@@ -1,0 +1,541 @@
+"""
+BAHMetadataGenerator のユニットテスト
+
+テスト対象: utils/metadata_generator.py
+副作用のない純粋ロジック（タイムスタンプ計算、ファイル名サニタイズ、メタデータ生成）を検証する。
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import pytest
+
+from utils.channel_config import ChannelConfig
+from utils.metadata_generator import BAHMetadataGenerator
+
+# ---------------------------------------------------------------------------
+# フィクスチャ: ChannelConfig シングルトンをテスト間でリセット
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def reset_config():
+    """各テスト前に ChannelConfig をリセットし、テスト後もリセット"""
+    ChannelConfig.reset()
+    yield
+    ChannelConfig.reset()
+
+
+# ---------------------------------------------------------------------------
+# ヘルパー: 最小限の初期化でインスタンスを取得する
+# ---------------------------------------------------------------------------
+
+def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAHMetadataGenerator:
+    """テスト用に任意のディレクトリ名で BAHMetadataGenerator を生成する。
+
+    実際のファイルシステムにはアクセスしない純粋ロジックのテストに使用する。
+    """
+    gen = object.__new__(BAHMetadataGenerator)
+    gen.config = ChannelConfig.load()
+    gen.collection_path = Path(f"/tmp/fake-collections/{dir_name}")
+    gen.collection_name = gen._extract_collection_name()
+    gen.bit_depth = gen.config.genre_style
+    gen.tracks = []
+    return gen
+
+
+# ===========================================================================
+# 1. _format_timestamp のテスト
+# ===========================================================================
+
+class TestFormatTimestamp:
+    """秒数を YouTube チャプター形式のタイムスタンプに変換するロジックの検証。"""
+
+    @pytest.fixture
+    def gen(self):
+        return _make_generator()
+
+    def test_zero_seconds(self, gen):
+        assert gen._format_timestamp(0) == "00:00"
+
+    def test_seconds_only(self, gen):
+        assert gen._format_timestamp(5) == "00:05"
+
+    def test_one_minute(self, gen):
+        assert gen._format_timestamp(60) == "01:00"
+
+    def test_minutes_and_seconds(self, gen):
+        assert gen._format_timestamp(125) == "02:05"
+
+    def test_just_under_one_hour(self, gen):
+        assert gen._format_timestamp(3599) == "59:59"
+
+    def test_exactly_one_hour(self, gen):
+        assert gen._format_timestamp(3600) == "1:00:00"
+
+    def test_over_one_hour(self, gen):
+        assert gen._format_timestamp(3661) == "1:01:01"
+
+    def test_large_value(self, gen):
+        # 2:46:40 = 10000 seconds
+        assert gen._format_timestamp(10000) == "2:46:40"
+
+    @pytest.mark.parametrize("seconds,expected", [
+        (0, "00:00"),
+        (59, "00:59"),
+        (60, "01:00"),
+        (3600, "1:00:00"),
+        (5400, "1:30:00"),
+        (7261, "2:01:01"),
+    ])
+    def test_parametrized(self, gen, seconds, expected):
+        assert gen._format_timestamp(seconds) == expected
+
+
+# ===========================================================================
+# 2. _clean_track_title のテスト (ファイル名サニタイズ)
+# ===========================================================================
+
+class TestCleanTrackTitle:
+    """ファイル名から楽曲タイトルを清浄化するロジックの検証。"""
+
+    @pytest.fixture
+    def gen(self):
+        return _make_generator()
+
+    def test_remove_number_prefix(self, gen):
+        assert gen._clean_track_title("01-Castle Theme") == "Castle Theme"
+
+    def test_remove_number_prefix_high(self, gen):
+        assert gen._clean_track_title("22-Village at Dawn") == "Village at Dawn"
+
+    def test_remove_8bit_prefix(self, gen):
+        assert gen._clean_track_title("8bit Journey to the West") == "Journey to the West"
+
+    def test_remove_8bit_prefix_case_insensitive(self, gen):
+        assert gen._clean_track_title("8BIT Dungeon Depths") == "Dungeon Depths"
+
+    def test_remove_suffix_parenthesis(self, gen):
+        assert gen._clean_track_title("Forest Path (Remix)") == "Forest Path"
+
+    def test_remove_suffix_extended(self, gen):
+        assert gen._clean_track_title("Battle Cry (Extended)") == "Battle Cry"
+
+    def test_underscores_to_spaces(self, gen):
+        assert gen._clean_track_title("Dark_Cave_Theme") == "Dark Cave Theme"
+
+    def test_collapse_extra_spaces(self, gen):
+        assert gen._clean_track_title("  Hero   Theme  ") == "Hero Theme"
+
+    def test_combined_cleanup(self, gen):
+        # 番号プレフィックス + アンダースコア + 括弧サフィックス
+        assert gen._clean_track_title("03-Mystic_Tower (Looped)") == "Mystic Tower"
+
+    def test_no_modification_needed(self, gen):
+        assert gen._clean_track_title("Crystal Cavern") == "Crystal Cavern"
+
+
+# ===========================================================================
+# 3. _extract_collection_name のテスト
+# ===========================================================================
+
+class TestExtractCollectionName:
+    """ディレクトリ名からコレクション名を抽出するロジックの検証。"""
+
+    def test_standard_8bit(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        assert gen.collection_name == "Adventure Music"
+
+    def test_without_bit_prefix(self):
+        gen = _make_generator("20250801-live-treasure-collection")
+        assert gen.collection_name == "Treasure Collection"
+
+    def test_fallback_to_dir_name(self):
+        gen = _make_generator("some-unusual-directory")
+        assert gen.collection_name == "some-unusual-directory"
+
+
+# ===========================================================================
+# 4. bit_depth のテスト（config.genre_style から取得）
+# ===========================================================================
+
+class TestBitDepth:
+    """bit_depth が channel_config.json の genre_style から取得されることの検証。"""
+
+    def test_from_config(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        config = ChannelConfig.load()
+        assert gen.bit_depth == config.genre_style
+
+    def test_consistent_across_directories(self):
+        """異なるディレクトリ名でも同じ config 値が返る"""
+        gen1 = _make_generator("20250907-live-8bit-adventure-music")
+        gen2 = _make_generator("20250914-live-16bit-village-town-ver2")
+        assert gen1.bit_depth == gen2.bit_depth
+
+
+# ===========================================================================
+# 5. _generate_tags のテスト（channel_config.json 駆動）
+# ===========================================================================
+
+class TestGenerateTags:
+    """YouTube タグ生成ロジックの検証（config ベース）。"""
+
+    def test_base_tags_present(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        config = ChannelConfig.load()
+        tags = gen._generate_tags()
+        # base タグが含まれること
+        for base_tag in config.base_tags[:3]:
+            assert base_tag in tags
+
+    def test_channel_name_in_tags(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        config = ChannelConfig.load()
+        tags = gen._generate_tags()
+        assert config.channel_name.lower() in tags
+
+    def test_theme_tags_applied(self):
+        """コレクション名にテーマキーワードが含まれる場合、対応テーマタグが追加される"""
+        config = ChannelConfig.load()
+        themes = config.theme_tags
+        # テーマが存在する場合のみテスト
+        if themes:
+            theme_name = list(themes.keys())[0]
+            gen = _make_generator(f"20250907-live-8bit-{theme_name}-music")
+            tags = gen._generate_tags()
+            for theme_tag in themes[theme_name]:
+                assert theme_tag in tags
+
+    def test_max_50_tags(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        tags = gen._generate_tags()
+        assert len(tags) <= 50
+
+
+# ===========================================================================
+# 6. メタデータ生成ロジックのテスト (tracks を直接注入)
+# ===========================================================================
+
+class TestGenerateCompleteCollectionMetadata:
+    """Complete Collection 用メタデータ生成の検証。tracks を直接セットして副作用なしでテスト。"""
+
+    @pytest.fixture
+    def gen_with_tracks(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        gen.tracks = [
+            {
+                "filename": "01-Hero_Theme.wav",
+                "title": "Hero Theme",
+                "duration": 180,
+                "start_time": 0,
+                "end_time": 180,
+                "timestamp": "00:00",
+            },
+            {
+                "filename": "02-Forest_Path.wav",
+                "title": "Forest Path",
+                "duration": 210,
+                "start_time": 180,
+                "end_time": 390,
+                "timestamp": "03:00",
+            },
+            {
+                "filename": "03-Castle_Gate.wav",
+                "title": "Castle Gate",
+                "duration": 195,
+                "start_time": 390,
+                "end_time": 585,
+                "timestamp": "06:30",
+            },
+        ]
+        return gen
+
+    def test_title_new_format(self, gen_with_tracks):
+        """新タイトルフォーマット: {style} {theme} RPG Music - {activity} BGM [{duration}]"""
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        title = meta["title"]
+        assert "8-Bit" in title
+        assert "RPG Music" in title
+        assert "BGM" in title
+        assert "[" in title and "]" in title
+
+    def test_title_contains_theme(self, gen_with_tracks):
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        assert "Adventure Music" in meta["title"]
+
+    def test_title_contains_duration_display(self, gen_with_tracks):
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        # 585 seconds < 35 min → 5分単位丸め → "10 min"
+        assert "10 min" in meta["title"]
+
+    def test_description_contains_timestamps(self, gen_with_tracks):
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        desc = meta["description"]
+        assert "00:00" in desc
+        assert "03:00" in desc
+        assert "06:30" in desc
+
+    def test_description_contains_track_titles(self, gen_with_tracks):
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        desc = meta["description"]
+        assert "Hero Theme" in desc
+        assert "Forest Path" in desc
+        assert "Castle Gate" in desc
+
+    def test_description_contains_usage_info(self, gen_with_tracks):
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        desc = meta["description"]
+        assert "Usage & Attribution" in desc
+        assert "Free to use" in desc
+
+    def test_category_from_config(self, gen_with_tracks):
+        config = ChannelConfig.load()
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        assert meta["category_id"] == config.category_id
+
+    def test_privacy_from_config(self, gen_with_tracks):
+        config = ChannelConfig.load()
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        assert meta["privacy_status"] == config.privacy_status
+
+    def test_tags_is_list(self, gen_with_tracks):
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        assert isinstance(meta["tags"], list)
+        assert len(meta["tags"]) > 0
+
+    def test_localizations_present(self, gen_with_tracks):
+        """ローカライゼーションが返り値に含まれること"""
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        assert "localizations" in meta
+        config = ChannelConfig.load()
+        for lang in config.supported_languages:
+            assert lang in meta["localizations"]
+            assert "title" in meta["localizations"][lang]
+            assert "description" in meta["localizations"][lang]
+
+    def test_localizations_title_length(self, gen_with_tracks):
+        """ローカライゼーション各タイトルが100文字以下"""
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        for lang, loc in meta["localizations"].items():
+            assert len(loc["title"]) <= 100, f"{lang} title exceeds 100 chars"
+
+    def test_localizations_uses_activity_phrases(self, gen_with_tracks):
+        """各言語のタイトルに自然言語アクティビティフレーズが使われること"""
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        # adventure テーマ → Gaming アクティビティ
+        ja_title = meta["localizations"]["ja"]["title"]
+        assert "ゲームが盛り上がる" in ja_title
+        ko_title = meta["localizations"]["ko"]["title"]
+        assert "게임이 더 재밌어지는" in ko_title
+
+    def test_localizations_description_contains_timestamps(self, gen_with_tracks):
+        """各言語の説明文にタイムスタンプが保持されること"""
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        for lang, loc in meta["localizations"].items():
+            assert "00:00" in loc["description"], f"{lang} missing timestamp"
+            assert "Hero Theme" in loc["description"], f"{lang} missing track title"
+
+    def test_description_header_matches_title(self, gen_with_tracks):
+        """説明文ヘッダーが新タイトルと連動すること"""
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        title = meta["title"]
+        desc = meta["description"]
+        assert desc.startswith(f"🎵 {title}")
+
+
+# ===========================================================================
+# 7. _format_duration_display のテスト（デュレーション丸め）
+# ===========================================================================
+
+class TestFormatDurationDisplay:
+    """デュレーション丸めロジックの検証。"""
+
+    @pytest.mark.parametrize("seconds,expected", [
+        (300, "5 min"),          # 5分ちょうど → "5 min"
+        (585, "10 min"),         # 9.75分 → 10分に丸め
+        (900, "15 min"),         # 15分
+        (1500, "25 min"),        # 25分
+        (1800, "30 min"),        # 30分
+        (2040, "35 min"),        # 34分 → 35分未満なので5分単位 → round(34/5)*5=35
+    ])
+    def test_short_durations(self, seconds, expected):
+        assert BAHMetadataGenerator._format_duration_display(seconds) == expected
+
+    def test_boundary_35_min(self):
+        """35分ちょうどは "1 Hour" に丸まる"""
+        assert BAHMetadataGenerator._format_duration_display(35 * 60) == "1 Hour"
+
+    def test_one_hour(self):
+        assert BAHMetadataGenerator._format_duration_display(3600) == "1 Hour"
+
+    def test_75_min_boundary(self):
+        """75分ちょうどは 1.25h → 1.5 Hours に丸まる"""
+        assert BAHMetadataGenerator._format_duration_display(75 * 60) == "1.5 Hours"
+
+    def test_90_min(self):
+        assert BAHMetadataGenerator._format_duration_display(90 * 60) == "1.5 Hours"
+
+    def test_105_min(self):
+        """105分 = 1.75h → 2 Hours に丸まる"""
+        assert BAHMetadataGenerator._format_duration_display(105 * 60) == "2 Hours"
+
+    def test_two_hours(self):
+        assert BAHMetadataGenerator._format_duration_display(7200) == "2 Hours"
+
+    def test_very_short(self):
+        """60秒 = 1分 → 最小 5 min"""
+        assert BAHMetadataGenerator._format_duration_display(60) == "5 min"
+
+
+# ===========================================================================
+# 8. _extract_theme_name のテスト
+# ===========================================================================
+
+class TestExtractThemeName:
+    """テーマ名抽出ロジックの検証。"""
+
+    def test_removes_collection_suffix(self):
+        gen = _make_generator("20250907-live-8bit-treasure-collection")
+        assert gen._extract_theme_name() == "Treasure"
+
+    def test_preserves_multi_word_theme(self):
+        gen = _make_generator("20250907-live-8bit-ice-cavern-music")
+        assert gen._extract_theme_name() == "Ice Cavern Music"
+
+    def test_standard_theme(self):
+        gen = _make_generator("20250907-live-8bit-battle-music")
+        assert gen._extract_theme_name() == "Battle Music"
+
+
+# ===========================================================================
+# 9. _get_activity のテスト
+# ===========================================================================
+
+class TestGetActivity:
+    """アクティビティキーワード取得ロジックの検証。"""
+
+    def test_battle_returns_gaming(self):
+        gen = _make_generator("20250907-live-8bit-battle-music")
+        assert gen._get_activity() == "Gaming"
+
+    def test_village_returns_study(self):
+        gen = _make_generator("20250907-live-8bit-village-town")
+        assert gen._get_activity() == "Study"
+
+    def test_ocean_returns_chill(self):
+        gen = _make_generator("20250907-live-8bit-ocean-adventure")
+        assert gen._get_activity() == "Chill"
+
+    def test_dungeon_returns_focus(self):
+        gen = _make_generator("20250907-live-8bit-dungeon-music")
+        assert gen._get_activity() == "Focus"
+
+    def test_unknown_theme_returns_default(self):
+        gen = _make_generator("20250907-live-8bit-mystery-music")
+        config = ChannelConfig.load()
+        assert gen._get_activity() == config.default_activity
+
+
+# ===========================================================================
+# 10. _generate_title のテスト（統合）
+# ===========================================================================
+
+class TestGenerateTitle:
+    """タイトル生成統合テスト。"""
+
+    def test_format_matches_template(self):
+        gen = _make_generator("20250907-live-8bit-ice-cavern-music")
+        gen.tracks = [{"duration": 3600}]  # 1時間
+        title = gen._generate_title(3600)
+        assert title == "8-Bit Ice Cavern Music RPG Music - Study BGM [1 Hour]"
+
+    def test_battle_theme_gaming(self):
+        gen = _make_generator("20250907-live-8bit-battle-music")
+        title = gen._generate_title(3600)
+        assert "Gaming BGM" in title
+
+    def test_title_max_100_chars(self):
+        gen = _make_generator("20250907-live-8bit-extremely-long-theme-name-that-might-exceed-limits")
+        title = gen._generate_title(3600)
+        assert len(title) <= 100
+
+
+# ===========================================================================
+# 11. クロスフェード関連テスト
+# ===========================================================================
+
+class TestCrossfade:
+    """クロスフェード設定・タイムスタンプ・合計時間の検証。"""
+
+    def test_crossfade_config_default(self):
+        """ChannelConfig.crossfade_duration がデフォルト 1.0 を返すこと"""
+        config = ChannelConfig.load()
+        assert config.crossfade_duration == 1.0
+
+    def test_timestamp_with_crossfade(self):
+        """3曲のタイムスタンプがクロスフェード分だけ前倒しされること
+
+        Track A: 120s → start=0, end=120
+        Track B: 90s  → start=120-1=119, end=119+90=209
+        Track C: 60s  → start=209-1=208, end=208+60=268
+        """
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        gen.tracks = [
+            {
+                "filename": "01-Track_A.wav",
+                "title": "Track A",
+                "duration": 120,
+                "start_time": 0,
+                "end_time": 120,
+                "timestamp": "00:00",
+            },
+            {
+                "filename": "02-Track_B.wav",
+                "title": "Track B",
+                "duration": 90,
+                "start_time": 119,
+                "end_time": 209,
+                "timestamp": "01:59",
+            },
+            {
+                "filename": "03-Track_C.wav",
+                "title": "Track C",
+                "duration": 60,
+                "start_time": 208,
+                "end_time": 268,
+                "timestamp": "03:28",
+            },
+        ]
+        # タイムスタンプ検証: 0:00, dur[0]-1=119s=1:59, dur[0]+dur[1]-2=208s=3:28
+        assert gen.tracks[0]["timestamp"] == "00:00"
+        assert gen.tracks[1]["timestamp"] == gen._format_timestamp(119)
+        assert gen.tracks[2]["timestamp"] == gen._format_timestamp(208)
+
+    def test_total_duration_with_crossfade(self):
+        """合計時間 = sum(durations) - (N-1) * crossfade
+
+        3曲: 120 + 90 + 60 = 270, crossfade=1.0, overlap=2 → 合計 268
+        """
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        gen.tracks = [
+            {"duration": 120},
+            {"duration": 90},
+            {"duration": 60},
+        ]
+        config = ChannelConfig.load()
+        crossfade = config.crossfade_duration
+        expected = sum(t["duration"] for t in gen.tracks) - max(0, len(gen.tracks) - 1) * crossfade
+        assert expected == 268.0
+
+    def test_single_track_no_crossfade(self):
+        """1曲のみの場合、クロスフェード補正なし"""
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        gen.tracks = [{"duration": 180}]
+        config = ChannelConfig.load()
+        crossfade = config.crossfade_duration
+        total = sum(t["duration"] for t in gen.tracks) - max(0, len(gen.tracks) - 1) * crossfade
+        assert total == 180.0
+
+
