@@ -33,16 +33,21 @@ class YouTubeOAuthHandler:
         初期化
 
         Args:
-            auth_dir (str): 認証ファイルディレクトリのパス
+            auth_dir (str): token.json を格納するチャンネル固有 auth ディレクトリのパス
         """
+        from utils.channel_config import ChannelConfig
+        channel_dir = ChannelConfig.channel_dir()
+        repo_root = channel_dir.parent.parent  # youtube-channels/
+
+        # client_secrets.json: 全チャンネル共有（単一 GCP プロジェクト）
+        self.client_secrets_file = repo_root / 'auth' / 'client_secrets.json'
+
+        # token.json: チャンネル固有
         if auth_dir is None:
-            from utils.channel_config import ChannelConfig
-            auth_dir = ChannelConfig.channel_dir() / 'auth'
+            auth_dir = channel_dir / 'auth'
         else:
             auth_dir = Path(auth_dir)
-
         self.auth_dir = auth_dir
-        self.client_secrets_file = self.auth_dir / 'client_secrets.json'
         self.token_file = self.auth_dir / 'token.json'
         self.credentials = None
 

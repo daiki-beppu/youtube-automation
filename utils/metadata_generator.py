@@ -97,7 +97,7 @@ class BAHMetadataGenerator:
                         'timestamp': self._format_timestamp(start_time)
                     })
 
-                    current_time = end_time - crossfade
+                    current_time = int(end_time - crossfade)
 
             except Exception as e:
                 print(f"⚠️  ファイル解析エラー {wav_file.name}: {e}")
