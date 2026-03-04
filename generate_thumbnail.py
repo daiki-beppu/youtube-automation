@@ -53,22 +53,31 @@ def load_config() -> dict:
 def extract_prompt(prompts_md: Path, variation: str | None) -> str:
     """thumbnail-prompts.md から指定バリエーションのプロンプトを抽出する。
 
-    variation=None → Primary Prompt
-    variation="A"  → Variation A
-    variation="B"  → Variation B
+    variation=None  → Primary Prompt
+    variation="A"   → Variation A
+    variation="B"   → Variation B
+    variation="bg"  → Video Background Prompt
     """
     text = prompts_md.read_text(encoding="utf-8")
 
     if variation is None:
         # ## Primary Prompt セクション直後のコードブロック
         pattern = r"## Primary Prompt\s*\n```\n(.*?)\n```"
+    elif variation == "bg":
+        # ## Video Background Prompt セクション直後のコードブロック
+        pattern = r"## Video Background Prompt[^\n]*\n\s*```\n(.*?)\n```"
     else:
         # ### Variation X セクション直後のコードブロック
         pattern = rf"### Variation {re.escape(variation)}[^\n]*\n\s*```\n(.*?)\n```"
 
     match = re.search(pattern, text, re.DOTALL)
     if not match:
-        label = f"Variation {variation}" if variation else "Primary Prompt"
+        if variation == "bg":
+            label = "Video Background Prompt"
+        elif variation:
+            label = f"Variation {variation}"
+        else:
+            label = "Primary Prompt"
         print(f"[ERROR] {label} のプロンプトが見つかりません: {prompts_md}")
         sys.exit(1)
 
@@ -200,7 +209,12 @@ def main():
             sys.exit(1)
 
         prompts_md = collection_path / "20-documentation" / "thumbnail-prompts.md"
-        filename = f"main-{args.variation.lower()}.png" if args.variation else "main.png"
+        if args.variation == "bg":
+            filename = "bg.png"
+        elif args.variation:
+            filename = f"main-{args.variation.lower()}.png"
+        else:
+            filename = "main.png"
         output_path = collection_path / "10-assets" / filename
         workflow_state = collection_path / "workflow-state.json"
 
@@ -214,7 +228,12 @@ def main():
         cost_per_image = config.get("cost_per_image_usd", DEFAULT_COST)
         prompt = extract_prompt(prompts_md, args.variation)
 
-        label = f"Variation {args.variation}" if args.variation else "Primary Prompt"
+        if args.variation == "bg":
+            label = "Video Background Prompt"
+        elif args.variation:
+            label = f"Variation {args.variation}"
+        else:
+            label = "Primary Prompt"
         print(f"\nコレクション: {collection_path.name}")
         print(f"プロンプト:   {label}")
         print(f"出力先:       {output_path.relative_to(REPO_ROOT)}")
