@@ -61,6 +61,10 @@ class ChannelConfig:
         if cls._instance is not None:
             return cls._instance
 
+        # .env を自動ロード（CWD から親ディレクトリを遡り探索）
+        from dotenv import load_dotenv, find_dotenv
+        load_dotenv(find_dotenv())
+
         if config_path is None:
             cls._channel_dir = cls._resolve_channel_dir()
             config_path = cls._channel_dir / 'config' / 'channel_config.json'

@@ -165,6 +165,9 @@ def update_workflow_state(workflow_state: Path, approved: bool = False):
 
 
 def main():
+    from dotenv import load_dotenv, find_dotenv
+    load_dotenv(find_dotenv())
+
     parser = argparse.ArgumentParser(description="Gemini API でサムネイル画像を生成")
     parser.add_argument(
         "collection_path", nargs="?", default=None, help="コレクションのパス（例: collections/planning/xxx）"
