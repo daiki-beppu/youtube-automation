@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Gemini API 経由でコレクションのサムネイル画像を生成する。
+"""Gemini API 経由でサムネイル画像を生成する。
 
-thumbnail-prompts.md の Primary Prompt を読み込み、
-Gemini Image Generation API で画像を生成して 10-assets/main.png に保存する。
+2つのモード:
+  1. コレクションモード: thumbnail-prompts.md の Primary Prompt を読み込み、10-assets/main.png に保存
+  2. ダイレクトモード: --prompt でテキスト直指定、--output で出力先指定（workflow-state 更新なし）
 
 Usage:
-    python3 youtube-automation/generate_thumbnail.py <collection-path>
-    python3 youtube-automation/generate_thumbnail.py <collection-path> -y  # コスト確認スキップ
-    python3 youtube-automation/generate_thumbnail.py <collection-path> --variation A  # バリエーション指定
+    # コレクションモード
+    python3 generate_thumbnail.py <collection-path>
+    python3 generate_thumbnail.py <collection-path> -y
+    python3 generate_thumbnail.py <collection-path> --variation A
+
+    # ダイレクトモード（/plan プレビュー等）
+    python3 generate_thumbnail.py --prompt "A mystical forest..." --output /tmp/preview.png -y
 
 Example:
-    python3 youtube-automation/generate_thumbnail.py collections/planning/20260219-8bit-rpg-class-vol2-collection
+    python3 generate_thumbnail.py collections/planning/20260219-8bit-rpg-class-vol2-collection
+    python3 generate_thumbnail.py --prompt "Celtic harp in moonlight" --output previews/plan-a.png -y
 """
 
 import argparse
@@ -74,7 +80,7 @@ def confirm_cost(model: str, cost_per_image: float) -> bool:
     print()
     print("=== Gemini Thumbnail Generation ===")
     print(f"モデル:     {model}")
-    print(f"生成枚数:   1 image")
+    print("生成枚数:   1 image")
     print(f"推定コスト: ${cost_per_image:.3f}")
     print()
     try:
@@ -103,6 +109,7 @@ def generate_thumbnail(client, prompt: str, model: str, output_path: Path) -> bo
             for part in response.parts:
                 if part.inline_data is not None:
                     import io
+
                     from PIL import Image as PILImage
                     image = PILImage.open(io.BytesIO(part.inline_data.data))
                     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -150,44 +157,70 @@ def update_workflow_state(workflow_state: Path, approved: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(description="Gemini API でサムネイル画像を生成")
-    parser.add_argument("collection_path", help="コレクションのパス（例: collections/planning/xxx）")
+    parser.add_argument(
+        "collection_path", nargs="?", default=None, help="コレクションのパス（例: collections/planning/xxx）"
+    )
     parser.add_argument("-y", "--yes", action="store_true", help="コスト確認をスキップ")
     parser.add_argument(
         "--variation",
-        choices=["A", "B", "C"],
+        choices=["A", "B", "C", "bg"],
         default=None,
-        help="使用するプロンプトバリエーション（省略時は Primary Prompt）",
+        help="使用するプロンプトバリエーション（省略時は Primary Prompt、bg は動画背景用）",
     )
+    parser.add_argument("--prompt", type=str, default=None, help="プロンプトテキストを直接指定（ダイレクトモード）")
+    parser.add_argument("--output", type=str, default=None, help="出力パス（--prompt 時必須）")
     args = parser.parse_args()
 
-    # コレクションパス解決
-    collection_path = Path(args.collection_path)
-    if not collection_path.is_absolute():
-        collection_path = REPO_ROOT / collection_path
-    if not collection_path.exists():
-        print(f"[ERROR] コレクションが見つかりません: {collection_path}")
-        sys.exit(1)
+    # --- ダイレクトモード ---
+    direct_mode = args.prompt is not None
+    if direct_mode:
+        if not args.output:
+            parser.error("--prompt 使用時は --output も必須です")
+        prompt = args.prompt
+        output_path = Path(args.output)
+        if not output_path.is_absolute():
+            output_path = Path.cwd() / output_path
+        workflow_state = None
 
-    prompts_md = collection_path / "20-documentation" / "thumbnail-prompts.md"
-    filename = f"main-{args.variation.lower()}.png" if args.variation else "main.png"
-    output_path = collection_path / "10-assets" / filename
-    workflow_state = collection_path / "workflow-state.json"
+        config = load_config()
+        model = config.get("model", DEFAULT_MODEL)
+        cost_per_image = config.get("cost_per_image_usd", DEFAULT_COST)
 
-    if not prompts_md.exists():
-        print(f"[ERROR] thumbnail-prompts.md が見つかりません: {prompts_md}")
-        print("  先に /thumbnail スキルを実行してプロンプトを生成してください。")
-        sys.exit(1)
+        print("\nモード:       ダイレクト")
+        print(f"プロンプト:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
+        print(f"出力先:       {output_path}")
 
-    # 設定・プロンプト読み込み
-    config = load_config()
-    model = config.get("model", DEFAULT_MODEL)
-    cost_per_image = config.get("cost_per_image_usd", DEFAULT_COST)
-    prompt = extract_prompt(prompts_md, args.variation)
+    # --- コレクションモード ---
+    elif args.collection_path:
+        collection_path = Path(args.collection_path)
+        if not collection_path.is_absolute():
+            collection_path = REPO_ROOT / collection_path
+        if not collection_path.exists():
+            print(f"[ERROR] コレクションが見つかりません: {collection_path}")
+            sys.exit(1)
 
-    label = f"Variation {args.variation}" if args.variation else "Primary Prompt"
-    print(f"\nコレクション: {collection_path.name}")
-    print(f"プロンプト:   {label}")
-    print(f"出力先:       {output_path.relative_to(REPO_ROOT)}")
+        prompts_md = collection_path / "20-documentation" / "thumbnail-prompts.md"
+        filename = f"main-{args.variation.lower()}.png" if args.variation else "main.png"
+        output_path = collection_path / "10-assets" / filename
+        workflow_state = collection_path / "workflow-state.json"
+
+        if not prompts_md.exists():
+            print(f"[ERROR] thumbnail-prompts.md が見つかりません: {prompts_md}")
+            print("  先に /thumbnail スキルを実行してプロンプトを生成してください。")
+            sys.exit(1)
+
+        config = load_config()
+        model = config.get("model", DEFAULT_MODEL)
+        cost_per_image = config.get("cost_per_image_usd", DEFAULT_COST)
+        prompt = extract_prompt(prompts_md, args.variation)
+
+        label = f"Variation {args.variation}" if args.variation else "Primary Prompt"
+        print(f"\nコレクション: {collection_path.name}")
+        print(f"プロンプト:   {label}")
+        print(f"出力先:       {output_path.relative_to(REPO_ROOT)}")
+
+    else:
+        parser.error("collection_path または --prompt が必要です")
 
     # 既存ファイル確認
     if output_path.exists() and output_path.stat().st_size > 0:
@@ -233,10 +266,14 @@ def main():
     print("===========================================")
     if success:
         print("  サムネイル生成: 完了")
-        print(f"  ファイル: {output_path.relative_to(REPO_ROOT)}")
+        try:
+            print(f"  ファイル: {output_path.relative_to(REPO_ROOT)}")
+        except ValueError:
+            print(f"  ファイル: {output_path}")
         print(f"  コスト:   ${cost_per_image:.3f}")
         print(f"  時間:     {elapsed:.1f}秒")
-        update_workflow_state(workflow_state)
+        if workflow_state:
+            update_workflow_state(workflow_state)
     else:
         print("  サムネイル生成: 失敗")
         print("  --variation A や --variation B で別プロンプトを試してください。")
