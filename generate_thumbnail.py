@@ -2,7 +2,7 @@
 """Gemini API 経由でサムネイル画像を生成する。
 
 2つのモード:
-  1. コレクションモード: thumbnail-prompts.md の Primary Prompt を読み込み、10-assets/main.png に保存
+  1. コレクションモード: thumbnail-prompts.md の Primary Prompt を読み込み、10-assets/thumbnail.png に保存
   2. ダイレクトモード: --prompt でテキスト直指定、--output で出力先指定（workflow-state 更新なし）
 
 Usage:
@@ -210,11 +210,11 @@ def main():
 
         prompts_md = collection_path / "20-documentation" / "thumbnail-prompts.md"
         if args.variation == "bg":
-            filename = "bg.png"
-        elif args.variation:
-            filename = f"main-{args.variation.lower()}.png"
-        else:
             filename = "main.png"
+        elif args.variation:
+            filename = f"thumbnail-{args.variation.lower()}.png"
+        else:
+            filename = "thumbnail.png"
         output_path = collection_path / "10-assets" / filename
         workflow_state = collection_path / "workflow-state.json"
 

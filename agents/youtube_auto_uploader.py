@@ -12,6 +12,7 @@ Features:
 """
 
 import logging
+import re
 import sys
 import time
 from datetime import datetime
@@ -209,6 +210,39 @@ class YouTubeAutoUploader:
         except Exception as e:
             logger.warning(f"⚠️  サムネイル設定エラー: {e}")
 
+    def _load_descriptions_md(self, collection_dir: Path) -> dict | None:
+        """descriptions.md から事前生成メタデータを読み込み
+
+        /description スキルが生成した descriptions.md が存在する場合、
+        title / description / tags を抽出して返す。
+        ファイルが存在しない or パース失敗時は None（BAHMetadataGenerator にフォールバック）。
+        """
+        desc_path = collection_dir / '20-documentation' / 'descriptions.md'
+        if not desc_path.exists():
+            return None
+
+        text = desc_path.read_text(encoding='utf-8')
+
+        title = self._extract_md_section(text, 'タイトル案')
+        description = self._extract_md_section(text, 'Complete Collection 概要欄')
+        tags_raw = self._extract_md_section(text, 'タグ（YouTube タグ欄）')
+
+        if not (title and description):
+            logger.warning("⚠️  descriptions.md のパースに失敗 — BAHMetadataGenerator にフォールバック")
+            return None
+
+        tags = [t.strip() for t in tags_raw.replace('\n', ',').split(',') if t.strip()] if tags_raw else []
+
+        logger.info("📄 descriptions.md からメタデータを読み込み")
+        return {'title': title.strip(), 'description': description.strip(), 'tags': tags}
+
+    @staticmethod
+    def _extract_md_section(text: str, heading: str) -> str | None:
+        """Markdown の ## heading 直後のコードフェンス内容を抽出"""
+        pattern = rf'## {re.escape(heading)}\s*\n+```\n(.*?)```'
+        m = re.search(pattern, text, re.DOTALL)
+        return m.group(1).strip() if m else None
+
     def upload_collection(self, collection_path: str, publish_at: str = None) -> Dict:
         """
         Complete Collection のアップロード
@@ -268,14 +302,28 @@ class YouTubeAutoUploader:
 
         master_video = video_files[0]
 
-        # メタデータ生成
+        # メタデータ生成（BAHMetadataGenerator — localizations 等）
         metadata = metadata_gen.generate_complete_collection_metadata()
+
+        # descriptions.md が存在すれば title/description/tags を上書き
+        prebuilt = self._load_descriptions_md(collection_dir)
+        if prebuilt:
+            metadata['title'] = prebuilt['title']
+            metadata['description'] = prebuilt['description']
+            if prebuilt['tags']:
+                metadata['tags'] = prebuilt['tags']
+
         if publish_at:
             metadata['publish_at'] = publish_at
 
-        # サムネイル検索
-        thumbnail_files = list(collection_dir.glob('10-assets/*.png'))
-        thumbnail_path = str(thumbnail_files[0]) if thumbnail_files else None
+        # サムネイル検索（thumbnail.png を優先）
+        thumbnail_path = None
+        thumbnail_exact = collection_dir / '10-assets' / 'thumbnail.png'
+        if thumbnail_exact.exists():
+            thumbnail_path = str(thumbnail_exact)
+        else:
+            thumbnail_files = list(collection_dir.glob('10-assets/*.png'))
+            thumbnail_path = str(thumbnail_files[0]) if thumbnail_files else None
 
         # アップロード実行
         video_id = self.upload_video(str(master_video), metadata, thumbnail_path)
