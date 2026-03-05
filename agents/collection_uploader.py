@@ -44,7 +44,7 @@ class CollectionUploader:
             collections_root = ChannelConfig.channel_dir() / 'collections'
 
         if config_path is None:
-            config_path = Path(__file__).parent.parent / 'config' / 'schedule_config.json'
+            config_path = ChannelConfig.channel_dir() / 'config' / 'schedule_config.json'
 
         self.collections_root = Path(collections_root)
         self.config_path = Path(config_path)
@@ -87,73 +87,70 @@ class CollectionUploader:
 
     # ─── スケジュール公開 ─────────────────────────────
 
-    def _get_last_published_date(self) -> datetime | None:
-        """YouTube API でチャンネル最終公開日を取得
-
-        Returns:
-            最終公開動画の公開日時（JST）。失敗時は None。
-        """
-        if not self.youtube_service:
-            self.initialize_youtube_service()
-
-        try:
-            response = self.youtube_service.search().list(
-                forMine=True, type='video', order='date', maxResults=1, part='snippet'
-            ).execute()
-
-            items = response.get('items', [])
-            if not items:
-                logger.warning("⚠️  公開動画が見つかりません")
-                return None
-
-            published_str = items[0]['snippet']['publishedAt']
-            published_utc = datetime.fromisoformat(published_str.replace('Z', '+00:00'))
-            tz_name = self.config.get('schedule', {}).get('timezone', 'Asia/Tokyo')
-            return published_utc.astimezone(ZoneInfo(tz_name))
-
-        except Exception as e:
-            logger.warning(f"⚠️  最終公開日取得エラー: {e}")
-            return None
-
     def _calculate_publish_at(self) -> str | None:
         """CC のスケジュール公開日時を計算
 
-        最終公開日の翌日の指定時刻を返す。
-        API 失敗時は今日の翌日をフォールバック。
-        public 設定時は None（即時公開）。
+        auto_schedule_enabled が true の場合:
+        - 当日の publish_time（デフォルト 20:00）でスケジュール
+        - 同日に既存の公開/予約動画があれば翌日にスライド
+        - 翌日にも重複があればさらに翌日…と空きスロットを探す
+
+        auto_schedule_enabled が false の場合は None（即時公開）。
 
         Returns:
-            ISO 8601 形式の公開日時文字列。public 設定時は None。
+            ISO 8601 形式の公開日時文字列。即時公開時は None。
         """
-        upload_cfg = self.config.get('upload_settings', {})
-        if upload_cfg.get('privacy_status') == 'public':
+        schedule_cfg = self.config.get('schedule', {})
+        if not schedule_cfg.get('auto_schedule_enabled', False):
             return None
 
-        schedule_cfg = self.config.get('schedule', {})
         tz_name = schedule_cfg.get('timezone', 'Asia/Tokyo')
-        publish_time = schedule_cfg.get('day1_time', '10:00')
+        publish_time = schedule_cfg.get('publish_time', schedule_cfg.get('day1_time', '20:00'))
         tz = ZoneInfo(tz_name)
         hour, minute = map(int, publish_time.split(':'))
 
-        last_published = self._get_last_published_date()
-        if last_published:
-            base_date = last_published.date()
-            logger.info(f"📅 最終公開日: {base_date}")
-        else:
-            base_date = datetime.now(tz).date()
-            logger.info(f"📅 最終公開日取得失敗 — 今日 ({base_date}) を基準に計算")
-
-        publish_dt = datetime(base_date.year, base_date.month, base_date.day,
-                              hour, minute, 0, tzinfo=tz) + timedelta(days=1)
-
-        # 過去日チェック: 公開日が現在より前なら翌日にスライド
         now = datetime.now(tz)
+        publish_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        # 既に今日の公開時刻を過ぎていたら翌日から開始
         if publish_dt <= now:
-            publish_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0) + timedelta(days=1)
-            logger.info("📅 過去日を検出 — 翌日にスライド")
+            publish_dt += timedelta(days=1)
+
+        # 既存の公開日と重複しない日を探す
+        existing_dates = self._get_published_dates()
+        max_slide = 30  # 無限ループ防止
+        for _ in range(max_slide):
+            if publish_dt.date() not in existing_dates:
+                break
+            publish_dt += timedelta(days=1)
+            logger.info(f"📅 公開日重複 — {publish_dt.date()} にスライド")
 
         logger.info(f"📅 CC 公開予定: {publish_dt.isoformat()}")
         return publish_dt.isoformat()
+
+    def _get_published_dates(self) -> set:
+        """YouTube API でチャンネルの公開済み/予約済み動画の公開日セットを取得"""
+        if not self.youtube_service:
+            self.initialize_youtube_service()
+
+        tz_name = self.config.get('schedule', {}).get('timezone', 'Asia/Tokyo')
+        tz = ZoneInfo(tz_name)
+        dates = set()
+
+        try:
+            response = self.youtube_service.search().list(
+                forMine=True, type='video', order='date', maxResults=50, part='snippet'
+            ).execute()
+
+            for item in response.get('items', []):
+                published_str = item['snippet']['publishedAt']
+                published_utc = datetime.fromisoformat(published_str.replace('Z', '+00:00'))
+                dates.add(published_utc.astimezone(tz).date())
+
+        except Exception as e:
+            logger.warning(f"⚠️  公開日一覧取得エラー: {e}")
+
+        return dates
 
     # ─── コレクション検索 ───────────────────────────
 
