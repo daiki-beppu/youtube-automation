@@ -33,7 +33,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 CHANNEL_CONFIG = REPO_ROOT / "youtube-automation" / "config" / "channel_config.json"
 
 # --- 定数 ---
-DEFAULT_MODEL = "gemini-3-pro-image-preview"
+DEFAULT_MODEL = "gemini-3.1-flash-image-preview"
 DEFAULT_COST = 0.04
 RETRY_MAX = 3
 RETRY_BACKOFF = [10, 30, 60]
@@ -181,6 +181,7 @@ def main():
     )
     parser.add_argument("--prompt", type=str, default=None, help="プロンプトテキストを直接指定（ダイレクトモード）")
     parser.add_argument("--output", type=str, default=None, help="出力パス（--prompt 時必須）")
+    parser.add_argument("--model", type=str, default=None, help="使用するモデル（例: gemini-3.1-flash-image-preview）")
     args = parser.parse_args()
 
     # --- ダイレクトモード ---
@@ -195,7 +196,7 @@ def main():
         workflow_state = None
 
         config = load_config()
-        model = config.get("model", DEFAULT_MODEL)
+        model = args.model or config.get("model", DEFAULT_MODEL)
         cost_per_image = config.get("cost_per_image_usd", DEFAULT_COST)
 
         print("\nモード:       ダイレクト")
@@ -227,7 +228,7 @@ def main():
             sys.exit(1)
 
         config = load_config()
-        model = config.get("model", DEFAULT_MODEL)
+        model = args.model or config.get("model", DEFAULT_MODEL)
         cost_per_image = config.get("cost_per_image_usd", DEFAULT_COST)
         prompt = extract_prompt(prompts_md, args.variation)
 

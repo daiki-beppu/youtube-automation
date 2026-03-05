@@ -88,7 +88,9 @@ class YouTubeAutoUploader:
 
         # リクエストボディ作成
         status_body = {
-            'privacyStatus': metadata.get('privacy_status', 'private')
+            'privacyStatus': metadata.get('privacy_status', 'private'),
+            'selfDeclaredMadeForKids': False,
+            'containsSyntheticMedia': True,
         }
 
         # スケジュール公開: publishAt 指定時は private 必須

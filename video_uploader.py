@@ -89,7 +89,8 @@ class VideoUploader:
             },
             "status": {
                 "privacyStatus": privacy_status,
-                "selfDeclaredMadeForKids": False
+                "selfDeclaredMadeForKids": False,
+                "containsSyntheticMedia": True,
             }
         }
 
