@@ -62,7 +62,7 @@ class ChannelConfig:
             return cls._instance
 
         # .env を自動ロード（CWD から親ディレクトリを遡り探索）
-        from dotenv import load_dotenv, find_dotenv
+        from dotenv import find_dotenv, load_dotenv
         load_dotenv(find_dotenv())
 
         if config_path is None:

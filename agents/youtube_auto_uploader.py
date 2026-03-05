@@ -24,10 +24,9 @@ logger = logging.getLogger(__name__)
 # プロジェクトルートをパスに追加
 sys.path.append(str(Path(__file__).parent.parent))
 
+from auth.oauth_handler import YouTubeOAuthHandler
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
-
-from auth.oauth_handler import YouTubeOAuthHandler
 from utils.channel_config import ChannelConfig
 from utils.metadata_generator import BAHMetadataGenerator
 
@@ -90,7 +89,7 @@ class YouTubeAutoUploader:
         status_body = {
             'privacyStatus': metadata.get('privacy_status', 'private'),
             'selfDeclaredMadeForKids': False,
-            'containsSyntheticMedia': True,
+            'containsSyntheticMedia': False,
         }
 
         # スケジュール公開: publishAt 指定時は private 必須

@@ -16,7 +16,6 @@ import json
 import logging
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from auth.oauth_handler import YouTubeOAuthHandler
 from utils.analytics_collector import YouTubeAnalyticsCollector

@@ -185,7 +185,11 @@ class EightBAHReportGenerator:
                 'current_position': f"{current_ctr:.2f}%",
                 'target_position': f"{target_ctr}%",
                 'improvement_multiplier': f"{improvement_needed:.1f}x",
-                'feasibility': 'Achievable with strategic optimization' if improvement_needed < 5 else 'Requires major strategy shift'
+                'feasibility': (
+                    'Achievable with strategic optimization'
+                    if improvement_needed < 5
+                    else 'Requires major strategy shift'
+                )
             },
             'optimal_content_strategy': {
                 'recommended_bit_type': best_bit_type,
@@ -215,7 +219,9 @@ class EightBAHReportGenerator:
 
         # bit type 推奨
         bit_comparison = ctr_strategy.get('bit_type_comparison', {})
-        recommended_bit = '8-bit' if bit_comparison.get('8_bit', {}).get('average_ctr', 0) > bit_comparison.get('16_bit', {}).get('average_ctr', 0) else '16-bit'
+        eight_bit_ctr = bit_comparison.get('8_bit', {}).get('average_ctr', 0)
+        sixteen_bit_ctr = bit_comparison.get('16_bit', {}).get('average_ctr', 0)
+        recommended_bit = '8-bit' if eight_bit_ctr > sixteen_bit_ctr else '16-bit'
 
         # 次期コレクション提案
         next_collections = []
@@ -348,12 +354,28 @@ class EightBAHReportGenerator:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{config.channel_name} - {report_type_ja}</title>
     <style>
-        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Hiragino Sans', 'Yu Gothic', 'Meiryo'; margin: 0; padding: 20px; background: #f5f5f5; }}
-        .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif,
+                'Hiragino Sans', 'Yu Gothic', 'Meiryo';
+            margin: 0; padding: 20px; background: #f5f5f5;
+        }}
+        .container {{
+            max-width: 1200px; margin: 0 auto; background: white;
+            padding: 30px; border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }}
         .header {{ text-align: center; margin-bottom: 40px; }}
         .header h1 {{ color: #2c3e50; margin-bottom: 10px; }}
-        .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }}
-        .stat-card {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; }}
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px; margin-bottom: 30px;
+        }}
+        .stat-card {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 20px; border-radius: 8px;
+            text-align: center;
+        }}
         .stat-value {{ font-size: 2em; font-weight: bold; margin-bottom: 5px; }}
         .section {{ margin-bottom: 30px; }}
         .section h2 {{ color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}

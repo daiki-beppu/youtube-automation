@@ -90,7 +90,7 @@ class VideoUploader:
             "status": {
                 "privacyStatus": privacy_status,
                 "selfDeclaredMadeForKids": False,
-                "containsSyntheticMedia": True,
+                "containsSyntheticMedia": False,
             }
         }
 
@@ -127,7 +127,10 @@ class VideoUploader:
                     if e.resp.status in [500, 502, 503, 504] and retry_count < max_retries:
                         retry_count += 1
                         wait_time = 2 ** retry_count
-                        logger.warning(f"⚠️  Upload error (attempt {retry_count}/{max_retries}), retrying in {wait_time}s...")
+                        logger.warning(
+                            f"⚠️  Upload error (attempt {retry_count}/{max_retries}), "
+                            f"retrying in {wait_time}s..."
+                        )
                         time.sleep(wait_time)
                     else:
                         logger.error(f"❌ Upload failed: {e}")

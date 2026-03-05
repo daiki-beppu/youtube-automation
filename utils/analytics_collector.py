@@ -24,9 +24,8 @@ from pathlib import Path
 # プロジェクトルートをパスに追加
 sys.path.append(str(Path(__file__).parent.parent))
 
-from googleapiclient.discovery import build
-
 from auth.oauth_handler import YouTubeOAuthHandler
+from googleapiclient.discovery import build
 from utils.channel_analytics import ChannelAnalyticsMixin
 from utils.ctr_analytics import CTRAnalyticsMixin
 from utils.video_analytics import VideoAnalyticsMixin

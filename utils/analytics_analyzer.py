@@ -217,7 +217,9 @@ class EightBAHAnalyzer:
             }
         }
 
-    def _generate_ctr_recommendations(self, collection_ctrs: Dict, bit_comparison: Dict, theme_analysis: Dict) -> List[str]:
+    def _generate_ctr_recommendations(
+        self, collection_ctrs: Dict, bit_comparison: Dict, theme_analysis: Dict
+    ) -> List[str]:
         """CTR改善提案生成"""
         recommendations = []
 
