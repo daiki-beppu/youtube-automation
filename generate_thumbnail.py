@@ -30,8 +30,6 @@ from pathlib import Path
 # --- パス解決 ---
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-CHANNEL_CONFIG = REPO_ROOT / "youtube-automation" / "config" / "channel_config.json"
-
 # --- 定数 ---
 DEFAULT_MODEL = "gemini-3.1-flash-image-preview"
 DEFAULT_COST = 0.04
@@ -40,14 +38,14 @@ RETRY_BACKOFF = [10, 30, 60]
 
 
 def load_config() -> dict:
-    """channel_config.json から gemini_image 設定を読み込む。"""
-    if not CHANNEL_CONFIG.exists():
-        print("[WARN] channel_config.json が見つかりません。デフォルト設定を使用します。")
+    """ChannelConfig から gemini_image 設定を読み込む。"""
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        from utils.channel_config import ChannelConfig
+        config = ChannelConfig.load()
+        return config.raw.get("gemini_image", {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST})
+    except Exception:
         return {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST}
-
-    with open(CHANNEL_CONFIG) as f:
-        config = json.load(f)
-    return config.get("gemini_image", {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST})
 
 
 def extract_prompt(prompts_md: Path, variation: str | None) -> str:
