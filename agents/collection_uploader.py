@@ -303,7 +303,7 @@ class CollectionUploader:
         tracking = self._load_tracking(collection_path)
         if tracking is None:
             print(f"📋 {collection_path.name}")
-            print("   tracking 未初期化 — --next で開始してください")
+            print("   tracking 未初期化 — 実行するとアップロードを開始します")
             return
 
         cc = tracking.get('complete_collection', {})
@@ -410,7 +410,6 @@ def main():
 
     config = ChannelConfig.load()
     parser = argparse.ArgumentParser(description=f'{config.channel_short} Collection Uploader')
-    parser.add_argument('--next', action='store_true', help='次ステップ実行')
     parser.add_argument('--status', action='store_true', help='進捗表示')
     parser.add_argument('--plan', action='store_true', help='スケジュール計算（ドライラン）')
     parser.add_argument('--daemon', '-d', action='store_true', help='常駐スケジューラー起動')
@@ -424,10 +423,6 @@ def main():
 
         if args.daemon:
             uploader.run_automated_schedule()
-        elif args.next:
-            target = uploader._find_collection(args.collection)
-            if target:
-                uploader.execute_next_step(target)
         elif args.status:
             target = uploader._find_collection(args.collection)
             if target:
@@ -437,11 +432,9 @@ def main():
             if target:
                 uploader.show_plan(target)
         else:
-            print("使用法:")
-            print("  次ステップ実行:     python collection_uploader.py --next [-c NAME]")
-            print("  進捗表示:           python collection_uploader.py --status [-c NAME]")
-            print("  スケジュール計算:   python collection_uploader.py --plan [-c NAME]")
-            print("  常駐スケジューラー: python collection_uploader.py --daemon")
+            target = uploader._find_collection(args.collection)
+            if target:
+                uploader.execute_next_step(target)
 
     except KeyboardInterrupt:
         print("\n🛑 処理が中断されました")
