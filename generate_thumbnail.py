@@ -98,6 +98,29 @@ def confirm_cost(model: str, cost_per_image: float) -> bool:
     return answer in ("y", "yes")
 
 
+def resolve_unique_path(output_path: Path) -> Path:
+    """出力パスが既存の場合、-v2, -v3 ... と自動採番して一意なパスを返す。"""
+    if not output_path.exists():
+        return output_path
+    stem = output_path.stem
+    suffix = output_path.suffix
+    parent = output_path.parent
+    # 既に -vN が付いている場合はベース名を取り出す
+    base_match = re.match(r"^(.+)-v(\d+)$", stem)
+    if base_match:
+        base = base_match.group(1)
+        start = int(base_match.group(2)) + 1
+    else:
+        base = stem
+        start = 2
+    for n in range(start, start + 100):
+        candidate = parent / f"{base}-v{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+    # fallback: should never reach here
+    return parent / f"{base}-v{start + 100}{suffix}"
+
+
 def generate_thumbnail(client, prompt: str, model: str, output_path: Path) -> bool:
     """Gemini API で画像を1枚生成して output_path に保存する。成功したら True を返す。"""
     from google.genai import types
@@ -245,8 +268,14 @@ def main():
 
     # 既存ファイル確認
     if output_path.exists() and output_path.stat().st_size > 0:
-        print(f"\n[INFO] 既存ファイルが見つかりました: {output_path.name} ({output_path.stat().st_size:,} bytes)")
-        if not args.yes:
+        if args.yes:
+            # -y 時は自動バージョニング（並列エージェント安全）
+            original = output_path
+            output_path = resolve_unique_path(output_path)
+            if output_path != original:
+                print(f"\n[INFO] 既存ファイルあり → 自動採番: {output_path.name}")
+        else:
+            print(f"\n[INFO] 既存ファイルが見つかりました: {output_path.name} ({output_path.stat().st_size:,} bytes)")
             try:
                 answer = input("上書きしますか? (y/N): ").strip().lower()
             except (EOFError, KeyboardInterrupt):
