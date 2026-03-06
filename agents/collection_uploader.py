@@ -129,7 +129,11 @@ class CollectionUploader:
         return publish_dt.isoformat()
 
     def _get_published_dates(self) -> set:
-        """YouTube API でチャンネルの公開済み/予約済み動画の公開日セットを取得"""
+        """YouTube API でチャンネルの公開済み/予約済み動画の公開日セットを取得
+
+        search().list() で動画IDを取得し、videos().list(part='status,snippet') で
+        公開予約日時（status.publishAt）と公開日時（snippet.publishedAt）の両方を収集する。
+        """
         if not self.youtube_service:
             self.initialize_youtube_service()
 
@@ -138,14 +142,28 @@ class CollectionUploader:
         dates = set()
 
         try:
+            # 動画IDを取得（part='id' でクォータ節約）
             response = self.youtube_service.search().list(
-                forMine=True, type='video', order='date', maxResults=50, part='snippet'
+                forMine=True, type='video', order='date', maxResults=50, part='id'
             ).execute()
 
-            for item in response.get('items', []):
-                published_str = item['snippet']['publishedAt']
-                published_utc = datetime.fromisoformat(published_str.replace('Z', '+00:00'))
-                dates.add(published_utc.astimezone(tz).date())
+            video_ids = [item['id']['videoId'] for item in response.get('items', [])]
+            if not video_ids:
+                return dates
+
+            # status.publishAt（公開予約）と snippet.publishedAt（公開済み）を取得
+            videos_response = self.youtube_service.videos().list(
+                id=','.join(video_ids), part='status,snippet'
+            ).execute()
+
+            for video in videos_response.get('items', []):
+                # 公開予約日時を優先、なければ公開日時を使用
+                publish_at = video.get('status', {}).get('publishAt')
+                if publish_at:
+                    dt = datetime.fromisoformat(publish_at.replace('Z', '+00:00'))
+                else:
+                    dt = datetime.fromisoformat(video['snippet']['publishedAt'].replace('Z', '+00:00'))
+                dates.add(dt.astimezone(tz).date())
 
         except Exception as e:
             logger.warning(f"⚠️  公開日一覧取得エラー: {e}")
@@ -235,8 +253,15 @@ class CollectionUploader:
 
         # 既に完了
         if tracking.get('status') == 'completed':
+            cc = tracking.get('complete_collection', {})
             logger.info("✅ このコレクションは既にアップロード完了済みです")
-            return {"action": "already_completed", "details": {}}
+            if cc.get('video_url'):
+                logger.info(f"📹 {cc['video_url']}")
+            if cc.get('upload_time'):
+                logger.info(f"📅 アップロード日時: {cc['upload_time']}")
+            if cc.get('publish_at'):
+                logger.info(f"📅 公開予約: {cc['publish_at']}")
+            return {"action": "already_completed", "details": cc}
 
         # Complete Collection アップロード
         cc = tracking.get('complete_collection', {})
