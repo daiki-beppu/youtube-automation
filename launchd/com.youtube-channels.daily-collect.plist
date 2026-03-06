@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.youtube-channels.daily-collect</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/mba/01-dev/youtube-channels/automation/daily_collect.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/mba/01-dev/youtube-channels/automation/logs/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/mba/01-dev/youtube-channels/automation/logs/launchd_stderr.log</string>
+</dict>
+</plist>
