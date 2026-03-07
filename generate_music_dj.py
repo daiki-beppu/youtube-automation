@@ -166,6 +166,65 @@ def build_segment_compositions(comp: dict) -> list[dict]:
     return segments
 
 
+async def generate_segmented(client, types, comp: dict, output: Path,
+                             max_retries: int = 3) -> bytes | None:
+    """phase 境界でセグメント分割し、各セグメントを個別セッションで生成→結合する。"""
+    segments = build_segment_compositions(comp)
+    seg_dir = output.parent
+    seg_paths = [seg_dir / f"seg_{i+1:03d}.wav" for i in range(len(segments))]
+
+    print(f"\n=== セグメント分割生成 ({len(segments)} segments) ===")
+    for i, seg in enumerate(segments):
+        dur = seg["total_duration_min"]
+        print(f"  seg_{i+1:03d}: {seg['phases'][0]['name']} ({dur:.1f}min)")
+
+    # 各セグメントを生成
+    for i, (seg_comp, seg_path) in enumerate(zip(segments, seg_paths)):
+        # 既存セグメントはスキップ
+        if seg_path.exists():
+            dur = pcm_duration_sec(read_wav_pcm(seg_path))
+            print(f"\n  [skip] seg_{i+1:03d} ({format_time(dur / 60)}) — 既に存在")
+            continue
+
+        print(f"\n{'='*40}")
+        print(f"  セグメント {i+1}/{len(segments)}: {seg_comp['phases'][0]['name']}")
+        print(f"{'='*40}")
+
+        success = False
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                print(f"\n  [retry {attempt}/{max_retries}] seg_{i+1:03d}")
+
+            pcm = await generate_dj(client, types, seg_comp, seg_path)
+            if pcm is not None:
+                write_wav(pcm, seg_path)
+                print(f"  [saved] seg_{i+1:03d} ({format_time(pcm_duration_sec(pcm) / 60)})")
+                success = True
+                break
+
+        if not success:
+            print(f"\n[ERROR] seg_{i+1:03d} が {max_retries + 1} 回失敗しました。")
+            print("  成功済みセグメントは保持されています。再実行で続行できます。")
+            return None
+
+    # 全セグメントをクロスフェード結合
+    print(f"\n=== 結合中 ({len(segments)} segments) ===")
+    combined = read_wav_pcm(seg_paths[0])
+    for i in range(1, len(seg_paths)):
+        next_pcm = read_wav_pcm(seg_paths[i])
+        combined = crossfade_join(combined, next_pcm)
+        print(f"  joined: seg_{i:03d} + seg_{i+1:03d} -> {format_time(pcm_duration_sec(combined) / 60)}")
+
+    write_wav(combined, output)
+
+    # セグメントファイルを削除
+    for seg_path in seg_paths:
+        if seg_path.exists():
+            seg_path.unlink()
+
+    return combined
+
+
 def read_wav_pcm(path: Path) -> bytes:
     """WAV ファイルから PCM データを読み込む。"""
     with wave.open(str(path), "rb") as wf:
