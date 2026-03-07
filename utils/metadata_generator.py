@@ -404,6 +404,7 @@ class BAHMetadataGenerator:
             'tags': self._generate_tags(),
             'category_id': self.config.category_id,
             'privacy_status': self.config.privacy_status,
+            'language': self.config.language,
             'localizations': localizations,
         }
 

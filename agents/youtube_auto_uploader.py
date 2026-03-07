@@ -103,13 +103,14 @@ class YouTubeAutoUploader:
                 'title': metadata['title'][:100],  # YouTube上限100文字
                 'description': metadata['description'][:5000],  # YouTube上限5000文字
                 'tags': metadata['tags'][:50],  # YouTube上限50タグ
-                'categoryId': metadata.get('category_id', '10')
+                'categoryId': metadata.get('category_id', '10'),
+                'defaultLanguage': metadata.get('language', 'en'),
+                'defaultAudioLanguage': metadata.get('language', 'en'),
             },
             'status': status_body
         }
 
         if metadata.get('localizations'):
-            body['snippet']['defaultLanguage'] = 'en'
             body['localizations'] = metadata['localizations']
 
         try:
