@@ -142,6 +142,31 @@ def write_wav(pcm_data: bytes, output: Path) -> None:
         wf.writeframes(pcm_data)
 
 
+def build_preview_compositions(comp: dict, preview_duration_sec: float = 30) -> list[tuple[int, dict]]:
+    """3つの代表フェーズ（始め・中盤・終盤）からプレビュー用ミニ composition を構築する。"""
+    phases = comp["phases"]
+    n = len(phases)
+
+    if n <= 3:
+        indices = list(range(n))
+    else:
+        indices = [0, n // 2, n - 1]
+
+    previews = []
+    for idx in indices:
+        phase = phases[idx]
+        preview_comp = {
+            "title": f"Preview: {phase.get('name_en', phase['name'])}",
+            "total_duration_min": preview_duration_sec / 60,
+            "base": comp["base"],
+            "phases": [dict(phase, at_min=0)],
+            "transition_sec": 0,
+        }
+        previews.append((idx, preview_comp))
+
+    return previews
+
+
 def build_segment_compositions(comp: dict) -> list[dict]:
     """composition を phase 境界でセグメント分割し、各セグメント用の部分 composition を返す。"""
     phases = comp["phases"]
@@ -269,6 +294,44 @@ async def generate_segmented(client, types, comp: dict, output: Path,
             print(f"  {seg_path.name} -> {new_name}")
 
     return combined
+
+
+async def generate_previews(client, types, comp: dict, output_dir: Path,
+                            preview_duration_sec: float = 30) -> bool:
+    """3つの代表フェーズから短いプレビューサンプルを並列生成する。"""
+    previews = build_preview_compositions(comp, preview_duration_sec)
+
+    print(f"\n=== プレビュー生成 ({len(previews)} samples, {preview_duration_sec:.0f}s each) ===")
+    for i, (phase_idx, preview_comp) in enumerate(previews):
+        phase = preview_comp["phases"][0]
+        label = phase.get("name_en") or phase["name"]
+        print(f"  preview_{i+1:02d}: [{phase_idx+1}/{len(comp['phases'])}] {label}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    preview_paths = []
+    for i, (_, preview_comp) in enumerate(previews):
+        phase = preview_comp["phases"][0]
+        label = phase.get("name_en") or phase["name"]
+        safe_name = label.replace(" ", "-").replace("/", "-").replace("\\", "-").replace(":", "-")
+        path = output_dir / f"preview_{i+1:02d}_{safe_name}.wav"
+        preview_paths.append(path)
+
+    tasks = [
+        _generate_one_segment(client, types, i, preview_comp, preview_path, max_retries=1, semaphore=None)
+        for i, ((_, preview_comp), preview_path) in enumerate(zip(previews, preview_paths))
+    ]
+    results = await asyncio.gather(*tasks)
+
+    if all(results):
+        print("\n=== プレビュー完了 ===")
+        for path in preview_paths:
+            print(f"  {path.name}")
+        return True
+    else:
+        failed = [i + 1 for i, ok in enumerate(results) if not ok]
+        print(f"\n[ERROR] プレビュー生成失敗: {failed}")
+        return False
 
 
 def read_wav_pcm(path: Path) -> bytes:
@@ -511,6 +574,8 @@ def main():
                         help="並列生成数 (default: 0=逐次、N=N並列、-1=全並列)")
     parser.add_argument("--cleanup", action="store_true", default=False,
                         help="生成後にセグメントファイルを削除 (default: 保持)")
+    parser.add_argument("--preview", action="store_true",
+                        help="3つの代表フェーズから30秒プレビューを生成")
     args = parser.parse_args()
 
     comp_path = Path(args.composition).resolve()
@@ -522,6 +587,32 @@ def main():
 
     if args.dry_run:
         dry_run(comp)
+        sys.exit(0)
+
+    if args.preview:
+        dry_run(comp)
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            print("[ERROR] GEMINI_API_KEY 環境変数が設定されていません。")
+            sys.exit(1)
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError:
+            print("[ERROR] google-genai がインストールされていません。")
+            sys.exit(1)
+        client = genai.Client(http_options={"api_version": "v1alpha"})
+        output_dir = Path(args.output).resolve().parent / "preview"
+
+        start_time = time.monotonic()
+        ok = asyncio.run(generate_previews(client, types, comp, output_dir))
+        elapsed = time.monotonic() - start_time
+
+        if ok:
+            print(f"\n  生成時間: {int(elapsed)}秒")
+            print("  プレビューを確認し、問題なければ --preview を外して本生成を実行してください。")
+        else:
+            sys.exit(1)
         sys.exit(0)
 
     # Show timeline as confirmation
