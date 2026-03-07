@@ -200,7 +200,8 @@ async def _generate_one_segment(client, types, i: int, seg_comp: dict, seg_path:
 
 
 async def generate_segmented(client, types, comp: dict, output: Path,
-                             max_retries: int = 3, workers: int = 0) -> bytes | None:
+                             max_retries: int = 3, workers: int = 0,
+                             cleanup: bool = False) -> bytes | None:
     """phase 境界でセグメント分割し、各セグメントを個別セッションで生成→結合する。
 
     workers=0: 逐次実行（従来動作）
@@ -248,10 +249,24 @@ async def generate_segmented(client, types, comp: dict, output: Path,
 
     write_wav(combined, output)
 
-    # セグメントファイルを削除
-    for seg_path in seg_paths:
-        if seg_path.exists():
-            seg_path.unlink()
+    if cleanup:
+        for seg_path in seg_paths:
+            if seg_path.exists():
+                seg_path.unlink()
+        print("  セグメントファイルを削除しました")
+    else:
+        # セグメントファイルをリネーム（name_en > name > seg_NNN）
+        print("\n=== セグメントファイルをリネーム ===")
+        for i, (seg_path, seg_comp) in enumerate(zip(seg_paths, segments)):
+            if not seg_path.exists():
+                continue
+            phase = seg_comp["phases"][0]
+            label = phase.get("name_en") or phase["name"]
+            safe_name = label.replace(" ", "-").replace("/", "-").replace("\\", "-").replace(":", "-")
+            new_name = f"{i + 1:02d}_{safe_name}.wav"
+            new_path = seg_path.parent / new_name
+            seg_path.rename(new_path)
+            print(f"  {seg_path.name} -> {new_name}")
 
     return combined
 
@@ -494,6 +509,8 @@ def main():
                         help="セグメント分割生成 (default: 有効、--no-segmented で無効)")
     parser.add_argument("--workers", type=int, default=0,
                         help="並列生成数 (default: 0=逐次、N=N並列、-1=全並列)")
+    parser.add_argument("--cleanup", action="store_true", default=False,
+                        help="生成後にセグメントファイルを削除 (default: 保持)")
     args = parser.parse_args()
 
     comp_path = Path(args.composition).resolve()
@@ -561,7 +578,7 @@ def main():
         # セグメント分割生成モード（デフォルト）
         workers = args.workers if args.workers >= 0 else len(comp["phases"])
         pcm_data = asyncio.run(
-            generate_segmented(client, types, comp, output, max_retries=max_retries, workers=workers)
+            generate_segmented(client, types, comp, output, max_retries=max_retries, workers=workers, cleanup=args.cleanup)
         )
         gen_elapsed = time.monotonic() - start_time
         if pcm_data is None:
