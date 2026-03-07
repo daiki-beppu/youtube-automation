@@ -166,46 +166,77 @@ def build_segment_compositions(comp: dict) -> list[dict]:
     return segments
 
 
-async def generate_segmented(client, types, comp: dict, output: Path,
-                             max_retries: int = 3) -> bytes | None:
-    """phase 境界でセグメント分割し、各セグメントを個別セッションで生成→結合する。"""
-    segments = build_segment_compositions(comp)
-    seg_dir = output.parent
-    seg_paths = [seg_dir / f"seg_{i+1:03d}.wav" for i in range(len(segments))]
+async def _generate_one_segment(client, types, i: int, seg_comp: dict, seg_path: Path,
+                                max_retries: int, semaphore: asyncio.Semaphore | None) -> bool:
+    """1つのセグメントを生成する（並列実行用）。"""
+    label = f"seg_{i+1:03d}"
 
-    print(f"\n=== セグメント分割生成 ({len(segments)} segments) ===")
-    for i, seg in enumerate(segments):
-        dur = seg["total_duration_min"]
-        print(f"  seg_{i+1:03d}: {seg['phases'][0]['name']} ({dur:.1f}min)")
+    # 既存セグメントはスキップ
+    if seg_path.exists():
+        dur = pcm_duration_sec(read_wav_pcm(seg_path))
+        print(f"\n  [skip] {label} ({format_time(dur / 60)}) — 既に存在")
+        return True
 
-    # 各セグメントを生成
-    for i, (seg_comp, seg_path) in enumerate(zip(segments, seg_paths)):
-        # 既存セグメントはスキップ
-        if seg_path.exists():
-            dur = pcm_duration_sec(read_wav_pcm(seg_path))
-            print(f"\n  [skip] seg_{i+1:03d} ({format_time(dur / 60)}) — 既に存在")
-            continue
-
-        print(f"\n{'='*40}")
-        print(f"  セグメント {i+1}/{len(segments)}: {seg_comp['phases'][0]['name']}")
-        print(f"{'='*40}")
-
-        success = False
+    async def _do_generate():
+        print(f"\n  [{label}] 開始: {seg_comp['phases'][0]['name']}")
         for attempt in range(max_retries + 1):
             if attempt > 0:
-                print(f"\n  [retry {attempt}/{max_retries}] seg_{i+1:03d}")
+                print(f"\n  [{label}] retry {attempt}/{max_retries}")
 
             pcm = await generate_dj(client, types, seg_comp, seg_path)
             if pcm is not None:
                 write_wav(pcm, seg_path)
-                print(f"  [saved] seg_{i+1:03d} ({format_time(pcm_duration_sec(pcm) / 60)})")
-                success = True
-                break
+                print(f"\n  [{label}] 完了 ({format_time(pcm_duration_sec(pcm) / 60)})")
+                return True
 
-        if not success:
-            print(f"\n[ERROR] seg_{i+1:03d} が {max_retries + 1} 回失敗しました。")
+        print(f"\n  [{label}] {max_retries + 1} 回失敗")
+        return False
+
+    if semaphore:
+        async with semaphore:
+            return await _do_generate()
+    else:
+        return await _do_generate()
+
+
+async def generate_segmented(client, types, comp: dict, output: Path,
+                             max_retries: int = 3, workers: int = 0) -> bytes | None:
+    """phase 境界でセグメント分割し、各セグメントを個別セッションで生成→結合する。
+
+    workers=0: 逐次実行（従来動作）
+    workers>0: 最大 workers 並列で生成
+    """
+    segments = build_segment_compositions(comp)
+    seg_dir = output.parent
+    seg_paths = [seg_dir / f"seg_{i+1:03d}.wav" for i in range(len(segments))]
+
+    mode = f"{workers} workers" if workers > 0 else "sequential"
+    print(f"\n=== セグメント分割生成 ({len(segments)} segments, {mode}) ===")
+    for i, seg in enumerate(segments):
+        dur = seg["total_duration_min"]
+        print(f"  seg_{i+1:03d}: {seg['phases'][0]['name']} ({dur:.1f}min)")
+
+    if workers > 0:
+        # 並列生成
+        semaphore = asyncio.Semaphore(workers) if workers < len(segments) else None
+        tasks = [
+            _generate_one_segment(client, types, i, seg_comp, seg_path, max_retries, semaphore)
+            for i, (seg_comp, seg_path) in enumerate(zip(segments, seg_paths))
+        ]
+        results = await asyncio.gather(*tasks)
+
+        if not all(results):
+            failed = [i + 1 for i, ok in enumerate(results) if not ok]
+            print(f"\n[ERROR] 失敗セグメント: {failed}")
             print("  成功済みセグメントは保持されています。再実行で続行できます。")
             return None
+    else:
+        # 逐次生成（従来動作）
+        for i, (seg_comp, seg_path) in enumerate(zip(segments, seg_paths)):
+            ok = await _generate_one_segment(client, types, i, seg_comp, seg_path, max_retries, None)
+            if not ok:
+                print("  成功済みセグメントは保持されています。再実行で続行できます。")
+                return None
 
     # 全セグメントをクロスフェード結合
     print(f"\n=== 結合中 ({len(segments)} segments) ===")
@@ -461,6 +492,8 @@ def main():
                         help="切断時の自動リトライ回数 (default: 0=リトライなし)")
     parser.add_argument("--segmented", action=argparse.BooleanOptionalAction, default=True,
                         help="セグメント分割生成 (default: 有効、--no-segmented で無効)")
+    parser.add_argument("--workers", type=int, default=0,
+                        help="並列生成数 (default: 0=逐次、N=N並列、-1=全並列)")
     args = parser.parse_args()
 
     comp_path = Path(args.composition).resolve()
@@ -526,7 +559,10 @@ def main():
 
     if args.segmented and not args.resume:
         # セグメント分割生成モード（デフォルト）
-        pcm_data = asyncio.run(generate_segmented(client, types, comp, output, max_retries=max_retries))
+        workers = args.workers if args.workers >= 0 else len(comp["phases"])
+        pcm_data = asyncio.run(
+            generate_segmented(client, types, comp, output, max_retries=max_retries, workers=workers)
+        )
         gen_elapsed = time.monotonic() - start_time
         if pcm_data is None:
             print("\n音楽生成に失敗しました。")

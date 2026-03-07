@@ -179,3 +179,57 @@ class TestGenerateSegmented:
 
         seg_files = list(tmp_path.glob("seg_*.wav"))
         assert len(seg_files) == 0
+
+    def test_parallel_generates_all_segments(self, tmp_path):
+        """workers>0 で並列生成が全セグメント完了する。"""
+        comp = make_composition(phases_count=4, total_min=40)
+        output = tmp_path / "master.wav"
+        seg_pcm = make_pcm(5)
+
+        mock_client = MagicMock()
+        mock_types = MagicMock()
+
+        with patch("generate_music_dj.generate_dj", new_callable=AsyncMock, return_value=seg_pcm):
+            result = asyncio.run(generate_segmented(mock_client, mock_types, comp, output, max_retries=0, workers=4))
+
+        assert result is not None
+        assert output.exists()
+        seg_files = list(tmp_path.glob("seg_*.wav"))
+        assert len(seg_files) == 0  # クリーンアップ済み
+
+    def test_parallel_with_semaphore(self, tmp_path):
+        """workers < segments で Semaphore が機能する。"""
+        comp = make_composition(phases_count=4, total_min=40)
+        output = tmp_path / "master.wav"
+        seg_pcm = make_pcm(5)
+
+        mock_client = MagicMock()
+        mock_types = MagicMock()
+
+        with patch("generate_music_dj.generate_dj", new_callable=AsyncMock, return_value=seg_pcm):
+            result = asyncio.run(generate_segmented(mock_client, mock_types, comp, output, max_retries=0, workers=2))
+
+        assert result is not None
+        assert output.exists()
+
+    def test_parallel_partial_failure(self, tmp_path):
+        """並列生成で一部失敗時に None を返す。"""
+        comp = make_composition(phases_count=3, total_min=30)
+        output = tmp_path / "master.wav"
+        seg_pcm = make_pcm(5)
+        call_count = 0
+
+        mock_client = MagicMock()
+        mock_types = MagicMock()
+
+        async def mock_generate_dj(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                return None  # 2番目のセグメントが失敗
+            return seg_pcm
+
+        with patch("generate_music_dj.generate_dj", side_effect=mock_generate_dj):
+            result = asyncio.run(generate_segmented(mock_client, mock_types, comp, output, max_retries=0, workers=3))
+
+        assert result is None
