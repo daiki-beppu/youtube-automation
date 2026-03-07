@@ -191,23 +191,47 @@ class YouTubeAutoUploader:
             logger.error(f"❌ レスポンスに動画IDがありません: {response}")
             return None
 
+    def _compress_thumbnail(self, thumbnail_path: Path, max_bytes: int = 2_097_152) -> Path:
+        """サムネイルが max_bytes を超える場合、ffmpeg で JPEG 圧縮した一時ファイルを返す"""
+        if thumbnail_path.stat().st_size <= max_bytes:
+            return thumbnail_path
+
+        import tempfile
+        import subprocess
+        compressed = Path(tempfile.mktemp(suffix='.jpg'))
+        for quality in [2, 5]:  # ffmpeg -qscale:v 2=高品質, 5=中品質
+            subprocess.run(
+                ['ffmpeg', '-y', '-i', str(thumbnail_path), '-qscale:v', str(quality), str(compressed)],
+                capture_output=True,
+            )
+            if compressed.exists() and compressed.stat().st_size <= max_bytes:
+                logger.info(f"🗜️  サムネイル圧縮(q{quality}): {thumbnail_path.stat().st_size / 1024:.0f}KB → {compressed.stat().st_size / 1024:.0f}KB")
+                return compressed
+
+        logger.warning(f"⚠️  サムネイル圧縮後も {compressed.stat().st_size / 1024:.0f}KB — 上限超過")
+        return thumbnail_path
+
     def _set_thumbnail(self, video_id: str, thumbnail_path: str):
         """
-        サムネイル設定
+        サムネイル設定（2MB 超は自動圧縮）
 
         Args:
             video_id (str): 動画ID
             thumbnail_path (str): サムネイルファイルパス
         """
         try:
-            thumbnail_file = Path(thumbnail_path)
+            thumbnail_file = self._compress_thumbnail(Path(thumbnail_path))
 
             self.youtube_service.thumbnails().set(
                 videoId=video_id,
                 media_body=MediaFileUpload(str(thumbnail_file))
             ).execute()
 
-            logger.info(f"✅ サムネイル設定完了: {thumbnail_file.name}")
+            logger.info(f"✅ サムネイル設定完了: {Path(thumbnail_path).name}")
+
+            # 一時ファイルのクリーンアップ
+            if thumbnail_file != Path(thumbnail_path) and thumbnail_file.exists():
+                thumbnail_file.unlink()
 
         except Exception as e:
             logger.warning(f"⚠️  サムネイル設定エラー: {e}")
