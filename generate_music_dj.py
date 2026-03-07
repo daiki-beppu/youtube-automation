@@ -142,6 +142,30 @@ def write_wav(pcm_data: bytes, output: Path) -> None:
         wf.writeframes(pcm_data)
 
 
+def build_segment_compositions(comp: dict) -> list[dict]:
+    """composition を phase 境界でセグメント分割し、各セグメント用の部分 composition を返す。"""
+    phases = comp["phases"]
+    total_min = comp["total_duration_min"]
+    segments = []
+
+    for i, phase in enumerate(phases):
+        if i + 1 < len(phases):
+            duration_min = phases[i + 1]["at_min"] - phase["at_min"]
+        else:
+            duration_min = total_min - phase["at_min"]
+
+        seg_comp = {
+            "title": f"{comp['title']} [{i+1}/{len(phases)}] {phase['name']}",
+            "total_duration_min": duration_min,
+            "base": comp["base"],
+            "phases": [dict(phase, at_min=0)],
+            "transition_sec": comp["transition_sec"],
+        }
+        segments.append(seg_comp)
+
+    return segments
+
+
 def read_wav_pcm(path: Path) -> bytes:
     """WAV ファイルから PCM データを読み込む。"""
     with wave.open(str(path), "rb") as wf:
