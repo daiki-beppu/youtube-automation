@@ -16,6 +16,8 @@ SAMPLE_RATE = 48000
 CHANNELS = 2
 SAMPLE_WIDTH = 2  # 16-bit
 MODEL = "models/lyria-realtime-exp"
+CHECKPOINT_INTERVAL_SEC = 300  # 5分ごとに中間保存
+CROSSFADE_SAMPLES = SAMPLE_RATE * 5  # 結合時の5秒クロスフェード
 
 
 def load_composition(path: Path) -> dict:
@@ -140,34 +142,114 @@ def write_wav(pcm_data: bytes, output: Path) -> None:
         wf.writeframes(pcm_data)
 
 
-async def generate_dj(client, types, comp: dict) -> bytes | None:
-    """Lyria RealTime API でフェーズ展開 DJ 生成を行い、PCM データを返す。"""
+def read_wav_pcm(path: Path) -> bytes:
+    """WAV ファイルから PCM データを読み込む。"""
+    with wave.open(str(path), "rb") as wf:
+        return wf.readframes(wf.getnframes())
+
+
+def pcm_duration_sec(pcm_data: bytes | bytearray) -> float:
+    """PCM データの再生時間（秒）を計算。"""
+    return len(pcm_data) / (SAMPLE_RATE * CHANNELS * SAMPLE_WIDTH)
+
+
+def crossfade_join(pcm_a: bytes, pcm_b: bytes, fade_samples: int = CROSSFADE_SAMPLES) -> bytes:
+    """2つの PCM データをクロスフェードで結合する。"""
+    import struct
+
+    bytes_per_sample = CHANNELS * SAMPLE_WIDTH
+    fade_bytes = fade_samples * bytes_per_sample
+
+    if len(pcm_a) < fade_bytes or len(pcm_b) < fade_bytes:
+        return pcm_a + pcm_b
+
+    head = pcm_a[:-fade_bytes]
+    overlap_a = pcm_a[-fade_bytes:]
+    overlap_b = pcm_b[:fade_bytes]
+    tail = pcm_b[fade_bytes:]
+
+    mixed = bytearray(fade_bytes)
+    num_values = fade_bytes // SAMPLE_WIDTH
+    fmt = f"<{num_values}h"
+
+    samples_a = struct.unpack(fmt, overlap_a)
+    samples_b = struct.unpack(fmt, overlap_b)
+
+    result = []
+    samples_per_channel = num_values // CHANNELS if CHANNELS > 1 else num_values
+    for i in range(num_values):
+        progress = (i // CHANNELS) / max(1, samples_per_channel - 1)
+        val = int(samples_a[i] * (1.0 - progress) + samples_b[i] * progress)
+        val = max(-32768, min(32767, val))
+        result.append(val)
+
+    mixed = struct.pack(fmt, *result)
+    return head + mixed + tail
+
+
+def find_phase_at(comp: dict, elapsed_sec: float) -> int:
+    """指定秒数時点でのフェーズインデックスを返す。"""
+    phases = comp["phases"]
+    idx = 0
+    for i, p in enumerate(phases):
+        if p["at_min"] * 60 <= elapsed_sec:
+            idx = i
+    return idx
+
+
+async def generate_dj(client, types, comp: dict, output: Path,
+                      offset_sec: float = 0) -> bytes | None:
+    """Lyria RealTime API でフェーズ展開 DJ 生成を行い、PCM データを返す。
+
+    offset_sec > 0 の場合、そのオフセットから生成を開始する（resume 用）。
+    途中切断時も収集済みデータを .partial.wav に保存する。
+    """
     phases = comp["phases"]
     total_sec = comp["total_duration_min"] * 60
+    remaining_sec = total_sec - offset_sec
     trans_sec = comp["transition_sec"]
     timeline = build_timeline(comp)
     pcm_data = bytearray()
+    partial_path = output.with_suffix(".partial.wav")
+    last_checkpoint = 0
+    interrupted = False
+
+    # offset_sec に基づいて開始フェーズを決定
+    start_phase_idx = find_phase_at(comp, offset_sec)
+
+    # offset 以降の timeline イベントのみ処理
+    # (offset 分だけずらして判定)
+    event_idx = 0
+    for i, ev in enumerate(timeline):
+        if ev["at_sec"] > offset_sec:
+            event_idx = i
+            break
+    else:
+        event_idx = len(timeline)
 
     try:
         warnings.filterwarnings("ignore", message="Realtime music generation is experimental")
         async with client.aio.live.music.connect(model=MODEL) as session:
-            # 初期フェーズ設定
-            initial_prompt = build_prompt(comp, phases[0])
+            # 開始フェーズ設定
+            initial_prompt = build_prompt(comp, phases[start_phase_idx])
             await session.set_weighted_prompts(
                 prompts=[types.WeightedPrompt(text=initial_prompt, weight=1.0)]
             )
 
-            config = build_config_for_phase(types, comp, phases[0])
+            config = build_config_for_phase(types, comp, phases[start_phase_idx])
             if config:
                 await session.set_music_generation_config(config=config)
 
             await session.play()
-            print(f"\n  [生成開始] {phases[0]['name']}")
+
+            if offset_sec > 0:
+                print(f"\n  [再開] {phases[start_phase_idx]['name']} (offset {format_time(offset_sec / 60)})")
+            else:
+                print(f"\n  [生成開始] {phases[start_phase_idx]['name']}")
 
             start = time.monotonic()
             last_report = 0
-            event_idx = 1  # skip event 0 (initial phase)
-            current_phase_name = phases[0]["name"]
+            current_phase_name = phases[start_phase_idx]["name"]
 
             # Transition state
             in_transition = False
@@ -177,8 +259,11 @@ async def generate_dj(client, types, comp: dict) -> bytes | None:
             last_weight_update = 0.0
 
             async for message in session.receive():
-                elapsed = time.monotonic() - start
-                if elapsed >= total_sec:
+                stream_elapsed = time.monotonic() - start
+                # 実際の経過時間 = offset + ストリーム内の経過
+                virtual_elapsed = offset_sec + stream_elapsed
+
+                if virtual_elapsed >= total_sec:
                     break
 
                 # Collect audio
@@ -189,8 +274,8 @@ async def generate_dj(client, types, comp: dict) -> bytes | None:
                     else:
                         pcm_data.extend(chunk)
 
-                # Process timeline events
-                while event_idx < len(timeline) and elapsed >= timeline[event_idx]["at_sec"]:
+                # Process timeline events (using virtual_elapsed for correct phase timing)
+                while event_idx < len(timeline) and virtual_elapsed >= timeline[event_idx]["at_sec"]:
                     ev = timeline[event_idx]
 
                     if ev["type"] == "transition_start":
@@ -198,30 +283,28 @@ async def generate_dj(client, types, comp: dict) -> bytes | None:
                         trans_from_prompt = build_prompt(comp, phases[ev["from_idx"]])
                         trans_to_prompt = build_prompt(comp, phases[ev["to_idx"]])
                         trans_start_time = ev["at_sec"]
-                        last_weight_update = elapsed
+                        last_weight_update = virtual_elapsed
                         from_name = phases[ev['from_idx']]['name']
                         to_name = phases[ev['to_idx']]['name']
-                        print(f"\n  [{format_time(elapsed / 60)}] transition: {from_name} -> {to_name}")
+                        print(f"\n  [{format_time(virtual_elapsed / 60)}] transition: {from_name} -> {to_name}")
 
                     elif ev["type"] == "transition_end":
                         in_transition = False
                         current_phase_name = phases[ev["phase_idx"]]["name"]
-                        # Apply new phase config
                         new_config = build_config_for_phase(types, comp, phases[ev["phase_idx"]])
                         if new_config:
                             await session.set_music_generation_config(config=new_config)
-                        # Set full weight to new prompt
                         await session.set_weighted_prompts(
                             prompts=[types.WeightedPrompt(text=trans_to_prompt, weight=1.0)]
                         )
-                        print(f"\n  [{format_time(elapsed / 60)}] phase: {current_phase_name}")
+                        print(f"\n  [{format_time(virtual_elapsed / 60)}] phase: {current_phase_name}")
 
                     event_idx += 1
 
-                # Update crossfade weights during transition (every ~1 second)
-                if in_transition and (elapsed - last_weight_update) >= 1.0:
-                    last_weight_update = elapsed
-                    progress = min(1.0, (elapsed - trans_start_time) / trans_sec)
+                # Update crossfade weights during transition
+                if in_transition and (virtual_elapsed - last_weight_update) >= 1.0:
+                    last_weight_update = virtual_elapsed
+                    progress = min(1.0, (virtual_elapsed - trans_start_time) / trans_sec)
                     old_w = round(1.0 - progress, 2)
                     new_w = round(progress, 2)
                     await session.set_weighted_prompts(
@@ -232,29 +315,46 @@ async def generate_dj(client, types, comp: dict) -> bytes | None:
                     )
 
                 # Progress every 10 seconds
-                if int(elapsed) - last_report >= 10:
-                    last_report = int(elapsed)
-                    m, s = divmod(int(elapsed), 60)
+                if int(stream_elapsed) - last_report >= 10:
+                    last_report = int(stream_elapsed)
+                    m, s = divmod(int(virtual_elapsed), 60)
                     total_m, total_s = divmod(int(total_sec), 60)
                     phase_label = f" ({current_phase_name})" if not in_transition else " (transition)"
                     print(f"\r  [生成中] {m}:{s:02d} / {total_m}:{total_s:02d}{phase_label}", end="", flush=True)
+
+                # Checkpoint: 5分ごとに中間保存
+                checkpoint_elapsed = int(stream_elapsed)
+                if checkpoint_elapsed > 0 and checkpoint_elapsed - last_checkpoint >= CHECKPOINT_INTERVAL_SEC:
+                    last_checkpoint = checkpoint_elapsed
+                    write_wav(bytes(pcm_data), partial_path)
+                    dur = pcm_duration_sec(pcm_data)
+                    print(f"\n  [checkpoint] {format_time(dur / 60)} saved to {partial_path.name}")
 
             await session.stop()
             print("\n  [生成完了]")
 
     except KeyboardInterrupt:
+        interrupted = True
         print("\n\n  [中断] Ctrl+C を検出。収集済みデータを保存します。")
-    except ConnectionError as e:
-        print(f"\n[ERROR] 接続エラー: {e}")
-        print("  ネットワーク接続と API キーを確認してください。")
-        return None
     except Exception as e:
+        interrupted = True
         print(f"\n[ERROR] 生成中にエラーが発生: {e}")
+
+    # 途中切断時もデータがあれば partial に保存
+    if interrupted and pcm_data:
+        write_wav(bytes(pcm_data), partial_path)
+        dur = pcm_duration_sec(pcm_data)
+        print(f"  [partial] {format_time(dur / 60)} を {partial_path.name} に保存しました")
+        print(f"  再開: --resume {partial_path}")
         return None
 
     if not pcm_data:
         print("\n[ERROR] 音声データを受信できませんでした。")
         return None
+
+    # 成功時: partial ファイルがあれば削除
+    if partial_path.exists():
+        partial_path.unlink()
 
     return bytes(pcm_data)
 
@@ -274,6 +374,7 @@ def main():
     parser.add_argument("-o", "--output", default="master.wav", help="出力 WAV パス (default: master.wav)")
     parser.add_argument("-y", "--yes", action="store_true", help="確認スキップ")
     parser.add_argument("--dry-run", action="store_true", help="タイムライン表示のみ")
+    parser.add_argument("--resume", metavar="PARTIAL", help=".partial.wav から再開し、結合する")
     args = parser.parse_args()
 
     comp_path = Path(args.composition).resolve()
@@ -316,19 +417,48 @@ def main():
 
     client = genai.Client(http_options={"api_version": "v1alpha"})
     output = Path(args.output).resolve()
+
+    # Resume モード
+    partial_pcm = None
+    offset_sec = 0.0
+    if args.resume:
+        partial_path = Path(args.resume).resolve()
+        if not partial_path.exists():
+            print(f"[ERROR] {partial_path} が見つかりません")
+            sys.exit(1)
+        partial_pcm = read_wav_pcm(partial_path)
+        offset_sec = pcm_duration_sec(partial_pcm)
+        total_sec = comp["total_duration_min"] * 60
+        remaining = total_sec - offset_sec
+        print(f"\n  [resume] {format_time(offset_sec / 60)} の partial を読み込み")
+        print(f"  [resume] 残り {format_time(remaining / 60)} を生成します")
+
     start_time = time.monotonic()
 
-    pcm_data = asyncio.run(generate_dj(client, types, comp))
+    pcm_data = asyncio.run(generate_dj(client, types, comp, output, offset_sec=offset_sec))
 
     gen_elapsed = time.monotonic() - start_time
 
     if pcm_data is None:
         print("\n音楽生成に失敗しました。")
+        if partial_pcm:
+            print("  partial データは保持されています。再度 --resume で再開できます。")
         sys.exit(1)
+
+    # Resume 時はクロスフェード結合
+    if partial_pcm:
+        print(f"\n  [結合] partial ({format_time(offset_sec / 60)}) + "
+              f"new ({format_time(pcm_duration_sec(pcm_data) / 60)}) をクロスフェード結合...")
+        pcm_data = crossfade_join(partial_pcm, pcm_data)
+        # partial ファイルを削除
+        partial_path = Path(args.resume).resolve()
+        if partial_path.exists():
+            partial_path.unlink()
+            print(f"  [cleanup] {partial_path.name} を削除しました")
 
     write_wav(pcm_data, output)
 
-    actual_duration = len(pcm_data) / (SAMPLE_RATE * CHANNELS * SAMPLE_WIDTH)
+    actual_duration = pcm_duration_sec(pcm_data)
     size_mb = output.stat().st_size / (1024 * 1024)
     m, s = divmod(int(actual_duration), 60)
 
@@ -340,6 +470,8 @@ def main():
     print(f"  サイズ:     {size_mb:.1f} MB")
     print(f"  フェーズ数: {len(comp['phases'])}")
     print(f"  生成時間:   {int(gen_elapsed)}秒")
+    if partial_pcm:
+        print(f"  resume:     partial {format_time(offset_sec / 60)} + 新規生成を結合")
     print("===========================================")
 
 
