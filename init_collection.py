@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""コレクションディレクトリと workflow-state.json を初期化する。
+
+Usage:
+    # チャンネルディレクトリから実行（CWD 自動検出）
+    python3 ../../automation/init_collection.py "Collection Name" "theme-slug"
+    python3 ../../automation/init_collection.py "Collection Name" "theme-slug" --track-count 12 --selected-plan B
+
+    # ルートから CHANNEL_DIR 指定で実行
+    CHANNEL_DIR=channels/fantasy-celtic-music python3 automation/init_collection.py "Collection Name" "theme-slug"
+
+Example:
+    python3 ../../automation/init_collection.py "Weaving with Brigid by the Hearth" "brigid-hearth" --selected-plan B
+"""
+
+import argparse
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+# --- パス解決 ---
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+SUBDIRS = [
+    "10-assets",
+    "20-documentation",
+]
+
+
+def load_channel_short() -> str:
+    """ChannelConfig から channel_short を取得する。"""
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from utils.channel_config import ChannelConfig
+
+    config = ChannelConfig.load()
+    return config.raw["channel"]["short"].lower()
+
+
+def channel_dir() -> Path:
+    """ChannelConfig からチャンネルディレクトリを取得する。"""
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from utils.channel_config import ChannelConfig
+
+    return Path(ChannelConfig.channel_dir())
+
+
+def build_state(collection_name: str, theme: str, track_count: int, selected_plan: str) -> dict:
+    """workflow-state.json の初期状態を構築する。"""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return {
+        "collection_name": collection_name,
+        "theme": theme,
+        "created_at": now,
+        "updated_at": now,
+        "stage": "planning",
+        "phase": "planning-approved",
+        "steps": {
+            "planning": {
+                "generated": True,
+                "approved": True,
+                "selected_plan": selected_plan,
+                "track_count": track_count,
+            },
+            "thumbnail": {"generated": False, "approved": False},
+            "music": {"generated": False, "approved": False},
+            "production": {"generated": False, "approved": False},
+        },
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="コレクションディレクトリと workflow-state.json を初期化")
+    parser.add_argument("collection_name", help="コレクション表示名")
+    parser.add_argument("theme", help="テーマスラッグ（ハイフン区切り）")
+    parser.add_argument("--track-count", type=int, default=12, help="トラック数（デフォルト: 12）")
+    parser.add_argument("--selected-plan", default="A", help="選択した企画（A-E、デフォルト: A）")
+    args = parser.parse_args()
+
+    short = load_channel_short()
+    ch_dir = channel_dir()
+
+    date_prefix = datetime.now().strftime("%Y%m%d")
+    dir_name = f"{date_prefix}-{short}-{args.theme}-collection"
+    base_path = ch_dir / "collections" / "planning" / dir_name
+
+    if base_path.exists():
+        print(f"[ERROR] ディレクトリが既に存在します: {base_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # ディレクトリ作成
+    for sub in SUBDIRS:
+        (base_path / sub).mkdir(parents=True, exist_ok=True)
+
+    # workflow-state.json 生成
+    state = build_state(args.collection_name, args.theme, args.track_count, args.selected_plan)
+    state_path = base_path / "workflow-state.json"
+    with open(state_path, "w") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    print(f"[OK] コレクション作成完了: {base_path}")
+    print(f"  テーマ: {args.theme}")
+    print(f"  トラック数: {args.track_count}")
+    print(f"  選択プラン: {args.selected_plan}")
+
+
+if __name__ == "__main__":
+    main()

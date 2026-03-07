@@ -4,11 +4,11 @@ Channel Status Getter - Claude Code用シンプル情報取得
 分析なしで、Claude Codeが理解しやすい最新情報を取得
 """
 
-import sys
 import json
 import logging
+import sys
+from datetime import datetime, timedelta
 from pathlib import Path
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,36 @@ def get_channel_latest_status():
                     'url': f"https://youtu.be/{item['snippet']['resourceId']['videoId']}"
                 })
 
+        # 個別動画の Analytics 統計を OAuth で一括取得
+        video_ids = [c['video_id'] for c in collections if 'video_id' in c]
+        if video_ids:
+            logger.info(f"📊 {len(video_ids)}本の動画 Analytics を取得中...")
+            stats_map = {}
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+            try:
+                response = collector.analytics_service.reports().query(
+                    ids=f'channel=={collector.channel_id}',
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics='views,estimatedMinutesWatched,averageViewDuration',
+                    dimensions='video',
+                    filters=f'video=={",".join(video_ids)}',
+                    sort='-views'
+                ).execute()
+                for row in response.get('rows', []):
+                    stats_map[row[0]] = {
+                        'views': row[1],
+                        'watch_time_min': round(row[2], 1),
+                        'avg_view_duration_sec': row[3],
+                    }
+            except Exception as e:
+                logger.warning(f"⚠️ Analytics 取得エラー: {e}")
+            for c in collections:
+                vid = c.get('video_id')
+                if vid and vid in stats_map:
+                    c['stats'] = stats_map[vid]
+
         # コレクション数とトラック数を動的算出
         collections_count = len(collections)
         # 動画総数からComplete Collection数を除いた数がおおよその個別トラック数
@@ -177,7 +207,14 @@ def main():
 
         print("\n🎵 すべてのコレクション:")
         for i, collection in enumerate(status['recent_collections'], 1):
-            print(f"  {i:2d}. {collection['collection_name']} ({collection['published_at']})")
+            s = collection.get('stats', {})
+            if s:
+                avg_min = s['avg_view_duration_sec'] / 60
+                print(f"  {i:2d}. {collection['collection_name']} ({collection['published_at']})")
+                print(f"      👀 {s['views']:,} views  ⏱ {s['watch_time_min']:,.0f}min watched"
+                      f"  📊 avg {avg_min:.1f}min/view")
+            else:
+                print(f"  {i:2d}. {collection['collection_name']} ({collection['published_at']})")
 
         print(f"\n💾 データ更新: {status['updated_at']}")
 
