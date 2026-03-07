@@ -305,6 +305,9 @@ class CollectionUploader:
                 logger.info("✅ Complete Collection アップロード完了")
                 logger.info(f"📹 {complete_video['video_url']}")
 
+                # プレイリスト自動追加
+                self._assign_to_playlists(complete_video['video_id'], collection_path)
+
                 return {"action": "complete_collection_uploaded", "details": {**tracking['complete_collection']}}
             else:
                 error_msg = (complete_video or {}).get('error', 'Unknown error')
@@ -320,6 +323,35 @@ class CollectionUploader:
             self._save_tracking(collection_path, tracking)
             logger.error(f"❌ Complete Collection エラー: {e}")
             return {"action": "complete_collection_failed", "details": {"error": str(e)}}
+
+    # ─── プレイリスト連携 ─────────────────────────────
+
+    def _assign_to_playlists(self, video_id: str, collection_path: Path):
+        """アップロード後にプレイリストへ自動追加（失敗してもアップロードはブロックしない）"""
+        try:
+            from playlist_manager import PlaylistManager
+
+            ws_path = collection_path / 'workflow-state.json'
+            if not ws_path.exists():
+                return
+
+            with open(ws_path, 'r', encoding='utf-8') as f:
+                ws = json.load(f)
+
+            theme = ws.get('theme', '')
+            if not theme:
+                return
+
+            config = ChannelConfig.load()
+            if not config.playlists:
+                return
+
+            pm = PlaylistManager()
+            assigned = pm.assign_video(video_id, theme)
+            if assigned:
+                logger.info(f"📋 プレイリスト追加: {assigned}")
+        except Exception as e:
+            logger.warning(f"⚠️  プレイリスト追加エラー（非致命的）: {e}")
 
     # ─── ステータス表示 ──────────────────────────────
 

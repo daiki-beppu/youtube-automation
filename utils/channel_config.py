@@ -289,6 +289,12 @@ class ChannelConfig:
     def benchmark_config(self) -> dict:
         return self._data.get('benchmark', {})
 
+    # ─── Playlists ──────────────────────────────────
+
+    @property
+    def playlists(self) -> dict:
+        return self._data.get('playlists', {})
+
     # ─── 生データアクセス ─────────────────────────────
 
     @property
