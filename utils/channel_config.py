@@ -279,6 +279,16 @@ class ChannelConfig:
     def supported_languages(self) -> list[str]:
         return list(self.localizations_config['supported_languages'])
 
+    # ─── Benchmark ──────────────────────────────────
+
+    @property
+    def benchmark_channels(self) -> list[dict]:
+        return self._data.get('benchmark', {}).get('channels', [])
+
+    @property
+    def benchmark_config(self) -> dict:
+        return self._data.get('benchmark', {})
+
     # ─── 生データアクセス ─────────────────────────────
 
     @property
