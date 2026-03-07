@@ -14,7 +14,9 @@ Features:
 import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -182,13 +184,26 @@ class VideoUploader:
         try:
             # Check file size (max 2MB for thumbnails)
             file_size = os.path.getsize(thumbnail_file)
+            upload_file = thumbnail_file
+            temp_jpg = None
+
             if file_size > 2 * 1024 * 1024:
-                logger.warning(f"⚠️  Warning: Thumbnail size ({file_size / (1024*1024):.2f} MB) exceeds 2MB")
+                size_mb = file_size / (1024 * 1024)
+                logger.warning(f"⚠️  Thumbnail size ({size_mb:.2f} MB) exceeds 2MB — compressing to JPEG")
+                temp_jpg = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+                temp_jpg.close()
+                subprocess.run(
+                    ["ffmpeg", "-i", thumbnail_file, "-q:v", "2", "-update", "1", temp_jpg.name, "-y"],
+                    capture_output=True, check=True,
+                )
+                compressed_size = os.path.getsize(temp_jpg.name)
+                logger.info(f"📦 Compressed: {file_size / (1024*1024):.2f} MB → {compressed_size / (1024*1024):.2f} MB")
+                upload_file = temp_jpg.name
 
             # Upload thumbnail
             request = self.youtube.thumbnails().set(
                 videoId=video_id,
-                media_body=MediaFileUpload(thumbnail_file)
+                media_body=MediaFileUpload(upload_file)
             )
 
             request.execute()
@@ -198,6 +213,9 @@ class VideoUploader:
         except Exception as e:
             logger.error(f"❌ Thumbnail upload failed: {e}")
             return False
+        finally:
+            if temp_jpg and os.path.exists(temp_jpg.name):
+                os.unlink(temp_jpg.name)
 
     def create_playlist(
         self,
