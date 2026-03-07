@@ -375,6 +375,8 @@ def main():
     parser.add_argument("-y", "--yes", action="store_true", help="確認スキップ")
     parser.add_argument("--dry-run", action="store_true", help="タイムライン表示のみ")
     parser.add_argument("--resume", metavar="PARTIAL", help=".partial.wav から再開し、結合する")
+    parser.add_argument("--max-retries", type=int, default=0,
+                        help="切断時の自動リトライ回数 (default: 0=リトライなし)")
     args = parser.parse_args()
 
     comp_path = Path(args.composition).resolve()
@@ -417,45 +419,73 @@ def main():
 
     client = genai.Client(http_options={"api_version": "v1alpha"})
     output = Path(args.output).resolve()
+    partial_path = output.with_suffix(".partial.wav")
+    max_retries = args.max_retries
 
-    # Resume モード
-    partial_pcm = None
+    # Resume モード: 初期 partial の読み込み
+    accumulated_pcm = None
     offset_sec = 0.0
     if args.resume:
-        partial_path = Path(args.resume).resolve()
-        if not partial_path.exists():
-            print(f"[ERROR] {partial_path} が見つかりません")
+        resume_path = Path(args.resume).resolve()
+        if not resume_path.exists():
+            print(f"[ERROR] {resume_path} が見つかりません")
             sys.exit(1)
-        partial_pcm = read_wav_pcm(partial_path)
-        offset_sec = pcm_duration_sec(partial_pcm)
+        accumulated_pcm = read_wav_pcm(resume_path)
+        offset_sec = pcm_duration_sec(accumulated_pcm)
         total_sec = comp["total_duration_min"] * 60
         remaining = total_sec - offset_sec
         print(f"\n  [resume] {format_time(offset_sec / 60)} の partial を読み込み")
         print(f"  [resume] 残り {format_time(remaining / 60)} を生成します")
 
     start_time = time.monotonic()
+    attempt = 0
 
-    pcm_data = asyncio.run(generate_dj(client, types, comp, output, offset_sec=offset_sec))
+    while True:
+        pcm_data = asyncio.run(generate_dj(client, types, comp, output, offset_sec=offset_sec))
+
+        if pcm_data is not None:
+            # 成功: accumulated があればクロスフェード結合
+            if accumulated_pcm:
+                print(f"\n  [結合] partial ({format_time(offset_sec / 60)}) + "
+                      f"new ({format_time(pcm_duration_sec(pcm_data) / 60)}) をクロスフェード結合...")
+                pcm_data = crossfade_join(accumulated_pcm, pcm_data)
+            break
+
+        # 失敗: リトライ判定
+        attempt += 1
+        if attempt > max_retries:
+            print("\n音楽生成に失敗しました。")
+            if accumulated_pcm or partial_path.exists():
+                print("  partial データは保持されています。再度 --resume で再開できます。")
+            sys.exit(1)
+
+        # partial.wav を読み込んで accumulated に結合し、自動リトライ
+        if partial_path.exists():
+            new_partial = read_wav_pcm(partial_path)
+            if accumulated_pcm:
+                accumulated_pcm = crossfade_join(accumulated_pcm, new_partial)
+            else:
+                accumulated_pcm = new_partial
+            offset_sec = pcm_duration_sec(accumulated_pcm)
+
+        if offset_sec >= comp["total_duration_min"] * 60:
+            pcm_data = accumulated_pcm
+            break
+
+        wait_sec = min(30, 10 * attempt)
+        print(f"\n  [auto-retry] {attempt}/{max_retries} — {wait_sec}秒後にリトライ "
+              f"(offset {format_time(offset_sec / 60)})...")
+        time.sleep(wait_sec)
+
+        # partial を上書き保存して再開
+        write_wav(accumulated_pcm, partial_path)
+
+    # 完了: partial ファイルを削除
+    if partial_path.exists():
+        partial_path.unlink()
+        print(f"  [cleanup] {partial_path.name} を削除しました")
 
     gen_elapsed = time.monotonic() - start_time
-
-    if pcm_data is None:
-        print("\n音楽生成に失敗しました。")
-        if partial_pcm:
-            print("  partial データは保持されています。再度 --resume で再開できます。")
-        sys.exit(1)
-
-    # Resume 時はクロスフェード結合
-    if partial_pcm:
-        print(f"\n  [結合] partial ({format_time(offset_sec / 60)}) + "
-              f"new ({format_time(pcm_duration_sec(pcm_data) / 60)}) をクロスフェード結合...")
-        pcm_data = crossfade_join(partial_pcm, pcm_data)
-        # partial ファイルを削除
-        partial_path = Path(args.resume).resolve()
-        if partial_path.exists():
-            partial_path.unlink()
-            print(f"  [cleanup] {partial_path.name} を削除しました")
-
     write_wav(pcm_data, output)
 
     actual_duration = pcm_duration_sec(pcm_data)
@@ -470,8 +500,8 @@ def main():
     print(f"  サイズ:     {size_mb:.1f} MB")
     print(f"  フェーズ数: {len(comp['phases'])}")
     print(f"  生成時間:   {int(gen_elapsed)}秒")
-    if partial_pcm:
-        print(f"  resume:     partial {format_time(offset_sec / 60)} + 新規生成を結合")
+    if attempt > 0:
+        print(f"  リトライ:   {attempt}回")
     print("===========================================")
 
 
