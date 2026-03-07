@@ -289,7 +289,6 @@ async def generate_dj(client, types, comp: dict, output: Path,
     """
     phases = comp["phases"]
     total_sec = comp["total_duration_min"] * 60
-    remaining_sec = total_sec - offset_sec
     trans_sec = comp["transition_sec"]
     timeline = build_timeline(comp)
     pcm_data = bytearray()
