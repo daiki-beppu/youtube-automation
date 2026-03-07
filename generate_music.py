@@ -106,7 +106,7 @@ async def generate_music(client, types, prompt: str, duration: int, args) -> byt
                 await session.set_music_generation_config(config=config)
 
             await session.play()
-            print(f"\n  [生成開始]")
+            print("\n  [生成開始]")
 
             start = time.monotonic()
             last_report = 0
@@ -185,7 +185,9 @@ def main():
     parser.add_argument("--density", type=float, default=None, help="密度 (0.0-1.0)")
     parser.add_argument("--brightness", type=float, default=None, help="明るさ (0.0-1.0)")
     parser.add_argument("--temperature", type=float, default=None, help="温度パラメータ")
-    parser.add_argument("--mode", choices=["QUALITY", "DIVERSITY"], default="QUALITY", help="生成モード (default: QUALITY)")
+    parser.add_argument(
+        "--mode", choices=["QUALITY", "DIVERSITY"], default="QUALITY", help="生成モード (default: QUALITY)",
+    )
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
     args = parser.parse_args()
 

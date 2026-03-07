@@ -62,7 +62,8 @@ def dry_run(comp: dict) -> None:
     base = comp["base"]
 
     print(f"\n=== {title} ({total}min) ===")
-    print(f"  Base: bpm={base.get('bpm', 'auto')} brightness={base.get('brightness', 'auto')} mode={base.get('mode', 'QUALITY')}")
+    print(f"  Base: bpm={base.get('bpm', 'auto')} brightness={base.get('brightness', 'auto')}"
+          f" mode={base.get('mode', 'QUALITY')}")
     print(f"  Transition: {trans}s crossfade")
     print()
 
@@ -173,7 +174,6 @@ async def generate_dj(client, types, comp: dict) -> bytes | None:
             trans_from_prompt = ""
             trans_to_prompt = ""
             trans_start_time = 0.0
-            trans_to_idx = 0
             last_weight_update = 0.0
 
             async for message in session.receive():
@@ -198,9 +198,10 @@ async def generate_dj(client, types, comp: dict) -> bytes | None:
                         trans_from_prompt = build_prompt(comp, phases[ev["from_idx"]])
                         trans_to_prompt = build_prompt(comp, phases[ev["to_idx"]])
                         trans_start_time = ev["at_sec"]
-                        trans_to_idx = ev["to_idx"]
                         last_weight_update = elapsed
-                        print(f"\n  [{format_time(elapsed / 60)}] transition: {phases[ev['from_idx']]['name']} -> {phases[ev['to_idx']]['name']}")
+                        from_name = phases[ev['from_idx']]['name']
+                        to_name = phases[ev['to_idx']]['name']
+                        print(f"\n  [{format_time(elapsed / 60)}] transition: {from_name} -> {to_name}")
 
                     elif ev["type"] == "transition_end":
                         in_transition = False
@@ -239,7 +240,7 @@ async def generate_dj(client, types, comp: dict) -> bytes | None:
                     print(f"\r  [生成中] {m}:{s:02d} / {total_m}:{total_s:02d}{phase_label}", end="", flush=True)
 
             await session.stop()
-            print(f"\n  [生成完了]")
+            print("\n  [生成完了]")
 
     except KeyboardInterrupt:
         print("\n\n  [中断] Ctrl+C を検出。収集済みデータを保存します。")
