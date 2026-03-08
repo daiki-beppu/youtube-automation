@@ -280,8 +280,10 @@ async def generate_segmented(client, types, comp: dict, output: Path,
                 seg_path.unlink()
         print("  セグメントファイルを削除しました")
     else:
-        # セグメントファイルをリネーム（name_en > name > seg_NNN）
-        print("\n=== セグメントファイルをリネーム ===")
+        # セグメントファイルを 02-Individual-music/ に移動・リネーム
+        individual_dir = output.parent.parent / "02-Individual-music"
+        individual_dir.mkdir(parents=True, exist_ok=True)
+        print(f"\n=== セグメントファイルを {individual_dir.name}/ に移動 ===")
         for i, (seg_path, seg_comp) in enumerate(zip(seg_paths, segments)):
             if not seg_path.exists():
                 continue
@@ -289,9 +291,9 @@ async def generate_segmented(client, types, comp: dict, output: Path,
             label = phase.get("name_en") or phase["name"]
             safe_name = label.replace(" ", "-").replace("/", "-").replace("\\", "-").replace(":", "-")
             new_name = f"{i + 1:02d}_{safe_name}.wav"
-            new_path = seg_path.parent / new_name
+            new_path = individual_dir / new_name
             seg_path.rename(new_path)
-            print(f"  {seg_path.name} -> {new_name}")
+            print(f"  {seg_path.name} -> {individual_dir.name}/{new_name}")
 
     return combined
 
