@@ -38,16 +38,16 @@ for candidate in "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/thumbnail.png"; do
 done
 
 MASTER_AUDIO=""
-if [[ -f "${MASTER_DIR}/master-mix.wav" ]]; then
-    MASTER_AUDIO="${MASTER_DIR}/master-mix.wav"
-else
-    for f in "${MASTER_DIR}"/*-Master.mp3 "${MASTER_DIR}"/master.mp3; do
-        if [[ -f "$f" ]]; then
-            MASTER_AUDIO="$f"
-            break
-        fi
-    done
-fi
+for candidate_audio in \
+    "${MASTER_DIR}/master-mix.wav" \
+    "${MASTER_DIR}/master.wav" \
+    "${MASTER_DIR}"/*-Master.mp3 \
+    "${MASTER_DIR}"/master.mp3; do
+    if [[ -f "$candidate_audio" ]]; then
+        MASTER_AUDIO="$candidate_audio"
+        break
+    fi
+done
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
 
