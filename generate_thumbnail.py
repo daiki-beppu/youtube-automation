@@ -48,10 +48,10 @@ def load_config() -> dict:
         return {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST}
 
 
-def extract_prompt(prompts_md: Path, variation: str | None) -> str:
+def extract_prompt(prompts_md: Path, variation: str | None, use_text_overlay: bool = False) -> str:
     """thumbnail-prompts.md から指定バリエーションのプロンプトを抽出する。
 
-    variation=None  → Primary Prompt
+    variation=None  → Primary Prompt（use_text_overlay=True の場合は Text Overlay Prompt を優先）
     variation="A"   → Variation A
     variation="B"   → Variation B
     variation="bg"  → Video Background Prompt
@@ -59,8 +59,15 @@ def extract_prompt(prompts_md: Path, variation: str | None) -> str:
     text = prompts_md.read_text(encoding="utf-8")
 
     if variation is None:
+        if use_text_overlay:
+            # ## Text Overlay Prompt セクションを優先（参照画像ワークフロー）
+            overlay_pattern = r"## Text Overlay Prompt[^\n]*\n\s*```\n(.*?)\n```"
+            overlay_match = re.search(overlay_pattern, text, re.DOTALL)
+            if overlay_match:
+                return overlay_match.group(1).strip()
+            # フォールバック: ## Primary Prompt
         # ## Primary Prompt セクション直後のコードブロック
-        pattern = r"## Primary Prompt\s*\n```\n(.*?)\n```"
+        pattern = r"## Primary Prompt[^\n]*\n\s*```\n(.*?)\n```"
     elif variation == "bg":
         # ## Video Background Prompt セクション直後のコードブロック
         pattern = r"## Video Background Prompt[^\n]*\n\s*```\n(.*?)\n```"
@@ -121,16 +128,25 @@ def resolve_unique_path(output_path: Path) -> Path:
     return parent / f"{base}-v{start + 100}{suffix}"
 
 
-def generate_thumbnail(client, prompt: str, model: str, output_path: Path) -> bool:
+def generate_thumbnail(client, prompt: str, model: str, output_path: Path, reference_image: Path | None = None) -> bool:
     """Gemini API で画像を1枚生成して output_path に保存する。成功したら True を返す。"""
     from google.genai import types
 
+    # 参照画像がある場合は画像+テキストで送信
+    if reference_image:
+        ref_bytes = reference_image.read_bytes()
+        mime = "image/jpeg" if reference_image.suffix.lower() in (".jpg", ".jpeg") else "image/png"
+        ref_part = types.Part.from_bytes(data=ref_bytes, mime_type=mime)
+        contents = [ref_part, prompt]
+    else:
+        contents = [prompt]
+
     for attempt in range(RETRY_MAX):
         try:
-            print(f"  [Submit] モデル={model}")
+            print(f"  [Submit] モデル={model}" + (f" + 参照画像={reference_image.name}" if reference_image else ""))
             response = client.models.generate_content(
                 model=model,
-                contents=[prompt],
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=["IMAGE", "TEXT"],
                 ),
@@ -203,6 +219,9 @@ def main():
     parser.add_argument("--prompt", type=str, default=None, help="プロンプトテキストを直接指定（ダイレクトモード）")
     parser.add_argument("--output", type=str, default=None, help="出力パス（--prompt 時必須）")
     parser.add_argument("--model", type=str, default=None, help="使用するモデル（例: gemini-3.1-flash-image-preview）")
+    parser.add_argument(
+        "--reference", type=str, default=None, help="参照画像パス（main.png等）。画像+プロンプトで Gemini に送信"
+    )
     args = parser.parse_args()
 
     # --- ダイレクトモード ---
@@ -223,6 +242,8 @@ def main():
         print("\nモード:       ダイレクト")
         print(f"プロンプト:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
         print(f"出力先:       {output_path}")
+        if args.reference:
+            print(f"参照画像:     {args.reference}")
 
     # --- コレクションモード ---
     elif args.collection_path:
@@ -251,17 +272,22 @@ def main():
         config = load_config()
         model = args.model or config.get("model", DEFAULT_MODEL)
         cost_per_image = config.get("cost_per_image_usd", DEFAULT_COST)
-        prompt = extract_prompt(prompts_md, args.variation)
+        use_text_overlay = args.reference is not None and args.variation is None
+        prompt = extract_prompt(prompts_md, args.variation, use_text_overlay=use_text_overlay)
 
         if args.variation == "bg":
             label = "Video Background Prompt"
         elif args.variation:
             label = f"Variation {args.variation}"
+        elif use_text_overlay:
+            label = "Text Overlay Prompt"
         else:
             label = "Primary Prompt"
         print(f"\nコレクション: {collection_path.name}")
         print(f"プロンプト:   {label}")
         print(f"出力先:       {output_path.relative_to(REPO_ROOT)}")
+        if args.reference:
+            print(f"参照画像:     {args.reference}")
 
     else:
         parser.error("collection_path または --prompt が必要です")
@@ -305,10 +331,20 @@ def main():
         print("  pip3 install google-genai Pillow --break-system-packages")
         sys.exit(1)
 
+    # 参照画像解決
+    reference_image = None
+    if args.reference:
+        reference_image = Path(args.reference)
+        if not reference_image.is_absolute():
+            reference_image = Path.cwd() / reference_image
+        if not reference_image.exists():
+            print(f"[ERROR] 参照画像が見つかりません: {reference_image}")
+            sys.exit(1)
+
     # 生成実行
     client = genai.Client()
     start_time = time.monotonic()
-    success = generate_thumbnail(client, prompt, model, output_path)
+    success = generate_thumbnail(client, prompt, model, output_path, reference_image=reference_image)
     elapsed = time.monotonic() - start_time
 
     # レポート
