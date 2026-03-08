@@ -120,7 +120,8 @@ def build_config_for_phase(types, comp: dict, phase: dict):
     """base + phase オーバーライドから LiveMusicGenerationConfig を構築。"""
     base = comp["base"]
     kwargs = {}
-    for key in ("bpm", "brightness", "density", "guidance", "temperature"):
+    for key in ("bpm", "brightness", "density", "guidance", "temperature",
+                "scale", "top_k", "seed", "mute_bass", "mute_drums", "only_bass_and_drums"):
         val = phase.get(key, base.get(key))
         if val is not None:
             kwargs[key] = val
