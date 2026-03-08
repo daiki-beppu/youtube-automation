@@ -10,6 +10,7 @@ Features:
 """
 
 import json
+import logging
 import re
 import subprocess
 from datetime import datetime
@@ -17,6 +18,8 @@ from pathlib import Path
 from typing import Dict, List
 
 from .channel_config import ChannelConfig
+
+logger = logging.getLogger(__name__)
 
 
 class BAHMetadataGenerator:
@@ -64,7 +67,8 @@ class BAHMetadataGenerator:
         audio_dir = self.collection_path / '02-Individual-music'
 
         if not audio_dir.exists():
-            raise FileNotFoundError(f"音声ディレクトリが見つかりません: {audio_dir}")
+            logger.warning(f"音声ディレクトリが見つかりません（Lyria コレクション?）: {audio_dir}")
+            return []
 
         tracks = []
         current_time = 0
