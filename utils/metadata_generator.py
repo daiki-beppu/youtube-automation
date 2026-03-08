@@ -188,6 +188,55 @@ class BAHMetadataGenerator:
         else:
             return f"{minutes:02d}:{secs:02d}"
 
+    # ─── タイムスタンプ生成 ─────────────────────────────
+
+    def generate_timestamps(self) -> list[dict]:
+        """3ソース対応のタイムスタンプ生成
+
+        優先順位:
+        1. 個別トラックがある場合 → analyze_audio_files()
+        2. composition.json がある場合 → phases[].at_min
+        3. いずれもない場合 → 空リスト
+        """
+        # 1. 個別トラックがある場合
+        audio_dir = self.collection_path / '02-Individual-music'
+        if audio_dir.exists() and any(audio_dir.iterdir()):
+            tracks = self.analyze_audio_files()
+            return [{'timestamp': t['timestamp'], 'title': t['title']} for t in tracks]
+
+        # 2. composition.json がある場合（Lyria DJ 生成）
+        comp_path = self.collection_path / '20-documentation' / 'composition.json'
+        if comp_path.exists():
+            return self._timestamps_from_composition(comp_path)
+
+        return []
+
+    def _timestamps_from_composition(self, comp_path: Path) -> list[dict]:
+        """composition.json の phases からタイムスタンプを生成"""
+        with open(comp_path, 'r', encoding='utf-8') as f:
+            composition = json.load(f)
+
+        timestamps = []
+        for phase in composition.get('phases', []):
+            at_min = phase.get('at_min', 0)
+            at_sec = at_min * 60
+            name = phase.get('name_en', phase.get('name', ''))
+            timestamps.append({
+                'timestamp': self._format_timestamp(at_sec),
+                'title': name,
+            })
+
+        logger.info(f"composition.json から {len(timestamps)} チャプター生成")
+        return timestamps
+
+    def format_timestamps_text(self) -> str:
+        """タイムスタンプをYouTube概要欄用テキストに整形"""
+        timestamps = self.generate_timestamps()
+        if not timestamps:
+            return ''
+        lines = [f"{ts['timestamp']} {ts['title']}" for ts in timestamps]
+        return '\n'.join(lines)
+
     # ─── タイトル生成（2026リブランド） ─────────────────
 
     def _extract_theme_name(self) -> str:
@@ -230,6 +279,19 @@ class BAHMetadataGenerator:
         return self.config.get_activity_for_theme(theme)
 
     @staticmethod
+    def _format_duration_short(total_seconds: int) -> str:
+        """秒数を短縮デュレーション表示に変換（例: '1h', '2.5h', '25m'）"""
+        total_minutes = total_seconds / 60
+        if total_minutes < 35:
+            rounded = round(total_minutes / 5) * 5
+            return f"{max(rounded, 5)}m"
+        total_hours = total_minutes / 60
+        rounded_half = round(total_hours * 2) / 2
+        if rounded_half == int(rounded_half):
+            return f"{int(rounded_half)}h"
+        return f"{rounded_half}h"
+
+    @staticmethod
     def _format_duration_display(total_seconds: int) -> str:
         """秒数を人間可読なデュレーション表示に丸める
 
@@ -267,12 +329,14 @@ class BAHMetadataGenerator:
         theme = self._extract_theme_name()
         activity = self._get_activity()
         duration_display = self._format_duration_display(total_seconds)
+        duration_short = self._format_duration_short(total_seconds)
 
         title = self.config.title_template.format(
             style=self.config.genre_style.title(),
             theme=theme,
             activity=activity,
             duration_display=duration_display,
+            duration_short=duration_short,
         )
         return title[:100]
 
@@ -399,6 +463,7 @@ class BAHMetadataGenerator:
             'theme': theme,
             'activity': self._get_activity(),
             'duration_display': self._format_duration_display(total_duration),
+            'duration_short': self._format_duration_short(total_duration),
         }
         localizations = self.generate_localizations(title_vars, timestamp_body)
 
