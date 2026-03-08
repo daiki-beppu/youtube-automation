@@ -23,6 +23,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 SUBDIRS = [
+    "01-master",
+    "02-Individual-music",
     "10-assets",
     "20-documentation",
 ]
