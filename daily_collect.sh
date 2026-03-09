@@ -7,6 +7,9 @@
 #   cp automation/launchd/com.youtube-channels.daily-collect.plist ~/Library/LaunchAgents/
 #   launchctl load ~/Library/LaunchAgents/com.youtube-channels.daily-collect.plist
 
+# launchd は最小 PATH で起動するため Homebrew を明示追加
+export PATH="/opt/homebrew/bin:$PATH"
+
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
