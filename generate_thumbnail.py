@@ -141,14 +141,21 @@ def generate_thumbnail(client, prompt: str, model: str, output_path: Path, refer
     else:
         contents = [prompt]
 
+    # 出力形式: .png → PNG（ロスレス、動画背景用）、.jpg → JPEG（YouTube サムネイル用）
+    save_as_png = output_path.suffix.lower() == ".png"
+
     for attempt in range(RETRY_MAX):
         try:
-            print(f"  [Submit] モデル={model}" + (f" + 参照画像={reference_image.name}" if reference_image else ""))
+            print(f"  [Submit] モデル={model} 解像度=2K" + (f" + 参照画像={reference_image.name}" if reference_image else ""))
             response = client.models.generate_content(
                 model=model,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=["IMAGE", "TEXT"],
+                    image_config=types.ImageConfig(
+                        aspect_ratio="16:9",
+                        image_size="2K",
+                    ),
                 ),
             )
 
@@ -159,14 +166,17 @@ def generate_thumbnail(client, prompt: str, model: str, output_path: Path, refer
                     from PIL import Image as PILImage
                     image = PILImage.open(io.BytesIO(part.inline_data.data))
                     output_path.parent.mkdir(parents=True, exist_ok=True)
-                    # 常に JPEG で保存（軽量 + YouTube サムネイル 2MB 上限対応）
-                    rgb_image = image.convert("RGB")
-                    jpg_path = output_path.with_suffix(".jpg")
-                    rgb_image.save(str(jpg_path), quality=92, optimize=True)
-                    # 元の拡張子が .png だった場合は削除不要（まだ保存していない）
-                    if output_path.suffix != ".jpg" and output_path.exists():
-                        output_path.unlink()
-                    output_path = jpg_path
+                    if save_as_png:
+                        # PNG ロスレス保存（動画背景・高品質用途）
+                        image.save(str(output_path), optimize=True)
+                    else:
+                        # JPEG 保存（YouTube サムネイル 2MB 上限対応）
+                        rgb_image = image.convert("RGB")
+                        jpg_path = output_path.with_suffix(".jpg")
+                        rgb_image.save(str(jpg_path), quality=92, optimize=True)
+                        if output_path.suffix != ".jpg" and output_path.exists():
+                            output_path.unlink()
+                        output_path = jpg_path
                     size_kb = output_path.stat().st_size // 1024
                     print(f"  [Done]   保存完了 → {output_path} ({size_kb} KB)")
                     return True
@@ -263,7 +273,7 @@ def main():
 
         prompts_md = collection_path / "20-documentation" / "thumbnail-prompts.md"
         if args.variation == "bg":
-            filename = "main.jpg"
+            filename = "main.png"
         elif args.variation:
             filename = f"thumbnail-{args.variation.lower()}.png"
         else:
