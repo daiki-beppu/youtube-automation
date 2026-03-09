@@ -166,19 +166,26 @@ def generate_thumbnail(client, prompt: str, model: str, output_path: Path, refer
                     from PIL import Image as PILImage
                     image = PILImage.open(io.BytesIO(part.inline_data.data))
                     output_path.parent.mkdir(parents=True, exist_ok=True)
+                    rgb_image = image.convert("RGB")
                     if save_as_png:
                         # PNG ロスレス保存（動画背景・高品質用途）
                         image.save(str(output_path), optimize=True)
+                        png_kb = output_path.stat().st_size // 1024
+                        print(f"  [Done]   保存完了 → {output_path} ({png_kb} KB)")
+                        # JPEG 圧縮版も同時生成
+                        jpg_path = output_path.with_suffix(".jpg")
+                        rgb_image.save(str(jpg_path), quality=92, optimize=True)
+                        jpg_kb = jpg_path.stat().st_size // 1024
+                        print(f"  [Done]   JPEG版   → {jpg_path} ({jpg_kb} KB)")
                     else:
                         # JPEG 保存（YouTube サムネイル 2MB 上限対応）
-                        rgb_image = image.convert("RGB")
                         jpg_path = output_path.with_suffix(".jpg")
                         rgb_image.save(str(jpg_path), quality=92, optimize=True)
                         if output_path.suffix != ".jpg" and output_path.exists():
                             output_path.unlink()
                         output_path = jpg_path
-                    size_kb = output_path.stat().st_size // 1024
-                    print(f"  [Done]   保存完了 → {output_path} ({size_kb} KB)")
+                        size_kb = output_path.stat().st_size // 1024
+                        print(f"  [Done]   保存完了 → {output_path} ({size_kb} KB)")
                     return True
 
             # 画像なしレスポンス
