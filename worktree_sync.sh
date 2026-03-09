@@ -102,7 +102,7 @@ sync_files_exclude() {
 }
 sync_files_exclude "01-master" "master.wav" "$MAIN_COLLECTION/02-Individual-music" "individual tracks"
 sync_files "01-master/*.mp4" "$MAIN_COLLECTION/01-master" "master video"
-sync_files "10-assets/main.png" "$MAIN_COLLECTION/10-assets" "main.png"
+sync_files "10-assets/main.jpg" "$MAIN_COLLECTION/10-assets" "main.jpg"
 
 # --- preview クリーンアップ ---
 if [[ -d "01-master/preview" ]]; then

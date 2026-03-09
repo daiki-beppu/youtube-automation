@@ -159,7 +159,14 @@ def generate_thumbnail(client, prompt: str, model: str, output_path: Path, refer
                     from PIL import Image as PILImage
                     image = PILImage.open(io.BytesIO(part.inline_data.data))
                     output_path.parent.mkdir(parents=True, exist_ok=True)
-                    image.save(str(output_path))
+                    # 常に JPEG で保存（軽量 + YouTube サムネイル 2MB 上限対応）
+                    rgb_image = image.convert("RGB")
+                    jpg_path = output_path.with_suffix(".jpg")
+                    rgb_image.save(str(jpg_path), quality=92, optimize=True)
+                    # 元の拡張子が .png だった場合は削除不要（まだ保存していない）
+                    if output_path.suffix != ".jpg" and output_path.exists():
+                        output_path.unlink()
+                    output_path = jpg_path
                     size_kb = output_path.stat().st_size // 1024
                     print(f"  [Done]   保存完了 → {output_path} ({size_kb} KB)")
                     return True
@@ -256,11 +263,11 @@ def main():
 
         prompts_md = collection_path / "20-documentation" / "thumbnail-prompts.md"
         if args.variation == "bg":
-            filename = "main.png"
+            filename = "main.jpg"
         elif args.variation:
             filename = f"thumbnail-{args.variation.lower()}.png"
         else:
-            filename = "thumbnail.png"
+            filename = "thumbnail.jpg"
         output_path = collection_path / "10-assets" / filename
         workflow_state = collection_path / "workflow-state.json"
 

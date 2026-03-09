@@ -342,14 +342,13 @@ class YouTubeAutoUploader:
         if publish_at:
             metadata['publish_at'] = publish_at
 
-        # サムネイル検索（thumbnail.png を優先）
+        # サムネイル検索（thumbnail.jpg を優先）
         thumbnail_path = None
-        thumbnail_exact = collection_dir / '10-assets' / 'thumbnail.png'
-        if thumbnail_exact.exists():
-            thumbnail_path = str(thumbnail_exact)
-        else:
-            thumbnail_files = list(collection_dir.glob('10-assets/*.png'))
-            thumbnail_path = str(thumbnail_files[0]) if thumbnail_files else None
+        for tn in ['thumbnail.jpg', 'thumbnail.png', 'main.jpg', 'main.png']:
+            candidate = collection_dir / '10-assets' / tn
+            if candidate.exists():
+                thumbnail_path = str(candidate)
+                break
 
         # アップロード実行
         video_id = self.upload_video(str(master_video), metadata, thumbnail_path)
