@@ -29,6 +29,11 @@ COLLECTION_NAME="$(echo "$dir_basename" \
     | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}' OFS='-')"
 
 # ─── Auto-detect Assets ─────────────────────────────────
+LOOP_VIDEO=""
+if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
+    LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
+fi
+
 THUMBNAIL=""
 for candidate in "${ASSETS_DIR}/main.jpg" "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/thumbnail.jpg" "${ASSETS_DIR}/thumbnail.png"; do
     if [[ -f "$candidate" ]]; then
@@ -82,10 +87,14 @@ format_duration() {
 
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v10.0 — ${COLLECTION_NAME}"
+echo "  generate_videos.sh v11.0 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
-echo "  Thumbnail: $(basename "$THUMBNAIL")"
+if [[ -n "$LOOP_VIDEO" ]]; then
+    echo "  Video BG : $(basename "$LOOP_VIDEO") (loop)"
+else
+    echo "  Thumbnail: $(basename "$THUMBNAIL")"
+fi
 echo "  Audio    : $(basename "$MASTER_AUDIO")"
 echo "  Output   : $(basename "$MASTER_OUTPUT")"
 
@@ -97,17 +106,32 @@ PROGRESS_FILE="$(mktemp)"
 trap 'rm -f "$PROGRESS_FILE"' EXIT
 
 # ─── FFmpeg (background) ─────────────────────────────────
-ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" -i "$MASTER_AUDIO" \
-    -c:v libx264 -tune stillimage -preset ultrafast -crf 40 -pix_fmt yuv420p \
-    -x264opts keyint=1:min-keyint=1 \
-    -r 1 \
-    -c:a aac -b:a 192k -ar 48000 \
-    -t "$duration" \
-    -movflags +faststart \
-    -shortest \
-    -loglevel error \
-    -progress "$PROGRESS_FILE" \
-    "$MASTER_OUTPUT" &
+if [[ -n "$LOOP_VIDEO" ]]; then
+    # ループ動画背景モード: loop.mp4 を無限ループで背景に使用
+    ffmpeg -y -stream_loop -1 -i "$LOOP_VIDEO" -i "$MASTER_AUDIO" \
+        -c:v libx264 -preset slow -crf 20 -pix_fmt yuv420p \
+        -r 24 \
+        -c:a aac -b:a 192k -ar 48000 \
+        -t "$duration" \
+        -movflags +faststart \
+        -shortest \
+        -loglevel error \
+        -progress "$PROGRESS_FILE" \
+        "$MASTER_OUTPUT" &
+else
+    # 静止画背景モード（従来）
+    ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" -i "$MASTER_AUDIO" \
+        -c:v libx264 -tune stillimage -preset ultrafast -crf 40 -pix_fmt yuv420p \
+        -x264opts keyint=1:min-keyint=1 \
+        -r 1 \
+        -c:a aac -b:a 192k -ar 48000 \
+        -t "$duration" \
+        -movflags +faststart \
+        -shortest \
+        -loglevel error \
+        -progress "$PROGRESS_FILE" \
+        "$MASTER_OUTPUT" &
+fi
 ffmpeg_pid=$!
 
 # ─── Progress Bar ─────────────────────────────────────────
