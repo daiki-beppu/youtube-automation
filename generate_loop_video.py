@@ -82,6 +82,7 @@ def generate_loop_video(client, image_path: Path, output_path: Path, model: str,
                 resolution="1080p",
                 number_of_videos=1,
                 duration_seconds=8,
+                person_generation="allow_adult",
                 last_frame=image,
             ),
         )

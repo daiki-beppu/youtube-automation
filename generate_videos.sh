@@ -46,6 +46,7 @@ MASTER_AUDIO=""
 for candidate_audio in \
     "${MASTER_DIR}/master-mix.wav" \
     "${MASTER_DIR}/master.wav" \
+    "${MASTER_DIR}"/*-Master-mix.wav \
     "${MASTER_DIR}"/*-Master.mp3 \
     "${MASTER_DIR}"/master.mp3; do
     if [[ -f "$candidate_audio" ]]; then
@@ -108,8 +109,17 @@ trap 'rm -f "$PROGRESS_FILE"' EXIT
 # ─── FFmpeg (background) ─────────────────────────────────
 if [[ -n "$LOOP_VIDEO" ]]; then
     # ループ動画背景モード: loop.mp4 を無限ループで背景に使用
+    # ソースが既に 1920x1080 なら scale/pad をスキップ
+    loop_res="$(ffprobe -v error -select_streams v:0 \
+        -show_entries stream=width,height -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
+    if [[ "$loop_res" == "1920,1080" ]]; then
+        VF_FILTER=""
+    else
+        VF_FILTER="-vf scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
+    fi
     ffmpeg -y -stream_loop -1 -i "$LOOP_VIDEO" -i "$MASTER_AUDIO" \
-        -c:v libx264 -preset slow -crf 20 -pix_fmt yuv420p \
+        -c:v libx264 -tune film -preset fast -crf 23 -pix_fmt yuv420p \
+        $VF_FILTER \
         -r 24 \
         -c:a aac -b:a 192k -ar 48000 \
         -t "$duration" \
@@ -121,7 +131,8 @@ if [[ -n "$LOOP_VIDEO" ]]; then
 else
     # 静止画背景モード（従来）
     ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" -i "$MASTER_AUDIO" \
-        -c:v libx264 -tune stillimage -preset ultrafast -crf 40 -pix_fmt yuv420p \
+        -c:v libx264 -tune stillimage -preset ultrafast -crf 23 -pix_fmt yuv420p \
+        -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
         -x264opts keyint=1:min-keyint=1 \
         -r 1 \
         -c:a aac -b:a 192k -ar 48000 \
