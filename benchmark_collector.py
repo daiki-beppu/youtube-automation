@@ -29,11 +29,7 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
-# --- パス解決 ---
-SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR))
-
-from auth.oauth_handler import YouTubeOAuthHandler  # noqa: E402
+import utils._path_setup  # noqa: F401
 from utils.benchmark_analyzer import (  # noqa: E402
     compute_daily_views,
     compute_engagement_rate,
@@ -42,6 +38,7 @@ from utils.benchmark_analyzer import (  # noqa: E402
     parse_iso_duration,
 )
 from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.youtube_service import get_youtube  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +59,10 @@ Return ONLY valid JSON (no markdown, no code fences):
 
 
 class BenchmarkCollector:
-    """競合チャンネルのベンチマークデータ収集・分析"""
+    """競合チャンネルのベンチマークデータ収集（YouTube Data API）"""
 
     def __init__(self):
         self.config = ChannelConfig.load()
-        self.auth_handler = YouTubeOAuthHandler()
         self.youtube = None
         self.benchmark_config = self.config.benchmark_config
         self.channel_dir = ChannelConfig.channel_dir()
@@ -77,7 +73,7 @@ class BenchmarkCollector:
     def initialize(self):
         """YouTube API 認証を実行する。"""
         logger.info("YouTube API 認証中...")
-        self.youtube = self.auth_handler.get_youtube_service()
+        self.youtube = get_youtube()
         logger.info("認証完了")
 
     def check_freshness(self) -> list[dict]:
@@ -191,7 +187,9 @@ class BenchmarkCollector:
         long_videos = [v for v in videos if not self._is_short(v)]
         if long_videos:
             channel_data["avg_views"] = round(sum(v["views"] for v in long_videos) / len(long_videos))
-            channel_data["avg_daily_views"] = round(sum(v["daily_views"] for v in long_videos) / len(long_videos), 1)
+            channel_data["avg_daily_views"] = round(
+                sum(v["daily_views"] for v in long_videos) / len(long_videos), 1
+            )
             channel_data["avg_engagement_rate"] = round(
                 sum(v["engagement_rate"] for v in long_videos) / len(long_videos), 2
             )
@@ -247,6 +245,49 @@ class BenchmarkCollector:
             "channels": results,
             "collected_at": self.today.isoformat(),
         }
+
+    def save_json(self, data: dict) -> Path:
+        """中間 JSON を data/ に保存する。
+
+        Returns:
+            保存先パス
+        """
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
+        path = self.data_dir / filename
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        logger.info("JSON 保存: %s", path)
+        return path
+
+    # --- 内部メソッド ---
+
+    @staticmethod
+    def _is_short(video: dict) -> bool:
+        """Short 動画かどうかを判定する。"""
+        duration = video.get("duration_iso", "")
+        match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
+        if not match:
+            return False
+        hours = int(match.group(1) or 0)
+        minutes = int(match.group(2) or 0)
+        return hours == 0 and minutes < 5
+
+    @staticmethod
+    def _best_thumbnail_url(thumbnails: dict) -> str:
+        """最高解像度のサムネイルURLを返す。"""
+        for key in ("maxres", "standard", "high", "medium", "default"):
+            if key in thumbnails:
+                return thumbnails[key]["url"]
+        return ""
+
+
+class BenchmarkThumbnailAnalyzer:
+    """ベンチマークサムネイルの Gemini 分析"""
+
+    def __init__(self, benchmarks_dir: Path):
+        self.benchmarks_dir = benchmarks_dir
 
     def analyze_thumbnails(self, data: dict, keep: bool = False) -> dict:
         """サムネイル画像をダウンロードして Gemini で分析する。
@@ -316,7 +357,9 @@ class BenchmarkCollector:
                         logger.info("サムネイル分析完了: %s", video["title"][:40])
                     except json.JSONDecodeError as e:
                         logger.warning("サムネイル分析JSONパース失敗 [%s]: %s", video["title"][:30], e)
-                        video["thumbnail_analysis"] = {"raw": response.text[:500] if 'response' in dir() else str(e)}
+                        video["thumbnail_analysis"] = {
+                            "raw": response.text[:500] if 'response' in dir() else str(e)
+                        }
                     except Exception as e:
                         logger.warning("サムネイル分析失敗 [%s]: %s", video["title"][:30], e)
 
@@ -324,20 +367,14 @@ class BenchmarkCollector:
 
         return data
 
-    def save_json(self, data: dict) -> Path:
-        """中間 JSON を data/ に保存する。
 
-        Returns:
-            保存先パス
-        """
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
-        path = self.data_dir / filename
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        logger.info("JSON 保存: %s", path)
-        return path
+class BenchmarkReportGenerator:
+    """ベンチマーク Markdown レポート生成"""
+
+    def __init__(self, config, benchmarks_dir: Path, today: date):
+        self.config = config
+        self.benchmarks_dir = benchmarks_dir
+        self.today = today
 
     def generate_markdown(self, data: dict) -> dict[str, str]:
         """収集データから Markdown レポートを生成する。
@@ -375,7 +412,7 @@ class BenchmarkCollector:
 
     @staticmethod
     def _is_short(video: dict) -> bool:
-        """Short 動画かどうかを判定する。"""
+        """Short 動画かどうかを判定する（レポート生成時のフィルタ用）。"""
         duration = video.get("duration_iso", "")
         match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
         if not match:
@@ -479,8 +516,11 @@ class BenchmarkCollector:
         lines.append("")
 
         # サムネイル分析
-        analyzed = [v for v in videos if v.get("thumbnail_analysis") and isinstance(v["thumbnail_analysis"], dict)
-                    and "composition" in v.get("thumbnail_analysis", {})]
+        analyzed = [
+            v for v in videos
+            if v.get("thumbnail_analysis") and isinstance(v["thumbnail_analysis"], dict)
+            and "composition" in v.get("thumbnail_analysis", {})
+        ]
         if analyzed:
             lines.extend(["## サムネイル分析（Gemini API）", ""])
             for i, v in enumerate(analyzed[:5], 1):
@@ -615,14 +655,6 @@ class BenchmarkCollector:
         lines.append("")
         return "\n".join(lines)
 
-    @staticmethod
-    def _best_thumbnail_url(thumbnails: dict) -> str:
-        """最高解像度のサムネイルURLを返す。"""
-        for key in ("maxres", "standard", "high", "medium", "default"):
-            if key in thumbnails:
-                return thumbnails[key]["url"]
-        return ""
-
 
 def main():
     parser = argparse.ArgumentParser(description="競合チャンネルのベンチマークデータ収集・分析")
@@ -669,7 +701,8 @@ def main():
     analyze_thumbnails = collector.benchmark_config.get("analyze_thumbnails", True)
     if analyze_thumbnails and not args.no_thumbnails:
         print("サムネイル分析中（Gemini API）...")
-        data = collector.analyze_thumbnails(data, keep=args.keep_thumbnails)
+        analyzer = BenchmarkThumbnailAnalyzer(collector.benchmarks_dir)
+        data = analyzer.analyze_thumbnails(data, keep=args.keep_thumbnails)
 
     # JSON 保存
     json_path = collector.save_json(data)
@@ -677,8 +710,9 @@ def main():
 
     # Markdown 生成
     if not args.json_only:
-        md_map = collector.generate_markdown(data)
-        collector.write_markdown(md_map)
+        reporter = BenchmarkReportGenerator(collector.config, collector.benchmarks_dir, collector.today)
+        md_map = reporter.generate_markdown(data)
+        reporter.write_markdown(md_map)
         print(f"Markdown 更新: {len(md_map)} ファイル")
 
     # サマリー

@@ -12,6 +12,8 @@ import warnings
 import wave
 from pathlib import Path
 
+from utils.time_utils import format_duration_mmss
+
 SAMPLE_RATE = 48000
 CHANNELS = 2
 SAMPLE_WIDTH = 2  # 16-bit
@@ -49,13 +51,6 @@ def load_composition(path: Path) -> dict:
     return comp
 
 
-def format_time(minutes: float) -> str:
-    """分を mm:ss 形式に変換。"""
-    m = int(minutes)
-    s = int((minutes - m) * 60)
-    return f"{m:02d}:{s:02d}"
-
-
 def dry_run(comp: dict) -> None:
     """タイムラインを表示して終了。"""
     title = comp["title"]
@@ -77,11 +72,11 @@ def dry_run(comp: dict) -> None:
 
         if i > 0:
             trans_start = at - trans / 120
-            print(f"  {format_time(trans_start)}  ── transition ({trans}s) ──")
+            print(f"  {format_duration_mmss(trans_start)}  ── transition ({trans}s) ──")
 
-        print(f"  {format_time(at)}  {name:<20s} {override_str}")
+        print(f"  {format_duration_mmss(at)}  {name:<20s} {override_str}")
 
-    print(f"  {format_time(total)}  END")
+    print(f"  {format_duration_mmss(total)}  END")
     print()
 
 
@@ -200,7 +195,7 @@ async def _generate_one_segment(client, types, i: int, seg_comp: dict, seg_path:
     # 既存セグメントはスキップ
     if seg_path.exists():
         dur = pcm_duration_sec(read_wav_pcm(seg_path))
-        print(f"\n  [skip] {label} ({format_time(dur / 60)}) — 既に存在")
+        print(f"\n  [skip] {label} ({format_duration_mmss(dur / 60)}) — 既に存在")
         return True
 
     async def _do_generate():
@@ -212,7 +207,7 @@ async def _generate_one_segment(client, types, i: int, seg_comp: dict, seg_path:
             pcm = await generate_dj(client, types, seg_comp, seg_path)
             if pcm is not None:
                 write_wav(pcm, seg_path)
-                print(f"\n  [{label}] 完了 ({format_time(pcm_duration_sec(pcm) / 60)})")
+                print(f"\n  [{label}] 完了 ({format_duration_mmss(pcm_duration_sec(pcm) / 60)})")
                 return True
 
         print(f"\n  [{label}] {max_retries + 1} 回失敗")
@@ -271,7 +266,7 @@ async def generate_segmented(client, types, comp: dict, output: Path,
     for i in range(1, len(seg_paths)):
         next_pcm = read_wav_pcm(seg_paths[i])
         combined = crossfade_join(combined, next_pcm)
-        print(f"  joined: seg_{i:03d} + seg_{i+1:03d} -> {format_time(pcm_duration_sec(combined) / 60)}")
+        print(f"  joined: seg_{i:03d} + seg_{i+1:03d} -> {format_duration_mmss(pcm_duration_sec(combined) / 60)}")
 
     write_wav(combined, output)
 
@@ -437,7 +432,7 @@ async def generate_dj(client, types, comp: dict, output: Path,
             await session.play()
 
             if offset_sec > 0:
-                print(f"\n  [再開] {phases[start_phase_idx]['name']} (offset {format_time(offset_sec / 60)})")
+                print(f"\n  [再開] {phases[start_phase_idx]['name']} (offset {format_duration_mmss(offset_sec / 60)})")
             else:
                 print(f"\n  [生成開始] {phases[start_phase_idx]['name']}")
 
@@ -480,7 +475,8 @@ async def generate_dj(client, types, comp: dict, output: Path,
                         last_weight_update = virtual_elapsed
                         from_name = phases[ev['from_idx']]['name']
                         to_name = phases[ev['to_idx']]['name']
-                        print(f"\n  [{format_time(virtual_elapsed / 60)}] transition: {from_name} -> {to_name}")
+                        print(f"\n  [{format_duration_mmss(virtual_elapsed / 60)}] "
+                              f"transition: {from_name} -> {to_name}")
 
                     elif ev["type"] == "transition_end":
                         in_transition = False
@@ -491,7 +487,7 @@ async def generate_dj(client, types, comp: dict, output: Path,
                         await session.set_weighted_prompts(
                             prompts=[types.WeightedPrompt(text=trans_to_prompt, weight=1.0)]
                         )
-                        print(f"\n  [{format_time(virtual_elapsed / 60)}] phase: {current_phase_name}")
+                        print(f"\n  [{format_duration_mmss(virtual_elapsed / 60)}] phase: {current_phase_name}")
 
                     event_idx += 1
 
@@ -522,7 +518,7 @@ async def generate_dj(client, types, comp: dict, output: Path,
                     last_checkpoint = checkpoint_elapsed
                     write_wav(bytes(pcm_data), partial_path)
                     dur = pcm_duration_sec(pcm_data)
-                    print(f"\n  [checkpoint] {format_time(dur / 60)} saved to {partial_path.name}")
+                    print(f"\n  [checkpoint] {format_duration_mmss(dur / 60)} saved to {partial_path.name}")
 
             await session.stop()
             print("\n  [生成完了]")
@@ -538,7 +534,7 @@ async def generate_dj(client, types, comp: dict, output: Path,
     if interrupted and pcm_data:
         write_wav(bytes(pcm_data), partial_path)
         dur = pcm_duration_sec(pcm_data)
-        print(f"  [partial] {format_time(dur / 60)} を {partial_path.name} に保存しました")
+        print(f"  [partial] {format_duration_mmss(dur / 60)} を {partial_path.name} に保存しました")
         print(f"  再開: --resume {partial_path}")
         return None
 
@@ -662,8 +658,8 @@ def main():
         offset_sec = pcm_duration_sec(accumulated_pcm)
         total_sec = comp["total_duration_min"] * 60
         remaining = total_sec - offset_sec
-        print(f"\n  [resume] {format_time(offset_sec / 60)} の partial を読み込み")
-        print(f"  [resume] 残り {format_time(remaining / 60)} を生成します")
+        print(f"\n  [resume] {format_duration_mmss(offset_sec / 60)} の partial を読み込み")
+        print(f"  [resume] 残り {format_duration_mmss(remaining / 60)} を生成します")
 
     start_time = time.monotonic()
     attempt = 0
@@ -672,7 +668,10 @@ def main():
         # セグメント分割生成モード（デフォルト）
         workers = args.workers if args.workers >= 0 else len(comp["phases"])
         pcm_data = asyncio.run(
-            generate_segmented(client, types, comp, output, max_retries=max_retries, workers=workers, cleanup=args.cleanup)
+            generate_segmented(
+                client, types, comp, output,
+                max_retries=max_retries, workers=workers, cleanup=args.cleanup,
+            )
         )
         gen_elapsed = time.monotonic() - start_time
         if pcm_data is None:
@@ -687,8 +686,8 @@ def main():
             if pcm_data is not None:
                 # 成功: accumulated があればクロスフェード結合
                 if accumulated_pcm:
-                    print(f"\n  [結合] partial ({format_time(offset_sec / 60)}) + "
-                          f"new ({format_time(pcm_duration_sec(pcm_data) / 60)}) をクロスフェード結合...")
+                    print(f"\n  [結合] partial ({format_duration_mmss(offset_sec / 60)}) + "
+                          f"new ({format_duration_mmss(pcm_duration_sec(pcm_data) / 60)}) をクロスフェード結合...")
                     pcm_data = crossfade_join(accumulated_pcm, pcm_data)
                 break
 
@@ -715,7 +714,7 @@ def main():
 
             wait_sec = min(30, 10 * attempt)
             print(f"\n  [auto-retry] {attempt}/{max_retries} — {wait_sec}秒後にリトライ "
-                  f"(offset {format_time(offset_sec / 60)})...")
+                  f"(offset {format_duration_mmss(offset_sec / 60)})...")
             time.sleep(wait_sec)
 
             # partial を上書き保存して再開

@@ -14,25 +14,24 @@ Features:
 import logging
 import re
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent.parent))
-
-from auth.oauth_handler import YouTubeOAuthHandler
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaFileUpload
-from utils.channel_config import ChannelConfig
-from utils.metadata_generator import BAHMetadataGenerator
+import utils._path_setup  # noqa: F401, E402
+from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
+from utils.upload_core import YouTubeUploadCore  # noqa: E402
 
 
-class YouTubeAutoUploader:
-    """YouTube自動アップロードメインクラス"""
+class YouTubeAutoUploader(YouTubeUploadCore):
+    """YouTube自動アップロードメインクラス
+
+    YouTubeUploadCore を継承し、コレクション単位のアップロード機能を提供する。
+    コアのアップロード・サムネイル・リトライロジックは YouTubeUploadCore に委譲。
+    """
 
     def __init__(self, collections_root: str = None):
         """
@@ -41,50 +40,35 @@ class YouTubeAutoUploader:
         Args:
             collections_root (str): collections/ ディレクトリのパス
         """
+        super().__init__()
+
         if collections_root is None:
-            from utils.channel_config import ChannelConfig
             collections_root = ChannelConfig.channel_dir() / 'collections'
 
         self.collections_root = Path(collections_root)
-        self.auth_handler = YouTubeOAuthHandler()
-        self.youtube_service = None
         self.upload_results = []
 
-    def initialize(self):
-        """YouTube API 初期化"""
-        logger.info("🔐 YouTube API 認証中...")
-        self.youtube_service = self.auth_handler.get_youtube_service()
-        logger.info("✅ YouTube API 準備完了")
+    @property
+    def youtube_service(self):
+        """後方互換: youtube_service は youtube の別名"""
+        return self.youtube
+
+    @youtube_service.setter
+    def youtube_service(self, value):
+        self.youtube = value
 
     def upload_video(self, video_path: str, metadata: Dict, thumbnail_path: str = None) -> Optional[str]:
         """
-        動画をYouTubeにアップロード
+        メタデータ辞書から YouTube API ボディを構築してアップロード
 
         Args:
             video_path (str): 動画ファイルパス
-            metadata (Dict): メタデータ
+            metadata (Dict): メタデータ（title, description, tags, privacy_status 等）
             thumbnail_path (str): サムネイルファイルパス
 
         Returns:
             str: アップロードされた動画のID（失敗時はNone）
         """
-        if not self.youtube_service:
-            self.initialize()
-
-        video_file = Path(video_path)
-        if not video_file.exists():
-            logger.error(f"❌ 動画ファイルが見つかりません: {video_path}")
-            return None
-
-        logger.info(f"📤 アップロード開始: {video_file.name}")
-
-        # メディアファイル準備
-        media = MediaFileUpload(
-            str(video_file),
-            chunksize=-1,  # 一括アップロード
-            resumable=True
-        )
-
         # リクエストボディ作成
         status_body = {
             'privacyStatus': metadata.get('privacy_status', 'private'),
@@ -96,7 +80,7 @@ class YouTubeAutoUploader:
         if metadata.get('publish_at'):
             status_body['privacyStatus'] = 'private'
             status_body['publishAt'] = metadata['publish_at']
-            logger.info(f"📅 スケジュール公開: {metadata['publish_at']}")
+            logger.info(f"スケジュール公開: {metadata['publish_at']}")
 
         body = {
             'snippet': {
@@ -107,134 +91,13 @@ class YouTubeAutoUploader:
                 'defaultLanguage': metadata.get('language', 'en'),
                 'defaultAudioLanguage': metadata.get('language', 'en'),
             },
-            'status': status_body
+            'status': status_body,
         }
 
         if metadata.get('localizations'):
             body['localizations'] = metadata['localizations']
 
-        try:
-            # 動画アップロード実行
-            insert_request = self.youtube_service.videos().insert(
-                part=','.join(body.keys()),
-                body=body,
-                media_body=media
-            )
-
-            # プログレス表示しながらアップロード
-            video_id = self._resumable_upload(insert_request, video_file.name)
-
-            if video_id:
-                logger.info(f"✅ アップロード成功: {video_id}")
-
-                # サムネイル設定
-                if thumbnail_path and Path(thumbnail_path).exists():
-                    self._set_thumbnail(video_id, thumbnail_path)
-
-                return video_id
-            else:
-                logger.error(f"❌ アップロード失敗: {video_file.name}")
-                return None
-
-        except HttpError as e:
-            logger.error(f"❌ YouTube API エラー: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"❌ 予期しないエラー: {e}")
-            return None
-
-    def _resumable_upload(self, insert_request, filename: str) -> Optional[str]:
-        """
-        再開可能アップロード実行
-
-        Args:
-            insert_request: YouTube API リクエスト
-            filename: ファイル名（表示用）
-
-        Returns:
-            str: 動画ID（失敗時はNone）
-        """
-        response = None
-        error = None
-        retry = 0
-
-        while response is None:
-            try:
-                logger.info(f"📤 アップロード中: {filename} (試行{retry + 1})")
-                status, response = insert_request.next_chunk()
-
-                if status:
-                    progress = int(status.progress() * 100)
-                    logger.info(f"   進捗: {progress}%")
-
-            except HttpError as e:
-                if e.resp.status in [500, 502, 503, 504]:
-                    # 再試行可能エラー
-                    error = f"再試行可能エラー: {e}"
-                    time.sleep(2 ** retry)
-                    retry += 1
-                    if retry > 5:
-                        logger.error(f"❌ リトライ上限到達: {error}")
-                        return None
-                else:
-                    # 致命的エラー
-                    logger.error(f"❌ 致命的エラー: {e}")
-                    return None
-
-            except Exception as e:
-                logger.error(f"❌ アップロードエラー: {e}")
-                return None
-
-        if 'id' in response:
-            return response['id']
-        else:
-            logger.error(f"❌ レスポンスに動画IDがありません: {response}")
-            return None
-
-    def _compress_thumbnail(self, thumbnail_path: Path, max_bytes: int = 2_097_152) -> Path:
-        """サムネイルが max_bytes を超える場合、ffmpeg で JPEG 圧縮した一時ファイルを返す"""
-        if thumbnail_path.stat().st_size <= max_bytes:
-            return thumbnail_path
-
-        import tempfile
-        import subprocess
-        compressed = Path(tempfile.mktemp(suffix='.jpg'))
-        for quality in [2, 5]:  # ffmpeg -qscale:v 2=高品質, 5=中品質
-            subprocess.run(
-                ['ffmpeg', '-y', '-i', str(thumbnail_path), '-qscale:v', str(quality), str(compressed)],
-                capture_output=True,
-            )
-            if compressed.exists() and compressed.stat().st_size <= max_bytes:
-                logger.info(f"🗜️  サムネイル圧縮(q{quality}): {thumbnail_path.stat().st_size / 1024:.0f}KB → {compressed.stat().st_size / 1024:.0f}KB")
-                return compressed
-
-        logger.warning(f"⚠️  サムネイル圧縮後も {compressed.stat().st_size / 1024:.0f}KB — 上限超過")
-        return thumbnail_path
-
-    def _set_thumbnail(self, video_id: str, thumbnail_path: str):
-        """
-        サムネイル設定（2MB 超は自動圧縮）
-
-        Args:
-            video_id (str): 動画ID
-            thumbnail_path (str): サムネイルファイルパス
-        """
-        try:
-            thumbnail_file = self._compress_thumbnail(Path(thumbnail_path))
-
-            self.youtube_service.thumbnails().set(
-                videoId=video_id,
-                media_body=MediaFileUpload(str(thumbnail_file))
-            ).execute()
-
-            logger.info(f"✅ サムネイル設定完了: {Path(thumbnail_path).name}")
-
-            # 一時ファイルのクリーンアップ
-            if thumbnail_file != Path(thumbnail_path) and thumbnail_file.exists():
-                thumbnail_file.unlink()
-
-        except Exception as e:
-            logger.warning(f"⚠️  サムネイル設定エラー: {e}")
+        return super().upload_video(video_path, body, thumbnail_path)
 
     def _load_descriptions_md(self, collection_dir: Path) -> dict | None:
         """descriptions.md から事前生成メタデータを読み込み

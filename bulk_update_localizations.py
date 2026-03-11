@@ -16,13 +16,11 @@ import json
 import re
 import sys
 import time
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent))
-
-from auth.oauth_handler import YouTubeOAuthHandler  # noqa: E402
+import utils._path_setup  # noqa: F401
 from utils.channel_config import ChannelConfig  # noqa: E402
 from utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
+from utils.youtube_service import get_youtube  # noqa: E402
 
 
 def parse_iso8601_duration(duration: str) -> int:
@@ -103,15 +101,8 @@ def main():
     # 2. YouTube API で duration を取得
     video_ids = [v['video_id'] for v in videos]
 
-    if not args.dry_run:
-        handler = YouTubeOAuthHandler()
-        youtube = handler.get_youtube_service()
-    else:
-        youtube = None
-
     # duration 取得（dry-run でもタイトルプレビューのために取得）
-    handler = YouTubeOAuthHandler()
-    yt = handler.get_youtube_service()
+    yt = get_youtube()
 
     # 50件ずつバッチ取得（API 制限）
     duration_map = {}
@@ -192,7 +183,7 @@ def main():
                     'localizations': localizations,
                 }
             ).execute()
-            print(f"   ✅ 更新完了")
+            print("   ✅ 更新完了")
             updated += 1
             time.sleep(0.5)  # API レート制限対策
         except Exception as e:

@@ -14,42 +14,38 @@ Features:
 import json
 import logging
 import os
-import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaFileUpload
-
 logger = logging.getLogger(__name__)
 
-# Import OAuth handler from auth directory
-sys.path.insert(0, str(Path(__file__).parent))
-from auth.oauth_handler import YouTubeOAuthHandler
-from utils.channel_config import ChannelConfig
+import utils._path_setup  # noqa: F401, E402
+from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.upload_core import YouTubeUploadCore  # noqa: E402
 
 
-class VideoUploader:
-    """YouTube Video Upload Manager"""
+class VideoUploader(YouTubeUploadCore):
+    """YouTube Video Upload Manager (legacy)
+
+    レガシーアップローダー。コアのアップロード・サムネイル・リトライロジックは
+    YouTubeUploadCore に委譲。プレイリスト操作メソッドは PlaylistManager が依存
+    しているため維持する。
+    """
 
     def __init__(self, auth_dir=None):
         """
         Initialize uploader
 
         Args:
-            auth_dir (str): Authentication directory path
+            auth_dir (str): Authentication directory path (unused, kept for backward compat)
         """
-        self.auth_handler = YouTubeOAuthHandler(auth_dir)
-        self.youtube = None
+        super().__init__()
 
     def authenticate(self):
-        """Execute OAuth authentication"""
-        logger.info("🔐 YouTube API Authentication...")
-        self.youtube = self.auth_handler.get_youtube_service()
-        logger.info("✅ Authentication successful")
+        """Execute OAuth authentication (後方互換エイリアス)"""
+        self.initialize()
 
     def upload_video(
         self,
@@ -74,148 +70,43 @@ class VideoUploader:
         Returns:
             Dict: Upload response with video ID and URL
         """
-        if not self.youtube:
-            self.authenticate()
+        logger.info(f"Uploading video: {title}")
+        logger.info(f"File: {video_file}")
+        logger.info(f"File size: {os.path.getsize(video_file) / (1024*1024):.2f} MB")
 
-        logger.info(f"📤 Uploading video: {title}")
-        logger.info(f"📁 File: {video_file}")
-        logger.info(f"📊 File size: {os.path.getsize(video_file) / (1024*1024):.2f} MB")
-
-        # Prepare request body
         body = {
             "snippet": {
                 "title": title,
                 "description": description,
                 "tags": tags,
-                "categoryId": category_id
+                "categoryId": category_id,
             },
             "status": {
                 "privacyStatus": privacy_status,
                 "selfDeclaredMadeForKids": False,
                 "containsSyntheticMedia": False,
-            }
+            },
         }
 
-        # Prepare media upload
-        media = MediaFileUpload(
-            video_file,
-            chunksize=1024 * 1024,  # 1MB chunks
-            resumable=True
-        )
+        video_id = super().upload_video(video_file, body)
 
-        try:
-            # Execute upload request
-            request = self.youtube.videos().insert(
-                part="snippet,status",
-                body=body,
-                media_body=media
-            )
-
-            # Upload with progress tracking
-            response = None
-            retry_count = 0
-            max_retries = 5
-
-            while response is None:
-                try:
-                    logger.info("⏳ Uploading...")
-                    status, response = request.next_chunk()
-
-                    if status:
-                        progress = int(status.progress() * 100)
-                        logger.info(f"⏳ Upload progress: {progress}%")
-
-                except HttpError as e:
-                    if e.resp.status in [500, 502, 503, 504] and retry_count < max_retries:
-                        retry_count += 1
-                        wait_time = 2 ** retry_count
-                        logger.warning(
-                            f"⚠️  Upload error (attempt {retry_count}/{max_retries}), "
-                            f"retrying in {wait_time}s..."
-                        )
-                        time.sleep(wait_time)
-                    else:
-                        logger.error(f"❌ Upload failed: {e}")
-                        raise
-
-            logger.info("✅ Upload completed successfully!")
-
-            # Extract video information
-            video_id = response['id']
+        if video_id:
             video_url = f"https://youtu.be/{video_id}"
-
             result = {
                 "video_id": video_id,
                 "video_url": video_url,
                 "title": title,
-                "status": "success"
+                "status": "success",
             }
-
-            logger.info(f"🎬 Video ID: {video_id}")
-            logger.info(f"🔗 Video URL: {video_url}")
-
+            logger.info(f"Video ID: {video_id}")
+            logger.info(f"Video URL: {video_url}")
             return result
-
-        except Exception as e:
-            logger.error(f"❌ Upload error: {e}")
+        else:
             return {
                 "status": "failed",
-                "error": str(e),
-                "title": title
+                "error": "Upload failed",
+                "title": title,
             }
-
-    def set_thumbnail(self, video_id: str, thumbnail_file: str) -> bool:
-        """
-        Set custom thumbnail for video
-
-        Args:
-            video_id (str): YouTube video ID
-            thumbnail_file (str): Path to thumbnail image
-
-        Returns:
-            bool: Success status
-        """
-        if not self.youtube:
-            self.authenticate()
-
-        logger.info(f"🖼️  Setting thumbnail for video: {video_id}")
-        logger.info(f"📁 Thumbnail file: {thumbnail_file}")
-
-        try:
-            # Check file size (max 2MB for thumbnails)
-            file_size = os.path.getsize(thumbnail_file)
-            upload_file = thumbnail_file
-            temp_jpg = None
-
-            if file_size > 2 * 1024 * 1024:
-                size_mb = file_size / (1024 * 1024)
-                logger.warning(f"⚠️  Thumbnail size ({size_mb:.2f} MB) exceeds 2MB — compressing to JPEG")
-                temp_jpg = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-                temp_jpg.close()
-                subprocess.run(
-                    ["ffmpeg", "-i", thumbnail_file, "-q:v", "2", "-update", "1", temp_jpg.name, "-y"],
-                    capture_output=True, check=True,
-                )
-                compressed_size = os.path.getsize(temp_jpg.name)
-                logger.info(f"📦 Compressed: {file_size / (1024*1024):.2f} MB → {compressed_size / (1024*1024):.2f} MB")
-                upload_file = temp_jpg.name
-
-            # Upload thumbnail
-            request = self.youtube.thumbnails().set(
-                videoId=video_id,
-                media_body=MediaFileUpload(upload_file)
-            )
-
-            request.execute()
-            logger.info("✅ Thumbnail set successfully")
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ Thumbnail upload failed: {e}")
-            return False
-        finally:
-            if temp_jpg and os.path.exists(temp_jpg.name):
-                os.unlink(temp_jpg.name)
 
     def create_playlist(
         self,

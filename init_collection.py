@@ -22,6 +22,8 @@ from pathlib import Path
 # --- パス解決 ---
 SCRIPT_DIR = Path(__file__).resolve().parent
 
+import utils._path_setup  # noqa: F401, E402
+
 SUBDIRS = [
     "01-master",
     "02-Individual-music",
@@ -32,8 +34,7 @@ SUBDIRS = [
 
 def load_channel_short() -> str:
     """ChannelConfig から channel_short を取得する。"""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    from utils.channel_config import ChannelConfig
+    from utils.channel_config import ChannelConfig  # noqa: E402
 
     config = ChannelConfig.load()
     return config.raw["channel"]["short"].lower()
@@ -41,8 +42,7 @@ def load_channel_short() -> str:
 
 def channel_dir() -> Path:
     """ChannelConfig からチャンネルディレクトリを取得する。"""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    from utils.channel_config import ChannelConfig
+    from utils.channel_config import ChannelConfig  # noqa: E402
 
     return Path(ChannelConfig.channel_dir())
 

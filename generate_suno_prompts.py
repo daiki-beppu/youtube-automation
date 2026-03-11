@@ -4,12 +4,9 @@
 import sys
 from pathlib import Path
 
-import yaml
-
-automation_dir = Path(__file__).resolve().parent
-sys.path.insert(0, str(automation_dir))
-
-from utils.channel_config import ChannelConfig
+import utils._path_setup  # noqa: F401
+import yaml  # noqa: E402
+from utils.channel_config import ChannelConfig  # noqa: E402
 
 
 def generate(patterns_path: Path) -> str:

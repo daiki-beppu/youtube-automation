@@ -17,6 +17,8 @@ import warnings
 import wave
 from pathlib import Path
 
+from utils.time_utils import format_duration_mss
+
 SAMPLE_RATE = 48000
 CHANNELS = 2
 SAMPLE_WIDTH = 2  # 16-bit
@@ -159,12 +161,6 @@ def write_wav(pcm_data: bytes, output: Path) -> None:
         wf.writeframes(pcm_data)
 
 
-def format_duration(seconds: float) -> str:
-    """秒数を m:ss 形式にフォーマット。"""
-    m, s = divmod(int(seconds), 60)
-    return f"{m}:{s:02d}"
-
-
 def main():
     try:
         from dotenv import find_dotenv, load_dotenv
@@ -243,7 +239,7 @@ def main():
     print("===========================================")
     print("  音楽生成: 完了")
     print(f"  ファイル: {output}")
-    print(f"  時間:     {actual_duration:.1f}秒 ({format_duration(actual_duration)})")
+    print(f"  時間:     {actual_duration:.1f}秒 ({format_duration_mss(actual_duration)})")
     print(f"  サイズ:   {size_mb:.1f} MB")
     print(f"  生成時間: {elapsed:.1f}秒")
     print("===========================================")

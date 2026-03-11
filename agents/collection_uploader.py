@@ -23,12 +23,10 @@ import schedule  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-# プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent.parent))
-
+import utils._path_setup  # noqa: F401, E402
 from agents.youtube_auto_uploader import YouTubeAutoUploader  # noqa: E402
-from auth.oauth_handler import YouTubeOAuthHandler  # noqa: E402
 from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.youtube_service import get_youtube  # noqa: E402
 
 
 class CollectionUploader:
@@ -49,7 +47,6 @@ class CollectionUploader:
         self.collections_root = Path(collections_root)
         self.config_path = Path(config_path)
         self.uploader = YouTubeAutoUploader(str(collections_root))
-        self.auth_handler = YouTubeOAuthHandler()
         self.config = self._load_config()
         self.youtube_service = None
 
@@ -83,7 +80,7 @@ class CollectionUploader:
     def initialize_youtube_service(self):
         """YouTube API サービス初期化"""
         if not self.youtube_service:
-            self.youtube_service = self.auth_handler.get_youtube_service()
+            self.youtube_service = get_youtube()
 
     # ─── スケジュール公開 ─────────────────────────────
 

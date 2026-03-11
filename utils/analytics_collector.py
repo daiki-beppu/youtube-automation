@@ -12,31 +12,36 @@ Features:
 Note:
     メソッドは3つの Mixin に分割されています:
     - channel_analytics.py: チャンネル全体統計
-    - video_analytics.py: 動画別分析
+    - video_listing.py: 動画一覧取得
+    - video_analytics.py: 動画別分析（コア）
+    - strategic_analytics.py: 戦略的統合分析
     - ctr_analytics.py: CTR・コレクション分析
 """
 
 import json
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
-# プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent.parent))
-
-from auth.oauth_handler import YouTubeOAuthHandler
-from googleapiclient.discovery import build
+import utils._path_setup  # noqa: F401
 from utils.channel_analytics import ChannelAnalyticsMixin
 from utils.ctr_analytics import CTRAnalyticsMixin
+from utils.strategic_analytics import StrategicAnalyticsMixin
 from utils.video_analytics import VideoAnalyticsMixin
+from utils.video_listing import VideoListingMixin
+from utils.youtube_service import get_analytics, get_youtube
 
 
-class YouTubeAnalyticsCollector(ChannelAnalyticsMixin, VideoAnalyticsMixin, CTRAnalyticsMixin):
+class YouTubeAnalyticsCollector(
+    ChannelAnalyticsMixin,
+    VideoListingMixin,
+    VideoAnalyticsMixin,
+    StrategicAnalyticsMixin,
+    CTRAnalyticsMixin,
+):
     """YouTube Analytics データ収集クラス"""
 
     def __init__(self):
         """初期化"""
-        self.auth_handler = YouTubeOAuthHandler()
         self.youtube_service = None
         self.analytics_service = None
         self.channel_id = None
@@ -45,12 +50,8 @@ class YouTubeAnalyticsCollector(ChannelAnalyticsMixin, VideoAnalyticsMixin, CTRA
         """YouTube API 初期化"""
         print("🔐 YouTube Analytics API 認証中...")
 
-        # YouTube Data API v3
-        self.youtube_service = self.auth_handler.get_youtube_service()
-
-        # YouTube Analytics API
-        credentials = self.auth_handler.authenticate()
-        self.analytics_service = build('youtubeAnalytics', 'v2', credentials=credentials)
+        self.youtube_service = get_youtube()
+        self.analytics_service = get_analytics()
 
         # チャンネルID取得
         self.channel_id = self._get_channel_id()

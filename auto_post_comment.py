@@ -16,14 +16,12 @@ Usage:
 import argparse
 import json
 import logging
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent))
-
-from auth.oauth_handler import YouTubeOAuthHandler  # noqa: E402
+import utils._path_setup  # noqa: F401
 from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.youtube_service import get_youtube  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +159,7 @@ def main():
     parser.add_argument("--collection", type=str, help="特定コレクションのパス")
     args = parser.parse_args()
 
-    config = ChannelConfig.load()
+    ChannelConfig.load()
     channel_dir = ChannelConfig.channel_dir()
 
     # 対象コレクション取得
@@ -192,8 +190,7 @@ def main():
     logger.info(f"対象: {len(pending)} コレクション")
 
     # YouTube API 接続（対象がある場合のみ）
-    handler = YouTubeOAuthHandler()
-    youtube = handler.get_youtube_service()
+    youtube = get_youtube()
 
     posted = 0
     for item in pending:
@@ -216,7 +213,7 @@ def main():
         update_workflow_state(item["path"] / "workflow-state.json", comment_id)
 
         logger.info(f"✅ コメント投稿完了: {name} → {comment_id}")
-        logger.info(f"⚠️  固定は YouTube Studio で手動:")
+        logger.info("⚠️  固定は YouTube Studio で手動:")
         logger.info(f"   https://studio.youtube.com/video/{vid}/comments")
         posted += 1
 

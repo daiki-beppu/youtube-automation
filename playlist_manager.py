@@ -15,12 +15,10 @@ Usage:
 import json
 import logging
 import sys
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent))
-
-from auth.oauth_handler import YouTubeOAuthHandler  # noqa: E402
+import utils._path_setup  # noqa: F401
 from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.youtube_service import get_youtube  # noqa: E402
 from video_uploader import VideoUploader  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -41,8 +39,7 @@ class PlaylistManager:
 
     def _get_youtube(self):
         if self._youtube is None:
-            handler = YouTubeOAuthHandler()
-            self._youtube = handler.get_youtube_service()
+            self._youtube = get_youtube()
         return self._youtube
 
     # ─── プレイリスト解決 ──────────────────────────────
@@ -276,40 +273,6 @@ class PlaylistManager:
 
         return results
 
-    # ─── ステータス表示 ────────────────────────────────
-
-    def show_status(self):
-        """プレイリストの現在の状態を表示"""
-        playlists_config = self.config.playlists
-
-        if not playlists_config:
-            print("playlists セクションが channel_config.json に未定義です")
-            return
-
-        print(f"\n{self.config.channel_name} - Playlists")
-        print("=" * 50)
-
-        for key, pl in playlists_config.items():
-            playlist_id = pl.get('playlist_id')
-            status = playlist_id or "(未作成)"
-            print(f"\n  [{key}] {pl['title']}")
-            print(f"    ID: {status}")
-
-            if playlist_id:
-                try:
-                    video_ids = self._list_playlist_video_ids(playlist_id)
-                    print(f"    動画数: {len(video_ids)}")
-                except Exception:
-                    print("    動画数: (取得エラー)")
-
-            # マッチングルール表示
-            if pl.get('auto_add'):
-                print("    ルール: 全動画自動追加")
-            if pl.get('auto_add_activities'):
-                print(f"    ルール: activities = {pl['auto_add_activities']}")
-            if pl.get('auto_add_themes'):
-                print(f"    ルール: themes = {pl['auto_add_themes']}")
-
     # ─── init（作成 + 同期） ──────────────────────────
 
     def init(self, dry_run: bool = False):
@@ -349,7 +312,8 @@ def main():
         if args.init:
             manager.init(dry_run=args.dry_run)
         elif args.status:
-            manager.show_status()
+            from playlist_status import PlaylistStatusViewer
+            PlaylistStatusViewer().show_status()
         elif args.assign:
             if not args.theme:
                 parser.error('--assign には --theme が必要です')

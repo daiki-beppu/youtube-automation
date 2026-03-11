@@ -15,18 +15,15 @@ import json
 import logging
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-# プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent))
-
-from utils.analytics_analyzer import EightBAHAnalyzer
-from utils.analytics_collector import YouTubeAnalyticsCollector
-from utils.channel_config import ChannelConfig
-from utils.report_generator import ReportGenerator
+import utils._path_setup  # noqa: F401, E402
+from utils.analytics_analyzer import EightBAHAnalyzer  # noqa: E402
+from utils.analytics_collector import YouTubeAnalyticsCollector  # noqa: E402
+from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.report_generator import ReportGenerator  # noqa: E402
 
 
 class EightBAHLatestInfoSystem:

@@ -20,9 +20,7 @@ from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
-# プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent.parent))
-
+import utils._path_setup  # noqa: F401, E402
 from agents.youtube_auto_uploader import YouTubeAutoUploader  # noqa: E402
 from utils.channel_config import ChannelConfig  # noqa: E402
 
