@@ -22,12 +22,8 @@ COLLECTION_DIR="$(cd "$COLLECTION_DIR" && pwd)"
 MASTER_DIR="${COLLECTION_DIR}/01-master"
 MUSIC_DIR="${COLLECTION_DIR}/02-Individual-music"
 
-# ─── Auto-detect Collection Name ─────────────────────────
-dir_basename="$(basename "$COLLECTION_DIR")"
-COLLECTION_NAME="$(echo "$dir_basename" \
-    | sed -E 's/^[0-9]+-[a-z]+-//; s/-collection$//' \
-    | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}' OFS='-')"
-OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp3"
+# ─── Output ──────────────────────────────────────────────
+OUTPUT="${MASTER_DIR}/master.mp3"
 
 # ─── Prerequisites ───────────────────────────────────────
 if ! command -v ffmpeg &>/dev/null; then
@@ -53,7 +49,7 @@ if [[ $N -eq 0 ]]; then
 fi
 
 echo ""
-echo "  generate_master.sh v2.0 — ${COLLECTION_NAME}"
+echo "  generate_master.sh v2.0"
 echo "  ──────────────────────────────────────────"
 echo ""
 echo "  Input : ${N} MP3 files"
