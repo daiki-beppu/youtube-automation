@@ -14,7 +14,6 @@ Features:
 
 import json
 import logging
-import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -61,7 +60,7 @@ class CollectionUploader:
         default_config = {
             "schedule": {"day1_time": "10:00", "timezone": "Asia/Tokyo"},
             "upload_settings": {"privacy_status": "public", "category_id": "10"},
-            "collections_management": {"auto_move_to_live": True, "backup_after_upload": True},
+            "collections_management": {"auto_move_to_live": True},
             "api_limits": {"upload_quota_per_day": 6, "concurrent_uploads": 1, "delay_between_uploads": 5},
         }
 
@@ -301,10 +300,6 @@ class CollectionUploader:
                 if self.config['collections_management'].get('auto_move_to_live', True):
                     collection_path = self._move_collection_to_live(collection_path)
 
-                # Google Drive バックアップ＋ローカルクリーンアップ
-                if self.config['collections_management'].get('backup_after_upload', True):
-                    self._backup_to_gdrive(collection_path)
-
                 self._save_tracking(collection_path, tracking)
 
                 logger.info("✅ Complete Collection アップロード完了")
@@ -423,30 +418,6 @@ class CollectionUploader:
         except Exception as e:
             logger.warning(f"⚠️  コレクション移動エラー: {e}")
             return collection_path
-
-    def _backup_to_gdrive(self, collection_path: Path):
-        """Google Drive にバックアップし、ローカルのメディアファイルを削除（ベストエフォート）"""
-        try:
-            script = Path(__file__).resolve().parents[1] / 'archive_to_gdrive.sh'
-            if not script.exists():
-                logger.warning(f"⚠️  archive_to_gdrive.sh が見つかりません: {script}")
-                return
-
-            cmd = ['bash', str(script), '--collection', str(collection_path), '--delete']
-            logger.info(f"📦 Google Drive バックアップ開始: {collection_path.name}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-
-            if result.returncode == 0:
-                logger.info("📦 Google Drive バックアップ＋ローカル削除完了")
-                if result.stdout:
-                    for line in result.stdout.strip().split('\n')[-3:]:
-                        logger.info(f"   {line}")
-            else:
-                logger.warning(f"⚠️  Google Drive バックアップ失敗（非致命的）: {result.stderr.strip()}")
-        except subprocess.TimeoutExpired:
-            logger.warning("⚠️  Google Drive バックアップがタイムアウト（10分）しました")
-        except Exception as e:
-            logger.warning(f"⚠️  Google Drive バックアップエラー（非致命的）: {e}")
 
     # ─── デーモン ────────────────────────────────────
 

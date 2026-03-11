@@ -158,14 +158,25 @@ class BAHMetadataGenerator:
         # 番号プレフィックス削除 ("01-", "02-" 等)
         title = re.sub(r'^\d{2}-', '', title)
 
+        # パターンプレフィックス削除 ("pattern-a1-", "pattern-b-", "pattern-c2-" 等)
+        title = re.sub(r'^pattern-[a-z]\d?-', '', title, flags=re.IGNORECASE)
+
         # サフィックス削除 ("(Remix)", "(Extended)" 等)
         title = re.sub(r'\s*\([^)]+\)\s*$', '', title)
 
-        # アンダースコアをスペースに
-        title = title.replace('_', ' ')
+        # アンダースコア・ハイフンをスペースに
+        title = title.replace('_', ' ').replace('-', ' ')
 
         # 余分なスペース削除
         title = ' '.join(title.split())
+
+        # タイトルケース変換（冠詞・前置詞は小文字維持、先頭語は常に大文字）
+        SMALL_WORDS = {'a', 'an', 'the', 'at', 'by', 'in', 'of', 'on', 'to', 'and', 'but', 'or', 'for', 'nor'}
+        words = title.title().split()
+        for i, word in enumerate(words):
+            if i > 0 and word.lower() in SMALL_WORDS:
+                words[i] = word.lower()
+        title = ' '.join(words)
 
         return title
 
@@ -369,8 +380,8 @@ class BAHMetadataGenerator:
             desc_data = lang_data['description']
             opening = desc_data['opening'].format(
                 style=title_vars['style'],
-                primary=self.config.genre_primary,
-                context=self.config.genre_context,
+                primary=self.config.genre_primary.title(),
+                context=self.config.genre_context.title(),
             )
 
             usage_lines = '\n'.join(f"• {line}" for line in desc_data['usage_lines'])
@@ -456,7 +467,7 @@ class BAHMetadataGenerator:
             self.config.hashtag_line,
         ])
 
-        # ローカライゼーション用変数
+        # ローカライゼーション用変数（インスタンスに保存して再利用可能にする）
         theme = self._extract_theme_name()
         title_vars = {
             'style': self.config.genre_style.title(),
@@ -465,6 +476,7 @@ class BAHMetadataGenerator:
             'duration_display': self._format_duration_display(total_duration),
             'duration_short': self._format_duration_short(total_duration),
         }
+        self._last_title_vars = title_vars
         localizations = self.generate_localizations(title_vars, timestamp_body)
 
         return {

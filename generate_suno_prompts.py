@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Generate suno-prompts.md from channel_config.json + suno-patterns.yaml."""
 
-import json
 import sys
 from pathlib import Path
 
@@ -63,9 +62,9 @@ def generate(patterns_path: Path) -> str:
             lines.append("")
             lines.append(f"### Variation {j}")
             lines.append("**Styles:**")
+            lines.append(f"{tempo}, 5 minutes,")
             lines.append(f"{base_style},")
-            lines.append("looping game bgm,")
-            lines.append(f"{scene}, {tempo}, 5 minutes")
+            lines.append(scene)
 
             if exclude_styles:
                 lines.append("")

@@ -36,23 +36,16 @@ class ChannelAnalyticsMixin:
                 dimensions='day'
             ).execute()
 
-            # CTRデータ（別途取得） - impressions利用不可の場合はスキップ
-            try:
-                ctr_response = self.analytics_service.reports().query(
-                    ids=f'channel=={self.channel_id}',
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics='views,estimatedMinutesWatched'  # 利用可能なメトリクスのみ
-                ).execute()
-            except Exception as e:
-                print(f"⚠️ CTRデータ取得をスキップ: {e}")
-                ctr_response = {'rows': []}
+            # Note: サムネイル CTR (impressionClickThroughRate) は
+            # YouTube Analytics API v2 では取得不可。YouTube Studio でのみ確認可能。
+            # 以前のコードは views/estimatedMinutesWatched を誤って impressions/ctr_percentage
+            # としてマッピングしていたバグがあったため、ctr_data は空を返す。
 
             return {
                 'period': f"{start_date} to {end_date}",
                 'daily_metrics': self._process_daily_data(response),
-                'ctr_data': self._process_ctr_data(ctr_response),
-                'summary': self._calculate_summary_stats(response, ctr_response)
+                'ctr_data': {'impressions': 0, 'ctr_percentage': 0, 'note': 'CTR is not available via Analytics API'},
+                'summary': self._calculate_summary_stats(response)
             }
 
         except Exception as e:
@@ -142,24 +135,13 @@ class ChannelAnalyticsMixin:
 
         return daily_data
 
-    def _process_ctr_data(self, response: Dict) -> Dict:
-        """CTRデータ処理"""
-        if 'rows' in response and response['rows']:
-            row = response['rows'][0]
-            return {
-                'impressions': row[0],
-                'ctr_percentage': row[1]
-            }
-        return {'impressions': 0, 'ctr_percentage': 0}
-
-    def _calculate_summary_stats(self, main_response: Dict, ctr_response: Dict) -> Dict:
+    def _calculate_summary_stats(self, main_response: Dict) -> Dict:
         """サマリー統計計算"""
         summary = {
             'total_views': 0,
             'total_watch_time': 0,
             'net_subscribers': 0,
             'total_engagement': 0,
-            'average_ctr': 0
         }
 
         if 'rows' in main_response:
@@ -168,8 +150,5 @@ class ChannelAnalyticsMixin:
                 summary['total_watch_time'] += row[2]
                 summary['net_subscribers'] += (row[4] - row[5])
                 summary['total_engagement'] += (row[6] + row[8] + row[9])
-
-        ctr_data = self._process_ctr_data(ctr_response)
-        summary['average_ctr'] = ctr_data['ctr_percentage']
 
         return summary

@@ -168,7 +168,9 @@ class TestGenerateSegmented:
     def test_renames_segment_files_by_default(self, tmp_path):
         """デフォルトではセグメントファイルがフェーズ名でリネームされる。"""
         comp = make_composition(phases_count=2, total_min=20)
-        output = tmp_path / "master.wav"
+        master_dir = tmp_path / "01-master"
+        master_dir.mkdir()
+        output = master_dir / "master.wav"
         seg_pcm = make_pcm(5)
 
         mock_client = MagicMock()
@@ -177,11 +179,11 @@ class TestGenerateSegmented:
         with patch("generate_music_dj.generate_dj", new_callable=AsyncMock, return_value=seg_pcm):
             asyncio.run(generate_segmented(mock_client, mock_types, comp, output, max_retries=0))
 
-        seg_files = list(tmp_path.glob("seg_*.wav"))
+        seg_files = list(master_dir.glob("seg_*.wav"))
         assert len(seg_files) == 0  # seg_* は残らない
-        renamed_files = sorted(tmp_path.glob("*.wav"))
-        # master.wav + 2つのリネーム済みファイル
-        assert len(renamed_files) == 3
+        individual_dir = tmp_path / "02-Individual-music"
+        renamed_files = sorted(individual_dir.glob("*.wav"))
+        assert len(renamed_files) == 2
         assert renamed_files[0].name.startswith("01_")
         assert renamed_files[1].name.startswith("02_")
 
@@ -203,7 +205,9 @@ class TestGenerateSegmented:
     def test_parallel_generates_all_segments(self, tmp_path):
         """workers>0 で並列生成が全セグメント完了する。"""
         comp = make_composition(phases_count=4, total_min=40)
-        output = tmp_path / "master.wav"
+        master_dir = tmp_path / "01-master"
+        master_dir.mkdir()
+        output = master_dir / "master.wav"
         seg_pcm = make_pcm(5)
 
         mock_client = MagicMock()
@@ -214,9 +218,10 @@ class TestGenerateSegmented:
 
         assert result is not None
         assert output.exists()
-        seg_files = list(tmp_path.glob("seg_*.wav"))
+        seg_files = list(master_dir.glob("seg_*.wav"))
         assert len(seg_files) == 0  # リネーム済み
-        renamed_files = sorted(f for f in tmp_path.glob("*.wav") if f.name != "master.wav")
+        individual_dir = tmp_path / "02-Individual-music"
+        renamed_files = sorted(individual_dir.glob("*.wav"))
         assert len(renamed_files) == 4
 
     def test_parallel_with_semaphore(self, tmp_path):

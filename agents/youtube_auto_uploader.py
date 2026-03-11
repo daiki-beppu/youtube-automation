@@ -263,6 +263,19 @@ class YouTubeAutoUploader:
         return {'title': title.strip(), 'description': description.strip(), 'tags': tags}
 
     @staticmethod
+    def _extract_body_for_localizations(description: str) -> str | None:
+        """キュレーション済み概要欄から本文部分（フッター前）を抽出
+
+        ローカライゼーション用: シーンフック + タイムスタンプ + ブリッジテキストを返す。
+        フッター（Perfect for / Usage & Attribution 等）は generate_localizations() が各言語で付加する。
+        """
+        for marker in ['Perfect for:', '🎮 Perfect for', '─────', '📝 Usage', 'Usage & Attribution']:
+            idx = description.find(marker)
+            if idx > 0:
+                return description[:idx].rstrip()
+        return None
+
+    @staticmethod
     def _extract_md_section(text: str, heading: str) -> str | None:
         """Markdown の ## heading 直後のコードフェンス内容を抽出"""
         pattern = rf'## {re.escape(heading)}\s*\n+```\n(.*?)```'
@@ -338,6 +351,13 @@ class YouTubeAutoUploader:
             metadata['description'] = prebuilt['description']
             if prebuilt['tags']:
                 metadata['tags'] = prebuilt['tags']
+
+            # ローカライゼーションにもキュレーション済みの本文を使用
+            curated_body = self._extract_body_for_localizations(prebuilt['description'])
+            if curated_body and hasattr(metadata_gen, '_last_title_vars'):
+                metadata['localizations'] = metadata_gen.generate_localizations(
+                    metadata_gen._last_title_vars, curated_body
+                )
 
         if publish_at:
             metadata['publish_at'] = publish_at

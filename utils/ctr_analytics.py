@@ -56,10 +56,15 @@ class CTRAnalyticsMixin:
 
             return {
                 'period': f"{start_date} to {end_date}",
+                'overall_engagement': self._process_overall_ctr(overall_response),
+                'video_performance': self._process_video_ctr(video_ctr_response),
+                'daily_traffic': self._process_traffic_source_ctr(traffic_response),
+                'performance_analysis': self._analyze_ctr_performance(video_ctr_response),
+                # 後方互換キー
                 'overall_ctr': self._process_overall_ctr(overall_response),
                 'video_ctr_ranking': self._process_video_ctr(video_ctr_response),
                 'traffic_source_ctr': self._process_traffic_source_ctr(traffic_response),
-                'ctr_analysis': self._analyze_ctr_performance(video_ctr_response)
+                'ctr_analysis': self._analyze_ctr_performance(video_ctr_response),
             }
 
         except Exception as e:
@@ -139,14 +144,18 @@ class CTRAnalyticsMixin:
         return 'Other'
 
     def _process_overall_ctr(self, response: Dict) -> Dict:
-        """全体CTR処理"""
+        """全体エンゲージメント処理
+        Note: YouTube Analytics API v2 ではサムネイル CTR (impressionClickThroughRate) は
+        取得不可。ここでは views/likes/comments/shares/subscribersGained を処理する。
+        """
         if 'rows' in response and response['rows']:
             row = response['rows'][0]
             return {
-                'total_impressions': row[0],
-                'overall_ctr': row[1],
-                'total_views': row[2],
-                'ctr_status': self._evaluate_ctr_performance(row[1])
+                'total_views': row[0],
+                'total_likes': row[1],
+                'total_comments': row[2],
+                'total_shares': row[3],
+                'subscribers_gained': row[4],
             }
         return {}
 
@@ -162,8 +171,11 @@ class CTRAnalyticsMixin:
             return 'Poor (緊急改善必要)'
 
     def _process_video_ctr(self, response: Dict) -> List[Dict]:
-        """動画別CTR処理"""
-        video_ctr = []
+        """動画別パフォーマンス処理
+        メトリクス: views,likes,comments,estimatedMinutesWatched (dimensions=video)
+        row: [video_id, views, likes, comments, watch_time_minutes]
+        """
+        video_data = []
 
         if 'rows' in response:
             video_ids = [row[0] for row in response['rows']]
@@ -173,47 +185,50 @@ class CTRAnalyticsMixin:
                 video_id = row[0]
                 video_detail = video_details.get(video_id, {})
 
-                video_ctr.append({
+                video_data.append({
                     'video_id': video_id,
                     'title': video_detail.get('title', 'Unknown'),
-                    'impressions': row[1],
-                    'ctr': row[2],
-                    'views': row[3],
+                    'views': row[1],
+                    'likes': row[2],
+                    'comments': row[3],
+                    'watch_time_minutes': row[4],
                     'collection_type': self._classify_collection_type(video_detail.get('title', '')),
-                    'performance': self._evaluate_ctr_performance(row[2])
                 })
 
-        return video_ctr
+        return video_data
 
     def _process_traffic_source_ctr(self, response: Dict) -> List[Dict]:
-        """トラフィックソース別CTR処理"""
-        traffic_ctr = []
+        """日別トラフィック処理
+        メトリクス: views,estimatedMinutesWatched (dimensions=day)
+        row: [date, views, watch_time_minutes]
+        """
+        daily_traffic = []
 
         if 'rows' in response:
             for row in response['rows']:
-                traffic_ctr.append({
-                    'source_type': row[0],
-                    'impressions': row[1],
-                    'ctr': row[2],
-                    'views': row[3]
+                daily_traffic.append({
+                    'date': row[0],
+                    'views': row[1],
+                    'watch_time_minutes': row[2],
                 })
 
-        return traffic_ctr
+        return daily_traffic
 
     def _analyze_ctr_performance(self, response: Dict) -> Dict:
-        """CTRパフォーマンス分析"""
+        """動画パフォーマンス分析
+        Note: CTR は YouTube Analytics API v2 では取得不可。
+        代わりに views ベースのパフォーマンス分析を行う。
+        """
         if not response.get('rows'):
             return {}
 
-        ctrs = [row[2] for row in response['rows']]
+        views = [row[1] for row in response['rows']]
 
         return {
-            'highest_ctr': max(ctrs),
-            'lowest_ctr': min(ctrs),
-            'average_ctr': sum(ctrs) / len(ctrs),
-            'videos_above_2_percent': len([ctr for ctr in ctrs if ctr >= 2.0]),
-            'videos_below_1_percent': len([ctr for ctr in ctrs if ctr < 1.0]),
-            'improvement_potential': 2.0 - (sum(ctrs) / len(ctrs))
+            'highest_views': max(views),
+            'lowest_views': min(views),
+            'average_views': sum(views) / len(views),
+            'total_videos': len(views),
         }
 
     def _calculate_collection_stats(self, videos: List[Dict]) -> Dict:
