@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""コレクション用ループ動画背景を Veo 3.1 API で生成する。
+"""ショート用 9:16 ループ動画を Veo 3.1 API で生成する。
 
-main.png を開始・終了フレーム両方に指定し、微細なアニメーション付きの
-シームレスなループ動画を生成する。
+short.png（9:16 縦型サムネイル）を開始・終了フレームに指定し、
+キャラクターアニメーション付きの 8秒シームレスループ動画を生成する。
 
 Usage:
     # コレクションパス指定
-    python3 generate_loop_video.py <collection-path>
-    python3 generate_loop_video.py <collection-path> --prompt "gentle wind..."
+    python3 generate_short_loop.py <collection-path>
+    python3 generate_short_loop.py <collection-path> --prompt "gentle wind..."
 
     # CWD がコレクションディレクトリの場合
-    python3 generate_loop_video.py
+    python3 generate_short_loop.py
 
-    # FFmpeg クロスフェード補正
-    python3 generate_loop_video.py <collection-path> --smooth
+    # 末尾トリムなし
+    python3 generate_short_loop.py <collection-path> --no-trim
 """
 
 import argparse
@@ -29,9 +29,18 @@ REPO_ROOT = SCRIPT_DIR.parent
 import utils._path_setup  # noqa: F401, E402
 from utils.veo_generator import (  # noqa: E402
     DEFAULT_MODEL,
-    DEFAULT_PROMPT,
     generate_loop_video,
-    smooth_loop,
+    trim_tail,
+)
+
+SHORT_DEFAULT_PROMPT = (
+    "Gentle character animation: the character slowly moves their head, "
+    "hair sways softly in the breeze, clothing ripples with subtle movement, "
+    "hand gently reaches toward a light source. "
+    "Flowers and plants sway gently in the wind. "
+    "Soft flickering light shifts on surfaces. "
+    "Keep all text completely static and unchanged. "
+    "No smoke, no particles, no falling objects."
 )
 
 
@@ -45,13 +54,10 @@ def load_config() -> dict:
         return {}
 
 
-def resolve_collection_paths(collection_path: Path) -> tuple[Path, Path]:
-    """コレクションパスから入力画像と出力動画のパスを解決する。"""
-    image_path = collection_path / "10-assets" / "main.png"
-    if not image_path.exists():
-        # JPEG フォールバック
-        image_path = collection_path / "10-assets" / "main.jpg"
-    output_path = collection_path / "10-assets" / "loop.mp4"
+def resolve_paths(collection_path: Path) -> tuple[Path, Path]:
+    """コレクションパスから short.png と出力動画のパスを解決する。"""
+    image_path = collection_path / "10-assets" / "short.png"
+    output_path = collection_path / "10-assets" / "short-loop.mp4"
     return image_path, output_path
 
 
@@ -59,54 +65,59 @@ def main():
     from dotenv import find_dotenv, load_dotenv
     load_dotenv(find_dotenv())
 
-    parser = argparse.ArgumentParser(description="Veo 3.1 コレクションループ動画生成")
+    parser = argparse.ArgumentParser(description="Veo 3.1 ショート用 9:16 ループ動画生成")
     parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument("--prompt", help="動画生成プロンプト")
     parser.add_argument("--model", help="Veo モデル名")
-    parser.add_argument("--smooth", action="store_true", help="FFmpeg クロスフェードでループ補正")
-    parser.add_argument("--crossfade", type=float, default=0.5, help="クロスフェード秒数 (デフォルト: 0.5)")
+    parser.add_argument("--no-trim", action="store_true", help="末尾トリムをスキップ")
+    parser.add_argument("--trim-tail", type=float, default=1.0, help="末尾トリム秒数 (デフォルト: 1.0)")
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
     args = parser.parse_args()
 
     # 設定読み込み
     veo_config = load_config()
     model = args.model or veo_config.get("model", DEFAULT_MODEL)
-    prompt = args.prompt or veo_config.get("default_prompt", DEFAULT_PROMPT)
+    prompt = args.prompt or SHORT_DEFAULT_PROMPT
 
     # パス解決
     if args.collection:
         collection_path = Path(args.collection)
         if not collection_path.is_absolute():
             collection_path = Path.cwd() / collection_path
-        image_path, output_path = resolve_collection_paths(collection_path)
+        image_path, output_path = resolve_paths(collection_path)
     else:
-        # CWD がコレクションディレクトリか確認
         cwd = Path.cwd()
         if (cwd / "10-assets").exists():
-            image_path, output_path = resolve_collection_paths(cwd)
+            image_path, output_path = resolve_paths(cwd)
         else:
             parser.error("コレクションパスを指定するか、コレクションディレクトリ内で実行してください")
             return
 
     # バリデーション
     if not image_path.exists():
-        print(f"[ERROR] 入力画像が見つかりません: {image_path}")
+        print(f"[ERROR] short.png が見つかりません: {image_path}")
+        print("  /short-thumbnail で先に 9:16 サムネイルを生成してください")
         sys.exit(1)
 
     # 確認
     print()
     print("===========================================")
-    print("  Veo 3.1 ループ動画生成")
+    print("  Veo 3.1 ショート用ループ動画生成")
     print("===========================================")
     print(f"  入力:   {image_path}")
     print(f"  出力:   {output_path}")
     print(f"  モデル: {model}")
-    print(f"  補正:   {'あり' if args.smooth else 'なし'}")
+    print("  比率:   9:16（縦型）")
+    print(f"  トリム: {'なし' if args.no_trim else f'末尾 {args.trim_tail}秒カット'}")
     print("===========================================")
     print()
 
     if not args.yes:
-        answer = input("  生成しますか？ [y/N] ").strip().lower()
+        try:
+            answer = input("  生成しますか？ [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  キャンセルしました。")
+            sys.exit(0)
         if answer not in ("y", "yes"):
             print("  キャンセルしました。")
             sys.exit(0)
@@ -129,10 +140,10 @@ def main():
     # 生成実行
     client = genai.Client()
     start_time = time.monotonic()
-    success = generate_loop_video(client, image_path, output_path, model, prompt)
+    success = generate_loop_video(client, image_path, output_path, model, prompt, aspect_ratio="9:16")
 
-    if success and args.smooth:
-        smooth_loop(output_path, args.crossfade, trim_tail_sec=0.0)
+    if success and not args.no_trim:
+        trim_tail(output_path, args.trim_tail)
 
     elapsed = time.monotonic() - start_time
 
@@ -140,14 +151,14 @@ def main():
     print()
     print("===========================================")
     if success:
-        print("  ループ動画生成: 完了")
+        print("  ショートループ動画生成: 完了")
         try:
             print(f"  ファイル: {output_path.relative_to(REPO_ROOT)}")
         except ValueError:
             print(f"  ファイル: {output_path}")
         print(f"  時間:     {elapsed:.1f}秒")
     else:
-        print("  ループ動画生成: 失敗")
+        print("  ショートループ動画生成: 失敗")
         print("  --prompt でプロンプトを変えて再試行してください。")
     print("===========================================")
     print()

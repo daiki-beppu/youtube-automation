@@ -20,7 +20,9 @@ POLL_INTERVAL_SEC = 20
 MAX_POLL_SEC = 600  # 10分タイムアウト
 
 
-def generate_loop_video(client, image_path: Path, output_path: Path, model: str, prompt: str) -> bool:
+def generate_loop_video(
+    client, image_path: Path, output_path: Path, model: str, prompt: str, aspect_ratio: str = "16:9",
+) -> bool:
     """Veo 3.1 API でループ動画を生成する。"""
     from google.genai import types
 
@@ -29,7 +31,7 @@ def generate_loop_video(client, image_path: Path, output_path: Path, model: str,
     print(f"  [Submit] モデル={model}")
     print(f"  [Image]  {image_path.name}")
     print(f"  [Prompt] {prompt[:100]}...")
-    print("  [Config] 16:9 / 1080p / 8秒 / ループ（開始=終了フレーム）")
+    print(f"  [Config] {aspect_ratio} / 1080p / 8秒 / ループ（開始=終了フレーム）")
     print()
 
     try:
@@ -38,7 +40,7 @@ def generate_loop_video(client, image_path: Path, output_path: Path, model: str,
             prompt=prompt,
             image=image,
             config=types.GenerateVideosConfig(
-                aspect_ratio="16:9",
+                aspect_ratio=aspect_ratio,
                 resolution="1080p",
                 number_of_videos=1,
                 duration_seconds=8,
@@ -102,8 +104,45 @@ def strip_audio(video_path: Path) -> None:
             tmp.unlink()
 
 
-def smooth_loop(video_path: Path, crossfade_sec: float = 0.5) -> bool:
-    """FFmpeg クロスフェードでループの継ぎ目を滑らかにする。"""
+def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
+    """Veo 末尾のノイズ/歪みを除去する（映像コピー、再エンコードなし）。"""
+    duration_cmd = [
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
+    ]
+    try:
+        duration = float(subprocess.check_output(duration_cmd, text=True).strip())
+    except Exception as e:
+        print(f"  [ERROR]  動画長取得失敗: {e}")
+        return False
+
+    usable = duration - trim_sec
+    if usable <= 0:
+        print(f"  [ERROR]  動画が短すぎます ({duration:.1f}秒)")
+        return False
+
+    tmp = video_path.with_stem(video_path.stem + "_trimmed")
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video_path), "-t", str(usable), "-c:v", "copy", "-an", str(tmp)],
+            check=True, capture_output=True, text=True,
+        )
+        tmp.rename(video_path)
+        print(f"  [Trim]   末尾 {trim_sec}秒カット（{duration:.1f}秒 → {usable:.1f}秒）")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"  [ERROR]  トリム失敗: {e.stderr[:200]}")
+        if tmp.exists():
+            tmp.unlink()
+        return False
+
+
+def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: float = 1.0) -> bool:
+    """末尾トリム + FFmpeg クロスフェードでループの継ぎ目を滑らかにする。
+
+    Veo 3.1 は末尾にノイズ/歪みを生成することがあるため、
+    trim_tail_sec でカットしてからクロスフェードで結合する。
+    """
     output = video_path.with_stem(video_path.stem + "_smooth")
     duration_cmd = [
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -115,12 +154,21 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5) -> bool:
         print(f"  [ERROR]  動画長取得失敗: {e}")
         return False
 
-    trim_end = duration - crossfade_sec
+    # 末尾トリム（ノイズ除去）+ クロスフェード用の分割点
+    usable_end = duration - trim_tail_sec
+    trim_end = usable_end - crossfade_sec
+    if trim_end <= 0:
+        print(f"  [ERROR]  動画が短すぎます ({duration:.1f}秒)")
+        return False
+
+    print(f"  [Trim]   末尾 {trim_tail_sec}秒カット（{duration:.1f}秒 → {usable_end:.1f}秒）")
+
     # 末尾と先頭をクロスフェードで結合
     filter_complex = (
-        f"[0]split[main][tail];"
+        f"[0]trim=0:{usable_end},setpts=PTS-STARTPTS[trimmed];"
+        f"[trimmed]split[main][tail];"
         f"[main]trim=0:{trim_end},setpts=PTS-STARTPTS[a];"
-        f"[tail]trim={trim_end}:{duration},setpts=PTS-STARTPTS[b];"
+        f"[tail]trim={trim_end}:{usable_end},setpts=PTS-STARTPTS[b];"
         f"[b][a]xfade=transition=fade:duration={crossfade_sec}:offset=0[out]"
     )
 
