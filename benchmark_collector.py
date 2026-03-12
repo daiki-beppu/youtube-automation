@@ -166,6 +166,7 @@ class BenchmarkCollector:
                 "video_id": video["id"],
                 "title": snippet["title"],
                 "published_at": snippet["publishedAt"][:10],
+                "published_at_utc": snippet["publishedAt"],
                 "views": int(stats.get("viewCount", 0)),
                 "likes": int(stats.get("likeCount", 0)),
                 "comments": int(stats.get("commentCount", 0)),
@@ -411,6 +412,19 @@ class BenchmarkReportGenerator:
         return text.replace("|", "\\|")
 
     @staticmethod
+    def _utc_to_jst_time(utc_str: str) -> str:
+        """UTC ISO 8601 タイムスタンプから JST 時刻（HH:MM）を返す。"""
+        if not utc_str or len(utc_str) < 16:
+            return "—"
+        try:
+            from datetime import datetime, timedelta, timezone
+            utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
+            jst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
+            return jst_dt.strftime("%H:%M")
+        except (ValueError, TypeError):
+            return "—"
+
+    @staticmethod
     def _is_short(video: dict) -> bool:
         """Short 動画かどうかを判定する（レポート生成時のフィルタ用）。"""
         duration = video.get("duration_iso", "")
@@ -449,8 +463,8 @@ class BenchmarkReportGenerator:
         lines.extend([
             f"## 最新{len(videos)}投稿（{channel['collected_at']} 取得）",
             "",
-            "| # | 公開日 | タイトル | 再生数 | 日次再生 | 高評価 | コメント | ER% | 尺 |",
-            "|---|--------|---------|-------|---------|-------|---------|-----|-----|",
+            "| # | 公開日 | 時刻(JST) | タイトル | 再生数 | 日次再生 | 高評価 | コメント | ER% | 尺 |",
+            "|---|--------|-----------|---------|-------|---------|-------|---------|-----|-----|",
         ])
 
         max_views = max((lv["views"] for lv in long_videos), default=0)
@@ -460,8 +474,9 @@ class BenchmarkReportGenerator:
             if long_videos and v["views"] == max_views:
                 title = f"**{title}**"
                 views_str = f"**{views_str}**"
+            jst_time = self._utc_to_jst_time(v.get("published_at_utc", ""))
             lines.append(
-                f"| {i} | {v['published_at']} | {title} | {views_str} "
+                f"| {i} | {v['published_at']} | {jst_time} | {title} | {views_str} "
                 f"| {v['daily_views']:.0f} | {v['likes']:,} | {v['comments']:,} "
                 f"| {v['engagement_rate']:.1f}% | {v['duration_display']} |"
             )
@@ -576,6 +591,34 @@ class BenchmarkReportGenerator:
         for label, fn in metrics:
             row = f"| {label} | " + " | ".join(fn(ch) for ch in channels) + " | — |"
             lines.append(row)
+
+        lines.append("")
+
+        # 投稿時間帯分析
+        lines.extend([
+            f"## 投稿時間帯（JST）（{self.today.isoformat()} データ実証）",
+            "",
+        ])
+        for ch in channels:
+            videos = ch.get("videos", [])
+            jst_times = []
+            for v in videos:
+                utc_str = v.get("published_at_utc", "")
+                if utc_str and len(utc_str) >= 16:
+                    t = self._utc_to_jst_time(utc_str)
+                    if t != "—":
+                        jst_times.append(t)
+            if jst_times:
+                lines.append(f"### {ch['name']}")
+                lines.append("")
+                lines.append("| 動画 | 投稿時刻(JST) | 再生数 |")
+                lines.append("|------|---------------|--------|")
+                for v in videos:
+                    t = self._utc_to_jst_time(v.get("published_at_utc", ""))
+                    if t != "—":
+                        title_short = self._escape_md_table(v["title"][:40])
+                        lines.append(f"| {title_short} | {t} | {v['views']:,} |")
+                lines.append("")
 
         lines.append("")
 

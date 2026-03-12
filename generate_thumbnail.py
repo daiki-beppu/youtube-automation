@@ -29,6 +29,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 import utils._path_setup  # noqa: F401, E402
 from utils.image_generator import (  # noqa: E402
     DEFAULT_MODEL,
+    apply_composition_rules,
     confirm_cost,
     generate_image,
     load_gemini_config,
@@ -140,7 +141,8 @@ def main():
     model = args.model or config.get("model", DEFAULT_MODEL)
     cost_per_image = config.get("cost_per_image_usd", 0.04)
     use_text_overlay = args.reference is not None and args.variation is None
-    prompt = extract_prompt(prompts_md, args.variation, use_text_overlay=use_text_overlay)
+    raw_prompt = extract_prompt(prompts_md, args.variation, use_text_overlay=use_text_overlay)
+    prompt = apply_composition_rules(raw_prompt, config)
 
     if args.variation == "bg":
         label = "Video Background Prompt"

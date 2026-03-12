@@ -89,11 +89,11 @@ class ShortUploader:
     # ─── 公開日計算 ───────────────────────────────────
 
     def _calculate_short_publish_at(self, collection_path: Path) -> str | None:
-        """CC publish_at + short_delay_days で公開日を算出
+        """CC 公開日の翌日 short_publish_time に公開日を算出
 
         1. upload_tracking.json → complete_collection.publish_at を取得
         2. publish_at があればパース、なければ upload_time + timezone でフォールバック
-        3. + short_delay_hours（channel_config.json、デフォルト 12時間）
+        3. CC 公開日の翌日 + short_publish_time（channel_config.json、デフォルト 08:00）
         4. 過去の日時なら None を返す（即時公開 = public）
         """
         tracking = self._load_upload_tracking(collection_path)
@@ -118,9 +118,12 @@ class ShortUploader:
             logger.error("❌ CC の公開日時が取得できません")
             return None
 
-        # CC 公開日時 + short_delay_hours を加算
-        delay_hours = self.config._data.get('post_upload', {}).get('short_delay_hours', 12)
-        short_dt = cc_dt + timedelta(hours=delay_hours)
+        # CC 公開日の翌日 + short_publish_time で固定時刻を算出
+        short_time_str = self.config._data.get('post_upload', {}).get('short_publish_time', '08:00')
+        hour, minute = map(int, short_time_str.split(':'))
+        next_day = (cc_dt + timedelta(days=1)).date()
+        short_dt = datetime(next_day.year, next_day.month, next_day.day,
+                            hour, minute, 0, tzinfo=tz)
 
         # 過去なら即時公開
         now = datetime.now(tz)

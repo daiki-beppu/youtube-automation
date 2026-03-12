@@ -26,6 +26,33 @@ def load_gemini_config() -> dict:
         return {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST}
 
 
+def apply_composition_rules(prompt: str, config: dict) -> str:
+    """channel_config の構図ルールをプロンプトに自動適用する。
+
+    composition_keywords のいずれも含まれていない場合、composition_prefix を冒頭に付加。
+    テキストオーバーレイ系プロンプト（参照画像への編集指示）はスキップする。
+    """
+    prefix = config.get("composition_prefix", "")
+    keywords = config.get("composition_keywords", [])
+
+    if not prefix or not keywords:
+        return prompt
+
+    # テキストオーバーレイ/編集系プロンプトはスキップ
+    lower = prompt.lower().lstrip()
+    if lower.startswith("use this image") or "do not change the background" in lower or lower.startswith("edit this"):
+        return prompt
+
+    # 既にキーワードが含まれていればそのまま返す
+    for kw in keywords:
+        if kw.lower() in lower:
+            return prompt
+
+    # プレフィックスを冒頭に付加
+    print(f"  [Auto]   構図ルール適用: {prefix}")
+    return f"{prefix} {prompt}"
+
+
 def confirm_cost(model: str, cost_per_image: float) -> bool:
     """コスト見積もりを表示してユーザー確認を取る。"""
     print()

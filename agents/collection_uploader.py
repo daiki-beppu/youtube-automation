@@ -88,7 +88,7 @@ class CollectionUploader:
         """CC のスケジュール公開日時を計算
 
         auto_schedule_enabled が true の場合:
-        - 当日の publish_time（デフォルト 20:00）でスケジュール
+        - 当日の publish_time（デフォルト 17:00）でスケジュール
         - 同日に既存の公開/予約動画があれば翌日にスライド
         - 翌日にも重複があればさらに翌日…と空きスロットを探す
 
@@ -102,7 +102,7 @@ class CollectionUploader:
             return None
 
         tz_name = schedule_cfg.get('timezone', 'Asia/Tokyo')
-        publish_time = schedule_cfg.get('publish_time', schedule_cfg.get('day1_time', '20:00'))
+        publish_time = schedule_cfg.get('publish_time', schedule_cfg.get('day1_time', '17:00'))
         tz = ZoneInfo(tz_name)
         hour, minute = map(int, publish_time.split(':'))
 
