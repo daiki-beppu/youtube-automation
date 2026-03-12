@@ -92,7 +92,7 @@ def resolve_unique_path(output_path: Path) -> Path:
     return parent / f"{base}-v{start + 100}{suffix}"
 
 
-def generate_image(client, prompt: str, model: str, output_path: Path, reference_image: Path | None = None) -> bool:
+def generate_image(client, prompt: str, model: str, output_path: Path, reference_image: Path | None = None, aspect_ratio: str = "16:9") -> bool:
     """Gemini API で画像を1枚生成して output_path に保存する。成功したら True を返す。"""
     from google.genai import types
     from PIL import Image as PILImage
@@ -121,7 +121,7 @@ def generate_image(client, prompt: str, model: str, output_path: Path, reference
                 config=types.GenerateContentConfig(
                     response_modalities=["IMAGE", "TEXT"],
                     image_config=types.ImageConfig(
-                        aspect_ratio="16:9",
+                        aspect_ratio=aspect_ratio,
                         image_size="2K",
                     ),
                 ),

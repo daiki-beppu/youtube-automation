@@ -44,6 +44,9 @@ def main():
     parser.add_argument(
         "--reference", type=str, default=None, help="参照画像パス（main.png等）。画像+プロンプトで Gemini に送信"
     )
+    parser.add_argument(
+        "--aspect-ratio", type=str, default="16:9", help="アスペクト比（例: 16:9, 9:16, 1:1）"
+    )
     args = parser.parse_args()
 
     config = load_gemini_config()
@@ -112,7 +115,7 @@ def main():
     # 生成実行
     client = genai.Client()
     start_time = time.monotonic()
-    success = generate_image(client, prompt, model, output_path, reference_image=reference_image)
+    success = generate_image(client, prompt, model, output_path, reference_image=reference_image, aspect_ratio=args.aspect_ratio)
     elapsed = time.monotonic() - start_time
 
     # レポート
