@@ -51,7 +51,17 @@ def resolve_collection_paths(collection_path: Path) -> tuple[Path, Path]:
     if not image_path.exists():
         # JPEG フォールバック
         image_path = collection_path / "10-assets" / "main.jpg"
+    # 既存 loop.mp4 がある場合は連番で退避
     output_path = collection_path / "10-assets" / "loop.mp4"
+    if output_path.exists():
+        n = 1
+        while True:
+            backup = collection_path / "10-assets" / f"loop-v{n}.mp4"
+            if not backup.exists():
+                break
+            n += 1
+        output_path.rename(backup)
+        print(f"  [Backup] 既存ファイルを {backup.name} にリネーム")
     return image_path, output_path
 
 

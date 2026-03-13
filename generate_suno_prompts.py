@@ -59,14 +59,18 @@ def generate(patterns_path: Path) -> str:
             lines.append("")
             lines.append(f"### Variation {j}")
             lines.append("**Styles:**")
+            lines.append("```")
             lines.append(f"{tempo}, 5 minutes,")
             lines.append(f"{base_style},")
             lines.append(scene)
+            lines.append("```")
 
             if exclude_styles:
                 lines.append("")
                 lines.append("**Exclude Styles:**")
+                lines.append("```")
                 lines.append(exclude_styles)
+                lines.append("```")
 
         lines.append("")
         lines.append("---")
