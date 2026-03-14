@@ -69,14 +69,16 @@ class ShortUploader:
     def _find_short_video(self, collection_path: Path, short_num: int | None = None) -> Path | None:
         """ショート動画ファイルを検索
 
-        1. short_num 指定時: 01-master/shorts/short-{NN}.mp4
+        1. short_num 指定時: 01-master/shorts/short-{NN}-*.mp4（ラベル付きファイル名対応）
         2. 通常: 01-master/short.mp4
         """
         if short_num is not None:
-            candidate = collection_path / '01-master' / 'shorts' / f'short-{short_num:02d}.mp4'
-            if candidate.exists():
-                return candidate
-            logger.error(f"❌ ショート動画が見つかりません: {candidate}")
+            prefix = f'short-{short_num:02d}'
+            shorts_dir = collection_path / '01-master' / 'shorts'
+            candidates = sorted(shorts_dir.glob(f'{prefix}*.mp4'))
+            if candidates:
+                return candidates[0]
+            logger.error(f"❌ ショート動画が見つかりません: {shorts_dir}/{prefix}*.mp4")
             return None
 
         candidate = collection_path / '01-master' / 'short.mp4'
@@ -253,18 +255,71 @@ class ShortUploader:
 
         logger.info("📋 workflow-state.json 更新完了")
 
+    # ─── 投稿間隔チェック ───────────────────────────────
+
+    def _check_upload_interval(self) -> tuple[bool, str]:
+        """前回のショートアップロードから十分な時間が経過しているかチェック
+
+        schedule_config.json の shorts.min_hours_between_shorts を参照。
+        live/ 配下の全コレクションの workflow-state.json を走査して
+        最新のショートアップロード時刻を取得する。
+
+        Returns:
+            (ok, message): ok=True なら投稿可、False なら待機必要
+        """
+        min_hours = self.schedule_config.get('shorts', {}).get('min_hours_between_shorts', 24)
+        tz_name = self.schedule_config.get('schedule', {}).get('timezone', 'Asia/Tokyo')
+        tz = ZoneInfo(tz_name)
+        now = datetime.now(tz)
+
+        # live/ 配下の全コレクションから最新のショートアップロード時刻を探す
+        live_dir = self.channel_dir / 'collections' / 'live'
+        latest_upload_time = None
+
+        if live_dir.exists():
+            for ws_file in live_dir.glob('*/workflow-state.json'):
+                try:
+                    with open(ws_file, 'r', encoding='utf-8') as f:
+                        ws = json.load(f)
+                    upload_time_str = ws.get('post_upload', {}).get('short', {}).get('upload_time')
+                    if upload_time_str:
+                        upload_time = datetime.fromisoformat(upload_time_str)
+                        if upload_time.tzinfo is None:
+                            upload_time = upload_time.replace(tzinfo=tz)
+                        if latest_upload_time is None or upload_time > latest_upload_time:
+                            latest_upload_time = upload_time
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+        if latest_upload_time is None:
+            return True, "前回のショートアップロード記録なし — 投稿可"
+
+        elapsed_hours = (now - latest_upload_time).total_seconds() / 3600
+        if elapsed_hours >= min_hours:
+            return True, f"前回から {elapsed_hours:.1f}h 経過（最低 {min_hours}h）— 投稿可"
+        else:
+            remaining = min_hours - elapsed_hours
+            return False, f"前回から {elapsed_hours:.1f}h（最低 {min_hours}h 必要）— あと {remaining:.1f}h 待機"
+
     # ─── オーケストレーション ─────────────────────────
 
     def upload_short(self, collection_path: Path, short_num: int | None = None) -> dict:
         """メインオーケストレーター
 
-        1. ショート動画ファイルを検索
-        2. CC の公開日から publish_at を計算
-        3. メタデータ生成
-        4. アップロード実行
-        5. workflow-state.json 更新
+        1. 投稿間隔チェック
+        2. ショート動画ファイルを検索
+        3. CC の公開日から publish_at を計算
+        4. メタデータ生成
+        5. アップロード実行
+        6. workflow-state.json 更新
         """
         collection_path = Path(collection_path).resolve()
+
+        # 投稿間隔チェック
+        ok, message = self._check_upload_interval()
+        if not ok:
+            logger.warning(f"⏳ {message}")
+            return {"action": "short_upload_blocked", "details": {"reason": message}}
 
         # ショート動画検索
         video_path = self._find_short_video(collection_path, short_num)
@@ -330,6 +385,12 @@ class ShortUploader:
         collection_path = Path(collection_path).resolve()
 
         print(f"📋 ショートアップロード計画: {collection_path.name}")
+        print()
+
+        # 投稿間隔チェック
+        ok, message = self._check_upload_interval()
+        status = "✅" if ok else "⏳"
+        print(f"  {status} 投稿間隔: {message}")
         print()
 
         # 動画ファイル確認

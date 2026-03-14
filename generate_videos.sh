@@ -42,18 +42,10 @@ for candidate in "${ASSETS_DIR}/main.jpg" "${ASSETS_DIR}/main.png" "${ASSETS_DIR
     fi
 done
 
-MASTER_AUDIO=""
-for candidate_audio in \
-    "${MASTER_DIR}/master-mix.wav" \
-    "${MASTER_DIR}/master.wav" \
-    "${MASTER_DIR}"/*-Master-mix.wav \
-    "${MASTER_DIR}"/*-Master.mp3 \
-    "${MASTER_DIR}"/master.mp3; do
-    if [[ -f "$candidate_audio" ]]; then
-        MASTER_AUDIO="$candidate_audio"
-        break
-    fi
-done
+MASTER_AUDIO="${MASTER_DIR}/master-mix.wav"
+if [[ ! -f "$MASTER_AUDIO" ]]; then
+    MASTER_AUDIO=""
+fi
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
 
@@ -65,7 +57,7 @@ if [[ -z "$THUMBNAIL" ]]; then
     echo "ERROR: No thumbnail found in ${ASSETS_DIR}/ (main.jpg/png or thumbnail.jpg/png)"; exit 1
 fi
 if [[ -z "$MASTER_AUDIO" ]]; then
-    echo "ERROR: No master audio found in ${MASTER_DIR}/"; exit 1
+    echo "ERROR: master-mix.wav not found in ${MASTER_DIR}/ (only master-mix.wav is accepted)"; exit 1
 fi
 if ! ffprobe -v error "$MASTER_AUDIO" &>/dev/null; then
     echo "ERROR: Corrupted file: $MASTER_AUDIO"; exit 1
@@ -121,7 +113,7 @@ if [[ -n "$LOOP_VIDEO" ]]; then
         -c:v libx264 -tune film -preset fast -crf 23 -pix_fmt yuv420p \
         $VF_FILTER \
         -r 24 \
-        -c:a aac -b:a 192k -ar 48000 \
+        -c:a aac -b:a 384k -ar 48000 \
         -t "$duration" \
         -movflags +faststart \
         -shortest \
@@ -135,7 +127,7 @@ else
         -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
         -x264opts keyint=1:min-keyint=1 \
         -r 1 \
-        -c:a aac -b:a 192k -ar 48000 \
+        -c:a aac -b:a 384k -ar 48000 \
         -t "$duration" \
         -movflags +faststart \
         -shortest \
