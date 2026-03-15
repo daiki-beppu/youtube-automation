@@ -699,6 +699,108 @@ class BenchmarkReportGenerator:
         return "\n".join(lines)
 
 
+def find_latest_benchmark_json(data_dir: Path) -> Path | None:
+    """最新のベンチマーク JSON を返す。"""
+    files = sorted(data_dir.glob("benchmark_*.json"), reverse=True)
+    return files[0] if files else None
+
+
+def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbnail: bool = False) -> list[dict]:
+    """最新ベンチマーク JSON から min_views 以上の動画を抽出する。
+
+    Returns:
+        動画情報リスト（再生数降順）
+    """
+    benchmark_path = find_latest_benchmark_json(data_dir)
+    if not benchmark_path:
+        return []
+
+    with open(benchmark_path) as f:
+        data = json.load(f)
+
+    targets = []
+    seen_ids: set[str] = set()
+    for ch in data.get("channels", []):
+        channel_name = ch.get("name", "Unknown")
+        channel_slug = ch.get("slug", "unknown")
+        for v in ch.get("videos", []):
+            vid = v.get("video_id", "")
+            if vid in seen_ids:
+                continue
+            seen_ids.add(vid)
+            views = int(v.get("views", 0))
+            thumb_url = v.get("thumbnail_url", "")
+            if views < min_views:
+                continue
+            if require_thumbnail and not thumb_url:
+                continue
+            targets.append({
+                "video_id": vid,
+                "title": v.get("title", ""),
+                "views": views,
+                "channel_name": channel_name,
+                "channel_slug": channel_slug,
+                "published_at": v.get("published_at", ""),
+                "thumbnail_url": thumb_url,
+            })
+
+    targets.sort(key=lambda x: x["views"], reverse=True)
+    return targets
+
+
+def ensure_benchmark_fresh(data_dir: Path | None = None):
+    """ベンチマークデータの鮮度を確認し、全チャンネルが1つの JSON に揃った状態を保証する。
+
+    1つでも古い or 欠けているチャンネルがあれば --force で全チャンネル一括更新。
+    """
+    collector = BenchmarkCollector()
+    if data_dir is None:
+        data_dir = collector.data_dir
+
+    # 最新 JSON に全チャンネルが含まれているか検証
+    need_update = False
+    expected_slugs = {ch["slug"] for ch in collector.config.benchmark_channels}
+
+    latest = find_latest_benchmark_json(data_dir)
+    if latest:
+        with open(latest) as f:
+            latest_data = json.load(f)
+        found_slugs = {ch.get("slug") for ch in latest_data.get("channels", [])}
+        missing = expected_slugs - found_slugs
+        if missing:
+            logger.info("ベンチマーク: 最新 JSON に %s が欠けている → 全チャンネル更新", missing)
+            need_update = True
+    else:
+        logger.info("ベンチマーク: JSON が存在しない → 全チャンネル更新")
+        need_update = True
+
+    if not need_update:
+        stale = collector.check_freshness()
+        if stale:
+            logger.info("ベンチマーク: %d チャンネルが古い → 全チャンネル更新", len(stale))
+            need_update = True
+
+    if not need_update:
+        logger.info("ベンチマーク: 全チャンネル最新（%d チャンネル）", len(expected_slugs))
+        return
+
+    collector.initialize()
+    data = collector.collect_all(force=True)
+
+    if data.get("skipped") or not data.get("channels"):
+        return
+
+    if collector.benchmark_config.get("analyze_thumbnails", True):
+        analyzer = BenchmarkThumbnailAnalyzer(collector.benchmarks_dir)
+        data = analyzer.analyze_thumbnails(data, keep=False)
+
+    collector.save_json(data)
+    reporter = BenchmarkReportGenerator(collector.config, collector.benchmarks_dir, collector.today)
+    md_map = reporter.generate_markdown(data)
+    reporter.write_markdown(md_map)
+    logger.info("ベンチマーク更新完了")
+
+
 def main():
     parser = argparse.ArgumentParser(description="競合チャンネルのベンチマークデータ収集・分析")
     parser.add_argument("--force", action="store_true", help="鮮度に関わらず全チャンネル更新")
