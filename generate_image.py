@@ -47,10 +47,16 @@ def main():
     parser.add_argument(
         "--aspect-ratio", type=str, default="16:9", help="アスペクト比（例: 16:9, 9:16, 1:1）"
     )
+    parser.add_argument(
+        "--no-composition", action="store_true", help="composition_prefix の自動付加をスキップ"
+    )
     args = parser.parse_args()
 
     config = load_gemini_config()
-    prompt = apply_composition_rules(args.prompt, config)
+    if args.no_composition or args.reference:
+        prompt = args.prompt
+    else:
+        prompt = apply_composition_rules(args.prompt, config)
     output_path = Path(args.output)
     if not output_path.is_absolute():
         output_path = Path.cwd() / output_path
