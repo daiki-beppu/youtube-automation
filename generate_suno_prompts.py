@@ -16,6 +16,7 @@ def generate(patterns_path: Path) -> str:
     genre_line = suno.get("genre_line", "")
     mood_descriptors = suno.get("mood_descriptors", "")
     exclude_styles = suno.get("exclude_styles", "")
+    style_variants = suno.get("style_variants", {})
 
     base_parts = [genre_line]
     if mood_descriptors:
@@ -49,19 +50,30 @@ def generate(patterns_path: Path) -> str:
         label = labels[i] if i < len(labels) else str(i + 1)
         name_jp = pattern["name_jp"]
         name_en = pattern["name_en"]
-        tempo = pattern["tempo"]
+        tempo = pattern.get("tempo")
         scenes = pattern["scenes"]
+        style_key = pattern.get("style")
+
+        # Per-pattern style variant override
+        if style_key and style_key in style_variants:
+            variant = style_variants[style_key]
+            effective_style = variant["genre_line"]
+            style_label = f" [{style_key}: {variant['name']}]"
+        else:
+            effective_style = base_style
+            style_label = ""
 
         lines.append("")
-        lines.append(f"## Pattern {label}: {name_jp} — {name_en}")
+        lines.append(f"## Pattern {label}: {name_jp} — {name_en}{style_label}")
 
         for j, scene in enumerate(scenes, 1):
             lines.append("")
             lines.append(f"### Variation {j}")
             lines.append("**Styles:**")
             lines.append("```")
-            lines.append(f"{tempo}, 5 minutes,")
-            lines.append(f"{base_style},")
+            if tempo:
+                lines.append(f"{tempo}, 5 minutes,")
+            lines.append(f"{effective_style},")
             lines.append(scene)
             lines.append("```")
 
