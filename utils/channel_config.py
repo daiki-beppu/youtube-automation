@@ -246,7 +246,7 @@ class ChannelConfig:
 
     @property
     def default_activity(self) -> str:
-        return self._data['title']['default_activity']
+        return self._data['title'].get('default_activity', self._data['title'].get('default_activities', 'Study'))
 
     def get_activity_for_theme(self, theme: str) -> str:
         """テーマ名からアクティビティキーワードを取得
@@ -258,7 +258,15 @@ class ChannelConfig:
             アクティビティ文字列（例: "Study", "Gaming"）
         """
         theme_lower = theme.lower()
-        theme_activities = self._data['title']['theme_activities']
+        # jazzgak. TTP 形式: theme_scenes (activities はシーン内に格納)
+        theme_scenes = self._data['title'].get('theme_scenes', {})
+        if theme_scenes:
+            for keyword, scene_data in theme_scenes.items():
+                if keyword in theme_lower:
+                    return scene_data.get('activities', self.default_activity)
+            return self.default_activity
+        # 従来形式: theme_activities
+        theme_activities = self._data['title'].get('theme_activities', {})
         for keyword, activity in theme_activities.items():
             if keyword in theme_lower:
                 return activity

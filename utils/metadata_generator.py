@@ -292,10 +292,24 @@ class BAHMetadataGenerator:
         duration_display = self._format_duration_display(total_seconds)
         duration_short = self._format_duration_short(total_seconds)
 
+        # jazzgak. TTP 形式: theme_scenes から scene_phrase と activities を取得
+        theme_scenes = self.config.raw.get('title', {}).get('theme_scenes', {})
+        scene_phrase = ""
+        activities = activity
+        if theme_scenes:
+            theme_lower = theme.lower()
+            for keyword, scene_data in theme_scenes.items():
+                if keyword in theme_lower:
+                    scene_phrase = scene_data.get('scene', '')
+                    activities = scene_data.get('activities', activity)
+                    break
+
         title = self.config.title_template.format(
             style=self.config.genre_style.title(),
             theme=theme,
             activity=activity,
+            activities=activities,
+            scene_phrase=scene_phrase,
             duration_display=duration_display,
             duration_short=duration_short,
         )
