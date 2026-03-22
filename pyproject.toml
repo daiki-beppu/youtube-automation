@@ -1,0 +1,25 @@
+[project]
+name = "youtube-channels-automation"
+version = "1.0.0"
+description = "YouTube channel automation tools"
+requires-python = ">=3.11"
+dependencies = [
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "schedule",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+veo = ["google-genai", "Pillow"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

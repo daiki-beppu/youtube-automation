@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - YouTube OAuth 2.0 認証ハンドラー
+YouTube OAuth 2.0 認証ハンドラー
 YouTube Data API v3を使用した自動アップロードのための認証システム
 
 Required setup:
@@ -10,6 +10,7 @@ Required setup:
 4. client_secrets.json をダウンロードして auth/ に配置
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -38,10 +39,13 @@ class YouTubeOAuthHandler:
         """
         from utils.channel_config import ChannelConfig
         channel_dir = ChannelConfig.channel_dir()
-        repo_root = channel_dir.parent.parent  # youtube-channels/
 
-        # client_secrets.json: 全チャンネル共有（単一 GCP プロジェクト）
-        self.client_secrets_file = repo_root / 'auth' / 'client_secrets.json'
+        # client_secrets.json: 環境変数 or automation/auth/ 内（submodule 同梱）
+        client_secrets_dir = os.environ.get('CLIENT_SECRETS_DIR')
+        if client_secrets_dir:
+            self.client_secrets_file = Path(client_secrets_dir) / 'client_secrets.json'
+        else:
+            self.client_secrets_file = Path(__file__).parent / 'client_secrets.json'
 
         # token.json: チャンネル固有
         if auth_dir is None:

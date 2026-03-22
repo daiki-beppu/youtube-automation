@@ -2,18 +2,23 @@
 # daily_collect.sh — YouTube Analytics データの日次自動収集
 # launchd から呼び出される想定
 #
-# セットアップ:
-#   chmod +x automation/daily_collect.sh
-#   cp automation/launchd/com.youtube-channels.daily-collect.plist ~/Library/LaunchAgents/
-#   launchctl load ~/Library/LaunchAgents/com.youtube-channels.daily-collect.plist
+# 使い方:
+#   チャンネルリポのルートから実行:
+#     ./automation/daily_collect.sh
+#   または CHANNEL_DIR を指定:
+#     CHANNEL_DIR=/path/to/channel ./automation/daily_collect.sh
 
 # launchd は最小 PATH で起動するため Homebrew を明示追加
 export PATH="/opt/homebrew/bin:$PATH"
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="${REPO_ROOT}/automation/logs"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# チャンネルディレクトリ: CHANNEL_DIR 環境変数 or スクリプトの親ディレクトリ
+CHANNEL_DIR="${CHANNEL_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+CHANNEL_NAME="$(basename "$CHANNEL_DIR")"
+LOG_DIR="${CHANNEL_DIR}/automation/logs"
 LOG_FILE="${LOG_DIR}/daily_collect_$(date +%Y%m%d).log"
 
 mkdir -p "$LOG_DIR"
@@ -22,32 +27,20 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
 
-# 各チャンネルのデータを収集
-collect_channel() {
-    local channel_dir="$1"
-    local channel_name
-    channel_name=$(basename "$channel_dir")
+if [[ ! -f "${CHANNEL_DIR}/config/channel_config.json" ]]; then
+    log "ERROR: ${CHANNEL_NAME} — config/channel_config.json not found in ${CHANNEL_DIR}"
+    exit 1
+fi
 
-    if [[ ! -f "${channel_dir}/config/channel_config.json" ]]; then
-        log "SKIP: ${channel_name} (channel_config.json not found)"
-        return 0
-    fi
+log "=== Daily collect started: ${CHANNEL_NAME} ==="
 
-    log "START: ${channel_name}"
-    if CHANNEL_DIR="$channel_dir" python3 "${REPO_ROOT}/automation/analytics_system.py" >> "$LOG_FILE" 2>&1; then
-        log "OK: ${channel_name}"
-    else
-        log "ERROR: ${channel_name} (exit code: $?)"
-    fi
-}
+if CHANNEL_DIR="$CHANNEL_DIR" python3 "${SCRIPT_DIR}/analytics_system.py" >> "$LOG_FILE" 2>&1; then
+    log "OK: ${CHANNEL_NAME}"
+else
+    log "ERROR: ${CHANNEL_NAME} (exit code: $?)"
+fi
 
-log "=== Daily collect started ==="
-
-for channel_dir in "${REPO_ROOT}"/channels/*/; do
-    collect_channel "$channel_dir"
-done
-
-log "=== Daily collect finished ==="
+log "=== Daily collect finished: ${CHANNEL_NAME} ==="
 
 # ログローテーション: 30日超のログを削除
 find "$LOG_DIR" -name "daily_collect_*.log" -mtime +30 -delete 2>/dev/null || true

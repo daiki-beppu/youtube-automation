@@ -1,0 +1,14 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Auth（client_secrets は手動配置、git 管理しない）
+auth/client_secrets.json
+
+# Logs
+logs/
