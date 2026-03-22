@@ -9,8 +9,15 @@ from pathlib import Path
 
 import pytest
 
-# automation/tests/ から channels/8bah/ までの相対パス
-_CHANNEL_DIR = Path(__file__).resolve().parents[2] / 'channels' / '8bah'
+# automation/tests/ からリポジトリルートまでの相対パス
+# 独立リポジトリ: config/ が直下にある
+# モノレポ: channels/8bah/ 配下にある
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CHANNEL_DIR = (
+    _REPO_ROOT
+    if (_REPO_ROOT / 'config' / 'channel_config.json').exists()
+    else _REPO_ROOT / 'channels' / '8bah'
+)
 
 
 @pytest.fixture(autouse=True, scope='session')

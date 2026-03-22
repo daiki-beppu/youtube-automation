@@ -121,7 +121,10 @@ def main():
     # 生成実行
     client = genai.Client()
     start_time = time.monotonic()
-    success = generate_image(client, prompt, model, output_path, reference_image=reference_image, aspect_ratio=args.aspect_ratio)
+    success = generate_image(
+        client, prompt, model, output_path,
+        reference_image=reference_image, aspect_ratio=args.aspect_ratio,
+    )
     elapsed = time.monotonic() - start_time
 
     # レポート
