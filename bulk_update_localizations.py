@@ -130,46 +130,38 @@ def main():
 
         # BAHMetadataGenerator で localizations を生成
         gen = BAHMetadataGenerator(str(col_path))
-        theme = gen._extract_theme_name()
-        activity = gen._get_activity()
-        duration_display = gen._format_duration_display(total_seconds)
-        duration_short = gen._format_duration_short(total_seconds)
 
-        title_vars = {
-            'style': config.genre_style.title(),
-            'theme': theme,
-            'activity': activity,
-            'duration_display': duration_display,
-            'duration_short': duration_short,
-        }
+        # scene_phrases を workflow-state.json から読み込み
+        scene_phrases = gen._load_scene_phrases()
 
-        # descriptions.md からキュレーション済み本文を取得（優先）
+        # 英語タイトルを生成
         en_title = gen._generate_title(total_seconds)
-        description_body = None
 
+        # descriptions.md からタイムスタンプ部分を抽出
+        timestamp_body = None
         desc_md_path = col_path / '20-documentation' / 'descriptions.md'
         if desc_md_path.exists():
             desc_text = desc_md_path.read_text(encoding='utf-8')
             curated_desc = extract_md_section(desc_text, 'Complete Collection 概要欄')
             if curated_desc:
-                curated_body = extract_body_for_localizations(curated_desc)
-                if curated_body:
-                    description_body = curated_body
+                lines = curated_desc.split('\n')
+                ts_lines = [line for line in lines if re.match(r'^\d{1,2}:\d{2}', line.strip())]
+                if ts_lines:
+                    timestamp_body = '\n'.join(ts_lines)
 
-        # descriptions.md がない場合はフォールバック: 自動生成タイムスタンプ
-        if description_body is None:
-            timestamp_text = gen.format_timestamps_text()
-            description_body = f"🎵 {en_title}\n\n{timestamp_text}" if timestamp_text else f"🎵 {en_title}"
+        # フォールバック: 自動生成タイムスタンプ
+        if timestamp_body is None:
+            timestamp_body = gen.format_timestamps_text()
 
-        localizations = gen.generate_localizations(title_vars, description_body)
+        localizations = gen.generate_localizations(en_title, timestamp_body or '', scene_phrases)
 
-        # 日本語タイトルをプレビュー
-        ja_title = localizations.get('ja', {}).get('title', '(N/A)')
+        # プレビュー
+        ja_loc = localizations.get('ja', {})
         print(f"\n{'─' * 50}")
         print(f"🎬 {vid} — {col_path.name}")
         print(f"   EN: {en_title}")
-        print(f"   JA: {ja_title}")
-        print(f"   ⏱️  {duration_display} ({total_seconds}s)")
+        print(f"   JA: {ja_loc.get('title', 'N/A')}")
+        print(f"   JA desc: {ja_loc.get('description', '')[:100]}...")
 
         if args.dry_run:
             continue
