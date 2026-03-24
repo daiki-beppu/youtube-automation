@@ -127,16 +127,15 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
     @staticmethod
     def _extract_body_for_localizations(description: str) -> str | None:
-        """キュレーション済み概要欄から本文部分（フッター前）を抽出
+        """キュレーション済み概要欄からタイムスタンプ部分を抽出
 
-        ローカライゼーション用: シーンフック + タイムスタンプ + ブリッジテキストを返す。
-        フッター（Perfect for / Usage & Attribution 等）は generate_localizations() が各言語で付加する。
+        ローカライゼーション用: トラックリスト（タイムスタンプ行）のみを返す。
+        概要欄の他セクションは generate_localizations() がテンプレートから構築する。
         """
-        for marker in ['Perfect for:', '🎮 Perfect for', '─────', '📝 Usage', 'Usage & Attribution']:
-            idx = description.find(marker)
-            if idx > 0:
-                return description[:idx].rstrip()
-        return None
+        import re
+        lines = description.split('\n')
+        timestamp_lines = [line for line in lines if re.match(r'^\d{1,2}:\d{2}', line.strip())]
+        return '\n'.join(timestamp_lines) if timestamp_lines else None
 
     @staticmethod
     def _extract_md_section(text: str, heading: str) -> str | None:
@@ -215,11 +214,12 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             if prebuilt['tags']:
                 metadata['tags'] = prebuilt['tags']
 
-            # ローカライゼーションにもキュレーション済みの本文を使用
-            curated_body = self._extract_body_for_localizations(prebuilt['description'])
-            if curated_body and hasattr(metadata_gen, '_last_title_vars'):
+            # ローカライゼーションにもキュレーション済みのタイムスタンプを使用
+            curated_timestamps = self._extract_body_for_localizations(prebuilt['description'])
+            scene_phrases = getattr(metadata_gen, '_last_scene_phrases', {})
+            if curated_timestamps:
                 metadata['localizations'] = metadata_gen.generate_localizations(
-                    metadata_gen._last_title_vars, curated_body
+                    metadata['title'], curated_timestamps, scene_phrases
                 )
 
         if publish_at:
