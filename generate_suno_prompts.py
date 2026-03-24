@@ -18,6 +18,8 @@ def generate(patterns_path: Path) -> str:
     mood_descriptors = suno.get("mood_descriptors", "")
     exclude_styles = suno.get("exclude_styles", "")
     style_variants = suno.get("style_variants", {})
+    duration_prompt = suno.get("duration_prompt", "")
+    style_influence = suno.get("style_influence", 50)
 
     base_parts = [genre_line]
     if mood_descriptors:
@@ -39,7 +41,7 @@ def generate(patterns_path: Path) -> str:
         "|-----------|-----|",
         "| Mode | Custom |",
         "| Weirdness | 20% |",
-        "| Style Influence | 70% |",
+        f"| Style Influence | {style_influence}% |",
         "| Lyrics | (空) |",
         "",
         "---",
@@ -72,9 +74,13 @@ def generate(patterns_path: Path) -> str:
             lines.append(f"### Variation {j}")
             lines.append("**Styles:**")
             lines.append("```")
+            parts = []
             if tempo:
-                lines.append(f"{tempo}, 5 minutes,")
-            lines.append(f"{effective_style},")
+                parts.append(tempo)
+            parts.append(effective_style)
+            if duration_prompt:
+                parts.append(duration_prompt)
+            lines.append(", ".join(parts) + ",")
             lines.append(scene)
             lines.append("```")
 
