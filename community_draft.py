@@ -69,7 +69,11 @@ What scene does this music paint in your mind? Tell us below!
 
 {hashtags} #NewRelease"""
 
-        logger.info("📝 コミュニティ投稿ドラフト生成完了")
+        # community_draft.md に保存
+        output_path = col_path / "20-documentation" / "community_draft.md"
+        output_path.write_text(draft + "\n", encoding="utf-8")
+
+        logger.info(f"📝 コミュニティ投稿ドラフト生成完了: {output_path}")
         logger.info("⚠️  YouTube Studio のコミュニティタブに手動で投稿してください:")
         logger.info("   https://studio.youtube.com/channel/community")
 

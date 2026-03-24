@@ -306,7 +306,7 @@ class TestGenerateCompleteCollectionMetadata:
         assert len(meta["tags"]) > 0
 
     def test_localizations_present(self, gen_with_tracks):
-        """ローカライゼーションが返り値に含まれること"""
+        """全15言語のローカライゼーションが返り値に含まれること"""
         meta = gen_with_tracks.generate_complete_collection_metadata()
         assert "localizations" in meta
         config = ChannelConfig.load()
@@ -321,19 +321,72 @@ class TestGenerateCompleteCollectionMetadata:
         for lang, loc in meta["localizations"].items():
             assert len(loc["title"]) <= 100, f"{lang} title exceeds 100 chars"
 
-    def test_localizations_uses_activity_phrases(self, gen_with_tracks):
-        """各言語のタイトルにチャンネル名が含まれること"""
-        meta = gen_with_tracks.generate_complete_collection_metadata()
-        ja_title = meta["localizations"]["ja"]["title"]
-        # ローカライゼーションにチャンネル短縮名またはテーマが含まれる
-        assert len(ja_title) > 0
+    def test_localizations_title_with_scene_phrase(self):
+        """scene_phrase がローカライズタイトルに反映される"""
+        gen = _make_generator()
+        gen.tracks = [{"timestamp": "00:00", "title": "Track 1", "duration": 180, "start_time": 0, "end_time": 180}]
+        scene_phrases = {"ja": "雨の街の夜テスト"}
+        locs = gen.generate_localizations(
+            english_title="Test English Title",
+            timestamp_body="00:00 01. Track 1",
+            scene_phrases=scene_phrases,
+        )
+        assert "ja" in locs
+        assert "雨の街の夜テスト" in locs["ja"]["title"]
 
-    def test_localizations_description_contains_timestamps(self, gen_with_tracks):
-        """各言語の説明文にタイムスタンプが保持されること"""
-        meta = gen_with_tracks.generate_complete_collection_metadata()
-        for lang, loc in meta["localizations"].items():
-            assert "00:00" in loc["description"], f"{lang} missing timestamp"
-            assert "Hero Theme" in loc["description"], f"{lang} missing track title"
+    def test_localizations_title_fallback_to_english(self):
+        """scene_phrase がない言語は英語タイトルにフォールバック"""
+        gen = _make_generator()
+        gen.tracks = []
+        locs = gen.generate_localizations(
+            english_title="English Fallback Title",
+            timestamp_body="00:00 Track 1",
+            scene_phrases={},
+        )
+        for lang, loc in locs.items():
+            assert loc["title"] == "English Fallback Title"
+
+    def test_localizations_description_hybrid_structure(self):
+        """概要欄がハイブリッド構造（現地語ポエム + 英語メタデータ）"""
+        gen = _make_generator()
+        gen.tracks = []
+        locs = gen.generate_localizations(
+            english_title="Test",
+            timestamp_body="00:00 01. Track 1",
+            scene_phrases={"ja": "テスト"},
+        )
+        ja_desc = locs["ja"]["description"]
+        assert "- Genre :" in ja_desc
+        assert "- Vibe :" in ja_desc
+        assert "- Best for :" in ja_desc
+        assert "Track List" in ja_desc
+        assert "Usage & Attribution" in ja_desc
+        assert "00:00 01. Track 1" in ja_desc
+
+    def test_localizations_description_length(self):
+        """全言語の概要欄が5000文字以下"""
+        gen = _make_generator()
+        gen.tracks = []
+        locs = gen.generate_localizations(
+            english_title="Test",
+            timestamp_body="00:00 Track 1",
+            scene_phrases={},
+        )
+        for lang, loc in locs.items():
+            assert len(loc["description"]) <= 5000, f"{lang} description exceeds 5000 chars"
+
+    def test_localizations_scene_phrases_empty(self):
+        """scene_phrases が空でもエラーにならない"""
+        gen = _make_generator()
+        gen.tracks = []
+        locs = gen.generate_localizations(
+            english_title="Fallback",
+            timestamp_body="",
+            scene_phrases={},
+        )
+        assert len(locs) > 0
+        for lang, loc in locs.items():
+            assert loc["title"] == "Fallback"
 
     def test_description_header_matches_title(self, gen_with_tracks):
         """説明文ヘッダーが新タイトルと連動すること"""
