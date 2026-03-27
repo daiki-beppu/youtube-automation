@@ -56,8 +56,9 @@ class PlaylistManager:
                 matched.append(key)
                 continue
 
-            # activity ベースのマッチング
-            if activity in pl.get('auto_add_activities', []):
+            # activity ベースのマッチング（"Study · Focus · Late Night" → ["Study", "Focus", "Late Night"]）
+            activities = [a.strip() for a in activity.split('·')]
+            if any(a in pl.get('auto_add_activities', []) for a in activities):
                 matched.append(key)
                 continue
 

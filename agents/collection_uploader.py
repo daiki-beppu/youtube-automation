@@ -84,13 +84,19 @@ class CollectionUploader:
 
     # ─── スケジュール公開 ─────────────────────────────
 
+    # 曜日名 → isoweekday() マッピング（月=1, 日=7）
+    _WEEKDAY_MAP = {
+        'mon': 1, 'tue': 2, 'wed': 3, 'thu': 4,
+        'fri': 5, 'sat': 6, 'sun': 7,
+    }
+
     def _calculate_publish_at(self) -> str | None:
         """CC のスケジュール公開日時を計算
 
         auto_schedule_enabled が true の場合:
-        - 当日の publish_time（デフォルト 17:00）でスケジュール
-        - 同日に既存の公開/予約動画があれば翌日にスライド
-        - 翌日にも重複があればさらに翌日…と空きスロットを探す
+        - cadence で指定された曜日（例: tue, thu, sat）に限定
+        - 当日の publish_time を過ぎていたら次の cadence 曜日から探索
+        - 同日に既存の公開/予約動画があればさらに次の cadence 曜日にスライド
 
         auto_schedule_enabled が false の場合は None（即時公開）。
 
@@ -106,6 +112,10 @@ class CollectionUploader:
         tz = ZoneInfo(tz_name)
         hour, minute = map(int, publish_time.split(':'))
 
+        # cadence 曜日を isoweekday に変換（未設定なら全曜日許可）
+        cadence = schedule_cfg.get('cadence', [])
+        allowed_weekdays = {self._WEEKDAY_MAP[d.lower()] for d in cadence} if cadence else set(range(1, 8))
+
         now = datetime.now(tz)
         publish_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
@@ -113,14 +123,16 @@ class CollectionUploader:
         if publish_dt <= now:
             publish_dt += timedelta(days=1)
 
-        # 既存の公開日と重複しない日を探す
+        # cadence 曜日かつ既存公開日と重複しない日を探す
         existing_dates = self._get_published_dates()
         max_slide = 30  # 無限ループ防止
         for _ in range(max_slide):
-            if publish_dt.date() not in existing_dates:
+            if publish_dt.isoweekday() in allowed_weekdays and publish_dt.date() not in existing_dates:
                 break
             publish_dt += timedelta(days=1)
-            logger.info(f"📅 公開日重複 — {publish_dt.date()} にスライド")
+            if publish_dt.isoweekday() not in allowed_weekdays:
+                continue
+            logger.info(f"📅 公開日スライド → {publish_dt.date()} ({publish_dt.strftime('%a')})")
 
         logger.info(f"📅 CC 公開予定: {publish_dt.isoformat()}")
         return publish_dt.isoformat()
