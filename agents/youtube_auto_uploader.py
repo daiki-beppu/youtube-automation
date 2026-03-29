@@ -69,6 +69,13 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         Returns:
             str: アップロードされた動画のID（失敗時はNone）
         """
+        # タイトル長バリデーション（YouTube上限100文字）
+        title = metadata.get('title', '')
+        if len(title) > 100:
+            raise ValueError(
+                f"タイトルが100文字を超えています（{len(title)}文字）: {title}"
+            )
+
         # リクエストボディ作成
         status_body = {
             'privacyStatus': metadata.get('privacy_status', 'private'),
@@ -84,7 +91,8 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
         body = {
             'snippet': {
-                'title': metadata['title'][:100],  # YouTube上限100文字
+                'title': metadata['title'],  # YouTube上限100文字
+
                 'description': metadata['description'][:5000],  # YouTube上限5000文字
                 'tags': metadata['tags'][:50],  # YouTube上限50タグ
                 'categoryId': metadata.get('category_id', '10'),
