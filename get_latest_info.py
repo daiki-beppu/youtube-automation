@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - 最新情報取得システム
+最新情報取得システム
 YouTube Analytics APIから最新データを収集し、分析レポートを自動生成
 
 Features:
@@ -20,19 +20,19 @@ from typing import Any, Dict
 logger = logging.getLogger(__name__)
 
 import utils._path_setup  # noqa: F401, E402
-from utils.analytics_analyzer import EightBAHAnalyzer  # noqa: E402
+from utils.analytics_analyzer import AnalyticsAnalyzer  # noqa: E402
 from utils.analytics_collector import YouTubeAnalyticsCollector  # noqa: E402
 from utils.channel_config import ChannelConfig  # noqa: E402
 from utils.report_generator import ReportGenerator  # noqa: E402
 
 
-class EightBAHLatestInfoSystem:
-    """8BAH最新情報取得・分析システム"""
+class LatestInfoSystem:
+    """最新情報取得・分析システム"""
 
     def __init__(self):
         """初期化"""
         self.collector = YouTubeAnalyticsCollector()
-        self.analyzer = EightBAHAnalyzer()
+        self.analyzer = AnalyticsAnalyzer()
         self.report_generator = ReportGenerator()
         self.data_dir = ChannelConfig.channel_dir() / 'data'
         self.reports_dir = ChannelConfig.channel_dir() / 'reports'
@@ -230,7 +230,7 @@ class EightBAHLatestInfoSystem:
 
         return {
             '8_bit': bit_8_stats,
-            'recommendation': '8-bit専念',
+            'recommendation': 'focus on primary genre',
         }
 
     def _analyze_theme_performance(self, video_analytics: Dict) -> Dict[str, Any]:
@@ -278,7 +278,7 @@ class EightBAHLatestInfoSystem:
             'total_videos_analyzed': total_videos,
             'high_performance_count': high_performance,
             'estimated_ctr_status': 'Improving' if high_performance > total_videos * 0.4 else 'Needs Attention',
-            'current_target': '0.59% → 2.0% (3.4x improvement needed)'
+            'current_target': 'analyze current CTR and set improvement target'
         }
 
     def _generate_strategic_recommendations(self, bit_analysis: Dict, theme_analysis: Dict, ctr_analysis: Dict) -> list:
@@ -403,7 +403,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        system = EightBAHLatestInfoSystem()
+        system = LatestInfoSystem()
 
         if args.quick:
             # クイック確認

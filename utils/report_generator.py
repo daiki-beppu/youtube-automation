@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - 自動レポート生成システム
+自動レポート生成システム
 YouTube Analytics データを基にした戦略的レポートを自動生成
 
 Features:
@@ -16,13 +16,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .analytics_analyzer import EightBAHAnalyzer
+from .analytics_analyzer import AnalyticsAnalyzer
 from .analytics_collector import YouTubeAnalyticsCollector
 from .channel_config import ChannelConfig
 
 
-class EightBAHReportGenerator:
-    """8-Bit Adventure Hub 自動レポート生成クラス"""
+class ReportGenerator:
+    """自動レポート生成クラス"""
 
     def __init__(self, output_dir=None):
         """
@@ -41,7 +41,7 @@ class EightBAHReportGenerator:
 
         # 分析システム初期化
         self.collector = YouTubeAnalyticsCollector()
-        self.analyzer = EightBAHAnalyzer()
+        self.analyzer = AnalyticsAnalyzer()
 
     def generate_weekly_report(self) -> Dict[str, Any]:
         """
@@ -512,7 +512,7 @@ def main():
 
     try:
         # レポートジェネレーター初期化
-        report_generator = EightBAHReportGenerator()
+        report_generator = ReportGenerator()
 
         # 自動レポート生成実行
         results = report_generator.run_automated_report_generation()

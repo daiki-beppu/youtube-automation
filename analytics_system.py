@@ -18,7 +18,7 @@ from utils.channel_config import ChannelConfig  # noqa: E402
 logger = logging.getLogger(__name__)
 
 
-class EightBAHAnalyticsSystem:
+class AnalyticsSystem:
     """YouTube Analytics データ収集システム"""
 
     def __init__(self):
@@ -148,7 +148,7 @@ def main():
 
     args = parser.parse_args()
 
-    system = EightBAHAnalyticsSystem()
+    system = AnalyticsSystem()
 
     if args.all_time:
         print("🌟 全期間データ取得モード（チャンネル開設～現在）")

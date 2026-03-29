@@ -1,6 +1,6 @@
 # 🔐 YouTube Data API OAuth 2.0 セットアップガイド
 
-8-Bit Adventure Hub の YouTube 自動アップロードシステム用の認証設定手順です。
+YouTube 自動アップロードシステム用の認証設定手順です。
 
 ## 📋 前提条件
 - Googleアカウント（YouTubeチャンネル所有者）
@@ -10,7 +10,7 @@
 
 ### Step 1: Google Cloud Console プロジェクト作成
 1. [Google Cloud Console](https://console.cloud.google.com/) にアクセス
-2. 新しいプロジェクトを作成（例: "8bah-youtube-automation"）
+2. 新しいプロジェクトを作成（例: "your-youtube-automation"）
 3. プロジェクトを選択
 
 ### Step 2: YouTube Data API v3 有効化
@@ -22,7 +22,7 @@
 1. 「APIとサービス」→「認証情報」
 2. 「認証情報を作成」→「OAuth クライアント ID」
 3. 「デスクトップアプリケーション」を選択
-4. 名前を入力（例: "8BAH Auto Uploader"）
+4. 名前を入力（例: "YouTube Auto Uploader"）
 5. 「作成」をクリック
 
 ### Step 4: client_secrets.json ダウンロード
@@ -80,7 +80,7 @@ youtube-automation/auth/token.json
 💾 認証トークン保存完了
 ✅ YouTube Data API サービス接続成功  
 ✅ API接続テスト成功
-📺 チャンネル名: 8-Bit Adventure Hub
+📺 チャンネル名: Your Channel Name
 👥 登録者数: XX
 🎉 認証・接続テスト完了！YouTube自動アップロードの準備ができました。
 ```

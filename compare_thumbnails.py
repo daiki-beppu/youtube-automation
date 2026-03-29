@@ -139,7 +139,10 @@ class ThumbnailComparer:
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="サムネイル比較検証")
-    parser.add_argument("--min-views", type=int, default=DEFAULT_MIN_VIEWS, help=f"最低再生数（default: {DEFAULT_MIN_VIEWS:,}）")
+    parser.add_argument(
+        "--min-views", type=int, default=DEFAULT_MIN_VIEWS,
+        help=f"最低再生数（default: {DEFAULT_MIN_VIEWS:,}）",
+    )
     parser.add_argument("--no-open", action="store_true", help="ディレクトリを open しない")
     parser.add_argument("--small-only", action="store_true", help="縮小版のみ表示")
     args = parser.parse_args()

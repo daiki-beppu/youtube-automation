@@ -1,5 +1,5 @@
 """
-8BAH - チャンネル全体統計 Mixin
+チャンネル全体統計 Mixin
 YouTubeAnalyticsCollector のチャンネルレベル分析メソッド群
 """
 

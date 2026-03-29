@@ -187,7 +187,7 @@ class YouTubeOAuthHandler:
 
 def main():
     """メイン関数 - スタンドアロン実行用"""
-    print("🎵 8-Bit Adventure Hub - YouTube OAuth 2.0 認証テスト")
+    print("🎵 YouTube OAuth 2.0 認証テスト")
     print("=" * 60)
 
     try:

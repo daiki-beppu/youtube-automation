@@ -7,8 +7,16 @@ __pycache__/
 .venv/
 .env
 
-# Auth（client_secrets は手動配置、git 管理しない）
+# Auth（client_secrets / token は手動配置、git 管理しない）
 auth/client_secrets.json
+auth/token.json
+
+# Scheduler (user-specific)
+launchd/
+
+# IDE
+.vscode/
+.idea/
 
 # Logs
 logs/

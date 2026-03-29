@@ -114,7 +114,9 @@ class BenchmarkCommentCollector:
 
             ch_slug = target["channel_slug"]
             if ch_slug not in result["summary"]["by_channel"]:
-                result["summary"]["by_channel"][ch_slug] = {"name": target["channel_name"], "video_count": 0, "comment_count": 0}
+                result["summary"]["by_channel"][ch_slug] = {
+                    "name": target["channel_name"], "video_count": 0, "comment_count": 0,
+                }
             result["summary"]["by_channel"][ch_slug]["video_count"] += 1
             result["summary"]["by_channel"][ch_slug]["comment_count"] += len(comments)
             result["summary"]["total_comments"] += len(comments)
@@ -125,20 +127,23 @@ class BenchmarkCommentCollector:
         with open(output_path, "w") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
-        logger.info("保存完了: %s（%d動画, %d件コメント）", output_path.name, result["summary"]["total_videos"], result["summary"]["total_comments"])
+        logger.info(
+            "保存完了: %s（%d動画, %d件コメント）",
+            output_path.name, result["summary"]["total_videos"], result["summary"]["total_comments"],
+        )
         return result
 
 
 def print_summary(data: dict):
     """収集結果のサマリーを表示"""
     summary = data.get("summary", {})
-    print(f"\n📊 コメント収集サマリー")
+    print("\n📊 コメント収集サマリー")
     print(f"   対象動画: {summary.get('total_videos', 0)}本")
     print(f"   総コメント: {summary.get('total_comments', 0)}件")
     print()
     for slug, info in summary.get("by_channel", {}).items():
         print(f"   {info['name']}: {info['video_count']}本, {info['comment_count']}件")
-    print(f"\n📁 動画別コメント数:")
+    print("\n📁 動画別コメント数:")
     for v in data.get("videos", []):
         print(f"   {v['views']:>7,} views | {v['comment_count']:>3}件 | {v['title'][:55]}")
 
@@ -146,8 +151,14 @@ def print_summary(data: dict):
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="ベンチマーク動画のコメント収集")
-    parser.add_argument("--min-views", type=int, default=DEFAULT_MIN_VIEWS, help=f"最低再生数（default: {DEFAULT_MIN_VIEWS:,}）")
-    parser.add_argument("--max-comments", type=int, default=DEFAULT_MAX_COMMENTS, help=f"動画あたりの最大取得数（default: {DEFAULT_MAX_COMMENTS}）")
+    parser.add_argument(
+        "--min-views", type=int, default=DEFAULT_MIN_VIEWS,
+        help=f"最低再生数（default: {DEFAULT_MIN_VIEWS:,}）",
+    )
+    parser.add_argument(
+        "--max-comments", type=int, default=DEFAULT_MAX_COMMENTS,
+        help=f"動画あたりの最大取得数（default: {DEFAULT_MAX_COMMENTS}）",
+    )
     parser.add_argument("--force", action="store_true", help="既存データがあっても再取得")
     args = parser.parse_args()
 

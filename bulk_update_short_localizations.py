@@ -164,7 +164,7 @@ def main():
                     'localizations': localizations,
                 }
             ).execute()
-            print(f"      ✅ 更新完了")
+            print("      ✅ 更新完了")
             updated += 1
             time.sleep(0.5)
         except Exception as e:

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - アナリティクス分析システム
-YouTube Analytics APIで収集したデータを8BAH特化で分析する機能
+アナリティクス分析システム
+YouTube Analytics APIで収集したデータを分析する機能
 
 Functions:
-- CTR改善戦略分析 (現在の0.58% → 目標2.0%+)
+- CTR改善戦略分析
 - コレクション別パフォーマンス比較
 - 8-bit vs 16-bit音源効果分析
 - 投稿タイミング最適化
@@ -19,7 +19,7 @@ from typing import Any, Dict, List
 from .channel_config import ChannelConfig
 
 
-class EightBAHAnalyzer:
+class AnalyticsAnalyzer:
     """チャンネル専用アナリティクス分析クラス"""
 
     def __init__(self, data_dir=None):
@@ -46,7 +46,7 @@ class EightBAHAnalyzer:
 
     def analyze_ctr_improvement_strategy(self, analytics_data: Dict) -> Dict[str, Any]:
         """
-        CTR改善戦略分析 (0.58% → 2.0%目標)
+        CTR改善戦略分析
 
         Args:
             analytics_data: analytics_collector.pyから取得したデータ
@@ -295,7 +295,7 @@ def main():
     print("=" * 60)
 
     # サンプルデータでテスト
-    analyzer = EightBAHAnalyzer()
+    analyzer = AnalyticsAnalyzer()
 
     # 実際の分析データが必要な場合はanalytics_collectorから取得
     sample_data = {

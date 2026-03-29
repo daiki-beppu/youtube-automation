@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - YouTube 自動アップローダー
+YouTube 自動アップローダー
 collections/ の動画を自動的にYouTubeにアップロード
 
 Features:

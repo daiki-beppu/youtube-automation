@@ -12,6 +12,7 @@ from typing import Optional
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
+
 from utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)

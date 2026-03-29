@@ -1,0 +1,73 @@
+{
+  "channel": {
+    "name": "Test Channel",
+    "short": "TC",
+    "youtube_handle": "@testchannel",
+    "url": "https://youtube.com/@testchannel",
+    "core_message": "Test core message",
+    "cta_subscribe": "Subscribe now!",
+    "tagline": "Test tagline"
+  },
+  "content_model": {
+    "type": "collection",
+    "languages": ["en"]
+  },
+  "genre": {
+    "primary": "chiptune",
+    "style": "8-bit",
+    "context": "RPG"
+  },
+  "youtube": {
+    "category_id": "10",
+    "privacy_status": "public",
+    "language": "ja"
+  },
+  "tags": {
+    "base": ["chiptune music", "8-bit music", "RPG music", "game music"],
+    "themes": {
+      "adventure": ["adventure music", "journey music"],
+      "battle": ["battle music", "boss battle", "epic music"],
+      "village": ["village music", "town music", "peaceful music"],
+      "dungeon": ["dungeon music", "mysterious music"],
+      "ocean": ["ocean music", "sea music"],
+      "forest": ["forest music", "nature music"],
+      "treasure": ["treasure music", "discovery music"]
+    }
+  },
+  "descriptions": {
+    "opening": "{style} {primary} music inspired by classic {context} adventures.",
+    "sub_opening": "Perfect for gaming, studying, or relaxing to nostalgic melodies.",
+    "perfect_for": [
+      "RPG Game Development",
+      "Study & Focus Sessions",
+      "Nostalgic Background Music"
+    ],
+    "hashtags": ["#ChiptuneMusic", "#8bitMusic", "#RPGMusic"]
+  },
+  "analytics": {
+    "collection_filter_keywords": ["collection", "complete"]
+  },
+  "title": {
+    "template": "{style} {theme} RPG Music - {activity} BGM [{duration_display}]",
+    "default_activity": "Study",
+    "theme_activities": {
+      "battle": "Gaming",
+      "forest": "Relaxation",
+      "ocean": "Chill",
+      "dungeon": "Focus",
+      "village": "Study",
+      "adventure": "Gaming"
+    }
+  },
+  "suno": {
+    "workspace_name": "Test Workspace",
+    "genre_line": "chiptune, 8-bit",
+    "exclude_styles": "rock, metal"
+  },
+  "benchmark": {
+    "channels": [{"name": "Rival", "id": "UC123"}]
+  },
+  "playlists": {
+    "main": "PLtest123"
+  }
+}

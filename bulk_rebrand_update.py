@@ -241,12 +241,12 @@ def main():
                         "snippet": snippet_update,
                     },
                 ).execute()
-                print(f"   ✅ snippet 更新完了")
+                print("   ✅ snippet 更新完了")
                 time.sleep(0.5)
 
             if not args.title_only and video["thumbnail_path"]:
                 uploader.set_thumbnail(vid, str(video["thumbnail_path"]))
-                print(f"   ✅ サムネイル更新完了")
+                print("   ✅ サムネイル更新完了")
                 time.sleep(0.5)
 
             updated += 1

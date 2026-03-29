@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - Collection Uploader
+Collection Uploader
 
 Complete Collection を YouTube にアップロードし、
 publishAt によるスケジュール公開（private → public）を管理する。

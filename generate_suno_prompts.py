@@ -4,8 +4,9 @@
 import sys
 from pathlib import Path
 
-import utils._path_setup  # noqa: F401
 import yaml  # noqa: E402
+
+import utils._path_setup  # noqa: F401
 from utils.channel_config import ChannelConfig  # noqa: E402
 
 

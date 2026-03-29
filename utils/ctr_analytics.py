@@ -1,5 +1,5 @@
 """
-8BAH - CTR・コレクション分析 Mixin
+CTR・コレクション分析 Mixin
 YouTubeAnalyticsCollector の CTR 特化分析メソッド群
 """
 
@@ -11,7 +11,7 @@ class CTRAnalyticsMixin:
 
     def get_ctr_analysis(self, start_date: str, end_date: str) -> Dict:
         """
-        CTR詳細分析（8BAH戦略用）
+        CTR詳細分析
 
         Args:
             start_date (str): 開始日
@@ -73,7 +73,7 @@ class CTRAnalyticsMixin:
 
     def get_collection_performance(self, start_date: str, end_date: str) -> Dict:
         """
-        コレクション別パフォーマンス分析（8BAH特化）
+        コレクション別パフォーマンス分析
 
         Args:
             start_date (str): 開始日
@@ -82,7 +82,7 @@ class CTRAnalyticsMixin:
         Returns:
             Dict: コレクション分析結果
         """
-        print("🎵 8BAH コレクション別パフォーマンス分析中...")
+        print("🎵 コレクション別パフォーマンス分析中...")
 
         # 動画データ取得
         videos_data = self.get_video_analytics(start_date, end_date)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - YouTube Video Uploader
+YouTube Video Uploader
 Complete Collection video upload with thumbnail and playlist creation
 
 Features:

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-8-Bit Adventure Hub (8BAH) - YouTube Analytics データ収集ユーティリティ
+YouTube Analytics データ収集ユーティリティ
 YouTube Analytics API を使用したチャンネル分析データの取得・処理
 
 Features:
 - チャンネル全体の統計データ取得
 - 動画別パフォーマンス分析
 - CTR・視聴時間・エンゲージメント分析
-- 8BAH戦略用メトリクス収集
+- 戦略用メトリクス収集
 
 Note:
     メソッドは3つの Mixin に分割されています:
@@ -83,7 +83,7 @@ def main():
     """メイン関数 - スタンドアロン実行用"""
     import argparse
 
-    parser = argparse.ArgumentParser(description='8BAH YouTube Analytics 収集')
+    parser = argparse.ArgumentParser(description='YouTube Analytics 収集')
     parser.add_argument('--days', '-d', type=int, default=30, help='過去の日数')
     parser.add_argument('--ctr-only', action='store_true', help='CTR分析のみ')
     parser.add_argument('--collections', action='store_true', help='コレクション分析')
@@ -98,7 +98,7 @@ def main():
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=args.days)).strftime('%Y-%m-%d')
 
-        print("📊 8-Bit Adventure Hub Analytics 分析")
+        print("📊 YouTube Analytics 分析")
         print(f"📅 期間: {start_date} - {end_date}")
         print("=" * 60)
 
