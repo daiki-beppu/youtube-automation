@@ -157,7 +157,8 @@ class TestChannelDirResolution:
     def test_resolve_raises_when_no_config(self, monkeypatch, tmp_path):
         monkeypatch.delenv("CHANNEL_DIR", raising=False)
         monkeypatch.chdir(tmp_path)
-        with pytest.raises(FileNotFoundError):
+        from utils.exceptions import ConfigError
+        with pytest.raises(ConfigError):
             ChannelConfig._resolve_channel_dir()
 
 

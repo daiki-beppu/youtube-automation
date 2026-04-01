@@ -2,7 +2,7 @@
 youtube_service モジュールのユニットテスト
 
 テスト対象: utils/youtube_service.py
-シングルトンキャッシュ動作を unittest.mock で検証する。
+ServiceRegistry のキャッシュ動作を unittest.mock で検証する。
 """
 
 import sys
@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 
 import utils.youtube_service as yt_service
+from utils.youtube_service import ServiceRegistry
 
 # ---------------------------------------------------------------------------
 # フィクスチャ: 各テストでキャッシュをリセット
@@ -28,31 +29,55 @@ def reset_service():
 
 
 # ---------------------------------------------------------------------------
-# get_youtube
+# ServiceRegistry（クラスベーステスト）
+# ---------------------------------------------------------------------------
+
+class TestServiceRegistry:
+    def test_inject_handler(self):
+        mock_handler = MagicMock()
+        mock_handler.get_youtube_service.return_value = "injected_youtube"
+
+        registry = ServiceRegistry(handler=mock_handler)
+        assert registry.youtube == "injected_youtube"
+
+    def test_reset_clears_cache(self):
+        mock_handler = MagicMock()
+        mock_handler.get_youtube_service.side_effect = ["svc_1", "svc_2"]
+        registry = ServiceRegistry(handler=mock_handler)
+
+        first = registry.youtube
+        registry.reset()
+        # handler もリセットされるので再注入
+        registry._handler = mock_handler
+        second = registry.youtube
+
+        assert first == "svc_1"
+        assert second == "svc_2"
+
+
+# ---------------------------------------------------------------------------
+# get_youtube（モジュールレベル関数の後方互換テスト）
 # ---------------------------------------------------------------------------
 
 class TestGetYoutube:
-    @patch('utils.youtube_service._get_handler')
-    def test_returns_youtube_service(self, mock_get_handler):
+    def test_returns_youtube_service(self):
         mock_handler = MagicMock()
         mock_handler.get_youtube_service.return_value = "fake_youtube_service"
-        mock_get_handler.return_value = mock_handler
+        yt_service._default_registry._handler = mock_handler
 
         result = yt_service.get_youtube()
         assert result == "fake_youtube_service"
         mock_handler.get_youtube_service.assert_called_once()
 
-    @patch('utils.youtube_service._get_handler')
-    def test_caches_service(self, mock_get_handler):
+    def test_caches_service(self):
         mock_handler = MagicMock()
         mock_handler.get_youtube_service.return_value = "fake_youtube_service"
-        mock_get_handler.return_value = mock_handler
+        yt_service._default_registry._handler = mock_handler
 
         first = yt_service.get_youtube()
         second = yt_service.get_youtube()
 
         assert first is second
-        # handler.get_youtube_service called only once due to caching
         mock_handler.get_youtube_service.assert_called_once()
 
 
@@ -62,12 +87,11 @@ class TestGetYoutube:
 
 class TestGetAnalytics:
     @patch('utils.youtube_service.build')
-    @patch('utils.youtube_service._get_handler')
-    def test_returns_analytics_service(self, mock_get_handler, mock_build):
+    def test_returns_analytics_service(self, mock_build):
         mock_handler = MagicMock()
         mock_creds = MagicMock()
         mock_handler.authenticate.return_value = mock_creds
-        mock_get_handler.return_value = mock_handler
+        yt_service._default_registry._handler = mock_handler
         mock_build.return_value = "fake_analytics_service"
 
         result = yt_service.get_analytics()
@@ -76,11 +100,10 @@ class TestGetAnalytics:
         mock_build.assert_called_once_with('youtubeAnalytics', 'v2', credentials=mock_creds)
 
     @patch('utils.youtube_service.build')
-    @patch('utils.youtube_service._get_handler')
-    def test_caches_service(self, mock_get_handler, mock_build):
+    def test_caches_service(self, mock_build):
         mock_handler = MagicMock()
         mock_handler.authenticate.return_value = MagicMock()
-        mock_get_handler.return_value = mock_handler
+        yt_service._default_registry._handler = mock_handler
         mock_build.return_value = "fake_analytics_service"
 
         first = yt_service.get_analytics()
@@ -95,12 +118,11 @@ class TestGetAnalytics:
 # ---------------------------------------------------------------------------
 
 class TestGetCredentials:
-    @patch('utils.youtube_service._get_handler')
-    def test_returns_credentials(self, mock_get_handler):
+    def test_returns_credentials(self):
         mock_handler = MagicMock()
         mock_creds = MagicMock()
         mock_handler.authenticate.return_value = mock_creds
-        mock_get_handler.return_value = mock_handler
+        yt_service._default_registry._handler = mock_handler
 
         result = yt_service.get_credentials()
         assert result is mock_creds
@@ -111,16 +133,16 @@ class TestGetCredentials:
 # ---------------------------------------------------------------------------
 
 class TestReset:
-    @patch('utils.youtube_service._get_handler')
-    def test_reset_clears_cache(self, mock_get_handler):
+    def test_reset_clears_cache(self):
         mock_handler = MagicMock()
         mock_handler.get_youtube_service.side_effect = ["service_1", "service_2"]
-        mock_get_handler.return_value = mock_handler
+        yt_service._default_registry._handler = mock_handler
 
         first = yt_service.get_youtube()
         assert first == "service_1"
 
         yt_service.reset()
+        yt_service._default_registry._handler = mock_handler
 
         second = yt_service.get_youtube()
         assert second == "service_2"
