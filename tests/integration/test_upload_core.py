@@ -13,7 +13,6 @@ from httplib2 import Response
 
 from utils.exceptions import UploadError, YouTubeAPIError
 
-
 # ---------------------------------------------------------------------------
 # ヘルパー
 # ---------------------------------------------------------------------------
