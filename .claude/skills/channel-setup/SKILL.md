@@ -28,7 +28,7 @@ description: >-
 
 `channel-research.md` の分析データも参照しながら、方向性に基づいて以下を Claude が生成し提案:
 
-テンプレートは `automation/.claude/skills/channel-references/config-template.json` を参照。
+テンプレートは `references/config-template.json` を参照（同スキルディレクトリ内）。
 
 1. **tags.base**（10個程度）: 競合のタグ分析を参考にジャンルに適した YouTube 検索タグ
 2. **tags.themes**（6-10テーマ）: テーマ別タグ群（各3語程度）
@@ -67,53 +67,11 @@ mkdir -p {collections/planning,collections/live,reports,branding,tools,tests,.cl
 
 | ファイル | 生成方法 |
 |---------|---------|
-| `config/schedule_config.json` | `automation/.claude/skills/channel-references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整 |
-| `config/upload_settings.json` | `automation/.claude/skills/channel-references/upload-settings-template.json` をコピー |
-| `config/localizations.json` | 最小構成（ja + en）をジャンルに合わせて生成 |
-| `get_channel_status` | テンプレートからチャンネル名のみ変更（下記参照） |
-| `.claude/CLAUDE.md` | `automation/.claude/skills/channel-references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
-
-#### get_channel_status テンプレート
-
-```python
-#!/usr/bin/env python3
-"""{channel_name} チャンネル - get_channel_status ラッパー"""
-import os
-import sys
-from pathlib import Path
-
-CHANNEL_DIR = Path(__file__).parent
-os.environ.setdefault('CHANNEL_DIR', str(CHANNEL_DIR))
-sys.path.insert(0, str(CHANNEL_DIR / 'automation'))
-
-import importlib.util  # noqa: E402
-import importlib.machinery
-_loader = importlib.machinery.SourceFileLoader("get_channel_status", str(CHANNEL_DIR / "automation" / "get_channel_status"))
-spec = importlib.util.spec_from_loader("get_channel_status", _loader)
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-mod.main()
-```
-
-#### localizations.json 最小構成
-
-```json
-{
-  "default_language": "en",
-  "languages": {
-    "ja": {
-      "title_template": "{style} {theme} - {activity}用BGM [{duration_display}]",
-      "description_opening": "{style}の{primary}音楽。"
-    },
-    "en": {
-      "title_template": "{style} {theme} Music - {activity} BGM [{duration_display}]",
-      "description_opening": "{style} {primary} music."
-    }
-  }
-}
-```
-
-ジャンル情報を反映した具体的な文言に調整すること。
+| `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整 |
+| `config/upload_settings.json` | `references/upload-settings-template.json` をコピー |
+| `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整 |
+| `get_channel_status` | `references/get-channel-status-template.py` の `{{CHANNEL_NAME}}` を置換 |
+| `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
 
 ### Step 6: 実行権限付与
 
@@ -177,5 +135,5 @@ print('Config loaded successfully!')
 ## Cross References
 
 - `/channel-direction` → 前フェーズ: 方向性決定
-- `channel-references/` → 共有テンプレート
+- `references/` → テンプレートファイル（同スキルディレクトリ内）
 - `/wf-new` → チャンネル完成後の最初のアクション
