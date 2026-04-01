@@ -1,1 +1,0 @@
-.claude/skills/wf-next/references/post_upload_actions.py

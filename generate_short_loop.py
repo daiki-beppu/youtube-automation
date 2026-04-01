@@ -1,1 +1,0 @@
-.claude/skills/short/references/generate_short_loop.py

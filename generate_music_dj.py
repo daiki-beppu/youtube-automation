@@ -1,1 +1,0 @@
-.claude/skills/lyria/references/generate_music_dj.py

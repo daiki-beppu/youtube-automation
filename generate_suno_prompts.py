@@ -1,1 +1,0 @@
-.claude/skills/suno/references/generate_suno_prompts.py

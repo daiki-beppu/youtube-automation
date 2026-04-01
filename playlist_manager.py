@@ -1,1 +1,0 @@
-.claude/skills/upload/references/playlist_manager.py

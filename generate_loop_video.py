@@ -1,1 +1,0 @@
-.claude/skills/loop-video/references/generate_loop_video.py

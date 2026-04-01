@@ -1,1 +1,0 @@
-.claude/skills/videoup/references/generate_videos.sh

@@ -3,7 +3,12 @@ CTR・コレクション分析 Mixin
 YouTubeAnalyticsCollector の CTR 特化分析メソッド群
 """
 
-from typing import Dict, List
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Dict, List
+
+if TYPE_CHECKING:
+    from .analytics_base import AnalyticsBase  # noqa: F401
 
 
 class CTRAnalyticsMixin:

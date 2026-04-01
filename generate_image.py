@@ -1,1 +1,0 @@
-.claude/skills/thumbnail/references/generate_image.py

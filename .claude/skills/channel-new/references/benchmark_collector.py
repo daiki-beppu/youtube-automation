@@ -1,1 +1,1 @@
-../../benchmark/references/benchmark_collector.py
+../../../../scripts/benchmark_collector.py

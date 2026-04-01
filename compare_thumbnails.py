@@ -1,1 +1,0 @@
-.claude/skills/thumbnail-compare/references/compare_thumbnails.py

@@ -1,1 +1,0 @@
-.claude/skills/wf-next/references/community_draft.py

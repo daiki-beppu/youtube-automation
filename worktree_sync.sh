@@ -1,1 +1,0 @@
-.claude/skills/lyria/references/worktree_sync.sh

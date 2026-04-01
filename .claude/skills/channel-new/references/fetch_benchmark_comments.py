@@ -1,1 +1,1 @@
-../../viewer-voice/references/fetch_benchmark_comments.py
+../../../../scripts/fetch_benchmark_comments.py

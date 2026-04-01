@@ -275,22 +275,12 @@ class BAHMetadataGenerator:
         theme = self._extract_theme_name()
         return self.config.get_activity_for_theme(theme)
 
-    @staticmethod
-    def _format_duration_short(total_seconds: int) -> str:
-        """秒数を短縮デュレーション表示に変換（例: '1h', '2.5h', '25m'）"""
-        return format_duration_short(total_seconds)
-
-    @staticmethod
-    def _format_duration_display(total_seconds: int) -> str:
-        """秒数を人間可読なデュレーション表示に丸める（例: '2 Hours', '25 min'）"""
-        return format_duration_display(total_seconds)
-
     def _generate_title(self, total_seconds: int) -> str:
         """channel_config のテンプレートでタイトルを生成（100文字制限）"""
         theme = self._extract_theme_name()
         activity = self._get_activity()
-        duration_display = self._format_duration_display(total_seconds)
-        duration_short = self._format_duration_short(total_seconds)
+        duration_display = format_duration_display(total_seconds)
+        duration_short = format_duration_short(total_seconds)
 
         # jazzgak. TTP 形式: theme_scenes から scene_phrase と activities を取得
         theme_scenes = self.config.raw.get('title', {}).get('theme_scenes', {})
@@ -437,8 +427,8 @@ class BAHMetadataGenerator:
             'style': self.config.genre_style.title(),
             'theme': theme,
             'activity': self._get_activity(),
-            'duration_display': self._format_duration_display(total_duration),
-            'duration_short': self._format_duration_short(total_duration),
+            'duration_display': format_duration_display(total_duration),
+            'duration_short': format_duration_short(total_duration),
         }
         self._last_title_vars = title_vars
         localizations = self.generate_localizations(title_vars, timestamp_body)

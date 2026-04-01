@@ -1,1 +1,0 @@
-.claude/skills/upload/references/video_uploader.py

@@ -14,6 +14,7 @@ import pytest
 
 from utils.channel_config import ChannelConfig
 from utils.metadata_generator import BAHMetadataGenerator
+from utils.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------
 # フィクスチャ: ChannelConfig シングルトンをテスト間でリセット
@@ -361,32 +362,32 @@ class TestFormatDurationDisplay:
         (2040, "35 min"),        # 34分 → 35分未満なので5分単位 → round(34/5)*5=35
     ])
     def test_short_durations(self, seconds, expected):
-        assert BAHMetadataGenerator._format_duration_display(seconds) == expected
+        assert format_duration_display(seconds) == expected
 
     def test_boundary_35_min(self):
         """35分ちょうどは "1 Hour" に丸まる"""
-        assert BAHMetadataGenerator._format_duration_display(35 * 60) == "1 Hour"
+        assert format_duration_display(35 * 60) == "1 Hour"
 
     def test_one_hour(self):
-        assert BAHMetadataGenerator._format_duration_display(3600) == "1 Hour"
+        assert format_duration_display(3600) == "1 Hour"
 
     def test_75_min_boundary(self):
         """75分ちょうどは 1.25h → 1.5 Hours に丸まる"""
-        assert BAHMetadataGenerator._format_duration_display(75 * 60) == "1.5 Hours"
+        assert format_duration_display(75 * 60) == "1.5 Hours"
 
     def test_90_min(self):
-        assert BAHMetadataGenerator._format_duration_display(90 * 60) == "1.5 Hours"
+        assert format_duration_display(90 * 60) == "1.5 Hours"
 
     def test_105_min(self):
         """105分 = 1.75h → 2 Hours に丸まる"""
-        assert BAHMetadataGenerator._format_duration_display(105 * 60) == "2 Hours"
+        assert format_duration_display(105 * 60) == "2 Hours"
 
     def test_two_hours(self):
-        assert BAHMetadataGenerator._format_duration_display(7200) == "2 Hours"
+        assert format_duration_display(7200) == "2 Hours"
 
     def test_very_short(self):
         """60秒 = 1分 → 最小 5 min"""
-        assert BAHMetadataGenerator._format_duration_display(60) == "5 min"
+        assert format_duration_display(60) == "5 min"
 
 
 # ===========================================================================

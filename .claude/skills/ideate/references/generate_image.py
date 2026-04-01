@@ -1,1 +1,1 @@
-../../thumbnail/references/generate_image.py
+../../../../scripts/generate_image.py

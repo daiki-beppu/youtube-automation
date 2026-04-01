@@ -1,1 +1,1 @@
-../../masterup/references/generate_master.sh
+../../../../scripts/generate_master.sh

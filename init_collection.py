@@ -1,1 +1,0 @@
-.claude/skills/wf-new/references/init_collection.py

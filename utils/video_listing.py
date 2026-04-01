@@ -3,8 +3,13 @@
 YouTubeAnalyticsCollector のチャンネル動画リスト取得メソッド群
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
+
+if TYPE_CHECKING:
+    from .analytics_base import AnalyticsBase  # noqa: F401
 
 
 class VideoListingMixin:

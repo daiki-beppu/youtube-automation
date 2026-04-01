@@ -1,1 +1,0 @@
-.claude/skills/masterup/references/generate_master.sh

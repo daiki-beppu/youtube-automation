@@ -3,8 +3,13 @@
 YouTubeAnalyticsCollector のチャンネルレベル分析メソッド群
 """
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Dict
+from typing import TYPE_CHECKING, Dict
+
+if TYPE_CHECKING:
+    from .analytics_base import AnalyticsBase  # noqa: F401
 
 
 class ChannelAnalyticsMixin:

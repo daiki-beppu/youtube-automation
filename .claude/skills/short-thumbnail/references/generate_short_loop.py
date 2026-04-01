@@ -1,1 +1,1 @@
-../../short/references/generate_short_loop.py
+../../../../scripts/generate_short_loop.py
