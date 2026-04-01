@@ -1,0 +1,254 @@
+---
+name: thumbnail
+description: Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + Gemini API での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること
+---
+
+## Overview
+
+コレクション用サムネイルを `channel_config.json` の `gemini_image` 設定に基づいて生成します。
+チャンネルごとにスタイル・キャラ・参照画像が異なり、全て config から動的に読み取ります。
+
+## When to Use
+
+- コレクションが確定し、サムネイル制作に着手するとき
+- CTR 最適化されたサムネイルが必要なとき
+
+## Quick Reference
+
+| 引数 | 説明 | 例 |
+|------|------|-----|
+| `$ARGUMENTS` | テーマ・活動指定（省略可） | `/thumbnail fiddle playing` |
+| 未指定 | デフォルト活動で生成 | `/thumbnail` |
+
+## Channel Adaptation
+
+**すべての設定は `channel_config.json` の `gemini_image` セクションから読み取る。**
+スキル内にチャンネル固有のハードコードはしない。
+
+実行前に以下を確認:
+1. `gemini_image.model` → 使用する Gemini モデル
+2. `gemini_image.style` → スタイル説明（参照画像ベース or プロンプトベース）
+3. `gemini_image.prompt_prefix` → プロンプト冒頭の固定文（キャラ描写等）
+4. `gemini_image.reference_images` → 参照画像の定義（あれば参照画像モード）
+5. `gemini_image.fixed_character` → 固定キャラの設定（あればキャラ固定モード）
+6. `gemini_image.composition_rules` → 構図・環境のルール
+7. `gemini_image.thumbnail_text` → テキストオーバーレイの設定
+
+## 生成モード判定
+
+### 参照画像モード（`reference_images` が定義されている場合）
+
+GoV TTP のように、参照画像を渡してスタイルを維持する方式。
+
+```bash
+# Phase 1: 参照画像 + プロンプトで背景生成
+python3 automation/generate_image.py \
+  --prompt "<prompt_prefix を含むプロンプト>" \
+  --reference <channel_dir>/<reference_images.default> \
+  --output <collection-path>/10-assets/main-v1.jpg -y
+```
+
+**参照画像の選択ロジック**:
+- `reference_images` のキーからシーンに最適なものを選択
+- `path_base: "channel_dir"` の場合、パスはチャンネルディレクトリからの相対パス
+- `--reference` 使用時は `composition_prefix` が自動スキップされる（generate_image.py 修正済み）
+
+### プロンプトベースモード（`reference_images` が未定義の場合）
+
+参照画像なしでプロンプトのみで生成する方式（フォールバック）。
+
+```bash
+python3 automation/generate_image.py \
+  --prompt "<完全なプロンプト>" \
+  --output <collection-path>/10-assets/main-v1.jpg -y
+```
+
+この場合、`composition_prefix` が自動付加される。
+
+## プロンプト構築
+
+### 1. prompt_prefix を取得
+
+`gemini_image.prompt_prefix` をプロンプト冒頭に配置:
+```
+例: "Anime illustration. Elf woman with long white hair and pointed ears"
+```
+
+### 2. fixed_character から活動を組み立て
+
+`gemini_image.fixed_character` がある場合:
+- `outfit`: 服装描写
+- `instrument`: 楽器（テーマに応じて持ち替え可なら変更）
+- `face`: 顔の向き指示
+
+### 3. composition_rules から環境・制約を適用
+
+- `environment`: 許可される環境
+- `allowed_actions`: 使える活動
+- `ng_actions`: 禁止パターン
+- `brightness`: 明るさルール
+
+### 4. プロンプトテンプレート（参照画像モード）
+
+```
+{prompt_prefix}, {表情}.
+She wears {outfit}. {ポーズ・活動}. {環境描写}.
+{光と雰囲気}. {face}.
+No text, no words, no letters, no typography.
+```
+
+### 5. プロンプト末尾（プロンプトベースモード）
+
+`reference_images` がない場合、スタイル句を末尾に付加する必要がある。
+チャンネル CLAUDE.md にスタイル句指定があればそれを使用。なければデフォルト:
+```
+Hyper-detailed digital matte painting blending photorealism with subtle painterly
+illustration touches... (v7 style)
+Widescreen 16:9 aspect ratio.
+```
+
+## ワークフロー
+
+### モード判定
+
+`gemini_image.generation_mode` を確認:
+
+- **`single_step`**: テキスト付き参照画像から差分のみで完成サムネイルを1ステップ生成（後述）
+- **未定義 / `two_phase`**: 従来の2フェーズワークフロー（Phase 1 + Phase 2）
+
+### Single-Step モード（`generation_mode: "single_step"`）
+
+テキスト付き参照画像（テキストレイアウト・雨窓テクスチャ・3オブジェクト配置を含む）を参照にして、
+**変更点だけ**をプロンプトで指示する。背景生成とテキストオーバーレイが1回の生成で完了する。
+
+**重要**: 参照画像と同じ要素（レイアウト、ターンテーブル、テキスト配置）はプロンプトに含めない。
+差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。
+
+1. `color_themes` からテーマのカラー設定を取得
+2. `diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
+   - `{background}`: カラーテーマの背景色
+   - `{candle}`: カラーテーマのキャンドル色
+   - `{cocktail_description}`: カクテル名 + 色 + グラス形状の自然な描写
+   - `{title_line1}`, `{title_line2}`: コレクションタイトル
+
+3. 生成:
+```bash
+python3 automation/generate_image.py \
+  --reference <channel_dir>/<reference_images.default> \
+  --prompt "<diff_prompt_template を置換したプロンプト>" \
+  --output <collection-path>/10-assets/thumbnail-v1.jpg -y
+```
+
+4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
+5. 背景画像（テキストなし）も必要な場合は、別途テキストなしの参照画像で生成
+
+**例（navy → lavender への差し替え）:**
+```
+Change the background color to pale lilac. Change the left candle to a warm gold
+glass jar with rich glossy candy-like translucent texture. Change the right cocktail
+to an aviation cocktail — pale violet-blue liquid in an elegant coupe glass with
+a maraschino cherry. Change the subtitle text below the line to 'Rainy Melancholy
+Jazz, Late Night BGM'. Keep the same muted text color matching the new background.
+Keep the same rain window texture. Keep the turntable unchanged.
+```
+
+### Two-Phase モード（従来方式・フォールバック）
+
+#### Phase 1: 背景候補生成（main.png）
+
+**main.png が既に存在する場合は Phase 1 をスキップして Phase 2 へ進む。**
+（`/ideate` で本番品質のプレビューが生成され、選択後にコピーされている）
+
+main.png が存在しない場合のみ:
+1. テーマに合わせてプロンプトを構築（上記テンプレート）
+2. 参照画像モードなら `reference_images` から適切な画像を選択
+3. 生成: `generate_image.py --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.jpg -y`
+4. `open` でプレビュー → ユーザー承認 → `cp main-v1.jpg main.png`
+
+#### Phase 2: テキストオーバーレイ（thumbnail.jpg）
+
+1. `thumbnail_text` からテキスト設定を取得
+2. テキストオーバーレイプロンプトを構築:
+
+**`thumbnail_text.text_overlay_prompt` が定義されている場合（推奨）:**
+- テンプレート内の `{title_line1}`, `{title_line2}`, `{channel_name}` をコレクションのタイトルとチャンネル名で置換して使用
+- テキスト配置位置: キャラが左にいる場合は右半分、キャラが右にいる場合は左上
+- 例: `{title_line1}` = "The Harpist's", `{title_line2}` = "Quiet Rest"
+
+**`text_overlay_prompt` が未定義の場合（フォールバック）:**
+```
+Add text to this image. Add two lines of text in a classic serif font.
+First line smaller: '[Title Line 1]' in light weight.
+Second line larger and bolder: '[Title Line 2]' directly below with
+almost no line spacing. Both lines in warm ivory cream color.
+Below the title, add '{channel_name}' in very small spaced-out small
+caps, slightly more transparent. No decorations — only clean text.
+Do not change the background image in any way.
+```
+
+3. 生成: `generate_image.py --reference 10-assets/main.png --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
+4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
+
+## 品質チェック
+
+Phase 1 生成後:
+- [ ] `gemini_image.style` に記載されたスタイルが維持されているか
+- [ ] `composition_rules.environment` の制約を満たしているか
+- [ ] `fixed_character` の外見が維持されているか（ある場合）
+- [ ] キャラの顔が見えているか（`fixed_character.face` の指示通り）
+- [ ] キャラサイズが `composition_rules.character_size` を満たしているか
+- [ ] 楽器が描かれているか
+- [ ] テキストが入っていないか
+
+Phase 2 生成後:
+- [ ] 背景が変わっていないか
+- [ ] タイトルテキストが `composition_rules.text_lines` の制約内か
+- [ ] `thumbnail_text.channel_name` が表示されているか
+
+## プロンプト保存
+
+プロンプトは `20-documentation/thumbnail-prompts.md` に保存:
+
+```markdown
+# Thumbnail Prompts - [コレクション名]
+
+*スタイル: {gemini_image.style}*
+*モデル: {gemini_image.model}*
+*参照画像: {使用した参照画像}*
+
+## Video Background Prompt (main.png)
+
+\```
+[生成に使用したプロンプト]
+\```
+
+## Text Overlay Prompt (thumbnail.jpg)
+
+\```
+[テキストオーバーレイ指示]
+\```
+```
+
+## ファイル命名ルール（上書き禁止）
+
+| ファイル | 用途 |
+|---------|------|
+| `main.png` | 動画背景（テキストなし） |
+| `main-v{N}.jpg` | 背景候補 |
+| `thumbnail-v{N}.jpg` | テキスト付き候補 |
+| `thumbnail.jpg` | **最終承認後にベスト版をコピー** |
+
+### クリーンアップ（承認後に必ず実行）
+
+```bash
+rm -f 10-assets/main-v*.jpg 10-assets/thumbnail-v*.jpg
+```
+
+### `workflow-state.json` 更新
+
+画像確認・承認後、`thumbnail.approved = true` を更新する。
+
+## Next Step
+
+サムネイル確定後:
+→ `/suno <theme>` で音楽プロンプト生成

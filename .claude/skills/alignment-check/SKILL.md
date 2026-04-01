@@ -1,0 +1,72 @@
+---
+name: alignment-check
+description: Use when 各コレクションの音楽ムード × サムネイル雰囲気 × タイトル訴求の整合性を監査したいとき。「整合性チェック」「一致してるか確認」「タイトル見直し」「サムネと音楽の一致」「タイトル改善」「CTR改善」など。CTR に最も影響するチェックポイント。方向性見直し時に必ず使用すること
+---
+
+## Overview
+
+公開済み全コレクションの音楽プロンプト・サムネイル・タイトルを横断的に監査し、
+不一致箇所を特定。タイトルフォーマットの改定案も提示する。
+
+## 実行フロー
+
+### Phase 1: 全コレクション棚卸し（サブエージェント並列）
+
+**2つのサブエージェントを並列起動**（Agent ツール）:
+
+**Agent 1: コレクション × サムネ × 音楽プロンプト収集**
+- `collections/live/` の全コレクションを列挙
+- 各コレクションから以下を読み込み:
+  - `workflow-state.json` — タイトル、テーマ、活動タグ
+  - `20-documentation/suno-prompts.md` or `composition.json` — 音楽ムード・楽器・テンポ
+- コレクションごとの [タイトル / 音楽ムード / テーマ] を一覧表にまとめる
+
+**Agent 2: ベンチマークタイトル構造分析**
+- `data/benchmark_YYYYMMDD.json`（最新）を読み込み
+- 全ベンチマーク動画のタイトル構造をパターン分類
+- 各パターンの平均再生数を算出
+- 現行テンプレート（`channel_config.json` の `title.template`）との比較
+
+### Phase 2: サムネイル視覚確認
+
+Agent 1 の結果から、全コレクションのサムネイルを Read ツールで順に表示:
+- `collections/live/*/10-assets/thumbnail.jpg`
+- 各サムネイルについて以下を評価:
+  - 明るさ（◎/○/△/✗）
+  - キャラサイズ（大/中/小）
+  - キャラの活動（具体的か）
+  - 楽器の有無
+  - 音楽ムードとの整合性
+
+### Phase 3: 整合性マトリクス作成
+
+Phase 1-2 の結果を統合し、各コレクションの整合性を判定:
+
+```
+| 動画 | 音楽ムード | サムネ雰囲気 | タイトル訴求 | 整合性 |
+```
+
+不一致箇所には ⚠️ を付け、具体的な改善提案を付記。
+
+### Phase 4: タイトルフォーマット改定
+
+現行 vs ベンチマーク比較に基づき、新タイトルフォーマット案を提示。
+既存動画のタイトル変更候補も提案（YouTube Studio で手動変更可能）。
+
+タイトルの語彙チェック:
+- 一般視聴者に分かる語彙か（Scriptorium, Bower, Vigil 等の難語を検出）
+- YouTube 検索バーに打ち込む言葉か
+
+### Phase 5: 意思決定 + レポート保存
+
+AskUserQuestion で新タイトルフォーマットを確認。
+`docs/plans/alignment-audit.md` を生成。
+必要に応じて `channel_config.json` のタイトルテンプレートを更新。
+
+## 関連ファイル
+
+- `config/channel_config.json` — `title.template`, `title.theme_activities`
+- `docs/benchmarks/common-patterns.md` — 5つの成功法則
+- `collections/live/*/10-assets/thumbnail.jpg` — サムネイル
+- `collections/live/*/20-documentation/` — 音楽プロンプト
+- `collections/live/*/workflow-state.json` — タイトル・テーマ
