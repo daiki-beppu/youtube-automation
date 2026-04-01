@@ -19,7 +19,7 @@ description: >-
 /channel-setup     → Phase 4: テクニカルセットアップ + 検証
 ```
 
-共有テンプレートは `automation/.claude/skills/channel-references/` に配置。
+共有テンプレートは `automation/.claude/skills/channel-setup/references/` に配置。
 
 ## Instructions
 
@@ -49,7 +49,7 @@ git submodule add <automation-repo-url> automation
 
 ### Step 3: 認証セットアップ
 
-OAuth クライアントは `automation/auth/client_secrets.json` として submodule に含まれる（全チャンネル共通）。
+OAuth クライアントはユーザーが自分で作成する。`automation/auth/SETUP.md` の手順に従い、Google Cloud Console で OAuth 2.0 認証情報を作成して `automation/auth/client_secrets.json` に配置すること。テンプレートは `automation/auth/client_secrets_template.json` を参照。
 チャンネル固有トークンは `auth/token.json` に保存され、初回実行時に自動生成される。
 
 リサーチ段階では既存チャンネルのトークンをコピーして使用可能（YouTube Data API はチャンネル所有権に関係なく動作）:

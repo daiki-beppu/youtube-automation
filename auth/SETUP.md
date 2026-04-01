@@ -28,17 +28,17 @@ YouTube 自動アップロードシステム用の認証設定手順です。
 ### Step 4: client_secrets.json ダウンロード
 1. 作成された認証情報の「ダウンロード」ボタンをクリック
 2. ダウンロードされたJSONファイルを `client_secrets.json` にリネーム
-3. このファイル (`youtube-automation/auth/`) に配置
+3. このファイル (`auth/`) に配置
 
 ### Step 5: 認証テスト実行
 ```bash
-cd youtube-automation/auth/
+cd auth/
 python3 oauth_handler.py
 ```
 
 ## 📁 ファイル構成
 ```
-youtube-automation/auth/
+auth/
 ├── client_secrets.json          # OAuth 2.0認証情報（要作成）
 ├── client_secrets_template.json # テンプレート
 ├── token.json                   # 認証トークン（自動生成）
@@ -55,8 +55,8 @@ youtube-automation/auth/
 ### .gitignore 設定確認
 ```gitignore
 # YouTube API認証ファイル
-youtube-automation/auth/client_secrets.json
-youtube-automation/auth/token.json
+auth/client_secrets.json
+auth/token.json
 ```
 
 ## 🔧 トラブルシューティング
