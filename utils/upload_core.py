@@ -14,6 +14,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
 from utils.exceptions import UploadError, YouTubeAPIError
+from utils.upload_policy import RetryDecision, ThumbnailCompression
 from utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
@@ -105,12 +106,11 @@ class YouTubeUploadCore:
             動画ID。失敗時は None。
         """
         response = None
-        error = None
-        retry = 0
+        attempt = 0
 
         while response is None:
             try:
-                logger.info(f"アップロード中: {filename} (試行{retry + 1})")
+                logger.info(f"アップロード中: {filename} (試行{attempt + 1})")
                 status, response = insert_request.next_chunk()
 
                 if status:
@@ -118,13 +118,11 @@ class YouTubeUploadCore:
                     logger.info(f"   進捗: {progress}%")
 
             except HttpError as e:
-                if e.resp.status in [500, 502, 503, 504]:
-                    error = f"再試行可能エラー: {e}"
-                    time.sleep(2 ** retry)
-                    retry += 1
-                    if retry > 5:
-                        logger.error(f"リトライ上限到達: {error}")
-                        return None
+                decision = RetryDecision.for_http_error(e.resp.status, attempt)
+                if decision.should_retry:
+                    logger.warning(f"再試行可能エラー: {e}")
+                    time.sleep(decision.delay_seconds)
+                    attempt += 1
                 else:
                     logger.error(f"致命的エラー: {e}")
                     return None
@@ -174,7 +172,8 @@ class YouTubeUploadCore:
 
     def _compress_thumbnail(self, thumbnail_path: Path, max_bytes: int = 2_097_152) -> Path:
         """サムネイルが max_bytes を超える場合、ffmpeg で JPEG 圧縮した一時ファイルを返す。"""
-        if thumbnail_path.stat().st_size <= max_bytes:
+        strategy = ThumbnailCompression.for_file(thumbnail_path.stat().st_size, max_bytes)
+        if not strategy.needs_compression:
             return thumbnail_path
 
         import subprocess
@@ -183,7 +182,9 @@ class YouTubeUploadCore:
         tmp_fd = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
         tmp_fd.close()
         compressed = Path(tmp_fd.name)
-        for quality in [2, 5]:  # ffmpeg -qscale:v 2=高品質, 5=中品質
+        failed_qualities: set[int] = set()
+
+        while (quality := strategy.next_quality(failed_qualities)) is not None:
             subprocess.run(
                 ['ffmpeg', '-y', '-i', str(thumbnail_path), '-qscale:v', str(quality), str(compressed)],
                 capture_output=True,
@@ -194,6 +195,7 @@ class YouTubeUploadCore:
                     f"{thumbnail_path.stat().st_size / 1024:.0f}KB -> {compressed.stat().st_size / 1024:.0f}KB"
                 )
                 return compressed
+            failed_qualities.add(quality)
 
         logger.warning(f"サムネイル圧縮後も {compressed.stat().st_size / 1024:.0f}KB — 上限超過")
         return thumbnail_path
