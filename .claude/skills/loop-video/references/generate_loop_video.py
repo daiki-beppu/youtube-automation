@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""Veo 3.1 API 経由で汎用動画を生成する（ダイレクトモード）。
+"""コレクション用ループ動画背景を Veo 3.1 API で生成する。
 
-任意の画像を入力として、Veo 3.1 でループ動画を生成する。
-コレクション構造に依存しない汎用スクリプト。
+main.png を開始・終了フレーム両方に指定し、微細なアニメーション付きの
+シームレスなループ動画を生成する。
 
 Usage:
-    python3 generate_veo_video.py --image /path/to/image.png --output /path/to/output.mp4
-    python3 generate_veo_video.py --image img.png --output out.mp4 --prompt "gentle wind..."
-    python3 generate_veo_video.py --image img.png --output out.mp4 --smooth --crossfade 0.8
+    # コレクションパス指定
+    python3 generate_loop_video.py <collection-path>
+    python3 generate_loop_video.py <collection-path> --prompt "gentle wind..."
+
+    # CWD がコレクションディレクトリの場合
+    python3 generate_loop_video.py
+
+    # FFmpeg クロスフェード補正
+    python3 generate_loop_video.py <collection-path> --smooth
 """
 
 import argparse
@@ -29,13 +35,42 @@ from utils.veo_generator import (  # noqa: E402
 )
 
 
+def load_config() -> dict:
+    """ChannelConfig から veo 設定を読み込む。"""
+    try:
+        from utils.channel_config import ChannelConfig  # noqa: E402
+        config = ChannelConfig.load()
+        return config.raw.get("veo", {})
+    except Exception:
+        return {}
+
+
+def resolve_collection_paths(collection_path: Path) -> tuple[Path, Path]:
+    """コレクションパスから入力画像と出力動画のパスを解決する。"""
+    image_path = collection_path / "10-assets" / "main.png"
+    if not image_path.exists():
+        # JPEG フォールバック
+        image_path = collection_path / "10-assets" / "main.jpg"
+    # 既存 loop.mp4 がある場合は連番で退避
+    output_path = collection_path / "10-assets" / "loop.mp4"
+    if output_path.exists():
+        n = 1
+        while True:
+            backup = collection_path / "10-assets" / f"loop-v{n}.mp4"
+            if not backup.exists():
+                break
+            n += 1
+        output_path.rename(backup)
+        print(f"  [Backup] 既存ファイルを {backup.name} にリネーム")
+    return image_path, output_path
+
+
 def main():
     from dotenv import find_dotenv, load_dotenv
     load_dotenv(find_dotenv())
 
-    parser = argparse.ArgumentParser(description="Veo 3.1 汎用動画生成（ダイレクトモード）")
-    parser.add_argument("--image", required=True, help="入力画像パス")
-    parser.add_argument("--output", required=True, help="出力動画パス")
+    parser = argparse.ArgumentParser(description="Veo 3.1 コレクションループ動画生成")
+    parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument("--prompt", help="動画生成プロンプト")
     parser.add_argument("--model", help="Veo モデル名")
     parser.add_argument("--smooth", action="store_true", help="FFmpeg クロスフェードでループ補正")
@@ -43,11 +78,25 @@ def main():
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
     args = parser.parse_args()
 
-    model = args.model or DEFAULT_MODEL
-    prompt = args.prompt or DEFAULT_PROMPT
+    # 設定読み込み
+    veo_config = load_config()
+    model = args.model or veo_config.get("model", DEFAULT_MODEL)
+    prompt = args.prompt or veo_config.get("default_prompt", DEFAULT_PROMPT)
 
-    image_path = Path(args.image).resolve()
-    output_path = Path(args.output).resolve()
+    # パス解決
+    if args.collection:
+        collection_path = Path(args.collection)
+        if not collection_path.is_absolute():
+            collection_path = Path.cwd() / collection_path
+        image_path, output_path = resolve_collection_paths(collection_path)
+    else:
+        # CWD がコレクションディレクトリか確認
+        cwd = Path.cwd()
+        if (cwd / "10-assets").exists():
+            image_path, output_path = resolve_collection_paths(cwd)
+        else:
+            parser.error("コレクションパスを指定するか、コレクションディレクトリ内で実行してください")
+            return
 
     # バリデーション
     if not image_path.exists():
@@ -57,7 +106,7 @@ def main():
     # 確認
     print()
     print("===========================================")
-    print("  Veo 3.1 動画生成（ダイレクトモード）")
+    print("  Veo 3.1 ループ動画生成")
     print("===========================================")
     print(f"  入力:   {image_path}")
     print(f"  出力:   {output_path}")
@@ -93,7 +142,7 @@ def main():
     success = generate_loop_video(client, image_path, output_path, model, prompt)
 
     if success and args.smooth:
-        smooth_loop(output_path, args.crossfade)
+        smooth_loop(output_path, args.crossfade, trim_tail_sec=0.0)
 
     elapsed = time.monotonic() - start_time
 
@@ -101,14 +150,14 @@ def main():
     print()
     print("===========================================")
     if success:
-        print("  動画生成: 完了")
+        print("  ループ動画生成: 完了")
         try:
             print(f"  ファイル: {output_path.relative_to(REPO_ROOT)}")
         except ValueError:
             print(f"  ファイル: {output_path}")
         print(f"  時間:     {elapsed:.1f}秒")
     else:
-        print("  動画生成: 失敗")
+        print("  ループ動画生成: 失敗")
         print("  --prompt でプロンプトを変えて再試行してください。")
     print("===========================================")
     print()

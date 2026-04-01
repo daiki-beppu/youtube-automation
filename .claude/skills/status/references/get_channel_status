@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""
+Channel Status Getter - Claude Code用シンプル情報取得
+分析なしで、Claude Codeが理解しやすい最新情報を取得
+"""
+
+import json
+import logging
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+sys.path.append(str(Path(__file__).resolve().parent))
+
+from utils.analytics_collector import YouTubeAnalyticsCollector
+from utils.channel_config import ChannelConfig
+
+
+def get_channel_latest_status():
+    """チャンネルの最新状況をシンプルに取得"""
+    config = ChannelConfig.load()
+    logger.info(f"📊 {config.channel_short} 最新状況取得中...")
+
+    try:
+        collector = YouTubeAnalyticsCollector()
+        collector.initialize()
+
+        # 基本チャンネル情報
+        channel_response = collector.youtube_service.channels().list(
+            part='snippet,statistics',
+            mine=True
+        ).execute()
+
+        if not channel_response['items']:
+            return {'error': 'チャンネル情報取得失敗'}
+
+        channel = channel_response['items'][0]
+        stats = channel['statistics']
+
+        # 最新コレクション情報（Complete Collection形式の動画を抽出）
+        uploads_response = collector.youtube_service.channels().list(
+            part='contentDetails',
+            id=collector.channel_id
+        ).execute()
+
+        uploads_playlist_id = uploads_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+
+        # Complete Collection再生リストから直接取得
+        logger.info("🔍 Complete Collection再生リストから取得中...")
+        collections = []
+
+        # チャンネルの全再生リストを取得
+        playlists_response = collector.youtube_service.playlists().list(
+            part='snippet',
+            channelId=collector.channel_id,
+            maxResults=50
+        ).execute()
+
+        # config からフィルタキーワードを取得
+        filter_keywords = config.collection_filter_keywords
+
+        target_playlists = []
+        for playlist in playlists_response['items']:
+            title = playlist['snippet']['title']
+            if all(keyword in title for keyword in filter_keywords):
+                target_playlists.append({
+                    'id': playlist['id'],
+                    'title': title
+                })
+                logger.info(f"📋 対象再生リスト発見: {title}")
+
+        # 各Complete Collection再生リストから動画を取得
+        for playlist in target_playlists:
+            logger.info(f"🎵 {playlist['title']} から動画取得中...")
+
+            playlist_items_response = collector.youtube_service.playlistItems().list(
+                part='snippet',
+                playlistId=playlist['id'],
+                maxResults=50
+            ).execute()
+
+            for item in playlist_items_response['items']:
+                video_title = item['snippet']['title']
+                collections.append({
+                    'collection_name': video_title,
+                    'published_at': item['snippet']['publishedAt'][:10],
+                    'video_id': item['snippet']['resourceId']['videoId'],
+                    'url': f"https://youtu.be/{item['snippet']['resourceId']['videoId']}",
+                    'playlist_source': playlist['title']
+                })
+                logger.info(f"  ✅ {video_title}")
+
+        # 投稿日時で降順ソート（新しい順）
+        collections.sort(key=lambda x: x['published_at'], reverse=True)
+
+        logger.info(f"📊 Complete Collection再生リストから{len(collections)}個を取得")
+
+        # もしコレクションが見つからない場合は、uploadsプレイリストから最新動画を表示
+        if not collections:
+            recent_videos_response = collector.youtube_service.playlistItems().list(
+                part='snippet',
+                playlistId=uploads_playlist_id,
+                maxResults=10
+            ).execute()
+            for item in recent_videos_response.get('items', []):
+                collections.append({
+                    'collection_name': item['snippet']['title'],
+                    'published_at': item['snippet']['publishedAt'][:10],
+                    'video_id': item['snippet']['resourceId']['videoId'],
+                    'url': f"https://youtu.be/{item['snippet']['resourceId']['videoId']}"
+                })
+
+        # 個別動画の Analytics 統計を OAuth で一括取得
+        video_ids = [c['video_id'] for c in collections if 'video_id' in c]
+        if video_ids:
+            logger.info(f"📊 {len(video_ids)}本の動画 Analytics を取得中...")
+            stats_map = {}
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+            try:
+                response = collector.analytics_service.reports().query(
+                    ids=f'channel=={collector.channel_id}',
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics='views,estimatedMinutesWatched,averageViewDuration',
+                    dimensions='video',
+                    filters=f'video=={",".join(video_ids)}',
+                    sort='-views'
+                ).execute()
+                for row in response.get('rows', []):
+                    stats_map[row[0]] = {
+                        'views': row[1],
+                        'watch_time_min': round(row[2], 1),
+                        'avg_view_duration_sec': row[3],
+                    }
+            except Exception as e:
+                logger.warning(f"⚠️ Analytics 取得エラー: {e}")
+            for c in collections:
+                vid = c.get('video_id')
+                if vid and vid in stats_map:
+                    c['stats'] = stats_map[vid]
+
+        # コレクション数とトラック数を動的算出
+        collections_count = len(collections)
+        # 動画総数からComplete Collection数を除いた数がおおよその個別トラック数
+        video_count = int(stats.get('videoCount', 0))
+        estimated_tracks = video_count - collections_count if video_count > collections_count else video_count
+
+        # シンプルな状況サマリー
+        status = {
+            'channel_name': channel['snippet']['title'],
+            'subscriber_count': int(stats.get('subscriberCount', 0)),
+            'total_views': int(stats.get('viewCount', 0)),
+            'video_count': video_count,
+            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'recent_collections': collections,
+            'collections_count': collections_count,
+            'estimated_tracks': estimated_tracks,
+        }
+
+        return status
+
+    except Exception as e:
+        return {'error': f'取得エラー: {str(e)}'}
+
+def main():
+    """メイン実行"""
+    import argparse
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
+    config = ChannelConfig.load()
+    parser = argparse.ArgumentParser(description=f'{config.channel_short}最新状況取得（Claude Code用）')
+    parser.add_argument('--json', action='store_true', help='JSON形式で出力')
+    parser.add_argument('--summary', action='store_true', help='サマリーのみ表示')
+
+    args = parser.parse_args()
+
+    status = get_channel_latest_status()
+
+    if 'error' in status:
+        print(f"❌ {status['error']}")
+        sys.exit(1)
+
+    if args.json:
+        print(json.dumps(status, indent=2, ensure_ascii=False))
+    elif args.summary:
+        print(f"チャンネル: {status['channel_name']}")
+        print(f"登録者: {status['subscriber_count']:,}人")
+        print(f"総動画数: {status['video_count']:,}本")
+        print(f"コレクション: {status['collections_count']}個")
+        print(f"推定トラック数: {status['estimated_tracks']}曲")
+    else:
+        # Claude Code用の詳細表示
+        print("=" * 50)
+        print(f"🎵 {config.channel_name} ({config.channel_short}) - 最新状況")
+        print("=" * 50)
+        print(f"📺 チャンネル名: {status['channel_name']}")
+        print(f"👥 登録者数: {status['subscriber_count']:,}人")
+        print(f"👀 総再生回数: {status['total_views']:,}回")
+        print(f"🎬 総動画数: {status['video_count']:,}本")
+        print(f"🎵 完成コレクション: {status['collections_count']}個")
+        print(f"🎶 推定トラック数: {status['estimated_tracks']}曲")
+        print(f"📅 更新日時: {status['updated_at']}")
+
+        print("\n🎵 すべてのコレクション:")
+        for i, collection in enumerate(status['recent_collections'], 1):
+            s = collection.get('stats', {})
+            if s:
+                avg_min = s['avg_view_duration_sec'] / 60
+                print(f"  {i:2d}. {collection['collection_name']} ({collection['published_at']})")
+                print(f"      👀 {s['views']:,} views  ⏱ {s['watch_time_min']:,.0f}min watched"
+                      f"  📊 avg {avg_min:.1f}min/view")
+            else:
+                print(f"  {i:2d}. {collection['collection_name']} ({collection['published_at']})")
+
+        print(f"\n💾 データ更新: {status['updated_at']}")
+
+if __name__ == "__main__":
+    main()

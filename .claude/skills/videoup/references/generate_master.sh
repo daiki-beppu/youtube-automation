@@ -1,0 +1,1 @@
+../../masterup/references/generate_master.sh

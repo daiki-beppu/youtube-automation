@@ -1,0 +1,1 @@
+../../thumbnail/references/generate_image.py
