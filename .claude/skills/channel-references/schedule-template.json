@@ -1,0 +1,31 @@
+{
+  "schedule": {
+    "day1_time": "20:00",
+    "day2_time": "20:00",
+    "timezone": "Asia/Tokyo",
+    "auto_schedule_enabled": true
+  },
+  "upload_settings": {
+    "privacy_status": "private",
+    "category_id": "10",
+    "auto_create_playlist": true,
+    "max_retries": 3,
+    "retry_delay_seconds": 300
+  },
+  "collections_management": {
+    "auto_move_to_live": true,
+    "backup_before_move": false,
+    "watch_ready_directory": true
+  },
+  "notification_settings": {
+    "discord_webhook_url": "",
+    "email_notifications": false,
+    "terminal_notifications": true
+  },
+  "api_limits": {
+    "upload_quota_per_day": 6,
+    "uploads_per_batch": 5,
+    "concurrent_uploads": 1,
+    "delay_between_uploads": 5
+  }
+}

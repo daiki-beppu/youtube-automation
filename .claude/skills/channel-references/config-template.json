@@ -1,0 +1,63 @@
+{
+  "channel": {
+    "name": "{{CHANNEL_NAME}}",
+    "short": "{{SHORT}}",
+    "youtube_handle": "",
+    "url": "",
+    "core_message": "{{CORE_MESSAGE}}",
+    "cta_subscribe": "Subscribe for new {{PRIMARY}} music!",
+    "tagline": "{{CORE_MESSAGE}}"
+  },
+  "content_model": {
+    "type": "collection",
+    "languages": ["en"]
+  },
+  "genre": {
+    "primary": "{{PRIMARY}}",
+    "style": "{{STYLE}}",
+    "context": "{{CONTEXT}}"
+  },
+  "youtube": {
+    "category_id": "10",
+    "privacy_status": "public",
+    "language": "en"
+  },
+  "tags": {
+    "base": [],
+    "themes": {}
+  },
+  "descriptions": {
+    "opening": "{style} {primary} music inspired by {{CONTEXT}} adventures.",
+    "sub_opening": "Perfect for studying, relaxing, or immersing yourself in {{CONTEXT}} worlds.",
+    "perfect_for": [
+      "Study & Focus Sessions",
+      "Background Music",
+      "Creative Work",
+      "Relaxation"
+    ],
+    "hashtags": []
+  },
+  "gemini_image": {
+    "model": "gemini-3.1-flash-image-preview",
+    "cost_per_image_usd": 0.04
+  },
+  "analytics": {
+    "collection_filter_keywords": ["Complete Collection", "{{SHORT}}"]
+  },
+  "title": {
+    "template": "{style} {theme} Music - {activity} BGM [{duration_display}]",
+    "default_activity": "Study",
+    "theme_activities": {}
+  },
+  "audio": {
+    "crossfade_duration": 1.0
+  },
+  "workflow": {
+    "steps": ["planning", "thumbnail", "music", "finish"]
+  },
+  "suno": {
+    "workspace_name": "{{SHORT}}",
+    "genre_line": "",
+    "exclude_styles": ""
+  }
+}
