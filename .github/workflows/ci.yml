@@ -30,5 +30,5 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -e ".[dev]"
-      - name: Test
+      - name: Test with coverage
         run: pytest

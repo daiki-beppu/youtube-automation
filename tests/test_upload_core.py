@@ -152,14 +152,31 @@ class TestSetThumbnail:
         assert result is True
         mock_thumbnails.set.assert_called_once()
 
-    def test_returns_false_on_error(self, tmp_path, initialized_core):
+    def test_returns_false_on_os_error(self, tmp_path, initialized_core):
         thumb = tmp_path / "thumb.jpg"
         thumb.write_bytes(b"x" * 1000)
 
-        initialized_core.youtube.thumbnails.side_effect = Exception("API error")
+        initialized_core.youtube.thumbnails.side_effect = OSError("disk error")
 
         result = initialized_core.set_thumbnail("video123", str(thumb))
         assert result is False
+
+    def test_raises_youtube_api_error_on_http_error(self, tmp_path, initialized_core):
+        from googleapiclient.errors import HttpError
+
+        from utils.exceptions import YouTubeAPIError
+
+        thumb = tmp_path / "thumb.jpg"
+        thumb.write_bytes(b"x" * 1000)
+
+        resp = MagicMock()
+        resp.status = 403
+        initialized_core.youtube.thumbnails.return_value.set.return_value.execute.side_effect = HttpError(
+            resp, b"forbidden"
+        )
+
+        with pytest.raises(YouTubeAPIError):
+            initialized_core.set_thumbnail("video123", str(thumb))
 
 
 # ---------------------------------------------------------------------------
@@ -228,12 +245,14 @@ class TestResumableUpload:
         assert result is None
         mock_request.next_chunk.assert_called_once()
 
-    def test_generic_exception_returns_none(self, upload_core):
-        mock_request = MagicMock()
-        mock_request.next_chunk.side_effect = RuntimeError("network error")
+    def test_os_error_raises_upload_error(self, upload_core):
+        from utils.exceptions import UploadError
 
-        result = upload_core._resumable_upload(mock_request, "test.mp4")
-        assert result is None
+        mock_request = MagicMock()
+        mock_request.next_chunk.side_effect = OSError("disk error")
+
+        with pytest.raises(UploadError):
+            upload_core._resumable_upload(mock_request, "test.mp4")
 
     def test_response_without_id_returns_none(self, upload_core):
         mock_request = MagicMock()

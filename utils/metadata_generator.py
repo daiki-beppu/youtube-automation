@@ -105,11 +105,11 @@ class BAHMetadataGenerator:
                     current_time = int(end_time - crossfade)
 
             except Exception as e:
-                print(f"⚠️  ファイル解析エラー {wav_file.name}: {e}")
+                logger.warning(f"ファイル解析エラー {wav_file.name}: {e}")
                 continue
 
         self.tracks = tracks
-        print(f"✅ 楽曲解析完了: {len(tracks)}曲")
+        logger.info(f"楽曲解析完了: {len(tracks)}曲")
         return tracks
 
     def _get_audio_duration(self, wav_file: Path) -> int:
@@ -127,7 +127,8 @@ class BAHMetadataGenerator:
                 ['afinfo', str(wav_file)],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                timeout=30,
             )
 
             # "estimated duration: XXX.XXX seconds" を抽出
@@ -136,8 +137,8 @@ class BAHMetadataGenerator:
                     duration_str = line.split(':')[1].strip().split()[0]
                     return int(float(duration_str))
 
-        except (subprocess.CalledProcessError, ValueError, IndexError) as e:
-            print(f"afinfo エラー {wav_file.name}: {e}")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError) as e:
+            logger.warning(f"afinfo エラー {wav_file.name}: {e}")
 
         return 0
 

@@ -12,6 +12,7 @@ Features:
 """
 
 import json
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
@@ -20,6 +21,10 @@ from .analytics_analyzer import AnalyticsAnalyzer
 from .analytics_collector import YouTubeAnalyticsCollector
 from .channel_config import ChannelConfig
 from .report_renderer import render_html_report
+
+logger = logging.getLogger(__name__)
+
+TRENDING_VIEW_THRESHOLD = 1000
 
 
 class ReportGenerator:
@@ -51,7 +56,7 @@ class ReportGenerator:
         Returns:
             Dict: 週次レポートデータ
         """
-        print("📅 週次レポート生成中...")
+        logger.info("週次レポート生成中...")
 
         # 過去7日間のデータ取得
         end_date = datetime.now()
@@ -91,7 +96,7 @@ class ReportGenerator:
         Returns:
             Dict: 月次レポートデータ
         """
-        print("📊 月次戦略レポート生成中...")
+        logger.info("月次戦略レポート生成中...")
 
         # 過去30日間のデータ取得
         end_date = datetime.now()
@@ -161,7 +166,7 @@ class ReportGenerator:
             'total_impressions': total_impressions,
             'average_ctr': (total_views / total_impressions * 100) if total_impressions > 0 else 0,
             'top_performing_video': weekly_videos[0] if weekly_videos else None,
-            'performance_trend': '上昇' if total_views > 1000 else '安定',  # 簡易判定
+            'performance_trend': '上昇' if total_views > TRENDING_VIEW_THRESHOLD else '安定',
             'engagement_quality': 'High' if len([v for v in weekly_videos if v['ctr'] > 1.0]) > 0 else 'Medium'
         }
 
@@ -312,7 +317,7 @@ class ReportGenerator:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(report_data, f, ensure_ascii=False, indent=2)
 
-        print(f"💾 レポート保存完了: {filepath}")
+        logger.info(f"レポート保存完了: {filepath}")
         return str(filepath)
 
     def save_report_as_html(self, report_data: Dict, filename: str = None) -> str:
@@ -328,7 +333,7 @@ class ReportGenerator:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(html_content)
 
-        print(f"📄 HTMLレポート保存完了: {filepath}")
+        logger.info(f"HTMLレポート保存完了: {filepath}")
         return str(filepath)
 
     def _generate_html_report(self, report_data: Dict) -> str:
@@ -338,13 +343,13 @@ class ReportGenerator:
     def run_automated_report_generation(self) -> Dict[str, str]:
         """自動レポート生成実行"""
         config = ChannelConfig.load()
-        print(f"🚀 {config.channel_short}自動レポート生成システム開始...")
+        logger.info(f"{config.channel_short}自動レポート生成システム開始...")
 
         results = {}
 
         try:
             # 週次レポート生成
-            print("\n📅 週次レポート生成...")
+            logger.info("週次レポート生成...")
             weekly_report = self.generate_weekly_report()
             weekly_json = self.save_report_as_json(weekly_report)
             weekly_html = self.save_report_as_html(weekly_report)
@@ -355,7 +360,7 @@ class ReportGenerator:
             }
 
             # 月次レポート生成
-            print("\n📊 月次戦略レポート生成...")
+            logger.info("月次戦略レポート生成...")
             monthly_report = self.generate_monthly_report()
             monthly_json = self.save_report_as_json(monthly_report)
             monthly_html = self.save_report_as_html(monthly_report)
@@ -365,11 +370,11 @@ class ReportGenerator:
                 'html': monthly_html
             }
 
-            print("\n✅ 自動レポート生成完了！")
-            print(f"📁 出力ディレクトリ: {self.output_dir}")
+            logger.info("自動レポート生成完了")
+            logger.info(f"出力ディレクトリ: {self.output_dir}")
 
         except Exception as e:
-            print(f"❌ レポート生成エラー: {e}")
+            logger.error(f"レポート生成エラー: {e}")
             results['error'] = str(e)
 
         return results

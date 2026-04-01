@@ -21,8 +21,9 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
-import utils._path_setup  # noqa: F401
 from benchmark_collector import ensure_benchmark_fresh, load_benchmark_videos  # noqa: E402
+
+import utils._path_setup  # noqa: F401
 from utils.channel_config import ChannelConfig  # noqa: E402
 
 logger = logging.getLogger(__name__)

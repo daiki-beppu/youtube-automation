@@ -5,10 +5,16 @@ YouTubeAnalyticsCollector の動画レベル分析メソッド群
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Dict, List
+
+from googleapiclient.errors import HttpError
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
+
+
+logger = logging.getLogger(__name__)
 
 
 class VideoAnalyticsMixin:
@@ -28,7 +34,7 @@ class VideoAnalyticsMixin:
         if not self.analytics_service:
             self.initialize()
 
-        print("🎬 動画別分析データ取得中: 全動画")
+        logger.info("動画別分析データ取得中: 全動画")
 
         try:
             # 動画別メトリクス取得
@@ -72,8 +78,11 @@ class VideoAnalyticsMixin:
 
             return videos_data
 
+        except HttpError as e:
+            logger.error(f"YouTube API エラー（動画別分析）: {e}")
+            return []
         except Exception as e:
-            print(f"❌ 動画別分析取得エラー: {e}")
+            logger.error(f"動画別分析取得エラー: {e}")
             return []
 
     def get_video_analytics_by_id(self, video_id: str, start_date: str, end_date: str) -> Dict:
@@ -117,8 +126,17 @@ class VideoAnalyticsMixin:
                     'average_view_duration': 0
                 }
 
+        except HttpError as e:
+            logger.error(f"YouTube API エラー（動画ID {video_id}）: {e}")
+            return {
+                'video_id': video_id,
+                'views': 0,
+                'estimated_minutes_watched': 0,
+                'average_view_duration': 0,
+                'error': str(e)
+            }
         except Exception as e:
-            print(f"  ❌ 動画ID {video_id} の分析取得エラー: {e}")
+            logger.error(f"動画ID {video_id} の分析取得エラー: {e}")
             return {
                 'video_id': video_id,
                 'views': 0,
@@ -157,8 +175,11 @@ class VideoAnalyticsMixin:
 
             return all_details
 
+        except HttpError as e:
+            logger.warning(f"YouTube API エラー（動画詳細取得）: {e}")
+            return {}
         except Exception as e:
-            print(f"⚠️  動画詳細取得エラー: {e}")
+            logger.warning(f"動画詳細取得エラー: {e}")
             return {}
 
     def _classify_video_type(self, title: str) -> str:

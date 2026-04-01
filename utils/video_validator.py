@@ -4,9 +4,25 @@
 アップロード前の動画ファイル品質・整合性チェック
 """
 
+import logging
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+# --- YouTube アップロード制限 ---
+MAX_FILE_SIZE_BYTES = 128 * 1024 * 1024 * 1024  # 128 GB
+MAX_DURATION_SEC = 12 * 3600  # 12 時間
+MIN_RESOLUTION_PX = 144
+
+# --- ビットレート推奨範囲 (bps) ---
+BITRATE_4K = (35_000_000, 68_000_000)
+BITRATE_1080P = (8_000_000, 12_000_000)
+BITRATE_720P = (5_000_000, 7_500_000)
+
+SUPPORTED_CODECS = ['h264', 'h265', 'hevc', 'vp9', 'av1']
 
 
 class VideoValidator:
@@ -207,7 +223,7 @@ class VideoValidator:
             return metadata
 
         except (subprocess.CalledProcessError, json.JSONDecodeError, Exception) as e:
-            print(f"ffprobe エラー {video_path.name}: {e}")
+            logger.warning(f"ffprobe エラー {video_path.name}: {e}")
             return None
 
     def _parse_fps(self, fps_string: str) -> float:
@@ -228,7 +244,7 @@ class VideoValidator:
         # ファイルサイズチェック
         if video_info['file_size'] == 0:
             errors.append("ファイルサイズが0です")
-        elif video_info['file_size'] > 128 * 1024 * 1024 * 1024:  # 128GB
+        elif video_info['file_size'] > MAX_FILE_SIZE_BYTES:
             errors.append("ファイルサイズがYouTube上限（128GB）を超えています")
 
         # 動画長チェック
@@ -237,7 +253,7 @@ class VideoValidator:
             errors.append("動画の長さが取得できません")
         elif duration < 1:  # 1秒未満
             errors.append("動画が短すぎます（1秒未満）")
-        elif duration > 12 * 3600:  # 12時間
+        elif duration > MAX_DURATION_SEC:
             errors.append("動画がYouTube上限（12時間）を超えています")
 
         # 解像度チェック
@@ -247,15 +263,14 @@ class VideoValidator:
         else:
             try:
                 width, height = map(int, resolution.split('x'))
-                if width < 144 or height < 144:
+                if width < MIN_RESOLUTION_PX or height < MIN_RESOLUTION_PX:
                     errors.append("解像度が低すぎます（最小144p）")
             except Exception:
                 errors.append("解像度の形式が不正です")
 
         # コーデックチェック
         codec = video_info.get('codec', '')
-        supported_codecs = ['h264', 'h265', 'hevc', 'vp9', 'av1']
-        if codec.lower() not in supported_codecs:
+        if codec.lower() not in SUPPORTED_CODECS:
             errors.append(f"サポートされていないコーデックです: {codec}")
 
         return errors
@@ -273,13 +288,16 @@ class VideoValidator:
                 width, height = map(int, resolution.split('x'))
 
                 if height >= 2160:  # 4K
-                    if bitrate < 35_000_000 or bitrate > 68_000_000:
+                    lo, hi = BITRATE_4K
+                    if bitrate < lo or bitrate > hi:
                         warnings.append("4K動画のビットレートが推奨範囲外です（35-68 Mbps）")
                 elif height >= 1080:  # 1080p
-                    if bitrate < 8_000_000 or bitrate > 12_000_000:
+                    lo, hi = BITRATE_1080P
+                    if bitrate < lo or bitrate > hi:
                         warnings.append("1080p動画のビットレートが推奨範囲外です（8-12 Mbps）")
                 elif height >= 720:  # 720p
-                    if bitrate < 5_000_000 or bitrate > 7_500_000:
+                    lo, hi = BITRATE_720P
+                    if bitrate < lo or bitrate > hi:
                         warnings.append("720p動画のビットレートが推奨範囲外です（5-7.5 Mbps）")
             except Exception:
                 pass

@@ -13,6 +13,7 @@ from typing import Optional
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
+from utils.exceptions import UploadError, YouTubeAPIError
 from utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
@@ -89,11 +90,9 @@ class YouTubeUploadCore:
                 return None
 
         except HttpError as e:
-            logger.error(f"YouTube API エラー: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"予期しないエラー: {e}")
-            return None
+            raise YouTubeAPIError(f"動画アップロード API エラー: {e}", status_code=e.resp.status) from e
+        except OSError as e:
+            raise UploadError(f"ファイルアクセスエラー: {e}") from e
 
     def _resumable_upload(self, insert_request, filename: str) -> Optional[str]:
         """再開可能アップロード実行（リトライ付き）。
@@ -130,9 +129,8 @@ class YouTubeUploadCore:
                     logger.error(f"致命的エラー: {e}")
                     return None
 
-            except Exception as e:
-                logger.error(f"アップロードエラー: {e}")
-                return None
+            except OSError as e:
+                raise UploadError(f"アップロードエラー: {e}") from e
 
         if 'id' in response:
             return response['id']
@@ -168,7 +166,9 @@ class YouTubeUploadCore:
 
             return True
 
-        except Exception as e:
+        except HttpError as e:
+            raise YouTubeAPIError(f"サムネイル設定 API エラー: {e}", status_code=e.resp.status) from e
+        except OSError as e:
             logger.warning(f"サムネイル設定エラー: {e}")
             return False
 
@@ -180,7 +180,9 @@ class YouTubeUploadCore:
         import subprocess
         import tempfile
 
-        compressed = Path(tempfile.mktemp(suffix='.jpg'))
+        tmp_fd = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+        tmp_fd.close()
+        compressed = Path(tmp_fd.name)
         for quality in [2, 5]:  # ffmpeg -qscale:v 2=高品質, 5=中品質
             subprocess.run(
                 ['ffmpeg', '-y', '-i', str(thumbnail_path), '-qscale:v', str(quality), str(compressed)],

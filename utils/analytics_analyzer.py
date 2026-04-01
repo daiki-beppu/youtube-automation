@@ -11,12 +11,15 @@ Functions:
 - サムネイル効果測定
 """
 
+import logging
 import statistics
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from .channel_config import ChannelConfig
+
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsAnalyzer:
@@ -54,7 +57,7 @@ class AnalyticsAnalyzer:
         Returns:
             Dict: CTR改善戦略レポート
         """
-        print("🎯 CTR改善戦略分析を実行中...")
+        logger.info("CTR改善戦略分析を実行中...")
 
         # 現在のCTR分析
         current_ctr = analytics_data.get('channel_ctr', {}).get('average_ctr', 0)
@@ -258,7 +261,7 @@ class AnalyticsAnalyzer:
 
     def generate_performance_report(self, analytics_data: Dict) -> Dict[str, Any]:
         """総合パフォーマンスレポート生成"""
-        print(f"📊 {self.config.channel_short}総合パフォーマンスレポート生成中...")
+        logger.info(f"{self.config.channel_short}総合パフォーマンスレポート生成中...")
 
         ctr_analysis = self.analyze_ctr_improvement_strategy(analytics_data)
 

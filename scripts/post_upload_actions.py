@@ -9,8 +9,9 @@ Usage:
 import argparse
 import logging
 
-import utils._path_setup  # noqa: F401
 from community_draft import CommunityDraftGenerator  # noqa: E402
+
+import utils._path_setup  # noqa: F401
 
 
 def main():

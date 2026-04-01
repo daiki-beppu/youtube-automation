@@ -5,11 +5,16 @@ YouTubeAnalyticsCollector のチャンネルレベル分析メソッド群
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict
 
+from googleapiclient.errors import HttpError
+
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelAnalyticsMixin:
@@ -29,7 +34,7 @@ class ChannelAnalyticsMixin:
         if not self.analytics_service:
             self.initialize()
 
-        print(f"📊 チャンネル分析データ取得中: {start_date} - {end_date}")
+        logger.info(f"チャンネル分析データ取得中: {start_date} - {end_date}")
 
         try:
             # 基本メトリクス
@@ -53,8 +58,11 @@ class ChannelAnalyticsMixin:
                 'summary': self._calculate_summary_stats(response)
             }
 
+        except HttpError as e:
+            logger.error(f"YouTube API エラー（チャンネル分析）: {e}")
+            return {'error': str(e)}
         except Exception as e:
-            print(f"❌ チャンネル分析取得エラー: {e}")
+            logger.error(f"チャンネル分析取得エラー: {e}")
             return {'error': str(e)}
 
     def collect_basic_analytics(self, start_date: str, end_date: str) -> Dict:
@@ -68,17 +76,17 @@ class ChannelAnalyticsMixin:
         Returns:
             Dict: 収集された基本アナリティクスデータ
         """
-        print(f"📊 基本アナリティクス収集: {start_date} 〜 {end_date}")
+        logger.info(f"基本アナリティクス収集: {start_date} 〜 {end_date}")
 
         try:
             # サービス初期化
             self.initialize()
 
             # 基本データ収集のみ
-            print("📈 チャンネル統計データ収集中...")
+            logger.info("チャンネル統計データ収集中...")
             channel_analytics = self.get_channel_analytics(start_date, end_date)
 
-            print("🎬 動画別パフォーマンス収集中...")
+            logger.info("動画別パフォーマンス収集中...")
             strategic_analytics = self.get_strategic_video_analytics(start_date, end_date, mode="efficient")
 
             # 戦略的分析結果から動画データを統合
@@ -111,12 +119,12 @@ class ChannelAnalyticsMixin:
                 }
             }
 
-            print("✅ 基本アナリティクス収集完了")
+            logger.info("基本アナリティクス収集完了")
             return basic_data
 
         except Exception as e:
-            print(f"❌ データ収集エラー: {e}")
-            print("🛑 エラーが発生したため処理を終了します")
+            logger.error(f"データ収集エラー: {e}")
+            logger.error("エラーが発生したため処理を終了します")
             raise
 
     def _process_daily_data(self, response: Dict) -> list:

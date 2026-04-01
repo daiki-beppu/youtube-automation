@@ -14,6 +14,8 @@ from utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CROSSFADE_SEC = 1.0
+
 # 必須キーの定義（ドット区切りのネストパス）
 _REQUIRED_KEYS = [
     'channel.name',
@@ -279,7 +281,7 @@ class ChannelConfig:
     @property
     def crossfade_duration(self) -> float:
         """トラック間クロスフェード秒数（デフォルト: 1.0秒）"""
-        return self._data.get('audio', {}).get('crossfade_duration', 1.0)
+        return self._data.get('audio', {}).get('crossfade_duration', DEFAULT_CROSSFADE_SEC)
 
     # ─── Suno ─────────────────────────────────────────
 

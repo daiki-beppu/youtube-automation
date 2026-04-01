@@ -19,16 +19,21 @@ Note:
 """
 
 import json
+import logging
 import sys
 from datetime import datetime, timedelta
+from typing import Any
 
 import utils._path_setup  # noqa: F401
 from utils.channel_analytics import ChannelAnalyticsMixin
 from utils.ctr_analytics import CTRAnalyticsMixin
+from utils.exceptions import YouTubeAPIError
 from utils.strategic_analytics import StrategicAnalyticsMixin
 from utils.video_analytics import VideoAnalyticsMixin
 from utils.video_listing import VideoListingMixin
 from utils.youtube_service import get_analytics, get_youtube
+
+logger = logging.getLogger(__name__)
 
 
 class YouTubeAnalyticsCollector(
@@ -42,13 +47,13 @@ class YouTubeAnalyticsCollector(
 
     def __init__(self):
         """初期化"""
-        self.youtube_service = None
-        self.analytics_service = None
-        self.channel_id = None
+        self.youtube_service: Any = None
+        self.analytics_service: Any = None
+        self.channel_id: str | None = None
 
     def initialize(self):
         """YouTube API 初期化"""
-        print("🔐 YouTube Analytics API 認証中...")
+        logger.info("YouTube Analytics API 認証中...")
 
         self.youtube_service = get_youtube()
         self.analytics_service = get_analytics()
@@ -56,7 +61,7 @@ class YouTubeAnalyticsCollector(
         # チャンネルID取得
         self.channel_id = self._get_channel_id()
 
-        print("✅ YouTube Analytics API 準備完了")
+        logger.info("YouTube Analytics API 準備完了")
 
     def _get_channel_id(self) -> str:
         """チャンネルID取得"""
@@ -69,13 +74,15 @@ class YouTubeAnalyticsCollector(
             if response['items']:
                 channel = response['items'][0]
                 self.channel_id = channel['id']
-                print(f"📺 チャンネル: {channel['snippet']['title']} ({self.channel_id})")
+                logger.info(f"チャンネル: {channel['snippet']['title']} ({self.channel_id})")
                 return self.channel_id
             else:
-                raise Exception("チャンネル情報が取得できませんでした")
+                raise YouTubeAPIError("チャンネル情報が取得できませんでした")
 
+        except YouTubeAPIError:
+            raise
         except Exception as e:
-            print(f"❌ チャンネルID取得エラー: {e}")
+            logger.error(f"チャンネルID取得エラー: {e}")
             raise
 
 

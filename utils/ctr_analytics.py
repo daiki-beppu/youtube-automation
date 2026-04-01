@@ -5,10 +5,16 @@ YouTubeAnalyticsCollector の CTR 特化分析メソッド群
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Dict, List
+
+from googleapiclient.errors import HttpError
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
+
+
+logger = logging.getLogger(__name__)
 
 
 class CTRAnalyticsMixin:
@@ -28,7 +34,7 @@ class CTRAnalyticsMixin:
         if not self.analytics_service:
             self.initialize()
 
-        print("🎯 CTR詳細分析実行中...")
+        logger.info("CTR詳細分析実行中...")
 
         try:
             # 基本メトリクス（impressions不使用）
@@ -72,8 +78,11 @@ class CTRAnalyticsMixin:
                 'ctr_analysis': self._analyze_ctr_performance(video_ctr_response),
             }
 
+        except HttpError as e:
+            logger.error(f"YouTube API エラー（CTR分析）: {e}")
+            return {'error': str(e)}
         except Exception as e:
-            print(f"❌ CTR分析エラー: {e}")
+            logger.error(f"CTR分析エラー: {e}")
             return {'error': str(e)}
 
     def get_collection_performance(self, start_date: str, end_date: str) -> Dict:
@@ -87,7 +96,7 @@ class CTRAnalyticsMixin:
         Returns:
             Dict: コレクション分析結果
         """
-        print("🎵 コレクション別パフォーマンス分析中...")
+        logger.info("コレクション別パフォーマンス分析中...")
 
         # 動画データ取得
         videos_data = self.get_video_analytics(start_date, end_date)

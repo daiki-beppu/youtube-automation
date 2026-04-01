@@ -5,11 +5,17 @@ YouTubeAnalyticsCollector のチャンネル動画リスト取得メソッド群
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Dict, List
 
+from googleapiclient.errors import HttpError
+
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
+
+
+logger = logging.getLogger(__name__)
 
 
 class VideoListingMixin:
@@ -25,7 +31,7 @@ class VideoListingMixin:
         if not self.youtube_service:
             self.initialize()
 
-        print("🎥 チャンネル全動画リスト取得中...")
+        logger.info("チャンネル全動画リスト取得中...")
 
         try:
             # チャンネルのアップロード済みプレイリストIDを取得
@@ -66,13 +72,16 @@ class VideoListingMixin:
                 if not next_page_token:
                     break
 
-                print(f"  📄 {len(videos)}本の動画を取得済み...")
+                logger.info(f"{len(videos)}本の動画を取得済み...")
 
-            print(f"✅ 全動画取得完了: {len(videos)}本")
+            logger.info(f"全動画取得完了: {len(videos)}本")
             return videos
 
+        except HttpError as e:
+            logger.error(f"YouTube API エラー（動画リスト取得）: {e}")
+            return []
         except Exception as e:
-            print(f"❌ 動画リスト取得エラー: {e}")
+            logger.error(f"動画リスト取得エラー: {e}")
             return []
 
     def get_recent_videos(self, days: int = 30) -> List[Dict]:
@@ -88,7 +97,7 @@ class VideoListingMixin:
         if not self.youtube_service:
             self.initialize()
 
-        print(f"📅 直近{days}日間の投稿動画を取得中...")
+        logger.info(f"直近{days}日間の投稿動画を取得中...")
 
         try:
             cutoff_date = datetime.now() - timedelta(days=days)
@@ -108,9 +117,9 @@ class VideoListingMixin:
             # 投稿日時で降順ソート（新しい順）
             recent_videos.sort(key=lambda x: x['published_at'], reverse=True)
 
-            print(f"✅ 直近{days}日間の投稿動画取得完了: {len(recent_videos)}本")
+            logger.info(f"直近{days}日間の投稿動画取得完了: {len(recent_videos)}本")
             return recent_videos
 
         except Exception as e:
-            print(f"❌ 直近動画取得エラー: {e}")
+            logger.error(f"直近動画取得エラー: {e}")
             return []

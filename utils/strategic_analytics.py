@@ -5,11 +5,17 @@ YouTubeAnalyticsCollector の統合・戦略的動画分析メソッド群
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Dict, List
 
+from googleapiclient.errors import HttpError
+
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
+
+
+logger = logging.getLogger(__name__)
 
 
 class StrategicAnalyticsMixin:
@@ -30,16 +36,16 @@ class StrategicAnalyticsMixin:
         Returns:
             Dict: 統合分析データ
         """
-        print(f"🎯 統合Analytics取得: 上位{top_count}本 + 直近{recent_days}日投稿")
+        logger.info(f"統合Analytics取得: 上位{top_count}本 + 直近{recent_days}日投稿")
 
         # Step 1: 全動画リストを一回で取得
-        print("📋 全動画リスト取得中...")
+        logger.info("全動画リスト取得中...")
         all_videos = self.get_all_channel_videos()
         if not all_videos:
             return {'top_videos': [], 'recent_videos': []}
 
         # Step 2: 直近投稿動画をフィルタリング
-        print(f"📅 直近{recent_days}日間の投稿動画をフィルタリング中...")
+        logger.info(f"直近{recent_days}日間の投稿動画をフィルタリング中...")
         cutoff_date = datetime.now() - timedelta(days=recent_days)
 
         recent_video_ids = set()
@@ -51,10 +57,10 @@ class StrategicAnalyticsMixin:
                 recent_video_ids.add(video['video_id'])
                 recent_videos_info.append(video)
 
-        print(f"  📊 直近投稿動画: {len(recent_videos_info)}本")
+        logger.info(f"直近投稿動画: {len(recent_videos_info)}本")
 
         # Step 3: 上位動画を効率的に取得
-        print(f"🏆 上位{top_count}本の動画Analytics取得中...")
+        logger.info(f"上位{top_count}本の動画Analytics取得中...")
         top_videos_data = []
         remaining_count = top_count
 
@@ -106,12 +112,15 @@ class StrategicAnalyticsMixin:
                 if len(response['rows']) < batch_size:
                     break
 
+            except HttpError as e:
+                logger.error(f"YouTube API エラー（上位動画取得）: {e}")
+                break
             except Exception as e:
-                print(f"  ❌ 上位動画取得エラー: {e}")
+                logger.error(f"上位動画取得エラー: {e}")
                 break
 
         # Step 4: 直近動画のAnalytics取得（上位に含まれていないもののみ）
-        print("📊 直近投稿動画のAnalytics取得中...")
+        logger.info("直近投稿動画のAnalytics取得中...")
         top_video_ids = {video['video_id'] for video in top_videos_data}
 
         recent_videos_data = []
@@ -144,11 +153,11 @@ class StrategicAnalyticsMixin:
             }
         }
 
-        print("✅ 統合Analytics取得完了:")
-        print(f"  🏆 上位動画: {len(top_videos_data)}本")
-        print(f"  📅 直近動画（上位外）: {len(recent_videos_data)}本")
-        print(f"  🔄 直近動画（上位内）: {result['statistics']['recent_in_top']}本")
-        print(f"  📊 総計: {result['statistics']['total_analyzed']}本")
+        logger.info("統合Analytics取得完了:")
+        logger.info(f"上位動画: {len(top_videos_data)}本")
+        logger.info(f"直近動画（上位外）: {len(recent_videos_data)}本")
+        logger.info(f"直近動画（上位内）: {result['statistics']['recent_in_top']}本")
+        logger.info(f"総計: {result['statistics']['total_analyzed']}本")
 
         return result
 
@@ -168,7 +177,7 @@ class StrategicAnalyticsMixin:
         Returns:
             Dict: 分析データ
         """
-        print(f"🎯 戦略的動画分析データ取得開始 (モード: {mode})")
+        logger.info(f"戦略的動画分析データ取得開始 (モード: {mode})")
 
         result = {
             'mode': mode,
@@ -179,26 +188,26 @@ class StrategicAnalyticsMixin:
         }
 
         if mode == "efficient":
-            print("📊 効率モード: 上位50本 + 直近30日投稿（統合取得）")
+            logger.info("効率モード: 上位50本 + 直近30日投稿（統合取得）")
             combined_data = self.get_combined_analytics(start_date, end_date, 50, 30)
             result['top_videos'] = combined_data['top_videos']
             result['recent_videos'] = combined_data['recent_videos']
 
         elif mode == "comprehensive":
-            print("🔍 包括モード: 全動画")
+            logger.info("包括モード: 全動画")
             result['all_videos'] = self.get_all_video_analytics(start_date, end_date)
 
         elif mode == "top_only":
-            print("🏆 上位のみモード: 上位50本")
+            logger.info("上位のみモード: 上位50本")
             result['top_videos'] = self.get_top_video_analytics(start_date, end_date, 50)
 
         elif mode == "recent_only":
-            print("📅 直近のみモード: 直近30日投稿")
+            logger.info("直近のみモード: 直近30日投稿")
             result['recent_videos'] = self.get_recent_video_analytics(start_date, end_date, 30)
 
         else:
-            print(f"❌ 不明なモード: {mode}")
-            print("利用可能なモード: efficient, comprehensive, top_only, recent_only")
+            logger.error(f"不明なモード: {mode}")
+            logger.info("利用可能なモード: efficient, comprehensive, top_only, recent_only")
             return result
 
         # 統計情報を追加
@@ -210,7 +219,7 @@ class StrategicAnalyticsMixin:
             'all_videos_count': len(result['all_videos'])
         }
 
-        print(f"✅ 戦略的分析データ取得完了: 総計{total_videos}本")
+        logger.info(f"戦略的分析データ取得完了: 総計{total_videos}本")
         return result
 
     def get_all_video_analytics(self, start_date: str, end_date: str) -> List[Dict]:
@@ -224,20 +233,20 @@ class StrategicAnalyticsMixin:
         Returns:
             List[Dict]: 全動画の統計データ
         """
-        print("🎬 動画別分析データ取得中: 全動画（制限なし）")
+        logger.info("動画別分析データ取得中: 全動画（制限なし）")
 
         # Step 1: 全動画リストを取得
         all_videos = self.get_all_channel_videos()
         if not all_videos:
-            print("❌ 動画リストの取得に失敗しました")
+            logger.error("動画リストの取得に失敗しました")
             return []
 
-        print(f"📊 {len(all_videos)}本の動画のAnalyticsデータを取得開始...")
+        logger.info(f"{len(all_videos)}本の動画のAnalyticsデータを取得開始...")
 
         # Step 2: 各動画のAnalyticsデータを取得
         videos_data = []
         for i, video in enumerate(all_videos, 1):
-            print(f"  📹 [{i}/{len(all_videos)}] {video['title'][:50]}...")
+            logger.info(f"[{i}/{len(all_videos)}] {video['title'][:50]}...")
 
             analytics_data = self.get_video_analytics_by_id(
                 video['video_id'],
@@ -254,12 +263,12 @@ class StrategicAnalyticsMixin:
 
             # 進行状況表示（10件ごと）
             if i % 10 == 0:
-                print(f"    ✅ {i}本完了...")
+                logger.info(f"{i}本完了...")
 
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get('views', 0), reverse=True)
 
-        print(f"✅ 全動画Analytics取得完了: {len(videos_data)}本")
+        logger.info(f"全動画Analytics取得完了: {len(videos_data)}本")
         return videos_data
 
     def get_top_video_analytics(self, start_date: str, end_date: str, top_count: int = 50) -> List[Dict]:
@@ -274,7 +283,7 @@ class StrategicAnalyticsMixin:
         Returns:
             List[Dict]: 上位動画の統計データ
         """
-        print(f"🎬 上位{top_count}本の動画分析データ取得中...")
+        logger.info(f"上位{top_count}本の動画分析データ取得中...")
 
         videos_data = []
         remaining_count = top_count
@@ -322,17 +331,20 @@ class StrategicAnalyticsMixin:
                     videos_data.append(video_data)
 
                 remaining_count -= len(response['rows'])
-                print(f"  📊 {len(videos_data)}本取得済み...")
+                logger.info(f"{len(videos_data)}本取得済み...")
 
                 # レスポンスが期待より少ない場合は終了
                 if len(response['rows']) < batch_size:
                     break
 
+            except HttpError as e:
+                logger.error(f"YouTube API エラー（バッチ取得）: {e}")
+                break
             except Exception as e:
-                print(f"  ❌ バッチ取得エラー: {e}")
+                logger.error(f"バッチ取得エラー: {e}")
                 break
 
-        print(f"✅ 上位動画Analytics取得完了: {len(videos_data)}本")
+        logger.info(f"上位動画Analytics取得完了: {len(videos_data)}本")
         return videos_data
 
     def get_recent_video_analytics(self, start_date: str, end_date: str, days: int = 30) -> List[Dict]:
@@ -347,20 +359,20 @@ class StrategicAnalyticsMixin:
         Returns:
             List[Dict]: 直近投稿動画の統計データ
         """
-        print(f"🎬 直近{days}日間投稿動画の分析データ取得中...")
+        logger.info(f"直近{days}日間投稿動画の分析データ取得中...")
 
         # 直近投稿動画を取得
         recent_videos = self.get_recent_videos(days)
         if not recent_videos:
-            print("❌ 直近投稿動画が見つかりません")
+            logger.error("直近投稿動画が見つかりません")
             return []
 
-        print(f"📊 {len(recent_videos)}本の直近動画のAnalyticsデータを取得開始...")
+        logger.info(f"{len(recent_videos)}本の直近動画のAnalyticsデータを取得開始...")
 
         # 各動画のAnalyticsデータを取得
         videos_data = []
         for i, video in enumerate(recent_videos, 1):
-            print(f"  📹 [{i}/{len(recent_videos)}] {video['title'][:50]}...")
+            logger.info(f"[{i}/{len(recent_videos)}] {video['title'][:50]}...")
 
             analytics_data = self.get_video_analytics_by_id(
                 video['video_id'],
@@ -378,5 +390,5 @@ class StrategicAnalyticsMixin:
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get('views', 0), reverse=True)
 
-        print(f"✅ 直近動画Analytics取得完了: {len(videos_data)}本")
+        logger.info(f"直近動画Analytics取得完了: {len(videos_data)}本")
         return videos_data
