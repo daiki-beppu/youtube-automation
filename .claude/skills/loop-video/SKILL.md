@@ -96,9 +96,9 @@ PD（パブリックドメイン）の童話キャラでも、ディズニー版
 ```json
 {
   "veo": {
-    "model": "veo-3.1-generate-preview",
+    "model": "veo-3.1-lite-generate-preview",
     "default_prompt": "...",
-    "duration_seconds": 8,
+    "duration_seconds": 4,
     "crossfade_sec": 0.5
   }
 }
