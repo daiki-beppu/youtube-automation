@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 # --- 定数 ---
-DEFAULT_MODEL = "veo-3.1-generate-preview"
+DEFAULT_MODEL = "veo-3.1-lite-generate-preview"
 DEFAULT_PROMPT = (
     "Static scene with only natural subtle movements: gentle flickering of candle flames, "
     "slight sway of character breathing, soft light shifts on surfaces. "
