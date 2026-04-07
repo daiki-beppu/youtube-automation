@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import os
+import random
 import struct
 import sys
 import time
@@ -20,6 +21,7 @@ SAMPLE_WIDTH = 2  # 16-bit
 DEFAULT_MODEL = "lyria-3-pro-preview"
 PREVIEW_MODEL = "lyria-3-clip-preview"
 DEFAULT_SEGMENT_SEC = 120  # デフォルトのセグメント長（プロンプトで制御可能）
+DEFAULT_SHUFFLE_SEGMENT_SEC = 180  # shuffle モード時のデフォルト（3分）
 
 
 def load_composition(path: Path) -> dict:
@@ -27,7 +29,8 @@ def load_composition(path: Path) -> dict:
     with open(path) as f:
         comp = json.load(f)
 
-    for key in ("title", "total_duration_min", "base", "phases"):
+    required = ("title", "base", "phases")
+    for key in required:
         if key not in comp:
             print(f"[ERROR] composition.json に '{key}' がありません")
             sys.exit(1)
@@ -36,18 +39,30 @@ def load_composition(path: Path) -> dict:
         print("[ERROR] phases が空です")
         sys.exit(1)
 
-    comp["phases"].sort(key=lambda p: p["at_min"])
-
-    if comp["phases"][0]["at_min"] != 0:
-        print("[ERROR] 最初の phase は at_min=0 である必要があります")
-        sys.exit(1)
-
     if "prompt_prefix" not in comp["base"]:
         print("[ERROR] base.prompt_prefix が必要です")
         sys.exit(1)
 
     comp.setdefault("model", DEFAULT_MODEL)
     comp.setdefault("crossfade_sec", 5)
+    comp.setdefault("shuffle_passes", 0)
+
+    if comp["shuffle_passes"] > 0:
+        # shuffle モード: at_min/total_duration_min は不要
+        comp.setdefault("segment_duration_sec", DEFAULT_SHUFFLE_SEGMENT_SEC)
+    else:
+        # 通常モード: at_min によるタイムライン
+        if "total_duration_min" not in comp:
+            print("[ERROR] composition.json に 'total_duration_min' がありません")
+            sys.exit(1)
+        for p in comp["phases"]:
+            if "at_min" not in p:
+                print("[ERROR] 通常モードでは各 phase に at_min が必要です")
+                sys.exit(1)
+        comp["phases"].sort(key=lambda p: p["at_min"])
+        if comp["phases"][0]["at_min"] != 0:
+            print("[ERROR] 最初の phase は at_min=0 である必要があります")
+            sys.exit(1)
 
     return comp
 
@@ -55,10 +70,32 @@ def load_composition(path: Path) -> dict:
 def dry_run(comp: dict) -> None:
     """タイムラインを表示して終了。"""
     title = comp["title"]
-    total = comp["total_duration_min"]
     crossfade = comp.get("crossfade_sec", 5)
     base = comp["base"]
+    shuffle_passes = comp.get("shuffle_passes", 0)
 
+    if shuffle_passes > 0:
+        seg_sec = comp.get("segment_duration_sec", DEFAULT_SHUFFLE_SEGMENT_SEC)
+        segments = build_segment_compositions(comp)
+        n = len(segments)
+        est_min = (n * seg_sec * shuffle_passes) / 60
+        print(f"\n=== {title} (SHUFFLE × {shuffle_passes} passes) ===")
+        print(f"  Model: {comp.get('model', DEFAULT_MODEL)}")
+        print(f"  Base: {base.get('prompt_prefix', '')[:60]}...")
+        if base.get("style_hints"):
+            print(f"  Style: {base['style_hints']}")
+        print(f"  Crossfade: {crossfade}s")
+        print(f"  Segment length: {seg_sec}s ({seg_sec // 60}:{seg_sec % 60:02d})")
+        print(f"  Unique segments: {n}")
+        print(f"  Total occurrences: {n} × {shuffle_passes} = {n * shuffle_passes}")
+        print(f"  Estimated master duration: ~{est_min:.0f} min")
+        print()
+        for i, seg in enumerate(segments):
+            print(f"  seg_{i+1:03d}  {seg['phase_name']:<30s}")
+        print()
+        return
+
+    total = comp["total_duration_min"]
     print(f"\n=== {title} ({total}min) ===")
     print(f"  Model: {comp.get('model', DEFAULT_MODEL)}")
     print(f"  Base: {base.get('prompt_prefix', '')[:60]}...")
@@ -87,7 +124,15 @@ def build_prompt(comp: dict, phase: dict) -> str:
 
 
 def build_segment_compositions(comp: dict) -> list[dict]:
-    """composition を phase 境界でセグメント分割し、長いフェーズは自動サブ分割する。"""
+    """composition を phase 境界でセグメント分割し、長いフェーズは自動サブ分割する。
+
+    shuffle_passes > 0 の場合、各 phase = 1 ユニークセグメントとして扱い、
+    at_min/total_duration_min は無視する（後段の generate_shuffled_master で
+    シャッフル順に連結される前提）。
+    """
+    if comp.get("shuffle_passes", 0) > 0:
+        return _build_unique_segments(comp)
+
     phases = comp["phases"]
     total_min = comp["total_duration_min"]
     model = comp.get("model", DEFAULT_MODEL)
@@ -119,6 +164,33 @@ def build_segment_compositions(comp: dict) -> list[dict]:
                 "model": model,
                 "phase_name": sub_label,
             })
+
+    return segments
+
+
+def _build_unique_segments(comp: dict) -> list[dict]:
+    """shuffle モード用: 各 phase = 1 ユニークセグメント。
+
+    duration_hint_sec or comp.segment_duration_sec の長さの単一セグメントとして扱う。
+    プロンプトには長さ指示を付加してモデルが想定長を出すよう促す。
+    """
+    phases = comp["phases"]
+    model = comp.get("model", DEFAULT_MODEL)
+    default_seg_sec = comp.get("segment_duration_sec", DEFAULT_SHUFFLE_SEGMENT_SEC)
+    segments = []
+
+    for phase in phases:
+        seg_sec = phase.get("duration_hint_sec", default_seg_sec)
+        prompt = build_prompt(comp, phase)
+        # 長さヒントをプロンプトに足してモデルに伝える（参考程度）
+        prompt = f"{prompt}, approximately {seg_sec} seconds long, full musical arc within this duration"
+        phase_name = phase.get("name_en") or phase["name"]
+        segments.append({
+            "title": f"{comp['title']} [seg_{len(segments)+1:03d}] {phase_name}",
+            "prompt": prompt,
+            "model": model,
+            "phase_name": phase_name,
+        })
 
     return segments
 
@@ -337,6 +409,140 @@ def generate_segmented(client, types, comp: dict, output: Path,
     return combined
 
 
+def generate_shuffled_master(client, types, comp: dict, output: Path,
+                             passes: int, max_retries: int = 3, workers: int = 0,
+                             cleanup: bool = False) -> bytes | None:
+    """ユニーク12曲 × N パス シャッフルマスター生成。
+
+    1. phases に対応する N 個のユニークセグメントを生成
+    2. 各セグメントの順番を passes 回シャッフル
+    3. 各シャッフル順でクロスフェード結合 → pass_pcm
+    4. 全 pass_pcm をクロスフェード結合 → master.wav
+    """
+    segments = build_segment_compositions(comp)
+    seg_dir = output.parent
+    seg_paths = [seg_dir / f"seg_{i+1:03d}.wav" for i in range(len(segments))]
+    crossfade_sec = comp.get("crossfade_sec", 5)
+    fade_samples = SAMPLE_RATE * crossfade_sec
+    n = len(segments)
+
+    mode = f"{workers} workers" if workers > 0 else "sequential"
+    print(f"\n=== Unique セグメント生成 ({n} segments, {mode}) ===")
+    for i, seg in enumerate(segments):
+        print(f"  seg_{i+1:03d}: {seg['phase_name']}")
+
+    if workers > 0:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    _generate_one_segment, client, types, i, seg, seg_path, max_retries,
+                ): i
+                for i, (seg, seg_path) in enumerate(zip(segments, seg_paths))
+            }
+            results = [None] * n
+            for future in futures:
+                results[futures[future]] = future.result()
+    else:
+        results = []
+        for i, (seg, seg_path) in enumerate(zip(segments, seg_paths)):
+            results.append(_generate_one_segment(client, types, i, seg, seg_path, max_retries))
+
+    if not all(results):
+        failed = [i + 1 for i, ok in enumerate(results) if not ok]
+        print(f"\n[ERROR] 失敗セグメント: {failed}")
+        print("  成功済みセグメントは保持されています。再実行で続行できます。")
+        return None
+
+    # シャッフル順を passes 個生成
+    # 制約:
+    #   1. 全パスの並びは互いに重複しない（ベストエフォート）
+    #   2. パス境界で同じ曲が連続しない（前パスの末尾 != 現パスの先頭）
+    seed = comp.get("shuffle_seed")
+    rng = random.Random(seed)
+    used_orders: set[tuple[int, ...]] = set()
+    pass_orders: list[list[int]] = []
+    for _ in range(passes):
+        prev_last = pass_orders[-1][-1] if pass_orders else None
+        order = list(range(n))
+        # まずは制約を満たす並びを探索
+        for _ in range(200):
+            rng.shuffle(order)
+            if prev_last is not None and order[0] == prev_last:
+                continue
+            key = tuple(order)
+            if key not in used_orders:
+                used_orders.add(key)
+                break
+        else:
+            # 200 回試行で見つからなければ、連続禁止だけは守って採用
+            for _ in range(50):
+                rng.shuffle(order)
+                if prev_last is None or order[0] != prev_last:
+                    break
+        pass_orders.append(list(order))
+
+    # 各セグメントの PCM を読み込み
+    pcms = [read_wav_pcm(p) for p in seg_paths]
+
+    # 各パスごとにクロスフェード結合
+    print(f"\n=== {passes} パスのシャッフル結合 (crossfade {crossfade_sec}s) ===")
+    pass_pcms: list[bytes] = []
+    for p_idx, order in enumerate(pass_orders):
+        order_str = " -> ".join(f"{i+1:02d}" for i in order)
+        print(f"  pass {p_idx+1}/{passes}: {order_str}")
+        combined = pcms[order[0]]
+        for j in range(1, len(order)):
+            combined = crossfade_join(combined, pcms[order[j]], fade_samples)
+        pass_pcms.append(combined)
+        print(f"    pass {p_idx+1} duration: {format_duration_mmss(pcm_duration_sec(combined) / 60)}")
+
+    # パス間をクロスフェード結合
+    print(f"\n=== {passes} パスを統合中 (crossfade {crossfade_sec}s) ===")
+    master = pass_pcms[0]
+    for i in range(1, len(pass_pcms)):
+        master = crossfade_join(master, pass_pcms[i], fade_samples)
+        print(f"  joined: pass_{i:02d} + pass_{i+1:02d} -> {format_duration_mmss(pcm_duration_sec(master) / 60)}")
+
+    write_wav(master, output)
+
+    if cleanup:
+        for sp in seg_paths:
+            if sp.exists():
+                sp.unlink()
+        print("  セグメントファイルを削除しました")
+    else:
+        individual_dir = output.parent.parent / "02-Individual-music"
+        individual_dir.mkdir(parents=True, exist_ok=True)
+        print(f"\n=== セグメントファイルを {individual_dir.name}/ に移動 ===")
+        for i, (sp, seg) in enumerate(zip(seg_paths, segments)):
+            if not sp.exists():
+                continue
+            safe_name = seg["phase_name"].replace(" ", "-").replace("/", "-").replace("\\", "-").replace(":", "-")
+            safe_name = safe_name.replace("(", "").replace(")", "")
+            new_name = f"{i + 1:02d}_{safe_name}.wav"
+            new_path = individual_dir / new_name
+            sp.rename(new_path)
+            print(f"  {sp.name} -> {individual_dir.name}/{new_name}")
+
+    # シャッフル順をログとして保存
+    log_path = output.parent.parent / "20-documentation" / "shuffle_orders.json"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_data = {
+        "passes": passes,
+        "segment_count": n,
+        "crossfade_sec": crossfade_sec,
+        "shuffle_seed": seed,
+        "orders": [
+            {"pass": p_idx + 1, "order_1based": [i + 1 for i in order]}
+            for p_idx, order in enumerate(pass_orders)
+        ],
+    }
+    log_path.write_text(json.dumps(log_data, indent=2, ensure_ascii=False))
+    print(f"\n  シャッフル順ログ: {log_path}")
+
+    return master
+
+
 def build_preview_compositions(comp: dict) -> list[tuple[int, dict]]:
     """3つの代表フェーズからプレビュー用セグメント情報を構築する。"""
     phases = comp["phases"]
@@ -425,6 +631,8 @@ def main():
                         help="生成後にセグメントファイルを削除 (default: 保持)")
     parser.add_argument("--preview", action="store_true",
                         help="3つの代表フェーズから30秒プレビューを生成 (Clip model)")
+    parser.add_argument("--shuffle-passes", type=int, default=None,
+                        help="N>0 で各 phase を 1 セグメントずつ生成し N 回シャッフル連結")
     args = parser.parse_args()
 
     comp_path = Path(args.composition).resolve()
@@ -433,6 +641,12 @@ def main():
         sys.exit(1)
 
     comp = load_composition(comp_path)
+
+    # CLI フラグが composition.json をオーバーライド
+    if args.shuffle_passes is not None:
+        comp["shuffle_passes"] = args.shuffle_passes
+        if args.shuffle_passes > 0:
+            comp.setdefault("segment_duration_sec", DEFAULT_SHUFFLE_SEGMENT_SEC)
 
     if args.dry_run:
         dry_run(comp)
@@ -483,10 +697,17 @@ def main():
 
     start_time = time.monotonic()
 
-    pcm_data = generate_segmented(
-        client, types, comp, output,
-        max_retries=args.max_retries, workers=workers, cleanup=args.cleanup,
-    )
+    if comp.get("shuffle_passes", 0) > 0:
+        pcm_data = generate_shuffled_master(
+            client, types, comp, output,
+            passes=comp["shuffle_passes"],
+            max_retries=args.max_retries, workers=workers, cleanup=args.cleanup,
+        )
+    else:
+        pcm_data = generate_segmented(
+            client, types, comp, output,
+            max_retries=args.max_retries, workers=workers, cleanup=args.cleanup,
+        )
 
     gen_elapsed = time.monotonic() - start_time
 
@@ -505,7 +726,12 @@ def main():
     print(f"  ファイル:   {output}")
     print(f"  時間:       {int(actual_duration)}秒 ({m}:{s:02d})")
     print(f"  サイズ:     {size_mb:.1f} MB")
-    print(f"  セグメント: {len(build_segment_compositions(comp))}")
+    seg_count = len(build_segment_compositions(comp))
+    if comp.get("shuffle_passes", 0) > 0:
+        passes = comp["shuffle_passes"]
+        print(f"  セグメント: {seg_count} unique × {passes} passes = {seg_count * passes} occurrences")
+    else:
+        print(f"  セグメント: {seg_count}")
     print(f"  生成時間:   {int(gen_elapsed)}秒")
     print("===========================================")
 
