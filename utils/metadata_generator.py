@@ -313,7 +313,19 @@ class BAHMetadataGenerator:
             duration_display=duration_display,
             duration_short=duration_short,
         )
-        return title[:100]
+        # YouTube タイトル制限: 100 codepoint。
+        # 過去事例: silent な title[:100] スライスでサロゲート文字接頭辞 +
+        # 長い scene_phrase の組み合わせがアップロード時に切られ、
+        # scene phrase 部分がまるごと消える事故が起きた。
+        # silent slice せず、超過時は呼び出し元で短縮対応するよう例外を投げる。
+        if len(title) > 100:
+            raise ValueError(
+                f"生成したタイトルが {len(title)} codepoint と 100 を超過: "
+                f"\n  {title}\n"
+                f"→ channel_config.json の title.theme_scenes[{theme}].scene を"
+                f"短く書き直してください"
+            )
+        return title
 
     def _load_scene_phrases(self) -> Dict[str, str]:
         """workflow-state.json から scene_phrases を読み込み"""
@@ -355,6 +367,23 @@ class BAHMetadataGenerator:
             "• Redistribution prohibited",
         ])
 
+        # 多言語タイトルが EN ベタコピーになる事故を防ぐため、
+        # supported_languages 全てに scene_phrases が存在することを事前検証する。
+        # 過去事例: 11/14 本でこの fail-silent フォールバックが発生し、
+        # 多言語タイトルが英語のままアップロードされた。
+        missing_langs = [
+            lang for lang in loc_config['supported_languages']
+            if not scene_phrases.get(lang)
+        ]
+        if missing_langs:
+            raise ValueError(
+                "scene_phrases に翻訳が不足しています。"
+                f"不足言語: {missing_langs}\n"
+                "→ コレクションの workflow-state.json に "
+                "`scene_phrases: {en: ..., ja: ..., ...}` を populate してください。\n"
+                "→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
+            )
+
         for lang in loc_config['supported_languages']:
             lang_data = loc_config['languages'].get(lang, {})
             desc_data = lang_data.get('description', {})
@@ -362,13 +391,20 @@ class BAHMetadataGenerator:
             # --- タイトル ---
             scene = scene_phrases.get(lang)
             title_tpl = lang_data.get('title_template')
-            if scene and title_tpl:
-                activities = lang_data.get('activities', best_for_line)
-                loc_title = title_tpl.format(
-                    scene_phrase=scene, activities=activities
-                )[:100]
-            else:
-                loc_title = english_title[:100]
+            if not title_tpl:
+                raise ValueError(
+                    f"localizations.json: language '{lang}' に title_template が無い"
+                )
+            activities = lang_data.get('activities', best_for_line)
+            loc_title = title_tpl.format(
+                scene_phrase=scene, activities=activities
+            )
+            if len(loc_title) > 100:
+                raise ValueError(
+                    f"localizations[{lang}].title が 100 codepoint を超過: "
+                    f"{len(loc_title)} chars\n  → {loc_title}\n"
+                    f"scene_phrases[{lang}] を短くしてください"
+                )
 
             # --- 概要欄（ハイブリッド方式）---
             opening_poem = desc_data.get('opening_poem', '')
