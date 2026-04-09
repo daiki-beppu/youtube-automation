@@ -22,11 +22,14 @@ REPO_ROOT = SCRIPT_DIR.parent
 
 import utils._path_setup  # noqa: F401, E402
 from utils.image_generator import (  # noqa: E402
+    DEFAULT_IMAGE_SIZE,
     DEFAULT_MODEL,
+    VALID_IMAGE_SIZES,
     apply_composition_rules,
     confirm_cost,
     generate_image,
     load_gemini_config,
+    print_cost_summary,
     resolve_unique_path,
 )
 
@@ -37,20 +40,43 @@ def main():
     load_dotenv(find_dotenv())
 
     parser = argparse.ArgumentParser(description="Gemini API で画像を生成（ダイレクトモード）")
-    parser.add_argument("--prompt", type=str, required=True, help="プロンプトテキスト")
-    parser.add_argument("--output", type=str, required=True, help="出力パス")
+    parser.add_argument("--prompt", type=str, default=None, help="プロンプトテキスト")
+    parser.add_argument("--output", type=str, default=None, help="出力パス")
     parser.add_argument("-y", "--yes", action="store_true", help="コスト確認をスキップ")
     parser.add_argument("--model", type=str, default=None, help="使用するモデル（例: gemini-3.1-flash-image-preview）")
     parser.add_argument(
-        "--reference", type=str, default=None, help="参照画像パス（main.png等）。画像+プロンプトで Gemini に送信"
+        "--reference",
+        type=str,
+        action="append",
+        default=None,
+        help="参照画像パス（複数指定可。複数指定時はスタイルブレンド/合成）",
     )
     parser.add_argument(
         "--aspect-ratio", type=str, default="16:9", help="アスペクト比（例: 16:9, 9:16, 1:1）"
     )
     parser.add_argument(
+        "--size",
+        type=str,
+        choices=list(VALID_IMAGE_SIZES),
+        default=DEFAULT_IMAGE_SIZE,
+        help=f"画像解像度 {VALID_IMAGE_SIZES} （デフォルト: {DEFAULT_IMAGE_SIZE}）",
+    )
+    parser.add_argument(
         "--no-composition", action="store_true", help="composition_prefix の自動付加をスキップ"
     )
+    parser.add_argument(
+        "--costs",
+        action="store_true",
+        help="data/image_costs.json から累積コストサマリを表示して終了",
+    )
     args = parser.parse_args()
+
+    if args.costs:
+        print_cost_summary()
+        sys.exit(0)
+
+    if not args.prompt or not args.output:
+        parser.error("--prompt と --output は必須です（--costs 単独実行を除く）")
 
     config = load_gemini_config()
     if args.no_composition or args.reference:
@@ -67,8 +93,9 @@ def main():
     print("\nモード:       ダイレクト")
     print(f"プロンプト:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
     print(f"出力先:       {output_path}")
+    print(f"解像度:       {args.size}")
     if args.reference:
-        print(f"参照画像:     {args.reference}")
+        print(f"参照画像:     {', '.join(args.reference)}")
 
     # 既存ファイル確認
     if output_path.exists() and output_path.stat().st_size > 0:
@@ -108,22 +135,26 @@ def main():
         print("  pip3 install google-genai Pillow --break-system-packages")
         sys.exit(1)
 
-    # 参照画像解決
-    reference_image = None
-    if args.reference:
-        reference_image = Path(args.reference)
-        if not reference_image.is_absolute():
-            reference_image = Path.cwd() / reference_image
-        if not reference_image.exists():
-            print(f"[ERROR] 参照画像が見つかりません: {reference_image}")
+    # 参照画像解決（複数対応）
+    reference_images: list[Path] = []
+    for raw_ref in args.reference or []:
+        ref_path = Path(raw_ref)
+        if not ref_path.is_absolute():
+            ref_path = Path.cwd() / ref_path
+        if not ref_path.exists():
+            print(f"[ERROR] 参照画像が見つかりません: {ref_path}")
             sys.exit(1)
+        reference_images.append(ref_path)
 
     # 生成実行
     client = genai.Client()
     start_time = time.monotonic()
     success = generate_image(
         client, prompt, model, output_path,
-        reference_image=reference_image, aspect_ratio=args.aspect_ratio,
+        reference_image=reference_images or None,
+        aspect_ratio=args.aspect_ratio,
+        image_size=args.size,
+        cost_per_image_usd=cost_per_image,
     )
     elapsed = time.monotonic() - start_time
 

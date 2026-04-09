@@ -2,158 +2,53 @@
   "supported_languages": ["ja", "ko", "es", "pt", "zh-Hans"],
   "languages": {
     "ja": {
-      "title_template": "{style} {theme} RPG ミュージック - {activity_phrase}BGM [{duration_display}]",
-      "activity_phrases": {
-        "Study": "勉強がはかどる",
-        "Gaming": "ゲームが盛り上がる",
-        "Focus": "作業に集中できる",
-        "Relaxing": "心が安らぐ",
-        "Sleep": "ぐっすり眠れる",
-        "Chill": "ゆったり聴ける"
-      },
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "ゲーム · 勉強 · 集中",
       "description": {
-        "opening": "クラシック{context}アドベンチャーにインスパイアされた{style} {primary}ミュージック。",
-        "sub_opening": "ゲーム、勉強、リラックスに最適です。",
-        "usage_header": "Usage & Attribution:",
-        "usage_lines": [
-          "オリジナルAI作曲",
-          "個人・商用で無料使用可",
-          "クレジット歓迎",
-          "再配布禁止"
-        ],
-        "perfect_for_header": "Perfect for:",
-        "perfect_for": [
-          "RPGゲーム開発",
-          "ゲーム配信",
-          "勉強・集中",
-          "BGM"
-        ],
+        "opening_poem": "ピクセルの夜、冒険の調べ",
         "cta_subscribe": "チャンネル登録お願いします！",
-        "tagline": "チップチューンアドベンチャーをお届けします！"
+        "tagline": "チップチューンアドベンチャーをお届けします！",
+        "hashtags": "#chiptune #8bit #BGM"
       }
     },
     "ko": {
-      "title_template": "{style} {theme} RPG 음악 - {activity_phrase} BGM [{duration_display}]",
-      "activity_phrases": {
-        "Study": "공부가 잘 되는",
-        "Gaming": "게임이 더 재밌어지는",
-        "Focus": "작업에 집중되는",
-        "Relaxing": "마음이 편안해지는",
-        "Sleep": "숙면할 수 있는",
-        "Chill": "여유롭게 들을 수 있는"
-      },
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "게임 · 공부 · 집중",
       "description": {
-        "opening": "클래식 {context} 어드벤처에서 영감을 받은 {style} {primary} 음악.",
-        "sub_opening": "게임, 공부, 휴식에 완벽합니다.",
-        "usage_header": "Usage & Attribution:",
-        "usage_lines": [
-          "오리지널 AI 작곡",
-          "개인 및 상업적 사용 무료",
-          "크레딧 환영",
-          "재배포 금지"
-        ],
-        "perfect_for_header": "Perfect for:",
-        "perfect_for": [
-          "RPG 게임 개발",
-          "게임 스트리밍",
-          "공부 & 집중",
-          "배경 음악"
-        ],
+        "opening_poem": "픽셀의 밤, 모험의 선율",
         "cta_subscribe": "채널을 구독해 주세요!",
-        "tagline": "칩튠 어드벤처를 전달합니다!"
+        "tagline": "칩튠 어드벤처를 전달합니다!",
+        "hashtags": "#chiptune #8bit #BGM"
       }
     },
     "es": {
-      "title_template": "{style} {theme} RPG Music - BGM {activity_phrase} [{duration_display}]",
-      "activity_phrases": {
-        "Study": "para estudiar mejor",
-        "Gaming": "para tus partidas",
-        "Focus": "para trabajar concentrado",
-        "Relaxing": "para relajarte",
-        "Sleep": "para dormir profundo",
-        "Chill": "para tu momento tranquilo"
-      },
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "Gaming · Estudio · Foco",
       "description": {
-        "opening": "Música {style} {primary} inspirada en aventuras clásicas de {context}.",
-        "sub_opening": "Perfecto para gaming, estudiar o relajarse.",
-        "usage_header": "Usage & Attribution:",
-        "usage_lines": [
-          "Composición original con IA",
-          "Uso gratuito personal y comercial",
-          "Se agradece la atribución",
-          "Redistribución prohibida"
-        ],
-        "perfect_for_header": "Perfect for:",
-        "perfect_for": [
-          "Desarrollo de juegos RPG",
-          "Streams de gaming",
-          "Estudio y concentración",
-          "Música de fondo"
-        ],
+        "opening_poem": "Noche de píxeles, melodía de aventura",
         "cta_subscribe": "Suscríbete para nuevas aventuras chiptune!",
-        "tagline": "Tu destino para aventuras chiptune!"
+        "tagline": "Tu destino para aventuras chiptune!",
+        "hashtags": "#chiptune #8bit #BGM"
       }
     },
     "pt": {
-      "title_template": "{style} {theme} RPG Music - BGM {activity_phrase} [{duration_display}]",
-      "activity_phrases": {
-        "Study": "para estudar melhor",
-        "Gaming": "para suas partidas",
-        "Focus": "para trabalhar focado",
-        "Relaxing": "para relaxar",
-        "Sleep": "para dormir profundo",
-        "Chill": "para seu momento tranquilo"
-      },
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "Gaming · Estudo · Foco",
       "description": {
-        "opening": "Música {style} {primary} inspirada em aventuras clássicas de {context}.",
-        "sub_opening": "Perfeito para gaming, estudar ou relaxar.",
-        "usage_header": "Usage & Attribution:",
-        "usage_lines": [
-          "Composição original com IA",
-          "Uso gratuito pessoal e comercial",
-          "Atribuição apreciada",
-          "Redistribuição proibida"
-        ],
-        "perfect_for_header": "Perfect for:",
-        "perfect_for": [
-          "Desenvolvimento de jogos RPG",
-          "Streams de gaming",
-          "Estudo e foco",
-          "Música de fundo"
-        ],
+        "opening_poem": "Noite de pixels, melodia de aventura",
         "cta_subscribe": "Inscreva-se para novas aventuras chiptune!",
-        "tagline": "Seu destino para aventuras chiptune!"
+        "tagline": "Seu destino para aventuras chiptune!",
+        "hashtags": "#chiptune #8bit #BGM"
       }
     },
     "zh-Hans": {
-      "title_template": "{style} {theme} RPG 音乐 - {activity_phrase}BGM [{duration_display}]",
-      "activity_phrases": {
-        "Study": "学习效率倍增的",
-        "Gaming": "玩游戏更带劲的",
-        "Focus": "工作专注的",
-        "Relaxing": "放松身心的",
-        "Sleep": "助你安睡的",
-        "Chill": "悠闲时光的"
-      },
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "游戏 · 学习 · 专注",
       "description": {
-        "opening": "灵感来自经典{context}冒险的{style} {primary}音乐。",
-        "sub_opening": "非常适合游戏、学习或放松。",
-        "usage_header": "Usage & Attribution:",
-        "usage_lines": [
-          "原创AI作曲",
-          "个人和商业用途免费使用",
-          "欢迎注明来源",
-          "禁止再分发"
-        ],
-        "perfect_for_header": "Perfect for:",
-        "perfect_for": [
-          "RPG游戏开发",
-          "游戏直播",
-          "学习和专注",
-          "背景音乐"
-        ],
+        "opening_poem": "像素之夜，冒险旋律",
         "cta_subscribe": "订阅频道获取更多芯片音乐冒险！",
-        "tagline": "您的芯片音乐冒险目的地！"
+        "tagline": "您的芯片音乐冒险目的地！",
+        "hashtags": "#chiptune #8bit #BGM"
       }
     }
   }

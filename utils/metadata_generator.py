@@ -304,62 +304,127 @@ class BAHMetadataGenerator:
             duration_display=duration_display,
             duration_short=duration_short,
         )
-        return title[:100]
+        # YouTube タイトル制限: 100 codepoint。
+        # 過去事例: silent な title[:100] スライスでサロゲート文字接頭辞 +
+        # 長い scene_phrase の組み合わせがアップロード時に切られ、
+        # scene phrase 部分がまるごと消える事故が起きた。
+        # silent slice せず、超過時は呼び出し元で短縮対応するよう例外を投げる。
+        if len(title) > 100:
+            raise ValueError(
+                f"生成したタイトルが {len(title)} codepoint と 100 を超過: "
+                f"\n  {title}\n"
+                f"→ channel_config.json の title.theme_scenes[{theme}].scene を"
+                f"短く書き直してください"
+            )
+        return title
 
-    def generate_localizations(self, title_vars: Dict, description_body: str) -> Dict:
-        """各言語のローカライズされたタイトル・説明文を生成
+    def _load_scene_phrases(self) -> Dict[str, str]:
+        """workflow-state.json から scene_phrases を読み込み"""
+        ws_path = self.collection_path / 'workflow-state.json'
+        if ws_path.exists():
+            try:
+                with open(ws_path, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                return state.get('scene_phrases', {})
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return {}
+
+    def generate_localizations(self, english_title: str, timestamp_body: str,
+                               scene_phrases: Dict[str, str] = None) -> Dict:
+        """各言語のローカライズされたタイトル・説明文を生成（jazzgak. TTP ハイブリッド方式）
 
         Args:
-            title_vars: テンプレート変数（style, theme, activity, duration_display）
-            description_body: 英語の説明文本文（タイムスタンプ部分）
+            english_title: 英語デフォルトタイトル（フォールバック用）
+            timestamp_body: タイムスタンプ部分（全言語共通、ヘッダーなし）
+            scene_phrases: {"ja": "雨の街の夜...", ...} コレクション別の感情フレーズ翻訳
 
         Returns:
             YouTube API 用 localizations 辞書
         """
         localizations = {}
         loc_config = self.config.localizations_config
+        scene_phrases = scene_phrases or {}
 
-        for lang in loc_config['supported_languages']:
-            lang_data = loc_config['languages'][lang]
+        # 英語固定パーツ（channel_config.json の descriptions.metadata から取得）
+        desc_metadata = self.config.raw.get('descriptions', {}).get('metadata', {})
+        genre_line = desc_metadata.get('genre', 'Jazz')
+        vibe_line = desc_metadata.get('vibe', 'Rainy night, Cozy')
+        best_for_line = desc_metadata.get('best_for', 'Study, Focus, Late Night')
+        usage_lines = '\n'.join([
+            "• Original AI composition",
+            "• Free for personal & non-commercial use",
+            "• For commercial use, check the platform's AI content policy",
+            "• Redistribution prohibited",
+        ])
 
-            # アクティビティフレーズ解決（自然言語 → フォールバック: 英語キーワード）
-            activity = title_vars['activity']
-            activity_phrases = lang_data.get('activity_phrases', {})
-            activity_phrase = activity_phrases.get(activity, activity)
-
-            # タイトル生成
-            loc_vars = {**title_vars, 'activity_phrase': activity_phrase}
-            loc_title = lang_data['title_template'].format(**loc_vars)[:100]
-
-            # 説明文生成
-            desc_data = lang_data['description']
-            opening = desc_data['opening'].format(
-                style=title_vars['style'],
-                primary=self.config.genre_primary.title(),
-                context=self.config.genre_context.title(),
+        # 多言語タイトルが EN ベタコピーになる事故を防ぐため、
+        # supported_languages 全てに scene_phrases が存在することを事前検証する。
+        # 過去事例: 11/14 本でこの fail-silent フォールバックが発生し、
+        # 多言語タイトルが英語のままアップロードされた。
+        missing_langs = [
+            lang for lang in loc_config['supported_languages']
+            if not scene_phrases.get(lang)
+        ]
+        if missing_langs:
+            raise ValueError(
+                "scene_phrases に翻訳が不足しています。"
+                f"不足言語: {missing_langs}\n"
+                "→ コレクションの workflow-state.json に "
+                "`scene_phrases: {en: ..., ja: ..., ...}` を populate してください。\n"
+                "→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
             )
 
-            usage_lines = '\n'.join(f"• {line}" for line in desc_data['usage_lines'])
-            perfect_for_lines = '\n'.join(f"• {item}" for item in desc_data['perfect_for'])
+        for lang in loc_config['supported_languages']:
+            lang_data = loc_config['languages'].get(lang, {})
+            desc_data = lang_data.get('description', {})
 
-            loc_desc = '\n'.join([
-                description_body,
+            # --- タイトル ---
+            scene = scene_phrases.get(lang)
+            title_tpl = lang_data.get('title_template')
+            if not title_tpl:
+                raise ValueError(
+                    f"localizations.json: language '{lang}' に title_template が無い"
+                )
+            activities = lang_data.get('activities', best_for_line)
+            loc_title = title_tpl.format(
+                scene_phrase=scene, activities=activities
+            )
+            if len(loc_title) > 100:
+                raise ValueError(
+                    f"localizations[{lang}].title が 100 codepoint を超過: "
+                    f"{len(loc_title)} chars\n  → {loc_title}\n"
+                    f"scene_phrases[{lang}] を短くしてください"
+                )
+
+            # --- 概要欄（ハイブリッド方式）---
+            opening_poem = desc_data.get('opening_poem', '')
+            cta = desc_data.get('cta_subscribe', self.config.cta_subscribe)
+            tagline = desc_data.get('tagline', self.config.tagline)
+            hashtags = desc_data.get('hashtags', self.config.hashtag_line)
+
+            desc_parts = []
+            if opening_poem:
+                desc_parts.append(opening_poem)
+                desc_parts.append("")
+            desc_parts.extend([
+                f"- Genre : {genre_line}",
+                f"- Vibe : {vibe_line}",
+                f"- Best for : {best_for_line}",
                 "",
-                opening,
-                desc_data['sub_opening'],
+                "⎯⎯⎯⎯ ✦ Track List ✦ ⎯⎯⎯⎯",
+                timestamp_body,
                 "",
-                f"📝 {desc_data['usage_header']}",
+                "📝 Usage & Attribution:",
                 usage_lines,
                 "",
-                f"🎮 {desc_data['perfect_for_header']}",
-                perfect_for_lines,
-                "",
                 f"🔗 {self.config.channel_name}:",
-                desc_data['cta_subscribe'],
-                desc_data['tagline'],
+                cta,
+                tagline,
                 "",
-                self.config.hashtag_line,
-            ])[:5000]
+                hashtags,
+            ])
+            loc_desc = '\n'.join(desc_parts)[:5000]
 
             localizations[lang] = {
                 'title': loc_title,
@@ -396,8 +461,11 @@ class BAHMetadataGenerator:
         for i, track in enumerate(self.tracks, 1):
             description_parts.append(f"{track['timestamp']} {i:02d}. {track['title']}")
 
-        # タイムスタンプ部分（ローカライゼーション共有用）
-        timestamp_body = '\n'.join(description_parts)
+        # タイムスタンプ部分（ローカライゼーション用、ヘッダーなし）
+        timestamp_lines = []
+        for i, track in enumerate(self.tracks, 1):
+            timestamp_lines.append(f"{track['timestamp']} {i:02d}. {track['title']}")
+        timestamp_body = '\n'.join(timestamp_lines)
 
         # config から説明文パーツを構築
         perfect_for_lines = '\n'.join(f"• {item}" for item in self.config.perfect_for)
@@ -422,17 +490,10 @@ class BAHMetadataGenerator:
             self.config.hashtag_line,
         ])
 
-        # ローカライゼーション用変数（インスタンスに保存して再利用可能にする）
-        theme = self._extract_theme_name()
-        title_vars = {
-            'style': self.config.genre_style.title(),
-            'theme': theme,
-            'activity': self._get_activity(),
-            'duration_display': format_duration_display(total_duration),
-            'duration_short': format_duration_short(total_duration),
-        }
-        self._last_title_vars = title_vars
-        localizations = self.generate_localizations(title_vars, timestamp_body)
+        # ローカライゼーション生成
+        scene_phrases = self._load_scene_phrases()
+        self._last_scene_phrases = scene_phrases
+        localizations = self.generate_localizations(title, timestamp_body, scene_phrases)
 
         return {
             'title': title,

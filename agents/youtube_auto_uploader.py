@@ -11,6 +11,7 @@ Features:
 - エラーハンドリング・リトライ機能
 """
 
+import json
 import logging
 import re
 import sys
@@ -69,6 +70,13 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         Returns:
             str: アップロードされた動画のID（失敗時はNone）
         """
+        # タイトル長バリデーション（YouTube上限100文字）
+        title = metadata.get('title', '')
+        if len(title) > 100:
+            raise ValueError(
+                f"タイトルが100文字を超えています（{len(title)}文字）: {title}"
+            )
+
         # リクエストボディ作成
         status_body = {
             'privacyStatus': metadata.get('privacy_status', 'private'),
@@ -84,7 +92,8 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
         body = {
             'snippet': {
-                'title': metadata['title'][:100],  # YouTube上限100文字
+                'title': metadata['title'],  # YouTube上限100文字
+
                 'description': metadata['description'][:5000],  # YouTube上限5000文字
                 'tags': metadata['tags'][:50],  # YouTube上限50タグ
                 'categoryId': metadata.get('category_id', '10'),
@@ -108,6 +117,16 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         """
         desc_path = collection_dir / '20-documentation' / 'descriptions.md'
         if not desc_path.exists():
+            # 過去事例: description.txt 等の別名でもファイルが存在し、
+            # その場合 fallback 経路で「Track 01」のような汎用名が
+            # アップロードされてしまった。意図しないフォールバックを早期発見する。
+            stray = list((collection_dir / '20-documentation').glob('description*'))
+            if stray:
+                raise RuntimeError(
+                    f"descriptions.md が無いのに別名ファイルが存在します: "
+                    f"{[p.name for p in stray]}\n"
+                    f"→ ファイル名は `descriptions.md` 固定。リネームして /description を再実行してください"
+                )
             return None
 
         text = desc_path.read_text(encoding='utf-8')
@@ -127,16 +146,15 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
     @staticmethod
     def _extract_body_for_localizations(description: str) -> str | None:
-        """キュレーション済み概要欄から本文部分（フッター前）を抽出
+        """キュレーション済み概要欄からタイムスタンプ部分を抽出
 
-        ローカライゼーション用: シーンフック + タイムスタンプ + ブリッジテキストを返す。
-        フッター（Perfect for / Usage & Attribution 等）は generate_localizations() が各言語で付加する。
+        ローカライゼーション用: トラックリスト（タイムスタンプ行）のみを返す。
+        概要欄の他セクションは generate_localizations() がテンプレートから構築する。
         """
-        for marker in ['Perfect for:', '🎮 Perfect for', '─────', '📝 Usage', 'Usage & Attribution']:
-            idx = description.find(marker)
-            if idx > 0:
-                return description[:idx].rstrip()
-        return None
+        import re
+        lines = description.split('\n')
+        timestamp_lines = [line for line in lines if re.match(r'^\d{1,2}:\d{2}', line.strip())]
+        return '\n'.join(timestamp_lines) if timestamp_lines else None
 
     @staticmethod
     def _extract_md_section(text: str, heading: str) -> str | None:
@@ -144,6 +162,76 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         pattern = rf'## {re.escape(heading)}\s*\n+```\n(.*?)```'
         m = re.search(pattern, text, re.DOTALL)
         return m.group(1).strip() if m else None
+
+    def _preflight_check(self, collection_dir: Path) -> None:
+        """アップロード前メタデータ品質チェック (fail-loud)。
+
+        過去事例の再発防止:
+        1. descriptions.md が存在すること（Track 01 仮名フォールバックを防ぐ）
+        2. workflow-state.json.scene_phrases に EN + 全 supported_languages が
+           揃っていること（多言語タイトルが EN ベタコピーになる事故を防ぐ）
+        3. タイムスタンプが per-theme 粒度であること（パターンバリエーション
+           を v1〜v6 ごとに別チャプターに展開していないことを確認）
+        4. タイトルが 100 codepoint 以内（YouTube 制限）
+        """
+        doc_dir = collection_dir / '20-documentation'
+        desc_path = doc_dir / 'descriptions.md'
+        if not desc_path.exists():
+            raise RuntimeError(
+                f"❌ {desc_path} が存在しません。/description を実行してください。"
+            )
+
+        text = desc_path.read_text(encoding='utf-8')
+        title = (self._extract_md_section(text, 'タイトル案') or '').strip()
+        description = (self._extract_md_section(text, 'Complete Collection 概要欄') or '').strip()
+
+        if not title or not description:
+            raise RuntimeError(
+                f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空"
+            )
+
+        if len(title) > 100:
+            raise RuntimeError(
+                f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}"
+            )
+
+        # タイムスタンプ粒度検証
+        ts_lines = [
+            line for line in description.split('\n')
+            if re.match(r'^\d{1,2}:\d{2}', line.strip())
+        ]
+        if len(ts_lines) < 3:
+            raise RuntimeError(
+                f"❌ タイムスタンプ {len(ts_lines)} 個 (最低 3 必要)"
+            )
+        # per-theme 粒度: 通常 3〜10 程度。20 を超えるならバリエーション展開疑い。
+        if len(ts_lines) > 12:
+            raise RuntimeError(
+                f"❌ タイムスタンプ {len(ts_lines)} 個。"
+                f"パターンバリエーション (v1〜v6) を別チャプターに"
+                f"展開している疑い。1 パターン = 1 チャプター "
+                f"(通常 3〜6 個) で再生成してください。"
+            )
+
+        # scene_phrases 完全性検証
+        ws_path = collection_dir / 'workflow-state.json'
+        state = json.loads(ws_path.read_text(encoding='utf-8')) if ws_path.exists() else {}
+        scene_phrases = state.get('scene_phrases') or {}
+
+        config = ChannelConfig.load()
+        required_langs = ['en'] + list(config.supported_languages)
+        missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
+        if missing:
+            raise RuntimeError(
+                f"❌ workflow-state.json.scene_phrases に翻訳が不足: {missing}\n"
+                f"→ /description で多言語翻訳を含めて再生成してください。\n"
+                f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
+            )
+
+        logger.info(
+            f"✅ preflight OK — title={len(title)}c, "
+            f"chapters={len(ts_lines)}, langs={len(scene_phrases)}"
+        )
 
     def upload_collection(self, collection_path: str, publish_at: str = None) -> Dict:
         """
@@ -162,6 +250,9 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
         logger.info(f"🎵 コレクションアップロード開始: {collection_dir.name}")
         logger.info(f"📁 パス: {collection_dir}")
+
+        # アップロード前メタデータ検証
+        self._preflight_check(collection_dir)
 
         # メタデータ生成器初期化
         metadata_gen = BAHMetadataGenerator(str(collection_dir))
@@ -215,11 +306,12 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             if prebuilt['tags']:
                 metadata['tags'] = prebuilt['tags']
 
-            # ローカライゼーションにもキュレーション済みの本文を使用
-            curated_body = self._extract_body_for_localizations(prebuilt['description'])
-            if curated_body and hasattr(metadata_gen, '_last_title_vars'):
+            # ローカライゼーションにもキュレーション済みのタイムスタンプを使用
+            curated_timestamps = self._extract_body_for_localizations(prebuilt['description'])
+            scene_phrases = getattr(metadata_gen, '_last_scene_phrases', {})
+            if curated_timestamps:
                 metadata['localizations'] = metadata_gen.generate_localizations(
-                    metadata_gen._last_title_vars, curated_body
+                    metadata['title'], curated_timestamps, scene_phrases
                 )
 
         if publish_at:
