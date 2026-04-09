@@ -1,6 +1,7 @@
 #!/bin/bash
-# generate_videos.sh v10.0 — Master video generator
+# generate_videos.sh v12.0 — Master video generator
 # Static image + master audio → MP4 (macOS optimized)
+# v12: ループモードを正規化キャッシュ + stream copy 化（クオリティ完全保持で大幅高速化）
 #
 # Usage:
 #   bash automation/generate_videos.sh <collection-path>
@@ -49,6 +50,13 @@ fi
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
 
+# ─── Audio encoder 自動選択 (macOS は AudioToolbox 優先) ─
+if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
+    AUDIO_ENCODER="aac_at"
+else
+    AUDIO_ENCODER="aac"
+fi
+
 # ─── Prerequisites ───────────────────────────────────────
 if ! command -v ffmpeg &>/dev/null; then
     echo "ERROR: ffmpeg not found"; exit 1
@@ -80,7 +88,7 @@ format_duration() {
 
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v11.0 — ${COLLECTION_NAME}"
+echo "  generate_videos.sh v12.0 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
@@ -101,19 +109,41 @@ trap 'rm -f "$PROGRESS_FILE"' EXIT
 # ─── FFmpeg (background) ─────────────────────────────────
 if [[ -n "$LOOP_VIDEO" ]]; then
     # ループ動画背景モード: loop.mp4 を無限ループで背景に使用
-    # ソースが既に 1920x1080 なら scale/pad をスキップ
-    loop_res="$(ffprobe -v error -select_streams v:0 \
-        -show_entries stream=width,height -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
-    if [[ "$loop_res" == "1920,1080" ]]; then
-        VF_FILTER=""
+    # 戦略: ソースを 1 度だけ yuv420p / 1920x1080 に正規化キャッシュし、
+    # 以降のマスター動画生成は -c:v copy で stream copy する（音声のみエンコード）
+    loop_specs="$(ffprobe -v error -select_streams v:0 \
+        -show_entries stream=width,height,pix_fmt -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
+    # csv=p=0 出力は "width,height,pix_fmt" の順
+    loop_w="$(echo "$loop_specs" | cut -d, -f1)"
+    loop_h="$(echo "$loop_specs" | cut -d, -f2)"
+    loop_pix="$(echo "$loop_specs" | cut -d, -f3)"
+
+    if [[ "$loop_w" == "1920" && "$loop_h" == "1080" && "$loop_pix" == "yuv420p" ]]; then
+        # 既に正規化済み: そのまま使う
+        LOOP_SOURCE="$LOOP_VIDEO"
     else
-        VF_FILTER="-vf scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
+        # 正規化キャッシュを使用
+        LOOP_SOURCE="${ASSETS_DIR}/loop_normalized.mp4"
+        if [[ ! -f "$LOOP_SOURCE" || "$LOOP_VIDEO" -nt "$LOOP_SOURCE" ]]; then
+            echo "  Normalizing loop source (1 回だけ実行) → loop_normalized.mp4"
+            ffmpeg -y -i "$LOOP_VIDEO" \
+                -c:v libx264 -preset slow -crf 18 -profile:v high -pix_fmt yuv420p \
+                -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
+                -an -movflags +faststart \
+                -loglevel error \
+                "$LOOP_SOURCE"
+            if [[ $? -ne 0 || ! -f "$LOOP_SOURCE" ]]; then
+                echo "  ERROR: loop_normalized.mp4 の生成に失敗"
+                exit 1
+            fi
+        fi
     fi
-    ffmpeg -y -stream_loop -1 -i "$LOOP_VIDEO" -i "$MASTER_AUDIO" \
-        -c:v libx264 -tune film -preset fast -crf 23 -pix_fmt yuv420p \
-        $VF_FILTER \
-        -r 24 \
-        -c:a aac -b:a 384k -ar 48000 \
+
+    # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声のみエンコード
+    ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" -i "$MASTER_AUDIO" \
+        -map 0:v:0 -map 1:a:0 \
+        -c:v copy \
+        -c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000 \
         -t "$duration" \
         -movflags +faststart \
         -shortest \
@@ -127,7 +157,7 @@ else
         -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
         -x264opts keyint=1:min-keyint=1 \
         -r 1 \
-        -c:a aac -b:a 384k -ar 48000 \
+        -c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000 \
         -t "$duration" \
         -movflags +faststart \
         -shortest \
