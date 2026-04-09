@@ -5,10 +5,7 @@ collection_uploader のインポート依存（schedule パッケージ等）を
 """
 
 from datetime import date, datetime, timedelta
-from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
-
-import pytest
 
 TZ = ZoneInfo("Asia/Tokyo")
 
@@ -34,7 +31,6 @@ def calculate_publish_at(
     if not auto_schedule_enabled:
         return None
 
-    tz = TZ
     hour, minute = map(int, publish_time.split(':'))
 
     allowed_weekdays = (

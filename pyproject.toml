@@ -1,21 +1,88 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "youtube-channels-automation"
-version = "1.0.0"
-description = "YouTube channel automation tools"
+version = "1.1.0"
+description = "YouTube channel automation toolkit - analytics, AI content generation, and auto-upload"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+readme = "README.md"
+authors = [{name = "daiki-beppu"}]
 dependencies = [
     "google-api-python-client",
     "google-auth-oauthlib",
     "google-auth-httplib2",
+    "python-dotenv",
     "pandas",
     "matplotlib",
     "seaborn",
     "schedule",
 ]
 
+[project.urls]
+Repository = "https://github.com/daiki-beppu/youtube-automation"
+
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 veo = ["google-genai", "Pillow"]
+
+[project.scripts]
+# CLI script entry points (yt-* prefix)
+yt-analytics = "youtube_automation.scripts.analytics_system:main"
+yt-benchmark-collect = "youtube_automation.scripts.benchmark_collector:main"
+yt-benchmark-comments = "youtube_automation.scripts.fetch_benchmark_comments:main"
+yt-bulk-update-desc = "youtube_automation.scripts.bulk_update_descriptions_from_md:main"
+yt-channel-status = "youtube_automation.scripts.get_channel_status:main"
+yt-community-draft = "youtube_automation.scripts.community_draft:main"
+yt-fix-timestamps = "youtube_automation.scripts.fix_per_theme_timestamps:main"
+yt-generate-image = "youtube_automation.scripts.generate_image:main"
+yt-generate-loop-video = "youtube_automation.scripts.generate_loop_video:main"
+yt-generate-music = "youtube_automation.scripts.generate_music:main"
+yt-generate-music-dj = "youtube_automation.scripts.generate_music_dj:main"
+yt-generate-short-loop = "youtube_automation.scripts.generate_short_loop:main"
+yt-generate-suno = "youtube_automation.scripts.generate_suno_prompts:main"
+yt-generate-thumbnail = "youtube_automation.scripts.generate_thumbnail:main"
+yt-init-collection = "youtube_automation.scripts.init_collection:main"
+yt-metadata-audit = "youtube_automation.scripts.metadata_audit:main"
+yt-playlist-manager = "youtube_automation.scripts.playlist_manager:main"
+yt-playlist-status = "youtube_automation.scripts.playlist_status:main"
+yt-populate-scene-phrases = "youtube_automation.scripts.populate_scene_phrases:main"
+yt-post-upload = "youtube_automation.scripts.post_upload_actions:main"
+yt-thumbnail-compare = "youtube_automation.scripts.compare_thumbnails:main"
+yt-video-uploader = "youtube_automation.scripts.video_uploader:main"
+
+# Agent entry points
+yt-upload-auto = "youtube_automation.agents.youtube_auto_uploader:main"
+yt-upload-collection = "youtube_automation.agents.collection_uploader:main"
+yt-upload-short = "youtube_automation.agents.short_uploader:main"
+
+# Skill management
+yt-skills = "youtube_automation.cli.skills_sync:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/youtube_automation"]
+
+[tool.hatch.build.targets.wheel.force-include]
+# Claude Code スキルファイルをパッケージ内 _skills/ として同梱
+# (yt-skills sync コマンドが importlib.resources で参照する)
+".claude/skills" = "youtube_automation/_skills"
+
+# templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "tests/",
+    ".claude/skills/",
+    "scripts/",
+    "auth/SETUP.md",
+    "auth/client_secrets_template.json",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
 
 [tool.ruff]
 target-version = "py311"

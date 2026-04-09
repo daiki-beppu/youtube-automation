@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from utils.channel_config import ChannelConfig
+from youtube_automation.utils.channel_config import ChannelConfig
 
 # ─── テスト用設定データ ──────────────────────────────
 
@@ -157,7 +157,8 @@ class TestChannelDirResolution:
     def test_resolve_raises_when_no_config(self, monkeypatch, tmp_path):
         monkeypatch.delenv("CHANNEL_DIR", raising=False)
         monkeypatch.chdir(tmp_path)
-        with pytest.raises(FileNotFoundError):
+        from youtube_automation.utils.exceptions import ConfigError
+        with pytest.raises(ConfigError):
             ChannelConfig._resolve_channel_dir()
 
 

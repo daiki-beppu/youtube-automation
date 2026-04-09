@@ -1,0 +1,1 @@
+../../../../src/youtube_automation/scripts/fetch_benchmark_comments.py

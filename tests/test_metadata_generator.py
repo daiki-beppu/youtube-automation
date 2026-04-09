@@ -12,8 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from utils.channel_config import ChannelConfig
-from utils.metadata_generator import BAHMetadataGenerator
+from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
+from youtube_automation.utils.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------
 # フィクスチャ: ChannelConfig シングルトンをテスト間でリセット
@@ -224,6 +225,16 @@ class TestGenerateCompleteCollectionMetadata:
     @pytest.fixture
     def gen_with_tracks(self):
         gen = _make_generator("20250907-live-8bit-adventure-music")
+        # generate_complete_collection_metadata は _load_scene_phrases() を経由するが、
+        # /tmp の fake collection には workflow-state.json が無いためモックで差し替える
+        _phrases = {
+            "ja": "8ビット冒険の世界",
+            "ko": "8비트 모험의 세계",
+            "es": "Mundo de aventura de 8 bits",
+            "pt": "Mundo de aventura 8 bits",
+            "zh-Hans": "8位冒险世界",
+        }
+        gen._load_scene_phrases = lambda: _phrases
         gen.tracks = [
             {
                 "filename": "01-Hero_Theme.wav",
@@ -321,30 +332,38 @@ class TestGenerateCompleteCollectionMetadata:
         for lang, loc in meta["localizations"].items():
             assert len(loc["title"]) <= 100, f"{lang} title exceeds 100 chars"
 
+    @staticmethod
+    def _all_phrases() -> dict:
+        return {
+            "ja": "雨の街の夜テスト",
+            "ko": "비 오는 도시 밤 테스트",
+            "es": "Noche urbana lluviosa test",
+            "pt": "Noite urbana chuvosa test",
+            "zh-Hans": "雨夜城市测试",
+        }
+
     def test_localizations_title_with_scene_phrase(self):
         """scene_phrase がローカライズタイトルに反映される"""
         gen = _make_generator()
         gen.tracks = [{"timestamp": "00:00", "title": "Track 1", "duration": 180, "start_time": 0, "end_time": 180}]
-        scene_phrases = {"ja": "雨の街の夜テスト"}
         locs = gen.generate_localizations(
             english_title="Test English Title",
             timestamp_body="00:00 01. Track 1",
-            scene_phrases=scene_phrases,
+            scene_phrases=self._all_phrases(),
         )
         assert "ja" in locs
         assert "雨の街の夜テスト" in locs["ja"]["title"]
 
-    def test_localizations_title_fallback_to_english(self):
-        """scene_phrase がない言語は英語タイトルにフォールバック"""
+    def test_localizations_missing_phrases_raises(self):
+        """scene_phrase が一部欠落していると ValueError を raise する（fail-silent 防止）"""
         gen = _make_generator()
         gen.tracks = []
-        locs = gen.generate_localizations(
-            english_title="English Fallback Title",
-            timestamp_body="00:00 Track 1",
-            scene_phrases={},
-        )
-        for lang, loc in locs.items():
-            assert loc["title"] == "English Fallback Title"
+        with pytest.raises(ValueError, match="scene_phrases"):
+            gen.generate_localizations(
+                english_title="English Fallback Title",
+                timestamp_body="00:00 Track 1",
+                scene_phrases={"ja": "雨"},
+            )
 
     def test_localizations_description_hybrid_structure(self):
         """概要欄がハイブリッド構造（現地語ポエム + 英語メタデータ）"""
@@ -353,7 +372,7 @@ class TestGenerateCompleteCollectionMetadata:
         locs = gen.generate_localizations(
             english_title="Test",
             timestamp_body="00:00 01. Track 1",
-            scene_phrases={"ja": "テスト"},
+            scene_phrases=self._all_phrases(),
         )
         ja_desc = locs["ja"]["description"]
         assert "- Genre :" in ja_desc
@@ -370,23 +389,21 @@ class TestGenerateCompleteCollectionMetadata:
         locs = gen.generate_localizations(
             english_title="Test",
             timestamp_body="00:00 Track 1",
-            scene_phrases={},
+            scene_phrases=self._all_phrases(),
         )
         for lang, loc in locs.items():
             assert len(loc["description"]) <= 5000, f"{lang} description exceeds 5000 chars"
 
-    def test_localizations_scene_phrases_empty(self):
-        """scene_phrases が空でもエラーにならない"""
+    def test_localizations_scene_phrases_empty_raises(self):
+        """scene_phrases が空ならフォールバックせずに ValueError"""
         gen = _make_generator()
         gen.tracks = []
-        locs = gen.generate_localizations(
-            english_title="Fallback",
-            timestamp_body="",
-            scene_phrases={},
-        )
-        assert len(locs) > 0
-        for lang, loc in locs.items():
-            assert loc["title"] == "Fallback"
+        with pytest.raises(ValueError, match="scene_phrases"):
+            gen.generate_localizations(
+                english_title="Fallback",
+                timestamp_body="",
+                scene_phrases={},
+            )
 
     def test_description_header_matches_title(self, gen_with_tracks):
         """説明文ヘッダーが新タイトルと連動すること"""
@@ -412,32 +429,32 @@ class TestFormatDurationDisplay:
         (2040, "35 min"),        # 34分 → 35分未満なので5分単位 → round(34/5)*5=35
     ])
     def test_short_durations(self, seconds, expected):
-        assert BAHMetadataGenerator._format_duration_display(seconds) == expected
+        assert format_duration_display(seconds) == expected
 
     def test_boundary_35_min(self):
         """35分ちょうどは "1 Hour" に丸まる"""
-        assert BAHMetadataGenerator._format_duration_display(35 * 60) == "1 Hour"
+        assert format_duration_display(35 * 60) == "1 Hour"
 
     def test_one_hour(self):
-        assert BAHMetadataGenerator._format_duration_display(3600) == "1 Hour"
+        assert format_duration_display(3600) == "1 Hour"
 
     def test_75_min_boundary(self):
         """75分ちょうどは 1.25h → 1.5 Hours に丸まる"""
-        assert BAHMetadataGenerator._format_duration_display(75 * 60) == "1.5 Hours"
+        assert format_duration_display(75 * 60) == "1.5 Hours"
 
     def test_90_min(self):
-        assert BAHMetadataGenerator._format_duration_display(90 * 60) == "1.5 Hours"
+        assert format_duration_display(90 * 60) == "1.5 Hours"
 
     def test_105_min(self):
         """105分 = 1.75h → 2 Hours に丸まる"""
-        assert BAHMetadataGenerator._format_duration_display(105 * 60) == "2 Hours"
+        assert format_duration_display(105 * 60) == "2 Hours"
 
     def test_two_hours(self):
-        assert BAHMetadataGenerator._format_duration_display(7200) == "2 Hours"
+        assert format_duration_display(7200) == "2 Hours"
 
     def test_very_short(self):
         """60秒 = 1分 → 最小 5 min"""
-        assert BAHMetadataGenerator._format_duration_display(60) == "5 min"
+        assert format_duration_display(60) == "5 min"
 
 
 # ===========================================================================

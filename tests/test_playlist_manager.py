@@ -1,164 +1,228 @@
 """
-PlaylistManager.resolve_playlists のテスト
+PlaylistManager のユニットテスト
 
-RJN の channel_config.json 相当の設定で、
-テーマ → 再生リスト解決が正しく動作することを検証。
+テスト対象: scripts/playlist_manager.py
+YouTube API 呼び出しと ChannelConfig を unittest.mock でモック化して検証する。
 """
 
-import json
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from youtube_automation.utils.channel_config import ChannelConfig
 
-from utils.channel_config import ChannelConfig
-
-# ─── テスト用設定データ（RJN の playlists + theme_scenes を再現） ───
-
-RJN_CONFIG = {
-    "channel": {
-        "name": "Rain Jazz Night",
-        "short": "RJN",
-        "youtube_handle": "@rainjazznight",
-        "url": "https://www.youtube.com/@rainjazznight",
-        "core_message": "Your rainy night jazz escape",
-        "cta_subscribe": "Subscribe!",
-        "tagline": "Your rainy night jazz escape",
-    },
-    "genre": {"primary": "jazz", "style": "rainy night", "context": "cafe ambience"},
-    "youtube": {"category_id": "10", "privacy_status": "public", "language": "en"},
-    "tags": {"base": ["rain jazz"], "themes": {}},
-    "descriptions": {
-        "opening": "test",
-        "sub_opening": "test",
-        "perfect_for": [],
-        "hashtags": [],
-    },
-    "analytics": {"collection_filter_keywords": []},
-    "suno": {"workspace_name": "RJN", "genre_line": "jazz", "exclude_styles": ""},
-    "title": {
-        "template": "Playlist {scene_phrase} BGM",
-        "default_activities": "Study · Focus · Late Night",
-        "theme_scenes": {
-            "city": {"scene": "Rainy city night", "activities": "Study · Focus · Late Night"},
-            "rooftop": {"scene": "Quiet rooftop", "activities": "Chill · Focus · Unwind"},
-            "cafe": {"scene": "Rainy night cafe", "activities": "Study · Work · Reading"},
-            "sleep": {"scene": "Quiet rain at midnight", "activities": "Sleep · Deep Rest · Calm"},
-            "melancholy": {"scene": "Lonely streetlamp", "activities": "Late Night · Reflection"},
-            "midnight-blues": {"scene": "Midnight blues in the rain", "activities": "Late Night · Chill · Reflection"},
-        },
-    },
-    "playlists": {
-        "all": {
-            "title": "Rain Jazz Night",
-            "playlist_id": "",
-            "auto_add": True,
-        },
-        "study": {
-            "title": "Rain Jazz for Study & Focus | Late Night BGM",
-            "playlist_id": "",
-            "auto_add_activities": ["Study", "Focus", "Work", "Chill"],
-        },
-    },
-    "benchmark": {"channels": []},
-}
-
-
-# ─── Fixtures ────────────────────────────────────────
-
+# ---------------------------------------------------------------------------
+# フィクスチャ
+# ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def reset_singleton():
+def reset_singletons():
     ChannelConfig.reset()
     yield
     ChannelConfig.reset()
 
 
-@pytest.fixture
-def config_file(tmp_path):
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    config_path = config_dir / "channel_config.json"
-    config_path.write_text(json.dumps(RJN_CONFIG), encoding="utf-8")
-    return config_path
+SAMPLE_PLAYLISTS_CONFIG = {
+    'all': {
+        'title': 'All Videos',
+        'auto_add': True,
+        'playlist_id': 'PL_ALL',
+    },
+    'battle': {
+        'title': 'Battle Music',
+        'auto_add_activities': ['Gaming'],
+        'playlist_id': 'PL_BATTLE',
+    },
+    'relaxation': {
+        'title': 'Relaxation Music',
+        'auto_add_themes': ['ocean', 'forest'],
+        'playlist_id': 'PL_RELAX',
+    },
+    'new_playlist': {
+        'title': 'New Playlist',
+        'description': 'A brand new playlist',
+        # playlist_id 未設定
+    },
+}
 
 
 @pytest.fixture
-def cfg(config_file):
-    return ChannelConfig.load(config_path=str(config_file))
+def mock_config():
+    """ChannelConfig のモック"""
+    config = MagicMock()
+    config.channel_name = 'Test Channel'
+    config.channel_short = 'TC'
+    config.playlists = SAMPLE_PLAYLISTS_CONFIG
+    config.get_activity_for_theme = MagicMock(return_value='Study')
+    return config
 
 
-# ─── resolve_playlists テスト ─────────────────────────
+@pytest.fixture
+def mock_youtube():
+    """モック化された YouTube API サービス"""
+    return MagicMock()
 
+
+@pytest.fixture
+def manager(mock_config, mock_youtube):
+    """PlaylistManager インスタンスを返す（外部依存をモック）"""
+    with patch('youtube_automation.scripts.playlist_manager.ChannelConfig') as MockCC, \
+         patch('youtube_automation.scripts.playlist_manager.get_youtube', return_value=mock_youtube), \
+         patch('youtube_automation.scripts.playlist_manager.VideoUploader') as MockUploader:
+        MockCC.load.return_value = mock_config
+        MockCC.channel_dir.return_value = Path('/tmp/fake_channel')
+
+        mock_uploader_instance = MagicMock()
+        MockUploader.return_value = mock_uploader_instance
+
+        from youtube_automation.scripts.playlist_manager import PlaylistManager
+        obj = PlaylistManager()
+        obj._youtube = mock_youtube
+        yield obj
+
+
+# ---------------------------------------------------------------------------
+# resolve_playlists
+# ---------------------------------------------------------------------------
 
 class TestResolvePlaylists:
-    """PlaylistManager.resolve_playlists のロジックを直接テスト
+    def test_auto_add_always_matched(self, manager):
+        """auto_add=True のプレイリストは常にマッチする"""
+        result = manager.resolve_playlists('anything')
+        assert 'all' in result
 
-    PlaylistManager は YouTube API 依存があるため、
-    resolve_playlists のコアロジックを直接検証する。
-    """
+    def test_activity_matching(self, manager, mock_config):
+        """activity ベースのマッチング"""
+        mock_config.get_activity_for_theme.return_value = 'Gaming'
+        result = manager.resolve_playlists('battle arena')
+        assert 'battle' in result
 
-    def _resolve(self, cfg, theme: str) -> list[str]:
-        """PlaylistManager.resolve_playlists と同等のロジック"""
-        playlists_config = cfg.playlists
-        activity = cfg.get_activity_for_theme(theme)
-        matched = []
+    def test_theme_keyword_matching(self, manager):
+        """theme キーワードベースのマッチング"""
+        result = manager.resolve_playlists('Deep Ocean Waves')
+        assert 'relaxation' in result
 
-        for key, pl in playlists_config.items():
-            if pl.get('auto_add'):
-                matched.append(key)
-                continue
-            activities = [a.strip() for a in activity.split('·')]
-            if any(a in pl.get('auto_add_activities', []) for a in activities):
-                matched.append(key)
-                continue
-            for theme_kw in pl.get('auto_add_themes', []):
-                if theme_kw in theme.lower():
-                    matched.append(key)
-                    break
+    def test_theme_keyword_case_insensitive(self, manager):
+        """テーマキーワードは大文字小文字を区別しない"""
+        result = manager.resolve_playlists('FOREST Ambience')
+        assert 'relaxation' in result
 
-        return matched
+    def test_no_match_beyond_auto_add(self, manager):
+        """auto_add 以外にマッチしない場合"""
+        mock_config = manager.config
+        mock_config.get_activity_for_theme.return_value = 'Study'
+        result = manager.resolve_playlists('village morning')
+        # 'all' は auto_add で常にマッチ、他はマッチしない
+        assert result == ['all']
 
-    def test_city_routes_to_all_and_study(self, cfg):
-        result = self._resolve(cfg, "city")
-        assert "all" in result
-        assert "study" in result
 
-    def test_rooftop_lights_routes_to_all_and_study(self, cfg):
-        """rooftop-lights は Focus と Chill で study にマッチ"""
-        result = self._resolve(cfg, "rooftop-lights")
-        assert "all" in result
-        assert "study" in result
+# ---------------------------------------------------------------------------
+# create_all_playlists
+# ---------------------------------------------------------------------------
 
-    def test_rainy_cafe_routes_to_all_and_study(self, cfg):
-        """rainy-cafe は Study と Work で study にマッチ"""
-        result = self._resolve(cfg, "rainy-cafe")
-        assert "all" in result
-        assert "study" in result
+class TestCreateAllPlaylists:
+    def test_dry_run_no_api_calls(self, manager, capsys):
+        """dry_run モードでは API コールが発生しない"""
+        result = manager.create_all_playlists(dry_run=True)
+        assert result == {}
+        # uploader.create_playlist が呼ばれていないことを確認
+        manager.uploader.create_playlist.assert_not_called()
 
-    def test_sleepless_midnight_routes_to_all_only(self, cfg):
-        """sleepless-midnight は Sleep 系で study にはマッチしない"""
-        result = self._resolve(cfg, "sleepless-midnight")
-        assert "all" in result
-        assert "study" not in result
+    def test_dry_run_prints_plan(self, manager, capsys):
+        """dry_run モードで作成予定を表示する"""
+        manager.create_all_playlists(dry_run=True)
+        captured = capsys.readouterr()
+        assert 'DRY-RUN' in captured.out
+        assert 'New Playlist' in captured.out
 
-    def test_midnight_blues_routes_to_all_and_study(self, cfg):
-        """midnight-blues は Chill で study にマッチ"""
-        result = self._resolve(cfg, "midnight-blues")
-        assert "all" in result
-        assert "study" in result
+    def test_skips_existing_playlists(self, manager):
+        """playlist_id 既存のプレイリストはスキップする"""
+        manager.uploader.create_playlist.return_value = {
+            'status': 'success', 'playlist_id': 'PL_NEW',
+        }
+        with patch.object(manager, '_write_back_playlist_ids'):
+            result = manager.create_all_playlists(dry_run=False)
+        # new_playlist だけ作成される
+        assert 'new_playlist' in result
+        assert len(result) == 1
 
-    def test_unknown_theme_uses_default(self, cfg):
-        """未知のテーマはデフォルト activities を使用"""
-        result = self._resolve(cfg, "unknown-theme")
-        assert "all" in result
-        # default_activities = "Study · Focus · Late Night" → Study, Focus で study マッチ
-        assert "study" in result
+    def test_create_success_writes_back(self, manager):
+        """作成成功時に _write_back_playlist_ids が呼ばれる"""
+        manager.uploader.create_playlist.return_value = {
+            'status': 'success', 'playlist_id': 'PL_CREATED',
+        }
+        with patch.object(manager, '_write_back_playlist_ids') as mock_write:
+            manager.create_all_playlists(dry_run=False)
+            mock_write.assert_called_once()
 
-    def test_all_playlist_always_included(self, cfg):
-        """auto_add: true の all は常に含まれる"""
-        for theme in ["city", "sleepless-midnight", "unknown"]:
-            result = self._resolve(cfg, theme)
-            assert "all" in result, f"theme={theme} で all が含まれていない"
+
+# ---------------------------------------------------------------------------
+# assign_video
+# ---------------------------------------------------------------------------
+
+class TestAssignVideo:
+    def test_dry_run_no_api_calls(self, manager, capsys):
+        """dry_run モードでは API コールが発生しない"""
+        result = manager.assign_video('VID123', 'ocean waves', dry_run=True)
+        # auto_add の 'all' と theme match の 'relaxation' がマッチ
+        assert 'all' in result
+        manager.uploader.add_video_to_playlist.assert_not_called()
+
+    def test_dry_run_prints_assignments(self, manager, capsys):
+        """dry_run モードで割り当て予定を表示する"""
+        manager.assign_video('VID123', 'forest walk', dry_run=True)
+        captured = capsys.readouterr()
+        assert 'DRY-RUN' in captured.out
+
+    def test_skips_no_playlist_id(self, manager):
+        """playlist_id 未設定のプレイリストはスキップする"""
+        # new_playlist を auto_add にしてマッチさせる
+        manager.config.playlists['new_playlist']['auto_add'] = True
+        with patch.object(manager, '_list_playlist_video_ids', return_value=set()):
+            manager.uploader.add_video_to_playlist.return_value = True
+            result = manager.assign_video('VID1', 'test', dry_run=False)
+        # new_playlist は playlist_id 未設定なのでスキップ
+        assert 'new_playlist' not in result
+
+
+# ---------------------------------------------------------------------------
+# _list_playlist_video_ids
+# ---------------------------------------------------------------------------
+
+class TestListPlaylistVideoIds:
+    def test_success(self, manager, mock_youtube):
+        """プレイリスト内の動画 ID セットを返す"""
+        mock_response = {
+            'items': [
+                {'contentDetails': {'videoId': 'VID_A'}},
+                {'contentDetails': {'videoId': 'VID_B'}},
+            ],
+        }
+        mock_list = mock_youtube.playlistItems.return_value.list
+        mock_list.return_value.execute.return_value = mock_response
+        # list_next で None を返してページネーション終了
+        mock_youtube.playlistItems.return_value.list_next.return_value = None
+
+        result = manager._list_playlist_video_ids('PL_TEST')
+        assert result == {'VID_A', 'VID_B'}
+
+    def test_empty_playlist(self, manager, mock_youtube):
+        """空のプレイリストでは空セットを返す"""
+        mock_response = {'items': []}
+        mock_list = mock_youtube.playlistItems.return_value.list
+        mock_list.return_value.execute.return_value = mock_response
+        mock_youtube.playlistItems.return_value.list_next.return_value = None
+
+        result = manager._list_playlist_video_ids('PL_EMPTY')
+        assert result == set()
+
+    def test_api_error_returns_empty(self, manager, mock_youtube):
+        """API エラー時は空セットを返す"""
+        mock_youtube.playlistItems.return_value.list.return_value.execute.side_effect = Exception('API Error')
+
+        result = manager._list_playlist_video_ids('PL_FAIL')
+        assert result == set()

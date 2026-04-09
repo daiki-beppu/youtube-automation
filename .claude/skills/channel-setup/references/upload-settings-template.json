@@ -1,0 +1,27 @@
+{
+  "default_metadata": {
+    "category_id": "10",
+    "privacy_status": "public",
+    "language": "ja"
+  },
+  "thumbnail_settings": {
+    "auto_set_thumbnail": true,
+    "thumbnail_search_patterns": [
+      "main.png",
+      "*main*.png",
+      "thumbnail.png",
+      "*thumb*.png"
+    ]
+  },
+  "playlist_settings": {
+    "auto_create_playlists": true,
+    "playlist_privacy": "public"
+  },
+  "quality_settings": {
+    "validate_before_upload": true,
+    "min_video_duration": 30,
+    "max_video_duration": 7200,
+    "required_file_extensions": [".mp4"],
+    "validate_audio_sync": false
+  }
+}

@@ -1,0 +1,1 @@
+../../../../src/youtube_automation/scripts/generate_thumbnail.py

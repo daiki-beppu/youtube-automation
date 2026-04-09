@@ -1,0 +1,1 @@
+../../../../src/youtube_automation/scripts/compare_thumbnails.py

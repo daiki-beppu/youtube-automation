@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from unittest.mock import MagicMock, patch
 
-from generate_music_dj import (
+from youtube_automation.scripts.generate_music_dj import (
     CHANNELS,
     SAMPLE_RATE,
     SAMPLE_WIDTH,
@@ -156,7 +156,7 @@ class TestGenerateSegmented:
         mock_client = MagicMock()
         mock_types = MagicMock()
 
-        with patch("generate_music_dj.generate_segment", return_value=audio_data):
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
             result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0)
 
         assert result is not None
@@ -181,7 +181,7 @@ class TestGenerateSegmented:
             call_count += 1
             return audio_data
 
-        with patch("generate_music_dj.generate_segment", side_effect=mock_generate):
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", side_effect=mock_generate):
             result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0)
 
         # seg_001 スキップ、残りを生成
@@ -204,8 +204,8 @@ class TestGenerateSegmented:
                 return None  # 1回目失敗
             return audio_data
 
-        with patch("generate_music_dj.generate_segment", side_effect=mock_generate):
-            with patch("generate_music_dj.time") as mock_time:
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", side_effect=mock_generate):
+            with patch("youtube_automation.scripts.generate_music_dj.time") as mock_time:
                 mock_time.sleep = MagicMock()
                 result = generate_segmented(mock_client, mock_types, comp, output, max_retries=3)
 
@@ -220,8 +220,8 @@ class TestGenerateSegmented:
         mock_client = MagicMock()
         mock_types = MagicMock()
 
-        with patch("generate_music_dj.generate_segment", return_value=None):
-            with patch("generate_music_dj.time") as mock_time:
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=None):
+            with patch("youtube_automation.scripts.generate_music_dj.time") as mock_time:
                 mock_time.sleep = MagicMock()
                 result = generate_segmented(mock_client, mock_types, comp, output, max_retries=2)
 
@@ -238,7 +238,7 @@ class TestGenerateSegmented:
         mock_client = MagicMock()
         mock_types = MagicMock()
 
-        with patch("generate_music_dj.generate_segment", return_value=audio_data):
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
             generate_segmented(mock_client, mock_types, comp, output, max_retries=0)
 
         seg_files = list(master_dir.glob("seg_*.wav"))
@@ -258,7 +258,7 @@ class TestGenerateSegmented:
         mock_client = MagicMock()
         mock_types = MagicMock()
 
-        with patch("generate_music_dj.generate_segment", return_value=audio_data):
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
             generate_segmented(mock_client, mock_types, comp, output, max_retries=0, cleanup=True)
 
         seg_files = list(tmp_path.glob("seg_*.wav"))
@@ -275,7 +275,7 @@ class TestGenerateSegmented:
         mock_client = MagicMock()
         mock_types = MagicMock()
 
-        with patch("generate_music_dj.generate_segment", return_value=audio_data):
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
             result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0, workers=4)
 
         assert result is not None
@@ -303,8 +303,8 @@ class TestGenerateSegmented:
                 return None
             return audio_data
 
-        with patch("generate_music_dj.generate_segment", side_effect=mock_generate):
-            with patch("generate_music_dj.time") as mock_time:
+        with patch("youtube_automation.scripts.generate_music_dj.generate_segment", side_effect=mock_generate):
+            with patch("youtube_automation.scripts.generate_music_dj.time") as mock_time:
                 mock_time.sleep = MagicMock()
                 result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0, workers=3)
 

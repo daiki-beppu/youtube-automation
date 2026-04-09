@@ -1,23 +1,22 @@
 """
-pytest 設定 - モノレポ用テスト環境設定
+pytest 設定 - テスト環境設定
 
-テスト実行時に CHANNEL_DIR を 8bah チャンネルに向ける。
-（8bah = デフォルトテストチャンネル）
+テスト実行時に CHANNEL_DIR をテスト用フィクスチャに向ける。
 """
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
-# automation/tests/ からリポジトリルートまでの相対パス
-# 独立リポジトリ: config/ が直下にある
-# モノレポ: channels/8bah/ 配下にある
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_CHANNEL_DIR = (
-    _REPO_ROOT
-    if (_REPO_ROOT / 'config' / 'channel_config.json').exists()
-    else _REPO_ROOT / 'channels' / '8bah'
-)
+# editable install されていない場合に備えて src/ を sys.path に追加
+_AUTOMATION_DIR = Path(__file__).resolve().parent.parent
+_SRC_DIR = _AUTOMATION_DIR / 'src'
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
+# テスト用フィクスチャディレクトリ
+_CHANNEL_DIR = Path(__file__).resolve().parent / 'fixtures' / 'sample_channel'
 
 
 @pytest.fixture(autouse=True, scope='session')

@@ -1,0 +1,1 @@
+../../../../scripts/generate_videos.sh
