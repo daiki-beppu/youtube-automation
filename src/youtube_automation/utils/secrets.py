@@ -15,13 +15,16 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 from functools import lru_cache
+from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError
 
 # シークレット名 → 1Password の参照 URI
 _SECRET_REFS: dict[str, str] = {
     "GEMINI_API_KEY": "op://Personal/GEMINI_API_KEY/credential",
+    "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
 }
 
 _OP_READ_TIMEOUT_SEC = 10
@@ -71,6 +74,35 @@ def get_secret(name: str) -> str:
         f"  → .env に {name}=... を設定するか、\n"
         f"  → 1Password の {op_ref} に登録してください"
     )
+
+
+_client_secrets_tempfile: Path | None = None
+
+
+def get_client_secrets_path() -> Path:
+    """client_secrets.json のパスを取得する。
+
+    1Password から JSON 内容を取得し、一時ファイルに書き出して返す。
+    同一プロセス内では同じ一時ファイルを再利用する。
+
+    Returns:
+        一時ファイルのパス
+
+    Raises:
+        ConfigError: 取得できなかった場合
+    """
+    global _client_secrets_tempfile
+    if _client_secrets_tempfile and _client_secrets_tempfile.exists():
+        return _client_secrets_tempfile
+
+    json_content = get_secret("CLIENT_SECRETS_JSON")
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", prefix="client_secrets_", delete=False
+    )
+    tmp.write(json_content)
+    tmp.close()
+    _client_secrets_tempfile = Path(tmp.name)
+    return _client_secrets_tempfile
 
 
 def get_gemini_api_key() -> str:

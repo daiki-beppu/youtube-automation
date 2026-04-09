@@ -44,6 +44,7 @@ class YouTubeOAuthHandler:
         #   1. CLIENT_SECRETS_DIR 環境変数 (明示的オーバーライド)
         #   2. <channel_dir>/auth/client_secrets.json (pip install 時の既定配置)
         #   3. <channel_dir>/automation/auth/client_secrets.json (submodule 互換)
+        #   4. 1Password (op read) から動的取得
         client_secrets_dir = os.environ.get('CLIENT_SECRETS_DIR')
         if client_secrets_dir:
             self.client_secrets_file = Path(client_secrets_dir) / 'client_secrets.json'
@@ -52,10 +53,18 @@ class YouTubeOAuthHandler:
                 channel_dir / 'auth' / 'client_secrets.json',
                 channel_dir / 'automation' / 'auth' / 'client_secrets.json',
             ]
-            self.client_secrets_file = next(
-                (c for c in candidates if c.exists()),
-                candidates[0],
-            )
+            found = next((c for c in candidates if c.exists()), None)
+            if found:
+                self.client_secrets_file = found
+            else:
+                # ファイルが見つからない場合、1Password から取得を試みる
+                try:
+                    from youtube_automation.utils.secrets import get_client_secrets_path
+                    self.client_secrets_file = get_client_secrets_path()
+                except Exception:
+                    # op read も失敗した場合はデフォルトパスを設定
+                    # (_validate_client_secrets で適切なエラーメッセージを表示)
+                    self.client_secrets_file = candidates[0]
 
         # token.json: チャンネル固有
         if auth_dir is None:
@@ -76,7 +85,8 @@ class YouTubeOAuthHandler:
                 "2. YouTube Data API v3 を有効化\n"
                 "3. OAuth 2.0 認証情報を作成\n"
                 "4. client_secrets.json をダウンロード\n"
-                "5. <channel_dir>/auth/ に配置 (または CLIENT_SECRETS_DIR 環境変数を指定)"
+                "5. <channel_dir>/auth/ に配置 (または CLIENT_SECRETS_DIR 環境変数を指定)\n"
+                "   または 1Password に CLIENT_SECRETS_JSON として登録"
             )
 
     def authenticate(self, force_reauth=False):
