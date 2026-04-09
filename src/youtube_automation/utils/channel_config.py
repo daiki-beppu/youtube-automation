@@ -10,7 +10,7 @@ import json
 import logging
 from pathlib import Path
 
-from utils.exceptions import ConfigError
+from youtube_automation.utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 

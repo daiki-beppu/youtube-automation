@@ -12,9 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from utils.channel_config import ChannelConfig
-from utils.metadata_generator import BAHMetadataGenerator
-from utils.time_utils import format_duration_display
+from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
+from youtube_automation.utils.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------
 # フィクスチャ: ChannelConfig シングルトンをテスト間でリセット

@@ -17,7 +17,7 @@ import shutil
 import subprocess
 from functools import lru_cache
 
-from utils.exceptions import ConfigError
+from youtube_automation.utils.exceptions import ConfigError
 
 # シークレット名 → 1Password の参照 URI
 _SECRET_REFS: dict[str, str] = {

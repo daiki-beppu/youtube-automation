@@ -1,1 +1,1 @@
-../../../../scripts/init_collection.py
+../../../../src/youtube_automation/scripts/init_collection.py

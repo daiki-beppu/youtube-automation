@@ -1,1 +1,1 @@
-../../../../scripts/generate_music_dj.py
+../../../../src/youtube_automation/scripts/generate_music_dj.py

@@ -21,3 +21,9 @@ launchd/
 
 # Logs
 logs/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.coverage

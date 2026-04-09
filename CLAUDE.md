@@ -1,21 +1,37 @@
 # youtube-channels-automation
 
-YouTube チャンネル運営を自動化するツールキット。各チャンネルリポジトリの `automation/` にサブモジュールとして組み込んで使用する。
+YouTube チャンネル運営を自動化するツールキット。git+https インストール（推奨）またはサブモジュール（後方互換）でチャンネルリポジトリに導入する。
 
 ## アーキテクチャ
+
+```
+youtube-channels-automation/         # ← このリポジトリ
+├── pyproject.toml                   # hatchling / [project.scripts] entry points
+├── src/
+│   └── youtube_automation/
+│       ├── utils/                   # コアライブラリ（設定, API, 分析, アップロード）
+│       ├── agents/                  # アップロードエージェント（Auto/Collection/Short）
+│       ├── auth/                    # OAuth 2.0 認証（YouTubeOAuthHandler）
+│       ├── scripts/                 # CLI スクリプト（analytics, upload, AI 生成）
+│       ├── cli/                     # ユーザー向け CLI ツール (yt-skills)
+│       └── templates/               # 説明文 Markdown テンプレート
+├── .claude/skills/                  # Claude Code スキル群（yt-skills sync で配布）
+├── tests/                           # pytest テストスイート
+├── auth/, scripts/, agents/         # submodule 利用者向け後方互換 shim
+└── auth/client_secrets.json         # (gitignored) ローカル開発用 OAuth 認証情報
+```
+
+downstream のチャンネルリポジトリ:
 
 ```
 channel-repo/                  # チャンネル固有リポジトリ
 ├── config/
 │   ├── channel_config.json    # チャンネル設定（唯一の設定ソース）
 │   └── localizations.json     # 多言語テンプレート
-├── automation/                # ← このリポジトリ（サブモジュール）
-│   ├── agents/                # アップロードエージェント（Auto/Collection/Short）
-│   ├── auth/                  # OAuth 2.0 認証（YouTubeOAuthHandler）
-│   ├── scripts/               # CLI スクリプト（analytics, upload, AI 生成）
-│   ├── utils/                 # コアライブラリ（設定, API, 分析, アップロード）
-│   ├── templates/             # 説明文 Markdown テンプレート
-│   └── tests/                 # pytest テストスイート
+├── auth/                      # チャンネル固有 OAuth 認証
+│   ├── client_secrets.json
+│   └── token.json
+├── .claude/skills/            # yt-skills sync で展開
 └── collections/               # コンテンツ成果物（音源, 動画, サムネイル）
 ```
 
@@ -23,15 +39,16 @@ channel-repo/                  # チャンネル固有リポジトリ
 
 | モジュール | 責務 |
 |-----------|------|
-| `utils/channel_config.py` | `channel_config.json` のシングルトンローダー・バリデーション |
-| `utils/youtube_service.py` | YouTube API サービスファクトリ（ServiceRegistry） |
-| `utils/upload_core.py` | 再開可能アップロード・サムネイル圧縮の共通コア |
-| `utils/exceptions.py` | ドメイン固有例外（ConfigError, YouTubeAPIError 等） |
-| `utils/collection_paths.py` | コレクションディレクトリ構造の解決 |
-| `utils/metadata_generator.py` | タイトル・説明文・タグ・ローカライゼーション自動生成 |
-| `utils/analytics_collector.py` | Analytics API データ収集（Mixin 構成） |
-| `utils/analytics_analyzer.py` | CTR・エンゲージメント分析 |
-| `auth/oauth_handler.py` | OAuth 2.0 トークン管理・リフレッシュ |
+| `youtube_automation.utils.channel_config` | `channel_config.json` のシングルトンローダー・バリデーション |
+| `youtube_automation.utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
+| `youtube_automation.utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
+| `youtube_automation.utils.exceptions` | ドメイン固有例外（ConfigError, YouTubeAPIError 等） |
+| `youtube_automation.utils.collection_paths` | コレクションディレクトリ構造の解決 |
+| `youtube_automation.utils.metadata_generator` | タイトル・説明文・タグ・ローカライゼーション自動生成 |
+| `youtube_automation.utils.analytics_collector` | Analytics API データ収集（Mixin 構成） |
+| `youtube_automation.utils.analytics_analyzer` | CTR・エンゲージメント分析 |
+| `youtube_automation.auth.oauth_handler` | OAuth 2.0 トークン管理・リフレッシュ |
+| `youtube_automation.cli.skills_sync` | `yt-skills` コマンド本体 |
 
 ## 開発規約
 
@@ -52,10 +69,22 @@ channel-repo/                  # チャンネル固有リポジトリ
 - ハードコーディング禁止 — `channel_config.json` に集約
 - 新しい設定キーを追加する場合は `ChannelConfig._validate()` にも必須/任意を定義
 
+### Import 規約
+- パッケージ内コードは必ず `from youtube_automation.xxx import ...` の fully-qualified import を使用
+- ルート直下の `utils/`, `agents/`, `auth/`, `scripts/` は **後方互換 shim 専用**で、新規コードからの参照は禁止
+- shim 経由 (`from utils.xxx import`) は submodule 形態で組み込まれた既存 downstream のためにのみ存在する
+
 ### テスト
-- `tests/conftest.py` が `CHANNEL_DIR` をフィクスチャに向ける
+- `tests/conftest.py` が `src/` を sys.path に追加し `CHANNEL_DIR` をフィクスチャに向ける
 - `ChannelConfig.reset()` / `ServiceRegistry.reset()` でシングルトンをリセット
 - `tests/fixtures/sample_channel/` にテストデータを配置
+
+### パッケージング
+- ビルドバックエンド: hatchling (`[build-system]` 参照)
+- パッケージレイアウト: `src/youtube_automation/` (PyPA src layout)
+- `.claude/skills/` は `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_skills/` に同梱され、`yt-skills sync` で配布される
+- 新しい CLI スクリプトを追加するときは `pyproject.toml` の `[project.scripts]` にも entry point を登録すること
+- バージョン bump は `pyproject.toml` `version` と `src/youtube_automation/__init__.py` の `__version__` の両方
 
 ## セキュリティ
 

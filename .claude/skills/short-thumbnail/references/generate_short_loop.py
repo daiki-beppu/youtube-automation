@@ -1,1 +1,1 @@
-../../../../scripts/generate_short_loop.py
+../../../../src/youtube_automation/scripts/generate_short_loop.py

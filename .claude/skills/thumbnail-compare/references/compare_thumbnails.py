@@ -1,1 +1,1 @@
-../../../../scripts/compare_thumbnails.py
+../../../../src/youtube_automation/scripts/compare_thumbnails.py

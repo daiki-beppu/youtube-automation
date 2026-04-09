@@ -1,1 +1,1 @@
-../../../../scripts/fetch_benchmark_comments.py
+../../../../src/youtube_automation/scripts/fetch_benchmark_comments.py

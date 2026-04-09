@@ -11,7 +11,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from utils.exceptions import UploadError, YouTubeAPIError
+from youtube_automation.utils.exceptions import UploadError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -20,11 +20,11 @@ from utils.exceptions import UploadError, YouTubeAPIError
 
 def _make_core_with_mock_youtube():
     """YouTube API を mock した YouTubeUploadCore を返す。"""
-    with patch('utils.upload_core.get_youtube') as mock_get_youtube:
+    with patch('youtube_automation.utils.upload_core.get_youtube') as mock_get_youtube:
         mock_youtube = MagicMock()
         mock_get_youtube.return_value = mock_youtube
 
-        from utils.upload_core import YouTubeUploadCore
+        from youtube_automation.utils.upload_core import YouTubeUploadCore
         core = YouTubeUploadCore()
         core.initialize()
 
@@ -156,7 +156,7 @@ class TestRetryBehavior:
             (None, {'id': 'retry_ok'}),
         ]
 
-        with patch('utils.upload_core.time.sleep'):
+        with patch('youtube_automation.utils.upload_core.time.sleep'):
             result = core.upload_video(str(video), {'snippet': {}})
 
         assert result == 'retry_ok'

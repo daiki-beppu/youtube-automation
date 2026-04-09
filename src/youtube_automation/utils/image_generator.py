@@ -18,15 +18,22 @@ VALID_IMAGE_SIZES = ("1K", "2K", "4K")
 RETRY_MAX = 3
 RETRY_BACKOFF = [10, 30, 60]
 
-# リポジトリルート（automation/utils/image_generator.py から 2 階層上）
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-IMAGE_COST_LOG = _REPO_ROOT / "data" / "image_costs.json"
+def _channel_dir() -> Path:
+    """チャンネルディレクトリを ChannelConfig 経由で解決する。"""
+    from youtube_automation.utils.channel_config import ChannelConfig
+
+    return ChannelConfig.channel_dir()
+
+
+def _image_cost_log() -> Path:
+    """画像生成コストログのパス（チャンネルディレクトリ配下）。"""
+    return _channel_dir() / "data" / "image_costs.json"
 
 
 def load_gemini_config() -> dict:
     """ChannelConfig から gemini_image 設定を読み込む。"""
     try:
-        from utils.channel_config import ChannelConfig  # noqa: E402
+        from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
 
         config = ChannelConfig.load()
         return config.raw.get("gemini_image", {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST})
@@ -119,18 +126,19 @@ def log_image_cost(
 ) -> None:
     """画像生成1件分を data/image_costs.json に追記する（失敗しても致命傷にしない）。"""
     try:
-        IMAGE_COST_LOG.parent.mkdir(parents=True, exist_ok=True)
+        log_path = _image_cost_log()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         entries: list[dict] = []
-        if IMAGE_COST_LOG.exists():
+        if log_path.exists():
             try:
-                entries = json.loads(IMAGE_COST_LOG.read_text(encoding="utf-8"))
+                entries = json.loads(log_path.read_text(encoding="utf-8"))
                 if not isinstance(entries, list):
                     entries = []
             except json.JSONDecodeError:
                 entries = []
 
         try:
-            relative_output = str(output_file.relative_to(_REPO_ROOT))
+            relative_output = str(output_file.relative_to(_channel_dir()))
         except ValueError:
             relative_output = str(output_file)
 
@@ -143,7 +151,7 @@ def log_image_cost(
             "estimated_cost_usd": round(cost_usd, 6),
             "output_file": relative_output,
         })
-        IMAGE_COST_LOG.write_text(
+        log_path.write_text(
             json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
@@ -153,11 +161,12 @@ def log_image_cost(
 
 def print_cost_summary() -> None:
     """data/image_costs.json から累積コストサマリを表示する。"""
-    if not IMAGE_COST_LOG.exists():
+    log_path = _image_cost_log()
+    if not log_path.exists():
         print("コストログがまだありません: data/image_costs.json")
         return
     try:
-        entries = json.loads(IMAGE_COST_LOG.read_text(encoding="utf-8"))
+        entries = json.loads(log_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         print("[ERROR] コストログの読み込みに失敗しました")
         return
@@ -193,7 +202,7 @@ def print_cost_summary() -> None:
     for s, d in sorted(by_size.items()):
         print(f"    {s}: {int(d['count'])} 件 / ${d['cost']:.4f}")
     print()
-    print(f"  ログ: {IMAGE_COST_LOG}")
+    print(f"  ログ: {log_path}")
     print()
 
 

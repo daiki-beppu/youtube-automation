@@ -8,14 +8,11 @@ import json
 import logging
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
+
+from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
+from youtube_automation.utils.channel_config import ChannelConfig
 
 logger = logging.getLogger(__name__)
-
-sys.path.append(str(Path(__file__).resolve().parent))
-
-from utils.analytics_collector import YouTubeAnalyticsCollector
-from utils.channel_config import ChannelConfig
 
 
 def get_channel_latest_status():

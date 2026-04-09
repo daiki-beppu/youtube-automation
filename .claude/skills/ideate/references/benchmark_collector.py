@@ -1,1 +1,1 @@
-../../../../scripts/benchmark_collector.py
+../../../../src/youtube_automation/scripts/benchmark_collector.py

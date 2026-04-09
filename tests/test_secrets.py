@@ -14,8 +14,8 @@ from unittest.mock import patch
 
 import pytest
 
-from utils.exceptions import ConfigError
-from utils.secrets import get_secret, reset_cache
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.secrets import get_secret, reset_cache
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +35,7 @@ class TestGetSecret:
     def test_returns_from_environ_when_present(self):
         """既に os.environ にあれば op を呼ばずにそれを返す"""
         os.environ["GEMINI_API_KEY"] = "from-env-12345"
-        with patch("utils.secrets.subprocess.run") as mock_run:
+        with patch("youtube_automation.utils.secrets.subprocess.run") as mock_run:
             value = get_secret("GEMINI_API_KEY")
         assert value == "from-env-12345"
         mock_run.assert_not_called()
@@ -43,8 +43,8 @@ class TestGetSecret:
     def test_falls_back_to_op_read_when_environ_empty(self):
         """os.environ に無く op が成功すれば op read の値を返す"""
         with (
-            patch("utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(
                 args=["op", "read", "..."],
@@ -59,8 +59,8 @@ class TestGetSecret:
     def test_op_read_result_is_cached_in_environ(self):
         """op read で取得した値は os.environ にもセットされる"""
         with (
-            patch("utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(
                 args=["op", "read", "..."],
@@ -73,15 +73,15 @@ class TestGetSecret:
 
     def test_raises_config_error_when_op_unavailable_and_environ_empty(self):
         """op が無く os.environ も空なら ConfigError"""
-        with patch("utils.secrets.shutil.which", return_value=None):
+        with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
             with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
                 get_secret("GEMINI_API_KEY")
 
     def test_raises_config_error_when_op_read_fails(self):
         """op はあるが op read が失敗したら ConfigError"""
         with (
-            patch("utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = subprocess.CalledProcessError(
                 returncode=1, cmd=["op", "read", "..."]
@@ -97,8 +97,8 @@ class TestGetSecret:
     def test_lru_cache_avoids_repeated_op_reads(self):
         """同一名で 2 回呼んでも op read は 1 回しか呼ばれない"""
         with (
-            patch("utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(
                 args=["op", "read", "..."],

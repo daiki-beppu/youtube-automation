@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from utils.channel_config import ChannelConfig
+from youtube_automation.utils.channel_config import ChannelConfig
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -38,14 +38,14 @@ def mock_config():
 @pytest.fixture
 def system(mock_config):
     """AnalyticsSystem インスタンスを返す（外部依存をモック）"""
-    with patch('analytics_system.ChannelConfig') as MockCC, \
-         patch('analytics_system.YouTubeAnalyticsCollector') as MockCollector:
+    with patch('youtube_automation.scripts.analytics_system.ChannelConfig') as MockCC, \
+         patch('youtube_automation.scripts.analytics_system.YouTubeAnalyticsCollector') as MockCollector:
         MockCC.load.return_value = mock_config
         MockCC.channel_dir.return_value = Path('/tmp/fake_channel')
         instance = MagicMock()
         MockCollector.return_value = instance
 
-        from analytics_system import AnalyticsSystem
+        from youtube_automation.scripts.analytics_system import AnalyticsSystem
         obj = AnalyticsSystem()
         obj._mock_collector_instance = instance
         obj._MockCC = MockCC
@@ -59,10 +59,10 @@ def system(mock_config):
 class TestInit:
     def test_init_creates_collector(self, mock_config):
         """__init__ が YouTubeAnalyticsCollector を生成する"""
-        with patch('analytics_system.ChannelConfig') as MockCC, \
-             patch('analytics_system.YouTubeAnalyticsCollector') as MockCollector:
+        with patch('youtube_automation.scripts.analytics_system.ChannelConfig') as MockCC, \
+             patch('youtube_automation.scripts.analytics_system.YouTubeAnalyticsCollector') as MockCollector:
             MockCC.load.return_value = mock_config
-            from analytics_system import AnalyticsSystem
+            from youtube_automation.scripts.analytics_system import AnalyticsSystem
             obj = AnalyticsSystem()
             MockCollector.assert_called_once()
             assert obj.collector is not None
@@ -86,8 +86,8 @@ class TestAuthenticate:
         mock_oauth_module.YouTubeOAuthHandler.return_value = mock_handler
 
         with patch.dict('sys.modules', {
-            'auth': MagicMock(),
-            'auth.oauth_handler': mock_oauth_module,
+            'youtube_automation.auth': MagicMock(),
+            'youtube_automation.auth.oauth_handler': mock_oauth_module,
         }):
             result = system.authenticate()
             assert result is True
@@ -98,9 +98,10 @@ class TestAuthenticate:
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = False
 
+        oauth_module = MagicMock(YouTubeOAuthHandler=MagicMock(return_value=mock_handler))
         with patch.dict('sys.modules', {
-            'auth': MagicMock(),
-            'auth.oauth_handler': MagicMock(YouTubeOAuthHandler=MagicMock(return_value=mock_handler)),
+            'youtube_automation.auth': MagicMock(),
+            'youtube_automation.auth.oauth_handler': oauth_module,
         }):
             result = system.authenticate()
             assert result is False
@@ -109,8 +110,8 @@ class TestAuthenticate:
     def test_authenticate_exception(self, system):
         """認証中に例外が発生した場合 False を返す"""
         with patch.dict('sys.modules', {
-            'auth': MagicMock(),
-            'auth.oauth_handler': MagicMock(
+            'youtube_automation.auth': MagicMock(),
+            'youtube_automation.auth.oauth_handler': MagicMock(
                 YouTubeOAuthHandler=MagicMock(side_effect=Exception('Token expired'))
             ),
         }):
@@ -135,7 +136,7 @@ class TestCollectAnalyticsData:
         expected_data = {'views': 1000, 'subscribers': 50}
         system.collector.collect_basic_analytics.return_value = expected_data
 
-        with patch('analytics_system.ChannelConfig') as MockCC:
+        with patch('youtube_automation.scripts.analytics_system.ChannelConfig') as MockCC:
             MockCC.channel_dir.return_value = tmp_path
 
             result = system.collect_analytics_data(days=7, save_data=True)
@@ -170,7 +171,7 @@ class TestCollectAnalyticsData:
 class TestRunDataCollection:
     def test_full_success(self, system, mock_config):
         """認証 → データ収集 → 成功の完全パス"""
-        with patch('analytics_system.ChannelConfig') as MockCC:
+        with patch('youtube_automation.scripts.analytics_system.ChannelConfig') as MockCC:
             MockCC.load.return_value = mock_config
 
             expected_data = {'views': 2000}
@@ -183,7 +184,7 @@ class TestRunDataCollection:
 
     def test_auth_failure(self, system, mock_config):
         """認証失敗時のパス"""
-        with patch('analytics_system.ChannelConfig') as MockCC:
+        with patch('youtube_automation.scripts.analytics_system.ChannelConfig') as MockCC:
             MockCC.load.return_value = mock_config
 
             with patch.object(system, 'authenticate', return_value=False):
@@ -194,7 +195,7 @@ class TestRunDataCollection:
 
     def test_data_collection_returns_none(self, system, mock_config):
         """データ収集が None を返した場合"""
-        with patch('analytics_system.ChannelConfig') as MockCC:
+        with patch('youtube_automation.scripts.analytics_system.ChannelConfig') as MockCC:
             MockCC.load.return_value = mock_config
 
             with patch.object(system, 'authenticate', return_value=True), \
@@ -206,7 +207,7 @@ class TestRunDataCollection:
 
     def test_data_collection_exception(self, system, mock_config):
         """データ収集中に例外が発生した場合"""
-        with patch('analytics_system.ChannelConfig') as MockCC:
+        with patch('youtube_automation.scripts.analytics_system.ChannelConfig') as MockCC:
             MockCC.load.return_value = mock_config
 
             with patch.object(system, 'authenticate', return_value=True), \

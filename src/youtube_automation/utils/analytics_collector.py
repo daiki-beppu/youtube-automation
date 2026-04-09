@@ -24,13 +24,13 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any
 
-from utils.channel_analytics import ChannelAnalyticsMixin
-from utils.ctr_analytics import CTRAnalyticsMixin
-from utils.exceptions import YouTubeAPIError
-from utils.strategic_analytics import StrategicAnalyticsMixin
-from utils.video_analytics import VideoAnalyticsMixin
-from utils.video_listing import VideoListingMixin
-from utils.youtube_service import get_analytics, get_youtube
+from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
+from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
+from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
+from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
+from youtube_automation.utils.video_listing import VideoListingMixin
+from youtube_automation.utils.youtube_service import get_analytics, get_youtube
 
 logger = logging.getLogger(__name__)
 

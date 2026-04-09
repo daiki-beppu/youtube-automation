@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from utils.channel_config import ChannelConfig
+from youtube_automation.utils.channel_config import ChannelConfig
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -70,16 +70,16 @@ def mock_youtube():
 @pytest.fixture
 def manager(mock_config, mock_youtube):
     """PlaylistManager インスタンスを返す（外部依存をモック）"""
-    with patch('playlist_manager.ChannelConfig') as MockCC, \
-         patch('playlist_manager.get_youtube', return_value=mock_youtube), \
-         patch('playlist_manager.VideoUploader') as MockUploader:
+    with patch('youtube_automation.scripts.playlist_manager.ChannelConfig') as MockCC, \
+         patch('youtube_automation.scripts.playlist_manager.get_youtube', return_value=mock_youtube), \
+         patch('youtube_automation.scripts.playlist_manager.VideoUploader') as MockUploader:
         MockCC.load.return_value = mock_config
         MockCC.channel_dir.return_value = Path('/tmp/fake_channel')
 
         mock_uploader_instance = MagicMock()
         MockUploader.return_value = mock_uploader_instance
 
-        from playlist_manager import PlaylistManager
+        from youtube_automation.scripts.playlist_manager import PlaylistManager
         obj = PlaylistManager()
         obj._youtube = mock_youtube
         yield obj

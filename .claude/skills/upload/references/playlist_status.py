@@ -1,1 +1,1 @@
-../../../../scripts/playlist_status.py
+../../../../src/youtube_automation/scripts/playlist_status.py

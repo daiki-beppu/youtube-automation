@@ -9,12 +9,11 @@ from pathlib import Path
 
 import pytest
 
-# scripts/ ディレクトリをインポートパスに追加
+# editable install されていない場合に備えて src/ を sys.path に追加
 _AUTOMATION_DIR = Path(__file__).resolve().parent.parent
-_SCRIPTS_DIR = _AUTOMATION_DIR / 'scripts'
-for _p in (str(_AUTOMATION_DIR), str(_SCRIPTS_DIR)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+_SRC_DIR = _AUTOMATION_DIR / 'src'
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 # テスト用フィクスチャディレクトリ
 _CHANNEL_DIR = Path(__file__).resolve().parent / 'fixtures' / 'sample_channel'

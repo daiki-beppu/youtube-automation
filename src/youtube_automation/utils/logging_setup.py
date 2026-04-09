@@ -1,7 +1,7 @@
 """標準化されたログ設定。
 
 Usage:
-    from utils.logging_setup import setup_logging
+    from youtube_automation.utils.logging_setup import setup_logging
 
     logger = setup_logging(__name__)
     logger.info("処理開始")

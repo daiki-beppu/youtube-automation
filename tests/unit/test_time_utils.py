@@ -6,7 +6,7 @@
 
 import pytest
 
-from utils.time_utils import (
+from youtube_automation.utils.time_utils import (
     format_duration_display,
     format_duration_mmss,
     format_duration_mss,

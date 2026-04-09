@@ -1,1 +1,1 @@
-../../../../scripts/generate_image.py
+../../../../src/youtube_automation/scripts/generate_image.py

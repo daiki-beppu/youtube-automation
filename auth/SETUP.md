@@ -28,22 +28,26 @@ YouTube 自動アップロードシステム用の認証設定手順です。
 ### Step 4: client_secrets.json ダウンロード
 1. 作成された認証情報の「ダウンロード」ボタンをクリック
 2. ダウンロードされたJSONファイルを `client_secrets.json` にリネーム
-3. このファイル (`auth/`) に配置
+3. **チャンネルディレクトリの `auth/` 配下** (例: `~/02-yt/<channel>/auth/client_secrets.json`) に配置
+
+> 検索順:
+> 1. `CLIENT_SECRETS_DIR` 環境変数で指定されたディレクトリ
+> 2. `<channel_dir>/auth/client_secrets.json` (推奨)
+> 3. `<channel_dir>/automation/auth/client_secrets.json` (submodule 互換フォールバック)
 
 ### Step 5: 認証テスト実行
+
+`yt-channel-status` などの CLI を初回実行すると OAuth フローが立ち上がります:
+
 ```bash
-cd auth/
-python3 oauth_handler.py
+yt-channel-status
 ```
 
 ## 📁 ファイル構成
 ```
-auth/
-├── client_secrets.json          # OAuth 2.0認証情報（要作成）
-├── client_secrets_template.json # テンプレート
-├── token.json                   # 認証トークン（自動生成）
-├── oauth_handler.py             # 認証ハンドラー
-└── SETUP.md                     # このファイル
+<channel_dir>/auth/
+├── client_secrets.json          # OAuth 2.0認証情報（要作成・gitignore）
+└── token.json                   # 認証トークン（自動生成・gitignore）
 ```
 
 ## ⚠️ セキュリティ注意事項

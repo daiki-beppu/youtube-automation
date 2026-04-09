@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-import utils.youtube_service as yt_service
-from utils.youtube_service import ServiceRegistry
+import youtube_automation.utils.youtube_service as yt_service
+from youtube_automation.utils.youtube_service import ServiceRegistry
 
 # ---------------------------------------------------------------------------
 # フィクスチャ: 各テストでキャッシュをリセット
@@ -86,7 +86,7 @@ class TestGetYoutube:
 # ---------------------------------------------------------------------------
 
 class TestGetAnalytics:
-    @patch('utils.youtube_service.build')
+    @patch('youtube_automation.utils.youtube_service.build')
     def test_returns_analytics_service(self, mock_build):
         mock_handler = MagicMock()
         mock_creds = MagicMock()
@@ -99,7 +99,7 @@ class TestGetAnalytics:
         assert result == "fake_analytics_service"
         mock_build.assert_called_once_with('youtubeAnalytics', 'v2', credentials=mock_creds)
 
-    @patch('utils.youtube_service.build')
+    @patch('youtube_automation.utils.youtube_service.build')
     def test_caches_service(self, mock_build):
         mock_handler = MagicMock()
         mock_handler.authenticate.return_value = MagicMock()

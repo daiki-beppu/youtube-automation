@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from utils.channel_config import ChannelConfig
+from youtube_automation.utils.channel_config import ChannelConfig
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -35,8 +35,8 @@ def mock_youtube():
 @pytest.fixture
 def uploader(mock_youtube):
     """VideoUploader インスタンスを返す（YouTubeUploadCore.initialize をモック）"""
-    with patch('utils.upload_core.get_youtube', return_value=mock_youtube):
-        from video_uploader import VideoUploader
+    with patch('youtube_automation.utils.upload_core.get_youtube', return_value=mock_youtube):
+        from youtube_automation.scripts.video_uploader import VideoUploader
         obj = VideoUploader()
         obj.youtube = mock_youtube
         yield obj
@@ -47,17 +47,17 @@ def uploader(mock_youtube):
 # ---------------------------------------------------------------------------
 
 class TestInit:
-    @patch('utils.upload_core.get_youtube', return_value=MagicMock())
+    @patch('youtube_automation.utils.upload_core.get_youtube', return_value=MagicMock())
     def test_init_calls_super(self, _mock_get_yt):
         """__init__ が YouTubeUploadCore.__init__() を呼ぶ"""
-        from video_uploader import VideoUploader
+        from youtube_automation.scripts.video_uploader import VideoUploader
         obj = VideoUploader(auth_dir="/tmp/fake")
         assert obj.youtube is None  # super().__init__() で None 初期化
 
-    @patch('utils.upload_core.get_youtube', return_value=MagicMock())
+    @patch('youtube_automation.utils.upload_core.get_youtube', return_value=MagicMock())
     def test_init_without_args(self, _mock_get_yt):
         """auth_dir 省略でもインスタンス化できる"""
-        from video_uploader import VideoUploader
+        from youtube_automation.scripts.video_uploader import VideoUploader
         obj = VideoUploader()
         assert obj.youtube is None
 
@@ -82,7 +82,7 @@ class TestUploadVideo:
     @patch('os.path.getsize', return_value=1024 * 1024 * 10)
     def test_upload_video_success(self, _mock_size, uploader):
         """アップロード成功時に video_id と URL を含む dict を返す"""
-        with patch('utils.upload_core.YouTubeUploadCore.upload_video', return_value='abc123'):
+        with patch('youtube_automation.utils.upload_core.YouTubeUploadCore.upload_video', return_value='abc123'):
             result = uploader.upload_video(
                 video_file='/tmp/test.mp4',
                 title='Test Video',
@@ -97,7 +97,7 @@ class TestUploadVideo:
     @patch('os.path.getsize', return_value=1024 * 1024 * 10)
     def test_upload_video_failure(self, _mock_size, uploader):
         """アップロード失敗時に status=failed を返す"""
-        with patch('utils.upload_core.YouTubeUploadCore.upload_video', return_value=None):
+        with patch('youtube_automation.utils.upload_core.YouTubeUploadCore.upload_video', return_value=None):
             result = uploader.upload_video(
                 video_file='/tmp/test.mp4',
                 title='Fail Video',
@@ -110,7 +110,8 @@ class TestUploadVideo:
     @patch('os.path.getsize', return_value=1024 * 1024 * 5)
     def test_upload_video_passes_body_to_core(self, _mock_size, uploader):
         """upload_video が正しい body を YouTubeUploadCore.upload_video に渡す"""
-        with patch('utils.upload_core.YouTubeUploadCore.upload_video', return_value='xyz') as mock_core:
+        target = 'youtube_automation.utils.upload_core.YouTubeUploadCore.upload_video'
+        with patch(target, return_value='xyz') as mock_core:
             uploader.upload_video(
                 video_file='/tmp/test.mp4',
                 title='T',
@@ -150,8 +151,8 @@ class TestCreatePlaylist:
 
     def test_create_playlist_auto_authenticates(self, mock_youtube):
         """youtube が None なら authenticate() が呼ばれる"""
-        with patch('utils.upload_core.get_youtube', return_value=mock_youtube):
-            from video_uploader import VideoUploader
+        with patch('youtube_automation.utils.upload_core.get_youtube', return_value=mock_youtube):
+            from youtube_automation.scripts.video_uploader import VideoUploader
             obj = VideoUploader()
             assert obj.youtube is None
             with patch.object(obj, 'authenticate') as mock_auth:
@@ -187,8 +188,8 @@ class TestAddVideoToPlaylist:
 
     def test_add_video_auto_authenticates(self, mock_youtube):
         """youtube が None なら authenticate() が呼ばれる"""
-        with patch('utils.upload_core.get_youtube', return_value=mock_youtube):
-            from video_uploader import VideoUploader
+        with patch('youtube_automation.utils.upload_core.get_youtube', return_value=mock_youtube):
+            from youtube_automation.scripts.video_uploader import VideoUploader
             obj = VideoUploader()
             assert obj.youtube is None
             with patch.object(obj, 'authenticate') as mock_auth:

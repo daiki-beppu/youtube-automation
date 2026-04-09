@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//private/tmp/yt-skills-test/.claude/skills/upload/**)",
+      "Read(//private/tmp/yt-skills-test/.claude/skills/upload/references/**)"
+    ]
+  }
+}

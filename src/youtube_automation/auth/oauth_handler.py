@@ -37,15 +37,25 @@ class YouTubeOAuthHandler:
         Args:
             auth_dir (str): token.json を格納するチャンネル固有 auth ディレクトリのパス
         """
-        from utils.channel_config import ChannelConfig
+        from youtube_automation.utils.channel_config import ChannelConfig
         channel_dir = ChannelConfig.channel_dir()
 
-        # client_secrets.json: 環境変数 or automation/auth/ 内（submodule 同梱）
+        # client_secrets.json の検索順:
+        #   1. CLIENT_SECRETS_DIR 環境変数 (明示的オーバーライド)
+        #   2. <channel_dir>/auth/client_secrets.json (pip install 時の既定配置)
+        #   3. <channel_dir>/automation/auth/client_secrets.json (submodule 互換)
         client_secrets_dir = os.environ.get('CLIENT_SECRETS_DIR')
         if client_secrets_dir:
             self.client_secrets_file = Path(client_secrets_dir) / 'client_secrets.json'
         else:
-            self.client_secrets_file = Path(__file__).parent / 'client_secrets.json'
+            candidates = [
+                channel_dir / 'auth' / 'client_secrets.json',
+                channel_dir / 'automation' / 'auth' / 'client_secrets.json',
+            ]
+            self.client_secrets_file = next(
+                (c for c in candidates if c.exists()),
+                candidates[0],
+            )
 
         # token.json: チャンネル固有
         if auth_dir is None:
@@ -66,7 +76,7 @@ class YouTubeOAuthHandler:
                 "2. YouTube Data API v3 を有効化\n"
                 "3. OAuth 2.0 認証情報を作成\n"
                 "4. client_secrets.json をダウンロード\n"
-                "5. youtube-automation/auth/ に配置"
+                "5. <channel_dir>/auth/ に配置 (または CLIENT_SECRETS_DIR 環境変数を指定)"
             )
 
     def authenticate(self, force_reauth=False):

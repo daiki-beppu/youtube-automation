@@ -1455,8 +1455,8 @@ wheels = [
 
 [[package]]
 name = "youtube-channels-automation"
-version = "1.0.0"
-source = { virtual = "." }
+version = "1.1.0"
+source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },

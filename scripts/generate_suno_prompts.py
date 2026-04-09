@@ -1,122 +1,14 @@
 #!/usr/bin/env python3
-"""Generate suno-prompts.md from channel_config.json + suno-patterns.yaml."""
+"""後方互換 wrapper — youtube_automation.scripts.generate_suno_prompts:main に委譲する。"""
 
 import sys
 from pathlib import Path
 
-import yaml
+_REPO_SRC = Path(__file__).resolve().parent.parent / "src"
+if _REPO_SRC.exists() and str(_REPO_SRC) not in sys.path:
+    sys.path.insert(0, str(_REPO_SRC))
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from utils.channel_config import ChannelConfig  # noqa: E402
-
-
-def generate(patterns_path: Path) -> str:
-    config = ChannelConfig.load()
-    suno = config._data.get("suno", {})
-
-    genre_line = suno.get("genre_line", "")
-    mood_descriptors = suno.get("mood_descriptors", "")
-    exclude_styles = suno.get("exclude_styles", "")
-    style_variants = suno.get("style_variants", {})
-    duration_prompt = suno.get("duration_prompt", "")
-    style_influence = suno.get("style_influence", 50)
-
-    base_parts = [genre_line]
-    if mood_descriptors:
-        base_parts.append(mood_descriptors)
-    base_style = ", ".join(base_parts)
-
-    with open(patterns_path) as f:
-        data = yaml.safe_load(f)
-
-    title = data.get("title", "Suno Prompts")
-    patterns = data.get("patterns", [])
-
-    lines = [
-        f"# Suno Prompts — {title}",
-        "",
-        "## SunoAI 推奨設定",
-        "",
-        "| パラメータ | 値 |",
-        "|-----------|-----|",
-        "| Mode | Custom |",
-        "| Weirdness | 20% |",
-        f"| Style Influence | {style_influence}% |",
-        "| Lyrics | (空) |",
-        "",
-        "---",
-    ]
-
-    labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-    for i, pattern in enumerate(patterns):
-        label = labels[i] if i < len(labels) else str(i + 1)
-        name_jp = pattern["name_jp"]
-        name_en = pattern["name_en"]
-        tempo = pattern.get("tempo")
-        scenes = pattern["scenes"]
-        style_key = pattern.get("style")
-
-        # Per-pattern style variant override
-        if style_key and style_key in style_variants:
-            variant = style_variants[style_key]
-            effective_style = variant["genre_line"]
-            style_label = f" [{style_key}: {variant['name']}]"
-        else:
-            effective_style = base_style
-            style_label = ""
-
-        lines.append("")
-        lines.append(f"## Pattern {label}: {name_jp} — {name_en}{style_label}")
-
-        for j, scene in enumerate(scenes, 1):
-            lines.append("")
-            lines.append(f"### Variation {j}")
-            lines.append("**Styles:**")
-            lines.append("```")
-            parts = []
-            if tempo:
-                parts.append(tempo)
-            parts.append(effective_style)
-            if duration_prompt:
-                parts.append(duration_prompt)
-            lines.append(", ".join(parts) + ",")
-            lines.append(scene)
-            lines.append("```")
-
-            if exclude_styles:
-                lines.append("")
-                lines.append("**Exclude Styles:**")
-                lines.append("```")
-                lines.append(exclude_styles)
-                lines.append("```")
-
-        lines.append("")
-        lines.append("---")
-
-    return "\n".join(lines) + "\n"
-
-
-def main():
-    if len(sys.argv) < 2:
-        patterns_path = Path.cwd() / "20-documentation" / "suno-patterns.yaml"
-        if not patterns_path.exists():
-            print("Usage: python3 generate_suno_prompts.py <collection-path or patterns.yaml>")
-            sys.exit(1)
-    else:
-        arg = Path(sys.argv[1])
-        patterns_path = arg if arg.is_file() else arg / "20-documentation" / "suno-patterns.yaml"
-
-    if not patterns_path.exists():
-        print(f"Error: {patterns_path} not found")
-        sys.exit(1)
-
-    output_path = patterns_path.parent / "suno-prompts.md"
-    content = generate(patterns_path)
-    output_path.write_text(content)
-    print(f"Generated: {output_path}")
-
+from youtube_automation.scripts.generate_suno_prompts import main  # noqa: E402
 
 if __name__ == "__main__":
     main()

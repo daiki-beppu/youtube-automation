@@ -1,7 +1,7 @@
 """コレクションディレクトリ構造のパス解決ユーティリティ。
 
 Usage:
-    from utils.collection_paths import CollectionPaths
+    from youtube_automation.utils.collection_paths import CollectionPaths
 
     paths = CollectionPaths("/path/to/collection")
     master = paths.find_master_video()

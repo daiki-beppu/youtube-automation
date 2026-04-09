@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.collection_paths import CollectionPaths
+from youtube_automation.utils.collection_paths import CollectionPaths
 
 # ---------------------------------------------------------------------------
 # コンストラクタ

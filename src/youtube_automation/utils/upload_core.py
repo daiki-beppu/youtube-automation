@@ -13,9 +13,9 @@ from typing import Optional
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-from utils.exceptions import UploadError, YouTubeAPIError
-from utils.upload_policy import RetryDecision, ThumbnailCompression
-from utils.youtube_service import get_youtube
+from youtube_automation.utils.exceptions import UploadError, YouTubeAPIError
+from youtube_automation.utils.upload_policy import RetryDecision, ThumbnailCompression
+from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
 

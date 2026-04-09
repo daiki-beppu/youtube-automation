@@ -1,7 +1,7 @@
 """時間・デュレーションのフォーマットユーティリティ。
 
 Usage:
-    from utils.time_utils import format_duration_mss, format_duration_mmss, format_timestamp
+    from youtube_automation.utils.time_utils import format_duration_mss, format_duration_mmss, format_timestamp
 """
 
 

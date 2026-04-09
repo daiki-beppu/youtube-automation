@@ -1,1 +1,1 @@
-../../../../scripts/video_uploader.py
+../../../../src/youtube_automation/scripts/video_uploader.py

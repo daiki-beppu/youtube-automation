@@ -1,1 +1,1 @@
-../../../../scripts/community_draft.py
+../../../../src/youtube_automation/scripts/community_draft.py
