@@ -12,7 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
-      - run: nix develop --command ruff check .
+      - run: nix develop --command uv sync --extra dev
+      - run: nix develop --command uv run ruff check .
 
   test:
     runs-on: ubuntu-latest
