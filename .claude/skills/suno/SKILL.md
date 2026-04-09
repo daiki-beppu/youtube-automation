@@ -156,7 +156,7 @@ patterns:
 ### Step 2: スクリプトで suno-prompts.md を生成
 
 ```bash
-python3 automation/generate_suno_prompts.py <collection-path>
+uv run yt-generate-suno <collection-path>
 ```
 
 `channel_config.json` の `suno.genre_line` + `suno.mood_descriptors` をパターンに自動付加して `suno-prompts.md` を生成。設定変更時はスクリプト再実行のみで全プロンプトに反映される。

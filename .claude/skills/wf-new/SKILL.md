@@ -39,7 +39,7 @@ Step 1（企画）を自動実行中...
 以下の Python スクリプトを実行してコレクションディレクトリと workflow-state.json を自動生成する:
 
 ```bash
-python3 automation/init_collection.py "<Collection Name>" "<theme-slug>" --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria>
+uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria>
 ```
 
 - `<Collection Name>`: 企画で決定したコレクション表示名

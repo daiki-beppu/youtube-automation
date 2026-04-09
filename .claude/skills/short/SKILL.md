@@ -71,9 +71,9 @@ mode = config.raw.get("content_model", {}).get("type", "release")
 **ショート用ループ動画の生成:**
 ```bash
 # short.png が必要（なければ /short-thumbnail で先に生成）
-python3 automation/generate_short_loop.py <collection-path> -y
+uv run yt-generate-short-loop <collection-path> -y
 # カスタムプロンプト指定
-python3 automation/generate_short_loop.py <collection-path> --prompt "gentle character animation..." -y
+uv run yt-generate-short-loop <collection-path> --prompt "gentle character animation..." -y
 ```
 
 ```bash
@@ -211,7 +211,7 @@ ls -lh "$OUTDIR"/*.mp4
 - `short-loop.mp4` は 8秒ループ → `-stream_loop -1` で 20秒分ループ再生
 - テキスト（タイトル・チャンネル名・CTA）は画像に焼き込み済み — drawtext 不要
 - キャラクターが動く（Veo アニメーション）ので zoompan 不要
-- 生成: `python3 automation/generate_short_loop.py <collection-path> -y`
+- 生成: `uv run yt-generate-short-loop <collection-path> -y`
 
 #### 5a-alt: short.png + zoompan（Veo ループ動画がない場合）
 
@@ -281,9 +281,9 @@ open <collection>/01-master/shorts/short-01-*.mp4
 #### 単体ショートの場合
 
 ```bash
-python3 automation/agents/short_uploader.py <collection-path>
+uv run yt-upload-short <collection-path>
 # ドライラン（メタデータ確認のみ）
-python3 automation/agents/short_uploader.py <collection-path> --dry-run
+uv run yt-upload-short <collection-path> --dry-run
 ```
 
 #### 複数ショートの場合
@@ -291,7 +291,7 @@ python3 automation/agents/short_uploader.py <collection-path> --dry-run
 ```bash
 # shorts/ ディレクトリ内の全ショートを順番にアップロード
 for i in 1 2 3; do
-  python3 automation/agents/short_uploader.py <collection-path> --short-num $i
+  uv run yt-upload-short <collection-path> --short-num $i
 done
 ```
 

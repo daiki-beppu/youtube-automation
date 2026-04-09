@@ -112,7 +112,7 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
 ### Step 6: ベンチマークデータ一括収集
 
 ```bash
-python3 automation/benchmark_collector.py --force --keep-thumbnails -v
+uv run yt-benchmark-collect --force --keep-thumbnails -v
 ```
 
 - 出力: `data/benchmark_YYYYMMDD.json` + `docs/benchmarks/{slug}.md`
@@ -121,7 +121,7 @@ python3 automation/benchmark_collector.py --force --keep-thumbnails -v
 ### Step 7: コメント収集
 
 ```bash
-python3 automation/fetch_benchmark_comments.py --min-views 5000
+uv run yt-benchmark-comments --min-views 5000
 ```
 
 - 出力: `data/comments_YYYYMMDD.json`

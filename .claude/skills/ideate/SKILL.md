@@ -98,9 +98,9 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 # <dir> は上で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
 # <slug> はテーマ名をケバブケースに変換（例: "The Wanderer's Road" → "wanderers-road"）
 REF=$(python3 -c "import json; c=json.load(open('config/channel_config.json')); print(c.get('gemini_image',{}).get('reference_images',{}).get('default',''))")
-python3 automation/generate_image.py --reference "$REF" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
-python3 automation/generate_image.py --reference "$REF" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
-python3 automation/generate_image.py --reference "$REF" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
+uv run yt-generate-image --reference "$REF" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
+uv run yt-generate-image --reference "$REF" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
+uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
 ```
 - 出力先: `collections/planning/_plan-previews/<dir>/plan-{a,b,c}-<slug>.png`
 - `_` プレフィックスで通常コレクションと区別

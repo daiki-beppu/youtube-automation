@@ -271,7 +271,7 @@ $ARGUMENTS
 3. dry-run でタイムラインを表示:
 
 ```bash
-python3 automation/generate_music_dj.py -c 20-documentation/composition.json --dry-run
+uv run yt-generate-music-dj -c 20-documentation/composition.json --dry-run
 ```
 
 4. ユーザーにフェーズ構成・タイミングの確認を求める
@@ -282,7 +282,7 @@ python3 automation/generate_music_dj.py -c 20-documentation/composition.json --d
 本生成の前に、3つの代表フェーズから30秒のプレビューサンプルを生成して方向性を確認する:
 
 ```bash
-python3 automation/generate_music_dj.py \
+uv run yt-generate-music-dj \
   -c 20-documentation/composition.json \
   -o 01-master/master.wav \
   --preview
@@ -301,7 +301,7 @@ python3 automation/generate_music_dj.py \
 ユーザー承認後、DJ エンジンを実行:
 
 ```bash
-python3 automation/generate_music_dj.py \
+uv run yt-generate-music-dj \
   -c 20-documentation/composition.json \
   -o 01-master/master.wav \
   -y --max-retries 3 --workers 10
@@ -337,7 +337,7 @@ python3 automation/generate_music_dj.py \
 ワークツリー検出・パス算出・コピーをすべて自動で行う（メインリポジトリで実行時は自動スキップ）。
 
 ```bash
-bash "$(git rev-parse --show-toplevel)/automation/worktree_sync.sh"
+bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_sync.sh"
 ```
 
 **コピー対象**:

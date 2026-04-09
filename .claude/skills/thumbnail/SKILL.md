@@ -42,7 +42,7 @@ GoV TTP のように、参照画像を渡してスタイルを維持する方式
 
 ```bash
 # Phase 1: 参照画像 + プロンプトで背景生成
-python3 automation/generate_image.py \
+uv run yt-generate-image \
   --prompt "<prompt_prefix を含むプロンプト>" \
   --reference <channel_dir>/<reference_images.default> \
   --output <collection-path>/10-assets/main-v1.jpg -y
@@ -58,7 +58,7 @@ python3 automation/generate_image.py \
 参照画像なしでプロンプトのみで生成する方式（フォールバック）。
 
 ```bash
-python3 automation/generate_image.py \
+uv run yt-generate-image \
   --prompt "<完全なプロンプト>" \
   --output <collection-path>/10-assets/main-v1.jpg -y
 ```
@@ -133,7 +133,7 @@ Widescreen 16:9 aspect ratio.
 
 3. 生成:
 ```bash
-python3 automation/generate_image.py \
+uv run yt-generate-image \
   --reference <channel_dir>/<reference_images.default> \
   --prompt "<diff_prompt_template を置換したプロンプト>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y

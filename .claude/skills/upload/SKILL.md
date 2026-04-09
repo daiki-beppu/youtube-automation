@@ -71,13 +71,13 @@ $ARGUMENTS
 
 ```bash
 # Complete Collection アップロード（デフォルト動作）
-python3 automation/agents/collection_uploader.py [-c NAME]
+uv run yt-upload-collection [-c NAME]
 
 # 進捗確認
-python3 automation/agents/collection_uploader.py --status [-c NAME]
+uv run yt-upload-collection --status [-c NAME]
 
 # スケジュール計算（ドライラン）
-python3 automation/agents/collection_uploader.py --plan [-c NAME]
+uv run yt-upload-collection --plan [-c NAME]
 ```
 
 ### エラーハンドリング

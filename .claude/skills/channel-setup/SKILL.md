@@ -118,9 +118,9 @@ print('Config loaded successfully!')
    - Gemini で生成後、Pillow でリサイズ・圧縮してサイズ上限内に収めること
    ```bash
    # アイコン生成
-   python3 automation/generate_image.py --prompt "..." --output branding/icon.png --aspect-ratio 1:1 -y
+   uv run yt-generate-image --prompt "..." --output branding/icon.png --aspect-ratio 1:1 -y
    # バナー生成
-   python3 automation/generate_image.py --prompt "..." --output branding/banner.png --aspect-ratio 16:9 -y
+   uv run yt-generate-image --prompt "..." --output branding/banner.png --aspect-ratio 16:9 -y
    # リサイズ（上限超過時）
    python3 -c "
    from PIL import Image

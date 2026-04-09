@@ -17,10 +17,10 @@
 
 ```bash
 # ドライラン（スケジュール確認）
-python3 automation/agents/collection_uploader.py --plan [-c NAME]
+uv run yt-upload-collection --plan [-c NAME]
 
 # Complete Collection アップロード（デフォルト動作）
-python3 automation/agents/collection_uploader.py [-c NAME]
+uv run yt-upload-collection [-c NAME]
 ```
 
 ## アップロード後確認
