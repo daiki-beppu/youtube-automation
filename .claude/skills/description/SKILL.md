@@ -7,6 +7,14 @@ description: Use when コレクションのYouTube概要欄を自動生成する
 
 コレクション用の YouTube 概要欄を自動生成します。ファーストビューに情景フックとタイムスタンプ（チャプター）を配置し、シーン描写・Perfect for セクション・Usage & Attribution・ハッシュタグで構成します。
 
+## 前提
+
+`config/channel_config.json` が存在すること。
+
+存在しない場合、ユーザーに確認:
+- **新規チャンネル** → `/channel-new` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+
 ## When to Use
 
 - コレクションの動画が完成し、YouTube 概要欄が必要なとき

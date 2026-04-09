@@ -7,6 +7,14 @@ description: Use when コレクションの動画が完成し、YouTubeへのア
 
 Complete Collection を YouTube にアップロードし、`planning/` → `live/` へ自動移行します。`/description` スキルで事前生成した概要欄・タイトル・タグを使用します。
 
+## 前提
+
+`config/channel_config.json` が存在すること。
+
+存在しない場合、ユーザーに確認:
+- **新規チャンネル** → `/channel-new` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+
 ## When to Use
 
 - コレクションの動画ファイルが揃い、YouTube へのアップロードが必要なとき

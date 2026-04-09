@@ -8,6 +8,14 @@ description: Use when コレクションのサムネイル画像が必要で、C
 コレクション用サムネイルを `channel_config.json` の `gemini_image` 設定に基づいて生成します。
 チャンネルごとにスタイル・キャラ・参照画像が異なり、全て config から動的に読み取ります。
 
+## 前提
+
+`config/channel_config.json` が存在すること。
+
+存在しない場合、ユーザーに確認:
+- **新規チャンネル** → `/channel-new` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+
 ## When to Use
 
 - コレクションが確定し、サムネイル制作に着手するとき

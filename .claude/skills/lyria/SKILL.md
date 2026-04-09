@@ -7,6 +7,14 @@ description: Use when コレクションのテーマが確定し、Lyria RealTim
 
 Lyria RealTime API を使い、composition.json に定義されたフェーズタイムラインに沿って Complete Collection 用マスター音源（WAV）を生成します。API のセッション制限（約10分）を回避するため、phase 境界でセグメント分割し、各セグメントを個別セッションで生成→クロスフェード結合します。
 
+## 前提
+
+`config/channel_config.json` が存在すること。
+
+存在しない場合、ユーザーに確認:
+- **新規チャンネル** → `/channel-new` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+
 ## When to Use
 
 - 新コレクションのテーマが確定し、音楽を生成するとき
