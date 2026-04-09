@@ -14,6 +14,8 @@ dependencies = [
     "google-api-python-client",
     "google-auth-oauthlib",
     "google-auth-httplib2",
+    "google-genai",
+    "Pillow",
     "python-dotenv",
     "pandas",
     "matplotlib",
@@ -26,7 +28,7 @@ Repository = "https://github.com/daiki-beppu/youtube-automation"
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
-veo = ["google-genai", "Pillow"]
+veo = []  # google-genai, Pillow moved to main dependencies
 
 [project.scripts]
 # CLI script entry points (yt-* prefix)
