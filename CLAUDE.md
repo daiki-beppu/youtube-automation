@@ -17,7 +17,7 @@ youtube-channels-automation/         # ← このリポジトリ
 │       └── templates/               # 説明文 Markdown テンプレート
 ├── .claude/skills/                  # Claude Code スキル群（yt-skills sync で配布）
 ├── tests/                           # pytest テストスイート
-├── auth/, scripts/, agents/         # submodule 利用者向け後方互換 shim
+├── scripts/*.sh                     # シェルスクリプト（generate_master.sh 等）
 └── auth/client_secrets.json         # (gitignored) ローカル開発用 OAuth 認証情報
 ```
 
@@ -71,8 +71,7 @@ channel-repo/                  # チャンネル固有リポジトリ
 
 ### Import 規約
 - パッケージ内コードは必ず `from youtube_automation.xxx import ...` の fully-qualified import を使用
-- ルート直下の `utils/`, `agents/`, `auth/`, `scripts/` は **後方互換 shim 専用**で、新規コードからの参照は禁止
-- shim 経由 (`from utils.xxx import`) は submodule 形態で組み込まれた既存 downstream のためにのみ存在する
+- ルート直下の `scripts/` にはシェルスクリプト（`.sh`）のみ配置。Python shim は廃止済み
 
 ### テスト
 - `tests/conftest.py` が `src/` を sys.path に追加し `CHANNEL_DIR` をフィクスチャに向ける
