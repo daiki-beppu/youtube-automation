@@ -24,8 +24,8 @@ from pathlib import Path
 # --- パス解決 ---
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
+sys.path.insert(0, str(REPO_ROOT))
 
-import utils._path_setup  # noqa: F401, E402
 from utils.exceptions import ConfigError  # noqa: E402
 from utils.image_generator import (  # noqa: E402
     DEFAULT_MODEL,

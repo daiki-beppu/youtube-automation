@@ -10,9 +10,11 @@ Usage:
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 
-import utils._path_setup  # noqa: F401
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from utils.channel_config import ChannelConfig  # noqa: E402
 
 logger = logging.getLogger(__name__)

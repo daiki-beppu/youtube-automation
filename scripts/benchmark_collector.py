@@ -28,7 +28,8 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
-import utils._path_setup  # noqa: F401
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from utils.benchmark_analyzer import (  # noqa: E402
     compute_daily_views,
     compute_engagement_rate,

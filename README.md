@@ -36,7 +36,7 @@ channel-repo/              # チャンネル固有リポジトリ
 - Python 3.11+
 - [FFmpeg](https://ffmpeg.org/) (動画生成に必要)
 - Google Cloud Project (YouTube Data API v3 有効化済み)
-- (オプション) [Nix](https://nixos.org/) + [direnv](https://direnv.net/): `flake.nix` で開発環境を再現可能に
+- (オプション) [Nix](https://nixos.org/): `flake.nix` で開発環境を再現可能に
 - (オプション) [1Password CLI](https://developer.1password.com/docs/cli/): シークレットをディスクに書かずに管理
 
 ## Quick Start
@@ -100,11 +100,10 @@ op signin
 ランタイム（Python / uv / FFmpeg / op）の再現性が必要な場合:
 
 ```bash
-direnv allow            # 初回のみ、.envrc を承認
-# 以降、cd automation で devShell に自動入室
+nix develop
 ```
 
-direnv を使わない場合は `nix develop` で手動入室できます。Nix を使わない OSS 利用者は、システムの Python と FFmpeg を自前で用意してください。
+`flake.nix` の `devShells.default` が Python 3.11 / uv / FFmpeg / 1Password CLI を提供します。Nix を使わない OSS 利用者は、システムの Python と FFmpeg を自前で用意してください。
 
 ## Configuration
 

@@ -20,7 +20,8 @@ from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
-import utils._path_setup  # noqa: F401, E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from agents.youtube_auto_uploader import YouTubeAutoUploader  # noqa: E402
 from utils.channel_config import ChannelConfig  # noqa: E402
 

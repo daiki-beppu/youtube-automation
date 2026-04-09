@@ -8,10 +8,12 @@ Usage:
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from community_draft import CommunityDraftGenerator  # noqa: E402
-
-import utils._path_setup  # noqa: F401
 
 
 def main():

@@ -23,8 +23,7 @@ from pathlib import Path
 
 # --- パス解決 ---
 SCRIPT_DIR = Path(__file__).resolve().parent
-
-import utils._path_setup  # noqa: F401, E402
+sys.path.insert(0, str(SCRIPT_DIR.parent))
 
 SUBDIRS = [
     "01-master",

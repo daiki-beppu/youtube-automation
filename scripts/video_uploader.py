@@ -21,7 +21,8 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-import utils._path_setup  # noqa: F401, E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from utils.channel_config import ChannelConfig  # noqa: E402
 from utils.upload_core import YouTubeUploadCore  # noqa: E402
 

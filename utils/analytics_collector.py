@@ -24,7 +24,6 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any
 
-import utils._path_setup  # noqa: F401
 from utils.channel_analytics import ChannelAnalyticsMixin
 from utils.ctr_analytics import CTRAnalyticsMixin
 from utils.exceptions import YouTubeAPIError

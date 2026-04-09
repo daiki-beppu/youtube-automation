@@ -17,11 +17,14 @@ Usage:
 import argparse
 import json
 import logging
+import sys
 from datetime import date, datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from benchmark_collector import ensure_benchmark_fresh, load_benchmark_videos  # noqa: E402
 
-import utils._path_setup  # noqa: F401
 from utils.channel_config import ChannelConfig  # noqa: E402
 from utils.youtube_service import get_youtube  # noqa: E402
 
