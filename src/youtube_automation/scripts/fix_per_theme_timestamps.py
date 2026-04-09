@@ -22,9 +22,10 @@ import re
 import subprocess
 from pathlib import Path
 
+from youtube_automation.utils.channel_config import ChannelConfig
+
 CROSSFADE_SEC = 3
-ROOT = Path(__file__).resolve().parent.parent.parent
-COLLECTIONS_DIR = ROOT / "collections" / "live"
+COLLECTIONS_DIR = ChannelConfig.channel_dir() / "collections" / "live"
 
 TARGET_COLLECTIONS = [
     "20260328-rjn-last-platform-collection",

@@ -19,12 +19,11 @@ import argparse
 import json
 import re
 import time
-from pathlib import Path
 
-from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
+from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.youtube_service import get_youtube
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-COLLECTIONS_DIR = ROOT / "collections" / "live"
+COLLECTIONS_DIR = ChannelConfig.channel_dir() / "collections" / "live"
 
 # Collections whose snippet should be refreshed from descriptions.md.
 TARGETS = [

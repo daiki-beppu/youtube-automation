@@ -11,10 +11,10 @@ Translations were authored to match the existing pattern of
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-COLLECTIONS_DIR = ROOT / "collections" / "live"
+from youtube_automation.utils.channel_config import ChannelConfig
+
+COLLECTIONS_DIR = ChannelConfig.channel_dir() / "collections" / "live"
 
 # {collection_dir_name: {lang: phrase}}
 SCENE_PHRASES: dict[str, dict[str, str]] = {

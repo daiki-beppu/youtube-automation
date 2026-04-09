@@ -25,8 +25,7 @@ from pathlib import Path
 
 from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-COLLECTIONS_DIR = ROOT / "collections" / "live"
+COLLECTIONS_DIR = ChannelConfig.channel_dir() / "collections" / "live"
 
 TS_RE = re.compile(r"^\d{1,2}:\d{2}")
 SECTION_RE = lambda h: re.compile(  # noqa: E731
