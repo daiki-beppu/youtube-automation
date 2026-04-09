@@ -13,6 +13,11 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from utils.exceptions import ConfigError  # noqa: E402
+from utils.secrets import get_gemini_api_key  # noqa: E402
+
 
 def generate_music(client, types, prompt: str, model: str) -> bytes | None:
     """Lyria 3 API で音楽を生成し、オーディオバイトを返す。"""
@@ -80,11 +85,13 @@ def main():
             print("中止しました。")
             sys.exit(0)
 
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        print("[ERROR] GEMINI_API_KEY 環境変数が設定されていません。")
-        print("  export GEMINI_API_KEY='your-api-key'")
-        sys.exit(1)
+    # GOOGLE_API_KEY が既に export されていればそれを優先、無ければ get_gemini_api_key()
+    if not os.environ.get("GOOGLE_API_KEY"):
+        try:
+            get_gemini_api_key()
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
 
     try:
         from google import genai

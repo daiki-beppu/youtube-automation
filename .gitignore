@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 .venv/
 .env
+.direnv/
 
 # Auth（client_secrets / token は手動配置、git 管理しない）
 auth/client_secrets.json

@@ -17,7 +17,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
@@ -27,6 +26,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 
 import utils._path_setup  # noqa: F401, E402
+from utils.exceptions import ConfigError  # noqa: E402
+from utils.secrets import get_gemini_api_key  # noqa: E402
 from utils.veo_generator import (  # noqa: E402
     DEFAULT_MODEL,
     DEFAULT_PROMPT,
@@ -121,11 +122,11 @@ def main():
             print("  キャンセルしました。")
             sys.exit(0)
 
-    # API キー確認
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("[ERROR] GEMINI_API_KEY 環境変数が設定されていません。")
-        print("  export GEMINI_API_KEY='your-api-key'")
+    # API キー取得（os.environ → 1Password の順で試行、副作用で os.environ にもセット）
+    try:
+        get_gemini_api_key()
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
         sys.exit(1)
 
     # SDK インポート

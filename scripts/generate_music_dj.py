@@ -13,7 +13,11 @@ import wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from utils.time_utils import format_duration_mmss
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from utils.exceptions import ConfigError  # noqa: E402
+from utils.secrets import get_gemini_api_key  # noqa: E402
+from utils.time_utils import format_duration_mmss  # noqa: E402
 
 SAMPLE_RATE = 48000
 CHANNELS = 2
@@ -654,10 +658,12 @@ def main():
 
     dry_run(comp)
 
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        print("[ERROR] GEMINI_API_KEY 環境変数が設定されていません。")
-        sys.exit(1)
+    if not os.environ.get("GOOGLE_API_KEY"):
+        try:
+            get_gemini_api_key()
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
 
     try:
         from google import genai

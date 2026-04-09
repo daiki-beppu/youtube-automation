@@ -19,7 +19,6 @@ Usage:
 import argparse
 import json
 import logging
-import os
 import re
 import sys
 import tempfile
@@ -38,6 +37,8 @@ from utils.benchmark_analyzer import (  # noqa: E402
     parse_iso_duration,
 )
 from utils.channel_config import ChannelConfig  # noqa: E402
+from utils.exceptions import ConfigError  # noqa: E402
+from utils.secrets import get_gemini_api_key  # noqa: E402
 from utils.youtube_service import get_youtube  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -300,8 +301,9 @@ class BenchmarkThumbnailAnalyzer:
         Returns:
             thumbnail_analysis が追加された data
         """
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
+        try:
+            get_gemini_api_key()
+        except ConfigError:
             logger.warning("GEMINI_API_KEY 未設定 — サムネイル分析をスキップ")
             return data
 

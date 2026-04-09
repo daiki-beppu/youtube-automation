@@ -16,7 +16,6 @@ Example:
 
 import argparse
 import json
-import os
 import re
 import sys
 import time
@@ -27,6 +26,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 
 import utils._path_setup  # noqa: F401, E402
+from utils.exceptions import ConfigError  # noqa: E402
 from utils.image_generator import (  # noqa: E402
     DEFAULT_MODEL,
     apply_composition_rules,
@@ -35,6 +35,7 @@ from utils.image_generator import (  # noqa: E402
     load_gemini_config,
     resolve_unique_path,
 )
+from utils.secrets import get_gemini_api_key  # noqa: E402
 
 
 def extract_prompt(prompts_md: Path, variation: str | None, use_text_overlay: bool = False) -> str:
@@ -186,11 +187,11 @@ def main():
         if not confirm_cost(model, cost_per_image):
             sys.exit(0)
 
-    # API キー確認
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("[ERROR] GEMINI_API_KEY 環境変数が設定されていません。")
-        print("  export GEMINI_API_KEY='your-api-key'")
+    # API キー取得（os.environ → 1Password の順で試行、副作用で os.environ にもセット）
+    try:
+        get_gemini_api_key()
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
         sys.exit(1)
 
     # SDK インポート

@@ -36,7 +36,8 @@ channel-repo/              # チャンネル固有リポジトリ
 - Python 3.11+
 - [FFmpeg](https://ffmpeg.org/) (動画生成に必要)
 - Google Cloud Project (YouTube Data API v3 有効化済み)
-- [1Password CLI](https://developer.1password.com/docs/cli/) (オプション: シークレット管理)
+- (オプション) [Nix](https://nixos.org/) + [direnv](https://direnv.net/): `flake.nix` で開発環境を再現可能に
+- (オプション) [1Password CLI](https://developer.1password.com/docs/cli/): シークレットをディスクに書かずに管理
 
 ## Quick Start
 
@@ -68,16 +69,42 @@ python auth/oauth_handler.py
 
 ### 5. 環境変数を設定
 
+シークレットは次の優先順位で取得されます:
+
+1. `os.environ` に既にセットされていればそれを使う
+2. 1Password CLI (`op`) が利用可能なら `op read` で取得
+3. 失敗した場合は `ConfigError`
+
+#### A. 標準方式: `.env` を直接編集（OSS 利用者向け）
+
 ```bash
 cp .env.example .env
-# .env を編集して API キーを設定
+$EDITOR .env  # GEMINI_API_KEY を書く
 ```
 
-1Password CLI を使用する場合:
+`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
+
+#### B. 1Password CLI 方式（秘密をディスクに書かない）
+
+`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シェルの環境変数や `.env` ファイルには一切残りません。
 
 ```bash
-bash setup_env.sh
+op signin
+# 以降、スクリプト実行時に utils/secrets.py が op read を呼ぶ
 ```
+
+シークレット参照は `utils/secrets.py` の `_SECRET_REFS` で定義されています（デフォルト: `op://Personal/GEMINI_API_KEY/credential`）。
+
+### 6. (オプション) Nix devShell
+
+ランタイム（Python / uv / FFmpeg / op）の再現性が必要な場合:
+
+```bash
+direnv allow            # 初回のみ、.envrc を承認
+# 以降、cd automation で devShell に自動入室
+```
+
+direnv を使わない場合は `nix develop` で手動入室できます。Nix を使わない OSS 利用者は、システムの Python と FFmpeg を自前で用意してください。
 
 ## Configuration
 
