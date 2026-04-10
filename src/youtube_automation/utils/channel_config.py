@@ -34,6 +34,10 @@ _REQUIRED_KEYS = [
     'descriptions.perfect_for',
     'descriptions.hashtags',
     'title.template',
+]
+
+# music_engine が lyria 以外の場合に必須となるキー
+_SUNO_REQUIRED_KEYS = [
     'suno.workspace_name',
     'suno.genre_line',
     'suno.exclude_styles',
@@ -119,11 +123,20 @@ class ChannelConfig:
     def _validate(cls):
         """必須キーの存在を検証する
 
+        music_engine が "lyria" のみの場合、suno セクションは不要。
+
         Raises:
             ConfigError: 必須キーが欠落している場合
         """
+        required = list(_REQUIRED_KEYS)
+
+        # music_engine が lyria 以外（suno, both, 未指定）なら suno キーも必須
+        music_engine = cls._data.get('music_engine', '')
+        if music_engine != 'lyria':
+            required.extend(_SUNO_REQUIRED_KEYS)
+
         missing = []
-        for key_path in _REQUIRED_KEYS:
+        for key_path in required:
             parts = key_path.split('.')
             current = cls._data
             for part in parts:

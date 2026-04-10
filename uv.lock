@@ -1461,8 +1461,10 @@ dependencies = [
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
+    { name = "google-genai" },
     { name = "matplotlib" },
     { name = "pandas" },
+    { name = "pillow" },
     { name = "python-dotenv" },
     { name = "schedule" },
     { name = "seaborn" },
@@ -1473,20 +1475,16 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
-veo = [
-    { name = "google-genai" },
-    { name = "pillow" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
-    { name = "google-genai", marker = "extra == 'veo'" },
+    { name = "google-genai" },
     { name = "matplotlib" },
     { name = "pandas" },
-    { name = "pillow", marker = "extra == 'veo'" },
+    { name = "pillow" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "python-dotenv" },
     { name = "ruff", marker = "extra == 'dev'" },

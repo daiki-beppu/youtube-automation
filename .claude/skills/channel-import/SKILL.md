@@ -15,6 +15,27 @@ description: >-
 
 **実行場所**: チャンネルリポジトリのルート
 
+### Step 0: リポジトリ準備（未作成の場合）
+
+チャンネルリポジトリが存在しない場合は、以下の手順で準備:
+
+1. **テンプレートからリポジトリ作成**:
+   ```bash
+   cd ~/02-yt
+   gh repo create <short> --template daiki-beppu/youtube-channel-template --private --clone
+   cd <short>
+   ```
+2. **automation パッケージのインストール**:
+   ```bash
+   uv add git+https://github.com/daiki-beppu/youtube-channels-automation.git
+   ```
+3. **スキルの同期**:
+   ```bash
+   uv run yt-skills sync
+   ```
+
+既にリポジトリがある場合はこのステップをスキップ。
+
 ### Step 1: 基本情報のヒアリング
 
 AskUserQuestion でユーザーに以下を質問:
@@ -93,13 +114,35 @@ print('Config loaded successfully!')
 "
 ```
 
-### Step 7: 次ステップ案内
+### Step 7: OAuth 認証と channel_id 取得
 
-config 生成完了後、以下を案内:
+`auth/token.json` がない場合:
 
-1. **OAuth 認証**（`auth/token.json` がない場合）: `uv run yt-status` で初回認証フローを起動
-2. **ベンチマーク設定**: 競合チャンネルを追加したい場合は `benchmark.channels` セクションを追加し `/benchmark` で収集
-3. **ペルソナ定義**: `/viewer-voice` → `/persona` → `/viewing-scene` の順で実行
+1. **OAuth 認証を実行**:
+   ```bash
+   uv run yt-status
+   ```
+   初回実行時にブラウザが開き Google アカウントで認証 → `auth/token.json` が生成される。
+
+2. **channel_id の自動取得**: 認証完了後、`channel.channel_id` が未設定なら API で自動取得し config に追記:
+   ```bash
+   uv run python3 -c "
+   from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+   handler = YouTubeOAuthHandler()
+   service = handler.get_youtube_service()
+   resp = service.channels().list(part='id', mine=True).execute()
+   print(resp['items'][0]['id'])
+   "
+   ```
+   取得した ID を `config/channel_config.json` の `channel.channel_id` に設定。
+
+### Step 8: 次ステップ案内
+
+config 生成・認証完了後、以下を案内:
+
+1. **ベンチマーク設定**: 競合チャンネルを追加したい場合は `benchmark.channels` セクションを追加し `/benchmark` で収集
+2. **ペルソナ定義**: `/viewer-voice` → `/persona` → `/viewing-scene` の順で実行
+3. **データ収集・分析**: `/collect` → `/analyze` で現状のパフォーマンスを把握
 4. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
 
 ## Cross References

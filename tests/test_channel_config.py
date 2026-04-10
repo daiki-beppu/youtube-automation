@@ -250,3 +250,49 @@ class TestConfigLoading:
         config_path.write_text(json.dumps(data), encoding="utf-8")
         cfg = ChannelConfig.load(config_path=str(config_path))
         assert cfg.crossfade_duration == 1.0
+
+
+# ─── Music engine conditional validation ─────────────
+
+class TestMusicEngineValidation:
+    def test_lyria_only_skips_suno_validation(self, tmp_path):
+        """music_engine が lyria の場合、suno セクションなしでもロードできる"""
+        data = json.loads(json.dumps(SAMPLE_CONFIG))
+        del data["suno"]
+        data["music_engine"] = "lyria"
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        cfg = ChannelConfig.load(config_path=str(config_path))
+        assert cfg.channel_name == "Test Channel"
+
+    def test_suno_engine_requires_suno_keys(self, tmp_path):
+        """music_engine が suno の場合、suno セクションがないとエラー"""
+        data = json.loads(json.dumps(SAMPLE_CONFIG))
+        del data["suno"]
+        data["music_engine"] = "suno"
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        from youtube_automation.utils.exceptions import ConfigError
+        with pytest.raises(ConfigError, match="suno.workspace_name"):
+            ChannelConfig.load(config_path=str(config_path))
+
+    def test_no_music_engine_requires_suno_keys(self, tmp_path):
+        """music_engine 未指定の場合、後方互換で suno セクションが必須"""
+        data = json.loads(json.dumps(SAMPLE_CONFIG))
+        del data["suno"]
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        from youtube_automation.utils.exceptions import ConfigError
+        with pytest.raises(ConfigError, match="suno.workspace_name"):
+            ChannelConfig.load(config_path=str(config_path))
+
+    def test_both_engine_requires_suno_keys(self, tmp_path):
+        """music_engine が both の場合、suno セクションが必須"""
+        data = json.loads(json.dumps(SAMPLE_CONFIG))
+        del data["suno"]
+        data["music_engine"] = "both"
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        from youtube_automation.utils.exceptions import ConfigError
+        with pytest.raises(ConfigError, match="suno.workspace_name"):
+            ChannelConfig.load(config_path=str(config_path))
