@@ -59,8 +59,12 @@ class AnalyticsAnalyzer:
         """
         logger.info("CTR改善戦略分析を実行中...")
 
-        # 現在のCTR分析
-        current_ctr = analytics_data.get('channel_ctr', {}).get('average_ctr', 0)
+        # 現在のCTR分析（新データ構造 + 旧データ構造のフォールバック）
+        ctr_analysis = analytics_data.get('ctr_analysis', {})
+        impressions_summary = ctr_analysis.get('impressions_summary', {})
+        current_ctr = impressions_summary.get('aggregated_ctr_percentage', 0) / 100
+        if current_ctr == 0:
+            current_ctr = analytics_data.get('channel_ctr', {}).get('average_ctr', 0)
         target_ctr = 2.0
         improvement_ratio = target_ctr / (current_ctr * 100) if current_ctr > 0 else 0
 
@@ -99,14 +103,17 @@ class AnalyticsAnalyzer:
         collection_ctrs = {}
         for video_id, data in video_data.items():
             title = data.get('title', '')
-            ctr = data.get('click_through_rate', 0)
+            # impression_ctr（新）→ click_through_rate（旧）のフォールバック
+            ctr = data.get('impression_ctr', 0)
+            if ctr == 0:
+                ctr = data.get('click_through_rate', 0) * 100
 
             # タイトルからコレクション名を推定
             collection_name = self._extract_collection_name(title)
             if collection_name:
                 if collection_name not in collection_ctrs:
                     collection_ctrs[collection_name] = []
-                collection_ctrs[collection_name].append(ctr * 100)
+                collection_ctrs[collection_name].append(ctr)
 
         # 統計計算
         collection_stats = {}
@@ -131,7 +138,9 @@ class AnalyticsAnalyzer:
 
         for video_id, data in video_data.items():
             title = data.get('title', '')
-            ctr = data.get('click_through_rate', 0) * 100
+            ctr = data.get('impression_ctr', 0)
+            if ctr == 0:
+                ctr = data.get('click_through_rate', 0) * 100
 
             if '8-bit' in title.lower() or '8-Bit' in title:
                 bit_8_ctrs.append(ctr)
@@ -167,7 +176,9 @@ class AnalyticsAnalyzer:
 
             for video_id, data in video_data.items():
                 title = data.get('title', '')
-                ctr = data.get('click_through_rate', 0) * 100
+                ctr = data.get('impression_ctr', 0)
+                if ctr == 0:
+                    ctr = data.get('click_through_rate', 0) * 100
 
                 if any(keyword.lower() in title.lower() for keyword in search_keywords):
                     theme_ctrs.append(ctr)
@@ -191,7 +202,9 @@ class AnalyticsAnalyzer:
         low_ctr_videos = []  # 0.8%未満
 
         for video_id, data in video_data.items():
-            ctr = data.get('click_through_rate', 0) * 100
+            ctr = data.get('impression_ctr', 0)
+            if ctr == 0:
+                ctr = data.get('click_through_rate', 0) * 100
             title = data.get('title', '')
 
             video_info = {'title': title, 'ctr': ctr, 'video_id': video_id}
@@ -259,6 +272,115 @@ class AnalyticsAnalyzer:
                 return theme.title()
         return None
 
+    def analyze_traffic_source_strategy(self, analytics_data: Dict) -> Dict[str, Any]:
+        """トラフィックソース最適化戦略分析"""
+        traffic_data = analytics_data.get('traffic_sources', {})
+        sources = traffic_data.get('sources', {})
+
+        if not sources:
+            return {'recommendations': ['トラフィックソースデータが未収集です']}
+
+        # ソースをシェア順にソート
+        sorted_sources = sorted(sources.items(), key=lambda x: x[1].get('views', 0), reverse=True)
+        top_source = sorted_sources[0] if sorted_sources else (None, {})
+
+        recommendations = []
+        source_dict = dict(sorted_sources)
+
+        # 検索トラフィック分析
+        search_share = source_dict.get('YT_SEARCH', {}).get('view_share_percent', 0)
+        browse_share = source_dict.get('BROWSE', {}).get('view_share_percent', 0)
+        related_share = source_dict.get('RELATED_VIDEO', {}).get('view_share_percent', 0)
+
+        if search_share > 30:
+            recommendations.append(f"検索流入が {search_share}% と高い — SEO 最適化が効果的")
+        elif search_share < 10:
+            recommendations.append("検索流入が少ない — タイトル・タグの SEO 改善を検討")
+
+        if browse_share > 20:
+            recommendations.append(f"おすすめ/ホーム流入が {browse_share}% — アルゴリズム評価が良好")
+
+        if related_share > 20:
+            recommendations.append(f"関連動画流入が {related_share}% — 類似コンテンツとの関連性が高い")
+
+        return {
+            'top_source': top_source[0] if top_source[0] else 'N/A',
+            'source_breakdown': {k: v.get('view_share_percent', 0) for k, v in sorted_sources[:5]},
+            'recommendations': recommendations,
+        }
+
+    def analyze_audience_composition(self, analytics_data: Dict) -> Dict[str, Any]:
+        """デバイス・地域別オーディエンス構成分析"""
+        audience = analytics_data.get('audience', {})
+        device_data = audience.get('by_device', {}).get('devices', {})
+        country_data = audience.get('by_country', {}).get('countries', {})
+
+        recommendations = []
+
+        # デバイス分析
+        mobile_share = device_data.get('MOBILE', {}).get('view_share_percent', 0)
+        if mobile_share > 60:
+            recommendations.append(f"モバイル視聴が {mobile_share}% — サムネイルの小画面最適化が重要")
+        elif mobile_share < 30:
+            recommendations.append("デスクトップ視聴が多い — 長時間 BGM コンテンツとの相性が良い")
+
+        tv_share = device_data.get('TV', {}).get('view_share_percent', 0)
+        if tv_share > 10:
+            recommendations.append(f"TV 視聴が {tv_share}% — リビング/環境音楽としての需要")
+
+        # 地域分析
+        if country_data:
+            top_countries = sorted(country_data.items(), key=lambda x: x[1].get('views', 0), reverse=True)[:3]
+            country_summary = ', '.join(f"{c[0]}({c[1].get('view_share_percent', 0)}%)" for c in top_countries)
+            recommendations.append(f"主要視聴国: {country_summary}")
+
+        return {
+            'device_breakdown': {k: v.get('view_share_percent', 0) for k, v in device_data.items()},
+            'top_countries': {k: v.get('view_share_percent', 0) for k, v in list(country_data.items())[:5]},
+            'recommendations': recommendations,
+        }
+
+    def analyze_retention_patterns(self, analytics_data: Dict) -> Dict[str, Any]:
+        """視聴維持率パターン分析"""
+        retention_data = analytics_data.get('retention', [])
+
+        if not retention_data:
+            return {'recommendations': ['視聴維持率データが未収集です（depth="full" で収集してください）']}
+
+        avg_retentions = [
+            v.get('average_retention', 0) for v in retention_data if v.get('average_retention', 0) > 0
+        ]
+        midpoint_retentions = [
+            v.get('midpoint_retention', 0) for v in retention_data if v.get('midpoint_retention', 0) > 0
+        ]
+
+        recommendations = []
+        if avg_retentions:
+            overall_avg = sum(avg_retentions) / len(avg_retentions)
+            recommendations.append(f"平均視聴維持率: {overall_avg * 100:.1f}%")
+
+            if overall_avg > 0.5:
+                recommendations.append("維持率が高い — コンテンツの質が視聴者ニーズに合致")
+            elif overall_avg < 0.3:
+                recommendations.append("維持率が低い — イントロの改善や楽曲構成の見直しを検討")
+
+        if midpoint_retentions:
+            avg_midpoint = sum(midpoint_retentions) / len(midpoint_retentions)
+            recommendations.append(f"中間地点維持率: {avg_midpoint * 100:.1f}%")
+
+        return {
+            'videos_analyzed': len(retention_data),
+            'average_retention': sum(avg_retentions) / len(avg_retentions) if avg_retentions else 0,
+            'average_midpoint_retention': (
+                sum(midpoint_retentions) / len(midpoint_retentions) if midpoint_retentions else 0
+            ),
+            'top_retention_videos': [
+                {'title': v.get('title', 'Unknown'), 'retention': v.get('average_retention', 0)}
+                for v in retention_data[:3]
+            ],
+            'recommendations': recommendations,
+        }
+
     def generate_performance_report(self, analytics_data: Dict) -> Dict[str, Any]:
         """総合パフォーマンスレポート生成"""
         logger.info(f"{self.config.channel_short}総合パフォーマンスレポート生成中...")
@@ -267,6 +389,11 @@ class AnalyticsAnalyzer:
 
         # チャンネル基本統計
         channel_stats = analytics_data.get('channel_analytics', {})
+
+        # 新メトリクスの分析（利用可能な場合）
+        traffic_strategy = self.analyze_traffic_source_strategy(analytics_data)
+        audience_comp = self.analyze_audience_composition(analytics_data)
+        retention_patterns = self.analyze_retention_patterns(analytics_data)
 
         report = {
             'generated_at': datetime.now().isoformat(),
@@ -277,6 +404,9 @@ class AnalyticsAnalyzer:
                 'average_ctr': channel_stats.get('average_ctr', 0) * 100
             },
             'ctr_strategy': ctr_analysis,
+            'traffic_source_strategy': traffic_strategy,
+            'audience_composition': audience_comp,
+            'retention_analysis': retention_patterns,
             'collection_summary': {
                 'total_collections': len(analytics_data.get('video_analytics', {})),
                 'genre_style': self.config.genre_style,

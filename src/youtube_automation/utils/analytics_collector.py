@@ -24,10 +24,13 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any
 
+from youtube_automation.utils.audience_analytics import AudienceAnalyticsMixin
 from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
 from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
+from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
 from youtube_automation.utils.video_listing import VideoListingMixin
 from youtube_automation.utils.youtube_service import get_analytics, get_youtube
@@ -41,6 +44,9 @@ class YouTubeAnalyticsCollector(
     VideoAnalyticsMixin,
     StrategicAnalyticsMixin,
     CTRAnalyticsMixin,
+    TrafficSourceMixin,
+    AudienceAnalyticsMixin,
+    RetentionAnalyticsMixin,
 ):
     """YouTube Analytics データ収集クラス"""
 

@@ -42,19 +42,21 @@ class ChannelAnalyticsMixin:
                 ids=f'channel=={self.channel_id}',
                 startDate=start_date,
                 endDate=end_date,
-                metrics='views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,likes,dislikes,comments,shares',
+                metrics='views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,likes,dislikes,comments,shares,averageViewPercentage,cardImpressions,cardClicks,cardClickRate',
                 dimensions='day'
             ).execute()
 
-            # Note: サムネイル CTR (impressionClickThroughRate) は
-            # YouTube Analytics API v2 では取得不可。YouTube Studio でのみ確認可能。
-            # 以前のコードは views/estimatedMinutesWatched を誤って impressions/ctr_percentage
-            # としてマッピングしていたバグがあったため、ctr_data は空を返す。
+            # Note: サムネイル CTR (impressions/impressionClickThroughRate) は
+            # チャンネルレベル (dimensions=day) では取得不可。
+            # 動画レベル (dimensions=video) では CTRAnalyticsMixin で取得を試行する。
 
             return {
                 'period': f"{start_date} to {end_date}",
                 'daily_metrics': self._process_daily_data(response),
-                'ctr_data': {'impressions': 0, 'ctr_percentage': 0, 'note': 'CTR is not available via Analytics API'},
+                'ctr_data': {
+                    'impressions': 0, 'ctr_percentage': 0,
+                    'note': 'Channel-level CTR requires video-level aggregation',
+                },
                 'summary': self._calculate_summary_stats(response)
             }
 
@@ -65,24 +67,28 @@ class ChannelAnalyticsMixin:
             logger.error(f"チャンネル分析取得エラー: {e}")
             return {'error': str(e)}
 
-    def collect_basic_analytics(self, start_date: str, end_date: str) -> Dict:
+    def collect_basic_analytics(self, start_date: str, end_date: str, depth: str = "standard") -> Dict:
         """
-        基本アナリティクスデータ収集（シンプル版）
+        アナリティクスデータ収集
 
         Args:
             start_date (str): 開始日 (YYYY-MM-DD)
             end_date (str): 終了日 (YYYY-MM-DD)
+            depth (str): 収集深度
+                - "basic": 既存メトリクスのみ（クォータ節約、後方互換）
+                - "standard": + impressions/CTR + traffic source + device（推奨）
+                - "full": + retention + country（全メトリクス）
 
         Returns:
-            Dict: 収集された基本アナリティクスデータ
+            Dict: 収集されたアナリティクスデータ
         """
-        logger.info(f"基本アナリティクス収集: {start_date} 〜 {end_date}")
+        logger.info(f"アナリティクス収集: {start_date} 〜 {end_date} (depth={depth})")
 
         try:
             # サービス初期化
             self.initialize()
 
-            # 基本データ収集のみ
+            # 基本データ収集
             logger.info("チャンネル統計データ収集中...")
             channel_analytics = self.get_channel_analytics(start_date, end_date)
 
@@ -106,20 +112,45 @@ class ChannelAnalyticsMixin:
                     'end_date': end_date,
                     'collected_at': datetime.now().isoformat()
                 },
+                'collection_depth': depth,
                 'channel_analytics': channel_analytics,
                 'video_analytics': video_data,
                 'strategic_analysis': strategic_analytics,
-                'summary': {
-                    'total_videos_analyzed': len(video_data),
-                    'strategic_mode': strategic_analytics['mode'],
-                    'analysis_breakdown': strategic_analytics['summary'],
-                    'date_range_days': (datetime.strptime(end_date, '%Y-%m-%d') -
-                                      datetime.strptime(start_date, '%Y-%m-%d')).days,
-                    'collection_version': '2.0'
-                }
             }
 
-            logger.info("基本アナリティクス収集完了")
+            # standard 以上: impressions/CTR + traffic source + device
+            if depth in ('standard', 'full'):
+                logger.info("CTR 詳細分析収集中...")
+                basic_data['ctr_analysis'] = self.get_ctr_analysis(start_date, end_date)
+
+                logger.info("トラフィックソース分析収集中...")
+                basic_data['traffic_sources'] = self.get_traffic_source_analytics(start_date, end_date)
+
+                logger.info("デバイス別分析収集中...")
+                basic_data['audience'] = {
+                    'by_device': self.get_device_analytics(start_date, end_date),
+                }
+
+            # full: + retention + country
+            if depth == 'full':
+                logger.info("地域別分析収集中...")
+                basic_data['audience']['by_country'] = self.get_country_analytics(start_date, end_date)
+
+                logger.info("視聴維持率分析収集中...")
+                basic_data['retention'] = self.get_retention_summary(start_date, end_date, top_n=10)
+
+            # サマリー
+            basic_data['summary'] = {
+                'total_videos_analyzed': len(video_data),
+                'strategic_mode': strategic_analytics['mode'],
+                'analysis_breakdown': strategic_analytics['summary'],
+                'date_range_days': (datetime.strptime(end_date, '%Y-%m-%d') -
+                                  datetime.strptime(start_date, '%Y-%m-%d')).days,
+                'collection_version': '3.0',
+                'depth': depth,
+            }
+
+            logger.info(f"アナリティクス収集完了 (depth={depth})")
             return basic_data
 
         except Exception as e:
@@ -143,7 +174,11 @@ class ChannelAnalyticsMixin:
                     'likes': row[6],
                     'dislikes': row[7],
                     'comments': row[8],
-                    'shares': row[9]
+                    'shares': row[9],
+                    'avg_view_percentage': row[10] if len(row) > 10 else 0,
+                    'card_impressions': row[11] if len(row) > 11 else 0,
+                    'card_clicks': row[12] if len(row) > 12 else 0,
+                    'card_click_rate': row[13] if len(row) > 13 else 0,
                 })
 
         return daily_data
@@ -155,13 +190,26 @@ class ChannelAnalyticsMixin:
             'total_watch_time': 0,
             'net_subscribers': 0,
             'total_engagement': 0,
+            'avg_view_percentage': 0,
+            'total_card_impressions': 0,
+            'total_card_clicks': 0,
         }
 
         if 'rows' in main_response:
+            view_percentages = []
             for row in main_response['rows']:
                 summary['total_views'] += row[1]
                 summary['total_watch_time'] += row[2]
                 summary['net_subscribers'] += (row[4] - row[5])
                 summary['total_engagement'] += (row[6] + row[8] + row[9])
+                if len(row) > 10 and row[10]:
+                    view_percentages.append(row[10])
+                if len(row) > 11:
+                    summary['total_card_impressions'] += row[11]
+                if len(row) > 12:
+                    summary['total_card_clicks'] += row[12]
+
+            if view_percentages:
+                summary['avg_view_percentage'] = sum(view_percentages) / len(view_percentages)
 
         return summary

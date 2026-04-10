@@ -72,7 +72,7 @@ class StrategicAnalyticsMixin:
                     ids=f'channel=={self.channel_id}',
                     startDate=start_date,
                     endDate=end_date,
-                    metrics='views,estimatedMinutesWatched,averageViewDuration',
+                    metrics='views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained',
                     dimensions='video',
                     sort='-views',
                     maxResults=batch_size,
@@ -99,9 +99,16 @@ class StrategicAnalyticsMixin:
                             if len(video_detail.get('description', '')) > 100
                             else video_detail.get('description', '')
                         ),
+                        'duration': video_detail.get('duration', ''),
+                        'definition': video_detail.get('definition', ''),
                         'views': row[1],
                         'estimated_minutes_watched': row[2],
                         'average_view_duration': row[3],
+                        'likes': row[4] if len(row) > 4 else 0,
+                        'dislikes': row[5] if len(row) > 5 else 0,
+                        'comments': row[6] if len(row) > 6 else 0,
+                        'shares': row[7] if len(row) > 7 else 0,
+                        'subscribers_gained': row[8] if len(row) > 8 else 0,
                         'url': f"https://www.youtube.com/watch?v={video_id}",
                         'is_recent': video_id in recent_video_ids
                     }
@@ -296,7 +303,7 @@ class StrategicAnalyticsMixin:
                     ids=f'channel=={self.channel_id}',
                     startDate=start_date,
                     endDate=end_date,
-                    metrics='views,estimatedMinutesWatched,averageViewDuration',
+                    metrics='views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained',
                     dimensions='video',
                     sort='-views',
                     maxResults=batch_size,
@@ -323,9 +330,16 @@ class StrategicAnalyticsMixin:
                             if len(video_detail.get('description', '')) > 100
                             else video_detail.get('description', '')
                         ),
+                        'duration': video_detail.get('duration', ''),
+                        'definition': video_detail.get('definition', ''),
                         'views': row[1],
                         'estimated_minutes_watched': row[2],
                         'average_view_duration': row[3],
+                        'likes': row[4] if len(row) > 4 else 0,
+                        'dislikes': row[5] if len(row) > 5 else 0,
+                        'comments': row[6] if len(row) > 6 else 0,
+                        'shares': row[7] if len(row) > 7 else 0,
+                        'subscribers_gained': row[8] if len(row) > 8 else 0,
                         'url': f"https://www.youtube.com/watch?v={video_id}"
                     }
                     videos_data.append(video_data)

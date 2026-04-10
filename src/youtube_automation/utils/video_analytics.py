@@ -42,7 +42,7 @@ class VideoAnalyticsMixin:
                 ids=f'channel=={self.channel_id}',
                 startDate=start_date,
                 endDate=end_date,
-                metrics='views,estimatedMinutesWatched,averageViewDuration',
+                metrics='views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained',
                 dimensions='video',
                 sort='-views',
                 maxResults=10
@@ -106,7 +106,7 @@ class VideoAnalyticsMixin:
                 ids=f'channel=={self.channel_id}',
                 startDate=start_date,
                 endDate=end_date,
-                metrics='views,estimatedMinutesWatched,averageViewDuration',
+                metrics='views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained',
                 filters=f'video=={video_id}'
             ).execute()
 
@@ -116,14 +116,24 @@ class VideoAnalyticsMixin:
                     'video_id': video_id,
                     'views': row[0] if len(row) > 0 else 0,
                     'estimated_minutes_watched': row[1] if len(row) > 1 else 0,
-                    'average_view_duration': row[2] if len(row) > 2 else 0
+                    'average_view_duration': row[2] if len(row) > 2 else 0,
+                    'likes': row[3] if len(row) > 3 else 0,
+                    'dislikes': row[4] if len(row) > 4 else 0,
+                    'comments': row[5] if len(row) > 5 else 0,
+                    'shares': row[6] if len(row) > 6 else 0,
+                    'subscribers_gained': row[7] if len(row) > 7 else 0,
                 }
             else:
                 return {
                     'video_id': video_id,
                     'views': 0,
                     'estimated_minutes_watched': 0,
-                    'average_view_duration': 0
+                    'average_view_duration': 0,
+                    'likes': 0,
+                    'dislikes': 0,
+                    'comments': 0,
+                    'shares': 0,
+                    'subscribers_gained': 0,
                 }
 
         except HttpError as e:
@@ -133,6 +143,11 @@ class VideoAnalyticsMixin:
                 'views': 0,
                 'estimated_minutes_watched': 0,
                 'average_view_duration': 0,
+                'likes': 0,
+                'dislikes': 0,
+                'comments': 0,
+                'shares': 0,
+                'subscribers_gained': 0,
                 'error': str(e)
             }
         except Exception as e:
@@ -142,6 +157,11 @@ class VideoAnalyticsMixin:
                 'views': 0,
                 'estimated_minutes_watched': 0,
                 'average_view_duration': 0,
+                'likes': 0,
+                'dislikes': 0,
+                'comments': 0,
+                'shares': 0,
+                'subscribers_gained': 0,
                 'error': str(e)
             }
 
@@ -158,19 +178,26 @@ class VideoAnalyticsMixin:
                 batch_ids = video_ids[i:i+50]
 
                 response = self.youtube_service.videos().list(
-                    part='snippet,statistics',
+                    part='snippet,statistics,contentDetails,topicDetails',
                     id=','.join(batch_ids)
                 ).execute()
 
                 for item in response.get('items', []):
                     video_id = item['id']
                     snippet = item['snippet']
+                    content_details = item.get('contentDetails', {})
+                    topic_details = item.get('topicDetails', {})
 
                     all_details[video_id] = {
                         'title': snippet['title'],
                         'published_at': snippet['publishedAt'],
                         'description': snippet.get('description', ''),
-                        'tags': snippet.get('tags', [])
+                        'tags': snippet.get('tags', []),
+                        'duration': content_details.get('duration', ''),
+                        'definition': content_details.get('definition', ''),
+                        'dimension': content_details.get('dimension', ''),
+                        'caption': content_details.get('caption', 'false'),
+                        'topic_categories': topic_details.get('topicCategories', []),
                     }
 
             return all_details
