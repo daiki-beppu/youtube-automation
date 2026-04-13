@@ -132,6 +132,11 @@ class ChannelAnalyticsMixin:
                 if video_id:
                     video_data[video_id] = video
 
+            # upload_tracking から予約公開日時を注入
+            publish_at_map = self._build_publish_at_map()
+            for vid, entry in video_data.items():
+                entry['scheduled_publish_at'] = publish_at_map.get(vid)
+
             # 基本データ構築
             basic_data = {
                 'collection_period': {

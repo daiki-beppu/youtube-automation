@@ -109,3 +109,31 @@ class TestBuildPublishAtMap:
             result = mixin._build_publish_at_map()
 
         assert result == {}
+
+
+class TestCollectBasicAnalyticsIntegration:
+    """collect_basic_analytics() が scheduled_publish_at を注入することを検証"""
+
+    def test_injects_scheduled_publish_at(self, live_dir):
+        """video_data に scheduled_publish_at が追加される"""
+        mixin = _make_mixin()
+        mixin.initialize = lambda: None
+        mixin.get_channel_analytics = lambda s, e: {"period": "test", "daily_metrics": []}
+        mixin.get_strategic_video_analytics = lambda s, e, mode="efficient": {
+            'mode': 'efficient',
+            'top_videos': [
+                {'video_id': 'ABC123', 'title': 'Cafe', 'published_at': '2026-03-25T08:00:00Z'},
+                {'video_id': 'XYZ789', 'title': 'Unknown', 'published_at': '2026-04-01T00:00:00Z'},
+            ],
+            'recent_videos': [],
+            'summary': {},
+        }
+
+        with patch.object(ChannelConfig, 'channel_dir', return_value=live_dir):
+            result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13", depth="basic")
+
+            video_data = result['video_analytics']
+            # マッチする動画: publish_at が入る
+            assert video_data['ABC123']['scheduled_publish_at'] == "2026-03-26T11:00:00+09:00"
+            # マッチしない動画: None
+            assert video_data['XYZ789']['scheduled_publish_at'] is None
