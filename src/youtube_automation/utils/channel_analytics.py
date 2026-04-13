@@ -5,8 +5,10 @@ YouTubeAnalyticsCollector のチャンネルレベル分析メソッド群
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Dict
 
 from googleapiclient.errors import HttpError
@@ -19,6 +21,31 @@ logger = logging.getLogger(__name__)
 
 class ChannelAnalyticsMixin:
     """チャンネル全体の統計データ取得・処理"""
+
+    def _build_publish_at_map(self) -> dict[str, str]:
+        """collections/live/ の upload_tracking.json から video_id → publish_at マップを構築。"""
+        from youtube_automation.utils.channel_config import ChannelConfig
+
+        publish_map: dict[str, str] = {}
+        live_dir = ChannelConfig.channel_dir() / 'collections' / 'live'
+        if not live_dir.exists():
+            return publish_map
+        for collection_dir in live_dir.iterdir():
+            if not collection_dir.is_dir():
+                continue
+            tracking = collection_dir / '20-documentation' / 'upload_tracking.json'
+            if not tracking.exists():
+                continue
+            try:
+                data = json.loads(tracking.read_text())
+                cc = data.get('complete_collection', {})
+                vid = cc.get('video_id')
+                pub = cc.get('publish_at')
+                if vid and pub:
+                    publish_map[vid] = pub
+            except (json.JSONDecodeError, OSError):
+                continue
+        return publish_map
 
     def get_channel_analytics(self, start_date: str, end_date: str) -> Dict:
         """
