@@ -110,7 +110,7 @@ print('Config loaded successfully!')
 1. **YouTube チャンネル作成**（まだの場合）→ `channel_config.json` の `youtube_handle`、`url`、`channel_id` を更新
 2. **OAuth 認証**: 初回実行で新チャンネル固有の認証フロー起動（`automation/auth/client_secrets.json` は submodule 経由で共有済み）
    ```bash
-   python3 get_channel_status  # 新規 OAuth フロー → auth/token.json 生成
+   uv run yt-channel-status  # 新規 OAuth フロー → auth/token.json 生成
    ```
 3. **ブランディング素材**: `generate_image.py` で生成し `branding/` に配置
    - **バナー画像** (`branding/banner.png`): 2048 x 1152 px、6 MB 以下、アスペクト比 16:9
