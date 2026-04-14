@@ -32,6 +32,7 @@ from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
 from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
+from youtube_automation.utils.video_daily_analytics import VideoDailyAnalyticsMixin
 from youtube_automation.utils.video_listing import VideoListingMixin
 from youtube_automation.utils.youtube_service import get_analytics, get_youtube
 
@@ -42,6 +43,7 @@ class YouTubeAnalyticsCollector(
     ChannelAnalyticsMixin,
     VideoListingMixin,
     VideoAnalyticsMixin,
+    VideoDailyAnalyticsMixin,
     StrategicAnalyticsMixin,
     CTRAnalyticsMixin,
     TrafficSourceMixin,

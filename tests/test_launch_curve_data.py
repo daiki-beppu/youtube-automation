@@ -1,0 +1,63 @@
+import json
+from pathlib import Path
+
+import pandas as pd
+
+from youtube_automation.utils.launch_curve_data import build_launch_curve_frame
+
+FIXTURES = Path(__file__).parent / "fixtures" / "sample_launch_curve"
+
+
+def _load():
+    with open(FIXTURES / "daily_sample.json") as f:
+        daily = json.load(f)
+    with open(FIXTURES / "video_meta.json") as f:
+        meta = json.load(f)
+    return daily, meta
+
+
+def test_build_launch_curve_frame_computes_days_since_publish():
+    daily, meta = _load()
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+
+    vid_a_day0 = df[(df["video_id"] == "vid_A") & (df["days_since_publish"] == 0)]
+    assert vid_a_day0["daily_views"].iloc[0] == 100
+
+    vid_b_day0 = df[(df["video_id"] == "vid_B") & (df["days_since_publish"] == 0)]
+    assert vid_b_day0["daily_views"].iloc[0] == 200
+
+
+def test_build_launch_curve_frame_computes_cumulative_views():
+    daily, meta = _load()
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+
+    vid_a = df[df["video_id"] == "vid_A"].sort_values("days_since_publish")
+    assert list(vid_a["cumulative_views"]) == [100, 180, 240]
+
+
+def test_build_launch_curve_frame_normalizes_publish_time_of_day():
+    """published_at の時刻成分で day が 1 日ズレない（深夜 00:00 に正規化）"""
+    daily = {
+        "rows": [
+            {"video_id": "v1", "date": "2026-04-01", "views": 10, "impressions": 0, "impression_ctr": 0.0},
+            {"video_id": "v1", "date": "2026-04-02", "views": 20, "impressions": 0, "impression_ctr": 0.0},
+        ]
+    }
+    # 公開時刻が午前 2 時でも、公開日（2026-04-01）は day 0 になるべき
+    meta = {"v1": {"title": "v1", "published_at": "2026-04-01T02:00:00Z"}}
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+    day0 = df[df["days_since_publish"] == 0]
+    assert day0["daily_views"].iloc[0] == 10
+    day1 = df[df["days_since_publish"] == 1]
+    assert day1["daily_views"].iloc[0] == 20
+
+
+def test_build_launch_curve_frame_has_required_columns():
+    daily, meta = _load()
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+    required = {
+        "video_id", "date", "published_at", "days_since_publish",
+        "daily_views", "cumulative_views", "daily_impressions", "ctr",
+    }
+    assert required.issubset(set(df.columns))
+    assert isinstance(df, pd.DataFrame)

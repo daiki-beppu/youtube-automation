@@ -284,6 +284,111 @@ class BenchmarkCollector:
             "collected_at": self.today.isoformat(),
         }
 
+    def collect_playlists(self, channel_info: dict) -> dict:
+        """1チャンネルの公開再生リスト構成を収集する。
+
+        playlists.list → 各 playlistItems.list → videos.list の 3 段で
+        再生リストごとの動画一覧と統計を取得する。
+
+        Args:
+            channel_info: benchmark.channels の1要素
+
+        Returns:
+            {channel_id, name, slug, playlists_collected_at, playlists: [...]}
+        """
+        channel_id = channel_info["id"]
+
+        # 1. 全再生リストを取得（ページング）
+        playlists_raw = []
+        page_token = None
+        while True:
+            resp = self.youtube.playlists().list(
+                part="snippet,contentDetails",
+                channelId=channel_id,
+                maxResults=50,
+                pageToken=page_token,
+            ).execute()
+            playlists_raw.extend(resp.get("items", []))
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+
+        logger.info("再生リスト取得: %d 件 (%s)", len(playlists_raw), channel_info["name"])
+
+        # 2. 各再生リストの動画 ID を取得し、video_id → 所属情報をマップ化
+        playlists_data = []
+        all_video_ids: set[str] = set()
+        for pl in playlists_raw:
+            playlist_id = pl["id"]
+            snippet = pl["snippet"]
+            content = pl["contentDetails"]
+
+            items = []
+            item_page_token = None
+            while True:
+                items_resp = self.youtube.playlistItems().list(
+                    part="snippet,contentDetails",
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=item_page_token,
+                ).execute()
+                for item in items_resp.get("items", []):
+                    item_snip = item["snippet"]
+                    video_id = item["contentDetails"]["videoId"]
+                    items.append({
+                        "position": item_snip.get("position", 0),
+                        "video_id": video_id,
+                        "title": item_snip.get("title", ""),
+                        "published_at": item["contentDetails"].get("videoPublishedAt", ""),
+                    })
+                    all_video_ids.add(video_id)
+                item_page_token = items_resp.get("nextPageToken")
+                if not item_page_token:
+                    break
+
+            playlists_data.append({
+                "playlist_id": playlist_id,
+                "title": snippet.get("title", ""),
+                "description": snippet.get("description", ""),
+                "item_count": int(content.get("itemCount", len(items))),
+                "items": items,
+            })
+
+        # 3. 動画 ID をバッチ（50件ずつ）で statistics + duration を取得
+        video_stats: dict[str, dict] = {}
+        video_id_list = list(all_video_ids)
+        for i in range(0, len(video_id_list), 50):
+            batch = video_id_list[i:i + 50]
+            videos_resp = self.youtube.videos().list(
+                part="statistics,contentDetails",
+                id=",".join(batch),
+            ).execute()
+            for v in videos_resp.get("items", []):
+                stats = v.get("statistics", {})
+                content = v.get("contentDetails", {})
+                duration_iso = content.get("duration", "")
+                video_stats[v["id"]] = {
+                    "views": int(stats.get("viewCount", 0)),
+                    "likes": int(stats.get("likeCount", 0)),
+                    "comments": int(stats.get("commentCount", 0)),
+                    "duration_iso": duration_iso,
+                    "duration_display": parse_iso_duration(duration_iso) if duration_iso else "",
+                }
+
+        # 4. 各 playlist の items に統計をマージ
+        for pl in playlists_data:
+            for item in pl["items"]:
+                stats = video_stats.get(item["video_id"], {})
+                item.update(stats)
+
+        return {
+            "channel_id": channel_id,
+            "name": channel_info["name"],
+            "slug": channel_info["slug"],
+            "playlists_collected_at": self.today.isoformat(),
+            "playlists": playlists_data,
+        }
+
     def save_json(self, data: dict) -> Path:
         """中間 JSON を data/ に保存する。
 
@@ -297,6 +402,52 @@ class BenchmarkCollector:
             json.dump(data, f, indent=2, ensure_ascii=False)
             f.write("\n")
         logger.info("JSON 保存: %s", path)
+        return path
+
+    def merge_playlists_into_json(self, playlists_results: list[dict]) -> Path:
+        """既存の同日付 benchmark JSON に playlists フィールドをマージする。
+
+        既存ファイルがなければ playlists のみを含む新規ファイルを作成する。
+
+        Args:
+            playlists_results: collect_playlists() の結果リスト
+
+        Returns:
+            保存先パス
+        """
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
+        path = self.data_dir / filename
+
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"channels": [], "collected_at": self.today.isoformat()}
+
+        # slug → channel オブジェクトを引けるようにする
+        channels_by_slug = {ch.get("slug"): ch for ch in data.get("channels", [])}
+
+        for pl_result in playlists_results:
+            slug = pl_result["slug"]
+            existing = channels_by_slug.get(slug)
+            if existing is not None:
+                existing["playlists_collected_at"] = pl_result["playlists_collected_at"]
+                existing["playlists"] = pl_result["playlists"]
+            else:
+                # 同日に動画ベンチマークが未収集のチャンネルは新規エントリで挿入
+                data.setdefault("channels", []).append({
+                    "channel_id": pl_result["channel_id"],
+                    "name": pl_result["name"],
+                    "slug": slug,
+                    "playlists_collected_at": pl_result["playlists_collected_at"],
+                    "playlists": pl_result["playlists"],
+                })
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        logger.info("JSON マージ保存: %s", path)
         return path
 
     # --- 内部メソッド ---
@@ -441,6 +592,92 @@ class BenchmarkReportGenerator:
             path = self.benchmarks_dir / f"{key}.md"
             path.write_text(content, encoding="utf-8")
             logger.info("Markdown 更新: %s", path.name)
+
+    def generate_playlists_markdown(self, playlists_results: list[dict]) -> dict[str, str]:
+        """再生リスト収集結果から {slug}-playlists.md コンテンツを生成する。
+
+        Returns:
+            {f"{slug}-playlists": markdown_content}
+        """
+        md_map = {}
+        for pl_result in playlists_results:
+            slug = pl_result["slug"]
+            md_map[f"{slug}-playlists"] = self._generate_playlists_md(pl_result)
+        return md_map
+
+    def _generate_playlists_md(self, channel: dict) -> str:
+        """1チャンネル分の再生リスト構成 Markdown を生成する。"""
+        playlists = channel.get("playlists", [])
+        collected_at = channel.get("playlists_collected_at", "")
+
+        lines = [
+            f"# {channel['name']} — 再生リスト構成",
+            "",
+            f"*取得日: {collected_at}*",
+            "",
+            f"再生リスト総数: **{len(playlists)}**",
+            "",
+            "## 再生リスト一覧",
+            "",
+            "| # | タイトル | 動画数 | 合計再生 | 平均再生 |",
+            "|---|---------|-------|---------|---------|",
+        ]
+
+        for i, pl in enumerate(playlists, 1):
+            items = pl.get("items", [])
+            total_views = sum(it.get("views", 0) for it in items)
+            avg_views = round(total_views / len(items)) if items else 0
+            title = self._escape_md_table(pl.get("title", ""))
+            lines.append(
+                f"| {i} | {title} | {pl.get('item_count', len(items))} | "
+                f"{total_views:,} | {avg_views:,} |"
+            )
+
+        # 構成軸の観察メモ（手動追記用プレースホルダー）
+        lines.extend([
+            "",
+            "## 構成軸の観察メモ",
+            "",
+            "<!-- TODO: 分類軸候補（time / mood / activity / season）を上記一覧から考察して追記 -->",
+            "",
+            "## 再生リスト別詳細",
+            "",
+        ])
+
+        # 各再生リストの動画一覧
+        for i, pl in enumerate(playlists, 1):
+            title = pl.get("title", "")
+            description = pl.get("description", "").strip()
+            items = sorted(pl.get("items", []), key=lambda x: x.get("position", 0))
+
+            lines.append(f"### {i}. {title}")
+            lines.append("")
+            lines.append(f"- playlist_id: `{pl.get('playlist_id', '')}`")
+            lines.append(f"- 動画数: {pl.get('item_count', len(items))}")
+            if description:
+                # 長すぎる説明は最初の数行まで
+                desc_short = "\n".join(description.splitlines()[:3])
+                lines.append(f"- 説明: {desc_short}")
+            lines.append("")
+
+            if items:
+                lines.append("| pos | タイトル | 再生数 | 高評価 | 尺 |")
+                lines.append("|-----|---------|-------|-------|-----|")
+                for item in items:
+                    pos = item.get("position", 0)
+                    item_title = self._escape_md_table(item.get("title", ""))
+                    views = item.get("views", 0)
+                    likes = item.get("likes", 0)
+                    duration = item.get("duration_display", "—")
+                    lines.append(
+                        f"| {pos} | {item_title} | {views:,} | {likes:,} | {duration} |"
+                    )
+                lines.append("")
+            else:
+                lines.append("*動画なし*")
+                lines.append("")
+
+        return "\n".join(lines)
 
     # --- 内部メソッド ---
 
@@ -858,6 +1095,11 @@ def main():
     parser.add_argument("--no-thumbnails", action="store_true", help="サムネイル分析をスキップ")
     parser.add_argument("--keep-thumbnails", action="store_true", help="サムネイル画像を保持")
     parser.add_argument("--channel", type=str, default=None, help="単一チャンネルの slug を指定")
+    parser.add_argument(
+        "--playlists",
+        action="store_true",
+        help="再生リスト構成のみ収集（既存動画ベンチマークはスキップ）。--channel 必須",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="詳細ログ出力")
     args = parser.parse_args()
 
@@ -872,6 +1114,60 @@ def main():
     if not collector.config.benchmark_channels:
         print("[ERROR] channel_config.json に benchmark.channels が設定されていません")
         sys.exit(1)
+
+    # --- 再生リスト収集モード ---
+    if args.playlists:
+        if not args.channel:
+            print("[ERROR] --playlists には --channel <slug> の指定が必須です")
+            print("        （誤って全チャンネル分の API クォータを消費しないため）")
+            sys.exit(1)
+
+        targets = [ch for ch in collector.config.benchmark_channels if ch["slug"] == args.channel]
+        if not targets:
+            print(f"[ERROR] チャンネルが見つかりません: {args.channel}")
+            sys.exit(1)
+
+        print("\n=== Benchmark Playlists Collector ===")
+        print(f"対象: {targets[0]['name']} ({args.channel})")
+        print()
+
+        collector.initialize()
+
+        playlists_results = []
+        for ch in targets:
+            logger.info("再生リスト収集中: %s (%s)", ch["name"], ch["id"])
+            result = collector.collect_playlists(ch)
+            playlists_results.append(result)
+
+        json_path = collector.merge_playlists_into_json(playlists_results)
+        print(f"JSON 保存: {json_path}")
+
+        if not args.json_only:
+            reporter = BenchmarkReportGenerator(
+                collector.config, collector.benchmarks_dir, collector.today
+            )
+            md_map = reporter.generate_playlists_markdown(playlists_results)
+            reporter.write_markdown(md_map)
+            for key in md_map:
+                print(f"Markdown 更新: {key}.md")
+
+        # サマリー
+        print()
+        print("=== 結果サマリー ===")
+        for r in playlists_results:
+            playlists = r.get("playlists", [])
+            total_videos = sum(len(p.get("items", [])) for p in playlists)
+            total_views = sum(
+                it.get("views", 0)
+                for p in playlists
+                for it in p.get("items", [])
+            )
+            print(
+                f"  {r['name']}: 再生リスト {len(playlists)}件, "
+                f"総動画 {total_videos}本, 合計再生 {total_views:,}"
+            )
+        print()
+        return
 
     print("\n=== Benchmark Collector ===")
     print(f"対象チャンネル: {len(collector.config.benchmark_channels)}件")

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-channels-automation"
-version = "1.2.0"
+version = "1.3.0"
 description = "YouTube channel automation toolkit - analytics, AI content generation, and auto-upload"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv",
     "pandas",
     "matplotlib",
+    "japanize-matplotlib",
     "seaborn",
     "schedule",
 ]
@@ -37,6 +38,7 @@ yt-benchmark-collect = "youtube_automation.scripts.benchmark_collector:main"
 yt-benchmark-comments = "youtube_automation.scripts.fetch_benchmark_comments:main"
 yt-bulk-update-desc = "youtube_automation.scripts.bulk_update_descriptions_from_md:main"
 yt-channel-status = "youtube_automation.scripts.get_channel_status:main"
+yt-channel-trend = "youtube_automation.scripts.channel_trend:main"
 yt-community-draft = "youtube_automation.scripts.community_draft:main"
 yt-fix-timestamps = "youtube_automation.scripts.fix_per_theme_timestamps:main"
 yt-generate-image = "youtube_automation.scripts.generate_image:main"
@@ -47,12 +49,15 @@ yt-generate-short-loop = "youtube_automation.scripts.generate_short_loop:main"
 yt-generate-suno = "youtube_automation.scripts.generate_suno_prompts:main"
 yt-generate-thumbnail = "youtube_automation.scripts.generate_thumbnail:main"
 yt-init-collection = "youtube_automation.scripts.init_collection:main"
+yt-launch-curve = "youtube_automation.scripts.launch_curve:main"
 yt-metadata-audit = "youtube_automation.scripts.metadata_audit:main"
 yt-playlist-manager = "youtube_automation.scripts.playlist_manager:main"
 yt-playlist-status = "youtube_automation.scripts.playlist_status:main"
 yt-populate-scene-phrases = "youtube_automation.scripts.populate_scene_phrases:main"
 yt-post-upload = "youtube_automation.scripts.post_upload_actions:main"
+yt-theme-compare = "youtube_automation.scripts.theme_compare:main"
 yt-thumbnail-compare = "youtube_automation.scripts.compare_thumbnails:main"
+yt-thumbnail-correlate = "youtube_automation.scripts.thumbnail_correlate:main"
 yt-video-uploader = "youtube_automation.scripts.video_uploader:main"
 
 # Agent entry points

@@ -89,6 +89,31 @@ class AnalyticsSystem:
                     json.dump(analytics_data, f, ensure_ascii=False, indent=2)
                 logger.info(f"💾 データ保存完了: {data_file}")
 
+                # --- 動画×日次データを別ファイルに保存（launch curve 分析用）---
+                try:
+                    video_list = self.collector.get_all_channel_videos()
+                    video_ids = [v["video_id"] for v in video_list]
+                    daily_rows = self.collector.get_video_daily_analytics(
+                        start_date.strftime('%Y-%m-%d'),
+                        end_date.strftime('%Y-%m-%d'),
+                        video_ids=video_ids,
+                    )
+                    daily_dir = ChannelConfig.channel_dir() / 'data' / 'analytics' / 'daily_per_video'
+                    daily_dir.mkdir(parents=True, exist_ok=True)
+                    daily_file = daily_dir / (
+                        f"{start_date.strftime('%Y-%m-%d')}_to_{end_date.strftime('%Y-%m-%d')}.json"
+                    )
+                    with open(daily_file, 'w', encoding='utf-8') as f:
+                        json.dump({
+                            "start_date": start_date.strftime('%Y-%m-%d'),
+                            "end_date": end_date.strftime('%Y-%m-%d'),
+                            "video_ids": video_ids,
+                            "rows": daily_rows,
+                        }, f, ensure_ascii=False, indent=2)
+                    logger.info(f"💾 動画×日次データ保存完了: {daily_file}")
+                except Exception as e:
+                    logger.warning(f"⚠️ 動画×日次データ保存失敗（続行）: {e}")
+
             logger.info("✅ アナリティクスデータ収集完了")
             return analytics_data
 
