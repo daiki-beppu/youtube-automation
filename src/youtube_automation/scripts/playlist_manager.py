@@ -273,6 +273,62 @@ class PlaylistManager:
 
         return results
 
+    # ─── 削除済み動画エントリの除去 ────────────────────
+
+    def clean_deleted_entries(self, dry_run: bool = False) -> dict[str, int]:
+        """全プレイリストから削除済み/非公開動画のエントリを除去する。
+
+        YouTube は動画が削除/非公開化された後もプレイリスト内にプレースホルダー
+        エントリ (snippet.title が "Deleted video" / "Private video") を残す。
+        これらを playlistItems.delete で除去する。
+
+        Returns:
+            {playlist_key: removed_count}
+        """
+        youtube = self._get_youtube()
+        playlists_config = self.config.playlists
+        removed_per_playlist: dict[str, int] = {}
+
+        deleted_titles = {"Deleted video", "Private video"}
+
+        for key, pl in playlists_config.items():
+            playlist_id = pl.get('playlist_id')
+            if not playlist_id:
+                logger.info(f"  {key}: playlist_id 未設定 — スキップ")
+                continue
+
+            removed = 0
+            page_token = None
+            while True:
+                resp = youtube.playlistItems().list(
+                    part='snippet',
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
+                ).execute()
+
+                for item in resp.get('items', []):
+                    title = item['snippet'].get('title', '')
+                    if title in deleted_titles:
+                        item_id = item['id']
+                        video_id = item['snippet'].get('resourceId', {}).get('videoId', '?')
+                        if dry_run:
+                            print(f"  [DRY-RUN] {key}: 除去予定 {video_id} ({title})")
+                        else:
+                            youtube.playlistItems().delete(id=item_id).execute()
+                            logger.info(f"  {key}: 除去 {video_id} ({title})")
+                        removed += 1
+
+                page_token = resp.get('nextPageToken')
+                if not page_token:
+                    break
+
+            removed_per_playlist[key] = removed
+            if removed == 0:
+                logger.info(f"  {key}: 削除済みエントリなし")
+
+        return removed_per_playlist
+
     # ─── init（作成 + 同期） ──────────────────────────
 
     def init(self, dry_run: bool = False):
@@ -302,6 +358,8 @@ def main():
     parser.add_argument('--status', action='store_true', help='現在の状態表示')
     parser.add_argument('--assign', metavar='VIDEO_ID', help='単一動画をプレイリストに追加')
     parser.add_argument('--theme', help='--assign 用のテーマ名')
+    parser.add_argument('--clean-deleted', action='store_true',
+                        help='全プレイリストから削除済み/非公開動画のエントリを除去')
     parser.add_argument('--dry-run', action='store_true', help='ドライラン（実行せず計画のみ表示）')
 
     args = parser.parse_args()
@@ -312,8 +370,16 @@ def main():
         if args.init:
             manager.init(dry_run=args.dry_run)
         elif args.status:
-            from playlist_status import PlaylistStatusViewer
+            from youtube_automation.scripts.playlist_status import PlaylistStatusViewer
             PlaylistStatusViewer().show_status()
+        elif args.clean_deleted:
+            print("\n=== 削除済み/非公開動画エントリの除去 ===")
+            results = manager.clean_deleted_entries(dry_run=args.dry_run)
+            total = sum(results.values())
+            print(f"\n=== 完了: {total} 件除去 ===")
+            for key, count in results.items():
+                if count > 0:
+                    print(f"  {key}: {count} 件")
         elif args.assign:
             if not args.theme:
                 parser.error('--assign には --theme が必要です')
