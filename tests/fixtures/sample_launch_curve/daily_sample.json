@@ -1,0 +1,13 @@
+{
+  "start_date": "2026-04-01",
+  "end_date": "2026-04-05",
+  "video_ids": ["vid_A", "vid_B"],
+  "rows": [
+    {"video_id": "vid_A", "date": "2026-04-01", "views": 100, "impressions": 5000, "impression_ctr": 2.0},
+    {"video_id": "vid_A", "date": "2026-04-02", "views": 80,  "impressions": 4000, "impression_ctr": 2.0},
+    {"video_id": "vid_A", "date": "2026-04-03", "views": 60,  "impressions": 3000, "impression_ctr": 2.0},
+    {"video_id": "vid_B", "date": "2026-04-03", "views": 200, "impressions": 8000, "impression_ctr": 2.5},
+    {"video_id": "vid_B", "date": "2026-04-04", "views": 150, "impressions": 6000, "impression_ctr": 2.5},
+    {"video_id": "vid_B", "date": "2026-04-05", "views": 100, "impressions": 4000, "impression_ctr": 2.5}
+  ]
+}
