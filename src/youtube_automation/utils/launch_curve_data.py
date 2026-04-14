@@ -36,8 +36,12 @@ def build_launch_curve_frame(
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
 
+    # published_at を日付に正規化（時刻成分で days_since_publish が1日ズレるのを防ぐ）
     meta_df = pd.DataFrame([
-        {"video_id": vid, "published_at": pd.to_datetime(m["published_at"]).tz_localize(None)}
+        {
+            "video_id": vid,
+            "published_at": pd.to_datetime(m["published_at"]).tz_localize(None).normalize(),
+        }
         for vid, m in video_meta.items()
     ])
     df = df.merge(meta_df, on="video_id", how="inner")

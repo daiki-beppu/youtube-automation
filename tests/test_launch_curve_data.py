@@ -35,6 +35,23 @@ def test_build_launch_curve_frame_computes_cumulative_views():
     assert list(vid_a["cumulative_views"]) == [100, 180, 240]
 
 
+def test_build_launch_curve_frame_normalizes_publish_time_of_day():
+    """published_at の時刻成分で day が 1 日ズレない（深夜 00:00 に正規化）"""
+    daily = {
+        "rows": [
+            {"video_id": "v1", "date": "2026-04-01", "views": 10, "impressions": 0, "impression_ctr": 0.0},
+            {"video_id": "v1", "date": "2026-04-02", "views": 20, "impressions": 0, "impression_ctr": 0.0},
+        ]
+    }
+    # 公開時刻が午前 2 時でも、公開日（2026-04-01）は day 0 になるべき
+    meta = {"v1": {"title": "v1", "published_at": "2026-04-01T02:00:00Z"}}
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+    day0 = df[df["days_since_publish"] == 0]
+    assert day0["daily_views"].iloc[0] == 10
+    day1 = df[df["days_since_publish"] == 1]
+    assert day1["daily_views"].iloc[0] == 20
+
+
 def test_build_launch_curve_frame_has_required_columns():
     daily, meta = _load()
     df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
