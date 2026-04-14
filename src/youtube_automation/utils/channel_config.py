@@ -226,6 +226,11 @@ class ChannelConfig:
     def theme_tags(self) -> dict[str, list[str]]:
         return self._data['tags']['themes']
 
+    @property
+    def channel_specific_tags(self) -> list[str]:
+        """チャンネル固有タグ（任意キー、未定義時は空リスト）"""
+        return list(self._data['tags'].get('channel_specific', []))
+
     def get_tags_for_collection(self, collection_name: str) -> list[str]:
         """コレクション名からタグリストを生成
 
@@ -236,6 +241,9 @@ class ChannelConfig:
             タグリスト（最大50）
         """
         tags = self.default_tags
+
+        # チャンネル固有タグ（任意キー、全コレクション共通）
+        tags.extend(self._data['tags'].get('channel_specific', []))
 
         # テーマ別タグ追加
         collection_lower = collection_name.lower()

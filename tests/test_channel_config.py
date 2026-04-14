@@ -36,6 +36,7 @@ SAMPLE_CONFIG = {
     },
     "tags": {
         "base": ["test", "music", "ambient"],
+        "channel_specific": ["test channel specific", "tcs"],
         "themes": {
             "forest": ["forest", "nature"],
             "battle": ["battle", "epic"],
@@ -206,10 +207,19 @@ class TestProperties:
         tags = self.cfg.get_tags_for_collection("Dark Forest Adventure")
         assert "forest" in tags
         assert "nature" in tags
+        assert "test channel specific" in tags
 
     def test_get_tags_for_collection_max_50(self):
         tags = self.cfg.get_tags_for_collection("forest")
         assert len(tags) <= 50
+
+    def test_channel_specific_tags(self):
+        assert self.cfg.channel_specific_tags == ["test channel specific", "tcs"]
+
+    def test_channel_specific_tags_returns_copy(self):
+        tags1 = self.cfg.channel_specific_tags
+        tags1.append("extra")
+        assert "extra" not in self.cfg.channel_specific_tags
 
     def test_get_activity_for_theme_match(self):
         assert self.cfg.get_activity_for_theme("Battle Arena") == "Gaming"
@@ -250,6 +260,18 @@ class TestConfigLoading:
         config_path.write_text(json.dumps(data), encoding="utf-8")
         cfg = ChannelConfig.load(config_path=str(config_path))
         assert cfg.crossfade_duration == 1.0
+
+    def test_channel_specific_tags_optional(self, tmp_path):
+        """tags.channel_specific キーが無い config でもエラーにならない（後方互換）"""
+        data = json.loads(json.dumps(SAMPLE_CONFIG))
+        del data["tags"]["channel_specific"]
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        cfg = ChannelConfig.load(config_path=str(config_path))
+        assert cfg.channel_specific_tags == []
+        tags = cfg.get_tags_for_collection("Dark Forest Adventure")
+        assert "forest" in tags
+        assert "test channel specific" not in tags
 
 
 # ─── Music engine conditional validation ─────────────
