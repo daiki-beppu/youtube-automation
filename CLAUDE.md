@@ -45,8 +45,12 @@ channel-repo/                  # チャンネル固有リポジトリ
 | `youtube_automation.utils.exceptions` | ドメイン固有例外（ConfigError, YouTubeAPIError 等） |
 | `youtube_automation.utils.collection_paths` | コレクションディレクトリ構造の解決 |
 | `youtube_automation.utils.metadata_generator` | タイトル・説明文・タグ・ローカライゼーション自動生成 |
-| `youtube_automation.utils.analytics_collector` | Analytics API データ収集（Mixin 構成） |
-| `youtube_automation.utils.analytics_analyzer` | CTR・エンゲージメント分析 |
+| `youtube_automation.utils.analytics_collector` | Analytics API データ収集（Mixin 構成、`VideoDailyAnalyticsMixin` で動画×日次取得） |
+| `youtube_automation.utils.analytics_analyzer` | CTR・エンゲージメント分析（レガシー、statistics ベース） |
+| `youtube_automation.utils.launch_curve_data` / `launch_curve_analyzer` / `launch_curve_plotter` | 動画別 launch curve + 過去ベンチマーク（pandas/matplotlib） |
+| `youtube_automation.utils.channel_trend` | チャンネル日次トレンド + 異常検知（pandas rolling） |
+| `youtube_automation.utils.theme_performance` | テーマ別平均曲線比較 |
+| `youtube_automation.utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量抽出 + CTR/views 相関（Pillow） |
 | `youtube_automation.auth.oauth_handler` | OAuth 2.0 トークン管理・リフレッシュ |
 | `youtube_automation.cli.skills_sync` | `yt-skills` コマンド本体 |
 
