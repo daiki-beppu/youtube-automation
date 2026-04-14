@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv",
     "pandas",
     "matplotlib",
+    "japanize-matplotlib",
     "seaborn",
     "schedule",
 ]

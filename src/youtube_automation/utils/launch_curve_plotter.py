@@ -8,6 +8,7 @@ from typing import Optional
 import matplotlib
 
 matplotlib.use("Agg")  # non-interactive backend
+import japanize_matplotlib  # noqa: E402, F401 — registers Japanese fonts
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
