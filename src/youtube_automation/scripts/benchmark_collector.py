@@ -112,7 +112,8 @@ class BenchmarkCollector:
             チャンネルデータ辞書（概要 + 動画リスト + 派生指標）
         """
         channel_id = channel_info["id"]
-        max_videos = self.benchmark_config.get("max_videos", 10)
+        scan_recent = self.benchmark_config.get("scan_recent", 50)
+        min_views = self.benchmark_config.get("min_views", 10000)
 
         # チャンネル概要
         ch_resp = self.youtube.channels().list(
@@ -135,56 +136,86 @@ class BenchmarkCollector:
             "subscribers": int(ch_item["statistics"].get("subscriberCount", 0)),
             "total_videos": int(ch_item["statistics"].get("videoCount", 0)),
             "collected_at": self.today.isoformat(),
+            "min_views_threshold": min_views,
         }
 
-        # 最新動画ID取得
-        playlist_resp = self.youtube.playlistItems().list(
-            part="contentDetails",
-            playlistId=uploads_playlist_id,
-            maxResults=max_videos,
-        ).execute()
-        video_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
+        # 最新動画ID取得（scan_recent 件を走査プールとする）
+        # TODO: scan_recent > 50 の場合は nextPageToken によるページング対応
+        video_ids: list[str] = []
+        page_token: str | None = None
+        remaining = scan_recent
+        while remaining > 0:
+            playlist_resp = self.youtube.playlistItems().list(
+                part="contentDetails",
+                playlistId=uploads_playlist_id,
+                maxResults=min(50, remaining),
+                pageToken=page_token,
+            ).execute()
+            batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
+            video_ids.extend(batch_ids)
+            page_token = playlist_resp.get("nextPageToken")
+            remaining -= len(batch_ids)
+            if not page_token or not batch_ids:
+                break
+
+        channel_data["scanned_count"] = len(video_ids)
 
         if not video_ids:
             logger.warning("動画が見つかりません: %s", channel_info["name"])
             channel_data["videos"] = []
+            channel_data["avg_views"] = 0
+            channel_data["avg_daily_views"] = 0
+            channel_data["avg_engagement_rate"] = 0
+            channel_data["top_tags"] = []
+            channel_data["posting_trend"] = {}
             return channel_data
 
-        # 動画詳細取得
-        videos_resp = self.youtube.videos().list(
-            part="snippet,statistics,contentDetails",
-            id=",".join(video_ids),
-        ).execute()
+        # 動画詳細取得（50件単位でバッチ）
+        raw_videos: list[dict] = []
+        for i in range(0, len(video_ids), 50):
+            videos_resp = self.youtube.videos().list(
+                part="snippet,statistics,contentDetails",
+                id=",".join(video_ids[i:i + 50]),
+            ).execute()
 
-        videos = []
-        for video in videos_resp.get("items", []):
-            snippet = video["snippet"]
-            stats = video["statistics"]
-            content = video["contentDetails"]
+            for video in videos_resp.get("items", []):
+                snippet = video["snippet"]
+                stats = video["statistics"]
+                content = video["contentDetails"]
 
-            v = {
-                "video_id": video["id"],
-                "title": snippet["title"],
-                "published_at": snippet["publishedAt"][:10],
-                "published_at_utc": snippet["publishedAt"],
-                "views": int(stats.get("viewCount", 0)),
-                "likes": int(stats.get("likeCount", 0)),
-                "comments": int(stats.get("commentCount", 0)),
-                "duration_iso": content["duration"],
-                "duration_display": parse_iso_duration(content["duration"]),
-                "tags": snippet.get("tags", []),
-                "description_keywords": extract_description_keywords(snippet.get("description", "")),
-                "thumbnail_url": self._best_thumbnail_url(snippet.get("thumbnails", {})),
-                "thumbnail_analysis": None,
-            }
-            v["daily_views"] = compute_daily_views(v, self.today)
-            v["engagement_rate"] = compute_engagement_rate(v)
-            videos.append(v)
+                v = {
+                    "video_id": video["id"],
+                    "title": snippet["title"],
+                    "published_at": snippet["publishedAt"][:10],
+                    "published_at_utc": snippet["publishedAt"],
+                    "views": int(stats.get("viewCount", 0)),
+                    "likes": int(stats.get("likeCount", 0)),
+                    "comments": int(stats.get("commentCount", 0)),
+                    "duration_iso": content["duration"],
+                    "duration_display": parse_iso_duration(content["duration"]),
+                    "tags": snippet.get("tags", []),
+                    "description_keywords": extract_description_keywords(snippet.get("description", "")),
+                    "thumbnail_url": self._best_thumbnail_url(snippet.get("thumbnails", {})),
+                    "thumbnail_analysis": None,
+                }
+                v["daily_views"] = compute_daily_views(v, self.today)
+                v["engagement_rate"] = compute_engagement_rate(v)
+                raw_videos.append(v)
+
+        # 視聴数フィルタ（min_views 以上のみベンチマーク対象）
+        videos = [v for v in raw_videos if v["views"] >= min_views]
+        # 視聴数降順で並べ替え（レポートの可読性向上）
+        videos.sort(key=lambda v: v["views"], reverse=True)
+
+        logger.info(
+            "%s: 走査 %d 本 → %d 本が %d 再生以上",
+            channel_info["name"], len(raw_videos), len(videos), min_views,
+        )
 
         channel_data["videos"] = videos
-        channel_data["posting_trend"] = compute_posting_intervals(videos)
+        channel_data["posting_trend"] = compute_posting_intervals(videos) if videos else {}
 
-        # 集計
+        # 集計（フィルタ後の Long 動画のみ対象）
         long_videos = [v for v in videos if not self._is_short(v)]
         if long_videos:
             channel_data["avg_views"] = round(sum(v["views"] for v in long_videos) / len(long_videos))
@@ -199,7 +230,7 @@ class BenchmarkCollector:
             channel_data["avg_daily_views"] = 0
             channel_data["avg_engagement_rate"] = 0
 
-        # タグ頻度分析
+        # タグ頻度分析（フィルタ後の動画のみ）
         all_tags = []
         for v in videos:
             all_tags.extend(t.lower() for t in v["tags"])
@@ -460,9 +491,21 @@ class BenchmarkReportGenerator:
             "",
         ]
 
-        # 動画テーブル
+        # 動画テーブル（ベンチマーク対象＝視聴数しきい値以上）
+        min_views = channel.get("min_views_threshold", 10000)
+        scanned = channel.get("scanned_count", len(videos))
+
+        if not videos:
+            lines.extend([
+                f"## ベンチマーク対象（再生数 {min_views:,}+）",
+                "",
+                f"> **該当動画なし** — 直近 {scanned} 本のいずれも {min_views:,} 再生未満でした。",
+                "",
+            ])
+            return "\n".join(lines)
+
         lines.extend([
-            f"## 最新{len(videos)}投稿（{channel['collected_at']} 取得）",
+            f"## ベンチマーク対象（再生数 {min_views:,}+ / 直近 {scanned} 本走査中 {len(videos)} 件該当）",
             "",
             "| # | 公開日 | 時刻(JST) | タイトル | 再生数 | 日次再生 | 高評価 | コメント | ER% | 尺 |",
             "|---|--------|-----------|---------|-------|---------|-------|---------|-----|-----|",

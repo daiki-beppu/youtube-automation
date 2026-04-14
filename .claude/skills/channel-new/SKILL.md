@@ -70,7 +70,8 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
   "genre": { "primary": "TBD", "style": "TBD", "context": "TBD" },
   "benchmark": {
     "channels": [],
-    "max_videos": 10,
+    "scan_recent": 50,
+    "min_views": 10000,
     "freshness_days": 3,
     "analyze_thumbnails": true
   }
