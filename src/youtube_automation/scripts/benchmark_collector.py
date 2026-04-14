@@ -183,6 +183,12 @@ class BenchmarkCollector:
                 stats = video["statistics"]
                 content = video["contentDetails"]
 
+                # ライブ配信・非公開動画等で duration が欠落することがあるためスキップ
+                duration_iso = content.get("duration")
+                if not duration_iso:
+                    logger.warning("duration 欠落のためスキップ: %s", video.get("id"))
+                    continue
+
                 v = {
                     "video_id": video["id"],
                     "title": snippet["title"],
@@ -191,8 +197,8 @@ class BenchmarkCollector:
                     "views": int(stats.get("viewCount", 0)),
                     "likes": int(stats.get("likeCount", 0)),
                     "comments": int(stats.get("commentCount", 0)),
-                    "duration_iso": content["duration"],
-                    "duration_display": parse_iso_duration(content["duration"]),
+                    "duration_iso": duration_iso,
+                    "duration_display": parse_iso_duration(duration_iso),
                     "tags": snippet.get("tags", []),
                     "description_keywords": extract_description_keywords(snippet.get("description", "")),
                     "thumbnail_url": self._best_thumbnail_url(snippet.get("thumbnails", {})),
