@@ -2,6 +2,18 @@
 
 YouTube チャンネル運営を自動化するツールキット。git+https インストール（推奨）またはサブモジュール（後方互換）でチャンネルリポジトリに導入する。
 
+## コマンド
+
+```bash
+uv sync                    # 依存解決（dev extras 込み: uv sync --extra dev）
+uv run pytest              # テスト実行
+uv run ruff check .        # lint
+uv run ruff format .       # フォーマット
+uv run yt-skills sync      # チャンネルリポジトリへスキル配布
+```
+
+CLI スクリプトは `pyproject.toml` `[project.scripts]` 配下に **`yt-*` プレフィックス**で登録する（例: `yt-analytics`, `yt-upload-collection`）。新規追加時もこの規約を踏襲。
+
 ## アーキテクチャ
 
 ```
