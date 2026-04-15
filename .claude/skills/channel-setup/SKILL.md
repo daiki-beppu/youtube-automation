@@ -1,10 +1,6 @@
 ---
 name: channel-setup
-description: >-
-  Use when /channel-direction で方向性が確定し、チャンネルのテクニカルセットアップを行いたいとき。
-  「セットアップ」「設定ファイル生成」「config 作成」「チャンネル構築」など、
-  新チャンネルの設定ファイル+ディレクトリ構造の完成に関わる場面で使用すること。
-  /channel-direction の後に実行する
+description: Use when /channel-direction で方向性が確定し、チャンネルのテクニカルセットアップを行いたいとき。「セットアップ」「設定ファイル生成」「config 作成」「チャンネル構築」など、新チャンネルの設定ファイル+ディレクトリ構造の完成に関わる場面で使用すること。/channel-direction の後に実行する
 ---
 
 ## Overview
