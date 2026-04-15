@@ -44,7 +44,7 @@ def _load_video_meta(channel_dir: Path) -> dict:
 
 
 def _print_text_summary(analysis: dict) -> None:
-    print(f"🎨 テーマ別パフォーマンス比較")
+    print("🎨 テーマ別パフォーマンス比較")
     print(f"   比較日齢: {analysis['peak_days']}")
     print(f"   最高初速: {analysis['best_theme_by_initial_velocity']}")
     print(f"   最高ロングテール: {analysis['best_theme_by_long_tail']}")

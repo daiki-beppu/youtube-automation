@@ -27,7 +27,6 @@ import yaml
 from youtube_automation.utils.channel_config import ChannelConfig
 from youtube_automation.utils.exceptions import ConfigError
 
-
 _cache: dict[str, dict[str, Any]] = {}
 
 

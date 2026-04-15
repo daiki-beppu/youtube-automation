@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.channel_config import ChannelConfig
 from youtube_automation.utils.audience_analytics import AudienceAnalyticsMixin
+from youtube_automation.utils.channel_config import ChannelConfig
 
 
 @pytest.fixture(autouse=True)

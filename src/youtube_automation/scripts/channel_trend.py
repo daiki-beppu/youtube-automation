@@ -36,7 +36,7 @@ def _load_daily_metrics(channel_dir: Path):
 def _print_text_summary(analysis: dict) -> None:
     s = analysis["summary"]
     period = s.get("period") or {}
-    print(f"📊 チャンネルトレンド分析")
+    print("📊 チャンネルトレンド分析")
     print(f"   期間: {period.get('start_date')} 〜 {period.get('end_date')} "
           f"({period.get('days')}日)")
     print(f"   合計 views: {s['total_views']:,}")
@@ -49,17 +49,17 @@ def _print_text_summary(analysis: dict) -> None:
 
     anomalies = analysis["anomalies"]
     if anomalies:
-        print(f"\n🚨 異常検知 (z_score ≥ 2):")
+        print("\n🚨 異常検知 (z_score ≥ 2):")
         for a in anomalies:
             icon = "🔺" if a["type"] == "spike" else "🔻"
             print(f"   {icon} {a['date']} views={a['views']:,} "
                   f"(z={a['z_score']}, 7d_ma={a['baseline_7d_ma']})")
     else:
-        print(f"\n🚨 異常検知: なし")
+        print("\n🚨 異常検知: なし")
 
     wow = analysis["week_over_week"]
     if wow:
-        print(f"\n📅 週次推移:")
+        print("\n📅 週次推移:")
         for w in wow[-6:]:
             delta = f"{w['delta_pct']:+.1f}%" if w['delta_pct'] is not None else "  —"
             print(f"   {w['week_starting']}: {w['views']:>6,} views  ({delta})")

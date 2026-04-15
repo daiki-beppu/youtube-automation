@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
@@ -38,14 +36,7 @@ def test_load_default_only(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
-    # default.yaml が存在するスキルを用意 (一時ディレクトリに fake)
-    # 実スキルのデフォルトを読むテストは integration 側に任せ、ここでは merge ロジックを検証
-    skill = "thumbnail"
-    # skill_config._default_path は editable install のソースツリーを参照する
-    # 実際の .claude/skills/thumbnail/config.default.yaml が存在しない段階でもテストが通るように、
-    # まずは override マージロジックを検証する別経路を使う
-
-    # 代わりに _deep_merge を直接テスト
+    # 実スキルの default.yaml を参照せず、_deep_merge のロジックだけを検証
     merged = skill_config._deep_merge(
         {"a": 1, "b": {"x": 1, "y": 2}},
         {"b": {"y": 20, "z": 30}, "c": 4},

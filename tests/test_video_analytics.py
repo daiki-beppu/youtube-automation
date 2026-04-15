@@ -5,7 +5,7 @@ VideoAnalyticsMixin のユニットテスト
 metrics パラメータと row マッピングの整合性を検証する。
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

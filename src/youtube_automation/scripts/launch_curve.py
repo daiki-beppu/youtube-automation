@@ -164,7 +164,7 @@ def _print_text_summary(analysis: Dict) -> None:
             )
         else:
             print(f"   判定: {t['quartile_label']}")
-    print(f"\n📊 全動画ランキング (最新日齢時点, 中央値比):")
+    print("\n📊 全動画ランキング (最新日齢時点, 中央値比):")
     for v in analysis["all_videos"]:
         ratio = f"{v['ratio_vs_median']:.2f}x" if v["ratio_vs_median"] else "n/a"
         print(
