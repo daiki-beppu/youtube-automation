@@ -6,7 +6,7 @@
 ## JSON 構文検証
 
 ```bash
-python3 -c "import json; json.load(open('config/channel_config.json'))"
+uv run python3 -c "import json; json.load(open('config/channel_config.json'))"
 ```
 
 エラーが出なければ構文 OK。
@@ -64,7 +64,7 @@ uv run yt-generate-image --prompt "..." --output branding/icon.png --aspect-rati
 uv run yt-generate-image --prompt "..." --output branding/banner.png --aspect-ratio 16:9 -y
 
 # リサイズ（上限超過時）
-python3 -c "
+uv run python3 -c "
 from PIL import Image
 icon = Image.open('branding/icon.png').resize((800, 800), Image.LANCZOS)
 icon.save('branding/icon.png', 'PNG', optimize=True)

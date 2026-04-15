@@ -107,7 +107,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 # 順次実行（API レート制限回避）
 # <dir> は上で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
 # <slug> はテーマ名をケバブケースに変換（例: "The Wanderer's Road" → "wanderers-road"）
-REF=$(python3 -c "from youtube_automation.utils.skill_config import load_skill_config; c=load_skill_config('thumbnail'); print(c.get('gemini_image',{}).get('reference_images',{}).get('default',''))")
+REF=$(uv run python3 -c "from youtube_automation.utils.skill_config import load_skill_config; c=load_skill_config('thumbnail'); print(c.get('gemini_image',{}).get('reference_images',{}).get('default',''))")
 uv run yt-generate-image --reference "$REF" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
 uv run yt-generate-image --reference "$REF" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
 uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
