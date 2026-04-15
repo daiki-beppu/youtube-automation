@@ -45,7 +45,7 @@ Phase 1 で作成した最小 config を完全版に拡張。`config-template.js
 |---------|---------|
 | `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整 |
 | `config/upload_settings.json` | `references/upload-settings-template.json` をコピー |
-| `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整 |
+| `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。多言語展開しないチャンネルは省略可（`ChannelConfig.supported_languages` は `youtube.language` のみへフォールバック） |
 | `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
 
 ### Step 6: 検証

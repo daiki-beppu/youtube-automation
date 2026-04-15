@@ -135,7 +135,14 @@ uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" 
 `docs/plans/persona-definition.md` で定義されたペルソナに対し、各 1 企画を生成する。
 ペルソナの視聴シーン・ユースケースから情景を導出し、差別化軸と掛け合わせてテーマを決定する。
 
-`docs/plans/persona-definition.md` が存在する場合、そこからペルソナを読み込む。未定義の場合はユーザーにペルソナ定義（`/persona`）を先に実行するよう案内する。
+`docs/plans/persona-definition.md` が存在する場合、そこからペルソナを読み込む。
+**存在しない場合は ideate を進めず、以下を案内して停止する:**
+
+```
+❌ docs/plans/persona-definition.md が見つかりません。
+   先に `/persona` を実行してターゲットペルソナを定義してください。
+   （チャンネル立ち上げ直後なら `/channel-direction` → `/persona` → `/ideate` の順）
+```
 
 今回のターゲットペルソナに対し、差別化軸（`config/skills/ideate.yaml` の `differentiation_axes`、デフォルト: location / time_of_day / activity / mood）の掛け合わせで候補を生成:
 

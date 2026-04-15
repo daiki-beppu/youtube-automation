@@ -274,3 +274,61 @@ class TestMusicEngineValidation:
             config_path.write_text(json.dumps(data), encoding="utf-8")
             cfg = ChannelConfig.load(config_path=str(config_path))
             assert cfg.channel_name == "Test Channel"
+
+    def test_music_engine_defaults_to_suno(self, config_file):
+        """music_engine 未設定時は 'suno' にフォールバック"""
+        cfg = ChannelConfig.load(config_path=str(config_file))
+        assert cfg.music_engine == "suno"
+
+    def test_music_engine_returns_configured_value(self, tmp_path):
+        data = json.loads(json.dumps(SAMPLE_CONFIG))
+        data["music_engine"] = "lyria"
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        cfg = ChannelConfig.load(config_path=str(config_path))
+        assert cfg.music_engine == "lyria"
+
+    def test_music_engine_unknown_value_warns(self, tmp_path, caplog):
+        """未知の値でも例外にはしないが警告ログを出す"""
+        import logging
+
+        data = json.loads(json.dumps(SAMPLE_CONFIG))
+        data["music_engine"] = "unknown_engine"
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        cfg = ChannelConfig.load(config_path=str(config_path))
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.channel_config"):
+            assert cfg.music_engine == "unknown_engine"
+        assert any("music_engine" in rec.message for rec in caplog.records)
+
+
+# ─── Localizations fallback ──────────────────────────
+
+class TestLocalizationsFallback:
+    def test_supported_languages_falls_back_to_youtube_language(self, monkeypatch, channel_dir_with_config):
+        """localizations.json が無い場合、supported_languages は youtube.language のみ返す"""
+        monkeypatch.setenv("CHANNEL_DIR", str(channel_dir_with_config))
+        cfg = ChannelConfig.load()
+        assert cfg.has_localizations is False
+        assert cfg.supported_languages == ["en"]
+
+    def test_supported_languages_uses_localizations_when_present(self, monkeypatch, channel_dir_with_config):
+        """localizations.json があればその supported_languages を返す"""
+        loc_path = channel_dir_with_config / "config" / "localizations.json"
+        loc_path.write_text(
+            json.dumps({"supported_languages": ["en", "ja", "es"]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(channel_dir_with_config))
+        cfg = ChannelConfig.load()
+        assert cfg.has_localizations is True
+        assert cfg.supported_languages == ["en", "ja", "es"]
+
+    def test_localizations_config_raises_config_error_when_missing(self, monkeypatch, channel_dir_with_config):
+        """localizations_config 直接参照時は ConfigError（FileNotFoundError ではなく）"""
+        from youtube_automation.utils.exceptions import ConfigError
+
+        monkeypatch.setenv("CHANNEL_DIR", str(channel_dir_with_config))
+        cfg = ChannelConfig.load()
+        with pytest.raises(ConfigError, match="localizations.json"):
+            _ = cfg.localizations_config

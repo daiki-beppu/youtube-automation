@@ -72,7 +72,7 @@ pip install "git+https://github.com/daiki-beppu/youtube-automation@v1.1.0"
 
 インストールすると `yt-*` という CLI コマンド群と `yt-skills` 同期ツールが PATH に入ります。
 
-> **submodule 形式 (legacy)**: 既存のチャンネルリポジトリは `git submodule add git@github.com:daiki-beppu/youtube-automation.git automation` でも引き続き動作します（`utils/`, `agents/`, `auth/`, `scripts/` の互換 shim を維持）。新規チャンネルは pip install を推奨。
+> **submodule 形式 (legacy)**: 既存のチャンネルリポジトリは `git submodule add git@github.com:daiki-beppu/youtube-automation.git automation` でも引き続き動作します（`utils/`, `agents/`, `auth/`, `scripts/` の互換 shim を維持）。新規チャンネルは pip install を推奨。submodule から uv 方式への移行手順は [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md) を参照。
 
 ### 2. Claude Code スキルを同期
 
