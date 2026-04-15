@@ -31,6 +31,11 @@ def generate(patterns_path: Path) -> str:
     title = data.get("title", "Suno Prompts")
     patterns = data.get("patterns", [])
 
+    vocal_keywords = ("vocals", "vocal", "singing", "rap", "sings", "sung")
+    auto_vocal = any(kw in genre_line.lower() for kw in vocal_keywords)
+    mode = data.get("mode", "vocal" if auto_vocal else "instrumental")
+    is_vocal = mode == "vocal"
+
     lines = [
         f"# Suno Prompts — {title}",
         "",
@@ -41,7 +46,8 @@ def generate(patterns_path: Path) -> str:
         "| Mode | Custom |",
         "| Weirdness | 20% |",
         f"| Style Influence | {style_influence}% |",
-        "| Lyrics | (空) |",
+        f"| Instrumental | {'OFF（ボーカルモード）' if is_vocal else 'ON（インストモード）'} |",
+        f"| Lyrics | {'各パターンの Lyrics 欄を投入' if is_vocal else '(空)'} |",
         "",
         "---",
     ]
@@ -54,6 +60,7 @@ def generate(patterns_path: Path) -> str:
         name_en = pattern["name_en"]
         tempo = pattern.get("tempo")
         scenes = pattern["scenes"]
+        lyrics = pattern.get("lyrics")
         style_key = pattern.get("style")
 
         # Per-pattern style variant override
@@ -88,6 +95,13 @@ def generate(patterns_path: Path) -> str:
                 lines.append("**Exclude Styles:**")
                 lines.append("```")
                 lines.append(exclude_styles)
+                lines.append("```")
+
+            if is_vocal and lyrics:
+                lines.append("")
+                lines.append("**Lyrics:**")
+                lines.append("```")
+                lines.append(lyrics.rstrip())
                 lines.append("```")
 
         lines.append("")
