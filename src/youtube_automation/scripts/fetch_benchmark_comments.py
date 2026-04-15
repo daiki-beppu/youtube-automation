@@ -19,8 +19,10 @@ import json
 import logging
 from datetime import date, datetime
 
-from benchmark_collector import ensure_benchmark_fresh, load_benchmark_videos  # noqa: E402
-
+from youtube_automation.scripts.benchmark_collector import (  # noqa: E402
+    ensure_benchmark_fresh,
+    load_benchmark_videos,
+)
 from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
