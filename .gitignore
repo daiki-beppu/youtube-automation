@@ -27,3 +27,4 @@ dist/
 build/
 *.egg-info/
 .coverage
+.worktrees/
