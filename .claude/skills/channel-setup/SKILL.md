@@ -43,16 +43,27 @@ description: >-
 
 Phase 1 で作成した最小 config を完全版に拡張。`config-template.json` の全フィールドを埋める。
 
-**必須セクション**: channel, content_model, genre, youtube, tags, descriptions, gemini_image, analytics, title, audio, workflow, suno
+**必須セクション**: channel, content_model, genre, youtube, tags, descriptions, analytics, title, workflow
 
-**オプションセクション**（方向性に基づき追加）:
+**skill-config で管理されるセクション**（channel_config.json には置かない）:
+
+| スキル | 設定ファイル |
+|---|---|
+| thumbnail / Gemini 画像生成 | `config/skills/thumbnail.yaml` |
+| suno | `config/skills/suno.yaml` |
+| lyria | `config/skills/lyria.yaml` |
+| ideate | `config/skills/ideate.yaml` |
+| benchmark | `config/skills/benchmark.yaml` |
+| short | `config/skills/short.yaml` |
+| description | `config/skills/description.yaml` |
+| masterup（audio.crossfade_duration 等） | `config/skills/masterup.yaml` |
+
+**オプションセクション**（方向性に基づき channel_config.json に追加）:
 
 | オプション | セクション | 条件 |
 |-----------|----------|------|
-| Lyria 音楽生成 | `lyria` | 音楽エンジンで lyria/both 選択時。ジャンルから提案 |
 | ループ動画 | `veo` | デフォルト有効 |
 | プレイリスト | `playlists` | プレイリスト名を提案（ID は空欄） |
-| ショート動画 | `short` | デフォルト有効 |
 | 投稿後自動化 | `post_upload` | デフォルト有効 |
 
 `benchmark` セクションは `/channel-new` で既に設定済み。

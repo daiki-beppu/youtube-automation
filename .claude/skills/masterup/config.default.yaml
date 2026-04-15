@@ -1,0 +1,18 @@
+# masterup skill default config
+#
+# マスター音源生成 + Suno CDN ダウンロードの設定。
+# チャンネル側では config/skills/masterup.yaml に上書き値を置く。
+
+audio:
+  # トラック間クロスフェード秒数
+  # metadata_generator.py がタイムスタンプ計算で参照する。
+  # 注意: references/generate_master.sh は内部で 3 秒固定を使っているため、
+  # 実際の音声クロスフェード時間と食い違う可能性がある（別 issue で統一検討）。
+  crossfade_duration: 1.0
+
+  # マスター音源のビットレート
+  bitrate: "192k"
+
+# Suno CDN ダウンロード設定
+suno_download:
+  cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"

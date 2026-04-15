@@ -1,0 +1,41 @@
+# description skill default config
+#
+# 概要欄生成の設定。チャンネル側では config/skills/description.yaml に上書き値を置く。
+#
+# 注意: tags.base / title.template / descriptions.opening / perfect_for / hashtags は
+# 複数スキル（metadata_generator / short / upload 等）から参照される横断属性のため、
+# 引き続き channel_config.json で管理する。ここには description 固有の派生マッピングのみ置く。
+
+# テーマ→Perfect for 用途マッピング
+# コレクション名と部分一致したキーの用途リストを採用する。
+# 未マッチ時は channel_config.json の descriptions.perfect_for がフォールバック。
+#
+# 例:
+# perfect_for_themes:
+#   study:
+#     - Late Night Study Sessions
+#     - Focus & Concentration
+#   sleep:
+#     - Falling Asleep
+#     - Insomnia Relief
+#   tavern:
+#     - Tabletop RPG Sessions
+#     - Fantasy Reading
+perfect_for_themes: {}
+
+# テーマ別絵文字（descriptions.md にテーマ見出しを差し込むときに参照）
+theme_emoji:
+  study: "📚"
+  sleep: "🌙"
+  tavern: "🍺"
+  ocean: "🌊"
+  forest: "🌿"
+  druid: "🔮"
+  rain: "🌧️"
+  hearth: "🔥"
+
+# YouTube Studio の Card（手動設定）に含める定型メッセージ
+cards:
+  enabled: true
+  timing: "12:00"
+  text_template: "Up next from {channel_name}"

@@ -38,24 +38,10 @@ from youtube_automation.utils.benchmark_analyzer import (  # noqa: E402
 from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 from youtube_automation.utils.secrets import get_gemini_api_key  # noqa: E402
+from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-# サムネイル分析で使用する Gemini モデル（テキスト出力 + 画像入力）
-THUMBNAIL_ANALYSIS_MODEL = "gemini-2.5-flash"
-THUMBNAIL_ANALYSIS_DELAY = 5  # 秒（レート制限対策）
-
-THUMBNAIL_ANALYSIS_PROMPT = """Analyze this YouTube thumbnail for a fantasy/celtic ambient music channel.
-Return ONLY valid JSON (no markdown, no code fences):
-{
-  "composition": "brief description of layout, focal points, and character positioning",
-  "color_palette": "dominant colors and overall mood/tone",
-  "text_placement": "how title text is positioned and styled",
-  "character_activity": "what the character is doing (or 'none' if no character)",
-  "atmosphere": "overall mood, lighting, and environmental effects",
-  "strengths": ["list", "of", "effective", "elements"]
-}"""
 
 
 class BenchmarkCollector:
@@ -64,7 +50,7 @@ class BenchmarkCollector:
     def __init__(self):
         self.config = ChannelConfig.load()
         self.youtube = None
-        self.benchmark_config = self.config.benchmark_config
+        self.benchmark_config = load_skill_config("benchmark")
         self.channel_dir = ChannelConfig.channel_dir()
         self.benchmarks_dir = self.channel_dir / "docs" / "benchmarks"
         self.data_dir = self.channel_dir / "data"
@@ -477,6 +463,10 @@ class BenchmarkThumbnailAnalyzer:
 
     def __init__(self, benchmarks_dir: Path):
         self.benchmarks_dir = benchmarks_dir
+        cfg = load_skill_config("benchmark").get("thumbnail_analysis", {})
+        self.model = cfg.get("model", "gemini-2.5-flash")
+        self.delay_sec = float(cfg.get("delay_sec", 5))
+        self.prompt = cfg.get("prompt", "").strip()
 
     def analyze_thumbnails(self, data: dict, keep: bool = False) -> dict:
         """サムネイル画像をダウンロードして Gemini で分析する。
@@ -532,10 +522,10 @@ class BenchmarkThumbnailAnalyzer:
                     try:
                         image_bytes = tmp_path.read_bytes()
                         response = client.models.generate_content(
-                            model=THUMBNAIL_ANALYSIS_MODEL,
+                            model=self.model,
                             contents=[
                                 types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                                THUMBNAIL_ANALYSIS_PROMPT,
+                                self.prompt,
                             ],
                         )
                         # JSON パース
@@ -553,7 +543,7 @@ class BenchmarkThumbnailAnalyzer:
                     except Exception as e:
                         logger.warning("サムネイル分析失敗 [%s]: %s", video["title"][:30], e)
 
-                    time.sleep(THUMBNAIL_ANALYSIS_DELAY)
+                    time.sleep(self.delay_sec)
 
         return data
 

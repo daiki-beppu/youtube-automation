@@ -1,0 +1,37 @@
+# benchmark skill default config
+#
+# 競合チャンネルベンチマーク収集の動作パラメータ。
+# チャンネル側では config/skills/benchmark.yaml に上書き値を置く。
+#
+# 注意: 競合チャンネルリスト (benchmark.channels[]) は戦略情報として
+# channel_config.json 側で管理する。この YAML では走査・分析の動作パラメータのみ扱う。
+
+# チャンネルあたりの走査プール本数（直近 N 投稿）
+scan_recent: 50
+
+# ベンチマーク対象とする視聴数しきい値（これ未満の動画は分析対象外）
+min_views: 10000
+
+# レポート鮮度（この日数を超えたら更新対象）
+freshness_days: 3
+
+# Gemini によるサムネイル分析を実行するか
+analyze_thumbnails: true
+
+# サムネイル分析の詳細設定
+thumbnail_analysis:
+  model: gemini-2.5-flash
+  delay_sec: 5  # API レート制限対策の待機秒数
+  # Gemini に渡すプロンプト。チャンネルのジャンル/世界観に合わせて
+  # config/skills/benchmark.yaml で上書きを推奨。
+  prompt: |
+    Analyze this YouTube thumbnail for a music channel.
+    Return ONLY valid JSON (no markdown, no code fences):
+    {
+      "composition": "brief description of layout, focal points, and character positioning",
+      "color_palette": "dominant colors and overall mood/tone",
+      "text_placement": "how title text is positioned and styled",
+      "character_activity": "what the character is doing (or 'none' if no character)",
+      "atmosphere": "overall mood, lighting, and environmental effects",
+      "strengths": ["list", "of", "effective", "elements"]
+    }

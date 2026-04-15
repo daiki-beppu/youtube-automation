@@ -37,10 +37,6 @@
     ],
     "hashtags": []
   },
-  "gemini_image": {
-    "model": "gemini-3.1-flash-image-preview",
-    "cost_per_image_usd": 0.04
-  },
   "analytics": {
     "collection_filter_keywords": ["Complete Collection", "{{SHORT}}"]
   },
@@ -49,15 +45,7 @@
     "default_activity": "Study",
     "theme_activities": {}
   },
-  "audio": {
-    "crossfade_duration": 1.0
-  },
   "workflow": {
     "steps": ["planning", "thumbnail", "music", "finish"]
-  },
-  "suno": {
-    "workspace_name": "{{SHORT}}",
-    "genre_line": "",
-    "exclude_styles": ""
   }
 }

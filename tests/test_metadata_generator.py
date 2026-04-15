@@ -37,8 +37,13 @@ def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAH
 
     実際のファイルシステムにはアクセスしない純粋ロジックのテストに使用する。
     """
+    from youtube_automation.utils.skill_config import load_skill_config
     gen = object.__new__(BAHMetadataGenerator)
     gen.config = ChannelConfig.load()
+    gen._masterup_config = load_skill_config("masterup")
+    gen._crossfade_sec = float(
+        gen._masterup_config.get("audio", {}).get("crossfade_duration", 1.0)
+    )
     gen.collection_path = Path(f"/tmp/fake-collections/{dir_name}")
     gen.collection_name = gen._extract_collection_name()
     gen.bit_depth = gen.config.genre_style
@@ -554,9 +559,10 @@ class TestCrossfade:
     """クロスフェード設定・タイムスタンプ・合計時間の検証。"""
 
     def test_crossfade_config_default(self):
-        """ChannelConfig.crossfade_duration が設定値を返すこと"""
-        config = ChannelConfig.load()
-        assert config.crossfade_duration == config.raw.get("audio", {}).get("crossfade_duration", 1.0)
+        """skill-config (masterup.yaml) の audio.crossfade_duration がロードされること"""
+        from youtube_automation.utils.skill_config import load_skill_config
+        cfg = load_skill_config("masterup")
+        assert cfg.get("audio", {}).get("crossfade_duration") == 1.0
 
     def test_timestamp_with_crossfade(self):
         """3曲のタイムスタンプがクロスフェード分だけ前倒しされること
@@ -605,8 +611,7 @@ class TestCrossfade:
             {"duration": 90},
             {"duration": 60},
         ]
-        config = ChannelConfig.load()
-        crossfade = config.crossfade_duration
+        crossfade = gen._crossfade_sec
         expected = sum(t["duration"] for t in gen.tracks) - max(0, len(gen.tracks) - 1) * crossfade
         # 270 - 2 * crossfade
         assert expected == 270.0 - 2 * crossfade
@@ -615,8 +620,7 @@ class TestCrossfade:
         """1曲のみの場合、クロスフェード補正なし"""
         gen = _make_generator("20250907-live-8bit-adventure-music")
         gen.tracks = [{"duration": 180}]
-        config = ChannelConfig.load()
-        crossfade = config.crossfade_duration
+        crossfade = gen._crossfade_sec
         total = sum(t["duration"] for t in gen.tracks) - max(0, len(gen.tracks) - 1) * crossfade
         assert total == 180.0
 

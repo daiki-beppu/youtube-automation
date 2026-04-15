@@ -51,9 +51,6 @@ SAMPLE_CONFIG = {
     "analytics": {
         "collection_filter_keywords": ["collection", "complete"],
     },
-    "audio": {
-        "crossfade_duration": 2.5,
-    },
     "suno": {
         "workspace_name": "Test Workspace",
         "genre_line": "ambient, chill",
@@ -196,9 +193,6 @@ class TestProperties:
     def test_hashtag_line(self):
         assert self.cfg.hashtag_line == "#test #music"
 
-    def test_crossfade_duration(self):
-        assert self.cfg.crossfade_duration == 2.5
-
     def test_default_tags_includes_channel_name(self):
         tags = self.cfg.default_tags
         assert "test channel" in tags
@@ -250,16 +244,6 @@ class TestConfigLoading:
         """load() が dotenv を呼び出すことを確認（エラーなく完了すればOK）"""
         cfg = ChannelConfig.load(config_path=str(config_file))
         assert cfg is not None
-
-    def test_crossfade_duration_default(self, tmp_path):
-        """audio セクションがない場合のデフォルト値"""
-        data = dict(SAMPLE_CONFIG)
-        data = json.loads(json.dumps(SAMPLE_CONFIG))
-        del data["audio"]
-        config_path = tmp_path / "config.json"
-        config_path.write_text(json.dumps(data), encoding="utf-8")
-        cfg = ChannelConfig.load(config_path=str(config_path))
-        assert cfg.crossfade_duration == 1.0
 
     def test_channel_specific_tags_optional(self, tmp_path):
         """tags.channel_specific キーが無い config でもエラーにならない（後方互換）"""

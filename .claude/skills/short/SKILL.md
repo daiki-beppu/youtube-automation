@@ -50,6 +50,23 @@ mode = config.raw.get("content_model", {}).get("type", "release")
 # "release"    → Mode B: 話す系クリップモード
 ```
 
+### 生成パラメータ
+
+各モードの尺・フェード・本数・フォント等は skill-config で管理する。
+チャンネル側で上書きする場合は `config/skills/short.yaml`。デフォルトは
+`.claude/skills/short/config.default.yaml` を参照:
+
+```python
+from youtube_automation.utils.skill_config import load_skill_config
+short_cfg = load_skill_config("short")
+duration = short_cfg.get("duration_sec", 20)       # Mode A
+fade_in = short_cfg.get("fade_in_sec", 1.0)
+fade_out = short_cfg.get("fade_out_sec", 1.5)
+count = short_cfg.get("default_count", 3)
+font = short_cfg.get("font_path")
+release = short_cfg.get("release", {})             # Mode B
+```
+
 ### ショート動画仕様（共通）
 
 | 項目 | 値 |

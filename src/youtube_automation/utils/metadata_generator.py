@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from .channel_config import ChannelConfig
+from .skill_config import load_skill_config
 from .time_utils import format_duration_display, format_duration_short, format_timestamp
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,10 @@ class BAHMetadataGenerator:
             collection_path (str): コレクションディレクトリのパス
         """
         self.config = ChannelConfig.load()
+        self._masterup_config = load_skill_config("masterup")
+        self._crossfade_sec = float(
+            self._masterup_config.get("audio", {}).get("crossfade_duration", 1.0)
+        )
         self.collection_path = Path(collection_path)
         self.collection_name = self._extract_collection_name()
         self.bit_depth = self.config.genre_style
@@ -73,7 +78,7 @@ class BAHMetadataGenerator:
 
         tracks = []
         current_time = 0
-        crossfade = self.config.crossfade_duration
+        crossfade = self._crossfade_sec
 
         # 音声ファイルを取得（WAV / MP3 / M4A / AAC に対応、数字順にソート）
         AUDIO_EXTS = {'.wav', '.mp3', '.m4a', '.aac'}
@@ -443,7 +448,7 @@ class BAHMetadataGenerator:
         if not self.tracks:
             self.analyze_audio_files()
 
-        crossfade = self.config.crossfade_duration
+        crossfade = self._crossfade_sec
         total_duration = sum(track['duration'] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
 
         # タイトル生成（2026リブランド）
@@ -519,7 +524,7 @@ class BAHMetadataGenerator:
         if not self.tracks:
             self.analyze_audio_files()
 
-        crossfade = self.config.crossfade_duration
+        crossfade = self._crossfade_sec
         total_duration = sum(track['duration'] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
 
         report_parts = [

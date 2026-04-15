@@ -65,25 +65,22 @@ AskUserQuestion で以下を確認:
    - `descriptions.opening`: `{style} {primary} music inspired by ...` 形式
    - `descriptions.perfect_for`: 4 項目（例: Study & Focus, Relaxation, Creative Work, Sleep）
    - `descriptions.hashtags`: 5 個程度
-6. **Suno 設定**（音楽エンジンが Suno/both の場合）:
-   - `suno.workspace_name`: 短縮名と同じでよいか確認
-   - `suno.genre_line`: 音色キーワード
-   - `suno.exclude_styles`: 除外スタイル
+6. **Suno 設定**（音楽エンジンが Suno/both の場合）: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` を上書き（ない場合は skill default を使用）
 
 ### Step 4: config 生成
 
 `channel-setup/references/config-template.json` をベースに、ヒアリング結果で全フィールドを埋めて `config/channel_config.json` を生成。
 
-**必須セクション**: channel, content_model, genre, youtube, tags, descriptions, gemini_image, analytics, title, audio, workflow, suno
+**必須セクション**: channel, content_model, genre, youtube, tags, descriptions, analytics, title, workflow
 
-**オプションセクション**（ヒアリング結果に基づき追加）:
+**skill-config で管理されるセクション**（channel_config.json には置かない）: thumbnail / suno / lyria / ideate / benchmark / short / description / masterup。チャンネル固有の上書きがある場合は `config/skills/<skill>.yaml` を作成。
+
+**オプションセクション**（ヒアリング結果に基づき channel_config.json に追加）:
 
 | オプション | セクション | 条件 |
 |-----------|----------|------|
-| Lyria 音楽生成 | `lyria` | 音楽エンジンで lyria/both 選択時 |
 | ループ動画 | `veo` | デフォルト有効 |
 | プレイリスト | `playlists` | プレイリスト名を提案（ID は空欄） |
-| ショート動画 | `short` | デフォルト有効 |
 | 投稿後自動化 | `post_upload` | デフォルト有効 |
 
 ### Step 5: ディレクトリ構造の確認・補完

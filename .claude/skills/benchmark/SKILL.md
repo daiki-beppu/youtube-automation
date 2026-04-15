@@ -74,24 +74,30 @@ uv run yt-benchmark-collect -v                 # 詳細ログ
    ```
 2. スクリプトを `--force` で実行 → ファイル自動生成
 
-## 設定（channel_config.json）
+## 設定
+
+競合チャンネルリストは `channel_config.json` で管理する:
 
 ```json
 "benchmark": {
-  "channels": [...],
-  "scan_recent": 50,
-  "min_views": 10000,
-  "freshness_days": 3,
-  "analyze_thumbnails": true
+  "channels": [
+    {"id": "UC_XXX", "slug": "channel-slug", "name": "Channel Name", "relationship": "..."}
+  ]
 }
 ```
+
+走査・分析の動作パラメータは skill-config (`.claude/skills/benchmark/config.default.yaml`) で管理。
+チャンネル側で上書きする場合は `config/skills/benchmark.yaml`:
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
 | `scan_recent` | 50 | チャンネルあたりの走査プール本数（直近 N 投稿） |
 | `min_views` | 10000 | ベンチマーク対象の視聴数しきい値 |
 | `freshness_days` | 3 | レポート更新間隔（日） |
-| `analyze_thumbnails` | false | Gemini によるサムネイル分析を実行するか |
+| `analyze_thumbnails` | true | Gemini によるサムネイル分析を実行するか |
+| `thumbnail_analysis.model` | gemini-2.5-flash | サムネイル分析モデル |
+| `thumbnail_analysis.delay_sec` | 5 | API レート制限対策の待機秒数 |
+| `thumbnail_analysis.prompt` | 汎用プロンプト | ジャンル/世界観に合わせて上書き推奨 |
 
 ## 注意事項
 

@@ -7,6 +7,19 @@ description: Use when SunoAI のプレイリストから楽曲をダウンロー
 
 SunoAI プレイリストURLから楽曲を一括ダウンロードし、クロスフェード結合でマスター音源を自動生成するまでの一連フローを実行します。
 
+## 設定
+
+動作パラメータは skill-config (`.claude/skills/masterup/config.default.yaml`) で管理。
+チャンネル側で上書きする場合は `config/skills/masterup.yaml`:
+
+| 項目 | 既定 | 説明 |
+|---|---|---|
+| `audio.crossfade_duration` | 1.0 | トラック間クロスフェード秒数（metadata_generator のタイムスタンプ計算で参照） |
+| `audio.bitrate` | "192k" | マスター音源のビットレート |
+| `suno_download.cdn_url_template` | `https://cdn1.suno.ai/{song_id}.mp3` | Suno CDN URL テンプレート |
+
+**既知の不整合**: `references/generate_master.sh` は内部で 3 秒クロスフェードを固定値で使用する。`audio.crossfade_duration` は metadata_generator のタイムスタンプ計算用途のみ。シェル側との統一は別 issue 扱い。
+
 ## When to Use
 
 - `/suno` で楽曲生成後、ユーザーがプレイリストを作成したとき

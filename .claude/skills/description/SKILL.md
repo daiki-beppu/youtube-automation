@@ -102,9 +102,11 @@ XX:XX [Track/Chapter 2]
 
 ### Perfect for テーマ別カスタマイズ
 
-`channel_config.json` の `descriptions.perfect_for_themes` からコレクションのテーマにマッチするキーを選択:
-- テーマが辞書にない場合は `descriptions.perfect_for`（デフォルト）を使用
-- 絵文字は以下を使い分け: 📚(study), 🌙(sleep), 🍺(tavern), 🌊(ocean), 🌿(forest), 🔮(druid/magic), 🌧️(rain), 🔥(hearth)
+skill-config (`.claude/skills/description/config.default.yaml` / 上書き `config/skills/description.yaml`)
+の `perfect_for_themes` からコレクションのテーマにマッチするキーを選択:
+
+- テーマが辞書にない場合は `channel_config.json` の `descriptions.perfect_for`（デフォルト）を使用
+- 絵文字は skill-config の `theme_emoji` から引く（例: 📚(study), 🌙(sleep), 🍺(tavern), 🌊(ocean), 🌿(forest), 🔮(druid/magic), 🌧️(rain), 🔥(hearth)）
 
 ### タイトル形式
 
@@ -131,13 +133,13 @@ XX:XX [Track/Chapter 2]
 
 ### Cards（YouTube Studio で手動設定）
 
-概要欄生成時に、カードセクションも descriptions.md に含める。
+概要欄生成時に、カードセクションも descriptions.md に含める。設定は skill-config の `cards` セクション参照。
 
 - **カード種類**: 動画カード（Video card）のみ
 - **枚数**: **1動画1枚**（最小限運用）
-- **タイミング**: **12:00** 固定（平均視聴時間 12〜21分 → 離脱直前に提示）
+- **タイミング**: skill-config `cards.timing`（デフォルト `12:00`）
 - **リンク先**: 最新のコレクション（新コレクション公開時に全動画を更新）
-- **テキスト**: "Up next from {channel.name}"
+- **テキスト**: skill-config `cards.text_template`（デフォルト `Up next from {channel_name}`）
 
 ### 品質チェック
 
