@@ -1,0 +1,73 @@
+# SunoAI プロンプト例（参考資料）
+
+品質が高い情景フレーズ + スタイルプロンプトの参考例。
+**これは例示のみ** — 各チャンネルの `config/skills/suno.yaml` の `genre_line` + `style_variants` に合わせて調整すること。
+
+## 例 1: jazzhop / lo-fi 系（bobble）
+
+### 品質基準プロンプト（C-1 パターン）
+
+```
+chill jazz hop, dusty piano samples, jazzy guitar licks, deep bass groove,
+bass-forward mix, prominent upright bass, lo-fi drum loop, tape saturated,
+instrumental, gentle, moody and misty, no rain sound effects, no white noise,
+no ambient noise,
+glistening cobblestone sidewalk at night, a bookshop awning glowing softly
+```
+
+**成功要因**:
+- ベースが前面に出ており、BGM としての厚みがある
+- `moody and misty` でしっとり感を確保しつつ雨 SE なし
+- `tape saturated` でアナログの温かみ（`vinyl crackle` は NG — ノイズ SE を誘発）
+- 情景フレーズが視覚的で音を連想しない
+
+## 例 2: acoustic folk / celtic 系
+
+```
+celtic folk, acoustic guitar fingerpicking, tin whistle melody, gentle fiddle,
+warm hearth recording, instrumental, unhurried,
+morning mist rising between ancient oaks, a stone well at the crossroads
+```
+
+## 例 3: ambient piano 系
+
+```
+solo piano, felt piano texture, minimal reverb, intimate microphone,
+instrumental, sparse and reflective,
+snow falling outside a library window, a half-finished teacup on the desk
+```
+
+## 情景フレーズ設計の共通原則
+
+1. **命令文なし**: "Create a..." で始めない
+2. **簡潔な修飾**: 形容詞は 1-2 個
+3. **五感に訴える**: 視覚・触覚・嗅覚の具体描写（メロディ・リズムは書かない）
+4. **楽器ロール指定（任意）**: `Solo Cello`, `Ethereal Choir` でフィーチャー楽器を強調可能
+
+## 禁止形容詞（全チャンネル共通）
+
+SunoAI をモダン/オーケストラ方向に誘導するため禁止:
+
+> thundering, blazing, crushing, soaring, screaming, devastating, explosive, ferocious, towering, surging, crystalline, shimmering, lush, sweeping, majestic, glorious, echoing
+
+代替: low, sparse, bright, soft, deep, gentle, quiet, warm, airy, rising, driving
+
+## 雨音・環境音の制御（全チャンネル共通）
+
+雨音・環境音は**楽曲に含めない**。マスタリング時に別レイヤーで追加する。
+
+**NG ワード（SE を誘発）:**
+> rain, dripping, drops, puddles, splashing, pouring, streaming water, trickling
+
+**OK ワード（ムード・視覚のみ）:**
+> misty, melancholic, nocturnal, bittersweet, wistful, lonesome, overcast, hazy, foggy, damp, glistening, misted, fogged
+
+**全プロンプト末尾に追加:**
+```
+no rain sound effects, no white noise, no ambient noise
+```
+
+**Exclude Styles にも追加:**
+```
+rain sounds, vinyl crackle, white noise, ambient noise
+```

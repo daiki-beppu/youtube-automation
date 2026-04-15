@@ -1,0 +1,44 @@
+# lyria skill default config
+#
+# Lyria RealTime API の DJ 型音楽生成設定。
+# チャンネル側で config/skills/lyria.yaml に上書き。
+
+# スキル無効化フラグ (true の場合 lyria スキルは /suno を案内して終了)
+_disabled: false
+
+# Lyria モデル
+model: lyria-3-pro-preview
+
+# base.prompt_prefix に入れる共通ジャンル句 (最小限、楽器名・ムード語は入れない)
+# 推奨: "{genre} only, clean dry recording, no pads"
+prompt_prefix: ""
+
+# スタイルヒント (ドキュメンテーション用、composition.json には反映されない)
+style_hints: ""
+
+# base パラメータ推奨値 (composition.json の base にマッピング)
+bpm: 110
+brightness: 0.4
+guidance: 3.0          # 2.5 → pad音増加、3.5 → 音数過多
+temperature: 0.9       # 0.7 → 単調ループ、0.6 以下 → ノイズ増
+scale: C_MAJOR_A_MINOR  # enum: C_MAJOR_A_MINOR / D_MAJOR_B_MINOR / G_MAJOR_E_MINOR 等
+mute_drums: true
+mode: QUALITY          # QUALITY / DIVERSITY
+
+# フェーズ間クロスフェード秒数
+transition_sec: 30
+
+# マスタリング時のクロスフェード (秒)
+crossfade_sec: 5
+
+# プロンプトに使わない禁止語
+ng_words:
+  - ambient pads
+  - ethereal choir
+  - cinematic
+  - orchestral
+  - epic
+  - synthesizer
+
+# タイミング余裕 (分) — total_duration_min = audio.target_duration_min + duration_padding_min
+duration_padding_min: 3

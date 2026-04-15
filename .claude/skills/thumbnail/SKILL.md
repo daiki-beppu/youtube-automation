@@ -5,14 +5,17 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 ## Overview
 
-コレクション用サムネイルを `channel_config.json` の `gemini_image` 設定に基づいて生成します。
-チャンネルごとにスタイル・キャラ・参照画像が異なり、全て config から動的に読み取ります。
+コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。
+チャンネルごとにスタイル・キャラ・参照画像が異なり、すべて skill-config から動的に読み取る。
 
 ## 前提
 
-`config/channel_config.json` が存在すること。
+以下の 2 つが揃っていること:
 
-存在しない場合、ユーザーに確認:
+1. `config/channel_config.json` が存在する
+2. `config/skills/thumbnail.yaml` が存在する（配布された `.claude/skills/thumbnail/config.default.yaml` をベースにチャンネルでカスタマイズ）
+
+いずれか不足する場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
 
@@ -30,10 +33,15 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 ## Channel Adaptation
 
-**すべての設定は `channel_config.json` の `gemini_image` セクションから読み取る。**
-スキル内にチャンネル固有のハードコードはしない。
+**すべての設定は `config/skills/thumbnail.yaml` から読み取る。**
+スキル内にチャンネル固有のハードコードはしない。読み込みは以下のコマンドで確認できる:
+
+```bash
+uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('thumbnail'), indent=2, ensure_ascii=False))"
+```
 
 実行前に以下を確認:
+
 1. `gemini_image.model` → 使用する Gemini モデル
 2. `gemini_image.style` → スタイル説明（参照画像ベース or プロンプトベース）
 3. `gemini_image.prompt_prefix` → プロンプト冒頭の固定文（キャラ描写等）
@@ -41,15 +49,26 @@ description: Use when コレクションのサムネイル画像が必要で、C
 5. `gemini_image.fixed_character` → 固定キャラの設定（あればキャラ固定モード）
 6. `gemini_image.composition_rules` → 構図・環境のルール
 7. `gemini_image.thumbnail_text` → テキストオーバーレイの設定
+8. `gemini_image.generation_mode` → 生成モード（後述）
+9. `gemini_image.brand_background` → チャンネル統一背景色（single_step / diff_from_reference で使用）
+10. `gemini_image.color_themes` → テーマ別カラーパレット（single_step モードで差し替え）
 
 ## 生成モード判定
 
+`gemini_image.generation_mode` を確認:
+
+| モード | 説明 |
+|---|---|
+| `ttp_swap` | 競合サムネ + 自キャラアイコンの 2 参照でキャラ置換 |
+| `single_step` | テキスト付き参照画像から差分のみ指示、1 ステップで完成 |
+| `diff_from_reference` | 既存キャラ画像を参照に差分指示 |
+| `two_phase`（未指定時のフォールバック）| 従来の 2 フェーズ（背景 → テキストオーバーレイ）|
+
 ### 参照画像モード（`reference_images` が定義されている場合）
 
-GoV TTP のように、参照画像を渡してスタイルを維持する方式。
+参照画像を渡してスタイルを維持する方式。
 
 ```bash
-# Phase 1: 参照画像 + プロンプトで背景生成
 uv run yt-generate-image \
   --prompt "<prompt_prefix を含むプロンプト>" \
   --reference <channel_dir>/<reference_images.default> \
@@ -71,16 +90,13 @@ uv run yt-generate-image \
   --output <collection-path>/10-assets/main-v1.jpg -y
 ```
 
-この場合、`composition_prefix` が自動付加される。
+`composition_prefix` が自動付加される。
 
 ## プロンプト構築
 
 ### 1. prompt_prefix を取得
 
-`gemini_image.prompt_prefix` をプロンプト冒頭に配置:
-```
-例: "Anime illustration. Elf woman with long white hair and pointed ears"
-```
+`gemini_image.prompt_prefix` をプロンプト冒頭に配置。
 
 ### 2. fixed_character から活動を組み立て
 
@@ -100,35 +116,27 @@ uv run yt-generate-image \
 
 ```
 {prompt_prefix}, {表情}.
-She wears {outfit}. {ポーズ・活動}. {環境描写}.
+She/He/It wears {outfit}. {ポーズ・活動}. {環境描写}.
 {光と雰囲気}. {face}.
 No text, no words, no letters, no typography.
 ```
 
 ### 5. プロンプト末尾（プロンプトベースモード）
 
-`reference_images` がない場合、スタイル句を末尾に付加する必要がある。
-チャンネル CLAUDE.md にスタイル句指定があればそれを使用。なければデフォルト:
+`reference_images` がない場合、スタイル句を末尾に付加する。
+チャンネル `CLAUDE.md` にスタイル句指定があればそれを使用。なければデフォルト:
+
 ```
 Hyper-detailed digital matte painting blending photorealism with subtle painterly
-illustration touches... (v7 style)
-Widescreen 16:9 aspect ratio.
+illustration touches. Widescreen 16:9 aspect ratio.
 ```
 
 ## ワークフロー
 
-### モード判定
-
-`gemini_image.generation_mode` を確認:
-
-- **`ttp_swap`**: ベンチマーク競合サムネ + 自チャンネルアイコンの 2 参照でキャラ置換（後述）
-- **`single_step`**: テキスト付き参照画像から差分のみで完成サムネイルを1ステップ生成（後述）
-- **未定義 / `two_phase`**: 従来の2フェーズワークフロー（Phase 1 + Phase 2）
-
 ### TTP Swap モード（`generation_mode: "ttp_swap"`）
 
 ベンチマーク競合の高再生サムネを **構図リファレンス**、自チャンネルのアイコンを **キャラリファレンス**
-として 2 枚同時に渡し、「キャラだけ差し替える」手法。wobble → bobble 実験（bobble で `branding/experiments/wobble-ttp-character-swap-20260415/`）で確立。
+として 2 枚同時に渡し、「キャラだけ差し替える」手法。
 
 **前提**:
 - `data/thumbnail_compare/benchmark/<channel>-<video_id>.jpg` に競合サムネがキャッシュ済み
@@ -146,7 +154,7 @@ Remove the copyright text in the top-right corner. Remove the logo icon and
 tagline text in the bottom-left corner. Both corners should be clean empty background.
 
 # 3. オリジナリティ（任意）
-Change the action: [自チャンネル固有の動作]. Change the [小道具のディテール] to [固有要素].
+Change the action: <自チャンネル固有の動作>. Change the <小道具のディテール> to <固有要素>.
 ```
 
 **コマンド**:
@@ -160,30 +168,28 @@ uv run yt-generate-image \
 ```
 
 **運用上の注意**:
-- **リトライ前提**: Gemini 3.1 Flash Image は同一プロンプトでも `'NoneType' object is not iterable`（空レスポンス）を返す瞬発的揺らぎがある。2〜3 回リトライで通る。プロンプトを微妙に言い換えるだけで通ることも多い。
-- **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォント・位置はデフォルトで完全継承される。変えたい部分だけ明示指示。
-- **ブランド置換**: 「Replace every occurrence of the word 'X' with 'Y'」で文字列差し替えが効く（ロゴ周りも含む）。
-- **ラテアートなど細部改変**: 小道具の模様変更（ハート → 自キャラ顔など）も 1 行で反映可能。自チャンネル固有の隠しギミックとして活用価値が高い。
-- **キャラサイズ**: 縮小傾向がある場合は「fills about 55% of the frame, bust-up portrait」を追記。
-- **コスト**: 成功 1 枚あたり $0.04〜$0.08（リトライ込み）。
-
+- **リトライ前提**: Gemini 3.1 Flash Image は同一プロンプトでも瞬発的にエラーを返す。2〜3 回リトライで通る
+- **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで完全継承される。変えたい部分だけ明示指示
+- **ブランド置換**: `Replace every occurrence of the word 'X' with 'Y'` で文字列差し替え可
+- **キャラサイズ**: 縮小傾向がある場合は `fills about 55% of the frame, bust-up portrait` を追記
+- **コスト**: 成功 1 枚あたり $0.04〜$0.08（リトライ込み）
 
 ### Single-Step モード（`generation_mode: "single_step"`）
 
-テキスト付き参照画像（テキストレイアウト・雨窓テクスチャ・3オブジェクト配置を含む）を参照にして、
-**変更点だけ**をプロンプトで指示する。背景生成とテキストオーバーレイが1回の生成で完了する。
+テキスト付き参照画像（テキストレイアウト・背景テクスチャ・オブジェクト配置を含む）を参照にして、
+**変更点だけ**をプロンプトで指示する。背景生成とテキストオーバーレイが 1 回の生成で完了する。
 
-**重要**: 参照画像と同じ要素（レイアウト、ターンテーブル、テキスト配置）はプロンプトに含めない。
+**重要**: 参照画像と同じ要素（レイアウト、固定オブジェクト、テキスト配置）はプロンプトに含めない。
 差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。
 
-1. `color_themes` からテーマのカラー設定を取得
-2. `diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
-   - `{background}`: カラーテーマの背景色
-   - `{candle}`: カラーテーマのキャンドル色
-   - `{cocktail_description}`: カクテル名 + 色 + グラス形状の自然な描写
+1. `gemini_image.color_themes` からテーマのカラー設定を取得
+2. `gemini_image.diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
+   - `{background}`: カラーテーマの背景色（未指定時は `gemini_image.brand_background` を使用）
+   - `{candle}`, `{cocktail_description}` などオブジェクト系プレースホルダ: `ideate.objects` や `color_themes` 配下の値
    - `{title_line1}`, `{title_line2}`: コレクションタイトル
 
 3. 生成:
+
 ```bash
 uv run yt-generate-image \
   --reference <channel_dir>/<reference_images.default> \
@@ -192,17 +198,9 @@ uv run yt-generate-image \
 ```
 
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
-5. 背景画像（テキストなし）も必要な場合は、別途テキストなしの参照画像で生成
+5. 背景画像（テキストなし）も必要な場合は、テキストなしの参照画像で別途生成
 
-**例（navy → lavender への差し替え）:**
-```
-Change the background color to pale lilac. Change the left candle to a warm gold
-glass jar with rich glossy candy-like translucent texture. Change the right cocktail
-to an aviation cocktail — pale violet-blue liquid in an elegant coupe glass with
-a maraschino cherry. Change the subtitle text below the line to 'Rainy Melancholy
-Jazz, Late Night BGM'. Keep the same muted text color matching the new background.
-Keep the same rain window texture. Keep the turntable unchanged.
-```
+差分プロンプトの具体例は skill-config の `gemini_image.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。
 
 ### Two-Phase モード（従来方式・フォールバック）
 
@@ -214,31 +212,29 @@ Keep the same rain window texture. Keep the turntable unchanged.
 main.png が存在しない場合のみ:
 1. テーマに合わせてプロンプトを構築（上記テンプレート）
 2. 参照画像モードなら `reference_images` から適切な画像を選択
-3. 生成: `generate_image.py --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.jpg -y`
+3. 生成: `yt-generate-image --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.jpg -y`
 4. `open` でプレビュー → ユーザー承認 → `cp main-v1.jpg main.png`
 
 #### Phase 2: テキストオーバーレイ（thumbnail.jpg）
 
-1. `thumbnail_text` からテキスト設定を取得
+1. `gemini_image.thumbnail_text` からテキスト設定を取得
 2. テキストオーバーレイプロンプトを構築:
 
 **`thumbnail_text.text_overlay_prompt` が定義されている場合（推奨）:**
-- テンプレート内の `{title_line1}`, `{title_line2}`, `{channel_name}` をコレクションのタイトルとチャンネル名で置換して使用
-- テキスト配置位置: キャラが左にいる場合は右半分、キャラが右にいる場合は左上
-- 例: `{title_line1}` = "The Harpist's", `{title_line2}` = "Quiet Rest"
+テンプレート内の `{title_line1}`, `{title_line2}`, `{channel_name}` をコレクションのタイトルとチャンネル名で置換して使用。
 
-**`text_overlay_prompt` が未定義の場合（フォールバック）:**
+**未定義の場合（フォールバック）:**
 ```
 Add text to this image. Add two lines of text in a classic serif font.
-First line smaller: '[Title Line 1]' in light weight.
-Second line larger and bolder: '[Title Line 2]' directly below with
-almost no line spacing. Both lines in warm ivory cream color.
-Below the title, add '{channel_name}' in very small spaced-out small
+First line smaller: '<Title Line 1>' in light weight.
+Second line larger and bolder: '<Title Line 2>' directly below with
+almost no line spacing. Both lines in <color>.
+Below the title, add '<channel_name>' in very small spaced-out small
 caps, slightly more transparent. No decorations — only clean text.
 Do not change the background image in any way.
 ```
 
-3. 生成: `generate_image.py --reference 10-assets/main.png --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
+3. 生成: `yt-generate-image --reference 10-assets/main.png --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
 
 ## 品質チェック
@@ -249,7 +245,6 @@ Phase 1 生成後:
 - [ ] `fixed_character` の外見が維持されているか（ある場合）
 - [ ] キャラの顔が見えているか（`fixed_character.face` の指示通り）
 - [ ] キャラサイズが `composition_rules.character_size` を満たしているか
-- [ ] 楽器が描かれているか
 - [ ] テキストが入っていないか
 
 Phase 2 生成後:
@@ -262,22 +257,22 @@ Phase 2 生成後:
 プロンプトは `20-documentation/thumbnail-prompts.md` に保存:
 
 ```markdown
-# Thumbnail Prompts - [コレクション名]
+# Thumbnail Prompts - <コレクション名>
 
 *スタイル: {gemini_image.style}*
 *モデル: {gemini_image.model}*
-*参照画像: {使用した参照画像}*
+*参照画像: <使用した参照画像>*
 
 ## Video Background Prompt (main.png)
 
 \```
-[生成に使用したプロンプト]
+<生成に使用したプロンプト>
 \```
 
 ## Text Overlay Prompt (thumbnail.jpg)
 
 \```
-[テキストオーバーレイ指示]
+<テキストオーバーレイ指示>
 \```
 ```
 

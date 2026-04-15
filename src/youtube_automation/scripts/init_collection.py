@@ -89,7 +89,7 @@ def main():
     short = config.raw["channel"]["short"].lower()
     ch_dir = Path(ChannelConfig.channel_dir())
 
-    music_engine = args.music_engine or ("lyria" if config.raw.get("lyria") else "suno")
+    music_engine = args.music_engine or config.raw.get("music_engine", "suno")
 
     date_prefix = datetime.now().strftime("%Y%m%d")
     dir_name = f"{date_prefix}-{short}-{args.theme}-collection"

@@ -31,12 +31,12 @@ def _image_cost_log() -> Path:
 
 
 def load_gemini_config() -> dict:
-    """ChannelConfig から gemini_image 設定を読み込む。"""
+    """thumbnail skill-config から gemini_image 設定を読み込む。"""
     try:
-        from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+        from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 
-        config = ChannelConfig.load()
-        return config.raw.get("gemini_image", {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST})
+        cfg = load_skill_config("thumbnail")
+        return cfg.get("gemini_image", {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST})
     except Exception:
         return {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST}
 

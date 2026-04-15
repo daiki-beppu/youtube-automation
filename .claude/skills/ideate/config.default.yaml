@@ -1,0 +1,39 @@
+# ideate skill default config
+#
+# コレクション企画生成の設定。
+# チャンネル側で config/skills/ideate.yaml に上書き。
+
+# 差別化軸 (企画候補生成時の軸)
+differentiation_axes:
+  - location
+  - time_of_day
+  - activity
+  - mood
+
+# プレビューサムネイル生成設定
+preview:
+  # 1 回の /ideate で生成する企画候補数
+  candidate_count: 3
+  # セッション ID のバイト数 (hex 文字列化後の長さは 2 倍)
+  session_id_bytes: 2
+
+# 差し替え可能オブジェクトの定義 (省略可、未定義時はサムネイル差別化は色・テーマのみ)
+# 詳しい例は references/object-design-examples.md を参照
+# objects:
+#   swappable:
+#     - slot: left_candle
+#       description_template: "{color} glass jar with {texture}"
+#       story_template: "{theme} に合わせた香りのキャンドル"
+#     - slot: right_cocktail
+#       description_template: "original cocktail called {name} — {color} liquid in {glass}"
+#       story_template: "{persona} が {scene} で飲む一杯"
+#   fixed:
+#     - turntable
+#     - rain_window
+
+# オリジナリティルール
+originality:
+  # 競合既存タイトルとの類似度許容度 (0.0-1.0、低いほど厳しい)
+  max_similarity: 0.5
+  # 企画ごとに競合パターン参照元を必ず記録するか
+  require_pattern_reference: true

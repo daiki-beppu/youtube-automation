@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Generate suno-prompts.md from channel_config.json + suno-patterns.yaml."""
+"""Generate suno-prompts.md from config/skills/suno.yaml + suno-patterns.yaml."""
 
 import sys
 from pathlib import Path
 
 import yaml
 
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 
 
 def generate(patterns_path: Path) -> str:
-    config = ChannelConfig.load()
-    suno = config._data.get("suno", {})
+    suno = load_skill_config("suno")
 
     genre_line = suno.get("genre_line", "")
     mood_descriptors = suno.get("mood_descriptors", "")
