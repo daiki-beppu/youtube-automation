@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -34,7 +34,7 @@ def resolve_collection_dir(arg: str | None) -> Path:
     if (cwd / "01-master").is_dir() and (cwd / "02-Individual-music").is_dir():
         return cwd
 
-    raise ConfigError(
+    raise ValidationError(
         "コレクションディレクトリを解決できません。引数で指定するか、"
         "01-master/ と 02-Individual-music/ を持つディレクトリで実行してください。"
     )
@@ -86,7 +86,7 @@ def _format_size(num_bytes: int) -> str:
 
 def _spin(stop_event: threading.Event, start: float, n_files: int) -> None:
     i = 0
-    while not stop_event.is_set():
+    while not stop_event.wait(0.15):
         elapsed = int(time.monotonic() - start)
         m, s = divmod(elapsed, 60)
         sys.stderr.write(
@@ -95,7 +95,6 @@ def _spin(stop_event: threading.Event, start: float, n_files: int) -> None:
         )
         sys.stderr.flush()
         i += 1
-        time.sleep(0.15)
 
 
 def generate_master(
@@ -109,14 +108,14 @@ def generate_master(
     master_dir = paths.master_dir
 
     if shutil.which("ffmpeg") is None:
-        raise ConfigError("ffmpeg が見つかりません (brew install ffmpeg など)")
+        raise ValidationError("ffmpeg が見つかりません (brew install ffmpeg など)")
     if not music_dir.is_dir():
-        raise ConfigError(f"ディレクトリが見つかりません: {music_dir}")
+        raise ValidationError(f"ディレクトリが見つかりません: {music_dir}")
 
     files = sorted(music_dir.glob("*.mp3"))
     n = len(files)
     if n == 0:
-        raise ConfigError(f"MP3 ファイルが見つかりません: {music_dir}")
+        raise ValidationError(f"MP3 ファイルが見つかりません: {music_dir}")
 
     master_dir.mkdir(parents=True, exist_ok=True)
     output = master_dir / "master.mp3"
@@ -164,13 +163,14 @@ def generate_master(
         stop_event.set()
         if spinner_thread is not None:
             spinner_thread.join()
+            sys.stderr.write("\r" + " " * 80 + "\r")
+            sys.stderr.flush()
 
     elapsed = int(time.monotonic() - start)
     m, s = divmod(elapsed, 60)
 
     if result.returncode != 0:
-        sys.stderr.write("\r" + " " * 80 + "\r")
-        raise ConfigError(f"FFmpeg failed with exit code {result.returncode}")
+        raise ValidationError(f"FFmpeg failed with exit code {result.returncode}")
 
     if not quiet:
         sys.stderr.write(
@@ -213,7 +213,7 @@ def main() -> int:
         crossfade = float(audio.get("crossfade_duration", 1.0))
         bitrate = str(audio.get("bitrate", "192k"))
         generate_master(collection_dir, crossfade, bitrate, quiet=args.quiet)
-    except ConfigError as e:
+    except ValidationError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
     return 0
