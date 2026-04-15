@@ -26,6 +26,12 @@ Lyria RealTime API を使い、`composition.json` に定義されたフェーズ
 - `/suno` + `/masterup` の代替として、API 完全自動の音楽生成を行いたいとき
 - フェーズ展開（DJ 型）のマスター音源を直接生成したいとき
 
+### 選択タイミング（どこで lyria が選ばれるか）
+
+1. **チャンネルのデフォルト** — `/channel-direction` で suno/lyria を検討 → `/channel-setup` が `channel_config.json` の `music_engine` に書き込む
+2. **コレクション単位の上書き** — `/wf-new` の `yt-init-collection --music-engine lyria` でコレクション毎に上書き可能（省略時はチャンネル設定を継承）
+3. **このスキルが呼ばれるとき** — `/wf-new` が `workflow-state.json` の `music_engine = "lyria"` を判定して `/lyria` を自動実行する。手動で `/lyria <theme>` を叩いた場合もこのスキルに入る
+
 ## Quick Reference
 
 | コマンド | 説明 | 例 |

@@ -53,7 +53,7 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 - `<theme-slug>`: ハイフン区切りのテーマスラッグ（例: `brigid-hearth`）
 - `--track-count`: 確認済みトラック数（デフォルト 12）
 - `--selected-plan`: 選択された企画（A〜E）
-- `--music-engine`: 選択された音楽エンジン（suno または lyria）
+- `--music-engine`: 音楽エンジン（`suno` / `lyria`）。**省略時は `channel_config.json` の `music_engine` が使われる**。コレクション単位で上書きしたいときのみ明示する
 
 スクリプトが以下を自動実行:
 - `collections/planning/YYYYMMDD-<short>-<theme>-collection/` ディレクトリ作成

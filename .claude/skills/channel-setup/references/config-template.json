@@ -12,6 +12,7 @@
     "type": "collection",
     "languages": ["en"]
   },
+  "music_engine": "suno",
   "genre": {
     "primary": "{{PRIMARY}}",
     "style": "{{STYLE}}",
