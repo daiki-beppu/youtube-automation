@@ -38,18 +38,20 @@ description: >-
 
 ### Step 2: 独立リポジトリ作成
 
-新しい独立リポジトリを作成し、automation submodule を追加:
+テンプレートから新リポジトリを作成し、automation パッケージをインストール、スキルを同期:
 
 ```bash
-mkdir -p youtube-{channel-name}/{config,auth,data,docs/benchmarks}
-cd youtube-{channel-name}
-git init
-git submodule add <automation-repo-url> automation
+gh repo create <short> --template daiki-beppu/youtube-channel-template --private --clone
+cd <short>
+uv add git+https://github.com/daiki-beppu/youtube-channels-automation.git
+uv run yt-skills sync
 ```
+
+正準ディレクトリ構造は `channel-setup/references/directory-structure.md` を参照（不足分があれば補完）。
 
 ### Step 3: 認証セットアップ
 
-OAuth クライアントはユーザーが自分で作成する。`automation/auth/SETUP.md` の手順に従い、Google Cloud Console で OAuth 2.0 認証情報を作成して `automation/auth/client_secrets.json` に配置すること。テンプレートは `automation/auth/client_secrets_template.json` を参照。
+OAuth クライアントはユーザーが自分で作成する。Google Cloud Console で OAuth 2.0 認証情報を作成し `auth/client_secrets.json` に配置すること。
 チャンネル固有トークンは `auth/token.json` に保存され、初回実行時に自動生成される。
 
 リサーチ段階では既存チャンネルのトークンをコピーして使用可能（YouTube Data API はチャンネル所有権に関係なく動作）:
@@ -110,24 +112,23 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
 }
 ```
 
-### Step 6: ベンチマークデータ一括収集
+### Step 6: ベンチマーク・コメントデータ収集
+
+ベンチマークデータは **`/benchmark` スキル** に委譲する（詳細はそちら参照）。初回は全チャンネル強制更新 + サムネイル画像保持で:
 
 ```bash
 uv run yt-benchmark-collect --force --keep-thumbnails -v
 ```
 
-- 出力: `data/benchmark_YYYYMMDD.json` + `docs/benchmarks/{slug}.md`
-- `--keep-thumbnails`: サムネイル画像を `docs/benchmarks/thumbnails/` に保存
-
-### Step 7: コメント収集
+続けてコメントも収集:
 
 ```bash
 uv run yt-benchmark-comments --min-views 5000
 ```
 
-- 出力: `data/comments_YYYYMMDD.json`
+- 出力: `data/benchmark_YYYYMMDD.json`, `data/comments_YYYYMMDD.json`, `docs/benchmarks/{slug}.md`
 
-### Step 8: 次フェーズへの案内
+### Step 7: 次フェーズへの案内
 
 「データ収集が完了しました。次は `/channel-research` で徹底分析を行います。」
 

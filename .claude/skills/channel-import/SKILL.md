@@ -71,75 +71,31 @@ AskUserQuestion で以下を確認:
 
 `channel-setup/references/config-template.json` をベースに、ヒアリング結果で全フィールドを埋めて `config/channel_config.json` を生成。
 
-**必須セクション**: channel, content_model, genre, youtube, tags, descriptions, analytics, title, workflow
-
-**skill-config で管理されるセクション**（channel_config.json には置かない）: thumbnail / suno / lyria / ideate / benchmark / short / description / masterup / loop-video。チャンネル固有の上書きがある場合は `config/skills/<skill>.yaml` を作成。
-
-**オプションセクション**（ヒアリング結果に基づき channel_config.json に追加）:
-
-| オプション | セクション | 条件 |
-|-----------|----------|------|
-| プレイリスト | `playlists` | プレイリスト名を提案（ID は空欄） |
-| 投稿後自動化 | `post_upload` | デフォルト有効 |
+含めるべきセクション（必須・skill-config 管理・オプション）は **`channel-setup/references/config-generation-rules.md`** を参照。
 
 ### Step 5: ディレクトリ構造の確認・補完
 
-既存リポジトリに不足しているディレクトリがあれば作成:
-
-```bash
-mkdir -p {collections/planning,collections/live,reports,branding,docs/benchmarks,docs/plans,data,config}
-```
+正準ディレクトリ構造は **`channel-setup/references/directory-structure.md`** を参照。
+既存リポジトリに不足しているディレクトリがあれば作成する。
 
 ### Step 6: 検証
 
-#### JSON 構文検証
-
-```bash
-python3 -c "import json; json.load(open('config/channel_config.json'))"
-```
-
-#### ChannelConfig ロードテスト
-
-```bash
-uv run python3 -c "
-from youtube_automation.utils.channel_config import ChannelConfig
-c = ChannelConfig.load()
-print(f'Channel: {c.channel_name} ({c.channel_short})')
-print(f'Genre: {c.genre_primary} / {c.genre_style}')
-print('Config loaded successfully!')
-"
-```
+JSON 構文検証・ChannelConfig ロードテストは **`channel-setup/references/verification.md`** を参照。
 
 ### Step 7: OAuth 認証と channel_id 取得
 
-`auth/token.json` がない場合:
-
-1. **OAuth 認証を実行**:
-   ```bash
-   uv run yt-status
-   ```
-   初回実行時にブラウザが開き Google アカウントで認証 → `auth/token.json` が生成される。
-
-2. **channel_id の自動取得**: 認証完了後、`channel.channel_id` が未設定なら API で自動取得し config に追記:
-   ```bash
-   uv run python3 -c "
-   from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
-   handler = YouTubeOAuthHandler()
-   service = handler.get_youtube_service()
-   resp = service.channels().list(part='id', mine=True).execute()
-   print(resp['items'][0]['id'])
-   "
-   ```
-   取得した ID を `config/channel_config.json` の `channel.channel_id` に設定。
+`auth/token.json` がない場合、OAuth 認証と channel_id 自動取得を実行。
+手順は **`channel-setup/references/verification.md`**（「OAuth 認証」「channel_id の自動取得」）を参照。
 
 ### Step 8: 次ステップ案内
 
 config 生成・認証完了後、以下を案内:
 
-1. **ベンチマーク設定**: 競合チャンネルを追加したい場合は `benchmark.channels` セクションを追加し `/benchmark` で収集
-2. **ペルソナ定義**: `/viewer-voice` → `/persona` → `/viewing-scene` の順で実行
-3. **データ収集・分析**: `/collect` → `/analyze` で現状のパフォーマンスを把握
-4. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
+1. **ブランディング素材**: 未作成の場合は `channel-setup/references/verification.md`（「ブランディング素材生成」）を参照
+2. **ベンチマーク設定**: 競合チャンネルを追加したい場合は `benchmark.channels` セクションを追加し `/benchmark` で収集
+3. **ペルソナ定義**: `/viewer-voice` → `/persona` → `/viewing-scene` の順で実行
+4. **データ収集・分析**: `/collect` → `/analyze` で現状のパフォーマンスを把握
+5. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
 
 ## Cross References
 

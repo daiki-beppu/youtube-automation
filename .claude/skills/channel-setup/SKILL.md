@@ -26,16 +26,9 @@ description: >-
 
 ### Step 2: 設定内容の提案と承認
 
-`channel-research.md` の分析データも参照しながら、方向性に基づいて以下を Claude が生成し提案:
-
-テンプレートは `references/config-template.json` を参照（同スキルディレクトリ内）。
-
-1. **tags.base**（10個程度）: 競合のタグ分析を参考にジャンルに適した YouTube 検索タグ
-2. **tags.themes**（6-10テーマ）: テーマ別タグ群（各3語程度）
-3. **descriptions**: opening（{style} {primary} で始まる）、sub_opening、perfect_for（4項目）、hashtags（5個）
-4. **title.template**: `"{style} {theme} ... Music - {activity} BGM [{duration_display}]"` 形式
-5. **title.theme_activities**: テーマ→アクティビティのマッピング
-6. **suno**: genre_line（音色キーワード）、exclude_styles（除外スタイル）
+`channel-research.md` の分析データも参照しながら、方向性に基づいて config 内容を Claude が生成し提案する。
+生成ルールは **`references/config-generation-rules.md`** を参照（tags / descriptions / title / suno の書き方）。
+雛形は `references/config-template.json`。
 
 提案をユーザーに見せ、承認 or 修正指示を受ける。
 
@@ -43,36 +36,12 @@ description: >-
 
 Phase 1 で作成した最小 config を完全版に拡張。`config-template.json` の全フィールドを埋める。
 
-**必須セクション**: channel, content_model, genre, youtube, tags, descriptions, analytics, title, workflow
-
-**skill-config で管理されるセクション**（channel_config.json には置かない）:
-
-| スキル | 設定ファイル |
-|---|---|
-| thumbnail / Gemini 画像生成 | `config/skills/thumbnail.yaml` |
-| suno | `config/skills/suno.yaml` |
-| lyria | `config/skills/lyria.yaml` |
-| ideate | `config/skills/ideate.yaml` |
-| benchmark | `config/skills/benchmark.yaml` |
-| short | `config/skills/short.yaml` |
-| description | `config/skills/description.yaml` |
-| masterup（audio.crossfade_duration 等） | `config/skills/masterup.yaml` |
-| loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |
-
-**オプションセクション**（方向性に基づき channel_config.json に追加）:
-
-| オプション | セクション | 条件 |
-|-----------|----------|------|
-| プレイリスト | `playlists` | プレイリスト名を提案（ID は空欄） |
-| 投稿後自動化 | `post_upload` | デフォルト有効 |
-
+含めるべきセクション（必須・skill-config 管理・オプション）は **`references/config-generation-rules.md`** を参照。
 `benchmark` セクションは `/channel-new` で既に設定済み。
 
 ### Step 4: 残りディレクトリの作成
 
-```bash
-mkdir -p {collections/planning,collections/live,reports,branding,tools,tests,.claude}
-```
+正準ディレクトリ構造は **`references/directory-structure.md`** を参照。
 
 ### Step 5: 残りファイル生成
 
@@ -81,66 +50,18 @@ mkdir -p {collections/planning,collections/live,reports,branding,tools,tests,.cl
 | `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整 |
 | `config/upload_settings.json` | `references/upload-settings-template.json` をコピー |
 | `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整 |
-| `get_channel_status` | `references/get-channel-status-template.py` の `{{CHANNEL_NAME}}` を置換 |
 | `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
 
-### Step 6: 実行権限付与
+### Step 6: 検証
 
-```bash
-chmod +x get_channel_status
-```
+JSON 構文検証・ChannelConfig ロードテスト・channel_id 自動取得コマンドは **`references/verification.md`** を参照。
+検証後、生成された全ファイルを一覧で確認する。
 
-### Step 7: 検証
-
-#### JSON 構文検証
-
-```bash
-python3 -c "import json; json.load(open('config/channel_config.json'))"
-```
-
-#### ChannelConfig ロードテスト
-
-```bash
-python3 -c "
-import sys; sys.path.insert(0, 'automation')
-from utils.channel_config import ChannelConfig
-c = ChannelConfig.load()
-print(f'Channel: {c.channel[\"name\"]} ({c.channel[\"short\"]})')
-print(f'Genre: {c.genre[\"primary\"]} / {c.genre[\"style\"]}')
-print(f'Benchmarks: {len(c.benchmark_config.get(\"channels\", []))} channels')
-print('Config loaded successfully!')
-"
-```
-
-#### 成果物の確認
-
-生成された全ファイルを一覧で確認。
-
-### Step 8: 次ステップ案内
+### Step 7: 次ステップ案内
 
 1. **YouTube チャンネル作成**（まだの場合）→ `channel_config.json` の `youtube_handle`、`url`、`channel_id` を更新
-2. **OAuth 認証**: 初回実行で新チャンネル固有の認証フロー起動（`automation/auth/client_secrets.json` は submodule 経由で共有済み）
-   ```bash
-   uv run yt-channel-status  # 新規 OAuth フロー → auth/token.json 生成
-   ```
-3. **ブランディング素材**: `generate_image.py` で生成し `branding/` に配置
-   - **バナー画像** (`branding/banner.png`): 2048 x 1152 px、6 MB 以下、アスペクト比 16:9
-   - **プロフィール写真** (`branding/icon.png`): 800 x 800 px 程度、4 MB 以下、PNG 形式、アスペクト比 1:1
-   - Gemini で生成後、Pillow でリサイズ・圧縮してサイズ上限内に収めること
-   ```bash
-   # アイコン生成
-   uv run yt-generate-image --prompt "..." --output branding/icon.png --aspect-ratio 1:1 -y
-   # バナー生成
-   uv run yt-generate-image --prompt "..." --output branding/banner.png --aspect-ratio 16:9 -y
-   # リサイズ（上限超過時）
-   python3 -c "
-   from PIL import Image
-   icon = Image.open('branding/icon.png').resize((800, 800), Image.LANCZOS)
-   icon.save('branding/icon.png', 'PNG', optimize=True)
-   banner = Image.open('branding/banner.png').resize((2048, 1152), Image.LANCZOS)
-   banner.save('branding/banner.png', 'PNG', optimize=True)
-   "
-   ```
+2. **OAuth 認証と channel_id 取得**: 手順は `references/verification.md`（「OAuth 認証」「channel_id の自動取得」）を参照
+3. **ブランディング素材**: 生成手順は `references/verification.md`（「ブランディング素材生成」）を参照
 4. **初回コレクション制作**: `/wf-new` を実行
 
 ## Cross References
