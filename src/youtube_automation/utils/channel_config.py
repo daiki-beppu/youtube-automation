@@ -316,16 +316,54 @@ class ChannelConfig:
 
     @property
     def localizations_config(self) -> dict:
-        """localizations.json の遅延読み込み"""
+        """localizations.json の遅延読み込み
+
+        Raises:
+            ConfigError: localizations.json が存在しない / JSON 不正の場合。
+                多言語機能（upload の localizations / short の翻訳）を使わないチャンネルは
+                `has_localizations` で事前確認してから参照すること。
+        """
         if self._localizations_data is None:
             loc_path = ChannelConfig.channel_dir() / 'config' / 'localizations.json'
-            with open(loc_path, 'r', encoding='utf-8') as f:
-                ChannelConfig._localizations_data = json.load(f)
+            try:
+                with open(loc_path, 'r', encoding='utf-8') as f:
+                    ChannelConfig._localizations_data = json.load(f)
+            except FileNotFoundError:
+                raise ConfigError(
+                    f"localizations.json が見つかりません: {loc_path}\n"
+                    "多言語機能を使う場合は channel-setup スキルの "
+                    "references/localizations-template.json を参考に作成してください。"
+                )
+            except json.JSONDecodeError as e:
+                raise ConfigError(f"localizations.json の JSON パースに失敗: {loc_path}: {e}")
         return self._localizations_data
 
     @property
+    def has_localizations(self) -> bool:
+        """localizations.json が存在するか（多言語機能の事前チェック用）"""
+        loc_path = ChannelConfig.channel_dir() / 'config' / 'localizations.json'
+        return loc_path.exists()
+
+    @property
     def supported_languages(self) -> list[str]:
+        """対応言語リスト。localizations.json が無い場合は channel.youtube.language のみ"""
+        if not self.has_localizations:
+            return [self.language]
         return list(self.localizations_config['supported_languages'])
+
+    # ─── Music engine ──────────────────────────────────
+
+    @property
+    def music_engine(self) -> str:
+        """音楽エンジン（'suno' / 'lyria'）。未設定時は 'suno'"""
+        engine = self._data.get('music_engine', 'suno')
+        if engine not in ('suno', 'lyria'):
+            logger.warning(
+                "channel_config.json の music_engine='%s' は未知の値です。"
+                "既知の値は 'suno' / 'lyria'",
+                engine,
+            )
+        return engine
 
     # ─── Benchmark ──────────────────────────────────
 
