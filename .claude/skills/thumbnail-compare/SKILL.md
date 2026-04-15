@@ -67,7 +67,7 @@ open data/thumbnail_compare/
 
 ## 関連ファイル
 
-- `automation/compare_thumbnails.py` — サムネイル収集・縮小スクリプト
+- `yt-thumbnail-compare` (`youtube_automation.scripts.compare_thumbnails`) — サムネイル収集・縮小スクリプト
 - `data/thumbnail_compare/` — 出力ディレクトリ
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ（サムネURL）
 - `collections/live/*/10-assets/thumbnail.jpg` — 自チャンネルサムネイル

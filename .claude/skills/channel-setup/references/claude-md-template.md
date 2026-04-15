@@ -63,7 +63,7 @@ uv run yt-upload-collection
 └── tests/                 # チャンネル固有テスト
 ```
 
-automation/ の構造はルート `.claude/CLAUDE.md` を参照。
+youtube-automation パッケージの構造は GitHub リポジトリ（daiki-beppu/youtube-channels-automation）の `CLAUDE.md` を参照。
 
 ## ワークフロー
 

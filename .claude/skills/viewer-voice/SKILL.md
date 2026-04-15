@@ -66,6 +66,6 @@ uv run yt-benchmark-comments --force
 
 ## 関連ファイル
 
-- `automation/fetch_benchmark_comments.py` — コメント収集スクリプト
+- `yt-benchmark-comments` (`youtube_automation.scripts.fetch_benchmark_comments`) — コメント収集スクリプト
 - `data/comments_YYYYMMDD.json` — コメント生データ
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ（自動更新）
