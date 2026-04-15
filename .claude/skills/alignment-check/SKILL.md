@@ -78,3 +78,16 @@ AskUserQuestion で新タイトルフォーマットを確認。
 - `collections/live/*/10-assets/thumbnail.jpg` — サムネイル
 - `collections/live/*/20-documentation/` — 音楽プロンプト
 - `collections/live/*/workflow-state.json` — タイトル・テーマ
+
+## Next Step
+
+`docs/plans/alignment-audit.md` 保存後、不整合カテゴリに応じて以下のスキルを再実行する:
+
+| 不整合カテゴリ | 症状 | 再実行スキル |
+|---------------|------|-------------|
+| **サムネ不一致** | 音楽ムードとサムネ雰囲気がズレ（例: lofi なのに派手な色調） | `/thumbnail <collection>` — 対象コレクションのサムネイル再生成 |
+| **音楽ミスマッチ** | テーマ・タイトルと音楽プロンプトがズレ（例: 「rain」テーマなのに upbeat） | `/ideate` で企画段階から見直し、その後 `/suno` または `/lyria` で再生成 |
+| **タイトル改善のみ** | サムネ・音楽は OK だがタイトルの訴求/語彙が弱い | YouTube Studio で手動変更 + `channel_config.json` の `title.template` を更新 |
+| **横断的な方向性ズレ** | 複数コレクションで同じ不整合パターン | `/channel-direction` でチャンネル全体の方向性を再検討 |
+
+再実行後は `/alignment-check` を再度走らせて解消を確認する（フィードバックループ）。
