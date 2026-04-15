@@ -5,9 +5,8 @@
 
 audio:
   # トラック間クロスフェード秒数
-  # metadata_generator.py がタイムスタンプ計算で参照する。
-  # 注意: references/generate_master.sh は内部で 3 秒固定を使っているため、
-  # 実際の音声クロスフェード時間と食い違う可能性がある（別 issue で統一検討）。
+  # yt-generate-master の ffmpeg acrossfade と metadata_generator.py の
+  # タイムスタンプ計算の両方がこの値を参照する。
   crossfade_duration: 1.0
 
   # マスター音源のビットレート

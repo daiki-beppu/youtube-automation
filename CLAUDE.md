@@ -17,7 +17,7 @@ youtube-channels-automation/         # ← このリポジトリ
 │       └── templates/               # 説明文 Markdown テンプレート
 ├── .claude/skills/                  # Claude Code スキル群（yt-skills sync で配布）
 ├── tests/                           # pytest テストスイート
-├── scripts/*.sh                     # シェルスクリプト（generate_master.sh 等）
+├── scripts/*.sh                     # シェルスクリプト（worktree_sync.sh 等）
 └── auth/client_secrets.json         # (gitignored) ローカル開発用 OAuth 認証情報
 ```
 
