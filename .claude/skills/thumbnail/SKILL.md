@@ -168,7 +168,7 @@ uv run yt-generate-image \
 ```
 
 **運用上の注意**:
-- **リトライ前提**: Gemini 3.1 Flash Image は同一プロンプトでも瞬発的にエラーを返す。2〜3 回リトライで通る
+- **リトライ前提**: Gemini Image 系モデル（`gemini_image.model` で指定）は同一プロンプトでも瞬発的にエラーを返す。2〜3 回リトライで通る
 - **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで完全継承される。変えたい部分だけ明示指示
 - **ブランド置換**: `Replace every occurrence of the word 'X' with 'Y'` で文字列差し替え可
 - **キャラサイズ**: 縮小傾向がある場合は `fills about 55% of the frame, bust-up portrait` を追記
