@@ -19,7 +19,7 @@ description: >-
 /channel-setup     → Phase 4: テクニカルセットアップ + 検証
 ```
 
-共有テンプレートは `automation/.claude/skills/channel-setup/references/` に配置。
+共有テンプレートは `.claude/skills/channel-setup/references/` に配置（`yt-skills sync` で配布）。
 
 ## Instructions
 
