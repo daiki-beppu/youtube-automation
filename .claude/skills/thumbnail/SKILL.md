@@ -121,8 +121,52 @@ Widescreen 16:9 aspect ratio.
 
 `gemini_image.generation_mode` を確認:
 
+- **`ttp_swap`**: ベンチマーク競合サムネ + 自チャンネルアイコンの 2 参照でキャラ置換（後述）
 - **`single_step`**: テキスト付き参照画像から差分のみで完成サムネイルを1ステップ生成（後述）
 - **未定義 / `two_phase`**: 従来の2フェーズワークフロー（Phase 1 + Phase 2）
+
+### TTP Swap モード（`generation_mode: "ttp_swap"`）
+
+ベンチマーク競合の高再生サムネを **構図リファレンス**、自チャンネルのアイコンを **キャラリファレンス**
+として 2 枚同時に渡し、「キャラだけ差し替える」手法。wobble → bobble 実験（bobble で `branding/experiments/wobble-ttp-character-swap-20260415/`）で確立。
+
+**前提**:
+- `data/thumbnail_compare/benchmark/<channel>-<video_id>.jpg` に競合サムネがキャッシュ済み
+  （未取得なら `uv run yt-thumbnail-compare --no-open` で取得）
+- `branding/icon.png` に自チャンネルキャラのアイコンが配置済み
+
+**プロンプトは短く保つのが重要**（長文はノイズ）。3 段階テンプレ:
+
+```
+# 1. キャラ置換（必須・これだけでも動く）
+Replace the character in the first image with the character from the second image.
+
+# 2. リブランド（任意）
+Remove the copyright text in the top-right corner. Remove the logo icon and
+tagline text in the bottom-left corner. Both corners should be clean empty background.
+
+# 3. オリジナリティ（任意）
+Change the action: [自チャンネル固有の動作]. Change the [小道具のディテール] to [固有要素].
+```
+
+**コマンド**:
+
+```bash
+uv run yt-generate-image \
+  --reference data/thumbnail_compare/benchmark/<benchmark-thumb>.jpg \
+  --reference branding/icon.png \
+  --prompt "<上記テンプレ>" \
+  --output collections/planning/<collection>/10-assets/main-v1.jpg -y
+```
+
+**運用上の注意**:
+- **リトライ前提**: Gemini 3.1 Flash Image は同一プロンプトでも `'NoneType' object is not iterable`（空レスポンス）を返す瞬発的揺らぎがある。2〜3 回リトライで通る。プロンプトを微妙に言い換えるだけで通ることも多い。
+- **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォント・位置はデフォルトで完全継承される。変えたい部分だけ明示指示。
+- **ブランド置換**: 「Replace every occurrence of the word 'X' with 'Y'」で文字列差し替えが効く（ロゴ周りも含む）。
+- **ラテアートなど細部改変**: 小道具の模様変更（ハート → 自キャラ顔など）も 1 行で反映可能。自チャンネル固有の隠しギミックとして活用価値が高い。
+- **キャラサイズ**: 縮小傾向がある場合は「fills about 55% of the frame, bust-up portrait」を追記。
+- **コスト**: 成功 1 枚あたり $0.04〜$0.08（リトライ込み）。
+
 
 ### Single-Step モード（`generation_mode: "single_step"`）
 
