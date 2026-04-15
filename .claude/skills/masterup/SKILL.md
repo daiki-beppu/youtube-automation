@@ -88,7 +88,7 @@ curl -L -o "02-Individual-music/{filename}.mp3" "https://cdn1.suno.ai/{song_id}.
 ダウンロード完了後、共有スクリプトでマスター音源を自動生成:
 
 ```bash
-bash .claude/skills/masterup/references/generate_master.sh
+bash "$(git rev-parse --show-toplevel)/.claude/skills/masterup/references/generate_master.sh"
 ```
 
 このスクリプトは `02-Individual-music/` の MP3 を自動検出し、3秒クロスフェードで結合します。
