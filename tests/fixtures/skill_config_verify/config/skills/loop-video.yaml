@@ -1,0 +1,6 @@
+# verify fixture: loop-video 上書き
+veo:
+  model: "veo-verify-override"
+  default_prompt: "VERIFY_LOOP_PROMPT_MARKER"
+  duration_seconds: 99
+  crossfade_sec: 9.9

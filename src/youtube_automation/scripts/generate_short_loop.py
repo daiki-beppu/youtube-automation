@@ -48,11 +48,10 @@ SHORT_DEFAULT_PROMPT = (
 
 
 def load_config() -> dict:
-    """ChannelConfig から veo 設定を読み込む。"""
+    """loop-video skill-config から veo セクションを読み込む。"""
     try:
-        from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
-        config = ChannelConfig.load()
-        return config.raw.get("veo", {})
+        from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
+        return load_skill_config("loop-video").get("veo", {})
     except Exception:
         return {}
 

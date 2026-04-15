@@ -1,0 +1,6 @@
+# verify fixture: masterup 上書き
+audio:
+  crossfade_duration: 2.5
+  bitrate: "256k"
+suno_download:
+  cdn_url_template: "https://verify.example/{song_id}.mp3"

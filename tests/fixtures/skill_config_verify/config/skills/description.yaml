@@ -1,0 +1,12 @@
+# verify fixture: description 上書き
+perfect_for_themes:
+  verify:
+    - Verify Use 1
+    - Verify Use 2
+theme_emoji:
+  verify: "🧪"
+  study: "📚"
+cards:
+  enabled: true
+  timing: "08:30"
+  text_template: "VERIFY_CARD from {channel_name}"

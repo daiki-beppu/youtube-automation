@@ -1,0 +1,25 @@
+# loop-video skill default config
+#
+# Veo 3.1 ループ動画生成の設定。
+# チャンネル側では config/skills/loop-video.yaml に上書き値を置く。
+#
+# 注意: generate_short_loop.py (ショート用 9:16 ループ) も同じ veo.* を共有する。
+
+veo:
+  # Veo モデル ID（API デフォルト: veo-3.1-lite-generate-preview）
+  model: "veo-3.1-lite-generate-preview"
+
+  # 動画生成プロンプト。コレクションの世界観に合わせてチャンネル側で上書き推奨。
+  # 原則: 静止構図 + 微細な動き（ロウソクの揺らぎ、キャラの呼吸、光のシフト）。
+  # 派手なエフェクト / 煙 / パーティクル / 落下物は NG（ループ破綻の原因）。
+  default_prompt: |
+    Static scene with only natural subtle movements: gentle flickering of candle flames,
+    slight sway of character breathing, soft light shifts on surfaces.
+    No smoke, no magical effects, no particles, no falling objects.
+    Keep the scene calm and grounded, like a living painting.
+
+  # 生成尺（Veo API 制約で現状 8 秒固定）
+  duration_seconds: 8
+
+  # FFmpeg ループ補正のクロスフェード秒数
+  crossfade_sec: 0.5

@@ -1,0 +1,24 @@
+{
+  "channel": {
+    "name": "Verify Channel",
+    "short": "VC",
+    "youtube_handle": "@verify",
+    "url": "https://youtube.com/@verify",
+    "core_message": "verification channel",
+    "cta_subscribe": "Subscribe!",
+    "tagline": "verify tagline"
+  },
+  "content_model": {"type": "collection", "languages": ["en"]},
+  "genre": {"primary": "ambient", "style": "verify", "context": "testing"},
+  "youtube": {"category_id": "10", "privacy_status": "public", "language": "en"},
+  "tags": {"base": ["verify"], "themes": {"forest": ["forest tag"]}},
+  "descriptions": {
+    "opening": "{style} {primary} for {context}",
+    "sub_opening": "sub",
+    "perfect_for": ["testing"],
+    "hashtags": ["#verify"]
+  },
+  "analytics": {"collection_filter_keywords": ["verify"]},
+  "title": {"template": "{theme}", "default_activity": "Study", "theme_activities": {}},
+  "benchmark": {"channels": [{"name": "RivalCh", "id": "UCabc"}]}
+}

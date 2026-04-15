@@ -73,13 +73,12 @@ AskUserQuestion で以下を確認:
 
 **必須セクション**: channel, content_model, genre, youtube, tags, descriptions, analytics, title, workflow
 
-**skill-config で管理されるセクション**（channel_config.json には置かない）: thumbnail / suno / lyria / ideate / benchmark / short / description / masterup。チャンネル固有の上書きがある場合は `config/skills/<skill>.yaml` を作成。
+**skill-config で管理されるセクション**（channel_config.json には置かない）: thumbnail / suno / lyria / ideate / benchmark / short / description / masterup / loop-video。チャンネル固有の上書きがある場合は `config/skills/<skill>.yaml` を作成。
 
 **オプションセクション**（ヒアリング結果に基づき channel_config.json に追加）:
 
 | オプション | セクション | 条件 |
 |-----------|----------|------|
-| ループ動画 | `veo` | デフォルト有効 |
 | プレイリスト | `playlists` | プレイリスト名を提案（ID は空欄） |
 | 投稿後自動化 | `post_upload` | デフォルト有効 |
 

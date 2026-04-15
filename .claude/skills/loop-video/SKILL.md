@@ -51,7 +51,7 @@ $ARGUMENTS
 
 1. **対象確認**: `10-assets/` に `main.png` or `main.jpg` があることを確認
 2. **プロンプト検討**: シーンに応じた自然な動きを指定
-   - デフォルトプロンプトは `channel_config.json` の `veo.default_prompt` を使用
+   - デフォルトプロンプトは skill-config (`config/skills/loop-video.yaml` または `.claude/skills/loop-video/config.default.yaml`) の `veo.default_prompt` を使用
    - シーンに合わない場合は `--prompt` でカスタマイズ
 3. **生成実行**: `uv run yt-generate-loop-video <collection-path> -y`
 4. **品質確認**: ユーザーに `loop.mp4` を確認してもらう
@@ -99,18 +99,25 @@ PD（パブリックドメイン）の童話キャラでも、ディズニー版
 
 ### 設定
 
-`channel_config.json` の `veo` セクション:
+skill-config (`.claude/skills/loop-video/config.default.yaml`) で管理。チャンネル側上書きは `config/skills/loop-video.yaml`:
 
-```json
-{
-  "veo": {
-    "model": "veo-3.1-lite-generate-preview",
-    "default_prompt": "...",
-    "duration_seconds": 4,
-    "crossfade_sec": 0.5
-  }
-}
+```yaml
+veo:
+  model: "veo-3.1-lite-generate-preview"
+  default_prompt: |
+    Static scene with only natural subtle movements...
+  duration_seconds: 8
+  crossfade_sec: 0.5
 ```
+
+| 項目 | 既定 | 説明 |
+|---|---|---|
+| `veo.model` | veo-3.1-lite-generate-preview | Veo API モデル |
+| `veo.default_prompt` | 汎用微動プロンプト | チャンネルの世界観に合わせて上書き推奨 |
+| `veo.duration_seconds` | 8 | 生成尺（Veo API 制約で 8 秒固定） |
+| `veo.crossfade_sec` | 0.5 | FFmpeg ループ補正のクロスフェード秒数 |
+
+`generate_short_loop.py`（ショート用 9:16 ループ）も同じ `loop-video.yaml` の `veo.*` を共有する。
 
 ## Integration
 

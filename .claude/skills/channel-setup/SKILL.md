@@ -57,12 +57,12 @@ Phase 1 で作成した最小 config を完全版に拡張。`config-template.js
 | short | `config/skills/short.yaml` |
 | description | `config/skills/description.yaml` |
 | masterup（audio.crossfade_duration 等） | `config/skills/masterup.yaml` |
+| loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |
 
 **オプションセクション**（方向性に基づき channel_config.json に追加）:
 
 | オプション | セクション | 条件 |
 |-----------|----------|------|
-| ループ動画 | `veo` | デフォルト有効 |
 | プレイリスト | `playlists` | プレイリスト名を提案（ID は空欄） |
 | 投稿後自動化 | `post_upload` | デフォルト有効 |
 
