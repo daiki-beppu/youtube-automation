@@ -69,5 +69,13 @@
   },
   "playlists": {
     "main": "PLtest123"
+  },
+  "youtube_channel": {
+    "description": "Test channel description for sync.",
+    "keywords": ["chiptune", "8-bit", "rpg music"],
+    "country": "JP",
+    "default_language": "ja",
+    "unsubscribed_trailer": "dQw4w9WgXcQ",
+    "made_for_kids": false
   }
 }
