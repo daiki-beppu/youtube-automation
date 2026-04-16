@@ -50,6 +50,14 @@ mode = config.raw.get("content_model", {}).get("type", "release")
 # "release"    → Mode B: 話す系クリップモード
 ```
 
+### 多言語ローカライゼーション対象
+
+Mode A では全ての supported language に対してショート用メタデータ（title/description）を生成する。対象言語の出所:
+
+- **Canonical 宣言**: `channel_config.json.localization.supported_languages` + `localization.default_language`
+- **実装**: `ChannelConfig.supported_languages`（現状は `localizations.json.supported_languages` を読むため両者を一致させること）
+- **テンプレート定義**: `localizations.json.languages.<lang>.short_title_template` / `short_description_template`
+
 ### 生成パラメータ
 
 各モードの尺・フェード・本数・フォント等は skill-config で管理する。

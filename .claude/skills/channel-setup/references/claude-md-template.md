@@ -97,6 +97,16 @@ Complete Collection アップロード + live 移動を実行:
 1. Complete Collection（マスター動画）アップロード
 2. `collections/planning/` → `collections/live/` 自動移動
 
+## 多言語ローカライゼーション（単一ソース原則）
+
+- **Canonical 宣言**: `config/channel_config.json` の `localization` セクション
+  - `default_language` (例: `en`) と `supported_languages` (追加翻訳言語のリスト) の和集合が全ターゲット言語
+- **翻訳データ**: `config/localizations.json` の `languages.<lang>` に title/description/hashtag テンプレート
+- **scene_phrases**: `collections/*/workflow-state.json` に `default_language + supported_languages` 全てのチャプター情景フレーズ翻訳が必要
+- **ランタイム参照**: `ChannelConfig.supported_languages` プロパティ経由（現状 `localizations.json.supported_languages` を読む）
+- **同期ルール**: `channel_config.json.localization.supported_languages` と `localizations.json.supported_languages` は必ず一致させる。片方を更新したらもう片方も更新すること
+- **`content_model.languages`**: collection 型では未使用（`localization.supported_languages` を使う）。single_release 型では発音言語リストとして解釈される
+
 ## 音楽制作ルール
 - SunoAIプロンプト作成は必ず `/suno` スキルを使用
 - 楽曲ダウンロード + マスター音源生成は `/masterup` スキルを使用

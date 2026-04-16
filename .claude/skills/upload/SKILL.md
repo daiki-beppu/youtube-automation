@@ -31,20 +31,23 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 実行前に `channel_config.json` の `content_model` を読み取り、チャンネルに適応する:
 
-| content_model.type | 動作 |
-|-------------------|------|
-| `collection` | Complete Collection アップロード → live 移動（単一動画） |
-| `single_release` | `content_model.languages` に基づくアップロード |
+| content_model.type | 動作 | 対応言語の出所 |
+|-------------------|------|--------------|
+| `collection` | Complete Collection アップロード → live 移動（単一動画） | `localization.supported_languages` + `localization.default_language`（`localizations.json` と同期） |
+| `single_release` | 言語ごとに別動画をアップロード | `content_model.languages`（発音言語リスト） |
 
 ### collection 型
 - 下記フローのとおり Complete Collection を1本アップロード
 - `collection_uploader.py` を使用
+- 多言語ローカライゼーションは `localization.supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
+- `ChannelConfig.supported_languages` が現状 `localizations.json.supported_languages` を読むため、両者を一致させること（`localization._note` 参照）
 
 ### single_release + languages: ["jp","en"]（COT）
 - **同日2本アップロード**: JP + EN を同日投稿（API クォータ: 2 × 1,600 = 3,200 ユニット）
 - **プレイリスト管理**: `channel_config.json` の `playlists.jp` / `playlists.en` に自動追加
 - **相互リンク**: アップロード後に概要欄を更新し、JP↔EN 動画 URL を相互記載
 - `video_uploader.py` を直接使用
+- single_release 型では `content_model.languages` が発音言語リストとして解釈される（collection 型とは意味が異なる）
 
 ## Instructions
 

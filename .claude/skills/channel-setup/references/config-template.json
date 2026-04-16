@@ -10,7 +10,13 @@
   },
   "content_model": {
     "type": "collection",
+    "_languages_note": "collection 型では未使用。多言語ローカライゼーション言語は localization.supported_languages を参照",
     "languages": ["en"]
+  },
+  "localization": {
+    "_note": "localizations.json の supported_languages と一致させる。scene_phrases / 概要欄多言語版 / ショート多言語版の対象言語",
+    "default_language": "en",
+    "supported_languages": []
   },
   "music_engine": "suno",
   "genre": {
