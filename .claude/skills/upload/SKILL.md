@@ -9,7 +9,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 ## 前提
 
-`config/channel_config.json` が存在すること。
+`config/channel/` が存在すること（`load_config()` でロード可能）。
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
@@ -29,7 +29,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 ## Channel Adaptation
 
-実行前に `channel_config.json` の `content_model` を読み取り、チャンネルに適応する:
+実行前に `config/channel/youtube.json` の `content_model` を読み取り、チャンネルに適応する:
 
 | content_model.type | 動作 | 対応言語の出所 |
 |-------------------|------|--------------|
@@ -40,11 +40,11 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 - 下記フローのとおり Complete Collection を1本アップロード
 - `collection_uploader.py` を使用
 - 多言語ローカライゼーションは `localization.supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
-- `ChannelConfig.supported_languages` が現状 `localizations.json.supported_languages` を読むため、両者を一致させること（`localization._note` 参照）
+- `load_config().localizations.supported_languages` は `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
 
 ### single_release + languages: ["jp","en"]（COT）
 - **同日2本アップロード**: JP + EN を同日投稿（API クォータ: 2 × 1,600 = 3,200 ユニット）
-- **プレイリスト管理**: `channel_config.json` の `playlists.jp` / `playlists.en` に自動追加
+- **プレイリスト管理**: `config/channel/playlists.json` の `playlists.jp` / `playlists.en` に自動追加
 - **相互リンク**: アップロード後に概要欄を更新し、JP↔EN 動画 URL を相互記載
 - `video_uploader.py` を直接使用
 - single_release 型では `content_model.languages` が発音言語リストとして解釈される（collection 型とは意味が異なる）
@@ -112,5 +112,5 @@ uv run yt-upload-collection --plan [-c NAME]
 
 - YouTube タイトル長制限準拠（100文字）
 - 誇張表現回避（Epic, Ultimate 等の禁止）
-- SEO 最適化タグ（`channel_config.json` の `tags.base` 参照）
+- SEO 最適化タグ（`config/channel/content.json` の `tags.base` 参照）
 - AI 透明性・Usage & Attribution の記載

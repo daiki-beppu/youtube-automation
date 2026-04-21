@@ -10,7 +10,7 @@ description: Use when 各コレクションの音楽ムード × サムネイル
 
 ## 前提
 
-`config/channel_config.json` が存在すること。
+`config/channel/` が存在すること（`load_config()` でロード可能）。
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
@@ -33,7 +33,7 @@ description: Use when 各コレクションの音楽ムード × サムネイル
 - `data/benchmark_YYYYMMDD.json`（最新）を読み込み
 - 全ベンチマーク動画のタイトル構造をパターン分類
 - 各パターンの平均再生数を算出
-- 現行テンプレート（`channel_config.json` の `title.template`）との比較
+- 現行テンプレート（`config/channel/content.json` の `title.template`）との比較
 
 ### Phase 2: サムネイル視覚確認
 
@@ -69,11 +69,11 @@ Phase 1-2 の結果を統合し、各コレクションの整合性を判定:
 
 AskUserQuestion で新タイトルフォーマットを確認。
 `docs/plans/alignment-audit.md` を生成。
-必要に応じて `channel_config.json` のタイトルテンプレートを更新。
+必要に応じて `config/channel/content.json` のタイトルテンプレートを更新。
 
 ## 関連ファイル
 
-- `config/channel_config.json` — `title.template`, `title.theme_activities`
+- `config/channel/content.json` — `title.template`, `title.theme_activities`
 - `docs/benchmarks/common-patterns.md` — 5つの成功法則
 - `collections/live/*/10-assets/thumbnail.jpg` — サムネイル
 - `collections/live/*/20-documentation/` — 音楽プロンプト
@@ -87,7 +87,7 @@ AskUserQuestion で新タイトルフォーマットを確認。
 |---------------|------|-------------|
 | **サムネ不一致** | 音楽ムードとサムネ雰囲気がズレ（例: lofi なのに派手な色調） | `/thumbnail <collection>` — 対象コレクションのサムネイル再生成 |
 | **音楽ミスマッチ** | テーマ・タイトルと音楽プロンプトがズレ（例: 「rain」テーマなのに upbeat） | `/ideate` で企画段階から見直し、その後 `/suno` または `/lyria` で再生成 |
-| **タイトル改善のみ** | サムネ・音楽は OK だがタイトルの訴求/語彙が弱い | YouTube Studio で手動変更 + `channel_config.json` の `title.template` を更新 |
+| **タイトル改善のみ** | サムネ・音楽は OK だがタイトルの訴求/語彙が弱い | YouTube Studio で手動変更 + `config/channel/content.json` の `title.template` を更新 |
 | **横断的な方向性ズレ** | 複数コレクションで同じ不整合パターン | `/channel-direction` でチャンネル全体の方向性を再検討 |
 
 再実行後は `/alignment-check` を再度走らせて解消を確認する（フィードバックループ）。

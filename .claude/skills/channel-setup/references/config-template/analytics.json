@@ -1,0 +1,8 @@
+{
+  "analytics": {
+    "collection_filter_keywords": ["Complete Collection", "{{SHORT}}"]
+  },
+  "benchmark": {
+    "channels": []
+  }
+}

@@ -11,7 +11,7 @@ Lyria RealTime API を使い、`composition.json` に定義されたフェーズ
 
 以下が揃っていること:
 
-1. `config/channel_config.json` が存在する（`audio.target_duration_min` を参照）
+1. `config/channel/` が存在する（`config/channel/audio.json` の `audio.target_duration_min` を参照）
 2. `config/skills/lyria.yaml` が存在する（配布された `config.default.yaml` をベースにカスタマイズ）
 3. `config/skills/lyria.yaml` の `_disabled` が **false** であること
 
@@ -28,7 +28,7 @@ Lyria RealTime API を使い、`composition.json` に定義されたフェーズ
 
 ### 選択タイミング（どこで lyria が選ばれるか）
 
-1. **チャンネルのデフォルト** — `/channel-direction` で suno/lyria を検討 → `/channel-setup` が `channel_config.json` の `music_engine` に書き込む
+1. **チャンネルのデフォルト** — `/channel-direction` で suno/lyria を検討 → `/channel-setup` が `config/channel/youtube.json` の `music_engine` に書き込む
 2. **コレクション単位の上書き** — `/wf-new` の `yt-init-collection --music-engine lyria` でコレクション毎に上書き可能（省略時はチャンネル設定を継承）
 3. **このスキルが呼ばれるとき** — `/wf-new` が `workflow-state.json` の `music_engine = "lyria"` を判定して `/lyria` を自動実行する。手動で `/lyria <theme>` を叩いた場合もこのスキルに入る
 
@@ -70,7 +70,7 @@ $ARGUMENTS → コレクションのテーマ指定
 uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('lyria'), indent=2, ensure_ascii=False))"
 ```
 
-`channel_config.json` からは `audio.target_duration_min`（コレクション全体の基準長）のみ参照する。
+`config/channel/audio.json` からは `audio.target_duration_min`（コレクション全体の基準長）のみ参照する。
 
 ## Instructions
 

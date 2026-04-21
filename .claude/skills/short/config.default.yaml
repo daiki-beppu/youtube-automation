@@ -3,7 +3,7 @@
 # ショート動画生成の設定。チャンネル側では config/skills/short.yaml に上書き値を置く。
 #
 # 注意: コンテンツモデル判定 (content_model.type) は upload など他スキルとも
-# 共有するため channel_config.json 側で管理する。この YAML には short 固有の派生値のみ置く。
+# 共有するため config/channel/youtube.json 側で管理する。この YAML には short 固有の派生値のみ置く。
 
 # モード A (collection): BGM テイスターのデフォルト
 duration_sec: 20          # 1ショートあたりの尺

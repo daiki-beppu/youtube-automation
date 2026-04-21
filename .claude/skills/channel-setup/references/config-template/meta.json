@@ -1,0 +1,11 @@
+{
+  "channel": {
+    "name": "{{CHANNEL_NAME}}",
+    "short": "{{SHORT}}",
+    "youtube_handle": "",
+    "url": "",
+    "core_message": "{{CORE_MESSAGE}}",
+    "cta_subscribe": "Subscribe for new {{PRIMARY}} music!",
+    "tagline": "{{CORE_MESSAGE}}"
+  }
+}

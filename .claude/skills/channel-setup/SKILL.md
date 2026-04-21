@@ -5,7 +5,7 @@ description: Use when /channel-direction で方向性が確定し、チャンネ
 
 ## Overview
 
-`/channel-direction` で確定した方向性をもとに、`channel_config.json` を完成させ、全設定ファイル+ディレクトリ構造を一括生成する。
+`/channel-direction` で確定した方向性をもとに、`config/channel/*.json` を完成させ、全設定ファイル+ディレクトリ構造を一括生成する。
 
 **前提**: `/channel-direction` が完了し、`docs/channel-direction.md` が存在すること。
 
@@ -24,16 +24,17 @@ description: Use when /channel-direction で方向性が確定し、チャンネ
 
 `channel-research.md` の分析データも参照しながら、方向性に基づいて config 内容を Claude が生成し提案する。
 生成ルールは **`references/config-generation-rules.md`** を参照（tags / descriptions / title / suno の書き方）。
-雛形は `references/config-template.json`。
+雛形は `references/config-template/*.json`（責務別 4 ファイル: meta / content / youtube / analytics）。
 
 提案をユーザーに見せ、承認 or 修正指示を受ける。
 
-### Step 3: channel_config.json の完成
+### Step 3: config/channel/*.json の完成
 
-Phase 1 で作成した最小 config を完全版に拡張。`config-template.json` の全フィールドを埋める。
+Phase 1 で `/channel-new` が作成した最小 config を完全版に拡張。`references/config-template/` の各ファイルを
+`config/channel/` 配下に配置し、全フィールドを埋める。
 
 含めるべきセクション（必須・skill-config 管理・オプション）は **`references/config-generation-rules.md`** を参照。
-`benchmark` セクションは `/channel-new` で既に設定済み。
+`benchmark.channels` は `/channel-new` で既に設定済み（`config/channel/analytics.json`）。
 
 ### Step 4: 残りディレクトリの作成
 
@@ -45,17 +46,17 @@ Phase 1 で作成した最小 config を完全版に拡張。`config-template.js
 |---------|---------|
 | `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整 |
 | `config/upload_settings.json` | `references/upload-settings-template.json` をコピー |
-| `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。多言語展開しないチャンネルは省略可（`ChannelConfig.supported_languages` は `youtube.language` のみへフォールバック）。展開する場合は `channel_config.json.localization.supported_languages` と `localizations.json.supported_languages` を必ず一致させること |
+| `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。多言語展開しないチャンネルは省略可（`load_config().localizations.supported_languages` は `youtube.api.language` へフォールバック）。`config/localizations.json` が唯一の Canonical ソース |
 | `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
 
 ### Step 6: 検証
 
-JSON 構文検証・ChannelConfig ロードテスト・channel_id 自動取得コマンドは **`references/verification.md`** を参照。
+JSON 構文検証・config ロードテスト・channel_id 自動取得コマンドは **`references/verification.md`** を参照。
 検証後、生成された全ファイルを一覧で確認する。
 
 ### Step 7: 次ステップ案内
 
-1. **YouTube チャンネル作成**（まだの場合）→ `channel_config.json` の `youtube_handle`、`url`、`channel_id` を更新
+1. **YouTube チャンネル作成**（まだの場合）→ `config/channel/meta.json` の `channel.youtube_handle`、`channel.url`、`channel.channel_id` を更新
 2. **OAuth 認証と channel_id 取得**: 手順は `references/verification.md`（「OAuth 認証」「channel_id の自動取得」）を参照
 3. **ブランディング素材**: 生成手順は `references/verification.md`（「ブランディング素材生成」）を参照
 4. **初回コレクション制作**: `/wf-new` を実行

@@ -11,7 +11,7 @@
 - [ ] タイトルに誇張表現なし（Epic, Ultimate 等 不使用）
 - [ ] AI 透明性・Usage & Attribution セクションあり
 - [ ] ハッシュタグ 13個（base + theme 固有）
-- [ ] SEO キーワード適切（`channel_config.json` の `tags.base` 参照）
+- [ ] SEO キーワード適切（`config/channel/content.json` の `tags.base` 参照）
 
 ## アップロード実行
 

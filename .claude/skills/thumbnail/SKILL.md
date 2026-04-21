@@ -12,7 +12,7 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 以下の 2 つが揃っていること:
 
-1. `config/channel_config.json` が存在する
+1. `config/channel/` が存在する（`load_config()` でロード可能）
 2. `config/skills/thumbnail.yaml` が存在する（配布された `.claude/skills/thumbnail/config.default.yaml` をベースにチャンネルでカスタマイズ）
 
 いずれか不足する場合、ユーザーに確認:
