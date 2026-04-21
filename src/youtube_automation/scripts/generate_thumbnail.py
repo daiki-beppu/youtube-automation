@@ -25,6 +25,7 @@ from pathlib import Path
 # --- パス解決 ---
 def _channel_root() -> Path:
     from youtube_automation.utils.channel_config import ChannelConfig
+
     return ChannelConfig.channel_dir()
 
 
@@ -37,7 +38,6 @@ from youtube_automation.utils.image_generator import (  # noqa: E402
     load_gemini_config,
     resolve_unique_path,
 )
-from youtube_automation.utils.secrets import get_gemini_api_key  # noqa: E402
 
 
 def extract_prompt(prompts_md: Path, variation: str | None, use_text_overlay: bool = False) -> str:
@@ -189,16 +189,9 @@ def main():
         if not confirm_cost(model, cost_per_image):
             sys.exit(0)
 
-    # API キー取得（os.environ → 1Password の順で試行、副作用で os.environ にもセット）
+    # SDK インポート & クライアント生成
     try:
-        get_gemini_api_key()
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
-    # SDK インポート
-    try:
-        from google import genai
+        from youtube_automation.utils.genai_client import create_genai_client
     except ImportError:
         print("[ERROR] google-genai がインストールされていません。")
         print("  pip3 install google-genai Pillow --break-system-packages")
@@ -216,7 +209,11 @@ def main():
         reference_images.append(ref_path)
 
     # 生成実行
-    client = genai.Client()
+    try:
+        client = create_genai_client()
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
     start_time = time.monotonic()
     success = generate_image(
         client,

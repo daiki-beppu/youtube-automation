@@ -4,7 +4,6 @@
 import argparse
 import json
 import math
-import os
 import random
 import struct
 import sys
@@ -14,7 +13,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-from youtube_automation.utils.secrets import get_gemini_api_key  # noqa: E402
 from youtube_automation.utils.time_utils import format_duration_mmss  # noqa: E402
 
 SAMPLE_RATE = 48000
@@ -656,22 +654,20 @@ def main():
 
     dry_run(comp)
 
-    if not os.environ.get("GOOGLE_API_KEY"):
-        try:
-            get_gemini_api_key()
-        except ConfigError as e:
-            print(f"[ERROR] {e}")
-            sys.exit(1)
-
     try:
-        from google import genai
         from google.genai import types
+
+        from youtube_automation.utils.genai_client import create_genai_client
     except ImportError:
         print("[ERROR] google-genai がインストールされていません。")
         print("  uv pip install google-genai")
         sys.exit(1)
 
-    client = genai.Client()
+    try:
+        client = create_genai_client()
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
 
     if args.preview:
         output_dir = Path(args.output).resolve().parent / "preview"

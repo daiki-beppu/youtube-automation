@@ -37,7 +37,6 @@ from youtube_automation.utils.benchmark_analyzer import (  # noqa: E402
 )
 from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-from youtube_automation.utils.secrets import get_gemini_api_key  # noqa: E402
 from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
@@ -479,19 +478,18 @@ class BenchmarkThumbnailAnalyzer:
             thumbnail_analysis が追加された data
         """
         try:
-            get_gemini_api_key()
-        except ConfigError:
-            logger.warning("GEMINI_API_KEY 未設定 — サムネイル分析をスキップ")
-            return data
-
-        try:
-            from google import genai
             from google.genai import types
+
+            from youtube_automation.utils.genai_client import create_genai_client
         except ImportError:
             logger.warning("google-genai 未インストール — サムネイル分析をスキップ")
             return data
 
-        client = genai.Client()
+        try:
+            client = create_genai_client()
+        except ConfigError as e:
+            logger.warning("AI クライアント初期化失敗 — サムネイル分析をスキップ: %s", e)
+            return data
         thumbnails_dir = self.benchmarks_dir / "thumbnails" if keep else None
         if thumbnails_dir:
             thumbnails_dir.mkdir(parents=True, exist_ok=True)

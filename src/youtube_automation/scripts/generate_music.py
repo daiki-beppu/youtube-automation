@@ -8,13 +8,11 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-from youtube_automation.utils.secrets import get_gemini_api_key  # noqa: E402
 
 
 def generate_music(client, types, prompt: str, model: str) -> bytes | None:
@@ -46,6 +44,7 @@ def generate_music(client, types, prompt: str, model: str) -> bytes | None:
 def main():
     try:
         from dotenv import find_dotenv, load_dotenv
+
         load_dotenv(find_dotenv())
     except ImportError:
         pass
@@ -58,7 +57,9 @@ def main():
     parser.add_argument("--prompt", "-p", required=True, help="音楽の説明テキスト")
     parser.add_argument("--output", "-o", default="output.mp3", help="出力ファイルパス (default: output.mp3)")
     parser.add_argument(
-        "--model", "-m", default="lyria-3-pro-preview",
+        "--model",
+        "-m",
+        default="lyria-3-pro-preview",
         choices=["lyria-3-pro-preview", "lyria-3-clip-preview"],
         help="モデル (default: lyria-3-pro-preview, clip は 30 秒固定)",
     )
@@ -83,23 +84,20 @@ def main():
             print("中止しました。")
             sys.exit(0)
 
-    # GOOGLE_API_KEY が既に export されていればそれを優先、無ければ get_gemini_api_key()
-    if not os.environ.get("GOOGLE_API_KEY"):
-        try:
-            get_gemini_api_key()
-        except ConfigError as e:
-            print(f"[ERROR] {e}")
-            sys.exit(1)
-
     try:
-        from google import genai
         from google.genai import types
+
+        from youtube_automation.utils.genai_client import create_genai_client
     except ImportError:
         print("[ERROR] google-genai がインストールされていません。")
         print("  uv pip install google-genai")
         sys.exit(1)
 
-    client = genai.Client()
+    try:
+        client = create_genai_client()
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
     print("\n  [生成中]...", end="", flush=True)
     start_time = time.monotonic()
 
