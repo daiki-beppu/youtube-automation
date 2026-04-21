@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.thumbnail_correlation import compute_correlations
 from youtube_automation.utils.thumbnail_features import extract_features
@@ -33,9 +33,7 @@ THUMB_URL_TEMPLATES = [
 def _load_analytics(channel_dir: Path) -> dict:
     candidates = sorted((channel_dir / "data").glob("analytics_data_*.json"))
     if not candidates:
-        raise ConfigError(
-            "analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。"
-        )
+        raise ConfigError("analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。")
     with open(candidates[-1], encoding="utf-8") as f:
         return json.load(f)
 
@@ -75,24 +73,19 @@ def _resolve_metric(data: dict, ctr_map: dict, vid: str, metric: str) -> float |
         v = data.get("views") or 0
         if v <= 0:
             return None
-        engagement = (
-            (data.get("likes") or 0)
-            + (data.get("comments") or 0)
-            + (data.get("shares") or 0)
-        )
+        engagement = (data.get("likes") or 0) + (data.get("comments") or 0) + (data.get("shares") or 0)
         return engagement / v * 100
     return None
 
 
 def _collect_video_features(
-    analytics_data: dict, cache_dir: Path, metric: str,
+    analytics_data: dict,
+    cache_dir: Path,
+    metric: str,
 ) -> list[dict]:
     va = analytics_data.get("video_analytics") or {}
     vp = (analytics_data.get("ctr_analysis") or {}).get("video_performance") or []
-    ctr_map = {
-        v["video_id"]: v.get("impression_ctr")
-        for v in vp if v.get("impression_ctr")
-    }
+    ctr_map = {v["video_id"]: v.get("impression_ctr") for v in vp if v.get("impression_ctr")}
 
     videos = []
     for vid, data in va.items():
@@ -108,12 +101,14 @@ def _collect_video_features(
             logger.warning(f"{vid} のサムネ処理失敗: {e}")
             continue
 
-        videos.append({
-            "video_id": vid,
-            "title": data.get("title", ""),
-            "ctr": float(value),  # key は互換性のため "ctr" のまま
-            "features": features,
-        })
+        videos.append(
+            {
+                "video_id": vid,
+                "title": data.get("title", ""),
+                "ctr": float(value),  # key は互換性のため "ctr" のまま
+                "features": features,
+            }
+        )
     return videos
 
 
@@ -143,19 +138,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="サムネ特徴量 × CTR 相関分析")
     parser.add_argument("--text", action="store_true", help="人間向けテキスト出力")
     parser.add_argument(
-        "--metric", choices=["ctr", "views", "engagement"], default="ctr",
+        "--metric",
+        choices=["ctr", "views", "engagement"],
+        default="ctr",
         help="相関対象 (ctr: 優先だがチャンネルが閾値未達だと空、"
-             "views: 視聴回数, engagement: (likes+comments+shares)/views)",
+        "views: 視聴回数, engagement: (likes+comments+shares)/views)",
     )
     parser.add_argument(
-        "--min-samples", type=int, default=5,
+        "--min-samples",
+        type=int,
+        default=5,
         help="相関計算に必要な最小サンプル数 (default: 5)",
     )
 
     args = parser.parse_args()
 
     try:
-        channel_dir = ChannelConfig.channel_dir()
+        channel_dir = _channel_dir()
         analytics = _load_analytics(channel_dir)
         cache_dir = channel_dir / "data" / "analytics" / "thumbnails"
 

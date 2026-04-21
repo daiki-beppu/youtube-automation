@@ -22,10 +22,10 @@ import re
 import subprocess
 from pathlib import Path
 
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import channel_dir
 
 CROSSFADE_SEC = 3
-COLLECTIONS_DIR = ChannelConfig.channel_dir() / "collections" / "live"
+COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
 TARGET_COLLECTIONS = [
     "20260328-rjn-last-platform-collection",
@@ -81,9 +81,7 @@ def fmt_timestamp(seconds: int) -> str:
     return f"{m}:{s:02d}"
 
 
-def compute_pattern_starts(
-    music_dir: Path, patterns: dict[str, str]
-) -> list[tuple[str, int]]:
+def compute_pattern_starts(music_dir: Path, patterns: dict[str, str]) -> list[tuple[str, int]]:
     """Return list of (pattern_name_en, start_seconds) ordered by appearance."""
     files = sorted(p for p in music_dir.glob("*.mp3"))
     if not files:
@@ -111,17 +109,12 @@ def compute_pattern_starts(
     result = []
     for letter, start_sec in ordered:
         if letter not in patterns:
-            raise RuntimeError(
-                f"pattern letter '{letter}' not in suno-prompts.md patterns "
-                f"({sorted(patterns)})"
-            )
+            raise RuntimeError(f"pattern letter '{letter}' not in suno-prompts.md patterns ({sorted(patterns)})")
         result.append((patterns[letter], start_sec))
     return result
 
 
-def replace_timestamps_in_description(
-    descriptions_md: Path, new_lines: list[str]
-) -> str:
+def replace_timestamps_in_description(descriptions_md: Path, new_lines: list[str]) -> str:
     """Return new content of descriptions.md with timestamps replaced.
 
     Strategy: locate the ``` fenced block right after

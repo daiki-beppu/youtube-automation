@@ -1,0 +1,27 @@
+{
+  "genre": {
+    "primary": "{{PRIMARY}}",
+    "style": "{{STYLE}}",
+    "context": "{{CONTEXT}}"
+  },
+  "tags": {
+    "base": [],
+    "themes": {}
+  },
+  "descriptions": {
+    "opening": "{style} {primary} music inspired by {{CONTEXT}} adventures.",
+    "sub_opening": "Perfect for studying, relaxing, or immersing yourself in {{CONTEXT}} worlds.",
+    "perfect_for": [
+      "Study & Focus Sessions",
+      "Background Music",
+      "Creative Work",
+      "Relaxation"
+    ],
+    "hashtags": []
+  },
+  "title": {
+    "template": "{style} {theme} Music - {activity} BGM [{duration_display}]",
+    "default_activity": "Study",
+    "theme_activities": {}
+  }
+}

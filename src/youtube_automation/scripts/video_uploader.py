@@ -22,7 +22,7 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import load_config  # noqa: E402
 from youtube_automation.utils.upload_core import YouTubeUploadCore  # noqa: E402
 
 
@@ -54,7 +54,7 @@ class VideoUploader(YouTubeUploadCore):
         description: str,
         tags: List[str],
         category_id: str = "10",  # Music category
-        privacy_status: str = "public"
+        privacy_status: str = "public",
     ) -> Optional[Dict]:
         """
         Upload video to YouTube
@@ -72,7 +72,7 @@ class VideoUploader(YouTubeUploadCore):
         """
         logger.info(f"Uploading video: {title}")
         logger.info(f"File: {video_file}")
-        logger.info(f"File size: {os.path.getsize(video_file) / (1024*1024):.2f} MB")
+        logger.info(f"File size: {os.path.getsize(video_file) / (1024 * 1024):.2f} MB")
 
         body = {
             "snippet": {
@@ -108,12 +108,7 @@ class VideoUploader(YouTubeUploadCore):
                 "title": title,
             }
 
-    def create_playlist(
-        self,
-        title: str,
-        description: str,
-        privacy_status: str = "public"
-    ) -> Optional[Dict]:
+    def create_playlist(self, title: str, description: str, privacy_status: str = "public") -> Optional[Dict]:
         """
         Create new playlist
 
@@ -133,30 +128,17 @@ class VideoUploader(YouTubeUploadCore):
         try:
             # Prepare request body
             body = {
-                "snippet": {
-                    "title": title,
-                    "description": description
-                },
-                "status": {
-                    "privacyStatus": privacy_status
-                }
+                "snippet": {"title": title, "description": description},
+                "status": {"privacyStatus": privacy_status},
             }
 
             # Execute playlist creation
-            response = self.youtube.playlists().insert(
-                part="snippet,status",
-                body=body
-            ).execute()
+            response = self.youtube.playlists().insert(part="snippet,status", body=body).execute()
 
-            playlist_id = response['id']
+            playlist_id = response["id"]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
 
-            result = {
-                "playlist_id": playlist_id,
-                "playlist_url": playlist_url,
-                "title": title,
-                "status": "success"
-            }
+            result = {"playlist_id": playlist_id, "playlist_url": playlist_url, "title": title, "status": "success"}
 
             logger.info("✅ Playlist created successfully")
             logger.info(f"📋 Playlist ID: {playlist_id}")
@@ -166,18 +148,9 @@ class VideoUploader(YouTubeUploadCore):
 
         except Exception as e:
             logger.error(f"❌ Playlist creation failed: {e}")
-            return {
-                "status": "failed",
-                "error": str(e),
-                "title": title
-            }
+            return {"status": "failed", "error": str(e), "title": title}
 
-    def add_video_to_playlist(
-        self,
-        playlist_id: str,
-        video_id: str,
-        position: int = 0
-    ) -> bool:
+    def add_video_to_playlist(self, playlist_id: str, video_id: str, position: int = 0) -> bool:
         """
         Add video to playlist
 
@@ -199,19 +172,13 @@ class VideoUploader(YouTubeUploadCore):
             body = {
                 "snippet": {
                     "playlistId": playlist_id,
-                    "resourceId": {
-                        "kind": "youtube#video",
-                        "videoId": video_id
-                    },
-                    "position": position
+                    "resourceId": {"kind": "youtube#video", "videoId": video_id},
+                    "position": position,
                 }
             }
 
             # Execute playlist item insertion
-            self.youtube.playlistItems().insert(
-                part="snippet",
-                body=body
-            ).execute()
+            self.youtube.playlistItems().insert(part="snippet", body=body).execute()
 
             logger.info(f"✅ Video added to playlist at position {position}")
             return True
@@ -225,21 +192,21 @@ def main():
     """Main function - Upload any collection via CLI arguments"""
     import argparse
 
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    config = ChannelConfig.load()
-    parser = argparse.ArgumentParser(description=f"{config.channel_short} YouTube Video Uploader")
+    config = load_config()
+    parser = argparse.ArgumentParser(description=f"{config.meta.channel_short} YouTube Video Uploader")
     parser.add_argument("collection_dir", help="Path to collection directory")
     parser.add_argument("--title", required=True, help="Video title")
     parser.add_argument("--playlist-title", help="Playlist title (optional)")
     parser.add_argument("--playlist-description", default="", help="Playlist description")
     parser.add_argument("--privacy", default="public", choices=["public", "private", "unlisted"])
-    parser.add_argument("--tags", nargs="+", default=config.default_tags)
+    parser.add_argument("--tags", nargs="+", default=config.content.tags.default())
     parser.add_argument("--config", help="Path to upload_config.json (overrides other args)")
 
     args = parser.parse_args()
 
-    print(f"🎮 {config.channel_name} - Video Upload System")
+    print(f"🎮 {config.meta.channel_name} - Video Upload System")
     print("=" * 80)
 
     # Resolve collection directory
@@ -250,7 +217,7 @@ def main():
 
     # Load config file if provided
     if args.config:
-        with open(args.config, 'r', encoding='utf-8') as f:
+        with open(args.config, "r", encoding="utf-8") as f:
             config = json.load(f)
         title = config.get("title", args.title)
         tags = config.get("tags", args.tags)
@@ -273,7 +240,7 @@ def main():
         # Load description
         if description_file.exists():
             print(f"\n📄 Loading description from: {description_file}")
-            with open(description_file, 'r', encoding='utf-8') as f:
+            with open(description_file, "r", encoding="utf-8") as f:
                 description = f.read()
         else:
             description = title
@@ -366,7 +333,7 @@ def main():
             "playlist": playlist_result if playlist_result.get("status") == "success" else None,
             "thumbnail_set": thumbnail_success,
         }
-        with open(tracking_file, 'w', encoding='utf-8') as f:
+        with open(tracking_file, "w", encoding="utf-8") as f:
             json.dump(tracking_data, f, indent=2, ensure_ascii=False)
         print(f"\n💾 Upload tracking saved: {tracking_file}")
         print("\n🎉 All operations completed successfully!")
@@ -374,6 +341,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

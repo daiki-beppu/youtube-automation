@@ -1,0 +1,101 @@
+"""コンテンツ関連（ジャンル・タグ・説明文・タイトル）の責務別 dataclass."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Genre:
+    """`genre` セクション."""
+
+    primary: str
+    style: str
+    context: str
+
+
+@dataclass(frozen=True)
+class Tags:
+    """`tags` セクション。`channel_name` は loader が合成時に注入."""
+
+    base: list[str]
+    themes: dict[str, list[str]]
+    channel_specific: list[str]
+    channel_name: str
+
+    def default(self) -> list[str]:
+        """チャンネル名を含むデフォルトタグリスト."""
+        return list(self.base) + [self.channel_name.lower()]
+
+    def for_collection(self, collection_name: str) -> list[str]:
+        """コレクション名からタグリストを生成（最大 50 件）."""
+        tags = self.default()
+        tags.extend(self.channel_specific)
+        lowered = collection_name.lower()
+        for theme, theme_tag_list in self.themes.items():
+            if theme in lowered:
+                tags.extend(theme_tag_list)
+                break
+        return tags[:50]
+
+
+@dataclass(frozen=True)
+class Descriptions:
+    """`descriptions` セクション。`genre` は loader が合成時に注入."""
+
+    opening: str
+    sub_opening: str
+    perfect_for: list[str]
+    hashtags: list[str]
+    metadata: dict
+    genre: Genre
+
+    @property
+    def hashtag_line(self) -> str:
+        """ハッシュタグ行（スペース区切り）."""
+        return " ".join(self.hashtags)
+
+    def render_opening(self) -> str:
+        """`{style}` / `{primary}` / `{context}` を format 展開した冒頭行を返す."""
+        return self.opening.format(
+            style=self.genre.style.title(),
+            primary=self.genre.primary,
+            context=self.genre.context,
+        )
+
+
+@dataclass(frozen=True)
+class Title:
+    """`title` セクション."""
+
+    template: str
+    default_activity: str
+    theme_scenes: dict
+    theme_activities: dict
+
+    def activity_for_theme(self, theme: str) -> str:
+        """テーマ名からアクティビティキーワードを取得.
+
+        `theme_scenes` 優先（TTP 形式）、未定義なら `theme_activities`（レガシー形式）。
+        どちらにもマッチしなければ `default_activity`.
+        """
+        lowered = theme.lower()
+        if self.theme_scenes:
+            for keyword, scene_data in self.theme_scenes.items():
+                if keyword in lowered:
+                    return scene_data.get("activities", self.default_activity)
+            return self.default_activity
+        for keyword, activity in self.theme_activities.items():
+            if keyword in lowered:
+                return activity
+        return self.default_activity
+
+
+@dataclass(frozen=True)
+class Content:
+    """コンテンツ責務の合成（genre / tags / descriptions / title）."""
+
+    genre: Genre
+    tags: Tags
+    descriptions: Descriptions
+    title: Title

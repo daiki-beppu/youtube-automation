@@ -2,7 +2,7 @@
 """
 Playlist Manager - YouTube プレイリスト管理
 
-channel_config.json の playlists 定義に基づき、
+config/channel/playlists.json の playlists 定義に基づき、
 プレイリストの作成・動画割り当て・状態管理を行う。
 
 Usage:
@@ -17,7 +17,7 @@ import logging
 import sys
 
 from youtube_automation.scripts.video_uploader import VideoUploader
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import channel_dir, load_config, reset
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
@@ -26,14 +26,14 @@ logger = logging.getLogger(__name__)
 class PlaylistManager:
     """YouTube プレイリスト管理
 
-    channel_config.json の playlists セクションに基づき、
+    config/channel/playlists.json の playlists セクションに基づき、
     プレイリストの CRUD と動画割り当てを管理する。
     """
 
     def __init__(self):
-        self.config = ChannelConfig.load()
+        self.config = load_config()
         self.uploader = VideoUploader()
-        self._config_path = ChannelConfig.channel_dir() / 'config' / 'channel_config.json'
+        self._config_path = channel_dir() / "config" / "channel" / "playlists.json"
         self._youtube = None
 
     def _get_youtube(self):
@@ -45,24 +45,24 @@ class PlaylistManager:
 
     def resolve_playlists(self, theme: str) -> list[str]:
         """テーマから所属すべきプレイリストキーのリストを返す"""
-        playlists_config = self.config.playlists
-        activity = self.config.get_activity_for_theme(theme)
+        playlists_config = self.config.playlists.items
+        activity = self.config.content.title.activity_for_theme(theme)
         theme_lower = theme.lower()
         matched = []
 
         for key, pl in playlists_config.items():
-            if pl.get('auto_add'):
+            if pl.get("auto_add"):
                 matched.append(key)
                 continue
 
             # activity ベースのマッチング（"Study · Focus · Late Night" → ["Study", "Focus", "Late Night"]）
-            activities = [a.strip() for a in activity.split('·')]
-            if any(a in pl.get('auto_add_activities', []) for a in activities):
+            activities = [a.strip() for a in activity.split("·")]
+            if any(a in pl.get("auto_add_activities", []) for a in activities):
                 matched.append(key)
                 continue
 
             # theme キーワードベースのマッチング
-            for theme_kw in pl.get('auto_add_themes', []):
+            for theme_kw in pl.get("auto_add_themes", []):
                 if theme_kw in theme_lower:
                     matched.append(key)
                     break
@@ -77,24 +77,24 @@ class PlaylistManager:
         Returns:
             作成されたプレイリストの {key: playlist_id} マップ
         """
-        playlists_config = self.config.playlists
+        playlists_config = self.config.playlists.items
         created = {}
 
         for key, pl in playlists_config.items():
-            if pl.get('playlist_id'):
+            if pl.get("playlist_id"):
                 logger.info(f"  {key}: 既存 ({pl['playlist_id']})")
                 continue
 
-            title = pl['title']
-            description = pl.get('description', '')
+            title = pl["title"]
+            description = pl.get("description", "")
 
             if dry_run:
                 print(f"  [DRY-RUN] 作成予定: {title}")
                 continue
 
             result = self.uploader.create_playlist(title, description)
-            if result and result.get('status') == 'success':
-                playlist_id = result['playlist_id']
+            if result and result.get("status") == "success":
+                playlist_id = result["playlist_id"]
                 created[key] = playlist_id
                 logger.info(f"  {key}: {playlist_id}")
             else:
@@ -106,19 +106,19 @@ class PlaylistManager:
         return created
 
     def _write_back_playlist_ids(self, created: dict[str, str]):
-        """channel_config.json に playlist_id を書き戻す"""
-        with open(self._config_path, 'r', encoding='utf-8') as f:
+        """config/channel/playlists.json に playlist_id を書き戻す"""
+        with open(self._config_path, "r", encoding="utf-8") as f:
             raw = json.load(f)
 
         for key, playlist_id in created.items():
-            if key in raw.get('playlists', {}):
-                raw['playlists'][key]['playlist_id'] = playlist_id
+            if key in raw.get("playlists", {}):
+                raw["playlists"][key]["playlist_id"] = playlist_id
 
-        with open(self._config_path, 'w', encoding='utf-8') as f:
+        with open(self._config_path, "w", encoding="utf-8") as f:
             json.dump(raw, f, indent=2, ensure_ascii=False)
-            f.write('\n')
+            f.write("\n")
 
-        logger.info(f"channel_config.json に {len(created)} 件の playlist_id を書き戻しました")
+        logger.info(f"config/channel/playlists.json に {len(created)} 件の playlist_id を書き戻しました")
 
     # ─── 動画割り当て ─────────────────────────────────
 
@@ -128,13 +128,11 @@ class PlaylistManager:
         video_ids = set()
 
         try:
-            request = youtube.playlistItems().list(
-                playlistId=playlist_id, part='contentDetails', maxResults=50
-            )
+            request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
             while request:
                 response = request.execute()
-                for item in response.get('items', []):
-                    video_ids.add(item['contentDetails']['videoId'])
+                for item in response.get("items", []):
+                    video_ids.add(item["contentDetails"]["videoId"])
                 request = youtube.playlistItems().list_next(request, response)
         except Exception as e:
             logger.warning(f"プレイリスト {playlist_id} の項目取得エラー: {e}")
@@ -147,13 +145,13 @@ class PlaylistManager:
         Returns:
             追加先のプレイリストキーリスト
         """
-        playlists_config = self.config.playlists
+        playlists_config = self.config.playlists.items
         target_keys = self.resolve_playlists(theme)
         assigned = []
 
         for key in target_keys:
             pl = playlists_config[key]
-            playlist_id = pl.get('playlist_id')
+            playlist_id = pl.get("playlist_id")
             if not playlist_id:
                 logger.warning(f"  {key}: playlist_id 未設定 — スキップ")
                 continue
@@ -171,7 +169,7 @@ class PlaylistManager:
                 continue
 
             # "all" プレイリストは末尾追加、その他は先頭追加
-            position = None if key == 'all' else 0
+            position = None if key == "all" else 0
 
             if position is not None:
                 success = self.uploader.add_video_to_playlist(playlist_id, video_id, position)
@@ -190,17 +188,9 @@ class PlaylistManager:
 
         try:
             body = {
-                "snippet": {
-                    "playlistId": playlist_id,
-                    "resourceId": {
-                        "kind": "youtube#video",
-                        "videoId": video_id
-                    }
-                }
+                "snippet": {"playlistId": playlist_id, "resourceId": {"kind": "youtube#video", "videoId": video_id}}
             }
-            self.uploader.youtube.playlistItems().insert(
-                part="snippet", body=body
-            ).execute()
+            self.uploader.youtube.playlistItems().insert(part="snippet", body=body).execute()
             logger.info(f"  {video_id} -> {playlist_id} (末尾)")
             return True
         except Exception as e:
@@ -215,7 +205,7 @@ class PlaylistManager:
         Returns:
             {collection_name: [assigned_playlist_keys]}
         """
-        collections_dir = ChannelConfig.channel_dir() / 'collections' / 'live'
+        collections_dir = channel_dir() / "collections" / "live"
         if not collections_dir.exists():
             logger.warning("live/ ディレクトリが見つかりません")
             return {}
@@ -224,43 +214,43 @@ class PlaylistManager:
         collections = sorted(collections_dir.iterdir())
 
         for col_path in collections:
-            if not col_path.is_dir() or col_path.name.startswith('.'):
+            if not col_path.is_dir() or col_path.name.startswith("."):
                 continue
 
             # workflow-state.json からテーマ取得
-            ws_path = col_path / 'workflow-state.json'
+            ws_path = col_path / "workflow-state.json"
             if not ws_path.exists():
                 logger.warning(f"  {col_path.name}: workflow-state.json なし — スキップ")
                 continue
 
-            with open(ws_path, 'r', encoding='utf-8') as f:
+            with open(ws_path, "r", encoding="utf-8") as f:
                 ws = json.load(f)
 
-            theme = ws.get('theme', '')
+            theme = ws.get("theme", "")
             if not theme:
                 logger.warning(f"  {col_path.name}: theme 未設定 — スキップ")
                 continue
 
             # upload_tracking.json から video_id 取得
-            tracking_path = col_path / '20-documentation' / 'upload_tracking.json'
+            tracking_path = col_path / "20-documentation" / "upload_tracking.json"
             if not tracking_path.exists():
                 logger.warning(f"  {col_path.name}: upload_tracking.json なし — スキップ")
                 continue
 
-            with open(tracking_path, 'r', encoding='utf-8') as f:
+            with open(tracking_path, "r", encoding="utf-8") as f:
                 tracking = json.load(f)
 
-            video_id = tracking.get('complete_collection', {}).get('video_id')
+            video_id = tracking.get("complete_collection", {}).get("video_id")
             if not video_id:
                 logger.warning(f"  {col_path.name}: video_id なし — スキップ")
                 continue
 
             # タイトル取得（表示用）
-            title = ws.get('steps', {}).get('planning', {}).get('final_title', col_path.name)
+            title = ws.get("steps", {}).get("planning", {}).get("final_title", col_path.name)
 
             if dry_run:
                 target_keys = self.resolve_playlists(theme)
-                playlists_config = self.config.playlists
+                playlists_config = self.config.playlists.items
                 print(f"\n  {title}")
                 print(f"    theme: {theme} | video_id: {video_id}")
                 for key in target_keys:
@@ -286,13 +276,13 @@ class PlaylistManager:
             {playlist_key: removed_count}
         """
         youtube = self._get_youtube()
-        playlists_config = self.config.playlists
+        playlists_config = self.config.playlists.items
         removed_per_playlist: dict[str, int] = {}
 
         deleted_titles = {"Deleted video", "Private video"}
 
         for key, pl in playlists_config.items():
-            playlist_id = pl.get('playlist_id')
+            playlist_id = pl.get("playlist_id")
             if not playlist_id:
                 logger.info(f"  {key}: playlist_id 未設定 — スキップ")
                 continue
@@ -300,18 +290,22 @@ class PlaylistManager:
             removed = 0
             page_token = None
             while True:
-                resp = youtube.playlistItems().list(
-                    part='snippet',
-                    playlistId=playlist_id,
-                    maxResults=50,
-                    pageToken=page_token,
-                ).execute()
+                resp = (
+                    youtube.playlistItems()
+                    .list(
+                        part="snippet",
+                        playlistId=playlist_id,
+                        maxResults=50,
+                        pageToken=page_token,
+                    )
+                    .execute()
+                )
 
-                for item in resp.get('items', []):
-                    title = item['snippet'].get('title', '')
+                for item in resp.get("items", []):
+                    title = item["snippet"].get("title", "")
                     if title in deleted_titles:
-                        item_id = item['id']
-                        video_id = item['snippet'].get('resourceId', {}).get('videoId', '?')
+                        item_id = item["id"]
+                        video_id = item["snippet"].get("resourceId", {}).get("videoId", "?")
                         if dry_run:
                             print(f"  [DRY-RUN] {key}: 除去予定 {video_id} ({title})")
                         else:
@@ -319,7 +313,7 @@ class PlaylistManager:
                             logger.info(f"  {key}: 除去 {video_id} ({title})")
                         removed += 1
 
-                page_token = resp.get('nextPageToken')
+                page_token = resp.get("nextPageToken")
                 if not page_token:
                     break
 
@@ -338,8 +332,8 @@ class PlaylistManager:
 
         # dry_run でなければ config を再読み込み（書き戻し後の playlist_id を反映）
         if not dry_run:
-            ChannelConfig.reset()
-            self.config = ChannelConfig.load()
+            reset()
+            self.config = load_config()
 
         print("\n=== Step 2: 既存動画の割り当て ===")
         results = self.sync_existing_videos(dry_run=dry_run)
@@ -350,17 +344,19 @@ class PlaylistManager:
 
 def main():
     import argparse
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-    config = ChannelConfig.load()
-    parser = argparse.ArgumentParser(description=f'{config.channel_short} Playlist Manager')
-    parser.add_argument('--init', action='store_true', help='プレイリスト作成 + 全動画割り当て')
-    parser.add_argument('--status', action='store_true', help='現在の状態表示')
-    parser.add_argument('--assign', metavar='VIDEO_ID', help='単一動画をプレイリストに追加')
-    parser.add_argument('--theme', help='--assign 用のテーマ名')
-    parser.add_argument('--clean-deleted', action='store_true',
-                        help='全プレイリストから削除済み/非公開動画のエントリを除去')
-    parser.add_argument('--dry-run', action='store_true', help='ドライラン（実行せず計画のみ表示）')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    config = load_config()
+    parser = argparse.ArgumentParser(description=f"{config.meta.channel_short} Playlist Manager")
+    parser.add_argument("--init", action="store_true", help="プレイリスト作成 + 全動画割り当て")
+    parser.add_argument("--status", action="store_true", help="現在の状態表示")
+    parser.add_argument("--assign", metavar="VIDEO_ID", help="単一動画をプレイリストに追加")
+    parser.add_argument("--theme", help="--assign 用のテーマ名")
+    parser.add_argument(
+        "--clean-deleted", action="store_true", help="全プレイリストから削除済み/非公開動画のエントリを除去"
+    )
+    parser.add_argument("--dry-run", action="store_true", help="ドライラン（実行せず計画のみ表示）")
 
     args = parser.parse_args()
 
@@ -371,6 +367,7 @@ def main():
             manager.init(dry_run=args.dry_run)
         elif args.status:
             from youtube_automation.scripts.playlist_status import PlaylistStatusViewer
+
             PlaylistStatusViewer().show_status()
         elif args.clean_deleted:
             print("\n=== 削除済み/非公開動画エントリの除去 ===")
@@ -382,7 +379,7 @@ def main():
                     print(f"  {key}: {count} 件")
         elif args.assign:
             if not args.theme:
-                parser.error('--assign には --theme が必要です')
+                parser.error("--assign には --theme が必要です")
             assigned = manager.assign_video(args.assign, args.theme, dry_run=args.dry_run)
             print(f"割り当て: {assigned}")
         else:

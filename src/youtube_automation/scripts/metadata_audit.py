@@ -23,9 +23,9 @@ import re
 import sys
 from pathlib import Path
 
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 
-COLLECTIONS_DIR = ChannelConfig.channel_dir() / "collections" / "live"
+COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
 TS_RE = re.compile(r"^\d{1,2}:\d{2}")
 SECTION_RE = lambda h: re.compile(  # noqa: E731
@@ -64,28 +64,16 @@ def audit_local(col: Path, supported_langs: list[str]) -> list[str]:
     if not description:
         issues.append("missing 'Complete Collection 概要欄' section")
     else:
-        ts_lines = [
-            line for line in description.split("\n")
-            if TS_RE.match(line.strip())
-        ]
+        ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]
         if len(ts_lines) < 3:
             issues.append(f"too few timestamps: {len(ts_lines)} (<3)")
         elif len(ts_lines) > 12:
-            issues.append(
-                f"too many timestamps: {len(ts_lines)} (>12, "
-                f"likely per-variation regression)"
-            )
+            issues.append(f"too many timestamps: {len(ts_lines)} (>12, likely per-variation regression)")
 
         # Roman numerals like 'Pattern I', 'Pattern II' suggest variation expansion
-        roman = [
-            line for line in ts_lines
-            if re.search(r"\b(I{1,3}|IV|V|VI{0,3})\b\s*$", line)
-        ]
+        roman = [line for line in ts_lines if re.search(r"\b(I{1,3}|IV|V|VI{0,3})\b\s*$", line)]
         if roman:
-            issues.append(
-                f"chapter names contain roman numerals "
-                f"(variation expansion): {len(roman)} lines"
-            )
+            issues.append(f"chapter names contain roman numerals (variation expansion): {len(roman)} lines")
 
     # workflow-state.json scene_phrases
     ws = col / "workflow-state.json"
@@ -95,10 +83,7 @@ def audit_local(col: Path, supported_langs: list[str]) -> list[str]:
         required = ["en"] + supported_langs
         missing = [lang for lang in required if not sp.get(lang)]
         if missing:
-            issues.append(
-                f"workflow-state.scene_phrases missing langs: "
-                f"{missing[:6]}{'…' if len(missing) > 6 else ''}"
-            )
+            issues.append(f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}")
     else:
         issues.append("workflow-state.json missing")
 
@@ -131,9 +116,7 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
         if "🎧  🌧" in title or "🎧   🌧" in title:
             issues[vid].append("YT title scene_phrase missing (auto-truncated)")
 
-        ts_lines = [
-            line for line in desc.split("\n") if TS_RE.match(line.strip())
-        ]
+        ts_lines = [line for line in desc.split("\n") if TS_RE.match(line.strip())]
         if len(ts_lines) > 12:
             issues[vid].append(f"YT description has {len(ts_lines)} chapters (>12)")
 
@@ -144,9 +127,7 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
 
         zh_codes = sorted(c for c in locs if c.startswith("zh"))
         if zh_codes and zh_codes != ["zh-Hans", "zh-Hant"]:
-            issues[vid].append(
-                f"YT zh codes are {zh_codes}, expected ['zh-Hans','zh-Hant']"
-            )
+            issues[vid].append(f"YT zh codes are {zh_codes}, expected ['zh-Hans','zh-Hant']")
 
     return issues
 
@@ -181,8 +162,8 @@ def main() -> None:
     do_local = args.local or not args.remote
     do_remote = args.remote or not args.local
 
-    config = ChannelConfig.load()
-    supported_langs = list(config.supported_languages)
+    config = load_config()
+    supported_langs = list(config.localizations.supported_languages)
 
     print(f"📋 Auditing collections in {COLLECTIONS_DIR}")
     print(f"   supported_languages: {supported_langs}\n")

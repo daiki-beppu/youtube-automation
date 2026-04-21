@@ -11,7 +11,7 @@ class AutomationError(Exception):
 class ConfigError(AutomationError):
     """設定ファイルの読み込み・バリデーションエラー
 
-    - channel_config.json の必須キー欠落
+    - config/channel/*.json の必須キー欠落
     - 設定ファイルが見つからない
     - JSON パースエラー
     """

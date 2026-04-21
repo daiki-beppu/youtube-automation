@@ -35,7 +35,14 @@ youtube-channels-automation/      # ← このリポジトリ
 ```
 channel-repo/                  # チャンネル固有リポジトリ
 ├── config/
-│   ├── channel_config.json    # チャンネル設定
+│   ├── channel/               # チャンネル設定（責務別分割、v2.0.0 以降）
+│   │   ├── meta.json          #   channel / youtube_channel
+│   │   ├── content.json       #   genre / tags / descriptions / title
+│   │   ├── youtube.json       #   youtube / music_engine / content_model
+│   │   ├── analytics.json     #   analytics / benchmark (optional)
+│   │   ├── playlists.json     #   playlists (optional)
+│   │   ├── workflow.json      #   post_upload / short (optional)
+│   │   └── audio.json         #   audio (optional)
 │   └── localizations.json     # 多言語テンプレート
 ├── auth/                      # OAuth 2.0 認証情報 (channel 固有)
 │   ├── client_secrets.json
@@ -88,8 +95,10 @@ yt-skills sync --force               # 既存ファイルを上書き
 
 ### 3. チャンネル設定を作成
 
-`config/channel_config.json` と `config/localizations.json` を作成します。
-サンプルは [`examples/`](examples/) を参照してください。
+`config/channel/*.json`（責務別分割の 4〜7 ファイル）と `config/localizations.json` を作成します。
+サンプルは [`examples/channel_config.example/`](examples/channel_config.example/) と [`examples/localizations.example.json`](examples/localizations.example.json) を参照してください。
+
+v1.x から v2.0.0 へ移行するチャンネルは [`docs/migration/v2-config-split.md`](docs/migration/v2-config-split.md) の手順に従い、`uv run yt-config-migrate migrate --apply` で旧 `config/channel_config.json` を自動分割できます。
 
 ### 4. OAuth 認証をセットアップ
 
@@ -140,10 +149,21 @@ nix develop
 
 ## Configuration
 
-### channel_config.json
+### config/channel/*.json
 
-チャンネルのメタデータ、ジャンル、タグ、タイトルテンプレートなどを定義します。
-詳細なフィールド説明は [`examples/channel_config.example.json`](examples/channel_config.example.json) を参照してください。
+チャンネルのメタデータ、ジャンル、タグ、タイトルテンプレートなどを責務別 7 ファイルに分割して定義します（v2.0.0 以降）。
+
+| ファイル | 責務 |
+|---|---|
+| `meta.json` | `channel` / `youtube_channel` |
+| `content.json` | `genre` / `tags` / `descriptions` / `title` |
+| `youtube.json` | `youtube` / `music_engine` / `content_model` |
+| `analytics.json` | `analytics` / `benchmark` (optional) |
+| `playlists.json` | `playlists` (optional) |
+| `workflow.json` | `post_upload` / `short` (optional) |
+| `audio.json` | `audio` (optional) |
+
+詳細なフィールド説明は [`examples/channel_config.example/`](examples/channel_config.example/) を参照してください。多言語テンプレートは `config/localizations.json` に集約します（単一ソース）。
 
 ### 環境変数
 

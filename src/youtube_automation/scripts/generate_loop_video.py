@@ -24,9 +24,9 @@ from pathlib import Path
 
 # --- パス解決 ---
 def _channel_root() -> Path:
-    from youtube_automation.utils.channel_config import ChannelConfig
+    from youtube_automation.utils.config import channel_dir
 
-    return ChannelConfig.channel_dir()
+    return channel_dir()
 
 
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402

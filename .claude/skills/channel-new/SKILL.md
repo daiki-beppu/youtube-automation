@@ -66,12 +66,40 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
 
 ### Step 4: 最小 config 作成
 
-`benchmark_collector.py` 実行に必要な最小限の `channel_config.json` を Write ツールで作成:
+`benchmark_collector.py` 実行に必要な最小限の `config/channel/*.json` を Write ツールで作成:
 
+`config/channel/meta.json`:
 ```json
 {
-  "channel": { "name": "{仮チャンネル名}", "short": "{仮SHORT}" },
+  "channel": {
+    "name": "{仮チャンネル名}",
+    "short": "{仮SHORT}",
+    "youtube_handle": "",
+    "url": ""
+  }
+}
+```
+
+`config/channel/content.json`:
+```json
+{
   "genre": { "primary": "TBD", "style": "TBD", "context": "TBD" },
+  "tags": { "base": [], "themes": {} },
+  "descriptions": { "opening": "", "perfect_for": [], "hashtags": [] },
+  "title": { "template": "" }
+}
+```
+
+`config/channel/youtube.json`:
+```json
+{
+  "youtube": { "category_id": "10", "privacy_status": "public", "language": "en" }
+}
+```
+
+`config/channel/analytics.json`:
+```json
+{
   "benchmark": {
     "channels": [],
     "scan_recent": 50,
@@ -103,7 +131,7 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
 |---|-------------|--------|--------|------|-----------|
 ```
 
-ユーザーの承認後、`channel_config.json` の `benchmark.channels` に全チャンネルを追加:
+ユーザーの承認後、`config/channel/analytics.json` の `benchmark.channels` に全チャンネルを追加:
 
 ```json
 {

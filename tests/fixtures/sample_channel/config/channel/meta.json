@@ -1,0 +1,19 @@
+{
+  "channel": {
+    "name": "Test Channel",
+    "short": "TC",
+    "youtube_handle": "@testchannel",
+    "url": "https://youtube.com/@testchannel",
+    "core_message": "Test core message",
+    "cta_subscribe": "Subscribe now!",
+    "tagline": "Test tagline"
+  },
+  "youtube_channel": {
+    "description": "Test channel description for sync.",
+    "keywords": ["chiptune", "8-bit", "rpg music"],
+    "country": "JP",
+    "default_language": "ja",
+    "unsubscribed_trailer": "dQw4w9WgXcQ",
+    "made_for_kids": false
+  }
+}

@@ -1,11 +1,11 @@
-# channel_config.json 生成ルール
+# config/channel/*.json 生成ルール
 
 `/channel-setup` と `/channel-import` から共通参照するルール集。
 テンプレートは同ディレクトリの `config-template.json`。
 
 ## 必須セクション
 
-以下は **すべて `channel_config.json` に含める**:
+以下は **すべて `config/channel/*.json` に含める**:
 
 - `channel` — name, short, core_message, channel_id, youtube_handle, url
 - `content_model` — collection / release など
@@ -45,7 +45,7 @@
 
 ## skill-config で管理するセクション
 
-以下は **`channel_config.json` には置かない**。チャンネル固有の上書きがある場合のみ `config/skills/<skill>.yaml` を作成する（ない場合は skill default を使用）:
+以下は **`config/channel/*.json` には置かない**。チャンネル固有の上書きがある場合のみ `config/skills/<skill>.yaml` を作成する（ない場合は skill default を使用）:
 
 | スキル | 設定ファイル |
 |---|---|
@@ -63,7 +63,7 @@
 
 ## オプションセクション
 
-方向性 or ヒアリング結果に応じて `channel_config.json` に追加:
+方向性 or ヒアリング結果に応じて `config/channel/*.json` に追加:
 
 | セクション | 条件 | 内容 |
 |---|---|---|

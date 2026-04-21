@@ -12,25 +12,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import load_config
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 from youtube_automation.utils.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------
-# フィクスチャ: ChannelConfig シングルトンをテスト間でリセット
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True)
-def reset_config():
-    """各テスト前に ChannelConfig をリセットし、テスト後もリセット"""
-    ChannelConfig.reset()
-    yield
-    ChannelConfig.reset()
-
-
-# ---------------------------------------------------------------------------
 # ヘルパー: 最小限の初期化でインスタンスを取得する
 # ---------------------------------------------------------------------------
+
 
 def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAHMetadataGenerator:
     """テスト用に任意のディレクトリ名で BAHMetadataGenerator を生成する。
@@ -38,15 +27,14 @@ def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAH
     実際のファイルシステムにはアクセスしない純粋ロジックのテストに使用する。
     """
     from youtube_automation.utils.skill_config import load_skill_config
+
     gen = object.__new__(BAHMetadataGenerator)
-    gen.config = ChannelConfig.load()
+    gen.config = load_config()
     gen._masterup_config = load_skill_config("masterup")
-    gen._crossfade_sec = float(
-        gen._masterup_config.get("audio", {}).get("crossfade_duration", 1.0)
-    )
+    gen._crossfade_sec = float(gen._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
     gen.collection_path = Path(f"/tmp/fake-collections/{dir_name}")
     gen.collection_name = gen._extract_collection_name()
-    gen.bit_depth = gen.config.genre_style
+    gen.bit_depth = gen.config.content.genre.style
     gen.tracks = []
     return gen
 
@@ -54,6 +42,7 @@ def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAH
 # ===========================================================================
 # 1. _format_timestamp のテスト
 # ===========================================================================
+
 
 class TestFormatTimestamp:
     """秒数を YouTube チャプター形式のタイムスタンプに変換するロジックの検証。"""
@@ -87,14 +76,17 @@ class TestFormatTimestamp:
         # 2:46:40 = 10000 seconds
         assert gen._format_timestamp(10000) == "2:46:40"
 
-    @pytest.mark.parametrize("seconds,expected", [
-        (0, "00:00"),
-        (59, "00:59"),
-        (60, "01:00"),
-        (3600, "1:00:00"),
-        (5400, "1:30:00"),
-        (7261, "2:01:01"),
-    ])
+    @pytest.mark.parametrize(
+        "seconds,expected",
+        [
+            (0, "00:00"),
+            (59, "00:59"),
+            (60, "01:00"),
+            (3600, "1:00:00"),
+            (5400, "1:30:00"),
+            (7261, "2:01:01"),
+        ],
+    )
     def test_parametrized(self, gen, seconds, expected):
         assert gen._format_timestamp(seconds) == expected
 
@@ -102,6 +94,7 @@ class TestFormatTimestamp:
 # ===========================================================================
 # 2. _clean_track_title のテスト (ファイル名サニタイズ)
 # ===========================================================================
+
 
 class TestCleanTrackTitle:
     """ファイル名から楽曲タイトルを清浄化するロジックの検証。"""
@@ -146,6 +139,7 @@ class TestCleanTrackTitle:
 # 3. _extract_collection_name のテスト
 # ===========================================================================
 
+
 class TestExtractCollectionName:
     """ディレクトリ名からコレクション名を抽出するロジックの検証。"""
 
@@ -166,13 +160,14 @@ class TestExtractCollectionName:
 # 4. bit_depth のテスト（config.genre_style から取得）
 # ===========================================================================
 
+
 class TestBitDepth:
-    """bit_depth が channel_config.json の genre_style から取得されることの検証。"""
+    """bit_depth が config/channel/content.json の genre.style から取得されることの検証。"""
 
     def test_from_config(self):
         gen = _make_generator("20250907-live-8bit-adventure-music")
-        config = ChannelConfig.load()
-        assert gen.bit_depth == config.genre_style
+        config = load_config()
+        assert gen.bit_depth == config.content.genre.style
 
     def test_consistent_across_directories(self):
         """異なるディレクトリ名でも同じ config 値が返る"""
@@ -182,30 +177,31 @@ class TestBitDepth:
 
 
 # ===========================================================================
-# 5. _generate_tags のテスト（channel_config.json 駆動）
+# 5. _generate_tags のテスト（config/channel/content.json 駆動）
 # ===========================================================================
+
 
 class TestGenerateTags:
     """YouTube タグ生成ロジックの検証（config ベース）。"""
 
     def test_base_tags_present(self):
         gen = _make_generator("20250907-live-8bit-adventure-music")
-        config = ChannelConfig.load()
+        config = load_config()
         tags = gen._generate_tags()
         # base タグが含まれること
-        for base_tag in config.base_tags[:3]:
+        for base_tag in list(config.content.tags.base)[:3]:
             assert base_tag in tags
 
     def test_channel_name_in_tags(self):
         gen = _make_generator("20250907-live-8bit-adventure-music")
-        config = ChannelConfig.load()
+        config = load_config()
         tags = gen._generate_tags()
-        assert config.channel_name.lower() in tags
+        assert config.meta.channel_name.lower() in tags
 
     def test_theme_tags_applied(self):
         """コレクション名にテーマキーワードが含まれる場合、対応テーマタグが追加される"""
-        config = ChannelConfig.load()
-        themes = config.theme_tags
+        config = load_config()
+        themes = config.content.tags.themes
         # テーマが存在する場合のみテスト
         if themes:
             theme_name = list(themes.keys())[0]
@@ -223,6 +219,7 @@ class TestGenerateTags:
 # ===========================================================================
 # 6. メタデータ生成ロジックのテスト (tracks を直接注入)
 # ===========================================================================
+
 
 class TestGenerateCompleteCollectionMetadata:
     """Complete Collection 用メタデータ生成の検証。tracks を直接セットして副作用なしでテスト。"""
@@ -277,8 +274,8 @@ class TestGenerateCompleteCollectionMetadata:
     def test_title_contains_theme(self, gen_with_tracks):
         meta = gen_with_tracks.generate_complete_collection_metadata()
         # RJN: タイトルテンプレートに activities が含まれる
-        config = ChannelConfig.load()
-        assert config.default_activity in meta["title"] or "BGM" in meta["title"]
+        config = load_config()
+        assert config.content.title.default_activity in meta["title"] or "BGM" in meta["title"]
 
     def test_title_contains_duration_display(self, gen_with_tracks):
         meta = gen_with_tracks.generate_complete_collection_metadata()
@@ -307,14 +304,14 @@ class TestGenerateCompleteCollectionMetadata:
         assert "Free to use" in desc
 
     def test_category_from_config(self, gen_with_tracks):
-        config = ChannelConfig.load()
+        config = load_config()
         meta = gen_with_tracks.generate_complete_collection_metadata()
-        assert meta["category_id"] == config.category_id
+        assert meta["category_id"] == config.youtube.api.category_id
 
     def test_privacy_from_config(self, gen_with_tracks):
-        config = ChannelConfig.load()
+        config = load_config()
         meta = gen_with_tracks.generate_complete_collection_metadata()
-        assert meta["privacy_status"] == config.privacy_status
+        assert meta["privacy_status"] == config.youtube.api.privacy_status
 
     def test_tags_is_list(self, gen_with_tracks):
         meta = gen_with_tracks.generate_complete_collection_metadata()
@@ -325,8 +322,8 @@ class TestGenerateCompleteCollectionMetadata:
         """全15言語のローカライゼーションが返り値に含まれること"""
         meta = gen_with_tracks.generate_complete_collection_metadata()
         assert "localizations" in meta
-        config = ChannelConfig.load()
-        for lang in config.supported_languages:
+        config = load_config()
+        for lang in config.localizations.supported_languages:
             assert lang in meta["localizations"]
             assert "title" in meta["localizations"][lang]
             assert "description" in meta["localizations"][lang]
@@ -422,17 +419,21 @@ class TestGenerateCompleteCollectionMetadata:
 # 7. _format_duration_display のテスト（デュレーション丸め）
 # ===========================================================================
 
+
 class TestFormatDurationDisplay:
     """デュレーション丸めロジックの検証。"""
 
-    @pytest.mark.parametrize("seconds,expected", [
-        (300, "5 min"),          # 5分ちょうど → "5 min"
-        (585, "10 min"),         # 9.75分 → 10分に丸め
-        (900, "15 min"),         # 15分
-        (1500, "25 min"),        # 25分
-        (1800, "30 min"),        # 30分
-        (2040, "35 min"),        # 34分 → 35分未満なので5分単位 → round(34/5)*5=35
-    ])
+    @pytest.mark.parametrize(
+        "seconds,expected",
+        [
+            (300, "5 min"),  # 5分ちょうど → "5 min"
+            (585, "10 min"),  # 9.75分 → 10分に丸め
+            (900, "15 min"),  # 15分
+            (1500, "25 min"),  # 25分
+            (1800, "30 min"),  # 30分
+            (2040, "35 min"),  # 34分 → 35分未満なので5分単位 → round(34/5)*5=35
+        ],
+    )
     def test_short_durations(self, seconds, expected):
         assert format_duration_display(seconds) == expected
 
@@ -466,6 +467,7 @@ class TestFormatDurationDisplay:
 # 8. _extract_theme_name のテスト
 # ===========================================================================
 
+
 class TestExtractThemeName:
     """テーマ名抽出ロジックの検証。"""
 
@@ -486,49 +488,51 @@ class TestExtractThemeName:
 # 9. _get_activity のテスト
 # ===========================================================================
 
+
 class TestGetActivity:
     """アクティビティキーワード取得ロジックの検証。"""
 
     def test_city_theme_returns_configured_activity(self):
         gen = _make_generator("20250907-live-city-jazz")
-        config = ChannelConfig.load()
+        config = load_config()
         activity = gen._get_activity()
         # theme_scenes に city があれば対応 activities、なければ default
-        theme_scenes = config.raw.get("title", {}).get("theme_scenes", {})
+        theme_scenes = config.content.title.theme_scenes
         if "city" in theme_scenes:
             assert activity == theme_scenes["city"]["activities"]
         else:
-            assert activity == config.default_activity
+            assert activity == config.content.title.default_activity
 
     def test_cafe_theme_returns_configured_activity(self):
         gen = _make_generator("20250907-live-cafe-jazz")
-        config = ChannelConfig.load()
+        config = load_config()
         activity = gen._get_activity()
-        theme_scenes = config.raw.get("title", {}).get("theme_scenes", {})
+        theme_scenes = config.content.title.theme_scenes
         if "cafe" in theme_scenes:
             assert activity == theme_scenes["cafe"]["activities"]
         else:
-            assert activity == config.default_activity
+            assert activity == config.content.title.default_activity
 
     def test_sleep_theme_returns_configured_activity(self):
         gen = _make_generator("20250907-live-sleep-jazz")
-        config = ChannelConfig.load()
+        config = load_config()
         activity = gen._get_activity()
-        theme_scenes = config.raw.get("title", {}).get("theme_scenes", {})
+        theme_scenes = config.content.title.theme_scenes
         if "sleep" in theme_scenes:
             assert activity == theme_scenes["sleep"]["activities"]
         else:
-            assert activity == config.default_activity
+            assert activity == config.content.title.default_activity
 
     def test_unknown_theme_returns_default(self):
         gen = _make_generator("20250907-live-mystery-music")
-        config = ChannelConfig.load()
-        assert gen._get_activity() == config.default_activity
+        config = load_config()
+        assert gen._get_activity() == config.content.title.default_activity
 
 
 # ===========================================================================
 # 10. _generate_title のテスト（統合）
 # ===========================================================================
+
 
 class TestGenerateTitle:
     """タイトル生成統合テスト。"""
@@ -555,12 +559,14 @@ class TestGenerateTitle:
 # 11. クロスフェード関連テスト
 # ===========================================================================
 
+
 class TestCrossfade:
     """クロスフェード設定・タイムスタンプ・合計時間の検証。"""
 
     def test_crossfade_config_default(self):
         """skill-config (masterup.yaml) の audio.crossfade_duration がロードされること"""
         from youtube_automation.utils.skill_config import load_skill_config
+
         cfg = load_skill_config("masterup")
         assert cfg.get("audio", {}).get("crossfade_duration") == 1.0
 
@@ -623,5 +629,3 @@ class TestCrossfade:
         crossfade = gen._crossfade_sec
         total = sum(t["duration"] for t in gen.tracks) - max(0, len(gen.tracks) - 1) * crossfade
         assert total == 180.0
-
-

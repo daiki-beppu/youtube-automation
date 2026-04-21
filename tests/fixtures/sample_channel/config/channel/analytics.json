@@ -1,0 +1,8 @@
+{
+  "analytics": {
+    "collection_filter_keywords": ["collection", "complete"]
+  },
+  "benchmark": {
+    "channels": [{"name": "Rival", "id": "UC123"}]
+  }
+}

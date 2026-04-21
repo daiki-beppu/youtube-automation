@@ -2,7 +2,7 @@
 """
 Playlist Status Viewer - プレイリスト状態表示
 
-channel_config.json の playlists 定義に基づき、
+config/channel/playlists.json の playlists 定義に基づき、
 プレイリストの現在の状態を表示する。
 
 Usage:
@@ -11,7 +11,7 @@ Usage:
 
 import logging
 
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import load_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ class PlaylistStatusViewer:
     """プレイリスト状態表示"""
 
     def __init__(self):
-        self.config = ChannelConfig.load()
+        self.config = load_config()
         self._youtube = None
 
     def _get_youtube(self):
@@ -35,13 +35,11 @@ class PlaylistStatusViewer:
         video_ids = set()
 
         try:
-            request = youtube.playlistItems().list(
-                playlistId=playlist_id, part='contentDetails', maxResults=50
-            )
+            request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
             while request:
                 response = request.execute()
-                for item in response.get('items', []):
-                    video_ids.add(item['contentDetails']['videoId'])
+                for item in response.get("items", []):
+                    video_ids.add(item["contentDetails"]["videoId"])
                 request = youtube.playlistItems().list_next(request, response)
         except Exception as e:
             logger.warning(f"プレイリスト {playlist_id} の項目取得エラー: {e}")
@@ -50,13 +48,13 @@ class PlaylistStatusViewer:
 
     def show_status(self):
         """プレイリストの現在の状態を表示"""
-        playlists_config = self.config.playlists
+        playlists_config = self.config.playlists.items
 
         if not playlists_config:
-            print("playlists セクションが channel_config.json に未定義です")
+            print("playlists セクションが config/channel/playlists.json に未定義です")
             return
 
-        print(f"\n{self.config.channel_name} - Playlists")
+        print(f"\n{self.config.meta.channel_name} - Playlists")
         print("=" * 50)
 
         # playlists が dict 形式と list 形式の両方に対応
@@ -66,9 +64,9 @@ class PlaylistStatusViewer:
             items = playlists_config.items()
 
         for key, pl in items:
-            playlist_id = pl.get('playlist_id') or pl.get('id')
+            playlist_id = pl.get("playlist_id") or pl.get("id")
             status = playlist_id or "(未作成)"
-            title = pl.get('title') or pl.get('name', f'Playlist {key}')
+            title = pl.get("title") or pl.get("name", f"Playlist {key}")
             print(f"\n  [{key}] {title}")
             print(f"    ID: {status}")
 
@@ -80,16 +78,16 @@ class PlaylistStatusViewer:
                     print("    動画数: (取得エラー)")
 
             # マッチングルール表示
-            if pl.get('auto_add'):
+            if pl.get("auto_add"):
                 print("    ルール: 全動画自動追加")
-            if pl.get('auto_add_activities'):
+            if pl.get("auto_add_activities"):
                 print(f"    ルール: activities = {pl['auto_add_activities']}")
-            if pl.get('auto_add_themes'):
+            if pl.get("auto_add_themes"):
                 print(f"    ルール: themes = {pl['auto_add_themes']}")
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     try:
         viewer = PlaylistStatusViewer()
         viewer.show_status()
@@ -98,6 +96,7 @@ def main():
     except Exception as e:
         print(f"エラー: {e}")
         import sys
+
         sys.exit(1)
 
 

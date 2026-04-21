@@ -6,29 +6,27 @@ ReportGenerator が生成したデータを HTML 形式に変換する
 from datetime import datetime
 from typing import Any, Dict
 
-from .channel_config import ChannelConfig
+from youtube_automation.utils.config import load_config
 
 
 def render_html_report(report_data: Dict[str, Any]) -> str:
     """レポートデータを HTML 形式に変換"""
-    config = ChannelConfig.load()
-    report_type = report_data.get('report_type', 'unknown')
-    generated_at = report_data.get('generated_at', datetime.now().isoformat())
+    config = load_config()
+    report_type = report_data.get("report_type", "unknown")
+    generated_at = report_data.get("generated_at", datetime.now().isoformat())
 
-    channel_overview = report_data.get('performance_summary', {}).get('channel_overview', {})
+    channel_overview = report_data.get("performance_summary", {}).get("channel_overview", {})
 
-    report_type_ja = {
-        'weekly': '週次レポート',
-        'monthly_strategic': '月次戦略レポート',
-        'monthly': '月次レポート'
-    }.get(report_type, report_type)
+    report_type_ja = {"weekly": "週次レポート", "monthly_strategic": "月次戦略レポート", "monthly": "月次レポート"}.get(
+        report_type, report_type
+    )
 
     html = f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{config.channel_name} - {report_type_ja}</title>
+    <title>{config.meta.channel_name} - {report_type_ja}</title>
     <style>
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif,
@@ -63,37 +61,37 @@ def render_html_report(report_data: Dict[str, Any]) -> str:
 <body>
     <div class="container">
         <div class="header">
-            <h1>{config.channel_name}</h1>
+            <h1>{config.meta.channel_name}</h1>
             <h2>{report_type_ja}</h2>
             <p>{generated_at}</p>
         </div>
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-value">{channel_overview.get('total_videos', 'N/A')}</div>
+                <div class="stat-value">{channel_overview.get("total_videos", "N/A")}</div>
                 <div>総動画数</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{channel_overview.get('subscriber_count', 'N/A')}</div>
+                <div class="stat-value">{channel_overview.get("subscriber_count", "N/A")}</div>
                 <div>登録者数</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{channel_overview.get('average_ctr', 0):.2f}%</div>
+                <div class="stat-value">{channel_overview.get("average_ctr", 0):.2f}%</div>
                 <div>平均CTR</div>
             </div>
         </div>"""
 
     # CTR 戦略セクション（月次レポートの場合）
-    if 'ctr_improvement_strategy' in report_data:
-        ctr_strategy = report_data['ctr_improvement_strategy']
-        recommendations = ctr_strategy.get('recommendations', [])
+    if "ctr_improvement_strategy" in report_data:
+        ctr_strategy = report_data["ctr_improvement_strategy"]
+        recommendations = ctr_strategy.get("recommendations", [])
 
         html += f"""
         <div class="section">
             <h2>CTR改善戦略</h2>
-            <p><strong>現在のCTR:</strong> {ctr_strategy['summary']['current_ctr_percent']:.2f}%</p>
-            <p><strong>目標CTR:</strong> {ctr_strategy['summary']['target_ctr_percent']}%</p>
-            <p><strong>改善必要度:</strong> {ctr_strategy['summary']['gap_analysis']}</p>
+            <p><strong>現在のCTR:</strong> {ctr_strategy["summary"]["current_ctr_percent"]:.2f}%</p>
+            <p><strong>目標CTR:</strong> {ctr_strategy["summary"]["target_ctr_percent"]}%</p>
+            <p><strong>改善必要度:</strong> {ctr_strategy["summary"]["gap_analysis"]}</p>
         </div>
         <div class="recommendations">
             <h3>主要推奨事項</h3>
@@ -107,12 +105,12 @@ def render_html_report(report_data: Dict[str, Any]) -> str:
         </div>"""
 
     # アクションアイテム
-    if 'action_items' in report_data:
+    if "action_items" in report_data:
         html += """
         <div class="action-items">
             <h3>アクションアイテム</h3>
             <ul>"""
-        for action in report_data['action_items']:
+        for action in report_data["action_items"]:
             html += f"\n                <li>{action}</li>"
         html += """
             </ul>
@@ -120,7 +118,7 @@ def render_html_report(report_data: Dict[str, Any]) -> str:
 
     html += f"""
         <div class="footer">
-            <p>{config.channel_name} アナリティクスシステムにより生成</p>
+            <p>{config.meta.channel_name} アナリティクスシステムにより生成</p>
         </div>
     </div>
 </body>

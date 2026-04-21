@@ -4,7 +4,7 @@
 # チャンネル側では config/skills/benchmark.yaml に上書き値を置く。
 #
 # 注意: 競合チャンネルリスト (benchmark.channels[]) は戦略情報として
-# channel_config.json 側で管理する。この YAML では走査・分析の動作パラメータのみ扱う。
+# config/channel/analytics.json 側で管理する。この YAML では走査・分析の動作パラメータのみ扱う。
 
 # チャンネルあたりの走査プール本数（直近 N 投稿）
 scan_recent: 50

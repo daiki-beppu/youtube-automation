@@ -6,7 +6,12 @@
 ## JSON 構文検証
 
 ```bash
-uv run python3 -c "import json; json.load(open('config/channel_config.json'))"
+uv run python3 -c "
+import json, glob
+for p in sorted(glob.glob('config/channel/*.json')):
+    json.load(open(p))
+    print(f'OK: {p}')
+"
 ```
 
 エラーが出なければ構文 OK。
@@ -14,12 +19,18 @@ uv run python3 -c "import json; json.load(open('config/channel_config.json'))"
 ## ChannelConfig ロードテスト
 
 ```bash
+uv run yt-config-migrate verify
+```
+
+または直接 API で確認:
+
+```bash
 uv run python3 -c "
-from youtube_automation.utils.channel_config import ChannelConfig
-c = ChannelConfig.load()
-print(f'Channel: {c.channel_name} ({c.channel_short})')
-print(f'Genre: {c.genre_primary} / {c.genre_style}')
-print(f'Benchmarks: {len(c.benchmark_config.get(\"channels\", []))} channels')
+from youtube_automation.utils.config import load_config
+c = load_config()
+print(f'Channel: {c.meta.channel_name} ({c.meta.channel_short})')
+print(f'Genre: {c.content.genre.primary} / {c.content.genre.style}')
+print(f'Benchmarks: {len(c.analytics.benchmark.channels)} channels')
 print('Config loaded successfully!')
 "
 ```
@@ -48,7 +59,7 @@ print(resp['items'][0]['id'])
 "
 ```
 
-出力された ID を `config/channel_config.json` の `channel.channel_id` に設定する。
+出力された ID を `config/channel/meta.json` の `channel.channel_id` に設定する。
 
 ## ブランディング素材生成
 

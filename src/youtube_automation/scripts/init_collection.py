@@ -72,7 +72,7 @@ def build_state(collection_name: str, theme: str, track_count: int, selected_pla
 
 
 def main():
-    from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+    from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 
     parser = argparse.ArgumentParser(description="コレクションディレクトリと workflow-state.json を初期化")
     parser.add_argument("collection_name", help="コレクション表示名")
@@ -80,16 +80,18 @@ def main():
     parser.add_argument("--track-count", type=int, default=12, help="トラック数（デフォルト: 12）")
     parser.add_argument("--selected-plan", default="A", help="選択した企画（A-E、デフォルト: A）")
     parser.add_argument(
-        "--music-engine", default=None, choices=["suno", "lyria"],
+        "--music-engine",
+        default=None,
+        choices=["suno", "lyria"],
         help="音楽エンジン（デフォルト: channel_config から自動判定）",
     )
     args = parser.parse_args()
 
-    config = ChannelConfig.load()
-    short = config.raw["channel"]["short"].lower()
-    ch_dir = Path(ChannelConfig.channel_dir())
+    config = load_config()
+    short = config.meta.channel_short.lower()
+    ch_dir = Path(channel_dir())
 
-    music_engine = args.music_engine or config.raw.get("music_engine", "suno")
+    music_engine = args.music_engine or config.youtube.music_engine
 
     date_prefix = datetime.now().strftime("%Y%m%d")
     dir_name = f"{date_prefix}-{short}-{args.theme}-collection"

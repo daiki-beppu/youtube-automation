@@ -22,7 +22,7 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
 from youtube_automation.utils.upload_core import YouTubeUploadCore  # noqa: E402
 
@@ -44,7 +44,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         super().__init__()
 
         if collections_root is None:
-            collections_root = ChannelConfig.channel_dir() / 'collections'
+            collections_root = channel_dir() / "collections"
 
         self.collections_root = Path(collections_root)
         self.upload_results = []
@@ -71,40 +71,37 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             str: アップロードされた動画のID（失敗時はNone）
         """
         # タイトル長バリデーション（YouTube上限100文字）
-        title = metadata.get('title', '')
+        title = metadata.get("title", "")
         if len(title) > 100:
-            raise ValueError(
-                f"タイトルが100文字を超えています（{len(title)}文字）: {title}"
-            )
+            raise ValueError(f"タイトルが100文字を超えています（{len(title)}文字）: {title}")
 
         # リクエストボディ作成
         status_body = {
-            'privacyStatus': metadata.get('privacy_status', 'private'),
-            'selfDeclaredMadeForKids': False,
-            'containsSyntheticMedia': False,
+            "privacyStatus": metadata.get("privacy_status", "private"),
+            "selfDeclaredMadeForKids": False,
+            "containsSyntheticMedia": False,
         }
 
         # スケジュール公開: publishAt 指定時は private 必須
-        if metadata.get('publish_at'):
-            status_body['privacyStatus'] = 'private'
-            status_body['publishAt'] = metadata['publish_at']
+        if metadata.get("publish_at"):
+            status_body["privacyStatus"] = "private"
+            status_body["publishAt"] = metadata["publish_at"]
             logger.info(f"スケジュール公開: {metadata['publish_at']}")
 
         body = {
-            'snippet': {
-                'title': metadata['title'],  # YouTube上限100文字
-
-                'description': metadata['description'][:5000],  # YouTube上限5000文字
-                'tags': metadata['tags'][:50],  # YouTube上限50タグ
-                'categoryId': metadata.get('category_id', '10'),
-                'defaultLanguage': metadata.get('language', 'en'),
-                'defaultAudioLanguage': metadata.get('language', 'en'),
+            "snippet": {
+                "title": metadata["title"],  # YouTube上限100文字
+                "description": metadata["description"][:5000],  # YouTube上限5000文字
+                "tags": metadata["tags"][:50],  # YouTube上限50タグ
+                "categoryId": metadata.get("category_id", "10"),
+                "defaultLanguage": metadata.get("language", "en"),
+                "defaultAudioLanguage": metadata.get("language", "en"),
             },
-            'status': status_body,
+            "status": status_body,
         }
 
-        if metadata.get('localizations'):
-            body['localizations'] = metadata['localizations']
+        if metadata.get("localizations"):
+            body["localizations"] = metadata["localizations"]
 
         return super().upload_video(video_path, body, thumbnail_path)
 
@@ -115,12 +112,12 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         title / description / tags を抽出して返す。
         ファイルが存在しない or パース失敗時は None（BAHMetadataGenerator にフォールバック）。
         """
-        desc_path = collection_dir / '20-documentation' / 'descriptions.md'
+        desc_path = collection_dir / "20-documentation" / "descriptions.md"
         if not desc_path.exists():
             # 過去事例: description.txt 等の別名でもファイルが存在し、
             # その場合 fallback 経路で「Track 01」のような汎用名が
             # アップロードされてしまった。意図しないフォールバックを早期発見する。
-            stray = list((collection_dir / '20-documentation').glob('description*'))
+            stray = list((collection_dir / "20-documentation").glob("description*"))
             if stray:
                 raise RuntimeError(
                     f"descriptions.md が無いのに別名ファイルが存在します: "
@@ -129,20 +126,20 @@ class YouTubeAutoUploader(YouTubeUploadCore):
                 )
             return None
 
-        text = desc_path.read_text(encoding='utf-8')
+        text = desc_path.read_text(encoding="utf-8")
 
-        title = self._extract_md_section(text, 'タイトル案')
-        description = self._extract_md_section(text, 'Complete Collection 概要欄')
-        tags_raw = self._extract_md_section(text, 'タグ（YouTube タグ欄）')
+        title = self._extract_md_section(text, "タイトル案")
+        description = self._extract_md_section(text, "Complete Collection 概要欄")
+        tags_raw = self._extract_md_section(text, "タグ（YouTube タグ欄）")
 
         if not (title and description):
             logger.warning("⚠️  descriptions.md のパースに失敗 — BAHMetadataGenerator にフォールバック")
             return None
 
-        tags = [t.strip() for t in tags_raw.replace('\n', ',').split(',') if t.strip()] if tags_raw else []
+        tags = [t.strip() for t in tags_raw.replace("\n", ",").split(",") if t.strip()] if tags_raw else []
 
         logger.info("📄 descriptions.md からメタデータを読み込み")
-        return {'title': title.strip(), 'description': description.strip(), 'tags': tags}
+        return {"title": title.strip(), "description": description.strip(), "tags": tags}
 
     @staticmethod
     def _extract_body_for_localizations(description: str) -> str | None:
@@ -152,14 +149,15 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         概要欄の他セクションは generate_localizations() がテンプレートから構築する。
         """
         import re
-        lines = description.split('\n')
-        timestamp_lines = [line for line in lines if re.match(r'^\d{1,2}:\d{2}', line.strip())]
-        return '\n'.join(timestamp_lines) if timestamp_lines else None
+
+        lines = description.split("\n")
+        timestamp_lines = [line for line in lines if re.match(r"^\d{1,2}:\d{2}", line.strip())]
+        return "\n".join(timestamp_lines) if timestamp_lines else None
 
     @staticmethod
     def _extract_md_section(text: str, heading: str) -> str | None:
         """Markdown の ## heading 直後のコードフェンス内容を抽出"""
-        pattern = rf'## {re.escape(heading)}\s*\n+```\n(.*?)```'
+        pattern = rf"## {re.escape(heading)}\s*\n+```\n(.*?)```"
         m = re.search(pattern, text, re.DOTALL)
         return m.group(1).strip() if m else None
 
@@ -174,36 +172,25 @@ class YouTubeAutoUploader(YouTubeUploadCore):
            を v1〜v6 ごとに別チャプターに展開していないことを確認）
         4. タイトルが 100 codepoint 以内（YouTube 制限）
         """
-        doc_dir = collection_dir / '20-documentation'
-        desc_path = doc_dir / 'descriptions.md'
+        doc_dir = collection_dir / "20-documentation"
+        desc_path = doc_dir / "descriptions.md"
         if not desc_path.exists():
-            raise RuntimeError(
-                f"❌ {desc_path} が存在しません。/description を実行してください。"
-            )
+            raise RuntimeError(f"❌ {desc_path} が存在しません。/description を実行してください。")
 
-        text = desc_path.read_text(encoding='utf-8')
-        title = (self._extract_md_section(text, 'タイトル案') or '').strip()
-        description = (self._extract_md_section(text, 'Complete Collection 概要欄') or '').strip()
+        text = desc_path.read_text(encoding="utf-8")
+        title = (self._extract_md_section(text, "タイトル案") or "").strip()
+        description = (self._extract_md_section(text, "Complete Collection 概要欄") or "").strip()
 
         if not title or not description:
-            raise RuntimeError(
-                f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空"
-            )
+            raise RuntimeError(f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空")
 
         if len(title) > 100:
-            raise RuntimeError(
-                f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}"
-            )
+            raise RuntimeError(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}")
 
         # タイムスタンプ粒度検証
-        ts_lines = [
-            line for line in description.split('\n')
-            if re.match(r'^\d{1,2}:\d{2}', line.strip())
-        ]
+        ts_lines = [line for line in description.split("\n") if re.match(r"^\d{1,2}:\d{2}", line.strip())]
         if len(ts_lines) < 3:
-            raise RuntimeError(
-                f"❌ タイムスタンプ {len(ts_lines)} 個 (最低 3 必要)"
-            )
+            raise RuntimeError(f"❌ タイムスタンプ {len(ts_lines)} 個 (最低 3 必要)")
         # per-theme 粒度: 通常 3〜10 程度。20 を超えるならバリエーション展開疑い。
         if len(ts_lines) > 12:
             raise RuntimeError(
@@ -214,12 +201,12 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             )
 
         # scene_phrases 完全性検証
-        ws_path = collection_dir / 'workflow-state.json'
-        state = json.loads(ws_path.read_text(encoding='utf-8')) if ws_path.exists() else {}
-        scene_phrases = state.get('scene_phrases') or {}
+        ws_path = collection_dir / "workflow-state.json"
+        state = json.loads(ws_path.read_text(encoding="utf-8")) if ws_path.exists() else {}
+        scene_phrases = state.get("scene_phrases") or {}
 
-        config = ChannelConfig.load()
-        required_langs = ['en'] + list(config.supported_languages)
+        config = load_config()
+        required_langs = ["en"] + list(config.localizations.supported_languages)
         missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
         if missing:
             raise RuntimeError(
@@ -228,10 +215,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
                 f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
             )
 
-        logger.info(
-            f"✅ preflight OK — title={len(title)}c, "
-            f"chapters={len(ts_lines)}, langs={len(scene_phrases)}"
-        )
+        logger.info(f"✅ preflight OK — title={len(title)}c, chapters={len(ts_lines)}, langs={len(scene_phrases)}")
 
     def upload_collection(self, collection_path: str, publish_at: str = None) -> Dict:
         """
@@ -258,19 +242,19 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         metadata_gen = BAHMetadataGenerator(str(collection_dir))
 
         results = {
-            'collection_name': metadata_gen.collection_name,
-            'collection_path': str(collection_dir),
-            'start_time': datetime.now(),
-            'complete_video': None,
-            'errors': []
+            "collection_name": metadata_gen.collection_name,
+            "collection_path": str(collection_dir),
+            "start_time": datetime.now(),
+            "complete_video": None,
+            "errors": [],
         }
 
         # Complete Collection アップロード
         complete_result = self._upload_complete_collection(collection_dir, metadata_gen, publish_at=publish_at)
-        results['complete_video'] = complete_result
+        results["complete_video"] = complete_result
 
-        results['end_time'] = datetime.now()
-        results['duration'] = results['end_time'] - results['start_time']
+        results["end_time"] = datetime.now()
+        results["duration"] = results["end_time"] - results["start_time"]
 
         # 結果レポート
         self._print_upload_report(results)
@@ -284,14 +268,14 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         logger.info("📹 Complete Collection アップロード準備中...")
 
         # マスター動画ファイル検索
-        video_files = list(collection_dir.glob('03-Individual-movie/*master*.mp4'))
+        video_files = list(collection_dir.glob("03-Individual-movie/*master*.mp4"))
         if not video_files:
-            video_files = list(collection_dir.glob('01-master/*.mp4'))
+            video_files = list(collection_dir.glob("01-master/*.mp4"))
 
         if not video_files:
             error_msg = "マスター動画ファイルが見つかりません"
             logger.error(f"❌ {error_msg}")
-            return {'error': error_msg}
+            return {"error": error_msg}
 
         master_video = video_files[0]
 
@@ -301,26 +285,26 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         # descriptions.md が存在すれば title/description/tags を上書き
         prebuilt = self._load_descriptions_md(collection_dir)
         if prebuilt:
-            metadata['title'] = prebuilt['title']
-            metadata['description'] = prebuilt['description']
-            if prebuilt['tags']:
-                metadata['tags'] = prebuilt['tags']
+            metadata["title"] = prebuilt["title"]
+            metadata["description"] = prebuilt["description"]
+            if prebuilt["tags"]:
+                metadata["tags"] = prebuilt["tags"]
 
             # ローカライゼーションにもキュレーション済みのタイムスタンプを使用
-            curated_timestamps = self._extract_body_for_localizations(prebuilt['description'])
-            scene_phrases = getattr(metadata_gen, '_last_scene_phrases', {})
+            curated_timestamps = self._extract_body_for_localizations(prebuilt["description"])
+            scene_phrases = getattr(metadata_gen, "_last_scene_phrases", {})
             if curated_timestamps:
-                metadata['localizations'] = metadata_gen.generate_localizations(
-                    metadata['title'], curated_timestamps, scene_phrases
+                metadata["localizations"] = metadata_gen.generate_localizations(
+                    metadata["title"], curated_timestamps, scene_phrases
                 )
 
         if publish_at:
-            metadata['publish_at'] = publish_at
+            metadata["publish_at"] = publish_at
 
         # サムネイル検索（thumbnail.jpg を優先）
         thumbnail_path = None
-        for tn in ['thumbnail.jpg', 'thumbnail.png', 'main.jpg', 'main.png']:
-            candidate = collection_dir / '10-assets' / tn
+        for tn in ["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"]:
+            candidate = collection_dir / "10-assets" / tn
             if candidate.exists():
                 thumbnail_path = str(candidate)
                 break
@@ -331,14 +315,14 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         if video_id:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
             return {
-                'video_id': video_id,
-                'video_url': video_url,
-                'title': metadata['title'],
-                'file_path': str(master_video),
-                'thumbnail_path': thumbnail_path
+                "video_id": video_id,
+                "video_url": video_url,
+                "title": metadata["title"],
+                "file_path": str(master_video),
+                "thumbnail_path": thumbnail_path,
             }
         else:
-            return {'error': 'Complete Collection アップロード失敗'}
+            return {"error": "Complete Collection アップロード失敗"}
 
     def _print_upload_report(self, results: Dict):
         """アップロード結果レポート表示"""
@@ -349,8 +333,8 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         logger.info(f"📅 実行日時: {results['start_time'].strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Complete Collection 結果
-        if results['complete_video']:
-            if 'video_id' in results['complete_video']:
+        if results["complete_video"]:
+            if "video_id" in results["complete_video"]:
                 logger.info(f"✅ Complete Collection: {results['complete_video']['video_url']}")
             else:
                 logger.error(f"❌ Complete Collection: {results['complete_video']['error']}")
@@ -366,10 +350,10 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             Dict: 全体の処理結果
         """
         if status_filter is None:
-            status_filter = ['ready']  # デフォルトはready状態のみ
+            status_filter = ["ready"]  # デフォルトはready状態のみ
 
-        config = ChannelConfig.load()
-        logger.info(f"🎵 {config.channel_name} - 一括YouTube アップロード")
+        config = load_config()
+        logger.info(f"🎵 {config.meta.channel_name} - 一括YouTube アップロード")
         logger.info(f"📁 collections ディレクトリ: {self.collections_root}")
         logger.info(f"🎯 対象ステータス: {status_filter}")
 
@@ -379,21 +363,20 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         for status in status_filter:
             status_dir = self.collections_root / status
             if status_dir.exists():
-                collections = [d for d in status_dir.iterdir()
-                             if d.is_dir() and not d.name.startswith('.')]
+                collections = [d for d in status_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
                 target_collections.extend([(status, col) for col in collections])
 
         if not target_collections:
             logger.error("❌ 処理対象のコレクションが見つかりません")
-            return {'error': '処理対象コレクションなし'}
+            return {"error": "処理対象コレクションなし"}
 
         logger.info(f"📋 処理対象: {len(target_collections)}コレクション")
 
         all_results = {
-            'start_time': datetime.now(),
-            'target_collections': len(target_collections),
-            'results': [],
-            'summary': {'success': 0, 'error': 0}
+            "start_time": datetime.now(),
+            "target_collections": len(target_collections),
+            "results": [],
+            "summary": {"success": 0, "error": 0},
         }
 
         # 各コレクションを処理
@@ -402,29 +385,26 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
             try:
                 result = self.upload_collection(str(collection_dir))
-                all_results['results'].append(result)
+                all_results["results"].append(result)
 
                 # 成功判定
-                has_success = bool(result.get('complete_video', {}).get('video_id'))
+                has_success = bool(result.get("complete_video", {}).get("video_id"))
 
                 if has_success:
-                    all_results['summary']['success'] += 1
+                    all_results["summary"]["success"] += 1
                     # ready -> live への移動（オプション）
                     # self._move_collection_to_live(collection_dir)
                 else:
-                    all_results['summary']['error'] += 1
+                    all_results["summary"]["error"] += 1
 
             except Exception as e:
                 error_msg = f"コレクション処理エラー {collection_dir.name}: {e}"
                 logger.error(f"❌ {error_msg}")
-                all_results['results'].append({
-                    'collection_name': collection_dir.name,
-                    'error': error_msg
-                })
-                all_results['summary']['error'] += 1
+                all_results["results"].append({"collection_name": collection_dir.name, "error": error_msg})
+                all_results["summary"]["error"] += 1
 
-        all_results['end_time'] = datetime.now()
-        all_results['duration'] = all_results['end_time'] - all_results['start_time']
+        all_results["end_time"] = datetime.now()
+        all_results["duration"] = all_results["end_time"] - all_results["start_time"]
 
         # 全体結果レポート
         self._print_batch_report(all_results)
@@ -438,18 +418,18 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         logger.info(f"⏱️  総実行時間: {all_results['duration']}")
         logger.info(f"📅 実行日時: {all_results['start_time'].strftime('%Y-%m-%d %H:%M:%S')}")
 
+
 def main():
     """メイン関数"""
     import argparse
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-    config = ChannelConfig.load()
-    parser = argparse.ArgumentParser(description=f'{config.channel_short} YouTube 自動アップローダー')
-    parser.add_argument('--collection', '-c', help='特定コレクションのパス')
-    parser.add_argument('--batch', '-b', action='store_true',
-                       help='collections/ready/ の一括処理')
-    parser.add_argument('--status', '-s', nargs='+', default=['ready'],
-                       help='一括処理対象ステータス')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    config = load_config()
+    parser = argparse.ArgumentParser(description=f"{config.meta.channel_short} YouTube 自動アップローダー")
+    parser.add_argument("--collection", "-c", help="特定コレクションのパス")
+    parser.add_argument("--batch", "-b", action="store_true", help="collections/ready/ の一括処理")
+    parser.add_argument("--status", "-s", nargs="+", default=["ready"], help="一括処理対象ステータス")
 
     args = parser.parse_args()
 
@@ -473,6 +453,7 @@ def main():
     except Exception as e:
         print(f"❌ エラー: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

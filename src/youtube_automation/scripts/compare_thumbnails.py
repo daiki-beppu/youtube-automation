@@ -25,7 +25,8 @@ from youtube_automation.scripts.benchmark_collector import (  # noqa: E402
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
+from youtube_automation.utils.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +39,12 @@ class ThumbnailComparer:
     """サムネイル比較検証"""
 
     def __init__(self, min_views: int = DEFAULT_MIN_VIEWS):
-        self.config = ChannelConfig.load()
-        self.channel_dir = ChannelConfig.channel_dir()
+        self.config = load_config()
+        self.channel_dir = _channel_dir()
         self.data_dir = self.channel_dir / "data"
         self.min_views = min_views
 
-        self.channel_slug = self.config.raw.get("channel", {}).get("short", "channel").lower()
+        self.channel_slug = self.config.meta.channel_short.lower()
         self.compare_dir = self.data_dir / "thumbnail_compare"
         self.benchmark_dir = self.compare_dir / "benchmark"
         self.channel_thumb_dir = self.compare_dir / self.channel_slug
@@ -70,7 +71,8 @@ class ThumbnailComparer:
         try:
             subprocess.run(
                 ["ffmpeg", "-i", str(input_path), "-vf", f"scale={SMALL_WIDTH}:{SMALL_HEIGHT}", "-y", str(output_path)],
-                capture_output=True, check=True,
+                capture_output=True,
+                check=True,
             )
             return True
         except FileNotFoundError:
@@ -116,6 +118,7 @@ class ThumbnailComparer:
                     os.symlink(thumb.resolve(), dest)
                 except OSError:
                     import shutil
+
                     shutil.copy2(thumb, dest)
             channel_copies.append(dest)
 
@@ -142,7 +145,9 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="サムネイル比較検証")
     parser.add_argument(
-        "--min-views", type=int, default=DEFAULT_MIN_VIEWS,
+        "--min-views",
+        type=int,
+        default=DEFAULT_MIN_VIEWS,
         help=f"最低再生数（default: {DEFAULT_MIN_VIEWS:,}）",
     )
     parser.add_argument("--no-open", action="store_true", help="ディレクトリを open しない")

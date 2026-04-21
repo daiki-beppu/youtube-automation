@@ -1,0 +1,12 @@
+{
+  "youtube": {
+    "category_id": "10",
+    "privacy_status": "public",
+    "language": "en"
+  },
+  "content_model": {
+    "type": "collection",
+    "languages": ["en"]
+  },
+  "music_engine": "suno"
+}

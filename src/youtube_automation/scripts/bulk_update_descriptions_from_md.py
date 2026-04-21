@@ -20,10 +20,10 @@ import json
 import re
 import time
 
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.youtube_service import get_youtube
 
-COLLECTIONS_DIR = ChannelConfig.channel_dir() / "collections" / "live"
+COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
 # Collections whose snippet should be refreshed from descriptions.md.
 TARGETS = [
@@ -49,14 +49,8 @@ def utf16_units(s: str) -> int:
 
 def load_collection(col: str) -> dict:
     col_dir = COLLECTIONS_DIR / col
-    desc_md = (col_dir / "20-documentation" / "descriptions.md").read_text(
-        encoding="utf-8"
-    )
-    upload_tracking = json.loads(
-        (col_dir / "20-documentation" / "upload_tracking.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    desc_md = (col_dir / "20-documentation" / "descriptions.md").read_text(encoding="utf-8")
+    upload_tracking = json.loads((col_dir / "20-documentation" / "upload_tracking.json").read_text(encoding="utf-8"))
     cc = upload_tracking.get("complete_collection") or {}
     video_id = cc.get("video_id")
     if not video_id:
@@ -84,9 +78,7 @@ def load_collection(col: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument(
-        "--only", help="comma-separated substring filter for collection names"
-    )
+    parser.add_argument("--only", help="comma-separated substring filter for collection names")
     args = parser.parse_args()
 
     targets = TARGETS

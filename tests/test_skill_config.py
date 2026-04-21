@@ -6,34 +6,24 @@ import pytest
 import yaml
 
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import reset as reset_config
 from youtube_automation.utils.exceptions import ConfigError
 
 
 @pytest.fixture(autouse=True)
 def reset_caches():
     skill_config.reset()
-    ChannelConfig.reset()
+    reset_config()
     yield
     skill_config.reset()
-    ChannelConfig.reset()
+    reset_config()
 
 
 def test_load_default_only(tmp_path, monkeypatch):
     """デフォルト値のみ (channel override なし) で読み込めること"""
-    # fixture の sample_channel には config/skills/ がない想定
+    # skill_config は channel_dir() のみ使用し load_config() を呼ばない
     channel_dir = tmp_path / "ch"
-    (channel_dir / "config").mkdir(parents=True)
-    (channel_dir / "config" / "channel_config.json").write_text(
-        '{"channel":{"name":"t","short":"t","youtube_handle":"@t","url":"https://x"},'
-        '"genre":{"primary":"p","style":"s","context":"c"},'
-        '"youtube":{"category_id":"10","privacy_status":"private","language":"en"},'
-        '"tags":{"base":[],"themes":{}},'
-        '"descriptions":{"opening":"","perfect_for":[],"hashtags":[]},'
-        '"title":{"template":""},'
-        '"music_engine":"lyria"}',
-        encoding="utf-8",
-    )
+    channel_dir.mkdir()
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     # 実スキルの default.yaml を参照せず、_deep_merge のロジックだけを検証
@@ -61,19 +51,8 @@ def test_missing_default_raises():
 
 def test_channel_override_merged(tmp_path, monkeypatch):
     """channel override が default とマージされること"""
-    # チャンネル側 override を用意
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
-    (channel_dir / "config" / "channel_config.json").write_text(
-        '{"channel":{"name":"t","short":"t","youtube_handle":"@t","url":"https://x"},'
-        '"genre":{"primary":"p","style":"s","context":"c"},'
-        '"youtube":{"category_id":"10","privacy_status":"private","language":"en"},'
-        '"tags":{"base":[],"themes":{}},'
-        '"descriptions":{"opening":"","perfect_for":[],"hashtags":[]},'
-        '"title":{"template":""},'
-        '"music_engine":"lyria"}',
-        encoding="utf-8",
-    )
     override_path = channel_dir / "config" / "skills" / "thumbnail.yaml"
     override_path.write_text(
         yaml.safe_dump({"gemini_image": {"brand_background": "custom-color"}}),
@@ -92,16 +71,6 @@ def test_cache_reset(tmp_path, monkeypatch):
     """reset でキャッシュがクリアされ、再度ロードされること"""
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
-    (channel_dir / "config" / "channel_config.json").write_text(
-        '{"channel":{"name":"t","short":"t","youtube_handle":"@t","url":"https://x"},'
-        '"genre":{"primary":"p","style":"s","context":"c"},'
-        '"youtube":{"category_id":"10","privacy_status":"private","language":"en"},'
-        '"tags":{"base":[],"themes":{}},'
-        '"descriptions":{"opening":"","perfect_for":[],"hashtags":[]},'
-        '"title":{"template":""},'
-        '"music_engine":"lyria"}',
-        encoding="utf-8",
-    )
     override = channel_dir / "config" / "skills" / "thumbnail.yaml"
     override.write_text(yaml.safe_dump({"marker": "a"}), encoding="utf-8")
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
@@ -116,6 +85,6 @@ def test_cache_reset(tmp_path, monkeypatch):
 
     # reset 後は再読み込み
     skill_config.reset("thumbnail")
-    ChannelConfig.reset()
+    reset_config()
     cfg3 = skill_config.load_skill_config("thumbnail")
     assert cfg3.get("marker") == "b"

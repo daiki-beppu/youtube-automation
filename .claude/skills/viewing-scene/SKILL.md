@@ -10,7 +10,7 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 
 ## 前提
 
-- `config/channel_config.json` が存在すること。
+- `config/channel/` が存在すること（`load_config()` でロード可能）。
   存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-import` を案内。
 - `docs/plans/persona-definition.md` が存在すること（未実施なら `/persona` を案内）
 - `reports/` に最新の分析レポートがあること（なければ `/collect` → `/analyze` を案内）
@@ -23,7 +23,7 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 
 **Agent 1: 自チャンネルシーン別パフォーマンス**
 - `reports/` の最新分析レポートを読み込み
-- 各動画の想定シーン（study, sleep, relaxation, dnd 等）を `channel_config.json` の `theme_activities` から判定
+- 各動画の想定シーン（study, sleep, relaxation, dnd 等）を `config/channel/content.json` の `title.theme_activities` から判定
 - シーン × 再生数 × 平均視聴時間のマッピング表を作成
 - シーン別パフォーマンスランキングを生成
 - 動画尺とパフォーマンスの相関分析
@@ -35,8 +35,8 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 - チャンネルごとの動画尺パターンを比較分析
 
 **Agent 3: 検索需要調査**
-- `channel_config.json` の `tags.base` と `suno.genre_line`（またはチャンネルのジャンルキーワード）から動的にキーワードを構築して WebSearch で需要を調査する
-- `channel_config.json` の `tags.base` と `genre.*` からキーワードを構築（例: `{genre.primary} music for study` / `{genre.style} music for work` / `作業用BGM {genre.primary}`）
+- `config/channel/content.json` の `tags.base` と `suno.genre_line`（またはチャンネルのジャンルキーワード）から動的にキーワードを構築して WebSearch で需要を調査する
+- `config/channel/content.json` の `tags.base` と `genre.*` からキーワードを構築（例: `{genre.primary} music for study` / `{genre.style} music for work` / `作業用BGM {genre.primary}`）
 - YouTube 検索のオートコンプリート傾向を推定
 
 ### Phase 2: シーン × ペルソナ クロス分析
@@ -58,4 +58,5 @@ AskUserQuestion でメインシーンと動画尺の方針を確認。
 - `docs/plans/persona-definition.md` — ペルソナ定義（入力）
 - `reports/analysis_*.md` — チャンネルパフォーマンスデータ
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ
-- `config/channel_config.json` — `theme_activities`, `audio.target_duration_min`
+- `config/channel/content.json` — `title.theme_activities`
+- `config/channel/audio.json` — `audio.target_duration_min`

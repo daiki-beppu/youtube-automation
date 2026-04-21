@@ -11,7 +11,7 @@
 ## 前提
 
 - 既存チャンネルリポジトリに `automation/` が submodule として追加済み
-- `config/channel_config.json`、`auth/client_secrets.json`（または `automation/auth/client_secrets.json`）が存在する
+- `config/channel/*.json`（v1.x なら `config/channel_config.json`）、`auth/client_secrets.json`（または `automation/auth/client_secrets.json`）が存在する
 - `uv` と `git` が利用可能
 
 ## 手順
@@ -84,8 +84,11 @@ git mv automation/auth/client_secrets.json auth/client_secrets.json 2>/dev/null 
 ### 7. 動作確認
 
 ```bash
-# ChannelConfig がロードできるか
-uv run python3 -c "from youtube_automation.utils.channel_config import ChannelConfig; print(ChannelConfig.load().channel_name)"
+# ChannelConfig がロードできるか（v2.0.0 以降）
+uv run python3 -c "from youtube_automation.utils.config import load_config; print(load_config().meta.channel_name)"
+
+# v1.x (旧 channel_config.json) からの移行時は先にこちらを実行:
+# uv run yt-config-migrate migrate --apply
 
 # OAuth が通るか
 uv run yt-channel-status

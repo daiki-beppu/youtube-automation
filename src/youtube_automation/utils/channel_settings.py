@@ -5,7 +5,7 @@
 
 ローカル側スキーマ:
 
-    channel_config.json:
+    config/channel/meta.json:
         youtube_channel:
           description: str                    # ブランディング説明文
           keywords: list[str]                 # タグ (API 側ではスペース区切り)
@@ -68,7 +68,7 @@ def build_update_body(
     未定義キーはリクエストから除外し、YouTube 側の値を破壊しない。
 
     Args:
-        local: channel_config.json の youtube_channel セクション
+        local: config/channel/meta.json の youtube_channel セクション
         localizations: localizations.json 全体（None なら同期しない）
         channel_id: 対象チャンネル ID
 
