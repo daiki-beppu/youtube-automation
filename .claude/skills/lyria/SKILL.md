@@ -1,6 +1,6 @@
 ---
 name: lyria
-description: Use when コレクションのテーマが確定し、Lyria RealTime API で音楽を生成したいとき。DJ型のフェーズ展開でマスター音源を自動生成。音楽制作、Lyria、DJ生成、マスター音源、フェーズ展開など、Lyria による音楽生成に関わる場面で必ず使用すること
+description: Use when Lyria RealTime API でマスター音源を自動生成したいとき。composition.json を設計し DJ フェーズ展開で WAV を直接出力する（人手介入なし、/masterup 不要、次工程は /videoup）。API 自動音源生成・DJ フェーズ展開・composition.json 設計の場面で使用すること。Suno で人手生成するチャンネルでは /suno を使う
 ---
 
 ## Overview
