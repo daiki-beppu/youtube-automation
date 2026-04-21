@@ -1,26 +1,8 @@
 {
-  "channel": {
-    "name": "Test Channel",
-    "short": "TC",
-    "youtube_handle": "@testchannel",
-    "url": "https://youtube.com/@testchannel",
-    "core_message": "Test core message",
-    "cta_subscribe": "Subscribe now!",
-    "tagline": "Test tagline"
-  },
-  "content_model": {
-    "type": "collection",
-    "languages": ["en"]
-  },
   "genre": {
     "primary": "chiptune",
     "style": "8-bit",
     "context": "RPG"
-  },
-  "youtube": {
-    "category_id": "10",
-    "privacy_status": "public",
-    "language": "ja"
   },
   "tags": {
     "base": ["chiptune music", "8-bit music", "RPG music", "game music"],
@@ -44,9 +26,6 @@
     ],
     "hashtags": ["#ChiptuneMusic", "#8bitMusic", "#RPGMusic"]
   },
-  "analytics": {
-    "collection_filter_keywords": ["collection", "complete"]
-  },
   "title": {
     "template": "{style} {theme} RPG Music - {activity} BGM [{duration_display}]",
     "default_activity": "Study",
@@ -58,24 +37,5 @@
       "village": "Study",
       "adventure": "Gaming"
     }
-  },
-  "suno": {
-    "workspace_name": "Test Workspace",
-    "genre_line": "chiptune, 8-bit",
-    "exclude_styles": "rock, metal"
-  },
-  "benchmark": {
-    "channels": [{"name": "Rival", "id": "UC123"}]
-  },
-  "playlists": {
-    "main": "PLtest123"
-  },
-  "youtube_channel": {
-    "description": "Test channel description for sync.",
-    "keywords": ["chiptune", "8-bit", "rpg music"],
-    "country": "JP",
-    "default_language": "ja",
-    "unsubscribed_trailer": "dQw4w9WgXcQ",
-    "made_for_kids": false
   }
 }
