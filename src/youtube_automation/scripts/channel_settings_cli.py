@@ -26,13 +26,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.utils.channel_config import ChannelConfig
 from youtube_automation.utils.channel_settings import (
     build_update_body,
     diff_settings,
     fetch_channel,
     parse_api_response,
 )
+from youtube_automation.utils.config import ChannelConfig, load_config
+from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 
@@ -40,10 +41,10 @@ logger = logging.getLogger(__name__)
 
 
 def _load_local(config: ChannelConfig, include_localizations: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-    channel = dict(config.youtube_channel_settings)
+    channel = dict(config.meta.branding.as_api_dict())
     localizations: dict[str, Any] = {}
-    if include_localizations and config.has_localizations:
-        localizations = dict(config.localizations_config)
+    if include_localizations and config.localizations.exists:
+        localizations = dict(config.localizations.data)
     return channel, localizations
 
 
@@ -57,7 +58,7 @@ def _print_diff(lines: list[str], direction: str) -> None:
 
 
 def _cmd_diff(args: argparse.Namespace) -> int:
-    config = ChannelConfig.load()
+    config = load_config()
     local_channel, local_loc = _load_local(config, include_localizations=not args.no_localizations)
 
     youtube = get_youtube()
@@ -72,7 +73,7 @@ def _cmd_diff(args: argparse.Namespace) -> int:
 
 
 def _cmd_push(args: argparse.Namespace) -> int:
-    config = ChannelConfig.load()
+    config = load_config()
     local_channel, local_loc = _load_local(config, include_localizations=not args.no_localizations)
 
     youtube = get_youtube()
@@ -110,7 +111,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
 
 
 def _cmd_pull(args: argparse.Namespace) -> int:
-    config = ChannelConfig.load()
+    config = load_config()
     local_channel, local_loc = _load_local(config, include_localizations=not args.no_localizations)
 
     youtube = get_youtube()
@@ -129,8 +130,8 @@ def _cmd_pull(args: argparse.Namespace) -> int:
         print("✋ dry-run. re-run with --apply to overwrite local files.")
         return 0
 
-    channel_dir = ChannelConfig.channel_dir()
-    config_path = channel_dir / "config" / "channel_config.json"
+    channel_dir = _channel_dir()
+    config_path = channel_dir / "config" / "channel" / "meta.json"
     _write_youtube_channel(config_path, remote_channel)
     print(f"📝 wrote youtube_channel section → {config_path}")
 

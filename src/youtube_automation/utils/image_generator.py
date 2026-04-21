@@ -18,11 +18,12 @@ VALID_IMAGE_SIZES = ("1K", "2K", "4K")
 RETRY_MAX = 3
 RETRY_BACKOFF = [10, 30, 60]
 
+
 def _channel_dir() -> Path:
     """チャンネルディレクトリを ChannelConfig 経由で解決する。"""
-    from youtube_automation.utils.channel_config import ChannelConfig
+    from youtube_automation.utils.config import channel_dir
 
-    return ChannelConfig.channel_dir()
+    return channel_dir()
 
 
 def _image_cost_log() -> Path:
@@ -142,15 +143,17 @@ def log_image_cost(
         except ValueError:
             relative_output = str(output_file)
 
-        entries.append({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "model": model,
-            "image_size": image_size,
-            "aspect_ratio": aspect_ratio,
-            "reference_count": reference_count,
-            "estimated_cost_usd": round(cost_usd, 6),
-            "output_file": relative_output,
-        })
+        entries.append(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "model": model,
+                "image_size": image_size,
+                "aspect_ratio": aspect_ratio,
+                "reference_count": reference_count,
+                "estimated_cost_usd": round(cost_usd, 6),
+                "output_file": relative_output,
+            }
+        )
         log_path.write_text(
             json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
@@ -207,7 +210,10 @@ def print_cost_summary() -> None:
 
 
 def generate_image(
-    client, prompt: str, model: str, output_path: Path,
+    client,
+    prompt: str,
+    model: str,
+    output_path: Path,
     reference_image: "Path | list[Path] | None" = None,
     aspect_ratio: str = "16:9",
     image_size: str = DEFAULT_IMAGE_SIZE,

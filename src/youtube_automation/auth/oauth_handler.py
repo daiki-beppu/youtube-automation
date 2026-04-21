@@ -25,9 +25,9 @@ class YouTubeOAuthHandler:
 
     # YouTube Full Access + Analytics スコープ
     SCOPES = [
-        'https://www.googleapis.com/auth/youtube',
-        'https://www.googleapis.com/auth/youtube.force-ssl',
-        'https://www.googleapis.com/auth/yt-analytics.readonly',
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
     ]
 
     def __init__(self, auth_dir=None):
@@ -37,21 +37,22 @@ class YouTubeOAuthHandler:
         Args:
             auth_dir (str): token.json を格納するチャンネル固有 auth ディレクトリのパス
         """
-        from youtube_automation.utils.channel_config import ChannelConfig
-        channel_dir = ChannelConfig.channel_dir()
+        from youtube_automation.utils.config import channel_dir as _channel_dir
+
+        channel_dir = _channel_dir()
 
         # client_secrets.json の検索順:
         #   1. CLIENT_SECRETS_DIR 環境変数 (明示的オーバーライド)
         #   2. <channel_dir>/auth/client_secrets.json (pip install 時の既定配置)
         #   3. <channel_dir>/automation/auth/client_secrets.json (submodule 互換)
         #   4. 1Password (op read) から動的取得
-        client_secrets_dir = os.environ.get('CLIENT_SECRETS_DIR')
+        client_secrets_dir = os.environ.get("CLIENT_SECRETS_DIR")
         if client_secrets_dir:
-            self.client_secrets_file = Path(client_secrets_dir) / 'client_secrets.json'
+            self.client_secrets_file = Path(client_secrets_dir) / "client_secrets.json"
         else:
             candidates = [
-                channel_dir / 'auth' / 'client_secrets.json',
-                channel_dir / 'automation' / 'auth' / 'client_secrets.json',
+                channel_dir / "auth" / "client_secrets.json",
+                channel_dir / "automation" / "auth" / "client_secrets.json",
             ]
             found = next((c for c in candidates if c.exists()), None)
             if found:
@@ -60,6 +61,7 @@ class YouTubeOAuthHandler:
                 # ファイルが見つからない場合、1Password から取得を試みる
                 try:
                     from youtube_automation.utils.secrets import get_client_secrets_path
+
                     self.client_secrets_file = get_client_secrets_path()
                 except Exception:
                     # op read も失敗した場合はデフォルトパスを設定
@@ -68,11 +70,11 @@ class YouTubeOAuthHandler:
 
         # token.json: チャンネル固有
         if auth_dir is None:
-            auth_dir = channel_dir / 'auth'
+            auth_dir = channel_dir / "auth"
         else:
             auth_dir = Path(auth_dir)
         self.auth_dir = auth_dir
-        self.token_file = self.auth_dir / 'token.json'
+        self.token_file = self.auth_dir / "token.json"
         self.credentials = None
 
     def _validate_client_secrets(self):
@@ -108,9 +110,7 @@ class YouTubeOAuthHandler:
         if not force_reauth and self.token_file.exists():
             try:
                 print("📁 既存トークンファイルを確認中...")
-                self.credentials = Credentials.from_authorized_user_file(
-                    str(self.token_file), self.SCOPES
-                )
+                self.credentials = Credentials.from_authorized_user_file(str(self.token_file), self.SCOPES)
                 print("✅ 既存トークン読み込み成功")
             except Exception as e:
                 print(f"⚠️  既存トークン読み込み失敗: {e}")
@@ -135,9 +135,7 @@ class YouTubeOAuthHandler:
             print("📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です")
 
             try:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    str(self.client_secrets_file), self.SCOPES
-                )
+                flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self.SCOPES)
                 self.credentials = flow.run_local_server(port=0)
                 print("✅ OAuth 2.0 認証成功")
                 self._save_credentials()
@@ -150,7 +148,7 @@ class YouTubeOAuthHandler:
     def _save_credentials(self):
         """認証情報をファイルに保存"""
         try:
-            with open(self.token_file, 'w') as token:
+            with open(self.token_file, "w") as token:
                 token.write(self.credentials.to_json())
             print(f"💾 認証トークン保存完了: {self.token_file}")
         except Exception as e:
@@ -167,7 +165,7 @@ class YouTubeOAuthHandler:
             self.authenticate()
 
         try:
-            service = build('youtube', 'v3', credentials=self.credentials)
+            service = build("youtube", "v3", credentials=self.credentials)
             print("✅ YouTube Data API サービス接続成功")
             return service
         except Exception as e:
@@ -184,15 +182,12 @@ class YouTubeOAuthHandler:
         try:
             service = self.get_youtube_service()
             # チャンネル情報取得でテスト
-            response = service.channels().list(
-                part='snippet,statistics',
-                mine=True
-            ).execute()
+            response = service.channels().list(part="snippet,statistics", mine=True).execute()
 
-            if response['items']:
-                channel = response['items'][0]
-                channel_title = channel['snippet']['title']
-                subscriber_count = channel['statistics'].get('subscriberCount', 'N/A')
+            if response["items"]:
+                channel = response["items"][0]
+                channel_title = channel["snippet"]["title"]
+                subscriber_count = channel["statistics"].get("subscriberCount", "N/A")
                 print("✅ API接続テスト成功")
                 print(f"📺 チャンネル名: {channel_title}")
                 print(f"👥 登録者数: {subscriber_count}")
@@ -204,6 +199,7 @@ class YouTubeOAuthHandler:
         except Exception as e:
             print(f"❌ API接続テスト失敗: {e}")
             return False
+
 
 def main():
     """メイン関数 - スタンドアロン実行用"""
@@ -226,6 +222,7 @@ def main():
     except Exception as e:
         print(f"\n❌ エラー: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

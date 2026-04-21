@@ -13,7 +13,8 @@ import logging
 import sys
 from pathlib import Path
 
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import channel_dir as _channel_dir
+from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.launch_curve_data import (
     build_launch_curve_frame,
@@ -30,9 +31,7 @@ logger = logging.getLogger(__name__)
 def _load_video_meta(channel_dir: Path) -> dict:
     candidates = sorted((channel_dir / "data").glob("analytics_data_*.json"))
     if not candidates:
-        raise ConfigError(
-            "analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。"
-        )
+        raise ConfigError("analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。")
     with open(candidates[-1], encoding="utf-8") as f:
         data = json.load(f)
     meta = {}
@@ -54,10 +53,7 @@ def _print_text_summary(analysis: dict) -> None:
         key=lambda x: x.get(f"day{analysis['peak_days'][0]}_mean") or 0,
         reverse=True,
     ):
-        peaks_str = ", ".join(
-            f"day{d}={t.get(f'day{d}_mean') or 'n/a'}"
-            for d in analysis["peak_days"]
-        )
+        peaks_str = ", ".join(f"day{d}={t.get(f'day{d}_mean') or 'n/a'}" for d in analysis["peak_days"])
         print(f"   {t['theme']:<15} (n={t['video_count']}): {peaks_str}")
 
 
@@ -66,7 +62,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="テーマ別 launch curve 比較")
     parser.add_argument(
-        "--peak-days", default="3,7,30",
+        "--peak-days",
+        default="3,7,30",
         help="比較する日齢 (カンマ区切り, default: 3,7,30)",
     )
     parser.add_argument("--text", action="store_true", help="人間向けテキスト出力")
@@ -75,24 +72,20 @@ def main() -> int:
     peak_days = tuple(int(d) for d in args.peak_days.split(","))
 
     try:
-        channel_dir = ChannelConfig.channel_dir()
-        config = ChannelConfig.load()
+        channel_dir = _channel_dir()
+        config = load_config()
 
         daily = load_latest_daily_snapshot(channel_dir / "data")
         if daily is None:
-            raise ConfigError(
-                "日次データが見つかりません。先に `yt-analytics` を実行してください。"
-            )
+            raise ConfigError("日次データが見つかりません。先に `yt-analytics` を実行してください。")
         meta = _load_video_meta(channel_dir)
         df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
         if df.empty:
             raise ConfigError("launch curve 用データが空です")
 
-        theme_keywords = config.theme_tags or {}
+        theme_keywords = config.content.tags.themes or {}
         if not theme_keywords:
-            raise ConfigError(
-                "channel_config.tags.themes が未設定です。テーマ比較を行うには設定してください。"
-            )
+            raise ConfigError("channel_config.tags.themes が未設定です。テーマ比較を行うには設定してください。")
 
         theme_video_map = classify_videos_by_theme(meta, theme_keywords)
         analysis = analyze_theme_performance(df, theme_video_map, peak_days=peak_days)

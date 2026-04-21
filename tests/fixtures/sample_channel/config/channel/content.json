@@ -1,0 +1,41 @@
+{
+  "genre": {
+    "primary": "chiptune",
+    "style": "8-bit",
+    "context": "RPG"
+  },
+  "tags": {
+    "base": ["chiptune music", "8-bit music", "RPG music", "game music"],
+    "themes": {
+      "adventure": ["adventure music", "journey music"],
+      "battle": ["battle music", "boss battle", "epic music"],
+      "village": ["village music", "town music", "peaceful music"],
+      "dungeon": ["dungeon music", "mysterious music"],
+      "ocean": ["ocean music", "sea music"],
+      "forest": ["forest music", "nature music"],
+      "treasure": ["treasure music", "discovery music"]
+    }
+  },
+  "descriptions": {
+    "opening": "{style} {primary} music inspired by classic {context} adventures.",
+    "sub_opening": "Perfect for gaming, studying, or relaxing to nostalgic melodies.",
+    "perfect_for": [
+      "RPG Game Development",
+      "Study & Focus Sessions",
+      "Nostalgic Background Music"
+    ],
+    "hashtags": ["#ChiptuneMusic", "#8bitMusic", "#RPGMusic"]
+  },
+  "title": {
+    "template": "{style} {theme} RPG Music - {activity} BGM [{duration_display}]",
+    "default_activity": "Study",
+    "theme_activities": {
+      "battle": "Gaming",
+      "forest": "Relaxation",
+      "ocean": "Chill",
+      "dungeon": "Focus",
+      "village": "Study",
+      "adventure": "Gaming"
+    }
+  }
+}

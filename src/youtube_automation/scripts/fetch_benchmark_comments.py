@@ -23,7 +23,7 @@ from youtube_automation.scripts.benchmark_collector import (  # noqa: E402
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class BenchmarkCommentCollector:
     """ベンチマーク動画のコメント収集"""
 
     def __init__(self, min_views: int = DEFAULT_MIN_VIEWS, max_comments: int = DEFAULT_MAX_COMMENTS):
-        self.channel_dir = ChannelConfig.channel_dir()
+        self.channel_dir = _channel_dir()
         self.data_dir = self.channel_dir / "data"
         self.min_views = min_views
         self.max_comments = max_comments
@@ -46,12 +46,16 @@ class BenchmarkCommentCollector:
     def _fetch_comments(self, video_id: str) -> list[dict]:
         """1動画のコメントを取得"""
         try:
-            response = self.youtube.commentThreads().list(
-                videoId=video_id,
-                part="snippet",
-                order="relevance",
-                maxResults=self.max_comments,
-            ).execute()
+            response = (
+                self.youtube.commentThreads()
+                .list(
+                    videoId=video_id,
+                    part="snippet",
+                    order="relevance",
+                    maxResults=self.max_comments,
+                )
+                .execute()
+            )
         except Exception as e:
             logger.warning("コメント取得失敗 %s: %s", video_id, e)
             return []
@@ -59,13 +63,15 @@ class BenchmarkCommentCollector:
         comments = []
         for item in response.get("items", []):
             snippet = item["snippet"]["topLevelComment"]["snippet"]
-            comments.append({
-                "author": snippet["authorDisplayName"],
-                "text": snippet["textOriginal"],
-                "likes": snippet["likeCount"],
-                "published_at": snippet["publishedAt"],
-                "comment_id": item["snippet"]["topLevelComment"]["id"],
-            })
+            comments.append(
+                {
+                    "author": snippet["authorDisplayName"],
+                    "text": snippet["textOriginal"],
+                    "likes": snippet["likeCount"],
+                    "published_at": snippet["publishedAt"],
+                    "comment_id": item["snippet"]["topLevelComment"]["id"],
+                }
+            )
 
         return comments
 
@@ -106,7 +112,11 @@ class BenchmarkCommentCollector:
             vid = target["video_id"]
             logger.info(
                 "[%d/%d] %s (%s views) — %s",
-                i, len(targets), target["title"][:50], f"{target['views']:,}", target["channel_name"],
+                i,
+                len(targets),
+                target["title"][:50],
+                f"{target['views']:,}",
+                target["channel_name"],
             )
 
             comments = self._fetch_comments(vid)
@@ -117,7 +127,9 @@ class BenchmarkCommentCollector:
             ch_slug = target["channel_slug"]
             if ch_slug not in result["summary"]["by_channel"]:
                 result["summary"]["by_channel"][ch_slug] = {
-                    "name": target["channel_name"], "video_count": 0, "comment_count": 0,
+                    "name": target["channel_name"],
+                    "video_count": 0,
+                    "comment_count": 0,
                 }
             result["summary"]["by_channel"][ch_slug]["video_count"] += 1
             result["summary"]["by_channel"][ch_slug]["comment_count"] += len(comments)
@@ -131,7 +143,9 @@ class BenchmarkCommentCollector:
 
         logger.info(
             "保存完了: %s（%d動画, %d件コメント）",
-            output_path.name, result["summary"]["total_videos"], result["summary"]["total_comments"],
+            output_path.name,
+            result["summary"]["total_videos"],
+            result["summary"]["total_comments"],
         )
         return result
 
@@ -154,11 +168,15 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="ベンチマーク動画のコメント収集")
     parser.add_argument(
-        "--min-views", type=int, default=DEFAULT_MIN_VIEWS,
+        "--min-views",
+        type=int,
+        default=DEFAULT_MIN_VIEWS,
         help=f"最低再生数（default: {DEFAULT_MIN_VIEWS:,}）",
     )
     parser.add_argument(
-        "--max-comments", type=int, default=DEFAULT_MAX_COMMENTS,
+        "--max-comments",
+        type=int,
+        default=DEFAULT_MAX_COMMENTS,
         help=f"動画あたりの最大取得数（default: {DEFAULT_MAX_COMMENTS}）",
     )
     parser.add_argument("--force", action="store_true", help="既存データがあっても再取得")

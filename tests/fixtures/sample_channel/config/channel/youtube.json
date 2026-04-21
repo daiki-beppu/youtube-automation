@@ -1,0 +1,11 @@
+{
+  "youtube": {
+    "category_id": "10",
+    "privacy_status": "public",
+    "language": "ja"
+  },
+  "content_model": {
+    "type": "collection",
+    "languages": ["ja"]
+  }
+}

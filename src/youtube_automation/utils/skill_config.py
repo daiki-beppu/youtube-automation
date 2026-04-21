@@ -24,7 +24,7 @@ from typing import Any
 
 import yaml
 
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}
@@ -45,13 +45,7 @@ def _default_path(skill: str) -> Path:
     except (ModuleNotFoundError, FileNotFoundError):
         pass
 
-    src_fallback = (
-        Path(__file__).resolve().parents[3]
-        / ".claude"
-        / "skills"
-        / skill
-        / "config.default.yaml"
-    )
+    src_fallback = Path(__file__).resolve().parents[3] / ".claude" / "skills" / skill / "config.default.yaml"
     if src_fallback.exists():
         return src_fallback
 
@@ -63,7 +57,7 @@ def _default_path(skill: str) -> Path:
 
 def _channel_override_path(skill: str) -> Path:
     """チャンネルリポジトリ側の上書き config パスを返す (存在チェックは呼び出し側)。"""
-    return ChannelConfig.channel_dir() / "config" / "skills" / f"{skill}.yaml"
+    return channel_dir() / "config" / "skills" / f"{skill}.yaml"
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

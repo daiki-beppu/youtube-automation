@@ -10,7 +10,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from youtube_automation.scripts import channel_settings_cli
-from youtube_automation.utils.channel_config import ChannelConfig
 from youtube_automation.utils.channel_settings import (
     build_update_body,
     diff_settings,
@@ -18,14 +17,6 @@ from youtube_automation.utils.channel_settings import (
     parse_api_response,
 )
 from youtube_automation.utils.exceptions import YouTubeAPIError
-
-
-@pytest.fixture(autouse=True)
-def reset_singleton():
-    ChannelConfig.reset()
-    yield
-    ChannelConfig.reset()
-
 
 # ---------------------------------------------------------------------------
 # build_update_body
@@ -288,7 +279,7 @@ class TestCLIPull:
         _prepare_channel_dir(tmp_path, monkeypatch)
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="pulled desc")]}
-        config_path = tmp_path / "config" / "channel_config.json"
+        config_path = tmp_path / "config" / "channel" / "meta.json"
         before = config_path.read_text(encoding="utf-8")
         with patch(
             "youtube_automation.scripts.channel_settings_cli.get_youtube",
@@ -304,7 +295,7 @@ class TestCLIPull:
         _prepare_channel_dir(tmp_path, monkeypatch)
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="pulled desc")]}
-        config_path = tmp_path / "config" / "channel_config.json"
+        config_path = tmp_path / "config" / "channel" / "meta.json"
         before_data = json.loads(config_path.read_text(encoding="utf-8"))
         with patch(
             "youtube_automation.scripts.channel_settings_cli.get_youtube",
@@ -324,11 +315,17 @@ class TestCLIPull:
 
 
 def _prepare_channel_dir(tmp_path: Path, monkeypatch) -> None:
-    """テスト用 channel_config.json を tmp_path にコピーし CHANNEL_DIR を向ける。"""
+    """テスト用 channel/*.json を tmp_path にコピーし CHANNEL_DIR を向ける。"""
     fixture_root = Path(__file__).parent / "fixtures" / "sample_channel"
-    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "config" / "channel_config.json").write_text(
-        (fixture_root / "config" / "channel_config.json").read_text(encoding="utf-8"),
+    src_channel = fixture_root / "config" / "channel"
+    dst_channel = tmp_path / "config" / "channel"
+    dst_channel.mkdir(parents=True, exist_ok=True)
+    for src in src_channel.glob("*.json"):
+        (dst_channel / src.name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    # localizations.json も実体化してコピー
+    loc_src = (fixture_root / "config" / "localizations.json").resolve()
+    (tmp_path / "config" / "localizations.json").write_text(
+        loc_src.read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))

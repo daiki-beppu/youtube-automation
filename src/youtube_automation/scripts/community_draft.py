@@ -12,7 +12,7 @@ import json
 import logging
 from pathlib import Path
 
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import load_config  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class CommunityDraftGenerator:
     """コミュニティ投稿ドラフト生成クラス"""
 
     def __init__(self):
-        self.config = ChannelConfig.load()
+        self.config = load_config()
 
     def generate_community_draft(self, collection_path: str) -> str:
         """コミュニティ投稿のドラフトテキストを生成
@@ -52,8 +52,8 @@ class CommunityDraftGenerator:
             video_url = cc.get("video_url", "")
 
         # ドラフト生成
-        tagline = self.config.raw.get("channel", {}).get("tagline", "")
-        hashtags = " ".join(self.config.raw.get("descriptions", {}).get("hashtags", []))
+        tagline = self.config.meta.tagline
+        hashtags = " ".join(list(self.config.content.descriptions.hashtags))
 
         draft = f"""🎵 New Release: {collection_name}
 

@@ -17,7 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-from .channel_config import ChannelConfig
+from youtube_automation.utils.config import load_config
+
 from .skill_config import load_skill_config
 from .time_utils import format_duration_display, format_duration_short, format_timestamp
 
@@ -34,14 +35,12 @@ class BAHMetadataGenerator:
         Args:
             collection_path (str): コレクションディレクトリのパス
         """
-        self.config = ChannelConfig.load()
+        self.config = load_config()
         self._masterup_config = load_skill_config("masterup")
-        self._crossfade_sec = float(
-            self._masterup_config.get("audio", {}).get("crossfade_duration", 1.0)
-        )
+        self._crossfade_sec = float(self._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
         self.collection_path = Path(collection_path)
         self.collection_name = self._extract_collection_name()
-        self.bit_depth = self.config.genre_style
+        self.bit_depth = self.config.content.genre.style
         self.tracks = []
 
     def _extract_collection_name(self) -> str:
@@ -50,15 +49,15 @@ class BAHMetadataGenerator:
 
         # 日付・ステータス・プレフィックスを除去
         # 例: "20250907-live-16bit-village-town-ver2" → "Village Town ver.2"
-        pattern = r'^\d{8}-\w+-(?:\d+bit-)?(.+)$'
+        pattern = r"^\d{8}-\w+-(?:\d+bit-)?(.+)$"
         match = re.match(pattern, dir_name)
 
         if match:
             name_part = match.group(1)
             # ハイフンをスペースに、大文字化
-            clean_name = name_part.replace('-', ' ').title()
+            clean_name = name_part.replace("-", " ").title()
             # "Ver" を "ver." に修正
-            clean_name = re.sub(r'\bVer(\d)', r'ver.\1', clean_name)
+            clean_name = re.sub(r"\bVer(\d)", r"ver.\1", clean_name)
             return clean_name
 
         return dir_name
@@ -70,7 +69,7 @@ class BAHMetadataGenerator:
         Returns:
             List[Dict]: 楽曲情報リスト
         """
-        audio_dir = self.collection_path / '02-Individual-music'
+        audio_dir = self.collection_path / "02-Individual-music"
 
         if not audio_dir.exists():
             logger.warning(f"音声ディレクトリが見つかりません（Lyria コレクション?）: {audio_dir}")
@@ -81,9 +80,8 @@ class BAHMetadataGenerator:
         crossfade = self._crossfade_sec
 
         # 音声ファイルを取得（WAV / MP3 / M4A / AAC に対応、数字順にソート）
-        AUDIO_EXTS = {'.wav', '.mp3', '.m4a', '.aac'}
-        wav_files = sorted([f for f in audio_dir.iterdir()
-                           if f.suffix.lower() in AUDIO_EXTS])
+        AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".aac"}
+        wav_files = sorted([f for f in audio_dir.iterdir() if f.suffix.lower() in AUDIO_EXTS])
 
         for wav_file in wav_files:
             try:
@@ -98,14 +96,16 @@ class BAHMetadataGenerator:
                     start_time = current_time
                     end_time = current_time + duration
 
-                    tracks.append({
-                        'filename': wav_file.name,
-                        'title': title,
-                        'duration': duration,
-                        'start_time': start_time,
-                        'end_time': end_time,
-                        'timestamp': self._format_timestamp(start_time)
-                    })
+                    tracks.append(
+                        {
+                            "filename": wav_file.name,
+                            "title": title,
+                            "duration": duration,
+                            "start_time": start_time,
+                            "end_time": end_time,
+                            "timestamp": self._format_timestamp(start_time),
+                        }
+                    )
 
                     current_time = int(end_time - crossfade)
 
@@ -129,7 +129,7 @@ class BAHMetadataGenerator:
         """
         try:
             result = subprocess.run(
-                ['afinfo', str(wav_file)],
+                ["afinfo", str(wav_file)],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -137,9 +137,9 @@ class BAHMetadataGenerator:
             )
 
             # "estimated duration: XXX.XXX seconds" を抽出
-            for line in result.stdout.split('\n'):
-                if 'estimated duration' in line:
-                    duration_str = line.split(':')[1].strip().split()[0]
+            for line in result.stdout.split("\n"):
+                if "estimated duration" in line:
+                    duration_str = line.split(":")[1].strip().split()[0]
                     return int(float(duration_str))
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError) as e:
@@ -160,30 +160,30 @@ class BAHMetadataGenerator:
         title = filename
 
         # プレフィックス削除 ("8bit ")
-        title = re.sub(r'^8bit\s+', '', title, flags=re.IGNORECASE)
+        title = re.sub(r"^8bit\s+", "", title, flags=re.IGNORECASE)
 
         # 番号プレフィックス削除 ("01-", "02-" 等)
-        title = re.sub(r'^\d{2}-', '', title)
+        title = re.sub(r"^\d{2}-", "", title)
 
         # パターンプレフィックス削除 ("pattern-a1-", "pattern-b-", "pattern-c2-" 等)
-        title = re.sub(r'^pattern-[a-z]\d?-', '', title, flags=re.IGNORECASE)
+        title = re.sub(r"^pattern-[a-z]\d?-", "", title, flags=re.IGNORECASE)
 
         # サフィックス削除 ("(Remix)", "(Extended)" 等)
-        title = re.sub(r'\s*\([^)]+\)\s*$', '', title)
+        title = re.sub(r"\s*\([^)]+\)\s*$", "", title)
 
         # アンダースコア・ハイフンをスペースに
-        title = title.replace('_', ' ').replace('-', ' ')
+        title = title.replace("_", " ").replace("-", " ")
 
         # 余分なスペース削除
-        title = ' '.join(title.split())
+        title = " ".join(title.split())
 
         # タイトルケース変換（冠詞・前置詞は小文字維持、先頭語は常に大文字）
-        SMALL_WORDS = {'a', 'an', 'the', 'at', 'by', 'in', 'of', 'on', 'to', 'and', 'but', 'or', 'for', 'nor'}
+        SMALL_WORDS = {"a", "an", "the", "at", "by", "in", "of", "on", "to", "and", "but", "or", "for", "nor"}
         words = title.title().split()
         for i, word in enumerate(words):
             if i > 0 and word.lower() in SMALL_WORDS:
                 words[i] = word.lower()
-        title = ' '.join(words)
+        title = " ".join(words)
 
         return title
 
@@ -202,13 +202,13 @@ class BAHMetadataGenerator:
         3. いずれもない場合 → 空リスト
         """
         # 1. 個別トラックがある場合
-        audio_dir = self.collection_path / '02-Individual-music'
+        audio_dir = self.collection_path / "02-Individual-music"
         if audio_dir.exists() and any(audio_dir.iterdir()):
             tracks = self.analyze_audio_files()
-            return [{'timestamp': t['timestamp'], 'title': t['title']} for t in tracks]
+            return [{"timestamp": t["timestamp"], "title": t["title"]} for t in tracks]
 
         # 2. composition.json がある場合（Lyria DJ 生成）
-        comp_path = self.collection_path / '20-documentation' / 'composition.json'
+        comp_path = self.collection_path / "20-documentation" / "composition.json"
         if comp_path.exists():
             return self._timestamps_from_composition(comp_path)
 
@@ -216,18 +216,20 @@ class BAHMetadataGenerator:
 
     def _timestamps_from_composition(self, comp_path: Path) -> list[dict]:
         """composition.json の phases からタイムスタンプを生成"""
-        with open(comp_path, 'r', encoding='utf-8') as f:
+        with open(comp_path, "r", encoding="utf-8") as f:
             composition = json.load(f)
 
         timestamps = []
-        for phase in composition.get('phases', []):
-            at_min = phase.get('at_min', 0)
+        for phase in composition.get("phases", []):
+            at_min = phase.get("at_min", 0)
             at_sec = at_min * 60
-            name = phase.get('name_en', phase.get('name', ''))
-            timestamps.append({
-                'timestamp': self._format_timestamp(at_sec),
-                'title': name,
-            })
+            name = phase.get("name_en", phase.get("name", ""))
+            timestamps.append(
+                {
+                    "timestamp": self._format_timestamp(at_sec),
+                    "title": name,
+                }
+            )
 
         logger.info(f"composition.json から {len(timestamps)} チャプター生成")
         return timestamps
@@ -236,9 +238,9 @@ class BAHMetadataGenerator:
         """タイムスタンプをYouTube概要欄用テキストに整形"""
         timestamps = self.generate_timestamps()
         if not timestamps:
-            return ''
+            return ""
         lines = [f"{ts['timestamp']} {ts['title']}" for ts in timestamps]
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     # ─── タイトル生成（2026リブランド） ─────────────────
 
@@ -247,20 +249,20 @@ class BAHMetadataGenerator:
 
         優先順位: workflow-state.json の collection_name → _extract_collection_name() から "Collection" 除去
         """
-        workflow_state_path = self.collection_path / 'workflow-state.json'
+        workflow_state_path = self.collection_path / "workflow-state.json"
         if workflow_state_path.exists():
             try:
-                with open(workflow_state_path, 'r', encoding='utf-8') as f:
+                with open(workflow_state_path, "r", encoding="utf-8") as f:
                     state = json.load(f)
-                if state.get('collection_name'):
-                    name = state['collection_name']
-                    name = re.sub(r'\s+Collection$', '', name, flags=re.IGNORECASE)
+                if state.get("collection_name"):
+                    name = state["collection_name"]
+                    name = re.sub(r"\s+Collection$", "", name, flags=re.IGNORECASE)
                     return name
             except (json.JSONDecodeError, KeyError):
                 pass
 
         name = self.collection_name
-        name = re.sub(r'\s+Collection$', '', name, flags=re.IGNORECASE)
+        name = re.sub(r"\s+Collection$", "", name, flags=re.IGNORECASE)
         return name
 
     def _get_activity(self) -> str:
@@ -268,18 +270,18 @@ class BAHMetadataGenerator:
 
         優先順位: workflow-state.json の title_activity → config のテーママッチング → デフォルト
         """
-        workflow_state_path = self.collection_path / 'workflow-state.json'
+        workflow_state_path = self.collection_path / "workflow-state.json"
         if workflow_state_path.exists():
             try:
-                with open(workflow_state_path, 'r', encoding='utf-8') as f:
+                with open(workflow_state_path, "r", encoding="utf-8") as f:
                     state = json.load(f)
-                if state.get('title_activity'):
-                    return state['title_activity']
+                if state.get("title_activity"):
+                    return state["title_activity"]
             except (json.JSONDecodeError, KeyError):
                 pass
 
         theme = self._extract_theme_name()
-        return self.config.get_activity_for_theme(theme)
+        return self.config.content.title.activity_for_theme(theme)
 
     def _generate_title(self, total_seconds: int) -> str:
         """channel_config のテンプレートでタイトルを生成（100文字制限）"""
@@ -289,19 +291,19 @@ class BAHMetadataGenerator:
         duration_short = format_duration_short(total_seconds)
 
         # jazzgak. TTP 形式: theme_scenes から scene_phrase と activities を取得
-        theme_scenes = self.config.raw.get('title', {}).get('theme_scenes', {})
+        theme_scenes = self.config.content.title.theme_scenes
         scene_phrase = ""
         activities = activity
         if theme_scenes:
             theme_lower = theme.lower()
             for keyword, scene_data in theme_scenes.items():
                 if keyword in theme_lower:
-                    scene_phrase = scene_data.get('scene', '')
-                    activities = scene_data.get('activities', activity)
+                    scene_phrase = scene_data.get("scene", "")
+                    activities = scene_data.get("activities", activity)
                     break
 
-        title = self.config.title_template.format(
-            style=self.config.genre_style.title(),
+        title = self.config.content.title.template.format(
+            style=self.config.content.genre.style.title(),
             theme=theme,
             activity=activity,
             activities=activities,
@@ -325,18 +327,19 @@ class BAHMetadataGenerator:
 
     def _load_scene_phrases(self) -> Dict[str, str]:
         """workflow-state.json から scene_phrases を読み込み"""
-        ws_path = self.collection_path / 'workflow-state.json'
+        ws_path = self.collection_path / "workflow-state.json"
         if ws_path.exists():
             try:
-                with open(ws_path, 'r', encoding='utf-8') as f:
+                with open(ws_path, "r", encoding="utf-8") as f:
                     state = json.load(f)
-                return state.get('scene_phrases', {})
+                return state.get("scene_phrases", {})
             except (json.JSONDecodeError, KeyError):
                 pass
         return {}
 
-    def generate_localizations(self, english_title: str, timestamp_body: str,
-                               scene_phrases: Dict[str, str] = None) -> Dict:
+    def generate_localizations(
+        self, english_title: str, timestamp_body: str, scene_phrases: Dict[str, str] = None
+    ) -> Dict:
         """各言語のローカライズされたタイトル・説明文を生成（jazzgak. TTP ハイブリッド方式）
 
         Args:
@@ -348,29 +351,28 @@ class BAHMetadataGenerator:
             YouTube API 用 localizations 辞書
         """
         localizations = {}
-        loc_config = self.config.localizations_config
+        loc_config = self.config.localizations.data
         scene_phrases = scene_phrases or {}
 
         # 英語固定パーツ（channel_config.json の descriptions.metadata から取得）
-        desc_metadata = self.config.raw.get('descriptions', {}).get('metadata', {})
-        genre_line = desc_metadata.get('genre', 'Jazz')
-        vibe_line = desc_metadata.get('vibe', 'Rainy night, Cozy')
-        best_for_line = desc_metadata.get('best_for', 'Study, Focus, Late Night')
-        usage_lines = '\n'.join([
-            "• Original AI composition",
-            "• Free for personal & non-commercial use",
-            "• For commercial use, check the platform's AI content policy",
-            "• Redistribution prohibited",
-        ])
+        desc_metadata = self.config.content.descriptions.metadata
+        genre_line = desc_metadata.get("genre", "Jazz")
+        vibe_line = desc_metadata.get("vibe", "Rainy night, Cozy")
+        best_for_line = desc_metadata.get("best_for", "Study, Focus, Late Night")
+        usage_lines = "\n".join(
+            [
+                "• Original AI composition",
+                "• Free for personal & non-commercial use",
+                "• For commercial use, check the platform's AI content policy",
+                "• Redistribution prohibited",
+            ]
+        )
 
         # 多言語タイトルが EN ベタコピーになる事故を防ぐため、
         # supported_languages 全てに scene_phrases が存在することを事前検証する。
         # 過去事例: 11/14 本でこの fail-silent フォールバックが発生し、
         # 多言語タイトルが英語のままアップロードされた。
-        missing_langs = [
-            lang for lang in loc_config['supported_languages']
-            if not scene_phrases.get(lang)
-        ]
+        missing_langs = [lang for lang in loc_config["supported_languages"] if not scene_phrases.get(lang)]
         if missing_langs:
             raise ValueError(
                 "scene_phrases に翻訳が不足しています。"
@@ -380,21 +382,17 @@ class BAHMetadataGenerator:
                 "→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
             )
 
-        for lang in loc_config['supported_languages']:
-            lang_data = loc_config['languages'].get(lang, {})
-            desc_data = lang_data.get('description', {})
+        for lang in loc_config["supported_languages"]:
+            lang_data = loc_config["languages"].get(lang, {})
+            desc_data = lang_data.get("description", {})
 
             # --- タイトル ---
             scene = scene_phrases.get(lang)
-            title_tpl = lang_data.get('title_template')
+            title_tpl = lang_data.get("title_template")
             if not title_tpl:
-                raise ValueError(
-                    f"localizations.json: language '{lang}' に title_template が無い"
-                )
-            activities = lang_data.get('activities', best_for_line)
-            loc_title = title_tpl.format(
-                scene_phrase=scene, activities=activities
-            )
+                raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
+            activities = lang_data.get("activities", best_for_line)
+            loc_title = title_tpl.format(scene_phrase=scene, activities=activities)
             if len(loc_title) > 100:
                 raise ValueError(
                     f"localizations[{lang}].title が 100 codepoint を超過: "
@@ -403,37 +401,39 @@ class BAHMetadataGenerator:
                 )
 
             # --- 概要欄（ハイブリッド方式）---
-            opening_poem = desc_data.get('opening_poem', '')
-            cta = desc_data.get('cta_subscribe', self.config.cta_subscribe)
-            tagline = desc_data.get('tagline', self.config.tagline)
-            hashtags = desc_data.get('hashtags', self.config.hashtag_line)
+            opening_poem = desc_data.get("opening_poem", "")
+            cta = desc_data.get("cta_subscribe", self.config.meta.cta_subscribe)
+            tagline = desc_data.get("tagline", self.config.meta.tagline)
+            hashtags = desc_data.get("hashtags", self.config.content.descriptions.hashtag_line)
 
             desc_parts = []
             if opening_poem:
                 desc_parts.append(opening_poem)
                 desc_parts.append("")
-            desc_parts.extend([
-                f"- Genre : {genre_line}",
-                f"- Vibe : {vibe_line}",
-                f"- Best for : {best_for_line}",
-                "",
-                "⎯⎯⎯⎯ ✦ Track List ✦ ⎯⎯⎯⎯",
-                timestamp_body,
-                "",
-                "📝 Usage & Attribution:",
-                usage_lines,
-                "",
-                f"🔗 {self.config.channel_name}:",
-                cta,
-                tagline,
-                "",
-                hashtags,
-            ])
-            loc_desc = '\n'.join(desc_parts)[:5000]
+            desc_parts.extend(
+                [
+                    f"- Genre : {genre_line}",
+                    f"- Vibe : {vibe_line}",
+                    f"- Best for : {best_for_line}",
+                    "",
+                    "⎯⎯⎯⎯ ✦ Track List ✦ ⎯⎯⎯⎯",
+                    timestamp_body,
+                    "",
+                    "📝 Usage & Attribution:",
+                    usage_lines,
+                    "",
+                    f"🔗 {self.config.meta.channel_name}:",
+                    cta,
+                    tagline,
+                    "",
+                    hashtags,
+                ]
+            )
+            loc_desc = "\n".join(desc_parts)[:5000]
 
             localizations[lang] = {
-                'title': loc_title,
-                'description': loc_desc,
+                "title": loc_title,
+                "description": loc_desc,
             }
 
         return localizations
@@ -449,7 +449,7 @@ class BAHMetadataGenerator:
             self.analyze_audio_files()
 
         crossfade = self._crossfade_sec
-        total_duration = sum(track['duration'] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
+        total_duration = sum(track["duration"] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
 
         # タイトル生成（2026リブランド）
         title = self._generate_title(total_duration)
@@ -470,30 +470,32 @@ class BAHMetadataGenerator:
         timestamp_lines = []
         for i, track in enumerate(self.tracks, 1):
             timestamp_lines.append(f"{track['timestamp']} {i:02d}. {track['title']}")
-        timestamp_body = '\n'.join(timestamp_lines)
+        timestamp_body = "\n".join(timestamp_lines)
 
         # config から説明文パーツを構築
-        perfect_for_lines = '\n'.join(f"• {item}" for item in self.config.perfect_for)
+        perfect_for_lines = "\n".join(f"• {item}" for item in list(self.config.content.descriptions.perfect_for))
 
-        description_parts.extend([
-            "",
-            self.config.description_opening,
-            self.config.description_sub_opening,
-            "",
-            "📝 Usage & Attribution:",
-            "• This music is original AI composition",
-            "• Free to use for personal & commercial projects",
-            "• Attribution appreciated but not required",
-            "• Redistribution as-is prohibited",
-            "",
-            f"🎮 Perfect for:\n{perfect_for_lines}",
-            "",
-            f"🔗 {self.config.channel_name}:",
-            self.config.cta_subscribe,
-            self.config.tagline,
-            "",
-            self.config.hashtag_line,
-        ])
+        description_parts.extend(
+            [
+                "",
+                self.config.content.descriptions.render_opening(),
+                self.config.content.descriptions.sub_opening,
+                "",
+                "📝 Usage & Attribution:",
+                "• This music is original AI composition",
+                "• Free to use for personal & commercial projects",
+                "• Attribution appreciated but not required",
+                "• Redistribution as-is prohibited",
+                "",
+                f"🎮 Perfect for:\n{perfect_for_lines}",
+                "",
+                f"🔗 {self.config.meta.channel_name}:",
+                self.config.meta.cta_subscribe,
+                self.config.meta.tagline,
+                "",
+                self.config.content.descriptions.hashtag_line,
+            ]
+        )
 
         # ローカライゼーション生成
         scene_phrases = self._load_scene_phrases()
@@ -501,18 +503,18 @@ class BAHMetadataGenerator:
         localizations = self.generate_localizations(title, timestamp_body, scene_phrases)
 
         return {
-            'title': title,
-            'description': '\n'.join(description_parts),
-            'tags': self._generate_tags(),
-            'category_id': self.config.category_id,
-            'privacy_status': self.config.privacy_status,
-            'language': self.config.language,
-            'localizations': localizations,
+            "title": title,
+            "description": "\n".join(description_parts),
+            "tags": self._generate_tags(),
+            "category_id": self.config.youtube.api.category_id,
+            "privacy_status": self.config.youtube.api.privacy_status,
+            "language": self.config.youtube.api.language,
+            "localizations": localizations,
         }
 
     def _generate_tags(self) -> List[str]:
         """YouTube タグ生成（channel_config.json 駆動）"""
-        return self.config.get_tags_for_collection(self.collection_name)
+        return self.config.content.tags.for_collection(self.collection_name)
 
     def generate_metadata_report(self) -> str:
         """
@@ -525,10 +527,10 @@ class BAHMetadataGenerator:
             self.analyze_audio_files()
 
         crossfade = self._crossfade_sec
-        total_duration = sum(track['duration'] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
+        total_duration = sum(track["duration"] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
 
         report_parts = [
-            f"📊 {self.config.channel_name} メタデータ生成レポート",
+            f"📊 {self.config.meta.channel_name} メタデータ生成レポート",
             "=" * 60,
             f"🎵 コレクション: {self.collection_name}",
             f"🎼 ビット深度: {self.bit_depth}",
@@ -541,10 +543,11 @@ class BAHMetadataGenerator:
         ]
 
         for i, track in enumerate(self.tracks, 1):
-            duration_formatted = self._format_timestamp(track['duration'])
+            duration_formatted = self._format_timestamp(track["duration"])
             report_parts.append(f"  {i:02d}. {track['timestamp']} {track['title']} ({duration_formatted})")
 
-        return '\n'.join(report_parts)
+        return "\n".join(report_parts)
+
 
 def main():
     """メイン関数 - スタンドアロン実行用"""
@@ -557,10 +560,10 @@ def main():
     collection_path = sys.argv[1]
 
     try:
-        config = ChannelConfig.load()
+        config = load_config()
         generator = BAHMetadataGenerator(collection_path)
 
-        print(f"🎵 {config.channel_name} - メタデータ生成テスト")
+        print(f"🎵 {config.meta.channel_name} - メタデータ生成テスト")
         print("=" * 60)
 
         # レポート生成
@@ -573,6 +576,7 @@ def main():
     except Exception as e:
         print(f"❌ エラー: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

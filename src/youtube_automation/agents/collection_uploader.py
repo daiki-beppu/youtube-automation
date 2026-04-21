@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader  # noqa: E402
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 
@@ -38,11 +38,10 @@ class CollectionUploader:
 
     def __init__(self, collections_root: str = None, config_path: str = None):
         if collections_root is None:
-            from youtube_automation.utils.channel_config import ChannelConfig
-            collections_root = ChannelConfig.channel_dir() / 'collections'
+            collections_root = channel_dir() / "collections"
 
         if config_path is None:
-            config_path = ChannelConfig.channel_dir() / 'config' / 'schedule_config.json'
+            config_path = channel_dir() / "config" / "schedule_config.json"
 
         self.collections_root = Path(collections_root)
         self.config_path = Path(config_path)
@@ -63,7 +62,7 @@ class CollectionUploader:
 
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
+                with open(self.config_path, "r", encoding="utf-8") as f:
                     loaded_config = json.load(f)
                 for key, val in loaded_config.items():
                     if isinstance(val, dict) and key in default_config:
@@ -86,8 +85,13 @@ class CollectionUploader:
 
     # 曜日名 → isoweekday() マッピング（月=1, 日=7）
     _WEEKDAY_MAP = {
-        'mon': 1, 'tue': 2, 'wed': 3, 'thu': 4,
-        'fri': 5, 'sat': 6, 'sun': 7,
+        "mon": 1,
+        "tue": 2,
+        "wed": 3,
+        "thu": 4,
+        "fri": 5,
+        "sat": 6,
+        "sun": 7,
     }
 
     def _calculate_publish_at(self) -> str | None:
@@ -103,17 +107,17 @@ class CollectionUploader:
         Returns:
             ISO 8601 形式の公開日時文字列。即時公開時は None。
         """
-        schedule_cfg = self.config.get('schedule', {})
-        if not schedule_cfg.get('auto_schedule_enabled', False):
+        schedule_cfg = self.config.get("schedule", {})
+        if not schedule_cfg.get("auto_schedule_enabled", False):
             return None
 
-        tz_name = schedule_cfg.get('timezone', 'Asia/Tokyo')
-        publish_time = schedule_cfg.get('publish_time', schedule_cfg.get('day1_time', '17:00'))
+        tz_name = schedule_cfg.get("timezone", "Asia/Tokyo")
+        publish_time = schedule_cfg.get("publish_time", schedule_cfg.get("day1_time", "17:00"))
         tz = ZoneInfo(tz_name)
-        hour, minute = map(int, publish_time.split(':'))
+        hour, minute = map(int, publish_time.split(":"))
 
         # cadence 曜日を isoweekday に変換（未設定なら全曜日許可）
-        cadence = schedule_cfg.get('cadence', [])
+        cadence = schedule_cfg.get("cadence", [])
         allowed_weekdays = {self._WEEKDAY_MAP[d.lower()] for d in cadence} if cadence else set(range(1, 8))
 
         now = datetime.now(tz)
@@ -146,32 +150,34 @@ class CollectionUploader:
         if not self.youtube_service:
             self.initialize_youtube_service()
 
-        tz_name = self.config.get('schedule', {}).get('timezone', 'Asia/Tokyo')
+        tz_name = self.config.get("schedule", {}).get("timezone", "Asia/Tokyo")
         tz = ZoneInfo(tz_name)
         dates = set()
 
         try:
             # 動画IDを取得（part='id' でクォータ節約）
-            response = self.youtube_service.search().list(
-                forMine=True, type='video', order='date', maxResults=50, part='id'
-            ).execute()
+            response = (
+                self.youtube_service.search()
+                .list(forMine=True, type="video", order="date", maxResults=50, part="id")
+                .execute()
+            )
 
-            video_ids = [item['id']['videoId'] for item in response.get('items', [])]
+            video_ids = [item["id"]["videoId"] for item in response.get("items", [])]
             if not video_ids:
                 return dates
 
             # status.publishAt（公開予約）と snippet.publishedAt（公開済み）を取得
-            videos_response = self.youtube_service.videos().list(
-                id=','.join(video_ids), part='status,snippet'
-            ).execute()
+            videos_response = (
+                self.youtube_service.videos().list(id=",".join(video_ids), part="status,snippet").execute()
+            )
 
-            for video in videos_response.get('items', []):
+            for video in videos_response.get("items", []):
                 # 公開予約日時を優先、なければ公開日時を使用
-                publish_at = video.get('status', {}).get('publishAt')
+                publish_at = video.get("status", {}).get("publishAt")
                 if publish_at:
-                    dt = datetime.fromisoformat(publish_at.replace('Z', '+00:00'))
+                    dt = datetime.fromisoformat(publish_at.replace("Z", "+00:00"))
                 else:
-                    dt = datetime.fromisoformat(video['snippet']['publishedAt'].replace('Z', '+00:00'))
+                    dt = datetime.fromisoformat(video["snippet"]["publishedAt"].replace("Z", "+00:00"))
                 dates.add(dt.astimezone(tz).date())
 
         except Exception as e:
@@ -181,13 +187,13 @@ class CollectionUploader:
 
     # ─── コレクション検索 ───────────────────────────
 
-    def find_collections(self, stages: tuple[str, ...] = ('planning', 'live')) -> list[Path]:
+    def find_collections(self, stages: tuple[str, ...] = ("planning", "live")) -> list[Path]:
         """コレクションを検索（指定ステージを探索）"""
         collections = []
         for stage in stages:
             stage_dir = self.collections_root / stage
             if stage_dir.exists():
-                collections.extend(d for d in stage_dir.iterdir() if d.is_dir() and not d.name.startswith('.'))
+                collections.extend(d for d in stage_dir.iterdir() if d.is_dir() and not d.name.startswith("."))
         collections.sort(key=lambda x: x.name)
         return collections
 
@@ -208,7 +214,7 @@ class CollectionUploader:
     # ─── Tracking ────────────────────────────────
 
     def _get_tracking_path(self, collection_path: Path) -> Path:
-        return collection_path / '20-documentation' / 'upload_tracking.json'
+        return collection_path / "20-documentation" / "upload_tracking.json"
 
     def _load_tracking(self, collection_path: Path) -> dict | None:
         """tracking ファイル読み込み"""
@@ -217,7 +223,7 @@ class CollectionUploader:
             return None
 
         try:
-            with open(tracking_file, 'r', encoding='utf-8') as f:
+            with open(tracking_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return None
@@ -227,7 +233,7 @@ class CollectionUploader:
         tracking_file = self._get_tracking_path(collection_path)
         tracking_file.parent.mkdir(exist_ok=True)
         try:
-            with open(tracking_file, 'w', encoding='utf-8') as f:
+            with open(tracking_file, "w", encoding="utf-8") as f:
                 json.dump(tracking, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"⚠️  追跡ファイル保存エラー: {e}")
@@ -261,25 +267,25 @@ class CollectionUploader:
             logger.info("📋 tracking 初期化完了")
 
         # 既に完了
-        if tracking.get('status') == 'completed':
-            cc = tracking.get('complete_collection', {})
+        if tracking.get("status") == "completed":
+            cc = tracking.get("complete_collection", {})
             logger.info("✅ このコレクションは既にアップロード完了済みです")
-            if cc.get('video_url'):
+            if cc.get("video_url"):
                 logger.info(f"📹 {cc['video_url']}")
-            if cc.get('upload_time'):
+            if cc.get("upload_time"):
                 logger.info(f"📅 アップロード日時: {cc['upload_time']}")
-            if cc.get('publish_at'):
+            if cc.get("publish_at"):
                 logger.info(f"📅 公開予約: {cc['publish_at']}")
             return {"action": "already_completed", "details": cc}
 
         # Complete Collection アップロード
-        cc = tracking.get('complete_collection', {})
-        if cc.get('status') != 'completed':
+        cc = tracking.get("complete_collection", {})
+        if cc.get("status") != "completed":
             publish_at = self._calculate_publish_at()
             return self._execute_complete_collection(collection_path, tracking, publish_at=publish_at)
 
         # 全完了
-        tracking['status'] = 'completed'
+        tracking["status"] = "completed"
         self._save_tracking(collection_path, tracking)
         logger.info("✅ 全ステップ完了")
         return {"action": "all_completed", "details": {}}
@@ -293,20 +299,20 @@ class CollectionUploader:
 
         try:
             result = self.uploader.upload_collection(str(collection_path), publish_at=publish_at)
-            complete_video = result.get('complete_video')
+            complete_video = result.get("complete_video")
 
-            if complete_video and 'video_id' in complete_video:
-                tracking['complete_collection'] = {
-                    'video_id': complete_video['video_id'],
-                    'video_url': complete_video['video_url'],
-                    'upload_time': datetime.now().isoformat(),
-                    'publish_at': publish_at,
-                    'status': 'completed',
+            if complete_video and "video_id" in complete_video:
+                tracking["complete_collection"] = {
+                    "video_id": complete_video["video_id"],
+                    "video_url": complete_video["video_url"],
+                    "upload_time": datetime.now().isoformat(),
+                    "publish_at": publish_at,
+                    "status": "completed",
                 }
-                tracking['status'] = 'completed'
+                tracking["status"] = "completed"
 
                 # live 移動
-                if self.config['collections_management'].get('auto_move_to_live', True):
+                if self.config["collections_management"].get("auto_move_to_live", True):
                     collection_path = self._move_collection_to_live(collection_path)
 
                 self._save_tracking(collection_path, tracking)
@@ -315,20 +321,20 @@ class CollectionUploader:
                 logger.info(f"📹 {complete_video['video_url']}")
 
                 # プレイリスト自動追加
-                self._assign_to_playlists(complete_video['video_id'], collection_path)
+                self._assign_to_playlists(complete_video["video_id"], collection_path)
 
-                return {"action": "complete_collection_uploaded", "details": {**tracking['complete_collection']}}
+                return {"action": "complete_collection_uploaded", "details": {**tracking["complete_collection"]}}
             else:
-                error_msg = (complete_video or {}).get('error', 'Unknown error')
-                tracking['complete_collection']['status'] = 'failed'
-                tracking['complete_collection']['error'] = error_msg
+                error_msg = (complete_video or {}).get("error", "Unknown error")
+                tracking["complete_collection"]["status"] = "failed"
+                tracking["complete_collection"]["error"] = error_msg
                 self._save_tracking(collection_path, tracking)
                 logger.error(f"❌ Complete Collection 失敗: {error_msg}")
                 return {"action": "complete_collection_failed", "details": {"error": error_msg}}
 
         except Exception as e:
-            tracking['complete_collection']['status'] = 'failed'
-            tracking['complete_collection']['error'] = str(e)
+            tracking["complete_collection"]["status"] = "failed"
+            tracking["complete_collection"]["error"] = str(e)
             self._save_tracking(collection_path, tracking)
             logger.error(f"❌ Complete Collection エラー: {e}")
             return {"action": "complete_collection_failed", "details": {"error": str(e)}}
@@ -340,19 +346,19 @@ class CollectionUploader:
         try:
             from playlist_manager import PlaylistManager
 
-            ws_path = collection_path / 'workflow-state.json'
+            ws_path = collection_path / "workflow-state.json"
             if not ws_path.exists():
                 return
 
-            with open(ws_path, 'r', encoding='utf-8') as f:
+            with open(ws_path, "r", encoding="utf-8") as f:
                 ws = json.load(f)
 
-            theme = ws.get('theme', '')
+            theme = ws.get("theme", "")
             if not theme:
                 return
 
-            config = ChannelConfig.load()
-            if not config.playlists:
+            config = load_config()
+            if not config.playlists.items:
                 return
 
             pm = PlaylistManager()
@@ -372,22 +378,22 @@ class CollectionUploader:
             print("   tracking 未初期化 — 実行するとアップロードを開始します")
             return
 
-        cc = tracking.get('complete_collection', {})
+        cc = tracking.get("complete_collection", {})
 
         print(f"📋 {tracking['collection_name']}")
 
-        cc_status = "✅" if cc.get('status') == 'completed' else ("❌" if cc.get('status') == 'failed' else "⏳")
+        cc_status = "✅" if cc.get("status") == "completed" else ("❌" if cc.get("status") == "failed" else "⏳")
         cc_date = ""
-        if cc.get('upload_time'):
+        if cc.get("upload_time"):
             cc_date = f" ({cc['upload_time'][:10]})"
         print(f"  Complete Collection{cc_date}: {cc_status}")
 
-        if cc.get('video_url'):
+        if cc.get("video_url"):
             print(f"  📹 {cc['video_url']}")
-        if cc.get('publish_at'):
+        if cc.get("publish_at"):
             print(f"  📅 公開予定: {cc['publish_at']}")
 
-        overall = "完了" if tracking.get('status') == 'completed' else "未完了"
+        overall = "完了" if tracking.get("status") == "completed" else "未完了"
         print(f"  Status: {overall}")
 
     def show_plan(self, collection_path: Path):
@@ -414,7 +420,7 @@ class CollectionUploader:
     def _move_collection_to_live(self, collection_path: Path) -> Path:
         """コレクションを live に移動。移動後のパスを返す"""
         try:
-            live_dir = self.collections_root / 'live'
+            live_dir = self.collections_root / "live"
             live_dir.mkdir(exist_ok=True)
 
             new_path = live_dir / collection_path.name
@@ -432,11 +438,11 @@ class CollectionUploader:
 
     def run_automated_schedule(self):
         """自動スケジュール実行（常駐プロセス）"""
-        config = ChannelConfig.load()
-        logger.info(f"🤖 {config.channel_name} - Collection Uploader 開始")
+        config = load_config()
+        logger.info(f"🤖 {config.meta.channel_name} - Collection Uploader 開始")
         logger.info(f"⏰ 投稿時間: {self.config['schedule']['day1_time']}")
 
-        schedule.every().day.at(self.config['schedule']['day1_time']).do(self._daily_check_and_upload)
+        schedule.every().day.at(self.config["schedule"]["day1_time"]).do(self._daily_check_and_upload)
 
         logger.info("🔄 スケジューラー開始（Ctrl+C で終了）")
 
@@ -444,6 +450,7 @@ class CollectionUploader:
             while True:
                 schedule.run_pending()
                 import time
+
                 time.sleep(60)
         except KeyboardInterrupt:
             logger.info("🛑 スケジューラー停止")
@@ -472,15 +479,16 @@ class CollectionUploader:
 def main():
     """メイン関数"""
     import argparse
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-    config = ChannelConfig.load()
-    parser = argparse.ArgumentParser(description=f'{config.channel_short} Collection Uploader')
-    parser.add_argument('--status', action='store_true', help='進捗表示')
-    parser.add_argument('--plan', action='store_true', help='スケジュール計算（ドライラン）')
-    parser.add_argument('--daemon', '-d', action='store_true', help='常駐スケジューラー起動')
-    parser.add_argument('--collection', '-c', help='対象コレクション名（部分一致）')
-    parser.add_argument('--config', help='設定ファイルパス')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    config = load_config()
+    parser = argparse.ArgumentParser(description=f"{config.meta.channel_short} Collection Uploader")
+    parser.add_argument("--status", action="store_true", help="進捗表示")
+    parser.add_argument("--plan", action="store_true", help="スケジュール計算（ドライラン）")
+    parser.add_argument("--daemon", "-d", action="store_true", help="常駐スケジューラー起動")
+    parser.add_argument("--collection", "-c", help="対象コレクション名（部分一致）")
+    parser.add_argument("--config", help="設定ファイルパス")
 
     args = parser.parse_args()
 
@@ -507,6 +515,7 @@ def main():
     except Exception as e:
         print(f"❌ エラー: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

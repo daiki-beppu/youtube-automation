@@ -35,7 +35,8 @@ from youtube_automation.utils.benchmark_analyzer import (  # noqa: E402
     extract_description_keywords,
     parse_iso_duration,
 )
-from youtube_automation.utils.channel_config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
+from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
@@ -47,10 +48,10 @@ class BenchmarkCollector:
     """競合チャンネルのベンチマークデータ収集（YouTube Data API）"""
 
     def __init__(self):
-        self.config = ChannelConfig.load()
+        self.config = load_config()
         self.youtube = None
         self.benchmark_config = load_skill_config("benchmark")
-        self.channel_dir = ChannelConfig.channel_dir()
+        self.channel_dir = _channel_dir()
         self.benchmarks_dir = self.channel_dir / "docs" / "benchmarks"
         self.data_dir = self.channel_dir / "data"
         self.today = date.today()
@@ -70,7 +71,7 @@ class BenchmarkCollector:
         freshness_days = self.benchmark_config.get("freshness_days", 3)
         stale_channels = []
 
-        for ch in self.config.benchmark_channels:
+        for ch in self.config.analytics.benchmark.channels:
             md_path = self.benchmarks_dir / f"{ch['slug']}.md"
             if not md_path.exists():
                 logger.info("ファイル未作成: %s → 初回収集対象", ch["slug"])
@@ -101,10 +102,14 @@ class BenchmarkCollector:
         min_views = self.benchmark_config.get("min_views", 10000)
 
         # チャンネル概要
-        ch_resp = self.youtube.channels().list(
-            part="snippet,statistics,contentDetails",
-            id=channel_id,
-        ).execute()
+        ch_resp = (
+            self.youtube.channels()
+            .list(
+                part="snippet,statistics,contentDetails",
+                id=channel_id,
+            )
+            .execute()
+        )
 
         if not ch_resp.get("items"):
             logger.error("チャンネルが見つかりません: %s", channel_id)
@@ -130,12 +135,16 @@ class BenchmarkCollector:
         page_token: str | None = None
         remaining = scan_recent
         while remaining > 0:
-            playlist_resp = self.youtube.playlistItems().list(
-                part="contentDetails",
-                playlistId=uploads_playlist_id,
-                maxResults=min(50, remaining),
-                pageToken=page_token,
-            ).execute()
+            playlist_resp = (
+                self.youtube.playlistItems()
+                .list(
+                    part="contentDetails",
+                    playlistId=uploads_playlist_id,
+                    maxResults=min(50, remaining),
+                    pageToken=page_token,
+                )
+                .execute()
+            )
             batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
             video_ids.extend(batch_ids)
             page_token = playlist_resp.get("nextPageToken")
@@ -158,10 +167,14 @@ class BenchmarkCollector:
         # 動画詳細取得（50件単位でバッチ）
         raw_videos: list[dict] = []
         for i in range(0, len(video_ids), 50):
-            videos_resp = self.youtube.videos().list(
-                part="snippet,statistics,contentDetails",
-                id=",".join(video_ids[i:i + 50]),
-            ).execute()
+            videos_resp = (
+                self.youtube.videos()
+                .list(
+                    part="snippet,statistics,contentDetails",
+                    id=",".join(video_ids[i : i + 50]),
+                )
+                .execute()
+            )
 
             for video in videos_resp.get("items", []):
                 snippet = video["snippet"]
@@ -200,7 +213,10 @@ class BenchmarkCollector:
 
         logger.info(
             "%s: 走査 %d 本 → %d 本が %d 再生以上",
-            channel_info["name"], len(raw_videos), len(videos), min_views,
+            channel_info["name"],
+            len(raw_videos),
+            len(videos),
+            min_views,
         )
 
         channel_data["videos"] = videos
@@ -210,9 +226,7 @@ class BenchmarkCollector:
         long_videos = [v for v in videos if not self._is_short(v)]
         if long_videos:
             channel_data["avg_views"] = round(sum(v["views"] for v in long_videos) / len(long_videos))
-            channel_data["avg_daily_views"] = round(
-                sum(v["daily_views"] for v in long_videos) / len(long_videos), 1
-            )
+            channel_data["avg_daily_views"] = round(sum(v["daily_views"] for v in long_videos) / len(long_videos), 1)
             channel_data["avg_engagement_rate"] = round(
                 sum(v["engagement_rate"] for v in long_videos) / len(long_videos), 2
             )
@@ -226,10 +240,7 @@ class BenchmarkCollector:
         for v in videos:
             all_tags.extend(t.lower() for t in v["tags"])
         tag_counts = Counter(all_tags)
-        channel_data["top_tags"] = [
-            {"tag": tag, "count": count}
-            for tag, count in tag_counts.most_common(15)
-        ]
+        channel_data["top_tags"] = [{"tag": tag, "count": count} for tag, count in tag_counts.most_common(15)]
 
         return channel_data
 
@@ -244,12 +255,12 @@ class BenchmarkCollector:
             全チャンネルの収集結果
         """
         if channel_slug:
-            targets = [ch for ch in self.config.benchmark_channels if ch["slug"] == channel_slug]
+            targets = [ch for ch in self.config.analytics.benchmark.channels if ch["slug"] == channel_slug]
             if not targets:
                 logger.error("チャンネルが見つかりません: %s", channel_slug)
                 return {"channels": [], "collected_at": self.today.isoformat()}
         elif force:
-            targets = list(self.config.benchmark_channels)
+            targets = list(self.config.analytics.benchmark.channels)
         else:
             targets = self.check_freshness()
 
@@ -287,12 +298,16 @@ class BenchmarkCollector:
         playlists_raw = []
         page_token = None
         while True:
-            resp = self.youtube.playlists().list(
-                part="snippet,contentDetails",
-                channelId=channel_id,
-                maxResults=50,
-                pageToken=page_token,
-            ).execute()
+            resp = (
+                self.youtube.playlists()
+                .list(
+                    part="snippet,contentDetails",
+                    channelId=channel_id,
+                    maxResults=50,
+                    pageToken=page_token,
+                )
+                .execute()
+            )
             playlists_raw.extend(resp.get("items", []))
             page_token = resp.get("nextPageToken")
             if not page_token:
@@ -311,43 +326,55 @@ class BenchmarkCollector:
             items = []
             item_page_token = None
             while True:
-                items_resp = self.youtube.playlistItems().list(
-                    part="snippet,contentDetails",
-                    playlistId=playlist_id,
-                    maxResults=50,
-                    pageToken=item_page_token,
-                ).execute()
+                items_resp = (
+                    self.youtube.playlistItems()
+                    .list(
+                        part="snippet,contentDetails",
+                        playlistId=playlist_id,
+                        maxResults=50,
+                        pageToken=item_page_token,
+                    )
+                    .execute()
+                )
                 for item in items_resp.get("items", []):
                     item_snip = item["snippet"]
                     video_id = item["contentDetails"]["videoId"]
-                    items.append({
-                        "position": item_snip.get("position", 0),
-                        "video_id": video_id,
-                        "title": item_snip.get("title", ""),
-                        "published_at": item["contentDetails"].get("videoPublishedAt", ""),
-                    })
+                    items.append(
+                        {
+                            "position": item_snip.get("position", 0),
+                            "video_id": video_id,
+                            "title": item_snip.get("title", ""),
+                            "published_at": item["contentDetails"].get("videoPublishedAt", ""),
+                        }
+                    )
                     all_video_ids.add(video_id)
                 item_page_token = items_resp.get("nextPageToken")
                 if not item_page_token:
                     break
 
-            playlists_data.append({
-                "playlist_id": playlist_id,
-                "title": snippet.get("title", ""),
-                "description": snippet.get("description", ""),
-                "item_count": int(content.get("itemCount", len(items))),
-                "items": items,
-            })
+            playlists_data.append(
+                {
+                    "playlist_id": playlist_id,
+                    "title": snippet.get("title", ""),
+                    "description": snippet.get("description", ""),
+                    "item_count": int(content.get("itemCount", len(items))),
+                    "items": items,
+                }
+            )
 
         # 3. 動画 ID をバッチ（50件ずつ）で statistics + duration を取得
         video_stats: dict[str, dict] = {}
         video_id_list = list(all_video_ids)
         for i in range(0, len(video_id_list), 50):
-            batch = video_id_list[i:i + 50]
-            videos_resp = self.youtube.videos().list(
-                part="statistics,contentDetails",
-                id=",".join(batch),
-            ).execute()
+            batch = video_id_list[i : i + 50]
+            videos_resp = (
+                self.youtube.videos()
+                .list(
+                    part="statistics,contentDetails",
+                    id=",".join(batch),
+                )
+                .execute()
+            )
             for v in videos_resp.get("items", []):
                 stats = v.get("statistics", {})
                 content = v.get("contentDetails", {})
@@ -421,13 +448,15 @@ class BenchmarkCollector:
                 existing["playlists"] = pl_result["playlists"]
             else:
                 # 同日に動画ベンチマークが未収集のチャンネルは新規エントリで挿入
-                data.setdefault("channels", []).append({
-                    "channel_id": pl_result["channel_id"],
-                    "name": pl_result["name"],
-                    "slug": slug,
-                    "playlists_collected_at": pl_result["playlists_collected_at"],
-                    "playlists": pl_result["playlists"],
-                })
+                data.setdefault("channels", []).append(
+                    {
+                        "channel_id": pl_result["channel_id"],
+                        "name": pl_result["name"],
+                        "slug": slug,
+                        "playlists_collected_at": pl_result["playlists_collected_at"],
+                        "playlists": pl_result["playlists"],
+                    }
+                )
 
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -441,7 +470,7 @@ class BenchmarkCollector:
     def _is_short(video: dict) -> bool:
         """Short 動画かどうかを判定する。"""
         duration = video.get("duration_iso", "")
-        match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
+        match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
         if not match:
             return False
         hours = int(match.group(1) or 0)
@@ -513,6 +542,7 @@ class BenchmarkThumbnailAnalyzer:
                     # 保持する場合はコピー
                     if thumbnails_dir:
                         import shutil
+
                         keep_path = thumbnails_dir / f"{slug}_{video['video_id']}.jpg"
                         shutil.copy2(tmp_path, keep_path)
 
@@ -529,15 +559,13 @@ class BenchmarkThumbnailAnalyzer:
                         # JSON パース
                         text = response.text.strip()
                         # コードフェンスを除去
-                        text = re.sub(r'^```(?:json)?\s*', '', text)
-                        text = re.sub(r'\s*```$', '', text)
+                        text = re.sub(r"^```(?:json)?\s*", "", text)
+                        text = re.sub(r"\s*```$", "", text)
                         video["thumbnail_analysis"] = json.loads(text)
                         logger.info("サムネイル分析完了: %s", video["title"][:40])
                     except json.JSONDecodeError as e:
                         logger.warning("サムネイル分析JSONパース失敗 [%s]: %s", video["title"][:30], e)
-                        video["thumbnail_analysis"] = {
-                            "raw": response.text[:500] if 'response' in dir() else str(e)
-                        }
+                        video["thumbnail_analysis"] = {"raw": response.text[:500] if "response" in dir() else str(e)}
                     except Exception as e:
                         logger.warning("サムネイル分析失敗 [%s]: %s", video["title"][:30], e)
 
@@ -616,21 +644,20 @@ class BenchmarkReportGenerator:
             total_views = sum(it.get("views", 0) for it in items)
             avg_views = round(total_views / len(items)) if items else 0
             title = self._escape_md_table(pl.get("title", ""))
-            lines.append(
-                f"| {i} | {title} | {pl.get('item_count', len(items))} | "
-                f"{total_views:,} | {avg_views:,} |"
-            )
+            lines.append(f"| {i} | {title} | {pl.get('item_count', len(items))} | {total_views:,} | {avg_views:,} |")
 
         # 構成軸の観察メモ（手動追記用プレースホルダー）
-        lines.extend([
-            "",
-            "## 構成軸の観察メモ",
-            "",
-            "<!-- TODO: 分類軸候補（time / mood / activity / season）を上記一覧から考察して追記 -->",
-            "",
-            "## 再生リスト別詳細",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 構成軸の観察メモ",
+                "",
+                "<!-- TODO: 分類軸候補（time / mood / activity / season）を上記一覧から考察して追記 -->",
+                "",
+                "## 再生リスト別詳細",
+                "",
+            ]
+        )
 
         # 各再生リストの動画一覧
         for i, pl in enumerate(playlists, 1):
@@ -657,9 +684,7 @@ class BenchmarkReportGenerator:
                     views = item.get("views", 0)
                     likes = item.get("likes", 0)
                     duration = item.get("duration_display", "—")
-                    lines.append(
-                        f"| {pos} | {item_title} | {views:,} | {likes:,} | {duration} |"
-                    )
+                    lines.append(f"| {pos} | {item_title} | {views:,} | {likes:,} | {duration} |")
                 lines.append("")
             else:
                 lines.append("*動画なし*")
@@ -681,6 +706,7 @@ class BenchmarkReportGenerator:
             return "—"
         try:
             from datetime import datetime, timedelta, timezone
+
             utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
             jst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
             return jst_dt.strftime("%H:%M")
@@ -691,7 +717,7 @@ class BenchmarkReportGenerator:
     def _is_short(video: dict) -> bool:
         """Short 動画かどうかを判定する（レポート生成時のフィルタ用）。"""
         duration = video.get("duration_iso", "")
-        match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
+        match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
         if not match:
             return False
         hours = int(match.group(1) or 0)
@@ -727,20 +753,24 @@ class BenchmarkReportGenerator:
         scanned = channel.get("scanned_count", len(videos))
 
         if not videos:
-            lines.extend([
-                f"## ベンチマーク対象（再生数 {min_views:,}+）",
-                "",
-                f"> **該当動画なし** — 直近 {scanned} 本のいずれも {min_views:,} 再生未満でした。",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"## ベンチマーク対象（再生数 {min_views:,}+）",
+                    "",
+                    f"> **該当動画なし** — 直近 {scanned} 本のいずれも {min_views:,} 再生未満でした。",
+                    "",
+                ]
+            )
             return "\n".join(lines)
 
-        lines.extend([
-            f"## ベンチマーク対象（再生数 {min_views:,}+ / 直近 {scanned} 本走査中 {len(videos)} 件該当）",
-            "",
-            "| # | 公開日 | 時刻(JST) | タイトル | 再生数 | 日次再生 | 高評価 | コメント | ER% | 尺 |",
-            "|---|--------|-----------|---------|-------|---------|-------|---------|-----|-----|",
-        ])
+        lines.extend(
+            [
+                f"## ベンチマーク対象（再生数 {min_views:,}+ / 直近 {scanned} 本走査中 {len(videos)} 件該当）",
+                "",
+                "| # | 公開日 | 時刻(JST) | タイトル | 再生数 | 日次再生 | 高評価 | コメント | ER% | 尺 |",
+                "|---|--------|-----------|---------|-------|---------|-------|---------|-----|-----|",
+            ]
+        )
 
         max_views = max((lv["views"] for lv in long_videos), default=0)
         for i, v in enumerate(videos, 1):
@@ -760,11 +790,13 @@ class BenchmarkReportGenerator:
 
         # 集計
         if long_videos:
-            lines.extend([
-                f"**Long動画平均再生数**: {channel['avg_views']:,} / 本",
-                f"**平均日次再生数**: {channel['avg_daily_views']:.0f}",
-                f"**平均エンゲージメント率**: {channel['avg_engagement_rate']:.1f}%",
-            ])
+            lines.extend(
+                [
+                    f"**Long動画平均再生数**: {channel['avg_views']:,} / 本",
+                    f"**平均日次再生数**: {channel['avg_daily_views']:.0f}",
+                    f"**平均エンゲージメント率**: {channel['avg_engagement_rate']:.1f}%",
+                ]
+            )
         if posting.get("average_interval"):
             trend_label = {"accelerating": "加速傾向", "decelerating": "減速傾向", "stable": "安定"}.get(
                 posting["trend"], "不明"
@@ -774,25 +806,28 @@ class BenchmarkReportGenerator:
 
         # 投稿間隔トレンド
         if posting.get("intervals_days"):
-            lines.extend([
-                "## 投稿間隔トレンド",
-                "",
-                f"平均間隔: {posting['average_interval']:.1f}日（{trend_label}）",
-                f"直近{len(posting['intervals_days'])}本: "
-                + " → ".join(f"{d}d" for d in posting["intervals_days"]),
-                "",
-            ])
+            lines.extend(
+                [
+                    "## 投稿間隔トレンド",
+                    "",
+                    f"平均間隔: {posting['average_interval']:.1f}日（{trend_label}）",
+                    f"直近{len(posting['intervals_days'])}本: "
+                    + " → ".join(f"{d}d" for d in posting["intervals_days"]),
+                    "",
+                ]
+            )
 
         # タグ分析
         top_tags = channel.get("top_tags", [])
         if top_tags:
-            lines.extend([
-                "## タグ分析",
-                "",
-                "頻出タグ: "
-                + ", ".join(f"{t['tag']} ({t['count']}/{len(videos)}本)" for t in top_tags[:10]),
-                "",
-            ])
+            lines.extend(
+                [
+                    "## タグ分析",
+                    "",
+                    "頻出タグ: " + ", ".join(f"{t['tag']} ({t['count']}/{len(videos)}本)" for t in top_tags[:10]),
+                    "",
+                ]
+            )
 
         # トレンド分析
         lines.extend(["## トレンド分析", ""])
@@ -807,24 +842,28 @@ class BenchmarkReportGenerator:
 
         # サムネイル分析
         analyzed = [
-            v for v in videos
-            if v.get("thumbnail_analysis") and isinstance(v["thumbnail_analysis"], dict)
+            v
+            for v in videos
+            if v.get("thumbnail_analysis")
+            and isinstance(v["thumbnail_analysis"], dict)
             and "composition" in v.get("thumbnail_analysis", {})
         ]
         if analyzed:
             lines.extend(["## サムネイル分析（Gemini API）", ""])
             for i, v in enumerate(analyzed[:5], 1):
                 a = v["thumbnail_analysis"]
-                lines.extend([
-                    f"### {i}. \"{self._escape_md_table(v['title'])}\" ({v['views']:,}再生)",
-                    f"- **構図**: {a.get('composition', 'N/A')}",
-                    f"- **配色**: {a.get('color_palette', 'N/A')}",
-                    f"- **テキスト**: {a.get('text_placement', 'N/A')}",
-                    f"- **キャラ活動**: {a.get('character_activity', 'N/A')}",
-                    f"- **雰囲気**: {a.get('atmosphere', 'N/A')}",
-                    f"- **強み**: {', '.join(a.get('strengths', []))}",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        f'### {i}. "{self._escape_md_table(v["title"])}" ({v["views"]:,}再生)',
+                        f"- **構図**: {a.get('composition', 'N/A')}",
+                        f"- **配色**: {a.get('color_palette', 'N/A')}",
+                        f"- **テキスト**: {a.get('text_placement', 'N/A')}",
+                        f"- **キャラ活動**: {a.get('character_activity', 'N/A')}",
+                        f"- **雰囲気**: {a.get('atmosphere', 'N/A')}",
+                        f"- **強み**: {', '.join(a.get('strengths', []))}",
+                        "",
+                    ]
+                )
 
         return "\n".join(lines)
 
@@ -842,7 +881,7 @@ class BenchmarkReportGenerator:
             # 「運用ベンチマーク」セクション以降を差し替え
             marker = "## 運用ベンチマーク"
             if marker in existing:
-                prefix = existing[:existing.index(marker)]
+                prefix = existing[: existing.index(marker)]
             else:
                 prefix = existing.rstrip() + "\n\n"
         else:
@@ -870,10 +909,12 @@ class BenchmarkReportGenerator:
         lines.append("")
 
         # 投稿時間帯分析
-        lines.extend([
-            f"## 投稿時間帯（JST）（{self.today.isoformat()} データ実証）",
-            "",
-        ])
+        lines.extend(
+            [
+                f"## 投稿時間帯（JST）（{self.today.isoformat()} データ実証）",
+                "",
+            ]
+        )
         for ch in channels:
             videos = ch.get("videos", [])
             jst_times = []
@@ -929,18 +970,20 @@ class BenchmarkReportGenerator:
             "├── README.md                      # このファイル（インデックス）",
             "├── common-patterns.md             # 全チャンネル共通の成功パターン",
         ]
-        bench_channels = self.config.benchmark_channels
+        bench_channels = self.config.analytics.benchmark.channels
         for i, ch in enumerate(bench_channels):
             prefix = "└──" if i == len(bench_channels) - 1 else "├──"
-            padding = max(1, 25 - len(ch['slug']))
+            padding = max(1, 25 - len(ch["slug"]))
             lines.append(f"{prefix} {ch['slug']}.md{' ' * padding}# {ch['name']} 分析")
         lines.extend(["```", "", "## チャンネル一覧", ""])
 
         # テーブル
-        lines.extend([
-            "| チャンネル | 登録者 | 動画数 | ポジション | 平均再生 | 平均ER% |",
-            "|---|---|---|---|---|---|",
-        ])
+        lines.extend(
+            [
+                "| チャンネル | 登録者 | 動画数 | ポジション | 平均再生 | 平均ER% |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
         for ch in channels:
             lines.append(
                 f"| [{ch['name']}]({ch['slug']}.md) "
@@ -951,18 +994,20 @@ class BenchmarkReportGenerator:
         lines.append("")
 
         # 更新履歴
-        lines.extend([
-            "## 更新履歴",
-            "",
-            f"- {self.today.isoformat()}: benchmark_collector.py で最新データ取得"
-            "（拡充版: ER%, 日次再生, タグ, サムネイル分析）",
-        ])
+        lines.extend(
+            [
+                "## 更新履歴",
+                "",
+                f"- {self.today.isoformat()}: benchmark_collector.py で最新データ取得"
+                "（拡充版: ER%, 日次再生, タグ, サムネイル分析）",
+            ]
+        )
 
         # 既存の更新履歴を保持
         readme_path = self.benchmarks_dir / "README.md"
         if readme_path.exists():
             existing = readme_path.read_text(encoding="utf-8")
-            history_match = re.search(r'## 更新履歴\n\n(- .+)', existing, re.DOTALL)
+            history_match = re.search(r"## 更新履歴\n\n(- .+)", existing, re.DOTALL)
             if history_match:
                 old_entries = history_match.group(1).strip().split("\n")
                 # 今日のエントリを除外して追記
@@ -1009,15 +1054,17 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
                 continue
             if require_thumbnail and not thumb_url:
                 continue
-            targets.append({
-                "video_id": vid,
-                "title": v.get("title", ""),
-                "views": views,
-                "channel_name": channel_name,
-                "channel_slug": channel_slug,
-                "published_at": v.get("published_at", ""),
-                "thumbnail_url": thumb_url,
-            })
+            targets.append(
+                {
+                    "video_id": vid,
+                    "title": v.get("title", ""),
+                    "views": views,
+                    "channel_name": channel_name,
+                    "channel_slug": channel_slug,
+                    "published_at": v.get("published_at", ""),
+                    "thumbnail_url": thumb_url,
+                }
+            )
 
     targets.sort(key=lambda x: x["views"], reverse=True)
     return targets
@@ -1034,7 +1081,7 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
 
     # 最新 JSON に全チャンネルが含まれているか検証
     need_update = False
-    expected_slugs = {ch["slug"] for ch in collector.config.benchmark_channels}
+    expected_slugs = {ch["slug"] for ch in collector.config.analytics.benchmark.channels}
 
     latest = find_latest_benchmark_json(data_dir)
     if latest:
@@ -1099,7 +1146,7 @@ def main():
 
     collector = BenchmarkCollector()
 
-    if not collector.config.benchmark_channels:
+    if not collector.config.analytics.benchmark.channels:
         print("[ERROR] channel_config.json に benchmark.channels が設定されていません")
         sys.exit(1)
 
@@ -1110,7 +1157,7 @@ def main():
             print("        （誤って全チャンネル分の API クォータを消費しないため）")
             sys.exit(1)
 
-        targets = [ch for ch in collector.config.benchmark_channels if ch["slug"] == args.channel]
+        targets = [ch for ch in collector.config.analytics.benchmark.channels if ch["slug"] == args.channel]
         if not targets:
             print(f"[ERROR] チャンネルが見つかりません: {args.channel}")
             sys.exit(1)
@@ -1131,9 +1178,7 @@ def main():
         print(f"JSON 保存: {json_path}")
 
         if not args.json_only:
-            reporter = BenchmarkReportGenerator(
-                collector.config, collector.benchmarks_dir, collector.today
-            )
+            reporter = BenchmarkReportGenerator(collector.config, collector.benchmarks_dir, collector.today)
             md_map = reporter.generate_playlists_markdown(playlists_results)
             reporter.write_markdown(md_map)
             for key in md_map:
@@ -1145,20 +1190,13 @@ def main():
         for r in playlists_results:
             playlists = r.get("playlists", [])
             total_videos = sum(len(p.get("items", [])) for p in playlists)
-            total_views = sum(
-                it.get("views", 0)
-                for p in playlists
-                for it in p.get("items", [])
-            )
-            print(
-                f"  {r['name']}: 再生リスト {len(playlists)}件, "
-                f"総動画 {total_videos}本, 合計再生 {total_views:,}"
-            )
+            total_views = sum(it.get("views", 0) for p in playlists for it in p.get("items", []))
+            print(f"  {r['name']}: 再生リスト {len(playlists)}件, 総動画 {total_videos}本, 合計再生 {total_views:,}")
         print()
         return
 
     print("\n=== Benchmark Collector ===")
-    print(f"対象チャンネル: {len(collector.config.benchmark_channels)}件")
+    print(f"対象チャンネル: {len(collector.config.analytics.benchmark.channels)}件")
     print(f"鮮度基準: {collector.benchmark_config.get('freshness_days', 3)}日")
     print()
 
@@ -1200,8 +1238,10 @@ def main():
     for ch in data["channels"]:
         videos_count = len(ch.get("videos", []))
         analyzed = sum(1 for v in ch.get("videos", []) if v.get("thumbnail_analysis"))
-        print(f"  {ch['name']}: {videos_count}本取得, 平均{ch.get('avg_views', 0):,}再生, "
-              f"ER {ch.get('avg_engagement_rate', 0):.1f}%, サムネイル分析 {analyzed}/{videos_count}")
+        print(
+            f"  {ch['name']}: {videos_count}本取得, 平均{ch.get('avg_views', 0):,}再生, "
+            f"ER {ch.get('avg_engagement_rate', 0):.1f}%, サムネイル分析 {analyzed}/{videos_count}"
+        )
     print()
 
 

@@ -6,17 +6,17 @@ import pytest
 import yaml
 
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.channel_config import ChannelConfig
+from youtube_automation.utils.config import reset as reset_config
 from youtube_automation.utils.exceptions import ConfigError
 
 
 @pytest.fixture(autouse=True)
 def reset_caches():
     skill_config.reset()
-    ChannelConfig.reset()
+    reset_config()
     yield
     skill_config.reset()
-    ChannelConfig.reset()
+    reset_config()
 
 
 def test_load_default_only(tmp_path, monkeypatch):
@@ -116,6 +116,6 @@ def test_cache_reset(tmp_path, monkeypatch):
 
     # reset 後は再読み込み
     skill_config.reset("thumbnail")
-    ChannelConfig.reset()
+    reset_config()
     cfg3 = skill_config.load_skill_config("thumbnail")
     assert cfg3.get("marker") == "b"
