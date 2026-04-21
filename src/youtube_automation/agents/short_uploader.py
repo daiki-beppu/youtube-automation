@@ -96,7 +96,7 @@ class ShortUploader:
 
         1. upload_tracking.json → complete_collection.publish_at を取得
         2. publish_at があればパース、なければ upload_time + timezone でフォールバック
-        3. CC 公開日の翌日 + short_publish_time（channel_config.json、デフォルト 08:00）
+        3. CC 公開日の翌日 + short_publish_time（config/channel/workflow.json、デフォルト 08:00）
         4. 過去の日時なら None を返す（即時公開 = public）
         """
         tracking = self._load_upload_tracking(collection_path)

@@ -1147,7 +1147,7 @@ def main():
     collector = BenchmarkCollector()
 
     if not collector.config.analytics.benchmark.channels:
-        print("[ERROR] channel_config.json に benchmark.channels が設定されていません")
+        print("[ERROR] config/channel/analytics.json に benchmark.channels が設定されていません")
         sys.exit(1)
 
     # --- 再生リスト収集モード ---

@@ -2,7 +2,7 @@
 """
 Playlist Status Viewer - プレイリスト状態表示
 
-channel_config.json の playlists 定義に基づき、
+config/channel/playlists.json の playlists 定義に基づき、
 プレイリストの現在の状態を表示する。
 
 Usage:
@@ -51,7 +51,7 @@ class PlaylistStatusViewer:
         playlists_config = self.config.playlists.items
 
         if not playlists_config:
-            print("playlists セクションが channel_config.json に未定義です")
+            print("playlists セクションが config/channel/playlists.json に未定義です")
             return
 
         print(f"\n{self.config.meta.channel_name} - Playlists")

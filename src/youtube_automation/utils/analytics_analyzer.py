@@ -42,7 +42,7 @@ class AnalyticsAnalyzer:
         self.collections_metadata = self._load_collections_metadata()
 
     def _load_collections_metadata(self):
-        """channel_config.json のテーマ情報からメタデータを構築"""
+        """config/channel/content.json のテーマ情報からメタデータを構築"""
         return {"themes": self.config.content.tags.themes}
 
     def analyze_ctr_improvement_strategy(self, analytics_data: Dict) -> Dict[str, Any]:
@@ -160,7 +160,7 @@ class AnalyticsAnalyzer:
         }
 
     def _analyze_theme_performance(self, analytics_data: Dict) -> Dict[str, Any]:
-        """テーマ別パフォーマンス分析（channel_config.json のテーマキーワードを使用）"""
+        """テーマ別パフォーマンス分析（config/channel/content.json のテーマキーワードを使用）"""
         video_data = analytics_data.get("video_analytics", {})
         theme_performance = {}
 

@@ -2,7 +2,7 @@
 """
 Playlist Manager - YouTube プレイリスト管理
 
-channel_config.json の playlists 定義に基づき、
+config/channel/playlists.json の playlists 定義に基づき、
 プレイリストの作成・動画割り当て・状態管理を行う。
 
 Usage:
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class PlaylistManager:
     """YouTube プレイリスト管理
 
-    channel_config.json の playlists セクションに基づき、
+    config/channel/playlists.json の playlists セクションに基づき、
     プレイリストの CRUD と動画割り当てを管理する。
     """
 
@@ -106,7 +106,7 @@ class PlaylistManager:
         return created
 
     def _write_back_playlist_ids(self, created: dict[str, str]):
-        """channel_config.json に playlist_id を書き戻す"""
+        """config/channel/playlists.json に playlist_id を書き戻す"""
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw = json.load(f)
 
@@ -118,7 +118,7 @@ class PlaylistManager:
             json.dump(raw, f, indent=2, ensure_ascii=False)
             f.write("\n")
 
-        logger.info(f"channel_config.json に {len(created)} 件の playlist_id を書き戻しました")
+        logger.info(f"config/channel/playlists.json に {len(created)} 件の playlist_id を書き戻しました")
 
     # ─── 動画割り当て ─────────────────────────────────
 

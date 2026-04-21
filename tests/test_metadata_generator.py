@@ -162,7 +162,7 @@ class TestExtractCollectionName:
 
 
 class TestBitDepth:
-    """bit_depth が channel_config.json の genre_style から取得されることの検証。"""
+    """bit_depth が config/channel/content.json の genre.style から取得されることの検証。"""
 
     def test_from_config(self):
         gen = _make_generator("20250907-live-8bit-adventure-music")
@@ -177,7 +177,7 @@ class TestBitDepth:
 
 
 # ===========================================================================
-# 5. _generate_tags のテスト（channel_config.json 駆動）
+# 5. _generate_tags のテスト（config/channel/content.json 駆動）
 # ===========================================================================
 
 

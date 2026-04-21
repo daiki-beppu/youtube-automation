@@ -145,7 +145,7 @@ def _cmd_pull(args: argparse.Namespace) -> int:
 
 
 def _write_youtube_channel(path: Path, youtube_channel: dict[str, Any]) -> None:
-    """channel_config.json の youtube_channel セクションのみを差し替える。"""
+    """config/channel/meta.json の youtube_channel セクションのみを差し替える。"""
     data = json.loads(path.read_text(encoding="utf-8"))
     data["youtube_channel"] = youtube_channel
     path.write_text(

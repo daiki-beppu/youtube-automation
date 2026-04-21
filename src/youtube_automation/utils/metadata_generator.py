@@ -6,7 +6,7 @@ collections/ ディレクトリの構造を解析し、YouTube用メタデータ
 Features:
 - WAVファイル自動解析（afinfo使用）
 - タイムスタンプ自動計算
-- channel_config.json ベースのテンプレート適用
+- config/channel/*.json ベースのテンプレート適用
 """
 
 import json
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class BAHMetadataGenerator:
-    """メタデータ生成クラス（channel_config.json 駆動）"""
+    """メタデータ生成クラス（config/channel/*.json 駆動）"""
 
     def __init__(self, collection_path: str):
         """
@@ -320,7 +320,7 @@ class BAHMetadataGenerator:
             raise ValueError(
                 f"生成したタイトルが {len(title)} codepoint と 100 を超過: "
                 f"\n  {title}\n"
-                f"→ channel_config.json の title.theme_scenes[{theme}].scene を"
+                f"→ config/channel/content.json の title.theme_scenes[{theme}].scene を"
                 f"短く書き直してください"
             )
         return title
@@ -354,7 +354,7 @@ class BAHMetadataGenerator:
         loc_config = self.config.localizations.data
         scene_phrases = scene_phrases or {}
 
-        # 英語固定パーツ（channel_config.json の descriptions.metadata から取得）
+        # 英語固定パーツ（config/channel/content.json の descriptions.metadata から取得）
         desc_metadata = self.config.content.descriptions.metadata
         genre_line = desc_metadata.get("genre", "Jazz")
         vibe_line = desc_metadata.get("vibe", "Rainy night, Cozy")
@@ -513,7 +513,7 @@ class BAHMetadataGenerator:
         }
 
     def _generate_tags(self) -> List[str]:
-        """YouTube タグ生成（channel_config.json 駆動）"""
+        """YouTube タグ生成（config/channel/content.json 駆動）"""
         return self.config.content.tags.for_collection(self.collection_name)
 
     def generate_metadata_report(self) -> str:
