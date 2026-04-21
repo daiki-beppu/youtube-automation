@@ -47,10 +47,9 @@ uv run yt-skills sync
 
 ### Step 3: 認証セットアップ
 
-OAuth クライアントはユーザーが自分で作成する。Google Cloud Console で OAuth 2.0 認証情報を作成し `auth/client_secrets.json` に配置すること。
-チャンネル固有トークンは `auth/token.json` に保存され、初回実行時に自動生成される。
+`/channel-new` 段階では **リサーチ用の最低限認証** のみ整える（競合ベンチマーク収集のため）。本番用 GCP プロジェクトと OAuth クライアントは `/channel-setup` の GCP / Vertex AI ブートストラップ step で自動化する。
 
-リサーチ段階では既存チャンネルのトークンをコピーして使用可能（YouTube Data API はチャンネル所有権に関係なく動作）:
+**リサーチ用ショートカット**: 既存チャンネルのトークンをコピーして使用可能（YouTube Data API はチャンネル所有権に関係なく動作）:
 
 ```bash
 cp /path/to/existing-channel-repo/auth/token.json auth/token.json
@@ -58,11 +57,7 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
 
 デフォルトのコピー元は `youtube-fantasy-celtic-music`。他のチャンネルを使いたい場合はユーザーに確認。
 
-**AI 生成系 API（Gemini/Veo/Lyria）の認証について**:
-
-新規 GCP アカウントで $300 クレジットを使いたい場合は **Vertex AI モード** を推奨する（2026 年以降、Google AI Studio の API キー経路では $300 クレジットが利用不可のため）。具体的な切替手順とトレードオフ（Lyria は Vertex 提供状況が流動的で AI Studio 推奨）は `automation/auth/SETUP.md` の「Vertex AI モードを使う場合」セクションを参照。
-
-既存の Google アカウント / GCP プロジェクトを流用できる場合は従来どおり AI Studio モード（`GEMINI_API_KEY`）で問題ない。
+本番用の GCP プロジェクト作成 / API 有効化 / Vertex AI 設定 / `.env` 書き出しは `/channel-setup` の GCP ブートストラップ step で AI セッション内完結させる（判断フローは `channel-setup/references/gcp-bootstrap.md`）。
 
 ### Step 4: 最小 config 作成
 
