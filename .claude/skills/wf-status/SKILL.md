@@ -1,6 +1,6 @@
 ---
 name: wf-status
-description: Use when コレクション制作の進捗確認をしたいとき。「進捗確認」「ワークフロー」「制作管理」「workflow-state」「今の状態」「どこまで進んだ」など、制作プロセスの現在地を確認する場面で必ず使用すること
+description: Use when コレクション制作の進捗を読むだけで確認したいとき（実行はしない）。「どこまで進んだ？」「workflow-state 見せて」「制作中コレクション一覧」など、collections/planning/ 配下の現在地を一覧・詳細表示するときに使用する。チャンネル登録者数など YouTube 側の統計は /status
 ---
 
 ## Overview
