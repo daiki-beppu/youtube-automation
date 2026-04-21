@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate suno-prompts.md from config/skills/suno.yaml + suno-patterns.yaml."""
 
-import sys
+import argparse
 from pathlib import Path
 
 import yaml
@@ -110,18 +110,22 @@ def generate(patterns_path: Path) -> str:
 
 
 def main():
-    if len(sys.argv) < 2:
-        patterns_path = Path.cwd() / "20-documentation" / "suno-patterns.yaml"
-        if not patterns_path.exists():
-            print("Usage: python3 generate_suno_prompts.py <collection-path or patterns.yaml>")
-            sys.exit(1)
-    else:
-        arg = Path(sys.argv[1])
-        patterns_path = arg if arg.is_file() else arg / "20-documentation" / "suno-patterns.yaml"
+    parser = argparse.ArgumentParser(
+        description="Generate suno-prompts.md from config/skills/suno.yaml + suno-patterns.yaml",
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        type=Path,
+        help="collection path or patterns.yaml path (default: CWD/20-documentation/suno-patterns.yaml)",
+    )
+    args = parser.parse_args()
+
+    path = args.path or Path.cwd()
+    patterns_path = path if path.is_file() else path / "20-documentation" / "suno-patterns.yaml"
 
     if not patterns_path.exists():
-        print(f"Error: {patterns_path} not found")
-        sys.exit(1)
+        parser.error(f"{patterns_path} not found")
 
     output_path = patterns_path.parent / "suno-prompts.md"
     content = generate(patterns_path)
