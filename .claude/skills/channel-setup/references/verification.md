@@ -16,7 +16,7 @@ for p in sorted(glob.glob('config/channel/*.json')):
 
 エラーが出なければ構文 OK。
 
-## ChannelConfig ロードテスト
+## load_config() ロードテスト
 
 ```bash
 uv run yt-config-migrate verify
