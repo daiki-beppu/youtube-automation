@@ -126,7 +126,6 @@ def main():
             print("  キャンセルしました。")
             sys.exit(0)
 
-    # SDK インポート & クライアント生成
     try:
         from youtube_automation.utils.genai_client import create_genai_client
     except ImportError:

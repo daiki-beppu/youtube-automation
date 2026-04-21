@@ -119,7 +119,6 @@ def main():
         if not confirm_cost(model, cost_per_image):
             sys.exit(0)
 
-    # SDK インポート & クライアント生成
     try:
         from youtube_automation.utils.genai_client import create_genai_client
     except ImportError:
