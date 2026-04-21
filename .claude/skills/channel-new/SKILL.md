@@ -58,6 +58,12 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
 
 デフォルトのコピー元は `youtube-fantasy-celtic-music`。他のチャンネルを使いたい場合はユーザーに確認。
 
+**AI 生成系 API（Gemini/Veo/Lyria）の認証について**:
+
+新規 GCP アカウントで $300 クレジットを使いたい場合は **Vertex AI モード** を推奨する（2026 年以降、Google AI Studio の API キー経路では $300 クレジットが利用不可のため）。具体的な切替手順とトレードオフ（Lyria は Vertex 提供状況が流動的で AI Studio 推奨）は `automation/auth/SETUP.md` の「Vertex AI モードを使う場合」セクションを参照。
+
+既存の Google アカウント / GCP プロジェクトを流用できる場合は従来どおり AI Studio モード（`GEMINI_API_KEY`）で問題ない。
+
 ### Step 4: 最小 config 作成
 
 `benchmark_collector.py` 実行に必要な最小限の `channel_config.json` を Write ツールで作成:

@@ -25,11 +25,11 @@ from pathlib import Path
 # --- パス解決 ---
 def _channel_root() -> Path:
     from youtube_automation.utils.channel_config import ChannelConfig
+
     return ChannelConfig.channel_dir()
 
 
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-from youtube_automation.utils.secrets import get_gemini_api_key  # noqa: E402
 from youtube_automation.utils.veo_generator import (  # noqa: E402
     DEFAULT_MODEL,
     generate_loop_video,
@@ -51,6 +51,7 @@ def load_config() -> dict:
     """loop-video skill-config から veo セクションを読み込む。"""
     try:
         from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
+
         return load_skill_config("loop-video").get("veo", {})
     except Exception:
         return {}
@@ -65,6 +66,7 @@ def resolve_paths(collection_path: Path) -> tuple[Path, Path]:
 
 def main():
     from dotenv import find_dotenv, load_dotenv
+
     load_dotenv(find_dotenv())
 
     parser = argparse.ArgumentParser(description="Veo 3.1 ショート用 9:16 ループ動画生成")
@@ -124,23 +126,19 @@ def main():
             print("  キャンセルしました。")
             sys.exit(0)
 
-    # API キー取得（os.environ → 1Password の順で試行、副作用で os.environ にもセット）
     try:
-        get_gemini_api_key()
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
-    # SDK インポート
-    try:
-        from google import genai
+        from youtube_automation.utils.genai_client import create_genai_client
     except ImportError:
         print("[ERROR] google-genai がインストールされていません。")
         print("  pip3 install google-genai --break-system-packages")
         sys.exit(1)
 
     # 生成実行
-    client = genai.Client()
+    try:
+        client = create_genai_client()
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
     start_time = time.monotonic()
     success = generate_loop_video(client, image_path, output_path, model, prompt, aspect_ratio="9:16")
 
