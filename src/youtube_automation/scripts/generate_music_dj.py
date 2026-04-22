@@ -21,7 +21,7 @@ CHANNELS = 2
 SAMPLE_WIDTH = 2  # 16-bit
 DEFAULT_MODEL = "lyria-3-pro-preview"
 PREVIEW_MODEL = "lyria-3-clip-preview"
-DEFAULT_SEGMENT_SEC = 120  # デフォルトのセグメント長（プロンプトで制御可能）
+DEFAULT_SEGMENT_SEC = 180  # Pro モデル ~184s 上限にフィット / phase.duration_hint_sec で上書き可
 DEFAULT_SHUFFLE_SEGMENT_SEC = 180  # shuffle モード時のデフォルト（3分）
 
 

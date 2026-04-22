@@ -47,11 +47,11 @@ def make_pcm(duration_sec: float) -> bytes:
 
 class TestBuildSegmentCompositions:
     def test_auto_subdivides_long_phases(self):
-        """デフォルト120秒超のフェーズが自動サブ分割される。"""
+        """デフォルト180秒超のフェーズが自動サブ分割される。"""
         comp = make_composition(phases_count=2, total_min=10)
-        # 各フェーズ5分 = 300秒 → ceil(300/120) = 3サブセグメント
+        # 各フェーズ5分 = 300秒 → ceil(300/180) = 2サブセグメント
         segments = build_segment_compositions(comp)
-        assert len(segments) == 6  # 2フェーズ × 3サブセグメント
+        assert len(segments) == 4  # 2フェーズ × 2サブセグメント
 
     def test_short_phases_not_subdivided(self):
         """2分以下のフェーズはサブ分割されない。"""
@@ -79,12 +79,11 @@ class TestBuildSegmentCompositions:
     def test_continuation_suffix_on_sub_segments(self):
         """サブセグメントの2番目以降に continuation テキストが付く。"""
         comp = make_composition(phases_count=1, total_min=5)
-        # 5分 = 300秒 → 3サブセグメント
+        # 5分 = 300秒 → ceil(300/180) = 2サブセグメント
         segments = build_segment_compositions(comp)
-        assert len(segments) == 3
+        assert len(segments) == 2
         assert "continuing" not in segments[0]["prompt"]
         assert "continuing" in segments[1]["prompt"]
-        assert "continuing" in segments[2]["prompt"]
 
     def test_uneven_phases(self):
         """at_min が不均等な場合も正しく分割される。"""
@@ -101,8 +100,8 @@ class TestBuildSegmentCompositions:
             "crossfade_sec": 5,
         }
         segments = build_segment_compositions(comp)
-        # intro: 1min (1seg), main: 5min (3seg), outro: 2min (1seg) = 5 segments
-        assert len(segments) == 5
+        # intro: 1min (1seg), main: 5min (ceil(300/180)=2seg), outro: 2min (1seg) = 4 segments
+        assert len(segments) == 4
 
     def test_duration_hint_sec_respected(self):
         """duration_hint_sec がサブ分割の単位として使われる。"""

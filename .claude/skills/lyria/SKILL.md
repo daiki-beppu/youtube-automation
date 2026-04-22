@@ -118,8 +118,8 @@ $ARGUMENTS
 | total_duration_min | `audio.target_duration_min` + `lyria.duration_padding_min` |
 
 **セグメント分割の仕組み**:
-- `generate_music_dj.py` は各 phase を `duration_hint_sec`（デフォルト **120 秒**）単位でサブ分割し、1 サブセグメント＝1 API コール（`lyria-3-pro-preview` の ~184 秒上限内）として生成する
-- Pro モデルの上限は約 184 秒/リクエストなので、**`duration_hint_sec` を 180 以内** に収めること（推奨は 120 秒前後）
+- `generate_music_dj.py` は各 phase を `duration_hint_sec`（デフォルト **180 秒**）単位でサブ分割し、1 サブセグメント＝1 API コール（`lyria-3-pro-preview` の ~184 秒上限内）として生成する
+- Pro モデルの上限は約 184 秒/リクエストなので、**`duration_hint_sec` を 180 以内** に収めること（既定値 180 がほぼ上限フィット、長尺コンテンツでは API コール数が最小化される）
 - サブセグメント間は `crossfade_sec`（デフォルト 5 秒）でクロスフェード結合される
 - `phase.duration_hint_sec` を個別指定すれば phase ごとにサブ分割単位を変えられる
 
@@ -161,7 +161,7 @@ $ARGUMENTS
 | `phases[].name` | Yes | フェーズ名（日本語、進捗表示用） |
 | `phases[].name_en` | Yes | フェーズ名（英語、ファイル名に使用） |
 | `phases[].prompt` | Yes | 主役楽器の演奏指示 + 最小限の情景（英語） |
-| `phases[].duration_hint_sec` | No | サブ分割の秒数（default 120。Pro モデル上限 184 を超えないこと） |
+| `phases[].duration_hint_sec` | No | サブ分割の秒数（default 180。Pro モデル上限 184 を超えないこと） |
 | `phases[].section_tag` | No | プロンプト末尾に追加される補足タグ（例: `"intro"`）|
 | `crossfade_sec` | No | サブセグメント間クロスフェード秒数（default: 5）|
 | `shuffle_passes` | No | N>0 で shuffle モード（各 phase を 1 セグメントとして N 回シャッフル連結）|
@@ -243,7 +243,7 @@ uv run yt-generate-music-dj \
 > **`.env` は自動ロード**: スクリプト内で `dotenv` により自動読み込みされる。
 
 **セグメント分割生成**:
-- 各 phase を `duration_hint_sec`（default 120s）単位のサブセグメントに分割し、1 サブセグメント＝1 API コール（`lyria-3-pro-preview` の ~184 秒上限内）で生成
+- 各 phase を `duration_hint_sec`（default 180s）単位のサブセグメントに分割し、1 サブセグメント＝1 API コール（`lyria-3-pro-preview` の ~184 秒上限内）で生成
 - `--workers N` で並列生成数を指定（推奨: `--workers 10`、または `-1` で全セグメント同時）
 - 生成中に `seg_001.wav`, `seg_002.wav`, ... が作成される
 - 全セグメント完了後にクロスフェード結合して master.wav を出力
@@ -294,7 +294,7 @@ composition.json の品質チェック:
 - [ ] `ng_words` に含まれる語がプロンプトに使われていないこと
 - [ ] 環境音系の語（`rain beginning to tap` 等）が使用されていないこと
 - [ ] 最初の phase が `at_min: 0` であること
-- [ ] `duration_hint_sec`（省略時 120）が 184 を超えていないこと（Pro モデル API 上限）
+- [ ] `duration_hint_sec`（省略時 180）が 184 を超えていないこと（Pro モデル API 上限）
 - [ ] `total_duration_min` が最後のフェーズ以降に十分な再生時間を確保していること
 - [ ] `base.bpm` / `base.brightness` 等、現行 `lyria_client.py` が API に渡さないキーを composition.json に書いていないこと（書いても無視されるだけだが混乱の元）
 - [ ] `--preview` でプレビュー生成し、音楽の方向性を確認済み
