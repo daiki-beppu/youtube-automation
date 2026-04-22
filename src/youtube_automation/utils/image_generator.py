@@ -4,31 +4,18 @@ generate_thumbnail.py と generate_image.py から共通利用される関数群
 """
 
 import io
-import json
 import re
 import time
-from datetime import datetime, timezone
 from pathlib import Path
+
+from youtube_automation.utils import cost_tracker
 
 # --- 定数 ---
 DEFAULT_MODEL = "gemini-3.1-flash-image-preview"
-DEFAULT_COST = 0.04
 DEFAULT_IMAGE_SIZE = "2K"
 VALID_IMAGE_SIZES = ("1K", "2K", "4K")
 RETRY_MAX = 3
 RETRY_BACKOFF = [10, 30, 60]
-
-
-def _channel_dir() -> Path:
-    """チャンネルディレクトリを ChannelConfig 経由で解決する。"""
-    from youtube_automation.utils.config import channel_dir
-
-    return channel_dir()
-
-
-def _image_cost_log() -> Path:
-    """画像生成コストログのパス（チャンネルディレクトリ配下）。"""
-    return _channel_dir() / "data" / "image_costs.json"
 
 
 def load_gemini_config() -> dict:
@@ -37,9 +24,9 @@ def load_gemini_config() -> dict:
         from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 
         cfg = load_skill_config("thumbnail")
-        return cfg.get("gemini_image", {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST})
+        return cfg.get("gemini_image", {"model": DEFAULT_MODEL})
     except Exception:
-        return {"model": DEFAULT_MODEL, "cost_per_image_usd": DEFAULT_COST}
+        return {"model": DEFAULT_MODEL}
 
 
 def apply_composition_rules(prompt: str, config: dict) -> str:
@@ -122,91 +109,27 @@ def log_image_cost(
     image_size: str,
     aspect_ratio: str,
     output_file: Path,
-    cost_usd: float,
+    cost_usd: float | None = None,
     reference_count: int = 0,
-) -> None:
-    """画像生成1件分を data/image_costs.json に追記する（失敗しても致命傷にしない）。"""
-    try:
-        log_path = _image_cost_log()
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        entries: list[dict] = []
-        if log_path.exists():
-            try:
-                entries = json.loads(log_path.read_text(encoding="utf-8"))
-                if not isinstance(entries, list):
-                    entries = []
-            except json.JSONDecodeError:
-                entries = []
-
-        try:
-            relative_output = str(output_file.relative_to(_channel_dir()))
-        except ValueError:
-            relative_output = str(output_file)
-
-        entries.append(
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "model": model,
-                "image_size": image_size,
-                "aspect_ratio": aspect_ratio,
-                "reference_count": reference_count,
-                "estimated_cost_usd": round(cost_usd, 6),
-                "output_file": relative_output,
-            }
-        )
-        log_path.write_text(
-            json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-    except Exception as e:
-        print(f"  [Warn]   コストログ書き込み失敗: {e}")
+) -> dict | None:
+    """画像生成1件分を cost_tracker 経由で記録する。cost_usd 省略時は PRICING で算出。"""
+    return cost_tracker.log_generation(
+        "image",
+        model=model,
+        quantity=1,
+        cost_usd=cost_usd,
+        metadata={
+            "image_size": image_size,
+            "aspect_ratio": aspect_ratio,
+            "reference_count": reference_count,
+            "output_file": cost_tracker.relative_to_channel_dir(output_file),
+        },
+    )
 
 
 def print_cost_summary() -> None:
-    """data/image_costs.json から累積コストサマリを表示する。"""
-    log_path = _image_cost_log()
-    if not log_path.exists():
-        print("コストログがまだありません: data/image_costs.json")
-        return
-    try:
-        entries = json.loads(log_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        print("[ERROR] コストログの読み込みに失敗しました")
-        return
-    if not entries:
-        print("生成履歴がまだありません。")
-        return
-
-    total_cost = 0.0
-    by_model: dict[str, dict[str, float]] = {}
-    by_size: dict[str, dict[str, float]] = {}
-    for e in entries:
-        cost = float(e.get("estimated_cost_usd", 0))
-        total_cost += cost
-        m = e.get("model", "unknown")
-        s = e.get("image_size", "unknown")
-        by_model.setdefault(m, {"count": 0, "cost": 0.0})
-        by_model[m]["count"] += 1
-        by_model[m]["cost"] += cost
-        by_size.setdefault(s, {"count": 0, "cost": 0.0})
-        by_size[s]["count"] += 1
-        by_size[s]["cost"] += cost
-
-    print()
-    print("=== Image Generation Cost Summary ===")
-    print(f"  総生成数:   {len(entries)}")
-    print(f"  累積コスト: ${total_cost:.4f}")
-    print()
-    print("  モデル別:")
-    for m, d in sorted(by_model.items()):
-        print(f"    {m}: {int(d['count'])} 件 / ${d['cost']:.4f}")
-    print()
-    print("  解像度別:")
-    for s, d in sorted(by_size.items()):
-        print(f"    {s}: {int(d['count'])} 件 / ${d['cost']:.4f}")
-    print()
-    print(f"  ログ: {log_path}")
-    print()
+    """画像生成カテゴリのサマリを表示する。"""
+    cost_tracker.print_summary("image")
 
 
 def generate_image(
@@ -223,7 +146,7 @@ def generate_image(
 
     reference_image: 単一 Path、Path のリスト、または None
     image_size: "1K" / "2K" / "4K"
-    cost_per_image_usd: 指定時のみ data/image_costs.json に履歴を追記する
+    cost_per_image_usd: カスタム単価。省略時は cost_tracker.PRICING から解像度別に算出
     """
     from google.genai import types
     from PIL import Image as PILImage
@@ -294,15 +217,15 @@ def generate_image(
                         print(f"  [Done]   保存完了 → {output_path} ({size_kb} KB)")
                         saved_path = output_path
 
-                    if cost_per_image_usd is not None:
-                        log_image_cost(
-                            model=model,
-                            image_size=image_size,
-                            aspect_ratio=aspect_ratio,
-                            output_file=saved_path,
-                            cost_usd=cost_per_image_usd,
-                            reference_count=len(references),
-                        )
+                    entry = log_image_cost(
+                        model=model,
+                        image_size=image_size,
+                        aspect_ratio=aspect_ratio,
+                        output_file=saved_path,
+                        cost_usd=cost_per_image_usd,
+                        reference_count=len(references),
+                    )
+                    cost_tracker.print_last_report(entry)
                     return True
 
             # 画像なしレスポンス

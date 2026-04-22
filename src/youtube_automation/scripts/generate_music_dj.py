@@ -12,6 +12,7 @@ import wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from youtube_automation.utils import cost_tracker  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 from youtube_automation.utils.time_utils import format_duration_mmss  # noqa: E402
 
@@ -325,6 +326,16 @@ def _generate_one_segment(client, types, i: int, seg: dict, seg_path: Path,
             _save_audio_as_wav(audio_data, seg_path)
             size_kb = seg_path.stat().st_size / 1024
             print(f"  [{label}] 完了 ({size_kb:.0f} KB)")
+            cost_tracker.log_generation(
+                "audio",
+                model=seg["model"],
+                quantity=1,
+                metadata={
+                    "phase_name": seg["phase_name"],
+                    "segment": label,
+                    "output_file": cost_tracker.relative_to_channel_dir(seg_path),
+                },
+            )
             return True
 
     print(f"  [{label}] {max_retries + 1} 回失敗")
@@ -734,6 +745,8 @@ def main():
         print(f"  セグメント: {seg_count}")
     print(f"  生成時間:   {int(gen_elapsed)}秒")
     print("===========================================")
+
+    cost_tracker.print_last_report()
 
 
 if __name__ == "__main__":
