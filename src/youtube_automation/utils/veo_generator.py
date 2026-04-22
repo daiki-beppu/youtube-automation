@@ -8,6 +8,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from youtube_automation.utils import cost_tracker
+
 # --- 定数 ---
 DEFAULT_MODEL = "veo-3.1-lite-generate-preview"
 DEFAULT_PROMPT = (
@@ -22,6 +24,7 @@ MAX_POLL_SEC = 600  # 10分タイムアウト
 
 def generate_loop_video(
     client, image_path: Path, output_path: Path, model: str, prompt: str, aspect_ratio: str = "16:9",
+    duration_seconds: int = 8,
 ) -> bool:
     """Veo 3.1 API でループ動画を生成する。"""
     from google.genai import types
@@ -31,7 +34,7 @@ def generate_loop_video(
     print(f"  [Submit] モデル={model}")
     print(f"  [Image]  {image_path.name}")
     print(f"  [Prompt] {prompt[:100]}...")
-    print(f"  [Config] {aspect_ratio} / 1080p / 8秒 / ループ（開始=終了フレーム）")
+    print(f"  [Config] {aspect_ratio} / 1080p / {duration_seconds}秒 / ループ（開始=終了フレーム）")
     print()
 
     try:
@@ -43,7 +46,7 @@ def generate_loop_video(
                 aspect_ratio=aspect_ratio,
                 resolution="1080p",
                 number_of_videos=1,
-                duration_seconds=8,
+                duration_seconds=duration_seconds,
                 person_generation="allow_adult",
                 last_frame=image,
             ),
@@ -86,6 +89,19 @@ def generate_loop_video(
 
     size_mb = output_path.stat().st_size / (1024 * 1024)
     print(f"  [Done]   保存完了 → {output_path} ({size_mb:.1f} MB)")
+
+    entry = cost_tracker.log_generation(
+        "video",
+        model=model,
+        quantity=duration_seconds,
+        metadata={
+            "duration_sec": duration_seconds,
+            "aspect_ratio": aspect_ratio,
+            "resolution": "1080p",
+            "output_file": cost_tracker.relative_to_channel_dir(output_path),
+        },
+    )
+    cost_tracker.print_last_report(entry)
     return True
 
 

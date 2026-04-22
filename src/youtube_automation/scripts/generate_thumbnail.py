@@ -31,6 +31,7 @@ def _channel_root() -> Path:
 
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 from youtube_automation.utils.image_generator import (  # noqa: E402
+    DEFAULT_IMAGE_SIZE,
     DEFAULT_MODEL,
     apply_composition_rules,
     confirm_cost,
@@ -146,7 +147,11 @@ def main():
 
     config = load_gemini_config()
     model = args.model or config.get("model", DEFAULT_MODEL)
-    cost_per_image = config.get("cost_per_image_usd", 0.04)
+    cost_per_image = config.get("cost_per_image_usd")
+    if cost_per_image is None:
+        from youtube_automation.utils.cost_tracker import estimate_cost
+
+        cost_per_image = estimate_cost(model, quantity=1, image_size=DEFAULT_IMAGE_SIZE) or 0.0
     use_text_overlay = args.reference is not None and args.variation is None
     raw_prompt = extract_prompt(prompts_md, args.variation, use_text_overlay=use_text_overlay)
     prompt = apply_composition_rules(raw_prompt, config)
