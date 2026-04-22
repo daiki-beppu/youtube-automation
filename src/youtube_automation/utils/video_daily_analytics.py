@@ -9,7 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 class VideoDailyAnalyticsMixin:
-    """動画 × 日次粒度で views/impressions/CTR を取得する"""
+    """動画 × 日次粒度で views を取得する
+
+    動画×日次では `videoThumbnailImpressions*` が API 仕様上取得不可のため views のみ。
+    impressions/CTR は `ChannelDailyAnalyticsMixin.get_channel_daily_impressions` で代替する。
+    """
 
     def get_video_daily_analytics(
         self,
@@ -18,7 +22,7 @@ class VideoDailyAnalyticsMixin:
         video_ids: Optional[List[str]] = None,
     ) -> List[Dict]:
         """
-        dimensions='video,day' で日次データを取得する。
+        dimensions='video,day' で日次 views を取得する。
 
         Args:
             start_date: YYYY-MM-DD
@@ -26,7 +30,7 @@ class VideoDailyAnalyticsMixin:
             video_ids: 対象動画 ID リスト（None で全動画。API 上限に注意）
 
         Returns:
-            List[Dict]: [{video_id, date, views, impressions, impression_ctr}, ...]
+            List[Dict]: [{video_id, date, views}, ...]
         """
         if not self.analytics_service:
             self.initialize()  # type: ignore[attr-defined]
@@ -45,7 +49,7 @@ class VideoDailyAnalyticsMixin:
         response = (
             self.analytics_service.reports()
             .query(
-                metrics="views,videoThumbnailImpressions,videoThumbnailImpressionsClickRate",
+                metrics="views",
                 **query_kwargs,
             )
             .execute()
@@ -60,8 +64,6 @@ class VideoDailyAnalyticsMixin:
                 "video_id": row[0],
                 "date": row[1],
                 "views": row[2],
-                "impressions": row[3],
-                "impression_ctr": row[4],
             }
             for row in rows
         ]

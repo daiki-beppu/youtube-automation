@@ -87,6 +87,12 @@ def _collect_video_features(
     vp = (analytics_data.get("ctr_analysis") or {}).get("video_performance") or []
     ctr_map = {v["video_id"]: v.get("impression_ctr") for v in vp if v.get("impression_ctr")}
 
+    if metric == "ctr" and not ctr_map and not any(data.get("click_through_rate") for data in va.values()):
+        logger.warning(
+            "動画別 CTR データが取得できていません（API 仕様上 impressions/CTR は動画別に取れません）。"
+            "--metric views または --metric engagement の利用を検討してください。"
+        )
+
     videos = []
     for vid, data in va.items():
         value = _resolve_metric(data, ctr_map, vid, metric)

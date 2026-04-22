@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +18,8 @@ from youtube_automation.utils.launch_curve_analyzer import (  # noqa: E402
     judge_video_vs_benchmark,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def plot_launch_curve(
     df: pd.DataFrame,
@@ -24,28 +27,48 @@ def plot_launch_curve(
     output_path: Path,
     window: int = 30,
 ) -> None:
-    """3 段サブプロット（累積 views / 日次 impressions / CTR）を 1 PNG に描画する。"""
+    """累積 views（＋利用可能なら 日次 impressions / CTR）を PNG に描画する。
+
+    動画×日次 impressions/CTR は API 仕様上取得できず欠損することがあるため、
+    欠損時は views 単独の 1 段プロットにフォールバックする。
+    """
     df = df[df["days_since_publish"] <= window]
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    has_impressions = "daily_impressions" in df.columns and df["daily_impressions"].notna().any()
+    has_ctr = "ctr" in df.columns and df["ctr"].notna().any()
 
+    panels = 1 + (1 if has_impressions else 0) + (1 if has_ctr else 0)
+    if panels == 1:
+        logger.info("launch curve: impressions/CTR が利用不可のため views のみ描画します")
+
+    fig, axes = plt.subplots(panels, 1, figsize=(10, 4 * panels), sharex=True)
+    if panels == 1:
+        axes = [axes]
+
+    idx = 0
     _plot_metric_panel(
-        axes[0],
+        axes[idx],
         df,
         target_video_id,
         metric="cumulative_views",
         title="累積 views (benchmark: past videos)",
         ylabel="cumulative views",
     )
-    _plot_metric_panel(
-        axes[1],
-        df,
-        target_video_id,
-        metric="daily_impressions",
-        title="日次 impressions",
-        ylabel="impressions/day",
-    )
-    _plot_ctr_panel(axes[2], df, target_video_id)
+    idx += 1
+
+    if has_impressions:
+        _plot_metric_panel(
+            axes[idx],
+            df,
+            target_video_id,
+            metric="daily_impressions",
+            title="日次 impressions",
+            ylabel="impressions/day",
+        )
+        idx += 1
+
+    if has_ctr:
+        _plot_ctr_panel(axes[idx], df, target_video_id)
 
     axes[-1].set_xlabel("days since publish")
 

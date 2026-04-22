@@ -142,6 +142,13 @@ class TestCollectAnalyticsData:
         system.authenticated = True
         expected_data = {"views": 1000, "subscribers": 50}
         system.collector.collect_basic_analytics.return_value = expected_data
+        system.collector.get_all_channel_videos.return_value = [{"video_id": "vid_A"}]
+        system.collector.get_video_daily_analytics.return_value = [
+            {"video_id": "vid_A", "date": "2026-04-01", "views": 100}
+        ]
+        system.collector.get_channel_daily_impressions.return_value = [
+            {"date": "2026-04-01", "views": 100, "impressions": 5000, "impression_ctr": 2.0}
+        ]
 
         with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
             result = system.collect_analytics_data(days=7, save_data=True)
@@ -150,6 +157,29 @@ class TestCollectAnalyticsData:
         # data ディレクトリにファイルが保存されたことを確認
         saved_files = list((tmp_path / "data").glob("analytics_data_*.json"))
         assert len(saved_files) == 1
+
+        # 動画×日次データが impressions フィールド無しで保存されていること
+        daily_files = list((tmp_path / "data" / "analytics" / "daily_per_video").glob("*.json"))
+        assert len(daily_files) == 1
+        import json
+
+        with open(daily_files[0], encoding="utf-8") as f:
+            daily_payload = json.load(f)
+        assert daily_payload["rows"][0] == {
+            "video_id": "vid_A",
+            "date": "2026-04-01",
+            "views": 100,
+        }
+        assert "impressions" not in daily_payload["rows"][0]
+        assert "impression_ctr" not in daily_payload["rows"][0]
+
+        # チャンネル×日次 impressions/CTR が新たに保存されていること
+        channel_daily_files = list((tmp_path / "data" / "analytics" / "channel_daily").glob("*.json"))
+        assert len(channel_daily_files) == 1
+        with open(channel_daily_files[0], encoding="utf-8") as f:
+            channel_daily_payload = json.load(f)
+        assert channel_daily_payload["rows"][0]["impressions"] == 5000
+        assert channel_daily_payload["rows"][0]["impression_ctr"] == 2.0
 
     def test_success_without_save(self, system):
         """認証済みでデータ保存なしの場合"""

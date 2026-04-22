@@ -17,7 +17,8 @@ def build_launch_curve_frame(
     永続化 JSON と動画メタから launch curve 用 DataFrame を構築する。
 
     Args:
-        daily_data: {"rows": [{video_id, date, views, impressions, impression_ctr}, ...]}
+        daily_data: {"rows": [{video_id, date, views, [impressions, impression_ctr]}, ...]}
+            impressions / impression_ctr は動画×日次では取得不可のため欠損している場合がある。
         video_meta: {video_id: {"title": ..., "published_at": "ISO-8601"}}
 
     Returns:
@@ -66,6 +67,12 @@ def build_launch_curve_frame(
             "impression_ctr": "ctr",
         }
     )
+    # impressions/CTR 列が無い場合は NaN で埋める
+    if "daily_impressions" not in df.columns:
+        df["daily_impressions"] = pd.NA
+    if "ctr" not in df.columns:
+        df["ctr"] = pd.NA
+
     df = df.sort_values(["video_id", "days_since_publish"])
     df["cumulative_views"] = df.groupby("video_id")["daily_views"].cumsum()
 

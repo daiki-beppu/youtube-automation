@@ -26,6 +26,7 @@ from typing import Any
 
 from youtube_automation.utils.audience_analytics import AudienceAnalyticsMixin
 from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
+from youtube_automation.utils.channel_daily_analytics import ChannelDailyAnalyticsMixin
 from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 class YouTubeAnalyticsCollector(
     ChannelAnalyticsMixin,
+    ChannelDailyAnalyticsMixin,
     VideoListingMixin,
     VideoAnalyticsMixin,
     VideoDailyAnalyticsMixin,
