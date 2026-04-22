@@ -12,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 
+from youtube_automation.utils import cost_tracker  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 
 
@@ -122,6 +123,18 @@ def main():
     print(f"  サイズ:   {size_mb:.1f} MB")
     print(f"  生成時間: {elapsed:.1f}秒")
     print("===========================================")
+
+    entry = cost_tracker.log_generation(
+        "audio",
+        model=args.model,
+        quantity=1,
+        metadata={
+            "prompt_preview": args.prompt[:120],
+            "output_file": cost_tracker.relative_to_channel_dir(output),
+            "elapsed_sec": round(elapsed, 1),
+        },
+    )
+    cost_tracker.print_last_report(entry)
 
 
 if __name__ == "__main__":

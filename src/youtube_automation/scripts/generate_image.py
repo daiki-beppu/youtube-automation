@@ -87,7 +87,11 @@ def main():
         output_path = Path.cwd() / output_path
 
     model = args.model or config.get("model", DEFAULT_MODEL)
-    cost_per_image = config.get("cost_per_image_usd", 0.04)
+    cost_per_image = config.get("cost_per_image_usd")
+    if cost_per_image is None:
+        from youtube_automation.utils.cost_tracker import estimate_cost
+
+        cost_per_image = estimate_cost(model, quantity=1, image_size=args.size) or 0.0
 
     print("\nモード:       ダイレクト")
     print(f"プロンプト:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
