@@ -1,6 +1,13 @@
-"""
-CTR・コレクション分析 Mixin
-YouTubeAnalyticsCollector の CTR 特化分析メソッド群
+"""CTR・コレクション分析 Mixin
+
+YouTubeAnalyticsCollector の CTR 特化分析メソッド群。
+
+`videoThumbnailImpressions` / `videoThumbnailImpressionsClickRate` は
+YouTube Analytics API (channel_reports) の仕様上 `dimensions=video` と組み合わせ不可。
+そのため動画別クエリからはこれらメトリクスを除外し、views/likes/comments/watch_time のみ取得する。
+(チャンネル全体サマリーは公式ドキュメントでは Traffic Source / Device Type / OS Report で
+取得可能とされているが、実 API では 400 が返るチャンネルが多く、Google 公式の Looker Studio
+Connector でも同症状が報告されている未解決問題のため、本 Mixin では収集しない)
 """
 
 from __future__ import annotations
@@ -70,12 +77,8 @@ class CTRAnalyticsMixin:
             daily_data = self._process_traffic_source_ctr(traffic_response)
             perf_analysis = self._analyze_ctr_performance(video_ctr_response)
 
-            # impressions 集計（動画レベルの合算でチャンネルレベル CTR を推定）
-            impressions_data = self._aggregate_impressions(video_data)
-
             return {
                 "period": f"{start_date} to {end_date}",
-                "impressions_summary": impressions_data,
                 "overall_engagement": overall_data,
                 "video_performance": video_data,
                 "daily_traffic": daily_data,
@@ -95,39 +98,20 @@ class CTRAnalyticsMixin:
             return {"error": str(e)}
 
     def _fetch_video_ctr(self, start_date: str, end_date: str) -> Dict:
-        """動画別 CTR データを取得する（トップ30本、views 降順）"""
+        """動画別パフォーマンスデータを取得する（トップ30本、views 降順）"""
         return (
             self.analytics_service.reports()
             .query(
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics=(
-                    "views,videoThumbnailImpressions,videoThumbnailImpressionsClickRate,"
-                    "likes,comments,estimatedMinutesWatched"
-                ),
+                metrics="views,likes,comments,estimatedMinutesWatched",
                 dimensions="video",
                 sort="-views",
                 maxResults=30,
             )
             .execute()
         )
-
-    def _aggregate_impressions(self, video_data: List[Dict]) -> Dict:
-        """動画レベルの impressions/CTR を集計してチャンネルサマリーを生成"""
-        total_impressions = sum(v.get("impressions", 0) for v in video_data)
-        total_views = sum(v.get("views", 0) for v in video_data)
-
-        if total_impressions > 0:
-            aggregated_ctr = (total_views / total_impressions) * 100
-        else:
-            aggregated_ctr = 0
-
-        return {
-            "total_impressions": total_impressions,
-            "total_views_from_impressions": total_views,
-            "aggregated_ctr_percentage": round(aggregated_ctr, 2),
-        }
 
     def get_collection_performance(self, start_date: str, end_date: str) -> Dict:
         """
@@ -204,9 +188,8 @@ class CTRAnalyticsMixin:
     def _process_overall_ctr(self, response: Dict) -> Dict:
         """全体エンゲージメント処理
 
-        チャンネルレベル（dimensions なし）ではサムネ CTR は取得不可のため、
-        views / likes / comments / shares / subscribersGained のみを返す。
-        サムネ CTR は動画レベルで取得して `_aggregate_impressions` で合算する。
+        views / likes / comments / shares / subscribersGained を返す。
+        サムネ impressions/CTR は `_process_channel_impressions_summary` 側で扱う。
         """
         if "rows" in response and response["rows"]:
             row = response["rows"][0]
@@ -233,7 +216,7 @@ class CTRAnalyticsMixin:
     def _process_video_ctr(self, response: Dict) -> List[Dict]:
         """動画別パフォーマンス処理
 
-        row: [video_id, views, impressions, ctr, likes, comments, watch_time]
+        row: [video_id, views, likes, comments, watch_time]
         """
         if "rows" not in response:
             return []
@@ -250,11 +233,9 @@ class CTRAnalyticsMixin:
                     "video_id": video_id,
                     "title": video_detail.get("title", "Unknown"),
                     "views": row[1],
-                    "impressions": row[2],
-                    "impression_ctr": row[3],
-                    "likes": row[4],
-                    "comments": row[5],
-                    "watch_time_minutes": row[6],
+                    "likes": row[2],
+                    "comments": row[3],
+                    "watch_time_minutes": row[4],
                     "collection_type": self._classify_collection_type(video_detail.get("title", "")),
                 }
             )
@@ -281,30 +262,22 @@ class CTRAnalyticsMixin:
         return daily_traffic
 
     def _analyze_ctr_performance(self, response: Dict) -> Dict:
-        """動画パフォーマンス分析（views / impressions / CTR サマリ）"""
+        """動画パフォーマンス分析（views サマリ）
+
+        動画別クエリでは impressions/CTR が取得できないため、views 統計のみを返す。
+        チャンネル全体の impressions/CTR サマリーは `impressions_summary` 側に格納される。
+        """
         if not response.get("rows"):
             return {}
 
         views = [row[1] for row in response["rows"]]
 
-        result = {
+        return {
             "highest_views": max(views),
             "lowest_views": min(views),
             "average_views": sum(views) / len(views),
             "total_videos": len(views),
         }
-
-        impressions = [row[2] for row in response["rows"] if row[2] > 0]
-        ctrs = [row[3] for row in response["rows"] if row[3] > 0]
-        if impressions:
-            result["total_impressions"] = sum(impressions)
-            result["average_impressions"] = sum(impressions) / len(impressions)
-        if ctrs:
-            result["average_ctr"] = sum(ctrs) / len(ctrs)
-            result["highest_ctr"] = max(ctrs)
-            result["lowest_ctr"] = min(ctrs)
-
-        return result
 
     def _calculate_collection_stats(self, videos: List[Dict]) -> Dict:
         """コレクション統計計算"""

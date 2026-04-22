@@ -10,11 +10,30 @@ import json
 import logging
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+
+def _save_dated_analytics_json(
+    subdir: str,
+    start_date: datetime,
+    end_date: datetime,
+    payload: dict[str, Any],
+    label: str,
+) -> Path:
+    """`data/analytics/<subdir>/<start>_to_<end>.json` に payload を保存する。"""
+    dir_path = channel_dir() / "data" / "analytics" / subdir
+    dir_path.mkdir(parents=True, exist_ok=True)
+    file_path = dir_path / f"{start_date.strftime('%Y-%m-%d')}_to_{end_date.strftime('%Y-%m-%d')}.json"
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    logger.info(f"💾 {label}保存完了: {file_path}")
+    return file_path
 
 
 class AnalyticsSystem:
@@ -89,7 +108,7 @@ class AnalyticsSystem:
                     json.dump(analytics_data, f, ensure_ascii=False, indent=2)
                 logger.info(f"💾 データ保存完了: {data_file}")
 
-                # --- 動画×日次データを別ファイルに保存（launch curve 分析用）---
+                # 動画×日次データ（launch curve 分析用）
                 try:
                     video_list = self.collector.get_all_channel_videos()
                     video_ids = [v["video_id"] for v in video_list]
@@ -98,24 +117,18 @@ class AnalyticsSystem:
                         end_date.strftime("%Y-%m-%d"),
                         video_ids=video_ids,
                     )
-                    daily_dir = channel_dir() / "data" / "analytics" / "daily_per_video"
-                    daily_dir.mkdir(parents=True, exist_ok=True)
-                    daily_file = daily_dir / (
-                        f"{start_date.strftime('%Y-%m-%d')}_to_{end_date.strftime('%Y-%m-%d')}.json"
+                    _save_dated_analytics_json(
+                        "daily_per_video",
+                        start_date,
+                        end_date,
+                        {
+                            "start_date": start_date.strftime("%Y-%m-%d"),
+                            "end_date": end_date.strftime("%Y-%m-%d"),
+                            "video_ids": video_ids,
+                            "rows": daily_rows,
+                        },
+                        "動画×日次データ",
                     )
-                    with open(daily_file, "w", encoding="utf-8") as f:
-                        json.dump(
-                            {
-                                "start_date": start_date.strftime("%Y-%m-%d"),
-                                "end_date": end_date.strftime("%Y-%m-%d"),
-                                "video_ids": video_ids,
-                                "rows": daily_rows,
-                            },
-                            f,
-                            ensure_ascii=False,
-                            indent=2,
-                        )
-                    logger.info(f"💾 動画×日次データ保存完了: {daily_file}")
                 except Exception as e:
                     logger.warning(f"⚠️ 動画×日次データ保存失敗（続行）: {e}")
 

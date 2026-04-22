@@ -12,13 +12,16 @@ class DummyCollector(VideoDailyAnalyticsMixin):
         self.channel_id = "UC_TEST"
 
 
-def test_get_video_daily_analytics_parses_thumbnail_impressions_rows():
+def test_get_video_daily_analytics_parses_views_only_rows():
+    """YouTube Analytics API 仕様上、dimensions=video,day では
+    videoThumbnailImpressions* が取得不可のため、views のみを扱う。
+    """
     mock_service = MagicMock()
     mock_service.reports().query().execute.return_value = {
         "rows": [
-            ["vid_A", "2026-04-01", 100, 5000, 2.0],
-            ["vid_A", "2026-04-02", 150, 7000, 2.1],
-            ["vid_B", "2026-04-01", 200, 10000, 2.0],
+            ["vid_A", "2026-04-01", 100],
+            ["vid_A", "2026-04-02", 150],
+            ["vid_B", "2026-04-01", 200],
         ],
     }
     collector = DummyCollector(mock_service)
@@ -28,10 +31,23 @@ def test_get_video_daily_analytics_parses_thumbnail_impressions_rows():
         "video_id": "vid_A",
         "date": "2026-04-01",
         "views": 100,
-        "impressions": 5000,
-        "impression_ctr": 2.0,
     }
     assert result[2]["video_id"] == "vid_B"
+
+
+def test_get_video_daily_analytics_query_uses_views_metric_only():
+    """クエリ送信時に videoThumbnailImpressions* が含まれないことを検証。"""
+    mock_service = MagicMock()
+    mock_service.reports().query().execute.return_value = {"rows": []}
+    collector = DummyCollector(mock_service)
+    collector.get_video_daily_analytics("2026-04-01", "2026-04-02")
+
+    # reports().query(...) の最後の呼び出しを取得
+    calls = mock_service.reports().query.call_args_list
+    # 最後の呼び出しが実際のクエリ (最初は .query() によるチェーン構築のダミー)
+    last_call_kwargs = calls[-1].kwargs
+    assert last_call_kwargs["metrics"] == "views"
+    assert "videoThumbnailImpressions" not in last_call_kwargs["metrics"]
 
 
 def test_get_video_daily_analytics_propagates_http_error():
