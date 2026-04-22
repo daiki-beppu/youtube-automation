@@ -12,6 +12,9 @@ class ChannelDailyAnalyticsMixin:
     """チャンネル × 日次粒度で views/impressions/CTR を取得する
 
     動画別 impressions が取れないため、チャンネル全体の日次値で代替する。
+    `videoThumbnailImpressions*` は `dimensions=insightTrafficSourceType,day`
+    + `filters=country==JP` で取得し、day ごとにソース行を合算して 1 日 1 行に戻す。
+    （流入元内訳は `get_ctr_analysis` の impressions_summary で別途取得）
     """
 
     def get_channel_daily_impressions(
@@ -20,14 +23,14 @@ class ChannelDailyAnalyticsMixin:
         end_date: str,
     ) -> List[Dict]:
         """
-        dimensions='day' で日次 views/impressions/CTR を取得する。
+        Traffic Source × day レポートで日次 views/impressions/CTR を取得する。
 
         Args:
             start_date: YYYY-MM-DD
             end_date: YYYY-MM-DD
 
         Returns:
-            List[Dict]: [{date, views, impressions, impression_ctr}, ...]
+            List[Dict]: [{date, views, impressions, impression_ctr}, ...] （date 昇順）
         """
         if not self.analytics_service:
             self.initialize()  # type: ignore[attr-defined]
@@ -39,7 +42,8 @@ class ChannelDailyAnalyticsMixin:
                 startDate=start_date,
                 endDate=end_date,
                 metrics="views,videoThumbnailImpressions,videoThumbnailImpressionsClickRate",
-                dimensions="day",
+                dimensions="insightTrafficSourceType,day",
+                filters="country==JP",
                 sort="day",
                 maxResults=10000,
             )
@@ -49,13 +53,35 @@ class ChannelDailyAnalyticsMixin:
 
     @staticmethod
     def _parse_channel_daily_rows(response: Dict) -> List[Dict]:
+        """Traffic Source × day レスポンスを day ごとに合算する。
+
+        row: [insightTrafficSourceType, date, views, impressions, impression_ctr]
+        CTR は各行平均ではなく `sum(views) / sum(impressions)` で再計算。
+        """
         rows = response.get("rows", [])
-        return [
-            {
-                "date": row[0],
-                "views": row[1],
-                "impressions": row[2],
-                "impression_ctr": row[3],
-            }
-            for row in rows
-        ]
+        by_date: Dict[str, Dict[str, float]] = {}
+
+        for row in rows:
+            date = row[1]
+            views = row[2] if len(row) > 2 else 0
+            impressions = row[3] if len(row) > 3 else 0
+
+            agg = by_date.setdefault(date, {"views": 0, "impressions": 0})
+            agg["views"] += views
+            agg["impressions"] += impressions
+
+        result: List[Dict] = []
+        for date in sorted(by_date.keys()):
+            agg = by_date[date]
+            views = agg["views"]
+            impressions = agg["impressions"]
+            ctr = (views / impressions * 100) if impressions > 0 else 0
+            result.append(
+                {
+                    "date": date,
+                    "views": views,
+                    "impressions": impressions,
+                    "impression_ctr": round(ctr, 2),
+                }
+            )
+        return result

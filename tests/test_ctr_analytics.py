@@ -1,8 +1,11 @@
 """CTR 分析ロジックのユニットテスト。
 
-YouTube Analytics API の仕様 (`videoThumbnailImpressions*` は
-`dimensions=video` と組み合わせ不可) に従ったクエリ送信と、
-チャンネル全体 impressions サマリーが維持されることを検証する。
+YouTube Analytics API の仕様
+(`videoThumbnailImpressions*` は Device Type / Traffic Source / Operating System の
+いずれかの必須 dimension + 地理 filter でのみ取得可) に従い、
+動画別クエリからは該当メトリクスを除外し、チャンネル全体サマリーは
+Device Type Report (`dimensions=deviceType` + `filters=country==JP`) 経由で
+取得することを検証する。
 """
 
 from unittest.mock import MagicMock
@@ -38,8 +41,8 @@ def test_fetch_video_ctr_excludes_thumbnail_impressions_metrics():
     assert "views" in last_call_kwargs["metrics"]
 
 
-def test_fetch_channel_impressions_summary_uses_no_dimensions():
-    """チャンネル全体 impressions サマリーは dimensions 無しで取得される。"""
+def test_fetch_channel_impressions_summary_uses_traffic_source_report():
+    """チャンネル全体 impressions サマリーは Traffic Source Report 経由で取得される。"""
     mock_service = MagicMock()
     mock_service.reports().query().execute.return_value = {"rows": []}
     collector = DummyCollector(mock_service)
@@ -49,22 +52,43 @@ def test_fetch_channel_impressions_summary_uses_no_dimensions():
     last_call_kwargs = mock_service.reports().query.call_args_list[-1].kwargs
     assert "videoThumbnailImpressions" in last_call_kwargs["metrics"]
     assert "videoThumbnailImpressionsClickRate" in last_call_kwargs["metrics"]
-    assert "dimensions" not in last_call_kwargs
+    assert last_call_kwargs["dimensions"] == "insightTrafficSourceType"
+    assert last_call_kwargs["filters"] == "country==JP"
 
 
-def test_process_channel_impressions_summary_builds_expected_shape():
-    """チャンネル全体 impressions レスポンスが所定の dict 形に変換される。"""
+def test_process_channel_impressions_summary_aggregates_traffic_source_rows():
+    """ソース別複数行を合算し、CTR は再計算。impressions>0 行のみが breakdown に入る。"""
     collector = DummyCollector(MagicMock())
 
-    # row: [views, impressions, impression_ctr]
-    response = {"rows": [[1000, 50000, 2.5]]}
+    # row: [insightTrafficSourceType, views, impressions, impression_ctr]
+    response = {
+        "rows": [
+            ["YT_SEARCH", 400, 20000, 2.0],
+            ["RELATED_VIDEO", 300, 15000, 2.0],
+            ["BROWSE", 200, 10000, 2.0],
+            ["SUBSCRIBER", 100, 5000, 2.0],
+            # impressions=0 の行は breakdown から除外される
+            ["EXT_URL", 50, 0, 0.0],
+        ]
+    }
     result = collector._process_channel_impressions_summary(response)
 
-    assert result == {
-        "total_impressions": 50000,
-        "total_views_from_impressions": 1000,
-        "aggregated_ctr_percentage": 2.5,
-    }
+    assert result["total_impressions"] == 50000
+    assert result["total_views_from_impressions"] == 1000
+    assert result["aggregated_ctr_percentage"] == 2.0
+
+    # breakdown は impressions 降順で並ぶ
+    breakdown = result["traffic_source_breakdown"]
+    assert len(breakdown) == 4
+    assert breakdown[0]["traffic_source"] == "YT_SEARCH"
+    assert breakdown[0]["impressions"] == 20000
+    assert breakdown[0]["impression_ctr_percentage"] == 2.0
+    assert [b["traffic_source"] for b in breakdown] == [
+        "YT_SEARCH",
+        "RELATED_VIDEO",
+        "BROWSE",
+        "SUBSCRIBER",
+    ]
 
 
 def test_process_channel_impressions_summary_empty_response_returns_zeros():
@@ -74,6 +98,7 @@ def test_process_channel_impressions_summary_empty_response_returns_zeros():
         "total_impressions": 0,
         "total_views_from_impressions": 0,
         "aggregated_ctr_percentage": 0,
+        "traffic_source_breakdown": [],
     }
 
 
@@ -113,7 +138,7 @@ def test_get_ctr_analysis_keeps_impressions_summary_via_channel_query():
     def execute_side_effect():
         return execute_side_effect.responses.pop(0)
 
-    # 呼び出し順: overall / video_ctr / traffic / channel_impressions
+    # 呼び出し順: overall / video_ctr / traffic / channel_impressions (Traffic Source Report)
     execute_side_effect.responses = [
         # overall (views,likes,comments,shares,subscribersGained)
         {"rows": [[10000, 500, 100, 20, 50]]},
@@ -121,8 +146,15 @@ def test_get_ctr_analysis_keeps_impressions_summary_via_channel_query():
         {"rows": [["vid_A", 5000, 200, 30, 12000]]},
         # traffic (views,estimatedMinutesWatched dimensions=day)
         {"rows": [["2026-04-01", 300, 1200]]},
-        # channel impressions summary (views,thumbImpressions,ctr)
-        {"rows": [[10000, 400000, 2.5]]},
+        # channel impressions summary (insightTrafficSourceType,views,impressions,ctr)
+        {
+            "rows": [
+                ["YT_SEARCH", 4000, 160000, 2.5],
+                ["RELATED_VIDEO", 3000, 120000, 2.5],
+                ["BROWSE", 2000, 80000, 2.5],
+                ["SUBSCRIBER", 1000, 40000, 2.5],
+            ]
+        },
     ]
     mock_service.reports().query().execute.side_effect = execute_side_effect
 
@@ -163,6 +195,7 @@ def test_get_ctr_analysis_tolerates_impressions_query_failure():
         "total_impressions": 0,
         "total_views_from_impressions": 0,
         "aggregated_ctr_percentage": 0,
+        "traffic_source_breakdown": [],
     }
     # 他のメトリクスは取得できていること
     assert result["video_performance"][0]["video_id"] == "vid_A"
