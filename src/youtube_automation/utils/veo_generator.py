@@ -11,7 +11,7 @@ from pathlib import Path
 from youtube_automation.utils import cost_tracker
 
 # --- 定数 ---
-DEFAULT_MODEL = "veo-3.1-lite-generate-preview"
+DEFAULT_MODEL = "veo-3.1-fast-generate-001"
 DEFAULT_PROMPT = (
     "Static scene with only natural subtle movements: gentle flickering of candle flames, "
     "slight sway of character breathing, soft light shifts on surfaces. "

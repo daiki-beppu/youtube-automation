@@ -86,6 +86,9 @@ PRICING: dict[str, ModelPricing] = {
         by_size={"1K": 0.134, "2K": 0.134, "4K": 0.24},
     ),
     # 動画 — Veo
+    # NOTE: GA 版 (`-001`) は preview 相当の単価を暫定で採用。正確な Vertex AI 公称価格が判明し次第更新する。
+    "veo-3.1-fast-generate-001": ModelPricing(unit="second", per_unit=0.15),
+    "veo-3.1-generate-001": ModelPricing(unit="second", per_unit=0.40),
     "veo-3.1-lite-generate-preview": ModelPricing(unit="second", per_unit=0.15),
     "veo-3.1-generate-preview": ModelPricing(unit="second", per_unit=0.40),
     "veo-3.0-generate-001": ModelPricing(unit="second", per_unit=0.40),
@@ -339,8 +342,7 @@ def print_last_report(last_entry: dict | None = None) -> None:
         f"{_format_usd(last['estimated_cost_usd'], rate)}"
     )
     month_detail = " / ".join(
-        f"{_CATEGORY_LABELS[c]} {_format_usd(month_by_cat.get(c, 0.0), rate)}"
-        for c in ("image", "video", "audio")
+        f"{_CATEGORY_LABELS[c]} {_format_usd(month_by_cat.get(c, 0.0), rate)}" for c in ("image", "video", "audio")
     )
     print(f"  今月({month}): {_format_usd(month_total, rate)}")
     print(f"    内訳: {month_detail}")
