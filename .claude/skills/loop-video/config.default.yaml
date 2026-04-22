@@ -6,8 +6,8 @@
 # 注意: generate_short_loop.py (ショート用 9:16 ループ) も同じ veo.* を共有する。
 
 veo:
-  # Veo モデル ID（API デフォルト: veo-3.1-lite-generate-preview）
-  model: "veo-3.1-lite-generate-preview"
+  # Veo モデル ID（API デフォルト: veo-3.1-fast-generate-001 / 選択肢: veo-3.1-fast-generate-001 | veo-3.1-generate-001）
+  model: "veo-3.1-fast-generate-001"
 
   # 動画生成プロンプト。コレクションの世界観に合わせてチャンネル側で上書き推奨。
   # 原則: 静止構図 + 微細な動き（ロウソクの揺らぎ、キャラの呼吸、光のシフト）。
