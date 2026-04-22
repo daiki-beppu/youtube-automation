@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from googleapiclient.errors import HttpError
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,39 +42,26 @@ class VideoDailyAnalyticsMixin:
         if video_ids:
             query_kwargs["filters"] = "video==" + ",".join(video_ids)
 
-        try:
-            response = self.analytics_service.reports().query(
-                metrics="views,impressions,impressionClickThroughRate",
+        response = (
+            self.analytics_service.reports()
+            .query(
+                metrics="views,videoThumbnailImpressions,videoThumbnailImpressionsClickRate",
                 **query_kwargs,
-            ).execute()
-            return self._parse_video_daily_rows(response, impressions_available=True)
-        except HttpError as e:
-            logger.warning(f"impressions 取得不可、フォールバック: {e}")
-            response = self.analytics_service.reports().query(
-                metrics="views",
-                **query_kwargs,
-            ).execute()
-            return self._parse_video_daily_rows(response, impressions_available=False)
+            )
+            .execute()
+        )
+        return self._parse_video_daily_rows(response)
 
     @staticmethod
-    def _parse_video_daily_rows(response: Dict, impressions_available: bool) -> List[Dict]:
+    def _parse_video_daily_rows(response: Dict) -> List[Dict]:
         rows = response.get("rows", [])
-        result = []
-        for row in rows:
-            if impressions_available:
-                result.append({
-                    "video_id": row[0],
-                    "date": row[1],
-                    "views": row[2],
-                    "impressions": row[3],
-                    "impression_ctr": row[4],
-                })
-            else:
-                result.append({
-                    "video_id": row[0],
-                    "date": row[1],
-                    "views": row[2],
-                    "impressions": 0,
-                    "impression_ctr": 0.0,
-                })
-        return result
+        return [
+            {
+                "video_id": row[0],
+                "date": row[1],
+                "views": row[2],
+                "impressions": row[3],
+                "impression_ctr": row[4],
+            }
+            for row in rows
+        ]

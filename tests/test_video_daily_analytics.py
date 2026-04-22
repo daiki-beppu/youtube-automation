@@ -1,5 +1,8 @@
 from unittest.mock import MagicMock
 
+import pytest
+from googleapiclient.errors import HttpError
+
 from youtube_automation.utils.video_daily_analytics import VideoDailyAnalyticsMixin
 
 
@@ -9,7 +12,7 @@ class DummyCollector(VideoDailyAnalyticsMixin):
         self.channel_id = "UC_TEST"
 
 
-def test_get_video_daily_analytics_parses_rows_with_impressions():
+def test_get_video_daily_analytics_parses_thumbnail_impressions_rows():
     mock_service = MagicMock()
     mock_service.reports().query().execute.return_value = {
         "rows": [
@@ -19,9 +22,7 @@ def test_get_video_daily_analytics_parses_rows_with_impressions():
         ],
     }
     collector = DummyCollector(mock_service)
-    result = collector.get_video_daily_analytics(
-        "2026-04-01", "2026-04-02", video_ids=["vid_A", "vid_B"]
-    )
+    result = collector.get_video_daily_analytics("2026-04-01", "2026-04-02", video_ids=["vid_A", "vid_B"])
     assert len(result) == 3
     assert result[0] == {
         "video_id": "vid_A",
@@ -33,22 +34,9 @@ def test_get_video_daily_analytics_parses_rows_with_impressions():
     assert result[2]["video_id"] == "vid_B"
 
 
-def test_get_video_daily_analytics_fallback_without_impressions():
-    from googleapiclient.errors import HttpError
-
+def test_get_video_daily_analytics_propagates_http_error():
     mock_service = MagicMock()
-    mock_service.reports().query().execute.side_effect = [
-        HttpError(MagicMock(status=400), b"impressions unavailable"),
-        {"rows": [["vid_A", "2026-04-01", 100]]},
-    ]
+    mock_service.reports().query().execute.side_effect = HttpError(MagicMock(status=400), b"metric not found")
     collector = DummyCollector(mock_service)
-    result = collector.get_video_daily_analytics(
-        "2026-04-01", "2026-04-01", video_ids=["vid_A"]
-    )
-    assert result[0] == {
-        "video_id": "vid_A",
-        "date": "2026-04-01",
-        "views": 100,
-        "impressions": 0,
-        "impression_ctr": 0.0,
-    }
+    with pytest.raises(HttpError):
+        collector.get_video_daily_analytics("2026-04-01", "2026-04-01", video_ids=["vid_A"])
