@@ -12,7 +12,7 @@ import wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from youtube_automation.utils import cost_tracker  # noqa: E402
+from youtube_automation.utils import cost_tracker, lyria_client  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 from youtube_automation.utils.time_utils import format_duration_mmss  # noqa: E402
 
@@ -92,7 +92,7 @@ def dry_run(comp: dict) -> None:
         print(f"  Estimated master duration: ~{est_min:.0f} min")
         print()
         for i, seg in enumerate(segments):
-            print(f"  seg_{i+1:03d}  {seg['phase_name']:<30s}")
+            print(f"  seg_{i + 1:03d}  {seg['phase_name']:<30s}")
         print()
         return
 
@@ -107,7 +107,7 @@ def dry_run(comp: dict) -> None:
 
     segments = build_segment_compositions(comp)
     for i, seg in enumerate(segments):
-        print(f"  seg_{i+1:03d}  {seg['phase_name']:<30s}")
+        print(f"  seg_{i + 1:03d}  {seg['phase_name']:<30s}")
     print(f"\n  Total segments: {len(segments)}")
     print(f"  {format_duration_mmss(total)}  END")
     print()
@@ -154,17 +154,19 @@ def build_segment_compositions(comp: dict) -> list[dict]:
         phase_name = phase.get("name_en") or phase["name"]
 
         for sub in range(num_subs):
-            sub_label = f"{phase_name} ({sub+1}/{num_subs})" if num_subs > 1 else phase_name
+            sub_label = f"{phase_name} ({sub + 1}/{num_subs})" if num_subs > 1 else phase_name
             sub_prompt = prompt
             if num_subs > 1 and sub > 0:
                 sub_prompt += ", continuing with new variations"
 
-            segments.append({
-                "title": f"{comp['title']} [seg_{len(segments)+1:03d}] {sub_label}",
-                "prompt": sub_prompt,
-                "model": model,
-                "phase_name": sub_label,
-            })
+            segments.append(
+                {
+                    "title": f"{comp['title']} [seg_{len(segments) + 1:03d}] {sub_label}",
+                    "prompt": sub_prompt,
+                    "model": model,
+                    "phase_name": sub_label,
+                }
+            )
 
     return segments
 
@@ -186,12 +188,14 @@ def _build_unique_segments(comp: dict) -> list[dict]:
         # 長さヒントをプロンプトに足してモデルに伝える（参考程度）
         prompt = f"{prompt}, approximately {seg_sec} seconds long, full musical arc within this duration"
         phase_name = phase.get("name_en") or phase["name"]
-        segments.append({
-            "title": f"{comp['title']} [seg_{len(segments)+1:03d}] {phase_name}",
-            "prompt": prompt,
-            "model": model,
-            "phase_name": phase_name,
-        })
+        segments.append(
+            {
+                "title": f"{comp['title']} [seg_{len(segments) + 1:03d}] {phase_name}",
+                "prompt": prompt,
+                "model": model,
+                "phase_name": phase_name,
+            }
+        )
 
     return segments
 
@@ -217,8 +221,7 @@ def pcm_duration_sec(pcm_data: bytes | bytearray) -> float:
     return len(pcm_data) / (SAMPLE_RATE * CHANNELS * SAMPLE_WIDTH)
 
 
-def crossfade_join(pcm_a: bytes, pcm_b: bytes,
-                   fade_samples: int | None = None) -> bytes:
+def crossfade_join(pcm_a: bytes, pcm_b: bytes, fade_samples: int | None = None) -> bytes:
     """2つの PCM データをクロスフェードで結合する。"""
     if fade_samples is None:
         fade_samples = SAMPLE_RATE * 5
@@ -252,30 +255,9 @@ def crossfade_join(pcm_a: bytes, pcm_b: bytes,
     return head + mixed + tail
 
 
-def generate_segment(client, types, prompt: str, model: str) -> bytes | None:
+def generate_segment(prompt: str, model: str) -> bytes | None:
     """Lyria 3 API で1セグメントを生成し、オーディオバイトを返す。"""
-    try:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-            ),
-        )
-    except Exception as e:
-        print(f"\n    [ERROR] API エラー: {e}")
-        return None
-
-    if not response.candidates or not response.candidates[0].content:
-        print("\n    [ERROR] レスポンスが空です（安全フィルタの可能性）")
-        return None
-
-    for part in response.candidates[0].content.parts:
-        if part.inline_data and part.inline_data.mime_type.startswith("audio/"):
-            return part.inline_data.data
-
-    print("\n    [ERROR] レスポンスにオーディオデータがありません")
-    return None
+    return lyria_client.generate_music(prompt, model)
 
 
 def _save_audio_as_wav(data: bytes, path: Path) -> None:
@@ -291,20 +273,32 @@ def _save_audio_as_wav(data: bytes, path: Path) -> None:
 
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-i", str(tmp_path),
-             "-ar", str(SAMPLE_RATE), "-ac", str(CHANNELS),
-             "-sample_fmt", "s16", "-f", "wav", str(path)],
-            capture_output=True, check=True,
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(tmp_path),
+                "-ar",
+                str(SAMPLE_RATE),
+                "-ac",
+                str(CHANNELS),
+                "-sample_fmt",
+                "s16",
+                "-f",
+                "wav",
+                str(path),
+            ],
+            capture_output=True,
+            check=True,
         )
     finally:
         if tmp_path.exists():
             tmp_path.unlink()
 
 
-def _generate_one_segment(client, types, i: int, seg: dict, seg_path: Path,
-                          max_retries: int) -> bool:
+def _generate_one_segment(i: int, seg: dict, seg_path: Path, max_retries: int) -> bool:
     """1つのセグメントを生成する。"""
-    label = f"seg_{i+1:03d}"
+    label = f"seg_{i + 1:03d}"
 
     if seg_path.exists():
         print(f"\n  [skip] {label} — 既に存在")
@@ -318,9 +312,7 @@ def _generate_one_segment(client, types, i: int, seg: dict, seg_path: Path,
             print(f"    [{label}] retry {attempt}/{max_retries} ({wait_sec}s 待機)")
             time.sleep(wait_sec)
 
-        audio_data = generate_segment(
-            client, types, seg["prompt"], seg["model"],
-        )
+        audio_data = generate_segment(seg["prompt"], seg["model"])
 
         if audio_data is not None:
             _save_audio_as_wav(audio_data, seg_path)
@@ -342,9 +334,9 @@ def _generate_one_segment(client, types, i: int, seg: dict, seg_path: Path,
     return False
 
 
-def generate_segmented(client, types, comp: dict, output: Path,
-                       max_retries: int = 3, workers: int = 0,
-                       cleanup: bool = False) -> bytes | None:
+def generate_segmented(
+    comp: dict, output: Path, max_retries: int = 3, workers: int = 0, cleanup: bool = False
+) -> bytes | None:
     """セグメント分割生成 → クロスフェード結合。
 
     workers=0: 逐次実行
@@ -352,21 +344,25 @@ def generate_segmented(client, types, comp: dict, output: Path,
     """
     segments = build_segment_compositions(comp)
     seg_dir = output.parent
-    seg_paths = [seg_dir / f"seg_{i+1:03d}.wav" for i in range(len(segments))]
+    seg_paths = [seg_dir / f"seg_{i + 1:03d}.wav" for i in range(len(segments))]
     crossfade_sec = comp.get("crossfade_sec", 5)
     fade_samples = SAMPLE_RATE * crossfade_sec
 
     mode = f"{workers} workers" if workers > 0 else "sequential"
     print(f"\n=== セグメント分割生成 ({len(segments)} segments, {mode}) ===")
     for i, seg in enumerate(segments):
-        print(f"  seg_{i+1:03d}: {seg['phase_name']}")
+        print(f"  seg_{i + 1:03d}: {seg['phase_name']}")
 
     if workers > 0:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {}
             for i, (seg, seg_path) in enumerate(zip(segments, seg_paths)):
                 future = executor.submit(
-                    _generate_one_segment, client, types, i, seg, seg_path, max_retries,
+                    _generate_one_segment,
+                    i,
+                    seg,
+                    seg_path,
+                    max_retries,
                 )
                 futures[future] = i
 
@@ -382,7 +378,7 @@ def generate_segmented(client, types, comp: dict, output: Path,
             return None
     else:
         for i, (seg, seg_path) in enumerate(zip(segments, seg_paths)):
-            ok = _generate_one_segment(client, types, i, seg, seg_path, max_retries)
+            ok = _generate_one_segment(i, seg, seg_path, max_retries)
             if not ok:
                 print("  成功済みセグメントは保持されています。再実行で続行できます。")
                 return None
@@ -393,7 +389,7 @@ def generate_segmented(client, types, comp: dict, output: Path,
     for i in range(1, len(seg_paths)):
         next_pcm = read_wav_pcm(seg_paths[i])
         combined = crossfade_join(combined, next_pcm, fade_samples)
-        print(f"  joined: seg_{i:03d} + seg_{i+1:03d} -> {format_duration_mmss(pcm_duration_sec(combined) / 60)}")
+        print(f"  joined: seg_{i:03d} + seg_{i + 1:03d} -> {format_duration_mmss(pcm_duration_sec(combined) / 60)}")
 
     write_wav(combined, output)
 
@@ -420,9 +416,9 @@ def generate_segmented(client, types, comp: dict, output: Path,
     return combined
 
 
-def generate_shuffled_master(client, types, comp: dict, output: Path,
-                             passes: int, max_retries: int = 3, workers: int = 0,
-                             cleanup: bool = False) -> bytes | None:
+def generate_shuffled_master(
+    comp: dict, output: Path, passes: int, max_retries: int = 3, workers: int = 0, cleanup: bool = False
+) -> bytes | None:
     """ユニーク12曲 × N パス シャッフルマスター生成。
 
     1. phases に対応する N 個のユニークセグメントを生成
@@ -432,7 +428,7 @@ def generate_shuffled_master(client, types, comp: dict, output: Path,
     """
     segments = build_segment_compositions(comp)
     seg_dir = output.parent
-    seg_paths = [seg_dir / f"seg_{i+1:03d}.wav" for i in range(len(segments))]
+    seg_paths = [seg_dir / f"seg_{i + 1:03d}.wav" for i in range(len(segments))]
     crossfade_sec = comp.get("crossfade_sec", 5)
     fade_samples = SAMPLE_RATE * crossfade_sec
     n = len(segments)
@@ -440,13 +436,17 @@ def generate_shuffled_master(client, types, comp: dict, output: Path,
     mode = f"{workers} workers" if workers > 0 else "sequential"
     print(f"\n=== Unique セグメント生成 ({n} segments, {mode}) ===")
     for i, seg in enumerate(segments):
-        print(f"  seg_{i+1:03d}: {seg['phase_name']}")
+        print(f"  seg_{i + 1:03d}: {seg['phase_name']}")
 
     if workers > 0:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(
-                    _generate_one_segment, client, types, i, seg, seg_path, max_retries,
+                    _generate_one_segment,
+                    i,
+                    seg,
+                    seg_path,
+                    max_retries,
                 ): i
                 for i, (seg, seg_path) in enumerate(zip(segments, seg_paths))
             }
@@ -456,7 +456,7 @@ def generate_shuffled_master(client, types, comp: dict, output: Path,
     else:
         results = []
         for i, (seg, seg_path) in enumerate(zip(segments, seg_paths)):
-            results.append(_generate_one_segment(client, types, i, seg, seg_path, max_retries))
+            results.append(_generate_one_segment(i, seg, seg_path, max_retries))
 
     if not all(results):
         failed = [i + 1 for i, ok in enumerate(results) if not ok]
@@ -499,20 +499,20 @@ def generate_shuffled_master(client, types, comp: dict, output: Path,
     print(f"\n=== {passes} パスのシャッフル結合 (crossfade {crossfade_sec}s) ===")
     pass_pcms: list[bytes] = []
     for p_idx, order in enumerate(pass_orders):
-        order_str = " -> ".join(f"{i+1:02d}" for i in order)
-        print(f"  pass {p_idx+1}/{passes}: {order_str}")
+        order_str = " -> ".join(f"{i + 1:02d}" for i in order)
+        print(f"  pass {p_idx + 1}/{passes}: {order_str}")
         combined = pcms[order[0]]
         for j in range(1, len(order)):
             combined = crossfade_join(combined, pcms[order[j]], fade_samples)
         pass_pcms.append(combined)
-        print(f"    pass {p_idx+1} duration: {format_duration_mmss(pcm_duration_sec(combined) / 60)}")
+        print(f"    pass {p_idx + 1} duration: {format_duration_mmss(pcm_duration_sec(combined) / 60)}")
 
     # パス間をクロスフェード結合
     print(f"\n=== {passes} パスを統合中 (crossfade {crossfade_sec}s) ===")
     master = pass_pcms[0]
     for i in range(1, len(pass_pcms)):
         master = crossfade_join(master, pass_pcms[i], fade_samples)
-        print(f"  joined: pass_{i:02d} + pass_{i+1:02d} -> {format_duration_mmss(pcm_duration_sec(master) / 60)}")
+        print(f"  joined: pass_{i:02d} + pass_{i + 1:02d} -> {format_duration_mmss(pcm_duration_sec(master) / 60)}")
 
     write_wav(master, output)
 
@@ -544,8 +544,7 @@ def generate_shuffled_master(client, types, comp: dict, output: Path,
         "crossfade_sec": crossfade_sec,
         "shuffle_seed": seed,
         "orders": [
-            {"pass": p_idx + 1, "order_1based": [i + 1 for i in order]}
-            for p_idx, order in enumerate(pass_orders)
+            {"pass": p_idx + 1, "order_1based": [i + 1 for i in order]} for p_idx, order in enumerate(pass_orders)
         ],
     }
     log_path.write_text(json.dumps(log_data, indent=2, ensure_ascii=False))
@@ -579,27 +578,31 @@ def build_preview_compositions(comp: dict) -> list[tuple[int, dict]]:
     return previews
 
 
-def generate_previews(client, types, comp: dict, output_dir: Path) -> bool:
+def generate_previews(comp: dict, output_dir: Path) -> bool:
     """3つの代表フェーズから30秒プレビューを並列生成する。"""
     previews = build_preview_compositions(comp)
 
     print(f"\n=== プレビュー生成 ({len(previews)} samples, Clip model) ===")
     for i, (phase_idx, seg) in enumerate(previews):
-        print(f"  preview_{i+1:02d}: [{phase_idx+1}/{len(comp['phases'])}] {seg['phase_name']}")
+        print(f"  preview_{i + 1:02d}: [{phase_idx + 1}/{len(comp['phases'])}] {seg['phase_name']}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     preview_paths = []
     for i, (_, seg) in enumerate(previews):
         safe_name = seg["phase_name"].replace(" ", "-").replace("/", "-").replace("\\", "-").replace(":", "-")
-        path = output_dir / f"preview_{i+1:02d}_{safe_name}.wav"
+        path = output_dir / f"preview_{i + 1:02d}_{safe_name}.wav"
         preview_paths.append(path)
 
     with ThreadPoolExecutor(max_workers=len(previews)) as executor:
         futures = {}
         for i, ((_, seg), path) in enumerate(zip(previews, preview_paths)):
             future = executor.submit(
-                _generate_one_segment, client, types, i, seg, path, max_retries=1,
+                _generate_one_segment,
+                i,
+                seg,
+                path,
+                max_retries=1,
             )
             futures[future] = i
 
@@ -622,6 +625,7 @@ def generate_previews(client, types, comp: dict, output_dir: Path) -> bool:
 def main():
     try:
         from dotenv import find_dotenv, load_dotenv
+
         load_dotenv(find_dotenv())
     except ImportError:
         pass
@@ -634,16 +638,15 @@ def main():
     parser.add_argument("-o", "--output", default="master.wav", help="出力 WAV パス (default: master.wav)")
     parser.add_argument("-y", "--yes", action="store_true", help="確認スキップ")
     parser.add_argument("--dry-run", action="store_true", help="タイムライン表示のみ")
-    parser.add_argument("--max-retries", type=int, default=3,
-                        help="失敗時の自動リトライ回数 (default: 3)")
-    parser.add_argument("--workers", type=int, default=0,
-                        help="並列生成数 (default: 0=逐次、N=N並列、-1=全並列)")
-    parser.add_argument("--cleanup", action="store_true", default=False,
-                        help="生成後にセグメントファイルを削除 (default: 保持)")
-    parser.add_argument("--preview", action="store_true",
-                        help="3つの代表フェーズから30秒プレビューを生成 (Clip model)")
-    parser.add_argument("--shuffle-passes", type=int, default=None,
-                        help="N>0 で各 phase を 1 セグメントずつ生成し N 回シャッフル連結")
+    parser.add_argument("--max-retries", type=int, default=3, help="失敗時の自動リトライ回数 (default: 3)")
+    parser.add_argument("--workers", type=int, default=0, help="並列生成数 (default: 0=逐次、N=N並列、-1=全並列)")
+    parser.add_argument(
+        "--cleanup", action="store_true", default=False, help="生成後にセグメントファイルを削除 (default: 保持)"
+    )
+    parser.add_argument("--preview", action="store_true", help="3つの代表フェーズから30秒プレビューを生成 (Clip model)")
+    parser.add_argument(
+        "--shuffle-passes", type=int, default=None, help="N>0 で各 phase を 1 セグメントずつ生成し N 回シャッフル連結"
+    )
     args = parser.parse_args()
 
     comp_path = Path(args.composition).resolve()
@@ -665,25 +668,14 @@ def main():
 
     dry_run(comp)
 
-    try:
-        from google.genai import types
-
-        from youtube_automation.utils.genai_client import create_genai_client
-    except ImportError:
-        print("[ERROR] google-genai がインストールされていません。")
-        print("  uv pip install google-genai")
-        sys.exit(1)
-
-    try:
-        client = create_genai_client()
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
     if args.preview:
         output_dir = Path(args.output).resolve().parent / "preview"
         start_time = time.monotonic()
-        ok = generate_previews(client, types, comp, output_dir)
+        try:
+            ok = generate_previews(comp, output_dir)
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
         elapsed = time.monotonic() - start_time
 
         if ok:
@@ -708,17 +700,27 @@ def main():
 
     start_time = time.monotonic()
 
-    if comp.get("shuffle_passes", 0) > 0:
-        pcm_data = generate_shuffled_master(
-            client, types, comp, output,
-            passes=comp["shuffle_passes"],
-            max_retries=args.max_retries, workers=workers, cleanup=args.cleanup,
-        )
-    else:
-        pcm_data = generate_segmented(
-            client, types, comp, output,
-            max_retries=args.max_retries, workers=workers, cleanup=args.cleanup,
-        )
+    try:
+        if comp.get("shuffle_passes", 0) > 0:
+            pcm_data = generate_shuffled_master(
+                comp,
+                output,
+                passes=comp["shuffle_passes"],
+                max_retries=args.max_retries,
+                workers=workers,
+                cleanup=args.cleanup,
+            )
+        else:
+            pcm_data = generate_segmented(
+                comp,
+                output,
+                max_retries=args.max_retries,
+                workers=workers,
+                cleanup=args.cleanup,
+            )
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
 
     gen_elapsed = time.monotonic() - start_time
 

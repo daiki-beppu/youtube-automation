@@ -5,6 +5,7 @@ Vertex AI 1 本化後の検証:
 1. `GOOGLE_CLOUD_PROJECT` が設定されていれば `genai.Client(vertexai=True, project, location)` が呼ばれる
 2. `GOOGLE_CLOUD_PROJECT` 未設定なら `ConfigError`
 3. `GOOGLE_CLOUD_LOCATION` が反映される（既定値 us-central1）
+4. `location` 引数は env より優先される (#56: モデル別 region 切替)
 """
 
 from __future__ import annotations
@@ -61,3 +62,26 @@ class TestCreateGenaiClient:
             genai_client.create_genai_client()
 
         mock_client.assert_called_once_with(vertexai=True, project="my-project", location="europe-west4")
+
+    def test_location_argument_overrides_env(self):
+        """`location` 引数は GOOGLE_CLOUD_LOCATION よりも優先される (画像 global / Veo us-central1 の両立用)"""
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        os.environ["GOOGLE_CLOUD_LOCATION"] = "europe-west4"
+
+        from youtube_automation.utils import genai_client
+
+        with patch.object(genai_client.genai, "Client") as mock_client:
+            genai_client.create_genai_client(location="global")
+
+        mock_client.assert_called_once_with(vertexai=True, project="my-project", location="global")
+
+    def test_location_argument_without_env(self):
+        """env が無くても `location` 引数だけで切替可能"""
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+
+        from youtube_automation.utils import genai_client
+
+        with patch.object(genai_client.genai, "Client") as mock_client:
+            genai_client.create_genai_client(location="us-central1")
+
+        mock_client.assert_called_once_with(vertexai=True, project="my-project", location="us-central1")

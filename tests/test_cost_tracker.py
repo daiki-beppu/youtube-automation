@@ -18,19 +18,23 @@ def tmp_channel(tmp_path: Path, monkeypatch):
     (tmp_path / "config" / "channel").mkdir(parents=True, exist_ok=True)
     # 最小限の meta.json / content.json を用意してローダを満たす
     (tmp_path / "config" / "channel" / "meta.json").write_text(
-        json.dumps({
-            "channel": {"name": "test", "slug": "test", "default_language": "ja"},
-            "youtube_channel": {"id": "UC_TEST", "handle": "@test", "url": "https://youtube.com/@test"},
-        }),
+        json.dumps(
+            {
+                "channel": {"name": "test", "slug": "test", "default_language": "ja"},
+                "youtube_channel": {"id": "UC_TEST", "handle": "@test", "url": "https://youtube.com/@test"},
+            }
+        ),
         encoding="utf-8",
     )
     (tmp_path / "config" / "channel" / "content.json").write_text(
-        json.dumps({
-            "genre": {"primary": "test"},
-            "tags": {"base": []},
-            "descriptions": {"short": "", "long": ""},
-            "title": {"prefix": "", "suffix": ""},
-        }),
+        json.dumps(
+            {
+                "genre": {"primary": "test"},
+                "tags": {"base": []},
+                "descriptions": {"short": "", "long": ""},
+                "title": {"prefix": "", "suffix": ""},
+            }
+        ),
         encoding="utf-8",
     )
     from youtube_automation.utils.config import reset
@@ -146,15 +150,19 @@ def test_read_log_normalizes_legacy_entries(tmp_channel: Path):
     legacy_path = tmp_channel / "data" / "image_costs.json"
     legacy_path.parent.mkdir(parents=True, exist_ok=True)
     legacy_path.write_text(
-        json.dumps([{
-            "timestamp": "2026-04-01T10:00:00+00:00",
-            "model": "gemini-3.1-flash-image-preview",
-            "image_size": "2K",
-            "aspect_ratio": "16:9",
-            "reference_count": 0,
-            "estimated_cost_usd": 0.04,
-            "output_file": "foo.png",
-        }]),
+        json.dumps(
+            [
+                {
+                    "timestamp": "2026-04-01T10:00:00+00:00",
+                    "model": "gemini-3.1-flash-image-preview",
+                    "image_size": "2K",
+                    "aspect_ratio": "16:9",
+                    "reference_count": 0,
+                    "estimated_cost_usd": 0.04,
+                    "output_file": "foo.png",
+                }
+            ]
+        ),
         encoding="utf-8",
     )
     entries = cost_tracker.read_log("image")
@@ -170,26 +178,28 @@ def test_print_summary_monthly_breakdown(tmp_channel: Path, capsys):
     path = tmp_channel / "data" / "image_costs.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps([
-            {
-                "timestamp": "2026-03-15T10:00:00+00:00",
-                "category": "image",
-                "model": "gemini-3.1-flash-image-preview",
-                "quantity": 1,
-                "unit": "image",
-                "estimated_cost_usd": 0.101,
-                "metadata": {"image_size": "2K"},
-            },
-            {
-                "timestamp": "2026-04-10T10:00:00+00:00",
-                "category": "image",
-                "model": "gemini-3.1-flash-image-preview",
-                "quantity": 1,
-                "unit": "image",
-                "estimated_cost_usd": 0.101,
-                "metadata": {"image_size": "2K"},
-            },
-        ]),
+        json.dumps(
+            [
+                {
+                    "timestamp": "2026-03-15T10:00:00+00:00",
+                    "category": "image",
+                    "model": "gemini-3.1-flash-image-preview",
+                    "quantity": 1,
+                    "unit": "image",
+                    "estimated_cost_usd": 0.101,
+                    "metadata": {"image_size": "2K"},
+                },
+                {
+                    "timestamp": "2026-04-10T10:00:00+00:00",
+                    "category": "image",
+                    "model": "gemini-3.1-flash-image-preview",
+                    "quantity": 1,
+                    "unit": "image",
+                    "estimated_cost_usd": 0.101,
+                    "metadata": {"image_size": "2K"},
+                },
+            ]
+        ),
         encoding="utf-8",
     )
     cost_tracker.print_summary("image")

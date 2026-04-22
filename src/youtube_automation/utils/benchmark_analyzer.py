@@ -17,7 +17,7 @@ def parse_iso_duration(iso: str) -> str:
     Returns:
         表示用文字列（例: "2h01m", "53s"）
     """
-    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', iso)
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso)
     if not match:
         return iso
 
@@ -138,17 +138,17 @@ def extract_description_keywords(description: str) -> list[str]:
     keywords = []
 
     # ハッシュタグ抽出
-    hashtags = re.findall(r'#(\w+)', description)
+    hashtags = re.findall(r"#(\w+)", description)
     keywords.extend(hashtags)
 
     # URL を除去してからキーワード抽出
-    cleaned = re.sub(r'https?://\S+', '', description)
+    cleaned = re.sub(r"https?://\S+", "", description)
 
     # 音楽ジャンル関連キーワード
     genre_patterns = [
-        r'\b(celtic|fantasy|ambient|folk|medieval|relaxing|orchestral|cinematic)\b',
-        r'\b(harp|flute|violin|piano|guitar|drums|whistle)\b',
-        r'\b(forest|castle|tavern|ocean|village|dungeon|battle|adventure)\b',
+        r"\b(celtic|fantasy|ambient|folk|medieval|relaxing|orchestral|cinematic)\b",
+        r"\b(harp|flute|violin|piano|guitar|drums|whistle)\b",
+        r"\b(forest|castle|tavern|ocean|village|dungeon|battle|adventure)\b",
     ]
     for pattern in genre_patterns:
         matches = re.findall(pattern, cleaned, re.IGNORECASE)

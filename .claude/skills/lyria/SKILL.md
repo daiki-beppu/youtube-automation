@@ -1,11 +1,13 @@
 ---
 name: lyria
-description: Use when Lyria RealTime API でマスター音源を自動生成したいとき。composition.json を設計し DJ フェーズ展開で WAV を直接出力する（人手介入なし、/masterup 不要、次工程は /videoup）。API 自動音源生成・DJ フェーズ展開・composition.json 設計の場面で使用すること。Suno で人手生成するチャンネルでは /suno を使う
+description: Use when Vertex AI Lyria 3 でマスター音源を自動生成したいとき。composition.json を設計し DJ フェーズ展開で WAV を直接出力する（人手介入なし、/masterup 不要、次工程は /videoup）。API 自動音源生成・DJ フェーズ展開・composition.json 設計の場面で使用すること。Suno で人手生成するチャンネルでは /suno を使う
 ---
 
 ## Overview
 
-Lyria RealTime API を使い、`composition.json` に定義されたフェーズタイムラインに沿って Complete Collection 用マスター音源（WAV）を生成する。API のセッション制限（約 10 分）を回避するため、phase 境界でセグメント分割し、各セグメントを個別セッションで生成 → クロスフェード結合する。
+Vertex AI Lyria 3 REST API (`interactions` エンドポイント) を使い、`composition.json` に定義されたフェーズタイムラインに沿って Complete Collection 用マスター音源（WAV）を生成する。
+
+Lyria 3 Pro は **1 リクエストあたり最大約 184 秒（~3 分）** まで生成できる。長尺コレクション（30 分〜数時間）は phase 境界＋サブ分割で複数セグメントに割り、それぞれを個別 API コールで生成してクロスフェード結合する。
 
 ## 前提
 
@@ -14,6 +16,7 @@ Lyria RealTime API を使い、`composition.json` に定義されたフェーズ
 1. `config/channel/` が存在する（`config/channel/audio.json` の `audio.target_duration_min` を参照）
 2. `config/skills/lyria.yaml` が存在する（配布された `config.default.yaml` をベースにカスタマイズ）
 3. `config/skills/lyria.yaml` の `_disabled` が **false** であること
+4. `.env` に `GOOGLE_CLOUD_PROJECT` が設定されており `gcloud auth application-default login` 済み（Vertex AI interactions エンドポイントは ADC で呼ぶ）
 
 いずれか不足する場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
@@ -53,15 +56,11 @@ $ARGUMENTS → コレクションのテーマ指定
 | skill-config キー | 用途 |
 |------------|------|
 | `_disabled` | true なら /suno を案内して終了 |
+| `model` | 本生成モデル (`lyria-3-pro-preview`)。プレビュー時は `lyria-3-clip-preview` が自動選択される |
 | `prompt_prefix` | `base.prompt_prefix`（共通ジャンル句） |
-| `bpm` | ベース BPM |
-| `brightness` | ベース brightness |
-| `guidance` | プロンプト忠実度 |
-| `temperature` | ランダム性 |
-| `scale` | 音階 |
-| `mute_drums` | ドラムミュート |
-| `transition_sec` | トランジション秒数 |
-| `ng_words` | プロンプトに使用禁止の語 |
+| `style_hints` | `base.style_hints`（補足スタイル句、optional） |
+| `crossfade_sec` | マスタリング時のセグメント結合クロスフェード秒数 |
+| `ng_words` | プロンプトに使用禁止の語（Claude が composition.json 設計時にチェック） |
 | `duration_padding_min` | `total_duration_min = audio.target_duration_min + duration_padding_min` の余剰分（推奨 3）|
 
 読み込み確認:
@@ -71,6 +70,10 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 ```
 
 `config/channel/audio.json` からは `audio.target_duration_min`（コレクション全体の基準長）のみ参照する。
+
+> **⚠ 現行実装の制約**: Lyria 3 `interactions` API 自体はテキスト + 参照画像、BPM、intensity、vocal/instrumental モードなどを受け取るが、このリポジトリの `youtube_automation/utils/lyria_client.py` は現在 `prompt` (text) と `model` しか送っていない。
+> そのため composition.json に `bpm` / `brightness` / `guidance` / `temperature` / `scale` / `mute_drums` / `mode` や `phase.*` オーバーライドを書いても `generate_music_dj.py` は読み取らず、API にも渡らない。
+> 音楽的コントロールは現状すべて `prompt` テキストで表現すること。BPM や参照画像を使いたい場合は先に `lyria_client.py` を拡張する必要がある（別 issue）。
 
 ## Instructions
 
@@ -111,22 +114,16 @@ $ARGUMENTS
 | 項目 | 推奨値 |
 |------|--------|
 | フェーズ数 | `target_duration_min` に応じて調整（120 分なら **30 前後、各 3.5-4.5 分**推奨）|
-| **各フェーズの最大長** | **10 分以内**（API セッション制限）|
-| transition_sec | `config/skills/lyria.yaml` の `transition_sec`（推奨 30）|
+| **各フェーズの上限** | **実質なし**（実装が自動で 2 分サブセグメントに分割する）|
 | total_duration_min | `audio.target_duration_min` + `lyria.duration_padding_min` |
 
-**セグメント分割の制約**: セグメント分割生成（デフォルト有効）では、各 phase が 1 つのセグメントになる。API のセッション制限が約 10 分のため、**各 phase の長さは必ず 10 分以内** にすること。10 分を超える phase がある場合はサブフェーズに分割する（例: 「シーの子守唄」→「シーの子守唄 — 歌声」+「シーの子守唄 — 残響」）。
+**セグメント分割の仕組み**:
+- `generate_music_dj.py` は各 phase を `duration_hint_sec`（デフォルト **120 秒**）単位でサブ分割し、1 サブセグメント＝1 API コール（`lyria-3-pro-preview` の ~184 秒上限内）として生成する
+- Pro モデルの上限は約 184 秒/リクエストなので、**`duration_hint_sec` を 180 以内** に収めること（推奨は 120 秒前後）
+- サブセグメント間は `crossfade_sec`（デフォルト 5 秒）でクロスフェード結合される
+- `phase.duration_hint_sec` を個別指定すれば phase ごとにサブ分割単位を変えられる
 
-フェーズの設計手順:
-1. コレクションのテーマ・雰囲気を分析
-2. **感情・エネルギーの流れ（起伏）** を設計する（4-6 の大きなアーク）
-3. 各アークを 10 分以内のサブフェーズに分割（「— サブテーマ」形式で命名）
-4. **楽器切り替え式で主役楽器を割り当てる**: フェーズごとに主役楽器を変える
-5. 各フェーズに **主役楽器 + メロディの動作指示** を prompt として記述（動作指示の詳細は references/lyria-tuning-guide.md 参照）
-6. `brightness`, `density`, `bpm` をフェーズごとにオーバーライド（起伏を表現）
-7. `ng_words` に含まれる語がプロンプトに使われていないか確認
-
-**duration の +α ルール**: Lyria のリアルタイム生成はタイミングが正確に終わらないため、`total_duration_min` は `audio.target_duration_min` より **+duration_padding_min** 分（デフォルト 3）に設定する。余剰分は後工程でトリミングできるが、不足分は再生成が必要になるため、常に余裕を持たせる。
+**duration の +α ルール**: Lyria の生成長はプロンプト経由のヒント扱いでぴったり一致しない。`total_duration_min` は `audio.target_duration_min` より **+duration_padding_min** 分（デフォルト 3）に設定する。余剰分は後工程でトリミングできるが、不足分は再生成が必要になるため、常に余裕を持たせる。
 
 ### composition.json 形式
 
@@ -134,27 +131,20 @@ $ARGUMENTS
 {
   "title": "<コレクション名>",
   "total_duration_min": "<audio.target_duration_min + lyria.duration_padding_min>",
+  "model": "lyria-3-pro-preview",
   "base": {
     "prompt_prefix": "<config/skills/lyria.yaml の prompt_prefix>",
-    "bpm": 110,
-    "brightness": 0.4,
-    "guidance": 3.0,
-    "temperature": 0.9,
-    "scale": "C_MAJOR_A_MINOR",
-    "mute_drums": true,
-    "mode": "QUALITY"
+    "style_hints": "<optional: ジャンル/雰囲気の補足句>"
   },
   "phases": [
     {
       "at_min": 0,
       "name": "<フェーズ名（日本語）>",
       "name_en": "<Phase Name in English>",
-      "prompt": "<主役楽器の演奏指示 + 最小限の情景（英語）>",
-      "brightness": 0.3,
-      "density": 0.2
+      "prompt": "<主役楽器の演奏指示 + 最小限の情景（英語）>"
     }
   ],
-  "transition_sec": 30
+  "crossfade_sec": 5
 }
 ```
 
@@ -163,31 +153,28 @@ $ARGUMENTS
 | フィールド | 必須 | 説明 |
 |-----------|------|------|
 | `title` | Yes | コレクション名 |
-| `total_duration_min` | Yes | 総再生時間（分） |
+| `total_duration_min` | Yes | 総再生時間（分） — shuffle モード以外で必要 |
+| `model` | No | `lyria-3-pro-preview`（default）/ `lyria-3-clip-preview`（30 秒固定、通常は使わない）|
 | `base.prompt_prefix` | Yes | 全フェーズ共通のジャンル句（skill-config から）|
-| `base.bpm` | Yes | ベース BPM（60-200）|
-| `base.brightness` | Yes | ベース明るさ（0.0-1.0）|
-| `base.guidance` | Yes | プロンプト忠実度（0.0-6.0）|
-| `base.temperature` | Yes | ランダム性 |
-| `base.scale` | No | 音階（enum 値: `C_MAJOR_A_MINOR` 等）|
-| `base.mute_drums` | No | ドラムミュート |
-| `base.mode` | No | QUALITY / DIVERSITY |
+| `base.style_hints` | No | スタイル補足句（全フェーズ共通）|
 | `phases[].at_min` | Yes | フェーズ開始時刻（分） |
 | `phases[].name` | Yes | フェーズ名（日本語、進捗表示用） |
 | `phases[].name_en` | Yes | フェーズ名（英語、ファイル名に使用） |
 | `phases[].prompt` | Yes | 主役楽器の演奏指示 + 最小限の情景（英語） |
-| `phases[].brightness` | No | brightness オーバーライド |
-| `phases[].density` | No | density オーバーライド（0.0-1.0）|
-| `phases[].bpm` | No | BPM オーバーライド |
-| `phases[].scale` | No | scale オーバーライド（転調用）|
-| `phases[].mute_drums` | No | フェーズ単位のドラムミュート |
-| `phases[].mute_bass` | No | フェーズ単位のベースミュート |
-| `transition_sec` | No | トランジション秒数（default: 30）|
+| `phases[].duration_hint_sec` | No | サブ分割の秒数（default 120。Pro モデル上限 184 を超えないこと） |
+| `phases[].section_tag` | No | プロンプト末尾に追加される補足タグ（例: `"intro"`）|
+| `crossfade_sec` | No | サブセグメント間クロスフェード秒数（default: 5）|
+| `shuffle_passes` | No | N>0 で shuffle モード（各 phase を 1 セグメントとして N 回シャッフル連結）|
+| `segment_duration_sec` | No | shuffle モード時のセグメント長（default 180）|
+| `shuffle_seed` | No | shuffle 再現用 seed |
 
-**LiveMusicGenerationConfig 全パラメータ**: bpm, brightness, density, guidance, temperature, scale, top_k, seed, mute_bass, mute_drums, only_bass_and_drums, music_generation_mode
-
-- `scale` は enum 値のみ: `C_MAJOR_A_MINOR`, `D_MAJOR_B_MINOR`, `G_MAJOR_E_MINOR` 等（Dorian/Mixolydian 等のモード指定不可）
-- `negative_prompt` は Live API に存在しない（プロンプト本文で `no X` 形式で指示）
+> **composition.json で現状は使わないキー**（`generate_music_dj.py` が読まない）:
+> `base.bpm` / `base.brightness` / `base.guidance` / `base.temperature` / `base.scale` / `base.mute_drums` / `base.mode` /
+> `phase.brightness` / `phase.density` / `phase.bpm` / `phase.scale` / `phase.mute_drums` / `phase.mute_bass` /
+> `transition_sec`
+>
+> Lyria 3 API 側では BPM / intensity / 参照画像などを受け取るが、現行 `lyria_client.py` は text prompt しか送っていない。
+> そのため音楽的コントロールは `prompt` 本文（動作指示、楽器指定、ムード句）で表現する。
 
 ## Step 3: 設定の書き出しとユーザー確認
 
@@ -196,19 +183,21 @@ $ARGUMENTS
    - ヘッダー（Engine, Channel, Duration）
    - 感情アーク（フェーズの流れを可視化）
    - Timeline Summary（dry-run 出力形式のサマリー）
-   - Base Settings テーブル
-   - 各フェーズの詳細（日本語解説 + prompt + パラメータ）
+   - 各フェーズの詳細（日本語解説 + prompt）
    - 品質チェックリスト
 
 **Timeline Summary の形式**（dry-run 出力を転記）:
 
 ```
 === <title> (<total_duration_min>min) ===
-  Base: bpm=<bpm>  brightness=<brightness>  mode=<mode>
-  Transition: <transition_sec>s crossfade
+  Model: lyria-3-pro-preview
+  Base: <prompt_prefix の冒頭 60 文字>...
+  Crossfade: <crossfade_sec>s
 
-  <HH:MM>  <phase_name>    brightness=<x>   bpm=<x>
+  seg_001  <phase_name_en>
+  seg_002  <phase_name_en (2/N)>
   ...
+  Total segments: <N>
   <HH:MM>  END
 ```
 
@@ -232,7 +221,7 @@ uv run yt-generate-music-dj \
   --preview
 ```
 
-- 始め・中盤・終盤の 3 フェーズから各 30 秒サンプルを並列生成（約 30 秒で完了）
+- 始め・中盤・終盤の 3 フェーズから各 30 秒サンプルを `lyria-3-clip-preview` で並列生成（約 30 秒で完了）
 - `01-master/preview/` に `preview_01_*.wav`, `preview_02_*.wav`, `preview_03_*.wav` が出力
 - ユーザーにプレビューの試聴を促し、方向性に問題がないか確認
 - 修正が必要な場合は composition.json を編集して再度 `--preview` を実行
@@ -253,23 +242,22 @@ uv run yt-generate-music-dj \
 
 > **`.env` は自動ロード**: スクリプト内で `dotenv` により自動読み込みされる。
 
-**セグメント分割生成**（デフォルト有効）:
-- 各 phase を独立した API セッションで生成（API の 10 分制限を回避）
-- `--workers N` で並列生成数を指定（推奨: `--workers 10`、全セグメント並列）
+**セグメント分割生成**:
+- 各 phase を `duration_hint_sec`（default 120s）単位のサブセグメントに分割し、1 サブセグメント＝1 API コール（`lyria-3-pro-preview` の ~184 秒上限内）で生成
+- `--workers N` で並列生成数を指定（推奨: `--workers 10`、または `-1` で全セグメント同時）
 - 生成中に `seg_001.wav`, `seg_002.wav`, ... が作成される
 - 全セグメント完了後にクロスフェード結合して master.wav を出力
 - 途中失敗時は自動リトライ（`--max-retries` 回）
 - 再実行時は成功済みセグメントをスキップして続行
-- `--no-segmented` で従来の 1 セッション生成に戻す
 
 **生成時間の目安**:
-- `--workers 10`（並列）: 123 分のコレクション ≈ **約 10 分**（最長セグメントのリアルタイム長に依存）
-- `--workers 0`（逐次）: 123 分のコレクション ≈ 123 分
+- `--workers 10`（並列）: 123 分のコレクション ≈ **約 10 分**（API レイテンシ + ffmpeg 変換）
+- `--workers 0`（逐次）: セグメント数 × 30-60 秒/segment
 
-**注意**: 並列生成時、他チャンネルで同時に Lyria セッションを実行すると quota エラーが発生する場合がある。並列生成中は他の Lyria 生成を停止すること。
+**注意**: Vertex AI の Lyria クォータ（プロジェクト単位）は有限なので、並列 workers を上げすぎると 429 エラーが発生する。他チャンネルと同時に大量生成しないこと。
 
 **セグメントファイルの扱い**:
-- デフォルトでセグメントファイル（`seg_*.wav`）は **保持** される（個別楽曲として利用可能）
+- デフォルトでセグメントファイル（`seg_*.wav`）は `02-Individual-music/<NN>_<phase_name>.wav` にリネーム移動される（個別楽曲として利用可能）
 - `--cleanup` を指定すると生成後に削除
 
 ## Step 5.1: ワークツリーからメインへのコピー
@@ -283,7 +271,7 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 
 **コピー対象**:
 - `01-master/master.wav` → メインの `01-master/`
-- `01-master/seg_*.wav` → メインの `02-Individual-music/`
+- `02-Individual-music/*.wav` → メインの `02-Individual-music/`
 - `10-assets/main.png` → メインの `10-assets/`
 
 事前確認には `--dry-run` を付ける。
@@ -301,15 +289,14 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 
 composition.json の品質チェック:
 
-- [ ] `prompt_prefix` が `config/skills/lyria.yaml` の `prompt_prefix` に基づいていること
-- [ ] `guidance`, `temperature`, `mute_drums` が skill-config の値に準拠していること
+- [ ] `base.prompt_prefix` が `config/skills/lyria.yaml` の `prompt_prefix` に基づいていること
 - [ ] 各 phase の `prompt` に主役楽器の演奏指示が含まれていること（楽器切り替え式）
-- [ ] `ng_words` に含まれる語が使用されていないこと
+- [ ] `ng_words` に含まれる語がプロンプトに使われていないこと
 - [ ] 環境音系の語（`rain beginning to tap` 等）が使用されていないこと
 - [ ] 最初の phase が `at_min: 0` であること
-- [ ] **各 phase の長さが 10 分以内であること**（API セッション制限）
-- [ ] フェーズ間に `transition_sec` 以上の間隔があること
+- [ ] `duration_hint_sec`（省略時 120）が 184 を超えていないこと（Pro モデル API 上限）
 - [ ] `total_duration_min` が最後のフェーズ以降に十分な再生時間を確保していること
+- [ ] `base.bpm` / `base.brightness` 等、現行 `lyria_client.py` が API に渡さないキーを composition.json に書いていないこと（書いても無視されるだけだが混乱の元）
 - [ ] `--preview` でプレビュー生成し、音楽の方向性を確認済み
 
 ## Next Step

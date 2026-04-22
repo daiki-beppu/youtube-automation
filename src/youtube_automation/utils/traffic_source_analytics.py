@@ -37,43 +37,47 @@ class TrafficSourceMixin:
         logger.info("トラフィックソース分析実行中...")
 
         try:
-            response = self.analytics_service.reports().query(
-                ids=f'channel=={self.channel_id}',
-                startDate=start_date,
-                endDate=end_date,
-                metrics='views,estimatedMinutesWatched,averageViewDuration',
-                dimensions='insightTrafficSourceType',
-                sort='-views'
-            ).execute()
+            response = (
+                self.analytics_service.reports()
+                .query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="views,estimatedMinutesWatched,averageViewDuration",
+                    dimensions="insightTrafficSourceType",
+                    sort="-views",
+                )
+                .execute()
+            )
 
             sources = {}
-            if 'rows' in response:
-                for row in response['rows']:
+            if "rows" in response:
+                for row in response["rows"]:
                     sources[row[0]] = {
-                        'views': row[1],
-                        'watch_time_minutes': row[2],
-                        'avg_view_duration': row[3],
+                        "views": row[1],
+                        "watch_time_minutes": row[2],
+                        "avg_view_duration": row[3],
                     }
 
             # 合計からシェアを計算
-            total_views = sum(s['views'] for s in sources.values())
+            total_views = sum(s["views"] for s in sources.values())
             for source_data in sources.values():
-                source_data['view_share_percent'] = (
-                    round((source_data['views'] / total_views) * 100, 1) if total_views > 0 else 0
+                source_data["view_share_percent"] = (
+                    round((source_data["views"] / total_views) * 100, 1) if total_views > 0 else 0
                 )
 
             logger.info(f"トラフィックソース: {len(sources)} タイプ検出")
             return {
-                'sources': sources,
-                'total_views': total_views,
+                "sources": sources,
+                "total_views": total_views,
             }
 
         except HttpError as e:
             logger.error(f"YouTube API エラー（トラフィックソース）: {e}")
-            return {'sources': {}, 'total_views': 0, 'error': str(e)}
+            return {"sources": {}, "total_views": 0, "error": str(e)}
         except Exception as e:
             logger.error(f"トラフィックソース分析エラー: {e}")
-            return {'sources': {}, 'total_views': 0, 'error': str(e)}
+            return {"sources": {}, "total_views": 0, "error": str(e)}
 
     def get_traffic_source_detail(self, start_date: str, end_date: str, source_type: str) -> List[Dict]:
         """
@@ -93,25 +97,31 @@ class TrafficSourceMixin:
         logger.info(f"トラフィックソース詳細取得: {source_type}")
 
         try:
-            response = self.analytics_service.reports().query(
-                ids=f'channel=={self.channel_id}',
-                startDate=start_date,
-                endDate=end_date,
-                metrics='views,estimatedMinutesWatched',
-                dimensions='insightTrafficSourceDetail',
-                filters=f'insightTrafficSourceType=={source_type}',
-                sort='-views',
-                maxResults=25
-            ).execute()
+            response = (
+                self.analytics_service.reports()
+                .query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="views,estimatedMinutesWatched",
+                    dimensions="insightTrafficSourceDetail",
+                    filters=f"insightTrafficSourceType=={source_type}",
+                    sort="-views",
+                    maxResults=25,
+                )
+                .execute()
+            )
 
             details = []
-            if 'rows' in response:
-                for row in response['rows']:
-                    details.append({
-                        'detail': row[0],
-                        'views': row[1],
-                        'watch_time_minutes': row[2],
-                    })
+            if "rows" in response:
+                for row in response["rows"]:
+                    details.append(
+                        {
+                            "detail": row[0],
+                            "views": row[1],
+                            "watch_time_minutes": row[2],
+                        }
+                    )
 
             logger.info(f"{source_type} 詳細: {len(details)} 件")
             return details

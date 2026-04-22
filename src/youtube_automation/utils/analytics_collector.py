@@ -73,14 +73,11 @@ class YouTubeAnalyticsCollector(
     def _get_channel_id(self) -> str:
         """チャンネルID取得"""
         try:
-            response = self.youtube_service.channels().list(
-                part='id,snippet',
-                mine=True
-            ).execute()
+            response = self.youtube_service.channels().list(part="id,snippet", mine=True).execute()
 
-            if response['items']:
-                channel = response['items'][0]
-                self.channel_id = channel['id']
+            if response["items"]:
+                channel = response["items"][0]
+                self.channel_id = channel["id"]
                 logger.info(f"チャンネル: {channel['snippet']['title']} ({self.channel_id})")
                 return self.channel_id
             else:
@@ -97,10 +94,10 @@ def main():
     """メイン関数 - スタンドアロン実行用"""
     import argparse
 
-    parser = argparse.ArgumentParser(description='YouTube Analytics 収集')
-    parser.add_argument('--days', '-d', type=int, default=30, help='過去の日数')
-    parser.add_argument('--ctr-only', action='store_true', help='CTR分析のみ')
-    parser.add_argument('--collections', action='store_true', help='コレクション分析')
+    parser = argparse.ArgumentParser(description="YouTube Analytics 収集")
+    parser.add_argument("--days", "-d", type=int, default=30, help="過去の日数")
+    parser.add_argument("--ctr-only", action="store_true", help="CTR分析のみ")
+    parser.add_argument("--collections", action="store_true", help="コレクション分析")
 
     args = parser.parse_args()
 
@@ -109,8 +106,8 @@ def main():
         collector.initialize()
 
         # 日付範囲計算
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=args.days)).strftime('%Y-%m-%d')
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=args.days)).strftime("%Y-%m-%d")
 
         print("📊 YouTube Analytics 分析")
         print(f"📅 期間: {start_date} - {end_date}")
@@ -132,7 +129,7 @@ def main():
             video_data = collector.get_video_analytics(start_date, end_date)
 
             print("📊 チャンネル統計:")
-            print(json.dumps(channel_data['summary'], indent=2, ensure_ascii=False))
+            print(json.dumps(channel_data["summary"], indent=2, ensure_ascii=False))
 
             print("\n🎬 トップ動画:")
             for i, video in enumerate(video_data[:5], 1):
@@ -143,6 +140,7 @@ def main():
     except Exception as e:
         print(f"❌ エラー: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

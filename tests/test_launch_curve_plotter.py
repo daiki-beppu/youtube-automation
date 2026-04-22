@@ -7,14 +7,16 @@ def _make_frame():
     records = []
     for vid in ["vid_0", "vid_1", "vid_2", "vid_3", "vid_4"]:
         for day in range(31):
-            records.append({
-                "video_id": vid,
-                "days_since_publish": day,
-                "cumulative_views": (int(vid.split("_")[1]) + 1) * day * 10,
-                "daily_views": (int(vid.split("_")[1]) + 1) * 10,
-                "daily_impressions": 500,
-                "ctr": 2.0,
-            })
+            records.append(
+                {
+                    "video_id": vid,
+                    "days_since_publish": day,
+                    "cumulative_views": (int(vid.split("_")[1]) + 1) * day * 10,
+                    "daily_views": (int(vid.split("_")[1]) + 1) * 10,
+                    "daily_impressions": 500,
+                    "ctr": 2.0,
+                }
+            )
     return pd.DataFrame(records)
 
 

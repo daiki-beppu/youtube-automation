@@ -1519,7 +1519,7 @@ wheels = [
 
 [[package]]
 name = "youtube-channels-automation"
-version = "2.0.2"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },
@@ -1532,6 +1532,7 @@ dependencies = [
     { name = "pillow" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "schedule" },
     { name = "seaborn" },
 ]
@@ -1555,6 +1556,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "schedule" },
     { name = "seaborn" },

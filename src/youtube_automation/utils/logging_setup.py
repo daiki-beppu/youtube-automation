@@ -22,6 +22,6 @@ def setup_logging(name: str = None, level: int = logging.INFO) -> logging.Logger
     """
     logging.basicConfig(
         level=level,
-        format='%(levelname)s: %(message)s',
+        format="%(levelname)s: %(message)s",
     )
     return logging.getLogger(name or __name__)

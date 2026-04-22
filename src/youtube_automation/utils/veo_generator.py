@@ -11,7 +11,7 @@ from pathlib import Path
 from youtube_automation.utils import cost_tracker
 
 # --- 定数 ---
-DEFAULT_MODEL = "veo-3.1-lite-generate-preview"
+DEFAULT_MODEL = "veo-3.1-fast-generate-001"
 DEFAULT_PROMPT = (
     "Static scene with only natural subtle movements: gentle flickering of candle flames, "
     "slight sway of character breathing, soft light shifts on surfaces. "
@@ -23,7 +23,12 @@ MAX_POLL_SEC = 600  # 10分タイムアウト
 
 
 def generate_loop_video(
-    client, image_path: Path, output_path: Path, model: str, prompt: str, aspect_ratio: str = "16:9",
+    client,
+    image_path: Path,
+    output_path: Path,
+    model: str,
+    prompt: str,
+    aspect_ratio: str = "16:9",
     duration_seconds: int = 8,
 ) -> bool:
     """Veo 3.1 API でループ動画を生成する。"""
@@ -77,12 +82,13 @@ def generate_loop_video(
     video_obj = operation.response.generated_videos[0]
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        client.files.download(file=video_obj.video)
-        video_obj.video.save(str(output_path))
-    except Exception as e:
-        print(f"  [ERROR]  動画保存失敗: {e}")
+    # Vertex AI モードではレスポンスに動画バイト列が直接含まれる。
+    # `client.files.download()` は Gemini Developer client 専用で Vertex AI では ValueError になるため使わない。
+    video_bytes = getattr(video_obj.video, "video_bytes", None)
+    if not video_bytes:
+        print("  [ERROR]  動画バイト列が取得できませんでした")
         return False
+    output_path.write_bytes(video_bytes)
 
     # Veo 3.1 はデフォルトで音声を生成するため、音声トラックを除去
     strip_audio(output_path)
@@ -111,7 +117,9 @@ def strip_audio(video_path: Path) -> None:
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", str(video_path), "-c:v", "copy", "-an", str(tmp)],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         tmp.rename(video_path)
         print("  [Strip]  音声トラック除去済み")
@@ -123,8 +131,14 @@ def strip_audio(video_path: Path) -> None:
 def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
     """Veo 末尾のノイズ/歪みを除去する（映像コピー、再エンコードなし）。"""
     duration_cmd = [
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
     ]
     try:
         duration = float(subprocess.check_output(duration_cmd, text=True).strip())
@@ -141,7 +155,9 @@ def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", str(video_path), "-t", str(usable), "-c:v", "copy", "-an", str(tmp)],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         tmp.rename(video_path)
         print(f"  [Trim]   末尾 {trim_sec}秒カット（{duration:.1f}秒 → {usable:.1f}秒）")
@@ -161,8 +177,14 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
     """
     output = video_path.with_stem(video_path.stem + "_smooth")
     duration_cmd = [
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
     ]
     try:
         duration = float(subprocess.check_output(duration_cmd, text=True).strip())
@@ -189,10 +211,20 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
     )
 
     cmd = [
-        "ffmpeg", "-y", "-i", str(video_path),
-        "-filter_complex", filter_complex,
-        "-map", "[out]",
-        "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "[out]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "slow",
+        "-crf",
+        "18",
         "-an",
         str(output),
     ]

@@ -71,12 +71,15 @@ class TestRetryDecision:
         decision = RetryDecision.for_http_error(503, current_attempt=MAX_RETRY_ATTEMPTS - 1)
         assert decision.should_retry is True
 
-    @pytest.mark.parametrize("attempt, expected_delay", [
-        (0, 1.0),
-        (1, 2.0),
-        (2, 4.0),
-        (3, 8.0),
-    ])
+    @pytest.mark.parametrize(
+        "attempt, expected_delay",
+        [
+            (0, 1.0),
+            (1, 2.0),
+            (2, 4.0),
+            (3, 8.0),
+        ],
+    )
     def test_applies_exponential_backoff(self, attempt, expected_delay):
         decision = RetryDecision.for_http_error(503, current_attempt=attempt)
         assert decision.delay_seconds == expected_delay

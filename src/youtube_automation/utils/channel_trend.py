@@ -19,10 +19,19 @@ def build_trend_frame(daily_metrics: List[Dict]) -> pd.DataFrame:
         subs_net, views_7d_ma, views_28d_ma, views_z_score
     """
     if not daily_metrics:
-        return pd.DataFrame(columns=[
-            "date", "views", "watch_time", "subscribers_gained", "subscribers_lost",
-            "subs_net", "views_7d_ma", "views_28d_ma", "views_z_score",
-        ])
+        return pd.DataFrame(
+            columns=[
+                "date",
+                "views",
+                "watch_time",
+                "subscribers_gained",
+                "subscribers_lost",
+                "subs_net",
+                "views_7d_ma",
+                "views_28d_ma",
+                "views_z_score",
+            ]
+        )
 
     df = pd.DataFrame(daily_metrics)
     df["date"] = pd.to_datetime(df["date"])
@@ -55,13 +64,15 @@ def detect_anomalies(df: pd.DataFrame, z_threshold: float = 2.0) -> List[Dict]:
         z = float(row["views_z_score"])
         if abs(z) < z_threshold:
             continue
-        anomalies.append({
-            "date": str(row["date"].date()),
-            "type": "spike" if z > 0 else "dip",
-            "views": int(row["views"]),
-            "z_score": round(z, 2),
-            "baseline_7d_ma": round(float(row["views_7d_ma"]), 2),
-        })
+        anomalies.append(
+            {
+                "date": str(row["date"].date()),
+                "type": "spike" if z > 0 else "dip",
+                "views": int(row["views"]),
+                "z_score": round(z, 2),
+                "baseline_7d_ma": round(float(row["views_7d_ma"]), 2),
+            }
+        )
     return anomalies
 
 
@@ -69,21 +80,14 @@ def _compute_week_over_week(df: pd.DataFrame) -> List[Dict]:
     """週次 (週の開始=月曜) の views 合計と前週比増減率を計算。"""
     if df.empty:
         return []
-    weekly = (
-        df.set_index("date")["views"]
-        .resample("W-MON", label="left", closed="left")
-        .sum()
-        .reset_index()
-    )
+    weekly = df.set_index("date")["views"].resample("W-MON", label="left", closed="left").sum().reset_index()
     weekly.columns = ["week_starting", "views"]
     weekly["delta_pct"] = weekly["views"].pct_change() * 100
     return [
         {
             "week_starting": str(r["week_starting"].date()),
             "views": int(r["views"]),
-            "delta_pct": (
-                round(float(r["delta_pct"]), 2) if pd.notna(r["delta_pct"]) else None
-            ),
+            "delta_pct": (round(float(r["delta_pct"]), 2) if pd.notna(r["delta_pct"]) else None),
         }
         for _, r in weekly.iterrows()
     ]

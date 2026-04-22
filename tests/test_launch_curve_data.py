@@ -56,8 +56,14 @@ def test_build_launch_curve_frame_has_required_columns():
     daily, meta = _load()
     df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
     required = {
-        "video_id", "date", "published_at", "days_since_publish",
-        "daily_views", "cumulative_views", "daily_impressions", "ctr",
+        "video_id",
+        "date",
+        "published_at",
+        "days_since_publish",
+        "daily_views",
+        "cumulative_views",
+        "daily_impressions",
+        "ctr",
     }
     assert required.issubset(set(df.columns))
     assert isinstance(df, pd.DataFrame)

@@ -72,7 +72,11 @@ def main():
     parser = argparse.ArgumentParser(description="Veo 3.1 ショート用 9:16 ループ動画生成")
     parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument("--prompt", help="動画生成プロンプト")
-    parser.add_argument("--model", help="Veo モデル名")
+    parser.add_argument(
+        "--model",
+        choices=["veo-3.1-fast-generate-001", "veo-3.1-generate-001"],
+        help="Veo モデル名 (default: veo-3.1-fast-generate-001)",
+    )
     parser.add_argument("--no-trim", action="store_true", help="末尾トリムをスキップ")
     parser.add_argument("--trim-tail", type=float, default=1.0, help="末尾トリム秒数 (デフォルト: 1.0)")
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
@@ -135,7 +139,7 @@ def main():
 
     # 生成実行
     try:
-        client = create_genai_client()
+        client = create_genai_client(location="us-central1")
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)

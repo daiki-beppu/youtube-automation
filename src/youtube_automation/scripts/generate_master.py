@@ -57,12 +57,18 @@ def _probe_duration(path: Path) -> float | None:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "csv=p=0",
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
                 str(path),
             ],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return float(result.stdout.strip())
     except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
@@ -140,15 +146,23 @@ def generate_master(
     cmd = ["ffmpeg", "-y"]
     for f in files:
         cmd.extend(["-i", str(f)])
-    cmd.extend([
-        "-filter_complex", build_filter(n, crossfade),
-        "-map", "[aout]",
-        "-c:a", "libmp3lame",
-        "-b:a", bitrate,
-        "-q:a", "0",
-        str(output),
-        "-loglevel", "error",
-    ])
+    cmd.extend(
+        [
+            "-filter_complex",
+            build_filter(n, crossfade),
+            "-map",
+            "[aout]",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            bitrate,
+            "-q:a",
+            "0",
+            str(output),
+            "-loglevel",
+            "error",
+        ]
+    )
 
     start = time.monotonic()
     stop_event = threading.Event()
@@ -173,9 +187,7 @@ def generate_master(
         raise ValidationError(f"FFmpeg failed with exit code {result.returncode}")
 
     if not quiet:
-        sys.stderr.write(
-            f"\r  ✓ Generated    ({m}m{s:02d}s) [{n} files, {n - 1} crossfades]      \n"
-        )
+        sys.stderr.write(f"\r  ✓ Generated    ({m}m{s:02d}s) [{n} files, {n - 1} crossfades]      \n")
         sys.stderr.flush()
 
         size = _format_size(output.stat().st_size)

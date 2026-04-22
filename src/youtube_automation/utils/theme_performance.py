@@ -80,9 +80,7 @@ def analyze_theme_performance(
             {
                 "day": int(r["days_since_publish"]),
                 "mean_cumulative_views": round(float(r["mean_cumulative_views"]), 2),
-                "sample_size": int(
-                    len(theme_df[theme_df["days_since_publish"] == r["days_since_publish"]])
-                ),
+                "sample_size": int(len(theme_df[theme_df["days_since_publish"] == r["days_since_publish"]])),
             }
             for _, r in mean_by_day.iterrows()
         ]
@@ -90,20 +88,17 @@ def analyze_theme_performance(
         peaks = {}
         for day in peak_days:
             row = mean_by_day[mean_by_day["days_since_publish"] == day]
-            peaks[f"day{day}_mean"] = (
-                round(float(row["mean_cumulative_views"].iloc[0]), 2)
-                if not row.empty else None
-            )
+            peaks[f"day{day}_mean"] = round(float(row["mean_cumulative_views"].iloc[0]), 2) if not row.empty else None
 
-        themes_out.append({
-            "theme": theme,
-            "video_count": len(vids),
-            "total_cumulative_views": int(
-                theme_df.groupby("video_id")["cumulative_views"].max().sum()
-            ),
-            "mean_curve": mean_curve,
-            **peaks,
-        })
+        themes_out.append(
+            {
+                "theme": theme,
+                "video_count": len(vids),
+                "total_cumulative_views": int(theme_df.groupby("video_id")["cumulative_views"].max().sum()),
+                "mean_curve": mean_curve,
+                **peaks,
+            }
+        )
 
     def _best(key):
         valid = [t for t in themes_out if t.get(key) is not None and t["theme"] != "other"]
