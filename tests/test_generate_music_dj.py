@@ -1,10 +1,11 @@
 """generate_music_dj のセグメント分割生成テスト。"""
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch  # noqa: F401
 
 from youtube_automation.scripts.generate_music_dj import (
     CHANNELS,
@@ -20,8 +21,12 @@ def make_composition(phases_count=6, total_min=60):
     """テスト用 composition を生成。"""
     interval = total_min / phases_count
     phases = [
-        {"at_min": round(i * interval, 1), "name": f"phase_{i+1}",
-         "name_en": f"phase_{i+1}", "prompt": f"prompt {i+1}"}
+        {
+            "at_min": round(i * interval, 1),
+            "name": f"phase_{i + 1}",
+            "name_en": f"phase_{i + 1}",
+            "prompt": f"prompt {i + 1}",
+        }
         for i in range(phases_count)
     ]
     return {
@@ -37,7 +42,7 @@ def make_composition(phases_count=6, total_min=60):
 def make_pcm(duration_sec: float) -> bytes:
     """指定秒数のサイレント PCM データを生成。"""
     num_bytes = int(duration_sec * SAMPLE_RATE * CHANNELS * SAMPLE_WIDTH)
-    return b'\x00' * num_bytes
+    return b"\x00" * num_bytes
 
 
 class TestBuildSegmentCompositions:
@@ -54,7 +59,7 @@ class TestBuildSegmentCompositions:
             "title": "Short",
             "total_duration_min": 4,
             "model": "lyria-3-pro-preview",
-                "base": {"prompt_prefix": "test"},
+            "base": {"prompt_prefix": "test"},
             "phases": [
                 {"at_min": 0, "name": "a", "name_en": "a", "prompt": "p1"},
                 {"at_min": 2, "name": "b", "name_en": "b", "prompt": "p2"},
@@ -87,7 +92,7 @@ class TestBuildSegmentCompositions:
             "title": "Uneven",
             "total_duration_min": 8,
             "model": "lyria-3-pro-preview",
-                "base": {"prompt_prefix": "test"},
+            "base": {"prompt_prefix": "test"},
             "phases": [
                 {"at_min": 0, "name": "intro", "name_en": "intro", "prompt": "a"},
                 {"at_min": 1, "name": "main", "name_en": "main", "prompt": "b"},
@@ -105,10 +110,9 @@ class TestBuildSegmentCompositions:
             "title": "Hint",
             "total_duration_min": 4,
             "model": "lyria-3-pro-preview",
-                "base": {"prompt_prefix": "test"},
+            "base": {"prompt_prefix": "test"},
             "phases": [
-                {"at_min": 0, "name": "a", "name_en": "a", "prompt": "p",
-                 "duration_hint_sec": 60},  # 1分ごとに分割
+                {"at_min": 0, "name": "a", "name_en": "a", "prompt": "p", "duration_hint_sec": 60},  # 1分ごとに分割
             ],
             "crossfade_sec": 5,
         }
@@ -122,10 +126,15 @@ class TestBuildSegmentCompositions:
             "title": "Long",
             "total_duration_min": 10,
             "model": "lyria-3-pro-preview",
-                "base": {"prompt_prefix": "test"},
+            "base": {"prompt_prefix": "test"},
             "phases": [
-                {"at_min": 0, "name": "a", "name_en": "a", "prompt": "p",
-                 "duration_hint_sec": 600},  # 10分 = フェーズ全体を1セグメント
+                {
+                    "at_min": 0,
+                    "name": "a",
+                    "name_en": "a",
+                    "prompt": "p",
+                    "duration_hint_sec": 600,
+                },  # 10分 = フェーズ全体を1セグメント
             ],
             "crossfade_sec": 5,
         }
@@ -139,6 +148,7 @@ class TestGenerateSegmented:
         pcm = make_pcm(duration_sec)
         import io
         import wave
+
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             wf.setnchannels(CHANNELS)
@@ -153,11 +163,8 @@ class TestGenerateSegmented:
         output = tmp_path / "master.wav"
         audio_data = self._make_mock_audio(5)
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
-
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
-            result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0)
+            result = generate_segmented(comp, output, max_retries=0)
 
         assert result is not None
         assert output.exists()
@@ -171,8 +178,6 @@ class TestGenerateSegmented:
         # seg_001.wav を事前に作成
         write_wav(pcm, tmp_path / "seg_001.wav")
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
         call_count = 0
         audio_data = self._make_mock_audio(5)
 
@@ -182,7 +187,7 @@ class TestGenerateSegmented:
             return audio_data
 
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", side_effect=mock_generate):
-            result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0)
+            result = generate_segmented(comp, output, max_retries=0)
 
         # seg_001 スキップ、残りを生成
         assert call_count == 1
@@ -195,9 +200,6 @@ class TestGenerateSegmented:
         audio_data = self._make_mock_audio(5)
         attempts = []
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
-
         def mock_generate(*args, **kwargs):
             attempts.append(1)
             if len(attempts) == 1:
@@ -207,7 +209,7 @@ class TestGenerateSegmented:
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", side_effect=mock_generate):
             with patch("youtube_automation.scripts.generate_music_dj.time") as mock_time:
                 mock_time.sleep = MagicMock()
-                result = generate_segmented(mock_client, mock_types, comp, output, max_retries=3)
+                result = generate_segmented(comp, output, max_retries=3)
 
         assert result is not None
         assert len(attempts) == 3  # seg1 失敗→リトライ成功、seg2 成功
@@ -217,13 +219,10 @@ class TestGenerateSegmented:
         comp = make_composition(phases_count=2, total_min=4)
         output = tmp_path / "master.wav"
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
-
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=None):
             with patch("youtube_automation.scripts.generate_music_dj.time") as mock_time:
                 mock_time.sleep = MagicMock()
-                result = generate_segmented(mock_client, mock_types, comp, output, max_retries=2)
+                result = generate_segmented(comp, output, max_retries=2)
 
         assert result is None
 
@@ -235,11 +234,8 @@ class TestGenerateSegmented:
         output = master_dir / "master.wav"
         audio_data = self._make_mock_audio(5)
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
-
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
-            generate_segmented(mock_client, mock_types, comp, output, max_retries=0)
+            generate_segmented(comp, output, max_retries=0)
 
         seg_files = list(master_dir.glob("seg_*.wav"))
         assert len(seg_files) == 0
@@ -255,11 +251,8 @@ class TestGenerateSegmented:
         output = tmp_path / "master.wav"
         audio_data = self._make_mock_audio(5)
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
-
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
-            generate_segmented(mock_client, mock_types, comp, output, max_retries=0, cleanup=True)
+            generate_segmented(comp, output, max_retries=0, cleanup=True)
 
         seg_files = list(tmp_path.glob("seg_*.wav"))
         assert len(seg_files) == 0
@@ -272,11 +265,8 @@ class TestGenerateSegmented:
         output = master_dir / "master.wav"
         audio_data = self._make_mock_audio(5)
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
-
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", return_value=audio_data):
-            result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0, workers=4)
+            result = generate_segmented(comp, output, max_retries=0, workers=4)
 
         assert result is not None
         assert output.exists()
@@ -293,9 +283,6 @@ class TestGenerateSegmented:
         audio_data = self._make_mock_audio(5)
         call_count = 0
 
-        mock_client = MagicMock()
-        mock_types = MagicMock()
-
         def mock_generate(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -306,6 +293,6 @@ class TestGenerateSegmented:
         with patch("youtube_automation.scripts.generate_music_dj.generate_segment", side_effect=mock_generate):
             with patch("youtube_automation.scripts.generate_music_dj.time") as mock_time:
                 mock_time.sleep = MagicMock()
-                result = generate_segmented(mock_client, mock_types, comp, output, max_retries=0, workers=3)
+                result = generate_segmented(comp, output, max_retries=0, workers=3)
 
         assert result is None

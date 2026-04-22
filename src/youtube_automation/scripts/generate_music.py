@@ -12,34 +12,8 @@ import sys
 import time
 from pathlib import Path
 
-from youtube_automation.utils import cost_tracker  # noqa: E402
-from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-
-
-def generate_music(client, types, prompt: str, model: str) -> bytes | None:
-    """Lyria 3 API で音楽を生成し、オーディオバイトを返す。"""
-    try:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-            ),
-        )
-    except Exception as e:
-        print(f"\n[ERROR] API 呼び出しに失敗: {e}")
-        return None
-
-    if not response.candidates or not response.candidates[0].content:
-        print("\n[ERROR] レスポンスが空です（安全フィルタによるブロックの可能性）。")
-        return None
-
-    for part in response.candidates[0].content.parts:
-        if part.inline_data and part.inline_data.mime_type.startswith("audio/"):
-            return part.inline_data.data
-
-    print("\n[ERROR] レスポンスにオーディオデータが含まれていません。")
-    return None
+from youtube_automation.utils import cost_tracker, lyria_client
+from youtube_automation.utils.exceptions import ConfigError
 
 
 def main():
@@ -85,24 +59,14 @@ def main():
             print("中止しました。")
             sys.exit(0)
 
-    try:
-        from google.genai import types
-
-        from youtube_automation.utils.genai_client import create_genai_client
-    except ImportError:
-        print("[ERROR] google-genai がインストールされていません。")
-        print("  uv pip install google-genai")
-        sys.exit(1)
-
-    try:
-        client = create_genai_client()
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
     print("\n  [生成中]...", end="", flush=True)
     start_time = time.monotonic()
 
-    audio_data = generate_music(client, types, args.prompt, args.model)
+    try:
+        audio_data = lyria_client.generate_music(args.prompt, args.model)
+    except ConfigError as e:
+        print(f"\n[ERROR] {e}")
+        sys.exit(1)
 
     elapsed = time.monotonic() - start_time
 

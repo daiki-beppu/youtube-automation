@@ -23,6 +23,7 @@ dependencies = [
     "seaborn",
     "schedule",
     "pyyaml",
+    "requests",
 ]
 
 [project.urls]
