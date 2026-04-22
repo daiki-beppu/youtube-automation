@@ -1,37 +1,34 @@
 # lyria skill default config
 #
-# Lyria RealTime API の DJ 型音楽生成設定。
+# Vertex AI Lyria 3 (`interactions` endpoint) の DJ 型音楽生成設定。
 # チャンネル側で config/skills/lyria.yaml に上書き。
+#
+# 注: Lyria 3 API は text / reference image / BPM / intensity / vocal-instrumental mode 等を受け取るが、
+# 当リポジトリの youtube_automation/utils/lyria_client.py は現状 prompt (text) と model しか送っていない。
+# そのため旧 Lyria RealTime API で使われていた LiveMusicGenerationConfig 系パラメータ
+# (bpm / brightness / guidance / scale / mute_drums 等) は composition.json に書いても
+# generate_music_dj.py が読まない。音楽的コントロールは prompt テキストで行う。
 
 # スキル無効化フラグ (true の場合 lyria スキルは /suno を案内して終了)
 _disabled: false
 
 # Lyria モデル
+#   lyria-3-pro-preview  : 1 リクエストあたり最大約 184 秒（~3 分）生成。本生成用
+#   lyria-3-clip-preview : 30 秒固定。プレビュー用 (--preview で自動使用)
 model: lyria-3-pro-preview
 
 # base.prompt_prefix に入れる共通ジャンル句 (最小限、楽器名・ムード語は入れない)
 # 推奨: "{genre} only, clean dry recording, no pads"
 prompt_prefix: ""
 
-# スタイルヒント (ドキュメンテーション用、composition.json には反映されない)
+# composition.json の base.style_hints に使うスタイルヒント (optional)
+# ジャンル・雰囲気の補足用。phase.prompt と一緒にモデルに送られる。
 style_hints: ""
 
-# base パラメータ推奨値 (composition.json の base にマッピング)
-bpm: 110
-brightness: 0.4
-guidance: 3.0          # 2.5 → pad音増加、3.5 → 音数過多
-temperature: 0.9       # 0.7 → 単調ループ、0.6 以下 → ノイズ増
-scale: C_MAJOR_A_MINOR  # enum: C_MAJOR_A_MINOR / D_MAJOR_B_MINOR / G_MAJOR_E_MINOR 等
-mute_drums: true
-mode: QUALITY          # QUALITY / DIVERSITY
-
 # フェーズ間クロスフェード秒数
-transition_sec: 30
-
-# マスタリング時のクロスフェード (秒)
 crossfade_sec: 5
 
-# プロンプトに使わない禁止語
+# プロンプトに使わない禁止語 (Claude が composition.json 設計時にチェック)
 ng_words:
   - ambient pads
   - ethereal choir
