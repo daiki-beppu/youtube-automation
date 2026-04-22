@@ -77,12 +77,13 @@ def generate_loop_video(
     video_obj = operation.response.generated_videos[0]
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        client.files.download(file=video_obj.video)
-        video_obj.video.save(str(output_path))
-    except Exception as e:
-        print(f"  [ERROR]  動画保存失敗: {e}")
+    # Vertex AI モードではレスポンスに動画バイト列が直接含まれる。
+    # `client.files.download()` は Gemini Developer client 専用で Vertex AI では ValueError になるため使わない。
+    video_bytes = getattr(video_obj.video, "video_bytes", None)
+    if not video_bytes:
+        print("  [ERROR]  動画バイト列が取得できませんでした")
         return False
+    output_path.write_bytes(video_bytes)
 
     # Veo 3.1 はデフォルトで音声を生成するため、音声トラックを除去
     strip_audio(output_path)
