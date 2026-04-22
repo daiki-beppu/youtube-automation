@@ -143,7 +143,7 @@ def main():
 
     # 生成実行
     try:
-        client = create_genai_client()
+        client = create_genai_client(location="global")
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)

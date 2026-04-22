@@ -76,7 +76,11 @@ def main():
     parser = argparse.ArgumentParser(description="Veo 3.1 コレクションループ動画生成")
     parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument("--prompt", help="動画生成プロンプト")
-    parser.add_argument("--model", help="Veo モデル名")
+    parser.add_argument(
+        "--model",
+        choices=["veo-3.1-fast-generate-001", "veo-3.1-generate-001"],
+        help="Veo モデル名 (default: veo-3.1-fast-generate-001)",
+    )
     parser.add_argument("--smooth", action="store_true", help="FFmpeg クロスフェードでループ補正")
     parser.add_argument("--crossfade", type=float, default=0.5, help="クロスフェード秒数 (デフォルト: 0.5)")
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
@@ -134,7 +138,7 @@ def main():
 
     # 生成実行
     try:
-        client = create_genai_client()
+        client = create_genai_client(location="us-central1")
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
