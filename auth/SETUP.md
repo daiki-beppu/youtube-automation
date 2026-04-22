@@ -2,7 +2,7 @@
 
 新しい YouTube チャンネル用に GCP プロジェクト + API + 認証情報を用意する手順。
 
-**従来は Console クリック中心だったが、本リポジトリはスクリプト / Terraform での半自動化に移行した**。手動クリックが残るのは **OAuth クライアント ID 作成の 1 ステップだけ**。
+本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているため、手動クリックが残るのは **OAuth クライアント ID 作成の 1 ステップだけ**。
 
 ---
 
@@ -11,21 +11,10 @@
 - Google アカウント（YouTube チャンネル所有者）
 - `gcloud` CLI インストール済み（[導入手順](https://cloud.google.com/sdk/docs/install)）
 - `gcloud auth login` 済み
+- Vertex AI API を呼ぶため **Billing account の紐付けが必須**
 - Terraform ルートを使うなら `terraform` >= 1.5 + `jq`
 
-## 💳 課金体系の変更について（2026 年〜）
-
-2026 年以降、Google Cloud の新規アカウントは **前払い（プリペイド）制のみ** に変更され、従来の **$300 無料クレジットは Google AI Studio の API キー経由では利用不可** になった。
-
-本リポジトリは YouTube Data API（無料枠で十分）に加えて Gemini / Veo / Lyria など有料 API を利用する。**新規 GCP アカウントの場合、$300 クレジットは Vertex AI 経由でのみ消費可能** なため:
-
-| パターン | 推奨度 | 方式 |
-|---------|-------|------|
-| 既存の Google アカウント / GCP プロジェクトを流用 | ⭐⭐⭐ 最簡単 | AI Studio モード（従来通り）|
-| 新規 GCP アカウント + $300 クレジット活用 | ⭐⭐ 推奨 | Vertex AI モード |
-| 新規アカウントで AI Studio モード | — | 前払いで入金必要 |
-
-YouTube Data API / Analytics API は OAuth 認証で動作し、この変更の影響を受けない。
+2026 年以降、Google Cloud の新規アカウントは前払い（プリペイド）制に変更されたが、**$300 無料クレジットは Vertex AI 経由で消費可能**。本リポジトリを Vertex AI 1 本に揃えた理由もこのクレジットを活かすため。
 
 ---
 
@@ -51,7 +40,7 @@ automation/scripts/gcp-bootstrap.sh \
 | オプション | 意味 |
 |-----------|------|
 | `--create` | プロジェクトが存在しなければ作成 |
-| `--billing-account ID` | Billing account を紐付け（有料 API に必須） |
+| `--billing-account ID` | Billing account を紐付け（Vertex AI に必須） |
 | `--adc-email EMAIL` | `aiplatform.user` 付与先アカウント（既定: `gcloud config account`） |
 | `--env-file PATH` | 書き出す `.env`（既定: `./.env`） |
 | `--location REGION` | Vertex AI リージョン（既定: `us-central1`） |
@@ -124,9 +113,9 @@ uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/tes
 
 ---
 
-## 🌐 AI Studio モード vs Vertex AI モード
+## 🌐 Vertex AI 前提の環境変数
 
-スクリプト / Terraform ルートでセットアップすると `.env` に以下が書き出され、**Vertex AI モードが有効になる**:
+スクリプト / Terraform ルートでセットアップすると `.env` に以下が書き出される:
 
 ```bash
 GOOGLE_GENAI_USE_VERTEXAI=true
@@ -134,18 +123,18 @@ GOOGLE_CLOUD_PROJECT=<your-project-id>
 GOOGLE_CLOUD_LOCATION=us-central1
 ```
 
-既存アカウントで AI Studio モードに留まりたい場合は、`.env` から上 3 行を削除 or コメントアウトし、代わりに `GEMINI_API_KEY` を設定すること。
+アプリ側 (`create_genai_client()`) は `GOOGLE_CLOUD_PROJECT` のみを参照し、常に `vertexai=True` で Client を初期化する。`GOOGLE_GENAI_USE_VERTEXAI` は google-genai SDK の自動検出用に置いておく任意フラグ。
 
-### 対応状況
+### 対応 API
 
-| API | AI Studio モード | Vertex AI モード |
-|-----|-----------------|------------------|
-| Gemini 画像生成（サムネイル等）| ✅ | ✅ |
-| Gemini 画像分析（ベンチマーク）| ✅ | ✅ |
-| Veo 動画生成（ループ動画/ショート）| ✅ | ✅ |
-| Lyria 3 音楽生成（`lyria-3-pro-preview` / `lyria-3-clip-preview`）| ✅ | ✅ Preview 提供中（[公式ドキュメント](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/lyria/lyria-3)） |
+Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化されていれば追加設定不要。
 
-`youtube_automation` の `generate_music.py` / `generate_music_dj.py` は `create_genai_client()` 経由で両モードに自動対応。Vertex AI モードの場合は `aiplatform.googleapis.com` が有効化されていれば Lyria 3 も同じクライアントでそのまま呼べる（追加設定不要）。
+| API | 用途 |
+|-----|------|
+| Gemini 画像生成 | サムネイル等 |
+| Gemini 画像分析 | ベンチマーク / 競合調査 |
+| Veo 動画生成 | ループ動画 / ショート |
+| Lyria 3 音楽生成（`lyria-3-pro-preview` / `lyria-3-clip-preview`）| 楽曲生成（[公式ドキュメント](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/lyria/lyria-3)） |
 
 ---
 

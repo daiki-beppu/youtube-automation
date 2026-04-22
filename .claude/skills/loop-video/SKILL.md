@@ -45,7 +45,8 @@ $ARGUMENTS
 ### 前提条件
 
 - `10-assets/main.png` または `main.jpg` が存在すること（サムネイル生成済み）
-- `GEMINI_API_KEY` が `.env` に設定されていること
+- Vertex AI 用環境変数が `.env` に設定されていること (`GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION`)
+- `gcloud auth application-default login` で ADC が取得済みであること
 
 ### ステップ
 

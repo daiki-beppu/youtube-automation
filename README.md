@@ -121,10 +121,10 @@ yt-channel-status
 
 ```bash
 cp .env.example .env
-$EDITOR .env  # GEMINI_API_KEY を書く
+$EDITOR .env  # Vertex AI 用変数 (GOOGLE_CLOUD_PROJECT 等) を書く
 ```
 
-`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
+`scripts/gcp-bootstrap.sh` または `infra/terraform/gcp/` を実行すれば `.env` に自動書き出しされます。`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
 
 #### B. 1Password CLI 方式（秘密をディスクに書かない）
 
@@ -135,7 +135,7 @@ op signin
 # 以降、スクリプト実行時に utils/secrets.py が op read を呼ぶ
 ```
 
-シークレット参照は `utils/secrets.py` の `_SECRET_REFS` で定義されています（デフォルト: `op://Personal/GEMINI_API_KEY/credential`）。
+シークレット参照は `utils/secrets.py` の `_SECRET_REFS` で定義されています（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）。AI 系は ADC 経由の認証のため `op` 取得は不要です。
 
 ### 6. (オプション) Nix devShell
 
@@ -169,7 +169,9 @@ nix develop
 
 | 変数名 | 必須 | 説明 |
 |--------|------|------|
-| `GEMINI_API_KEY` | AI生成機能使用時 | Google Gemini API キー |
+| `GOOGLE_CLOUD_PROJECT` | AI 生成機能使用時 | Vertex AI を呼ぶ GCP プロジェクト ID |
+| `GOOGLE_CLOUD_LOCATION` | 任意 | Vertex AI リージョン（既定: `us-central1`） |
+| `GOOGLE_GENAI_USE_VERTEXAI` | 任意 | google-genai SDK の自動検出用フラグ（アプリ側は参照しない） |
 | `CHANNEL_DIR` | 自動検出可 | チャンネルリポジトリのルートパス |
 | `CLIENT_SECRETS_DIR` | 任意 | `client_secrets.json` を置いたディレクトリ（デフォルト: `<channel_dir>/auth/`、フォールバック: `<channel_dir>/automation/auth/`） |
 
