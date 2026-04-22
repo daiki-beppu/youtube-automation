@@ -2,20 +2,21 @@
 
 YouTubeAnalyticsCollector の CTR 特化分析メソッド群。
 
-YouTube Analytics API の `channel_reports` 仕様上、
-`videoThumbnailImpressions` / `videoThumbnailImpressionsClickRate` は
-`Traffic Source Report` / `Traffic Source Detail Report` / `Device Type Report` /
-`Operating System Report` でのみ取得可能で、いずれも
-- 必須 dimension（`insightTrafficSourceType` / `deviceType` 等）
-- 地理 / video / group filter
-を同時に要求する。`dimensions` 無し・`dimensions=video` などでは常に 400 が返る。
+YouTube Analytics API (channel_reports) の仕様上、
+`videoThumbnailImpressions` / `videoThumbnailImpressionsClickRate` は以下 4 レポートでのみ取得可能:
+- Traffic Source Report (`dimensions=insightTrafficSourceType`)
+- Traffic Source Detail Report (`dimensions=insightTrafficSourceDetail` + `insightTrafficSourceType` filter)
+- Device Type Report (`dimensions=deviceType`)
+- Operating System Report (`dimensions=operatingSystem`)
 
-本 Mixin では Traffic Source Report
-(`dimensions=insightTrafficSourceType` + `filters=country==JP`) を採用する。
-Browse / Suggested / Search などサムネ接点別の impressions/CTR が得られ、
-Studio リーチタブと同じ水準の「どの導線で伸びているか」が分析可能。
-全体サマリーは行を合算して返し、ソース別 breakdown も同梱する。
-動画別クエリからは impressions 系メトリクスを除外する (API 仕様準拠)。
+`dimensions` 無し・`dimensions=video` などでは常に 400 が返る。
+本 Mixin では Traffic Source Report を採用し、Browse / Suggested / Search など
+サムネ接点別の impressions/CTR を同梱する（Studio リーチタブ相当）。
+
+備考: このメトリクス自体は YouTube Partner Program 要件など
+チャンネル条件に依存する可能性があり、仕様準拠クエリでも 400 が返ることがある。
+そのため `get_ctr_analysis` の呼び出しは try/except で保護する。
+動画別クエリからは impressions 系メトリクスを除外する (API 仕様上 `dimensions=video` 不可)。
 """
 
 from __future__ import annotations
@@ -134,9 +135,9 @@ class CTRAnalyticsMixin:
     def _fetch_channel_impressions_summary(self, start_date: str, end_date: str) -> Dict:
         """チャンネル全体の impressions/CTR を Traffic Source Report で取得する。
 
-        `videoThumbnailImpressions*` は `dimensions=insightTrafficSourceType` + 必須 filter
-        （地理 / video / group）と組み合わせる必要がある。地理 filter は `country==JP` 固定
-        （日本語チャンネル前提）。
+        Traffic Source Report は `dimensions=insightTrafficSourceType` のみで valid
+        （地理 / video filter は必須ではない）。チャンネル条件によってはメトリクス自体が
+        利用不可で 400 が返るため、呼び出し側で try/except する想定。
         row: [insightTrafficSourceType, views, videoThumbnailImpressions, videoThumbnailImpressionsClickRate]
         """
         return (
@@ -147,7 +148,6 @@ class CTRAnalyticsMixin:
                 endDate=end_date,
                 metrics="views,videoThumbnailImpressions,videoThumbnailImpressionsClickRate",
                 dimensions="insightTrafficSourceType",
-                filters="country==JP",
             )
             .execute()
         )

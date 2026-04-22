@@ -1,11 +1,14 @@
 """CTR 分析ロジックのユニットテスト。
 
-YouTube Analytics API の仕様
-(`videoThumbnailImpressions*` は Device Type / Traffic Source / Operating System の
-いずれかの必須 dimension + 地理 filter でのみ取得可) に従い、
-動画別クエリからは該当メトリクスを除外し、チャンネル全体サマリーは
-Device Type Report (`dimensions=deviceType` + `filters=country==JP`) 経由で
-取得することを検証する。
+YouTube Analytics API (channel_reports) の仕様に従い、
+`videoThumbnailImpressions*` は
+- Traffic Source Report (`dimensions=insightTrafficSourceType`)
+- Device Type / Operating System / Traffic Source Detail Report
+のいずれかでのみ valid（`dimensions=video` 不可）。
+
+本 Mixin では Traffic Source Report を採用（必須 filter なし、`day` は optional）。
+動画別クエリからは impressions 系を除外し、チャンネル全体サマリーは
+Traffic Source Report 経由で取得し deviceType / source 行を合算することを検証する。
 """
 
 from unittest.mock import MagicMock
@@ -42,7 +45,10 @@ def test_fetch_video_ctr_excludes_thumbnail_impressions_metrics():
 
 
 def test_fetch_channel_impressions_summary_uses_traffic_source_report():
-    """チャンネル全体 impressions サマリーは Traffic Source Report 経由で取得される。"""
+    """チャンネル全体 impressions サマリーは Traffic Source Report 経由で取得される。
+
+    仕様上 Traffic Source Report は必須 filter 無しなので、`filters` は指定しない。
+    """
     mock_service = MagicMock()
     mock_service.reports().query().execute.return_value = {"rows": []}
     collector = DummyCollector(mock_service)
@@ -53,7 +59,7 @@ def test_fetch_channel_impressions_summary_uses_traffic_source_report():
     assert "videoThumbnailImpressions" in last_call_kwargs["metrics"]
     assert "videoThumbnailImpressionsClickRate" in last_call_kwargs["metrics"]
     assert last_call_kwargs["dimensions"] == "insightTrafficSourceType"
-    assert last_call_kwargs["filters"] == "country==JP"
+    assert "filters" not in last_call_kwargs
 
 
 def test_process_channel_impressions_summary_aggregates_traffic_source_rows():

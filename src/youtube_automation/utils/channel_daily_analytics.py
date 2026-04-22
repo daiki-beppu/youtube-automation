@@ -12,9 +12,9 @@ class ChannelDailyAnalyticsMixin:
     """チャンネル × 日次粒度で views/impressions/CTR を取得する
 
     動画別 impressions が取れないため、チャンネル全体の日次値で代替する。
-    `videoThumbnailImpressions*` は `dimensions=insightTrafficSourceType,day`
-    + `filters=country==JP` で取得し、day ごとにソース行を合算して 1 日 1 行に戻す。
-    （流入元内訳は `get_ctr_analysis` の impressions_summary で別途取得）
+    Traffic Source Report は `day` を optional dimension として許容するため、
+    `dimensions=insightTrafficSourceType,day` で取得し day ごとに合算して
+    1 日 1 行に戻す（流入元内訳は `get_ctr_analysis` の impressions_summary 側で取得）。
     """
 
     def get_channel_daily_impressions(
@@ -43,7 +43,6 @@ class ChannelDailyAnalyticsMixin:
                 endDate=end_date,
                 metrics="views,videoThumbnailImpressions,videoThumbnailImpressionsClickRate",
                 dimensions="insightTrafficSourceType,day",
-                filters="country==JP",
                 sort="day",
                 maxResults=10000,
             )
