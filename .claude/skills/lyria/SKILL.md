@@ -71,9 +71,19 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 `config/channel/audio.json` からは `audio.target_duration_min`（コレクション全体の基準長）のみ参照する。
 
-> **⚠ 現行実装の制約**: Lyria 3 `interactions` API 自体はテキスト + 参照画像、BPM、intensity、vocal/instrumental モードなどを受け取るが、このリポジトリの `youtube_automation/utils/lyria_client.py` は現在 `prompt` (text) と `model` しか送っていない。
-> そのため composition.json に `bpm` / `brightness` / `guidance` / `temperature` / `scale` / `mute_drums` / `mode` や `phase.*` オーバーライドを書いても `generate_music_dj.py` は読み取らず、API にも渡らない。
-> 音楽的コントロールは現状すべて `prompt` テキストで表現すること。BPM や参照画像を使いたい場合は先に `lyria_client.py` を拡張する必要がある（別 issue）。
+## Advanced Parameters（Lyria 3 追加入力）
+
+`lyria_client.generate_music()` は以下の構造化パラメータを受け取れる。composition.json の `base.*` と `phases[].*` の両方で指定可能で、**phase > base > 未指定** の優先順位でマージされる。
+
+| キー | 型 | 説明 |
+|------|-----|------|
+| `reference_image` | string (path) | 参照画像パス。composition.json のある**ディレクトリからの相対**、または絶対パス。サムネイル `10-assets/main.png` を指せば音源の雰囲気が画像に寄る。対応形式: `.png`/`.jpg`/`.jpeg`/`.webp` |
+| `bpm` | integer | BPM。プロンプトに `", {bpm} BPM"` として自動合成される。目安 60-180 |
+| `intensity` | string enum | `"low"` / `"medium"` / `"high"`。それぞれ `"mellow, low-energy"` / `"balanced, moderate energy"` / `"driving, high-energy"` に展開される |
+| `mode` | string enum | `"instrumental"` / `"vocal"`。`instrumental` は末尾に `". Instrumental."` を付加、`vocal` は lyrics 未指定時のみ `". With vocals."` を付加 |
+| `lyrics` | string | 歌詞。末尾に `". Lyrics: ..."` として合成される。`[Verse]` `[Chorus]` の section tag 使用可。phase 固有（通常は `phases[].lyrics` で指定） |
+
+**API 仕様上の注意**: Lyria 3 `interactions` で真の構造化入力は `reference_image` のみ。`bpm`/`intensity`/`mode`/`lyrics` は独立フィールドではなく、プロンプトテキストへの自然言語埋め込みとして送信される。
 
 ## Instructions
 
@@ -167,14 +177,11 @@ $ARGUMENTS
 | `shuffle_passes` | No | N>0 で shuffle モード（各 phase を 1 セグメントとして N 回シャッフル連結）|
 | `segment_duration_sec` | No | shuffle モード時のセグメント長（default 180）|
 | `shuffle_seed` | No | shuffle 再現用 seed |
-
-> **composition.json で現状は使わないキー**（`generate_music_dj.py` が読まない）:
-> `base.bpm` / `base.brightness` / `base.guidance` / `base.temperature` / `base.scale` / `base.mute_drums` / `base.mode` /
-> `phase.brightness` / `phase.density` / `phase.bpm` / `phase.scale` / `phase.mute_drums` / `phase.mute_bass` /
-> `transition_sec`
->
-> Lyria 3 API 側では BPM / intensity / 参照画像などを受け取るが、現行 `lyria_client.py` は text prompt しか送っていない。
-> そのため音楽的コントロールは `prompt` 本文（動作指示、楽器指定、ムード句）で表現する。
+| `base.reference_image` / `phases[].reference_image` | No | 参照画像パス（相対は composition.json からの相対） |
+| `base.bpm` / `phases[].bpm` | No | BPM（整数、目安 60-180） |
+| `base.intensity` / `phases[].intensity` | No | `"low"` / `"medium"` / `"high"` |
+| `base.mode` / `phases[].mode` | No | `"instrumental"` / `"vocal"` |
+| `phases[].lyrics` | No | 歌詞文字列（section tag 可） |
 
 ## Step 3: 設定の書き出しとユーザー確認
 
@@ -296,7 +303,10 @@ composition.json の品質チェック:
 - [ ] 最初の phase が `at_min: 0` であること
 - [ ] `duration_hint_sec`（省略時 180）が 184 を超えていないこと（Pro モデル API 上限）
 - [ ] `total_duration_min` が最後のフェーズ以降に十分な再生時間を確保していること
-- [ ] `base.bpm` / `base.brightness` 等、現行 `lyria_client.py` が API に渡さないキーを composition.json に書いていないこと（書いても無視されるだけだが混乱の元）
+- [ ] `base.reference_image` を使う場合、コレクションの `10-assets/main.png` を `../10-assets/main.png` として指定していること
+- [ ] `bpm` を指定する場合は 60-180 の整数で、チャンネル audio config と整合していること
+- [ ] `intensity` は `"low"` / `"medium"` / `"high"` のいずれかであること
+- [ ] `mode` は `"instrumental"` / `"vocal"` のいずれかであること
 - [ ] `--preview` でプレビュー生成し、音楽の方向性を確認済み
 
 ## Next Step
