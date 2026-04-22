@@ -132,26 +132,6 @@ class AnalyticsSystem:
                 except Exception as e:
                     logger.warning(f"⚠️ 動画×日次データ保存失敗（続行）: {e}")
 
-                # チャンネル×日次 impressions/CTR（動画×日次では impressions 系が取得不可のため代替）
-                try:
-                    channel_daily_rows = self.collector.get_channel_daily_impressions(
-                        start_date.strftime("%Y-%m-%d"),
-                        end_date.strftime("%Y-%m-%d"),
-                    )
-                    _save_dated_analytics_json(
-                        "channel_daily",
-                        start_date,
-                        end_date,
-                        {
-                            "start_date": start_date.strftime("%Y-%m-%d"),
-                            "end_date": end_date.strftime("%Y-%m-%d"),
-                            "rows": channel_daily_rows,
-                        },
-                        "チャンネル×日次 impressions",
-                    )
-                except Exception as e:
-                    logger.warning(f"⚠️ チャンネル×日次 impressions 保存失敗（続行）: {e}")
-
             logger.info("✅ アナリティクスデータ収集完了")
             return analytics_data
 

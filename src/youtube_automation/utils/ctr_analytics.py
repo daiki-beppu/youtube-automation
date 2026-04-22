@@ -2,21 +2,12 @@
 
 YouTubeAnalyticsCollector の CTR 特化分析メソッド群。
 
-YouTube Analytics API (channel_reports) の仕様上、
-`videoThumbnailImpressions` / `videoThumbnailImpressionsClickRate` は以下 4 レポートでのみ取得可能:
-- Traffic Source Report (`dimensions=insightTrafficSourceType`)
-- Traffic Source Detail Report (`dimensions=insightTrafficSourceDetail` + `insightTrafficSourceType` filter)
-- Device Type Report (`dimensions=deviceType`)
-- Operating System Report (`dimensions=operatingSystem`)
-
-`dimensions` 無し・`dimensions=video` などでは常に 400 が返る。
-本 Mixin では Traffic Source Report を採用し、Browse / Suggested / Search など
-サムネ接点別の impressions/CTR を同梱する（Studio リーチタブ相当）。
-
-備考: このメトリクス自体は YouTube Partner Program 要件など
-チャンネル条件に依存する可能性があり、仕様準拠クエリでも 400 が返ることがある。
-そのため `get_ctr_analysis` の呼び出しは try/except で保護する。
-動画別クエリからは impressions 系メトリクスを除外する (API 仕様上 `dimensions=video` 不可)。
+`videoThumbnailImpressions` / `videoThumbnailImpressionsClickRate` は
+YouTube Analytics API (channel_reports) の仕様上 `dimensions=video` と組み合わせ不可。
+そのため動画別クエリからはこれらメトリクスを除外し、views/likes/comments/watch_time のみ取得する。
+(チャンネル全体サマリーは公式ドキュメントでは Traffic Source / Device Type / OS Report で
+取得可能とされているが、実 API では 400 が返るチャンネルが多く、Google 公式の Looker Studio
+Connector でも同症状が報告されている未解決問題のため、本 Mixin では収集しない)
 """
 
 from __future__ import annotations
@@ -81,15 +72,6 @@ class CTRAnalyticsMixin:
                 .execute()
             )
 
-            # Device Type Report 経由で取得するが、チャンネル設定やアクセス権限の都合で
-            # 400 が返ることがあるため個別に保護する
-            try:
-                impressions_response = self._fetch_channel_impressions_summary(start_date, end_date)
-                impressions_data = self._process_channel_impressions_summary(impressions_response)
-            except HttpError as e:
-                logger.warning(f"⚠️ チャンネル impressions サマリー取得失敗（続行）: {e}")
-                impressions_data = self._process_channel_impressions_summary({})
-
             overall_data = self._process_overall_ctr(overall_response)
             video_data = self._process_video_ctr(video_ctr_response)
             daily_data = self._process_traffic_source_ctr(traffic_response)
@@ -97,7 +79,6 @@ class CTRAnalyticsMixin:
 
             return {
                 "period": f"{start_date} to {end_date}",
-                "impressions_summary": impressions_data,
                 "overall_engagement": overall_data,
                 "video_performance": video_data,
                 "daily_traffic": daily_data,
@@ -131,78 +112,6 @@ class CTRAnalyticsMixin:
             )
             .execute()
         )
-
-    def _fetch_channel_impressions_summary(self, start_date: str, end_date: str) -> Dict:
-        """チャンネル全体の impressions/CTR を Traffic Source Report で取得する。
-
-        Traffic Source Report は `dimensions=insightTrafficSourceType` のみで valid
-        （地理 / video filter は必須ではない）。チャンネル条件によってはメトリクス自体が
-        利用不可で 400 が返るため、呼び出し側で try/except する想定。
-        row: [insightTrafficSourceType, views, videoThumbnailImpressions, videoThumbnailImpressionsClickRate]
-        """
-        return (
-            self.analytics_service.reports()
-            .query(
-                ids=f"channel=={self.channel_id}",
-                startDate=start_date,
-                endDate=end_date,
-                metrics="views,videoThumbnailImpressions,videoThumbnailImpressionsClickRate",
-                dimensions="insightTrafficSourceType",
-            )
-            .execute()
-        )
-
-    def _process_channel_impressions_summary(self, response: Dict) -> Dict:
-        """Traffic Source Report を合算してサマリー + ソース別 breakdown を返す。
-
-        row: [insightTrafficSourceType, views, impressions, impression_ctr]
-        - 全体 CTR は `sum(views_from_impressions) / sum(impressions)` で再計算。
-        - breakdown は impressions が発生したソースのみ impressions 降順で返す
-          (External / Direct などは impressions=0 の行が返るため除外)。
-        """
-        empty = {
-            "total_impressions": 0,
-            "total_views_from_impressions": 0,
-            "aggregated_ctr_percentage": 0,
-            "traffic_source_breakdown": [],
-        }
-
-        rows = response.get("rows") or []
-        if not rows:
-            return empty
-
-        total_views = 0
-        total_impressions = 0
-        breakdown: List[Dict] = []
-        for row in rows:
-            source = row[0] if len(row) > 0 else "UNKNOWN"
-            views = row[1] if len(row) > 1 else 0
-            impressions = row[2] if len(row) > 2 else 0
-            ctr = row[3] if len(row) > 3 else 0
-            if impressions <= 0:
-                # External / Direct などサムネ接点のない流入は impressions=0 なので
-                # views_from_impressions からも除外する (セマンティクス的に整合)
-                continue
-            total_views += views
-            total_impressions += impressions
-            breakdown.append(
-                {
-                    "traffic_source": source,
-                    "views_from_impressions": views,
-                    "impressions": impressions,
-                    "impression_ctr_percentage": round(ctr, 2),
-                }
-            )
-
-        breakdown.sort(key=lambda r: r["impressions"], reverse=True)
-        aggregated_ctr = (total_views / total_impressions * 100) if total_impressions > 0 else 0
-
-        return {
-            "total_impressions": total_impressions,
-            "total_views_from_impressions": total_views,
-            "aggregated_ctr_percentage": round(aggregated_ctr, 2),
-            "traffic_source_breakdown": breakdown,
-        }
 
     def get_collection_performance(self, start_date: str, end_date: str) -> Dict:
         """
