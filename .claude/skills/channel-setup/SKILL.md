@@ -49,12 +49,23 @@ Phase 1 で `/channel-new` が作成した最小 config を完全版に拡張。
 | `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。多言語展開しないチャンネルは省略可（`load_config().localizations.supported_languages` は `youtube.api.language` へフォールバック）。`config/localizations.json` が唯一の Canonical ソース |
 | `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
 
-### Step 6: 検証
+### Step 6: GCP / Vertex AI ブートストラップ
+
+新チャンネルの GCP プロジェクト + API + IAM + `.env` をセットアップする。判断基準・コマンド・リカバリ手順は **`references/gcp-bootstrap.md`** を参照。
+
+ユーザーに以下を確認してから実行する:
+- 既存プロジェクトを流用するか / 新規作成するか
+- terraform ルート（IaC 管理）を使うか / bootstrap.sh（最速）か
+- Billing account ID（新規作成時のみ必要）
+
+実行後、スクリプト出力の Console URL を開き OAuth 2.0 クライアント ID を **手動で 1 回作成**して `auth/client_secrets.json` に配置するよう案内する（gcloud / terraform 双方この手順だけ未サポート）。
+
+### Step 7: 検証
 
 JSON 構文検証・config ロードテスト・channel_id 自動取得コマンドは **`references/verification.md`** を参照。
 検証後、生成された全ファイルを一覧で確認する。
 
-### Step 7: 次ステップ案内
+### Step 8: 次ステップ案内
 
 1. **YouTube チャンネル作成**（まだの場合）→ `config/channel/meta.json` の `channel.youtube_handle`、`channel.url`、`channel.channel_id` を更新
 2. **OAuth 認証と channel_id 取得**: 手順は `references/verification.md`（「OAuth 認証」「channel_id の自動取得」）を参照

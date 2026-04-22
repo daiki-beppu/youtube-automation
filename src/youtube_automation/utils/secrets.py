@@ -23,7 +23,6 @@ from youtube_automation.utils.exceptions import ConfigError
 
 # シークレット名 → 1Password の参照 URI
 _SECRET_REFS: dict[str, str] = {
-    "GEMINI_API_KEY": "op://Personal/GEMINI_API_KEY/credential",
     "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
 }
 
@@ -96,18 +95,11 @@ def get_client_secrets_path() -> Path:
         return _client_secrets_tempfile
 
     json_content = get_secret("CLIENT_SECRETS_JSON")
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", prefix="client_secrets_", delete=False
-    )
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix="client_secrets_", delete=False)
     tmp.write(json_content)
     tmp.close()
     _client_secrets_tempfile = Path(tmp.name)
     return _client_secrets_tempfile
-
-
-def get_gemini_api_key() -> str:
-    """Google Gemini API キーを取得する。"""
-    return get_secret("GEMINI_API_KEY")
 
 
 def reset_cache() -> None:

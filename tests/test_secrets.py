@@ -17,26 +17,28 @@ import pytest
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.secrets import get_secret, reset_cache
 
+_TEST_SECRET = "CLIENT_SECRETS_JSON"
+
 
 @pytest.fixture(autouse=True)
 def clean_env():
-    """各テスト前後で GEMINI_API_KEY と lru_cache をクリーンにする"""
-    saved = os.environ.pop("GEMINI_API_KEY", None)
+    """各テスト前後で対象シークレットと lru_cache をクリーンにする"""
+    saved = os.environ.pop(_TEST_SECRET, None)
     reset_cache()
     yield
     reset_cache()
     if saved is not None:
-        os.environ["GEMINI_API_KEY"] = saved
+        os.environ[_TEST_SECRET] = saved
     else:
-        os.environ.pop("GEMINI_API_KEY", None)
+        os.environ.pop(_TEST_SECRET, None)
 
 
 class TestGetSecret:
     def test_returns_from_environ_when_present(self):
         """既に os.environ にあれば op を呼ばずにそれを返す"""
-        os.environ["GEMINI_API_KEY"] = "from-env-12345"
+        os.environ[_TEST_SECRET] = "from-env-12345"
         with patch("youtube_automation.utils.secrets.subprocess.run") as mock_run:
-            value = get_secret("GEMINI_API_KEY")
+            value = get_secret(_TEST_SECRET)
         assert value == "from-env-12345"
         mock_run.assert_not_called()
 
@@ -52,7 +54,7 @@ class TestGetSecret:
                 stdout="from-op-67890\n",
                 stderr="",
             )
-            value = get_secret("GEMINI_API_KEY")
+            value = get_secret(_TEST_SECRET)
         assert value == "from-op-67890"
         mock_run.assert_called_once()
 
@@ -68,14 +70,14 @@ class TestGetSecret:
                 stdout="cached-value\n",
                 stderr="",
             )
-            get_secret("GEMINI_API_KEY")
-        assert os.environ.get("GEMINI_API_KEY") == "cached-value"
+            get_secret(_TEST_SECRET)
+        assert os.environ.get(_TEST_SECRET) == "cached-value"
 
     def test_raises_config_error_when_op_unavailable_and_environ_empty(self):
         """op が無く os.environ も空なら ConfigError"""
         with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
-            with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
-                get_secret("GEMINI_API_KEY")
+            with pytest.raises(ConfigError, match=_TEST_SECRET):
+                get_secret(_TEST_SECRET)
 
     def test_raises_config_error_when_op_read_fails(self):
         """op はあるが op read が失敗したら ConfigError"""
@@ -83,11 +85,9 @@ class TestGetSecret:
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
-            mock_run.side_effect = subprocess.CalledProcessError(
-                returncode=1, cmd=["op", "read", "..."]
-            )
-            with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
-                get_secret("GEMINI_API_KEY")
+            mock_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=["op", "read", "..."])
+            with pytest.raises(ConfigError, match=_TEST_SECRET):
+                get_secret(_TEST_SECRET)
 
     def test_raises_config_error_for_unknown_secret_name(self):
         """未登録のシークレット名は ConfigError"""
@@ -106,6 +106,6 @@ class TestGetSecret:
                 stdout="cached\n",
                 stderr="",
             )
-            get_secret("GEMINI_API_KEY")
-            get_secret("GEMINI_API_KEY")
+            get_secret(_TEST_SECRET)
+            get_secret(_TEST_SECRET)
         mock_run.assert_called_once()

@@ -1,0 +1,22 @@
+# 使い方:
+#   cp terraform.tfvars.example terraform.tfvars
+#   <実値に書き換え>
+#   terraform init
+#   terraform apply
+
+project_id      = "my-youtube-channel-prod"
+create_project  = true
+billing_account = "012345-6789AB-CDEF01"
+adc_email       = "you@example.com"
+location        = "us-central1"
+
+# 任意
+# project_name = "My YouTube Channel"
+# org_id       = "123456789012"
+# folder_id    = "234567890123"
+# apis = [
+#   "youtube.googleapis.com",
+#   "youtubeanalytics.googleapis.com",
+#   "aiplatform.googleapis.com",
+#   "generativelanguage.googleapis.com",
+# ]
