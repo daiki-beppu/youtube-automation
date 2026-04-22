@@ -20,6 +20,7 @@ from youtube_automation.utils.youtube_service import ServiceRegistry
 # フィクスチャ: 各テストでキャッシュをリセット
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_service():
     """各テスト前後にシングルトンキャッシュをリセット"""
@@ -31,6 +32,7 @@ def reset_service():
 # ---------------------------------------------------------------------------
 # ServiceRegistry（クラスベーステスト）
 # ---------------------------------------------------------------------------
+
 
 class TestServiceRegistry:
     def test_inject_handler(self):
@@ -59,6 +61,7 @@ class TestServiceRegistry:
 # get_youtube（モジュールレベル関数の後方互換テスト）
 # ---------------------------------------------------------------------------
 
+
 class TestGetYoutube:
     def test_returns_youtube_service(self):
         mock_handler = MagicMock()
@@ -85,8 +88,9 @@ class TestGetYoutube:
 # get_analytics
 # ---------------------------------------------------------------------------
 
+
 class TestGetAnalytics:
-    @patch('youtube_automation.utils.youtube_service.build')
+    @patch("youtube_automation.utils.youtube_service.build")
     def test_returns_analytics_service(self, mock_build):
         mock_handler = MagicMock()
         mock_creds = MagicMock()
@@ -97,9 +101,9 @@ class TestGetAnalytics:
         result = yt_service.get_analytics()
 
         assert result == "fake_analytics_service"
-        mock_build.assert_called_once_with('youtubeAnalytics', 'v2', credentials=mock_creds)
+        mock_build.assert_called_once_with("youtubeAnalytics", "v2", credentials=mock_creds)
 
-    @patch('youtube_automation.utils.youtube_service.build')
+    @patch("youtube_automation.utils.youtube_service.build")
     def test_caches_service(self, mock_build):
         mock_handler = MagicMock()
         mock_handler.authenticate.return_value = MagicMock()
@@ -117,6 +121,7 @@ class TestGetAnalytics:
 # get_credentials
 # ---------------------------------------------------------------------------
 
+
 class TestGetCredentials:
     def test_returns_credentials(self):
         mock_handler = MagicMock()
@@ -131,6 +136,7 @@ class TestGetCredentials:
 # ---------------------------------------------------------------------------
 # reset
 # ---------------------------------------------------------------------------
+
 
 class TestReset:
     def test_reset_clears_cache(self):

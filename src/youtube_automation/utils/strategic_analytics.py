@@ -42,7 +42,7 @@ class StrategicAnalyticsMixin:
         logger.info("全動画リスト取得中...")
         all_videos = self.get_all_channel_videos()
         if not all_videos:
-            return {'top_videos': [], 'recent_videos': []}
+            return {"top_videos": [], "recent_videos": []}
 
         # Step 2: 直近投稿動画をフィルタリング
         logger.info(f"直近{recent_days}日間の投稿動画をフィルタリング中...")
@@ -52,9 +52,9 @@ class StrategicAnalyticsMixin:
         recent_videos_info = []
 
         for video in all_videos:
-            published_date = datetime.fromisoformat(video['published_at'].replace('Z', '+00:00'))
+            published_date = datetime.fromisoformat(video["published_at"].replace("Z", "+00:00"))
             if published_date.replace(tzinfo=None) >= cutoff_date:
-                recent_video_ids.add(video['video_id'])
+                recent_video_ids.add(video["video_id"])
                 recent_videos_info.append(video)
 
         logger.info(f"直近投稿動画: {len(recent_videos_info)}本")
@@ -68,55 +68,59 @@ class StrategicAnalyticsMixin:
             batch_size = min(10, remaining_count)
 
             try:
-                response = self.analytics_service.reports().query(
-                    ids=f'channel=={self.channel_id}',
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics='views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained',
-                    dimensions='video',
-                    sort='-views',
-                    maxResults=batch_size,
-                    startIndex=len(top_videos_data) + 1
-                ).execute()
+                response = (
+                    self.analytics_service.reports()
+                    .query(
+                        ids=f"channel=={self.channel_id}",
+                        startDate=start_date,
+                        endDate=end_date,
+                        metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
+                        dimensions="video",
+                        sort="-views",
+                        maxResults=batch_size,
+                        startIndex=len(top_videos_data) + 1,
+                    )
+                    .execute()
+                )
 
-                if 'rows' not in response:
+                if "rows" not in response:
                     break
 
                 # 動画詳細を取得
-                video_ids = [row[0] for row in response['rows']]
+                video_ids = [row[0] for row in response["rows"]]
                 video_details = self._get_video_details(video_ids)
 
-                for row in response['rows']:
+                for row in response["rows"]:
                     video_id = row[0]
                     video_detail = video_details.get(video_id, {})
 
                     video_data = {
-                        'video_id': video_id,
-                        'title': video_detail.get('title', 'Unknown'),
-                        'published_at': video_detail.get('published_at'),
-                        'description': (
-                            video_detail.get('description', '')[:100] + '...'
-                            if len(video_detail.get('description', '')) > 100
-                            else video_detail.get('description', '')
+                        "video_id": video_id,
+                        "title": video_detail.get("title", "Unknown"),
+                        "published_at": video_detail.get("published_at"),
+                        "description": (
+                            video_detail.get("description", "")[:100] + "..."
+                            if len(video_detail.get("description", "")) > 100
+                            else video_detail.get("description", "")
                         ),
-                        'duration': video_detail.get('duration', ''),
-                        'definition': video_detail.get('definition', ''),
-                        'views': row[1],
-                        'estimated_minutes_watched': row[2],
-                        'average_view_duration': row[3],
-                        'likes': row[4] if len(row) > 4 else 0,
-                        'dislikes': row[5] if len(row) > 5 else 0,
-                        'comments': row[6] if len(row) > 6 else 0,
-                        'shares': row[7] if len(row) > 7 else 0,
-                        'subscribers_gained': row[8] if len(row) > 8 else 0,
-                        'url': f"https://www.youtube.com/watch?v={video_id}",
-                        'is_recent': video_id in recent_video_ids
+                        "duration": video_detail.get("duration", ""),
+                        "definition": video_detail.get("definition", ""),
+                        "views": row[1],
+                        "estimated_minutes_watched": row[2],
+                        "average_view_duration": row[3],
+                        "likes": row[4] if len(row) > 4 else 0,
+                        "dislikes": row[5] if len(row) > 5 else 0,
+                        "comments": row[6] if len(row) > 6 else 0,
+                        "shares": row[7] if len(row) > 7 else 0,
+                        "subscribers_gained": row[8] if len(row) > 8 else 0,
+                        "url": f"https://www.youtube.com/watch?v={video_id}",
+                        "is_recent": video_id in recent_video_ids,
                     }
                     top_videos_data.append(video_data)
 
-                remaining_count -= len(response['rows'])
+                remaining_count -= len(response["rows"])
 
-                if len(response['rows']) < batch_size:
+                if len(response["rows"]) < batch_size:
                     break
 
             except HttpError as e:
@@ -128,36 +132,30 @@ class StrategicAnalyticsMixin:
 
         # Step 4: 直近動画のAnalytics取得（上位に含まれていないもののみ）
         logger.info("直近投稿動画のAnalytics取得中...")
-        top_video_ids = {video['video_id'] for video in top_videos_data}
+        top_video_ids = {video["video_id"] for video in top_videos_data}
 
         recent_videos_data = []
         for video in recent_videos_info:
-            if video['video_id'] not in top_video_ids:
-                analytics_data = self.get_video_analytics_by_id(
-                    video['video_id'], start_date, end_date
-                )
+            if video["video_id"] not in top_video_ids:
+                analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
 
-                combined_data = {
-                    **video,
-                    **analytics_data,
-                    'is_recent': True
-                }
+                combined_data = {**video, **analytics_data, "is_recent": True}
                 recent_videos_data.append(combined_data)
 
         # 再生回数で降順ソート
-        recent_videos_data.sort(key=lambda x: x.get('views', 0), reverse=True)
+        recent_videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
 
         # 結果
         result = {
-            'top_videos': top_videos_data,
-            'recent_videos': recent_videos_data,
-            'statistics': {
-                'top_videos_count': len(top_videos_data),
-                'recent_videos_count': len(recent_videos_data),
-                'recent_in_top': len([v for v in top_videos_data if v.get('is_recent')]),
-                'unique_recent_videos': len(recent_videos_data),
-                'total_analyzed': len(top_videos_data) + len(recent_videos_data)
-            }
+            "top_videos": top_videos_data,
+            "recent_videos": recent_videos_data,
+            "statistics": {
+                "top_videos_count": len(top_videos_data),
+                "recent_videos_count": len(recent_videos_data),
+                "recent_in_top": len([v for v in top_videos_data if v.get("is_recent")]),
+                "unique_recent_videos": len(recent_videos_data),
+                "total_analyzed": len(top_videos_data) + len(recent_videos_data),
+            },
         }
 
         logger.info("統合Analytics取得完了:")
@@ -187,30 +185,30 @@ class StrategicAnalyticsMixin:
         logger.info(f"戦略的動画分析データ取得開始 (モード: {mode})")
 
         result = {
-            'mode': mode,
-            'period': f"{start_date} to {end_date}",
-            'top_videos': [],
-            'recent_videos': [],
-            'all_videos': []
+            "mode": mode,
+            "period": f"{start_date} to {end_date}",
+            "top_videos": [],
+            "recent_videos": [],
+            "all_videos": [],
         }
 
         if mode == "efficient":
             logger.info("効率モード: 上位50本 + 直近30日投稿（統合取得）")
             combined_data = self.get_combined_analytics(start_date, end_date, 50, 30)
-            result['top_videos'] = combined_data['top_videos']
-            result['recent_videos'] = combined_data['recent_videos']
+            result["top_videos"] = combined_data["top_videos"]
+            result["recent_videos"] = combined_data["recent_videos"]
 
         elif mode == "comprehensive":
             logger.info("包括モード: 全動画")
-            result['all_videos'] = self.get_all_video_analytics(start_date, end_date)
+            result["all_videos"] = self.get_all_video_analytics(start_date, end_date)
 
         elif mode == "top_only":
             logger.info("上位のみモード: 上位50本")
-            result['top_videos'] = self.get_top_video_analytics(start_date, end_date, 50)
+            result["top_videos"] = self.get_top_video_analytics(start_date, end_date, 50)
 
         elif mode == "recent_only":
             logger.info("直近のみモード: 直近30日投稿")
-            result['recent_videos'] = self.get_recent_video_analytics(start_date, end_date, 30)
+            result["recent_videos"] = self.get_recent_video_analytics(start_date, end_date, 30)
 
         else:
             logger.error(f"不明なモード: {mode}")
@@ -218,12 +216,12 @@ class StrategicAnalyticsMixin:
             return result
 
         # 統計情報を追加
-        total_videos = len(result['top_videos']) + len(result['recent_videos']) + len(result['all_videos'])
-        result['summary'] = {
-            'total_videos_analyzed': total_videos,
-            'top_videos_count': len(result['top_videos']),
-            'recent_videos_count': len(result['recent_videos']),
-            'all_videos_count': len(result['all_videos'])
+        total_videos = len(result["top_videos"]) + len(result["recent_videos"]) + len(result["all_videos"])
+        result["summary"] = {
+            "total_videos_analyzed": total_videos,
+            "top_videos_count": len(result["top_videos"]),
+            "recent_videos_count": len(result["recent_videos"]),
+            "all_videos_count": len(result["all_videos"]),
         }
 
         logger.info(f"戦略的分析データ取得完了: 総計{total_videos}本")
@@ -255,16 +253,12 @@ class StrategicAnalyticsMixin:
         for i, video in enumerate(all_videos, 1):
             logger.info(f"[{i}/{len(all_videos)}] {video['title'][:50]}...")
 
-            analytics_data = self.get_video_analytics_by_id(
-                video['video_id'],
-                start_date,
-                end_date
-            )
+            analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
 
             # 動画情報とAnalyticsデータを結合
             combined_data = {
                 **video,  # title, published_at, description
-                **analytics_data  # views, estimated_minutes_watched, average_view_duration
+                **analytics_data,  # views, estimated_minutes_watched, average_view_duration
             }
             videos_data.append(combined_data)
 
@@ -273,7 +267,7 @@ class StrategicAnalyticsMixin:
                 logger.info(f"{i}本完了...")
 
         # 再生回数で降順ソート
-        videos_data.sort(key=lambda x: x.get('views', 0), reverse=True)
+        videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
 
         logger.info(f"全動画Analytics取得完了: {len(videos_data)}本")
         return videos_data
@@ -299,56 +293,60 @@ class StrategicAnalyticsMixin:
             batch_size = min(10, remaining_count)
 
             try:
-                response = self.analytics_service.reports().query(
-                    ids=f'channel=={self.channel_id}',
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics='views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained',
-                    dimensions='video',
-                    sort='-views',
-                    maxResults=batch_size,
-                    startIndex=len(videos_data) + 1
-                ).execute()
+                response = (
+                    self.analytics_service.reports()
+                    .query(
+                        ids=f"channel=={self.channel_id}",
+                        startDate=start_date,
+                        endDate=end_date,
+                        metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
+                        dimensions="video",
+                        sort="-views",
+                        maxResults=batch_size,
+                        startIndex=len(videos_data) + 1,
+                    )
+                    .execute()
+                )
 
-                if 'rows' not in response:
+                if "rows" not in response:
                     break
 
                 # 動画詳細を取得
-                video_ids = [row[0] for row in response['rows']]
+                video_ids = [row[0] for row in response["rows"]]
                 video_details = self._get_video_details(video_ids)
 
-                for row in response['rows']:
+                for row in response["rows"]:
                     video_id = row[0]
                     video_detail = video_details.get(video_id, {})
 
                     video_data = {
-                        'video_id': video_id,
-                        'title': video_detail.get('title', 'Unknown'),
-                        'published_at': video_detail.get('published_at'),
-                        'description': (
-                            video_detail.get('description', '')[:100] + '...'
-                            if len(video_detail.get('description', '')) > 100
-                            else video_detail.get('description', '')
+                        "video_id": video_id,
+                        "title": video_detail.get("title", "Unknown"),
+                        "published_at": video_detail.get("published_at"),
+                        "description": (
+                            video_detail.get("description", "")[:100] + "..."
+                            if len(video_detail.get("description", "")) > 100
+                            else video_detail.get("description", "")
                         ),
-                        'duration': video_detail.get('duration', ''),
-                        'definition': video_detail.get('definition', ''),
-                        'views': row[1],
-                        'estimated_minutes_watched': row[2],
-                        'average_view_duration': row[3],
-                        'likes': row[4] if len(row) > 4 else 0,
-                        'dislikes': row[5] if len(row) > 5 else 0,
-                        'comments': row[6] if len(row) > 6 else 0,
-                        'shares': row[7] if len(row) > 7 else 0,
-                        'subscribers_gained': row[8] if len(row) > 8 else 0,
-                        'url': f"https://www.youtube.com/watch?v={video_id}"
+                        "duration": video_detail.get("duration", ""),
+                        "definition": video_detail.get("definition", ""),
+                        "views": row[1],
+                        "estimated_minutes_watched": row[2],
+                        "average_view_duration": row[3],
+                        "likes": row[4] if len(row) > 4 else 0,
+                        "dislikes": row[5] if len(row) > 5 else 0,
+                        "comments": row[6] if len(row) > 6 else 0,
+                        "shares": row[7] if len(row) > 7 else 0,
+                        "subscribers_gained": row[8] if len(row) > 8 else 0,
+                        "url": f"https://www.youtube.com/watch?v={video_id}",
                     }
                     videos_data.append(video_data)
 
-                remaining_count -= len(response['rows'])
+                remaining_count -= len(response["rows"])
                 logger.info(f"{len(videos_data)}本取得済み...")
 
                 # レスポンスが期待より少ない場合は終了
-                if len(response['rows']) < batch_size:
+                if len(response["rows"]) < batch_size:
                     break
 
             except HttpError as e:
@@ -388,21 +386,14 @@ class StrategicAnalyticsMixin:
         for i, video in enumerate(recent_videos, 1):
             logger.info(f"[{i}/{len(recent_videos)}] {video['title'][:50]}...")
 
-            analytics_data = self.get_video_analytics_by_id(
-                video['video_id'],
-                start_date,
-                end_date
-            )
+            analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
 
             # 動画情報とAnalyticsデータを結合
-            combined_data = {
-                **video,
-                **analytics_data
-            }
+            combined_data = {**video, **analytics_data}
             videos_data.append(combined_data)
 
         # 再生回数で降順ソート
-        videos_data.sort(key=lambda x: x.get('views', 0), reverse=True)
+        videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
 
         logger.info(f"直近動画Analytics取得完了: {len(videos_data)}本")
         return videos_data

@@ -50,4 +50,4 @@ class RetryDecision:
             return cls(should_retry=False)
         if current_attempt >= MAX_RETRY_ATTEMPTS:
             return cls(should_retry=False)
-        return cls(should_retry=True, delay_seconds=float(2 ** current_attempt))
+        return cls(should_retry=True, delay_seconds=float(2**current_attempt))

@@ -72,7 +72,7 @@ class YouTubeUploadCore:
 
         try:
             insert_request = self.youtube.videos().insert(
-                part=','.join(body.keys()),
+                part=",".join(body.keys()),
                 body=body,
                 media_body=media,
             )
@@ -130,8 +130,8 @@ class YouTubeUploadCore:
             except OSError as e:
                 raise UploadError(f"アップロードエラー: {e}") from e
 
-        if 'id' in response:
-            return response['id']
+        if "id" in response:
+            return response["id"]
         else:
             logger.error(f"レスポンスに動画IDがありません: {response}")
             return None
@@ -179,14 +179,14 @@ class YouTubeUploadCore:
         import subprocess
         import tempfile
 
-        tmp_fd = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+        tmp_fd = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
         tmp_fd.close()
         compressed = Path(tmp_fd.name)
         failed_qualities: set[int] = set()
 
         while (quality := strategy.next_quality(failed_qualities)) is not None:
             subprocess.run(
-                ['ffmpeg', '-y', '-i', str(thumbnail_path), '-qscale:v', str(quality), str(compressed)],
+                ["ffmpeg", "-y", "-i", str(thumbnail_path), "-qscale:v", str(quality), str(compressed)],
                 capture_output=True,
             )
             if compressed.exists() and compressed.stat().st_size <= max_bytes:

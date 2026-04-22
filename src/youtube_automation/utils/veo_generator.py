@@ -23,7 +23,12 @@ MAX_POLL_SEC = 600  # 10分タイムアウト
 
 
 def generate_loop_video(
-    client, image_path: Path, output_path: Path, model: str, prompt: str, aspect_ratio: str = "16:9",
+    client,
+    image_path: Path,
+    output_path: Path,
+    model: str,
+    prompt: str,
+    aspect_ratio: str = "16:9",
     duration_seconds: int = 8,
 ) -> bool:
     """Veo 3.1 API でループ動画を生成する。"""
@@ -112,7 +117,9 @@ def strip_audio(video_path: Path) -> None:
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", str(video_path), "-c:v", "copy", "-an", str(tmp)],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         tmp.rename(video_path)
         print("  [Strip]  音声トラック除去済み")
@@ -124,8 +131,14 @@ def strip_audio(video_path: Path) -> None:
 def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
     """Veo 末尾のノイズ/歪みを除去する（映像コピー、再エンコードなし）。"""
     duration_cmd = [
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
     ]
     try:
         duration = float(subprocess.check_output(duration_cmd, text=True).strip())
@@ -142,7 +155,9 @@ def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", str(video_path), "-t", str(usable), "-c:v", "copy", "-an", str(tmp)],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         tmp.rename(video_path)
         print(f"  [Trim]   末尾 {trim_sec}秒カット（{duration:.1f}秒 → {usable:.1f}秒）")
@@ -162,8 +177,14 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
     """
     output = video_path.with_stem(video_path.stem + "_smooth")
     duration_cmd = [
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
     ]
     try:
         duration = float(subprocess.check_output(duration_cmd, text=True).strip())
@@ -190,10 +211,20 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
     )
 
     cmd = [
-        "ffmpeg", "-y", "-i", str(video_path),
-        "-filter_complex", filter_complex,
-        "-map", "[out]",
-        "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "[out]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "slow",
+        "-crf",
+        "18",
         "-an",
         str(output),
     ]

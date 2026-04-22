@@ -35,12 +35,9 @@ class VideoListingMixin:
 
         try:
             # チャンネルのアップロード済みプレイリストIDを取得
-            channel_response = self.youtube_service.channels().list(
-                part='contentDetails',
-                id=self.channel_id
-            ).execute()
+            channel_response = self.youtube_service.channels().list(part="contentDetails", id=self.channel_id).execute()
 
-            uploads_playlist_id = channel_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            uploads_playlist_id = channel_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
             # 全動画を取得
             videos = []
@@ -48,27 +45,31 @@ class VideoListingMixin:
 
             while True:
                 # プレイリストのアイテムを取得
-                playlist_response = self.youtube_service.playlistItems().list(
-                    part='snippet,contentDetails',
-                    playlistId=uploads_playlist_id,
-                    maxResults=50,
-                    pageToken=next_page_token
-                ).execute()
+                playlist_response = (
+                    self.youtube_service.playlistItems()
+                    .list(
+                        part="snippet,contentDetails",
+                        playlistId=uploads_playlist_id,
+                        maxResults=50,
+                        pageToken=next_page_token,
+                    )
+                    .execute()
+                )
 
-                for item in playlist_response['items']:
+                for item in playlist_response["items"]:
                     video_info = {
-                        'video_id': item['contentDetails']['videoId'],
-                        'title': item['snippet']['title'],
-                        'published_at': item['snippet']['publishedAt'],
-                        'description': (
-                            item['snippet']['description'][:100] + '...'
-                            if len(item['snippet']['description']) > 100
-                            else item['snippet']['description']
-                        )
+                        "video_id": item["contentDetails"]["videoId"],
+                        "title": item["snippet"]["title"],
+                        "published_at": item["snippet"]["publishedAt"],
+                        "description": (
+                            item["snippet"]["description"][:100] + "..."
+                            if len(item["snippet"]["description"]) > 100
+                            else item["snippet"]["description"]
+                        ),
                     }
                     videos.append(video_info)
 
-                next_page_token = playlist_response.get('nextPageToken')
+                next_page_token = playlist_response.get("nextPageToken")
                 if not next_page_token:
                     break
 
@@ -109,13 +110,13 @@ class VideoListingMixin:
             recent_videos = []
             for video in all_videos:
                 # ISO形式の日付をパース
-                published_date = datetime.fromisoformat(video['published_at'].replace('Z', '+00:00'))
+                published_date = datetime.fromisoformat(video["published_at"].replace("Z", "+00:00"))
 
                 if published_date.replace(tzinfo=None) >= cutoff_date:
                     recent_videos.append(video)
 
             # 投稿日時で降順ソート（新しい順）
-            recent_videos.sort(key=lambda x: x['published_at'], reverse=True)
+            recent_videos.sort(key=lambda x: x["published_at"], reverse=True)
 
             logger.info(f"直近{days}日間の投稿動画取得完了: {len(recent_videos)}本")
             return recent_videos

@@ -12,19 +12,29 @@ def _make_launch_frame():
     # theme adventure: vid_a1 (高初速), vid_a2 (低初速)
     for vid, rate in [("vid_a1", 100), ("vid_a2", 30)]:
         for day in range(7):
-            records.append({
-                "video_id": vid, "days_since_publish": day,
-                "cumulative_views": rate * (day + 1),
-                "daily_views": rate, "daily_impressions": 0, "ctr": 0.0,
-            })
+            records.append(
+                {
+                    "video_id": vid,
+                    "days_since_publish": day,
+                    "cumulative_views": rate * (day + 1),
+                    "daily_views": rate,
+                    "daily_impressions": 0,
+                    "ctr": 0.0,
+                }
+            )
     # theme battle: vid_b1 (中速), vid_b2 (中速)
     for vid, rate in [("vid_b1", 50), ("vid_b2", 60)]:
         for day in range(7):
-            records.append({
-                "video_id": vid, "days_since_publish": day,
-                "cumulative_views": rate * (day + 1),
-                "daily_views": rate, "daily_impressions": 0, "ctr": 0.0,
-            })
+            records.append(
+                {
+                    "video_id": vid,
+                    "days_since_publish": day,
+                    "cumulative_views": rate * (day + 1),
+                    "daily_views": rate,
+                    "daily_impressions": 0,
+                    "ctr": 0.0,
+                }
+            )
     return pd.DataFrame(records)
 
 

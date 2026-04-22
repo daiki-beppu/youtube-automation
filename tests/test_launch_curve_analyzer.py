@@ -20,14 +20,16 @@ def _make_frame():
     ]
     for i, vals in enumerate(base_cumvals):
         for day, cum in enumerate(vals):
-            records.append({
-                "video_id": f"vid_{i}",
-                "days_since_publish": day,
-                "cumulative_views": cum,
-                "daily_views": cum - (vals[day - 1] if day > 0 else 0),
-                "daily_impressions": 0,
-                "ctr": 0.0,
-            })
+            records.append(
+                {
+                    "video_id": f"vid_{i}",
+                    "days_since_publish": day,
+                    "cumulative_views": cum,
+                    "daily_views": cum - (vals[day - 1] if day > 0 else 0),
+                    "daily_impressions": 0,
+                    "ctr": 0.0,
+                }
+            )
     return pd.DataFrame(records)
 
 
@@ -54,7 +56,11 @@ def test_judge_video_vs_benchmark_labels_quartile():
     df = _make_frame()
     bench = compute_benchmark(df, metric="cumulative_views", exclude_video_id="vid_4")
     judgement = judge_video_vs_benchmark(
-        df, bench, video_id="vid_4", at_day=3, metric="cumulative_views",
+        df,
+        bench,
+        video_id="vid_4",
+        at_day=3,
+        metric="cumulative_views",
     )
     assert judgement["value"] == 500
     assert judgement["benchmark_median"] == 250

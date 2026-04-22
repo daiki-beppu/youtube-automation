@@ -22,7 +22,7 @@ BITRATE_4K = (35_000_000, 68_000_000)
 BITRATE_1080P = (8_000_000, 12_000_000)
 BITRATE_720P = (5_000_000, 7_500_000)
 
-SUPPORTED_CODECS = ['h264', 'h265', 'hevc', 'vp9', 'av1']
+SUPPORTED_CODECS = ["h264", "h265", "hevc", "vp9", "av1"]
 
 
 class VideoValidator:
@@ -45,44 +45,44 @@ class VideoValidator:
         collection_dir = Path(collection_path)
 
         if not collection_dir.exists():
-            return {'error': f"コレクションディレクトリが存在しません: {collection_path}"}
+            return {"error": f"コレクションディレクトリが存在しません: {collection_path}"}
 
         results = {
-            'collection_path': str(collection_dir),
-            'collection_name': collection_dir.name,
-            'master_video': None,
-            'individual_videos': [],
-            'errors': [],
-            'warnings': [],
-            'summary': {'total': 0, 'valid': 0, 'invalid': 0}
+            "collection_path": str(collection_dir),
+            "collection_name": collection_dir.name,
+            "master_video": None,
+            "individual_videos": [],
+            "errors": [],
+            "warnings": [],
+            "summary": {"total": 0, "valid": 0, "invalid": 0},
         }
 
         # マスター動画検証
         master_result = self._validate_master_video(collection_dir)
-        results['master_video'] = master_result
+        results["master_video"] = master_result
 
         if master_result:
-            results['summary']['total'] += 1
-            if master_result.get('valid', False):
-                results['summary']['valid'] += 1
+            results["summary"]["total"] += 1
+            if master_result.get("valid", False):
+                results["summary"]["valid"] += 1
             else:
-                results['summary']['invalid'] += 1
+                results["summary"]["invalid"] += 1
 
         # 個別動画検証
         individual_results = self._validate_individual_videos(collection_dir)
-        results['individual_videos'] = individual_results
+        results["individual_videos"] = individual_results
 
         for video_result in individual_results:
-            results['summary']['total'] += 1
-            if video_result.get('valid', False):
-                results['summary']['valid'] += 1
+            results["summary"]["total"] += 1
+            if video_result.get("valid", False):
+                results["summary"]["valid"] += 1
             else:
-                results['summary']['invalid'] += 1
+                results["summary"]["invalid"] += 1
 
         # 全体的な問題チェック
         overall_issues = self._check_overall_consistency(collection_dir, results)
-        results['errors'].extend(overall_issues.get('errors', []))
-        results['warnings'].extend(overall_issues.get('warnings', []))
+        results["errors"].extend(overall_issues.get("errors", []))
+        results["warnings"].extend(overall_issues.get("warnings", []))
 
         return results
 
@@ -92,43 +92,42 @@ class VideoValidator:
         master_candidates = []
 
         # 03-Individual-movie/ 内のマスター動画
-        video_dir = collection_dir / '03-Individual-movie'
+        video_dir = collection_dir / "03-Individual-movie"
         if video_dir.exists():
-            master_candidates.extend(video_dir.glob('*master*.mp4'))
+            master_candidates.extend(video_dir.glob("*master*.mp4"))
 
         # 01-master/ 内の動画
-        master_dir = collection_dir / '01-master'
+        master_dir = collection_dir / "01-master"
         if master_dir.exists():
-            master_candidates.extend(master_dir.glob('*.mp4'))
+            master_candidates.extend(master_dir.glob("*.mp4"))
 
         if not master_candidates:
-            return {'error': 'マスター動画ファイルが見つかりません', 'valid': False}
+            return {"error": "マスター動画ファイルが見つかりません", "valid": False}
 
         if len(master_candidates) > 1:
             return {
-                'error': f'複数のマスター動画ファイルが見つかりました: {[f.name for f in master_candidates]}',
-                'valid': False
+                "error": f"複数のマスター動画ファイルが見つかりました: {[f.name for f in master_candidates]}",
+                "valid": False,
             }
 
         master_video = master_candidates[0]
-        return self._validate_single_video(master_video, 'master')
+        return self._validate_single_video(master_video, "master")
 
     def _validate_individual_videos(self, collection_dir: Path) -> List[Dict]:
         """個別動画の検証"""
-        video_dir = collection_dir / '03-Individual-movie'
+        video_dir = collection_dir / "03-Individual-movie"
 
         if not video_dir.exists():
-            return [{'error': '03-Individual-movie ディレクトリが存在しません', 'valid': False}]
+            return [{"error": "03-Individual-movie ディレクトリが存在しません", "valid": False}]
 
-        video_files = [f for f in video_dir.glob('*.mp4')
-                      if 'master' not in f.name.lower()]
+        video_files = [f for f in video_dir.glob("*.mp4") if "master" not in f.name.lower()]
 
         if not video_files:
-            return [{'error': '個別動画ファイルが見つかりません', 'valid': False}]
+            return [{"error": "個別動画ファイルが見つかりません", "valid": False}]
 
         results = []
         for video_file in sorted(video_files):
-            result = self._validate_single_video(video_file, 'individual')
+            result = self._validate_single_video(video_file, "individual")
             results.append(result)
 
         return results
@@ -136,27 +135,27 @@ class VideoValidator:
     def _validate_single_video(self, video_path: Path, video_type: str) -> Dict:
         """単一動画ファイルの検証"""
         result = {
-            'file_path': str(video_path),
-            'file_name': video_path.name,
-            'file_size': 0,
-            'video_type': video_type,
-            'duration': 0,
-            'resolution': None,
-            'codec': None,
-            'bitrate': None,
-            'valid': False,
-            'errors': [],
-            'warnings': []
+            "file_path": str(video_path),
+            "file_name": video_path.name,
+            "file_size": 0,
+            "video_type": video_type,
+            "duration": 0,
+            "resolution": None,
+            "codec": None,
+            "bitrate": None,
+            "valid": False,
+            "errors": [],
+            "warnings": [],
         }
 
         try:
             # ファイル存在確認
             if not video_path.exists():
-                result['errors'].append(f"ファイルが存在しません: {video_path}")
+                result["errors"].append(f"ファイルが存在しません: {video_path}")
                 return result
 
             # ファイルサイズ取得
-            result['file_size'] = video_path.stat().st_size
+            result["file_size"] = video_path.stat().st_size
 
             # ffprobe でメタデータ取得
             metadata = self._get_video_metadata(video_path)
@@ -166,43 +165,37 @@ class VideoValidator:
 
                 # 基本検証
                 validation_errors = self._validate_video_properties(result, video_type)
-                result['errors'].extend(validation_errors)
+                result["errors"].extend(validation_errors)
 
                 # 警告チェック
                 warnings = self._check_video_warnings(result, video_type)
-                result['warnings'].extend(warnings)
+                result["warnings"].extend(warnings)
 
                 # 有効性判定
-                result['valid'] = len(result['errors']) == 0
+                result["valid"] = len(result["errors"]) == 0
             else:
-                result['errors'].append("動画メタデータの取得に失敗しました")
+                result["errors"].append("動画メタデータの取得に失敗しました")
 
         except Exception as e:
-            result['errors'].append(f"検証エラー: {e}")
+            result["errors"].append(f"検証エラー: {e}")
 
         return result
 
     def _get_video_metadata(self, video_path: Path) -> Optional[Dict]:
         """ffprobe で動画メタデータを取得"""
         try:
-            cmd = [
-                'ffprobe',
-                '-v', 'quiet',
-                '-print_format', 'json',
-                '-show_format',
-                '-show_streams',
-                str(video_path)
-            ]
+            cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(video_path)]
 
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             import json
+
             data = json.loads(result.stdout)
 
             # 動画ストリーム情報を取得
             video_stream = None
-            for stream in data.get('streams', []):
-                if stream.get('codec_type') == 'video':
+            for stream in data.get("streams", []):
+                if stream.get("codec_type") == "video":
                     video_stream = stream
                     break
 
@@ -210,14 +203,14 @@ class VideoValidator:
                 return None
 
             # フォーマット情報を取得
-            format_info = data.get('format', {})
+            format_info = data.get("format", {})
 
             metadata = {
-                'duration': float(format_info.get('duration', 0)),
-                'resolution': f"{video_stream.get('width', 0)}x{video_stream.get('height', 0)}",
-                'codec': video_stream.get('codec_name', 'unknown'),
-                'bitrate': int(format_info.get('bit_rate', 0)) if format_info.get('bit_rate') else None,
-                'fps': self._parse_fps(video_stream.get('r_frame_rate', '0/1'))
+                "duration": float(format_info.get("duration", 0)),
+                "resolution": f"{video_stream.get('width', 0)}x{video_stream.get('height', 0)}",
+                "codec": video_stream.get("codec_name", "unknown"),
+                "bitrate": int(format_info.get("bit_rate", 0)) if format_info.get("bit_rate") else None,
+                "fps": self._parse_fps(video_stream.get("r_frame_rate", "0/1")),
             }
 
             return metadata
@@ -229,8 +222,8 @@ class VideoValidator:
     def _parse_fps(self, fps_string: str) -> float:
         """フレームレート文字列をパース"""
         try:
-            if '/' in fps_string:
-                num, denom = fps_string.split('/')
+            if "/" in fps_string:
+                num, denom = fps_string.split("/")
                 return float(num) / float(denom)
             else:
                 return float(fps_string)
@@ -242,13 +235,13 @@ class VideoValidator:
         errors = []
 
         # ファイルサイズチェック
-        if video_info['file_size'] == 0:
+        if video_info["file_size"] == 0:
             errors.append("ファイルサイズが0です")
-        elif video_info['file_size'] > MAX_FILE_SIZE_BYTES:
+        elif video_info["file_size"] > MAX_FILE_SIZE_BYTES:
             errors.append("ファイルサイズがYouTube上限（128GB）を超えています")
 
         # 動画長チェック
-        duration = video_info['duration']
+        duration = video_info["duration"]
         if duration == 0:
             errors.append("動画の長さが取得できません")
         elif duration < 1:  # 1秒未満
@@ -257,19 +250,19 @@ class VideoValidator:
             errors.append("動画がYouTube上限（12時間）を超えています")
 
         # 解像度チェック
-        resolution = video_info.get('resolution', '0x0')
-        if resolution == '0x0':
+        resolution = video_info.get("resolution", "0x0")
+        if resolution == "0x0":
             errors.append("解像度が取得できません")
         else:
             try:
-                width, height = map(int, resolution.split('x'))
+                width, height = map(int, resolution.split("x"))
                 if width < MIN_RESOLUTION_PX or height < MIN_RESOLUTION_PX:
                     errors.append("解像度が低すぎます（最小144p）")
             except Exception:
                 errors.append("解像度の形式が不正です")
 
         # コーデックチェック
-        codec = video_info.get('codec', '')
+        codec = video_info.get("codec", "")
         if codec.lower() not in SUPPORTED_CODECS:
             errors.append(f"サポートされていないコーデックです: {codec}")
 
@@ -280,12 +273,12 @@ class VideoValidator:
         warnings = []
 
         # ビットレート警告
-        bitrate = video_info.get('bitrate')
+        bitrate = video_info.get("bitrate")
         if bitrate:
             # 4K: 35-68 Mbps, 1080p: 8-12 Mbps, 720p: 5-7.5 Mbps
-            resolution = video_info.get('resolution', '0x0')
+            resolution = video_info.get("resolution", "0x0")
             try:
-                width, height = map(int, resolution.split('x'))
+                width, height = map(int, resolution.split("x"))
 
                 if height >= 2160:  # 4K
                     lo, hi = BITRATE_4K
@@ -303,7 +296,7 @@ class VideoValidator:
                 pass
 
         # フレームレート警告
-        fps = video_info.get('fps', 0)
+        fps = video_info.get("fps", 0)
         if fps > 0:
             if fps < 24:
                 warnings.append("フレームレートが低い可能性があります（24fps未満）")
@@ -311,8 +304,8 @@ class VideoValidator:
                 warnings.append("フレームレートが高く、ファイルサイズが大きい可能性があります（60fps超）")
 
         # 動画タイプ別チェック
-        if video_type == 'individual':
-            duration = video_info['duration']
+        if video_type == "individual":
+            duration = video_info["duration"]
             if duration < 30:
                 warnings.append("個別楽曲としては短い可能性があります（30秒未満）")
             elif duration > 600:  # 10分
@@ -322,27 +315,27 @@ class VideoValidator:
 
     def _check_overall_consistency(self, collection_dir: Path, results: Dict) -> Dict:
         """コレクション全体の整合性チェック"""
-        issues = {'errors': [], 'warnings': []}
+        issues = {"errors": [], "warnings": []}
 
         # 音声ファイルと動画ファイルの数の整合性
-        audio_dir = collection_dir / '02-Individual-music'
+        audio_dir = collection_dir / "02-Individual-music"
         if audio_dir.exists():
-            audio_files = list(audio_dir.glob('*.wav'))
-            video_count = len(results['individual_videos'])
+            audio_files = list(audio_dir.glob("*.wav"))
+            video_count = len(results["individual_videos"])
 
             if len(audio_files) != video_count:
-                issues['warnings'].append(
+                issues["warnings"].append(
                     f"音声ファイル数（{len(audio_files)}）と動画ファイル数（{video_count}）が一致しません"
                 )
 
         # サムネイル画像の存在確認
-        assets_dir = collection_dir / '10-assets'
+        assets_dir = collection_dir / "10-assets"
         if assets_dir.exists():
-            thumbnail_files = list(assets_dir.glob('*.png'))
+            thumbnail_files = list(assets_dir.glob("*.png"))
             if not thumbnail_files:
-                issues['warnings'].append("サムネイル画像（PNG）が見つかりません")
+                issues["warnings"].append("サムネイル画像（PNG）が見つかりません")
         else:
-            issues['warnings'].append("10-assets ディレクトリが存在しません")
+            issues["warnings"].append("10-assets ディレクトリが存在しません")
 
         return issues
 
@@ -357,42 +350,42 @@ class VideoValidator:
         lines.append("")
 
         # サマリー
-        summary = validation_results['summary']
+        summary = validation_results["summary"]
         lines.append(f"📊 検証結果: {summary['valid']}/{summary['total']} ファイル有効")
 
-        if summary['invalid'] > 0:
+        if summary["invalid"] > 0:
             lines.append(f"❌ 無効ファイル: {summary['invalid']}個")
 
         lines.append("")
 
         # マスター動画
-        master = validation_results['master_video']
+        master = validation_results["master_video"]
         if master:
-            status = "✅" if master.get('valid', False) else "❌"
+            status = "✅" if master.get("valid", False) else "❌"
             lines.append(f"{status} マスター動画: {master.get('file_name', 'N/A')}")
 
-            if master.get('duration'):
-                minutes = int(master['duration'] // 60)
-                seconds = int(master['duration'] % 60)
+            if master.get("duration"):
+                minutes = int(master["duration"] // 60)
+                seconds = int(master["duration"] % 60)
                 lines.append(f"   ⏱️ 長さ: {minutes}:{seconds:02d}")
 
-            if master.get('resolution'):
+            if master.get("resolution"):
                 lines.append(f"   🖼️ 解像度: {master['resolution']}")
 
-            for error in master.get('errors', []):
+            for error in master.get("errors", []):
                 lines.append(f"   ❌ {error}")
 
-            for warning in master.get('warnings', []):
+            for warning in master.get("warnings", []):
                 lines.append(f"   ⚠️ {warning}")
 
         lines.append("")
 
         # 個別動画
-        individual_videos = validation_results['individual_videos']
+        individual_videos = validation_results["individual_videos"]
         if individual_videos:
             lines.append(f"🎶 個別動画: {len(individual_videos)}本")
 
-            valid_count = sum(1 for v in individual_videos if v.get('valid', False))
+            valid_count = sum(1 for v in individual_videos if v.get("valid", False))
             lines.append(f"   ✅ 有効: {valid_count}本")
 
             invalid_count = len(individual_videos) - valid_count
@@ -401,31 +394,32 @@ class VideoValidator:
 
             # エラーがある動画のみ詳細表示
             for video in individual_videos:
-                if video.get('errors') or video.get('warnings'):
-                    status = "✅" if video.get('valid', False) else "❌"
+                if video.get("errors") or video.get("warnings"):
+                    status = "✅" if video.get("valid", False) else "❌"
                     lines.append(f"   {status} {video.get('file_name', 'N/A')}")
 
-                    for error in video.get('errors', []):
+                    for error in video.get("errors", []):
                         lines.append(f"      ❌ {error}")
 
-                    for warning in video.get('warnings', []):
+                    for warning in video.get("warnings", []):
                         lines.append(f"      ⚠️ {warning}")
 
         # 全体的な問題
-        if validation_results['errors'] or validation_results['warnings']:
+        if validation_results["errors"] or validation_results["warnings"]:
             lines.append("")
             lines.append("🔍 全体的な問題:")
 
-            for error in validation_results['errors']:
+            for error in validation_results["errors"]:
                 lines.append(f"❌ {error}")
 
-            for warning in validation_results['warnings']:
+            for warning in validation_results["warnings"]:
                 lines.append(f"⚠️ {warning}")
 
         lines.append("")
         lines.append("=" * 50)
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
+
 
 def main():
     """メイン関数 - スタンドアロン実行用"""
@@ -445,7 +439,7 @@ def main():
         print(report)
 
         # 終了コード設定
-        if results['summary']['invalid'] > 0:
+        if results["summary"]["invalid"] > 0:
             sys.exit(1)  # 無効なファイルがある場合は非ゼロで終了
         else:
             sys.exit(0)  # 全て有効な場合は正常終了
@@ -453,6 +447,7 @@ def main():
     except Exception as e:
         print(f"❌ エラー: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -36,63 +36,69 @@ class RetentionAnalyticsMixin:
             self.initialize()
 
         try:
-            response = self.analytics_service.reports().query(
-                ids=f'channel=={self.channel_id}',
-                startDate=start_date,
-                endDate=end_date,
-                metrics='audienceWatchRatio,relativeRetentionPerformance',
-                dimensions='elapsedVideoTimeRatio',
-                filters=f'video=={video_id}',
-                sort='elapsedVideoTimeRatio'
-            ).execute()
+            response = (
+                self.analytics_service.reports()
+                .query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="audienceWatchRatio,relativeRetentionPerformance",
+                    dimensions="elapsedVideoTimeRatio",
+                    filters=f"video=={video_id}",
+                    sort="elapsedVideoTimeRatio",
+                )
+                .execute()
+            )
 
             retention_curve = []
-            if 'rows' in response:
-                for row in response['rows']:
-                    retention_curve.append({
-                        'elapsed_ratio': row[0],
-                        'watch_ratio': row[1],
-                        'relative_performance': row[2],
-                    })
+            if "rows" in response:
+                for row in response["rows"]:
+                    retention_curve.append(
+                        {
+                            "elapsed_ratio": row[0],
+                            "watch_ratio": row[1],
+                            "relative_performance": row[2],
+                        }
+                    )
 
             # サマリー統計を算出
             if retention_curve:
-                watch_ratios = [p['watch_ratio'] for p in retention_curve]
+                watch_ratios = [p["watch_ratio"] for p in retention_curve]
                 avg_retention = sum(watch_ratios) / len(watch_ratios)
                 # 50% 地点の維持率
-                midpoint = next((p for p in retention_curve if p['elapsed_ratio'] >= 0.5), None)
-                midpoint_retention = midpoint['watch_ratio'] if midpoint else 0
+                midpoint = next((p for p in retention_curve if p["elapsed_ratio"] >= 0.5), None)
+                midpoint_retention = midpoint["watch_ratio"] if midpoint else 0
             else:
                 avg_retention = 0
                 midpoint_retention = 0
 
             return {
-                'video_id': video_id,
-                'retention_curve': retention_curve,
-                'average_retention': round(avg_retention, 4),
-                'midpoint_retention': round(midpoint_retention, 4),
-                'data_points': len(retention_curve),
+                "video_id": video_id,
+                "retention_curve": retention_curve,
+                "average_retention": round(avg_retention, 4),
+                "midpoint_retention": round(midpoint_retention, 4),
+                "data_points": len(retention_curve),
             }
 
         except HttpError as e:
             logger.warning(f"視聴維持率取得不可 (video={video_id}): {e}")
             return {
-                'video_id': video_id,
-                'retention_curve': [],
-                'average_retention': 0,
-                'midpoint_retention': 0,
-                'data_points': 0,
-                'error': str(e),
+                "video_id": video_id,
+                "retention_curve": [],
+                "average_retention": 0,
+                "midpoint_retention": 0,
+                "data_points": 0,
+                "error": str(e),
             }
         except Exception as e:
             logger.error(f"視聴維持率取得エラー (video={video_id}): {e}")
             return {
-                'video_id': video_id,
-                'retention_curve': [],
-                'average_retention': 0,
-                'midpoint_retention': 0,
-                'data_points': 0,
-                'error': str(e),
+                "video_id": video_id,
+                "retention_curve": [],
+                "average_retention": 0,
+                "midpoint_retention": 0,
+                "data_points": 0,
+                "error": str(e),
             }
 
     def get_retention_summary(self, start_date: str, end_date: str, top_n: int = 10) -> List[Dict]:
@@ -116,23 +122,27 @@ class RetentionAnalyticsMixin:
 
         # 上位動画の video_id を取得
         try:
-            response = self.analytics_service.reports().query(
-                ids=f'channel=={self.channel_id}',
-                startDate=start_date,
-                endDate=end_date,
-                metrics='views',
-                dimensions='video',
-                sort='-views',
-                maxResults=top_n
-            ).execute()
+            response = (
+                self.analytics_service.reports()
+                .query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="views",
+                    dimensions="video",
+                    sort="-views",
+                    maxResults=top_n,
+                )
+                .execute()
+            )
         except HttpError as e:
             logger.error(f"上位動画リスト取得エラー: {e}")
             return []
 
-        if 'rows' not in response:
+        if "rows" not in response:
             return []
 
-        video_ids = [row[0] for row in response['rows']]
+        video_ids = [row[0] for row in response["rows"]]
         video_details = self._get_video_details(video_ids)
 
         results = []
@@ -140,10 +150,10 @@ class RetentionAnalyticsMixin:
             logger.info(f"[{i}/{len(video_ids)}] 維持率取得中: {video_id}")
             retention = self.get_audience_retention(video_id, start_date, end_date)
             detail = video_details.get(video_id, {})
-            retention['title'] = detail.get('title', 'Unknown')
+            retention["title"] = detail.get("title", "Unknown")
             results.append(retention)
 
         # 平均維持率で降順ソート
-        results.sort(key=lambda x: x.get('average_retention', 0), reverse=True)
+        results.sort(key=lambda x: x.get("average_retention", 0), reverse=True)
         logger.info(f"視聴維持率サマリー完了: {len(results)} 本")
         return results

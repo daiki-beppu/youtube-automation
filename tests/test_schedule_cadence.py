@@ -12,8 +12,13 @@ TZ = ZoneInfo("Asia/Tokyo")
 # collection_uploader.py から _calculate_publish_at のロジックを再現
 # 本体と同期を保つため、テスト失敗時は本体の変更を確認すること
 WEEKDAY_MAP = {
-    'mon': 1, 'tue': 2, 'wed': 3, 'thu': 4,
-    'fri': 5, 'sat': 6, 'sun': 7,
+    "mon": 1,
+    "tue": 2,
+    "wed": 3,
+    "thu": 4,
+    "fri": 5,
+    "sat": 6,
+    "sun": 7,
 }
 
 
@@ -31,13 +36,9 @@ def calculate_publish_at(
     if not auto_schedule_enabled:
         return None
 
-    hour, minute = map(int, publish_time.split(':'))
+    hour, minute = map(int, publish_time.split(":"))
 
-    allowed_weekdays = (
-        {WEEKDAY_MAP[d.lower()] for d in cadence}
-        if cadence
-        else set(range(1, 8))
-    )
+    allowed_weekdays = {WEEKDAY_MAP[d.lower()] for d in cadence} if cadence else set(range(1, 8))
 
     publish_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 

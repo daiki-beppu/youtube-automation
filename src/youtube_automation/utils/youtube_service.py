@@ -37,6 +37,7 @@ class ServiceRegistry:
     def _get_handler(self):
         if self._handler is None:
             from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+
             self._handler = YouTubeOAuthHandler()
         return self._handler
 
@@ -52,7 +53,7 @@ class ServiceRegistry:
         """YouTube Analytics API v2 サービスを返す（キャッシュ済み）。"""
         if self._analytics_service is None:
             credentials = self._get_handler().authenticate()
-            self._analytics_service = build('youtubeAnalytics', 'v2', credentials=credentials)
+            self._analytics_service = build("youtubeAnalytics", "v2", credentials=credentials)
         return self._analytics_service
 
     @property

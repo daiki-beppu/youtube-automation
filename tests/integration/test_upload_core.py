@@ -20,11 +20,12 @@ from youtube_automation.utils.exceptions import UploadError, YouTubeAPIError
 
 def _make_core_with_mock_youtube():
     """YouTube API を mock した YouTubeUploadCore を返す。"""
-    with patch('youtube_automation.utils.upload_core.get_youtube') as mock_get_youtube:
+    with patch("youtube_automation.utils.upload_core.get_youtube") as mock_get_youtube:
         mock_youtube = MagicMock()
         mock_get_youtube.return_value = mock_youtube
 
         from youtube_automation.utils.upload_core import YouTubeUploadCore
+
         core = YouTubeUploadCore()
         core.initialize()
 
@@ -33,7 +34,7 @@ def _make_core_with_mock_youtube():
 
 def _make_http_error(status: int, message: bytes = b"error") -> HttpError:
     """指定ステータスの HttpError を生成する。"""
-    resp = Response({'status': status})
+    resp = Response({"status": status})
     return HttpError(resp, message)
 
 
@@ -52,17 +53,17 @@ class TestUploadVideo:
 
         mock_insert = MagicMock()
         mock_youtube.videos.return_value.insert.return_value = mock_insert
-        mock_insert.next_chunk.return_value = (None, {'id': 'abc123'})
+        mock_insert.next_chunk.return_value = (None, {"id": "abc123"})
 
-        result = core.upload_video(str(video), {'snippet': {}, 'status': {}})
+        result = core.upload_video(str(video), {"snippet": {}, "status": {}})
 
-        assert result == 'abc123'
+        assert result == "abc123"
 
     def test_returns_none_for_missing_file(self):
         """存在しないファイルを指定すると None を返す"""
         core, _ = _make_core_with_mock_youtube()
 
-        result = core.upload_video("/nonexistent/video.mp4", {'snippet': {}})
+        result = core.upload_video("/nonexistent/video.mp4", {"snippet": {}})
 
         assert result is None
 
@@ -76,7 +77,7 @@ class TestUploadVideo:
         mock_youtube.videos.return_value.insert.side_effect = _make_http_error(403)
 
         with pytest.raises(YouTubeAPIError):
-            core.upload_video(str(video), {'snippet': {}})
+            core.upload_video(str(video), {"snippet": {}})
 
     def test_raises_upload_error_on_os_error(self, tmp_path):
         """ファイルアクセスエラーは UploadError に変換される"""
@@ -90,7 +91,7 @@ class TestUploadVideo:
         mock_insert.next_chunk.side_effect = OSError("disk error")
 
         with pytest.raises(UploadError):
-            core.upload_video(str(video), {'snippet': {}})
+            core.upload_video(str(video), {"snippet": {}})
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +154,10 @@ class TestRetryBehavior:
         mock_youtube.videos.return_value.insert.return_value = mock_insert
         mock_insert.next_chunk.side_effect = [
             _make_http_error(503),
-            (None, {'id': 'retry_ok'}),
+            (None, {"id": "retry_ok"}),
         ]
 
-        with patch('youtube_automation.utils.upload_core.time.sleep'):
-            result = core.upload_video(str(video), {'snippet': {}})
+        with patch("youtube_automation.utils.upload_core.time.sleep"):
+            result = core.upload_video(str(video), {"snippet": {}})
 
-        assert result == 'retry_ok'
+        assert result == "retry_ok"

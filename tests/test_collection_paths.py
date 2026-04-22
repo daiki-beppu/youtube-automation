@@ -16,6 +16,7 @@ from youtube_automation.utils.collection_paths import CollectionPaths
 # コンストラクタ
 # ---------------------------------------------------------------------------
 
+
 class TestConstructor:
     def test_from_string(self, tmp_path):
         paths = CollectionPaths(str(tmp_path))
@@ -36,6 +37,7 @@ class TestConstructor:
 # ---------------------------------------------------------------------------
 # ディレクトリプロパティ
 # ---------------------------------------------------------------------------
+
 
 class TestDirectoryProperties:
     def test_master_dir(self, tmp_path):
@@ -63,6 +65,7 @@ class TestDirectoryProperties:
 # ファイルパスプロパティ
 # ---------------------------------------------------------------------------
 
+
 class TestFilePathProperties:
     def test_workflow_state_path(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -88,6 +91,7 @@ class TestFilePathProperties:
 # ---------------------------------------------------------------------------
 # find_master_video
 # ---------------------------------------------------------------------------
+
 
 class TestFindMasterVideo:
     def test_returns_mp4_when_exists(self, tmp_path):
@@ -120,6 +124,7 @@ class TestFindMasterVideo:
 # find_master_audio
 # ---------------------------------------------------------------------------
 
+
 class TestFindMasterAudio:
     def test_returns_mp3_when_exists(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -144,6 +149,7 @@ class TestFindMasterAudio:
 # ---------------------------------------------------------------------------
 # find_thumbnail: thumbnail.jpg > main.png > main.jpg
 # ---------------------------------------------------------------------------
+
 
 class TestFindThumbnail:
     def test_prefers_thumbnail_jpg(self, tmp_path):
@@ -181,6 +187,7 @@ class TestFindThumbnail:
 # find_main_image: main.png > main.jpg
 # ---------------------------------------------------------------------------
 
+
 class TestFindMainImage:
     def test_prefers_main_png(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -211,6 +218,7 @@ class TestFindMainImage:
 # find_loop_video
 # ---------------------------------------------------------------------------
 
+
 class TestFindLoopVideo:
     def test_returns_loop_mp4_when_exists(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -228,6 +236,7 @@ class TestFindLoopVideo:
 # ---------------------------------------------------------------------------
 # individual_music_files
 # ---------------------------------------------------------------------------
+
 
 class TestIndividualMusicFiles:
     def test_returns_sorted_mp3_list(self, tmp_path):
@@ -260,6 +269,7 @@ class TestIndividualMusicFiles:
 # individual_movie_files
 # ---------------------------------------------------------------------------
 
+
 class TestIndividualMovieFiles:
     def test_returns_sorted_mp4_list(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -280,6 +290,7 @@ class TestIndividualMovieFiles:
 # ---------------------------------------------------------------------------
 # collection_name
 # ---------------------------------------------------------------------------
+
 
 class TestCollectionName:
     def test_with_date_and_channel_prefix(self, tmp_path):
