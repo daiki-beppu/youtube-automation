@@ -65,7 +65,52 @@ def load_composition(path: Path) -> dict:
             print("[ERROR] 最初の phase は at_min=0 である必要があります")
             sys.exit(1)
 
+    comp["_composition_dir"] = path.parent
+    _validate_reference_images(comp)
+
     return comp
+
+
+def _resolve_ref_image(base_dir: Path, ref: str | None) -> Path | None:
+    """composition.json 基点での相対パス解決。絶対パスはそのまま。不在なら ConfigError。"""
+    if ref is None:
+        return None
+    p = Path(ref)
+    if not p.is_absolute():
+        p = (base_dir / p).resolve()
+    if not p.exists():
+        raise ConfigError(f"参照画像が存在しません: {p}")
+    return p
+
+
+def _validate_reference_images(comp: dict) -> None:
+    """base と全 phase の reference_image を事前解決して `_reference_image_path` を注入する。"""
+    base_dir = comp["_composition_dir"]
+    comp["base"]["_reference_image_path"] = _resolve_ref_image(base_dir, comp["base"].get("reference_image"))
+    for phase in comp["phases"]:
+        phase["_reference_image_path"] = _resolve_ref_image(base_dir, phase.get("reference_image"))
+
+
+def _resolve_phase_param(base: dict, phase: dict, key: str) -> object:
+    """phase > base > None の優先順位で値を解決する。"""
+    if phase.get(key) is not None:
+        return phase[key]
+    return base.get(key)
+
+
+def _build_phase_extras(base: dict, phase: dict) -> dict:
+    """phase / base から Lyria 3 構造化パラメータを 1 つの dict にまとめる。
+
+    `_reference_image_path` は `load_composition` → `_validate_reference_images` で事前注入済み。
+    phase > base の優先順位。
+    """
+    return {
+        "bpm": _resolve_phase_param(base, phase, "bpm"),
+        "intensity": _resolve_phase_param(base, phase, "intensity"),
+        "mode": _resolve_phase_param(base, phase, "mode"),
+        "lyrics": _resolve_phase_param(base, phase, "lyrics"),
+        "reference_image": phase.get("_reference_image_path") or base.get("_reference_image_path"),
+    }
 
 
 def dry_run(comp: dict) -> None:
@@ -152,6 +197,7 @@ def build_segment_compositions(comp: dict) -> list[dict]:
 
         prompt = build_prompt(comp, phase)
         phase_name = phase.get("name_en") or phase["name"]
+        extras = _build_phase_extras(comp["base"], phase)
 
         for sub in range(num_subs):
             sub_label = f"{phase_name} ({sub + 1}/{num_subs})" if num_subs > 1 else phase_name
@@ -165,6 +211,7 @@ def build_segment_compositions(comp: dict) -> list[dict]:
                     "prompt": sub_prompt,
                     "model": model,
                     "phase_name": sub_label,
+                    **extras,
                 }
             )
 
@@ -194,6 +241,7 @@ def _build_unique_segments(comp: dict) -> list[dict]:
                 "prompt": prompt,
                 "model": model,
                 "phase_name": phase_name,
+                **_build_phase_extras(comp["base"], phase),
             }
         )
 
@@ -255,9 +303,22 @@ def crossfade_join(pcm_a: bytes, pcm_b: bytes, fade_samples: int | None = None) 
     return head + mixed + tail
 
 
-def generate_segment(prompt: str, model: str) -> bytes | None:
-    """Lyria 3 API で1セグメントを生成し、オーディオバイトを返す。"""
-    return lyria_client.generate_music(prompt, model)
+def generate_segment(seg: dict) -> bytes | None:
+    """Lyria 3 API で1セグメントを生成し、オーディオバイトを返す。
+
+    seg は build_segment_compositions / _build_unique_segments / build_preview_compositions
+    が構築した dict。prompt / model に加え reference_image / bpm / intensity / mode / lyrics を
+    lyria_client に引き渡す。
+    """
+    return lyria_client.generate_music(
+        seg["prompt"],
+        seg["model"],
+        reference_image=seg.get("reference_image"),
+        bpm=seg.get("bpm"),
+        intensity=seg.get("intensity"),
+        mode=seg.get("mode"),
+        lyrics=seg.get("lyrics"),
+    )
 
 
 def _save_audio_as_wav(data: bytes, path: Path) -> None:
@@ -312,22 +373,28 @@ def _generate_one_segment(i: int, seg: dict, seg_path: Path, max_retries: int) -
             print(f"    [{label}] retry {attempt}/{max_retries} ({wait_sec}s 待機)")
             time.sleep(wait_sec)
 
-        audio_data = generate_segment(seg["prompt"], seg["model"])
+        audio_data = generate_segment(seg)
 
         if audio_data is not None:
             _save_audio_as_wav(audio_data, seg_path)
             size_kb = seg_path.stat().st_size / 1024
             print(f"  [{label}] 完了 ({size_kb:.0f} KB)")
-            cost_tracker.log_generation(
-                "audio",
-                model=seg["model"],
-                quantity=1,
-                metadata={
-                    "phase_name": seg["phase_name"],
-                    "segment": label,
-                    "output_file": cost_tracker.relative_to_channel_dir(seg_path),
-                },
-            )
+            metadata = {
+                "phase_name": seg["phase_name"],
+                "segment": label,
+                "output_file": cost_tracker.relative_to_channel_dir(seg_path),
+            }
+            if seg.get("bpm") is not None:
+                metadata["bpm"] = seg["bpm"]
+            if seg.get("intensity"):
+                metadata["intensity"] = seg["intensity"]
+            if seg.get("mode"):
+                metadata["mode"] = seg["mode"]
+            if seg.get("reference_image"):
+                metadata["reference_image"] = str(seg["reference_image"])
+            if seg.get("lyrics"):
+                metadata["has_lyrics"] = True
+            cost_tracker.log_generation("audio", model=seg["model"], quantity=1, metadata=metadata)
             return True
 
     print(f"  [{label}] {max_retries + 1} 回失敗")
@@ -572,6 +639,7 @@ def build_preview_compositions(comp: dict) -> list[tuple[int, dict]]:
             "prompt": prompt,
             "model": PREVIEW_MODEL,
             "phase_name": phase.get("name_en") or phase["name"],
+            **_build_phase_extras(comp["base"], phase),
         }
         previews.append((idx, preview_seg))
 
@@ -654,7 +722,11 @@ def main():
         print(f"[ERROR] {comp_path} が見つかりません")
         sys.exit(1)
 
-    comp = load_composition(comp_path)
+    try:
+        comp = load_composition(comp_path)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
 
     # CLI フラグが composition.json をオーバーライド
     if args.shuffle_passes is not None:

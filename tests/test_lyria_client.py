@@ -103,3 +103,197 @@ class TestGenerateMusic:
             result = lyria_client.generate_music("p", "lyria-3-pro-preview")
 
         assert result is None
+
+    def test_bpm_embedded_in_payload_prompt(self, mock_token):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+
+        from youtube_automation.utils import lyria_client
+
+        with patch.object(lyria_client.requests, "post", return_value=_ok_response(audio)) as mock_post:
+            lyria_client.generate_music("solo piano", "lyria-3-pro-preview", bpm=120)
+
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["input"][0]["text"] == "solo piano, 120 BPM"
+
+    def test_intensity_embedded_in_payload_prompt(self, mock_token):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+
+        from youtube_automation.utils import lyria_client
+
+        with patch.object(lyria_client.requests, "post", return_value=_ok_response(audio)) as mock_post:
+            lyria_client.generate_music("solo piano", "lyria-3-pro-preview", intensity="low")
+
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["input"][0]["text"].startswith("mellow, low-energy, solo piano")
+
+    def test_mode_embedded_in_payload_prompt(self, mock_token):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+
+        from youtube_automation.utils import lyria_client
+
+        with patch.object(lyria_client.requests, "post", return_value=_ok_response(audio)) as mock_post:
+            lyria_client.generate_music("solo piano", "lyria-3-pro-preview", mode="instrumental")
+
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["input"][0]["text"] == "solo piano. Instrumental."
+
+    def test_lyrics_embedded_in_payload_prompt(self, mock_token):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+
+        from youtube_automation.utils import lyria_client
+
+        with patch.object(lyria_client.requests, "post", return_value=_ok_response(audio)) as mock_post:
+            lyria_client.generate_music("solo piano", "lyria-3-pro-preview", lyrics="[Verse]\nla")
+
+        _, kwargs = mock_post.call_args
+        assert "Lyrics: [Verse]\nla" in kwargs["json"]["input"][0]["text"]
+
+    def test_reference_image_added_to_payload_input(self, mock_token, tmp_path):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        img_path = tmp_path / "main.png"
+        img_bytes = b"\x89PNG\r\n\x1a\nfake-image-bytes"
+        img_path.write_bytes(img_bytes)
+
+        from youtube_automation.utils import lyria_client
+
+        with patch.object(lyria_client.requests, "post", return_value=_ok_response(audio)) as mock_post:
+            lyria_client.generate_music("solo piano", "lyria-3-pro-preview", reference_image=img_path)
+
+        _, kwargs = mock_post.call_args
+        inputs = kwargs["json"]["input"]
+        assert len(inputs) == 2
+        assert inputs[0] == {"type": "text", "text": "solo piano"}
+        assert inputs[1]["type"] == "image"
+        assert inputs[1]["mime_type"] == "image/png"
+        assert base64.b64decode(inputs[1]["data"]) == img_bytes
+
+    def test_missing_reference_image_raises_config_error(self, mock_token, tmp_path):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        missing = tmp_path / "missing.png"
+
+        from youtube_automation.utils import lyria_client
+
+        with pytest.raises(ConfigError, match="参照画像が存在しません"):
+            lyria_client.generate_music("p", "lyria-3-pro-preview", reference_image=missing)
+
+
+class TestComposePrompt:
+    def test_none_params_returns_base_as_is(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        assert _compose_prompt("solo piano", None, None, None, None) == "solo piano"
+
+    def test_bpm_appended_after_base(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        assert _compose_prompt("solo piano", 120, None, None, None) == "solo piano, 120 BPM"
+
+    def test_intensity_low_prepended(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        result = _compose_prompt("solo piano", None, "low", None, None)
+        assert result.startswith("mellow, low-energy, ")
+        assert "solo piano" in result
+
+    def test_intensity_medium_prepended(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        result = _compose_prompt("solo piano", None, "medium", None, None)
+        assert result.startswith("balanced, moderate energy, ")
+
+    def test_intensity_high_prepended(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        result = _compose_prompt("solo piano", None, "high", None, None)
+        assert result.startswith("driving, high-energy, ")
+
+    def test_mode_instrumental_appended(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        assert _compose_prompt("solo piano", None, None, "instrumental", None) == "solo piano. Instrumental."
+
+    def test_mode_vocal_without_lyrics_appends_with_vocals(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        assert _compose_prompt("solo piano", None, None, "vocal", None) == "solo piano. With vocals."
+
+    def test_mode_vocal_with_lyrics_skips_with_vocals(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        result = _compose_prompt("solo piano", None, None, "vocal", "[Verse]\nla la la")
+        assert "With vocals" not in result
+        assert "Lyrics: [Verse]\nla la la" in result
+
+    def test_lyrics_appended(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        result = _compose_prompt("solo piano", None, None, None, "[Chorus]\nsing")
+        assert result == "solo piano. Lyrics: [Chorus]\nsing"
+
+    def test_all_params_combined_order(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        result = _compose_prompt("solo piano in A minor", 90, "low", "vocal", "[Verse]\nmelody")
+        assert result == "mellow, low-energy, solo piano in A minor, 90 BPM. Lyrics: [Verse]\nmelody"
+
+    def test_all_params_instrumental_with_lyrics(self):
+        from youtube_automation.utils.lyria_client import _compose_prompt
+
+        result = _compose_prompt("jazz trio", 130, "high", "instrumental", "hum")
+        assert result == "driving, high-energy, jazz trio, 130 BPM. Instrumental. Lyrics: hum"
+
+
+class TestEncodeReferenceImage:
+    def test_png_encoded_with_correct_mime(self, tmp_path):
+        from youtube_automation.utils.lyria_client import _encode_reference_image
+
+        path = tmp_path / "img.png"
+        path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+        result = _encode_reference_image(path)
+        assert result["type"] == "image"
+        assert result["mime_type"] == "image/png"
+        assert base64.b64decode(result["data"]) == b"\x89PNG\r\n\x1a\nfake"
+
+    def test_jpg_encoded_as_image_jpeg(self, tmp_path):
+        from youtube_automation.utils.lyria_client import _encode_reference_image
+
+        path = tmp_path / "img.jpg"
+        path.write_bytes(b"\xff\xd8\xff\xe0fake-jpg")
+        result = _encode_reference_image(path)
+        assert result["mime_type"] == "image/jpeg"
+
+    def test_jpeg_encoded_as_image_jpeg(self, tmp_path):
+        from youtube_automation.utils.lyria_client import _encode_reference_image
+
+        path = tmp_path / "img.jpeg"
+        path.write_bytes(b"\xff\xd8\xff\xe0fake-jpg")
+        result = _encode_reference_image(path)
+        assert result["mime_type"] == "image/jpeg"
+
+    def test_webp_encoded_as_image_webp(self, tmp_path):
+        from youtube_automation.utils.lyria_client import _encode_reference_image
+
+        path = tmp_path / "img.webp"
+        path.write_bytes(b"RIFFxxxxWEBPfake")
+        result = _encode_reference_image(path)
+        assert result["mime_type"] == "image/webp"
+
+    def test_unsupported_extension_raises_config_error(self, tmp_path):
+        from youtube_automation.utils.lyria_client import _encode_reference_image
+
+        path = tmp_path / "img.gif"
+        path.write_bytes(b"GIF89afake")
+        with pytest.raises(ConfigError, match="対応していない画像形式"):
+            _encode_reference_image(path)
+
+    def test_missing_file_raises_config_error(self, tmp_path):
+        from youtube_automation.utils.lyria_client import _encode_reference_image
+
+        path = tmp_path / "missing.png"
+        with pytest.raises(ConfigError, match="参照画像が存在しません"):
+            _encode_reference_image(path)
