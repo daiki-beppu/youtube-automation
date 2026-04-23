@@ -1,3 +1,3 @@
 """YouTube channels automation toolkit."""
 
-__version__ = "3.2.1"
+__version__ = "4.0.0"
