@@ -217,7 +217,7 @@ uv run ruff check .
 | `yt-thumbnail-compare` | サムネイル比較検証 |
 | `yt-channel-status` | チャンネル最新状況 |
 | `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
-| `yt-video-uploader` / `yt-post-upload` | 動画アップロード補助 |
+| `yt-video-uploader` | 動画アップロード補助 |
 
 完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
 
