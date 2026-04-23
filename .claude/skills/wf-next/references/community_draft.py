@@ -1,1 +1,0 @@
-../../../../src/youtube_automation/scripts/community_draft.py

@@ -43,10 +43,15 @@ for candidate in "${ASSETS_DIR}/main.jpg" "${ASSETS_DIR}/main.png" "${ASSETS_DIR
     fi
 done
 
-MASTER_AUDIO="${MASTER_DIR}/master-mix.wav"
-if [[ ! -f "$MASTER_AUDIO" ]]; then
-    MASTER_AUDIO=""
-fi
+# DAW バウンスの実運用ケースに対応: wav 優先、なければ m4a / aac / mp3 / flac
+MASTER_AUDIO=""
+for ext in wav m4a aac mp3 flac; do
+    candidate="${MASTER_DIR}/master-mix.${ext}"
+    if [[ -f "$candidate" ]]; then
+        MASTER_AUDIO="$candidate"
+        break
+    fi
+done
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
 
@@ -57,6 +62,19 @@ else
     AUDIO_ENCODER="aac"
 fi
 
+# ─── 音声出力オプション (m4a/aac はストリームコピー、それ以外は再エンコード) ─
+if [[ -n "$MASTER_AUDIO" ]]; then
+    master_ext="${MASTER_AUDIO##*.}"
+    case "$master_ext" in
+        m4a|aac)
+            AUDIO_OUT_OPTS=(-c:a copy)
+            ;;
+        *)
+            AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000)
+            ;;
+    esac
+fi
+
 # ─── Prerequisites ───────────────────────────────────────
 if ! command -v ffmpeg &>/dev/null; then
     echo "ERROR: ffmpeg not found"; exit 1
@@ -65,7 +83,7 @@ if [[ -z "$THUMBNAIL" ]]; then
     echo "ERROR: No thumbnail found in ${ASSETS_DIR}/ (main.jpg/png or thumbnail.jpg/png)"; exit 1
 fi
 if [[ -z "$MASTER_AUDIO" ]]; then
-    echo "ERROR: master-mix.wav not found in ${MASTER_DIR}/ (only master-mix.wav is accepted)"; exit 1
+    echo "ERROR: master-mix.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1
 fi
 if ! ffprobe -v error "$MASTER_AUDIO" &>/dev/null; then
     echo "ERROR: Corrupted file: $MASTER_AUDIO"; exit 1
@@ -139,11 +157,11 @@ if [[ -n "$LOOP_VIDEO" ]]; then
         fi
     fi
 
-    # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声のみエンコード
+    # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声は AUDIO_OUT_OPTS に従う
     ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" -i "$MASTER_AUDIO" \
         -map 0:v:0 -map 1:a:0 \
         -c:v copy \
-        -c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000 \
+        "${AUDIO_OUT_OPTS[@]}" \
         -t "$duration" \
         -movflags +faststart \
         -shortest \
@@ -157,7 +175,7 @@ else
         -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
         -x264opts keyint=1:min-keyint=1 \
         -r 1 \
-        -c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000 \
+        "${AUDIO_OUT_OPTS[@]}" \
         -t "$duration" \
         -movflags +faststart \
         -shortest \

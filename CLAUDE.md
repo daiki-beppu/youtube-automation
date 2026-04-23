@@ -27,7 +27,7 @@ youtube-channels-automation/         # ← このリポジトリ
 ├── src/
 │   └── youtube_automation/
 │       ├── utils/                   # コアライブラリ（設定, API, 分析, アップロード）
-│       ├── agents/                  # アップロードエージェント（Auto/Collection/Short）
+│       ├── agents/                  # アップロードエージェント（Auto/Collection）
 │       ├── auth/                    # OAuth 2.0 認証（YouTubeOAuthHandler）
 │       ├── scripts/                 # CLI スクリプト（analytics, upload, AI 生成）
 │       ├── cli/                     # ユーザー向け CLI ツール (yt-skills)
@@ -49,7 +49,7 @@ channel-repo/                  # チャンネル固有リポジトリ
 │   │   ├── youtube.json       #   youtube / music_engine / content_model
 │   │   ├── analytics.json     #   analytics / benchmark (optional)
 │   │   ├── playlists.json     #   playlists (optional)
-│   │   ├── workflow.json      #   post_upload / short (optional)
+│   │   ├── workflow.json      #   (v4.0.0 で short / community 撤去、後方互換で素通し)
 │   │   └── audio.json         #   audio (optional)
 │   └── localizations.json     # 多言語テンプレート（config/ 直下）
 ├── auth/                      # チャンネル固有 OAuth 認証

@@ -5,6 +5,7 @@ PlaylistManager のユニットテスト
 YouTube API 呼び出しと load_config を unittest.mock でモック化して検証する。
 """
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -113,6 +114,25 @@ class TestResolvePlaylists:
         # 'all' は auto_add で常にマッチ、他はマッチしない
         assert result == ["all"]
 
+    def test_activity_override_bypasses_title_resolver(self, manager, mock_config):
+        """#80: activity を明示 override すると activity_for_theme は呼ばれない."""
+        mock_config.content.title.activity_for_theme.reset_mock()
+        mock_config.content.title.activity_for_theme.return_value = "Study"
+
+        result = manager.resolve_playlists("village morning", activity="Gaming")
+
+        mock_config.content.title.activity_for_theme.assert_not_called()
+        assert "battle" in result  # Gaming が auto_add_activities に hit
+
+    def test_activity_none_uses_title_resolver(self, manager, mock_config):
+        """activity=None の場合は従来どおり activity_for_theme が呼ばれる."""
+        mock_config.content.title.activity_for_theme.reset_mock()
+        mock_config.content.title.activity_for_theme.return_value = "Gaming"
+
+        manager.resolve_playlists("battle arena", activity=None)
+
+        mock_config.content.title.activity_for_theme.assert_called_once_with("battle arena")
+
 
 # ---------------------------------------------------------------------------
 # create_all_playlists
@@ -185,6 +205,50 @@ class TestAssignVideo:
             result = manager.assign_video("VID1", "test", dry_run=False)
         # new_playlist は playlist_id 未設定なのでスキップ
         assert "new_playlist" not in result
+
+    def test_collection_path_planning_activities_override(self, manager, mock_config, tmp_path):
+        """#80: workflow-state.json の planning.activities が activity_for_theme を上書きする."""
+        ws = tmp_path / "workflow-state.json"
+        ws.write_text(json.dumps({"planning": {"activities": "Gaming"}}), encoding="utf-8")
+
+        mock_config.content.title.activity_for_theme.reset_mock()
+        mock_config.content.title.activity_for_theme.return_value = "Study"
+
+        result = manager.assign_video("VID_X", "unknown-theme", dry_run=True, collection_path=tmp_path)
+
+        mock_config.content.title.activity_for_theme.assert_not_called()
+        assert "battle" in result
+
+    def test_collection_path_without_planning_falls_back(self, manager, mock_config, tmp_path):
+        """planning.activities が欠落していれば従来どおり activity_for_theme を使う."""
+        ws = tmp_path / "workflow-state.json"
+        ws.write_text(json.dumps({"theme": "ocean waves"}), encoding="utf-8")
+
+        mock_config.content.title.activity_for_theme.reset_mock()
+        mock_config.content.title.activity_for_theme.return_value = "Study"
+
+        manager.assign_video("VID_X", "ocean waves", dry_run=True, collection_path=tmp_path)
+
+        mock_config.content.title.activity_for_theme.assert_called_once_with("ocean waves")
+
+    def test_collection_path_without_workflow_state_is_tolerated(self, manager, mock_config, tmp_path):
+        """workflow-state.json が存在しなくても例外にならず、activity_for_theme に fallback."""
+        mock_config.content.title.activity_for_theme.reset_mock()
+        mock_config.content.title.activity_for_theme.return_value = "Study"
+
+        # workflow-state.json は作らない
+        manager.assign_video("VID_X", "ocean waves", dry_run=True, collection_path=tmp_path)
+
+        mock_config.content.title.activity_for_theme.assert_called_once_with("ocean waves")
+
+    def test_no_collection_path_uses_title_resolver(self, manager, mock_config):
+        """collection_path 未指定なら従来どおりの経路（後方互換）."""
+        mock_config.content.title.activity_for_theme.reset_mock()
+        mock_config.content.title.activity_for_theme.return_value = "Study"
+
+        manager.assign_video("VID_X", "ocean waves", dry_run=True)
+
+        mock_config.content.title.activity_for_theme.assert_called_once_with("ocean waves")
 
 
 # ---------------------------------------------------------------------------

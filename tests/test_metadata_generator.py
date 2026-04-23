@@ -13,7 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 
 from youtube_automation.utils.config import load_config
-from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
+from youtube_automation.utils.metadata_generator import (
+    BAHMetadataGenerator,
+    SceneTitleViolation,
+    format_scene_title_violations,
+    validate_scene_phrases,
+)
 from youtube_automation.utils.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------
@@ -629,3 +634,97 @@ class TestCrossfade:
         crossfade = gen._crossfade_sec
         total = sum(t["duration"] for t in gen.tracks) - max(0, len(gen.tracks) - 1) * crossfade
         assert total == 180.0
+
+
+# ===========================================================================
+# 12. validate_scene_phrases のテスト（#78: 事前検証ヘルパー）
+# ===========================================================================
+
+
+def _all_langs_phrases(text: str) -> dict:
+    """sample_channel fixture の supported_languages 全てに同じフレーズを割り当てる."""
+    config = load_config()
+    return {lang: text for lang in config.localizations.supported_languages}
+
+
+class TestValidateScenePhrases:
+    """`/description` 等の事前検証で全言語の codepoint 超過を一括検出できることの検証."""
+
+    def test_all_within_limit_returns_empty(self):
+        """全言語で 100 codepoint 以内なら空リスト"""
+        config = load_config()
+        violations = validate_scene_phrases(_all_langs_phrases("short phrase"), config)
+        assert violations == []
+
+    def test_single_language_over_limit(self):
+        """1 言語だけ超過すれば 1 件返る"""
+        config = load_config()
+        phrases = _all_langs_phrases("short phrase")
+        phrases["ja"] = "あ" * 90  # template + activities 込みで 100 超過
+        violations = validate_scene_phrases(phrases, config)
+        assert len(violations) == 1
+        assert violations[0].lang == "ja"
+        assert violations[0].length > 100
+
+    def test_multiple_languages_over_limit_reported_together(self):
+        """複数言語が超過していれば 1 言語ずつ fail せず全件まとめて返る（#78 の主目的）"""
+        config = load_config()
+        phrases = _all_langs_phrases("あ" * 90)
+        violations = validate_scene_phrases(phrases, config)
+        # sample_channel の supported_languages 5 つ全てが超過するはず
+        assert len(violations) == len(config.localizations.supported_languages)
+        langs = {v.lang for v in violations}
+        assert langs == set(config.localizations.supported_languages)
+
+    def test_violation_exposes_title_and_template(self):
+        """Violation は再現に必要な情報（lang / length / title / template）を含む"""
+        config = load_config()
+        phrases = _all_langs_phrases("short phrase")
+        phrases["ja"] = "あ" * 90
+        violations = validate_scene_phrases(phrases, config)
+        v = violations[0]
+        assert isinstance(v, SceneTitleViolation)
+        assert v.length == len(v.title)
+        assert "{scene_phrase}" in v.template
+
+    def test_missing_phrase_raises(self):
+        """scene_phrases に不足言語があれば ValueError（existing 挙動を踏襲）"""
+        config = load_config()
+        with pytest.raises(ValueError, match="scene_phrases"):
+            validate_scene_phrases({"ja": "あ"}, config)
+
+    def test_empty_scene_phrases_raises(self):
+        """空辞書はそのまま全言語欠落扱いで raise"""
+        config = load_config()
+        with pytest.raises(ValueError, match="scene_phrases"):
+            validate_scene_phrases({}, config)
+
+    def test_format_scene_title_violations_joins_all(self):
+        """format_scene_title_violations は全件を複数行にまとめる（CLI で 1 回で報告するため）"""
+        config = load_config()
+        phrases = _all_langs_phrases("あ" * 90)
+        violations = validate_scene_phrases(phrases, config)
+        text = format_scene_title_violations(violations)
+        for v in violations:
+            assert f"[{v.lang}]" in text
+            assert str(v.length) in text
+
+
+class TestGenerateLocalizationsBulkReport:
+    """generate_localizations でも全言語の違反がまとめて報告されることの確認."""
+
+    def test_all_violations_in_single_error(self):
+        """scene_phrases が複数言語で超過したとき、ValueError メッセージに全言語が含まれる"""
+        gen = _make_generator()
+        gen.tracks = []
+        config = load_config()
+        phrases = _all_langs_phrases("あ" * 90)
+        with pytest.raises(ValueError) as excinfo:
+            gen.generate_localizations(
+                english_title="Test",
+                timestamp_body="",
+                scene_phrases=phrases,
+            )
+        msg = str(excinfo.value)
+        for lang in config.localizations.supported_languages:
+            assert f"[{lang}]" in msg

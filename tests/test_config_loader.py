@@ -117,7 +117,6 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.localizations.supported_languages == ["ja"]
     assert config.audio.target_duration_min is None
     assert config.playlists.items == {}
-    assert config.workflow.post_upload.short_publish_time == "08:00"
 
 
 def test_load_all_sections(tmp_path, monkeypatch):
@@ -127,6 +126,9 @@ def test_load_all_sections(tmp_path, monkeypatch):
         "benchmark": {"channels": [{"name": "Rival", "id": "UC123"}]},
     }
     sections["playlists.json"] = {"playlists": {"main": "PLtest123"}}
+    # v4.0.0 で post_upload / short セクションは撤去されたが、downstream の
+    # workflow.json に残存していても loader が素通し（ConfigError を投げない）
+    # ことを保証するための後方互換レグレッションとしてここに残す。
     sections["workflow.json"] = {
         "workflow": {},
         "post_upload": {"short_publish_time": "09:30"},
@@ -155,8 +157,6 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.analytics.collection_filter_keywords == ["collection", "complete"]
     assert config.analytics.benchmark.channels == [{"name": "Rival", "id": "UC123"}]
     assert config.playlists.items == {"main": "PLtest123"}
-    assert config.workflow.post_upload.short_publish_time == "09:30"
-    assert config.workflow.short.raw == {"foo": "bar"}
     assert config.audio.target_duration_min == 120.0
     assert config.meta.branding.description == "ch desc"
     assert config.youtube.content_model.type == "collection"
@@ -239,8 +239,6 @@ def test_optional_sections_default(tmp_path, monkeypatch):
     assert config.analytics.collection_filter_keywords == []
     assert config.analytics.benchmark.channels == []
     assert config.playlists.items == {}
-    assert config.workflow.post_upload.short_publish_time == "08:00"
-    assert config.workflow.short.raw == {}
     assert config.audio.target_duration_min is None
 
 
@@ -294,6 +292,49 @@ def test_title_activity_for_theme_fallback(tmp_path, monkeypatch):
 
     assert config.content.title.activity_for_theme("Epic Battle Scene") == "Gaming"
     assert config.content.title.activity_for_theme("Ocean Waves") == "Chill"
+
+
+def test_title_activity_for_theme_scenes_exact_match_preferred(tmp_path, monkeypatch):
+    """#80 回帰: 短いキーが先に登録されていても完全一致が優先される."""
+    sections = _minimal_sections()
+    sections["content.json"]["tags"]["themes"] = {
+        "cafe": ["cafe music"],
+        "campus-cafe": ["campus cafe music"],
+    }
+    sections["content.json"]["title"]["default_activity"] = "Study"
+    sections["content.json"]["title"]["theme_scenes"] = {
+        "cafe": {"scene": "Cafe", "activities": "Study · Work · Reading"},
+        "campus-cafe": {"scene": "Campus Cafe", "activities": "Study · Work · Late Night"},
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    # exact match は dict 挿入順に関係なく優先される
+    assert config.content.title.activity_for_theme("campus-cafe") == "Study · Work · Late Night"
+    # substring だけの時は longest-match: campus-cafe が cafe より先に match する
+    assert config.content.title.activity_for_theme("nice-campus-cafe-mix") == "Study · Work · Late Night"
+    # 短いキーのみマッチするテーマは従来どおり cafe を拾う
+    assert config.content.title.activity_for_theme("after-midnight-cafe") == "Study · Work · Reading"
+
+
+def test_title_activity_for_theme_activities_exact_match_preferred(tmp_path, monkeypatch):
+    """#80 回帰: レガシー theme_activities 経路でも exact match が優先される."""
+    sections = _minimal_sections()
+    sections["content.json"]["title"]["default_activity"] = "Study"
+    sections["content.json"]["title"]["theme_activities"] = {
+        "cafe": "Study · Work · Reading",
+        "campus-cafe": "Study · Work · Late Night",
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.content.title.activity_for_theme("campus-cafe") == "Study · Work · Late Night"
+    assert config.content.title.activity_for_theme("nice-campus-cafe-mix") == "Study · Work · Late Night"
+    assert config.content.title.activity_for_theme("after-midnight-cafe") == "Study · Work · Reading"
 
 
 def test_descriptions_render_opening(tmp_path, monkeypatch):

@@ -15,6 +15,7 @@ Usage:
 import json
 import logging
 import sys
+from pathlib import Path
 
 from youtube_automation.scripts.video_uploader import VideoUploader
 from youtube_automation.utils.config import channel_dir, load_config, reset
@@ -43,10 +44,16 @@ class PlaylistManager:
 
     # ─── プレイリスト解決 ──────────────────────────────
 
-    def resolve_playlists(self, theme: str) -> list[str]:
-        """テーマから所属すべきプレイリストキーのリストを返す"""
+    def resolve_playlists(self, theme: str, activity: str | None = None) -> list[str]:
+        """テーマから所属すべきプレイリストキーのリストを返す.
+
+        `activity` 明示指定があればそれを優先し、`None` の場合のみ
+        `activity_for_theme(theme)` で解決する。明示 override は
+        `content.json` 未登録テーマに対する安全弁として使う（#80）。
+        """
         playlists_config = self.config.playlists.items
-        activity = self.config.content.title.activity_for_theme(theme)
+        if activity is None:
+            activity = self.config.content.title.activity_for_theme(theme)
         theme_lower = theme.lower()
         matched = []
 
@@ -122,6 +129,24 @@ class PlaylistManager:
 
     # ─── 動画割り当て ─────────────────────────────────
 
+    @staticmethod
+    def _planning_activities(collection_path: Path) -> str | None:
+        """collection_path/workflow-state.json から planning.activities を読む.
+
+        ファイル欠落・JSON 壊れ・キー欠落はいずれも `None` を返して呼び出し側に
+        `activity_for_theme` fallback させる（プレイリスト追加は非致命的機能のため）。
+        """
+        ws_path = collection_path / "workflow-state.json"
+        if not ws_path.exists():
+            return None
+        try:
+            data = json.loads(ws_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(f"workflow-state.json 読み込み失敗 ({ws_path}): {e}")
+            return None
+        explicit = data.get("planning", {}).get("activities")
+        return explicit if isinstance(explicit, str) and explicit else None
+
     def _list_playlist_video_ids(self, playlist_id: str) -> set[str]:
         """プレイリスト内の動画IDセットを取得（重複防止用）"""
         youtube = self._get_youtube()
@@ -139,14 +164,27 @@ class PlaylistManager:
 
         return video_ids
 
-    def assign_video(self, video_id: str, theme: str, dry_run: bool = False) -> list[str]:
+    def assign_video(
+        self,
+        video_id: str,
+        theme: str,
+        dry_run: bool = False,
+        collection_path: Path | None = None,
+    ) -> list[str]:
         """単一動画を該当プレイリストに追加
+
+        `collection_path` が与えられた場合、`workflow-state.json` の
+        `planning.activities` があればそれを activity override として
+        `resolve_playlists` に渡す。`content.json` の `theme_scenes` に
+        未登録の新テーマでも、明示的に activity を与えることで正しく
+        プレイリスト判定できる（#80）。
 
         Returns:
             追加先のプレイリストキーリスト
         """
+        activity_override = self._planning_activities(collection_path) if collection_path else None
         playlists_config = self.config.playlists.items
-        target_keys = self.resolve_playlists(theme)
+        target_keys = self.resolve_playlists(theme, activity=activity_override)
         assigned = []
 
         for key in target_keys:
@@ -248,8 +286,10 @@ class PlaylistManager:
             # タイトル取得（表示用）
             title = ws.get("steps", {}).get("planning", {}).get("final_title", col_path.name)
 
+            activity_override = self._planning_activities(col_path)
+
             if dry_run:
-                target_keys = self.resolve_playlists(theme)
+                target_keys = self.resolve_playlists(theme, activity=activity_override)
                 playlists_config = self.config.playlists.items
                 print(f"\n  {title}")
                 print(f"    theme: {theme} | video_id: {video_id}")
@@ -258,7 +298,7 @@ class PlaylistManager:
                 results[col_path.name] = target_keys
             else:
                 logger.info(f"\n  {title} ({video_id})")
-                assigned = self.assign_video(video_id, theme)
+                assigned = self.assign_video(video_id, theme, collection_path=col_path)
                 results[col_path.name] = assigned
 
         return results

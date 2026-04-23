@@ -53,20 +53,11 @@ def build_state(collection_name: str, theme: str, track_count: int, selected_pla
             "master_audio": None,
             "master_video": None,
             "description": False,
-            "short_thumbnail": False,
         },
         "upload": {
             "video_id": None,
             "video_url": None,
             "publish_at": None,
-        },
-        "community": {
-            "drafted": False,
-            "posted": False,
-        },
-        "shorts": {
-            "count": 0,
-            "videos": [],
         },
     }
 

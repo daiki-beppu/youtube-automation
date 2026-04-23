@@ -80,9 +80,17 @@ $ARGUMENTS
 
 ### レポート保存
 
-分析結果は必ずコレクションの `20-documentation/analysis_report.md` に保存すること。
+分析結果は `reports/analysis_YYYYMMDD.md` に保存する（チャンネル横断レポート）。
 
-保存後、`workflow-state.json` の `analysis.generated = true` に更新する。
+このファイルは **`/ideate` の前提必須入力**として読まれる。`/ideate` Phase 1-2 で
+以下のセクションが重視される（内容で認識、番号は目安）:
+
+- **§ 5 戦略的改善提案** — CTR 改善・コンテンツ最適化の方向性
+- **§ 6 推奨される次期コレクション候補** — データから導出されたテーマ候補
+- **§ 8 戦略ディスカッション** — 長期視点の示唆
+
+個別コレクションの振り返りメモが必要な場合は、`20-documentation/` に任意で
+追記してよい（`/ideate` の入力にはならない）。
 
 ## Next Step
 

@@ -1,1 +1,0 @@
-../../../../src/youtube_automation/scripts/post_upload_actions.py

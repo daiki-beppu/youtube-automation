@@ -57,7 +57,8 @@ options:
 
 ### Phase 4: レポート保存
 
-`docs/plans/persona-definition.md` を生成。
+`docs/channel/personas/persona-definition.md` を生成。
+ディレクトリが存在しなければ `mkdir -p docs/channel/personas` で作成してから書き出す。
 選択結果に基づき、タイトル・タグ・概要欄への影響もまとめる。
 
 ## 関連ファイル

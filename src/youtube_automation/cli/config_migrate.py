@@ -30,7 +30,7 @@ SECTION_MAP: dict[str, list[str]] = {
     "youtube.json": ["youtube", "music_engine", "content_model"],
     "analytics.json": ["analytics", "benchmark"],
     "playlists.json": ["playlists"],
-    "workflow.json": ["workflow", "post_upload", "short"],
+    "workflow.json": ["workflow"],
     "audio.json": ["audio"],
 }
 LOCALIZATIONS_MERGE_KEY = "localization"  # rjn 由来、単数形

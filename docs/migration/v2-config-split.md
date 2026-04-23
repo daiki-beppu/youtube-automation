@@ -48,7 +48,7 @@ content.json      genre, tags, descriptions, title
 youtube.json      youtube, music_engine, content_model
 analytics.json    analytics, benchmark
 playlists.json    playlists
-workflow.json     post_upload, short
+workflow.json     workflow
 audio.json        audio
 (unmapped)        suno  ← 未マップキーがあれば表示
 ```

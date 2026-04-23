@@ -12,7 +12,7 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。
   存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-import` を案内。
-- `docs/plans/persona-definition.md` が存在すること（未実施なら `/persona` を案内）
+- `docs/channel/personas/persona-definition.md` が存在すること（未実施なら `/persona` を案内）
 - `reports/` に最新の分析レポートがあること（なければ `/collect` → `/analyze` を案内）
 
 ## 実行フロー
@@ -55,7 +55,7 @@ AskUserQuestion でメインシーンと動画尺の方針を確認。
 
 ## 関連ファイル
 
-- `docs/plans/persona-definition.md` — ペルソナ定義（入力）
+- `docs/channel/personas/persona-definition.md` — ペルソナ定義（入力）
 - `reports/analysis_*.md` — チャンネルパフォーマンスデータ
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ
 - `config/channel/content.json` — `title.theme_activities`

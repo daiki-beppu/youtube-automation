@@ -110,7 +110,7 @@ def test_migrate_apply_full(tmp_path):
     legacy["analytics"] = {"collection_filter_keywords": ["collection"]}
     legacy["benchmark"] = {"channels": []}
     legacy["playlists"] = {"main": "PL123"}
-    legacy["post_upload"] = {"short_publish_time": "08:00"}
+    legacy["workflow"] = {}
     legacy["audio"] = {"target_duration_min": 30}
     _write_legacy(tmp_path, legacy)
     rc = main(["migrate", "--apply", "--target", str(tmp_path)])
@@ -119,7 +119,7 @@ def test_migrate_apply_full(tmp_path):
     for name in SECTION_MAP:
         assert (channel_dir / name).is_file(), f"missing {name}"
     workflow = _read_json(channel_dir / "workflow.json")
-    assert workflow["post_upload"]["short_publish_time"] == "08:00"
+    assert workflow == {"workflow": {}}
     audio = _read_json(channel_dir / "audio.json")
     assert audio["audio"]["target_duration_min"] == 30
     youtube = _read_json(channel_dir / "youtube.json")
