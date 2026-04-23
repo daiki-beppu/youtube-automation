@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -24,6 +25,78 @@ from .skill_config import load_skill_config
 from .time_utils import format_duration_display, format_duration_short, format_timestamp
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SceneTitleViolation:
+    """多言語タイトルの codepoint 超過違反（100 codepoint 上限）."""
+
+    lang: str
+    length: int
+    title: str
+    template: str
+
+
+def validate_scene_phrases(
+    scene_phrases: Dict[str, str],
+    config,
+) -> List[SceneTitleViolation]:
+    """scene_phrases を localizations の全言語で試算し、100 codepoint 超過を一括検出する.
+
+    `/description` など `workflow-state.json` への書き込み前に呼ぶことで、
+    アップロード時 preflight まで超過発覚を遅らせず、全言語分をまとめて検査できる.
+
+    Args:
+        scene_phrases: {"en": ..., "ja": ..., ...} コレクション別の感情フレーズ翻訳
+        config: `load_config()` の戻り値
+
+    Returns:
+        違反のリスト。空なら全言語 100 codepoint 以内.
+
+    Raises:
+        ValueError: scene_phrases が一部言語で欠落している場合、または
+            `localizations.json` に `title_template` が無い言語がある場合.
+    """
+    loc_config = config.localizations.data
+    supported = loc_config.get("supported_languages", [])
+
+    missing_langs = [lang for lang in supported if not scene_phrases.get(lang)]
+    if missing_langs:
+        raise ValueError(
+            "scene_phrases に翻訳が不足しています。"
+            f"不足言語: {missing_langs}\n"
+            "→ コレクションの workflow-state.json に "
+            "`scene_phrases: {en: ..., ja: ..., ...}` を populate してください。\n"
+            "→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
+        )
+
+    desc_metadata = config.content.descriptions.metadata
+    best_for_line = desc_metadata.get("best_for", "Study, Focus, Late Night")
+
+    violations: List[SceneTitleViolation] = []
+    for lang in supported:
+        lang_data = loc_config["languages"].get(lang, {})
+        title_tpl = lang_data.get("title_template")
+        if not title_tpl:
+            raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
+        activities = lang_data.get("activities", best_for_line)
+        scene = scene_phrases[lang]
+        title = title_tpl.format(scene_phrase=scene, activities=activities)
+        if len(title) > 100:
+            violations.append(
+                SceneTitleViolation(
+                    lang=lang,
+                    length=len(title),
+                    title=title,
+                    template=title_tpl,
+                )
+            )
+    return violations
+
+
+def format_scene_title_violations(violations: List[SceneTitleViolation]) -> str:
+    """違反リストを人間可読な複数行テキストに整形する（CLI / エラーメッセージ共通）."""
+    return "\n".join(f"  - [{v.lang}] {v.length} codepoints (+{v.length - 100}): {v.title}" for v in violations)
 
 
 class BAHMetadataGenerator:
@@ -368,37 +441,25 @@ class BAHMetadataGenerator:
             ]
         )
 
-        # 多言語タイトルが EN ベタコピーになる事故を防ぐため、
-        # supported_languages 全てに scene_phrases が存在することを事前検証する。
-        # 過去事例: 11/14 本でこの fail-silent フォールバックが発生し、
-        # 多言語タイトルが英語のままアップロードされた。
-        missing_langs = [lang for lang in loc_config["supported_languages"] if not scene_phrases.get(lang)]
-        if missing_langs:
+        # 欠落チェック + 100 codepoint 超過を全言語まとめて検出する
+        # （従来は 1 言語ずつ fail していたため多言語対応チャンネルで再アップロードを繰り返していた）
+        violations = validate_scene_phrases(scene_phrases, self.config)
+        if violations:
             raise ValueError(
-                "scene_phrases に翻訳が不足しています。"
-                f"不足言語: {missing_langs}\n"
-                "→ コレクションの workflow-state.json に "
-                "`scene_phrases: {en: ..., ja: ..., ...}` を populate してください。\n"
-                "→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
+                f"localizations の {len(violations)} 言語でタイトルが 100 codepoint を超過:\n"
+                f"{format_scene_title_violations(violations)}\n"
+                "→ workflow-state.json の該当 scene_phrases を短縮してください"
             )
 
         for lang in loc_config["supported_languages"]:
             lang_data = loc_config["languages"].get(lang, {})
             desc_data = lang_data.get("description", {})
 
-            # --- タイトル ---
-            scene = scene_phrases.get(lang)
-            title_tpl = lang_data.get("title_template")
-            if not title_tpl:
-                raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
+            # --- タイトル ---（validate_scene_phrases 済みなので必須キーは揃っている前提）
+            scene = scene_phrases[lang]
+            title_tpl = lang_data["title_template"]
             activities = lang_data.get("activities", best_for_line)
             loc_title = title_tpl.format(scene_phrase=scene, activities=activities)
-            if len(loc_title) > 100:
-                raise ValueError(
-                    f"localizations[{lang}].title が 100 codepoint を超過: "
-                    f"{len(loc_title)} chars\n  → {loc_title}\n"
-                    f"scene_phrases[{lang}] を短くしてください"
-                )
 
             # --- 概要欄（ハイブリッド方式）---
             opening_poem = desc_data.get("opening_poem", "")
