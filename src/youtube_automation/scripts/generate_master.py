@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,39 @@ def build_filter(n: int, crossfade: float) -> str:
     return ";".join(parts)
 
 
+def _sum_track_duration(files: list[Path]) -> float:
+    """個別トラックの尺を合算する。probe に失敗したファイルがあれば ValidationError。"""
+    total = 0.0
+    for f in files:
+        dur = _probe_duration(f)
+        if dur is None:
+            raise ValidationError(f"トラック尺の probe に失敗: {f}")
+        total += dur
+    return total
+
+
+def _resolve_loop_count(
+    explicit_loops: int | None,
+    target_duration_min: int | None,
+    single_loop_sec: float,
+    crossfade: float,
+) -> int:
+    """--loop / --target-duration から最終ループ回数を算出する。
+
+    M ループの理論尺は M 個のシングルループを末尾↔先頭 crossfade で連結するため:
+        M * single_loop_sec - (M - 1) * crossfade
+    これが target_sec 以上となる最小の M を返す。両オプション未指定なら 1。
+    """
+    if explicit_loops is not None:
+        return explicit_loops
+    if target_duration_min is not None:
+        target_sec = target_duration_min * 60
+        span = max(single_loop_sec - crossfade, 1e-6)
+        loops = math.ceil((target_sec - crossfade) / span)
+        return max(1, loops)
+    return 1
+
+
 def _probe_duration(path: Path) -> float | None:
     try:
         result = subprocess.run(
@@ -90,14 +124,14 @@ def _format_size(num_bytes: int) -> str:
     return f"{num_bytes:.1f}T"
 
 
-def _spin(stop_event: threading.Event, start: float, n_files: int) -> None:
+def _spin(stop_event: threading.Event, start: float, segments: int) -> None:
     i = 0
     while not stop_event.wait(0.15):
         elapsed = int(time.monotonic() - start)
         m, s = divmod(elapsed, 60)
         sys.stderr.write(
             f"\r  {SPINNER_FRAMES[i % len(SPINNER_FRAMES)]} Generating... "
-            f"({m}m{s:02d}s) [{n_files} files, {n_files - 1} crossfades]  "
+            f"({m}m{s:02d}s) [{segments} segments, {segments - 1} crossfades]  "
         )
         sys.stderr.flush()
         i += 1
@@ -107,6 +141,9 @@ def generate_master(
     collection_dir: Path,
     crossfade: float,
     bitrate: str,
+    *,
+    loops: int | None = None,
+    target_duration_min: int | None = None,
     quiet: bool = False,
 ) -> Path:
     paths = CollectionPaths(collection_dir)
@@ -123,33 +160,40 @@ def generate_master(
     if n == 0:
         raise ValidationError(f"MP3 ファイルが見つかりません: {music_dir}")
 
+    single_loop_sec = _sum_track_duration(files) if target_duration_min is not None else 0.0
+    effective_loops = _resolve_loop_count(loops, target_duration_min, single_loop_sec, crossfade)
+
+    expanded = files * effective_loops
+    n_effective = len(expanded)
+
     master_dir.mkdir(parents=True, exist_ok=True)
     output = master_dir / "master.mp3"
 
     if not quiet:
+        loop_note = f" × {effective_loops} loops = {n_effective} segments" if effective_loops > 1 else ""
         print()
         print("  yt-generate-master")
         print("  ──────────────────────────────────────────")
         print()
-        print(f"  Input : {n} MP3 files")
+        print(f"  Input : {n} MP3 files{loop_note}")
         print(f"  Output: {output.name}")
         print(f"  Crossfade: {crossfade:g}s (triangle curve)")
         print(f"  Bitrate  : {bitrate}")
         print()
 
-    if n == 1:
-        shutil.copyfile(files[0], output)
+    if n_effective == 1:
+        shutil.copyfile(expanded[0], output)
         if not quiet:
             print("  Single file — copied directly.\n")
         return output
 
     cmd = ["ffmpeg", "-y"]
-    for f in files:
+    for f in expanded:
         cmd.extend(["-i", str(f)])
     cmd.extend(
         [
             "-filter_complex",
-            build_filter(n, crossfade),
+            build_filter(n_effective, crossfade),
             "-map",
             "[aout]",
             "-c:a",
@@ -168,7 +212,7 @@ def generate_master(
     stop_event = threading.Event()
     spinner_thread: threading.Thread | None = None
     if not quiet and sys.stderr.isatty():
-        spinner_thread = threading.Thread(target=_spin, args=(stop_event, start, n))
+        spinner_thread = threading.Thread(target=_spin, args=(stop_event, start, n_effective))
         spinner_thread.start()
 
     try:
@@ -187,7 +231,9 @@ def generate_master(
         raise ValidationError(f"FFmpeg failed with exit code {result.returncode}")
 
     if not quiet:
-        sys.stderr.write(f"\r  ✓ Generated    ({m}m{s:02d}s) [{n} files, {n - 1} crossfades]      \n")
+        sys.stderr.write(
+            f"\r  ✓ Generated    ({m}m{s:02d}s) [{n_effective} segments, {n_effective - 1} crossfades]      \n"
+        )
         sys.stderr.flush()
 
         size = _format_size(output.stat().st_size)
@@ -216,15 +262,41 @@ def main() -> int:
         help="コレクションディレクトリ (省略時は CWD)",
     )
     parser.add_argument("--quiet", action="store_true", help="進捗表示を抑制")
+    loop_group = parser.add_mutually_exclusive_group()
+    loop_group.add_argument(
+        "--loop",
+        type=int,
+        metavar="N",
+        help="ファイルリストを N 回繰り返して acrossfade 連結 (N>=1)",
+    )
+    loop_group.add_argument(
+        "--target-duration",
+        type=int,
+        metavar="MIN",
+        dest="target_duration",
+        help="目標尺 (分) 以上になる最小のループ回数を自動算出",
+    )
     args = parser.parse_args()
 
     try:
+        if args.loop is not None and args.loop < 1:
+            raise ValidationError("--loop は 1 以上を指定してください")
+        if args.target_duration is not None and args.target_duration < 1:
+            raise ValidationError("--target-duration は 1 以上を指定してください")
+
         collection_dir = resolve_collection_dir(args.collection)
         cfg = load_skill_config("masterup")
         audio = cfg.get("audio", {})
         crossfade = float(audio.get("crossfade_duration", 1.0))
         bitrate = str(audio.get("bitrate", "192k"))
-        generate_master(collection_dir, crossfade, bitrate, quiet=args.quiet)
+        generate_master(
+            collection_dir,
+            crossfade,
+            bitrate,
+            loops=args.loop,
+            target_duration_min=args.target_duration,
+            quiet=args.quiet,
+        )
     except ValidationError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
