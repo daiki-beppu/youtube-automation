@@ -2,8 +2,6 @@
 #
 # Veo 3.1 ループ動画生成の設定。
 # チャンネル側では config/skills/loop-video.yaml に上書き値を置く。
-#
-# 注意: generate_short_loop.py (ショート用 9:16 ループ) も同じ veo.* を共有する。
 
 veo:
   # Veo モデル ID（API デフォルト: veo-3.1-fast-generate-001 / 選択肢: veo-3.1-fast-generate-001 | veo-3.1-generate-001）

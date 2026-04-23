@@ -54,7 +54,6 @@ du -sh 01-master/master.mp3 01-master/master-mix.wav 01-master/*-Master.mp4 02-I
 - `10-assets/main.png`, `10-assets/main.jpg`
 - `10-assets/thumbnail.jpg`, `10-assets/thumbnail.png`
 - `10-assets/loop.mp4`（オリジナル、再生成不可）
-- `10-assets/short.png`, `10-assets/short.jpg`
 - `20-documentation/*` 全ファイル
 
 削除対象ファイルが 1 つもないコレクションは「クリーンアップ済み」として表示する。

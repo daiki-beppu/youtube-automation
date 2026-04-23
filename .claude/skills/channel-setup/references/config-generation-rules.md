@@ -9,7 +9,7 @@
 
 - `channel` — name, short, core_message, channel_id, youtube_handle, url
 - `content_model` — collection / release など
-- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版 / ショート多言語版の対象言語、単一ソース宣言）
+- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版の対象言語、単一ソース宣言）
 - `music_engine` — `"suno"` または `"lyria"`（チャンネルのデフォルト音楽エンジン）
 - `genre` — primary, style, context
 - `youtube` — デフォルトのアップロード設定
@@ -54,7 +54,6 @@
 | lyria | `config/skills/lyria.yaml` |
 | ideate | `config/skills/ideate.yaml` |
 | benchmark | `config/skills/benchmark.yaml` |
-| short | `config/skills/short.yaml` |
 | description | `config/skills/description.yaml` |
 | masterup（`audio.crossfade_duration` 等） | `config/skills/masterup.yaml` |
 | loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |

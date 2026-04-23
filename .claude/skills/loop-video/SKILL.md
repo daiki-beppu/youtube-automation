@@ -118,8 +118,6 @@ veo:
 | `veo.duration_seconds` | 8 | 生成尺（Veo API 制約で 8 秒固定） |
 | `veo.crossfade_sec` | 0.5 | FFmpeg ループ補正のクロスフェード秒数 |
 
-`generate_short_loop.py`（ショート用 9:16 ループ）も同じ `loop-video.yaml` の `veo.*` を共有する。
-
 ## Integration
 
 `loop.mp4` が `10-assets/` に存在すると、`generate_videos.sh` v11.0 が自動検出し、
