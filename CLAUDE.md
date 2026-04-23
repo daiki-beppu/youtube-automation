@@ -27,7 +27,7 @@ youtube-channels-automation/         # ← このリポジトリ
 ├── src/
 │   └── youtube_automation/
 │       ├── utils/                   # コアライブラリ（設定, API, 分析, アップロード）
-│       ├── agents/                  # アップロードエージェント（Auto/Collection/Short）
+│       ├── agents/                  # アップロードエージェント（Auto/Collection）
 │       ├── auth/                    # OAuth 2.0 認証（YouTubeOAuthHandler）
 │       ├── scripts/                 # CLI スクリプト（analytics, upload, AI 生成）
 │       ├── cli/                     # ユーザー向け CLI ツール (yt-skills)
