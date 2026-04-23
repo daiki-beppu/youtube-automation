@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from youtube_automation.utils.audio_formats import AUDIO_EXTS
+
 logger = logging.getLogger(__name__)
 
 
@@ -320,7 +322,7 @@ class VideoValidator:
         # 音声ファイルと動画ファイルの数の整合性
         audio_dir = collection_dir / "02-Individual-music"
         if audio_dir.exists():
-            audio_files = list(audio_dir.glob("*.wav"))
+            audio_files = [f for f in audio_dir.iterdir() if f.is_file() and f.suffix.lower() in AUDIO_EXTS]
             video_count = len(results["individual_videos"])
 
             if len(audio_files) != video_count:

@@ -19,6 +19,7 @@ from typing import Dict, List
 
 from youtube_automation.utils.config import load_config
 
+from .audio_formats import AUDIO_EXTS
 from .skill_config import load_skill_config
 from .time_utils import format_duration_display, format_duration_short, format_timestamp
 
@@ -79,8 +80,7 @@ class BAHMetadataGenerator:
         current_time = 0
         crossfade = self._crossfade_sec
 
-        # 音声ファイルを取得（WAV / MP3 / M4A / AAC に対応、数字順にソート）
-        AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".aac"}
+        # 音声ファイルを取得（AUDIO_EXTS で許容形式を共有、数字順にソート）
         wav_files = sorted([f for f in audio_dir.iterdir() if f.suffix.lower() in AUDIO_EXTS])
 
         for wav_file in wav_files:
