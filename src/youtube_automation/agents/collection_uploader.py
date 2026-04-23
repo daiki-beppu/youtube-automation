@@ -20,12 +20,15 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import schedule  # noqa: E402
+from googleapiclient.errors import HttpError  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader  # noqa: E402
+from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
+from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 
@@ -343,29 +346,27 @@ class CollectionUploader:
 
     def _assign_to_playlists(self, video_id: str, collection_path: Path):
         """アップロード後にプレイリストへ自動追加（失敗してもアップロードはブロックしない）"""
+        ws_path = collection_path / "workflow-state.json"
+        if not ws_path.exists():
+            return
+
+        with open(ws_path, "r", encoding="utf-8") as f:
+            ws = json.load(f)
+
+        theme = ws.get("theme", "")
+        if not theme:
+            return
+
+        config = load_config()
+        if not config.playlists.items:
+            return
+
         try:
-            from playlist_manager import PlaylistManager
-
-            ws_path = collection_path / "workflow-state.json"
-            if not ws_path.exists():
-                return
-
-            with open(ws_path, "r", encoding="utf-8") as f:
-                ws = json.load(f)
-
-            theme = ws.get("theme", "")
-            if not theme:
-                return
-
-            config = load_config()
-            if not config.playlists.items:
-                return
-
             pm = PlaylistManager()
             assigned = pm.assign_video(video_id, theme)
             if assigned:
                 logger.info(f"📋 プレイリスト追加: {assigned}")
-        except Exception as e:
+        except (ConfigError, YouTubeAPIError, HttpError) as e:
             logger.warning(f"⚠️  プレイリスト追加エラー（非致命的）: {e}")
 
     # ─── ステータス表示 ──────────────────────────────
