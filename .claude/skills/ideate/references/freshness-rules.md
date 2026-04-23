@@ -17,7 +17,7 @@
 | 順序 | 前提スキル | 出力ファイル | 鮮度判定ルール | 古い / 未生成の場合 |
 |---|---|---|---|---|
 | 1 | `/benchmark` | `docs/benchmarks/*.md` + `data/benchmark_YYYYMMDD.json` | mtime が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古ければ stale | `/benchmark` を Skill ツールで実行（内部で鮮度チェック + 差分更新） |
-| 2 | `/persona` | `docs/plans/persona-definition.md` | 存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | ユーザーに `/persona` 実行を案内（自動呼び出しはしない — ペルソナ選択に `AskUserQuestion` が必要なため） |
+| 2 | `/persona` | `docs/channel/personas/persona-definition.md` | 存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | ユーザーに `/persona` 実行を案内（自動呼び出しはしない — ペルソナ選択に `AskUserQuestion` が必要なため） |
 | 3 | `/viewing-scene` | `docs/plans/viewing-scene-matrix.md` | 存在すれば OK（mtime 比較なし。persona 下流のため連動して判断） | ユーザーに `/viewing-scene` 実行を案内（自動呼び出しはしない — シーン選択に `AskUserQuestion` が必要なため） |
 
 ## workflow-state.json との同期
@@ -36,7 +36,7 @@
 #    （freshness_days より古い md があれば自動更新）
 
 # 2. persona — 存在チェックのみ
-if [ ! -f docs/plans/persona-definition.md ]; then
+if [ ! -f docs/channel/personas/persona-definition.md ]; then
   echo "persona 未定義 → /persona を案内"
 fi
 

@@ -145,15 +145,15 @@ uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" 
 
 ## ペルソナベース企画フレームワーク
 
-`docs/plans/persona-definition.md` で定義されたペルソナに対し、各 1 企画を生成する。
+`docs/channel/personas/persona-definition.md` で定義されたペルソナに対し、各 1 企画を生成する。
 ペルソナの視聴シーン・ユースケースから情景を導出し、差別化軸と掛け合わせてテーマを決定する。
 
-`docs/plans/persona-definition.md` が存在する場合、そこからペルソナを読み込む。鮮度・未生成の判定ルールは冒頭の「前提スキル状態確認」セクションに従う。
+`docs/channel/personas/persona-definition.md` が存在する場合、そこからペルソナを読み込む。鮮度・未生成の判定ルールは冒頭の「前提スキル状態確認」セクションに従う。
 
 **存在しない場合は ideate を進めず、以下を案内して停止する:**
 
 ```
-❌ docs/plans/persona-definition.md が見つかりません。
+❌ docs/channel/personas/persona-definition.md が見つかりません。
    先に `/persona` を実行してターゲットペルソナを定義してください。
    （チャンネル立ち上げ直後なら `/channel-direction` → `/persona` → `/ideate` の順）
 ```
@@ -254,7 +254,7 @@ uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" 
 **今回のターゲットペルソナ判定**:
 1. `collections/` 配下の全 `workflow-state.json` から `planning.target_persona` を収集
 2. 直近の選択ペルソナの次を今回のターゲットにする
-3. 初回 or 不明 → `docs/plans/persona-definition.md` の先頭ペルソナ
+3. 初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ
 
 **3 候補の差別化軸**:
 同一ペルソナ向けに、`differentiation_axes` の掛け合わせを変えてバリエーションを生成する。
