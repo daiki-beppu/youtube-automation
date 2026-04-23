@@ -241,7 +241,7 @@ uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" 
 
 ## オブジェクトデザインルール
 
-`config/skills/ideate.yaml` に `objects` セクションがある場合、サムネイルの差し替え可能オブジェクトと固定オブジェクトを定義する。これらはコミュニティ投稿でストーリーを展開するコンテンツ資産でもある。
+`config/skills/ideate.yaml` に `objects` セクションがある場合、サムネイルの差し替え可能オブジェクトと固定オブジェクトを定義する。
 
 `objects` がない場合、このセクションはスキップする（サムネイル差別化はカラー・構図のみになる）。
 
@@ -253,10 +253,6 @@ uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" 
 - ビジュアルは具体的に指定（形状・色・質感）
 
 具体例は `references/object-design-examples.md` を参照。
-
-### コミュニティ投稿での展開
-
-オブジェクトの説明は、YouTube コミュニティ投稿で世界観を広げるコンテンツとして設計する。
 
 ## オリジナリティ保証ルール
 

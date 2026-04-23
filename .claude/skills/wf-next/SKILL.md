@@ -60,18 +60,14 @@ description: Use when 既存コレクション（collections/planning/ 配下）
    - `assets.master_video`, `assets.description` を更新
 3. **順次**: Skill `/upload` — YouTube アップロード + live 移行
    - `upload.video_id`, `upload.video_url` を記録
-   - `stage: "live"`, `phase: "publishing"` に更新
+   - `stage: "live"`, `phase: "complete"` に更新
    - `collections/planning/` → `collections/live/` に移動
-4. **順次**: `uv run yt-post-upload community-draft <collection-path>` — コミュニティ投稿ドラフト
-   - `community.drafted` を更新
-   - `phase: "complete"` に更新
 
 #### `publishing` → リカバリ（途中エラー再実行）
 
 `assets` フラグで未完了ステップを特定し、そこから再実行。
 - `assets.master_video = null` → 並列 A から
 - `upload.video_id = null` → `/upload` から
-- `community.drafted = false` → コミュニティドラフトから
 
 #### `complete` → 完了案内
 
