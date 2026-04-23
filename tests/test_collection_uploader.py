@@ -73,7 +73,9 @@ def test_assign_to_playlists_calls_playlist_manager(workflow_state_file):
         CollectionUploader._assign_to_playlists(fake_self, "VIDEO_ID_123", workflow_state_file)
 
     mock_pm_class.assert_called_once_with()
-    mock_pm_instance.assign_video.assert_called_once_with("VIDEO_ID_123", "Rainy Jazz")
+    mock_pm_instance.assign_video.assert_called_once_with(
+        "VIDEO_ID_123", "Rainy Jazz", collection_path=workflow_state_file
+    )
 
 
 def test_assign_to_playlists_skips_when_no_theme(tmp_path):

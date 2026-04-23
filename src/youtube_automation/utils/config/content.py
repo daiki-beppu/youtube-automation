@@ -77,17 +77,25 @@ class Title:
         """テーマ名からアクティビティキーワードを取得.
 
         `theme_scenes` 優先（TTP 形式）、未定義なら `theme_activities`（レガシー形式）。
-        どちらにもマッチしなければ `default_activity`.
+        解決順序: (1) 完全一致 → (2) 長いキーから順に substring 一致（longest-match）→
+        (3) `default_activity`. 単純な dict 挿入順の substring 一致だと
+        `campus-cafe` が先に存在する `cafe` にマッチしてしまい、明示エントリが
+        dead code 化する症状があったため longest-match を優先する（#80）。
         """
         lowered = theme.lower()
         if self.theme_scenes:
-            for keyword, scene_data in self.theme_scenes.items():
+            if lowered in self.theme_scenes:
+                return self.theme_scenes[lowered].get("activities", self.default_activity)
+            for keyword in sorted(self.theme_scenes, key=len, reverse=True):
                 if keyword in lowered:
-                    return scene_data.get("activities", self.default_activity)
+                    return self.theme_scenes[keyword].get("activities", self.default_activity)
             return self.default_activity
-        for keyword, activity in self.theme_activities.items():
-            if keyword in lowered:
-                return activity
+        if self.theme_activities:
+            if lowered in self.theme_activities:
+                return self.theme_activities[lowered]
+            for keyword in sorted(self.theme_activities, key=len, reverse=True):
+                if keyword in lowered:
+                    return self.theme_activities[keyword]
         return self.default_activity
 
 

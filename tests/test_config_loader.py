@@ -294,6 +294,49 @@ def test_title_activity_for_theme_fallback(tmp_path, monkeypatch):
     assert config.content.title.activity_for_theme("Ocean Waves") == "Chill"
 
 
+def test_title_activity_for_theme_scenes_exact_match_preferred(tmp_path, monkeypatch):
+    """#80 回帰: 短いキーが先に登録されていても完全一致が優先される."""
+    sections = _minimal_sections()
+    sections["content.json"]["tags"]["themes"] = {
+        "cafe": ["cafe music"],
+        "campus-cafe": ["campus cafe music"],
+    }
+    sections["content.json"]["title"]["default_activity"] = "Study"
+    sections["content.json"]["title"]["theme_scenes"] = {
+        "cafe": {"scene": "Cafe", "activities": "Study · Work · Reading"},
+        "campus-cafe": {"scene": "Campus Cafe", "activities": "Study · Work · Late Night"},
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    # exact match は dict 挿入順に関係なく優先される
+    assert config.content.title.activity_for_theme("campus-cafe") == "Study · Work · Late Night"
+    # substring だけの時は longest-match: campus-cafe が cafe より先に match する
+    assert config.content.title.activity_for_theme("nice-campus-cafe-mix") == "Study · Work · Late Night"
+    # 短いキーのみマッチするテーマは従来どおり cafe を拾う
+    assert config.content.title.activity_for_theme("after-midnight-cafe") == "Study · Work · Reading"
+
+
+def test_title_activity_for_theme_activities_exact_match_preferred(tmp_path, monkeypatch):
+    """#80 回帰: レガシー theme_activities 経路でも exact match が優先される."""
+    sections = _minimal_sections()
+    sections["content.json"]["title"]["default_activity"] = "Study"
+    sections["content.json"]["title"]["theme_activities"] = {
+        "cafe": "Study · Work · Reading",
+        "campus-cafe": "Study · Work · Late Night",
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.content.title.activity_for_theme("campus-cafe") == "Study · Work · Late Night"
+    assert config.content.title.activity_for_theme("nice-campus-cafe-mix") == "Study · Work · Late Night"
+    assert config.content.title.activity_for_theme("after-midnight-cafe") == "Study · Work · Reading"
+
+
 def test_descriptions_render_opening(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, _minimal_sections())
     monkeypatch.setenv("CHANNEL_DIR", str(ch))

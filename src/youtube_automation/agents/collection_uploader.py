@@ -363,7 +363,7 @@ class CollectionUploader:
 
         try:
             pm = PlaylistManager()
-            assigned = pm.assign_video(video_id, theme)
+            assigned = pm.assign_video(video_id, theme, collection_path=collection_path)
             if assigned:
                 logger.info(f"📋 プレイリスト追加: {assigned}")
         except (ConfigError, YouTubeAPIError, HttpError) as e:
