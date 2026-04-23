@@ -1,11 +1,1 @@
-{
-  "post_upload": {
-    "short_publish_time": "08:00"
-  },
-  "short": {
-    "thumbnail": {
-      "engine": "gemini",
-      "aspect": "9:16"
-    }
-  }
-}
+{}

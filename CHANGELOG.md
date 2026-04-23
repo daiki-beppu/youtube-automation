@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed (BREAKING)
+
+YouTube Shorts 関連機能を完全撤去した。今後 short チャンネルを運用しない方針に伴う。
+関連: #74
+
+- **スキル**: `.claude/skills/short/` / `.claude/skills/short-thumbnail/` ディレクトリ一式
+- **Python モジュール**: `youtube_automation.agents.short_uploader` / `youtube_automation.scripts.generate_short_loop`
+- **CLI entry points**: `yt-generate-short-loop` / `yt-upload-short`
+- **設定スキーマ**: `Workflow.post_upload` / `Workflow.short` フィールド、および `PostUpload` / `ShortSettings` dataclass
+- **workflow-state.json**: `assets.short_thumbnail` / `shorts.count` / `shorts.videos` フィールド
+
+### Migration
+
+downstream チャンネルリポジトリでの対応手順:
+
+1. automation を本バージョンに pin-bump 後 `uv sync` を実行
+2. `.claude/skills/short*` は `uv run yt-skills sync --force` で自動的に除去される
+3. `config/channel/workflow.json` の `post_upload` / `short` キーは**削除しなくても loader は素通しする**ため任意。整理したい場合は手動削除
+4. 既存コレクションの `10-assets/short.png` / `short.jpg`、`01-master/shorts/` / `01-master/short-*.mp4` は必要に応じて `git rm`
+5. `workflow-state.json` の `assets.short_thumbnail` / `shorts.*` フィールドは未使用となる（読み取りもされない）
+
+**注意**: `ChannelMeta.channel_short`（チャンネル短縮コード、例: `"VC"` / `"TC"`）は短尺動画と無関係なので残存する。
+
 ## [2.0.0] - 2026-04-21
 
 `channel_config` を責務別分割する **破壊的リリース**。Epic #28 / #29 / #30 / #31 / #32 を一括で解決。

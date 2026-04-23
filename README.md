@@ -41,7 +41,7 @@ channel-repo/                  # チャンネル固有リポジトリ
 │   │   ├── youtube.json       #   youtube / music_engine / content_model
 │   │   ├── analytics.json     #   analytics / benchmark (optional)
 │   │   ├── playlists.json     #   playlists (optional)
-│   │   ├── workflow.json      #   post_upload / short (optional)
+│   │   ├── workflow.json      #   (optional, 拡張用 reserved)
 │   │   └── audio.json         #   audio (optional)
 │   └── localizations.json     # 多言語テンプレート
 ├── auth/                      # OAuth 2.0 認証情報 (channel 固有)
@@ -160,7 +160,7 @@ nix develop
 | `youtube.json` | `youtube` / `music_engine` / `content_model` |
 | `analytics.json` | `analytics` / `benchmark` (optional) |
 | `playlists.json` | `playlists` (optional) |
-| `workflow.json` | `post_upload` / `short` (optional) |
+| `workflow.json` | (optional, 拡張用 reserved) |
 | `audio.json` | `audio` (optional) |
 
 詳細なフィールド説明は [`examples/channel_config.example/`](examples/channel_config.example/) を参照してください。多言語テンプレートは `config/localizations.json` に集約します（単一ソース）。
@@ -209,14 +209,14 @@ uv run ruff check .
 | `yt-generate-thumbnail` | コレクションサムネイル生成 |
 | `yt-generate-music` / `yt-generate-music-dj` | Lyria 音楽生成 |
 | `yt-generate-suno` | Suno プロンプト生成 |
-| `yt-generate-loop-video` / `yt-generate-short-loop` | Veo ループ動画生成 |
+| `yt-generate-loop-video` | Veo ループ動画生成 |
 | `yt-init-collection` | 新規コレクションの雛形作成 |
 | `yt-metadata-audit` | メタデータの整合性監査 |
 | `yt-playlist-manager` / `yt-playlist-status` | プレイリスト管理 |
 | `yt-benchmark-collect` / `yt-benchmark-comments` | 競合チャンネル分析 |
 | `yt-thumbnail-compare` | サムネイル比較検証 |
 | `yt-channel-status` | チャンネル最新状況 |
-| `yt-upload-collection` / `yt-upload-short` / `yt-upload-auto` | YouTube アップロード |
+| `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
 | `yt-video-uploader` / `yt-post-upload` | 動画アップロード補助 |
 
 完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
