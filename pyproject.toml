@@ -51,7 +51,6 @@ yt-generate-loop-video = "youtube_automation.scripts.generate_loop_video:main"
 yt-generate-master = "youtube_automation.scripts.generate_master:main"
 yt-generate-music = "youtube_automation.scripts.generate_music:main"
 yt-generate-music-dj = "youtube_automation.scripts.generate_music_dj:main"
-yt-generate-short-loop = "youtube_automation.scripts.generate_short_loop:main"
 yt-generate-suno = "youtube_automation.scripts.generate_suno_prompts:main"
 yt-generate-thumbnail = "youtube_automation.scripts.generate_thumbnail:main"
 yt-init-collection = "youtube_automation.scripts.init_collection:main"
@@ -69,7 +68,6 @@ yt-video-uploader = "youtube_automation.scripts.video_uploader:main"
 # Agent entry points
 yt-upload-auto = "youtube_automation.agents.youtube_auto_uploader:main"
 yt-upload-collection = "youtube_automation.agents.collection_uploader:main"
-yt-upload-short = "youtube_automation.agents.short_uploader:main"
 
 # Skill management
 yt-skills = "youtube_automation.cli.skills_sync:main"
