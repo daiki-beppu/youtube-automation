@@ -59,10 +59,6 @@ def build_state(collection_name: str, theme: str, track_count: int, selected_pla
             "video_url": None,
             "publish_at": None,
         },
-        "community": {
-            "drafted": False,
-            "posted": False,
-        },
     }
 
 

@@ -260,9 +260,10 @@ def _build_playlists(merged: dict) -> Playlists:
 
 
 def _build_workflow(merged: dict) -> Workflow:
-    # v4.0.0 で short 関連セクションを撤去。`workflow` / `post_upload` / `short` が
-    # downstream に残っていても `_validate_required` は workflow.json に必須キーを
-    # 登録していないため素通しする（後方互換）。
+    # v4.0.0 で short / community_post 関連セクションを撤去。
+    # `workflow` / `post_upload` / `short` / `community` が downstream に残っていても
+    # `_validate_required` は workflow.json に必須キーを登録していないため
+    # 素通しする（後方互換）。
     return Workflow()
 
 
