@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from youtube_automation.utils.config.analytics import Analytics
 from youtube_automation.utils.config.audio import Audio
+from youtube_automation.utils.config.comments import Comments
 from youtube_automation.utils.config.content import Content
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import ChannelMeta
@@ -26,3 +27,4 @@ class ChannelConfig:
     workflow: Workflow
     audio: Audio
     localizations: Localizations
+    comments: Comments

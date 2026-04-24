@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+コメント自動返信機能を追加した。YouTube Data API v3 の `commentThreads.list` / `comments.insert`
+を使い、`config/channel/comments.json` のルール・テンプレートに沿って自チャンネル動画の
+コメントへ返信する。`dry-run` / `apply` 2 モードと `comment_reply_history.json` での
+二重返信防止を備える。関連: #72
+
+- `src/youtube_automation/utils/config/comments.py`: 新規 dataclass `Comments` / `CommentRule`（optional セクション）。`loader._build_comments` と `config_migrate.SECTION_MAP` に統合
+- `src/youtube_automation/utils/comments/`: 新規パッケージ。`fetcher` / `rule_engine` / `template` / `history` / `replier` の 5 モジュール
+- `src/youtube_automation/scripts/comment_reply.py`: CLI 本体
+- `pyproject.toml`: `yt-comments-reply` entry point を登録
+- `examples/channel_config.example/comments.json`: サンプル設定
+- `.claude/skills/comments-reply/SKILL.md`: Claude Code スキル（`yt-skills sync` で downstream 配布）
+- `tests/test_comments_*.py`: rule_engine / template / history / replier のユニットテスト、`test_config_loader.py` に comments セクション検証を追加
+
 ## [4.0.0] - 2026-04-23
 
 ### Added

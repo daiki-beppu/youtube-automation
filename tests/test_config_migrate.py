@@ -112,6 +112,7 @@ def test_migrate_apply_full(tmp_path):
     legacy["playlists"] = {"main": "PL123"}
     legacy["workflow"] = {}
     legacy["audio"] = {"target_duration_min": 30}
+    legacy["comments"] = {"enabled": False, "rules": [], "templates": {}}
     _write_legacy(tmp_path, legacy)
     rc = main(["migrate", "--apply", "--target", str(tmp_path)])
     assert rc == 0

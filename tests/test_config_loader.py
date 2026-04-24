@@ -117,6 +117,11 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.localizations.supported_languages == ["ja"]
     assert config.audio.target_duration_min is None
     assert config.playlists.items == {}
+    # comments は optional セクション、欠如時は enabled=False のデフォルト
+    assert config.comments.enabled is False
+    assert config.comments.rules == []
+    assert config.comments.templates == {}
+    assert config.comments.max_replies_per_run == 20
 
 
 def test_load_all_sections(tmp_path, monkeypatch):
@@ -135,6 +140,24 @@ def test_load_all_sections(tmp_path, monkeypatch):
         "short": {"foo": "bar"},
     }
     sections["audio.json"] = {"audio": {"target_duration_min": 120.0}}
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "max_replies_per_run": 5,
+            "delay_between_replies_sec": 1.0,
+            "rules": [
+                {
+                    "name": "greet_ja",
+                    "keywords": ["こんにちは"],
+                    "template_key": "greet",
+                    "language": "ja",
+                    "priority": 10,
+                }
+            ],
+            "templates": {"ja": {"greet": "ありがとうございます！"}},
+            "ng_words": ["spam"],
+        }
+    }
     sections["meta.json"]["youtube_channel"] = {
         "description": "ch desc",
         "keywords": ["tag1"],
@@ -165,6 +188,40 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.localizations.exists is True
     assert config.localizations.supported_languages == ["ja", "en"]
     assert config.localizations.default_language == "ja"
+    assert config.comments.enabled is True
+    assert config.comments.max_replies_per_run == 5
+    assert config.comments.delay_between_replies_sec == 1.0
+    assert len(config.comments.rules) == 1
+    assert config.comments.rules[0].name == "greet_ja"
+    assert config.comments.rules[0].keywords == ["こんにちは"]
+    assert config.comments.templates == {"ja": {"greet": "ありがとうございます！"}}
+    assert config.comments.ng_words == ["spam"]
+
+
+def test_comments_rule_name_required(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [{"keywords": ["hi"]}],  # name 未指定
+            "templates": {"ja": {"default": "hello"}},
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.rules\\[0\\].name"):
+        load_config()
+
+
+def test_comments_templates_must_be_object(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"templates": ["not", "an", "object"]}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.templates"):
+        load_config()
 
 
 def test_missing_required_key(tmp_path, monkeypatch):

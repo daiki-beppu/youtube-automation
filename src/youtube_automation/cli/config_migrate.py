@@ -32,6 +32,7 @@ SECTION_MAP: dict[str, list[str]] = {
     "playlists.json": ["playlists"],
     "workflow.json": ["workflow"],
     "audio.json": ["audio"],
+    "comments.json": ["comments"],
 }
 LOCALIZATIONS_MERGE_KEY = "localization"  # rjn 由来、単数形
 LOCALIZATIONS_FILENAME = "localizations.json"  # 複数形で固定
