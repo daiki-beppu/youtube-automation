@@ -239,7 +239,7 @@ class TestGenerateCompleteCollectionMetadata:
             "ko": "8비트 모험의 세계",
             "es": "Mundo de aventura de 8 bits",
             "pt": "Mundo de aventura 8 bits",
-            "zh-Hans": "8位冒险世界",
+            "zh-CN": "8位冒险世界",
         }
         gen._load_scene_phrases = lambda: _phrases
         gen.tracks = [
@@ -346,7 +346,7 @@ class TestGenerateCompleteCollectionMetadata:
             "ko": "비 오는 도시 밤 테스트",
             "es": "Noche urbana lluviosa test",
             "pt": "Noite urbana chuvosa test",
-            "zh-Hans": "雨夜城市测试",
+            "zh-CN": "雨夜城市测试",
         }
 
     def test_localizations_title_with_scene_phrase(self):

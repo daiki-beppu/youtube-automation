@@ -5,7 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.0.0] - 2026-04-26
+
+### Changed (BREAKING)
+
+中国語ローカライゼーションコードを `zh-Hans` / `zh-Hant` から YouTube Data API v3 公式の
+`zh-CN` / `zh-TW` に統一した。`i18nLanguages.list()` が返す中国語の公式コードは
+`zh-CN` / `zh-HK` / `zh-TW` のみで、`zh-Hans` / `zh-Hant` は含まれない。アップロード時に
+YouTube 側で canonical へ強制正規化される挙動も観測されており、リポジトリ内のリテラル・
+期待値・サンプル設定を canonical に揃える。関連: #82
+
+- `src/youtube_automation/scripts/metadata_audit.py`: `audit_remote()` の zh-codes 期待値を `["zh-CN", "zh-TW"]` に変更、エラーメッセージも合わせる
+- `src/youtube_automation/scripts/populate_scene_phrases.py`: `SCENE_PHRASES` 12 サンプルのキー `zh-Hans` / `zh-Hant` を `zh-CN` / `zh-TW` に rename
+- `examples/localizations.example.json`: `supported_languages` および `languages.zh-Hans` ブロックを `zh-CN` に rename。`tests/fixtures/sample_channel/config/localizations.json` はこのファイルへの symlink のため自動同期
+- `tests/test_metadata_generator.py`: フィクスチャ内のキー名を canonical に変更
+- `tests/test_metadata_audit.py`: 新規。`audit_remote()` の zh-codes 判定について canonical / 旧キー / 片方欠落の 3 ケースを mock ベースで回帰防止
+
+### Migration
+
+downstream チャンネルリポジトリで `zh-Hans` / `zh-Hant` を `config/localizations.json` または
+`collections/*/workflow-state.json` に含む場合、手動で書き換えが必要。詳細手順は
+[docs/migration/v5-zh-codes.md](docs/migration/v5-zh-codes.md) を参照。
+
+サマリ:
+
+```bash
+# 該当箇所の有無を確認
+grep -rln '"zh-Hans"\|"zh-Hant"' config/ collections/
+# ガイド記載の python ワンライナーで置換 → 検証
+uv run yt-metadata-audit --local
+```
+
+過去アップロード済み動画の `videos.update` 書き換えは本リリースのスコープ外。
+新キーで再アップロード時に YouTube 側が canonical で上書きする挙動を踏襲する想定。
+明示的に CLI 化したい場合は別 issue で起票。
 
 ### Added
 
@@ -201,4 +234,5 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.0.0
 [2.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v2.0.0

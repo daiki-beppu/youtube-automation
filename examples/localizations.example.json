@@ -1,5 +1,5 @@
 {
-  "supported_languages": ["ja", "ko", "es", "pt", "zh-Hans"],
+  "supported_languages": ["ja", "ko", "es", "pt", "zh-CN"],
   "languages": {
     "ja": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
@@ -41,7 +41,7 @@
         "hashtags": "#chiptune #8bit #BGM"
       }
     },
-    "zh-Hans": {
+    "zh-CN": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
       "activities": "游戏 · 学习 · 专注",
       "description": {
