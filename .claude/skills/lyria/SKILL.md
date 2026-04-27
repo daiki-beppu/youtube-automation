@@ -285,10 +285,43 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 
 ## Step 6: 完了時の更新
 
+- `workflow-state.json` の `planning.music` セクションを populate（下記参照）
 - `workflow-state.json` の `music.generated = true`, `music.approved = true` に更新
 - `music.master_audio` にマスター音源ファイル名を記録
 - `music.engine` に `"lyria"` を記録
 - `phase` を `"music-approved"` に更新
+
+### planning.music スキーマ
+
+`/alignment-check` がコレクション横断で音楽 mood × サムネ × タイトルの整合を機械的に判定できるよう、`workflow-state.json` の `planning.music` セクションを populate する。新規制作分は必須。
+
+```json
+{
+  "planning": {
+    "music": {
+      "engine": "lyria",
+      "mood": ["meditative", "warm"],
+      "atmosphere": "slow fingerpicked guitar in a quiet hall",
+      "tempo": "slow",
+      "instruments": ["fingerpicked guitar", "soft piano"],
+      "exclude": ["orchestral", "synthesizer"]
+    }
+  }
+}
+```
+
+**書き方ガイド**:
+
+| フィールド | ソース | 補足 |
+|-----------|--------|------|
+| `engine` | 固定値 `"lyria"` | — |
+| `mood` | `composition.json` の `base.intensity` + `base.style_hints` + 全 phase prompt から蒸留 | 感情語 1-3 個（例: `["meditative", "warm"]`）|
+| `atmosphere` | composition の世界観 1 文（`base.prompt_prefix` の意図 + 主要 phase の集約） | 個別 phase prompt をそのまま貼らず、コレクション全体を 1 文で言い切る |
+| `tempo` | `base.bpm` から自然言語化 | `<60` → `very slow` / `60-79` → `slow` / `80-99` → `gentle` / `100-119` → `moderate` / `≥120` → `lively`。bpm 未指定なら `intensity` から（`low` → `slow` / `medium` → `moderate` / `high` → `lively`）|
+| `instruments` | 全 phase `prompt` の楽器名を集約（重複排除） | "solo fingerpicked guitar" → `fingerpicked guitar` のように楽器名のみ抽出。主役 3-5 個に絞る |
+| `exclude` (optional) | `config/skills/lyria.yaml` の `ng_words` から**楽器系のみ** | `orchestral` / `synthesizer` / `ambient pads` 等。環境音系は対象外 |
+
+**冪等性**: 既存値があっても `planning.music` 全体を上書きする（merge しない）。スキル再実行 = composition 設計やり直しと見なす。
 
 ---
 

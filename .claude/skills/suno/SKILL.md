@@ -245,6 +245,38 @@ uv run yt-generate-suno <collection-path>
 
 保存後、`workflow-state.json` の `music.generated = true` に更新する。
 
+### Step 3: workflow-state.json の planning.music を更新
+
+`/alignment-check` がコレクション横断で音楽 mood × サムネ × タイトルの整合を機械的に判定できるよう、`workflow-state.json` の `planning.music` セクションを populate する。新規制作分は必須。
+
+```json
+{
+  "planning": {
+    "music": {
+      "engine": "suno",
+      "mood": ["mellow", "introspective"],
+      "atmosphere": "rainy harbor at night, mellow jazz by the docks",
+      "tempo": "slow",
+      "instruments": ["soft piano", "saxophone", "upright bass"],
+      "exclude": ["electric guitar", "heavy drums"]
+    }
+  }
+}
+```
+
+**書き方ガイド**:
+
+| フィールド | ソース | 補足 |
+|-----------|--------|------|
+| `engine` | 固定値 `"suno"` | — |
+| `mood` | パターン全体を貫く感情語 1-3 個 | パターン設計の感情の流れから蒸留（例: 静寂 → 開放 → 親密 → 動き なら `["mellow", "warm"]`）|
+| `atmosphere` | 全パターンの `scenes` を集約した世界観 1 文（英語） | 個別シーンを羅列せず、コレクション全体の情景を 1 文で言い切る |
+| `tempo` | パターンの代表テンポ | enum: `very slow` / `slow` / `gentle` / `moderate` / `lively`（情景フレーズ設計の「テンポ設計」表と同じ語彙）|
+| `instruments` | `config/skills/suno.yaml` の `genre_line` + `mood_descriptors` の楽器 + `scenes` の楽器ロール指定（`Solo Cello` 等）| 重複排除し、主役 3-5 個に絞る |
+| `exclude` (optional) | `config/skills/suno.yaml` の `exclude_styles` から**楽器系のみ** | `rain sounds` / `vinyl crackle` / `white noise` 等の環境音系は対象外（楽曲楽器ではないため）|
+
+**冪等性**: 既存値があっても `planning.music` 全体を上書きする（merge しない）。スキル再実行 = パターン設計やり直しと見なす。
+
 ## Next Step
 
 ### インストゥルメンタル
