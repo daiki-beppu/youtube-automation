@@ -1,0 +1,26 @@
+# takt config for youtube-channels-automation (upstream).
+#
+# - downstream channel repo に配るテンプレは `.takt-templates/` に置き、
+#   `yt-skills sync --asset takt --target <repo>` で展開する。
+# - 本ファイル (.takt/config.yaml) は upstream で起動する workflow 専用設定。
+#   個人マシン依存の設定 (API キー等) は `~/.takt/config.yaml` に書くこと。
+
+language: ja
+
+# claude-sdk: @anthropic-ai/claude-agent-sdk を直叩き (CLI サブプロセスではない)
+provider: claude-sdk
+model: sonnet
+
+base_branch: main
+concurrency: 1
+
+# channel-setup step が gcloud / terraform を呼ぶため unsandboxed 実行を許可。
+# 最小化は将来 (excluded_commands で部分許可) で検討。
+provider_options:
+  claude:
+    sandbox:
+      allow_unsandboxed_commands: true
+
+provider_profiles:
+  claude:
+    default_permission_mode: edit

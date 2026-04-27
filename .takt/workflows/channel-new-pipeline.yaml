@@ -1,0 +1,280 @@
+name: channel-new-pipeline
+description: |
+  新規 YouTube チャンネル開設の 3 段パイプライン (research → direction → setup)。
+  channel-new (新規 repo 作成 + 競合発掘) は前段で人手 or 既存スキルで完了済みの前提。
+  既存スキル `.claude/skills/channel-{research,direction,setup}` を takt workflow に
+  写像し、step / rule / 人手承認の表現力を検証する PoC。
+
+initial_step: research
+max_steps: 12
+
+steps:
+  # ─────────────────────────────────────────────────────────────
+  # Step 1: research — 競合ベンチマークデータの徹底分析
+  # ─────────────────────────────────────────────────────────────
+  - name: research
+    edit: true
+    persona: planner
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Glob
+          - Grep
+          - Edit
+          - Write
+    rules:
+      - condition: docs/channel-research.md が生成され分析が完了している
+        next: direction
+      - condition: 必須データ (data/benchmark_*.json or comments_*.json) が見つからない
+        next: ABORT
+        appendix: |
+          channel-new で benchmark/comments を収集してから再実行してください。
+    output_contracts:
+      report:
+        - name: summary.md
+          format: summary
+          use_judge: false
+    instruction: |
+      ## Goal
+      `/channel-new` で収集したベンチマークデータ + コメントデータを読み込み、
+      徹底的に分析して `docs/channel-research.md` を生成する。
+
+      ## 前提
+      以下のいずれかが存在することを最初に確認する。なければ ABORT:
+      - `data/benchmark_YYYYMMDD.json` (競合チャンネルの動画データ)
+      - `data/comments_YYYYMMDD.json` (競合動画のコメント)
+      - `docs/benchmarks/*.md` (各チャンネルの個別レポート)
+      - `docs/benchmarks/thumbnails/` (サムネイル画像、任意)
+
+      ## Steps
+      ### Step 1: データ読み込み
+      - `data/` 内の最新の `benchmark_*.json` / `comments_*.json`
+      - `docs/benchmarks/` 内の全 `.md`
+
+      ### Step 2: 競合マトリクス作成
+      テーブルで全チャンネルを比較:
+      `| チャンネル | 登録者 | 動画数 | 平均再生数 | 日次再生 | ER% | 投稿間隔 | 動画尺 |`
+      加えて: 成長段階 (立ち上げ/成長/安定/停滞)、投稿トレンド (加速/減速/安定)、勝ちパターン。
+
+      ### Step 3: コンテンツ戦略分析
+      - **タイトル**: フォーマットパターン、頻出ワード、成功 vs 平均
+      - **動画尺**: チャンネル別平均、尺と再生数の相関
+      - **テーマ・世界観**: 頻出タグ、世界観マッピング、ブルーオーシャン
+      - **投稿スケジュール**: 曜日・時間帯の傾向
+
+      ### Step 4: サムネイル分析
+      `docs/benchmarks/thumbnails/` の画像を Read ツールで読む (画像対応):
+      構図 / 色使い / テキスト / 共通成功パターン / 差別化の余地。
+      画像がない場合は `docs/benchmarks/*.md` の `thumbnail_analysis` セクションで代替。
+
+      ### Step 5: 視聴者インサイト
+      コメントデータから抽出:
+      利用シーン / 感情反応 / リクエスト / 言語分布 / エンゲージメント。
+
+      ### Step 6: レポート生成
+      `docs/channel-research.md` に以下のセクションで保存:
+      - 競合マトリクス
+      - コンテンツ戦略
+      - サムネイルパターン
+      - 視聴者インサイト
+      - 機会領域 (ブルーオーシャン)
+      - 推奨事項 (ポジショニング案 3 件 + リスクと機会)
+
+      ### Step 7: 完了報告
+      レポートのパスとサマリー (機会領域・推奨事項) を簡潔に出力する。
+      これが direction step の入力になる。
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 2: direction — ユーザー対話でポジショニング確定
+  # ─────────────────────────────────────────────────────────────
+  - name: direction
+    edit: true
+    persona: planner
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Glob
+          - Grep
+          - Edit
+          - Write
+    rules:
+      - condition: ユーザーが決定事項テーブルを最終承認した
+        next: setup
+        requires_user_input: true
+      - condition: ユーザーが修正を指示した (ポジショニング再検討、項目修正等)
+        next: direction
+        requires_user_input: true
+        interactive_only: true
+      - condition: 議論が膠着し前提データが不足している
+        next: ABORT
+        appendix: |
+          channel-research に戻って必要なデータを補完してください。
+    output_contracts:
+      report:
+        - name: summary.md
+          format: summary
+          use_judge: false
+    instruction: |
+      ## Goal
+      `docs/channel-research.md` をもとに、ユーザーと対話で新チャンネルの方向性を
+      決定し、`docs/channel-direction.md` に保存する。**常にデータ根拠を示しながら**
+      議論を進める。
+
+      ## Steps
+      ### Step 1: 分析レポートのサマリー提示
+      `docs/channel-research.md` を読み、以下をユーザーに 1 回提示:
+      - 競合の全体像 (登録者レンジ、投稿頻度、平均再生数)
+      - ロールモデル候補 (最も参考になるチャンネル)
+      - 機会領域 (ブルーオーシャン)
+      - 視聴者が求めているもの
+
+      ### Step 2: ポジショニング議論 (6 領域)
+      対話で以下を順に確定する。各論点でユーザー回答を待ち、確定したら次へ:
+      1. **ジャンル & スタイル**: 競合の空白ポジション、ユーザー好みとのマッチ
+         (`genre.primary` / `genre.style` / `genre.context` を確定)
+      2. **差別化ポイント**: 競合にないテーマ・スタイル・世界観・品質。持続可能か
+      3. **ターゲット視聴者**: コメント分析からの視聴者像、利用シーン
+      4. **コンテンツ戦略**: 動画尺 (`audio.target_duration_min`)、投稿頻度、テーマ幅
+      5. **ビジュアルアイデンティティ**: サムネイル方向性、トーン＆マナー
+      6. **チャンネル名**: 仮名見直し、SEO + ブランド観点
+
+      ### Step 3: 決定事項テーブルで最終承認
+      議論の結果を以下のテーブルでユーザーに最終確認:
+      | 項目 | 決定内容 | データ根拠 |
+      |------|---------|-----------|
+      | チャンネル名 (確定) | | |
+      | 短縮名 (3-5 文字) | | |
+      | リポジトリ名 | | |
+      | genre.primary / style / context | | 空白ポジション |
+      | コアメッセージ | | 視聴者インサイト |
+      | 差別化ポイント | | 競合にない要素 |
+      | ターゲット視聴者 | | コメント分析 |
+      | 動画尺 (分) | | 競合の傾向 |
+      | 投稿頻度 | | 競合の投稿間隔 |
+      | 音楽エンジン (suno/lyria) | | ジャンル適性・API 可用性 |
+      | サムネイル方針 | | 競合サムネイル分析 |
+
+      ユーザーが承認したら次 step へ。修正指示なら direction を再度回す。
+
+      ### Step 4: 方向性ドキュメント保存
+      承認後、`docs/channel-direction.md` に以下のフォーマットで保存:
+      - 基本情報 (channel name / short / genre / コアメッセージ)
+      - ポジショニング (差別化 / ターゲット / 利用シーン)
+      - コンテンツ戦略 (動画尺 / 頻度 / テーマ幅)
+      - ビジュアルアイデンティティ (サムネイル / トーン)
+      - 決定の根拠 (各決定のデータ根拠)
+
+      リポジトリ名が変更された場合、ユーザーにリポジトリのリネームも案内する
+      (本 step ではリネームは実行しない、setup step に渡さず upstream で人手対応)。
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 3: setup — 設定ファイル生成 + GCP bootstrap (人手承認ゲート付き)
+  # ─────────────────────────────────────────────────────────────
+  - name: setup
+    edit: true
+    persona: coder
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Glob
+          - Grep
+          - Edit
+          - Write
+          - Bash
+        sandbox:
+          allow_unsandboxed_commands: true
+    rules:
+      - condition: GCP bootstrap (gcloud / terraform 実行) を行う直前で確認待ち
+        next: setup
+        requires_user_input: true
+        interactive_only: true
+      - condition: OAuth クライアント ID 手動作成のためユーザー作業待ち
+        next: setup
+        requires_user_input: true
+        interactive_only: true
+      - condition: config + ディレクトリ + GCP + 検証がすべて完了した
+        next: COMPLETE
+      - condition: 必須情報 (Billing Account ID 等) が不足し進行不能
+        next: ABORT
+        appendix: |
+          ユーザーに必要情報を確認した上で再実行してください。
+    output_contracts:
+      report:
+        - name: summary.md
+          format: summary
+          use_judge: false
+    instruction: |
+      ## Goal
+      `docs/channel-direction.md` で確定した方向性をもとに、`config/channel/*.json`
+      を完成させ、ディレクトリ構造 + GCP/Vertex AI ブートストラップ + 検証までを
+      一気通貫で実行する。
+
+      ## 重要な制約 (review rule で人手承認ゲート)
+      - **GCP bootstrap (gcloud / terraform 実行) の直前**に必ずユーザーに確認:
+        - 既存 GCP プロジェクト流用 vs 新規作成
+        - terraform vs bootstrap.sh
+        - Billing Account ID (新規作成時のみ)
+      - **OAuth 2.0 クライアント ID** は gcloud / terraform 双方未対応。
+        Console URL を案内し、ユーザーが手動で 1 回作成 → `auth/client_secrets.json`
+        に配置する。これも人手承認ゲートで受け渡す。
+
+      ## Steps
+      ### Step 1: 方向性ドキュメント読み込み
+      `docs/channel-direction.md` から:
+      - チャンネル名 / 短縮名 / ジャンル (primary / style / context)
+      - コアメッセージ / 差別化ポイント
+      - 動画尺 / 投稿頻度 / 音楽エンジン
+
+      ### Step 2: config 内容の提案と承認
+      `docs/channel-research.md` の分析データも参照し、方向性に沿った config を提案。
+      生成ルールは `.claude/skills/channel-setup/references/config-generation-rules.md`、
+      雛形は `.claude/skills/channel-setup/references/config-template/*.json`
+      (責務別 4 ファイル: meta / content / youtube / analytics)。
+      ユーザーに見せて承認 or 修正指示を受ける。
+
+      ### Step 3: config/channel/*.json の完成
+      `/channel-new` が作った最小 config を完全版に拡張。
+      `references/config-template/` を `config/channel/` 配下に配置し、全フィールドを埋める。
+      `benchmark.channels` は `/channel-new` で設定済み (`config/channel/analytics.json`)。
+
+      ### Step 4: 残りディレクトリの作成
+      正準ディレクトリ構造: `.claude/skills/channel-setup/references/directory-structure.md`
+      を参照して全ディレクトリを作成。
+
+      ### Step 5: 残りファイル生成
+      | ファイル | 生成方法 |
+      |---------|---------|
+      | `config/schedule_config.json` | `references/schedule-template.json` をコピー、頻度調整 |
+      | `config/upload_settings.json` | `references/upload-settings-template.json` をコピー |
+      | `config/localizations.json` | `references/localizations-template.json` を方向性に合わせ調整 |
+      | `.claude/CLAUDE.md` | `references/claude-md-template.md` の placeholder を置換 |
+
+      ### Step 6: GCP / Vertex AI ブートストラップ
+      判断基準・コマンド・リカバリ: `.claude/skills/channel-setup/references/gcp-bootstrap.md`。
+      **必ず実行直前にユーザー承認** (`requires_user_input: true` rule で次 iteration を待つ):
+      - 既存プロジェクト流用 / 新規作成
+      - terraform / bootstrap.sh
+      - Billing Account ID (新規時)
+
+      実行後、Console URL を案内し OAuth クライアント ID を手動作成 →
+      `auth/client_secrets.json` に配置するようユーザーに依頼。
+      ここでも `requires_user_input: true` で待つ。
+
+      ### Step 7: 検証
+      JSON 構文 / config ロード / channel_id 自動取得は
+      `.claude/skills/channel-setup/references/verification.md` を参照。
+      生成全ファイルの一覧を最後に出力。
+
+      ### Step 8: 次ステップ案内
+      1. YouTube チャンネル作成 (まだなら) → `config/channel/meta.json` 更新
+      2. OAuth 認証 + channel_id 取得 (`references/verification.md`)
+      3. ブランディング素材 (`references/verification.md`)
+      4. 初回コレクション制作 → `/wf-new`
+
+      すべて完了したら本 step を抜け、workflow を COMPLETE する。
