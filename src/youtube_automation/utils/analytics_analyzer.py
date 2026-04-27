@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.ctr_resolver import index_reporting_per_video, resolve_ctr_summary
 
 logger = logging.getLogger(__name__)
 
@@ -57,30 +58,23 @@ class AnalyticsAnalyzer:
         """
         logger.info("CTR改善戦略分析を実行中...")
 
-        # 現在のCTR分析（新データ構造 + 旧データ構造のフォールバック）
-        ctr_analysis = analytics_data.get("ctr_analysis", {})
-        impressions_summary = ctr_analysis.get("impressions_summary", {})
-        current_ctr = impressions_summary.get("aggregated_ctr_percentage", 0) / 100
-        if current_ctr == 0:
-            current_ctr = analytics_data.get("channel_ctr", {}).get("average_ctr", 0)
+        # 現在の CTR 取得（reporting_api → ctr_analysis → channel_ctr の優先順）
+        summary = resolve_ctr_summary(analytics_data)
+        current_ctr_percent = summary["aggregated_ctr_percentage"] if summary else 0
         target_ctr = 2.0
-        improvement_ratio = target_ctr / (current_ctr * 100) if current_ctr > 0 else 0
+        improvement_ratio = target_ctr / current_ctr_percent if current_ctr_percent > 0 else 0
 
-        # コレクション別CTR比較
-        collection_ctrs = self._analyze_collection_ctrs(analytics_data)
+        # Reporting API per_video index は 1 度だけ作って各分析メソッドへ引き回す
+        reporting_index = index_reporting_per_video(analytics_data)
 
-        # 8-bit vs 16-bit CTR比較
-        bit_comparison = self._analyze_bit_type_performance(analytics_data)
-
-        # テーマ別CTR分析
-        theme_analysis = self._analyze_theme_performance(analytics_data)
-
-        # サムネイル効果分析
-        thumbnail_analysis = self._analyze_thumbnail_effectiveness(analytics_data)
+        collection_ctrs = self._analyze_collection_ctrs(analytics_data, reporting_index)
+        bit_comparison = self._analyze_bit_type_performance(analytics_data, reporting_index)
+        theme_analysis = self._analyze_theme_performance(analytics_data, reporting_index)
+        thumbnail_analysis = self._analyze_thumbnail_effectiveness(analytics_data, reporting_index)
 
         return {
             "summary": {
-                "current_ctr_percent": current_ctr * 100,
+                "current_ctr_percent": current_ctr_percent,
                 "target_ctr_percent": target_ctr,
                 "improvement_needed": improvement_ratio,
                 "gap_analysis": f"{improvement_ratio:.1f}x improvement required",
@@ -92,17 +86,19 @@ class AnalyticsAnalyzer:
             "recommendations": self._generate_ctr_recommendations(collection_ctrs, bit_comparison, theme_analysis),
         }
 
-    def _analyze_collection_ctrs(self, analytics_data: Dict) -> Dict[str, Any]:
+    def _analyze_collection_ctrs(
+        self, analytics_data: Dict, reporting_index: Dict[str, Dict] | None = None
+    ) -> Dict[str, Any]:
         """コレクション別CTR分析"""
         video_data = analytics_data.get("video_analytics", {})
+        if reporting_index is None:
+            reporting_index = index_reporting_per_video(analytics_data)
 
         collection_ctrs = {}
         for video_id, data in video_data.items():
             title = data.get("title", "")
-            # impression_ctr（新）→ click_through_rate（旧）のフォールバック
-            ctr = data.get("impression_ctr", 0)
-            if ctr == 0:
-                ctr = data.get("click_through_rate", 0) * 100
+            # Reporting API per_video CTR → impression_ctr → click_through_rate の優先順
+            ctr = _resolve_video_ctr(reporting_index.get(video_id), data)
 
             # タイトルからコレクション名を推定
             collection_name = self._extract_collection_name(title)
@@ -125,22 +121,24 @@ class AnalyticsAnalyzer:
 
         return collection_stats
 
-    def _analyze_bit_type_performance(self, analytics_data: Dict) -> Dict[str, Any]:
+    def _analyze_bit_type_performance(
+        self, analytics_data: Dict, reporting_index: Dict[str, Dict] | None = None
+    ) -> Dict[str, Any]:
         """8-bit vs 16-bit パフォーマンス比較"""
         video_data = analytics_data.get("video_analytics", {})
+        if reporting_index is None:
+            reporting_index = index_reporting_per_video(analytics_data)
 
         bit_8_ctrs = []
         bit_16_ctrs = []
 
         for video_id, data in video_data.items():
-            title = data.get("title", "")
-            ctr = data.get("impression_ctr", 0)
-            if ctr == 0:
-                ctr = data.get("click_through_rate", 0) * 100
+            title_lower = data.get("title", "").lower()
+            ctr = _resolve_video_ctr(reporting_index.get(video_id), data)
 
-            if "8-bit" in title.lower() or "8-Bit" in title:
+            if "8-bit" in title_lower:
                 bit_8_ctrs.append(ctr)
-            elif "16-bit" in title.lower() or "16-Bit" in title:
+            elif "16-bit" in title_lower:
                 bit_16_ctrs.append(ctr)
 
         return {
@@ -159,9 +157,13 @@ class AnalyticsAnalyzer:
             else "16-bit focus",
         }
 
-    def _analyze_theme_performance(self, analytics_data: Dict) -> Dict[str, Any]:
+    def _analyze_theme_performance(
+        self, analytics_data: Dict, reporting_index: Dict[str, Dict] | None = None
+    ) -> Dict[str, Any]:
         """テーマ別パフォーマンス分析（config/channel/content.json のテーマキーワードを使用）"""
         video_data = analytics_data.get("video_analytics", {})
+        if reporting_index is None:
+            reporting_index = index_reporting_per_video(analytics_data)
         theme_performance = {}
 
         for theme, tag_keywords in self.collections_metadata["themes"].items():
@@ -171,9 +173,7 @@ class AnalyticsAnalyzer:
 
             for video_id, data in video_data.items():
                 title = data.get("title", "")
-                ctr = data.get("impression_ctr", 0)
-                if ctr == 0:
-                    ctr = data.get("click_through_rate", 0) * 100
+                ctr = _resolve_video_ctr(reporting_index.get(video_id), data)
 
                 if any(keyword.lower() in title.lower() for keyword in search_keywords):
                     theme_ctrs.append(ctr)
@@ -187,9 +187,13 @@ class AnalyticsAnalyzer:
 
         return theme_performance
 
-    def _analyze_thumbnail_effectiveness(self, analytics_data: Dict) -> Dict[str, Any]:
+    def _analyze_thumbnail_effectiveness(
+        self, analytics_data: Dict, reporting_index: Dict[str, Dict] | None = None
+    ) -> Dict[str, Any]:
         """サムネイル効果分析 (CTR基準)"""
         video_data = analytics_data.get("video_analytics", {})
+        if reporting_index is None:
+            reporting_index = index_reporting_per_video(analytics_data)
 
         # CTRによる分類
         high_ctr_videos = []  # 1.5%以上
@@ -197,9 +201,7 @@ class AnalyticsAnalyzer:
         low_ctr_videos = []  # 0.8%未満
 
         for video_id, data in video_data.items():
-            ctr = data.get("impression_ctr", 0)
-            if ctr == 0:
-                ctr = data.get("click_through_rate", 0) * 100
+            ctr = _resolve_video_ctr(reporting_index.get(video_id), data)
             title = data.get("title", "")
 
             video_info = {"title": title, "ctr": ctr, "video_id": video_id}
@@ -381,6 +383,14 @@ class AnalyticsAnalyzer:
         # チャンネル基本統計
         channel_stats = analytics_data.get("channel_analytics", {})
 
+        # CTR は Reporting API → 旧 → fallback の順で取得
+        overview_summary = resolve_ctr_summary(analytics_data)
+        overview_ctr = (
+            overview_summary["aggregated_ctr_percentage"]
+            if overview_summary
+            else channel_stats.get("average_ctr", 0) * 100
+        )
+
         # 新メトリクスの分析（利用可能な場合）
         traffic_strategy = self.analyze_traffic_source_strategy(analytics_data)
         audience_comp = self.analyze_audience_composition(analytics_data)
@@ -392,7 +402,8 @@ class AnalyticsAnalyzer:
                 "total_videos": len(analytics_data.get("video_analytics", {})),
                 "subscriber_count": channel_stats.get("subscriber_count", "N/A"),
                 "total_views": channel_stats.get("total_views", "N/A"),
-                "average_ctr": channel_stats.get("average_ctr", 0) * 100,
+                "average_ctr": overview_ctr,
+                "ctr_source": overview_summary.get("source") if overview_summary else None,
             },
             "ctr_strategy": ctr_analysis,
             "traffic_source_strategy": traffic_strategy,
@@ -411,6 +422,18 @@ class AnalyticsAnalyzer:
         }
 
         return report
+
+
+def _resolve_video_ctr(reporting_row: Dict[str, Any] | None, video_data: Dict[str, Any]) -> float:
+    """1 動画分の CTR を Reporting API → impression_ctr → click_through_rate の優先順で解決する。"""
+    if reporting_row is not None:
+        ctr = reporting_row.get("ctr_percentage")
+        if ctr is not None:
+            return float(ctr)
+    ctr = video_data.get("impression_ctr", 0)
+    if ctr:
+        return float(ctr)
+    return float(video_data.get("click_through_rate", 0)) * 100
 
 
 def main():

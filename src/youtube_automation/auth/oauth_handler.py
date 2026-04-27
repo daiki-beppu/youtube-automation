@@ -23,11 +23,14 @@ from googleapiclient.discovery import build
 class YouTubeOAuthHandler:
     """YouTube Data API v3 OAuth 2.0 認証管理クラス"""
 
-    # YouTube Full Access + Analytics スコープ
+    # YouTube Full Access + Analytics + Reporting スコープ
+    # yt-analytics-monetary.readonly は Reporting API v1 (#84) で
+    # videoThumbnailImpressions / videoThumbnailImpressionsClickThroughRate を取得するため必須。
     SCOPES = [
         "https://www.googleapis.com/auth/youtube",
         "https://www.googleapis.com/auth/youtube.force-ssl",
         "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ]
 
     def __init__(self, auth_dir=None):

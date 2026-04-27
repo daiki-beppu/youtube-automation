@@ -1,0 +1,36 @@
+{
+  "comments": {
+    "enabled": false,
+    "max_replies_per_run": 20,
+    "delay_between_replies_sec": 2.0,
+    "history_file": "comment_reply_history.json",
+    "skip_held_for_review": true,
+    "ng_words": ["spam", "http://"],
+    "rules": [
+      {
+        "name": "greeting_ja",
+        "keywords": ["こんにちは", "はじめまして"],
+        "template_key": "greeting",
+        "language": "ja",
+        "priority": 10
+      },
+      {
+        "name": "thanks_en",
+        "keywords": ["thank you", "thanks"],
+        "template_key": "thanks",
+        "language": "en",
+        "priority": 5
+      }
+    ],
+    "templates": {
+      "ja": {
+        "greeting": "コメントありがとうございます！『{video_title}』を楽しんでいただけて嬉しいです。",
+        "thanks": "ありがとうございます、{comment_author}さん！"
+      },
+      "en": {
+        "greeting": "Thank you for your comment on '{video_title}'!",
+        "thanks": "Thank you, {comment_author}!"
+      }
+    }
+  }
+}

@@ -28,6 +28,7 @@ from youtube_automation.utils.audience_analytics import AudienceAnalyticsMixin
 from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
 from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.reporting_analytics import ReportingAPIMixin
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
 from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
@@ -49,6 +50,7 @@ class YouTubeAnalyticsCollector(
     TrafficSourceMixin,
     AudienceAnalyticsMixin,
     RetentionAnalyticsMixin,
+    ReportingAPIMixin,
 ):
     """YouTube Analytics データ収集クラス"""
 

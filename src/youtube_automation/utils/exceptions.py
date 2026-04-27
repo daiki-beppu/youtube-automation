@@ -29,6 +29,14 @@ class YouTubeAPIError(AutomationError):
         super().__init__(message)
         self.status_code = status_code
 
+    @classmethod
+    def from_http_error(cls, error, context: str) -> "YouTubeAPIError":
+        status = getattr(getattr(error, "resp", None), "status", None)
+        return cls(
+            f"{context}: {error}",
+            status_code=int(status) if status is not None else None,
+        )
+
 
 class ValidationError(AutomationError):
     """入力データのバリデーションエラー

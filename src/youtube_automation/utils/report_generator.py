@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.ctr_resolver import index_reporting_per_video, resolve_ctr_summary
 
 from .analytics_analyzer import AnalyticsAnalyzer
 from .analytics_collector import YouTubeAnalyticsCollector
@@ -136,6 +137,9 @@ class ReportGenerator:
         """週次インサイト生成"""
         video_data = analytics_data.get("video_analytics", {})
 
+        # Reporting API 由来 per-video CTR があれば優先
+        reporting_per_video = index_reporting_per_video(analytics_data)
+
         # 今週の動画パフォーマンス
         weekly_videos = []
         total_views = 0
@@ -143,8 +147,11 @@ class ReportGenerator:
 
         for video_id, data in video_data.items():
             views = data.get("views", 0)
-            impressions = data.get("impressions", 0)
-            ctr = data.get("click_through_rate", 0) * 100
+            ra = reporting_per_video.get(video_id, {})
+            impressions = ra.get("impressions") or data.get("impressions", 0)
+            ctr = ra.get("ctr_percentage")
+            if ctr is None:
+                ctr = data.get("click_through_rate", 0) * 100
 
             weekly_videos.append(
                 {
@@ -161,11 +168,21 @@ class ReportGenerator:
         # パフォーマンス順にソート
         weekly_videos.sort(key=lambda x: x["performance_score"], reverse=True)
 
+        # aggregated CTR は Reporting API のサマリを最優先
+        ctr_summary = resolve_ctr_summary(analytics_data)
+        if ctr_summary and ctr_summary.get("aggregated_ctr_percentage") is not None:
+            average_ctr = ctr_summary["aggregated_ctr_percentage"]
+        elif total_impressions > 0:
+            average_ctr = total_views / total_impressions * 100
+        else:
+            average_ctr = 0
+
         return {
             "total_videos_analyzed": len(weekly_videos),
             "total_views": total_views,
             "total_impressions": total_impressions,
-            "average_ctr": (total_views / total_impressions * 100) if total_impressions > 0 else 0,
+            "average_ctr": average_ctr,
+            "ctr_source": ctr_summary.get("source") if ctr_summary else None,
             "top_performing_video": weekly_videos[0] if weekly_videos else None,
             "performance_trend": "上昇" if total_views > TRENDING_VIEW_THRESHOLD else "安定",
             "engagement_quality": "High" if len([v for v in weekly_videos if v["ctr"] > 1.0]) > 0 else "Medium",

@@ -126,8 +126,8 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
             issues[vid].append("ja localized title has no Japanese chars")
 
         zh_codes = sorted(c for c in locs if c.startswith("zh"))
-        if zh_codes and zh_codes != ["zh-Hans", "zh-Hant"]:
-            issues[vid].append(f"YT zh codes are {zh_codes}, expected ['zh-Hans','zh-Hant']")
+        if zh_codes and zh_codes != ["zh-CN", "zh-TW"]:
+            issues[vid].append(f"YT zh codes are {zh_codes}, expected ['zh-CN','zh-TW']")
 
     return issues
 

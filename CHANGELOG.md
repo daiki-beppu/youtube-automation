@@ -5,7 +5,120 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.0.0] - 2026-04-26
+
+### Changed (BREAKING)
+
+#### OAuth スコープに `yt-analytics-monetary.readonly` を追加 (#84)
+
+YouTube Reporting API v1 経由で thumbnail impressions / CTR を取得する基盤を導入する
+ため、OAuth スコープに `https://www.googleapis.com/auth/yt-analytics-monetary.readonly`
+を追加した。既存 `auth/token.json` のスコープ集合と一致しなくなるため、ダウンストリーム
+チャンネルリポジトリでは再認証が必要。
+
+**移行手順** (各チャンネルリポジトリで実行):
+
+```bash
+rm auth/token.json
+uv run yt-analytics --days 7   # ブラウザで再認証フロー
+```
+
+ブラウザに表示されるスコープ一覧で `YouTube アナリティクスの収益データ` が含まれる
+ことを確認し、許可する。
+
+- `src/youtube_automation/auth/oauth_handler.py`: `SCOPES` に追加
+
+#### 中国語コードを YouTube 公式 `zh-CN` / `zh-TW` に統一
+
+中国語ローカライゼーションコードを `zh-Hans` / `zh-Hant` から YouTube Data API v3 公式の
+`zh-CN` / `zh-TW` に統一した。`i18nLanguages.list()` が返す中国語の公式コードは
+`zh-CN` / `zh-HK` / `zh-TW` のみで、`zh-Hans` / `zh-Hant` は含まれない。アップロード時に
+YouTube 側で canonical へ強制正規化される挙動も観測されており、リポジトリ内のリテラル・
+期待値・サンプル設定を canonical に揃える。関連: #82
+
+- `src/youtube_automation/scripts/metadata_audit.py`: `audit_remote()` の zh-codes 期待値を `["zh-CN", "zh-TW"]` に変更、エラーメッセージも合わせる
+- `src/youtube_automation/scripts/populate_scene_phrases.py`: `SCENE_PHRASES` 12 サンプルのキー `zh-Hans` / `zh-Hant` を `zh-CN` / `zh-TW` に rename
+- `examples/localizations.example.json`: `supported_languages` および `languages.zh-Hans` ブロックを `zh-CN` に rename。`tests/fixtures/sample_channel/config/localizations.json` はこのファイルへの symlink のため自動同期
+- `tests/test_metadata_generator.py`: フィクスチャ内のキー名を canonical に変更
+- `tests/test_metadata_audit.py`: 新規。`audit_remote()` の zh-codes 判定について canonical / 旧キー / 片方欠落の 3 ケースを mock ベースで回帰防止
+
+### Migration
+
+downstream チャンネルリポジトリで `zh-Hans` / `zh-Hant` を `config/localizations.json` または
+`collections/*/workflow-state.json` に含む場合、手動で書き換えが必要。詳細手順は
+[docs/migration/v5-zh-codes.md](docs/migration/v5-zh-codes.md) を参照。
+
+サマリ:
+
+```bash
+# 該当箇所の有無を確認
+grep -rln '"zh-Hans"\|"zh-Hant"' config/ collections/
+# ガイド記載の python ワンライナーで置換 → 検証
+uv run yt-metadata-audit --local
+```
+
+過去アップロード済み動画の `videos.update` 書き換えは本リリースのスコープ外。
+新キーで再アップロード時に YouTube 側が canonical で上書きする挙動を踏襲する想定。
+明示的に CLI 化したい場合は別 issue で起票。
+
+### Added
+
+#### YouTube Reporting API v1 による thumbnail impressions / CTR 取得基盤 (#84)
+
+YouTube Analytics API では `videoThumbnailImpressions` /
+`videoThumbnailImpressionsClickThroughRate` がどの dimensions パターンでも 400 拒否され
+自動収集できない（Google 公式 Looker Studio Connector でも同症状の未解決問題）。
+代替として Reporting API v1（非同期 CSV bulk download）経由で取得する基盤を追加した。
+
+- `src/youtube_automation/utils/reporting_api.py`: 新規 `ReportingAPIClient`。
+  `reportTypes.list()` から `channel_basic_a3 > a2 > a1` の優先順で動的選定、
+  `jobs.list()` で同名ジョブを再利用（冪等化）、`AuthorizedSession` で CSV ダウンロード、
+  `per_video` / `per_day` / `aggregated` の 3 階層サマリに集計
+- `src/youtube_automation/utils/reporting_analytics.py`: `ReportingAPIMixin` を新規追加し
+  `YouTubeAnalyticsCollector` の Mixin 末尾に結線（fail-open 設計、取得失敗時も他 Mixin は継続）
+- `src/youtube_automation/utils/youtube_service.py`: `ServiceRegistry.reporting` プロパティを追加
+- `src/youtube_automation/scripts/analytics_system.py`: `--include-reporting` フラグを追加。
+  ON 時に `data/analytics/reporting_api/<start>_to_<end>.json` へサマリを保存、
+  さらに `analytics_data` トップレベルの `reporting_api.impressions_summary` キーにも格納。
+  config 非依存のサブモードとして `--reporting-dry-run`（reportTypes / jobs 観察、副作用なし）と
+  `--reporting-create-job`（ジョブのみ冪等作成）も追加
+- `src/youtube_automation/utils/ctr_resolver.py`: 新規ヘルパー `resolve_ctr_summary`。
+  `reporting_api.impressions_summary` → `ctr_analysis.impressions_summary` →
+  `channel_ctr.average_ctr` の優先順で CTR を解決
+- `src/youtube_automation/utils/analytics_analyzer.py`: 各 `_analyze_*` 系で
+  per-video Reporting CTR を最優先参照、`generate_performance_report` の
+  `channel_overview.average_ctr` も resolver 経由
+- `src/youtube_automation/utils/report_generator.py`: `_generate_weekly_insights` で
+  Reporting API 由来 per-video CTR / aggregated CTR を最優先表示
+- `src/youtube_automation/utils/launch_curve_data.py`: `build_launch_curve_frame` に
+  `reporting_snapshot` 引数を追加し `reporting_ctr_snapshot` /
+  `reporting_impressions_snapshot` 列を broadcast。`load_latest_reporting_snapshot()` も追加
+- `src/youtube_automation/utils/ctr_analytics.py`: 既知制約コメントに代替経路を追記
+- `tests/test_reporting_api.py` / `tests/test_ctr_resolver.py`: 新規ユニットテスト 20 件
+- `tests/fixtures/reporting_api/channel_basic_a2_sample.csv`: 新規 CSV fixture
+
+**運用上の注意**:
+
+- ジョブ作成後、**最大 48 時間**以内に最初のレポートが取得可能になる
+  （初回取得時はジョブ作成日から **過去 30 日分**が backfill される）
+- それ以降は日次で **D+2**（その日のデータは翌々日）にレポートが生成される
+- API データ保持上限は現在から過去 **60 日**（それ以前のデータは取れない）
+- `--include-reporting` は opt-in（既定 OFF）
+
+#### コメント自動返信機能 (#72)
+
+コメント自動返信機能を追加した。YouTube Data API v3 の `commentThreads.list` / `comments.insert`
+を使い、`config/channel/comments.json` のルール・テンプレートに沿って自チャンネル動画の
+コメントへ返信する。`dry-run` / `apply` 2 モードと `comment_reply_history.json` での
+二重返信防止を備える。関連: #72
+
+- `src/youtube_automation/utils/config/comments.py`: 新規 dataclass `Comments` / `CommentRule`（optional セクション）。`loader._build_comments` と `config_migrate.SECTION_MAP` に統合
+- `src/youtube_automation/utils/comments/`: 新規パッケージ。`fetcher` / `rule_engine` / `template` / `history` / `replier` の 5 モジュール
+- `src/youtube_automation/scripts/comment_reply.py`: CLI 本体
+- `pyproject.toml`: `yt-comments-reply` entry point を登録
+- `examples/channel_config.example/comments.json`: サンプル設定
+- `.claude/skills/comments-reply/SKILL.md`: Claude Code スキル（`yt-skills sync` で downstream 配布）
+- `tests/test_comments_*.py`: rule_engine / template / history / replier のユニットテスト、`test_config_loader.py` に comments セクション検証を追加
 
 ## [4.0.0] - 2026-04-23
 
@@ -186,4 +299,5 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.0.0
 [2.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v2.0.0

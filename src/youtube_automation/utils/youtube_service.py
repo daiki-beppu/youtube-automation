@@ -33,6 +33,7 @@ class ServiceRegistry:
         self._handler = handler
         self._youtube_service = None
         self._analytics_service = None
+        self._reporting_service = None
 
     def _get_handler(self):
         if self._handler is None:
@@ -57,6 +58,14 @@ class ServiceRegistry:
         return self._analytics_service
 
     @property
+    def reporting(self):
+        """YouTube Reporting API v1 サービスを返す（キャッシュ済み）。"""
+        if self._reporting_service is None:
+            credentials = self._get_handler().authenticate()
+            self._reporting_service = build("youtubereporting", "v1", credentials=credentials)
+        return self._reporting_service
+
+    @property
     def credentials(self):
         """OAuth credentials を返す。"""
         return self._get_handler().authenticate()
@@ -66,6 +75,7 @@ class ServiceRegistry:
         self._handler = None
         self._youtube_service = None
         self._analytics_service = None
+        self._reporting_service = None
 
 
 # デフォルトのグローバルレジストリ
@@ -85,6 +95,11 @@ def get_youtube():
 def get_analytics():
     """YouTube Analytics API v2 サービスを返す（キャッシュ済み）。"""
     return _default_registry.analytics
+
+
+def get_reporting():
+    """YouTube Reporting API v1 サービスを返す（キャッシュ済み）。"""
+    return _default_registry.reporting
 
 
 def get_credentials():

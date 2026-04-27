@@ -9,6 +9,7 @@ from pathlib import Path
 
 from youtube_automation.utils.config.analytics import Analytics, Benchmark
 from youtube_automation.utils.config.audio import Audio
+from youtube_automation.utils.config.comments import CommentRule, Comments
 from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
 from youtube_automation.utils.config.localizations import Localizations
@@ -160,6 +161,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
     workflow = _build_workflow(merged)
     audio = _build_audio(merged)
     localizations = _load_localizations(channel_dir_path, youtube.api.language)
+    comments = _build_comments(merged)
 
     _validate_cross_file(youtube, content, localizations)
 
@@ -172,6 +174,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
         workflow=workflow,
         audio=audio,
         localizations=localizations,
+        comments=comments,
     )
 
 
@@ -270,6 +273,47 @@ def _build_workflow(merged: dict) -> Workflow:
 def _build_audio(merged: dict) -> Audio:
     ad = merged.get("audio") or {}
     return Audio(target_duration_min=ad.get("target_duration_min"))
+
+
+def _build_comments(merged: dict) -> Comments:
+    cm = merged.get("comments") or {}
+    rules_raw = cm.get("rules") or []
+    rules: list[CommentRule] = []
+    for i, raw in enumerate(rules_raw):
+        if not isinstance(raw, dict):
+            raise ConfigError(f"comments.rules[{i}] は object でなければなりません")
+        name = raw.get("name")
+        if not name:
+            raise ConfigError(f"comments.rules[{i}].name が必須です")
+        rules.append(
+            CommentRule(
+                name=name,
+                keywords=list(raw.get("keywords", [])),
+                pattern=raw.get("pattern"),
+                template_key=raw.get("template_key", "default"),
+                language=raw.get("language"),
+                priority=int(raw.get("priority", 0)),
+            )
+        )
+    templates_raw = cm.get("templates") or {}
+    if not isinstance(templates_raw, dict):
+        raise ConfigError("comments.templates は {言語: {key: text}} の object でなければなりません")
+    templates: dict[str, dict[str, str]] = {}
+    for lang, bucket in templates_raw.items():
+        if not isinstance(bucket, dict):
+            raise ConfigError(f"comments.templates.{lang} は object でなければなりません")
+        templates[str(lang)] = {str(k): str(v) for k, v in bucket.items()}
+
+    return Comments(
+        enabled=bool(cm.get("enabled", False)),
+        rules=rules,
+        templates=templates,
+        ng_words=list(cm.get("ng_words", [])),
+        max_replies_per_run=int(cm.get("max_replies_per_run", 20)),
+        delay_between_replies_sec=float(cm.get("delay_between_replies_sec", 2.0)),
+        history_file=str(cm.get("history_file", "comment_reply_history.json")),
+        skip_held_for_review=bool(cm.get("skip_held_for_review", True)),
+    )
 
 
 def _load_localizations(channel_dir_path: Path, fallback_language: str) -> Localizations:

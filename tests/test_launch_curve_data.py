@@ -64,6 +64,34 @@ def test_build_launch_curve_frame_has_required_columns():
         "cumulative_views",
         "daily_impressions",
         "ctr",
+        "reporting_ctr_snapshot",
+        "reporting_impressions_snapshot",
     }
     assert required.issubset(set(df.columns))
     assert isinstance(df, pd.DataFrame)
+
+
+def test_build_launch_curve_frame_merges_reporting_snapshot():
+    """Reporting API snapshot があれば per_video CTR / impressions が broadcast される (#84)。"""
+    daily, meta = _load()
+    snapshot = {
+        "per_video": [
+            {"video_id": "vid_A", "ctr_percentage": 5.5, "impressions": 1234},
+            {"video_id": "vid_B", "ctr_percentage": 4.0, "impressions": 2345},
+        ]
+    }
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta, reporting_snapshot=snapshot)
+
+    vid_a = df[df["video_id"] == "vid_A"].iloc[0]
+    assert vid_a["reporting_ctr_snapshot"] == 5.5
+    assert vid_a["reporting_impressions_snapshot"] == 1234
+
+    vid_b = df[df["video_id"] == "vid_B"].iloc[0]
+    assert vid_b["reporting_ctr_snapshot"] == 4.0
+
+
+def test_build_launch_curve_frame_without_reporting_snapshot_keeps_columns():
+    daily, meta = _load()
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+    assert df["reporting_ctr_snapshot"].isna().all()
+    assert df["reporting_impressions_snapshot"].isna().all()

@@ -1,0 +1,20 @@
+{
+  "comments": {
+    "enabled": false,
+    "rules": [
+      {
+        "name": "greeting_ja",
+        "keywords": ["こんにちは"],
+        "template_key": "greeting",
+        "language": "ja",
+        "priority": 10
+      }
+    ],
+    "templates": {
+      "ja": {
+        "greeting": "コメントありがとうございます！"
+      }
+    },
+    "ng_words": ["spam"]
+  }
+}
