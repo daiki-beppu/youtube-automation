@@ -22,8 +22,16 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
+from youtube_automation.utils.preflight_checks import (  # noqa: E402
+    check_duration,
+    check_tags_count,
+    check_tags_yt_chars,
+    extract_descriptions_md_tags,
+)
+from youtube_automation.utils.probe import probe_duration  # noqa: E402
 from youtube_automation.utils.upload_core import YouTubeUploadCore  # noqa: E402
 
 
@@ -171,6 +179,9 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         3. タイムスタンプが per-theme 粒度であること（パターンバリエーション
            を v1〜v6 ごとに別チャプターに展開していないことを確認）
         4. タイトルが 100 codepoint 以内（YouTube 制限）
+        5. タグ件数が `tags.min_count` を満たすこと（戦略書違反防止）
+        6. タグの quotation 込み文字数が YouTube の 500 制限内
+        7. master 動画尺が `audio.target_duration_min/max` 範囲内
         """
         doc_dir = collection_dir / "20-documentation"
         desc_path = doc_dir / "descriptions.md"
@@ -214,6 +225,38 @@ class YouTubeAutoUploader(YouTubeUploadCore):
                 f"→ /description で多言語翻訳を含めて再生成してください。\n"
                 f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
             )
+
+        # タグ件数 / quotation 文字数チェック
+        # descriptions.md の「タグ（YouTube タグ欄）」が _upload_complete_collection で
+        # for_collection() を上書きするため、本番と同じソースを検証する。
+        prebuilt_tags = extract_descriptions_md_tags(desc_path)
+        tags = prebuilt_tags if prebuilt_tags is not None else config.content.tags.for_collection(collection_dir.name)
+        issues: list[str] = []
+        for msg in (
+            check_tags_count(tags, config.content.tags.min_count),
+            check_tags_yt_chars(tags),
+        ):
+            if msg:
+                issues.append(msg)
+
+        # 動画尺チェック（target_duration が設定済みかつ master mp4 が存在する場合のみ）
+        if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
+            master_video = CollectionPaths(collection_dir).find_master_video()
+            if master_video:
+                dur = probe_duration(master_video)
+                if dur is None:
+                    issues.append(f"duration probe failed for {master_video.name}")
+                else:
+                    msg = check_duration(
+                        dur,
+                        config.audio.target_duration_min,
+                        config.audio.target_duration_max,
+                    )
+                    if msg:
+                        issues.append(msg)
+
+        if issues:
+            raise RuntimeError("❌ preflight failed:\n  - " + "\n  - ".join(issues))
 
         logger.info(f"✅ preflight OK — title={len(title)}c, chapters={len(ts_lines)}, langs={len(scene_phrases)}")
 

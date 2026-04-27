@@ -23,7 +23,16 @@ import re
 import sys
 from pathlib import Path
 
+from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
+from youtube_automation.utils.config.config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.preflight_checks import (  # noqa: E402
+    check_duration,
+    check_tags_count,
+    check_tags_yt_chars,
+    extract_descriptions_md_tags,
+)
+from youtube_automation.utils.probe import probe_duration  # noqa: E402
 
 COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
@@ -38,9 +47,10 @@ def extract_section(text: str, header: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
-def audit_local(col: Path, supported_langs: list[str]) -> list[str]:
+def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     """Return a list of issue descriptions for this collection."""
     issues: list[str] = []
+    supported_langs = list(config.localizations.supported_languages)
 
     desc_md = col / "20-documentation" / "descriptions.md"
     stray = list((col / "20-documentation").glob("description*"))
@@ -86,6 +96,33 @@ def audit_local(col: Path, supported_langs: list[str]) -> list[str]:
             issues.append(f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}")
     else:
         issues.append("workflow-state.json missing")
+
+    # タグ件数 / quotation 文字数（preflight と同じく descriptions.md 優先）
+    prebuilt_tags = extract_descriptions_md_tags(desc_md)
+    tags = prebuilt_tags if prebuilt_tags is not None else config.content.tags.for_collection(col.name)
+    for msg in (
+        check_tags_count(tags, config.content.tags.min_count),
+        check_tags_yt_chars(tags),
+    ):
+        if msg:
+            issues.append(msg)
+
+    # 動画尺チェック（master mp4 がローカルに残っている場合のみ。
+    # /live-clean 後のコレクションでは skip して偽陽性を防ぐ）
+    if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
+        master_video = CollectionPaths(col).find_master_video()
+        if master_video:
+            dur = probe_duration(master_video)
+            if dur is None:
+                issues.append(f"duration probe failed for {master_video.name}")
+            else:
+                msg = check_duration(
+                    dur,
+                    config.audio.target_duration_min,
+                    config.audio.target_duration_max,
+                )
+                if msg:
+                    issues.append(msg)
 
     return issues
 
@@ -175,7 +212,7 @@ def main() -> None:
         for col in sorted(COLLECTIONS_DIR.iterdir()):
             if not col.is_dir():
                 continue
-            issues = audit_local(col, supported_langs)
+            issues = audit_local(col, config)
             if issues:
                 total_issues += len(issues)
                 print(f"❌ {col.name}")

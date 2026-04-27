@@ -203,6 +203,7 @@ def _build_content(merged: dict, meta: ChannelMeta) -> Content:
         themes={k: list(v) for k, v in tg["themes"].items()},
         channel_specific=list(tg.get("channel_specific", [])),
         channel_name=meta.channel_name,
+        min_count=tg.get("min_count"),
     )
 
     dp = merged["descriptions"]
@@ -272,7 +273,10 @@ def _build_workflow(merged: dict) -> Workflow:
 
 def _build_audio(merged: dict) -> Audio:
     ad = merged.get("audio") or {}
-    return Audio(target_duration_min=ad.get("target_duration_min"))
+    return Audio(
+        target_duration_min=ad.get("target_duration_min"),
+        target_duration_max=ad.get("target_duration_max"),
+    )
 
 
 def _build_comments(merged: dict) -> Comments:

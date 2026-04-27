@@ -22,6 +22,7 @@ class Tags:
     themes: dict[str, list[str]]
     channel_specific: list[str]
     channel_name: str
+    min_count: int | None = None
 
     def default(self) -> list[str]:
         """チャンネル名を含むデフォルトタグリスト."""
