@@ -1,0 +1,337 @@
+name: collection-pipeline
+description: |
+  YouTube コレクション制作の単一 workflow。`/ideate` から `/upload` まで全工程を
+  step として表現し、各 step は idempotent (完了済みは skip して次 step へ)。
+  進行状態は workflow-state.json を持たず、ファイル位置・存在 + .takt/tasks.yaml
+  (takt の resume_point) で表現する。
+
+  人手作業 (mastering 等) で workflow を抜ける場合は COMPLETE / ABORT で正常終了し、
+  ユーザーは作業後に同じ task で `takt -t "<collection>"` を再起動する。各 step が
+  idempotent なので、最初から起動しても完了済み step は skip される。
+
+  人手介入は 3 箇所:
+  - select_plan (interactive gate 1: 企画選択)
+  - thumbnail_approve (interactive gate 2: サムネ承認)
+  - master_gate (interactive gate 3: Suno のみ、プレイリスト URL 入力)
+
+initial_step: detect
+max_steps: 16
+
+steps:
+  # ─────────────────────────────────────────────────────────────
+  # Step 1: detect — collection 特定 + 前提確認
+  # ─────────────────────────────────────────────────────────────
+  - name: detect
+    edit: false
+    persona: planner
+    required_permission_mode: readonly
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Glob
+          - Bash
+    rules:
+      - condition: 進行中の collection (planning 配下) を 1 つ特定できた
+        next: ideate_select
+      - condition: 進行中 collection が無く新規制作が必要
+        next: ideate_select
+      - condition: config/channel/ が無い
+        next: ABORT
+        appendix: |
+          先に /channel-new (新規) / /channel-import (既存運営中) で
+          config/channel/ を生成してください。
+      - condition: 進行中 collection が複数あって特定不能
+        next: ABORT
+        appendix: |
+          collections/planning/ に複数あります。task 引数で対象を指定してください
+          (例: takt -w collection-pipeline -t "20260427-bri-brigid-hearth-collection")。
+    instruction: |
+      ## Goal
+      task 引数 `<task>` を手がかりに対象 collection を特定する。新規制作の場合は
+      collection ディレクトリが無い状態で next: ideate_select に進む。
+
+      ## Steps
+      1. `Bash` で `ls config/channel/*.json` を確認 (0 件なら ABORT)
+      2. `Bash` で `find collections/planning -maxdepth 2 -type d -name "*-collection"`
+         を実行
+         - 0 件: 新規制作。任意 (task 引数があれば候補名としてメモ)
+         - 1 件: その collection を採用
+         - 2 件以上: task 引数に部分一致する 1 件を採用、それでも複数なら ABORT
+      3. report に collection path (新規時は "new") + ディレクトリ内 artifact 一覧
+         (`ls -la <col>/10-assets/ <col>/01-master/` など) を 8 行以内で書く
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 2: ideate_select — 候補生成 + ユーザー選択
+  # ─────────────────────────────────────────────────────────────
+  - name: ideate_select
+    edit: true
+    persona: planner
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Glob
+          - Edit
+          - Write
+          - Bash
+    rules:
+      - condition: collection が既に初期化済み (planning 配下にディレクトリ存在)
+        next: init
+      - condition: ユーザーが新規企画を選択した
+        next: init
+        requires_user_input: true
+        interactive_only: true
+      - condition: ユーザーが中断を指示した
+        next: ABORT
+        requires_user_input: true
+        interactive_only: true
+      - condition: 候補生成不能 (分析データ不足)
+        next: ABORT
+        appendix: |
+          /collect でデータ収集 → /channel-research などで補完してください。
+      - condition: 自動進行不可 (新規企画選択を pipeline では扱えない)
+        next: ABORT
+        appendix: |
+          collection-pipeline は interactive モードで起動してください
+          (例: takt -w collection-pipeline -t "次のコレクション")。
+    instruction: |
+      ## Goal
+      新規制作の場合のみ `/ideate` skill 相当で候補を生成し、ユーザーに選んでもらう。
+      既存 collection が detect 済みの場合は何もせず次 step へ進む。
+
+      ## Steps (新規時のみ)
+      1. `data/` `docs/benchmarks/` を確認
+      2. `/ideate` skill 相当で 3 候補を生成、preview 画像を tmp/preview/<theme-slug>/main.png に保存
+      3. ユーザーに候補と preview を提示し選択を求める
+      4. 選択結果 (id / theme-slug / track_count / music_engine) を report に明記
+
+      既存 collection の場合は report に "既に初期化済み、skip" の 1 行のみ。
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 3: init — yt-init-collection + thumbnail + music_prompts
+  # ─────────────────────────────────────────────────────────────
+  - name: init
+    edit: true
+    persona: coder
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Glob
+          - Edit
+          - Write
+          - Bash
+    rules:
+      - condition: thumbnail.jpg と music_prompts (suno-prompts.md / composition.json) がともに揃っている
+        next: thumbnail_approve
+      - condition: 致命的失敗 (yt-init-collection エラー等)
+        next: ABORT
+    instruction: |
+      ## Goal
+      collection ディレクトリ・サムネイル・音楽プロンプトを揃える。各 artifact は
+      存在チェックして既にあれば skip。
+
+      ## Steps
+      1. collection ディレクトリ未生成の場合のみ:
+         `Bash` で `uv run yt-init-collection "<Collection Name>" "<theme-slug>" \
+         --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria>`
+         (引数は ideate_select の選択結果)
+      2. preview 画像が `<col>/10-assets/main.png` に未配置なら配置
+      3. `<col>/10-assets/thumbnail.jpg` が未生成なら `/thumbnail` skill 相当で生成
+      4. 音楽プロンプト未生成なら:
+         - Suno: `/suno <theme>` で `<col>/20-documentation/suno-prompts.md`
+         - Lyria: `/lyria <theme>` で `<col>/20-documentation/composition.json`
+      5. report に各 artifact の状況 (作成 / skip) を明記
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 4: thumbnail_approve — サムネ承認 (interactive gate 2)
+  # ─────────────────────────────────────────────────────────────
+  - name: thumbnail_approve
+    edit: true
+    persona: planner
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Edit
+          - Write
+          - Bash
+    rules:
+      - condition: 10-assets/.thumbnail-approved フラグファイルが既に存在する
+        next: loop_video
+      - condition: ユーザーが承認した (フラグファイルを作成)
+        next: loop_video
+        requires_user_input: true
+        interactive_only: true
+      - condition: ユーザーが再生成を指示した
+        next: thumbnail_approve
+        requires_user_input: true
+        interactive_only: true
+      - condition: ユーザーが中断を指示した
+        next: ABORT
+        requires_user_input: true
+        interactive_only: true
+      - condition: 自動進行不可
+        next: ABORT
+        appendix: |
+          collection-pipeline は interactive モードで起動してください。
+    instruction: |
+      ## Goal
+      サムネを表示し、ユーザーの承認を flag file で永続化する。既に承認済みなら skip。
+
+      ## Steps
+      1. `<col>/10-assets/.thumbnail-approved` が存在するなら何もせず report に skip と書く
+      2. `Bash` で `open <col>/10-assets/thumbnail.jpg` でプレビュー
+      3. ユーザーに「承認 / 再生成 / 中断」を問う
+      4. 承認 → `Bash` で `touch <col>/10-assets/.thumbnail-approved` → 次 step へ
+      5. 再生成 → diff_prompt 修正 + generate_image.py 再実行 → 同 step を再度
+      6. 中断 → ABORT
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 5: loop_video — loop.mp4 生成 (失敗 OK)
+  # ─────────────────────────────────────────────────────────────
+  - name: loop_video
+    edit: true
+    persona: coder
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Edit
+          - Write
+          - Bash
+    rules:
+      - condition: loop.mp4 が存在する、または .loop_video.failed フラグがある
+        next: master_gate
+      - condition: 致命的失敗 (Bash 自体が動かない等)
+        next: ABORT
+    instruction: |
+      ## Goal
+      ループ動画を生成。失敗時は失敗フラグを残して次 step に進める (続行可能)。
+
+      ## Steps
+      1. `<col>/10-assets/loop.mp4` が存在するなら何もせず次へ
+      2. `<col>/10-assets/.loop_video.failed` が存在するならスキップして次へ
+      3. `/loop-video` skill 相当で `<col>/10-assets/main.png` → `loop.mp4` を生成
+      4. 失敗時は `Bash` で `touch <col>/10-assets/.loop_video.failed`
+      5. report に成功 / 失敗 (フラグファイル作成) を明記
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 6: master_gate — raw_master 生成 (Suno: URL 入力 / Lyria: 自動)
+  # ─────────────────────────────────────────────────────────────
+  - name: master_gate
+    edit: true
+    persona: coder
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Edit
+          - Write
+          - Bash
+    rules:
+      - condition: 00-master-raw/ に raw_master ファイルが存在する
+        next: master_check
+      - condition: Suno で URL 入力が必要
+        next: master_gate
+        requires_user_input: true
+        interactive_only: true
+      - condition: 自動進行不可 (pipeline で Suno URL 入力不能)
+        next: ABORT
+        appendix: |
+          Suno フローは interactive モードが必須です。
+      - condition: 致命的失敗
+        next: ABORT
+    instruction: |
+      ## Goal
+      raw_master 音源を生成。既に存在するなら skip。
+
+      ## Steps
+      1. `<col>/00-master-raw/` に音声ファイルが既に存在するなら何もせず次 step へ
+      2. config/channel/youtube.json から `music_engine` を読む
+      3. Suno フロー:
+         - rule "URL 入力が必要" を発火、ユーザーから Suno プレイリスト URL を取得
+         - `/masterup <URL>` skill 相当で DL → `<col>/00-master-raw/<filename>.mp3`
+      4. Lyria フロー:
+         - `/lyria <theme>` skill 相当で composition.json → セグメント生成 →
+           `<col>/00-master-raw/<filename>.wav` 自動生成
+      5. report に raw_master ファイル名を明記
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 7: master_check — 最終マスター検出 (配置待ちなら抜ける)
+  # ─────────────────────────────────────────────────────────────
+  - name: master_check
+    edit: false
+    persona: planner
+    required_permission_mode: readonly
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Glob
+          - Bash
+    rules:
+      - condition: 01-master/ に raw_master と異なるファイルが配置されている
+        next: publish_live
+      - condition: 最終マスター未配置 (ユーザー作業待ち)
+        next: COMPLETE
+        appendix: |
+          raw master をミキシング+マスタリング後 <col>/01-master/ に配置し、
+          再度 takt -w collection-pipeline -t "<col>" を実行してください。
+    instruction: |
+      ## Goal
+      最終マスター音源 (`01-master/` 配下) が配置されているかチェック。未配置なら
+      workflow を一旦正常終了し、ユーザー作業後の再実行を待つ。
+
+      ## Steps
+      1. `<col>/01-master/` 内のファイルを `Bash` で列挙
+      2. `<col>/00-master-raw/` のファイル名と比較し、異なる名前のファイルが 1 つ以上
+         あれば最終マスターとみなす
+      3. 配置済 → 次 step へ
+      4. 未配置 → COMPLETE (rule 2)、appendix のとおり再実行を案内
+
+  # ─────────────────────────────────────────────────────────────
+  # Step 8: publish_live — videoup + description + upload + live 移動
+  # ─────────────────────────────────────────────────────────────
+  - name: publish_live
+    edit: true
+    persona: coder
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Edit
+          - Write
+          - Bash
+        sandbox:
+          allow_unsandboxed_commands: true
+    rules:
+      - condition: collections/live/<col>/ にディレクトリが移動済み
+        next: COMPLETE
+        appendix: |
+          全工程完了。/analyze で初週パフォーマンスを確認してください (T+7 日後推奨)。
+      - condition: upload 失敗 / video_id 取得不能
+        next: ABORT
+        appendix: |
+          失敗箇所を確認後、再実行で続きから再開できます (idempotent)。
+    instruction: |
+      ## Goal
+      動画化・概要欄・YouTube アップロード・live 移動を実行する。各 sub-step は
+      対応 artifact が既に存在するなら skip (idempotent)。
+
+      ## Steps
+      1. **並列**: 以下を `Bash` で並行起動して wait:
+         - `/videoup` 相当 (`<col>/40-master-video/<filename>.mp4` 未生成時のみ)
+         - `/description` 相当 (`<col>/30-publish/description.txt` 未生成時のみ)
+      2. **順次**: `/upload` skill 相当で YouTube アップロード + live 移行
+         (`<col>/30-publish/youtube-url.txt` が無ければ実行、あれば skip)
+         - 成功時は upload 結果を `<col>/30-publish/youtube-url.txt` に保存
+         - `collections/planning/<col>/` を `collections/live/<col>/` に移動
+      3. report に動画 URL + 公開ステータス を明記
