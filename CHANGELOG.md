@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (BREAKING)
 
+#### OAuth スコープに `yt-analytics-monetary.readonly` を追加 (#84)
+
+YouTube Reporting API v1 経由で thumbnail impressions / CTR を取得する基盤を導入する
+ため、OAuth スコープに `https://www.googleapis.com/auth/yt-analytics-monetary.readonly`
+を追加した。既存 `auth/token.json` のスコープ集合と一致しなくなるため、ダウンストリーム
+チャンネルリポジトリでは再認証が必要。
+
+**移行手順** (各チャンネルリポジトリで実行):
+
+```bash
+rm auth/token.json
+uv run yt-analytics --days 7   # ブラウザで再認証フロー
+```
+
+ブラウザに表示されるスコープ一覧で `YouTube アナリティクスの収益データ` が含まれる
+ことを確認し、許可する。
+
+- `src/youtube_automation/auth/oauth_handler.py`: `SCOPES` に追加
+
+#### 中国語コードを YouTube 公式 `zh-CN` / `zh-TW` に統一
+
 中国語ローカライゼーションコードを `zh-Hans` / `zh-Hant` から YouTube Data API v3 公式の
 `zh-CN` / `zh-TW` に統一した。`i18nLanguages.list()` が返す中国語の公式コードは
 `zh-CN` / `zh-HK` / `zh-TW` のみで、`zh-Hans` / `zh-Hant` は含まれない。アップロード時に
@@ -41,6 +62,50 @@ uv run yt-metadata-audit --local
 明示的に CLI 化したい場合は別 issue で起票。
 
 ### Added
+
+#### YouTube Reporting API v1 による thumbnail impressions / CTR 取得基盤 (#84)
+
+YouTube Analytics API では `videoThumbnailImpressions` /
+`videoThumbnailImpressionsClickThroughRate` がどの dimensions パターンでも 400 拒否され
+自動収集できない（Google 公式 Looker Studio Connector でも同症状の未解決問題）。
+代替として Reporting API v1（非同期 CSV bulk download）経由で取得する基盤を追加した。
+
+- `src/youtube_automation/utils/reporting_api.py`: 新規 `ReportingAPIClient`。
+  `reportTypes.list()` から `channel_basic_a3 > a2 > a1` の優先順で動的選定、
+  `jobs.list()` で同名ジョブを再利用（冪等化）、`AuthorizedSession` で CSV ダウンロード、
+  `per_video` / `per_day` / `aggregated` の 3 階層サマリに集計
+- `src/youtube_automation/utils/reporting_analytics.py`: `ReportingAPIMixin` を新規追加し
+  `YouTubeAnalyticsCollector` の Mixin 末尾に結線（fail-open 設計、取得失敗時も他 Mixin は継続）
+- `src/youtube_automation/utils/youtube_service.py`: `ServiceRegistry.reporting` プロパティを追加
+- `src/youtube_automation/scripts/analytics_system.py`: `--include-reporting` フラグを追加。
+  ON 時に `data/analytics/reporting_api/<start>_to_<end>.json` へサマリを保存、
+  さらに `analytics_data` トップレベルの `reporting_api.impressions_summary` キーにも格納。
+  config 非依存のサブモードとして `--reporting-dry-run`（reportTypes / jobs 観察、副作用なし）と
+  `--reporting-create-job`（ジョブのみ冪等作成）も追加
+- `src/youtube_automation/utils/ctr_resolver.py`: 新規ヘルパー `resolve_ctr_summary`。
+  `reporting_api.impressions_summary` → `ctr_analysis.impressions_summary` →
+  `channel_ctr.average_ctr` の優先順で CTR を解決
+- `src/youtube_automation/utils/analytics_analyzer.py`: 各 `_analyze_*` 系で
+  per-video Reporting CTR を最優先参照、`generate_performance_report` の
+  `channel_overview.average_ctr` も resolver 経由
+- `src/youtube_automation/utils/report_generator.py`: `_generate_weekly_insights` で
+  Reporting API 由来 per-video CTR / aggregated CTR を最優先表示
+- `src/youtube_automation/utils/launch_curve_data.py`: `build_launch_curve_frame` に
+  `reporting_snapshot` 引数を追加し `reporting_ctr_snapshot` /
+  `reporting_impressions_snapshot` 列を broadcast。`load_latest_reporting_snapshot()` も追加
+- `src/youtube_automation/utils/ctr_analytics.py`: 既知制約コメントに代替経路を追記
+- `tests/test_reporting_api.py` / `tests/test_ctr_resolver.py`: 新規ユニットテスト 20 件
+- `tests/fixtures/reporting_api/channel_basic_a2_sample.csv`: 新規 CSV fixture
+
+**運用上の注意**:
+
+- ジョブ作成後、**最大 48 時間**以内に最初のレポートが取得可能になる
+  （初回取得時はジョブ作成日から **過去 30 日分**が backfill される）
+- それ以降は日次で **D+2**（その日のデータは翌々日）にレポートが生成される
+- API データ保持上限は現在から過去 **60 日**（それ以前のデータは取れない）
+- `--include-reporting` は opt-in（既定 OFF）
+
+#### コメント自動返信機能 (#72)
 
 コメント自動返信機能を追加した。YouTube Data API v3 の `commentThreads.list` / `comments.insert`
 を使い、`config/channel/comments.json` のルール・テンプレートに沿って自チャンネル動画の
