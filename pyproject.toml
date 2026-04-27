@@ -76,7 +76,7 @@ packages = ["src/youtube_automation"]
 
 [tool.hatch.build.targets.wheel.force-include]
 # Claude Code スキルファイルをパッケージ内 _skills/ として同梱
-# (yt-skills sync コマンドが importlib.resources で参照する)
+# (yt-skills sync --asset skills が importlib.resources で参照する)
 ".claude/skills" = "youtube_automation/_skills"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
