@@ -105,6 +105,7 @@ steps:
       - condition: ユーザーが決定事項テーブルを最終承認した
         next: setup
         requires_user_input: true
+        interactive_only: true
       - condition: ユーザーが修正を指示した (ポジショニング再検討、項目修正等)
         next: direction
         requires_user_input: true
