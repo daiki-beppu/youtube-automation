@@ -293,9 +293,10 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             # ローカライゼーションにもキュレーション済みのタイムスタンプを使用
             curated_timestamps = self._extract_body_for_localizations(prebuilt["description"])
             scene_phrases = getattr(metadata_gen, "_last_scene_phrases", {})
+            scene_emoji = metadata_gen._load_scene_emoji()
             if curated_timestamps:
                 metadata["localizations"] = metadata_gen.generate_localizations(
-                    metadata["title"], curated_timestamps, scene_phrases
+                    metadata["title"], curated_timestamps, scene_phrases, scene_emoji=scene_emoji
                 )
 
         if publish_at:

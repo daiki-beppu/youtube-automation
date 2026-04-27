@@ -40,6 +40,7 @@ class SceneTitleViolation:
 def validate_scene_phrases(
     scene_phrases: Dict[str, str],
     config,
+    scene_emoji: str = "",
 ) -> List[SceneTitleViolation]:
     """scene_phrases を localizations の全言語で試算し、100 codepoint 超過を一括検出する.
 
@@ -81,7 +82,7 @@ def validate_scene_phrases(
             raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
         activities = lang_data.get("activities", best_for_line)
         scene = scene_phrases[lang]
-        title = title_tpl.format(scene_phrase=scene, activities=activities)
+        title = title_tpl.format(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji)
         if len(title) > 100:
             violations.append(
                 SceneTitleViolation(
@@ -366,14 +367,21 @@ class BAHMetadataGenerator:
         # jazzgak. TTP 形式: theme_scenes から scene_phrase と activities を取得
         theme_scenes = self.config.content.title.theme_scenes
         scene_phrase = ""
+        scene_emoji = ""
         activities = activity
         if theme_scenes:
             theme_lower = theme.lower()
             for keyword, scene_data in theme_scenes.items():
                 if keyword in theme_lower:
                     scene_phrase = scene_data.get("scene", "")
+                    scene_emoji = scene_data.get("scene_emoji", "")
                     activities = scene_data.get("activities", activity)
                     break
+
+        # workflow-state.json の planning.scene_emoji を優先採用（コレクション固有の絵文字）
+        ws_scene_emoji = self._load_scene_emoji()
+        if ws_scene_emoji:
+            scene_emoji = ws_scene_emoji
 
         title = self.config.content.title.template.format(
             style=self.config.content.genre.style.title(),
@@ -381,6 +389,7 @@ class BAHMetadataGenerator:
             activity=activity,
             activities=activities,
             scene_phrase=scene_phrase,
+            scene_emoji=scene_emoji,
             duration_display=duration_display,
             duration_short=duration_short,
         )
@@ -410,8 +419,24 @@ class BAHMetadataGenerator:
                 pass
         return {}
 
+    def _load_scene_emoji(self) -> str:
+        """workflow-state.json から planning.scene_emoji を読み込み"""
+        ws_path = self.collection_path / "workflow-state.json"
+        if ws_path.exists():
+            try:
+                with open(ws_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                return state.get("planning", {}).get("scene_emoji", "")
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return ""
+
     def generate_localizations(
-        self, english_title: str, timestamp_body: str, scene_phrases: Dict[str, str] = None
+        self,
+        english_title: str,
+        timestamp_body: str,
+        scene_phrases: Dict[str, str] = None,
+        scene_emoji: str = "",
     ) -> Dict:
         """各言語のローカライズされたタイトル・説明文を生成（jazzgak. TTP ハイブリッド方式）
 
@@ -443,7 +468,7 @@ class BAHMetadataGenerator:
 
         # 欠落チェック + 100 codepoint 超過を全言語まとめて検出する
         # （従来は 1 言語ずつ fail していたため多言語対応チャンネルで再アップロードを繰り返していた）
-        violations = validate_scene_phrases(scene_phrases, self.config)
+        violations = validate_scene_phrases(scene_phrases, self.config, scene_emoji=scene_emoji)
         if violations:
             raise ValueError(
                 f"localizations の {len(violations)} 言語でタイトルが 100 codepoint を超過:\n"
@@ -459,7 +484,7 @@ class BAHMetadataGenerator:
             scene = scene_phrases[lang]
             title_tpl = lang_data["title_template"]
             activities = lang_data.get("activities", best_for_line)
-            loc_title = title_tpl.format(scene_phrase=scene, activities=activities)
+            loc_title = title_tpl.format(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji)
 
             # --- 概要欄（ハイブリッド方式）---
             opening_poem = desc_data.get("opening_poem", "")
@@ -560,8 +585,11 @@ class BAHMetadataGenerator:
 
         # ローカライゼーション生成
         scene_phrases = self._load_scene_phrases()
+        scene_emoji = self._load_scene_emoji()
         self._last_scene_phrases = scene_phrases
-        localizations = self.generate_localizations(title, timestamp_body, scene_phrases)
+        localizations = self.generate_localizations(
+            title, timestamp_body, scene_phrases, scene_emoji=scene_emoji
+        )
 
         return {
             "title": title,
