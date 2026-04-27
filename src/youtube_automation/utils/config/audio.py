@@ -10,3 +10,4 @@ class Audio:
     """`audio` セクション（optional、bobble のみ）."""
 
     target_duration_min: float | None = None
+    target_duration_max: float | None = None

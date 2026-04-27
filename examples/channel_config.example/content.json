@@ -5,6 +5,7 @@
     "context": "RPG"
   },
   "tags": {
+    "min_count": 30,
     "base": ["chiptune music", "8-bit music", "RPG music", "game music"],
     "themes": {
       "adventure": ["adventure music", "journey music"],

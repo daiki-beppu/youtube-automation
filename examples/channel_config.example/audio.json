@@ -1,5 +1,6 @@
 {
   "audio": {
-    "target_duration_min": 60
+    "target_duration_min": 60,
+    "target_duration_max": 75
   }
 }

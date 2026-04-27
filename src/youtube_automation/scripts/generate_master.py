@@ -22,6 +22,7 @@ from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -58,7 +59,7 @@ def _sum_track_duration(files: list[Path]) -> float:
     """個別トラックの尺を合算する。probe に失敗したファイルがあれば ValidationError。"""
     total = 0.0
     for f in files:
-        dur = _probe_duration(f)
+        dur = probe_duration(f)
         if dur is None:
             raise ValidationError(f"トラック尺の probe に失敗: {f}")
         total += dur
@@ -85,28 +86,6 @@ def _resolve_loop_count(
         loops = math.ceil((target_sec - crossfade) / span)
         return max(1, loops)
     return 1
-
-
-def _probe_duration(path: Path) -> float | None:
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "csv=p=0",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return float(result.stdout.strip())
-    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
-        return None
 
 
 def _format_duration(seconds: float) -> str:
@@ -237,7 +216,7 @@ def generate_master(
         sys.stderr.flush()
 
         size = _format_size(output.stat().st_size)
-        dur = _probe_duration(output)
+        dur = probe_duration(output)
         dur_fmt = _format_duration(dur) if dur is not None else "?"
 
         print()

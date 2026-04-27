@@ -52,7 +52,7 @@ class TestSumTrackDuration:
     def test_sums_successful_probes(self):
         files = [Path("/fake/a.mp3"), Path("/fake/b.mp3"), Path("/fake/c.mp3")]
         with patch(
-            "youtube_automation.scripts.generate_master._probe_duration",
+            "youtube_automation.scripts.generate_master.probe_duration",
             side_effect=[100.0, 200.5, 50.25],
         ):
             assert _sum_track_duration(files) == pytest.approx(350.75)
@@ -60,7 +60,7 @@ class TestSumTrackDuration:
     def test_raises_on_probe_failure(self):
         files = [Path("/fake/a.mp3"), Path("/fake/b.mp3")]
         with patch(
-            "youtube_automation.scripts.generate_master._probe_duration",
+            "youtube_automation.scripts.generate_master.probe_duration",
             side_effect=[100.0, None],
         ):
             with pytest.raises(ValidationError, match="probe に失敗"):
@@ -154,7 +154,7 @@ class TestGenerateMasterLoops:
         monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
 
         # 各ファイル 2300s → 1 ループ 4600s、target 150 min = 9000s → 2 ループ
-        monkeypatch.setattr(generate_master, "_probe_duration", lambda p: 2300.0)
+        monkeypatch.setattr(generate_master, "probe_duration", lambda p: 2300.0)
 
         captured = {}
 
