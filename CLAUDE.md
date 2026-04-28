@@ -129,3 +129,16 @@ channel-repo/                  # チャンネル固有リポジトリ
 - API キーは環境変数経由（`.env` または 1Password CLI）
 - OAuth スコープは必要最小限に制限
 - シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`。参照は `utils/secrets.py` の `_SECRET_REFS` で定義
+
+## 開発ワークフロー
+
+このリポジトリの開発は **takt + GitHub issue** に乗せる。手作業でブランチを切らず、
+`takt-issue` スキル経由で issue → worktree → PR を統一手順化する。手順詳細は
+`~/01-dev/dotfiles/config/.claude/skills/takt-issue/SKILL.md`。
+
+- **issue 起票**: `gh issue create` または `/issue` スキル
+- **takt 起動**: `takt add '#<N>'` → `takt run`（base branch は **main** 固定、PR は通常 PR）
+- **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`。詳細は `commit-convention` スキル参照
+- **takt 設定**: リポジトリ固有 `.takt/config.yaml`（`draft_pr: false`）、
+  グローバル `~/.takt/config.yaml`（`provider: claude`, `language: ja`）。
+  workflow は組み込み **default**（plan → review → ... → reviewers の 9 step）
