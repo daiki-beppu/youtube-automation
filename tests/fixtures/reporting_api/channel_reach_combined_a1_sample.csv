@@ -1,0 +1,6 @@
+date,channel_id,video_id,live_or_on_demand,subscribed_status,country_code,traffic_source_type,video_thumbnail_impressions,video_thumbnail_impressions_ctr
+2026-04-20,UCabc,vid001,ON_DEMAND,SUBSCRIBED,JP,3,1000,0.05
+2026-04-20,UCabc,vid001,ON_DEMAND,UNSUBSCRIBED,JP,3,1500,0.06
+2026-04-20,UCabc,vid001,ON_DEMAND,SUBSCRIBED,US,5,500,0.10
+2026-04-21,UCabc,vid001,ON_DEMAND,UNSUBSCRIBED,JP,3,2000,0.07
+2026-04-21,UCabc,vid002,ON_DEMAND,UNSUBSCRIBED,JP,5,800,0.04
