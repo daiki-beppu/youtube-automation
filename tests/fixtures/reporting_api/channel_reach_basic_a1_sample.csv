@@ -1,0 +1,6 @@
+date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr
+2026-04-20,UCabc,vid001,2000,0.05
+2026-04-20,UCabc,vid002,5000,0.08
+2026-04-21,UCabc,vid001,2200,0.06
+2026-04-21,UCabc,vid002,5500,0.10
+2026-04-22,UCabc,vid003,1500,0.04

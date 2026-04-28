@@ -5,6 +5,13 @@ YouTube Analytics API では `videoThumbnailImpressions` /
 全パターンで 400 拒否されるため、Reporting API v1 (非同期 CSV bulk download) で
 取得する基盤を提供する。
 
+レポートタイプは **Reach 系**（`channel_reach_basic_a1` /
+`channel_reach_combined_a1`）を使用する。これらの metrics に
+`video_thumbnail_impressions` / `video_thumbnail_impressions_ctr` が含まれる
+（公式: https://developers.google.com/youtube/reporting/v1/reports/channel_reports#reach-reports）。
+`channel_basic_*` には thumbnail impressions / CTR は含まれていない（views や
+card_impressions / annotation_impressions のみ）ため使用しない。
+
 仕様上の制約:
 - ジョブ作成後 **最大 48 時間**以内に最初のレポートが取得可能になる
 - 初回取得時はジョブ作成日からさかのぼって **過去 30 日分**が backfill される
@@ -45,18 +52,19 @@ logger = logging.getLogger(__name__)
 # CSV 列名候補（reportType の version で揺れる可能性に備え複数を許容）
 _IMPRESSIONS_COLUMNS = ("video_thumbnail_impressions",)
 _CTR_COLUMNS = (
-    "video_thumbnail_impressions_click_through_rate",
-    "video_thumbnail_impressions_ctr",  # 旧版互換
+    "video_thumbnail_impressions_ctr",  # Reach レポート公式カラム名
+    "video_thumbnail_impressions_click_through_rate",  # 将来の version suffix 揺れ向け
 )
 _VIDEO_ID_COLUMNS = ("video_id",)
 _DATE_COLUMNS = ("date", "day")
 
-# reportType ID 候補（version suffix 順、a3 > a2 > a1 を優先）
-# `videoThumbnailImpressions` を含む可能性が高いチャンネルレベル基本レポートを優先する。
+# reportType ID 候補。`video_thumbnail_impressions` / `video_thumbnail_impressions_ctr`
+# を metrics として持つのは Reach 系のみ（channel_basic_* は views と card/annotation
+# 系の impressions しか含まない）。
+# basic レポートより詳細な dimensions（traffic_source 等）を持つ combined を後段に置く。
 _REPORT_TYPE_PRIORITIES = (
-    "channel_basic_a3",
-    "channel_basic_a2",
-    "channel_basic_a1",
+    "channel_reach_basic_a1",
+    "channel_reach_combined_a1",
 )
 
 
@@ -81,7 +89,7 @@ class ReportingAPIClient:
     # reportType 選定
     # ------------------------------------------------------------------
     def select_report_type(self) -> str:
-        """`videoThumbnailImpressions` を含むレポートタイプの ID を返す。
+        """`video_thumbnail_impressions` を含む Reach レポートの ID を返す。
 
         `reportTypes.list()` で利用可能なレポートタイプ ID を列挙し、
         `_REPORT_TYPE_PRIORITIES` のうち最初に見つかったものを返す。
@@ -102,7 +110,7 @@ class ReportingAPIClient:
                 return candidate
 
         raise ConfigError(
-            "Reporting API: videoThumbnailImpressions を含む reportType が見つかりません。"
+            "Reporting API: video_thumbnail_impressions を含む Reach reportType が見つかりません。"
             f" 利用可能: {sorted(available)}"
         )
 

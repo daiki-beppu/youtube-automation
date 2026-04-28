@@ -14,7 +14,7 @@ import pytest
 from youtube_automation.utils.exceptions import ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.reporting_api import ReportingAPIClient
 
-_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "reporting_api" / "channel_basic_a2_sample.csv"
+_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "reporting_api" / "channel_reach_basic_a1_sample.csv"
 
 
 def _make_service(report_types: list[dict] | None = None, jobs: list[dict] | None = None):
@@ -28,34 +28,35 @@ def _make_service(report_types: list[dict] | None = None, jobs: list[dict] | Non
 # ---------------------------------------------------------------------------
 # select_report_type
 # ---------------------------------------------------------------------------
-def test_select_report_type_prefers_a3_over_a2():
+def test_select_report_type_prefers_reach_basic_over_combined():
     service = _make_service(
         report_types=[
-            {"id": "channel_basic_a2", "name": "Channel basic"},
-            {"id": "channel_basic_a3", "name": "Channel basic v3"},
-            {"id": "channel_demographics_a1", "name": "Demographics"},
+            {"id": "channel_reach_combined_a1", "name": "Reach combined"},
+            {"id": "channel_reach_basic_a1", "name": "Reach basic"},
+            {"id": "channel_basic_a3", "name": "User activity"},
         ]
     )
     client = ReportingAPIClient(service)
-    assert client.select_report_type() == "channel_basic_a3"
+    assert client.select_report_type() == "channel_reach_basic_a1"
 
 
-def test_select_report_type_falls_back_to_a2():
+def test_select_report_type_falls_back_to_reach_combined():
     service = _make_service(
         report_types=[
-            {"id": "channel_basic_a2", "name": "Channel basic"},
-            {"id": "channel_demographics_a1", "name": "Demographics"},
+            {"id": "channel_reach_combined_a1", "name": "Reach combined"},
+            {"id": "channel_basic_a3", "name": "User activity"},
         ]
     )
     client = ReportingAPIClient(service)
-    assert client.select_report_type() == "channel_basic_a2"
+    assert client.select_report_type() == "channel_reach_combined_a1"
 
 
 def test_select_report_type_raises_when_no_match():
     service = _make_service(
         report_types=[
+            {"id": "channel_basic_a3", "name": "User activity"},
             {"id": "channel_demographics_a1", "name": "Demographics"},
-            {"id": "channel_traffic_source_a2", "name": "Traffic"},
+            {"id": "channel_traffic_source_a3", "name": "Traffic"},
         ]
     )
     client = ReportingAPIClient(service)
@@ -69,13 +70,13 @@ def test_select_report_type_raises_when_no_match():
 def test_ensure_job_reuses_existing():
     service = _make_service(
         jobs=[
-            {"id": "job-existing", "reportTypeId": "channel_basic_a2", "name": "yt-automation"},
+            {"id": "job-existing", "reportTypeId": "channel_reach_basic_a1", "name": "yt-automation"},
             {"id": "job-other", "reportTypeId": "channel_demographics_a1", "name": "other"},
         ]
     )
     client = ReportingAPIClient(service)
 
-    job_id = client.ensure_job("channel_basic_a2")
+    job_id = client.ensure_job("channel_reach_basic_a1")
 
     assert job_id == "job-existing"
     service.jobs.return_value.create.assert_not_called()
@@ -86,11 +87,11 @@ def test_ensure_job_creates_when_missing():
     service.jobs.return_value.create.return_value.execute.return_value = {"id": "job-new"}
     client = ReportingAPIClient(service)
 
-    job_id = client.ensure_job("channel_basic_a2")
+    job_id = client.ensure_job("channel_reach_basic_a1")
 
     assert job_id == "job-new"
     service.jobs.return_value.create.assert_called_once_with(
-        body={"reportTypeId": "channel_basic_a2", "name": "yt-automation"}
+        body={"reportTypeId": "channel_reach_basic_a1", "name": "yt-automation"}
     )
 
 
@@ -176,8 +177,8 @@ def test_collect_impressions_summary_aggregates(monkeypatch):
     csv_text = _FIXTURE.read_text(encoding="utf-8")
 
     service = _make_service(
-        report_types=[{"id": "channel_basic_a2", "name": "Channel basic"}],
-        jobs=[{"id": "job-1", "reportTypeId": "channel_basic_a2", "name": "yt-automation"}],
+        report_types=[{"id": "channel_reach_basic_a1", "name": "Reach basic"}],
+        jobs=[{"id": "job-1", "reportTypeId": "channel_reach_basic_a1", "name": "yt-automation"}],
     )
     service.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {
         "reports": [{"id": "r1", "downloadUrl": "https://example.com/r1.csv"}]
@@ -194,7 +195,7 @@ def test_collect_impressions_summary_aggregates(monkeypatch):
     client = ReportingAPIClient(service, credentials=MagicMock())
     summary = client.collect_impressions_summary(days=7)
 
-    assert summary["selected_report_type"] == "channel_basic_a2"
+    assert summary["selected_report_type"] == "channel_reach_basic_a1"
     assert summary["report_count"] == 1
     assert summary["aggregated_impressions"] == 2000 + 5000 + 2200 + 5500 + 1500
     assert summary["aggregated_ctr_percentage"] == pytest.approx((5 + 8 + 6 + 10 + 4) / 5)
@@ -204,8 +205,8 @@ def test_collect_impressions_summary_aggregates(monkeypatch):
 
 def test_collect_impressions_summary_returns_empty_when_no_reports():
     service = _make_service(
-        report_types=[{"id": "channel_basic_a2", "name": "Channel basic"}],
-        jobs=[{"id": "job-1", "reportTypeId": "channel_basic_a2", "name": "yt-automation"}],
+        report_types=[{"id": "channel_reach_basic_a1", "name": "Reach basic"}],
+        jobs=[{"id": "job-1", "reportTypeId": "channel_reach_basic_a1", "name": "yt-automation"}],
     )
     service.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {"reports": []}
 

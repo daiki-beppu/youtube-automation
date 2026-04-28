@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+#### Reporting API: Reach レポートに切り替えて thumbnail impressions / CTR を実取得する
+
+`ReportingAPIClient.select_report_type()` が選定する `_REPORT_TYPE_PRIORITIES` を
+`channel_basic_*` から **Reach 系**（`channel_reach_basic_a1` /
+`channel_reach_combined_a1`）に変更した。
+
+問題: `channel_basic_a3` には views / engaged_views / card_impressions /
+annotation_impressions しか含まれず、`video_thumbnail_impressions` /
+`video_thumbnail_impressions_ctr` を **CSV カラムとして提供しない**
+（[公式ドキュメント](https://developers.google.com/youtube/reporting/v1/reports/channel_reports)）。
+そのため `--include-reporting` を実行しても全レポートで「impressions / ctr 列が
+見つかりません」のパース警告が発生し、`per_video` / `per_day` が常に空になっていた。
+
+修正:
+
+- `_REPORT_TYPE_PRIORITIES`: `channel_reach_basic_a1` を 1 番目、
+  `channel_reach_combined_a1` を 2 番目に変更
+- `_CTR_COLUMNS`: 公式名 `video_thumbnail_impressions_ctr` を 1 番目に
+  （旧版 `video_thumbnail_impressions_click_through_rate` は将来の version suffix
+  揺れに備え互換のため残す）
+- モジュール docstring・`select_report_type` docstring・エラーメッセージを
+  Reach レポート前提の表現に更新
+- ユニットテスト・フィクスチャ CSV を Reach レポートのスキーマに合わせて更新
+  (`tests/fixtures/reporting_api/channel_basic_a2_sample.csv` →
+  `channel_reach_basic_a1_sample.csv`)
+
+**移行手順** (各チャンネルリポジトリ):
+
+旧バージョンで作成された `channel_basic_a3` ジョブは無害な状態で残るが、新版起動時に
+`channel_reach_basic_a1` の新規ジョブが自動作成される。最初のレポート生成までは
+**最大 48 時間**（backfill で過去 30 日分）、以降は D+2 ラグで日次レポートが届く。
+
+```bash
+uv run yt-analytics --reporting-create-job   # 新ジョブ作成（冪等）
+# 24-48h 待機
+uv run yt-analytics --include-reporting --days 28
+```
+
+- `src/youtube_automation/utils/reporting_api.py`: `_REPORT_TYPE_PRIORITIES` /
+  `_CTR_COLUMNS` / docstring / エラーメッセージ更新
+- `tests/test_reporting_api.py`: 期待 reportType を `channel_reach_basic_a1` 系に変更
+- `tests/fixtures/reporting_api/channel_reach_basic_a1_sample.csv`: Reach レポート
+  スキーマ（dimensions: date / channel_id / video_id, metrics:
+  video_thumbnail_impressions / video_thumbnail_impressions_ctr）に合わせて更新
+
 ## [5.0.0] - 2026-04-26
 
 ### Changed (BREAKING)
