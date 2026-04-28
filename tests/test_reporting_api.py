@@ -14,7 +14,9 @@ import pytest
 from youtube_automation.utils.exceptions import ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.reporting_api import ReportingAPIClient
 
-_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "reporting_api" / "channel_reach_basic_a1_sample.csv"
+_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "reporting_api"
+_FIXTURE = _FIXTURE_DIR / "channel_reach_basic_a1_sample.csv"
+_FIXTURE_COMBINED = _FIXTURE_DIR / "channel_reach_combined_a1_sample.csv"
 
 
 def _make_service(report_types: list[dict] | None = None, jobs: list[dict] | None = None):
@@ -173,12 +175,46 @@ def test_download_report_csv_raises_on_http_error(monkeypatch):
 # ---------------------------------------------------------------------------
 # collect_impressions_summary
 # ---------------------------------------------------------------------------
-def test_collect_impressions_summary_aggregates(monkeypatch):
-    csv_text = _FIXTURE.read_text(encoding="utf-8")
+@pytest.mark.parametrize(
+    "fixture_path, report_type, expected_total_imp, expected_total_weighted, expected_video_ids, expected_dates",
+    [
+        # Reach basic: 1 (video, date) ごとに 1 行
+        # weighted CTR: (2000×5 + 5000×8 + 2200×6 + 5500×10 + 1500×4) / 16200 = 124200/16200
+        (
+            _FIXTURE,
+            "channel_reach_basic_a1",
+            16200,
+            124200.0,
+            {"vid001", "vid002", "vid003"},
+            {"2026-04-20", "2026-04-21", "2026-04-22"},
+        ),
+        # Reach combined: 1 (video, date) に traffic_source / country / subscribed_status の組合せで複数行
+        # weighted CTR: (1000×5 + 1500×6 + 500×10 + 2000×7 + 800×4) / 5800 = 36200/5800
+        (
+            _FIXTURE_COMBINED,
+            "channel_reach_combined_a1",
+            5800,
+            36200.0,
+            {"vid001", "vid002"},
+            {"2026-04-20", "2026-04-21"},
+        ),
+    ],
+    ids=["reach_basic", "reach_combined"],
+)
+def test_collect_impressions_summary_aggregates(
+    monkeypatch,
+    fixture_path,
+    report_type,
+    expected_total_imp,
+    expected_total_weighted,
+    expected_video_ids,
+    expected_dates,
+):
+    csv_text = fixture_path.read_text(encoding="utf-8")
 
     service = _make_service(
-        report_types=[{"id": "channel_reach_basic_a1", "name": "Reach basic"}],
-        jobs=[{"id": "job-1", "reportTypeId": "channel_reach_basic_a1", "name": "yt-automation"}],
+        report_types=[{"id": report_type, "name": report_type}],
+        jobs=[{"id": "job-1", "reportTypeId": report_type, "name": "yt-automation"}],
     )
     service.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {
         "reports": [{"id": "r1", "downloadUrl": "https://example.com/r1.csv"}]
@@ -195,12 +231,53 @@ def test_collect_impressions_summary_aggregates(monkeypatch):
     client = ReportingAPIClient(service, credentials=MagicMock())
     summary = client.collect_impressions_summary(days=7)
 
-    assert summary["selected_report_type"] == "channel_reach_basic_a1"
+    assert summary["selected_report_type"] == report_type
     assert summary["report_count"] == 1
-    assert summary["aggregated_impressions"] == 2000 + 5000 + 2200 + 5500 + 1500
-    assert summary["aggregated_ctr_percentage"] == pytest.approx((5 + 8 + 6 + 10 + 4) / 5)
-    assert {row["video_id"] for row in summary["per_video"]} == {"vid001", "vid002", "vid003"}
-    assert {row["date"] for row in summary["per_day"]} == {"2026-04-20", "2026-04-21", "2026-04-22"}
+    assert summary["aggregated_impressions"] == expected_total_imp
+    assert summary["aggregated_ctr_percentage"] == pytest.approx(expected_total_weighted / expected_total_imp)
+    assert {row["video_id"] for row in summary["per_video"]} == expected_video_ids
+    assert {row["date"] for row in summary["per_day"]} == expected_dates
+
+
+def test_collect_impressions_summary_combined_uses_weighted_ctr(monkeypatch):
+    """Reach combined で 1 video × 1 date に複数 segment がある場合、CTR が impression
+    加重平均になっていることを per_video / per_day の数値で確認する。
+
+    単純平均だと segment 数で割ってしまい、impression が大きい segment が過小評価される。
+    """
+    csv_text = _FIXTURE_COMBINED.read_text(encoding="utf-8")
+
+    service = _make_service(
+        report_types=[{"id": "channel_reach_combined_a1", "name": "Reach combined"}],
+        jobs=[{"id": "job-1", "reportTypeId": "channel_reach_combined_a1", "name": "yt-automation"}],
+    )
+    service.jobs.return_value.reports.return_value.list.return_value.execute.return_value = {
+        "reports": [{"id": "r1", "downloadUrl": "https://example.com/r1.csv"}]
+    }
+
+    fake_response = MagicMock(status_code=200, content=csv_text.encode("utf-8"))
+    fake_session = MagicMock()
+    fake_session.get.return_value = fake_response
+    monkeypatch.setattr(
+        "youtube_automation.utils.reporting_api.AuthorizedSession",
+        lambda *_a, **_k: fake_session,
+    )
+
+    client = ReportingAPIClient(service, credentials=MagicMock())
+    summary = client.collect_impressions_summary(days=7)
+
+    # vid001: 4 segments を加重平均
+    # impressions = 1000+1500+500+2000 = 5000
+    # weighted CTR = (1000×5 + 1500×6 + 500×10 + 2000×7) / 5000 = 33000/5000 = 6.6%
+    vid001 = next(row for row in summary["per_video"] if row["video_id"] == "vid001")
+    assert vid001["impressions"] == 5000
+    assert vid001["ctr_percentage"] == pytest.approx(6.6)
+
+    # 2026-04-20: vid001 の 3 segments のみ
+    # impressions = 3000, weighted CTR = (5000+9000+5000)/3000 = 19000/3000 ≈ 6.333%
+    day0 = next(row for row in summary["per_day"] if row["date"] == "2026-04-20")
+    assert day0["impressions"] == 3000
+    assert day0["ctr_percentage"] == pytest.approx(19000 / 3000)
 
 
 def test_collect_impressions_summary_returns_empty_when_no_reports():

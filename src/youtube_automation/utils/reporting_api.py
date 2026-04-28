@@ -429,18 +429,21 @@ def _aggregate_rows(
     window_days: int,
     report_count: int,
 ) -> dict[str, Any]:
-    """行データを per_video / per_day / aggregated に集計する。"""
+    """行データを per_video / per_day / aggregated に集計する。
+
+    CTR は **impression 加重平均** で計算する (`weighted_ctr = Σ(imp × ctr) / Σ(imp)`)。
+    Reach combined レポートでは 1 (video, date) に traffic_source / country / device 等
+    複数 dimension の行が含まれるため、単純平均だと impression が大きい segment が
+    過小評価され統計的に正しくない。Reach basic 単一行ケースでも結果は変わらない。
+    """
     per_video_imp: dict[str, int] = defaultdict(int)
-    per_video_ctr_sum: dict[str, float] = defaultdict(float)
-    per_video_ctr_n: dict[str, int] = defaultdict(int)
+    per_video_weighted: dict[str, float] = defaultdict(float)
 
     per_day_imp: dict[str, int] = defaultdict(int)
-    per_day_ctr_sum: dict[str, float] = defaultdict(float)
-    per_day_ctr_n: dict[str, int] = defaultdict(int)
+    per_day_weighted: dict[str, float] = defaultdict(float)
 
     total_impressions = 0
-    total_ctr_sum = 0.0
-    total_ctr_n = 0
+    total_weighted = 0.0
 
     for row in rows:
         imp = row.get("impressions")
@@ -448,37 +451,40 @@ def _aggregate_rows(
         vid = row.get("video_id")
         day = row.get("date")
 
-        if imp is not None:
-            total_impressions += imp
-            if vid:
-                per_video_imp[vid] += imp
-            if day:
-                per_day_imp[day] += imp
-        if ctr is not None:
-            total_ctr_sum += ctr
-            total_ctr_n += 1
-            if vid:
-                per_video_ctr_sum[vid] += ctr
-                per_video_ctr_n[vid] += 1
-            if day:
-                per_day_ctr_sum[day] += ctr
-                per_day_ctr_n[day] += 1
+        if imp is None:
+            continue
+
+        total_impressions += imp
+        if vid:
+            per_video_imp[vid] += imp
+        if day:
+            per_day_imp[day] += imp
+
+        if ctr is None:
+            continue
+
+        weighted = imp * ctr
+        total_weighted += weighted
+        if vid:
+            per_video_weighted[vid] += weighted
+        if day:
+            per_day_weighted[day] += weighted
 
     per_video = [
         {
             "video_id": vid,
-            "impressions": per_video_imp[vid] if vid in per_video_imp else None,
-            "ctr_percentage": (per_video_ctr_sum[vid] / per_video_ctr_n[vid] if per_video_ctr_n.get(vid) else None),
+            "impressions": per_video_imp[vid],
+            "ctr_percentage": (per_video_weighted[vid] / per_video_imp[vid]) if per_video_imp[vid] > 0 else None,
         }
-        for vid in sorted(set(per_video_imp) | set(per_video_ctr_sum))
+        for vid in sorted(per_video_imp)
     ]
     per_day = [
         {
             "date": day,
-            "impressions": per_day_imp[day] if day in per_day_imp else None,
-            "ctr_percentage": (per_day_ctr_sum[day] / per_day_ctr_n[day] if per_day_ctr_n.get(day) else None),
+            "impressions": per_day_imp[day],
+            "ctr_percentage": (per_day_weighted[day] / per_day_imp[day]) if per_day_imp[day] > 0 else None,
         }
-        for day in sorted(set(per_day_imp) | set(per_day_ctr_sum))
+        for day in sorted(per_day_imp)
     ]
 
     return {
@@ -487,7 +493,7 @@ def _aggregate_rows(
         "window_days": window_days,
         "report_count": report_count,
         "aggregated_impressions": total_impressions if total_impressions else None,
-        "aggregated_ctr_percentage": (total_ctr_sum / total_ctr_n) if total_ctr_n else None,
+        "aggregated_ctr_percentage": (total_weighted / total_impressions) if total_impressions else None,
         "per_video": per_video,
         "per_day": per_day,
     }

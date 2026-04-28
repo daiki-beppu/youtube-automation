@@ -54,6 +54,27 @@ uv run yt-analytics --include-reporting --days 28
   スキーマ（dimensions: date / channel_id / video_id, metrics:
   video_thumbnail_impressions / video_thumbnail_impressions_ctr）に合わせて更新
 
+#### Reporting API: CTR 集計を impression 加重平均に変更
+
+`_aggregate_rows` の CTR 計算を **単純平均** から **impression 加重平均** に変更
+（`weighted_ctr = Σ(imp × ctr) / Σ(imp)`）。
+
+旧実装は segment / 日 / video の CTR を単純平均していたため、`channel_reach_combined_a1`
+にフォールバックして 1 (video, date) に traffic_source / country / device 等の複数
+dimension 行が含まれた場合、impression が大きい segment が過小評価され統計的に
+正しくない値になっていた（例: search 1000imp/CTR5% と suggest 500imp/CTR10% の真の
+CTR は 6.67% だが、旧実装は 7.5% を返していた）。
+
+`channel_reach_basic_a1` 単一行ケースでも `aggregated_ctr_percentage` の値が変わる
+（impression が大きい video の重みが正しく反映される）。
+
+- `src/youtube_automation/utils/reporting_api.py`: `_aggregate_rows` を加重平均化
+- `tests/fixtures/reporting_api/channel_reach_combined_a1_sample.csv`: 新規追加
+  （1 video × 1 date に複数 segment を持つサンプル）
+- `tests/test_reporting_api.py`: `test_collect_impressions_summary_aggregates` を
+  basic / combined の parametrize 化、加重平均の期待値で書き直し +
+  `test_collect_impressions_summary_combined_uses_weighted_ctr` 追加
+
 ## [5.0.0] - 2026-04-26
 
 ### Changed (BREAKING)
