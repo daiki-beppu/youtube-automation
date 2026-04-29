@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-04-29
+
 ### Added
 
 #### `yt-generate-master`: `--shuffle` / `--shuffle-seed` で MP3 連結順をランダム化する
@@ -86,6 +88,30 @@ skill-config (`.claude/skills/masterup/config.default.yaml` または
 - `tests/test_generate_master.py`: `TestCliSkillConfigTargetDuration` 5 ケース
   （CLI 未指定時の採用 / CLI 上書き優先 / `--loop` 指定時の skill-config 無視 /
   `< 1` バリデーション / キー欠落時の既存挙動保持）
+
+### Fixed
+
+#### 画像生成コストの skill ドキュメント表記を `cost_tracker.PRICING` ベースに揃える
+
+`thumbnail` / `ideate` skill のドキュメント上の `$0.04` ハードコーディングを削除し、
+`cost_tracker.PRICING` を single source of truth として参照する形に揃えた (#102)。
+従来は `gemini-3.1-flash-image-preview` 等の現行モデル価格 (1K で $0.067〜) と乖離した
+古い見積りが表示されていた。
+
+- `.claude/skills/thumbnail/SKILL.md`: ttp_swap モードのコスト表記を
+  `cost_tracker.PRICING` 参照に変更。例示値は `gemini-3.1-flash-image-preview`
+  の 2K で `$0.101 〜 $0.303`（最大 3 回試行込み = 初回 + 最大 2 回リトライ）に更新
+- `.claude/skills/ideate/SKILL.md`: Phase 4-2 の静的コスト見積りを
+  `cost_tracker.estimate_cost` + `load_skill_config` + `image_generator.DEFAULT_MODEL`
+  / `DEFAULT_IMAGE_SIZE` を使う動的算出ワンライナーに置換。`cost_per_image_usd`
+  カスタム単価優先 (`if per is None:` 判定で `generate_image.py:90-94` と整合)
+- `.claude/skills/thumbnail/config.default.yaml`: `cost_per_image_usd: 0.04` の
+  数値例を削除し、「PRICING の値を上書きしたい場合のみ指定（用途例: エンタープライズ
+  割引価格や予算上限値の固定）」に置換
+- `tests/test_skill_cost_documentation.py`: 14 テスト追加。3 対象ファイルへの
+  旧ハードコード不在検証 + `cost_tracker.PRICING` / `estimate_cost` /
+  `load_skill_config` 参照の存在検証 + `.claude/skills/**/*.{md,yaml,yml}`
+  横断走査リグレッションガード
 
 ## [5.1.1] - 2026-04-28
 
