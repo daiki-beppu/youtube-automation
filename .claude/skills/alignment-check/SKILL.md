@@ -78,6 +78,7 @@ AskUserQuestion で新タイトルフォーマットを確認。
 - `collections/live/*/10-assets/thumbnail.jpg` — サムネイル
 - `collections/live/*/20-documentation/` — 音楽プロンプト
 - `collections/live/*/workflow-state.json` — タイトル・テーマ
+- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `thumbnail_alignment` 出力（サムネ vs 本編の整合性監査の根拠）
 
 ## Next Step
 

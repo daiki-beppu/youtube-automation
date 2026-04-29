@@ -72,3 +72,4 @@ open data/thumbnail_compare/
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ（サムネURL）
 - `collections/live/*/10-assets/thumbnail.jpg` — 自チャンネルサムネイル
 - `docs/benchmarks/common-patterns.md` — サムネイルチェックリスト v4
+- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `signature_elements` / `hook_structure` 出力（競合のサムネ実装パターン抽出を補強）

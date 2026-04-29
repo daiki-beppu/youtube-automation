@@ -105,3 +105,7 @@ uv run yt-benchmark-collect -v                 # 詳細ログ
 - YouTube API: 1チャンネルあたり約 4 ユニット（channels 1 + playlistItems 1 + videos 約 2）
 - Gemini サムネイル分析: 5秒間隔でレート制限回避（`--no-thumbnails` でスキップ可）
 - `common-patterns.md` の手書きパターン分析は「運用ベンチマーク」セクションより上に維持される
+
+## 関連ファイル
+
+- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の動画本体スコアリング出力（競合スコアリングの追加入力）

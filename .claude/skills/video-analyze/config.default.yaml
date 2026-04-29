@@ -1,0 +1,46 @@
+# video-analyze skill default config
+#
+# Gemini で YouTube 動画を直接解析するスキル (Issue #103) の動作パラメータ。
+# チャンネル側では config/skills/video-analyze.yaml に上書き値を置く。
+
+# Gemini モデル名 (動画入力対応モデルを指定)
+model: gemini-2.5-flash
+
+# API レート制限対策の動画間ウェイト (秒)
+delay_sec: 10
+
+# Gemini に渡すプロンプト。チャンネルのジャンル/世界観に合わせて
+# config/skills/video-analyze.yaml で上書きを推奨。
+#
+# 出力 JSON はトップレベルにジャンル横断のドメインキーを置き、CLI 側で
+# video_id / slug / url / title / analyzed_at / model を後付けする。
+prompt: |
+  Analyze this YouTube video as a music channel content audit.
+  Return ONLY valid JSON (no markdown, no code fences) with this exact shape:
+  {
+    "hook_structure": {
+      "intro_sec": <number>,
+      "first_text_at": <number>,
+      "cuts_in_first_30s": <number>,
+      "signature_elements": ["list", "of", "visual", "elements", "shown", "in", "first 30s"]
+    },
+    "bgm_arc": {
+      "intro": "timestamp range (e.g. 0:00-0:15)",
+      "peak": "timestamp (e.g. 1:30)",
+      "outro": "timestamp range (e.g. 9:30-end)",
+      "energy_curve": "brief description of dynamics"
+    },
+    "scene_timeline": [
+      {"start": "0:00", "summary": "one-line description of what changes"}
+    ],
+    "thumbnail_alignment": {
+      "signature_present": <bool>,
+      "color_palette_match": <bool>,
+      "notes": "what was promised by thumbnail vs delivered in video"
+    },
+    "editing_metrics": {
+      "avg_cut_sec": <number>,
+      "text_per_min": <number>,
+      "transition_style": "brief description"
+    }
+  }

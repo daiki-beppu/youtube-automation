@@ -96,3 +96,7 @@ $ARGUMENTS
 
 分析完了後:
 → `/ideate` でデータに基づくコレクション企画を生成
+
+## 関連ファイル
+
+- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `scene_timeline` 出力（retention drop と動画展開のクロス参照に使う）

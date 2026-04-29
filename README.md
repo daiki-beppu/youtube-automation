@@ -215,11 +215,14 @@ uv run ruff check .
 | `yt-playlist-manager` / `yt-playlist-status` | プレイリスト管理 |
 | `yt-benchmark-collect` / `yt-benchmark-comments` | 競合チャンネル分析 |
 | `yt-thumbnail-compare` | サムネイル比較検証 |
+| `yt-video-analyze` | Gemini で YouTube 動画を直接解析（フック構造・BGM 展開・シーン・サムネ整合性・編集指標） |
 | `yt-channel-status` | チャンネル最新状況 |
 | `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
 | `yt-video-uploader` | 動画アップロード補助 |
 
 完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
+
+> **`yt-video-analyze` の動画公開範囲制約**: Gemini API は YouTube URL を直接受け取って動画本体を解析しますが、対象動画は **Public または Unlisted** である必要があります。Private 動画は API 側で取得できず解析できません。
 
 ## License
 
