@@ -230,3 +230,118 @@ class TestCli:
         rc = generate_master.main()
         assert rc == 1
         assert "--target-duration は 1 以上" in capsys.readouterr().err
+
+
+class TestCliSkillConfigTargetDuration:
+    """skill-config の audio.target_duration_min を CLI 未指定時のデフォルトとして解決する。"""
+
+    def _patch_main_dependencies(
+        self,
+        monkeypatch,
+        skill_config: dict,
+    ) -> dict:
+        """`load_skill_config` と `generate_master` を差し替えて kwargs を捕捉する。"""
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_skill_config",
+            lambda _: skill_config,
+        )
+
+        captured: dict = {}
+
+        def fake_generate_master(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return Path("/tmp/fake-master.mp3")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.generate_master",
+            fake_generate_master,
+        )
+        return captured
+
+    def test_skill_config_target_duration_used_when_cli_unspecified(self, monkeypatch, tmp_path):
+        # Given: skill-config に target_duration_min=120、CLI フラグ未指定
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 120}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: target_duration_min=120, loops=None で generate_master が呼ばれる
+        assert rc == 0
+        assert captured["kwargs"]["loops"] is None
+        assert captured["kwargs"]["target_duration_min"] == 120
+
+    def test_cli_target_duration_overrides_skill_config(self, monkeypatch, tmp_path):
+        # Given: skill-config と CLI 両方に値があり CLI が優先されるべき
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 120}},
+        )
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--target-duration", "90"],
+        )
+
+        # When
+        rc = generate_master.main()
+
+        # Then: CLI 値 90 が採用される (skill-config の 120 は無視)
+        assert rc == 0
+        assert captured["kwargs"]["loops"] is None
+        assert captured["kwargs"]["target_duration_min"] == 90
+
+    def test_cli_loop_ignores_skill_config_target_duration(self, monkeypatch, tmp_path):
+        # Given: --loop 指定時は skill-config の target_duration_min を黙って無視
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 120}},
+        )
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--loop", "3"],
+        )
+
+        # When
+        rc = generate_master.main()
+
+        # Then: loops=3, target_duration_min=None (skill-config 値が漏れない)
+        assert rc == 0
+        assert captured["kwargs"]["loops"] == 3
+        assert captured["kwargs"]["target_duration_min"] is None
+
+    def test_skill_config_target_duration_below_one_raises_validation_error(self, monkeypatch, capsys, tmp_path):
+        # Given: skill-config 値が境界外 (< 1) — CLI と同じ境界条件で弾く
+        self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 0}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: ValidationError で exit code 1、エラーメッセージにソースが明示される
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "skill-config" in err
+        assert "target_duration_min" in err
+
+    def test_no_skill_config_target_duration_preserves_default_behavior(self, monkeypatch, tmp_path):
+        # Given: skill-config に target_duration_min が無い (現行のデフォルト挙動)
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"crossfade_duration": 1.0, "bitrate": "192k"}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: 既存挙動どおり target_duration_min=None で渡る (= 1 ループ)
+        assert rc == 0
+        assert captured["kwargs"]["loops"] is None
+        assert captured["kwargs"]["target_duration_min"] is None

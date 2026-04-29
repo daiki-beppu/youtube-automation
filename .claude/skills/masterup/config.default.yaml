@@ -12,6 +12,11 @@ audio:
   # マスター音源のビットレート
   bitrate: "192k"
 
+  # CLI フラグ (`--loop` / `--target-duration`) が両方未指定のときに
+  # `yt-generate-master --target-duration MIN` 相当のデフォルト値として使われる。
+  # 同梱デフォルトでは未設定 (= 1 ループで終了)。チャンネル側で opt-in する。
+  # target_duration_min: 120
+
 # Suno CDN ダウンロード設定
 suno_download:
   cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"

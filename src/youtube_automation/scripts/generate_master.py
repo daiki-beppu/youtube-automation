@@ -27,6 +27,10 @@ from youtube_automation.utils.skill_config import load_skill_config
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+# skill-config (`masterup.audio.<KEY>`) のキー名。CLI フラグ未指定時に
+# `--target-duration` 相当のデフォルトとして参照される。
+_TARGET_DURATION_MIN_KEY = "target_duration_min"
+
 
 def resolve_collection_dir(arg: str | None) -> Path:
     if arg:
@@ -268,12 +272,26 @@ def main() -> int:
         audio = cfg.get("audio", {})
         crossfade = float(audio.get("crossfade_duration", 1.0))
         bitrate = str(audio.get("bitrate", "192k"))
+
+        # CLI フラグ (--loop / --target-duration) が両方未指定なら
+        # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
+        # --loop 指定時は loops 指定が最優先のため skill-config 値を黙って無視する。
+        target_duration: int | None = args.target_duration
+        if args.loop is None and args.target_duration is None:
+            skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
+            if skill_target is not None:
+                target_duration = int(skill_target)
+                if target_duration < 1:
+                    raise ValidationError(
+                        f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
+                    )
+
         generate_master(
             collection_dir,
             crossfade,
             bitrate,
             loops=args.loop,
-            target_duration_min=args.target_duration,
+            target_duration_min=target_duration,
             quiet=args.quiet,
         )
     except ValidationError as e:
