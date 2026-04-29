@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import random
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,14 @@ SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇",
 # skill-config (`masterup.audio.<KEY>`) のキー名。CLI フラグ未指定時に
 # `--target-duration` 相当のデフォルトとして参照される。
 _TARGET_DURATION_MIN_KEY = "target_duration_min"
+
+# skill-config (`masterup.audio.<KEY>`) のキー名。CLI `--shuffle` / `--shuffle-seed`
+# 未指定時のデフォルトとして参照される。
+_SHUFFLE_KEY = "shuffle"
+_SHUFFLE_SEED_KEY = "shuffle_seed"
+
+# 自動生成 seed の上限（ログ・再現用に 32-bit unsigned 範囲）。
+_AUTO_SEED_BOUND = 2**32
 
 
 def resolve_collection_dir(arg: str | None) -> Path:
@@ -127,6 +136,8 @@ def generate_master(
     *,
     loops: int | None = None,
     target_duration_min: int | None = None,
+    shuffle: bool = False,
+    shuffle_seed: int | None = None,
     quiet: bool = False,
 ) -> Path:
     paths = CollectionPaths(collection_dir)
@@ -142,6 +153,13 @@ def generate_master(
     n = len(files)
     if n == 0:
         raise ValidationError(f"MP3 ファイルが見つかりません: {music_dir}")
+
+    # ループ展開前にシャッフルする (要件 8: 同一シャッフル順を N 回繰り返す)。
+    # 再現性ログは quiet モードでも常に stdout に出す (要件 4)。
+    if shuffle:
+        effective_seed = shuffle_seed if shuffle_seed is not None else random.SystemRandom().randrange(_AUTO_SEED_BOUND)
+        random.Random(effective_seed).shuffle(files)
+        print(f"[Shuffle] seed={effective_seed}")
 
     single_loop_sec = _sum_track_duration(files) if target_duration_min is not None else 0.0
     effective_loops = _resolve_loop_count(loops, target_duration_min, single_loop_sec, crossfade)
@@ -259,6 +277,18 @@ def main() -> int:
         dest="target_duration",
         help="目標尺 (分) 以上になる最小のループ回数を自動算出",
     )
+    parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="入力 MP3 リストをシャッフルしてから連結",
+    )
+    parser.add_argument(
+        "--shuffle-seed",
+        type=int,
+        metavar="N",
+        dest="shuffle_seed",
+        help="シャッフルの再現性 seed (指定すると --shuffle を暗黙有効化)",
+    )
     args = parser.parse_args()
 
     try:
@@ -286,12 +316,29 @@ def main() -> int:
                         f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
                     )
 
+        # CLI > skill-config > デフォルト の優先順位で shuffle / shuffle_seed を解決。
+        # CLI で --shuffle または --shuffle-seed のいずれかが指定されていれば CLI 優先。
+        # skill-config 側は `audio.shuffle: true` が明示要求 (`shuffle_seed` 単独では有効化しない)。
+        cli_shuffle_specified = args.shuffle or args.shuffle_seed is not None
+        shuffle_enabled = cli_shuffle_specified or bool(audio.get(_SHUFFLE_KEY, False))
+
+        shuffle_seed: int | None = args.shuffle_seed
+        if shuffle_seed is None:
+            skill_seed = audio.get(_SHUFFLE_SEED_KEY)
+            if skill_seed is not None:
+                # bool は int サブクラスのため明示的に除外する。
+                if isinstance(skill_seed, bool) or not isinstance(skill_seed, int):
+                    raise ValidationError(f"skill-config masterup.audio.{_SHUFFLE_SEED_KEY} は整数で指定してください")
+                shuffle_seed = skill_seed
+
         generate_master(
             collection_dir,
             crossfade,
             bitrate,
             loops=args.loop,
             target_duration_min=target_duration,
+            shuffle=shuffle_enabled,
+            shuffle_seed=shuffle_seed,
             quiet=args.quiet,
         )
     except ValidationError as e:
