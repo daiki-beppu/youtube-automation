@@ -1,0 +1,3 @@
+# automation リポジトリの takt 設定
+# provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
+draft_pr: false
