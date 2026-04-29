@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### `yt-generate-master`: skill-config の `audio.target_duration_min` をデフォルト目標尺として読み取る
+
+`yt-generate-master` CLI で `--loop` / `--target-duration` のどちらも未指定の場合、
+skill-config (`.claude/skills/masterup/config.default.yaml` または
+チャンネル側の `config/skills/masterup.yaml`) の `audio.target_duration_min` を
+`--target-duration MIN` 相当のデフォルト値として参照するようにした (#98)。
+
+これによりチャンネル単位で「最低尺」をプロジェクト設定として宣言できるようになり、
+`/masterup` スキル側で CLI フラグを補完するローカルワークアラウンド
+(`yt-skills sync` で上書きされる脆弱な実装) を排除できる。
+
+優先順位:
+
+1. CLI `--loop N` 指定時はそれが最優先 (既存挙動)
+2. CLI `--target-duration MIN` 指定時はそれを使用 (既存挙動)
+3. 上記未指定時に `audio.target_duration_min` があればその値を採用
+4. それも未設定なら従来どおり 1 ループで終了
+
+- `src/youtube_automation/scripts/generate_master.py`: `main()` の引数解決部に
+  skill-config フォールバックを追加。値が `< 1` のときは `ValidationError` で
+  弾く（メッセージにソース `skill-config masterup.audio.target_duration_min`
+  を明示）。`--loop` 指定時は skill-config 値を黙って無視する
+- `.claude/skills/masterup/config.default.yaml`: `target_duration_min` の
+  コメント例を追記（同梱デフォルトでは未設定 = 既存挙動を維持し、
+  チャンネル側で opt-in する設計）
+- `.claude/skills/masterup/SKILL.md`: 設定表 / Quick Reference に新キーを追記
+- `tests/test_generate_master.py`: `TestCliSkillConfigTargetDuration` 5 ケース
+  （CLI 未指定時の採用 / CLI 上書き優先 / `--loop` 指定時の skill-config 無視 /
+  `< 1` バリデーション / キー欠落時の既存挙動保持）
+
 ## [5.1.1] - 2026-04-28
 
 ### Fixed
