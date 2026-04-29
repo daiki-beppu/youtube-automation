@@ -172,7 +172,7 @@ uv run yt-generate-image \
 - **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで完全継承される。変えたい部分だけ明示指示
 - **ブランド置換**: `Replace every occurrence of the word 'X' with 'Y'` で文字列差し替え可
 - **キャラサイズ**: 縮小傾向がある場合は `fills about 55% of the frame, bust-up portrait` を追記
-- **コスト**: 成功 1 枚あたり $0.04〜$0.08（リトライ込み）
+- **コスト**: 単価は `cost_tracker.PRICING` 参照（最大 3 回試行込み = 初回 + 最大 2 回リトライ）。例: `gemini-3.1-flash-image-preview` の 2K で 1 枚あたり $0.101 〜 $0.303
 
 ### Single-Step モード（`generation_mode: "single_step"`）
 

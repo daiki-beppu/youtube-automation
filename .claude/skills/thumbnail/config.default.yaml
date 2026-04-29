@@ -8,7 +8,8 @@ gemini_image:
   model: gemini-3.1-flash-image-preview
 
   # 1 枚あたりのコスト (USD) は cost_tracker.PRICING から解像度別に自動算出される。
-  # カスタム単価を使いたい場合のみ cost_per_image_usd を指定（例: cost_per_image_usd: 0.04）
+  # PRICING の値を上書きしたい場合のみ cost_per_image_usd を指定する
+  # （用途例: エンタープライズ割引価格や予算上限値の固定）
 
   # 生成モード:
   #   single_step   : テキスト付き参照画像から差分のみ指示し 1 ステップで完成
