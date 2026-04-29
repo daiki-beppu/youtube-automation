@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### `yt-generate-master`: `--shuffle` / `--shuffle-seed` で MP3 連結順をランダム化する
+
+`yt-generate-master` CLI に `--shuffle` フラグと `--shuffle-seed N` を追加した。`--shuffle`
+指定時は `02-Individual-music/` 配下の MP3 リストをループ展開の前に 1 回だけランダム順に
+並べ替えてから ffmpeg `acrossfade` で連結する。`--shuffle-seed N` で再現性のある順序
+（同 seed → 同入力 → 同順序）を確保でき、seed 単独指定で `--shuffle` を暗黙有効化する。
+seed 未指定時は `random.SystemRandom().randrange(2**32)` で確定 seed を引いて使用前に
+stdout へ `[Shuffle] seed=<N>` を出力するため、ログを見れば常に再現できる。`--quiet`
+指定時もシャッフル再現性ログは抑制しない。関連: #99
+
+skill-config 側にも `audio.shuffle: true` / `audio.shuffle_seed: N` を追加した。CLI
+フラグ未指定時のデフォルトとして読み取られる優先順位は CLI > skill-config > デフォルト。
+`audio.shuffle: true` が明示要求で、`audio.shuffle_seed` 単独設定では shuffle を有効化
+しない（skill-config は永続設定のため誤動作防止に明示要求とする / CLI の `--shuffle-seed`
+単独指定で shuffle を暗黙有効化する挙動とは異なる）。`audio.shuffle_seed` が整数以外（文字列・
+`bool` など）の場合は `ValidationError` でフェイルする（`bool` は `int` のサブクラスなので
+明示除外）。
+
+これにより Suno で同一プロンプトから生成した類似イントロ群がマスター後半で連続する
+問題（typical: 1 collection × 26 tracks）を CLI フラグ一つで回避でき、SKILL.md 側で
+案内していたランダムリネームの 2 段階ワークアラウンドが不要になる。`--loop` /
+`--target-duration` と組み合わせると、シャッフル後の順序がループごとに同じ並びで N 回
+繰り返される（ループごとに独立してシャッフルし直すわけではない）。
+
+issue spec の `random.seed(N)` 表記に対し、コードベース既存規約
+（`generate_music_dj.py` の `random.Random(seed)` インスタンス使用）に合わせて
+`random.Random(effective_seed).shuffle(files)` を採用した。グローバル RNG 状態を
+汚染せずテスト隔離を保つため。
+
+- `src/youtube_automation/scripts/generate_master.py`: `argparse` に `--shuffle` /
+  `--shuffle-seed` を追加。`generate_master()` に `shuffle` / `shuffle_seed`
+  キーワード専用引数を追加し、ループ展開（`files * effective_loops`）の手前で
+  `random.Random(effective_seed).shuffle(files)` を実行。再現性ログを quiet モード
+  でも常に stdout へ出力。`main()` の skill-config 解決ブロックに
+  `_SHUFFLE_KEY` / `_SHUFFLE_SEED_KEY` のフォールバック処理を追加
+- `.claude/skills/masterup/config.default.yaml`: `shuffle` / `shuffle_seed` の
+  コメント例を追記（同梱デフォルトでは未設定 = 既存挙動を維持し、
+  チャンネル側で opt-in する設計）
+- `.claude/skills/masterup/SKILL.md`: 設定表 / Quick Reference / Step 5 例に
+  `--shuffle` / `--shuffle-seed` および skill-config キーを追記。シャッフルが
+  ループ展開の前に 1 回だけ行われる挙動を明記
+- `tests/test_generate_master.py`: `TestGenerateMasterShuffle` 9 ケース（決定論性 /
+  seed ログ / quiet モード時もログ出力 / 自動 seed の SystemRandom 利用 /
+  ループ展開前のシャッフル / 1 ファイル時の copy 経路 / shuffle=False で seed
+  無視）、`TestCliShuffle` 5 ケース（CLI 引数解析・暗黙有効化・境界値）、
+  `TestCliSkillConfigShuffle` 10 ケース（skill-config 解決・CLI 優先・seed
+  フォールバック・型バリデーション）
+
 #### `yt-generate-master`: skill-config の `audio.target_duration_min` をデフォルト目標尺として読み取る
 
 `yt-generate-master` CLI で `--loop` / `--target-duration` のどちらも未指定の場合、

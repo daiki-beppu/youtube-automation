@@ -1,7 +1,8 @@
-"""generate_master の --loop / --target-duration 実装テスト。"""
+"""generate_master の --loop / --target-duration / --shuffle 実装テスト。"""
 
 from __future__ import annotations
 
+import random as real_random
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -345,3 +346,527 @@ class TestCliSkillConfigTargetDuration:
         assert rc == 0
         assert captured["kwargs"]["loops"] is None
         assert captured["kwargs"]["target_duration_min"] is None
+
+
+def _setup_shuffle_collection(tmp_path: Path, file_count: int) -> tuple[Path, list[str]]:
+    """シャッフル検証用のコレクション。並びが分かるように `01-track.mp3 ... NN-track.mp3`。"""
+    (tmp_path / "01-master").mkdir()
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    names: list[str] = []
+    for i in range(1, file_count + 1):
+        name = f"{i:02d}-track.mp3"
+        (music_dir / name).write_bytes(b"\x00" * 128)
+        names.append(name)
+    return tmp_path, names
+
+
+def _input_files_in_cmd(cmd: list[str]) -> list[str]:
+    """ffmpeg コマンドから `-i <path>` の <path> 部分を順序通りに抽出する。"""
+    inputs: list[str] = []
+    for i, token in enumerate(cmd):
+        if token == "-i":
+            inputs.append(cmd[i + 1])
+    return inputs
+
+
+class TestGenerateMasterShuffle:
+    """generate_master() の shuffle / shuffle_seed kwargs を検証する。"""
+
+    def test_shuffle_disabled_keeps_sorted_order(self, tmp_path, monkeypatch, capsys):
+        # Given: shuffle=False (default) — 並びは sorted() のまま
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=5)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        # ファイル名は sorted() 通り
+        assert [Path(p).name for p in inputs] == names
+        # シャッフルログは出ない
+        assert "[Shuffle]" not in capsys.readouterr().out
+
+    def test_shuffle_with_seed_is_deterministic(self, tmp_path, monkeypatch):
+        # Given: shuffle=True, shuffle_seed=42 — random.Random(42) と同じ並びになる
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=5)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        expected = names.copy()
+        real_random.Random(42).shuffle(expected)
+        # 安全確認: 5 ファイル + seed 42 で sorted と異なる順序になることを保証
+        assert expected != names
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                shuffle=True,
+                shuffle_seed=42,
+                quiet=True,
+            )
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        assert [Path(p).name for p in inputs] == expected
+
+    def test_same_seed_gives_same_order_across_calls(self, tmp_path, monkeypatch):
+        # Given: 同じ seed で 2 回呼べば同じ順序になる (再現性)
+        collection, _ = _setup_shuffle_collection(tmp_path, file_count=5)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        results: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            results.append(_input_files_in_cmd(cmd))
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(collection, crossfade=1.0, bitrate="192k", shuffle=True, shuffle_seed=7, quiet=True)
+            run_generate_master(collection, crossfade=1.0, bitrate="192k", shuffle=True, shuffle_seed=7, quiet=True)
+
+        assert results[0] == results[1]
+
+    def test_shuffle_log_includes_seed(self, tmp_path, monkeypatch, capsys):
+        # Given: shuffle=True, shuffle_seed=42 — stdout に `[Shuffle] seed=42` が出る
+        collection, _ = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with patch.object(generate_master.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                shuffle=True,
+                shuffle_seed=42,
+                quiet=True,
+            )
+
+        out = capsys.readouterr().out
+        assert "[Shuffle] seed=42" in out
+
+    def test_shuffle_log_emitted_even_in_quiet_mode(self, tmp_path, monkeypatch, capsys):
+        # Given: quiet=True でもシャッフル再現性ログは抑制しない (要件 4)
+        collection, _ = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with patch.object(generate_master.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                shuffle=True,
+                shuffle_seed=99,
+                quiet=True,
+            )
+
+        out = capsys.readouterr().out
+        assert "[Shuffle] seed=99" in out
+
+    def test_shuffle_without_seed_uses_system_random(self, tmp_path, monkeypatch, capsys):
+        # Given: shuffle_seed=None — SystemRandom().randrange(2**32) で seed を確定
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=5)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        # SystemRandom().randrange(...) が固定値 12345 を返すように差し替え
+        fake_sr = SimpleNamespace(randrange=lambda _bound: 12345)
+        monkeypatch.setattr(generate_master.random, "SystemRandom", lambda: fake_sr, raising=False)
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                shuffle=True,
+                shuffle_seed=None,
+                quiet=True,
+            )
+
+        # 自動生成 seed (12345) がログに出る
+        out = capsys.readouterr().out
+        assert "[Shuffle] seed=12345" in out
+        # 並びは Random(12345) と一致する (= ログの seed が実際に使われた)
+        expected = names.copy()
+        real_random.Random(12345).shuffle(expected)
+        inputs = _input_files_in_cmd(captured["cmd"])
+        assert [Path(p).name for p in inputs] == expected
+
+    def test_shuffle_happens_before_loop_expansion(self, tmp_path, monkeypatch):
+        # Given: shuffle=True + loops=3 — shuffled_files * 3 (= 同じシャッフル順を 3 回繰り返す)
+        # ループごとの独立シャッフルではない
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=4)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        expected_single = names.copy()
+        real_random.Random(123).shuffle(expected_single)
+        expected_expanded = expected_single * 3
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                loops=3,
+                shuffle=True,
+                shuffle_seed=123,
+                quiet=True,
+            )
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        assert [Path(p).name for p in inputs] == expected_expanded
+        # -i 数 = 4 files * 3 loops = 12
+        assert captured["cmd"].count("-i") == 12
+
+    def test_no_shuffle_ignores_shuffle_seed(self, tmp_path, monkeypatch, capsys):
+        # Given: shuffle=False で shuffle_seed が渡っても並びは sorted のまま、ログも出ない
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=5)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                shuffle=False,
+                shuffle_seed=42,
+                quiet=True,
+            )
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        assert [Path(p).name for p in inputs] == names
+        assert "[Shuffle]" not in capsys.readouterr().out
+
+    def test_shuffle_with_single_file_does_not_error(self, tmp_path, monkeypatch, capsys):
+        # Given: 1 file + shuffle=True — エラーにならず copy 経路を通る (ログは出る)
+        collection, _ = _setup_shuffle_collection(tmp_path, file_count=1)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with patch.object(generate_master.subprocess, "run") as mock_run:
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                shuffle=True,
+                shuffle_seed=1,
+                quiet=True,
+            )
+
+        # ffmpeg は呼ばれず copy 経路
+        mock_run.assert_not_called()
+        assert (collection / "01-master" / "master.mp3").exists()
+        # シャッフルログは出る (seed が記録されることが大事)
+        assert "[Shuffle] seed=1" in capsys.readouterr().out
+
+
+class TestCliShuffle:
+    """CLI 引数 (--shuffle / --shuffle-seed) が generate_master() に渡る kwargs を検証する。"""
+
+    def _patch_main_dependencies(self, monkeypatch, skill_config: dict | None = None) -> dict:
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_skill_config",
+            lambda _: skill_config or {},
+        )
+
+        captured: dict = {}
+
+        def fake_generate_master(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return Path("/tmp/fake-master.mp3")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.generate_master",
+            fake_generate_master,
+        )
+        return captured
+
+    def test_no_flags_disables_shuffle(self, monkeypatch, tmp_path):
+        # Given: --shuffle / --shuffle-seed どちらも未指定
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=False, shuffle_seed=None
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is False
+        assert captured["kwargs"]["shuffle_seed"] is None
+
+    def test_cli_shuffle_flag_enables_shuffle(self, monkeypatch, tmp_path):
+        # Given: --shuffle のみ指定
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path), "--shuffle"])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=True, shuffle_seed=None
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] is None
+
+    def test_cli_shuffle_seed_implies_shuffle(self, monkeypatch, tmp_path):
+        # Given: --shuffle-seed N 単独指定 (--shuffle 未指定)
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--shuffle-seed", "42"],
+        )
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=True (暗黙有効化), shuffle_seed=42
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] == 42
+
+    def test_cli_shuffle_seed_zero_is_treated_as_specified(self, monkeypatch, tmp_path):
+        # Given: --shuffle-seed 0 — 値 0 でも "指定された" とみなして shuffle 有効化
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--shuffle-seed", "0"],
+        )
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=True, shuffle_seed=0
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] == 0
+
+    def test_cli_shuffle_with_explicit_seed(self, monkeypatch, tmp_path):
+        # Given: --shuffle と --shuffle-seed を併用
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--shuffle", "--shuffle-seed", "777"],
+        )
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=True, shuffle_seed=777
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] == 777
+
+
+class TestCliSkillConfigShuffle:
+    """skill-config の audio.shuffle / audio.shuffle_seed を CLI 未指定時のデフォルトとして解決する。"""
+
+    def _patch_main_dependencies(self, monkeypatch, skill_config: dict) -> dict:
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_skill_config",
+            lambda _: skill_config,
+        )
+
+        captured: dict = {}
+
+        def fake_generate_master(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return Path("/tmp/fake-master.mp3")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.generate_master",
+            fake_generate_master,
+        )
+        return captured
+
+    def test_skill_config_shuffle_true_enables_shuffle(self, monkeypatch, tmp_path):
+        # Given: audio.shuffle: true、CLI フラグ未指定
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": True}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=True (skill-config から)、seed は None
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] is None
+
+    def test_skill_config_shuffle_with_seed(self, monkeypatch, tmp_path):
+        # Given: audio.shuffle: true + audio.shuffle_seed: 42
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": True, "shuffle_seed": 42}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=True, shuffle_seed=42
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] == 42
+
+    def test_skill_config_shuffle_false_keeps_shuffle_disabled(self, monkeypatch, tmp_path):
+        # Given: audio.shuffle: false (明示)、CLI フラグ未指定
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": False}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=False のまま
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is False
+
+    def test_skill_config_shuffle_seed_alone_does_not_enable_shuffle(self, monkeypatch, tmp_path):
+        # Given: audio.shuffle_seed: 42 のみ (audio.shuffle なし)
+        # → 設計判断: shuffle_seed 単独では shuffle を有効化しない (CLI とセマンティクス揃え)
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle_seed": 42}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=False (有効化しない)
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is False
+
+    def test_cli_shuffle_overrides_skill_config_disabled(self, monkeypatch, tmp_path):
+        # Given: skill-config で shuffle: false、CLI で --shuffle を指定
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": False}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path), "--shuffle"])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: CLI が優先されて shuffle=True
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+
+    def test_cli_shuffle_seed_overrides_skill_config_seed(self, monkeypatch, tmp_path):
+        # Given: skill-config と CLI 両方に seed があり CLI が優先されるべき
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": True, "shuffle_seed": 42}},
+        )
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--shuffle-seed", "5"],
+        )
+
+        # When
+        rc = generate_master.main()
+
+        # Then: CLI 値 5 が採用される (skill-config の 42 は無視)
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] == 5
+
+    def test_cli_shuffle_inherits_skill_config_seed(self, monkeypatch, tmp_path):
+        # Given: CLI は --shuffle のみ、skill-config には audio.shuffle_seed: 42
+        # CLI が seed を指定していなければ skill-config の seed が使われる
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle_seed": 42}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path), "--shuffle"])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: shuffle=True (CLI), shuffle_seed=42 (skill-config フォールバック)
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] == 42
+
+    def test_skill_config_shuffle_seed_non_int_raises_validation_error(self, monkeypatch, capsys, tmp_path):
+        # Given: skill-config の shuffle_seed が文字列 (型違反)
+        self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": True, "shuffle_seed": "abc"}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: ValidationError で exit code 1、エラーメッセージにソースとキー名が明示される
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "skill-config" in err
+        assert "shuffle_seed" in err
+
+    def test_skill_config_shuffle_seed_bool_raises_validation_error(self, monkeypatch, capsys, tmp_path):
+        # Given: shuffle_seed が True (bool は int サブクラスなので isinstance(x, int) を素通りする)
+        self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": True, "shuffle_seed": True}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: bool も型エラーとして弾く
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "skill-config" in err
+        assert "shuffle_seed" in err
+
+    def test_no_skill_config_shuffle_preserves_default_behavior(self, monkeypatch, tmp_path):
+        # Given: skill-config に shuffle / shuffle_seed のいずれも無い
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"crossfade_duration": 1.0, "bitrate": "192k"}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        rc = generate_master.main()
+
+        # Then: 既存挙動どおり shuffle=False, shuffle_seed=None
+        assert rc == 0
+        assert captured["kwargs"]["shuffle"] is False
+        assert captured["kwargs"]["shuffle_seed"] is None
