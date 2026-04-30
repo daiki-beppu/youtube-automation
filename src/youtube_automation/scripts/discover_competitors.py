@@ -91,6 +91,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=_DEFAULT_PER_KEYWORD,
         help="search.list の maxResults（キーワード毎の取得上限）",
     )
+    parser.add_argument(
+        "--require-music-topic",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "channels.list の topicCategories に音楽トピックを含むチャンネルのみ通すフィルタ。"
+            "既定: ON（topic 不明チャンネルは fail-open で通す）。"
+            "従来挙動に戻すには --no-require-music-topic"
+        ),
+    )
     parser.add_argument("--output", required=True, help="Markdown 出力先（同名 .csv も書き出す）")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
@@ -123,6 +133,7 @@ def _build_params(args: argparse.Namespace) -> DiscoveryParams:
         posted_within_days=args.posted_within_days,
         top=args.top,
         per_keyword_results=args.per_keyword,
+        require_music_topic=args.require_music_topic,
     )
 
 

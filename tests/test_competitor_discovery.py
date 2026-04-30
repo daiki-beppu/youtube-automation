@@ -21,6 +21,7 @@ import pytest
 
 from youtube_automation.utils.competitor_discovery import discover_competitors
 from youtube_automation.utils.competitor_scoring import (
+    _MUSIC_TOPIC_URLS,
     CandidateChannel,
     DiscoveryParams,
     ScoreBreakdown,
@@ -33,6 +34,7 @@ from youtube_automation.utils.competitor_scoring import (
     _compute_posting_cadence,
     _compute_subscriber_proximity,
     _format_reason,
+    _is_music_topic_match,
 )
 from youtube_automation.utils.exceptions import YouTubeAPIError
 
@@ -67,10 +69,12 @@ def _make_channel(
     matched_keywords: set[str] | None = None,
     recent_videos: list[VideoMetric] | None = None,
     last_posted_days_ago: int | None = 7,
+    topic_categories: tuple[str, ...] = (),
 ) -> CandidateChannel:
     """テスト用の CandidateChannel を組み立てる。
 
     last_posted_days_ago=None の場合は last_posted_at=None（recent_videos 取得前を模擬）。
+    topic_categories は API 由来の Wikipedia URL タプル（既定は空 = fail-open 対象）。
     """
     last_posted_at = None if last_posted_days_ago is None else date.today() - timedelta(days=last_posted_days_ago)
     return CandidateChannel(
@@ -82,6 +86,7 @@ def _make_channel(
         matched_keywords=set(matched_keywords or set()),
         recent_videos=list(recent_videos or []),
         last_posted_at=last_posted_at,
+        topic_categories=topic_categories,
     )
 
 
@@ -93,6 +98,7 @@ def _make_params(
     posted_within_days: int = 30,
     top: int = 20,
     per_keyword_results: int = 20,
+    require_music_topic: bool = True,
 ) -> DiscoveryParams:
     return DiscoveryParams(
         keywords=keywords,
@@ -101,6 +107,7 @@ def _make_params(
         posted_within_days=posted_within_days,
         top=top,
         per_keyword_results=per_keyword_results,
+        require_music_topic=require_music_topic,
     )
 
 
@@ -170,6 +177,7 @@ class TestModuleResponsibilitySplit:
             competitor_scoring._compute_monthly_uploads,
             competitor_scoring._compute_avg_views,
             competitor_scoring._score_candidate,
+            competitor_scoring._is_music_topic_match,
         ):
             assert fn.__module__ == scoring_module, f"{fn.__name__} は scoring モジュール定義であるべき"
 
@@ -284,6 +292,209 @@ class TestApplyFilters:
         assert original == [keep, drop]
         assert result is not original
         assert result == [keep]
+
+
+# ----------------------------------------------------------------------------
+# require_music_topic フィルタ（Issue #120）
+# ----------------------------------------------------------------------------
+
+
+class TestCandidateChannelTopicCategories:
+    """CandidateChannel.topic_categories の不変条件。"""
+
+    def test_topic_categories_field_exists_with_default_empty_tuple(self):
+        # Given: 明示指定なしで生成
+        ch = _make_channel()
+
+        # Then: API 由来の immutable データなので tuple、既定は空
+        assert isinstance(ch.topic_categories, tuple)
+        assert ch.topic_categories == ()
+
+    def test_topic_categories_accepts_explicit_value(self):
+        # Given: 明示的に音楽 URL を渡す
+        urls = ("https://en.wikipedia.org/wiki/Music",)
+
+        # When
+        ch = _make_channel(topic_categories=urls)
+
+        # Then
+        assert ch.topic_categories == urls
+
+
+class TestDiscoveryParamsRequireMusicTopic:
+    """DiscoveryParams.require_music_topic の既定と保持。"""
+
+    def test_require_music_topic_default_is_true(self):
+        # Given: 明示指定なし（CLI 側 default=True と整合）
+        params = _make_params()
+
+        # Then: 主要ユースケース（音楽系チャンネル発掘）に最適化
+        assert params.require_music_topic is True
+
+    def test_require_music_topic_false_is_preserved(self):
+        # Given: 後方互換のため OFF も指定可能
+        params = _make_params(require_music_topic=False)
+
+        # Then
+        assert params.require_music_topic is False
+
+
+class TestIsMusicTopicMatch:
+    """`_is_music_topic_match` 純粋関数: Wikipedia URL prefix マッチで音楽トピック判定。"""
+
+    def test_empty_input_returns_false(self):
+        # Given: topic_categories が空（fail-open は呼び出し側で制御するため、本関数自体は False）
+        # When/Then
+        assert _is_music_topic_match(()) is False
+
+    def test_music_root_url_returns_true(self):
+        # Given: ルート Music URL のみ
+        # When/Then
+        assert _is_music_topic_match(("https://en.wikipedia.org/wiki/Music",)) is True
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://en.wikipedia.org/wiki/Electronic_music",
+            "https://en.wikipedia.org/wiki/Hip_hop_music",
+            "https://en.wikipedia.org/wiki/Pop_music",
+            "https://en.wikipedia.org/wiki/Rock_music",
+            "https://en.wikipedia.org/wiki/Classical_music",
+            "https://en.wikipedia.org/wiki/Independent_music",
+            "https://en.wikipedia.org/wiki/Jazz",
+            "https://en.wikipedia.org/wiki/Country_music",
+            "https://en.wikipedia.org/wiki/Soul_music",
+            "https://en.wikipedia.org/wiki/Reggae",
+        ],
+    )
+    def test_known_music_subgenre_url_returns_true(self, url: str):
+        # Given: order.md §実装方針 4 で列挙された 11 URL のサブジャンル群
+        # When/Then
+        assert _is_music_topic_match((url,)) is True
+
+    def test_non_music_url_returns_false(self):
+        # Given: 非音楽トピック（Lifestyle / Sports 等）
+        # When/Then
+        assert _is_music_topic_match(("https://en.wikipedia.org/wiki/Lifestyle_(sociology)",)) is False
+        assert _is_music_topic_match(("https://en.wikipedia.org/wiki/Sport",)) is False
+        assert _is_music_topic_match(("https://en.wikipedia.org/wiki/Food",)) is False
+
+    def test_any_match_in_list_returns_true(self):
+        # Given: 音楽 + 非音楽の混在（チャンネル単位 topic は複数返ることがある）
+        topics = (
+            "https://en.wikipedia.org/wiki/Sport",
+            "https://en.wikipedia.org/wiki/Pop_music",
+        )
+
+        # When/Then: 1 つでも音楽トピックがあれば True
+        assert _is_music_topic_match(topics) is True
+
+    def test_prefix_match_against_known_music_url(self):
+        # Given: 既知 Music URL を prefix に持つ URL（仮にサブパスがあってもマッチする）
+        # When/Then: prefix マッチ実装なので True
+        assert _is_music_topic_match(("https://en.wikipedia.org/wiki/Music_of_Japan",)) is True
+
+    def test_music_topic_urls_constant_contains_required_entries(self):
+        # Given: order.md §実装方針 4 が列挙する 11 URL の不変条件
+        required = {
+            "https://en.wikipedia.org/wiki/Music",
+            "https://en.wikipedia.org/wiki/Electronic_music",
+            "https://en.wikipedia.org/wiki/Hip_hop_music",
+            "https://en.wikipedia.org/wiki/Pop_music",
+            "https://en.wikipedia.org/wiki/Rock_music",
+            "https://en.wikipedia.org/wiki/Classical_music",
+            "https://en.wikipedia.org/wiki/Independent_music",
+            "https://en.wikipedia.org/wiki/Jazz",
+            "https://en.wikipedia.org/wiki/Country_music",
+            "https://en.wikipedia.org/wiki/Soul_music",
+            "https://en.wikipedia.org/wiki/Reggae",
+        }
+
+        # Then: 定数は frozenset で必須 URL を全て含む（追加は許容、削除は不可）
+        assert isinstance(_MUSIC_TOPIC_URLS, frozenset)
+        assert required.issubset(_MUSIC_TOPIC_URLS)
+
+
+class TestApplyFiltersMusicTopic:
+    """`_apply_filters` の topic 判定: require_music_topic ON 時のみ作用、空 topic は fail-open。"""
+
+    def test_keeps_music_channel_when_require_music_topic_true(self):
+        # Given: 音楽 topic を持つチャンネル
+        ch = _make_channel(
+            subscribers=100_000,
+            last_posted_days_ago=5,
+            topic_categories=("https://en.wikipedia.org/wiki/Pop_music",),
+        )
+        params = _make_params(require_music_topic=True)
+
+        # When
+        result = _apply_filters([ch], params)
+
+        # Then: 音楽 topic のチャンネルは通る
+        assert result == [ch]
+
+    def test_drops_non_music_channel_when_require_music_topic_true(self):
+        # Given: 非音楽 topic（インテリア/DIY 系の誤検知を想定）
+        ch = _make_channel(
+            subscribers=100_000,
+            last_posted_days_ago=5,
+            topic_categories=("https://en.wikipedia.org/wiki/Lifestyle_(sociology)",),
+        )
+        params = _make_params(require_music_topic=True)
+
+        # When
+        result = _apply_filters([ch], params)
+
+        # Then: 非音楽 topic のみのチャンネルは除外（issue #120 の主要効用）
+        assert result == []
+
+    def test_keeps_channel_with_empty_topic_when_require_music_topic_true(self):
+        # Given: topic_categories が空（新規 / 小規模チャンネル等）
+        ch = _make_channel(
+            subscribers=100_000,
+            last_posted_days_ago=5,
+            topic_categories=(),
+        )
+        params = _make_params(require_music_topic=True)
+
+        # When
+        result = _apply_filters([ch], params)
+
+        # Then: fail-open 設計で通す（判定不能なら除外しない）
+        assert result == [ch]
+
+    def test_keeps_non_music_channel_when_require_music_topic_false(self):
+        # Given: 非音楽 topic でも require_music_topic=False なら従来挙動（topic フィルタなし）
+        ch = _make_channel(
+            subscribers=100_000,
+            last_posted_days_ago=5,
+            topic_categories=("https://en.wikipedia.org/wiki/Lifestyle_(sociology)",),
+        )
+        params = _make_params(require_music_topic=False)
+
+        # When
+        result = _apply_filters([ch], params)
+
+        # Then: フラグ OFF 時は topic 判定をスキップ（後方互換）
+        assert result == [ch]
+
+    def test_keeps_mixed_topic_channel_when_at_least_one_music_topic_present(self):
+        # Given: 音楽 + 非音楽の混在
+        ch = _make_channel(
+            subscribers=100_000,
+            last_posted_days_ago=5,
+            topic_categories=(
+                "https://en.wikipedia.org/wiki/Lifestyle_(sociology)",
+                "https://en.wikipedia.org/wiki/Jazz",
+            ),
+        )
+        params = _make_params(require_music_topic=True)
+
+        # When
+        result = _apply_filters([ch], params)
+
+        # Then: 1 つでも音楽 topic を持てば通る
+        assert result == [ch]
 
 
 # ----------------------------------------------------------------------------
@@ -727,6 +938,191 @@ class TestDiscoverCompetitors:
 
         # Then
         assert len(scored) <= 2
+
+    def test_channels_list_includes_topic_details_part(self):
+        # Given: 最小限の search hit（issue #120: API quota 増やさず part を拡張）
+        today_iso = date.today().isoformat()
+        youtube = self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": "UC_X", "channelTitle": "Channel X"}}],
+            channel_items=[
+                {
+                    "id": "UC_X",
+                    "snippet": {"title": "Channel X", "description": "lo-fi", "customUrl": "@x"},
+                    "statistics": {"subscriberCount": "100000", "videoCount": "10"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_X"}},
+                    "topicDetails": {"topicCategories": ["https://en.wikipedia.org/wiki/Music"]},
+                }
+            ],
+            playlist_items={"UU_X": [{"contentDetails": {"videoId": "VX1"}}]},
+            video_items=[
+                {
+                    "id": "VX1",
+                    "snippet": {"title": "lo-fi", "publishedAt": f"{today_iso}T00:00:00Z"},
+                    "statistics": {"viewCount": "10000", "likeCount": "100", "commentCount": "10"},
+                }
+            ],
+        )
+        params = _make_params(min_subscribers=10_000, max_subscribers=1_000_000)
+
+        # When
+        discover_competitors(youtube, params)
+
+        # Then: channels.list の part に topicDetails が含まれる（外部契約: API 呼び出し位置）
+        call = youtube.channels.return_value.list.call_args
+        assert call is not None, "channels.list が呼ばれていない"
+        part = call.kwargs.get("part")
+        assert part is not None, "channels.list は part を kwargs で渡す契約"
+        assert "topicDetails" in part, f"part='{part}' に topicDetails が含まれない"
+
+    def test_topic_categories_populated_from_api_response(self):
+        # Given: topicDetails 付きレスポンス、フィルタ通過するチャンネル
+        today_iso = date.today().isoformat()
+        youtube = self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": "UC_X", "channelTitle": "Channel X"}}],
+            channel_items=[
+                {
+                    "id": "UC_X",
+                    "snippet": {"title": "Channel X", "description": "lo-fi", "customUrl": "@x"},
+                    "statistics": {"subscriberCount": "100000", "videoCount": "10"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_X"}},
+                    "topicDetails": {
+                        "topicCategories": [
+                            "https://en.wikipedia.org/wiki/Music",
+                            "https://en.wikipedia.org/wiki/Pop_music",
+                        ]
+                    },
+                }
+            ],
+            playlist_items={"UU_X": [{"contentDetails": {"videoId": "VX1"}}]},
+            video_items=[
+                {
+                    "id": "VX1",
+                    "snippet": {"title": "lo-fi", "publishedAt": f"{today_iso}T00:00:00Z"},
+                    "statistics": {"viewCount": "10000", "likeCount": "100", "commentCount": "10"},
+                }
+            ],
+        )
+        params = _make_params(
+            min_subscribers=10_000,
+            max_subscribers=1_000_000,
+            require_music_topic=True,
+        )
+
+        # When
+        scored = discover_competitors(youtube, params)
+
+        # Then: API 由来の topicCategories が CandidateChannel.topic_categories に tuple で格納される
+        assert len(scored) == 1
+        topic_categories = scored[0].channel.topic_categories
+        assert isinstance(topic_categories, tuple)
+        assert "https://en.wikipedia.org/wiki/Music" in topic_categories
+        assert "https://en.wikipedia.org/wiki/Pop_music" in topic_categories
+
+    def test_topic_categories_default_empty_when_api_returns_no_topic_details(self):
+        # Given: topicDetails を返さないチャンネル（小規模 / 新規）→ fail-open
+        today_iso = date.today().isoformat()
+        youtube = self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": "UC_X", "channelTitle": "Channel X"}}],
+            channel_items=[
+                {
+                    "id": "UC_X",
+                    "snippet": {"title": "Channel X", "description": "lo-fi", "customUrl": "@x"},
+                    "statistics": {"subscriberCount": "100000", "videoCount": "10"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_X"}},
+                    # NOTE: topicDetails が欠落
+                }
+            ],
+            playlist_items={"UU_X": [{"contentDetails": {"videoId": "VX1"}}]},
+            video_items=[
+                {
+                    "id": "VX1",
+                    "snippet": {"title": "lo-fi", "publishedAt": f"{today_iso}T00:00:00Z"},
+                    "statistics": {"viewCount": "10000", "likeCount": "100", "commentCount": "10"},
+                }
+            ],
+        )
+        params = _make_params(
+            min_subscribers=10_000,
+            max_subscribers=1_000_000,
+            require_music_topic=True,
+        )
+
+        # When
+        scored = discover_competitors(youtube, params)
+
+        # Then: topicDetails 欠落でも空 tuple として扱い、require_music_topic=True でも fail-open で通す
+        assert len(scored) == 1
+        assert scored[0].channel.topic_categories == ()
+
+    def test_drops_non_music_channel_when_require_music_topic_true(self):
+        # Given: 非音楽 topic（issue #120 の Lo-Fi House 誤検知ケース）
+        today_iso = date.today().isoformat()
+        youtube = self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": "UC_X", "channelTitle": "Lo-Fi House"}}],
+            channel_items=[
+                {
+                    "id": "UC_X",
+                    "snippet": {"title": "Lo-Fi House", "description": "interior DIY", "customUrl": "@lofihouse"},
+                    "statistics": {"subscriberCount": "690000", "videoCount": "100"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_X"}},
+                    "topicDetails": {"topicCategories": ["https://en.wikipedia.org/wiki/Lifestyle_(sociology)"]},
+                }
+            ],
+            playlist_items={"UU_X": [{"contentDetails": {"videoId": "VX1"}}]},
+            video_items=[
+                {
+                    "id": "VX1",
+                    "snippet": {"title": "DIY", "publishedAt": f"{today_iso}T00:00:00Z"},
+                    "statistics": {"viewCount": "10000", "likeCount": "100", "commentCount": "10"},
+                }
+            ],
+        )
+        params = _make_params(
+            min_subscribers=10_000,
+            max_subscribers=1_000_000,
+            require_music_topic=True,
+        )
+
+        # When
+        scored = discover_competitors(youtube, params)
+
+        # Then: 非音楽 topic のチャンネルは除外（issue #120 の主要効用）
+        assert scored == []
+
+    def test_keeps_non_music_channel_when_require_music_topic_false(self):
+        # Given: 同じ非音楽 topic を、フラグ OFF で通す（後方互換）
+        today_iso = date.today().isoformat()
+        youtube = self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": "UC_X", "channelTitle": "Lo-Fi House"}}],
+            channel_items=[
+                {
+                    "id": "UC_X",
+                    "snippet": {"title": "Lo-Fi House", "description": "interior DIY", "customUrl": "@lofihouse"},
+                    "statistics": {"subscriberCount": "690000", "videoCount": "100"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_X"}},
+                    "topicDetails": {"topicCategories": ["https://en.wikipedia.org/wiki/Lifestyle_(sociology)"]},
+                }
+            ],
+            playlist_items={"UU_X": [{"contentDetails": {"videoId": "VX1"}}]},
+            video_items=[
+                {
+                    "id": "VX1",
+                    "snippet": {"title": "DIY", "publishedAt": f"{today_iso}T00:00:00Z"},
+                    "statistics": {"viewCount": "10000", "likeCount": "100", "commentCount": "10"},
+                }
+            ],
+        )
+        params = _make_params(
+            min_subscribers=10_000,
+            max_subscribers=1_000_000,
+            require_music_topic=False,
+        )
+
+        # When
+        scored = discover_competitors(youtube, params)
+
+        # Then: --no-require-music-topic 相当で従来挙動（topic 判定なし）
+        assert len(scored) == 1
 
     def test_empty_search_results_returns_empty(self):
         # Given: search hit なし

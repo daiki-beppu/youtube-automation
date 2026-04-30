@@ -78,7 +78,11 @@ def _fetch_channel_details(
     for i in range(0, len(channel_ids), _CHANNELS_BATCH_SIZE):
         batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
         try:
-            resp = youtube.channels().list(part="snippet,statistics,contentDetails", id=",".join(batch)).execute()
+            resp = (
+                youtube.channels()
+                .list(part="snippet,statistics,contentDetails,topicDetails", id=",".join(batch))
+                .execute()
+            )
         except HttpError as e:
             raise YouTubeAPIError.from_http_error(e, "channels.list failed") from e
 
@@ -87,6 +91,7 @@ def _fetch_channel_details(
             snippet = item.get("snippet", {})
             stats = item.get("statistics", {})
             content = item.get("contentDetails", {})
+            topic_details = item.get("topicDetails", {})
             uploads = content.get("relatedPlaylists", {}).get("uploads")
             if uploads:
                 uploads_map[ch_id] = uploads
@@ -100,6 +105,7 @@ def _fetch_channel_details(
                     matched_keywords=set(keyword_map.get(ch_id, set())),
                     recent_videos=[],
                     last_posted_at=None,
+                    topic_categories=tuple(topic_details.get("topicCategories", [])),
                 )
             )
     return fetched, uploads_map

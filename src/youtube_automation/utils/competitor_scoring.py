@@ -37,6 +37,25 @@ _FACTOR_PHRASES: dict[str, str] = {
     "subscriber_proximity": "近い登録者帯",
 }
 
+# 音楽トピック判定用 Wikipedia URL（freebase 後継の topicCategories と同形式）。
+# `channels.list part=topicDetails` の `topicCategories` を prefix マッチで判定する。
+# Issue #120: 非音楽チャンネルの誤検知（例: "Lo-Fi House" インテリア / DIY 系）を構造的に抑制する。
+_MUSIC_TOPIC_URLS: frozenset[str] = frozenset(
+    {
+        "https://en.wikipedia.org/wiki/Music",
+        "https://en.wikipedia.org/wiki/Electronic_music",
+        "https://en.wikipedia.org/wiki/Hip_hop_music",
+        "https://en.wikipedia.org/wiki/Pop_music",
+        "https://en.wikipedia.org/wiki/Rock_music",
+        "https://en.wikipedia.org/wiki/Classical_music",
+        "https://en.wikipedia.org/wiki/Independent_music",
+        "https://en.wikipedia.org/wiki/Jazz",
+        "https://en.wikipedia.org/wiki/Country_music",
+        "https://en.wikipedia.org/wiki/Soul_music",
+        "https://en.wikipedia.org/wiki/Reggae",
+    }
+)
+
 
 # ----------------------------------------------------------------------------
 # Dataclasses
@@ -53,6 +72,7 @@ class DiscoveryParams:
     posted_within_days: int
     top: int
     per_keyword_results: int
+    require_music_topic: bool = True
 
 
 @dataclass
@@ -77,6 +97,7 @@ class CandidateChannel:
     matched_keywords: set[str]
     recent_videos: list[VideoMetric]
     last_posted_at: date | None
+    topic_categories: tuple[str, ...] = ()
 
 
 @dataclass
@@ -106,11 +127,22 @@ class ScoredCandidate:
 # ----------------------------------------------------------------------------
 
 
+def _is_music_topic_match(topic_categories: tuple[str, ...]) -> bool:
+    """`topic_categories` の URL が `_MUSIC_TOPIC_URLS` のいずれかを prefix に持つか判定する。
+
+    空入力は False を返す（fail-open は呼び出し側 `_apply_filters` の責務）。
+    """
+    return any(topic.startswith(prefix) for topic in topic_categories for prefix in _MUSIC_TOPIC_URLS)
+
+
 def _apply_filters(channels: list[CandidateChannel], params: DiscoveryParams) -> list[CandidateChannel]:
-    """登録者レンジ・動画本数・最終投稿日でフィルタする（入力非破壊）。
+    """登録者レンジ・動画本数・最終投稿日・音楽トピックでフィルタする（入力非破壊）。
 
     `last_posted_at is None` のチャンネルは投稿日フィルタを保留する
     （recent_videos 取得前のため。後段で再フィルタする）。
+
+    `require_music_topic=True` のときのみ topic 判定を作用させ、
+    `topic_categories` が空のチャンネルは fail-open で通す（判定不能 → 除外しない）。
     """
     today = date.today()
     result: list[CandidateChannel] = []
@@ -123,6 +155,8 @@ def _apply_filters(channels: list[CandidateChannel], params: DiscoveryParams) ->
             days_since = (today - ch.last_posted_at).days
             if days_since > params.posted_within_days:
                 continue
+        if params.require_music_topic and ch.topic_categories and not _is_music_topic_match(ch.topic_categories):
+            continue
         result.append(ch)
     return result
 
