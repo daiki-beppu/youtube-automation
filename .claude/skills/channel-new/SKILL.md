@@ -109,6 +109,22 @@ cp /path/to/existing-channel-repo/auth/token.json auth/token.json
 
 **目標: 5-10 チャンネルを発見**
 
+**最初に試すこと**: `yt-discover-competitors` で発掘候補を自動生成する。
+ニッチキーワードを 3-5 個渡すと、登録者数レンジ・最終投稿日でフィルタした
+ランキング付き Markdown + CSV が出力される（詳細は `/discover-competitors` skill 参照）:
+
+```bash
+uv run yt-discover-competitors \
+  --keywords "{キーワード1},{キーワード2},{キーワード3}" \
+  --min-subscribers 10000 --max-subscribers 1000000 \
+  --posted-within-days 30 --top 20 \
+  --output research/discovery.md
+```
+
+ユーザーに結果を提示して承認を得る → そのまま下記の `benchmark.channels` 反映へ進む。
+
+**自動発掘で不足する場合の補完手順**（任意キーワードで結果が乏しいときのみ）:
+
 1. ユーザーの参考チャンネルのジャンル・特徴を把握
 2. WebSearch で類似チャンネルを探す:
    - `"youtube channels similar to {参考チャンネル}" {ジャンル} music`
