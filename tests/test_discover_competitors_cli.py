@@ -52,6 +52,7 @@ def _make_scored(
     avg_views: int = 120_000,
     score_total: float = 0.92,
     reason: str = "キーワード一致率高、最近の更新活発",
+    topic_categories: tuple[str, ...] = (),
 ) -> ScoredCandidate:
     """テスト用の ScoredCandidate を組み立てる"""
     channel = CandidateChannel(
@@ -63,6 +64,7 @@ def _make_scored(
         matched_keywords={"lo-fi"},
         recent_videos=[],
         last_posted_at=date.today() - timedelta(days=3),
+        topic_categories=topic_categories,
     )
     breakdown = ScoreBreakdown(
         keyword_match=0.9,
@@ -168,6 +170,36 @@ class TestBuildParser:
         # Then
         assert args.verbose is True
 
+    def test_require_music_topic_default_is_true(self):
+        # Given: 主要ユースケース（音楽系発掘）に最適化された既定 ON（issue #120）
+        parser = _build_parser()
+
+        # When
+        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md"])
+
+        # Then: BooleanOptionalAction + default=True
+        assert args.require_music_topic is True
+
+    def test_require_music_topic_explicit_true(self):
+        # Given: 明示 ON 指定
+        parser = _build_parser()
+
+        # When
+        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md", "--require-music-topic"])
+
+        # Then
+        assert args.require_music_topic is True
+
+    def test_no_require_music_topic_disables_filter(self):
+        # Given: --no-require-music-topic で従来挙動（topic フィルタ無し）に戻す
+        parser = _build_parser()
+
+        # When
+        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md", "--no-require-music-topic"])
+
+        # Then: 後方互換確保（issue #120 §効用）
+        assert args.require_music_topic is False
+
 
 # ----------------------------------------------------------------------------
 # _build_params（境界での解決: argparse → DiscoveryParams）
@@ -188,6 +220,7 @@ class TestBuildParams:
             per_keyword=20,
             output="research/out.md",
             verbose=False,
+            require_music_topic=True,
         )
         defaults.update(overrides)
         return Namespace(**defaults)
@@ -250,6 +283,26 @@ class TestBuildParams:
         # When/Then
         with pytest.raises(ValidationError):
             _build_params(args)
+
+    def test_require_music_topic_true_flows_to_params(self):
+        # Given: CLI で --require-music-topic 指定 → args.require_music_topic=True
+        args = self._ns(require_music_topic=True)
+
+        # When
+        params = _build_params(args)
+
+        # Then: 境界での解決原則に沿って args の値がそのまま DiscoveryParams に流れる
+        assert params.require_music_topic is True
+
+    def test_require_music_topic_false_flows_to_params(self):
+        # Given: CLI で --no-require-music-topic 指定 → args.require_music_topic=False
+        args = self._ns(require_music_topic=False)
+
+        # When
+        params = _build_params(args)
+
+        # Then: 後方互換確保（topic フィルタ無し）
+        assert params.require_music_topic is False
 
 
 # ----------------------------------------------------------------------------
@@ -571,4 +624,5 @@ def _make_params_for_render() -> DiscoveryParams:
         posted_within_days=30,
         top=20,
         per_keyword_results=20,
+        require_music_topic=True,
     )
