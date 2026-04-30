@@ -28,3 +28,6 @@ build/
 *.egg-info/
 .coverage
 .worktrees/
+
+# pytest 副作用: cost_tracker / lyria 系テストが sample_channel/data/ に書き残す（レビュー AI-NOTE-fixtures-data-leak）
+tests/fixtures/sample_channel/data/
