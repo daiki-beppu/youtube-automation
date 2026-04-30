@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from youtube_automation.utils.image_provider.base import ImageGenerationRequest
 from youtube_automation.utils.image_provider.config import OpenAIConfig
 from youtube_automation.utils.image_provider.openai import OpenAIImageProvider

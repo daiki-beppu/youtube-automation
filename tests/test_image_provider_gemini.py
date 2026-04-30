@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from youtube_automation.utils.image_provider.base import ImageGenerationRequest
 from youtube_automation.utils.image_provider.config import GeminiConfig
 from youtube_automation.utils.image_provider.gemini import GeminiImageProvider

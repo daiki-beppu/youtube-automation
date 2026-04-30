@@ -11,14 +11,14 @@ from __future__ import annotations
 import warnings
 
 import pytest
+
+from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.config import (
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
     parse_image_generation_config,
 )
-
-from youtube_automation.utils.exceptions import ConfigError
 
 # ---------- parse_image_generation_config ----------
 
