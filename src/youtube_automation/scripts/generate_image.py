@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Gemini API 経由で画像を生成する汎用スクリプト（ダイレクトモード）。
+"""画像生成プロバイダー（Gemini / OpenAI）経由で画像を生成する汎用スクリプト。
 
 プロンプトテキストと出力パスを直接指定して画像生成。
+provider 切り替えは ``config/skills/thumbnail.yaml`` の
+``image_generation.provider`` で行う。
 workflow-state.json には触れない。
 
 Usage:
-    python3 generate_image.py --prompt "A mystical forest..." --output /tmp/preview.png -y
-    python3 generate_image.py --prompt "Celtic harp in moonlight" --output previews/plan-a.png
-    python3 generate_image.py --prompt "..." --output out.png --reference ref.png -y
+    yt-generate-image --prompt "A mystical forest..." --output /tmp/preview.png -y
+    yt-generate-image --prompt "Celtic harp in moonlight" --output previews/plan-a.png
+    yt-generate-image --prompt "..." --output out.png --reference ref.png -y
 """
 
 import argparse
@@ -15,26 +17,32 @@ import sys
 import time
 from pathlib import Path
 
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider import (
+    ImageGenerationRequest,
+    get_provider,
+    load_image_generation_config,
+)
+from youtube_automation.utils.image_provider.composition import (
+    apply_composition_rules,
+    confirm_cost,
+    print_cost_summary,
+    prompt_overwrite_or_rename,
+    resolve_composition_source,
+    resolve_cost_per_image,
+    resolve_reference_paths,
+)
+from youtube_automation.utils.image_provider.config import replace_model
 
-# --- パス解決 ---
+# Gemini 用の解像度オプション（OpenAI provider 時は無視される）
+_GEMINI_VALID_IMAGE_SIZES = ("1K", "2K", "4K")
+_GEMINI_DEFAULT_IMAGE_SIZE = "2K"
+
+
 def _channel_root() -> Path:
     from youtube_automation.utils.config import channel_dir
 
     return channel_dir()
-
-
-from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-from youtube_automation.utils.image_generator import (  # noqa: E402
-    DEFAULT_IMAGE_SIZE,
-    DEFAULT_MODEL,
-    VALID_IMAGE_SIZES,
-    apply_composition_rules,
-    confirm_cost,
-    generate_image,
-    load_gemini_config,
-    print_cost_summary,
-    resolve_unique_path,
-)
 
 
 def main():
@@ -42,11 +50,13 @@ def main():
 
     load_dotenv(find_dotenv())
 
-    parser = argparse.ArgumentParser(description="Gemini API で画像を生成（ダイレクトモード）")
+    parser = argparse.ArgumentParser(
+        description="画像生成プロバイダー（Gemini / OpenAI）で画像を生成（ダイレクトモード）"
+    )
     parser.add_argument("--prompt", type=str, default=None, help="プロンプトテキスト")
     parser.add_argument("--output", type=str, default=None, help="出力パス")
     parser.add_argument("-y", "--yes", action="store_true", help="コスト確認をスキップ")
-    parser.add_argument("--model", type=str, default=None, help="使用するモデル（例: gemini-3.1-flash-image-preview）")
+    parser.add_argument("--model", type=str, default=None, help="使用するモデル（skill-config の値を上書き）")
     parser.add_argument(
         "--reference",
         type=str,
@@ -58,9 +68,12 @@ def main():
     parser.add_argument(
         "--size",
         type=str,
-        choices=list(VALID_IMAGE_SIZES),
-        default=DEFAULT_IMAGE_SIZE,
-        help=f"画像解像度 {VALID_IMAGE_SIZES} （デフォルト: {DEFAULT_IMAGE_SIZE}）",
+        choices=list(_GEMINI_VALID_IMAGE_SIZES),
+        default=_GEMINI_DEFAULT_IMAGE_SIZE,
+        help=(
+            f"画像解像度 {_GEMINI_VALID_IMAGE_SIZES}（Gemini provider 用、デフォルト: "
+            f"{_GEMINI_DEFAULT_IMAGE_SIZE}）。OpenAI provider では aspect_ratio から自動決定"
+        ),
     )
     parser.add_argument("--no-composition", action="store_true", help="composition_prefix の自動付加をスキップ")
     parser.add_argument(
@@ -77,98 +90,102 @@ def main():
     if not args.prompt or not args.output:
         parser.error("--prompt と --output は必須です（--costs 単独実行を除く）")
 
-    config = load_gemini_config()
+    try:
+        cfg = load_image_generation_config()
+    except ConfigError as e:
+        print(f"[ERROR] skill-config 読み込み失敗: {e}")
+        sys.exit(1)
+
+    # provider オーバーライド: --model 指定時は cfg のモデル値を差し替える
+    if args.model:
+        cfg = replace_model(cfg, args.model)
+
+    # composition_prefix は thumbnail skill-config の image_generation.<provider> 直下で扱われない（旧
+    # gemini_image.* と同じ位置にユーザーが置くケースに対応）。channel-side で
+    # composition_prefix を提供している場合のみ適用される。
+    from youtube_automation.utils.skill_config import load_skill_config
+
+    skill_cfg = load_skill_config("thumbnail")
+    composition_source = resolve_composition_source(skill_cfg, cfg.provider)
+
     if args.no_composition or args.reference:
         prompt = args.prompt
     else:
-        prompt = apply_composition_rules(args.prompt, config)
+        prompt = apply_composition_rules(args.prompt, composition_source)
+
     output_path = Path(args.output)
     if not output_path.is_absolute():
         output_path = Path.cwd() / output_path
 
-    model = args.model or config.get("model", DEFAULT_MODEL)
-    cost_per_image = config.get("cost_per_image_usd")
-    if cost_per_image is None:
-        from youtube_automation.utils.cost_tracker import estimate_cost
+    # provider 別にモデル ID と画像サイズキーを解決
+    if cfg.provider == "gemini":
+        assert cfg.gemini is not None
+        model = cfg.gemini.model
+        image_size = args.size
+    else:
+        assert cfg.openai is not None
+        model = cfg.openai.model
+        image_size = cfg.openai.quality
 
-        cost_per_image = estimate_cost(model, quantity=1, image_size=args.size) or 0.0
+    # コスト算出: skill-config の cost_per_image_usd 上書きがあれば優先、なければ PRICING
+    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider, model, image_size)
 
     print("\nモード:       ダイレクト")
+    print(f"プロバイダー: {cfg.provider}")
     print(f"プロンプト:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
     print(f"出力先:       {output_path}")
-    print(f"解像度:       {args.size}")
+    print(f"解像度:       {image_size}")
     if args.reference:
         print(f"参照画像:     {', '.join(args.reference)}")
 
-    # 既存ファイル確認
-    if output_path.exists() and output_path.stat().st_size > 0:
-        if args.yes:
-            original = output_path
-            output_path = resolve_unique_path(output_path)
-            if output_path != original:
-                print(f"\n[INFO] 既存ファイルあり → 自動採番: {output_path.name}")
-        else:
-            print(f"\n[INFO] 既存ファイルが見つかりました: {output_path.name} ({output_path.stat().st_size:,} bytes)")
-            try:
-                answer = input("上書きしますか? (y/N): ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                print("\n中止しました。")
-                sys.exit(0)
-            if answer not in ("y", "yes"):
-                print("中止しました。")
-                sys.exit(0)
+    # 既存ファイル確認（上書き or -vN 自動採番）
+    resolved_path = prompt_overwrite_or_rename(output_path, yes=args.yes)
+    if resolved_path is None:
+        sys.exit(0)
+    output_path = resolved_path
 
-    # コスト確認
-    if not args.yes:
-        if not confirm_cost(model, cost_per_image):
-            sys.exit(0)
-
-    try:
-        from youtube_automation.utils.genai_client import create_genai_client
-    except ImportError:
-        print("[ERROR] google-genai がインストールされていません。")
-        print("  pip3 install google-genai Pillow --break-system-packages")
-        sys.exit(1)
+    if not args.yes and not confirm_cost(model, cost_per_image):
+        sys.exit(0)
 
     # 参照画像解決（複数対応）
-    reference_images: list[Path] = []
-    for raw_ref in args.reference or []:
-        ref_path = Path(raw_ref)
-        if not ref_path.is_absolute():
-            ref_path = Path.cwd() / ref_path
-        if not ref_path.exists():
-            print(f"[ERROR] 参照画像が見つかりません: {ref_path}")
-            sys.exit(1)
-        reference_images.append(ref_path)
-
-    # 生成実行
     try:
-        client = create_genai_client(location="global")
+        reference_images = resolve_reference_paths(args.reference)
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
-    start_time = time.monotonic()
-    success = generate_image(
-        client,
-        prompt,
-        model,
-        output_path,
-        reference_image=reference_images or None,
+
+    try:
+        provider = get_provider(cfg)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    request = ImageGenerationRequest(
+        prompt=prompt,
+        output_path=output_path,
         aspect_ratio=args.aspect_ratio,
-        image_size=args.size,
+        image_size=image_size,
+        references=reference_images,
         cost_per_image_usd=cost_per_image,
     )
+
+    start_time = time.monotonic()
+    try:
+        result = provider.generate(request)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
     elapsed = time.monotonic() - start_time
 
-    # レポート
     print()
     print("===========================================")
-    if success:
+    if result.success:
         print("  画像生成: 完了")
+        saved = result.saved_path or output_path
         try:
-            print(f"  ファイル: {output_path.relative_to(_channel_root())}")
+            print(f"  ファイル: {saved.relative_to(_channel_root())}")
         except ValueError:
-            print(f"  ファイル: {output_path}")
+            print(f"  ファイル: {saved}")
         print(f"  コスト:   ${cost_per_image:.3f}")
         print(f"  時間:     {elapsed:.1f}秒")
     else:
@@ -177,7 +194,7 @@ def main():
     print("===========================================")
     print()
 
-    sys.exit(0 if success else 1)
+    sys.exit(0 if result.success else 1)
 
 
 if __name__ == "__main__":

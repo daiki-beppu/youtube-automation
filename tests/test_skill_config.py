@@ -55,16 +55,17 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     (channel_dir / "config" / "skills").mkdir(parents=True)
     override_path = channel_dir / "config" / "skills" / "thumbnail.yaml"
     override_path.write_text(
-        yaml.safe_dump({"gemini_image": {"brand_background": "custom-color"}}),
+        yaml.safe_dump({"image_generation": {"gemini": {"brand_background": "custom-color"}}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+    gemini_block = cfg.get("image_generation", {}).get("gemini", {})
     # default にある他キーは残り、override した brand_background は新しい値になる
-    assert cfg.get("gemini_image", {}).get("brand_background") == "custom-color"
+    assert gemini_block.get("brand_background") == "custom-color"
     # default.yaml の他のキーが残っていること (モデル名など)
-    assert "model" in cfg.get("gemini_image", {})
+    assert "model" in gemini_block
 
 
 def test_cache_reset(tmp_path, monkeypatch):

@@ -587,9 +587,7 @@ class BAHMetadataGenerator:
         scene_phrases = self._load_scene_phrases()
         scene_emoji = self._load_scene_emoji()
         self._last_scene_phrases = scene_phrases
-        localizations = self.generate_localizations(
-            title, timestamp_body, scene_phrases, scene_emoji=scene_emoji
-        )
+        localizations = self.generate_localizations(title, timestamp_body, scene_phrases, scene_emoji=scene_emoji)
 
         return {
             "title": title,

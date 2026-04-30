@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### サムネイル生成プロバイダーを設定から切り替え可能にする（gpt-image-2 対応）
+
+サムネイル生成パスを `youtube_automation.utils.image_provider` 抽象化レイヤに刷新し、
+skill-config の `image_generation.provider: gemini | openai` で OpenAI gpt-image-2 系と
+Gemini を案件単位で切り替えられるようにした。OpenAI provider は CJK 文字描画が綺麗で
+16:9 / 9:16 をネイティブサポートする gpt-image-2 を `images.generate` / `images.edit`
+経由で利用する。`thumbnail` スキルは内部で `aspect_ratio: "16:9"` 固定で provider を呼び
+出し、9:16 縦型は将来の `short-thumbnail` 復活時に同 API で接続できる構造を保つ。
+`OPENAI_API_KEY` は `youtube_automation.utils.secrets._SECRET_REFS` 経由（env →
+1Password CLI）で解決する。`cost_tracker.PRICING` に `gpt-image-2` / `gpt-image-1.5` /
+`gpt-image-1-mini` を追加し、`gpt-image-2` の `high` 品質を 1024×1024 約 $0.21/枚で
+登録（他 2 モデルは 2026-04 時点の暫定値）。関連: #67
+
+- `src/youtube_automation/utils/image_provider/__init__.py`: ファクトリ
+  `get_provider(cfg)` と skill-config ラッパ `load_image_generation_config()` を公開
+- `src/youtube_automation/utils/image_provider/base.py`: `ImageProvider` Protocol、
+  `ImageGenerationRequest` / `ImageGenerationResult`、共通リトライ定数
+  `RETRY_MAX=3` / `RETRY_BACKOFF=[10, 30, 60]`
+- `src/youtube_automation/utils/image_provider/config.py`: `ImageGenerationConfig` /
+  `GeminiConfig` / `OpenAIConfig` dataclass。`OpenAIConfig.__post_init__` で
+  `aspect_ratio in ("16:9", "9:16")` を検査（不一致は `ConfigError`）
+- `src/youtube_automation/utils/image_provider/gemini.py`: 旧 `image_generator.py` の
+  Gemini ロジックを `GeminiImageProvider` に移植
+- `src/youtube_automation/utils/image_provider/openai.py`: gpt-image 系の新規実装。
+  `aspect_ratio → size`（`16:9 → 1536x1024` / `9:16 → 1024x1536`）マッピングと
+  `OPENAI_API_KEY` 解決、リトライ、参照画像のハンドルクローズを担う
+- `src/youtube_automation/utils/image_provider/composition.py`: provider 中立な
+  `apply_composition_rules` / `confirm_cost` / `resolve_unique_path` /
+  `log_image_cost` / `resolve_composition_source` /
+  `resolve_cost_per_image`（`cost_per_image_usd` 上書き解決）/
+  `persist_image`（PNG/JPEG 保存・YouTube サムネ 2MB 上限対応）/
+  `prompt_overwrite_or_rename`（既存出力の上書き確認 + ``-vN`` 採番）/
+  `resolve_reference_paths`（参照画像パス解決、欠損時 `ConfigError`）を集約。
+  Gemini / OpenAI 両 provider が同一の保存ロジックを共有し、`scripts/generate_*` 2 本も
+  単価解決・上書き分岐・参照画像解決の共通ロジックをここから import する
+- `src/youtube_automation/utils/image_provider/config.py`: `replace_model(cfg, model)`
+  を新設。CLI `--model` 引数による `ImageGenerationConfig` の active provider 側
+  モデル ID 差し替えを `scripts/generate_*` 2 本から共通利用
+- `src/youtube_automation/utils/secrets.py`: `_SECRET_REFS` に `OPENAI_API_KEY` を追加
+- `src/youtube_automation/utils/cost_tracker.py`: `PRICING` に gpt-image 3 モデルを
+  追加。OpenAI は `quality` で課金階層が決まるため `unit="image"` ＋
+  `by_size: {low, medium, high}` を維持
+- `src/youtube_automation/utils/skill_config.py`: `load_channel_override(skill)` を
+  公開。`gemini_image:` 旧 namespace の override 検出に使用
+- `pyproject.toml`: `dependencies` に `openai` を追加
+- `tests/test_image_provider_*.py`: provider 切り替え／aspect_ratio バリデーション／
+  Gemini・OpenAI 各実装／統合フローのテストを追加
+
+### Changed
+
+- `.claude/skills/thumbnail/config.default.yaml`: ルート namespace を `gemini_image:`
+  から `image_generation:` に刷新し、`provider` / `gemini` / `openai` の階層に
+  分割。OpenAI 設定例（`model` / `quality` / `aspect_ratio` / `thinking` / `batch`）を
+  追記
+- `.claude/skills/thumbnail/SKILL.md`: provider 非依存の表現に書き換え
+  （`gemini_image.*` → `image_generation.gemini.*`）。Channel Adaptation セクションに
+  provider 切り替え手順を追加
+- `.claude/skills/ideate/SKILL.md`: Phase 4-2 の skill-config 参照を新 namespace
+  （`image_generation.gemini.*` / `image_generation.openai.*`）に追従
+- `src/youtube_automation/scripts/generate_image.py`: import 経路を
+  `image_provider` 直叩きに変更（旧 `image_generator.generate_image()` 呼び出し撤去）
+- `src/youtube_automation/scripts/generate_thumbnail.py`: 同上。Gemini provider の
+  `image_size` は `cfg.gemini.image_size` から解決（ハードコード撤去）
+- `tests/test_skill_cost_documentation.py`: namespace 検査ヘルパーを
+  `image_generation.gemini` に置換
+
+### Deprecated
+
+- skill-config の `gemini_image:` 旧 namespace は非推奨。`image_generation.provider:
+  gemini` + `image_generation.gemini.*` への移行を推奨。後方互換のため当面ロードは
+  継続するが、`DeprecationWarning` を発行する。default.yaml に `image_generation:`
+  を持たせている都合でユーザー override の `gemini_image:` が上書きされて silently
+  破棄されるバグを避けるため、`load_image_generation_config()` は override ファイル
+  単体に `gemini_image:` のみが宣言されている場合に legacy パスへ分岐する
+
+### Removed
+
+- `src/youtube_automation/utils/image_generator.py`: `image_provider` パッケージへ
+  ロジックを完全移植したため削除（grep 上の外部参照ゼロ確認済み）
+
 ## [5.2.0] - 2026-04-29
 
 ### Added

@@ -75,6 +75,62 @@ def test_estimate_cost_image_without_size_raises():
         cost_tracker.estimate_cost("gemini-3.1-flash-image-preview")
 
 
+# ---------- OpenAI gpt-image-* 系の登録（Issue #67） ----------
+
+
+def test_estimate_cost_gpt_image_2_high_quality_is_021():
+    """Given gpt-image-2 + quality=high
+    When estimate_cost を呼ぶ
+    Then 1 枚あたり $0.21（order.md 補足 "1024×1024 high 品質で約 $0.21/枚"）。
+    """
+    assert cost_tracker.estimate_cost("gpt-image-2", image_size="high") == 0.21
+
+
+def test_pricing_gpt_image_2_registers_three_quality_levels():
+    """Given cost_tracker.PRICING
+    When gpt-image-2 を引く
+    Then low / medium / high の 3 品質が登録されている。
+    """
+    pricing = cost_tracker.PRICING.get("gpt-image-2")
+    assert pricing is not None, "gpt-image-2 が PRICING に未登録"
+    assert pricing.unit == "image"
+    assert pricing.by_size is not None
+    assert {"low", "medium", "high"}.issubset(pricing.by_size.keys())
+
+
+@pytest.mark.parametrize("model", ["gpt-image-1.5", "gpt-image-1-mini"])
+def test_pricing_gpt_image_lower_tier_models_are_registered(model: str):
+    """Given gpt-image-1.5 / gpt-image-1-mini
+    When PRICING を引く
+    Then エントリが存在し unit=image, by_size に low/medium/high が揃う。
+
+    単価の厳密値は order.md に明示なし（参考リンク経由）のため、
+    暫定値の存在のみ確認する。
+    """
+    pricing = cost_tracker.PRICING.get(model)
+    assert pricing is not None, f"{model} が PRICING に未登録"
+    assert pricing.unit == "image"
+    assert pricing.by_size is not None
+    assert {"low", "medium", "high"}.issubset(pricing.by_size.keys())
+
+
+def test_log_generation_gpt_image_2_uses_quality_as_image_size_key(tmp_channel: Path):
+    """Given gpt-image-2 を log_generation する
+    When metadata.image_size に "high" を渡す
+    Then PRICING の by_size["high"] = 0.21 で記録される。
+    """
+    cost_tracker.log_generation(
+        "image",
+        model="gpt-image-2",
+        quantity=1,
+        metadata={"image_size": "high", "aspect_ratio": "16:9"},
+    )
+    entries = _read_log(tmp_channel, "image_costs.json")
+    assert len(entries) == 1
+    assert entries[0]["estimated_cost_usd"] == 0.21
+    assert entries[0]["model"] == "gpt-image-2"
+
+
 def test_log_generation_image_writes_file(tmp_channel: Path):
     entry = cost_tracker.log_generation(
         "image",

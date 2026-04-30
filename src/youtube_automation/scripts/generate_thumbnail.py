@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""コレクションサムネイル画像を Gemini API で生成する。
+"""コレクションサムネイル画像を画像生成プロバイダー（Gemini / OpenAI）で生成する。
 
 thumbnail-prompts.md の Primary Prompt を読み込み、10-assets/ に保存。
+provider 切り替えは ``config/skills/thumbnail.yaml`` の
+``image_generation.provider`` で行う。
 ダイレクトモード（プロンプト直指定）は generate_image.py を使用してください。
 
 Usage:
-    python3 generate_thumbnail.py <collection-path>
-    python3 generate_thumbnail.py <collection-path> -y
-    python3 generate_thumbnail.py <collection-path> --variation A
-    python3 generate_thumbnail.py <collection-path> --variation bg
-
-Example:
-    python3 generate_thumbnail.py collections/planning/20260219-8bit-rpg-class-vol2-collection
+    yt-generate-thumbnail <collection-path>
+    yt-generate-thumbnail <collection-path> -y
+    yt-generate-thumbnail <collection-path> --variation A
+    yt-generate-thumbnail <collection-path> --variation bg
 """
 
 import argparse
@@ -21,24 +20,30 @@ import sys
 import time
 from pathlib import Path
 
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider import (
+    ImageGenerationRequest,
+    get_provider,
+    load_image_generation_config,
+)
+from youtube_automation.utils.image_provider.composition import (
+    apply_composition_rules,
+    confirm_cost,
+    prompt_overwrite_or_rename,
+    resolve_composition_source,
+    resolve_cost_per_image,
+    resolve_reference_paths,
+)
+from youtube_automation.utils.image_provider.config import replace_model
 
-# --- パス解決 ---
+# Thumbnail スキルは 16:9 固定（order.md 「期待する動作 1」: thumbnail スキルは 16:9 固定）
+_THUMBNAIL_ASPECT_RATIO = "16:9"
+
+
 def _channel_root() -> Path:
     from youtube_automation.utils.config import channel_dir
 
     return channel_dir()
-
-
-from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-from youtube_automation.utils.image_generator import (  # noqa: E402
-    DEFAULT_IMAGE_SIZE,
-    DEFAULT_MODEL,
-    apply_composition_rules,
-    confirm_cost,
-    generate_image,
-    load_gemini_config,
-    resolve_unique_path,
-)
 
 
 def extract_prompt(prompts_md: Path, variation: str | None, use_text_overlay: bool = False) -> str:
@@ -53,19 +58,14 @@ def extract_prompt(prompts_md: Path, variation: str | None, use_text_overlay: bo
 
     if variation is None:
         if use_text_overlay:
-            # ## Text Overlay Prompt セクションを優先（参照画像ワークフロー）
             overlay_pattern = r"## Text Overlay Prompt[^\n]*\n\s*```\n(.*?)\n```"
             overlay_match = re.search(overlay_pattern, text, re.DOTALL)
             if overlay_match:
                 return overlay_match.group(1).strip()
-            # フォールバック: ## Primary Prompt
-        # ## Primary Prompt セクション直後のコードブロック
         pattern = r"## Primary Prompt[^\n]*\n\s*```\n(.*?)\n```"
     elif variation == "bg":
-        # ## Video Background Prompt セクション直後のコードブロック
         pattern = r"## Video Background Prompt[^\n]*\n\s*```\n(.*?)\n```"
     else:
-        # ### Variation X セクション直後のコードブロック
         pattern = rf"### Variation {re.escape(variation)}[^\n]*\n\s*```\n(.*?)\n```"
 
     match = re.search(pattern, text, re.DOTALL)
@@ -104,7 +104,7 @@ def main():
 
     load_dotenv(find_dotenv())
 
-    parser = argparse.ArgumentParser(description="Gemini API でコレクションサムネイル画像を生成")
+    parser = argparse.ArgumentParser(description="画像生成プロバイダーでコレクションサムネイル画像を生成")
     parser.add_argument("collection_path", help="コレクションのパス（例: collections/planning/xxx）")
     parser.add_argument("-y", "--yes", action="store_true", help="コスト確認をスキップ")
     parser.add_argument(
@@ -113,13 +113,13 @@ def main():
         default=None,
         help="使用するプロンプトバリエーション（省略時は Primary Prompt、bg は動画背景用）",
     )
-    parser.add_argument("--model", type=str, default=None, help="使用するモデル（例: gemini-3.1-flash-image-preview）")
+    parser.add_argument("--model", type=str, default=None, help="使用するモデル（skill-config の値を上書き）")
     parser.add_argument(
         "--reference",
         type=str,
         action="append",
         default=None,
-        help="参照画像パス（複数指定可。画像+プロンプトで Gemini に送信）",
+        help="参照画像パス（複数指定可）",
     )
     args = parser.parse_args()
 
@@ -145,16 +145,35 @@ def main():
         print("  先に /thumbnail スキルを実行してプロンプトを生成してください。")
         sys.exit(1)
 
-    config = load_gemini_config()
-    model = args.model or config.get("model", DEFAULT_MODEL)
-    cost_per_image = config.get("cost_per_image_usd")
-    if cost_per_image is None:
-        from youtube_automation.utils.cost_tracker import estimate_cost
+    try:
+        cfg = load_image_generation_config()
+    except ConfigError as e:
+        print(f"[ERROR] skill-config 読み込み失敗: {e}")
+        sys.exit(1)
 
-        cost_per_image = estimate_cost(model, quantity=1, image_size=DEFAULT_IMAGE_SIZE) or 0.0
+    if args.model:
+        cfg = replace_model(cfg, args.model)
+
+    from youtube_automation.utils.skill_config import load_skill_config
+
+    skill_cfg = load_skill_config("thumbnail")
+
+    if cfg.provider == "gemini":
+        assert cfg.gemini is not None
+        model = cfg.gemini.model
+        image_size = cfg.gemini.image_size
+    else:
+        assert cfg.openai is not None
+        model = cfg.openai.model
+        image_size = cfg.openai.quality
+
+    composition_source = resolve_composition_source(skill_cfg, cfg.provider)
+
+    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider, model, image_size)
+
     use_text_overlay = args.reference is not None and args.variation is None
     raw_prompt = extract_prompt(prompts_md, args.variation, use_text_overlay=use_text_overlay)
-    prompt = apply_composition_rules(raw_prompt, config)
+    prompt = apply_composition_rules(raw_prompt, composition_source)
 
     if args.variation == "bg":
         label = "Video Background Prompt"
@@ -165,79 +184,58 @@ def main():
     else:
         label = "Primary Prompt"
     print(f"\nコレクション: {collection_path.name}")
+    print(f"プロバイダー: {cfg.provider}")
     print(f"プロンプト:   {label}")
     print(f"出力先:       {output_path.relative_to(_channel_root())}")
     if args.reference:
         print(f"参照画像:     {', '.join(args.reference)}")
 
-    # 既存ファイル確認
-    if output_path.exists() and output_path.stat().st_size > 0:
-        if args.yes:
-            # -y 時は自動バージョニング（並列エージェント安全）
-            original = output_path
-            output_path = resolve_unique_path(output_path)
-            if output_path != original:
-                print(f"\n[INFO] 既存ファイルあり → 自動採番: {output_path.name}")
-        else:
-            print(f"\n[INFO] 既存ファイルが見つかりました: {output_path.name} ({output_path.stat().st_size:,} bytes)")
-            try:
-                answer = input("上書きしますか? (y/N): ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                print("\n中止しました。")
-                sys.exit(0)
-            if answer not in ("y", "yes"):
-                print("中止しました。")
-                sys.exit(0)
+    resolved_path = prompt_overwrite_or_rename(output_path, yes=args.yes)
+    if resolved_path is None:
+        sys.exit(0)
+    output_path = resolved_path
 
-    # コスト確認
-    if not args.yes:
-        if not confirm_cost(model, cost_per_image):
-            sys.exit(0)
+    if not args.yes and not confirm_cost(model, cost_per_image):
+        sys.exit(0)
 
     try:
-        from youtube_automation.utils.genai_client import create_genai_client
-    except ImportError:
-        print("[ERROR] google-genai がインストールされていません。")
-        print("  pip3 install google-genai Pillow --break-system-packages")
-        sys.exit(1)
-
-    # 参照画像解決（複数対応）
-    reference_images: list[Path] = []
-    for raw_ref in args.reference or []:
-        ref_path = Path(raw_ref)
-        if not ref_path.is_absolute():
-            ref_path = Path.cwd() / ref_path
-        if not ref_path.exists():
-            print(f"[ERROR] 参照画像が見つかりません: {ref_path}")
-            sys.exit(1)
-        reference_images.append(ref_path)
-
-    # 生成実行
-    try:
-        client = create_genai_client(location="global")
+        reference_images = resolve_reference_paths(args.reference)
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
-    start_time = time.monotonic()
-    success = generate_image(
-        client,
-        prompt,
-        model,
-        output_path,
-        reference_image=reference_images or None,
+
+    try:
+        provider = get_provider(cfg)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    request = ImageGenerationRequest(
+        prompt=prompt,
+        output_path=output_path,
+        aspect_ratio=_THUMBNAIL_ASPECT_RATIO,
+        image_size=image_size,
+        references=reference_images,
         cost_per_image_usd=cost_per_image,
     )
+
+    start_time = time.monotonic()
+    try:
+        result = provider.generate(request)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
     elapsed = time.monotonic() - start_time
 
-    # レポート
     print()
     print("===========================================")
-    if success:
+    if result.success:
         print("  サムネイル生成: 完了")
+        saved = result.saved_path or output_path
         try:
-            print(f"  ファイル: {output_path.relative_to(_channel_root())}")
+            print(f"  ファイル: {saved.relative_to(_channel_root())}")
         except ValueError:
-            print(f"  ファイル: {output_path}")
+            print(f"  ファイル: {saved}")
         print(f"  コスト:   ${cost_per_image:.3f}")
         print(f"  時間:     {elapsed:.1f}秒")
         update_workflow_state(workflow_state)
@@ -247,7 +245,7 @@ def main():
     print("===========================================")
     print()
 
-    sys.exit(0 if success else 1)
+    sys.exit(0 if result.success else 1)
 
 
 if __name__ == "__main__":
