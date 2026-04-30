@@ -58,15 +58,19 @@ def _phase_4_2_block(text: str) -> str:
     return match.group(1)
 
 
-def _config_yaml_gemini_image_block(text: str) -> str:
-    """thumbnail/config.default.yaml の gemini_image セクション (cost_per_image_usd まで) を抽出。"""
+def _config_yaml_image_generation_block(text: str) -> str:
+    """thumbnail/config.default.yaml の image_generation セクションを抽出。
+
+    Issue #67 のプロバイダー切り替え対応で、旧 `gemini_image:` ルートキーは
+    `image_generation:` 配下の `gemini:` サブセクションに移行された。
+    """
     match = re.search(
-        r"^gemini_image:.*?(?=^[a-z_]+:|\Z)",
+        r"^image_generation:.*?(?=^[a-z_]+:|\Z)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
     if not match:
-        raise AssertionError("thumbnail/config.default.yaml に gemini_image セクションが見つかりません")
+        raise AssertionError("thumbnail/config.default.yaml に image_generation セクションが見つかりません")
     return match.group(0)
 
 
@@ -160,37 +164,70 @@ def test_ideate_phase_4_2_keeps_user_reject_fallback_text() -> None:
     assert "テキストのみ" in block
 
 
-# ---------- thumbnail/config.default.yaml (cost_per_image_usd コメント) ----------
+# ---------- thumbnail/config.default.yaml (image_generation namespace - Issue #67) ----------
+
+
+def test_thumbnail_config_yaml_uses_image_generation_namespace() -> None:
+    """Given thumbnail/config.default.yaml
+    When ファイルを読む
+    Then ルートキーが `image_generation:` に移行されている
+        (Issue #67: provider 切り替え対応で `gemini_image:` から rename)。
+    """
+    text = _read(THUMBNAIL_CONFIG_YAML)
+    assert re.search(r"^image_generation:", text, flags=re.MULTILINE), (
+        "ルートキー `image_generation:` が見つかりません (Issue #67 で `gemini_image:` から移行)"
+    )
+
+
+def test_thumbnail_config_yaml_drops_legacy_gemini_image_root_key() -> None:
+    """Given thumbnail/config.default.yaml
+    When ファイルを読む
+    Then 旧ルートキー `gemini_image:` は削除されている
+        (旧 namespace は loader 側でのみ後方互換、デフォルト yaml には残さない)。
+    """
+    text = _read(THUMBNAIL_CONFIG_YAML)
+    assert not re.search(r"^gemini_image:", text, flags=re.MULTILINE), (
+        "旧ルートキー `gemini_image:` が残存。新 namespace `image_generation:` のみ使用すること"
+    )
+
+
+def test_thumbnail_config_yaml_declares_provider_field() -> None:
+    """Given image_generation ブロック
+    When 内容を読む
+    Then provider フィールドで gemini/openai を切り替え可能と明示されている。
+    """
+    block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
+    assert re.search(r"\bprovider:\s*\w+", block), f"`provider:` キーが見当たりません:\n{block}"
 
 
 def test_thumbnail_config_yaml_drops_hardcoded_004_example() -> None:
-    """Given thumbnail/config.default.yaml の gemini_image ブロック
-    When 修正後のコメントを読む
+    """Given image_generation ブロック
+    When コメントを読む
     Then `cost_per_image_usd: 0.04` という誤解を招く数値例が消えている。
     """
-    block = _config_yaml_gemini_image_block(_read(THUMBNAIL_CONFIG_YAML))
+    block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
     assert "cost_per_image_usd: 0.04" not in block, f"`cost_per_image_usd: 0.04` の誤解を招く数値例が残存:\n{block}"
     # 念のため 単独の $0.04 系表記も拒否
     assert "$0.04" not in block
 
 
 def test_thumbnail_config_yaml_keeps_pricing_auto_calc_comment() -> None:
-    """Given thumbnail/config.default.yaml の gemini_image ブロック
-    When 修正後のコメントを読む
+    """Given image_generation ブロック
+    When コメントを読む
     Then 「PRICING から自動算出」の既存コメントは維持される
         (Issue 補足で「自動算出が正」と明示されているため)。
     """
-    block = _config_yaml_gemini_image_block(_read(THUMBNAIL_CONFIG_YAML))
+    block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
     assert "cost_tracker.PRICING" in block, f"`cost_tracker.PRICING` 参照コメントが消えている:\n{block}"
 
 
 def test_thumbnail_config_yaml_keeps_cost_per_image_usd_key_doc() -> None:
-    """Given thumbnail/config.default.yaml の gemini_image ブロック
-    When 修正後のコメントを読む
+    """Given image_generation ブロック
+    When コメントを読む
     Then カスタム単価キー `cost_per_image_usd` のドキュメント自体は残る
         (キーの存在意義の説明が必要なため)。
     """
-    block = _config_yaml_gemini_image_block(_read(THUMBNAIL_CONFIG_YAML))
+    block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
     assert "cost_per_image_usd" in block, f"`cost_per_image_usd` キーの説明が消えている:\n{block}"
 
 

@@ -3,77 +3,102 @@
 # チャンネル側で上書きする場合は config/skills/thumbnail.yaml に記述する。
 # deep-merge でマージされる (dict は再帰マージ、リスト・スカラは上書き)。
 
-gemini_image:
-  # 使用する Gemini 画像生成モデル
-  model: gemini-3.1-flash-image-preview
+image_generation:
+  # provider: "gemini" | "openai"
+  # - gemini: Gemini Image (Nano Banana 系) を使用
+  # - openai: OpenAI gpt-image 系を使用（OPENAI_API_KEY が必要）
+  provider: gemini
 
-  # 1 枚あたりのコスト (USD) は cost_tracker.PRICING から解像度別に自動算出される。
-  # PRICING の値を上書きしたい場合のみ cost_per_image_usd を指定する
-  # （用途例: エンタープライズ割引価格や予算上限値の固定）
+  # 1 枚あたりのコスト (USD) は cost_tracker.PRICING から自動算出される。
+  # PRICING の値を上書きしたい場合のみ各 provider の cost_per_image_usd を指定する
+  # （用途例: エンタープライズ割引価格や予算上限値の固定）。
 
-  # 生成モード:
-  #   single_step   : テキスト付き参照画像から差分のみ指示し 1 ステップで完成
-  #   ttp_swap      : 競合サムネ + 自キャラアイコンの 2 参照でキャラ置換
-  #   two_phase     : 従来の 2 フェーズ (背景 → テキストオーバーレイ)
-  #   diff_from_reference : 既存キャラ画像を参照に差分のみ指示
-  generation_mode: two_phase
+  gemini:
+    # 使用する Gemini 画像生成モデル
+    model: gemini-3.1-flash-image-preview
 
-  # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
-  style: ""
+    # 生成モード:
+    #   single_step   : テキスト付き参照画像から差分のみ指示し 1 ステップで完成
+    #   ttp_swap      : 競合サムネ + 自キャラアイコンの 2 参照でキャラ置換
+    #   two_phase     : 従来の 2 フェーズ (背景 → テキストオーバーレイ)
+    #   diff_from_reference : 既存キャラ画像を参照に差分のみ指示
+    generation_mode: two_phase
 
-  # チャンネル統一の背景色 (single_step / diff_from_reference で使用)
-  # 未定義の場合は single_step の差分指示で背景色指示を省略する
-  brand_background: ""
+    # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
+    style: ""
 
-  # 参照画像の定義 (省略時はプロンプトベースモード)
-  # reference_images:
-  #   default: branding/character-reference/main-ref.png
-  #   path_base: channel_dir  # channel_dir からの相対パス
-  #   notes: ""
+    # チャンネル統一の背景色 (single_step / diff_from_reference で使用)
+    # 未定義の場合は single_step の差分指示で背景色指示を省略する
+    brand_background: ""
 
-  # 差分プロンプトのテンプレ (single_step / diff_from_reference モードで使用)
-  # プレースホルダ: {scene_description}, {specific_changes}, {background},
-  #                {candle}, {cocktail_description}, {title_line1}, {title_line2}
-  diff_prompt_template: ""
+    # 参照画像の定義 (省略時はプロンプトベースモード)
+    # reference_images:
+    #   default: branding/character-reference/main-ref.png
+    #   path_base: channel_dir  # channel_dir からの相対パス
+    #   notes: ""
 
-  # single_step モードで差し替えるカラーパレット (テーマごとの variation)
-  # color_themes:
-  #   navy:
-  #     background: "deep navy blue"
-  #     candle: "warm amber glass jar"
-  #     cocktail_description: "old fashioned cocktail in a rocks glass"
+    # 差分プロンプトのテンプレ (single_step / diff_from_reference モードで使用)
+    # プレースホルダ: {scene_description}, {specific_changes}, {background},
+    #                {candle}, {cocktail_description}, {title_line1}, {title_line2}
+    diff_prompt_template: ""
 
-  # 固定キャラクターの設定 (あればキャラ固定モード)
-  # fixed_character:
-  #   species: ""
-  #   description: ""
-  #   outfit: ""
-  #   accessories: ""
-  #   expression: ""
-  #   pose: ""
+    # single_step モードで差し替えるカラーパレット (テーマごとの variation)
+    # color_themes:
+    #   navy:
+    #     background: "deep navy blue"
+    #     candle: "warm amber glass jar"
+    #     cocktail_description: "old fashioned cocktail in a rocks glass"
 
-  # 構図・環境のルール
-  composition_rules:
-    environment: ""
-    character_size: ""
-    character_pose: ""
-    allowed_actions: ""
-    ng_actions: ""
-    background: ""
-    text_lines: "タイトルは 2 行以内"
-    channel_branding: ""
+    # 固定キャラクターの設定 (あればキャラ固定モード)
+    # fixed_character:
+    #   species: ""
+    #   description: ""
+    #   outfit: ""
+    #   accessories: ""
+    #   expression: ""
+    #   pose: ""
 
-  # テキストオーバーレイ設定 (two_phase モードで使用)
-  thumbnail_text:
-    channel_name: ""
-    channel_name_style: ""
-    title_format: ""
-    title_prefix: ""
-    copy_position: "right of character"
-    font:
-      copy: "classic serif"
-      genre_tag: "sans-serif bold"
-    color: ""
-    decoration: "none"
-    # Phase 2 のオーバーレイプロンプト (プレースホルダ: {title_line1}, {title_line2}, {channel_name})
-    text_overlay_prompt: ""
+    # 構図・環境のルール
+    composition_rules:
+      environment: ""
+      character_size: ""
+      character_pose: ""
+      allowed_actions: ""
+      ng_actions: ""
+      background: ""
+      text_lines: "タイトルは 2 行以内"
+      channel_branding: ""
+
+    # テキストオーバーレイ設定 (two_phase モードで使用)
+    thumbnail_text:
+      channel_name: ""
+      channel_name_style: ""
+      title_format: ""
+      title_prefix: ""
+      copy_position: "right of character"
+      font:
+        copy: "classic serif"
+        genre_tag: "sans-serif bold"
+      color: ""
+      decoration: "none"
+      # Phase 2 のオーバーレイプロンプト (プレースホルダ: {title_line1}, {title_line2}, {channel_name})
+      text_overlay_prompt: ""
+
+  openai:
+    # 使用する OpenAI 画像生成モデル
+    model: gpt-image-2
+
+    # 品質階層: low | medium | high（cost_tracker.PRICING の by_size key と一致）
+    quality: high
+
+    # アスペクト比は "16:9" / "9:16" のみサポート（thumbnail スキルは内部で 16:9 固定）
+    aspect_ratio: "16:9"
+
+    # 構図プランニング: off | low | medium | high
+    thinking: medium
+
+    # 1 リクエストで生成する枚数（n パラメータ）
+    batch: 1
+
+    # PRICING を上書きしたい場合のみ cost_per_image_usd を指定する
+    # cost_per_image_usd: null

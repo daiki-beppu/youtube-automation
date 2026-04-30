@@ -112,6 +112,18 @@ def load_skill_config(skill: str, *, use_cache: bool = True) -> dict[str, Any]:
     return merged
 
 
+def load_channel_override(skill: str) -> dict[str, Any]:
+    """チャンネル側 override 単体を返す (default とのマージは行わない)。
+
+    skill-config の旧 namespace 移行など、ユーザーが明示的に設定したキーだけを
+    検出したいケースで使う。override ファイルが無ければ空 dict。
+    """
+    path = _channel_override_path(skill)
+    if not path.exists():
+        return {}
+    return _load_yaml(path)
+
+
 def reset(skill: str | None = None) -> None:
     """キャッシュをクリアする (テスト用)。
 

@@ -77,6 +77,7 @@ channel-repo/                  # チャンネル固有リポジトリ
 | `youtube_automation.utils.channel_trend` | チャンネル日次トレンド + 異常検知（pandas rolling） |
 | `youtube_automation.utils.theme_performance` | テーマ別平均曲線比較 |
 | `youtube_automation.utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量抽出 + CTR/views 相関（Pillow） |
+| `youtube_automation.utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え）。`get_provider()` / `load_image_generation_config()` / `ImageGenerationRequest` を export |
 | `youtube_automation.auth.oauth_handler` | OAuth 2.0 トークン管理・リフレッシュ |
 | `youtube_automation.utils.secrets` | シークレット解決（env → 1Password CLI → ConfigError） |
 | `youtube_automation.cli.skills_sync` | `yt-skills` コマンド本体 |

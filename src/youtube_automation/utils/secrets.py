@@ -24,6 +24,7 @@ from youtube_automation.utils.exceptions import ConfigError
 # シークレット名 → 1Password の参照 URI
 _SECRET_REFS: dict[str, str] = {
     "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
+    "OPENAI_API_KEY": "op://Personal/OpenAI_API_Key/credential",
 }
 
 _OP_READ_TIMEOUT_SEC = 10

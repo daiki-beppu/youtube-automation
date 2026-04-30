@@ -15,6 +15,7 @@ dependencies = [
     "google-auth-oauthlib",
     "google-auth-httplib2",
     "google-genai",
+    "openai",
     "Pillow",
     "python-dotenv",
     "pandas",

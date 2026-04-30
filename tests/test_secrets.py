@@ -15,22 +15,24 @@ from unittest.mock import patch
 import pytest
 
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.secrets import get_secret, reset_cache
+from youtube_automation.utils.secrets import _SECRET_REFS, get_secret, reset_cache
 
 _TEST_SECRET = "CLIENT_SECRETS_JSON"
+_MANAGED_SECRETS = ("CLIENT_SECRETS_JSON", "OPENAI_API_KEY")
 
 
 @pytest.fixture(autouse=True)
 def clean_env():
     """各テスト前後で対象シークレットと lru_cache をクリーンにする"""
-    saved = os.environ.pop(_TEST_SECRET, None)
+    saved: dict[str, str | None] = {name: os.environ.pop(name, None) for name in _MANAGED_SECRETS}
     reset_cache()
     yield
     reset_cache()
-    if saved is not None:
-        os.environ[_TEST_SECRET] = saved
-    else:
-        os.environ.pop(_TEST_SECRET, None)
+    for name, value in saved.items():
+        if value is not None:
+            os.environ[name] = value
+        else:
+            os.environ.pop(name, None)
 
 
 class TestGetSecret:
@@ -109,3 +111,50 @@ class TestGetSecret:
             get_secret(_TEST_SECRET)
             get_secret(_TEST_SECRET)
         mock_run.assert_called_once()
+
+
+# ---------- OPENAI_API_KEY (Issue #67: gpt-image-2 サポート) ----------
+
+
+class TestOpenAIApiKeyRegistered:
+    """OPENAI_API_KEY が `_SECRET_REFS` に登録され、既存 3 経路が機能することを確認する。"""
+
+    def test_openai_api_key_is_registered_in_secret_refs(self):
+        """Given _SECRET_REFS
+        When OPENAI_API_KEY を引く
+        Then 1Password 参照 URI が登録されている。
+        """
+        assert "OPENAI_API_KEY" in _SECRET_REFS, "OPENAI_API_KEY が _SECRET_REFS に未登録"
+        ref = _SECRET_REFS["OPENAI_API_KEY"]
+        # op:// スキームの参照 URI であること
+        assert ref.startswith("op://"), f"1Password 参照 URI 形式でない: {ref}"
+
+    def test_openai_api_key_returns_from_environ_when_present(self):
+        """既に os.environ にあれば op を呼ばずにそれを返す。"""
+        os.environ["OPENAI_API_KEY"] = "sk-from-env-12345"
+        with patch("youtube_automation.utils.secrets.subprocess.run") as mock_run:
+            value = get_secret("OPENAI_API_KEY")
+        assert value == "sk-from-env-12345"
+        mock_run.assert_not_called()
+
+    def test_openai_api_key_falls_back_to_op_read(self):
+        """os.environ に無く op が成功すれば op read の値を返す。"""
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["op", "read", "..."],
+                returncode=0,
+                stdout="sk-from-op-67890\n",
+                stderr="",
+            )
+            value = get_secret("OPENAI_API_KEY")
+        assert value == "sk-from-op-67890"
+        mock_run.assert_called_once()
+
+    def test_openai_api_key_raises_config_error_when_unavailable(self):
+        """op が無く os.environ も空なら ConfigError。"""
+        with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
+            with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
+                get_secret("OPENAI_API_KEY")

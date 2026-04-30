@@ -106,7 +106,7 @@ Phase 1-1〜1-3 の入力を統合し:
 
 `config/skills/ideate.yaml` の `preview.candidate_count`（デフォルト 3）個の企画について、`/thumbnail` スキルの Phase 1 と同等の本番品質プロンプトを生成する:
 
-- `config/skills/thumbnail.yaml` の `gemini_image.prompt_prefix` + `composition_rules` を完全適用
+- `config/skills/thumbnail.yaml` の `image_generation.gemini.prompt_prefix` + `composition_rules` を完全適用
 - 英語 1 段落、誇張表現禁止、16:9 構図、テキスト除外
 - **本番品質で生成する**（選択後そのまま `main.png` として使用するため）
 
@@ -114,22 +114,28 @@ Phase 1-1〜1-3 の入力を統合し:
 
 `cost_tracker.PRICING` 参照で動的算出する（`cost_per_image_usd` カスタム単価があれば優先）。
 チャンネル設定 (`config/skills/ideate.yaml` の `preview.candidate_count` /
-`config/skills/thumbnail.yaml` の `gemini_image.model` / `cost_per_image_usd`) に追従するため、
+`config/skills/thumbnail.yaml` の `image_generation.<provider>.model` / `cost_per_image_usd`) に追従するため、
 以下のワンライナーを実行して結果をそのまま提示する:
 
 ```bash
 uv run python3 -c "
 from youtube_automation.utils.cost_tracker import estimate_cost
-from youtube_automation.utils.image_generator import DEFAULT_IMAGE_SIZE, DEFAULT_MODEL
+from youtube_automation.utils.image_provider import load_image_generation_config
 from youtube_automation.utils.skill_config import load_skill_config
 ic = load_skill_config('ideate').get('preview', {})
-tc = load_skill_config('thumbnail').get('gemini_image', {})
+cfg = load_image_generation_config()
 count = ic.get('candidate_count', 3)
-model = tc.get('model', DEFAULT_MODEL)
+if cfg.provider == 'gemini':
+    model = cfg.gemini.model
+    image_size = cfg.gemini.image_size
+else:
+    model = cfg.openai.model
+    image_size = cfg.openai.quality
+tc = load_skill_config('thumbnail').get('image_generation', {}).get(cfg.provider, {})
 per = tc.get('cost_per_image_usd')
 if per is None:
-    per = estimate_cost(model, image_size=DEFAULT_IMAGE_SIZE) or 0.0
-print(f'{count} 枚 × \${per:.3f} = \${count*per:.3f} ({model} / {DEFAULT_IMAGE_SIZE})')
+    per = estimate_cost(model, image_size=image_size) or 0.0
+print(f'{count} 枚 × \${per:.3f} = \${count*per:.3f} ({model} / {image_size})')
 "
 ```
 
@@ -152,20 +158,20 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 
 **プロンプト構築**:
 
-`config/skills/thumbnail.yaml` の `gemini_image.generation_mode` を確認:
+`config/skills/thumbnail.yaml` の `image_generation.gemini.generation_mode` を確認:
 
-- **`single_step` の場合**: `gemini_image.diff_prompt_template` をベースに、オブジェクトデザインルール（`ideate.objects` が定義されている場合）に従って企画ごとのオリジナルオブジェクトを指定。
-  - **背景色**: `gemini_image.brand_background` を使用（定義がある場合）。全コレクション統一
+- **`single_step` の場合**: `image_generation.gemini.diff_prompt_template` をベースに、オブジェクトデザインルール（`ideate.objects` が定義されている場合）に従って企画ごとのオリジナルオブジェクトを指定。
+  - **背景色**: `image_generation.gemini.brand_background` を使用（定義がある場合）。全コレクション統一
   - **差別化はオブジェクトで行う**: `ideate.objects.swappable` で定義されたスロットを企画ごとに変える
   - 具体的な差分プロンプトの書き方は `references/object-design-examples.md` を参照
 
-- **それ以外の場合**: `gemini_image.prompt_prefix` + `composition_rules` を適用した本番品質プロンプトを生成（従来方式）
+- **それ以外の場合**: `image_generation.gemini.prompt_prefix` + `composition_rules` を適用した本番品質プロンプトを生成（従来方式）
 
 ```bash
 # 順次実行（API レート制限回避）
 # <dir> は上で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
 # <slug> はテーマ名をケバブケースに変換（例: "The Wanderer's Road" → "wanderers-road"）
-REF=$(uv run python3 -c "from youtube_automation.utils.skill_config import load_skill_config; c=load_skill_config('thumbnail'); print(c.get('gemini_image',{}).get('reference_images',{}).get('default',''))")
+REF=$(uv run python3 -c "from youtube_automation.utils.skill_config import load_skill_config; c=load_skill_config('thumbnail'); print(c.get('image_generation',{}).get('gemini',{}).get('reference_images',{}).get('default',''))")
 uv run yt-generate-image --reference "$REF" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
 uv run yt-generate-image --reference "$REF" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
 uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
@@ -213,7 +219,7 @@ uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" 
 
 ### カラールール
 
-- **背景色**: `config/skills/thumbnail.yaml` の `gemini_image.brand_background` を使用（定義があれば全コレクション統一）
+- **背景色**: `config/skills/thumbnail.yaml` の `image_generation.gemini.brand_background` を使用（定義があれば全コレクション統一）
 - **差別化はオブジェクトで行う**: `ideate.objects.swappable` を企画ごとに変える
 
 各企画には以下を必ず含める:

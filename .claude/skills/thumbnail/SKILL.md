@@ -1,12 +1,13 @@
 ---
 name: thumbnail
-description: Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + Gemini API での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること
+description: Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + 画像生成プロバイダー（Gemini / OpenAI）での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること
 ---
 
 ## Overview
 
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。
 チャンネルごとにスタイル・キャラ・参照画像が異なり、すべて skill-config から動的に読み取る。
+画像生成プロバイダー（Gemini / OpenAI）は `image_generation.provider` で切り替え可能。
 
 ## 前提
 
@@ -31,6 +32,17 @@ description: Use when コレクションのサムネイル画像が必要で、C
 | `$ARGUMENTS` | テーマ・活動指定（省略可） | `/thumbnail fiddle playing` |
 | 未指定 | デフォルト活動で生成 | `/thumbnail` |
 
+## プロバイダー切り替え
+
+`config/skills/thumbnail.yaml` の `image_generation.provider` で選択する:
+
+| provider | 特徴 | 必要なシークレット |
+|---|---|---|
+| `gemini` | Gemini Image (Nano Banana 系) | `GOOGLE_CLOUD_PROJECT` ＋ ADC |
+| `openai` | OpenAI gpt-image 系（CJK 文字描画が綺麗、16:9/9:16 ネイティブ対応） | `OPENAI_API_KEY` |
+
+OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
+
 ## Channel Adaptation
 
 **すべての設定は `config/skills/thumbnail.yaml` から読み取る。**
@@ -42,20 +54,21 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 実行前に以下を確認:
 
-1. `gemini_image.model` → 使用する Gemini モデル
-2. `gemini_image.style` → スタイル説明（参照画像ベース or プロンプトベース）
-3. `gemini_image.prompt_prefix` → プロンプト冒頭の固定文（キャラ描写等）
-4. `gemini_image.reference_images` → 参照画像の定義（あれば参照画像モード）
-5. `gemini_image.fixed_character` → 固定キャラの設定（あればキャラ固定モード）
-6. `gemini_image.composition_rules` → 構図・環境のルール
-7. `gemini_image.thumbnail_text` → テキストオーバーレイの設定
-8. `gemini_image.generation_mode` → 生成モード（後述）
-9. `gemini_image.brand_background` → チャンネル統一背景色（single_step / diff_from_reference で使用）
-10. `gemini_image.color_themes` → テーマ別カラーパレット（single_step モードで差し替え）
+1. `image_generation.provider` → 使用するプロバイダー（`gemini` / `openai`）
+2. `image_generation.gemini.model` → 使用する Gemini モデル
+3. `image_generation.gemini.style` → スタイル説明（参照画像ベース or プロンプトベース）
+4. `image_generation.gemini.prompt_prefix` → プロンプト冒頭の固定文（キャラ描写等）
+5. `image_generation.gemini.reference_images` → 参照画像の定義（あれば参照画像モード）
+6. `image_generation.gemini.fixed_character` → 固定キャラの設定（あればキャラ固定モード）
+7. `image_generation.gemini.composition_rules` → 構図・環境のルール
+8. `image_generation.gemini.thumbnail_text` → テキストオーバーレイの設定
+9. `image_generation.gemini.generation_mode` → 生成モード（後述）
+10. `image_generation.gemini.brand_background` → チャンネル統一背景色（single_step / diff_from_reference で使用）
+11. `image_generation.gemini.color_themes` → テーマ別カラーパレット（single_step モードで差し替え）
 
 ## 生成モード判定
 
-`gemini_image.generation_mode` を確認:
+`image_generation.gemini.generation_mode` を確認:
 
 | モード | 説明 |
 |---|---|
@@ -96,11 +109,11 @@ uv run yt-generate-image \
 
 ### 1. prompt_prefix を取得
 
-`gemini_image.prompt_prefix` をプロンプト冒頭に配置。
+`image_generation.gemini.prompt_prefix` をプロンプト冒頭に配置。
 
 ### 2. fixed_character から活動を組み立て
 
-`gemini_image.fixed_character` がある場合:
+`image_generation.gemini.fixed_character` がある場合:
 - `outfit`: 服装描写
 - `instrument`: 楽器（テーマに応じて持ち替え可なら変更）
 - `face`: 顔の向き指示
@@ -168,11 +181,11 @@ uv run yt-generate-image \
 ```
 
 **運用上の注意**:
-- **リトライ前提**: Gemini Image 系モデル（`gemini_image.model` で指定）は同一プロンプトでも瞬発的にエラーを返す。2〜3 回リトライで通る
+- **リトライ前提**: 画像生成プロバイダーは同一プロンプトでも瞬発的にエラーを返す。2〜3 回リトライで通る
 - **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで完全継承される。変えたい部分だけ明示指示
 - **ブランド置換**: `Replace every occurrence of the word 'X' with 'Y'` で文字列差し替え可
 - **キャラサイズ**: 縮小傾向がある場合は `fills about 55% of the frame, bust-up portrait` を追記
-- **コスト**: 単価は `cost_tracker.PRICING` 参照（最大 3 回試行込み = 初回 + 最大 2 回リトライ）。例: `gemini-3.1-flash-image-preview` の 2K で 1 枚あたり $0.101 〜 $0.303
+- **コスト**: 単価は `cost_tracker.PRICING` 参照（最大 3 回試行込み = 初回 + 最大 2 回リトライ）。provider・モデル・画像サイズ別に自動算出される
 
 ### Single-Step モード（`generation_mode: "single_step"`）
 
@@ -182,9 +195,9 @@ uv run yt-generate-image \
 **重要**: 参照画像と同じ要素（レイアウト、固定オブジェクト、テキスト配置）はプロンプトに含めない。
 差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。
 
-1. `gemini_image.color_themes` からテーマのカラー設定を取得
-2. `gemini_image.diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
-   - `{background}`: カラーテーマの背景色（未指定時は `gemini_image.brand_background` を使用）
+1. `image_generation.gemini.color_themes` からテーマのカラー設定を取得
+2. `image_generation.gemini.diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
+   - `{background}`: カラーテーマの背景色（未指定時は `image_generation.gemini.brand_background` を使用）
    - `{candle}`, `{cocktail_description}` などオブジェクト系プレースホルダ: `ideate.objects` や `color_themes` 配下の値
    - `{title_line1}`, `{title_line2}`: コレクションタイトル
 
@@ -200,7 +213,7 @@ uv run yt-generate-image \
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
 5. 背景画像（テキストなし）も必要な場合は、テキストなしの参照画像で別途生成
 
-差分プロンプトの具体例は skill-config の `gemini_image.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。
+差分プロンプトの具体例は skill-config の `image_generation.gemini.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。
 
 ### Two-Phase モード（従来方式・フォールバック）
 
@@ -217,7 +230,7 @@ main.png が存在しない場合のみ:
 
 #### Phase 2: テキストオーバーレイ（thumbnail.jpg）
 
-1. `gemini_image.thumbnail_text` からテキスト設定を取得
+1. `image_generation.gemini.thumbnail_text` からテキスト設定を取得
 2. テキストオーバーレイプロンプトを構築:
 
 **`thumbnail_text.text_overlay_prompt` が定義されている場合（推奨）:**
@@ -240,7 +253,7 @@ Do not change the background image in any way.
 ## 品質チェック
 
 Phase 1 生成後:
-- [ ] `gemini_image.style` に記載されたスタイルが維持されているか
+- [ ] `image_generation.gemini.style` に記載されたスタイルが維持されているか
 - [ ] `composition_rules.environment` の制約を満たしているか
 - [ ] `fixed_character` の外見が維持されているか（ある場合）
 - [ ] キャラの顔が見えているか（`fixed_character.face` の指示通り）
@@ -259,8 +272,9 @@ Phase 2 生成後:
 ```markdown
 # Thumbnail Prompts - <コレクション名>
 
-*スタイル: {gemini_image.style}*
-*モデル: {gemini_image.model}*
+*プロバイダー: {image_generation.provider}*
+*スタイル: {image_generation.gemini.style}*
+*モデル: {image_generation.gemini.model}*
 *参照画像: <使用した参照画像>*
 
 ## Video Background Prompt (main.png)

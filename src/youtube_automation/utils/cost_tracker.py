@@ -85,6 +85,22 @@ PRICING: dict[str, ModelPricing] = {
         unit="image",
         by_size={"1K": 0.134, "2K": 0.134, "4K": 0.24},
     ),
+    # 画像 — OpenAI gpt-image 系（Issue #67, 2026-04 時点）
+    # by_size の key は OpenAI の `quality` 値（low / medium / high）に揃える。
+    # gpt-image-2 high は order.md "1024×1024 high 品質で約 $0.21/枚" に基づく。
+    # gpt-image-1.5 / gpt-image-1-mini の単価は order.md に明示なし（OpenAI 公開時に要再確認）。
+    "gpt-image-2": ModelPricing(
+        unit="image",
+        by_size={"low": 0.04, "medium": 0.10, "high": 0.21},
+    ),
+    "gpt-image-1.5": ModelPricing(
+        unit="image",
+        by_size={"low": 0.02, "medium": 0.05, "high": 0.12},
+    ),
+    "gpt-image-1-mini": ModelPricing(
+        unit="image",
+        by_size={"low": 0.01, "medium": 0.02, "high": 0.04},
+    ),
     # 動画 — Veo
     # NOTE: GA 版 (`-001`) は preview 相当の単価を暫定で採用。正確な Vertex AI 公称価格が判明し次第更新する。
     "veo-3.1-fast-generate-001": ModelPricing(unit="second", per_unit=0.15),
