@@ -322,6 +322,66 @@ class TestMainTf:
         assert block is not None
         assert re.search(r'hostname\s*=\s*"youtube-stream"', block), 'hostname = "youtube-stream" が設定されていない'
 
+    def test_vultr_instance_user_data_uses_templatefile_for_cloud_init(self):
+        """Given main.tf
+        When vultr_instance.this.user_data を読む
+        Then ``templatefile("${path.module}/cloud-init.yaml", {...})`` 経由で
+             cloud-init.yaml が渡されている（issue #124 要件）。
+
+        ``${path.module}`` を必ず付け、``-chdir`` 実行で相対パスが崩れないようにする。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None, 'resource "vultr_instance" "this" が存在しない'
+        assert re.search(
+            r"user_data\s*=\s*templatefile\(\s*\"\$\{path\.module\}/cloud-init\.yaml\"",
+            block,
+        ), 'user_data が templatefile("${path.module}/cloud-init.yaml", ...) で結線されていない'
+
+    def test_vultr_instance_user_data_passes_unit_via_file_function(self):
+        """Given main.tf
+        When vultr_instance.this.user_data の templatefile 第 2 引数を読む
+        Then ``youtube_stream_service = file("${path.module}/templates/youtube-stream.service.tftpl")``
+             で systemd unit テンプレを読み込んで cloud-init に渡している。
+
+        unit 側に Terraform 補間 (``${...}``) は無いため ``templatefile`` ではなく
+        ``file`` を使う（補間を持たない静的ファイルは ``file`` で読む原則）。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(
+            r"youtube_stream_service\s*=\s*file\(\s*\"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl\"\s*\)",
+            block,
+        ), 'youtube_stream_service が file("${path.module}/templates/youtube-stream.service.tftpl") で渡されていない'
+
+    def test_vultr_instance_user_data_does_not_inline_cloud_init_yaml(self):
+        """Given main.tf
+        When vultr_instance.this.user_data を読む
+        Then ``<<EOT ... EOT`` / ``<<-EOT ... EOT`` のヒアドキュメントで cloud-init を
+             直書きしていない（order.md「templatefile 経由」要件違反の検出）。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert not re.search(
+            r"user_data\s*=\s*<<-?[A-Z]+",
+            block,
+        ), "user_data がヒアドキュメントで直書きされている（templatefile 経由でなければならない）"
+
+    def test_vultr_instance_user_data_does_not_contain_secret_strings(self):
+        """Given main.tf
+        When vultr_instance.this.user_data 周辺を読む
+        Then secret（rtmp URL / stream key）が直書きされていない
+             （plan 差分でも露出しない要件）。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert "rtmp://" not in block, "main.tf の vultr_instance に rtmp:// URL が含まれている"
+        assert "rtmps://" not in block, "main.tf の vultr_instance に rtmps:// URL が含まれている"
+        assert "rtmp.youtube.com" not in block, "main.tf の vultr_instance に rtmp.youtube.com が含まれている"
+
 
 # ============================================================================
 # outputs.tf

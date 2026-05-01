@@ -1,0 +1,18 @@
+#cloud-config
+package_update: true
+
+packages:
+  - ffmpeg
+
+write_files:
+  - path: /etc/systemd/system/youtube-stream.service
+    owner: 'root:root'
+    permissions: '0644'
+    content: |
+      ${indent(6, youtube_stream_service)}
+
+runcmd:
+  - install -d -o root -g root -m 0755 /opt/youtube-stream
+  - install -d -o root -g root -m 0755 /opt/youtube-stream/videos
+  - install -d -o root -g root -m 0755 /opt/youtube-stream/logs
+  - systemctl daemon-reload

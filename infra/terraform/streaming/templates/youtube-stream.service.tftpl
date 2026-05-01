@@ -1,0 +1,16 @@
+[Unit]
+Description=YouTube Live 24/7 streaming via FFmpeg
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/youtube-stream.env
+ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO -c copy -f flv $RTMP_URL
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/youtube-stream/logs/ffmpeg.log
+StandardError=append:/opt/youtube-stream/logs/ffmpeg.log
+
+[Install]
+WantedBy=multi-user.target
