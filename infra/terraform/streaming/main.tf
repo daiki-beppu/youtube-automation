@@ -12,4 +12,8 @@ resource "vultr_instance" "this" {
   tags     = ["youtube-stream"]
 
   ssh_key_ids = [vultr_ssh_key.this.id]
+
+  user_data = base64encode(templatefile("${path.module}/cloud-init.yaml", {
+    systemd_unit = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})
+  }))
 }
