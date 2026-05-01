@@ -25,6 +25,9 @@ from youtube_automation.utils.exceptions import ConfigError
 _SECRET_REFS: dict[str, str] = {
     "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
     "OPENAI_API_KEY": "op://Personal/OpenAI_API_Key/credential",
+    # Issue #110: Vultr 帯域モニタリング + Discord/Slack webhook
+    "VULTR_API_KEY": "op://Personal/Vultr/api_key",
+    "STREAM_WEBHOOK_URL": "op://Personal/Stream_Notification_Webhook/url",
 }
 
 _OP_READ_TIMEOUT_SEC = 10
