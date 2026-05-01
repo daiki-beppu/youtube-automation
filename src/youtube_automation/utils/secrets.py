@@ -25,6 +25,7 @@ from youtube_automation.utils.exceptions import ConfigError
 _SECRET_REFS: dict[str, str] = {
     "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
     "OPENAI_API_KEY": "op://Personal/OpenAI_API_Key/credential",
+    "DISCORD_WEBHOOK_URL": "op://Personal/YouTube_Stream_Discord_Webhook/url",
 }
 
 _OP_READ_TIMEOUT_SEC = 10

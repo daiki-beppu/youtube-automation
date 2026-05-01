@@ -24,7 +24,12 @@ resource "null_resource" "deploy" {
     video_hash  = filemd5(var.video_path)
     # SHA256 は不可逆なので nonsensitive() で剥がし triggers map に格納する
     # （terraform 1.5+ は sensitive 値の派生も sensitive 扱いするため必須）
-    stream_key = nonsensitive(sha256(var.stream_key))
+    stream_key      = nonsensitive(sha256(var.stream_key))
+    discord_webhook = nonsensitive(sha256(var.discord_webhook_url))
+    healthcheck_sh  = filemd5("${path.module}/../../../scripts/streaming/healthcheck.sh")
+    notify_sh       = filemd5("${path.module}/../../../scripts/streaming/notify.sh")
+    logrotate_conf  = filemd5("${path.module}/../../../scripts/streaming/logrotate.conf")
+    cron_d          = filemd5("${path.module}/../../../scripts/streaming/cron.d")
   }
 
   connection {
@@ -47,13 +52,46 @@ resource "null_resource" "deploy" {
     destination = "/etc/youtube-stream.env"
   }
 
+  provisioner "file" {
+    content = templatefile("${path.module}/templates/youtube-stream-healthcheck.env.tftpl", {
+      webhook = var.discord_webhook_url
+    })
+    destination = "/etc/youtube-stream-healthcheck.env"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/../../../scripts/streaming/healthcheck.sh"
+    destination = "/opt/youtube-stream/bin/healthcheck.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/../../../scripts/streaming/notify.sh"
+    destination = "/opt/youtube-stream/bin/notify.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/../../../scripts/streaming/logrotate.conf"
+    destination = "/etc/logrotate.d/youtube-stream"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/../../../scripts/streaming/cron.d"
+    destination = "/etc/cron.d/youtube-stream-healthcheck"
+  }
+
   provisioner "remote-exec" {
     inline = [
       "chmod 600 /etc/youtube-stream.env",
       "chown root:root /etc/youtube-stream.env",
+      "mkdir -p /opt/youtube-stream/bin",
+      "chmod 755 /opt/youtube-stream/bin/healthcheck.sh /opt/youtube-stream/bin/notify.sh",
+      "chmod 0600 /etc/youtube-stream-healthcheck.env",
+      "chown root:root /etc/youtube-stream-healthcheck.env",
+      "chmod 0644 /etc/cron.d/youtube-stream-healthcheck /etc/logrotate.d/youtube-stream",
       "systemctl daemon-reload",
       "systemctl enable --now youtube-stream",
       "systemctl restart youtube-stream",
+      "systemctl restart cron",
     ]
   }
 }
