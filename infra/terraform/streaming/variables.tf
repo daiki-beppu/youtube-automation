@@ -27,3 +27,20 @@ variable "os_id" {
   description = "Ubuntu 24.04 LTS x64 の Vultr OS ID。Vultr API は integer を要求するため number 型で扱う"
   default     = 2284
 }
+
+variable "video_path" {
+  type        = string
+  description = "VPS にアップロードするローカル動画ファイルの絶対パス（環境依存のため必須項目）"
+}
+
+variable "stream_key" {
+  type        = string
+  description = "YouTube Live のストリームキー。TF_VAR_stream_key 経由で 1Password から注入する想定（tfstate にも sensitive 扱いで残す）"
+  sensitive   = true
+}
+
+variable "ssh_priv_key_path" {
+  type        = string
+  description = "null_resource provisioner の SSH 接続に使う秘密鍵ファイルのパス（~ は pathexpand で展開される）"
+  default     = "~/.ssh/yt_stream_key"
+}

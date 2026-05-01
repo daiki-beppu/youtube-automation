@@ -1,17 +1,22 @@
 # 使い方:
 #   cp terraform.tfvars.example terraform.tfvars
-#   <必要に応じて任意項目を有効化>
+#   <video_path を実値に書き換え、必要に応じて任意項目を有効化>
 #   export TF_VAR_vultr_api_key=$(op read 'op://Personal/Vultr/api_key')
+#   export TF_VAR_stream_key=$(op read 'op://Personal/YouTube/stream_key')
 #   terraform -chdir=infra/terraform/streaming init
 #   terraform -chdir=infra/terraform/streaming apply
 #
 # 注意:
-#   vultr_api_key はこのファイルに書かない（terraform.tfvars は gitignore 対象だが
-#   うっかりコピーや bak が漏洩する事故を防ぐため、必ず環境変数 TF_VAR_vultr_api_key
-#   経由で渡す。1Password CLI からの注入を推奨）。
+#   vultr_api_key / stream_key はこのファイルに書かない（terraform.tfvars は gitignore 対象だが
+#   うっかりコピーや bak が漏洩する事故を防ぐため、必ず環境変数 TF_VAR_vultr_api_key /
+#   TF_VAR_stream_key 経由で渡す。1Password CLI（op read）からの注入を推奨）。
+
+# 必須（環境ごとに書き換える）
+video_path = "/absolute/path/to/your/video.mp4"
 
 # 任意（デフォルト値で運用するならコメントアウトのまま）
-# ssh_pub_key_path = "~/.ssh/yt_stream_key.pub"
-# region           = "nrt"
-# plan             = "vc2-1c-2gb"
-# os_id            = 2284
+# ssh_pub_key_path  = "~/.ssh/yt_stream_key.pub"
+# ssh_priv_key_path = "~/.ssh/yt_stream_key"
+# region            = "nrt"
+# plan              = "vc2-1c-2gb"
+# os_id             = 2284
