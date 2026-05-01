@@ -3274,5 +3274,161 @@
       "segment": "seg_002",
       "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-114/test_parallel_partial_failure0/seg_002.wav"
     }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:27.231913+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_1",
+      "segment": "seg_001",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_generates_all_segments_an0/seg_001.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:27.297306+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_2",
+      "segment": "seg_002",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_generates_all_segments_an0/seg_002.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:27.458509+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_2",
+      "segment": "seg_002",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_skips_existing_segments0/seg_002.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:27.624271+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_1",
+      "segment": "seg_001",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_retries_on_failure0/seg_001.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:27.697120+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_2",
+      "segment": "seg_002",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_retries_on_failure0/seg_002.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:27.860475+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_1",
+      "segment": "seg_001",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_renames_segment_files_by_0/01-master/seg_001.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:27.929526+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_2",
+      "segment": "seg_002",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_renames_segment_files_by_0/01-master/seg_002.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:28.096907+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_1",
+      "segment": "seg_001",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_cleans_up_segment_files_w0/seg_001.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:28.162062+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_2",
+      "segment": "seg_002",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_cleans_up_segment_files_w0/seg_002.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:28.323930+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_1",
+      "segment": "seg_001",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_parallel_generates_all_se0/01-master/seg_001.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:28.323876+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_2",
+      "segment": "seg_002",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_parallel_generates_all_se0/01-master/seg_002.wav"
+    }
+  },
+  {
+    "timestamp": "2026-05-01T11:00:28.486830+00:00",
+    "category": "audio",
+    "model": "lyria-3-pro-preview",
+    "quantity": 1,
+    "unit": "song",
+    "estimated_cost_usd": 0.08,
+    "metadata": {
+      "phase_name": "phase_2",
+      "segment": "seg_002",
+      "output_file": "/private/var/folders/df/2dv2pvsx255_n6hg5wklcryc0000gn/T/pytest-of-mba/pytest-117/test_parallel_partial_failure0/seg_002.wav"
+    }
   }
 ]

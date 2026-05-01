@@ -36,6 +36,8 @@ _TFVARS_EXAMPLE = _STREAMING_DIR / "terraform.tfvars.example"
 _ROOT_GITIGNORE = _REPO_ROOT / ".gitignore"
 _CLOUD_INIT_YAML = _STREAMING_DIR / "cloud-init.yaml"
 _SYSTEMD_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.service.tftpl"
+_ENV_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.env.tftpl"
+_STREAMING_README = _STREAMING_DIR / "README.md"
 
 
 # ---------- ヘルパー ----------
@@ -866,3 +868,586 @@ class TestMainTfUserData:
             block,
             flags=re.IGNORECASE,
         ), "main.tf に動画ファイルパスが直書きされている"
+
+
+# ============================================================================
+# variables.tf — #125 追加変数（video_path / stream_key / ssh_priv_key_path）
+# ============================================================================
+
+
+class TestVariablesTfNullResource:
+    """``variables.tf`` の #125 で追加される 3 変数定義。
+
+    order.md 構成表:
+      - ``video_path`` (string, default なし)
+      - ``stream_key`` (string, sensitive=true, default なし)
+      - ``ssh_priv_key_path`` (string, default ``~/.ssh/yt_stream_key``)
+    """
+
+    def test_video_path_is_required_string_with_no_default(self):
+        """Given variables.tf
+        When video_path 変数定義を読む
+        Then type=string, description あり, default は宣言されていない（必須項目 / Fail Fast）。
+
+        動画パスはローカル環境ごとに異なるため、デフォルトを持たせず利用者に明示指定させる。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"video_path"')
+        assert block is not None, 'variable "video_path" が存在しない'
+        assert re.search(r"type\s*=\s*string", block), "video_path.type が string でない"
+        assert re.search(r"description\s*=", block), "video_path.description が無い"
+        assert not re.search(r"\bdefault\s*=", block), (
+            "video_path には default を設定してはならない（環境依存・必須項目）"
+        )
+
+    def test_stream_key_is_sensitive_string_with_no_default(self):
+        """Given variables.tf
+        When stream_key 変数定義を読む
+        Then type=string, sensitive=true, description あり, default は宣言されていない。
+
+        secret は ``vultr_api_key`` と同様 Fail Fast。tfstate に sensitive 扱いで残ることを保証する。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"stream_key"')
+        assert block is not None, 'variable "stream_key" が存在しない'
+        assert re.search(r"type\s*=\s*string", block), "stream_key.type が string でない"
+        assert re.search(r"sensitive\s*=\s*true", block), (
+            "stream_key.sensitive = true が無い（tfstate に平文で残るリスク）"
+        )
+        assert re.search(r"description\s*=", block), "stream_key.description が無い"
+        assert not re.search(r"\bdefault\s*=", block), (
+            "stream_key には default を設定してはならない（Fail Fast / secret はランタイム注入）"
+        )
+
+    def test_ssh_priv_key_path_default_is_yt_stream_key(self):
+        """Given variables.tf
+        When ssh_priv_key_path 変数定義を読む
+        Then type=string, default=``~/.ssh/yt_stream_key``, description あり。
+
+        既存 ``ssh_pub_key_path`` のデフォルト ``~/.ssh/yt_stream_key.pub`` と対称になる秘密鍵パス。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"ssh_priv_key_path"')
+        assert block is not None, 'variable "ssh_priv_key_path" が存在しない'
+        assert re.search(r"type\s*=\s*string", block), "ssh_priv_key_path.type が string でない"
+        assert re.search(r'default\s*=\s*"~/\.ssh/yt_stream_key"', block), (
+            'ssh_priv_key_path.default が "~/.ssh/yt_stream_key" でない（ssh_pub_key_path と対称）'
+        )
+        assert re.search(r"description\s*=", block), "ssh_priv_key_path.description が無い"
+
+
+# ============================================================================
+# versions.tf — #125 で追加される null provider 宣言
+# ============================================================================
+
+
+class TestVersionsTfNullProvider:
+    """``versions.tf`` の ``required_providers.null`` 宣言（#125）。
+
+    ``null_resource`` 利用には provider 宣言が必須。terraform 1.5+ では deprecation warning を回避する。
+    """
+
+    def test_required_providers_declares_null_source(self):
+        """Given versions.tf
+        When required_providers.null を読む
+        Then source = "hashicorp/null" が宣言されている。
+        """
+        text = _strip_hcl_comments(_read(_VERSIONS_TF))
+        terraform_block = _extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = _extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None, "required_providers ブロックが存在しない"
+        null_block = _extract_block(rp_block, r"null")
+        assert null_block is not None, "required_providers.null が宣言されていない"
+        assert re.search(r'source\s*=\s*"hashicorp/null"', null_block), (
+            'required_providers.null.source が "hashicorp/null" でない'
+        )
+
+    def test_required_providers_null_version_at_least_3_2(self):
+        """Given versions.tf
+        When required_providers.null.version を読む
+        Then ">= 3.2" を含む制約が宣言されている（plan §2.2）。
+        """
+        text = _strip_hcl_comments(_read(_VERSIONS_TF))
+        terraform_block = _extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = _extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None
+        null_block = _extract_block(rp_block, r"null")
+        assert null_block is not None
+        assert re.search(r'version\s*=\s*"[^"]*>=\s*3\.2', null_block), (
+            "required_providers.null.version が >= 3.2 を満たしていない"
+        )
+
+
+# ============================================================================
+# main.tf — #125 で追加される null_resource.deploy
+# ============================================================================
+
+
+class TestMainTfNullResource:
+    """``main.tf`` の ``null_resource.deploy`` 構造（#125）。
+
+    triggers / connection / 3 provisioners（file / file / remote-exec）の各構造を検証する。
+    """
+
+    def test_null_resource_deploy_exists(self):
+        """Given main.tf
+        When null_resource.deploy を探す
+        Then 定義されている（terraform apply 最終ステップの起点）。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None, 'resource "null_resource" "deploy" が存在しない'
+
+    def test_triggers_block_has_three_keys(self):
+        """Given main.tf
+        When null_resource.deploy.triggers を読む
+        Then instance_id / video_hash / stream_key の 3 キーが宣言されている。
+
+        - instance_id = vultr_instance.this.id（VPS 再作成時の再 deploy）
+        - video_hash = filemd5(var.video_path)（動画差分での再 deploy）
+        - stream_key（sha256 ハッシュ。stream key 差分での再 deploy）
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None, "null_resource.deploy.triggers ブロックが存在しない"
+        assert re.search(r"instance_id\s*=\s*vultr_instance\.this\.id", triggers), (
+            "triggers.instance_id が vultr_instance.this.id でない"
+        )
+        assert re.search(r"video_hash\s*=\s*filemd5\(\s*var\.video_path\s*\)", triggers), (
+            "triggers.video_hash が filemd5(var.video_path) でない"
+        )
+        assert re.search(r"\bstream_key\s*=", triggers), "triggers.stream_key が無い"
+
+    def test_triggers_stream_key_is_wrapped_with_nonsensitive(self):
+        """Given main.tf
+        When triggers.stream_key の右辺を読む
+        Then ``nonsensitive(sha256(var.stream_key))`` のように nonsensitive() でラップされている。
+
+        terraform 1.5+ は sensitive 値の派生も sensitive 扱いするため、triggers map に
+        直接 ``sha256(var.stream_key)`` を置くと「Output refers to sensitive values」でエラー。
+        SHA256 は不可逆なので nonsensitive() で剥がす運用判断（plan §2.4）。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None
+        # nonsensitive(sha256(var.stream_key)) 形式（空白許容）
+        assert re.search(
+            r"stream_key\s*=\s*nonsensitive\(\s*sha256\(\s*var\.stream_key\s*\)\s*\)",
+            triggers,
+        ), (
+            "triggers.stream_key が nonsensitive(sha256(var.stream_key)) でラップされていない "
+            "（terraform 1.5+ で sensitive 派生エラーになる）"
+        )
+
+    def test_connection_block_uses_pathexpand_for_private_key(self):
+        """Given main.tf
+        When null_resource.deploy.connection を読む
+        Then private_key = file(pathexpand(var.ssh_priv_key_path)) で ``~`` 展開されている。
+
+        既存 ``vultr_ssh_key.this.ssh_key`` 規約（main.tf:3）と対称。pathexpand 無しだと
+        ``~/.ssh/yt_stream_key`` がリテラルパスとして読まれて ssh 接続に失敗する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        connection = _extract_block(block, r"connection")
+        assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
+        assert re.search(r'type\s*=\s*"ssh"', connection), 'connection.type が "ssh" でない'
+        assert re.search(r'user\s*=\s*"root"', connection), 'connection.user が "root" でない'
+        assert re.search(r"host\s*=\s*vultr_instance\.this\.main_ip", connection), (
+            "connection.host が vultr_instance.this.main_ip でない"
+        )
+        assert re.search(
+            r"private_key\s*=\s*file\(\s*pathexpand\(\s*var\.ssh_priv_key_path\s*\)\s*\)",
+            connection,
+        ), "connection.private_key が file(pathexpand(var.ssh_priv_key_path)) でない（~ 未展開のリスク）"
+
+    def test_provisioner_file_uploads_video_to_canonical_path(self):
+        """Given main.tf
+        When 1 つ目の ``provisioner "file"`` を読む
+        Then source=var.video_path, destination=/opt/youtube-stream/videos/current.mp4。
+
+        cloud-init で作成済みの ``/opt/youtube-stream/videos/`` （cloud-init.yaml:14）に固定名で配置。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        # 動画アップロード provisioner は source=var.video_path で識別
+        # ブロック内に「source = var.video_path」と「destination = "/opt/.../current.mp4"」が
+        # 同じ provisioner "file" 内にあることを検証（順序は問わない）
+        match = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?source\s*=\s*var\.video_path[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/videos/current\.mp4"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+        match_alt = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/videos/current\.mp4"[^}]*?'
+            r"source\s*=\s*var\.video_path[^}]*?\}",
+            block,
+            flags=re.DOTALL,
+        )
+        assert match or match_alt, (
+            'provisioner "file" で source=var.video_path → '
+            "/opt/youtube-stream/videos/current.mp4 へのアップロードが宣言されていない"
+        )
+
+    def test_provisioner_file_places_env_via_templatefile(self):
+        """Given main.tf
+        When 2 つ目の ``provisioner "file"`` を読む
+        Then content=templatefile(...), destination=/etc/youtube-stream.env。
+
+        templatefile は ``${path.module}/templates/youtube-stream.env.tftpl`` を読む。
+        secret を tfstate に残さず provisioner 経由で配信する経路。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        # templatefile を引数に取る provisioner "file" を抽出（destination=/etc/youtube-stream.env）
+        assert re.search(
+            r'destination\s*=\s*"/etc/youtube-stream\.env"',
+            block,
+        ), 'provisioner "file" の destination が "/etc/youtube-stream.env" でない'
+        assert re.search(
+            r'templatefile\(\s*"\$\{path\.module\}/templates/youtube-stream\.env\.tftpl"',
+            block,
+        ), (
+            'env を配置する provisioner で templatefile("${path.module}/templates/'
+            'youtube-stream.env.tftpl", ...) が呼ばれていない'
+        )
+
+    def test_env_templatefile_passes_video_and_rtmp_url_variables(self):
+        """Given main.tf
+        When env を配置する templatefile() の variables map を読む
+        Then ``video = "/opt/youtube-stream/videos/current.mp4"`` と
+             ``rtmp_url = "rtmp://a.rtmp.youtube.com/live2/${var.stream_key}"`` が渡されている。
+
+        コメント除去ヘルパーは URL 内の ``//`` を削るため、この検証は raw text で行う。
+        """
+        text = _read(_MAIN_TF)  # raw（rtmp:// の // を保持するためコメント除去しない）
+        # video 変数（リテラル文字列）
+        assert re.search(
+            r'video\s*=\s*"/opt/youtube-stream/videos/current\.mp4"',
+            text,
+        ), 'templatefile に video = "/opt/youtube-stream/videos/current.mp4" が渡されていない'
+        # rtmp_url 変数（${var.stream_key} 補間を含む）
+        assert re.search(
+            r'rtmp_url\s*=\s*"rtmp://a\.rtmp\.youtube\.com/live2/\$\{var\.stream_key\}"',
+            text,
+        ), 'templatefile に rtmp_url = "rtmp://a.rtmp.youtube.com/live2/${var.stream_key}" が渡されていない'
+
+    def test_provisioner_remote_exec_inline_includes_required_commands(self):
+        """Given main.tf
+        When ``provisioner "remote-exec"`` の inline を読む
+        Then 仕様通りの 5 コマンドがすべて含まれている（順序固定）。
+
+        - chmod 600 /etc/youtube-stream.env  （0600 / root 所有）
+        - chown root:root /etc/youtube-stream.env
+        - systemctl daemon-reload  （新 unit / .env 反映）
+        - systemctl enable --now youtube-stream  （初回起動）
+        - systemctl restart youtube-stream  （再 apply 時に .env 再読込）
+
+        order.md 完了条件「0600 / root 所有」「11h+1h サイクル開始」を満たす。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        remote_exec = re.search(
+            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
+            block,
+            flags=re.DOTALL,
+        )
+        assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
+        inline = remote_exec.group(1)
+        for command, hint in [
+            (r"chmod\s+600\s+/etc/youtube-stream\.env", "chmod 600"),
+            (r"chown\s+root:root\s+/etc/youtube-stream\.env", "chown root:root"),
+            (r"systemctl\s+daemon-reload", "daemon-reload"),
+            (r"systemctl\s+enable\s+--now\s+youtube-stream", "enable --now youtube-stream"),
+            (r"systemctl\s+restart\s+youtube-stream", "restart youtube-stream"),
+        ]:
+            assert re.search(command, inline), f"remote-exec の inline に '{hint}' コマンドが無い"
+
+    def test_no_explicit_depends_on_for_null_resource(self):
+        """Given main.tf
+        When null_resource.deploy ブロック直下を読む
+        Then 明示的な ``depends_on = [...]`` を持たない。
+
+        triggers / connection で ``vultr_instance.this`` を参照することで暗黙の依存が成立しており、
+        plan §「特に注意すべきアンチパターン」#10 で「冗長な depends_on を書かない」と明示。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        # 内側ブロック（connection 等）の depends_on は本テストの対象外なので、
+        # 「行頭からインデント込みで `depends_on = [`」が現れる箇所が無いことを検証
+        assert not re.search(r"^\s*depends_on\s*=\s*\[", block, flags=re.MULTILINE), (
+            "null_resource.deploy に明示的な depends_on を書いてはならない "
+            "（plan アンチパターン #10、参照で暗黙依存が成立する）"
+        )
+
+    def test_no_extra_provisioner_attributes_added(self):
+        """Given main.tf
+        When null_resource.deploy 内の provisioner を読む
+        Then ``on_failure`` / ``timeout`` 等、order.md に無い属性を勝手に追加していない。
+
+        plan §「特に注意すべきアンチパターン」#7 のスコープ越境チェック。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        assert not re.search(r"\bon_failure\s*=", block), (
+            "provisioner に on_failure 属性が追加されている（order.md スコープ外）"
+        )
+        assert not re.search(r"\btimeout\s*=", block), (
+            "provisioner に timeout 属性が追加されている（order.md スコープ外）"
+        )
+
+
+# ============================================================================
+# templates/youtube-stream.env.tftpl — #125 新規ファイル
+# ============================================================================
+
+
+class TestEnvTftpl:
+    """``templates/youtube-stream.env.tftpl`` の env テンプレ内容（#125）。
+
+    systemd ``EnvironmentFile`` 形式（``KEY=VALUE``、引用符なし）。terraform ``templatefile()``
+    が ``${video}`` / ``${rtmp_url}`` を実値に展開し、systemd は env file をロードするだけ。
+    """
+
+    def test_file_exists(self):
+        """Given infra/terraform/streaming/templates/
+        When youtube-stream.env.tftpl を探す
+        Then 存在する。
+        """
+        assert _ENV_TFTPL.exists(), "templates/youtube-stream.env.tftpl が存在しない"
+
+    def test_contains_video_variable_assignment(self):
+        """Given env tftpl
+        When 全文を読む
+        Then ``VIDEO=${video}`` 行がある（terraform templatefile で展開される変数記法）。
+
+        値はクォートしない（systemd EnvironmentFile の慣例。クォートすると文字列に含まれてしまう）。
+        """
+        text = _read(_ENV_TFTPL)
+        assert re.search(r"^VIDEO=\$\{video\}\s*$", text, flags=re.MULTILINE), (
+            "VIDEO=${video} 行が存在しない（terraform templatefile 変数記法を使うこと）"
+        )
+
+    def test_contains_rtmp_url_variable_assignment(self):
+        """Given env tftpl
+        When 全文を読む
+        Then ``RTMP_URL=${rtmp_url}`` 行がある。
+        """
+        text = _read(_ENV_TFTPL)
+        assert re.search(r"^RTMP_URL=\$\{rtmp_url\}\s*$", text, flags=re.MULTILINE), (
+            "RTMP_URL=${rtmp_url} 行が存在しない（terraform templatefile 変数記法を使うこと）"
+        )
+
+    def test_does_not_contain_systemd_style_dollar_var_for_known_keys(self):
+        """Given env tftpl
+        When 全文を読む
+        Then ``$VIDEO`` / ``$RTMP_URL`` の systemd 参照記法（波括弧なし）が含まれていない。
+
+        env file 内では既にリテラル値に展開済の値が並ぶべき。``$NAME`` は systemd unit の
+        ``ExecStart`` 側で参照する記法であり、env file 内に書くのは誤り。
+        """
+        text = _read(_ENV_TFTPL)
+        # `${VIDEO}` ではなく `$VIDEO`（直後が { でない）パターンを検出
+        assert not re.search(r"\$VIDEO\b(?!\s*\})", text), (
+            "$VIDEO（systemd 参照記法）が env file に書かれている。${video} を使うこと"
+        )
+        assert not re.search(r"\$RTMP_URL\b(?!\s*\})", text), (
+            "$RTMP_URL（systemd 参照記法）が env file に書かれている。${rtmp_url} を使うこと"
+        )
+
+    def test_does_not_contain_plaintext_secrets(self):
+        """Given env tftpl
+        When 全文を読む
+        Then ``rtmp://`` URL や動画パスのリテラルが含まれていない（テンプレート段階では未展開）。
+
+        secret は terraform templatefile() の variables map 経由でだけ流入させる。
+        """
+        text = _read(_ENV_TFTPL)
+        assert not re.search(r"rtmp://", text), "rtmp:// が env tftpl に直書きされている（${rtmp_url} を使うこと）"
+        assert not re.search(
+            r"/opt/youtube-stream/videos/[^\s$]+\.(mp4|mkv|mov|webm)",
+            text,
+            flags=re.IGNORECASE,
+        ), "動画ファイルパスが env tftpl に直書きされている（${video} を使うこと）"
+
+    def test_values_are_not_quoted(self):
+        """Given env tftpl
+        When VIDEO / RTMP_URL の右辺を読む
+        Then 値がクォート（``"..."`` / ``'...'``）で囲まれていない。
+
+        systemd ``EnvironmentFile`` は ``KEY=VALUE`` の VALUE を素のまま読む。クォートすると
+        文字列の一部とみなされ、ffmpeg の引数解釈で破綻する。
+        """
+        text = _read(_ENV_TFTPL)
+        assert not re.search(r"^VIDEO=['\"]", text, flags=re.MULTILINE), (
+            "VIDEO の値がクォートされている（systemd EnvironmentFile の慣例違反）"
+        )
+        assert not re.search(r"^RTMP_URL=['\"]", text, flags=re.MULTILINE), (
+            "RTMP_URL の値がクォートされている（systemd EnvironmentFile の慣例違反）"
+        )
+
+
+# ============================================================================
+# terraform.tfvars.example — #125 で video_path / TF_VAR_stream_key 注入手順を追記
+# ============================================================================
+
+
+class TestTfvarsExampleStreamKey:
+    """``terraform.tfvars.example`` の #125 追加項目の secret 漏洩防止。"""
+
+    def test_does_not_contain_stream_key_assignment(self):
+        """Given terraform.tfvars.example
+        When ファイル内容（コメント除去後）を読む
+        Then ``stream_key = "..."`` のアクティブ代入が存在しない。
+
+        secret は TF_VAR_stream_key 経由で渡す前提で、サンプルにも値を書かない
+        （既存 ``test_does_not_contain_vultr_api_key_assignment`` と同種規約）。
+        """
+        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        assert not re.search(r"^\s*stream_key\s*=", text, flags=re.MULTILINE), (
+            "stream_key の代入がアクティブ行に存在する（secret 漏洩リスク）"
+        )
+
+    def test_mentions_tf_var_stream_key_in_comments(self):
+        """Given terraform.tfvars.example
+        When ファイル内容（コメント込み）を読む
+        Then ``TF_VAR_stream_key`` の使い方がコメントに記載されている。
+
+        運用者が secret 注入方法を発見できるよう、`vultr_api_key` と並列で説明する。
+        """
+        raw = _read(_TFVARS_EXAMPLE)
+        assert "TF_VAR_stream_key" in raw, (
+            "TF_VAR_stream_key の案内コメントが無い（運用者が secret 注入方法を発見できない）"
+        )
+
+    def test_mentions_op_read_for_stream_key(self):
+        """Given terraform.tfvars.example
+        When ファイル内容（コメント込み）を読む
+        Then ``op read`` による 1Password CLI 注入の案内が含まれている。
+
+        ルート ``README.md`` / ``infra/terraform/gcp/terraform.tfvars.example`` の慣例を踏襲。
+        """
+        raw = _read(_TFVARS_EXAMPLE)
+        assert "op read" in raw, "op read（1Password CLI）による secret 注入手順がコメントに無い"
+
+    def test_video_path_assignment_is_active(self):
+        """Given terraform.tfvars.example
+        When ファイル内容（コメント除去後）を読む
+        Then ``video_path = "..."`` がアクティブ行（コメントアウトされていない行）に存在する。
+
+        ``video_path`` はデフォルト値を持たない必須項目のため、サンプルでも明示する。
+        """
+        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        assert re.search(r"^\s*video_path\s*=\s*\"", text, flags=re.MULTILINE), (
+            'video_path = "..." がアクティブ行に存在しない（必須項目だがサンプルから発見できない）'
+        )
+
+
+# ============================================================================
+# infra/terraform/streaming/README.md — #125 新規ドキュメント
+# ============================================================================
+
+
+class TestStreamingReadme:
+    """``infra/terraform/streaming/README.md`` の最低限の記載項目（#125）。
+
+    order.md「secret 注入手順を README に記載」を満たし、運用者が ``terraform apply`` から
+    動作確認まで辿れる導線を提供する。
+
+    本テストは README の文章スタイルや章立て順序は問わない。**運用上クリティカルなキーワード**の
+    包含のみ検証する（執筆の自由度を残す）。
+    """
+
+    def test_file_exists(self):
+        """Given infra/terraform/streaming/
+        When README.md を探す
+        Then 存在する（gcp モジュールと並列の慣例）。
+        """
+        assert _STREAMING_README.exists(), "infra/terraform/streaming/README.md が存在しない"
+
+    def test_mentions_tf_var_stream_key(self):
+        """Given README
+        When 全文を読む
+        Then ``TF_VAR_stream_key`` 環境変数の言及がある（secret 注入の入口）。
+        """
+        text = _read(_STREAMING_README)
+        assert "TF_VAR_stream_key" in text, "README に TF_VAR_stream_key の言及が無い（secret 注入手順が辿れない）"
+
+    def test_mentions_tf_var_vultr_api_key(self):
+        """Given README
+        When 全文を読む
+        Then ``TF_VAR_vultr_api_key`` の言及がある（既存 secret も再掲する）。
+        """
+        text = _read(_STREAMING_README)
+        assert "TF_VAR_vultr_api_key" in text, (
+            "README に TF_VAR_vultr_api_key の言及が無い（運用者が必要 env を網羅できない）"
+        )
+
+    def test_mentions_op_read_for_secret_injection(self):
+        """Given README
+        When 全文を読む
+        Then ``op read`` による 1Password CLI 経由の secret 注入手順がある。
+        """
+        text = _read(_STREAMING_README)
+        assert "op read" in text, "README に op read（1Password CLI）の手順が無い"
+
+    def test_mentions_terraform_apply_command(self):
+        """Given README
+        When 全文を読む
+        Then ``terraform apply`` 実行手順が含まれている。
+        """
+        text = _read(_STREAMING_README)
+        assert re.search(r"terraform[^\n]*apply", text), "README に terraform apply の実行コマンドが書かれていない"
+
+    def test_mentions_systemctl_status_for_verification(self):
+        """Given README
+        When 全文を読む
+        Then ``systemctl status`` 等の動作確認コマンドが書かれている。
+
+        order.md「動作確認」セクションの最低限の引用。
+        """
+        text = _read(_STREAMING_README)
+        assert "systemctl" in text, "README に systemctl 系の動作確認コマンドが書かれていない"
+
+    def test_mentions_11h_1h_streaming_cycle(self):
+        """Given README
+        When 全文を読む
+        Then 11h 配信 / 1h 休止サイクルの説明が含まれている。
+
+        利用者が「なぜ 11h で勝手に止まるか」を理解できる必要がある（systemd 由来の挙動）。
+        """
+        text = _read(_STREAMING_README)
+        # 「11h」「11 時間」「RuntimeMaxSec」のいずれかでカバー
+        has_11h = "11h" in text or "11 時間" in text or "11時間" in text
+        has_runtime_max = "RuntimeMaxSec" in text
+        assert has_11h or has_runtime_max, (
+            "README に 11h サイクル / RuntimeMaxSec の説明が無い（systemd 由来の自動停止が説明されない）"
+        )
+
+    def test_does_not_contain_plaintext_stream_key(self):
+        """Given README
+        When 全文を読む
+        Then 実 stream key っぽいリテラル（``rtmp://...`` の URL 末尾値）が直書きされていない。
+
+        ドキュメントとしての例示でも、実際の YouTube stream key 形式（連続英数字）を書かないこと。
+        """
+        text = _read(_STREAMING_README)
+        # rtmp://a.rtmp.youtube.com/live2/<英数字 8 文字以上> っぽいパターンを検出
+        assert not re.search(
+            r"rtmp://[\w.]+/live2/[A-Za-z0-9]{8,}",
+            text,
+        ), "README に実 stream key を含む rtmp URL が書かれている可能性（漏洩リスク）"
