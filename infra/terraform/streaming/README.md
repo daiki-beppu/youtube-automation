@@ -56,6 +56,59 @@ systemd unit が以下の挙動を持つ:
 
 同じ動画 / 同じキーで再 apply すると no-op（冪等）。
 
+## 動画の差し替え手順
+
+`null_resource.deploy` の `triggers.video_hash`（`filemd5(var.video_path)`）が変わると同 resource のみが再実行され、新動画が VPS に転送されて `systemctl restart youtube-stream` まで一気通貫で走る。`vultr_ssh_key` / `vultr_instance` は trigger に含まれないため **VPS は再作成されない**。
+
+```bash
+# 1. 新動画の絶対パスを TF_VAR_video_path に export
+export TF_VAR_video_path=$(realpath ./new_video.mp4)
+
+# 2. 差分計画を確認（null_resource.deploy のみ replace 予定であること）
+terraform -chdir=infra/terraform/streaming plan
+
+# 3. 適用（filemd5 trigger が変わるので null_resource が再実行 → ファイル送信 + systemctl restart）
+terraform -chdir=infra/terraform/streaming apply
+```
+
+`terraform plan` の出力で `null_resource.deploy` の **replace 1 件のみ** であることを確認してから apply する。`vultr_instance` / `vultr_ssh_key` の change/replace 行が混じる場合は、`terraform.tfvars` の `region` / `plan` / `os_id` を意図せず変更している可能性があるため apply しない。
+
+### 視聴者ダウンタイムを 0 秒にする運用 tips
+
+§配信サイクル の 11h+1h サイクル中、毎日 11:00–12:00 / 23:00–0:00 の **休止時間** に apply するのが基本。
+
+| 実施タイミング | 視聴者影響 | 反映タイミング |
+|---|---|---|
+| 休止時間（11:00–12:00 / 23:00–0:00）| 0 秒 | apply 完了直後（休止状態がキャンセルされ即起動。以降のサイクルは apply 時刻基点にシフトする）|
+| 配信中 | `systemctl restart` 実行直後の数秒〜数十秒の中断 | apply 完了直後（即時再起動。以降のサイクルは apply 時刻基点にシフトする）|
+
+中断を 0 秒に抑えたければ必ず休止時間まで待ってから apply する。`null_resource.deploy` の最終 provisioner は `systemctl restart youtube-stream` を無条件で実行する（`main.tf` の `provisioner "remote-exec"` 参照）ため、配信中 apply で「次サイクル待ち」を選ぶ手段は提供されていない。
+
+休止時間の正確な開始時刻は VPS 上で以下を確認できる:
+
+```bash
+ssh -i ~/.ssh/yt_stream_key root@<instance_ip> systemctl show youtube-stream | grep -E 'ExecMainStartTimestamp|RuntimeMaxUSec'
+```
+
+### 同じ動画で再 apply した場合（冪等性）
+
+`filemd5(var.video_path)` が前回と同値なら `triggers` 全体が不変となり、`null_resource.deploy` は no-op。`terraform plan` の差分も 0 件になる（`No changes. Your infrastructure matches the configuration.`）。同じ mp4 で誤って再 apply しても VPS には何も起きないため、運用上は安全に空打ちできる。
+
+### 旧動画の扱い
+
+`provisioner "file"` の `destination` が `/opt/youtube-stream/videos/current.mp4` に固定されており、毎回同一パスへ上書きされる。VPS 上に旧動画は残らないため、明示的な削除手順は不要（単一ファイル方式の自然な振る舞い）。
+
+### トラブルシューティング（差し替え時）
+
+#### `Error: Missing required argument` / `var.video_path is required`
+`TF_VAR_video_path` を export せずに `terraform plan` / `apply` を実行している。`export TF_VAR_video_path=$(realpath ./new_video.mp4)` を当該シェルで再実行する。
+
+#### `terraform plan` で `vultr_instance` まで replace される
+`terraform.tfvars` の `region` / `plan` / `os_id` を意図せず変更している。差分行の resource 名を確認し、必要なら `terraform.tfvars` を元の値に戻してから再 plan する（差替時はこの 3 値を触らない）。
+
+#### apply 後も旧動画のまま見えている
+RTMP セッションの切替遅延（YouTube 側の数秒バッファ）または `ffmpeg` の再起動失敗。`journalctl -u youtube-stream -n 50 -f` で `ffmpeg` 起動時刻と入力ファイルを確認する。新しい時刻で `Stream #0:0` が出ていれば反映済（視聴側のキャッシュ抜けを待つ）。
+
 ## 動作確認
 
 VPS 上で以下を実行する（ホスト名は `terraform output instance_ip` で確認）:

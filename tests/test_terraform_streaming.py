@@ -1451,3 +1451,108 @@ class TestStreamingReadme:
             r"rtmp://[\w.]+/live2/[A-Za-z0-9]{8,}",
             text,
         ), "README に実 stream key を含む rtmp URL が書かれている可能性（漏洩リスク）"
+
+
+# ============================================================================
+# infra/terraform/streaming/README.md — #111 動画差し替え手順
+# ============================================================================
+
+
+class TestStreamingReadmeVideoSwap:
+    """``infra/terraform/streaming/README.md`` 「動画の差し替え手順」セクション（#111）。
+
+    依存 #125 で実装済みの ``null_resource.deploy`` (filemd5 trigger / current.mp4 上書き /
+    systemctl restart) を運用フェーズで使うための手順ドキュメントを検証する。
+
+    本テストは README の章立て順序や文章スタイルを問わず、運用上クリティカルなキーワードの
+    包含のみ検証する（執筆の自由度を残す）。order.md「動画差し替え手順」のタスク項目と
+    plan.md §write_tests ステップ指示に対応。
+    """
+
+    def test_has_video_swap_section_heading(self):
+        """Given README
+        When 全文を読む
+        Then 「動画の差し替え」を含む Markdown 見出し（``##`` / ``###``）が存在する。
+
+        運用者が見出しから瞬時に当該手順に到達できるよう、章として独立している必要がある。
+        """
+        text = _read(_STREAMING_README)
+        # ## または ### 行で「動画の差し替え」または「動画差し替え」を含む見出しがあること
+        assert re.search(
+            r"^#{2,3}\s+[^\n]*動画(の)?差し替え",
+            text,
+            flags=re.MULTILINE,
+        ), "README に「動画(の)?差し替え」を含む ## / ### 見出しが無い（運用者が章を辿れない）"
+
+    def test_mentions_tf_var_video_path(self):
+        """Given README
+        When 全文を読む
+        Then ``TF_VAR_video_path`` 環境変数の言及がある。
+
+        差し替え時に新しい動画パスを Terraform に渡すための env 名を運用者が
+        正確に知る必要がある（typo すれば ``var.video_path is required`` で失敗する）。
+        """
+        text = _read(_STREAMING_README)
+        assert "TF_VAR_video_path" in text, (
+            "README に TF_VAR_video_path の言及が無い（差し替え時の env 注入手順が辿れない）"
+        )
+
+    def test_mentions_terraform_plan_for_diff_check(self):
+        """Given README
+        When 全文を読む
+        Then ``terraform ... plan`` の差分確認手順が記載されている。
+
+        order.md「``terraform plan`` で **新動画 only** の差分が出ることの確認手順」要件。
+        apply 前に意図しないリソース（``vultr_instance`` 等）の replace を察知する導線。
+        """
+        text = _read(_STREAMING_README)
+        assert re.search(r"terraform[^\n]*plan", text), (
+            "README に terraform plan の差分確認手順が無い（apply 前の安全確認導線が欠落）"
+        )
+
+    def test_mentions_idle_window_for_zero_downtime(self):
+        """Given README
+        When 全文を読む
+        Then 「休止」または「ダウンタイム」または「0 秒」のいずれかが書かれている。
+
+        order.md「休止時間に実施するのが視聴者には透明」運用 tips 要件。
+        運用者が「いつ apply すべきか」の判断軸を README から得られる必要がある。
+        """
+        text = _read(_STREAMING_README)
+        has_idle = "休止" in text
+        has_downtime = "ダウンタイム" in text
+        has_zero_sec = "0 秒" in text or "0秒" in text
+        assert has_idle or has_downtime or has_zero_sec, (
+            "README に休止時間 / ダウンタイム / 0 秒 のいずれの運用 tips も無い"
+            "（視聴者影響を踏まえた実施タイミングの判断軸が欠落）"
+        )
+
+    def test_mentions_idempotency_with_filemd5(self):
+        """Given README
+        When 全文を読む
+        Then 「filemd5」または「no-op」または「冪等」のいずれかが書かれている。
+
+        order.md テスト第 3 項「同じ動画で再 apply → no-op（filemd5 不変）」の運用根拠。
+        運用者が「動かない」と誤認しないよう、冪等性の仕組みを README から読み取れる必要がある。
+        """
+        text = _read(_STREAMING_README)
+        has_filemd5 = "filemd5" in text
+        has_noop = "no-op" in text
+        has_idempotent = "冪等" in text
+        assert has_filemd5 or has_noop or has_idempotent, (
+            "README に filemd5 / no-op / 冪等 のいずれの言及も無い"
+            "（同一動画で再 apply した時の挙動が運用者に伝わらない）"
+        )
+
+    def test_mentions_current_mp4_overwrite(self):
+        """Given README
+        When 全文を読む
+        Then ``current.mp4`` への上書き（旧動画削除の自然解消）に触れている。
+
+        order.md 完了条件「旧動画は VPS 上に明示的に削除する仕組みを用意」を、
+        単一ファイル方式（``provisioner "file"`` が毎回上書き）で満たす根拠を README に明記する。
+        """
+        text = _read(_STREAMING_README)
+        assert "current.mp4" in text, (
+            "README に current.mp4 への上書きの言及が無い（旧動画が自然消去される根拠が辿れない）"
+        )
