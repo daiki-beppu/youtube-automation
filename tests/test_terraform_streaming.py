@@ -1,16 +1,19 @@
 """infra/terraform/streaming の Terraform 構成のスペック準拠テスト。
 
-issue #123 の order.md と plan.md に基づき、以下を検証する:
+issue #123 / #124 の order.md と plan.md に基づき、以下を検証する:
 
 - ``versions.tf``: ``vultr/vultr`` provider 宣言と provider ブロック
 - ``variables.tf``: 5 変数の型/default/sensitive
-- ``main.tf``: ``vultr_ssh_key`` + ``vultr_instance`` の構造と紐付け
+- ``main.tf``: ``vultr_ssh_key`` + ``vultr_instance`` の構造と紐付け、
+  ``user_data`` の base64encode + templatefile 連鎖（#124）
 - ``outputs.tf``: ``instance_ip`` / ``instance_id`` の expose
 - ``terraform.tfvars.example``: secret を平文で含まない
 - ルート ``.gitignore``: Terraform 系の ignore エントリ
+- ``cloud-init.yaml``: package_update / packages / runcmd / write_files / daemon-reload (#124)
+- ``templates/youtube-stream.service.tftpl``: 11h+1h 断続制御を含む systemd unit (#124)
 
-terraform バイナリに依存せず、``.tf`` ファイルのテキストを正規表現で
-構造検証する。実 ``terraform validate`` / ``apply`` は手動検証。
+terraform バイナリに依存せず、``.tf`` / ``.yaml`` / ``.tftpl`` ファイルのテキストを
+正規表現で構造検証する。実 ``terraform validate`` / ``apply`` は手動検証。
 """
 
 from __future__ import annotations
@@ -31,6 +34,8 @@ _MAIN_TF = _STREAMING_DIR / "main.tf"
 _OUTPUTS_TF = _STREAMING_DIR / "outputs.tf"
 _TFVARS_EXAMPLE = _STREAMING_DIR / "terraform.tfvars.example"
 _ROOT_GITIGNORE = _REPO_ROOT / ".gitignore"
+_CLOUD_INIT_YAML = _STREAMING_DIR / "cloud-init.yaml"
+_SYSTEMD_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.service.tftpl"
 
 
 # ---------- ヘルパー ----------
@@ -440,3 +445,424 @@ class TestRootGitignoreTerraformEntries:
         provider バイナリ・cache をコミットしない。
         """
         assert ".terraform/" in gitignore_lines, ".terraform/ が .gitignore に追加されていない"
+
+
+# ============================================================================
+# cloud-init.yaml (#124)
+# ============================================================================
+
+
+class TestCloudInitYaml:
+    """``cloud-init.yaml`` の構造（#124: プロビジョニング起動 YAML）。
+
+    ``${indent(6, systemd_unit)}`` という Terraform テンプレート式を含むため、
+    YAML パーサーで読み込まず、テキストベースで構造検証する。
+    """
+
+    def test_file_exists_with_cloud_config_header(self):
+        """Given infra/terraform/streaming/
+        When cloud-init.yaml を探す
+        Then 存在し、先頭が ``#cloud-config`` で始まる（cloud-init 必須ヘッダー）。
+        """
+        assert _CLOUD_INIT_YAML.exists(), "cloud-init.yaml が存在しない"
+        text = _read(_CLOUD_INIT_YAML)
+        first_line = text.splitlines()[0] if text.splitlines() else ""
+        assert first_line.strip() == "#cloud-config", (
+            f"先頭行が #cloud-config でない: {first_line!r}（cloud-init が認識しない）"
+        )
+
+    def test_package_update_is_true(self):
+        """Given cloud-init.yaml
+        When ``package_update`` キーを読む
+        Then ``true`` が設定されている (R1)。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(r"^package_update:\s*true\b", text, flags=re.MULTILINE), (
+            "package_update: true が宣言されていない（apt update が走らない）"
+        )
+
+    def test_packages_list_includes_ffmpeg(self):
+        """Given cloud-init.yaml
+        When ``packages:`` リストを読む
+        Then ``ffmpeg`` が含まれている (R2)。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        # `packages:` キーから次のトップレベルキー（インデント無し）の直前までを抽出
+        match = re.search(
+            r"^packages:\s*\n((?:[ \t]+.*\n)+)",
+            text,
+            flags=re.MULTILINE,
+        )
+        assert match is not None, "packages: リストブロックが存在しない"
+        packages_block = match.group(1)
+        assert re.search(r"^\s*-\s*ffmpeg\b", packages_block, flags=re.MULTILINE), (
+            "packages リストに ffmpeg が含まれていない"
+        )
+
+    def test_runcmd_creates_videos_dir_with_root_owner_and_0755(self):
+        """Given cloud-init.yaml
+        When runcmd を読む
+        Then ``/opt/youtube-stream/videos`` を root:root, 0755 で作成するコマンドがある (R3)。
+
+        ``install -d -m 0755 -o root -g root <path>`` 形式でパーミッションと所有者を明示する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(
+            r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/videos\b",
+            text,
+        ), "/opt/youtube-stream/videos を root:root 0755 で作成する install コマンドが無い"
+
+    def test_runcmd_creates_logs_dir_with_root_owner_and_0755(self):
+        """Given cloud-init.yaml
+        When runcmd を読む
+        Then ``/opt/youtube-stream/logs`` を root:root, 0755 で作成するコマンドがある (R4)。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(
+            r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/logs\b",
+            text,
+        ), "/opt/youtube-stream/logs を root:root 0755 で作成する install コマンドが無い"
+
+    def test_write_files_places_systemd_unit_at_canonical_path(self):
+        """Given cloud-init.yaml
+        When write_files エントリを読む
+        Then ``/etc/systemd/system/youtube-stream.service`` を配置する宣言がある (R5)。
+
+        owner=root:root, permissions='0644' の典型的な systemd unit 配置メタデータも併せて検証。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(r"^write_files:", text, flags=re.MULTILINE), "write_files: ブロックが存在しない"
+        assert re.search(
+            r"path:\s*/etc/systemd/system/youtube-stream\.service\b",
+            text,
+        ), "write_files に /etc/systemd/system/youtube-stream.service の path が無い"
+        assert re.search(r"owner:\s*root:root\b", text), "write_files の systemd unit に owner: root:root が無い"
+        assert re.search(r"permissions:\s*['\"]?0644['\"]?", text), (
+            "write_files の systemd unit に permissions: '0644' が無い"
+        )
+
+    def test_systemd_unit_content_uses_templatefile_interpolation(self):
+        """Given cloud-init.yaml
+        When write_files の content を読む
+        Then ``${indent(N, systemd_unit)}`` 形式で systemd unit が埋め込まれている。
+
+        plan の「templatefile 経由」+「YAML インデント整合のため indent() を使う」を検証。
+        直書き（複数行リテラル）にすると外側 templatefile からの注入経路が消えるため必須。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(r"\$\{\s*indent\(\s*\d+\s*,\s*systemd_unit\s*\)\s*\}", text), (
+            "write_files.content が ${indent(N, systemd_unit)} で埋め込まれていない"
+            "（直書きだと systemd unit が templatefile 経由にならない）"
+        )
+
+    def test_runcmd_invokes_systemctl_daemon_reload(self):
+        """Given cloud-init.yaml
+        When runcmd を読む
+        Then 末尾近くで ``systemctl daemon-reload`` が実行される (R6)。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(r"\bsystemctl\s+daemon-reload\b", text), (
+            "systemctl daemon-reload が runcmd に無い（write_files 後にユニット定義が認識されない）"
+        )
+
+    def test_does_not_enable_or_start_service(self):
+        """Given cloud-init.yaml
+        When 全文を読む
+        Then ``systemctl enable`` も ``systemctl start`` も実行しない (R7)。
+
+        order.md cloud-init §4「``enable --now`` は #125 で対応」のスコープ越境を防ぐ。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert not re.search(r"\bsystemctl\s+enable\b", text), (
+            "systemctl enable を実行してはならない（#125 の責務、ここで起動すると .env 不在で失敗する）"
+        )
+        assert not re.search(r"\bsystemctl\s+start\b", text), "systemctl start を実行してはならない（#125 の責務）"
+        # `--now` 単独でも enable と組み合わせる意図のため検出
+        assert not re.search(r"\bsystemctl\s+\S+\s+--now\b", text), (
+            "systemctl ... --now を実行してはならない（実質 enable+start の越境）"
+        )
+
+    def test_does_not_contain_plaintext_secrets(self):
+        """Given cloud-init.yaml
+        When 全文を読む
+        Then 動画パス・RTMP URL・stream key の直書きが無い (R19)。
+
+        `user_data` に含めると Vultr API 経由で漏洩するため、ここに secret を書かない。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        # ありがちな漏洩パターン（YAML 値として `=` ではなく `:` を使うが念のため両対応）
+        assert not re.search(r"\brtmp://[^\s'\"]+", text), "rtmp:// URL が直書きされている（secret 漏洩リスク）"
+        assert not re.search(r"\bRTMP_URL\s*[:=]\s*['\"]?rtmp", text), (
+            "RTMP_URL に rtmp:// 値が直書きされている（secret 漏洩リスク）"
+        )
+        # YAML key/value としての VIDEO 直書き
+        # （`write_files` content 内の `$VIDEO` は許容するため key 形式に限定）
+        assert not re.search(
+            r"^\s*VIDEO\s*[:=]\s*['\"]?/[\w./-]+\.(mp4|mkv|mov|webm)\b",
+            text,
+            flags=re.MULTILINE | re.IGNORECASE,
+        ), "VIDEO に動画パスが直書きされている（secret/構成 漏洩リスク、.env で渡すべき）"
+
+
+# ============================================================================
+# templates/youtube-stream.service.tftpl (#124)
+# ============================================================================
+
+
+class TestSystemdUnitTemplate:
+    """``templates/youtube-stream.service.tftpl`` の systemd unit 内容（#124）。
+
+    INI 風だが ``configparser`` は systemd の独自構文で fail することがあるため、
+    セクションごとにテキストを切り出し、key=value を正規表現で検証する。
+    """
+
+    @staticmethod
+    def _section(text: str, name: str) -> str | None:
+        """``[Name]`` セクションを次の ``[Other]`` 直前まで抜き出す。"""
+        match = re.search(
+            rf"^\[{re.escape(name)}\]\s*\n(.*?)(?=^\[|\Z)",
+            text,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        return match.group(1) if match else None
+
+    def test_file_exists(self):
+        """Given infra/terraform/streaming/templates/
+        When youtube-stream.service.tftpl を探す
+        Then 存在する。
+        """
+        assert _SYSTEMD_TFTPL.exists(), "templates/youtube-stream.service.tftpl が存在しない"
+
+    def test_unit_section_has_description(self):
+        """Given .tftpl
+        When [Unit] セクションを読む
+        Then ``Description=`` が宣言されている (R8)。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        unit = self._section(text, "Unit")
+        assert unit is not None, "[Unit] セクションが存在しない"
+        assert re.search(r"^Description=\S", unit, flags=re.MULTILINE), (
+            "[Unit].Description= が空または無い（systemctl status の表示に必須）"
+        )
+
+    def test_unit_section_after_network_online_target(self):
+        """Given .tftpl
+        When [Unit] セクションを読む
+        Then ``After=network-online.target`` が宣言されている (R9)。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        unit = self._section(text, "Unit")
+        assert unit is not None
+        assert re.search(r"^After=network-online\.target\s*$", unit, flags=re.MULTILINE), (
+            "[Unit].After=network-online.target が無い（ネットワーク準備前に ffmpeg 起動するリスク）"
+        )
+
+    def test_service_type_simple(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``Type=simple`` が宣言されている (R10)。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None, "[Service] セクションが存在しない"
+        assert re.search(r"^Type=simple\s*$", service, flags=re.MULTILINE), "[Service].Type=simple が無い"
+
+    def test_service_environment_file_path(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``EnvironmentFile=/etc/youtube-stream.env`` が宣言されている (R11)。
+
+        secret 隔離の核。VIDEO/RTMP_URL を unit 内に直書きせず .env から読む経路を強制する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(
+            r"^EnvironmentFile=/etc/youtube-stream\.env\s*$",
+            service,
+            flags=re.MULTILINE,
+        ), "[Service].EnvironmentFile=/etc/youtube-stream.env が無い（secret 隔離が破綻）"
+
+    def test_service_exec_start_uses_env_vars_not_literals(self):
+        """Given .tftpl
+        When [Service].ExecStart を読む
+        Then 仕様通りのコマンドが宣言されている (R12)。
+
+        ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO -c copy -f flv $RTMP_URL``
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        # 順序固定の厳密マッチ
+        expected = (
+            r"^ExecStart=/usr/bin/ffmpeg\s+-re\s+-stream_loop\s+-1\s+"
+            r"-i\s+\$VIDEO\s+-c\s+copy\s+-f\s+flv\s+\$RTMP_URL\s*$"
+        )
+        assert re.search(expected, service, flags=re.MULTILINE), (
+            "[Service].ExecStart が order.md 規定の ffmpeg コマンドと一致しない"
+        )
+
+    def test_service_runtime_max_sec_11h(self):
+        """Given .tftpl
+        When [Service] を読む
+        Then ``RuntimeMaxSec=11h`` が宣言されている (R13)。
+
+        12h 以上で配信するとアーカイブされない YouTube 仕様の回避策。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^RuntimeMaxSec=11h\s*$", service, flags=re.MULTILINE), (
+            "[Service].RuntimeMaxSec=11h が無い（11h で停止しないとアーカイブされない）"
+        )
+
+    def test_service_restart_always(self):
+        """Given .tftpl
+        When [Service] を読む
+        Then ``Restart=always`` が宣言されている (R14)。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^Restart=always\s*$", service, flags=re.MULTILINE), (
+            "[Service].Restart=always が無い（11h 停止後に自動再開しない）"
+        )
+
+    def test_service_restart_sec_1h(self):
+        """Given .tftpl
+        When [Service] を読む
+        Then ``RestartSec=1h`` が宣言されている (R15)。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^RestartSec=1h\s*$", service, flags=re.MULTILINE), (
+            "[Service].RestartSec=1h が無い（11h+1h サイクルが成立しない）"
+        )
+
+    def test_install_section_wanted_by_multi_user(self):
+        """Given .tftpl
+        When [Install] セクションを読む
+        Then ``WantedBy=multi-user.target`` が宣言されている (R16)。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        install = self._section(text, "Install")
+        assert install is not None, "[Install] セクションが存在しない"
+        assert re.search(r"^WantedBy=multi-user\.target\s*$", install, flags=re.MULTILINE), (
+            "[Install].WantedBy=multi-user.target が無い（systemctl enable で起動対象にならない）"
+        )
+
+    def test_no_terraform_interpolation_remains(self):
+        """Given .tftpl
+        When 全文を読む
+        Then ``${...}`` 形式の Terraform 補間が残っていない (R20 の片側)。
+
+        ``$VIDEO`` ``$RTMP_URL`` は systemd の env 参照（波括弧なし）であり terraform は素通しする。
+        ``${...}`` を書くと terraform templatefile 評価時に未定義変数で fail する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        assert not re.search(r"\$\{[^}]+\}", text), (
+            "${...} 形式の補間が残っている（systemd で参照したい場合は $NAME と書く / "
+            "terraform で渡したい場合は templatefile() の variables map に追加する）"
+        )
+
+    def test_no_plaintext_secrets_in_unit(self):
+        """Given .tftpl
+        When 全文を読む
+        Then RTMP URL・stream key・動画パスが直書きされていない (R19/R20)。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        assert not re.search(r"rtmp://[^\s$]+", text), (
+            "rtmp:// が直書きされている（secret 漏洩リスク、$RTMP_URL を使うこと）"
+        )
+        # 動画パスっぽいリテラル（拡張子付き絶対パス）
+        assert not re.search(
+            r"-i\s+(?!\$)[/\w.-]+\.(mp4|mkv|mov|webm)\b",
+            text,
+            flags=re.IGNORECASE,
+        ), "ffmpeg -i に動画パスが直書きされている（$VIDEO を使うこと）"
+
+
+# ============================================================================
+# main.tf user_data (#124)
+# ============================================================================
+
+
+class TestMainTfUserData:
+    """``main.tf`` の ``vultr_instance.this.user_data`` 結線（#124）。"""
+
+    def test_user_data_attribute_exists(self):
+        """Given main.tf
+        When vultr_instance.this を読む
+        Then ``user_data`` 属性が宣言されている (R17)。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(r"^\s*user_data\s*=", block, flags=re.MULTILINE), (
+            "vultr_instance.this.user_data が宣言されていない"
+        )
+
+    def test_user_data_is_base64encoded(self):
+        """Given main.tf
+        When vultr_instance.this.user_data の右辺を読む
+        Then ``base64encode(...)`` でラップされている (R18)。
+
+        Vultr API ``POST /v2/instances`` の user_data は base64 必須。
+        terraform-provider-vultr は値をそのまま API に渡すため HCL 側で base64encode が必要。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(r"user_data\s*=\s*base64encode\s*\(", block), (
+            "user_data が base64encode(...) でラップされていない（cloud-init が起動しない）"
+        )
+
+    def test_user_data_loads_cloud_init_yaml_via_templatefile(self):
+        """Given main.tf
+        When user_data の右辺を読む
+        Then 外側 ``templatefile("${path.module}/cloud-init.yaml", {...})`` が使われている。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(
+            r'templatefile\(\s*"\$\{path\.module\}/cloud-init\.yaml"',
+            block,
+        ), 'user_data が templatefile("${path.module}/cloud-init.yaml", ...) を呼んでいない'
+
+    def test_user_data_inner_templatefile_loads_systemd_unit(self):
+        """Given main.tf
+        When user_data の右辺を読む
+        Then 内側に ``templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})`` がある。
+
+        cloud-init.yaml の ``${indent(6, systemd_unit)}`` に渡される値の出元。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(
+            r"systemd_unit\s*=\s*templatefile\(\s*"
+            r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"',
+            block,
+        ), (
+            'systemd_unit = templatefile("${path.module}/templates/youtube-stream.service.tftpl", ...) '
+            "の結線が無い（cloud-init に systemd unit が注入されない）"
+        )
+
+    def test_user_data_does_not_contain_plaintext_secrets(self):
+        """Given main.tf
+        When user_data 全体を読む
+        Then RTMP URL や動画パスのリテラルが含まれていない (R19)。
+
+        secret は #125 の `.env` 経由で systemd に渡す責務分離を守る。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert not re.search(r"rtmp://", block), "main.tf に rtmp:// が直書きされている"
+        assert not re.search(
+            r'"[^"]*\.(mp4|mkv|mov|webm)"',
+            block,
+            flags=re.IGNORECASE,
+        ), "main.tf に動画ファイルパスが直書きされている"
