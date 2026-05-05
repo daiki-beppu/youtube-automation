@@ -1,12 +1,12 @@
 # Object Design Examples（参考資料）
 
-`objects` を `config/skills/ideate.yaml` で定義するときの参考例。
+`objects` を `config/skills/collection-ideate.yaml` で定義するときの参考例。
 **これは例示のみ** — 実際のオブジェクトは各チャンネルのコンセプトに合わせて自由に設計する。
 
 ## 例 1: bobble（jazzhop BGM + アライグマキャラ）
 
 Single-Step モードで、ベース参照画像の「左キャンドル + 右カクテル」をコレクションごとに差し替える構成。
-`config/skills/ideate.yaml` での記述例:
+`config/skills/collection-ideate.yaml` での記述例:
 
 ```yaml
 objects:

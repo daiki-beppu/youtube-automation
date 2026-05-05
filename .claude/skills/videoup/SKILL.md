@@ -61,4 +61,4 @@ $ARGUMENTS
 ## Next Step
 
 動画生成後:
-→ `/description <collection-path>` でYouTube概要欄を生成
+→ `/video-description <collection-path>` でYouTube概要欄を生成

@@ -1,5 +1,5 @@
 ---
-name: persona
+name: audience-persona
 description: Use when ターゲット視聴者のペルソナを定義・見直したいとき。「誰が聴くか」「ペルソナ設定」「ターゲット」「視聴者像」「ターゲット層」「リスナー像」など。/viewer-voice の結果を前提とし、/viewing-scene の入力になる。チャンネル立ち上げ・方向性見直し時に必ず使用すること
 ---
 

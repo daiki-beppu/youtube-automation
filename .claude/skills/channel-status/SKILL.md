@@ -1,5 +1,5 @@
 ---
-name: status
+name: channel-status
 description: Use when チャンネル全体の YouTube 統計（登録者数・総再生回数・動画別パフォーマンス）を取得したいとき。「登録者数は？」「チャンネルの最新情報」「YouTube の数字見せて」など、YouTube API から数字を取得するときに使用する。ローカルのコレクション制作進捗は /wf-status
 ---
 
