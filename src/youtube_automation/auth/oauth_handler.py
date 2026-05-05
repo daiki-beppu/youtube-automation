@@ -33,12 +33,15 @@ class YouTubeOAuthHandler:
         "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ]
 
-    def __init__(self, auth_dir=None):
+    def __init__(self, auth_dir=None, scopes=None, token_path=None):
         """
         初期化
 
         Args:
             auth_dir (str): token.json を格納するチャンネル固有 auth ディレクトリのパス
+            scopes (list[str] | None): OAuth scopes。未指定時はクラス属性 ``SCOPES``（既存挙動）
+            token_path (str | Path | None): token ファイルパス。未指定時は ``<auth_dir>/token.json``。
+                stream key 取得用に ``token_streaming.json`` を分離する用途で使用する（issue #135）
         """
         from youtube_automation.utils.config import channel_dir as _channel_dir
 
@@ -71,13 +74,22 @@ class YouTubeOAuthHandler:
                     # (_validate_client_secrets で適切なエラーメッセージを表示)
                     self.client_secrets_file = candidates[0]
 
-        # token.json: チャンネル固有
+        # scopes: 未指定時は SCOPES クラス属性（既存 callsite との後方互換）
+        self._scopes = list(scopes) if scopes is not None else self.SCOPES
+
+        # auth_dir は従来挙動を維持。未指定なら channel_dir/"auth"
         if auth_dir is None:
             auth_dir = channel_dir / "auth"
         else:
             auth_dir = Path(auth_dir)
         self.auth_dir = auth_dir
-        self.token_file = self.auth_dir / "token.json"
+
+        # token_path 指定時はそれを最優先。未指定時は <auth_dir>/token.json
+        # （token_path 指定時に auth_dir を上書きしない: 引数の意味を silently 変えない）
+        if token_path is not None:
+            self.token_file = Path(token_path)
+        else:
+            self.token_file = self.auth_dir / "token.json"
         self.credentials = None
 
     def _validate_client_secrets(self):
@@ -113,7 +125,7 @@ class YouTubeOAuthHandler:
         if not force_reauth and self.token_file.exists():
             try:
                 print("📁 既存トークンファイルを確認中...")
-                self.credentials = Credentials.from_authorized_user_file(str(self.token_file), self.SCOPES)
+                self.credentials = Credentials.from_authorized_user_file(str(self.token_file), self._scopes)
                 print("✅ 既存トークン読み込み成功")
             except Exception as e:
                 print(f"⚠️  既存トークン読み込み失敗: {e}")
@@ -138,7 +150,7 @@ class YouTubeOAuthHandler:
             print("📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です")
 
             try:
-                flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self.SCOPES)
+                flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self._scopes)
                 self.credentials = flow.run_local_server(port=0)
                 print("✅ OAuth 2.0 認証成功")
                 self._save_credentials()

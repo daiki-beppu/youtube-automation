@@ -14,7 +14,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 - `terraform` >= 1.5 インストール済み
 - Vultr API キーを 1Password に保管済み（または環境変数で渡せる状態）
-- YouTube Studio で発行したストリームキーを 1Password に保管済み
+- `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
 - SSH 鍵ペア `~/.ssh/yt_stream_key` / `~/.ssh/yt_stream_key.pub` を生成済み
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
 
@@ -27,6 +27,7 @@ cp terraform.tfvars.example terraform.tfvars
 # → video_path を実値（絶対パス）に書き換え
 
 # 2. secret を環境変数経由で注入（1Password CLI 推奨）
+#    ストリームキーが 1Password に未保管なら事前に `yt-fetch-stream-key --vault=Personal --item=YouTube` を実行
 export TF_VAR_vultr_api_key=$(op read 'op://Personal/Vultr/api_key')
 export TF_VAR_stream_key=$(op read 'op://Personal/YouTube/stream_key')
 
