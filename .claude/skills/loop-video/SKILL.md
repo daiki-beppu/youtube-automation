@@ -113,7 +113,7 @@ veo:
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
-| `veo.model` | veo-3.1-fast-generate-001 | Veo API モデル（選択肢: veo-3.1-fast-generate-001 / veo-3.1-generate-001） |
+| `veo.model` | veo-3.1-fast-generate-001 | Veo API モデル（選択肢: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview） |
 | `veo.default_prompt` | 汎用微動プロンプト | チャンネルの世界観に合わせて上書き推奨 |
 | `veo.duration_seconds` | 8 | 生成尺（Veo API 制約で 8 秒固定） |
 | `veo.crossfade_sec` | 0.5 | FFmpeg ループ補正のクロスフェード秒数 |

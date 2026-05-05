@@ -4,7 +4,7 @@
 # チャンネル側では config/skills/loop-video.yaml に上書き値を置く。
 
 veo:
-  # Veo モデル ID（API デフォルト: veo-3.1-fast-generate-001 / 選択肢: veo-3.1-fast-generate-001 | veo-3.1-generate-001）
+  # Veo モデル ID（API デフォルト: veo-3.1-fast-generate-001 / 選択肢: veo-3.1-fast-generate-001 | veo-3.1-generate-001 | veo-3.1-lite-generate-preview）
   model: "veo-3.1-fast-generate-001"
 
   # 動画生成プロンプト。コレクションの世界観に合わせてチャンネル側で上書き推奨。

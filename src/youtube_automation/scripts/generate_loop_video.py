@@ -68,22 +68,36 @@ def resolve_collection_paths(collection_path: Path) -> tuple[Path, Path]:
     return image_path, output_path
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    # Veo の preview/GA リリースサイクルに追従するため、`--model` は choices で
+    # 縛らず任意文字列を受ける。未知モデルは Vertex AI 側でエラーになる。
+    # RawTextHelpFormatter: help 文字列にハイフン入りモデル名が連なるため、
+    # 80 桁折り返しで `veo-3.1-lite-` / `generate-preview` のように分断されないようにする。
+    parser = argparse.ArgumentParser(
+        description="Veo 3.1 コレクションループ動画生成",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument("collection", nargs="?", help="コレクションパス")
+    parser.add_argument("--prompt", help="動画生成プロンプト")
+    parser.add_argument(
+        "--model",
+        help=(
+            "Veo モデル名 (default: skill-config の veo.model, fallback: veo-3.1-fast-generate-001)。"
+            " 例: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview"
+        ),
+    )
+    parser.add_argument("--smooth", action="store_true", help="FFmpeg クロスフェードでループ補正")
+    parser.add_argument("--crossfade", type=float, default=0.5, help="クロスフェード秒数 (デフォルト: 0.5)")
+    parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
+    return parser
+
+
 def main():
     from dotenv import find_dotenv, load_dotenv
 
     load_dotenv(find_dotenv())
 
-    parser = argparse.ArgumentParser(description="Veo 3.1 コレクションループ動画生成")
-    parser.add_argument("collection", nargs="?", help="コレクションパス")
-    parser.add_argument("--prompt", help="動画生成プロンプト")
-    parser.add_argument(
-        "--model",
-        choices=["veo-3.1-fast-generate-001", "veo-3.1-generate-001"],
-        help="Veo モデル名 (default: veo-3.1-fast-generate-001)",
-    )
-    parser.add_argument("--smooth", action="store_true", help="FFmpeg クロスフェードでループ補正")
-    parser.add_argument("--crossfade", type=float, default=0.5, help="クロスフェード秒数 (デフォルト: 0.5)")
-    parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
+    parser = _build_parser()
     args = parser.parse_args()
 
     # 設定読み込み
