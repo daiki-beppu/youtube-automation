@@ -25,9 +25,11 @@ from youtube_automation.utils.exceptions import ConfigError
 _SECRET_REFS: dict[str, str] = {
     "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
     "OPENAI_API_KEY": "op://Personal/OpenAI_API_Key/credential",
+    "YOUTUBE_STREAM_KEY": "op://Personal/YouTube/stream_key",
 }
 
 _OP_READ_TIMEOUT_SEC = 10
+_OP_WRITE_TIMEOUT_SEC = 10
 
 
 @lru_cache(maxsize=None)
@@ -101,6 +103,73 @@ def get_client_secrets_path() -> Path:
     tmp.close()
     _client_secrets_tempfile = Path(tmp.name)
     return _client_secrets_tempfile
+
+
+def write_op_secret(vault: str, item: str, field: str, value: str) -> None:
+    """1Password の指定 vault / item / field にシークレットを書き込む。
+
+    既存 item があれば ``op item edit`` で field を更新し、無ければ
+    ``op item create --category=password`` で新規作成にフォールバックする
+    （初回 / 2 回目以降の両ケースを 1 関数で吸収する）。
+
+    Args:
+        vault: 1Password vault 名（例: ``"Personal"``）
+        item:  item 名（例: ``"YouTube"``）
+        field: field 名（例: ``"stream_key"``）
+        value: 書き込む値
+
+    Raises:
+        ConfigError: ``op`` CLI が PATH 上に無い、または edit / create 双方が失敗した場合
+    """
+    op_path = shutil.which("op")
+    if not op_path:
+        raise ConfigError(
+            "1Password CLI (op) が見つかりません。\n"
+            "  → https://developer.1password.com/docs/cli/get-started/ からインストールするか、\n"
+            "  → 既にインストール済みなら PATH を確認してください"
+        )
+
+    assignment = f"{field}={value}"
+
+    edit_cmd = ["op", "item", "edit", item, "--vault", vault, assignment]
+    try:
+        subprocess.run(
+            edit_cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=_OP_WRITE_TIMEOUT_SEC,
+        )
+        return
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        # item 不在ケース。create にフォールバックする
+        pass
+
+    create_cmd = [
+        "op",
+        "item",
+        "create",
+        "--category=password",
+        "--vault",
+        vault,
+        "--title",
+        item,
+        assignment,
+    ]
+    try:
+        subprocess.run(
+            create_cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=_OP_WRITE_TIMEOUT_SEC,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        stderr = getattr(exc, "stderr", "") or ""
+        raise ConfigError(
+            f"1Password への書き込みに失敗しました (vault={vault}, item={item}, field={field})。\n"
+            f"  op item edit / create の両方が失敗しています。stderr: {stderr.strip()}"
+        ) from exc
 
 
 def reset_cache() -> None:
