@@ -12,9 +12,6 @@ genre_line: ""
 # Suno の Exclude Styles 欄に入れる除外語
 exclude_styles: "heavy metal, aggressive, EDM, dubstep, techno, industrial, white noise, orchestral, rain sounds, vinyl crackle, ambient noise"
 
-# 長さ指定プロンプト (V5 の Styles 末尾に追加、-5 分曲用)
-duration_prompt: "long-form performance, over 4 minutes, 4 to 5 minutes"
-
 # Style Influence (0-100、高いほどジャンル指定が強く反映される)
 style_influence: 85
 

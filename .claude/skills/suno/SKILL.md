@@ -58,19 +58,15 @@ $ARGUMENTS
 4 パターン × 3 回生成（1 回 2 曲）= **24 トラック** → ベスト曲を選定。
 プロンプト変更は **4 回のみ**（パターン切替時のみ）。
 
-### 曲の長さ制御（V5）
+### 曲の長さ（V5）
 
-V5 では Styles に時間指定プロンプトが反映されるようになった。`config/skills/suno.yaml` の `duration_prompt` で一元管理:
+Suno V5 では Styles 経由で実楽曲長を制御できない（2026-05 時点）。Styles 末尾に長さ指定文字列を入れてもトークンを浪費するだけで効かないため、リポジトリ側ではこの指定を持たない。望む長さに満たない場合は **Suno UI の Extend** で延長する。
 
-- **Styles に追加**: （例: `long-form performance, over 4 minutes, 4 to 5 minutes`）
 - **Style Influence**: `style_influence` で指定（デフォルト 85 推奨）
 - **Model**: V5 を使用
 
-スクリプトが `duration_prompt` を全パターンの Styles 末尾に自動付加する。
-
 > 注意: 構造タグ（`[Intro]`, `[Verse]`, `[Chorus]`, `[Bridge]`, `[Outro]`）は**インストゥルメンタルでは効果なし**だが、
 > **ボーカルモードでは Lyrics 欄に必須**（楽曲構成を Suno に伝える）。
-> Extend は最終手段として使えるが、Styles での時間指定を優先する。
 
 ## ボーカルモード（歌詞あり楽曲）
 
@@ -157,6 +153,10 @@ rain sounds, vinyl crackle, white noise, ambient noise
 
 しっとり感は `misty`, `melancholic`, `nocturnal`, `bittersweet` 等のムード語で表現する。
 
+#### genre_line と exclude_styles の整合性
+
+`exclude_styles` で除外したワードを `genre_line` 側に残すと相殺される。たとえば `exclude_styles` に `vinyl crackle` を含めつつ `genre_line` に `vinyl crackle warmth` のような表現を入れると、Suno には除外したい SE が結局供給されてしまう。`exclude_styles` を更新するときは `genre_line` 側にも同じワードや派生表現が混ざっていないかをセットで確認する。
+
 ### 品質基準プロンプト例
 
 ジャンル別の具体例は `references/suno-examples.md` を参照。新規プロンプト作成時は、該当ジャンルの例を基準として確認する。
@@ -239,7 +239,7 @@ patterns:
 uv run yt-generate-suno <collection-path>
 ```
 
-`config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `duration_prompt` + `style_influence` をパターンに自動付加して `suno-prompts.md` を生成する。設定変更時はスクリプト再実行のみで全プロンプトに反映される。
+`config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` を生成する。設定変更時はスクリプト再実行のみで全プロンプトに反映される。
 
 **ボーカルモードの出力**: 各パターンに **Style 欄**（情景フレーズ + genre_line）+ **Lyrics 欄**（歌詞そのまま）の 2 ブロックが書き出される。Suno 側で Custom Mode に入って **Instrumental トグル OFF** にした状態で両方をコピペする。
 
