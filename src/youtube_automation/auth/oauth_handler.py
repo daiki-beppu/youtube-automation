@@ -19,6 +19,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+from youtube_automation.utils.exceptions import ConfigError
+
 
 class YouTubeOAuthHandler:
     """YouTube Data API v3 OAuth 2.0 認証管理クラス"""
@@ -161,13 +163,27 @@ class YouTubeOAuthHandler:
         return self.credentials
 
     def _save_credentials(self):
-        """認証情報をファイルに保存"""
+        """認証情報をファイルに 0o600 で保存する。
+
+        プロセス umask に依存せず必ず 0o600 で作成し、既存ファイル上書き時も
+        chmod で保険をかける（``O_TRUNC`` は既存ファイルの mode を変更しない）。
+        書き込み失敗時は ``ConfigError`` として raise する（握りつぶし禁止 ―
+        失敗を黙って成功扱いすると毎回ブラウザ認証が走る運用障害になる）。
+
+        Raises:
+            ConfigError: トークンファイルの書き込みに失敗した場合。
+        """
         try:
-            with open(self.token_file, "w") as token:
+            fd = os.open(self.token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as token:
                 token.write(self.credentials.to_json())
+            os.chmod(self.token_file, 0o600)  # 既存ファイル上書き時の保険
             print(f"💾 認証トークン保存完了: {self.token_file}")
-        except Exception as e:
-            print(f"❌ 認証トークン保存失敗: {e}")
+        except OSError as e:
+            raise ConfigError(
+                f"認証トークン保存失敗: {self.token_file} ({e})。"
+                "親ディレクトリの書き込み権限と空き容量を確認してください。"
+            ) from e
 
     def get_youtube_service(self):
         """

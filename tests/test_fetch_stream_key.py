@@ -425,6 +425,10 @@ class TestOAuthHandlerExtension:
             mock_creds = MagicMock()
             mock_creds.valid = True
             mock_creds.expired = False
+            # _save_credentials が file.write(creds.to_json()) を呼ぶため
+            # 文字列を返さないと TypeError が伝播する（issue #149 で
+            # ``except Exception`` を ``except OSError`` に絞ったため）
+            mock_creds.to_json.return_value = "{}"
             mock_flow.run_local_server.return_value = mock_creds
             mock_flow_cls.from_client_secrets_file.return_value = mock_flow
 
