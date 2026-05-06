@@ -39,6 +39,9 @@ _SYSTEMD_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.service.tftpl"
 _ENV_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.env.tftpl"
 _STREAMING_README = _STREAMING_DIR / "README.md"
 
+_SCRIPTS_STREAMING_DIR = _REPO_ROOT / "scripts" / "streaming"
+_SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
+
 
 # ---------- ヘルパー ----------
 
@@ -1555,4 +1558,186 @@ class TestStreamingReadmeVideoSwap:
         text = _read(_STREAMING_README)
         assert "current.mp4" in text, (
             "README に current.mp4 への上書きの言及が無い（旧動画が自然消去される根拠が辿れない）"
+        )
+
+    def test_mentions_swap_video_script(self):
+        """Given README
+        When 全文を読む
+        Then ``swap_video.sh`` への到達導線（言及）が存在する。
+
+        order.md「スクリプト化（任意）: ``scripts/streaming/swap_video.sh``」「1 コマンド
+        ラッパーとして提供」要件。ラッパーを追加しても README から発見できなければ運用者は
+        到達できないため、README が `swap_video.sh` という識別子に言及していることを担保する。
+        """
+        text = _read(_STREAMING_README)
+        assert "swap_video.sh" in text, (
+            "README に swap_video.sh の言及が無い"
+            "（1 コマンドラッパーへの到達導線が欠落し、運用者が発見できない）"
+        )
+
+
+# ============================================================================
+# scripts/streaming/swap_video.sh — #111 1 コマンドラッパー
+# ============================================================================
+
+
+class TestSwapVideoScript:
+    """``scripts/streaming/swap_video.sh`` の静的検査（#111 任意要件「1 コマンドラッパー」）。
+
+    本スクリプトは ``TF_VAR_video_path`` を解決して export し、``terraform -chdir=...
+    apply`` を起動するシェルラッパー。``terraform apply`` 単体運用も引き続き有効だが、
+    `swap_video.sh <video-path>` で完了条件「1 コマンドで動画差替が完了」を堅く満たす。
+
+    本テストは terraform バイナリ非依存の方針（既存 ``TestStreamingReadmeVideoSwap``
+    と同様）に従い、ファイルテキスト・実行ビット・主要キーワードを正規表現で検証する。
+    実行時挙動（subprocess での実 terraform 呼び出し / shellcheck 適用）はスコープ外。
+    """
+
+    def test_script_exists(self):
+        """Given リポジトリ
+        When ``scripts/streaming/swap_video.sh`` を探す
+        Then 当該ファイルが存在する。
+
+        order.md「スクリプト化（任意）: ``scripts/streaming/swap_video.sh``」要件の最低条件。
+        ラッパーは README から発見可能であっても、ファイルが無ければ叩けない。
+        """
+        assert _SWAP_VIDEO_SCRIPT.exists(), (
+            f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} が存在しない"
+            "（1 コマンドラッパーが未実装）"
+        )
+
+    def test_script_is_executable(self):
+        """Given スクリプトファイル
+        When ファイル属性を確認
+        Then 実行ビット（owner ``x``）が立っている。
+
+        ``./scripts/streaming/swap_video.sh <video>`` 形式で直接叩けるよう、
+        実行属性が必要。``bash scripts/streaming/swap_video.sh`` 経由でしか動かないと
+        運用者が事故る（タブ補完で失敗する）。
+        """
+        if not _SWAP_VIDEO_SCRIPT.exists():
+            pytest.fail(
+                f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} が存在しない（先に実装が必要）"
+            )
+        mode = _SWAP_VIDEO_SCRIPT.stat().st_mode
+        # owner execute bit (0o100) が立っていること
+        assert mode & 0o100, (
+            f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} に owner 実行ビットが無い"
+            f"（chmod +x 漏れ。現在の mode: {oct(mode)}）"
+        )
+
+    def test_script_uses_strict_mode(self):
+        """Given スクリプト本文
+        When 全文を読む
+        Then ``set -euo pipefail`` が記載されている。
+
+        bash スクリプトの最低限の規律。`-e`（失敗即終了）, `-u`（未定義変数を fail）,
+        `-o pipefail`（pipe 中の失敗を伝播）が無いと、provisioning 系の失敗が握りつぶされる。
+        既存 ``scripts/gcp-terraform-apply.sh:13`` と同方針。
+        """
+        text = _read(_SWAP_VIDEO_SCRIPT)
+        assert re.search(r"^set\s+-euo\s+pipefail\b", text, flags=re.MULTILINE), (
+            "swap_video.sh に `set -euo pipefail` が無い"
+            "（エラー握りつぶしリスク。Fail Fast 原則に違反）"
+        )
+
+    def test_script_exports_tf_var_video_path(self):
+        """Given スクリプト本文
+        When 全文を読む
+        Then ``TF_VAR_video_path`` の export 行が記載されている。
+
+        order.md 差し替え手順「``export TF_VAR_video_path=$(realpath ./new_video.mp4)``」
+        を 1 コマンド化するのが本ラッパーの中核。env 注入が無ければ ``var.video_path``
+        が解決できず terraform は ``Missing required argument`` で落ちる。
+        """
+        text = _read(_SWAP_VIDEO_SCRIPT)
+        assert re.search(r"export\s+TF_VAR_video_path\b", text), (
+            "swap_video.sh に `export TF_VAR_video_path` が無い"
+            "（差し替え対象の動画パスを Terraform に渡す経路が欠落）"
+        )
+
+    def test_script_uses_realpath_for_absolute_path(self):
+        """Given スクリプト本文
+        When 全文を読む
+        Then ``realpath`` が呼び出されている。
+
+        order.md「``$(realpath ./new_video.mp4)``」要件。Terraform の ``provisioner "file"``
+        は実行時の cwd に依存するため、相対パスのまま渡すと別ディレクトリから叩いた時に
+        破綻する。``realpath`` で絶対化する経路を必ず通す。
+        """
+        text = _read(_SWAP_VIDEO_SCRIPT)
+        assert re.search(r"\brealpath\b", text), (
+            "swap_video.sh に `realpath` の呼び出しが無い"
+            "（相対パス渡しで cwd 依存になり、別ディレクトリから叩くと破綻する）"
+        )
+
+    def test_script_runs_terraform_apply_with_chdir(self):
+        """Given スクリプト本文
+        When 全文を読む
+        Then ``terraform`` の ``apply`` を ``-chdir=`` 付きで起動している。
+
+        order.md「``TF_VAR_video_path`` をセットして ``terraform apply -auto-approve``」要件。
+        既存 README が ``terraform -chdir=infra/terraform/streaming apply`` パターンで
+        統一されているため、ラッパー側も ``-chdir=`` を使い記述パターンを揃える
+        （plan.md「pushd ではなく -chdir= を使う」）。
+        """
+        text = _read(_SWAP_VIDEO_SCRIPT)
+        assert re.search(r"terraform\s+[^\n]*-chdir=", text), (
+            "swap_video.sh に `terraform -chdir=...` が無い"
+            "（既存 README の記述パターン (-chdir=) と不一致 / pushd 等の cwd 依存実装の疑い）"
+        )
+        assert re.search(r"terraform\s+[^\n]*\bapply\b", text), (
+            "swap_video.sh に `terraform apply` 起動行が無い"
+            "（差し替えを実行する本体コマンドが欠落）"
+        )
+
+    def test_script_default_apply_is_interactive(self):
+        """Given スクリプト本文
+        When 全文を読む
+        Then ``-auto-approve`` の付与が条件分岐配下にある（無条件付与ではない）。
+
+        plan.md「``--auto-approve`` は off（対話確認）」要件。デフォルトで
+        ``-auto-approve`` を付けると誤 apply 事故のリスクが上がる。``--auto-approve``
+        フラグを明示した時のみ ``-auto-approve`` を Terraform に渡す分岐構造であること。
+        """
+        text = _read(_SWAP_VIDEO_SCRIPT)
+        # `--auto-approve` のフラグハンドリング（引数パース）が存在する
+        assert re.search(r"--auto-approve\b", text), (
+            "swap_video.sh に `--auto-approve` 引数の取り扱いが無い"
+            "（plan.md 仕様: フラグ off がデフォルト / 明示時のみ非対話 apply）"
+        )
+        # `terraform ... apply -auto-approve` が無条件に書かれていない
+        # （= 直接 1 行で `terraform apply -auto-approve` を書くのは禁止。条件分岐配下が必須）
+        unconditional = re.search(
+            r"^[ \t]*terraform\s+[^\n]*\bapply\b[^\n]*-auto-approve",
+            text,
+            flags=re.MULTILINE,
+        )
+        # `if` / `case` / `$AUTO_APPROVE` などのガード語が同一スクリプト内にある場合は
+        # 上記マッチが分岐配下にある可能性がある。安全側で「``apply -auto-approve`` の
+        # 行が出現する場合は、その上方に AUTO_APPROVE 系変数のガードがあること」を要求する。
+        if unconditional is not None:
+            head = text[: unconditional.start()]
+            assert re.search(r"AUTO_APPROVE", head), (
+                "swap_video.sh が `terraform apply -auto-approve` を無条件で実行している"
+                "（AUTO_APPROVE 変数等のガードが上方に無い。誤 apply リスク）"
+            )
+
+    def test_script_supports_auto_approve_flag(self):
+        """Given スクリプト本文
+        When 全文を読む
+        Then ``-auto-approve`` を terraform に渡す経路と ``--auto-approve`` 受け取りが対になっている。
+
+        ユーザーが ``--auto-approve`` を渡した時に Terraform 側へ ``-auto-approve``
+        が伝播する経路があること。フラグだけ受け取って何もしない実装になっていないか担保する。
+        """
+        text = _read(_SWAP_VIDEO_SCRIPT)
+        # ユーザー向けフラグ `--auto-approve` の取り回し
+        assert re.search(r"--auto-approve\b", text), (
+            "swap_video.sh が `--auto-approve` 引数を受け取っていない"
+        )
+        # terraform へ渡す `-auto-approve`（シングルダッシュ）
+        assert re.search(r"-auto-approve\b", text), (
+            "swap_video.sh が terraform へ `-auto-approve` を渡していない"
+            "（ユーザーフラグだけ受け取って Terraform 側に伝播していない）"
         )

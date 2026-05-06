@@ -73,6 +73,20 @@ terraform -chdir=infra/terraform/streaming apply
 
 `terraform plan` の出力で `null_resource.deploy` の **replace 1 件のみ** であることを確認してから apply する。`vultr_instance` / `vultr_ssh_key` の change/replace 行が混じる場合は、`terraform.tfvars` の `region` / `plan` / `os_id` を意図せず変更している可能性があるため apply しない。
 
+### 1 コマンドラッパー: `swap_video.sh`
+
+上記 3 ステップを 1 コマンドに畳んだラッパー `scripts/streaming/swap_video.sh` を同梱している。引数の動画パスを `realpath` で絶対化し `TF_VAR_video_path` に export してから `terraform -chdir=infra/terraform/streaming plan` → `apply` を順に実行する。
+
+```bash
+# 対話確認あり（既定）
+scripts/streaming/swap_video.sh ./new_video.mp4
+
+# 非対話 apply（CI / 確信があるとき）
+scripts/streaming/swap_video.sh --auto-approve ./new_video.mp4
+```
+
+secret 系（`TF_VAR_stream_key` / `TF_VAR_vultr_api_key`）はラッパーが扱わない方針のため、呼び出し側で事前 export しておくこと（§使い方 の手順 2 と同じ）。`terraform init` も実行しないため、初回のみ手動で `terraform -chdir=infra/terraform/streaming init` を一度走らせる。
+
 ### 視聴者ダウンタイムを 0 秒にする運用 tips
 
 §配信サイクル の 11h+1h サイクル中、毎日 11:00–12:00 / 23:00–0:00 の **休止時間** に apply するのが基本。
