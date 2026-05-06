@@ -44,3 +44,9 @@ variable "ssh_priv_key_path" {
   description = "null_resource provisioner の SSH 接続に使う秘密鍵ファイルのパス（~ は pathexpand で展開される）"
   default     = "~/.ssh/yt_stream_key"
 }
+
+variable "discord_webhook_url" {
+  type        = string
+  description = "死活監視通知の送信先 Discord Webhook URL。TF_VAR_discord_webhook_url 経由で 1Password から注入する想定（tfstate にも sensitive 扱いで残す）"
+  sensitive   = true
+}

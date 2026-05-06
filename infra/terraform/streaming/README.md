@@ -8,7 +8,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 - `vultr_ssh_key` × 1（VPS 作成時に登録する SSH 公開鍵）
 - `vultr_instance` × 1（Ubuntu 24.04 LTS / vc2-1c-2gb / 東京リージョン）
-- `null_resource.deploy` × 1（動画アップロード + `EnvironmentFile` 配置 + systemd 起動）
+- `null_resource.deploy` × 1（動画アップロード + `EnvironmentFile` 配置 + systemd 起動 + 死活監視配置）
 
 ## 前提
 
@@ -30,6 +30,7 @@ cp terraform.tfvars.example terraform.tfvars
 #    ストリームキーが 1Password に未保管なら事前に `yt-fetch-stream-key --vault=Personal --item=YouTube` を実行
 export TF_VAR_vultr_api_key=$(op read 'op://Personal/Vultr/api_key')
 export TF_VAR_stream_key=$(op read 'op://Personal/YouTube/stream_key')
+export TF_VAR_discord_webhook_url=$(op read 'op://Personal/YouTube_Stream_Discord_Webhook/url')
 
 # 3. apply
 terraform init
@@ -145,6 +146,40 @@ ssh -i ~/.ssh/yt_stream_key root@<instance_ip> journalctl -u youtube-stream -f
 |------|------|
 | `instance_ip` | プロビジョニングされた VPS の IPv4 アドレス |
 | `instance_id` | Vultr インスタンス ID |
+
+## 死活監視（issue #109）
+
+`youtube-stream.service` は **11 時間配信 → 1 時間休止 → 自動再開** のサイクルで自律的に回るため、素朴な「サービス active か」チェックでは 1 時間休止中（`activating (auto-restart)`）に毎回誤検知が出る（5 分間隔 × 1h = 12 回/サイクル）。本モジュールは以下の 4-way 分類で計画停止と本物の異常を切り分ける:
+
+| systemd 状態 | 分類 | 通知 | 想定シナリオ |
+|---|---|---|---|
+| `active+running` | `ok` | しない | 配信中 |
+| `activating+auto-restart+success` | `idle` | しない | `RuntimeMaxSec=11h` 到達による正常停止後の `RestartSec=1h` 休止（自動再開待ち） |
+| `inactive+dead+success` | `manual` | しない | 運用者の `systemctl stop` |
+| その他（`failed` / `Result≠success` 等） | `anomaly` | **送る** | `kill -9` / `core-dump` / 設定不備 |
+
+### 通知手段
+
+Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`curl -X POST` で送信する。secret は他の secret と同様 `TF_VAR_discord_webhook_url` 環境変数経由で 1Password から注入し、`terraform.tfvars` には書かない。
+
+### 配置されるアセット
+
+| パス | 役割 |
+|---|---|
+| `/opt/youtube-stream/bin/healthcheck.sh` | systemd 状態を 4 通り分類し、anomaly のみ `notify.sh` を呼ぶ |
+| `/opt/youtube-stream/bin/notify.sh` | Discord Webhook へ POST。HTTP 失敗は cron に伝播させない |
+| `/etc/cron.d/youtube-stream-healthcheck` | `*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh` |
+| `/etc/logrotate.d/youtube-stream` | `/opt/youtube-stream/logs/*.log` を `daily / rotate 7 / copytruncate` でローテート（ffmpeg を再起動しない） |
+| `/etc/youtube-stream-healthcheck.env` | mode 0600 root:root、`DISCORD_WEBHOOK_URL=...` |
+
+### テストシナリオ（VPS 上で確認）
+
+| 操作 | 期待結果 |
+|---|---|
+| `kill -9 $(pgrep ffmpeg)` | 5 分以内に Discord に anomaly 通知が届く |
+| `systemctl stop youtube-stream` | 通知は飛ばない（`manual` 分類） |
+| 11h `RuntimeMaxSec` 到達による正常停止 | 通知は飛ばない（`activating+auto-restart+success` = `idle`） |
+| 1 時間後の自動再開（`RestartSec=1h` / `auto-restart`） | 通知は飛ばない（休止中は `idle`、再開後は `ok`） |
 
 ## トラブルシューティング
 

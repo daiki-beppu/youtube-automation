@@ -28,6 +28,7 @@ _SECRET_REFS: dict[str, str] = {
     "YOUTUBE_STREAM_KEY": "op://Personal/YouTube/stream_key",
     "VULTR_API_KEY": "op://Personal/Vultr/api_key",
     "STREAM_WEBHOOK_URL": "op://Personal/Stream_Notification_Webhook/url",
+    "DISCORD_WEBHOOK_URL": "op://Personal/YouTube_Stream_Discord_Webhook/url",
 }
 
 _OP_READ_TIMEOUT_SEC = 10
