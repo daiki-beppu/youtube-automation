@@ -159,6 +159,40 @@ def test_report_mode_defaults_to_previous_month_when_month_not_given():
     assert "2026-04" in content
 
 
+def test_report_mode_january_first_resolves_to_previous_year_december():
+    """Given --report のみ かつ 今日が 1/1 (年跨ぎ cron 起動)
+    When CLI を実行
+    Then 前年 12 月のレポートを生成する。
+
+    cron `0 0 1 * *` が 1 月 1 日 0:00 に発火した際、前月 = 前年 12 月に
+    解決される必要がある。R11「月初 cron で前月レポートを自動投稿」の
+    年跨ぎエッジケース（_previous_month の `month == 1` 分岐）の回帰防止。
+    """
+    bw = {
+        "2025-12-15": {"incoming_bytes": 1024**3 * 100, "outgoing_bytes": 0},
+        "2026-01-01": {"incoming_bytes": 1024**3 * 1, "outgoing_bytes": 0},
+    }
+    mocks = _patch_all(bandwidth=bw)
+    enters = _enter(mocks)
+    with patch(
+        "youtube_automation.cli.stream_bandwidth.today",
+        return_value=__import__("datetime").date(2026, 1, 1),
+    ):
+        try:
+            rc = stream_bandwidth.main(["--report", "--instance-id", "VULTR_X"])
+        finally:
+            _exit(mocks)
+    assert rc == 0
+    notify_mock = enters[4]
+    notify_mock.assert_called_once()
+    kwargs = notify_mock.call_args.kwargs
+    args = notify_mock.call_args.args
+    content = kwargs.get("content") if "content" in kwargs else (args[0] if args else None)
+    # 前年 12 月のレポートが生成され、当月 (2026-01) のデータでは無いこと。
+    assert "2025-12" in content
+    assert "2026-01" not in content
+
+
 # ---------- --check-threshold ----------
 
 
@@ -259,3 +293,52 @@ def test_main_returns_int_for_systemd_exit():
     finally:
         _exit(mocks)
     assert isinstance(rc, int)
+
+
+# ---------- R13: --help が落ちない (% リテラルのエスケープ回帰防止) ----------
+
+
+def test_format_help_does_not_crash_on_percent_literal():
+    """Given _build_parser() で構築した parser
+    When format_help() を呼ぶ
+    Then ValueError 等の例外を投げず、ヘルプ文字列を返す。
+
+    R13 (Issue #110 派生): description / help 文字列内の "80%" は argparse の
+    `_expand_help` が `%(prog)s` 形式の format 指定として解釈するため、
+    `%%` でエスケープしないと `ValueError: unsupported format character ...`
+    で `--help` 経路全体が異常終了する。本テストは parser 構築だけで完結し
+    I/O 境界に到達しない pure な経路で `format_help()` を呼ぶことで、
+    description (R13: stream_bandwidth.py:72) と --check-threshold の
+    help (R13: stream_bandwidth.py:84) の両方を一度に検証する。
+    """
+    parser = stream_bandwidth._build_parser()
+
+    # format_help() は ValueError を含む一切の例外を投げてはならない。
+    help_text = parser.format_help()
+
+    # エスケープ後 (`80%%`) も画面表示時には `80%` に戻ること。
+    # 利用者が「閾値が 80% であること」をヘルプから読み取れる契約。
+    assert "80%" in help_text
+
+
+def test_help_flag_prints_usage_with_zero_exit(capsys):
+    """Given `--help`
+    When CLI を実行
+    Then SystemExit(0) で終了し、stdout に usage を出力する。
+
+    R13 の利用者到達経路全体の回帰防止。argparse の `--help` は
+    `print_help()` を経由して `format_help()` を呼ぶため、内部で
+    例外が起きると SystemExit(0) ではなく未捕捉例外で死ぬ。
+    """
+    import pytest
+
+    with pytest.raises(SystemExit) as exc_info:
+        stream_bandwidth.main(["--help"])
+
+    assert exc_info.value.code == 0
+    out = capsys.readouterr().out
+    # argparse は usage 行から始まるヘルプを stdout に出す。
+    assert "usage" in out.lower()
+    assert "--report" in out
+    assert "--check-threshold" in out
+    assert "--probe-bitrate" in out

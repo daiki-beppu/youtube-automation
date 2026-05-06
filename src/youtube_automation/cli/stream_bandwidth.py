@@ -81,7 +81,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--check-threshold",
         action="store_true",
-        help="当月使用量が 80% 閾値を超えていれば webhook にアラート",
+        help="当月使用量が 80%% 閾値を超えていれば webhook にアラート",
     )
     mode.add_argument(
         "--probe-bitrate",
