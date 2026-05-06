@@ -158,3 +158,65 @@ class TestOpenAIApiKeyRegistered:
         with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
             with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
                 get_secret("OPENAI_API_KEY")
+
+
+# ---------- Issue #110: 帯域モニタリング用シークレット ----------
+
+
+class TestStreamingSecretsRegistered:
+    """VULTR_API_KEY と STREAM_WEBHOOK_URL が `_SECRET_REFS` に登録され、
+    既存 3 経路 (env / op / fail) がそのまま機能することを確認する。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        for name in ("VULTR_API_KEY", "STREAM_WEBHOOK_URL"):
+            os.environ.pop(name, None)
+        reset_cache()
+        yield
+        for name in ("VULTR_API_KEY", "STREAM_WEBHOOK_URL"):
+            os.environ.pop(name, None)
+        reset_cache()
+
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    def test_secret_is_registered_in_secret_refs(self, name: str):
+        """Given _SECRET_REFS
+        When 引く
+        Then 1Password 参照 URI (op://) として登録されている。
+        """
+        assert name in _SECRET_REFS, f"{name} が _SECRET_REFS に未登録"
+        ref = _SECRET_REFS[name]
+        assert ref.startswith("op://"), f"1Password 参照 URI 形式でない: {ref}"
+
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    def test_returns_from_environ_when_present(self, name: str):
+        """既に os.environ にあれば op を呼ばずにそれを返す。"""
+        os.environ[name] = f"value-of-{name}"
+        with patch("youtube_automation.utils.secrets.subprocess.run") as mock_run:
+            value = get_secret(name)
+        assert value == f"value-of-{name}"
+        mock_run.assert_not_called()
+
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    def test_falls_back_to_op_read(self, name: str):
+        """env に無く op が成功すれば op read の値を返す。"""
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["op", "read", "..."],
+                returncode=0,
+                stdout=f"from-op-{name}\n",
+                stderr="",
+            )
+            value = get_secret(name)
+        assert value == f"from-op-{name}"
+        mock_run.assert_called_once()
+
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    def test_raises_config_error_when_unavailable(self, name: str):
+        """env も op も空なら ConfigError。"""
+        with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
+            with pytest.raises(ConfigError, match=name):
+                get_secret(name)
