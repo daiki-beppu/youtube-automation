@@ -5,7 +5,7 @@ issue #123 / #124 の order.md と plan.md に基づき、以下を検証する:
 - ``versions.tf``: ``vultr/vultr`` provider 宣言と provider ブロック
 - ``variables.tf``: 5 変数の型/default/sensitive
 - ``main.tf``: ``vultr_ssh_key`` + ``vultr_instance`` の構造と紐付け、
-  ``user_data`` の base64encode + templatefile 連鎖（#124）
+  ``user_data`` の templatefile 連鎖（#124）
 - ``outputs.tf``: ``instance_ip`` / ``instance_id`` の expose
 - ``terraform.tfvars.example``: secret を平文で含まない
 - ルート ``.gitignore``: Terraform 系の ignore エントリ
@@ -805,19 +805,22 @@ class TestMainTfUserData:
             "vultr_instance.this.user_data が宣言されていない"
         )
 
-    def test_user_data_is_base64encoded(self):
+    def test_user_data_is_not_double_base64_encoded(self):
         """Given main.tf
         When vultr_instance.this.user_data の右辺を読む
-        Then ``base64encode(...)`` でラップされている (R18)。
+        Then ``base64encode(...)`` でラップされていない (R18 改訂)。
 
-        Vultr API ``POST /v2/instances`` の user_data は base64 必須。
-        terraform-provider-vultr は値をそのまま API に渡すため HCL 側で base64encode が必要。
+        terraform-provider-vultr v2.31.0 は ``user_data`` の値を内部で base64 エンコード
+        してから Vultr API に渡す。HCL 側で重ねて ``base64encode`` を呼ぶと
+        double-encoding になり、VPS 側の cloud-init が
+        ``Unhandled non-multipart (text/x-not-multipart) userdata`` 警告を出して
+        userdata を無視する（実証: 初回 apply 後に ``cloud-init status --long``）。
         """
         text = _strip_hcl_comments(_read(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
-        assert re.search(r"user_data\s*=\s*base64encode\s*\(", block), (
-            "user_data が base64encode(...) でラップされていない（cloud-init が起動しない）"
+        assert not re.search(r"base64encode\s*\(", block), (
+            "user_data に base64encode(...) が残っている（provider が auto-encode するため二重になる）"
         )
 
     def test_user_data_loads_cloud_init_yaml_via_templatefile(self):
