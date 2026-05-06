@@ -49,10 +49,10 @@ resource "null_resource" "deploy" {
   }
 
   connection {
-    type        = "ssh"
-    user        = "root"
-    host        = vultr_instance.this.main_ip
-    private_key = file(pathexpand(var.ssh_priv_key_path))
+    type  = "ssh"
+    host  = vultr_instance.this.main_ip
+    user  = "root"
+    agent = true
   }
 
   provisioner "file" {
