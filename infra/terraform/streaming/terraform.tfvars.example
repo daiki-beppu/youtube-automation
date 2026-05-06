@@ -23,8 +23,7 @@ video_path = "/absolute/path/to/your/video.mp4"
 allowed_ssh_cidr = ["203.0.113.5/32"]
 
 # 任意（デフォルト値で運用するならコメントアウトのまま）
-# ssh_pub_key_path  = "~/.ssh/yt_stream_key.pub"
-# ssh_priv_key_path = "~/.ssh/yt_stream_key"
-# region            = "nrt"
-# plan              = "vc2-1c-2gb"
-# os_id             = 2284
+# ssh_pub_key_path = "~/.ssh/yt_stream_key.pub"
+# region           = "nrt"
+# plan             = "vc2-1c-2gb"
+# os_id            = 2284

@@ -887,17 +887,16 @@ class TestMainTfUserData:
 
 
 # ============================================================================
-# variables.tf — #125 追加変数（video_path / stream_key / ssh_priv_key_path）
+# variables.tf — #125 追加変数（video_path / stream_key）
 # ============================================================================
 
 
 class TestVariablesTfNullResource:
-    """``variables.tf`` の #125 で追加される 3 変数定義。
+    """``variables.tf`` の #125 で追加される変数定義（#154 で ssh_priv_key_path を撤去）。
 
     order.md 構成表:
       - ``video_path`` (string, default なし)
       - ``stream_key`` (string, sensitive=true, default なし)
-      - ``ssh_priv_key_path`` (string, default ``~/.ssh/yt_stream_key``)
     """
 
     def test_video_path_is_required_string_with_no_default(self):
@@ -935,21 +934,20 @@ class TestVariablesTfNullResource:
             "stream_key には default を設定してはならない（Fail Fast / secret はランタイム注入）"
         )
 
-    def test_ssh_priv_key_path_default_is_yt_stream_key(self):
+    def test_ssh_priv_key_path_variable_does_not_exist(self):
         """Given variables.tf
-        When ssh_priv_key_path 変数定義を読む
-        Then type=string, default=``~/.ssh/yt_stream_key``, description あり。
+        When ``ssh_priv_key_path`` の variable 定義を探す
+        Then 定義が存在しない（issue #154 / order.md R2 で ssh-agent 経由に切替）。
 
-        既存 ``ssh_pub_key_path`` のデフォルト ``~/.ssh/yt_stream_key.pub`` と対称になる秘密鍵パス。
+        connection で ``private_key`` を使わなくなり、変数自体が未使用化したため撤去する。
+        残骸として残すと「設定したのに使われない」混乱を招くため、関連テスト D1 と一対で削除する。
         """
         text = _strip_hcl_comments(_read(_VARIABLES_TF))
         block = _extract_block(text, r'variable\s+"ssh_priv_key_path"')
-        assert block is not None, 'variable "ssh_priv_key_path" が存在しない'
-        assert re.search(r"type\s*=\s*string", block), "ssh_priv_key_path.type が string でない"
-        assert re.search(r'default\s*=\s*"~/\.ssh/yt_stream_key"', block), (
-            'ssh_priv_key_path.default が "~/.ssh/yt_stream_key" でない（ssh_pub_key_path と対称）'
+        assert block is None, (
+            'variable "ssh_priv_key_path" が残っている'
+            "（issue #154: ssh-agent 切替で未使用化したため削除する）"
         )
-        assert re.search(r"description\s*=", block), "ssh_priv_key_path.description が無い"
 
 
 # ============================================================================
@@ -1186,13 +1184,31 @@ class TestMainTfNullResource:
             "（terraform 1.5+ で sensitive 派生エラーになる）"
         )
 
-    def test_connection_block_uses_pathexpand_for_private_key(self):
+    def test_connection_block_declares_agent_true(self):
         """Given main.tf
         When null_resource.deploy.connection を読む
-        Then private_key = file(pathexpand(var.ssh_priv_key_path)) で ``~`` 展開されている。
+        Then ``agent = true`` が宣言されている。
 
-        既存 ``vultr_ssh_key.this.ssh_key`` 規約（main.tf:3）と対称。pathexpand 無しだと
-        ``~/.ssh/yt_stream_key`` がリテラルパスとして読まれて ssh 接続に失敗する。
+        SSH 秘密鍵 PEM を Terraform graph (plan / state / debug log) に取り込まない経路。
+        ssh-agent 経由で鍵を渡すため、Terraform 自身は鍵に触れない。
+        （issue #154 / order.md 推奨対応 R2）
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        connection = _extract_block(block, r"connection")
+        assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
+        assert re.search(r"\bagent\s*=\s*true\b", connection), (
+            "connection.agent = true が無い（ssh-agent 経由経路が宣言されていない）"
+        )
+
+    def test_connection_block_retains_ssh_type_and_root_user_and_host(self):
+        """Given main.tf
+        When null_resource.deploy.connection を読む
+        Then ``type = "ssh"`` / ``user = "root"`` / ``host = vultr_instance.this.main_ip`` が維持されている。
+
+        connection ブロック書き換え（#154）で接続先・プロトコル・ユーザーまで誤って削除しないことの保証。
+        order.md 推奨対応の HCL スニペット参照。
         """
         text = _strip_hcl_comments(_read(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
@@ -1204,10 +1220,45 @@ class TestMainTfNullResource:
         assert re.search(r"host\s*=\s*vultr_instance\.this\.main_ip", connection), (
             "connection.host が vultr_instance.this.main_ip でない"
         )
-        assert re.search(
-            r"private_key\s*=\s*file\(\s*pathexpand\(\s*var\.ssh_priv_key_path\s*\)\s*\)",
-            connection,
-        ), "connection.private_key が file(pathexpand(var.ssh_priv_key_path)) でない（~ 未展開のリスク）"
+
+    def test_connection_block_does_not_contain_private_key(self):
+        """Given main.tf
+        When null_resource.deploy.connection を読む
+        Then ``private_key`` 属性が宣言されていない。
+
+        **クリティカルなリグレッション保証**。``private_key = ...`` が混入すると、たとえ
+        ``agent = true`` も併記されていても PEM 全文が Terraform graph に取り込まれてしまう
+        （plan / state / TF_LOG=DEBUG に平文残存）。
+        単語境界 ``\\b`` で ``vultr_ssh_key.this.ssh_key`` などの誤マッチを避ける。
+        （issue #154 / order.md 概要・推奨対応 R2）
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        connection = _extract_block(block, r"connection")
+        assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
+        assert not re.search(r"\bprivate_key\s*=", connection), (
+            "connection.private_key が残っている"
+            "（PEM 全文が Terraform graph / plan / state に取り込まれる漏洩経路）"
+        )
+
+    def test_connection_block_does_not_reference_ssh_priv_key_path_var(self):
+        """Given main.tf
+        When null_resource.deploy.connection を読む
+        Then ``var.ssh_priv_key_path`` への参照が含まれていない。
+
+        撤去変数（#154 で variables.tf から削除）への参照復活を防ぐ。connection ブロックに
+        スコープを絞って検証することで、コメント行や別箇所の影響を排除する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        connection = _extract_block(block, r"connection")
+        assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
+        assert "ssh_priv_key_path" not in connection, (
+            "connection ブロック内に var.ssh_priv_key_path 参照が残っている"
+            "（撤去済み変数への参照復活）"
+        )
 
     def test_provisioner_file_uploads_video_to_canonical_path(self):
         """Given main.tf
@@ -1694,6 +1745,21 @@ class TestTfvarsExampleStreamKey:
             'video_path = "..." がアクティブ行に存在しない（必須項目だがサンプルから発見できない）'
         )
 
+    def test_does_not_mention_ssh_priv_key_path(self):
+        """Given terraform.tfvars.example
+        When ファイル内容（raw text、コメント込み）を読む
+        Then ``ssh_priv_key_path`` キーワードがどこにも含まれていない。
+
+        #154 で variables.tf から ``ssh_priv_key_path`` を撤去したため、サンプルにコメント行で
+        残っていると、利用者がコメントアウト解除した際に「Reference to undeclared input
+        variable」で apply が失敗する。
+        """
+        raw = _read(_TFVARS_EXAMPLE)
+        assert "ssh_priv_key_path" not in raw, (
+            "terraform.tfvars.example に ssh_priv_key_path が残っている"
+            "（撤去済み変数。利用者が有効化すると undeclared input variable で fail する）"
+        )
+
 
 # ============================================================================
 # terraform.tfvars.example — #153 で allowed_ssh_cidr の必須サンプル追記
@@ -1824,6 +1890,35 @@ class TestStreamingReadme:
             r"rtmp://[\w.]+/live2/[A-Za-z0-9]{8,}",
             text,
         ), "README に実 stream key を含む rtmp URL が書かれている可能性（漏洩リスク）"
+
+    def test_does_not_mention_ssh_priv_key_path(self):
+        """Given README
+        When 全文を読む
+        Then ``ssh_priv_key_path`` キーワードがどこにも含まれていない。
+
+        #154 で variables.tf から撤去された変数。README に残るとドキュメント / 実装乖離になり、
+        運用者が「設定したのに反映されない」混乱を起こす。仕様準拠（README ↔ 実装）の保証。
+        """
+        text = _read(_STREAMING_README)
+        assert "ssh_priv_key_path" not in text, (
+            "README に ssh_priv_key_path の言及が残っている"
+            "（撤去済み変数。ドキュメント / 実装乖離）"
+        )
+
+    def test_mentions_ssh_add_for_agent_setup(self):
+        """Given README
+        When 全文を読む
+        Then ``ssh-add`` コマンドの言及がある（ssh-agent への鍵登録手順）。
+
+        #154 で ``connection.agent = true`` に切り替えたため、``terraform apply`` 成功の起動条件が
+        「秘密鍵ファイルの存在」から「ssh-agent に鍵が登録されていること」に変わる。
+        運用者が前提を満たせる導線として ``ssh-add`` 系コマンドの言及が必要。
+        既存 ``test_mentions_*`` 系の緩い包含検査スタイルを踏襲（章立て自由度を残す）。
+        """
+        text = _read(_STREAMING_README)
+        assert "ssh-add" in text, (
+            "README に ssh-add の言及が無い（ssh-agent 登録手順が辿れず terraform apply が失敗する）"
+        )
 
 
 # ============================================================================
@@ -2180,4 +2275,47 @@ class TestStreamingSkillFirewall:
         assert "allowed_ssh_cidr" in text, (
             "SKILL.md に allowed_ssh_cidr の言及が無い"
             "（operator が必須項目を発見できず、§1 初回構築で SSH 到達不可になる）"
+        )
+
+
+# ============================================================================
+# .claude/skills/streaming/SKILL.md — #154 ssh-agent 切替の operator 索引
+# ============================================================================
+
+
+class TestStreamingSkillSshAgent:
+    """``.claude/skills/streaming/SKILL.md`` の #154 ssh-agent 経路の言及。
+
+    SKILL.md は operator 索引。``connection.agent = true`` に切り替わったため、
+    operator が ``terraform apply`` 前に ``ssh-add`` で鍵を登録する必要がある。
+    本テストは raw text のキーワード包含のみ検証する（章立て自由度を残す）。
+    """
+
+    def test_does_not_mention_ssh_priv_key_path(self):
+        """Given SKILL.md
+        When 全文を読む
+        Then ``ssh_priv_key_path`` キーワードがどこにも含まれていない。
+
+        #154 で variables.tf から撤去された変数。SKILL.md に残ると README / SKILL.md の整合が
+        崩れ、operator が古い前提に従って詰まる。
+        """
+        text = _read(_STREAMING_SKILL)
+        assert "ssh_priv_key_path" not in text, (
+            "SKILL.md に ssh_priv_key_path の言及が残っている"
+            "（撤去済み変数。README / SKILL 不整合）"
+        )
+
+    def test_mentions_ssh_add_for_agent_setup(self):
+        """Given SKILL.md
+        When 全文を読む
+        Then ``ssh-add`` コマンドの言及がある（ssh-agent への鍵登録手順）。
+
+        #154 で ``connection.agent = true`` に切り替えたため、operator が ``terraform apply`` 前に
+        ssh-agent へ鍵を登録する必要がある。SKILL.md 経由のオペレーターも起動条件を把握できる
+        必要があるため、README と同じく ``ssh-add`` の緩い包含検査で担保する。
+        """
+        text = _read(_STREAMING_SKILL)
+        assert "ssh-add" in text, (
+            "SKILL.md に ssh-add の言及が無い"
+            "（operator が ssh-agent 登録手順を SKILL.md から辿れず terraform apply が失敗する）"
         )

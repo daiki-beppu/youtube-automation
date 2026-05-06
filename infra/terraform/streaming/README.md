@@ -18,6 +18,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - Vultr API キーを 1Password に保管済み（または環境変数で渡せる状態）
 - `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
 - SSH 鍵ペア `~/.ssh/yt_stream_key` / `~/.ssh/yt_stream_key.pub` を生成済み
+- ssh-agent が起動済み（`SSH_AUTH_SOCK` が設定されている）かつ秘密鍵が登録済み（`ssh-add ~/.ssh/yt_stream_key`）。`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続するため、ssh-agent 未起動 / 鍵未登録 のいずれでも apply 時に `Permission denied (publickey)` で失敗する。`ssh-add -l` で登録済み鍵を確認できる（`Could not open a connection to your authentication agent.` が返れば agent 未起動）
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
 - operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
 
@@ -195,7 +196,10 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 `triggers.stream_key` を `sha256(var.stream_key)` のまま書くとこのエラーが出る。本モジュールでは `nonsensitive(sha256(...))` でラップ済み（SHA256 は不可逆なので脱 sensitive 安全）。
 
 ### `Permission denied (publickey)`（provisioner SSH 失敗）
-`ssh_priv_key_path`（デフォルト `~/.ssh/yt_stream_key`）が `ssh_pub_key_path`（デフォルト `~/.ssh/yt_stream_key.pub`）と対になっていない。`ssh-keygen -t ed25519 -f ~/.ssh/yt_stream_key` で再生成し、`terraform apply` を再実行する。
+`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続する（鍵を Terraform graph に持ち込まないため）。失敗時は以下を順に確認する:
+
+1. `ssh-add -l` で `~/.ssh/yt_stream_key` 系の鍵が登録されているか。未登録なら `ssh-add ~/.ssh/yt_stream_key` で登録してから `terraform apply` を再実行
+2. 登録済みの鍵が `~/.ssh/yt_stream_key.pub`（`ssh_pub_key_path`）と対になっているか。鍵ペアが食い違っていれば `ssh-keygen -t ed25519 -f ~/.ssh/yt_stream_key` で再生成し、`ssh-add ~/.ssh/yt_stream_key` で登録
 
 ### `terraform apply` 後に配信が始まらない
 - `journalctl -u youtube-stream -f` で `ffmpeg` のエラーを確認（stream key 不正・動画ファイル破損など）
