@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""yt-fetch-stream-key CLI（issue #135）。
+"""yt-fetch-stream-key CLI（issue #135 / issue #152）。
 
 YouTube Data API ``liveStreams.list`` でストリームキーを取得し、
 ``--stdout`` で標準出力、``--vault/--item`` で 1Password に書き込む。
@@ -7,8 +7,12 @@ YouTube Data API ``liveStreams.list`` でストリームキーを取得し、
 専用 token (``auth/token_streaming.json``) を ``YouTubeOAuthHandler`` に渡し、
 既存 upload 用 token (``auth/token.json``) と分離する。
 
+``--stdout`` モードはストリームキーが平文で流れるため、必ず pipe 経由で受けること
+（直接 TTY に出力しようとすると WARNING を stderr に出して exit code 2 で中断する）。
+GitHub Actions 上では ``::add-mask::<value>`` を先行出力してログマスキングを有効化する。
+
 Usage:
-    yt-fetch-stream-key --stdout
+    yt-fetch-stream-key --stdout | <consumer>          # pipe 経由必須
     yt-fetch-stream-key --vault Personal --item YouTube
     yt-fetch-stream-key --vault Personal --item YouTube --stream-id <id>
 """
@@ -16,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from googleapiclient.discovery import build
@@ -49,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--stdout",
         action="store_true",
-        help="ストリームキーを標準出力に書き出す（CI / Terraform 用）",
+        help="ストリームキーを標準出力に書き出す（CI / Terraform 用、pipe 経由必須）",
     )
     parser.add_argument(
         "--vault",
@@ -174,6 +179,30 @@ def extract_stream_info(stream: dict) -> str:
 
 
 # ----------------------------------------------------------------------------
+# stdout 出力（GHA マスキング + TTY ガード）
+# ----------------------------------------------------------------------------
+
+
+def _emit_stdout(value: str) -> None:
+    """``--stdout`` 経路の出力を 1 箇所に閉じ込める（issue #152）。
+
+    - ``GITHUB_ACTIONS == "true"`` のとき ``::add-mask::<value>`` 行を先行出力し、
+      GitHub Actions のログマスキングを有効化する。
+    - ``sys.stdout`` が TTY のとき、平文露出（bash history / ``set -x``）を防ぐため
+      stderr に WARNING を出して ``sys.exit(2)`` で中断する。
+    - いずれでもないとき値のみを stdout に出力する（pipe 経由の正常パス）。
+    """
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        # GitHub Actions のログマスキング
+        print(f"::add-mask::{value}")
+    if sys.stdout.isatty():
+        # TTY 出力は警告を stderr に出して中断
+        print("WARNING: stream_key を TTY に出力します。pipe で受けてください。", file=sys.stderr)
+        sys.exit(2)
+    print(value)
+
+
+# ----------------------------------------------------------------------------
 # main
 # ----------------------------------------------------------------------------
 
@@ -189,7 +218,7 @@ def main() -> None:
     stream_name = extract_stream_info(stream)
 
     if args.stdout:
-        print(stream_name)
+        _emit_stdout(stream_name)
         return
 
     write_op_secret(args.vault, args.item, args.field, stream_name)

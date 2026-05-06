@@ -506,6 +506,24 @@ class TestCli:
         with pytest.raises(SystemExit):
             fsk.main()
 
+    def test_stdout_and_vault_mutually_exclusive(self, monkeypatch):
+        """Given ``--stdout`` と ``--vault/--item`` を同時指定
+        When ``main()``
+        Then ``SystemExit``（mutex 違反: ``_validate_output_target`` 内
+        ``parser.error`` 経由で argparse が exit する）。
+
+        issue #152 で未カバーだった ``stdout=True and has_op_target`` 分岐の回帰テスト。
+        """
+        from youtube_automation.scripts import fetch_stream_key as fsk
+
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-fetch-stream-key", "--stdout", "--vault", "Personal", "--item", "YouTube"],
+        )
+
+        with pytest.raises(SystemExit):
+            fsk.main()
+
     def test_stream_id_flag_is_passed_to_select_stream(self, monkeypatch):
         """Given ``--stream-id explicit-id``
         When ``main()``
@@ -537,3 +555,122 @@ class TestCli:
         args = call_args.args
         passed_id = kwargs.get("stream_id") if "stream_id" in kwargs else (args[1] if len(args) > 1 else None)
         assert passed_id == "explicit-id", f"stream_id flag not propagated: args={args} kwargs={kwargs}"
+
+    def test_main_emits_add_mask_under_github_actions(self, capsys, monkeypatch):
+        """Given ``GITHUB_ACTIONS=true`` 環境下で ``--stdout``
+        When ``main()``
+        Then stdout に ``::add-mask::<key>`` 行が出る（CLI 入口 → ``_emit_stdout`` 配線確認）。
+
+        到達経路のリグレッション担保: ``main()`` の出力箇所が
+        マスキング対応経路（``_emit_stdout``）を確実に通っていることを保証する。
+        """
+        from youtube_automation.scripts import fetch_stream_key as fsk
+
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        monkeypatch.setattr("sys.argv", ["yt-fetch-stream-key", "--stdout"])
+
+        fake_stream = _make_stream(stream_name="masked-key-42")
+        with (
+            patch.object(fsk, "get_streaming_credentials", return_value=MagicMock()),
+            patch.object(fsk, "list_live_streams", return_value=[fake_stream]),
+        ):
+            fsk.main()
+
+        captured = capsys.readouterr()
+        assert "::add-mask::masked-key-42" in captured.out, (
+            f"GHA mask line missing on main()'s stdout: {captured.out!r}"
+        )
+        assert "masked-key-42" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# _emit_stdout（GHA マスキング / TTY ガード / 通常出力）
+# ---------------------------------------------------------------------------
+
+
+class TestEmitStdout:
+    """``_emit_stdout(value)`` の純関数振る舞い検証（issue #152）。
+
+    挙動仕様（``order.md`` §マスキング）:
+    - ``GITHUB_ACTIONS == "true"`` のとき stdout に ``::add-mask::<value>`` を出す
+    - ``sys.stdout.isatty()`` が True のとき stderr に WARNING を出して ``sys.exit(2)``
+    - いずれにも該当しないとき stdout に ``<value>`` のみを出す
+
+    観測可能な振る舞い（stdout / stderr / exit code）のみを検証し、
+    ``os.environ.get`` の呼び出し回数のような実装詳細には依存しない。
+    """
+
+    def test_emits_add_mask_line_when_github_actions_is_true(self, capsys, monkeypatch):
+        """Given ``GITHUB_ACTIONS="true"`` + 非TTY（capsys デフォルト）
+        When ``_emit_stdout("my-key-1234")``
+        Then stdout に ``::add-mask::my-key-1234`` 行 → ``my-key-1234`` 行 の順で出る。
+
+        順序まで担保するため ``splitlines()`` 一致で検証する。
+        """
+        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+
+        _emit_stdout("my-key-1234")
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        assert lines == ["::add-mask::my-key-1234", "my-key-1234"], (
+            f"expected GHA mask line followed by value line, got: {lines!r}"
+        )
+
+    def test_does_not_emit_add_mask_when_github_actions_is_unset(self, capsys, monkeypatch):
+        """Given ``GITHUB_ACTIONS`` 未設定 + 非TTY
+        When ``_emit_stdout("plain-value")``
+        Then ``::add-mask::`` プレフィックス行は出ず、値のみ出る（既存挙動の維持）。
+        """
+        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+
+        _emit_stdout("plain-value")
+
+        captured = capsys.readouterr()
+        assert "::add-mask::" not in captured.out, f"unexpected GHA mask prefix when env unset: {captured.out!r}"
+        assert "plain-value" in captured.out
+
+    def test_does_not_emit_add_mask_when_github_actions_is_not_literally_true(self, capsys, monkeypatch):
+        """Given ``GITHUB_ACTIONS="false"``（``"true"`` 完全一致でない）+ 非TTY
+        When ``_emit_stdout("plain-value")``
+        Then ``::add-mask::`` 行は出ない。
+
+        ``order.md`` の ``== "true"`` 仕様の境界検証。誤判定で平文露出するリスクの予防。
+        """
+        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+
+        monkeypatch.setenv("GITHUB_ACTIONS", "false")
+
+        _emit_stdout("plain-value")
+
+        captured = capsys.readouterr()
+        assert "::add-mask::" not in captured.out, (
+            f"GHA mask prefix should not appear when env != 'true': {captured.out!r}"
+        )
+        assert "plain-value" in captured.out
+
+    def test_exits_with_code_2_when_stdout_is_a_tty(self, capsys, monkeypatch):
+        """Given ``sys.stdout.isatty()`` が True
+        When ``_emit_stdout("tty-key")``
+        Then ``SystemExit(code=2)`` + stderr に WARNING + stdout に値が出ない。
+
+        TTY 経由での平文露出を防止する異常パス。``GITHUB_ACTIONS`` を未設定にして
+        マスク行による偽陽性（stdout に "tty-key" を含む可能性）を排除する。
+        """
+        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+        with pytest.raises(SystemExit) as exc:
+            _emit_stdout("tty-key")
+
+        assert exc.value.code == 2, f"expected exit code 2, got: {exc.value.code!r}"
+
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.err, f"warning must be emitted to stderr on TTY: {captured.err!r}"
+        assert "tty-key" not in captured.out, f"value must not appear on TTY stdout: {captured.out!r}"
