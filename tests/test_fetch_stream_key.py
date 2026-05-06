@@ -272,12 +272,13 @@ class TestWriteOpSecret:
             with pytest.raises(ConfigError):
                 write_op_secret("Personal", "YouTube", "stream_key", "abc")
 
-    def test_value_is_passed_to_op_subprocess(self):
+    def test_value_is_not_in_argv_on_edit_path(self):
         """Given 任意の secret 値
-        When ``write_op_secret``
-        Then subprocess の引数に ``"<field>=<value>"`` 形式で値が渡る。
+        When ``write_op_secret`` が ``op item edit`` を呼ぶ
+        Then secret 値そのものは argv に含まれない（``ps aux`` / ``/proc/<pid>/cmdline`` 漏えい防止）。
 
-        値の流れが op コマンド引数まで伝搬していることを保証する（隠れた解決経路の禁止）。
+        Issue #151 の core regression guard: argv に value 文字列を埋め込む実装への退行を検出する。
+        値の伝搬は stdin 経由（別ケースで担保）。
         """
         from youtube_automation.utils.secrets import write_op_secret
 
@@ -289,10 +290,138 @@ class TestWriteOpSecret:
 
             write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
 
-        all_args = mock_run.call_args_list[0].args[0]
-        joined = " ".join(all_args)
-        assert "secret-value-xyz" in joined, f"value not propagated to op CLI args: {all_args}"
-        assert "stream_key" in joined, f"field not propagated to op CLI args: {all_args}"
+        edit_argv = mock_run.call_args_list[0].args[0]
+        joined = " ".join(edit_argv)
+        assert "secret-value-xyz" not in joined, (
+            f"raw secret value must not appear in op CLI argv (ps aux exposure): {edit_argv}"
+        )
+
+    def test_value_is_not_in_argv_on_create_fallback_path(self):
+        """Given ``op item edit`` が失敗（item 不在）
+        When ``write_op_secret`` が ``op item create`` にフォールバックする
+        Then create argv にも secret 値そのものは含まれない。
+
+        edit / create 双方が同一の漏えい経路を共有しているため、fallback 側も対称に担保する。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=["op", "item", "edit"],
+                    stderr="item not found",
+                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            ]
+
+            write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
+
+        create_argv = mock_run.call_args_list[1].args[0]
+        joined = " ".join(create_argv)
+        assert "secret-value-xyz" not in joined, (
+            f"raw secret value must not appear in op CLI argv on create fallback: {create_argv}"
+        )
+
+    def test_value_is_passed_via_stdin_on_edit_path(self):
+        """Given 任意の secret 値
+        When ``write_op_secret`` が ``op item edit`` を呼ぶ
+        Then secret 値は ``subprocess.run(..., input=value)`` の kwargs として渡る。
+
+        argv に乗らないだけでなく、stdin 経由で確実に op プロセスに伝搬していることを独立検証する。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+            write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
+
+        edit_kwargs = mock_run.call_args_list[0].kwargs
+        assert edit_kwargs.get("input") == "secret-value-xyz", (
+            f"secret value must be passed via subprocess.run(input=...) on edit path: kwargs={edit_kwargs}"
+        )
+
+    def test_value_is_passed_via_stdin_on_create_fallback_path(self):
+        """Given ``op item edit`` が失敗
+        When ``write_op_secret`` が ``op item create`` にフォールバックする
+        Then create 呼び出しでも ``input=value`` で stdin 配線される。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=["op", "item", "edit"],
+                    stderr="item not found",
+                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            ]
+
+            write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
+
+        create_kwargs = mock_run.call_args_list[1].kwargs
+        assert create_kwargs.get("input") == "secret-value-xyz", (
+            f"secret value must be passed via subprocess.run(input=...) on create fallback: kwargs={create_kwargs}"
+        )
+
+    def test_assignment_uses_password_type_with_empty_value(self):
+        """Given ``field="stream_key"``
+        When ``write_op_secret`` が argv を構築する
+        Then 末尾要素は ``"stream_key[password]="`` と完全一致（末尾 ``=`` で空値）。
+
+        ``password=`` や ``stream_key=<value>`` のような旧形式・別形式への退行を境界で防ぐ。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        field = "stream_key"
+        expected_assignment = f"{field}[password]="
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+            write_op_secret("Personal", "YouTube", field, "secret-value-xyz")
+
+        edit_argv = mock_run.call_args_list[0].args[0]
+        assert edit_argv[-1] == expected_assignment, (
+            f"assignment must be '{expected_assignment}' "
+            f"(empty-value + [password] type indicator), got: {edit_argv[-1]!r}"
+        )
+
+    def test_text_true_is_preserved_for_str_based_stderr_handling(self):
+        """Given ``op item edit`` を呼ぶ
+        When ``write_op_secret`` が ``subprocess.run`` を呼ぶ
+        Then ``text=True`` が kwargs に含まれる。
+
+        ``getattr(exc, "stderr", "") or ""`` の str 前提（``secrets.py`` の例外ハンドラ）が崩れる退行を境界で防ぐ。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+            write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
+
+        edit_kwargs = mock_run.call_args_list[0].kwargs
+        assert edit_kwargs.get("text") is True, (
+            f"text=True must be preserved so stderr remains str: kwargs={edit_kwargs}"
+        )
 
 
 # ---------------------------------------------------------------------------

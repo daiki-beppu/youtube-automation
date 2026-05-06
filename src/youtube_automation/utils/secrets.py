@@ -143,12 +143,17 @@ def write_op_secret(vault: str, item: str, field: str, value: str) -> None:
             "  → 既にインストール済みなら PATH を確認してください"
         )
 
-    assignment = f"{field}={value}"
+    # 値は argv に埋め込まず stdin (`subprocess.run(input=value)`) で渡す。
+    # argv に乗せると `ps aux` / `/proc/<pid>/cmdline` から同一ホスト他ユーザーが
+    # secret を奪取できてしまう（Issue #151）。`[password]` 型指示子 + 末尾 `=`
+    # の空値 assignment と `input=value` を組み合わせ、op CLI に stdin から値を渡す。
+    assignment = f"{field}[password]="
 
     edit_cmd = ["op", "item", "edit", item, "--vault", vault, assignment]
     try:
         subprocess.run(
             edit_cmd,
+            input=value,
             check=True,
             capture_output=True,
             text=True,
@@ -173,6 +178,7 @@ def write_op_secret(vault: str, item: str, field: str, value: str) -> None:
     try:
         subprocess.run(
             create_cmd,
+            input=value,
             check=True,
             capture_output=True,
             text=True,
