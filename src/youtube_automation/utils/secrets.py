@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import atexit
 import os
 import shutil
 import subprocess
@@ -101,10 +102,20 @@ def get_client_secrets_path() -> Path:
         return _client_secrets_tempfile
 
     json_content = get_secret("CLIENT_SECRETS_JSON")
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix="client_secrets_", delete=False)
-    tmp.write(json_content)
-    tmp.close()
-    _client_secrets_tempfile = Path(tmp.name)
+    # mkstemp → chmod → fdopen の順序を厳守: 書き込み前に 0o600 を確定させ
+    # OS umask に依存せず world-readable な状態を経由しないことを保証する
+    fd, path = tempfile.mkstemp(prefix="client_secrets_", suffix=".json")
+    os.chmod(path, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(json_content)
+
+    def _cleanup(p: str = path) -> None:
+        # idempotent: ファイルが既に消えていても atexit 連鎖を止めない
+        if os.path.exists(p):
+            os.unlink(p)
+
+    atexit.register(_cleanup)
+    _client_secrets_tempfile = Path(path)
     return _client_secrets_tempfile
 
 
