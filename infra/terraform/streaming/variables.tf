@@ -50,3 +50,14 @@ variable "discord_webhook_url" {
   description = "死活監視通知の送信先 Discord Webhook URL。TF_VAR_discord_webhook_url 経由で 1Password から注入する想定（tfstate にも sensitive 扱いで残す）"
   sensitive   = true
 }
+
+variable "allowed_ssh_cidr" {
+  type        = list(string)
+  default     = []
+  description = "SSH (22/tcp) 接続を許可する CIDR のリスト（例: [\"203.0.113.5/32\"]）。デフォルト [] のまま apply すると validation で fail する必須入力"
+
+  validation {
+    condition     = length(var.allowed_ssh_cidr) > 0
+    error_message = "allowed_ssh_cidr を 1 件以上指定してください（例: 自分の IP を `curl -s ifconfig.me` で取得し \"203.0.113.5/32\" 形式で渡す）。"
+  }
+}

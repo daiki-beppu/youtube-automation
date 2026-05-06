@@ -38,6 +38,7 @@ _CLOUD_INIT_YAML = _STREAMING_DIR / "cloud-init.yaml"
 _SYSTEMD_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.service.tftpl"
 _ENV_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.env.tftpl"
 _STREAMING_README = _STREAMING_DIR / "README.md"
+_STREAMING_SKILL = _REPO_ROOT / ".claude" / "skills" / "streaming" / "SKILL.md"
 
 _SCRIPTS_STREAMING_DIR = _REPO_ROOT / "scripts" / "streaming"
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
@@ -952,6 +953,131 @@ class TestVariablesTfNullResource:
 
 
 # ============================================================================
+# variables.tf — #153 で追加される allowed_ssh_cidr 変数（firewall）
+# ============================================================================
+
+
+class TestVariablesTfFirewall:
+    """``variables.tf`` の #153 で追加される ``allowed_ssh_cidr`` 変数定義（firewall）。
+
+    order.md 推奨対応:
+      - ``variable "allowed_ssh_cidr"`` (type=list(string), default=[], description あり)
+      - ``validation { length(var.allowed_ssh_cidr) > 0 }`` で空入力を fail-fast
+    """
+
+    def test_allowed_ssh_cidr_is_list_of_string_with_empty_default(self):
+        """Given variables.tf
+        When allowed_ssh_cidr 変数定義を読む
+        Then type=list(string), default=[], description あり (R1, H1)。
+
+        order.md スニペット通り `default = []` を保ち、空入力は別途 validation で拒否する。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        assert block is not None, 'variable "allowed_ssh_cidr" が存在しない'
+        assert re.search(r"type\s*=\s*list\(\s*string\s*\)", block), "allowed_ssh_cidr.type が list(string) でない"
+        # default は空リスト固定
+        assert re.search(r"default\s*=\s*\[\s*\]", block), (
+            "allowed_ssh_cidr.default が [] でない（必須入力扱いのため空リストが既定）"
+        )
+        assert re.search(r"description\s*=", block), "allowed_ssh_cidr.description が無い"
+
+    def test_allowed_ssh_cidr_validation_rejects_empty_list(self):
+        """Given variables.tf
+        When allowed_ssh_cidr 変数定義の validation ブロックを読む
+        Then condition が ``length(var.allowed_ssh_cidr) > 0`` で error_message が宣言されている (R5, H2)。
+
+        空リストでの apply を fail-fast で拒否する経路（plan §到達経路 (c)）。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        assert block is not None
+        validation = _extract_block(block, r"validation")
+        assert validation is not None, (
+            "allowed_ssh_cidr.validation ブロックが存在しない（空入力を fail-fast で拒否できない）"
+        )
+        assert re.search(
+            r"condition\s*=\s*length\(\s*var\.allowed_ssh_cidr\s*\)\s*>\s*0",
+            validation,
+        ), "validation.condition が length(var.allowed_ssh_cidr) > 0 でない"
+        assert re.search(r"error_message\s*=\s*\"", validation), "validation.error_message が宣言されていない"
+
+    def test_allowed_ssh_cidr_default_does_not_open_world(self):
+        """Given variables.tf
+        When allowed_ssh_cidr 変数定義の default を読む
+        Then ``0.0.0.0/0`` 等の全世界開放 CIDR が含まれていない (E1)。
+
+        plan §検討したアプローチ「default = ["0.0.0.0/0"] で全開放」は不採用。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        assert block is not None
+        # default 値の中身を抽出
+        default_match = re.search(r"default\s*=\s*(\[[^\]]*\])", block)
+        assert default_match is not None, "allowed_ssh_cidr.default が宣言されていない"
+        default_value = default_match.group(1)
+        assert "0.0.0.0/0" not in default_value, (
+            "allowed_ssh_cidr.default に 0.0.0.0/0 が含まれている（issue 目的の攻撃面縮小が無効化される）"
+        )
+        assert "::/0" not in default_value, "allowed_ssh_cidr.default に ::/0 が含まれている（IPv6 全世界開放）"
+
+    def test_allowed_ssh_cidr_is_not_sensitive(self):
+        """Given variables.tf
+        When allowed_ssh_cidr 変数定義を読む
+        Then ``sensitive = true`` が宣言されていない (E2)。
+
+        plan §secret 漏洩リスク確定: CIDR は secret ではない。tfstate に平文で残ってよい。
+        ``vultr_api_key`` / ``stream_key`` の sensitive 必須検証の対称形。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        assert block is not None
+        assert not re.search(r"sensitive\s*=\s*true", block), (
+            "allowed_ssh_cidr に sensitive = true が宣言されている（CIDR は secret ではない、YAGNI）"
+        )
+
+    def test_allowed_ssh_cidr_validation_error_message_includes_operational_hint(self):
+        """Given variables.tf
+        When allowed_ssh_cidr.validation.error_message を読む
+        Then 運用ヒント語句（``curl`` / ``ifconfig.me`` / ``/32``）のいずれかを含む (E5)。
+
+        plan §到達経路 (c) actionable な fail-fast 文言の担保。
+        operator が空入力で plan が落ちた時、error_message から具体的対処を読み取れる必要がある。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        assert block is not None
+        validation = _extract_block(block, r"validation")
+        assert validation is not None
+        msg_match = re.search(r'error_message\s*=\s*"([^"]*)"', validation)
+        assert msg_match is not None, "validation.error_message が文字列リテラルで宣言されていない"
+        msg = msg_match.group(1)
+        assert msg.strip() != "", "validation.error_message が空文字列"
+        has_hint = any(hint in msg for hint in ("curl", "ifconfig.me", "/32"))
+        assert has_hint, (
+            "validation.error_message に運用ヒント（curl / ifconfig.me / /32）が含まれていない"
+            "（operator が空入力で詰まっても具体的対処を辿れない）"
+        )
+
+    def test_allowed_ssh_cidr_does_not_use_yagni_attributes(self):
+        """Given variables.tf
+        When allowed_ssh_cidr 変数定義を読む
+        Then order.md 非掲載属性（``nullable`` / ``ephemeral``）が宣言されていない (X5)。
+
+        order.md スニペットに無い属性は YAGNI として追加しない（plan §確認したアプローチ参照）。
+        """
+        text = _strip_hcl_comments(_read(_VARIABLES_TF))
+        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        assert block is not None
+        assert not re.search(r"\bnullable\s*=", block), (
+            "allowed_ssh_cidr に nullable 属性が宣言されている（order.md スコープ外、YAGNI）"
+        )
+        assert not re.search(r"\bephemeral\s*=", block), (
+            "allowed_ssh_cidr に ephemeral 属性が宣言されている（order.md スコープ外、YAGNI）"
+        )
+
+
+# ============================================================================
 # versions.tf — #125 で追加される null provider 宣言
 # ============================================================================
 
@@ -1227,6 +1353,203 @@ class TestMainTfNullResource:
 
 
 # ============================================================================
+# main.tf — #153 で追加される vultr_firewall_group / vultr_firewall_rule
+# ============================================================================
+
+
+class TestMainTfFirewall:
+    """``main.tf`` の #153 で追加される firewall リソース構造（22/tcp 限定）。
+
+    order.md 推奨対応:
+      - ``vultr_firewall_group "stream"`` (description あり)
+      - ``vultr_firewall_rule "ssh"``（``for_each = toset(var.allowed_ssh_cidr)`` /
+        protocol=tcp / ip_type=v4 / port=22 / subnet+subnet_size を CIDR 分解で算出）
+      - ``vultr_instance.this`` に ``firewall_group_id = vultr_firewall_group.stream.id``
+    """
+
+    def test_vultr_firewall_group_stream_exists_with_description(self):
+        """Given main.tf
+        When vultr_firewall_group.stream を探す
+        Then 定義されており description 行を持つ (R2, H3)。
+
+        firewall 適用の親リソース。欠ければ rule が孤立する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_group"\s+"stream"')
+        assert block is not None, 'resource "vultr_firewall_group" "stream" が存在しない'
+        assert re.search(r"description\s*=", block), "vultr_firewall_group.stream.description が無い"
+
+    def test_vultr_firewall_rule_ssh_uses_for_each_toset(self):
+        """Given main.tf
+        When vultr_firewall_rule.ssh の for_each を読む
+        Then ``for_each = toset(var.allowed_ssh_cidr)`` が宣言されている (R3, H4, E3)。
+
+        toset() で安定アドレス化することで、中間要素削除時の index ズレ事故（誤 replace）を防ぐ
+        （plan §検討したアプローチ参照）。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        assert block is not None, 'resource "vultr_firewall_rule" "ssh" が存在しない'
+        assert re.search(
+            r"for_each\s*=\s*toset\(\s*var\.allowed_ssh_cidr\s*\)",
+            block,
+        ), (
+            "vultr_firewall_rule.ssh.for_each が toset(var.allowed_ssh_cidr) でない"
+            "（list 直渡しは index ズレ事故の原因になる）"
+        )
+
+    def test_vultr_firewall_rule_ssh_links_firewall_group(self):
+        """Given main.tf
+        When vultr_firewall_rule.ssh の firewall_group_id を読む
+        Then ``firewall_group_id = vultr_firewall_group.stream.id`` で親リソースに結線されている
+        (R3a, H5)。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        assert block is not None
+        assert re.search(
+            r"firewall_group_id\s*=\s*vultr_firewall_group\.stream\.id",
+            block,
+        ), (
+            "vultr_firewall_rule.ssh.firewall_group_id が vultr_firewall_group.stream.id でない"
+            "（rule が親 group に紐付かない）"
+        )
+
+    def test_vultr_firewall_rule_ssh_uses_tcp_v4_port_22(self):
+        """Given main.tf
+        When vultr_firewall_rule.ssh の protocol / ip_type / port を読む
+        Then ``protocol="tcp"`` / ``ip_type="v4"`` / ``port="22"`` (R3b, H6)。
+
+        SSH 22/tcp 限定の核。order.md スコープ通りに IPv4 の 22/tcp のみ。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        assert block is not None
+        assert re.search(r'protocol\s*=\s*"tcp"', block), 'vultr_firewall_rule.ssh.protocol が "tcp" でない'
+        assert re.search(r'ip_type\s*=\s*"v4"', block), 'vultr_firewall_rule.ssh.ip_type が "v4" でない'
+        assert re.search(r'port\s*=\s*"22"', block), 'vultr_firewall_rule.ssh.port が "22" でない'
+
+    def test_vultr_firewall_rule_ssh_decomposes_cidr_into_subnet_and_size(self):
+        """Given main.tf
+        When vultr_firewall_rule.ssh の subnet / subnet_size を読む
+        Then ``subnet = split("/", each.value)[0]`` /
+             ``subnet_size = tonumber(split("/", each.value)[1])`` (R3c, H7)。
+
+        Vultr API は CIDR ではなく subnet+subnet_size の 2 値で要求するため、
+        each.value（"203.0.113.5/32" 形式）を split で分解する必要がある。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        assert block is not None
+        assert re.search(
+            r'subnet\s*=\s*split\(\s*"/"\s*,\s*each\.value\s*\)\[\s*0\s*\]',
+            block,
+        ), 'subnet が split("/", each.value)[0] でない'
+        assert re.search(
+            r'subnet_size\s*=\s*tonumber\(\s*split\(\s*"/"\s*,\s*each\.value\s*\)\[\s*1\s*\]\s*\)',
+            block,
+        ), 'subnet_size が tonumber(split("/", each.value)[1]) でない'
+
+    def test_vultr_firewall_rule_ssh_subnet_is_not_literal(self):
+        """Given main.tf
+        When vultr_firewall_rule.ssh の subnet を読む
+        Then ``0.0.0.0`` 等のリテラル直書きでない (X3)。
+
+        plan アンチパターン「全開放リテラル直書き」防止。subnet は each.value 由来であるべき。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        assert block is not None
+        assert not re.search(r'subnet\s*=\s*"0\.0\.0\.0"', block), (
+            'vultr_firewall_rule.ssh.subnet が "0.0.0.0" リテラル（全開放）'
+        )
+        # 任意の IPv4 リテラル直書きを禁止（subnet は split(...) 由来であるべき）
+        assert not re.search(r'subnet\s*=\s*"\d+\.\d+\.\d+\.\d+"', block), (
+            "vultr_firewall_rule.ssh.subnet に IPv4 リテラルが直書きされている（CIDR は each.value 由来であるべき）"
+        )
+
+    def test_vultr_firewall_rule_ssh_does_not_use_other_ports(self):
+        """Given main.tf
+        When vultr_firewall_rule.ssh の port 属性を全件走査する
+        Then ``"22"`` 以外の ``port = "..."`` リテラルが存在しない (X1)。
+
+        スコープ越境防止: order.md は SSH 22 のみ、80/443 等の追加ポートは別 issue。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        assert block is not None
+        # port = "<value>" の <value> が "22" 以外の値を取っていないこと
+        ports = re.findall(r'port\s*=\s*"([^"]*)"', block)
+        non_22 = [p for p in ports if p != "22"]
+        assert not non_22, (
+            f"vultr_firewall_rule.ssh に 22 以外の port リテラルが存在: {non_22}"
+            "（order.md スコープ外。80/443 等は別 issue）"
+        )
+
+    def test_vultr_firewall_rule_ssh_does_not_use_ip_type_v6(self):
+        """Given main.tf
+        When vultr_firewall_rule.ssh を読む
+        Then ``ip_type = "v6"`` が存在しない (X2)。
+
+        order.md は IPv4 のみ。IPv6 firewall rule の追加は別 issue。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        assert block is not None
+        assert not re.search(r'ip_type\s*=\s*"v6"', block), (
+            'vultr_firewall_rule.ssh に ip_type = "v6" が含まれている（order.md スコープ外）'
+        )
+
+    def test_only_one_vultr_firewall_rule_resource_declared(self):
+        """Given main.tf
+        When ``resource "vultr_firewall_rule" "..."`` の宣言を全件走査する
+        Then ``"ssh"`` の 1 個のみ (X4)。
+
+        スコープ越境防止: 追加 rule リソース（80/443 / IPv6 等）を「ついで」に追加しない。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        rules = re.findall(r'resource\s+"vultr_firewall_rule"\s+"(\w+)"', text)
+        assert rules == ["ssh"], (
+            f"vultr_firewall_rule リソースが ['ssh'] 以外になっている: {rules}（order.md スコープ外。SSH 22 1 個のみ）"
+        )
+
+    def test_vultr_instance_has_firewall_group_id_wiring(self):
+        """Given main.tf
+        When vultr_instance.this の firewall_group_id を読む
+        Then ``firewall_group_id = vultr_firewall_group.stream.id`` で結線されている (R4, H8)。
+
+        plan §配線確認チェックリスト #4。配線漏れすると firewall を作っても無効。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(
+            r"firewall_group_id\s*=\s*vultr_firewall_group\.stream\.id",
+            block,
+        ), (
+            "vultr_instance.this.firewall_group_id が vultr_firewall_group.stream.id でない"
+            "（配線漏れ。firewall を作っても instance に適用されない）"
+        )
+
+    def test_vultr_instance_has_no_explicit_depends_on_for_firewall(self):
+        """Given main.tf
+        When vultr_instance.this ブロックを読む
+        Then ``depends_on = [...]`` の明示宣言が存在しない (E4)。
+
+        plan アンチパターン #3: ``firewall_group_id`` 参照で暗黙依存が成立するため、
+        冗長な depends_on は禁止。既存 ``test_no_explicit_depends_on_for_null_resource`` と同方針。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        # 行頭からインデント込みで `depends_on = [` が現れる箇所が無いこと
+        assert not re.search(r"^\s*depends_on\s*=\s*\[", block, flags=re.MULTILINE), (
+            "vultr_instance.this に明示的な depends_on を書いてはならない "
+            "（plan アンチパターン #3、firewall_group_id 参照で暗黙依存が成立する）"
+        )
+
+
+# ============================================================================
 # templates/youtube-stream.env.tftpl — #125 新規ファイル
 # ============================================================================
 
@@ -1369,6 +1692,41 @@ class TestTfvarsExampleStreamKey:
         text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
         assert re.search(r"^\s*video_path\s*=\s*\"", text, flags=re.MULTILINE), (
             'video_path = "..." がアクティブ行に存在しない（必須項目だがサンプルから発見できない）'
+        )
+
+
+# ============================================================================
+# terraform.tfvars.example — #153 で allowed_ssh_cidr の必須サンプル追記
+# ============================================================================
+
+
+class TestTfvarsExampleFirewall:
+    """``terraform.tfvars.example`` の #153 ``allowed_ssh_cidr`` discoverability。"""
+
+    def test_allowed_ssh_cidr_assignment_is_active_with_slash_32_placeholder(self):
+        """Given terraform.tfvars.example
+        When ファイル内容（コメント除去後）を読む
+        Then ``allowed_ssh_cidr = ["..."]`` がアクティブ行に存在し、``/32`` プレースホルダーを含む
+        (R6, H9)。
+
+        ``allowed_ssh_cidr`` は default = [] かつ validation で空入力を拒否する必須項目。
+        operator がサンプルから視認できる必要があるため、``video_path`` と同様にアクティブ代入で示す。
+        ``/32``（ホスト 1 台限定）が運用上自然なプレースホルダー。
+        """
+        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        # アクティブ行（コメントアウトされていない行）に allowed_ssh_cidr = [...] が存在する
+        match = re.search(
+            r"^\s*allowed_ssh_cidr\s*=\s*\[([^\]]*)\]",
+            text,
+            flags=re.MULTILINE,
+        )
+        assert match is not None, (
+            'allowed_ssh_cidr = ["..."] がアクティブ行に存在しない（必須項目だがサンプルから発見できない）'
+        )
+        list_body = match.group(1)
+        assert "/32" in list_body, (
+            "allowed_ssh_cidr のサンプル値に /32 プレースホルダーが含まれていない"
+            "（ホスト 1 台限定の運用想定が伝わらない）"
         )
 
 
@@ -1583,8 +1941,51 @@ class TestStreamingReadmeVideoSwap:
         """
         text = _read(_STREAMING_README)
         assert "swap_video.sh" in text, (
-            "README に swap_video.sh の言及が無い"
-            "（1 コマンドラッパーへの到達導線が欠落し、運用者が発見できない）"
+            "README に swap_video.sh の言及が無い（1 コマンドラッパーへの到達導線が欠落し、運用者が発見できない）"
+        )
+
+
+# ============================================================================
+# infra/terraform/streaming/README.md — #153 allowed_ssh_cidr の手順記載
+# ============================================================================
+
+
+class TestStreamingReadmeFirewall:
+    """``infra/terraform/streaming/README.md`` の #153 ``allowed_ssh_cidr`` 手順言及。
+
+    operator が CIDR 設定手順（IP 取得 → /32 化 → tfvars 記載）を辿れる導線を担保する。
+    本テストは README の章立て順序や文章スタイルは問わず、運用上クリティカルなキーワード
+    包含のみ検証する（執筆の自由度を残す）。
+    """
+
+    def test_mentions_allowed_ssh_cidr(self):
+        """Given README
+        When 全文を読む
+        Then ``allowed_ssh_cidr`` キーワードの言及がある (R7, H10)。
+
+        手順書からの到達経路。設定 key 名を README から発見できる必要がある。
+        """
+        text = _read(_STREAMING_README)
+        assert "allowed_ssh_cidr" in text, (
+            "README に allowed_ssh_cidr の言及が無い（operator が必須項目を発見できず、CIDR 設定手順が辿れない）"
+        )
+
+    def test_mentions_ip_acquisition_path(self):
+        """Given README
+        When 全文を読む
+        Then IP 取得導線（``/32`` / ``ifconfig.me`` / ``curl`` のいずれか）に言及している
+        (R7, H11)。
+
+        CIDR 化手順を運用者が辿れる必要がある。固定文言は要求しないが、
+        「自分の IP を /32 で書く」という作業に対応するヒント語句が必須。
+        """
+        text = _read(_STREAMING_README)
+        has_slash_32 = "/32" in text
+        has_ifconfig_me = "ifconfig.me" in text
+        has_curl = "curl" in text
+        assert has_slash_32 or has_ifconfig_me or has_curl, (
+            "README に /32 / ifconfig.me / curl のいずれの言及も無い"
+            "（CIDR 化手順 = IP 取得 → /32 化 が運用者に伝わらない）"
         )
 
 
@@ -1614,8 +2015,7 @@ class TestSwapVideoScript:
         ラッパーは README から発見可能であっても、ファイルが無ければ叩けない。
         """
         assert _SWAP_VIDEO_SCRIPT.exists(), (
-            f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} が存在しない"
-            "（1 コマンドラッパーが未実装）"
+            f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} が存在しない（1 コマンドラッパーが未実装）"
         )
 
     def test_script_is_executable(self):
@@ -1628,9 +2028,7 @@ class TestSwapVideoScript:
         運用者が事故る（タブ補完で失敗する）。
         """
         if not _SWAP_VIDEO_SCRIPT.exists():
-            pytest.fail(
-                f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} が存在しない（先に実装が必要）"
-            )
+            pytest.fail(f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} が存在しない（先に実装が必要）")
         mode = _SWAP_VIDEO_SCRIPT.stat().st_mode
         # owner execute bit (0o100) が立っていること
         assert mode & 0o100, (
@@ -1649,8 +2047,7 @@ class TestSwapVideoScript:
         """
         text = _read(_SWAP_VIDEO_SCRIPT)
         assert re.search(r"^set\s+-euo\s+pipefail\b", text, flags=re.MULTILINE), (
-            "swap_video.sh に `set -euo pipefail` が無い"
-            "（エラー握りつぶしリスク。Fail Fast 原則に違反）"
+            "swap_video.sh に `set -euo pipefail` が無い（エラー握りつぶしリスク。Fail Fast 原則に違反）"
         )
 
     def test_script_exports_tf_var_video_path(self):
@@ -1664,8 +2061,7 @@ class TestSwapVideoScript:
         """
         text = _read(_SWAP_VIDEO_SCRIPT)
         assert re.search(r"export\s+TF_VAR_video_path\b", text), (
-            "swap_video.sh に `export TF_VAR_video_path` が無い"
-            "（差し替え対象の動画パスを Terraform に渡す経路が欠落）"
+            "swap_video.sh に `export TF_VAR_video_path` が無い（差し替え対象の動画パスを Terraform に渡す経路が欠落）"
         )
 
     def test_script_uses_realpath_for_absolute_path(self):
@@ -1699,8 +2095,7 @@ class TestSwapVideoScript:
             "（既存 README の記述パターン (-chdir=) と不一致 / pushd 等の cwd 依存実装の疑い）"
         )
         assert re.search(r"terraform\s+[^\n]*\bapply\b", text), (
-            "swap_video.sh に `terraform apply` 起動行が無い"
-            "（差し替えを実行する本体コマンドが欠落）"
+            "swap_video.sh に `terraform apply` 起動行が無い（差し替えを実行する本体コマンドが欠落）"
         )
 
     def test_script_default_apply_is_interactive(self):
@@ -1745,11 +2140,44 @@ class TestSwapVideoScript:
         """
         text = _read(_SWAP_VIDEO_SCRIPT)
         # ユーザー向けフラグ `--auto-approve` の取り回し
-        assert re.search(r"--auto-approve\b", text), (
-            "swap_video.sh が `--auto-approve` 引数を受け取っていない"
-        )
+        assert re.search(r"--auto-approve\b", text), "swap_video.sh が `--auto-approve` 引数を受け取っていない"
         # terraform へ渡す `-auto-approve`（シングルダッシュ）
         assert re.search(r"-auto-approve\b", text), (
             "swap_video.sh が terraform へ `-auto-approve` を渡していない"
             "（ユーザーフラグだけ受け取って Terraform 側に伝播していない）"
+        )
+
+
+# ============================================================================
+# .claude/skills/streaming/SKILL.md — #153 allowed_ssh_cidr の operator 索引
+# ============================================================================
+
+
+class TestStreamingSkillFirewall:
+    """``.claude/skills/streaming/SKILL.md`` の #153 ``allowed_ssh_cidr`` 言及。
+
+    SKILL.md は operator 索引。明示しないと §1 初回構築の ``terraform apply`` が
+    SSH 到達不可で詰むため、必須項目として CIDR を記載する必要がある。
+    本テストは raw text のキーワード包含のみ検証する（章立て自由度を残す）。
+    """
+
+    def test_skill_file_exists(self):
+        """Given .claude/skills/streaming/
+        When SKILL.md を探す
+        Then 存在する。
+        """
+        assert _STREAMING_SKILL.exists(), ".claude/skills/streaming/SKILL.md が存在しない"
+
+    def test_mentions_allowed_ssh_cidr(self):
+        """Given SKILL.md
+        When 全文を読む
+        Then ``allowed_ssh_cidr`` キーワードの言及がある (R8, H12)。
+
+        operator 索引からの到達経路。明示しないと §1 初回構築の terraform apply が
+        SSH 到達不可で詰む。
+        """
+        text = _read(_STREAMING_SKILL)
+        assert "allowed_ssh_cidr" in text, (
+            "SKILL.md に allowed_ssh_cidr の言及が無い"
+            "（operator が必須項目を発見できず、§1 初回構築で SSH 到達不可になる）"
         )

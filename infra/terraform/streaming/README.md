@@ -7,6 +7,8 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 ## 管理するリソース
 
 - `vultr_ssh_key` × 1（VPS 作成時に登録する SSH 公開鍵）
+- `vultr_firewall_group` × 1（`youtube-stream` インスタンスに適用するファイアウォールグループ）
+- `vultr_firewall_rule` × N（`var.allowed_ssh_cidr` の CIDR ごとに 22/tcp の inbound rule。IPv4 のみ）
 - `vultr_instance` × 1（Ubuntu 24.04 LTS / vc2-1c-2gb / 東京リージョン）
 - `null_resource.deploy` × 1（動画アップロード + `EnvironmentFile` 配置 + systemd 起動 + 死活監視配置）
 
@@ -17,6 +19,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
 - SSH 鍵ペア `~/.ssh/yt_stream_key` / `~/.ssh/yt_stream_key.pub` を生成済み
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
+- operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
 
 ## 使い方
 
@@ -25,6 +28,8 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 cd infra/terraform/streaming
 cp terraform.tfvars.example terraform.tfvars
 # → video_path を実値（絶対パス）に書き換え
+# → allowed_ssh_cidr を operator の IP/32 に書き換え（例: ["203.0.113.5/32"]）
+#    自分のグローバル IP は `curl -s ifconfig.me` で取得する
 
 # 2. secret を環境変数経由で注入（1Password CLI 推奨）
 #    ストリームキーが 1Password に未保管なら事前に `yt-fetch-stream-key --vault=Personal --item=YouTube` を実行
@@ -182,6 +187,9 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 | 1 時間後の自動再開（`RestartSec=1h` / `auto-restart`） | 通知は飛ばない（休止中は `idle`、再開後は `ok`） |
 
 ## トラブルシューティング
+
+### `Error: Invalid value for variable` / `allowed_ssh_cidr` で plan が失敗する
+`var.allowed_ssh_cidr` が空 `[]` のまま `terraform plan` / `apply` を実行している（`validation { condition = length(var.allowed_ssh_cidr) > 0 }` で fail-fast）。`terraform.tfvars` の `allowed_ssh_cidr` に operator の IP/32 を 1 件以上記入する。`curl -s ifconfig.me` で自分のグローバル IP を取得し、`["203.0.113.5/32"]` 形式で渡す。
 
 ### `Error: Output refers to sensitive values`
 `triggers.stream_key` を `sha256(var.stream_key)` のまま書くとこのエラーが出る。本モジュールでは `nonsensitive(sha256(...))` でラップ済み（SHA256 は不可逆なので脱 sensitive 安全）。

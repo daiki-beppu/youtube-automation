@@ -16,6 +16,12 @@
 # 必須（環境ごとに書き換える）
 video_path = "/absolute/path/to/your/video.mp4"
 
+# 必須: SSH 接続を許可する CIDR のリスト（22/tcp 限定）。
+#   自分のグローバル IP は `curl -s ifconfig.me` で取得できる。
+#   ホスト 1 台限定にするなら /32 を付ける（例: "203.0.113.5/32"）。
+#   空 [] のまま apply すると validation で fail する。
+allowed_ssh_cidr = ["203.0.113.5/32"]
+
 # 任意（デフォルト値で運用するならコメントアウトのまま）
 # ssh_pub_key_path  = "~/.ssh/yt_stream_key.pub"
 # ssh_priv_key_path = "~/.ssh/yt_stream_key"

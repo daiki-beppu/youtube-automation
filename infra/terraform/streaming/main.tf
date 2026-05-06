@@ -3,6 +3,20 @@ resource "vultr_ssh_key" "this" {
   ssh_key = file(pathexpand(var.ssh_pub_key_path))
 }
 
+resource "vultr_firewall_group" "stream" {
+  description = "youtube-stream firewall group"
+}
+
+resource "vultr_firewall_rule" "ssh" {
+  for_each          = toset(var.allowed_ssh_cidr)
+  firewall_group_id = vultr_firewall_group.stream.id
+  protocol          = "tcp"
+  ip_type           = "v4"
+  subnet            = split("/", each.value)[0]
+  subnet_size       = tonumber(split("/", each.value)[1])
+  port              = "22"
+}
+
 resource "vultr_instance" "this" {
   region   = var.region
   plan     = var.plan
@@ -10,6 +24,8 @@ resource "vultr_instance" "this" {
   hostname = "youtube-stream"
   label    = "youtube-stream"
   tags     = ["youtube-stream"]
+
+  firewall_group_id = vultr_firewall_group.stream.id
 
   ssh_key_ids = [vultr_ssh_key.this.id]
 
