@@ -1187,7 +1187,6 @@ class TestStreamingArchiveCheckCli:
                 streaming_archive_check,
                 "build_youtube_service",
                 return_value=MagicMock(),
-                create=True,
             ),
             patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "2"]),
         ):
@@ -1215,7 +1214,6 @@ class TestStreamingArchiveCheckCli:
                 streaming_archive_check,
                 "build_youtube_service",
                 return_value=MagicMock(),
-                create=True,
             ),
             patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "2"]),
         ):
@@ -1243,13 +1241,11 @@ class TestStreamingArchiveCheckCli:
                 streaming_archive_check,
                 "build_youtube_service",
                 return_value=MagicMock(),
-                create=True,
             ),
             patch.object(
                 streaming_archive_check,
                 "get_secret",
                 return_value="https://discord.com/api/webhooks/123/abc",
-                create=True,
             ),
             patch("requests.post") as mock_post,
             patch.object(

@@ -74,7 +74,8 @@ def count_archives_for_date(youtube_service: Any, target_date: date) -> int:
         actual_end = details.get("actualEndTime")
         if not actual_end:
             continue
-        ended_at = datetime.fromisoformat(actual_end.replace("Z", "+00:00"))
+        # Python 3.11+ の fromisoformat は末尾 'Z' を直接受理する
+        ended_at = datetime.fromisoformat(actual_end)
         if ended_at.astimezone(timezone.utc).date() == target_date:
             count += 1
     return count

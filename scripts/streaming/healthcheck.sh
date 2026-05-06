@@ -44,7 +44,7 @@ classify_status() {
 # source されたとき（bash 関数の単体テスト用）はここで終了する。
 # BASH_SOURCE[0] と $0 が一致する場合のみ「直接実行」。
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
-  return 0 2>/dev/null || true
+  return 0
 fi
 
 readonly UNIT="youtube-stream"
