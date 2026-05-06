@@ -13,9 +13,9 @@ resource "vultr_instance" "this" {
 
   ssh_key_ids = [vultr_ssh_key.this.id]
 
-  user_data = base64encode(templatefile("${path.module}/cloud-init.yaml", {
+  user_data = templatefile("${path.module}/cloud-init.yaml", {
     systemd_unit = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})
-  }))
+  })
 }
 
 resource "null_resource" "deploy" {
