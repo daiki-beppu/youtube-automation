@@ -688,20 +688,29 @@ class TestSystemdUnitTemplate:
     def test_service_exec_start_uses_env_vars_not_literals(self):
         """Given .tftpl
         When [Service].ExecStart を読む
-        Then 仕様通りのコマンドが宣言されている (R12)。
+        Then 無音 audio を mux した ffmpeg コマンドが宣言されている (R12 改訂)。
 
-        ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO -c copy -f flv $RTMP_URL``
+        実証: 映像のみ(``-c copy``) で送信すると YouTube Live が
+        ``streamStatus=inactive / healthStatus=noData`` のまま broadcast を認識しない。
+        ``anullsrc`` で無音 AAC を mux すると即座に ``streamStatus=active`` に遷移する。
+
+        ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO``
+        ``-f lavfi -i anullsrc=r=44100:cl=stereo``
+        ``-c:v copy -c:a aac -b:a 128k -map 0:v -map 1:a -f flv $RTMP_URL``
         """
         text = _read(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
-        # 順序固定の厳密マッチ
         expected = (
             r"^ExecStart=/usr/bin/ffmpeg\s+-re\s+-stream_loop\s+-1\s+"
-            r"-i\s+\$VIDEO\s+-c\s+copy\s+-f\s+flv\s+\$RTMP_URL\s*$"
+            r"-i\s+\$VIDEO\s+"
+            r"-f\s+lavfi\s+-i\s+anullsrc=r=44100:cl=stereo\s+"
+            r"-c:v\s+copy\s+-c:a\s+aac\s+-b:a\s+128k\s+"
+            r"-map\s+0:v\s+-map\s+1:a\s+"
+            r"-f\s+flv\s+\$RTMP_URL\s*$"
         )
         assert re.search(expected, service, flags=re.MULTILINE), (
-            "[Service].ExecStart が order.md 規定の ffmpeg コマンドと一致しない"
+            "[Service].ExecStart が改訂後の ffmpeg コマンド（anullsrc audio mux つき）と一致しない"
         )
 
     def test_service_runtime_max_sec_11h(self):
