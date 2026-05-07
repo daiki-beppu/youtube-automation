@@ -104,6 +104,80 @@ def test_masterup_skill_md_step_5_5_appears_after_step_5() -> None:
     assert pos55 > pos5, "`Step 5.5` は `Step 5` の後に来るべき"
 
 
+# ---------- H-3c (#11): Issue #210 SKILL.md から master_raw.mp3 が消えている ----------
+
+
+def test_masterup_skill_md_does_not_mention_master_raw_mp3() -> None:
+    """Given Issue #210 (A2) で `master_raw.mp3` 中間ファイル概念が廃止された
+    When masterup/SKILL.md 全文を読む
+    Then `master_raw.mp3` の文字列が一切出現しない (C-2 リグレッション防止)。
+    """
+    text = _read(MASTERUP_SKILL_MD)
+    assert "master_raw.mp3" not in text, (
+        "masterup/SKILL.md に `master_raw.mp3` の記述が残存している "
+        "(Issue #210 で中間ファイル概念は廃止)"
+    )
+
+
+# ---------- H-3d (#12): Issue #210 SKILL.md から --keep-raw が消えている ----------
+
+
+def test_masterup_skill_md_does_not_mention_keep_raw_flag() -> None:
+    """Given Issue #210 (A3) で `--keep-raw` フラグが削除された
+    When masterup/SKILL.md 全文を読む
+    Then `--keep-raw` の文字列が一切出現しない (C-2 リグレッション防止)。
+    """
+    text = _read(MASTERUP_SKILL_MD)
+    assert "--keep-raw" not in text, (
+        "masterup/SKILL.md に `--keep-raw` の記述が残存している "
+        "(Issue #210 でフラグ削除済み)"
+    )
+
+
+# ---------- H-3e (#13): Issue #210 SKILL.md が pass-through 自動検出を明記 ----------
+
+
+def test_masterup_skill_md_describes_pass_through_auto_detection() -> None:
+    """Given Issue #210 (B) で intro 素材無しチャンネルでは pass-through する
+    When masterup/SKILL.md 全文を読む
+    Then 自動検出 / pass-through の挙動と「常に呼ぶ」運用契約が明記されている。
+    """
+    text = _read(MASTERUP_SKILL_MD)
+    detection_needles = [
+        "pass-through",
+        "自動検出",
+        "intro 素材が揃っていない",
+        "intro 素材",
+    ]
+    assert any(n in text for n in detection_needles), (
+        "masterup/SKILL.md に pass-through 自動検出の言及が無い "
+        f"(needles={detection_needles})"
+    )
+    runtime_needles = ["常に呼ぶ", "常時実行", "Step 5 完了後に必ず"]
+    assert any(n in text for n in runtime_needles), (
+        "masterup/SKILL.md に「常に呼ぶ」運用契約の記述が無い "
+        f"(needles={runtime_needles})"
+    )
+
+
+# ---------- H-3f (#14): Issue #210 SKILL.md が検出キーを明記 ----------
+
+
+def test_masterup_skill_md_mentions_intro_detection_keys() -> None:
+    """Given Issue #210 (B) で `branding/intro_sfx/` と `branding/rain_layers/` が
+        検出キーになる
+    When masterup/SKILL.md 全文を読む
+    Then 両ディレクトリパスが言及されている (利用者が前提条件を理解できる)。
+    """
+    text = _read(MASTERUP_SKILL_MD)
+    assert "branding/intro_sfx" in text, (
+        "masterup/SKILL.md が `branding/intro_sfx/` (検出キー 1) を明記していない"
+    )
+    assert "branding/rain_layers" in text, (
+        "masterup/SKILL.md が `branding/rain_layers/` (検出キー 2) を明記していない"
+    )
+
+
 # ---------- H-4: videoup/SKILL.md Intro 統合モード ----------
 
 

@@ -119,11 +119,10 @@ yt-generate-master --shuffle-seed 42        # 再現性 seed 指定（--shuffle 
 
 ### Step 5.5: マスター後処理（intro audio 統合 / 設計 D）
 
-`branding/intro.mp4` を持つチャンネルでは、`yt-generate-master` の出力 `master_raw.mp3` をそのまま使わず、`finalize_master.py` で intro 区間の SFX + rain ambience + 楽曲を amix し、loudnorm two-pass で整音した `master.mp3` を最終出力する。
+Step 5 完了後に必ず呼び出す（intro 素材の有無は `finalize_master.py` 側で自動検出する）。intro 素材が揃ったチャンネルでは `01-master/master.mp3` に対して intro 区間の SFX + rain ambience + 楽曲を amix し、loudnorm two-pass で整音した結果を atomic rename で同じ `master.mp3` に in-place 上書きする。intro 素材が揃っていないチャンネルでは pass-through で終了し `master.mp3` には触れない（`/videoup` の `branding/intro.mp4` 自動検出と対称）。
 
 ```bash
 uv run python .claude/skills/masterup/references/finalize_master.py <collection-path>
-uv run python .claude/skills/masterup/references/finalize_master.py <collection-path> --keep-raw
 ```
 
 設計 D の核（`config.default.yaml` の `intro_audio:` namespace で channel が上書き可能）:
@@ -133,13 +132,17 @@ uv run python .claude/skills/masterup/references/finalize_master.py <collection-
 - SFX 3 種 (`branding/intro_sfx/{cup_v3,paper,vinyl_v4}.wav`) を 6000ms / 18000ms / 10000ms に配置
 - 最終 mix は `[song][sfx][rain]amix=inputs=3:duration=first:normalize=0,loudnorm=I=-14:LRA=11:TP=-1.5[aout]`
 
+intro モードの起動条件（自動検出）:
+
+- `<repo-root>/branding/intro_sfx/` ディレクトリと `<repo-root>/branding/rain_layers/` ディレクトリが両方存在する → intro モードで amix（このとき SFX 3 種または `rain_*.wav` のどれかが欠けていれば fail-fast で `exit 1`）
+- どちらか一方でもディレクトリ自体が無い → pass-through で `exit 0`（`master.mp3` 不変、stderr に `INFO:` ログ）
+
 前提:
 
-- `01-master/master_raw.mp3` が存在すること（Step 5 の出力をそのまま使う）
-- `<repo-root>/branding/intro_sfx/{cup_v3,paper,vinyl_v4}.wav` 3 種が配置済み
-- `<repo-root>/branding/rain_layers/rain_*.wav` が 1 件以上配置済み
+- `01-master/master.mp3` が存在すること（Step 5 の出力）
+- intro モードを使う場合は `<repo-root>/branding/intro_sfx/{cup_v3,paper,vinyl_v4}.wav` 3 種と `<repo-root>/branding/rain_layers/rain_*.wav` 1 件以上が配置済み
 
-成功時、デフォルトで `master_raw.mp3` は削除される（`--keep-raw` で保持可）。`/intro` スキルで `branding/intro.mp4` を作っていない channel では本ステップ自体を実行しない（`master_raw.mp3` をそのまま `master.mp3` にリネームする運用）。
+成功時、`01-master/master.mp3` が intro 区間込みの最終マスターに置き換わる（atomic rename で in-place 上書き）。pass2 失敗時は元の `master.mp3` を保護したまま rc を伝播する。
 
 ### Step 6: ワークツリー実行時のメインへのコピー
 

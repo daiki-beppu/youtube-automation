@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """設計 D の音声側施策を実行する master.mp3 ファイナライズ。
 
-`master_raw.mp3` (本編楽曲) + `branding/intro_sfx/{cup,paper,vinyl}.wav` (3 SFX)
-+ `branding/rain_layers/rain_*.wav` (N レイヤー) を ffmpeg で amix し、
-loudnorm two-pass で整音した最終 `master.mp3` を出力する。
+`01-master/master.mp3` (Step 5 出力の本編楽曲) + `branding/intro_sfx/{cup,paper,vinyl}.wav`
+(3 SFX) + `branding/rain_layers/rain_*.wav` (N レイヤー) を ffmpeg で amix し、
+loudnorm two-pass で整音した最終 `master.mp3` を atomic rename で in-place 上書きする。
+
+intro 素材ディレクトリ (`branding/intro_sfx/` または `branding/rain_layers/`) が
+存在しないチャンネルでは pass-through で rc=0 終了する (`/videoup` の自動検出と対称)。
 
 設計 D の核:
 - 楽曲は `song_delay_ms` ms 遅延 + `song_fadein_s` 秒 afade-in (intro 区間を雨 + SFX に譲る)
@@ -13,7 +16,6 @@ loudnorm two-pass で整音した最終 `master.mp3` を出力する。
 
 Usage:
     python finalize_master.py <collection-path>
-    python finalize_master.py <collection-path> --keep-raw
 """
 from __future__ import annotations
 
@@ -44,6 +46,10 @@ _REQUIRED_KEYS: tuple[str, ...] = (
 )
 
 _RAIN_GLOB = "rain_*.wav"
+
+# ファイル名定数: master.mp3 を atomic rename で上書きするため temp は同一ディレクトリに置く
+_MASTER_FILENAME = "master.mp3"
+_MASTER_TMP_FILENAME = "master.tmp.mp3"
 
 
 def _validate_intro_audio(config: dict[str, Any]) -> None:
@@ -78,7 +84,7 @@ def _format_seconds(value: float | int) -> str:
 
 def build_common_parts(config: dict[str, Any], *, n_rain: int) -> list[str]:
     """SFX + rain + song の filter graph parts を組み立てる (loudnorm / 最終 amix
-    は含まない)。input layout は [0]=master_raw, [1..3]=SFX (cup/paper/vinyl 固定順),
+    は含まない)。input layout は [0]=master, [1..3]=SFX (cup/paper/vinyl 固定順),
     [4..N+3]=rain_*.wav。
 
     Returns:
@@ -219,11 +225,27 @@ def parse_loudnorm_json(stderr: str) -> dict[str, Any]:
     )
 
 
-def finalize(collection: Path, *, keep_raw: bool = False) -> int:
-    """`<collection>/01-master/master_raw.mp3` を入力に master.mp3 を生成する。
+def _intro_mode_enabled(repo: Path) -> bool:
+    """intro 素材ディレクトリの有無で intro モード適用可否を判定する。
+
+    `branding/intro_sfx/` または `branding/rain_layers/` のどちらか一方でも
+    存在しないチャンネルは intro モード非対応として扱う (pass-through トリガー)。
+    `is_dir()` を使うのは file/symlink での誤検出を避けるため。
+    """
+    sfx_dir = repo / "branding" / "intro_sfx"
+    rain_dir = repo / "branding" / "rain_layers"
+    return sfx_dir.is_dir() and rain_dir.is_dir()
+
+
+def finalize(collection: Path) -> int:
+    """`<collection>/01-master/master.mp3` に intro 区間 SFX + rain + 楽曲を amix し、
+    atomic rename で `master.mp3` を in-place 上書きする。
+
+    intro 素材ディレクトリ (`branding/intro_sfx/` / `branding/rain_layers/`) が存在
+    しないチャンネルでは pass-through で rc=0 終了する (master.mp3 不変)。
 
     Returns:
-        exit code (0=成功 / 1=入力検証失敗 / その他=ffmpeg 伝播)
+        exit code (0=成功 or pass-through / 1=入力検証失敗 / その他=ffmpeg 伝播)
     """
     config_full = load_skill_config("masterup", use_cache=False)
     intro_audio = config_full.get("intro_audio")
@@ -234,14 +256,24 @@ def finalize(collection: Path, *, keep_raw: bool = False) -> int:
     _validate_intro_audio(intro_audio)
 
     repo = channel_dir()
-    master_raw = collection / "01-master" / "master_raw.mp3"
-    output = collection / "01-master" / "master.mp3"
+    master = collection / "01-master" / _MASTER_FILENAME
 
     # 入力検証 (Fail Fast)
-    if not master_raw.exists():
-        print(f"ERROR: master_raw.mp3 が見つかりません: {master_raw}", file=sys.stderr)
+    if not master.exists():
+        print(f"ERROR: {_MASTER_FILENAME} が見つかりません: {master}", file=sys.stderr)
         return 1
 
+    # intro モード自動検出: ディレクトリ自体が無いチャンネルは pass-through
+    if not _intro_mode_enabled(repo):
+        print(
+            f"INFO: intro 素材ディレクトリ (branding/intro_sfx/ または "
+            f"branding/rain_layers/) が見つかりません。pass-through で終了します "
+            f"({master})",
+            file=sys.stderr,
+        )
+        return 0
+
+    # ハーフ実装防止 (dir はあるが中身欠落 = fail-fast)
     sfx_dir = repo / "branding" / "intro_sfx"
     sfx_files: list[Path] = []
     for name in _SFX_ORDER:
@@ -253,7 +285,7 @@ def finalize(collection: Path, *, keep_raw: bool = False) -> int:
         sfx_files.append(path)
 
     rain_dir = repo / "branding" / "rain_layers"
-    rain_files = sorted(rain_dir.glob(_RAIN_GLOB)) if rain_dir.exists() else []
+    rain_files = sorted(rain_dir.glob(_RAIN_GLOB))
     if not rain_files:
         print(
             f"ERROR: rain layer (rain_*.wav) が {rain_dir} に存在しません",
@@ -262,6 +294,7 @@ def finalize(collection: Path, *, keep_raw: bool = False) -> int:
         return 1
 
     n_rain = len(rain_files)
+    temp_out = collection / "01-master" / _MASTER_TMP_FILENAME
 
     # ── pass1: loudnorm 測定 ──
     pass1_filter = build_filter(
@@ -269,7 +302,7 @@ def finalize(collection: Path, *, keep_raw: bool = False) -> int:
         n_rain=n_rain,
         measured=None,
     )
-    cmd1: list[str] = ["ffmpeg", "-y", "-i", str(master_raw)]
+    cmd1: list[str] = ["ffmpeg", "-y", "-i", str(master)]
     for s in sfx_files:
         cmd1 += ["-i", str(s)]
     for r in rain_files:
@@ -291,13 +324,13 @@ def finalize(collection: Path, *, keep_raw: bool = False) -> int:
 
     measured = parse_loudnorm_json(result1.stderr or "")
 
-    # ── pass2: linear loudnorm + 出力 ──
+    # ── pass2: linear loudnorm + temp 書き出し ──
     pass2_filter = build_filter(
         intro_audio,
         n_rain=n_rain,
         measured=measured,
     )
-    cmd2: list[str] = ["ffmpeg", "-y", "-i", str(master_raw)]
+    cmd2: list[str] = ["ffmpeg", "-y", "-i", str(master)]
     for s in sfx_files:
         cmd2 += ["-i", str(s)]
     for r in rain_files:
@@ -306,7 +339,7 @@ def finalize(collection: Path, *, keep_raw: bool = False) -> int:
         "-filter_complex", pass2_filter,
         "-map", "[aout]",
         "-c:a", "libmp3lame", "-b:a", "192k",
-        str(output),
+        str(temp_out),
     ]
     result2 = subprocess.run(cmd2, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if result2.returncode != 0:
@@ -316,29 +349,25 @@ def finalize(collection: Path, *, keep_raw: bool = False) -> int:
         )
         if result2.stderr:
             print(result2.stderr, file=sys.stderr)
+        # temp の best-effort 削除 (元 master.mp3 は os.replace を呼ばない限り無傷)
+        try:
+            os.remove(temp_out)
+        except OSError:
+            pass
         return result2.returncode
 
-    # 中間成果物クリーンアップ (--keep-raw で抑止)
-    if not keep_raw:
-        try:
-            os.remove(master_raw)
-        except OSError as e:
-            print(f"WARN: master_raw.mp3 削除に失敗 ({e})", file=sys.stderr)
+    # ── atomic rename: temp_out → master (同一 fs 内で os.replace) ──
+    os.replace(temp_out, master)
 
-    print(f"Success: {output}")
+    print(f"Success: {master}")
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("collection", type=Path, help="コレクションディレクトリ")
-    parser.add_argument(
-        "--keep-raw",
-        action="store_true",
-        help="master_raw.mp3 を削除せず残す (debug 用)",
-    )
     args = parser.parse_args()
-    return finalize(args.collection, keep_raw=args.keep_raw)
+    return finalize(args.collection)
 
 
 if __name__ == "__main__":
