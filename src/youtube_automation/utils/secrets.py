@@ -68,9 +68,6 @@ def get_secret(name: str) -> str:
             )
             value = result.stdout.strip()
             if value:
-                # SDK ライブラリが暗黙に os.environ を参照するケースに備えて
-                # プロセス内の環境変数にもセットしておく（プロセス終了で消える）
-                os.environ[name] = value
                 return value
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
             pass

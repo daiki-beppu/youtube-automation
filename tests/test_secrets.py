@@ -2,7 +2,7 @@
 
 検証する 3 経路:
 1. os.environ に既にあれば op を呼ばずにそれを返す
-2. os.environ に無く op がある場合は op read で取得し、os.environ にもセットする
+2. os.environ に無く op がある場合は op read で取得して返す（os.environ への書き戻しは行わない）
 3. どちらも失敗したら ConfigError を raise する
 """
 
@@ -67,8 +67,8 @@ class TestGetSecret:
         assert value == "from-op-67890"
         mock_run.assert_called_once()
 
-    def test_op_read_result_is_cached_in_environ(self):
-        """op read で取得した値は os.environ にもセットされる"""
+    def test_op_read_result_is_not_written_to_environ(self):
+        """op read で取得した値は os.environ にセットされない（global env 注入禁止: Issue #163）"""
         with (
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
@@ -76,11 +76,11 @@ class TestGetSecret:
             mock_run.return_value = subprocess.CompletedProcess(
                 args=["op", "read", "..."],
                 returncode=0,
-                stdout="cached-value\n",
+                stdout="op-only-value\n",
                 stderr="",
             )
             get_secret(_TEST_SECRET)
-        assert os.environ.get(_TEST_SECRET) == "cached-value"
+        assert os.environ.get(_TEST_SECRET) is None
 
     def test_raises_config_error_when_op_unavailable_and_environ_empty(self):
         """op が無く os.environ も空なら ConfigError"""
