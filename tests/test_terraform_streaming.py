@@ -1405,6 +1405,326 @@ class TestMainTfNullResource:
 
 
 # ============================================================================
+# main.tf — #157 で追加される locals.scripts_dir（DRY 化リファクタリング）
+# ============================================================================
+
+
+class TestMainTfLocalsScriptsDir:
+    """``main.tf`` の ``locals.scripts_dir``（#157）構造とその参照経路を検証する。
+
+    Issue #157: ``${path.module}/../../../scripts/streaming/`` のハードコードが
+    triggers の ``filemd5`` 4 件 + provisioner ``source`` 4 件 = 8 箇所に散在し、
+    scripts 移動時に triggers/source 不整合が検知困難になる構造的リスクを解消する。
+
+    検証観点:
+      - ``locals { scripts_dir = "..." }`` の宣言と値
+      - triggers の 4 つの filemd5 が ``${local.scripts_dir}/...`` を参照
+      - provisioner ``"file"`` の 4 つの source が ``${local.scripts_dir}/...`` を参照
+        （対応する destination とのペアリング保証）
+      - ``../../../scripts/streaming`` リテラルが locals 内に **1 度だけ**出現する DRY 不変条件
+      - locals ブロックを除いた残部に旧形式 ``${path.module}/../../../scripts/streaming/``
+        が残っていない（置換漏れ検知）
+    """
+
+    def test_locals_block_declares_scripts_dir(self):
+        """Given main.tf
+        When トップレベルに ``locals`` ブロックを探す
+        Then 宣言されており、内部に ``scripts_dir`` キーが存在する。
+
+        新構造の起点。R1（Plan 要件）の存在保証。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+
+        block = _extract_block(text, r"^\s*locals")
+
+        assert block is not None, "main.tf にトップレベル locals ブロックが宣言されていない"
+        assert re.search(r"\bscripts_dir\s*=", block), (
+            "locals ブロック内に scripts_dir キーが存在しない"
+        )
+
+    def test_locals_scripts_dir_value_is_canonical_relative_path(self):
+        """Given main.tf
+        When ``locals.scripts_dir`` の右辺リテラルを読む
+        Then ``"${path.module}/../../../scripts/streaming"`` と一致する。
+
+        集約先の値が誤ると 8 箇所すべての参照先が壊れる。リグレッション影響大。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r"^\s*locals")
+        assert block is not None
+
+        match = re.search(
+            r'scripts_dir\s*=\s*"\$\{path\.module\}/\.\./\.\./\.\./scripts/streaming"',
+            block,
+        )
+
+        assert match is not None, (
+            'locals.scripts_dir が "${path.module}/../../../scripts/streaming" でない '
+            "（値が誤ると 8 箇所の参照先が壊れる）"
+        )
+
+    def test_triggers_healthcheck_sh_uses_local_scripts_dir(self):
+        """Given main.tf
+        When ``null_resource.deploy.triggers.healthcheck_sh`` を読む
+        Then ``filemd5("${local.scripts_dir}/healthcheck.sh")`` で参照している。
+
+        triggers/source 不整合（issue #157 の動機）の直接的リグレッション保証。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None
+
+        match = re.search(
+            r'healthcheck_sh\s*=\s*filemd5\(\s*"\$\{local\.scripts_dir\}/healthcheck\.sh"\s*\)',
+            triggers,
+        )
+
+        assert match is not None, (
+            'triggers.healthcheck_sh が filemd5("${local.scripts_dir}/healthcheck.sh") でない'
+        )
+
+    def test_triggers_notify_sh_uses_local_scripts_dir(self):
+        """Given main.tf
+        When ``null_resource.deploy.triggers.notify_sh`` を読む
+        Then ``filemd5("${local.scripts_dir}/notify.sh")`` で参照している。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None
+
+        match = re.search(
+            r'notify_sh\s*=\s*filemd5\(\s*"\$\{local\.scripts_dir\}/notify\.sh"\s*\)',
+            triggers,
+        )
+
+        assert match is not None, (
+            'triggers.notify_sh が filemd5("${local.scripts_dir}/notify.sh") でない'
+        )
+
+    def test_triggers_logrotate_conf_uses_local_scripts_dir(self):
+        """Given main.tf
+        When ``null_resource.deploy.triggers.logrotate_conf`` を読む
+        Then ``filemd5("${local.scripts_dir}/logrotate.conf")`` で参照している。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None
+
+        match = re.search(
+            r'logrotate_conf\s*=\s*filemd5\(\s*"\$\{local\.scripts_dir\}/logrotate\.conf"\s*\)',
+            triggers,
+        )
+
+        assert match is not None, (
+            'triggers.logrotate_conf が filemd5("${local.scripts_dir}/logrotate.conf") でない'
+        )
+
+    def test_triggers_cron_d_uses_local_scripts_dir(self):
+        """Given main.tf
+        When ``null_resource.deploy.triggers.cron_d`` を読む
+        Then ``filemd5("${local.scripts_dir}/cron.d")`` で参照している。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None
+
+        match = re.search(
+            r'cron_d\s*=\s*filemd5\(\s*"\$\{local\.scripts_dir\}/cron\.d"\s*\)',
+            triggers,
+        )
+
+        assert match is not None, (
+            'triggers.cron_d が filemd5("${local.scripts_dir}/cron.d") でない'
+        )
+
+    def test_provisioner_file_healthcheck_sh_sources_local_scripts_dir(self):
+        """Given main.tf
+        When healthcheck.sh を /opt/youtube-stream/bin/healthcheck.sh に配置する provisioner を読む
+        Then ``source = "${local.scripts_dir}/healthcheck.sh"`` で参照している。
+
+        refactor で source 4 つの取り違え（並べ替えバグ）を防止するため、
+        source/destination のペアリングを順序非依存で検証する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+
+        match = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/healthcheck\.sh"[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/bin/healthcheck\.sh"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+        match_alt = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/bin/healthcheck\.sh"[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/healthcheck\.sh"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+
+        assert match or match_alt, (
+            'provisioner "file" で source="${local.scripts_dir}/healthcheck.sh" → '
+            "/opt/youtube-stream/bin/healthcheck.sh のアップロードが宣言されていない"
+        )
+
+    def test_provisioner_file_notify_sh_sources_local_scripts_dir(self):
+        """Given main.tf
+        When notify.sh を /opt/youtube-stream/bin/notify.sh に配置する provisioner を読む
+        Then ``source = "${local.scripts_dir}/notify.sh"`` で参照している。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+
+        match = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/notify\.sh"[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/bin/notify\.sh"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+        match_alt = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/bin/notify\.sh"[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/notify\.sh"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+
+        assert match or match_alt, (
+            'provisioner "file" で source="${local.scripts_dir}/notify.sh" → '
+            "/opt/youtube-stream/bin/notify.sh のアップロードが宣言されていない"
+        )
+
+    def test_provisioner_file_logrotate_conf_sources_local_scripts_dir(self):
+        """Given main.tf
+        When logrotate.conf を /etc/logrotate.d/youtube-stream に配置する provisioner を読む
+        Then ``source = "${local.scripts_dir}/logrotate.conf"`` で参照している。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+
+        match = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/logrotate\.conf"[^}]*?'
+            r'destination\s*=\s*"/etc/logrotate\.d/youtube-stream"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+        match_alt = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'destination\s*=\s*"/etc/logrotate\.d/youtube-stream"[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/logrotate\.conf"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+
+        assert match or match_alt, (
+            'provisioner "file" で source="${local.scripts_dir}/logrotate.conf" → '
+            "/etc/logrotate.d/youtube-stream のアップロードが宣言されていない"
+        )
+
+    def test_provisioner_file_cron_d_sources_local_scripts_dir(self):
+        """Given main.tf
+        When cron.d を /etc/cron.d/youtube-stream-healthcheck に配置する provisioner を読む
+        Then ``source = "${local.scripts_dir}/cron.d"`` で参照している。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+
+        match = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/cron\.d"[^}]*?'
+            r'destination\s*=\s*"/etc/cron\.d/youtube-stream-healthcheck"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+        match_alt = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'destination\s*=\s*"/etc/cron\.d/youtube-stream-healthcheck"[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/cron\.d"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+
+        assert match or match_alt, (
+            'provisioner "file" で source="${local.scripts_dir}/cron.d" → '
+            "/etc/cron.d/youtube-stream-healthcheck のアップロードが宣言されていない"
+        )
+
+    def test_canonical_relative_path_literal_appears_exactly_once(self):
+        """Given main.tf 全体（コメント除去前の生テキスト）
+        When ``../../../scripts/streaming`` リテラルの出現回数を数える
+        Then 1 回だけ出現する（locals.scripts_dir の右辺のみ）。
+
+        DRY 不変条件のリグレッション保証。Issue #157 の根本動機（triggers vs source
+        不整合検知困難）を構造的に解決する。8 箇所の重複が局在化されていることを保証。
+        """
+        text = _read(_MAIN_TF)
+
+        occurrences = text.count("../../../scripts/streaming")
+
+        assert occurrences == 1, (
+            f"main.tf に ../../../scripts/streaming リテラルが {occurrences} 回出現している "
+            "（locals に集約後、リテラルは locals 内 1 箇所のみであるべき）"
+        )
+
+    def test_no_hardcoded_path_module_scripts_streaming_outside_locals(self):
+        """Given main.tf からコメントを除去し、さらに locals ブロックを除いた残部
+        When ``${path.module}/../../../scripts/streaming/`` パターンを探す
+        Then 一切ヒットしない（locals 外に旧形式の path.module 直書きが残っていない）。
+
+        旧形式の置換漏れ検知。``${path.module}/cloud-init.yaml`` 等を誤検出しないよう、
+        パターンは ``/scripts/streaming/`` まで含めた完全形に限定する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+
+        # locals ブロックを抽出して残部を作る
+        locals_match = re.search(r"^\s*locals\s*\{", text, flags=re.MULTILINE)
+        assert locals_match is not None, "locals ブロックが見つからない"
+        block_start = locals_match.start()
+        # ネストカウントで locals ブロック終了位置を探す
+        depth = 0
+        i = locals_match.end() - 1  # `{` の位置
+        block_end: int | None = None
+        while i < len(text):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    block_end = i + 1
+                    break
+            i += 1
+        assert block_end is not None, "locals ブロックの終端が見つからない"
+
+        remainder = text[:block_start] + text[block_end:]
+
+        match = re.search(
+            r"\$\{path\.module\}/\.\./\.\./\.\./scripts/streaming/",
+            remainder,
+        )
+
+        assert match is None, (
+            "locals ブロックの外側に ${path.module}/../../../scripts/streaming/ "
+            "の旧形式リテラルが残っている（locals.scripts_dir への置換漏れ）"
+        )
+
+
+# ============================================================================
 # main.tf — #153 で追加される vultr_firewall_group / vultr_firewall_rule
 # ============================================================================
 

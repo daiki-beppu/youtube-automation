@@ -1,3 +1,7 @@
+locals {
+  scripts_dir = "${path.module}/../../../scripts/streaming"
+}
+
 resource "vultr_ssh_key" "this" {
   name    = "youtube-stream"
   ssh_key = file(pathexpand(var.ssh_pub_key_path))
@@ -42,10 +46,10 @@ resource "null_resource" "deploy" {
     # （terraform 1.5+ は sensitive 値の派生も sensitive 扱いするため必須）
     stream_key      = nonsensitive(sha256(var.stream_key))
     discord_webhook = nonsensitive(sha256(var.discord_webhook_url))
-    healthcheck_sh  = filemd5("${path.module}/../../../scripts/streaming/healthcheck.sh")
-    notify_sh       = filemd5("${path.module}/../../../scripts/streaming/notify.sh")
-    logrotate_conf  = filemd5("${path.module}/../../../scripts/streaming/logrotate.conf")
-    cron_d          = filemd5("${path.module}/../../../scripts/streaming/cron.d")
+    healthcheck_sh  = filemd5("${local.scripts_dir}/healthcheck.sh")
+    notify_sh       = filemd5("${local.scripts_dir}/notify.sh")
+    logrotate_conf  = filemd5("${local.scripts_dir}/logrotate.conf")
+    cron_d          = filemd5("${local.scripts_dir}/cron.d")
   }
 
   connection {
@@ -76,22 +80,22 @@ resource "null_resource" "deploy" {
   }
 
   provisioner "file" {
-    source      = "${path.module}/../../../scripts/streaming/healthcheck.sh"
+    source      = "${local.scripts_dir}/healthcheck.sh"
     destination = "/opt/youtube-stream/bin/healthcheck.sh"
   }
 
   provisioner "file" {
-    source      = "${path.module}/../../../scripts/streaming/notify.sh"
+    source      = "${local.scripts_dir}/notify.sh"
     destination = "/opt/youtube-stream/bin/notify.sh"
   }
 
   provisioner "file" {
-    source      = "${path.module}/../../../scripts/streaming/logrotate.conf"
+    source      = "${local.scripts_dir}/logrotate.conf"
     destination = "/etc/logrotate.d/youtube-stream"
   }
 
   provisioner "file" {
-    source      = "${path.module}/../../../scripts/streaming/cron.d"
+    source      = "${local.scripts_dir}/cron.d"
     destination = "/etc/cron.d/youtube-stream-healthcheck"
   }
 
