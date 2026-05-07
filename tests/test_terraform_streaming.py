@@ -692,15 +692,17 @@ class TestSystemdUnitTemplate:
     def test_service_exec_start_uses_env_vars_not_literals(self):
         """Given .tftpl
         When [Service].ExecStart を読む
-        Then 無音 audio を mux した ffmpeg コマンドが宣言されている (R12 改訂)。
+        Then 動画ファイル自体の音声トラックを ``-c:a copy`` で送出する ffmpeg コマンドが
+        宣言されている (R12 再改訂 / #185)。
 
-        実証: 映像のみ(``-c copy``) で送信すると YouTube Live が
-        ``streamStatus=inactive / healthStatus=noData`` のまま broadcast を認識しない。
-        ``anullsrc`` で無音 AAC を mux すると即座に ``streamStatus=active`` に遷移する。
+        旧仕様 (R12 改訂) では ``-f lavfi -i anullsrc=...`` で仮想無音入力を 2 番目に
+        足し ``-c:a aac -b:a 128k -map 0:v -map 1:a`` で音声を上書きしていたため、
+        動画に音声があっても配信は無音になっていた。#185 で anullsrc 経路を撤去し、
+        ffmpeg の自動マッピング（best v/a 各 1 ストリーム）に任せて
+        ``-c:a copy`` で再エンコードなしに送出する。
 
         ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO``
-        ``-f lavfi -i anullsrc=r=44100:cl=stereo``
-        ``-c:v copy -c:a aac -b:a 128k -map 0:v -map 1:a -f flv $RTMP_URL``
+        ``-c:v copy -c:a copy -f flv $RTMP_URL``
         """
         text = _read(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
@@ -708,13 +710,12 @@ class TestSystemdUnitTemplate:
         expected = (
             r"^ExecStart=/usr/bin/ffmpeg\s+-re\s+-stream_loop\s+-1\s+"
             r"-i\s+\$VIDEO\s+"
-            r"-f\s+lavfi\s+-i\s+anullsrc=r=44100:cl=stereo\s+"
-            r"-c:v\s+copy\s+-c:a\s+aac\s+-b:a\s+128k\s+"
-            r"-map\s+0:v\s+-map\s+1:a\s+"
+            r"-c:v\s+copy\s+-c:a\s+copy\s+"
             r"-f\s+flv\s+\$RTMP_URL\s*$"
         )
         assert re.search(expected, service, flags=re.MULTILINE), (
-            "[Service].ExecStart が改訂後の ffmpeg コマンド（anullsrc audio mux つき）と一致しない"
+            "[Service].ExecStart が #185 改訂後の ffmpeg コマンド"
+            "（動画音声をそのまま -c:a copy で送出）と一致しない"
         )
 
     def test_service_runtime_max_sec_11h(self):
