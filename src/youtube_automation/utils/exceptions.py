@@ -38,6 +38,15 @@ class YouTubeAPIError(AutomationError):
         )
 
 
+class AuthError(AutomationError):
+    """OAuth 2.0 認証関連のエラー
+
+    - client_secrets.json の読み込み失敗
+    - run_local_server 経路の認証失敗
+    - GoogleAuthError 系の取りまとめ
+    """
+
+
 class ValidationError(AutomationError):
     """入力データのバリデーションエラー
 

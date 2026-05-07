@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Read(//private/tmp/yt-skills-test/.claude/skills/upload/**)",
-      "Read(//private/tmp/yt-skills-test/.claude/skills/upload/references/**)"
+      "Read(//private/tmp/yt-skills-test/.claude/skills/upload/references/**)",
+      "Bash(/tmp/wait_takt_critical_3.sh)"
     ]
   }
 }

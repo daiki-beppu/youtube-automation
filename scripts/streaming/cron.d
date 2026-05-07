@@ -1,0 +1,4 @@
+# /etc/cron.d/youtube-stream-healthcheck として配置する。
+# 5 分間隔 = 11h+1h サイクルの 1h 休止に対し 12 回の誤検知抑止が走るが、
+# healthcheck.sh 側で activating+auto-restart+success を idle に分類するので通知は飛ばない。
+*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh
