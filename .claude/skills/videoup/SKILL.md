@@ -58,6 +58,27 @@ $ARGUMENTS
 - ユーザーが DAW でミックスした `master-mix.{wav,m4a}` がある場合、`yt-generate-master` は不要
 - `set -e` は使用しない（明示的エラーハンドリング）
 
+## Intro 統合モード（`branding/intro.mp4` 自動検出 / 設計 D 動画側施策）
+
+`<repo-root>/branding/intro.mp4` が存在し、かつ `10-assets/loop.mp4` も配置されている場合、`generate_videos.sh` は **Intro 統合モード（v13 pure concat）** で動作する:
+
+1. `intro_video_only.mp4` — `branding/intro.mp4` を `-an -c:v copy` で stream copy（音声なしを保証）
+2. `body_video.mp4` — `loop_normalized.mp4` を `master_duration - 30` 秒分ループ（`-c:v copy`）
+3. `concat demuxer + stream copy` で intro + body を結合し、最終的に master 音声を `-map` で合成
+
+`loop_normalized.mp4` 生成時は intro と fps を揃えるため `-r 24` を強制する（concat demuxer + stream copy が成立する前提条件）。
+
+### 責務分界（音声 / 動画）
+
+- **音声合成（SFX + rain + 楽曲 amix + loudnorm）** は **`/masterup` の `finalize_master.py`** が担当する。`master.mp3` には設計 D の音声合流が既に焼き込まれている前提
+- **`generate_videos.sh` の Intro 統合モードは pure video concat に徹する** — intro.mp4 から audio を読まない、master.mp3 をそのまま全長 audio source として `-map` する
+- intro.mp4 は **video-only**（`-an`）で `/intro` スキルが生成するため、concat demuxer 段階で audio stream の食い違いは起きない
+
+### 制約
+
+- Intro 統合モードは **loop モード必須**。静止画モード（`10-assets/loop.mp4` なし）では intro 統合非対応で早期エラー終了する
+- intro.mp4 が無い channel は従来通りの loop モード（intro なし stream copy）にフォールバックする
+
 ## Next Step
 
 動画生成後:

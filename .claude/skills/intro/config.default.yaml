@@ -1,0 +1,70 @@
+# intro skill default config
+#
+# チャンネル共通 30 秒 intro 動画 (`branding/intro.mp4`) ビルダーの設定。
+# RJN (Rain Jazz Night) を default 値の見本として記述。各チャンネルは
+# `config/skills/intro.yaml` で `text` / `logo` / `font` / `color` を上書きすること。
+#
+# 設計 D の本質的タイムライン (30s, 5 segments, 1920x1080, 24fps) は本ファイルでは
+# 上書き不可。`generate_intro.py` の module 定数に固定。
+
+# 5 segments のタイムライン (start/end は秒、設計 D 固定の 30s 境界)。
+# text_en / text_ja は drawtext 表示文。空文字列で drawtext を抑止できる。
+segments:
+  - name: "01_rain_cu"
+    start: 0
+    end: 5
+    text_en: "Rest in the sound of rain."
+    text_ja: "雨の音に、心を預ける。"
+  - name: "02_lamp_steam"
+    start: 5
+    end: 10
+    text_en: "Tonight, your own hideaway."
+    text_ja: "今夜は、あなただけの隠れ家で。"
+  - name: "04_cinemagraph_a"
+    start: 10
+    end: 15
+    text_en: ""
+    text_ja: ""
+  - name: "03_room_ws"
+    start: 15
+    end: 25
+    text_en: ""
+    text_ja: ""
+  - name: "04_cinemagraph_b"
+    start: 25
+    end: 30
+    text_en: ""
+    text_ja: ""
+
+# drawtext のフォントサイズ / シャドウ等の共通スタイル。segment の text_en / text_ja
+# は segments[*] 側で指定する (このブロックは「全 segment 共通の見た目パラメータ」用)。
+text:
+  fontsize_en: 84
+  fontsize_ja: 42
+  fontsize_logo: 96
+  fontsize_tagline: 32
+  fade_seconds: 0.7
+  shadow_color: "black@0.35"
+  shadow_x: 1
+  shadow_y: 2
+
+# drawtext で参照されるフォント (macOS 既定)。Linux / Windows では override 必須。
+font:
+  en: "/System/Library/Fonts/Supplemental/Times New Roman.ttf"
+  ja: "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc"
+
+# drawtext / droplet PNG / drawbox の塗り色。サムネ世界観と整合させる。
+color:
+  drawtext: "#3A4A55"  # ダークティール (drawtext + drawbox)
+  droplet: "#3A4A55"   # 雫 PNG の RGB
+
+# 15-25s の logo segment 用テキスト 3 行。
+logo:
+  heading_left: "Rain"
+  heading_right: "Jazz Night"
+  tagline: "Your rainy night jazz bar escape"
+
+# 雫 PNG (05_droplet.png) の生成パラメータ。
+droplet:
+  size: 96             # 出力 PNG の正方形ピクセル
+  super_sampling: 4    # アンチエイリアス倍率

@@ -39,3 +39,35 @@ def _reset_config_singleton():
     reset_config()
     yield
     reset_config()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_cost_tracker_writes(tmp_path_factory, monkeypatch):
+    """sample_channel fixture への cost_tracker 書き込みを構造的に隔離する。
+
+    `cost_tracker.log_generation` は `<channel_dir>/data/{image,video,audio}_costs.json` に
+    append する設計のため、CHANNEL_DIR を sample_channel fixture に向けたまま
+    pytest を実行すると lyria 系等のテスト経由で `tests/fixtures/sample_channel/data/`
+    配下が毎回上書きされる。`git checkout` の単発 revert では durable に解決できないため、
+    `_log_path` 解決を一時ディレクトリへリダイレクトし fixture を不可触に保つ。
+
+    `tmp_channel` fixture などテスト側で CHANNEL_DIR を tmp_path に上書きする場合は
+    元の解決パス（テスト固有 tmp_path 配下）を尊重し、テストの read 側 helper との
+    整合を維持する。
+    """
+    from youtube_automation.utils import cost_tracker as _ct
+
+    isolated_dir = tmp_path_factory.mktemp("cost_tracker_isolated")
+
+    def _isolated_log_path(category):
+        try:
+            from youtube_automation.utils.config import channel_dir as _channel_dir
+
+            current = _channel_dir()
+        except Exception:
+            return isolated_dir / _ct._LOG_FILENAMES[category]
+        if current == _CHANNEL_DIR:
+            return isolated_dir / _ct._LOG_FILENAMES[category]
+        return current / "data" / _ct._LOG_FILENAMES[category]
+
+    monkeypatch.setattr("youtube_automation.utils.cost_tracker._log_path", _isolated_log_path)

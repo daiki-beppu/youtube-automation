@@ -1,6 +1,6 @@
 # masterup skill default config
 #
-# マスター音源生成 + Suno CDN ダウンロードの設定。
+# マスター音源生成 + Suno CDN ダウンロード + 設計 D の音声合流の設定。
 # チャンネル側では config/skills/masterup.yaml に上書き値を置く。
 
 audio:
@@ -31,3 +31,41 @@ audio:
 # Suno CDN ダウンロード設定
 suno_download:
   cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"
+
+# 設計 D の音声合流設定 (intro 区間の楽曲遅延 + 雨 N-layer + SFX 3 種を amix し
+# loudnorm two-pass で整音する `finalize_master.py` 専用)。
+intro_audio:
+  # 楽曲を intro 開始から何 ms 遅延させて合流させるか (設計 D の核: 10000 = 10s)。
+  song_delay_ms: 10000
+  # 楽曲合流時の afade-in 秒数 (設計 D の核: 2 秒)。
+  song_fadein_s: 2
+  # 楽曲全体の音量補正 dB (-8 = intro 区間で雨 + SFX に席を譲るため少し抑える)。
+  song_volume_db: -8
+
+  # 雨 N-layer の各レイヤー音量 dB (RJN は -19 を 5 layer 重ねている前提)。
+  rain_volume_db: -19
+  # 雨レイヤー fadein 秒数 (頭の不連続を抑える)。
+  rain_fadein_s: 0.5
+
+  # loudnorm two-pass の target 値 (I=integrated / LRA=loudness range / TP=true peak)。
+  loudnorm:
+    I: -14
+    LRA: 11
+    TP: -1.5
+
+  # SFX 3 種の配置タイミングと音量 (設計 D 固定タイミング)。
+  # branding/intro_sfx/<file> から読まれる。channel が wav 名を変えたい場合は
+  # `file:` を上書きする (start_ms / volume_db は設計 D の核なので原則固定)。
+  sfx:
+    cup:
+      file: "cup_v3.wav"
+      start_ms: 6000
+      volume_db: -3
+    paper:
+      file: "paper.wav"
+      start_ms: 18000
+      volume_db: -12
+    vinyl:
+      file: "vinyl_v4.wav"
+      start_ms: 10000
+      volume_db: -6

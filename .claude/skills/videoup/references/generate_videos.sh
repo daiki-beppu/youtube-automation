@@ -1,6 +1,8 @@
 #!/bin/bash
-# generate_videos.sh v12.0 — Master video generator
-# Static image + master audio → MP4 (macOS optimized)
+# generate_videos.sh v13.0 — Master video generator
+# (Previous: generate_videos.sh v12.0 — ループモード stream copy + 正規化キャッシュ)
+# Static image / Loop background + master audio → MP4
+# v13: Intro 統合モード追加（`branding/intro.mp4` 自動検出時に pure concat 経路）
 # v12: ループモードを正規化キャッシュ + stream copy 化（クオリティ完全保持で大幅高速化）
 #
 # Usage:
@@ -29,6 +31,21 @@ COLLECTION_NAME="$(echo "$dir_basename" \
     | sed -E 's/^[0-9]+-[a-z]+-//; s/-collection$//' \
     | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}' OFS='-')"
 
+# ─── Repo root resolution (for branding/intro.mp4 auto-detection) ─
+REPO_ROOT=""
+candidate="$COLLECTION_DIR"
+while [[ "$candidate" != "/" && -n "$candidate" ]]; do
+    if [[ -d "${candidate}/config/channel" || -d "${candidate}/branding" || -d "${candidate}/.git" ]]; then
+        REPO_ROOT="$candidate"
+        break
+    fi
+    candidate="$(dirname "$candidate")"
+done
+if [[ -z "$REPO_ROOT" ]]; then
+    # collection の祖先方向で見つからなければ collection 直上をフォールバック扱い
+    REPO_ROOT="$(dirname "$(dirname "$COLLECTION_DIR")")"
+fi
+
 # ─── Auto-detect Assets ─────────────────────────────────
 LOOP_VIDEO=""
 if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
@@ -55,14 +72,15 @@ done
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
 
-# ─── Audio encoder 自動選択 (macOS は AudioToolbox 優先) ─
-if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
-    AUDIO_ENCODER="aac_at"
-else
-    AUDIO_ENCODER="aac"
+# ─── Intro mode auto-detection ───────────────────────────
+INTRO_VIDEO="${REPO_ROOT}/branding/intro.mp4"
+INTRO_MODE=0
+if [[ -f "$INTRO_VIDEO" ]]; then
+    INTRO_MODE=1
 fi
 
-# ─── 音声出力オプション (m4a/aac はストリームコピー、それ以外は再エンコード) ─
+# ─── 音声出力オプション (m4a/aac はストリームコピー、それ以外は AAC 再エンコード) ─
+# m4a/aac 系は encoder 検出 ffmpeg 呼び出し自体を省略する (-c:a copy で再エンコード不要)
 if [[ -n "$MASTER_AUDIO" ]]; then
     master_ext="${MASTER_AUDIO##*.}"
     case "$master_ext" in
@@ -70,6 +88,12 @@ if [[ -n "$MASTER_AUDIO" ]]; then
             AUDIO_OUT_OPTS=(-c:a copy)
             ;;
         *)
+            # AAC エンコーダ自動選択 (macOS は AudioToolbox 優先)
+            if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
+                AUDIO_ENCODER="aac_at"
+            else
+                AUDIO_ENCODER="aac"
+            fi
             AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000)
             ;;
     esac
@@ -89,6 +113,12 @@ if ! ffprobe -v error "$MASTER_AUDIO" &>/dev/null; then
     echo "ERROR: Corrupted file: $MASTER_AUDIO"; exit 1
 fi
 
+# Intro 統合モードは loop モード必須 (静止画 + intro は別仕様)
+if [[ $INTRO_MODE -eq 1 && -z "$LOOP_VIDEO" ]]; then
+    echo "ERROR: 静止画モードでは intro 統合非対応 (Intro 統合モードは 10-assets/loop.mp4 が必要)"
+    exit 1
+fi
+
 # ─── Duration (macOS: afinfo, fallback: ffprobe) ─────────
 get_duration() {
     local file="$1"
@@ -106,13 +136,20 @@ format_duration() {
 
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v12.0 — ${COLLECTION_NAME}"
+if [[ $INTRO_MODE -eq 1 ]]; then
+    echo "  generate_videos.sh v13.0 — ${COLLECTION_NAME} (Intro 統合モード)"
+else
+    echo "  generate_videos.sh v13.0 — ${COLLECTION_NAME}"
+fi
 echo "  ──────────────────────────────────────────"
 echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
     echo "  Video BG : $(basename "$LOOP_VIDEO") (loop)"
 else
     echo "  Thumbnail: $(basename "$THUMBNAIL")"
+fi
+if [[ $INTRO_MODE -eq 1 ]]; then
+    echo "  Intro    : $(basename "$INTRO_VIDEO") (concat 先頭)"
 fi
 echo "  Audio    : $(basename "$MASTER_AUDIO")"
 echo "  Output   : $(basename "$MASTER_OUTPUT")"
@@ -122,31 +159,33 @@ echo "  Duration : $(format_duration "$duration")"
 echo ""
 start=$SECONDS
 PROGRESS_FILE="$(mktemp)"
-trap 'rm -f "$PROGRESS_FILE"' EXIT
 
-# ─── FFmpeg (background) ─────────────────────────────────
+# 一時中間成果物 (Intro 統合モード用) は trap でまとめて掃除
+TS="$$"
+INTRO_TMP="/tmp/intro_video_only_${COLLECTION_NAME}_${TS}.mp4"
+BODY_TMP="/tmp/body_video_${COLLECTION_NAME}_${TS}.mp4"
+CONCAT_LIST="/tmp/concat_${COLLECTION_NAME}_${TS}.txt"
+trap 'rm -f "$PROGRESS_FILE" "$INTRO_TMP" "$BODY_TMP" "$CONCAT_LIST"' EXIT
+
+# ─── Loop 正規化キャッシュ (loop モードのみ) ─────────────
 if [[ -n "$LOOP_VIDEO" ]]; then
-    # ループ動画背景モード: loop.mp4 を無限ループで背景に使用
-    # 戦略: ソースを 1 度だけ yuv420p / 1920x1080 に正規化キャッシュし、
-    # 以降のマスター動画生成は -c:v copy で stream copy する（音声のみエンコード）
     loop_specs="$(ffprobe -v error -select_streams v:0 \
         -show_entries stream=width,height,pix_fmt -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
-    # csv=p=0 出力は "width,height,pix_fmt" の順
     loop_w="$(echo "$loop_specs" | cut -d, -f1)"
     loop_h="$(echo "$loop_specs" | cut -d, -f2)"
     loop_pix="$(echo "$loop_specs" | cut -d, -f3)"
 
     if [[ "$loop_w" == "1920" && "$loop_h" == "1080" && "$loop_pix" == "yuv420p" ]]; then
-        # 既に正規化済み: そのまま使う
         LOOP_SOURCE="$LOOP_VIDEO"
     else
-        # 正規化キャッシュを使用
         LOOP_SOURCE="${ASSETS_DIR}/loop_normalized.mp4"
         if [[ ! -f "$LOOP_SOURCE" || "$LOOP_VIDEO" -nt "$LOOP_SOURCE" ]]; then
             echo "  Normalizing loop source (1 回だけ実行) → loop_normalized.mp4"
+            # -r 24 で intro.mp4 と fps を揃える (concat demuxer + stream copy 互換の前提)
             ffmpeg -y -i "$LOOP_VIDEO" \
                 -c:v libx264 -preset slow -crf 18 -profile:v high -pix_fmt yuv420p \
                 -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
+                -r 24 \
                 -an -movflags +faststart \
                 -loglevel error \
                 "$LOOP_SOURCE"
@@ -156,8 +195,50 @@ if [[ -n "$LOOP_VIDEO" ]]; then
             fi
         fi
     fi
+fi
 
-    # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声は AUDIO_OUT_OPTS に従う
+# ─── FFmpeg 本処理 ───────────────────────────────────────
+if [[ $INTRO_MODE -eq 1 ]]; then
+    # ─── Intro 統合モード v13 (3 段ビルド + concat demuxer) ──
+    # Step 1: intro_video_only.mp4 (intro.mp4 を audio 抜き stream copy)
+    ffmpeg -y -i "$INTRO_VIDEO" -an -c:v copy \
+        -movflags +faststart \
+        -loglevel error \
+        "$INTRO_TMP"
+    rc=$?
+    if [[ $rc -ne 0 || ! -f "$INTRO_TMP" ]]; then
+        echo "  ERROR: intro_video_only.mp4 の生成に失敗 (exit ${rc})"
+        exit ${rc:-1}
+    fi
+
+    # Step 2: body_video.mp4 (loop を duration - 30s 分ループ、stream copy)
+    body_dur=$(awk "BEGIN{printf \"%.2f\", ${duration} - 30}")
+    ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
+        -an -c:v copy \
+        -t "$body_dur" \
+        -movflags +faststart \
+        -loglevel error \
+        "$BODY_TMP"
+    rc=$?
+    if [[ $rc -ne 0 || ! -f "$BODY_TMP" ]]; then
+        echo "  ERROR: body_video.mp4 の生成に失敗 (exit ${rc})"
+        exit ${rc:-1}
+    fi
+
+    # Step 3: concat demuxer で intro + body を結合し、master.mp3 を audio として map
+    printf "file '%s'\nfile '%s'\n" "$INTRO_TMP" "$BODY_TMP" > "$CONCAT_LIST"
+    ffmpeg -y -f concat -safe 0 -i "$CONCAT_LIST" -i "$MASTER_AUDIO" \
+        -map 0:v:0 -map 1:a:0 \
+        -c:v copy \
+        "${AUDIO_OUT_OPTS[@]}" \
+        -t "$duration" \
+        -movflags +faststart \
+        -shortest \
+        -loglevel error \
+        -progress "$PROGRESS_FILE" \
+        "$MASTER_OUTPUT" &
+elif [[ -n "$LOOP_VIDEO" ]]; then
+    # ─── 通常 loop モード (intro 無し / 既存挙動) ─
     ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" -i "$MASTER_AUDIO" \
         -map 0:v:0 -map 1:a:0 \
         -c:v copy \
@@ -169,7 +250,7 @@ if [[ -n "$LOOP_VIDEO" ]]; then
         -progress "$PROGRESS_FILE" \
         "$MASTER_OUTPUT" &
 else
-    # 静止画背景モード（従来）
+    # ─── 静止画背景モード (従来) ─
     ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" -i "$MASTER_AUDIO" \
         -c:v libx264 -tune stillimage -preset ultrafast -crf 23 -pix_fmt yuv420p \
         -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
@@ -215,7 +296,6 @@ wait "$ffmpeg_pid"
 exit_code=$?
 elapsed=$((SECONDS - start))
 
-# Final bar
 printf "\r  ✓ Generated    %s 100%% (%dm%02ds)    \n" \
     "$(printf '%0.s█' $(seq 1 $BAR_WIDTH))" $((elapsed/60)) $((elapsed%60))
 

@@ -69,6 +69,9 @@ collections/            # コンテンツ成果物
 | `auth.oauth_handler` | OAuth 2.0 トークン管理 |
 | `utils.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
 | `cli.skills_sync` | `yt-skills` 本体 |
+| `/intro` skill | チャンネル共通 30 秒 intro 動画 (`branding/intro.mp4`) ビルダー。チャンネル開設 / ブランド刷新時の 1 回限り。設計 D（10s afade-in 合流）の動画側施策。`config/skills/intro.yaml` で text / logo / font / color を上書き可能 |
+| `/masterup` skill | `finalize_master.py` で SFX (cup/paper/vinyl) + rain N-layer + 設計 D 楽曲合流（10s 遅延 + 2s afade-in）を amix し、loudnorm two-pass で master.mp3 を最終整音 |
+| `/videoup` skill | `branding/intro.mp4` 検出時の Intro 統合モード v13（pure concat + audio map）。loop モード必須。intro 24fps と揃えるため `loop_normalized.mp4` 生成時に `-r 24` を強制 |
 
 ## 開発規約
 

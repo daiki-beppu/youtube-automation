@@ -117,6 +117,30 @@ yt-generate-master --shuffle-seed 42        # 再現性 seed 指定（--shuffle 
 
 **シャッフル時の注意**: `--shuffle` はループ展開の**前**に 1 回だけ実行され、シャッフルされた順序がループごとに同じ並びで N 回繰り返される（ループごとに独立してシャッフルし直すわけではない）。再現性が必要な場合は `--shuffle-seed N` を指定するか、`--shuffle` 単独実行時に stdout に出る `[Shuffle] seed=<N>` の値を控えておけば後で同じ並びを再現できる。再現性ログは `--quiet` 指定時も常に出力される。
 
+### Step 5.5: マスター後処理（intro audio 統合 / 設計 D）
+
+`branding/intro.mp4` を持つチャンネルでは、`yt-generate-master` の出力 `master_raw.mp3` をそのまま使わず、`finalize_master.py` で intro 区間の SFX + rain ambience + 楽曲を amix し、loudnorm two-pass で整音した `master.mp3` を最終出力する。
+
+```bash
+uv run python .claude/skills/masterup/references/finalize_master.py <collection-path>
+uv run python .claude/skills/masterup/references/finalize_master.py <collection-path> --keep-raw
+```
+
+設計 D の核（`config.default.yaml` の `intro_audio:` namespace で channel が上書き可能）:
+
+- 楽曲を `song_delay_ms` (default 10000 = 10s) 遅延 + `song_fadein_s` (default 2 秒) で afade-in
+- 雨 N-layer (`branding/rain_layers/rain_*.wav`) を `rain_volume_db` で amix
+- SFX 3 種 (`branding/intro_sfx/{cup_v3,paper,vinyl_v4}.wav`) を 6000ms / 18000ms / 10000ms に配置
+- 最終 mix は `[song][sfx][rain]amix=inputs=3:duration=first:normalize=0,loudnorm=I=-14:LRA=11:TP=-1.5[aout]`
+
+前提:
+
+- `01-master/master_raw.mp3` が存在すること（Step 5 の出力をそのまま使う）
+- `<repo-root>/branding/intro_sfx/{cup_v3,paper,vinyl_v4}.wav` 3 種が配置済み
+- `<repo-root>/branding/rain_layers/rain_*.wav` が 1 件以上配置済み
+
+成功時、デフォルトで `master_raw.mp3` は削除される（`--keep-raw` で保持可）。`/intro` スキルで `branding/intro.mp4` を作っていない channel では本ステップ自体を実行しない（`master_raw.mp3` をそのまま `master.mp3` にリネームする運用）。
+
 ### Step 6: ワークツリー実行時のメインへのコピー
 
 git worktree 内で実行している場合（パスに `.claude/worktrees/` を含む場合）、生成した音源ファイルをメインワークツリーにもコピーする。
