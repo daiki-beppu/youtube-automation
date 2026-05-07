@@ -10,7 +10,7 @@ __pycache__/
 
 # Auth（client_secrets / token は手動配置、git 管理しない）
 auth/client_secrets.json
-auth/token.json
+auth/token*.json
 
 # Scheduler (user-specific)
 launchd/
