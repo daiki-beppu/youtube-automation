@@ -10,16 +10,54 @@ Required setup:
 4. client_secrets.json をダウンロードして auth/ に配置
 """
 
+import logging
 import os
+import re
 import sys
 from pathlib import Path
 
+import google.auth.exceptions
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
+
+logger = logging.getLogger(__name__)
+
+# `_redact()` で除去する token 値・パターン（モジュール定数として外出し）
+_TOKEN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"ya29\.[\w\-]+"),  # Google access token
+    re.compile(r"1//[\w\-]+"),  # Google refresh token
+    re.compile(r"[\w\-]{20,}\.[\w\-]{20,}\.[\w\-]{20,}"),  # JWT 風 3 セグメント
+    re.compile(r"(?i)\b(?:refresh_token|access_token|client_secret|id_token)=[^\s&]+"),
+)
+# OSError(__str__) の `[Errno N] reason: '<abs path>'` 形式
+_OSERRNO_PATH_RE = re.compile(r": '([^']+)'")
+_REDACTED_TOKEN = "<redacted-token>"
+_REDACTED_PATH = "<redacted-path>"
+
+
+def _redact(message: str, *paths: object) -> str:
+    """ログメッセージから token 値・絶対パスを除去する。
+
+    3 系統のマスクを順に適用する:
+
+    1. ``_OSERRNO_PATH_RE`` で OSErrno 形式 ``: '<abs path>'`` の絶対パスを除去
+    2. ``paths`` 引数で渡された ``Path`` / ``str`` を ``os.fspath`` で literal 置換
+    3. ``_TOKEN_PATTERNS`` で OAuth token 値 / JWT / 機密 key=value を除去
+
+    呼び出し側は ``self.token_file`` / ``self.client_secrets_file`` のような
+    instance 属性をそのまま渡せるよう ``object`` を受ける。
+    """
+    redacted = _OSERRNO_PATH_RE.sub(f": '{_REDACTED_PATH}'", message)
+    for path in paths:
+        redacted = redacted.replace(os.fspath(path), _REDACTED_PATH)
+    for pattern in _TOKEN_PATTERNS:
+        redacted = pattern.sub(_REDACTED_TOKEN, redacted)
+    return redacted
 
 
 class YouTubeOAuthHandler:
@@ -71,7 +109,7 @@ class YouTubeOAuthHandler:
                     from youtube_automation.utils.secrets import get_client_secrets_path
 
                     self.client_secrets_file = get_client_secrets_path()
-                except Exception:
+                except ConfigError:
                     # op read も失敗した場合はデフォルトパスを設定
                     # (_validate_client_secrets で適切なエラーメッセージを表示)
                     self.client_secrets_file = candidates[0]
@@ -129,8 +167,9 @@ class YouTubeOAuthHandler:
                 print("📁 既存トークンファイルを確認中...")
                 self.credentials = Credentials.from_authorized_user_file(str(self.token_file), self._scopes)
                 print("✅ 既存トークン読み込み成功")
-            except Exception as e:
-                print(f"⚠️  既存トークン読み込み失敗: {e}")
+            except (OSError, ValueError) as e:
+                # 旧トークンが壊れているケースは新規認証へフォールスルーで recovery する
+                logger.warning("既存トークン読み込み失敗: %s", _redact(str(e), self.token_file))
                 self.credentials = None
 
         # トークンの有効性確認・更新
@@ -141,9 +180,10 @@ class YouTubeOAuthHandler:
                     self.credentials.refresh(Request())
                     print("✅ トークン更新成功")
                     self._save_credentials()
-                except Exception as e:
-                    print(f"❌ トークン更新失敗: {e}")
-                    print("🔄 新規認証を実行します...")
+                except google.auth.exceptions.RefreshError as e:
+                    # AuthError を raise すると新規認証へのフォールスルー recovery が壊れる。
+                    # credentials=None に落として下の新規認証ブロックで recovery する。
+                    logger.warning("token refresh 失敗: %s", _redact(str(e)))
                     self.credentials = None
 
         # 新規認証が必要な場合
@@ -156,9 +196,9 @@ class YouTubeOAuthHandler:
                 self.credentials = flow.run_local_server(port=0)
                 print("✅ OAuth 2.0 認証成功")
                 self._save_credentials()
-            except Exception as e:
-                print(f"❌ OAuth 2.0 認証失敗: {e}")
-                raise
+            except (ValueError, OSError, google.auth.exceptions.GoogleAuthError) as e:
+                logger.error("OAuth 2.0 認証失敗: %s", _redact(str(e), self.client_secrets_file))
+                raise AuthError("OAuth 2.0 認証に失敗しました") from e
 
         return self.credentials
 
@@ -199,9 +239,8 @@ class YouTubeOAuthHandler:
             service = build("youtube", "v3", credentials=self.credentials)
             print("✅ YouTube Data API サービス接続成功")
             return service
-        except Exception as e:
-            print(f"❌ YouTube Data API サービス接続失敗: {e}")
-            raise
+        except HttpError as e:
+            raise YouTubeAPIError.from_http_error(e, "YouTube Data API サービス接続失敗") from e
 
     def test_connection(self):
         """
@@ -227,8 +266,11 @@ class YouTubeOAuthHandler:
                 print("❌ チャンネル情報が取得できませんでした")
                 return False
 
-        except Exception as e:
-            print(f"❌ API接続テスト失敗: {e}")
+        except (HttpError, AuthError, YouTubeAPIError, google.auth.exceptions.GoogleAuthError, OSError) as e:
+            logger.error(
+                "API 接続テスト失敗: %s",
+                _redact(str(e), self.token_file, self.client_secrets_file),
+            )
             return False
 
 
