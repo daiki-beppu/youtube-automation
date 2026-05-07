@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 # ---------- パス定数 ----------
 
@@ -95,6 +96,21 @@ def _extract_block(text: str, header_pattern: str) -> str | None:
             if depth == 0:
                 return text[start:i]
     return None
+
+
+def _extract_yaml_packages_block(text: str) -> str | None:
+    """``packages:`` キー直下のリストブロック（インデント行の連続）を 1 つ抜き出す。
+
+    ``packages:`` 行から、次のトップレベルキー（インデント無し行）または EOF までを
+    1 つのテキストとして返す。`cloud-init.yaml` の `- ffmpeg` / `- unattended-upgrades`
+    などのアイテム判定に使う。マッチしない場合は ``None``。
+    """
+    match = re.search(
+        r"^packages:\s*\n((?:[ \t]+.*\n)+)",
+        text,
+        flags=re.MULTILINE,
+    )
+    return match.group(1) if match else None
 
 
 # ============================================================================
@@ -480,7 +496,10 @@ class TestCloudInitYaml:
     def test_package_update_is_true(self):
         """Given cloud-init.yaml
         When ``package_update`` キーを読む
-        Then ``true`` が設定されている (R1)。
+        Then ``true`` が設定されている (R1、R-172-IMP-2: hardening 編集後も維持)。
+
+        新規 ``package_upgrade: true`` 追記時に既存 ``package_update`` を誤って書換・削除して
+        いないことも本テストで保証する。
         """
         text = _read(_CLOUD_INIT_YAML)
         assert re.search(r"^package_update:\s*true\b", text, flags=re.MULTILINE), (
@@ -490,17 +509,14 @@ class TestCloudInitYaml:
     def test_packages_list_includes_ffmpeg(self):
         """Given cloud-init.yaml
         When ``packages:`` リストを読む
-        Then ``ffmpeg`` が含まれている (R2)。
+        Then ``ffmpeg`` が含まれている (R2、R-172-IMP-2-b: hardening 編集後も維持)。
+
+        streaming systemd unit で動画変換に必須の前提パッケージ。
+        #172 hardening の ``# ...`` 省略表記による誤削除リグレッションも本テストで担保する。
         """
         text = _read(_CLOUD_INIT_YAML)
-        # `packages:` キーから次のトップレベルキー（インデント無し）の直前までを抽出
-        match = re.search(
-            r"^packages:\s*\n((?:[ \t]+.*\n)+)",
-            text,
-            flags=re.MULTILINE,
-        )
-        assert match is not None, "packages: リストブロックが存在しない"
-        packages_block = match.group(1)
+        packages_block = _extract_yaml_packages_block(text)
+        assert packages_block is not None, "packages: リストブロックが存在しない"
         assert re.search(r"^\s*-\s*ffmpeg\b", packages_block, flags=re.MULTILINE), (
             "packages リストに ffmpeg が含まれていない"
         )
@@ -609,6 +625,220 @@ class TestCloudInitYaml:
             flags=re.MULTILINE | re.IGNORECASE,
         ), "VIDEO に動画パスが直書きされている（secret/構成 漏洩リスク、.env で渡すべき）"
 
+    # ------------------------------------------------------------------
+    # Issue #172 hardening: ssh_pwauth / package_upgrade / unattended-upgrades
+    # ------------------------------------------------------------------
+
+    def test_declares_ssh_pwauth_false(self):
+        """Given cloud-init.yaml
+        When トップレベルキーを読む
+        Then ``ssh_pwauth: false`` が宣言されている (R-172-1)。
+
+        cloud-init レイヤで SSH パスワード認証を無効化し、
+        Vultr/Ubuntu イメージの初期デフォルトへの依存を解消する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(r"^ssh_pwauth:\s*false\b", text, flags=re.MULTILINE), (
+            "ssh_pwauth: false がトップレベルで宣言されていない"
+            "（cloud-init レイヤの SSH パスワード認証無効化が欠落、初期デフォルト依存）"
+        )
+
+    def test_package_upgrade_is_true(self):
+        """Given cloud-init.yaml
+        When トップレベルキーを読む
+        Then ``package_upgrade: true`` が宣言されている (R-172-2)。
+
+        初期構築時のセキュリティパッチ適用を保証する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(r"^package_upgrade:\s*true\b", text, flags=re.MULTILINE), (
+            "package_upgrade: true がトップレベルで宣言されていない（初期構築時のセキュリティパッチが未適用になる）"
+        )
+
+    def test_packages_list_includes_unattended_upgrades(self):
+        """Given cloud-init.yaml
+        When ``packages:`` リストを読む
+        Then ``unattended-upgrades`` が含まれている (R-172-3)。
+
+        運用中の自動セキュリティパッチ適用パッケージを導入する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        packages_block = _extract_yaml_packages_block(text)
+        assert packages_block is not None, "packages: リストブロックが存在しない"
+        assert re.search(r"^\s*-\s*unattended-upgrades\b", packages_block, flags=re.MULTILINE), (
+            "packages リストに unattended-upgrades が含まれていない（運用中の自動パッチ適用が無効）"
+        )
+
+    def test_runcmd_disables_password_authentication_in_sshd_config(self):
+        """Given cloud-init.yaml
+        When runcmd を読む
+        Then ``sed`` で ``/etc/ssh/sshd_config`` の ``PasswordAuthentication`` を
+             ``no`` に固定するコマンドがある (R-172-4)。
+
+        cloud-init の ``ssh_pwauth: false`` と二重防御で、
+        コメント有/無・既存値に関わらず冪等に ``no`` を強制する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        # 同一行に sed / `^#\?PasswordAuthentication` パターン / `PasswordAuthentication no`
+        # / sshd_config パスが揃う。正規表現でリテラル `\?` を表すには `\\` (literal バックスラッシュ)
+        # + `\?` (escaped 疑問符) で `\\\?` と書く必要がある。
+        sed_line_pattern = (
+            r"sed\s+-i\s+.*\^#\\\?PasswordAuthentication.*"
+            r"PasswordAuthentication\s+no.*?/etc/ssh/sshd_config"
+        )
+        assert re.search(sed_line_pattern, text), (
+            "sed -i で /etc/ssh/sshd_config の PasswordAuthentication を no に書き換える runcmd が無い"
+            "（sshd_config レイヤの二重防御欠落）"
+        )
+
+    def test_runcmd_reloads_ssh_with_sshd_fallback(self):
+        """Given cloud-init.yaml
+        When runcmd を読む
+        Then ``systemctl reload ssh || systemctl reload sshd`` の OR フォールバックが実行される (R-172-5)。
+
+        Ubuntu のサービス名差異（``ssh`` vs ``sshd``）を OR で吸収する。片寄せ禁止。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(
+            r"systemctl\s+reload\s+ssh\s*\|\|\s*systemctl\s+reload\s+sshd",
+            text,
+        ), (
+            "systemctl reload ssh || systemctl reload sshd の OR フォールバックが runcmd に無い"
+            "（Ubuntu サービス名差異吸収が欠落）"
+        )
+
+    def test_runcmd_reconfigures_unattended_upgrades(self):
+        """Given cloud-init.yaml
+        When runcmd を読む
+        Then ``dpkg-reconfigure --priority=low unattended-upgrades`` が実行される (R-172-6)。
+
+        ``unattended-upgrades`` パッケージのインストール後アクティベートを保証する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(
+            r"dpkg-reconfigure\s+--priority=low\s+unattended-upgrades\b",
+            text,
+        ), (
+            "dpkg-reconfigure --priority=low unattended-upgrades が runcmd に無い"
+            "（unattended-upgrades のアクティベートが欠落）"
+        )
+
+    def test_hardening_runcmd_runs_before_install_d(self):
+        """Given cloud-init.yaml
+        When runcmd の出現順序を読む
+        Then hardening 3 行（``sed`` / ``systemctl reload ssh`` / ``dpkg-reconfigure``）が
+             既存の ``install -d ... /opt/youtube-stream/videos`` より前に配置されている (R-172-IMP-1)。
+
+        早期 hardening の意図に従い、issue 推奨形どおり 3 行を runcmd 先頭に挿入する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        sed_idx = text.find("sed -i")
+        reload_idx = text.find("systemctl reload ssh")
+        reconfigure_idx = text.find("dpkg-reconfigure")
+        install_videos_idx = text.find("install -d -m 0755 -o root -g root /opt/youtube-stream/videos")
+        assert sed_idx != -1, "sed -i 行が cloud-init.yaml に見つからない（前段確認）"
+        assert reload_idx != -1, "systemctl reload ssh 行が cloud-init.yaml に見つからない（前段確認）"
+        assert reconfigure_idx != -1, "dpkg-reconfigure 行が cloud-init.yaml に見つからない（前段確認）"
+        assert install_videos_idx != -1, (
+            "install -d ... /opt/youtube-stream/videos 行が cloud-init.yaml に見つからない（前段確認）"
+        )
+        assert sed_idx < reload_idx < reconfigure_idx < install_videos_idx, (
+            "hardening 3 行（sed → systemctl reload ssh → dpkg-reconfigure）が "
+            "install -d ... /opt/youtube-stream/videos より前に並んでいない"
+            f"（順序: sed={sed_idx}, reload={reload_idx}, "
+            f"reconfigure={reconfigure_idx}, install_videos={install_videos_idx}）"
+        )
+
+    def test_packages_list_retains_cron(self):
+        """Given hardening 反映後の cloud-init.yaml
+        When ``packages:`` リストを読む
+        Then ``cron`` が引き続き含まれている (R-172-IMP-2)。
+
+        ``main.tf`` の ``null_resource.deploy`` が ``/etc/cron.d/youtube-stream-healthcheck`` を
+        配置する前提で必須のパッケージ。issue 推奨形の ``# ...`` 省略表記による誤削除リグレッションを捕捉する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        packages_block = _extract_yaml_packages_block(text)
+        assert packages_block is not None, "packages: リストブロックが存在しない"
+        assert re.search(r"^\s*-\s*cron\b", packages_block, flags=re.MULTILINE), (
+            "packages リストから cron が消えている"
+            "（healthcheck cron の前提が崩れる: main.tf の /etc/cron.d/youtube-stream-healthcheck が動かない）"
+        )
+
+    def test_runcmd_sed_entry_has_no_outer_double_quotes(self):
+        """Given cloud-init.yaml
+        When runcmd の sed 行を読む
+        Then ``- "sed ..."`` のように外側を二重引用符で囲んでいない。
+
+        plan 実装ガイドラインに従い、既存 ``install -d ...`` と同じ裸書きスタイルを維持する。
+        外側クォートを付けると YAML 文字列としての挙動が変わり、issue 推奨形からの逸脱になる。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert not re.search(r'^\s*-\s*"sed', text, flags=re.MULTILINE), (
+            'runcmd の sed 行が外側を二重引用符で囲まれている（- "sed ..." 形式）'
+            "。既存慣習どおりクォートなしの裸書きにすること"
+        )
+
+    def test_runcmd_retains_install_d_bin(self):
+        """Given hardening 反映後の cloud-init.yaml
+        When runcmd を読む
+        Then 既存の ``install -d ... /opt/youtube-stream/bin`` 行が保持されている (R-172-IMP-2)。
+
+        ``/opt/youtube-stream/bin`` は terraform の ``provisioner "file"`` がスクリプトを
+        upload する宛先（既存コメント参照）。新規 hardening 3 行先頭挿入時に
+        誤って削除されていないことを保証する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        assert re.search(
+            r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/bin\b",
+            text,
+        ), (
+            "/opt/youtube-stream/bin を root:root 0755 で作成する install コマンドが消えている"
+            '（terraform provisioner "file" のスクリプト upload 先が失われる）'
+        )
+
+    def test_cloud_init_yaml_is_valid_yaml(self):
+        """Given cloud-init.yaml
+        When ``yaml.safe_load`` で読み込む
+        Then 例外を投げず ``dict`` を返す (I-1)。
+
+        cloud-init に渡す前段の構文ガード。インデント崩れ・タブ混入・キー重複等を
+        regex ベースの個別テストでは捕捉できないため、YAML パーサで包括的に検証する。
+        ``yaml.YAMLError`` は明示 try/except せず pytest トレースに伝播させる。
+        """
+        loaded = yaml.safe_load(_read(_CLOUD_INIT_YAML))
+        assert isinstance(loaded, dict), (
+            f"cloud-init.yaml が dict としてロードできない（型: {type(loaded).__name__}）"
+            "。トップレベルが空・list 化・スカラー化など構文不備の可能性"
+        )
+
+    def test_ssh_pwauth_declared_exactly_once(self):
+        """Given hardening 反映後の cloud-init.yaml
+        When 行頭 ``ssh_pwauth:`` の出現件数を数える
+        Then 宣言は **ちょうど 1 件** である。
+
+        Red 段階では「宣言 0 件」、Green 段階では「重複宣言 ≥ 2 件」の双方を捕捉する
+        dual-purpose ガード。既存の ``re.search`` 系テストは最初の 1 件にマッチして
+        重複を見逃すため、件数チェックで補完する。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        matches = re.findall(r"^ssh_pwauth:", text, flags=re.MULTILINE)
+        assert len(matches) == 1, f"ssh_pwauth が {len(matches)} 回宣言されている（重複編集 or 欠落リグレッション）"
+
+    def test_package_upgrade_declared_exactly_once(self):
+        """Given hardening 反映後の cloud-init.yaml
+        When 行頭 ``package_upgrade:`` の出現件数を数える
+        Then 宣言は **ちょうど 1 件** である。
+
+        ``package_update``（既存）と紛らわしいため行頭 + コロン込みでアンカーし、
+        ``package_upgrade`` 単独の重複/欠落を検知する dual-purpose ガード。
+        """
+        text = _read(_CLOUD_INIT_YAML)
+        matches = re.findall(r"^package_upgrade:", text, flags=re.MULTILINE)
+        assert len(matches) == 1, (
+            f"package_upgrade が {len(matches)} 回宣言されている（重複編集 or 欠落リグレッション）"
+        )
+
 
 # ============================================================================
 # templates/youtube-stream.service.tftpl (#124)
@@ -714,8 +944,7 @@ class TestSystemdUnitTemplate:
             r"-f\s+flv\s+\$RTMP_URL\s*$"
         )
         assert re.search(expected, service, flags=re.MULTILINE), (
-            "[Service].ExecStart が #185 改訂後の ffmpeg コマンド"
-            "（動画音声をそのまま -c:a copy で送出）と一致しない"
+            "[Service].ExecStart が #185 改訂後の ffmpeg コマンド（動画音声をそのまま -c:a copy で送出）と一致しない"
         )
 
     def test_service_runtime_max_sec_11h(self):
@@ -946,8 +1175,7 @@ class TestVariablesTfNullResource:
         text = _strip_hcl_comments(_read(_VARIABLES_TF))
         block = _extract_block(text, r'variable\s+"ssh_priv_key_path"')
         assert block is None, (
-            'variable "ssh_priv_key_path" が残っている'
-            "（issue #154: ssh-agent 切替で未使用化したため削除する）"
+            'variable "ssh_priv_key_path" が残っている（issue #154: ssh-agent 切替で未使用化したため削除する）'
         )
 
 
@@ -1239,8 +1467,7 @@ class TestMainTfNullResource:
         connection = _extract_block(block, r"connection")
         assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
         assert not re.search(r"\bprivate_key\s*=", connection), (
-            "connection.private_key が残っている"
-            "（PEM 全文が Terraform graph / plan / state に取り込まれる漏洩経路）"
+            "connection.private_key が残っている（PEM 全文が Terraform graph / plan / state に取り込まれる漏洩経路）"
         )
 
     def test_connection_block_does_not_reference_ssh_priv_key_path_var(self):
@@ -1257,8 +1484,7 @@ class TestMainTfNullResource:
         connection = _extract_block(block, r"connection")
         assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
         assert "ssh_priv_key_path" not in connection, (
-            "connection ブロック内に var.ssh_priv_key_path 参照が残っている"
-            "（撤去済み変数への参照復活）"
+            "connection ブロック内に var.ssh_priv_key_path 参照が残っている（撤去済み変数への参照復活）"
         )
 
     def test_provisioner_file_uploads_video_to_canonical_path(self):
@@ -1902,8 +2128,7 @@ class TestStreamingReadme:
         """
         text = _read(_STREAMING_README)
         assert "ssh_priv_key_path" not in text, (
-            "README に ssh_priv_key_path の言及が残っている"
-            "（撤去済み変数。ドキュメント / 実装乖離）"
+            "README に ssh_priv_key_path の言及が残っている（撤去済み変数。ドキュメント / 実装乖離）"
         )
 
     def test_mentions_ssh_add_for_agent_setup(self):
@@ -2302,8 +2527,7 @@ class TestStreamingSkillSshAgent:
         """
         text = _read(_STREAMING_SKILL)
         assert "ssh_priv_key_path" not in text, (
-            "SKILL.md に ssh_priv_key_path の言及が残っている"
-            "（撤去済み変数。README / SKILL 不整合）"
+            "SKILL.md に ssh_priv_key_path の言及が残っている（撤去済み変数。README / SKILL 不整合）"
         )
 
     def test_mentions_ssh_add_for_agent_setup(self):

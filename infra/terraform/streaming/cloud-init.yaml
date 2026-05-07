@@ -1,8 +1,11 @@
 #cloud-config
+ssh_pwauth: false
 package_update: true
+package_upgrade: true
 packages:
   - ffmpeg
   - cron
+  - unattended-upgrades
 
 write_files:
   - path: /etc/systemd/system/youtube-stream.service
@@ -12,6 +15,9 @@ write_files:
       ${indent(6, systemd_unit)}
 
 runcmd:
+  - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - systemctl reload ssh || systemctl reload sshd
+  - dpkg-reconfigure --priority=low unattended-upgrades
   - install -d -m 0755 -o root -g root /opt/youtube-stream/videos
   - install -d -m 0755 -o root -g root /opt/youtube-stream/logs
   # bin/ は terraform の provisioner "file" がスクリプトを upload する宛先。
