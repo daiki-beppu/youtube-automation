@@ -365,5 +365,5 @@ def test_audit_document_lists_all_eight_renames() -> None:
         if old not in text or new not in text:
             missing.append(f"{old} -> {new}")
     assert missing == [], (
-        f"監査ドキュメントに rename マッピング記載が不足:\n  " + "\n  ".join(missing)
+        "監査ドキュメントに rename マッピング記載が不足:\n  " + "\n  ".join(missing)
     )
