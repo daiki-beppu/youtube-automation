@@ -33,15 +33,13 @@
      - ``TF_VAR_discord_webhook_url`` を案内コメントに含む
 10. ``infra/terraform/streaming/README.md``
      - 死活監視セクション / Discord / 4 シナリオ言及
-11. ``src/youtube_automation/utils/secrets.py``
-     - ``DISCORD_WEBHOOK_URL`` が ``_SECRET_REFS`` に登録
-12. ``src/youtube_automation/utils/streaming_archive.py``
+11. ``src/youtube_automation/utils/streaming_archive.py``
      - ``count_archives_for_date`` のモック検証
-13. ``src/youtube_automation/scripts/streaming_archive_check.py``
+12. ``src/youtube_automation/scripts/streaming_archive_check.py``
      - argparse / 件数不足時 exit 1 / Discord 通知
-14. ``pyproject.toml``
+13. ``pyproject.toml``
      - ``yt-stream-archive-check`` entry point 登録
-15. ``docs/streaming-healthcheck.md``
+14. ``docs/streaming-healthcheck.md``
      - 4 シナリオ言及
 
 shell スクリプト系は ``bash`` バイナリに依存するため subprocess で直接実行する。
@@ -940,62 +938,6 @@ class TestStreamingReadmeHealthcheck:
             assert scenario_keyword in text, (
                 f"README に '{scenario_keyword}' シナリオの言及が無い（4 シナリオ運用手順未網羅）"
             )
-
-
-# ============================================================================
-# src/youtube_automation/utils/secrets.py — DISCORD_WEBHOOK_URL 登録
-# ============================================================================
-
-
-class TestSecretsDiscordWebhookUrl:
-    """``secrets.py::_SECRET_REFS`` への ``DISCORD_WEBHOOK_URL`` 登録。"""
-
-    def test_discord_webhook_url_is_registered(self):
-        """Given secrets.py
-        When _SECRET_REFS を読む
-        Then DISCORD_WEBHOOK_URL が登録されている（op:// 参照 URI 形式）。
-        """
-        from youtube_automation.utils.secrets import _SECRET_REFS
-
-        assert "DISCORD_WEBHOOK_URL" in _SECRET_REFS, (
-            "DISCORD_WEBHOOK_URL が _SECRET_REFS に未登録"
-        )
-        ref = _SECRET_REFS["DISCORD_WEBHOOK_URL"]
-        assert ref.startswith("op://"), f"1Password 参照 URI 形式でない: {ref!r}"
-
-    def test_discord_webhook_url_returns_from_environ_when_present(self):
-        """既に os.environ にあれば op を呼ばずにそれを返す。"""
-        from youtube_automation.utils.secrets import get_secret, reset_cache
-
-        reset_cache()
-        original = os.environ.pop("DISCORD_WEBHOOK_URL", None)
-        try:
-            os.environ["DISCORD_WEBHOOK_URL"] = "https://discord.com/api/webhooks/from-env/abc"
-            with patch("youtube_automation.utils.secrets.subprocess.run") as mock_run:
-                value = get_secret("DISCORD_WEBHOOK_URL")
-            assert value == "https://discord.com/api/webhooks/from-env/abc"
-            mock_run.assert_not_called()
-        finally:
-            reset_cache()
-            os.environ.pop("DISCORD_WEBHOOK_URL", None)
-            if original is not None:
-                os.environ["DISCORD_WEBHOOK_URL"] = original
-
-    def test_discord_webhook_url_raises_config_error_when_unavailable(self):
-        """op が無く os.environ も空なら ConfigError。"""
-        from youtube_automation.utils.exceptions import ConfigError
-        from youtube_automation.utils.secrets import get_secret, reset_cache
-
-        reset_cache()
-        original = os.environ.pop("DISCORD_WEBHOOK_URL", None)
-        try:
-            with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
-                with pytest.raises(ConfigError, match="DISCORD_WEBHOOK_URL"):
-                    get_secret("DISCORD_WEBHOOK_URL")
-        finally:
-            reset_cache()
-            if original is not None:
-                os.environ["DISCORD_WEBHOOK_URL"] = original
 
 
 # ============================================================================

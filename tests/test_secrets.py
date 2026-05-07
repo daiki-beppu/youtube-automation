@@ -171,21 +171,22 @@ class TestOpenAIApiKeyRegistered:
 
 
 class TestStreamingSecretsRegistered:
-    """VULTR_API_KEY と STREAM_WEBHOOK_URL が `_SECRET_REFS` に登録され、
-    既存 3 経路 (env / op / fail) がそのまま機能することを確認する。
+    """VULTR_API_KEY / STREAM_WEBHOOK_URL / DISCORD_WEBHOOK_URL の 3 シークレットが
+    `_SECRET_REFS` に登録され、4 経路 (登録確認 / env / op-fallback / fail) が
+    そのまま機能することを確認する。
     """
 
     @pytest.fixture(autouse=True)
     def _clean(self):
-        for name in ("VULTR_API_KEY", "STREAM_WEBHOOK_URL"):
+        for name in ("VULTR_API_KEY", "STREAM_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"):
             os.environ.pop(name, None)
         reset_cache()
         yield
-        for name in ("VULTR_API_KEY", "STREAM_WEBHOOK_URL"):
+        for name in ("VULTR_API_KEY", "STREAM_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"):
             os.environ.pop(name, None)
         reset_cache()
 
-    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"])
     def test_secret_is_registered_in_secret_refs(self, name: str):
         """Given _SECRET_REFS
         When 引く
@@ -195,7 +196,7 @@ class TestStreamingSecretsRegistered:
         ref = _SECRET_REFS[name]
         assert ref.startswith("op://"), f"1Password 参照 URI 形式でない: {ref}"
 
-    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"])
     def test_returns_from_environ_when_present(self, name: str):
         """既に os.environ にあれば op を呼ばずにそれを返す。"""
         os.environ[name] = f"value-of-{name}"
@@ -204,7 +205,7 @@ class TestStreamingSecretsRegistered:
         assert value == f"value-of-{name}"
         mock_run.assert_not_called()
 
-    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"])
     def test_falls_back_to_op_read(self, name: str):
         """env に無く op が成功すれば op read の値を返す。"""
         with (
@@ -221,7 +222,7 @@ class TestStreamingSecretsRegistered:
         assert value == f"from-op-{name}"
         mock_run.assert_called_once()
 
-    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL"])
+    @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"])
     def test_raises_config_error_when_unavailable(self, name: str):
         """env も op も空なら ConfigError。"""
         with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
