@@ -768,6 +768,160 @@ class TestSystemdUnitTemplate:
             "[Install].WantedBy=multi-user.target が無い（systemctl enable で起動対象にならない）"
         )
 
+    def test_service_dynamic_user_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``DynamicUser=yes`` が宣言されている (#159 R1)。
+
+        root 実行 → 動的非特権ユーザ実行への切り替え。demuxer CVE
+        （CVE-2023-49502 等）から root RCE への到達経路を遮断する hardening の核。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^DynamicUser=yes\s*$", service, flags=re.MULTILINE), (
+            "[Service].DynamicUser=yes が無い（root 実行のままだと CVE 経路が塞がらない）"
+        )
+
+    def test_service_no_new_privileges(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``NoNewPrivileges=true`` が宣言されている (#159 R2)。
+
+        setuid バイナリによる権限昇格を遮断する hardening の核。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^NoNewPrivileges=true\s*$", service, flags=re.MULTILINE), (
+            "[Service].NoNewPrivileges=true が無い（setuid 経由の権限昇格を許す）"
+        )
+
+    def test_service_protect_system_strict(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ProtectSystem=strict`` が宣言されている (#159 R3)。
+
+        ``/`` ``/usr`` ``/boot`` ``/etc`` を read-only にする hardening の核。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^ProtectSystem=strict\s*$", service, flags=re.MULTILINE), (
+            "[Service].ProtectSystem=strict が無い（/usr などへの書き込みが防げない）"
+        )
+
+    def test_service_protect_home_true(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ProtectHome=true`` が宣言されている (#159 R4)。
+
+        ``/home`` の不可視化による secret 漏洩経路の遮断。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^ProtectHome=true\s*$", service, flags=re.MULTILINE), (
+            "[Service].ProtectHome=true が無い（/home からの secret 漏洩経路が残る）"
+        )
+
+    def test_service_private_tmp(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``PrivateTmp=true`` が宣言されている (#159 R5)。
+
+        ``/tmp`` を namespace で隔離し他プロセスとの共有を遮断する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^PrivateTmp=true\s*$", service, flags=re.MULTILINE), (
+            "[Service].PrivateTmp=true が無い（/tmp 経由の干渉が防げない）"
+        )
+
+    def test_service_private_devices(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``PrivateDevices=true`` が宣言されている (#159 R6)。
+
+        ``/dev`` を最小サブセット化し物理デバイスへの直接アクセスを遮断する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^PrivateDevices=true\s*$", service, flags=re.MULTILINE), (
+            "[Service].PrivateDevices=true が無い（/dev 経由の物理デバイス露出が残る）"
+        )
+
+    def test_service_capability_bounding_set_empty(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``CapabilityBoundingSet=`` が空値で宣言されている (#159 R7)。
+
+        全 capability 剥奪は root RCE 経路の最終遮断。空値 (``=`` の後ろが空) を
+        ``\\s*$`` のマッチと ``\\S`` の非マッチで双方向に検証する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^CapabilityBoundingSet=\s*$", service, flags=re.MULTILINE), (
+            "[Service].CapabilityBoundingSet= (空値) が無い（全 capability 剥奪が効かない）"
+        )
+        assert not re.search(r"^CapabilityBoundingSet=\S", service, flags=re.MULTILINE), (
+            "[Service].CapabilityBoundingSet= に値が指定されている（空でないと全剥奪にならない）"
+        )
+
+    def test_service_ambient_capabilities_empty(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``AmbientCapabilities=`` が空値で宣言されている (#159 R8)。
+
+        子プロセスへの capability 引き継ぎ遮断。空値検証は CapabilityBoundingSet と同形式。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^AmbientCapabilities=\s*$", service, flags=re.MULTILINE), (
+            "[Service].AmbientCapabilities= (空値) が無い（子プロセスへ capability が引き継がれる）"
+        )
+        assert not re.search(r"^AmbientCapabilities=\S", service, flags=re.MULTILINE), (
+            "[Service].AmbientCapabilities= に値が指定されている（空でないと引き継ぎ遮断にならない）"
+        )
+
+    def test_service_read_only_paths_videos(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ReadOnlyPaths=/opt/youtube-stream/videos`` が宣言されている (#159 R9)。
+
+        動画ファイルの書き換え防止。``ProtectSystem=strict`` と組み合わせて
+        書き込み可能領域を最小化する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(
+            r"^ReadOnlyPaths=/opt/youtube-stream/videos\s*$",
+            service,
+            flags=re.MULTILINE,
+        ), "[Service].ReadOnlyPaths=/opt/youtube-stream/videos が無い（動画ファイルの書き換え防止が効かない）"
+
+    def test_service_read_write_paths_logs(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ReadWritePaths=/opt/youtube-stream/logs`` が宣言されている (#159 R10)。
+
+        logrotate 対象パスの書き込み許可（spec 指示）。``ProtectSystem=strict`` 下で
+        書き込みが必要な領域を明示する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(
+            r"^ReadWritePaths=/opt/youtube-stream/logs\s*$",
+            service,
+            flags=re.MULTILINE,
+        ), "[Service].ReadWritePaths=/opt/youtube-stream/logs が無い（logs ディレクトリへの書き込み経路が破綻）"
+
     def test_no_terraform_interpolation_remains(self):
         """Given .tftpl
         When 全文を読む

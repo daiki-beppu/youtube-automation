@@ -4,6 +4,16 @@ After=network-online.target
 
 [Service]
 Type=simple
+DynamicUser=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadOnlyPaths=/opt/youtube-stream/videos
+ReadWritePaths=/opt/youtube-stream/logs
 EnvironmentFile=/etc/youtube-stream.env
 ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO -c:v copy -c:a copy -f flv $RTMP_URL
 RuntimeMaxSec=11h
