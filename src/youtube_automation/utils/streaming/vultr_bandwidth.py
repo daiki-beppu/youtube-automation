@@ -13,6 +13,7 @@ import json
 import urllib.error
 import urllib.request
 from typing import Any
+from urllib.parse import quote
 
 from youtube_automation.utils.exceptions import YouTubeAPIError
 
@@ -35,7 +36,7 @@ def fetch_bandwidth(*, instance_id: str, api_key: str) -> dict[str, dict[str, in
     Raises:
         YouTubeAPIError: HTTP エラーまたはレスポンス形式が想定外の場合
     """
-    url = f"{_VULTR_API_BASE}/instances/{instance_id}/bandwidth"
+    url = f"{_VULTR_API_BASE}/instances/{quote(instance_id, safe='')}/bandwidth"
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
     try:
         with urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SEC) as resp:

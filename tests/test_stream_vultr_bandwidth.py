@@ -106,6 +106,41 @@ def test_fetch_bandwidth_raises_when_response_missing_bandwidth_key():
             vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
 
 
+# ---------- url-injection defense (Issue #167): URL path encoding ----------
+
+
+def test_fetch_bandwidth_percent_encodes_slash_in_instance_id():
+    """Given instance_id に `/` を含む値 ("A/B")
+    When fetch_bandwidth を呼ぶ
+    Then `/` が `%2F` にエンコードされ、URL path segment を勝手に拡張できない
+    (`safe=''` 必須の根拠: デフォルト `safe='/'` だと `/` が透過する)。
+    """
+    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+        mock_open.return_value = _fake_urlopen({"bandwidth": {}})
+        vultr_bandwidth.fetch_bandwidth(instance_id="A/B", api_key="KEY")
+
+    request_arg = mock_open.call_args[0][0]
+    assert request_arg.full_url == "https://api.vultr.com/v2/instances/A%2FB/bandwidth"
+
+
+def test_fetch_bandwidth_percent_encodes_traversal_payload_in_instance_id():
+    """Given instance_id に path traversal payload ("../etc/passwd")
+    When fetch_bandwidth を呼ぶ
+    Then `/` を `%2F` に展開し、raw な `/etc/passwd` が URL に現れない
+    (url-injection defense の意図を adversarial input で固定)。
+    """
+    from urllib.parse import quote
+
+    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+        mock_open.return_value = _fake_urlopen({"bandwidth": {}})
+        vultr_bandwidth.fetch_bandwidth(instance_id="../etc/passwd", api_key="KEY")
+
+    request_arg = mock_open.call_args[0][0]
+    expected_segment = quote("../etc/passwd", safe="")
+    assert request_arg.full_url == f"https://api.vultr.com/v2/instances/{expected_segment}/bandwidth"
+    assert "/etc/passwd" not in request_arg.full_url
+
+
 # ---------- monthly_total_gb (pure) ----------
 
 
