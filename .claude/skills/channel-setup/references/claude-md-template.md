@@ -82,7 +82,7 @@ youtube-automation パッケージの構造は GitHub リポジトリ（daiki-be
 ```
 planning/ → live/
 ```
-- `/upload` 完了時: `planning/` → `live/`
+- `/video-upload` 完了時: `planning/` → `live/`
 
 ### 標準ディレクトリ構造
 ```
@@ -131,7 +131,7 @@ Complete Collection アップロード + live 移動を実行:
 ### 戦略的知見
 - 音源スタイルは `config/channel/content.json` の `genre.style` で管理（Analytics実証に基づく）
 - **Complete Collection のみ投稿**
-- テーマ別パフォーマンスは `/analyze` で都度確認（静的記述は陳腐化するため）
+- テーマ別パフォーマンスは `/analytics-analyze` で都度確認（静的記述は陳腐化するため）
 
 ## Gotchas
 

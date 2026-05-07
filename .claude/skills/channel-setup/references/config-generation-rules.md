@@ -52,9 +52,9 @@
 | thumbnail / Gemini 画像生成 | `config/skills/thumbnail.yaml` |
 | suno | `config/skills/suno.yaml` |
 | lyria | `config/skills/lyria.yaml` |
-| ideate | `config/skills/ideate.yaml` |
+| collection-ideate | `config/skills/collection-ideate.yaml` |
 | benchmark | `config/skills/benchmark.yaml` |
-| description | `config/skills/description.yaml` |
+| video-description | `config/skills/video-description.yaml` |
 | masterup（`audio.crossfade_duration` 等） | `config/skills/masterup.yaml` |
 | loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |
 

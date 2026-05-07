@@ -55,10 +55,10 @@ description: Use when 既存コレクション（collections/planning/ 配下）
 
 1. **並列 A**（2 Agent 同時起動）:
    - Agent 1: Skill `/videoup` — generate_videos.sh で動画生成
-   - Agent 2: Skill `/description` — 概要欄自動生成
+   - Agent 2: Skill `/video-description` — 概要欄自動生成
 2. 並列 A 完了後:
    - `assets.master_video`, `assets.description` を更新
-3. **順次**: Skill `/upload` — YouTube アップロード + live 移行
+3. **順次**: Skill `/video-upload` — YouTube アップロード + live 移行
    - `upload.video_id`, `upload.video_url` を記録
    - `stage: "live"`, `phase: "complete"` に更新
    - `collections/planning/` → `collections/live/` に移動
@@ -67,13 +67,13 @@ description: Use when 既存コレクション（collections/planning/ 配下）
 
 `assets` フラグで未完了ステップを特定し、そこから再実行。
 - `assets.master_video = null` → 並列 A から
-- `upload.video_id = null` → `/upload` から
+- `upload.video_id = null` → `/video-upload` から
 
 #### `complete` → 完了案内
 
 ```
 全工程完了済みです。
-→ `/analyze` で初週パフォーマンスを確認してください（T+7日後推奨）
+→ `/analytics-analyze` で初週パフォーマンスを確認してください（T+7日後推奨）
 ```
 
 ### 3. state ファイルの更新ルール

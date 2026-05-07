@@ -89,8 +89,8 @@ config 生成・認証完了後、以下を案内:
 
 1. **ブランディング素材**: 未作成の場合は `channel-setup/references/verification.md`（「ブランディング素材生成」）を参照
 2. **ベンチマーク設定**: 競合チャンネルを追加したい場合は `config/channel/analytics.json` の `benchmark.channels` を追加し `/benchmark` で収集
-3. **ペルソナ定義**: `/viewer-voice` → `/persona` → `/viewing-scene` の順で実行
-4. **データ収集・分析**: `/collect` → `/analyze` で現状のパフォーマンスを把握
+3. **ペルソナ定義**: `/viewer-voice` → `/audience-persona` → `/viewing-scene` の順で実行
+4. **データ収集・分析**: `/analytics-collect` → `/analytics-analyze` で現状のパフォーマンスを把握
 5. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
 
 ## Cross References

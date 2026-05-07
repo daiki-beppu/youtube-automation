@@ -4,7 +4,7 @@
 
 - [ ] マスター動画（`01-master/00-master.mp4` または `03-Individual-movie/*master*.mp4`）
 - [ ] サムネイル（`10-assets/thumbnail.jpg`）
-- [ ] 概要欄（`20-documentation/descriptions.md` — `/description` スキルで生成済み）
+- [ ] 概要欄（`20-documentation/descriptions.md` — `/video-description` スキルで生成済み）
 
 ## コンテンツ品質確認
 
