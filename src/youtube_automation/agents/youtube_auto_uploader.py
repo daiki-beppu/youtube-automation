@@ -116,7 +116,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
     def _load_descriptions_md(self, collection_dir: Path) -> dict | None:
         """descriptions.md から事前生成メタデータを読み込み
 
-        /description スキルが生成した descriptions.md が存在する場合、
+        /video-description スキルが生成した descriptions.md が存在する場合、
         title / description / tags を抽出して返す。
         ファイルが存在しない or パース失敗時は None（BAHMetadataGenerator にフォールバック）。
         """
@@ -130,7 +130,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
                 raise RuntimeError(
                     f"descriptions.md が無いのに別名ファイルが存在します: "
                     f"{[p.name for p in stray]}\n"
-                    f"→ ファイル名は `descriptions.md` 固定。リネームして /description を再実行してください"
+                    f"→ ファイル名は `descriptions.md` 固定。リネームして /video-description を再実行してください"
                 )
             return None
 
@@ -186,7 +186,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         doc_dir = collection_dir / "20-documentation"
         desc_path = doc_dir / "descriptions.md"
         if not desc_path.exists():
-            raise RuntimeError(f"❌ {desc_path} が存在しません。/description を実行してください。")
+            raise RuntimeError(f"❌ {desc_path} が存在しません。/video-description を実行してください。")
 
         text = desc_path.read_text(encoding="utf-8")
         title = (self._extract_md_section(text, "タイトル案") or "").strip()
@@ -222,7 +222,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         if missing:
             raise RuntimeError(
                 f"❌ workflow-state.json.scene_phrases に翻訳が不足: {missing}\n"
-                f"→ /description で多言語翻訳を含めて再生成してください。\n"
+                f"→ /video-description で多言語翻訳を含めて再生成してください。\n"
                 f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
             )
 

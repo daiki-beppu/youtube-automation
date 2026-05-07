@@ -1,6 +1,6 @@
 ---
 name: viewing-scene
-description: Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義したいとき。「視聴シーン」「利用シーン」「どんな時に聴かれるか」「シーン分析」「視聴者はいつ聴く」など。/persona の結果を踏まえてシーン別パフォーマンスを分析。チャンネル立ち上げ・方向性見直し時に必ず使用すること
+description: Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義したいとき。「視聴シーン」「利用シーン」「どんな時に聴かれるか」「シーン分析」「視聴者はいつ聴く」など。/audience-persona の結果を踏まえてシーン別パフォーマンスを分析。チャンネル立ち上げ・方向性見直し時に必ず使用すること
 ---
 
 ## Overview
@@ -12,8 +12,8 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。
   存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-import` を案内。
-- `docs/channel/personas/persona-definition.md` が存在すること（未実施なら `/persona` を案内）
-- `reports/` に最新の分析レポートがあること（なければ `/collect` → `/analyze` を案内）
+- `docs/channel/personas/persona-definition.md` が存在すること（未実施なら `/audience-persona` を案内）
+- `reports/` に最新の分析レポートがあること（なければ `/analytics-collect` → `/analytics-analyze` を案内）
 
 ## 実行フロー
 

@@ -220,7 +220,7 @@ uv run yt-generate-image \
 #### Phase 1: 背景候補生成（main.png）
 
 **main.png が既に存在する場合は Phase 1 をスキップして Phase 2 へ進む。**
-（`/ideate` で本番品質のプレビューが生成され、選択後にコピーされている）
+（`/collection-ideate` で本番品質のプレビューが生成され、選択後にコピーされている）
 
 main.png が存在しない場合のみ:
 1. テーマに合わせてプロンプトを構築（上記テンプレート）

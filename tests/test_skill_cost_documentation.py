@@ -3,13 +3,16 @@
 Issue #102: 画像生成コスト ($0.04/枚) のハードコーディング解消。
 対象ファイル:
 - .claude/skills/thumbnail/SKILL.md (ttp_swap モードのコスト記述)
-- .claude/skills/ideate/SKILL.md (Phase 4-2 のコスト一括確認)
+- .claude/skills/collection-ideate/SKILL.md (Phase 4-2 のコスト一括確認)
 - .claude/skills/thumbnail/config.default.yaml (cost_per_image_usd コメント例)
 
 ドキュメント変更のため、テストは
 - 旧ハードコード値が残っていないこと（負の検証）
 - cost_tracker.PRICING / estimate_cost を single source of truth として参照していること（正の検証）
 の 2 観点で行う。
+
+Issue #130: `ideate` skill は `collection-ideate` に rename されたため、
+本テストの skill パス定数も新名を参照する。
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 
 THUMBNAIL_SKILL_MD = _SKILLS_DIR / "thumbnail" / "SKILL.md"
 THUMBNAIL_CONFIG_YAML = _SKILLS_DIR / "thumbnail" / "config.default.yaml"
-IDEATE_SKILL_MD = _SKILLS_DIR / "ideate" / "SKILL.md"
+IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 
 
 # ---------- 共通ヘルパー ----------
@@ -80,7 +83,7 @@ def _config_yaml_image_generation_block(text: str) -> str:
 @pytest.mark.parametrize(
     "path",
     [THUMBNAIL_SKILL_MD, THUMBNAIL_CONFIG_YAML, IDEATE_SKILL_MD],
-    ids=["thumbnail/SKILL.md", "thumbnail/config.default.yaml", "ideate/SKILL.md"],
+    ids=["thumbnail/SKILL.md", "thumbnail/config.default.yaml", "collection-ideate/SKILL.md"],
 )
 def test_target_skill_files_exist(path: Path) -> None:
     """前提: 修正対象の skill ファイルが存在する。"""

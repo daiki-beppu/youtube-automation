@@ -16,7 +16,6 @@ def generate(patterns_path: Path) -> str:
     mood_descriptors = suno.get("mood_descriptors", "")
     exclude_styles = suno.get("exclude_styles", "")
     style_variants = suno.get("style_variants", {})
-    duration_prompt = suno.get("duration_prompt", "")
     style_influence = suno.get("style_influence", 50)
 
     base_parts = [genre_line]
@@ -83,8 +82,6 @@ def generate(patterns_path: Path) -> str:
             if tempo:
                 parts.append(tempo)
             parts.append(effective_style)
-            if duration_prompt:
-                parts.append(duration_prompt)
             lines.append(", ".join(parts) + ",")
             lines.append(scene)
             lines.append("```")

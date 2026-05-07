@@ -1,145 +1,131 @@
-# youtube-channels-automation
+# CLAUDE.md
 
-YouTube チャンネル運営を自動化するツールキット。git+https インストール（推奨）またはサブモジュール（後方互換）でチャンネルリポジトリに導入する。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## コマンド
+## プロジェクト概要
+
+YouTube チャンネル運営を自動化するツールキット。`youtube-channels-automation` パッケージとして配布し、各チャンネルリポジトリへ git+https または submodule 経由で導入される。Analytics 収集、AI コンテンツ生成（Lyria / Veo / Gemini / Suno）、動画アップロード、メタデータ生成、ベンチマーク分析を統合提供する。
+
+## プロジェクト固有コマンド
 
 ```bash
-uv sync --extra dev                 # 開発用依存含めて解決
-uv run pytest                       # テスト実行
-uv run ruff check .                 # lint
-uv run ruff format .                # フォーマット
-uv run yt-skills sync               # チャンネルリポジトリへスキル配布
-uv run yt-skills list               # 同梱スキル一覧
-uv run yt-skills diff               # 同梱版との差分確認
-uv run yt-config-migrate diff       # v1 → v2 config 分割のプレビュー
-uv run yt-config-migrate migrate --apply   # config/channel_config.json を分割
-uv run yt-config-migrate verify     # 新 loader で読み込み検証
+uv run yt-skills sync                       # チャンネルリポジトリへ .claude/skills を配布
+uv run yt-skills list                       # 同梱スキル一覧
+uv run yt-skills diff                       # 同梱版との差分確認
+uv run yt-config-migrate diff               # 旧 channel_config.json → 責務別分割のプレビュー
+uv run yt-config-migrate migrate --apply    # 実際に分割実行
+uv run yt-config-migrate verify             # 新 loader で読み込み検証
 ```
 
-CLI スクリプトは `pyproject.toml` `[project.scripts]` 配下に **`yt-*` プレフィックス**で登録する（例: `yt-analytics`, `yt-upload-collection`）。新規追加時もこの規約を踏襲。
+`yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。
 
 ## アーキテクチャ
 
-```
-youtube-channels-automation/         # ← このリポジトリ
-├── pyproject.toml                   # hatchling / [project.scripts] entry points
-├── src/
-│   └── youtube_automation/
-│       ├── utils/                   # コアライブラリ（設定, API, 分析, アップロード）
-│       ├── agents/                  # アップロードエージェント（Auto/Collection）
-│       ├── auth/                    # OAuth 2.0 認証（YouTubeOAuthHandler）
-│       ├── scripts/                 # CLI スクリプト（analytics, upload, AI 生成）
-│       ├── cli/                     # ユーザー向け CLI ツール (yt-skills)
-│       └── templates/               # 説明文 Markdown テンプレート
-├── .claude/skills/                  # Claude Code スキル群（yt-skills sync で配布）
-├── tests/                           # pytest テストスイート
-├── scripts/*.sh                     # シェルスクリプト（worktree_sync.sh 等）
-└── auth/client_secrets.json         # (gitignored) ローカル開発用 OAuth 認証情報
-```
+このリポジトリは **このリポジトリ自体** と **下流のチャンネルリポジトリ** の 2 層構造で動く。
 
-downstream のチャンネルリポジトリ:
+### 自リポジトリ
+
+- `src/youtube_automation/utils/` — コアライブラリ（設定ローダー、API クライアント、analytics、upload）
+- `src/youtube_automation/agents/` — アップロードエージェント（Auto / Collection）
+- `src/youtube_automation/scripts/` — `yt-*` CLI 本体
+- `src/youtube_automation/cli/` — ユーザー向け CLI（`yt-skills`, `yt-config-migrate`, `yt-cost-report`）
+- `src/youtube_automation/templates/` — 説明文テンプレート
+- `.claude/skills/` — Claude Code スキル群。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
+- `utils/`, `agents/`, `auth/`, `scripts/` — submodule 利用者向け **後方互換 shim**（新規開発は `src/youtube_automation/` 側で行う）
+
+### 下流チャンネルリポジトリ（`CHANNEL_DIR` が指す先）
 
 ```
-channel-repo/                  # チャンネル固有リポジトリ
-├── config/
-│   ├── channel/               # チャンネル設定（責務別分割、v2.0.0 以降）
-│   │   ├── meta.json          #   channel / youtube_channel
-│   │   ├── content.json       #   genre / tags / descriptions / title
-│   │   ├── youtube.json       #   youtube / music_engine / content_model
-│   │   ├── analytics.json     #   analytics / benchmark (optional)
-│   │   ├── playlists.json     #   playlists (optional)
-│   │   ├── workflow.json      #   (v4.0.0 で short / community 撤去、後方互換で素通し)
-│   │   └── audio.json         #   audio (optional)
-│   └── localizations.json     # 多言語テンプレート（config/ 直下）
-├── auth/                      # チャンネル固有 OAuth 認証
-│   ├── client_secrets.json
-│   └── token.json
-├── .claude/skills/            # yt-skills sync で展開
-└── collections/               # コンテンツ成果物（音源, 動画, サムネイル）
+config/channel/         # 責務別分割設定（v2.0.0 以降）
+  meta.json             # channel / youtube_channel
+  content.json          # genre / tags / descriptions / title
+  youtube.json          # youtube / music_engine / content_model
+  analytics.json        # analytics / benchmark
+  playlists.json        # playlists
+  workflow.json         # (v4.0.0 で short / community 撤去、後方互換で素通し)
+  audio.json            # audio
+config/localizations.json
+auth/{client_secrets,token}.json
+.claude/skills/         # yt-skills sync で展開
+collections/            # コンテンツ成果物
 ```
 
 ## 主要モジュール
 
 | モジュール | 責務 |
-|-----------|------|
-| `youtube_automation.utils.config` | `config/channel/*.json` の glob ロード・バリデーション。`load_config()` / `channel_dir()` / `reset()` / `ChannelConfig` を export |
-| `youtube_automation.utils.config.meta` / `content` / `youtube` / `analytics` / `playlists` / `workflow` / `audio` / `localizations` | 責務別 dataclass（`ChannelMeta`, `Content`, `YoutubeSection` 等） |
-| `youtube_automation.cli.config_migrate` | `yt-config-migrate` 本体（旧 `channel_config.json` → `config/channel/*.json` 変換） |
-| `youtube_automation.utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
-| `youtube_automation.utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
-| `youtube_automation.utils.exceptions` | ドメイン固有例外（ConfigError, YouTubeAPIError 等） |
-| `youtube_automation.utils.collection_paths` | コレクションディレクトリ構造の解決 |
-| `youtube_automation.utils.metadata_generator` | タイトル・説明文・タグ・ローカライゼーション自動生成 |
-| `youtube_automation.utils.analytics_collector` | Analytics API データ収集（Mixin 構成、`VideoDailyAnalyticsMixin` で動画×日次取得） |
-| `youtube_automation.utils.analytics_analyzer` | CTR・エンゲージメント分析（レガシー、statistics ベース） |
-| `youtube_automation.utils.launch_curve_data` / `launch_curve_analyzer` / `launch_curve_plotter` | 動画別 launch curve + 過去ベンチマーク（pandas/matplotlib） |
-| `youtube_automation.utils.channel_trend` | チャンネル日次トレンド + 異常検知（pandas rolling） |
-| `youtube_automation.utils.theme_performance` | テーマ別平均曲線比較 |
-| `youtube_automation.utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量抽出 + CTR/views 相関（Pillow） |
-| `youtube_automation.utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え）。`get_provider()` / `load_image_generation_config()` / `ImageGenerationRequest` を export |
-| `youtube_automation.auth.oauth_handler` | OAuth 2.0 トークン管理・リフレッシュ |
-| `youtube_automation.utils.secrets` | シークレット解決（env → 1Password CLI → ConfigError） |
-| `youtube_automation.cli.skills_sync` | `yt-skills` コマンド本体 |
+|---|---|
+| `utils.config` | `config/channel/*.json` の glob ロード／バリデーション。`load_config()` / `channel_dir()` / `reset()` / `ChannelConfig` を export |
+| `utils.config.{meta,content,youtube,analytics,playlists,workflow,audio,localizations}` | 責務別 dataclass |
+| `cli.config_migrate` | `yt-config-migrate` 本体（v1 → v2 変換） |
+| `utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
+| `utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
+| `utils.exceptions` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
+| `utils.collection_paths` | コレクションディレクトリ構造の解決 |
+| `utils.metadata_generator` | タイトル・説明文・タグ・ローカライゼーション生成 |
+| `utils.analytics_collector` | Analytics API 収集（Mixin 構成、`VideoDailyAnalyticsMixin` で動画×日次取得） |
+| `utils.launch_curve_*` / `channel_trend` / `theme_performance` | 視聴推移分析（pandas / matplotlib） |
+| `utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量＋ CTR/views 相関（Pillow） |
+| `utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
+| `auth.oauth_handler` | OAuth 2.0 トークン管理 |
+| `utils.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
+| `cli.skills_sync` | `yt-skills` 本体 |
 
 ## 開発規約
 
-### Python
-- Python 3.11+
-- リンター: ruff（E, F, I, W）
-- 行長: 120 文字
-- テスト: pytest
-- パッケージマネージャ: uv
+### 設定アクセス
 
-### エラーハンドリング
-- `utils/exceptions.py` のドメイン例外を使用すること
-- 生の `Exception` / `KeyError` を catch しない — `ConfigError`, `YouTubeAPIError` 等を使う
-- API 呼び出しには適切なリトライ・タイムアウトを設定
-
-### 設定
-- チャンネル固有値は必ず `load_config()` 経由で参照（`from youtube_automation.utils.config import load_config`）
-- 責務別ネームスペースでアクセス: `config.meta.channel_name` / `config.content.tags.base` / `config.youtube.api.category_id` など
+- チャンネル固有値は **必ず** `from youtube_automation.utils.config import load_config` 経由で取得
+- 責務別ネームスペースでアクセス: `config.meta.channel_name` / `config.content.tags.base` / `config.youtube.api.category_id`
 - ハードコーディング禁止 — `config/channel/*.json` に集約
 - 新しい設定キーを追加する場合:
   1. 該当責務の dataclass（`utils/config/<section>.py`）にフィールド追加
   2. `utils/config/loader.py::_build_*` で JSON からの組み立てを追加
   3. 必須キーであれば `_REQUIRED_KEYS_BY_SECTION` にも登録
-- サンプル設定は `examples/channel_config.example/`（7 ファイル）と `examples/localizations.example.json`
 - Path のみ必要な場合（loader を起動したくない）は `channel_dir()` を使う
+- サンプルは `examples/channel_config.example/`（7 ファイル）と `examples/localizations.example.json`
+
+### エラーハンドリング
+
+- `utils/exceptions.py` のドメイン例外を使用すること
+- 生の `Exception` / `KeyError` を catch しない — `ConfigError`, `YouTubeAPIError` 等を使う
+- `YouTubeAPIError.from_http_error(error, context)` で googleapiclient の HttpError を変換できる
 
 ### Import 規約
-- パッケージ内コードは必ず `from youtube_automation.xxx import ...` の fully-qualified import を使用
+
+- パッケージ内コードは必ず `from youtube_automation.xxx import ...` の fully-qualified import を使う
 - ルート直下の `scripts/` にはシェルスクリプト（`.sh`）のみ配置。Python shim は廃止済み
 
+### スクリプト配置
+
+- **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`、`.claude/skills/lyria/references/generate_music.py`）
+- ルート `scripts/` には複数の文脈から共有される **共通スクリプトのみ** を置く（例: `gcp-bootstrap.sh`, `gcp-terraform-apply.sh`）
+- 単一 skill からしか呼ばれないものを `scripts/` に残すと、skill の自己完結性が崩れて配布時に取り残されるので避ける
+
 ### テスト
-- `tests/conftest.py` が `src/` を sys.path に追加し `CHANNEL_DIR` をフィクスチャに向ける
-- `youtube_automation.utils.config.reset()` / `ServiceRegistry.reset()` でシングルトンをリセット
-- `tests/fixtures/sample_channel/config/channel/*.json` にテストデータを配置（新構造）
+
+- `tests/conftest.py` が `src/` を sys.path に追加し `CHANNEL_DIR` を `tests/fixtures/sample_channel/` に向ける
+- `_reset_config_singleton` autouse fixture が各テスト前後で `utils.config.reset()` を呼ぶ。**追加で** `ServiceRegistry.reset()` が必要なテストは個別に呼ぶこと
 - ユニット: `tests/test_*.py` / 統合: `tests/integration/`（API・外部依存あり）
+- フィクスチャ JSON は新構造（`config/channel/*.json`）で配置
 
 ### パッケージング
-- ビルドバックエンド: hatchling (`[build-system]` 参照)
-- パッケージレイアウト: `src/youtube_automation/` (PyPA src layout)
-- `.claude/skills/` は `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_skills/` に同梱され、`yt-skills sync` で配布される
-- 新しい CLI スクリプトを追加するときは `pyproject.toml` の `[project.scripts]` にも entry point を登録すること
-- バージョン bump は `pyproject.toml` `version` と `src/youtube_automation/__init__.py` の `__version__` の両方
+
+- `.claude/skills/` は `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_skills/` に同梱され、`yt-skills sync` が `importlib.resources` で参照する
+- バージョン bump は `pyproject.toml` の `version` と `src/youtube_automation/__init__.py` の `__version__` の **両方**
 
 ## セキュリティ
 
 - `auth/client_secrets.json` / `auth/token.json` / `.env` は **絶対にコミットしない**
-- API キーは環境変数経由（`.env` または 1Password CLI）
-- OAuth スコープは必要最小限に制限
-- シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`。参照は `utils/secrets.py` の `_SECRET_REFS` で定義
+- シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`
+- 参照定義は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）
+- AI 系（Vertex AI）は ADC 認証のため `op` 取得は不要
 
 ## 開発ワークフロー
 
-このリポジトリの開発は **takt + GitHub issue** に乗せる。手作業でブランチを切らず、
-`takt-issue` スキル経由で issue → worktree → PR を統一手順化する。手順詳細は
-`~/01-dev/dotfiles/config/.claude/skills/takt-issue/SKILL.md`。
+このリポジトリの開発は **takt + GitHub issue** に乗せる。手作業でブランチを切らず、`takt-issue` スキル経由で issue → worktree → PR を統一手順化する。
 
 - **issue 起票**: `gh issue create` または `/issue` スキル
 - **takt 起動**: `takt add '#<N>'` → `takt run`（base branch は **main** 固定、PR は通常 PR）
-- **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`。詳細は `commit-convention` スキル参照
-- **takt 設定**: リポジトリ固有 `.takt/config.yaml`（`draft_pr: false`）、
-  グローバル `~/.takt/config.yaml`（`provider: claude`, `language: ja`）。
-  workflow は組み込み **default**（plan → review → ... → reviewers の 9 step）
+- **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`。`commit-convention` スキル参照
+- **takt 設定**: リポジトリ固有 `.takt/config.yaml`（`draft_pr: false`）、グローバル `~/.takt/config.yaml`（`provider: claude`, `language: ja`）
+- workflow は組み込み **default**（plan → review → ... → reviewers の 9 step）

@@ -1,6 +1,6 @@
-# description skill default config
+# video-description skill default config
 #
-# 概要欄生成の設定。チャンネル側では config/skills/description.yaml に上書き値を置く。
+# 概要欄生成の設定。チャンネル側では config/skills/video-description.yaml に上書き値を置く。
 #
 # 注意: tags.base / title.template / descriptions.opening / perfect_for / hashtags は
 # 複数スキル（metadata_generator / short / upload 等）から参照される横断属性のため、

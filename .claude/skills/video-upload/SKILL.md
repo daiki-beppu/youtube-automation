@@ -1,11 +1,11 @@
 ---
-name: upload
+name: video-upload
 description: Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行
 ---
 
 ## Overview
 
-Complete Collection を YouTube にアップロードし、`planning/` → `live/` へ自動移行します。`/description` スキルで事前生成した概要欄・タイトル・タグを使用します。
+Complete Collection を YouTube にアップロードし、`planning/` → `live/` へ自動移行します。`/video-description` スキルで事前生成した概要欄・タイトル・タグを使用します。
 
 ## 前提
 
@@ -24,8 +24,8 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/upload collections/planning/20260304-clm-fairy-forest-collection` |
-| 未指定 | `collections/planning/` から自動検出 | `/upload` |
+| `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/video-upload collections/planning/20260304-clm-fairy-forest-collection` |
+| 未指定 | `collections/planning/` から自動検出 | `/video-upload` |
 
 ## Channel Adaptation
 
@@ -67,7 +67,7 @@ $ARGUMENTS
 
 1. **マスター動画**: `01-master/*.mp4` または `03-Individual-movie/*master*.mp4` — 存在しなければエラー終了
 2. **サムネイル**: `10-assets/thumbnail.jpg` — 存在しなければエラー終了
-3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/description` スキルを実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
+3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/video-description` スキルを実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
 
 ### アップロードフロー
 
