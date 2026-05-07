@@ -13,8 +13,11 @@ CLI モード:
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from youtube_automation.cli import stream_bandwidth
 
@@ -85,18 +88,28 @@ def test_default_mode_prints_summary_no_webhook(capsys):
     """Given 引数なし
     When CLI を実行
     Then 現状サマリが stdout に出力され、webhook 投稿は呼ばれない。
+
+    `today()` を当月 (2026-04) の月末に凍結することで、fixture 由来の
+    100 GB が `monthly_total_gb` に反映されることを保証する。`today()`
+    patch を外すと `"100.0 GB"` assertion が失敗するため、当月不一致
+    fixture による偽陽性 pass を防ぐ。
     """
-    bw = {"2026-04-01": {"incoming_bytes": 1024**3, "outgoing_bytes": 0}}
+    # 当月 100 GB (1024**3 * 100 bytes)
+    bw = {"2026-04-01": {"incoming_bytes": 1024**3 * 100, "outgoing_bytes": 0}}
     mocks = _patch_all(bandwidth=bw)
     enters = _enter(mocks)
     try:
-        rc = stream_bandwidth.main(["--instance-id", "VULTR_X"])
+        with patch(
+            "youtube_automation.cli.stream_bandwidth.today",
+            return_value=date(2026, 4, 30),
+        ):
+            rc = stream_bandwidth.main(["--instance-id", "VULTR_X"])
     finally:
         _exit(mocks)
     assert rc == 0
     out = capsys.readouterr().out
-    # サマリ出力を確認 (GB を含む)
-    assert "GB" in out
+    # patch を外すと "0.0 GB" になり失敗する形にすることでリグレッションを検出
+    assert "100.0 GB" in out
     # notify は呼ばれない
     notify_mock = enters[4]
     notify_mock.assert_not_called()
@@ -130,6 +143,41 @@ def test_report_mode_calls_notify_with_formatted_text():
     assert webhook_url == "https://example.com/hook"
     assert content is not None
     assert "2026-04" in content
+
+
+def test_report_mode_emits_na_when_previous_month_has_no_data():
+    """Given 前月キーを持たない fixture
+    When --report --month 2026-04
+    Then notify content に "N/A" / "前月データなし" が含まれる。
+
+    `cli/stream_bandwidth.py:136-139` の `previous_usage_gb == 0 → None` 変換と、
+    `monthly_report._format_diff_gb` (`utils/streaming/monthly_report.py:20-23`) の
+    `"前月比: N/A (前月データなし)"` 出力経路を結合検証する。前月キー (2026-03-*) を
+    fixture に含めないことで `monthly_total_gb` が 0.0 を返す経路を素直に通す。
+    """
+    # 対象月 2026-04 のキーのみ (前月 2026-03 のキーなし)
+    bw = {"2026-04-15": {"incoming_bytes": 1024**3 * 200, "outgoing_bytes": 0}}
+    mocks = _patch_all(bandwidth=bw)
+    enters = _enter(mocks)
+    # `_run_report` は --month 明示時 today() を経由しないが、_previous_month の
+    # 引数解決と将来の経路変化に備えて凍結し意図を固定する。
+    with patch(
+        "youtube_automation.cli.stream_bandwidth.today",
+        return_value=date(2026, 5, 1),
+    ):
+        try:
+            rc = stream_bandwidth.main(["--report", "--month", "2026-04", "--instance-id", "VULTR_X"])
+        finally:
+            _exit(mocks)
+    assert rc == 0
+    notify_mock = enters[4]
+    notify_mock.assert_called_once()
+    kwargs = notify_mock.call_args.kwargs
+    args = notify_mock.call_args.args
+    content = kwargs.get("content") if "content" in kwargs else (args[0] if args else None)
+    assert content is not None
+    assert "N/A" in content
+    assert "前月データなし" in content
 
 
 def test_report_mode_defaults_to_previous_month_when_month_not_given():
@@ -200,18 +248,35 @@ def test_check_threshold_silent_when_under_threshold():
     """Given usage が閾値未満
     When --check-threshold
     Then notify は呼ばれない (silent)。
+
+    silent モードは stdout を持たないため `notify.assert_not_called()` だけでは
+    0 GB 経路と 100 GB 経路を区別できない。`today()` を当月に凍結したうえで
+    `is_over_threshold` を spy 化し、call_args.usage_gb=100.0 を verify する
+    ことで、fixture 由来の usage が閾値判定に届いていることを白箱検証する。
     """
     # 100 GB (閾値 1638.4 GB を大きく下回る)
     bw = {"2026-04-15": {"incoming_bytes": 1024**3 * 100, "outgoing_bytes": 0}}
     mocks = _patch_all(bandwidth=bw)
     enters = _enter(mocks)
     try:
-        rc = stream_bandwidth.main(["--check-threshold", "--instance-id", "VULTR_X"])
+        with (
+            patch(
+                "youtube_automation.cli.stream_bandwidth.today",
+                return_value=date(2026, 4, 30),
+            ),
+            patch(
+                "youtube_automation.cli.stream_bandwidth.is_over_threshold",
+                return_value=False,
+            ) as mock_threshold,
+        ):
+            rc = stream_bandwidth.main(["--check-threshold", "--instance-id", "VULTR_X"])
     finally:
         _exit(mocks)
     assert rc == 0
     notify_mock = enters[4]
     notify_mock.assert_not_called()
+    # 閾値判定は fixture 由来の 100 GB で評価されている (0 GB 経路の偽陽性ではない)
+    assert mock_threshold.call_args.kwargs["usage_gb"] == pytest.approx(100.0)
 
 
 def test_check_threshold_alerts_when_over_80_percent():
@@ -330,8 +395,6 @@ def test_help_flag_prints_usage_with_zero_exit(capsys):
     `print_help()` を経由して `format_help()` を呼ぶため、内部で
     例外が起きると SystemExit(0) ではなく未捕捉例外で死ぬ。
     """
-    import pytest
-
     with pytest.raises(SystemExit) as exc_info:
         stream_bandwidth.main(["--help"])
 
