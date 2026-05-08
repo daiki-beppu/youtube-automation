@@ -24,6 +24,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
+
 # ---------- パス定数 ----------
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -46,56 +48,6 @@ _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
 
 
 # ---------- ヘルパー ----------
-
-
-def _strip_hcl_comments(text: str) -> str:
-    """行コメント (``#`` / ``//``) と ``/* ... */`` ブロックコメントを除去する。
-
-    HCL の構文解析はせず、コメント行で false-positive のマッチを起こさないための前処理。
-    文字列リテラル内の ``#`` などは想定しない（本テスト対象の HCL は素直な構造のみ）。
-    """
-    # ブロックコメント (greedy にならないよう非貪欲)
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-    # 行コメント
-    cleaned_lines: list[str] = []
-    for line in text.splitlines():
-        # `#` が文字列内にあるケースは本テストの対象 HCL では発生しないため単純に切る
-        for marker in ("#", "//"):
-            idx = line.find(marker)
-            if idx >= 0:
-                line = line[:idx]
-        cleaned_lines.append(line)
-    return "\n".join(cleaned_lines)
-
-
-def _read(path: Path) -> str:
-    if not path.exists():
-        pytest.fail(f"必須ファイルが存在しない: {path.relative_to(_REPO_ROOT)}")
-    return path.read_text(encoding="utf-8")
-
-
-def _extract_block(text: str, header_pattern: str) -> str | None:
-    """``header { ... }`` または ``header = { ... }`` のトップレベルブロックを 1 つ抜き出す。
-
-    ``header_pattern`` は header 行（``{`` 直前まで）にマッチする正規表現。
-    ネストした ``{ }`` を 1 段までカウントしてマッチ範囲を確定する。
-    HCL の ``required_providers`` 内は ``name = { ... }``（オブジェクトリテラル）
-    形式のため、ヘッダーと ``{`` の間に任意で ``=`` を許容する。
-    """
-    match = re.search(header_pattern + r"\s*=?\s*\{", text)
-    if not match:
-        return None
-    start = match.end()  # `{` の直後
-    depth = 1
-    for i in range(start, len(text)):
-        ch = text[i]
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start:i]
-    return None
 
 
 def _extract_yaml_packages_block(text: str) -> str | None:
@@ -126,8 +78,8 @@ class TestVersionsTf:
         When terraform ブロックを読む
         Then required_version は ">= 1.5" を含む（既存 gcp/versions.tf と同じ最低保証）。
         """
-        text = _strip_hcl_comments(_read(_VERSIONS_TF))
-        terraform_block = _extract_block(text, r"terraform")
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None, "terraform { ... } ブロックが存在しない"
         assert re.search(r'required_version\s*=\s*"[^"]*>=\s*1\.5', terraform_block), (
             "required_version が >= 1.5 を含んでいない"
@@ -138,12 +90,12 @@ class TestVersionsTf:
         When required_providers ブロックを読む
         Then vultr.source = "vultr/vultr" が宣言されている。
         """
-        text = _strip_hcl_comments(_read(_VERSIONS_TF))
-        terraform_block = _extract_block(text, r"terraform")
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None
-        rp_block = _extract_block(terraform_block, r"required_providers")
+        rp_block = extract_block(terraform_block, r"required_providers")
         assert rp_block is not None, "required_providers ブロックが存在しない"
-        vultr_block = _extract_block(rp_block, r"vultr")
+        vultr_block = extract_block(rp_block, r"vultr")
         assert vultr_block is not None, "required_providers.vultr が宣言されていない"
         assert re.search(r'source\s*=\s*"vultr/vultr"', vultr_block), (
             'required_providers.vultr.source が "vultr/vultr" でない'
@@ -154,12 +106,12 @@ class TestVersionsTf:
         When required_providers.vultr.version を読む
         Then ">= 2" を含む制約が宣言されている（order.md「>= 2.x」）。
         """
-        text = _strip_hcl_comments(_read(_VERSIONS_TF))
-        terraform_block = _extract_block(text, r"terraform")
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None
-        rp_block = _extract_block(terraform_block, r"required_providers")
+        rp_block = extract_block(terraform_block, r"required_providers")
         assert rp_block is not None
-        vultr_block = _extract_block(rp_block, r"vultr")
+        vultr_block = extract_block(rp_block, r"vultr")
         assert vultr_block is not None
         assert re.search(r'version\s*=\s*"[^"]*>=\s*2', vultr_block), (
             "required_providers.vultr.version が >= 2 を満たしていない"
@@ -172,8 +124,8 @@ class TestVersionsTf:
 
         secret を hardcode せず変数経由で受け取る最重要要件。
         """
-        text = _strip_hcl_comments(_read(_VERSIONS_TF))
-        provider_block = _extract_block(text, r'provider\s+"vultr"')
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        provider_block = extract_block(text, r'provider\s+"vultr"')
         assert provider_block is not None, 'provider "vultr" ブロックが存在しない'
         assert re.search(r"api_key\s*=\s*var\.vultr_api_key", provider_block), (
             "provider.vultr.api_key が var.vultr_api_key を参照していない"
@@ -193,8 +145,8 @@ class TestVariablesTf:
         When vultr_api_key 変数定義を読む
         Then sensitive = true でかつ default は宣言されていない（Fail Fast）。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"vultr_api_key"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"vultr_api_key"')
         assert block is not None, 'variable "vultr_api_key" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "vultr_api_key.type が string でない"
         assert re.search(r"sensitive\s*=\s*true", block), "vultr_api_key.sensitive = true が無い"
@@ -208,8 +160,8 @@ class TestVariablesTf:
         When ssh_pub_key_path 変数定義を読む
         Then default が "~/.ssh/yt_stream_key.pub"。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"ssh_pub_key_path"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"ssh_pub_key_path"')
         assert block is not None, 'variable "ssh_pub_key_path" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "ssh_pub_key_path.type が string でない"
         assert re.search(r'default\s*=\s*"~/\.ssh/yt_stream_key\.pub"', block), (
@@ -222,8 +174,8 @@ class TestVariablesTf:
         When region 変数定義を読む
         Then default が "nrt"（東京）。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"region"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"region"')
         assert block is not None, 'variable "region" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "region.type が string でない"
         assert re.search(r'default\s*=\s*"nrt"', block), 'region.default が "nrt" でない'
@@ -234,8 +186,8 @@ class TestVariablesTf:
         When plan 変数定義を読む
         Then default が "vc2-1c-2gb"（$10/月、2GB RAM）。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"plan"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"plan"')
         assert block is not None, 'variable "plan" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "plan.type が string でない"
         assert re.search(r'default\s*=\s*"vc2-1c-2gb"', block), 'plan.default が "vc2-1c-2gb" でない'
@@ -246,8 +198,8 @@ class TestVariablesTf:
         When os_id 変数定義を読む
         Then type が number でかつ default が 2284（Ubuntu 24.04 LTS x64 の Vultr OS ID）。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"os_id"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"os_id"')
         assert block is not None, 'variable "os_id" が存在しない'
         assert re.search(r"type\s*=\s*number", block), "os_id.type が number でない（API は integer）"
         assert re.search(r"default\s*=\s*2284\b", block), "os_id.default が 2284 でない"
@@ -269,8 +221,8 @@ class TestMainTf:
 
         ``~`` 展開のため file() の前段に pathexpand() を必ず噛ませる必要がある。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_ssh_key"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_ssh_key"\s+"this"')
         assert block is not None, 'resource "vultr_ssh_key" "this" が存在しない'
         assert re.search(
             r"ssh_key\s*=\s*file\(\s*pathexpand\(\s*var\.ssh_pub_key_path\s*\)\s*\)",
@@ -282,8 +234,8 @@ class TestMainTf:
         When vultr_instance.this を探す
         Then 定義されている。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None, 'resource "vultr_instance" "this" が存在しない'
 
     def test_vultr_instance_references_variables(self):
@@ -291,8 +243,8 @@ class TestMainTf:
         When vultr_instance.this の region/plan/os_id を読む
         Then すべて var.* で結線されている（ハードコード禁止）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(r"region\s*=\s*var\.region", block), "instance.region が var.region でない"
         assert re.search(r"plan\s*=\s*var\.plan", block), "instance.plan が var.plan でない"
@@ -303,8 +255,8 @@ class TestMainTf:
         When vultr_instance.this.ssh_key_ids を読む
         Then [vultr_ssh_key.this.id] で SSH 鍵リソースに結線されている。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(
             r"ssh_key_ids\s*=\s*\[\s*vultr_ssh_key\.this\.id\s*\]",
@@ -318,8 +270,8 @@ class TestMainTf:
 
         Vultr provider v2.x で単数 tag は非推奨。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(r"\btags\s*=\s*\[", block), "tags 属性（複数形）が無い"
         assert re.search(r'tags\s*=\s*\[\s*"youtube-stream"\s*\]', block), 'tags = ["youtube-stream"] の形式でない'
@@ -331,8 +283,8 @@ class TestMainTf:
         When vultr_instance.this.label を読む
         Then "youtube-stream" が設定されている（運用識別用）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(r'label\s*=\s*"youtube-stream"', block), 'label = "youtube-stream" が設定されていない'
 
@@ -344,8 +296,8 @@ class TestMainTf:
         plan §実装アプローチ 4 / coder-decisions §3 で確定された運用識別子であり、
         誤って削除・改変された場合のリグレッションを検出する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(r'hostname\s*=\s*"youtube-stream"', block), 'hostname = "youtube-stream" が設定されていない'
 
@@ -363,8 +315,8 @@ class TestOutputsTf:
         When output "instance_ip" を読む
         Then value = vultr_instance.this.main_ip でかつ description が付いている。
         """
-        text = _strip_hcl_comments(_read(_OUTPUTS_TF))
-        block = _extract_block(text, r'output\s+"instance_ip"')
+        text = strip_hcl_comments(read_file(_OUTPUTS_TF))
+        block = extract_block(text, r'output\s+"instance_ip"')
         assert block is not None, 'output "instance_ip" が存在しない'
         assert re.search(r"value\s*=\s*vultr_instance\.this\.main_ip", block), (
             "instance_ip.value が vultr_instance.this.main_ip でない"
@@ -376,8 +328,8 @@ class TestOutputsTf:
         When output "instance_id" を読む
         Then value = vultr_instance.this.id でかつ description が付いている。
         """
-        text = _strip_hcl_comments(_read(_OUTPUTS_TF))
-        block = _extract_block(text, r'output\s+"instance_id"')
+        text = strip_hcl_comments(read_file(_OUTPUTS_TF))
+        block = extract_block(text, r'output\s+"instance_id"')
         assert block is not None, 'output "instance_id" が存在しない'
         assert re.search(r"value\s*=\s*vultr_instance\.this\.id\b", block), (
             "instance_id.value が vultr_instance.this.id でない"
@@ -407,7 +359,7 @@ class TestTfvarsExample:
 
         secret は TF_VAR_vultr_api_key 経由で渡す前提で、サンプルにも値を書かない。
         """
-        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        text = strip_hcl_comments(read_file(_TFVARS_EXAMPLE))
         # コメント除去後に `vultr_api_key = ...` が残っていないこと
         assert not re.search(r"^\s*vultr_api_key\s*=", text, flags=re.MULTILINE), (
             "vultr_api_key の代入がアクティブ行に存在する（secret 漏洩リスク）"
@@ -418,7 +370,7 @@ class TestTfvarsExample:
         When ファイル内容（コメント込み）を読む
         Then TF_VAR_vultr_api_key の使い方がコメントに記載されている。
         """
-        raw = _read(_TFVARS_EXAMPLE)
+        raw = read_file(_TFVARS_EXAMPLE)
         assert "TF_VAR_vultr_api_key" in raw, (
             "TF_VAR_vultr_api_key の案内コメントが無い（運用者が secret 注入方法を発見できない）"
         )
@@ -435,7 +387,7 @@ class TestRootGitignoreTerraformEntries:
     @pytest.fixture
     def gitignore_lines(self) -> list[str]:
         """空白除去・空行除外した非コメント行のリスト。"""
-        text = _read(_ROOT_GITIGNORE)
+        text = read_file(_ROOT_GITIGNORE)
         return [line.strip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
     def test_ignores_terraform_tfvars(self, gitignore_lines: list[str]):
@@ -499,7 +451,7 @@ class TestCloudInitYaml:
         Then 存在し、先頭が ``#cloud-config`` で始まる（cloud-init 必須ヘッダー）。
         """
         assert _CLOUD_INIT_YAML.exists(), "cloud-init.yaml が存在しない"
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         first_line = text.splitlines()[0] if text.splitlines() else ""
         assert first_line.strip() == "#cloud-config", (
             f"先頭行が #cloud-config でない: {first_line!r}（cloud-init が認識しない）"
@@ -513,7 +465,7 @@ class TestCloudInitYaml:
         新規 ``package_upgrade: true`` 追記時に既存 ``package_update`` を誤って書換・削除して
         いないことも本テストで保証する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(r"^package_update:\s*true\b", text, flags=re.MULTILINE), (
             "package_update: true が宣言されていない（apt update が走らない）"
         )
@@ -526,7 +478,7 @@ class TestCloudInitYaml:
         streaming systemd unit で動画変換に必須の前提パッケージ。
         #172 hardening の ``# ...`` 省略表記による誤削除リグレッションも本テストで担保する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         packages_block = _extract_yaml_packages_block(text)
         assert packages_block is not None, "packages: リストブロックが存在しない"
         assert re.search(r"^\s*-\s*ffmpeg\b", packages_block, flags=re.MULTILINE), (
@@ -540,7 +492,7 @@ class TestCloudInitYaml:
 
         ``install -d -m 0755 -o root -g root <path>`` 形式でパーミッションと所有者を明示する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
             r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/videos\b",
             text,
@@ -551,7 +503,7 @@ class TestCloudInitYaml:
         When runcmd を読む
         Then ``/opt/youtube-stream/logs`` を root:root, 0755 で作成するコマンドがある (R4)。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
             r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/logs\b",
             text,
@@ -564,7 +516,7 @@ class TestCloudInitYaml:
 
         owner=root:root, permissions='0644' の典型的な systemd unit 配置メタデータも併せて検証。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(r"^write_files:", text, flags=re.MULTILINE), "write_files: ブロックが存在しない"
         assert re.search(
             r"path:\s*/etc/systemd/system/youtube-stream\.service\b",
@@ -583,7 +535,7 @@ class TestCloudInitYaml:
         plan の「templatefile 経由」+「YAML インデント整合のため indent() を使う」を検証。
         直書き（複数行リテラル）にすると外側 templatefile からの注入経路が消えるため必須。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(r"\$\{\s*indent\(\s*\d+\s*,\s*systemd_unit\s*\)\s*\}", text), (
             "write_files.content が ${indent(N, systemd_unit)} で埋め込まれていない"
             "（直書きだと systemd unit が templatefile 経由にならない）"
@@ -594,7 +546,7 @@ class TestCloudInitYaml:
         When runcmd を読む
         Then 末尾近くで ``systemctl daemon-reload`` が実行される (R6)。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(r"\bsystemctl\s+daemon-reload\b", text), (
             "systemctl daemon-reload が runcmd に無い（write_files 後にユニット定義が認識されない）"
         )
@@ -606,7 +558,7 @@ class TestCloudInitYaml:
 
         order.md cloud-init §4「``enable --now`` は #125 で対応」のスコープ越境を防ぐ。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert not re.search(r"\bsystemctl\s+enable\b", text), (
             "systemctl enable を実行してはならない（#125 の責務、ここで起動すると .env 不在で失敗する）"
         )
@@ -623,7 +575,7 @@ class TestCloudInitYaml:
 
         `user_data` に含めると Vultr API 経由で漏洩するため、ここに secret を書かない。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         # ありがちな漏洩パターン（YAML 値として `=` ではなく `:` を使うが念のため両対応）
         assert not re.search(r"\brtmp://[^\s'\"]+", text), "rtmp:// URL が直書きされている（secret 漏洩リスク）"
         assert not re.search(r"\bRTMP_URL\s*[:=]\s*['\"]?rtmp", text), (
@@ -649,7 +601,7 @@ class TestCloudInitYaml:
         cloud-init レイヤで SSH パスワード認証を無効化し、
         Vultr/Ubuntu イメージの初期デフォルトへの依存を解消する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(r"^ssh_pwauth:\s*false\b", text, flags=re.MULTILINE), (
             "ssh_pwauth: false がトップレベルで宣言されていない"
             "（cloud-init レイヤの SSH パスワード認証無効化が欠落、初期デフォルト依存）"
@@ -662,7 +614,7 @@ class TestCloudInitYaml:
 
         初期構築時のセキュリティパッチ適用を保証する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(r"^package_upgrade:\s*true\b", text, flags=re.MULTILINE), (
             "package_upgrade: true がトップレベルで宣言されていない（初期構築時のセキュリティパッチが未適用になる）"
         )
@@ -674,7 +626,7 @@ class TestCloudInitYaml:
 
         運用中の自動セキュリティパッチ適用パッケージを導入する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         packages_block = _extract_yaml_packages_block(text)
         assert packages_block is not None, "packages: リストブロックが存在しない"
         assert re.search(r"^\s*-\s*unattended-upgrades\b", packages_block, flags=re.MULTILINE), (
@@ -690,7 +642,7 @@ class TestCloudInitYaml:
         cloud-init の ``ssh_pwauth: false`` と二重防御で、
         コメント有/無・既存値に関わらず冪等に ``no`` を強制する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         # 同一行に sed / `^#\?PasswordAuthentication` パターン / `PasswordAuthentication no`
         # / sshd_config パスが揃う。正規表現でリテラル `\?` を表すには `\\` (literal バックスラッシュ)
         # + `\?` (escaped 疑問符) で `\\\?` と書く必要がある。
@@ -710,7 +662,7 @@ class TestCloudInitYaml:
 
         Ubuntu のサービス名差異（``ssh`` vs ``sshd``）を OR で吸収する。片寄せ禁止。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
             r"systemctl\s+reload\s+ssh\s*\|\|\s*systemctl\s+reload\s+sshd",
             text,
@@ -726,7 +678,7 @@ class TestCloudInitYaml:
 
         ``unattended-upgrades`` パッケージのインストール後アクティベートを保証する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
             r"dpkg-reconfigure\s+--priority=low\s+unattended-upgrades\b",
             text,
@@ -743,7 +695,7 @@ class TestCloudInitYaml:
 
         早期 hardening の意図に従い、issue 推奨形どおり 3 行を runcmd 先頭に挿入する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         sed_idx = text.find("sed -i")
         reload_idx = text.find("systemctl reload ssh")
         reconfigure_idx = text.find("dpkg-reconfigure")
@@ -769,7 +721,7 @@ class TestCloudInitYaml:
         ``main.tf`` の ``null_resource.deploy`` が ``/etc/cron.d/youtube-stream-healthcheck`` を
         配置する前提で必須のパッケージ。issue 推奨形の ``# ...`` 省略表記による誤削除リグレッションを捕捉する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         packages_block = _extract_yaml_packages_block(text)
         assert packages_block is not None, "packages: リストブロックが存在しない"
         assert re.search(r"^\s*-\s*cron\b", packages_block, flags=re.MULTILINE), (
@@ -785,7 +737,7 @@ class TestCloudInitYaml:
         plan 実装ガイドラインに従い、既存 ``install -d ...`` と同じ裸書きスタイルを維持する。
         外側クォートを付けると YAML 文字列としての挙動が変わり、issue 推奨形からの逸脱になる。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert not re.search(r'^\s*-\s*"sed', text, flags=re.MULTILINE), (
             'runcmd の sed 行が外側を二重引用符で囲まれている（- "sed ..." 形式）'
             "。既存慣習どおりクォートなしの裸書きにすること"
@@ -800,7 +752,7 @@ class TestCloudInitYaml:
         upload する宛先（既存コメント参照）。新規 hardening 3 行先頭挿入時に
         誤って削除されていないことを保証する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
             r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/bin\b",
             text,
@@ -818,7 +770,7 @@ class TestCloudInitYaml:
         regex ベースの個別テストでは捕捉できないため、YAML パーサで包括的に検証する。
         ``yaml.YAMLError`` は明示 try/except せず pytest トレースに伝播させる。
         """
-        loaded = yaml.safe_load(_read(_CLOUD_INIT_YAML))
+        loaded = yaml.safe_load(read_file(_CLOUD_INIT_YAML))
         assert isinstance(loaded, dict), (
             f"cloud-init.yaml が dict としてロードできない（型: {type(loaded).__name__}）"
             "。トップレベルが空・list 化・スカラー化など構文不備の可能性"
@@ -833,7 +785,7 @@ class TestCloudInitYaml:
         dual-purpose ガード。既存の ``re.search`` 系テストは最初の 1 件にマッチして
         重複を見逃すため、件数チェックで補完する。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         matches = re.findall(r"^ssh_pwauth:", text, flags=re.MULTILINE)
         assert len(matches) == 1, f"ssh_pwauth が {len(matches)} 回宣言されている（重複編集 or 欠落リグレッション）"
 
@@ -845,7 +797,7 @@ class TestCloudInitYaml:
         ``package_update``（既存）と紛らわしいため行頭 + コロン込みでアンカーし、
         ``package_upgrade`` 単独の重複/欠落を検知する dual-purpose ガード。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         matches = re.findall(r"^package_upgrade:", text, flags=re.MULTILINE)
         assert len(matches) == 1, (
             f"package_upgrade が {len(matches)} 回宣言されている（重複編集 or 欠落リグレッション）"
@@ -886,7 +838,7 @@ class TestSystemdUnitTemplate:
         When [Unit] セクションを読む
         Then ``Description=`` が宣言されている (R8)。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         unit = self._section(text, "Unit")
         assert unit is not None, "[Unit] セクションが存在しない"
         assert re.search(r"^Description=\S", unit, flags=re.MULTILINE), (
@@ -898,7 +850,7 @@ class TestSystemdUnitTemplate:
         When [Unit] セクションを読む
         Then ``After=network-online.target`` が宣言されている (R9)。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         unit = self._section(text, "Unit")
         assert unit is not None
         assert re.search(r"^After=network-online\.target\s*$", unit, flags=re.MULTILINE), (
@@ -910,7 +862,7 @@ class TestSystemdUnitTemplate:
         When [Service] セクションを読む
         Then ``Type=simple`` が宣言されている (R10)。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None, "[Service] セクションが存在しない"
         assert re.search(r"^Type=simple\s*$", service, flags=re.MULTILINE), "[Service].Type=simple が無い"
@@ -922,7 +874,7 @@ class TestSystemdUnitTemplate:
 
         secret 隔離の核。VIDEO/RTMP_URL を unit 内に直書きせず .env から読む経路を強制する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(
@@ -946,7 +898,7 @@ class TestSystemdUnitTemplate:
         ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO``
         ``-c:v copy -c:a copy -f flv $RTMP_URL``
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         expected = (
@@ -966,7 +918,7 @@ class TestSystemdUnitTemplate:
 
         12h 以上で配信するとアーカイブされない YouTube 仕様の回避策。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^RuntimeMaxSec=11h\s*$", service, flags=re.MULTILINE), (
@@ -978,7 +930,7 @@ class TestSystemdUnitTemplate:
         When [Service] を読む
         Then ``Restart=always`` が宣言されている (R14)。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^Restart=always\s*$", service, flags=re.MULTILINE), (
@@ -990,7 +942,7 @@ class TestSystemdUnitTemplate:
         When [Service] を読む
         Then ``RestartSec=1h`` が宣言されている (R15)。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^RestartSec=1h\s*$", service, flags=re.MULTILINE), (
@@ -1002,7 +954,7 @@ class TestSystemdUnitTemplate:
         When [Install] セクションを読む
         Then ``WantedBy=multi-user.target`` が宣言されている (R16)。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         install = self._section(text, "Install")
         assert install is not None, "[Install] セクションが存在しない"
         assert re.search(r"^WantedBy=multi-user\.target\s*$", install, flags=re.MULTILINE), (
@@ -1017,7 +969,7 @@ class TestSystemdUnitTemplate:
         root 実行 → 動的非特権ユーザ実行への切り替え。demuxer CVE
         （CVE-2023-49502 等）から root RCE への到達経路を遮断する hardening の核。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^DynamicUser=yes\s*$", service, flags=re.MULTILINE), (
@@ -1031,7 +983,7 @@ class TestSystemdUnitTemplate:
 
         setuid バイナリによる権限昇格を遮断する hardening の核。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^NoNewPrivileges=true\s*$", service, flags=re.MULTILINE), (
@@ -1045,7 +997,7 @@ class TestSystemdUnitTemplate:
 
         ``/`` ``/usr`` ``/boot`` ``/etc`` を read-only にする hardening の核。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^ProtectSystem=strict\s*$", service, flags=re.MULTILINE), (
@@ -1059,7 +1011,7 @@ class TestSystemdUnitTemplate:
 
         ``/home`` の不可視化による secret 漏洩経路の遮断。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^ProtectHome=true\s*$", service, flags=re.MULTILINE), (
@@ -1073,7 +1025,7 @@ class TestSystemdUnitTemplate:
 
         ``/tmp`` を namespace で隔離し他プロセスとの共有を遮断する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^PrivateTmp=true\s*$", service, flags=re.MULTILINE), (
@@ -1087,7 +1039,7 @@ class TestSystemdUnitTemplate:
 
         ``/dev`` を最小サブセット化し物理デバイスへの直接アクセスを遮断する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^PrivateDevices=true\s*$", service, flags=re.MULTILINE), (
@@ -1102,7 +1054,7 @@ class TestSystemdUnitTemplate:
         全 capability 剥奪は root RCE 経路の最終遮断。空値 (``=`` の後ろが空) を
         ``\\s*$`` のマッチと ``\\S`` の非マッチで双方向に検証する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^CapabilityBoundingSet=\s*$", service, flags=re.MULTILINE), (
@@ -1119,7 +1071,7 @@ class TestSystemdUnitTemplate:
 
         子プロセスへの capability 引き継ぎ遮断。空値検証は CapabilityBoundingSet と同形式。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^AmbientCapabilities=\s*$", service, flags=re.MULTILINE), (
@@ -1137,7 +1089,7 @@ class TestSystemdUnitTemplate:
         動画ファイルの書き換え防止。``ProtectSystem=strict`` と組み合わせて
         書き込み可能領域を最小化する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(
@@ -1154,7 +1106,7 @@ class TestSystemdUnitTemplate:
         logrotate 対象パスの書き込み許可（spec 指示）。``ProtectSystem=strict`` 下で
         書き込みが必要な領域を明示する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(
@@ -1171,7 +1123,7 @@ class TestSystemdUnitTemplate:
         ``$VIDEO`` ``$RTMP_URL`` は systemd の env 参照（波括弧なし）であり terraform は素通しする。
         ``${...}`` を書くと terraform templatefile 評価時に未定義変数で fail する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         assert not re.search(r"\$\{[^}]+\}", text), (
             "${...} 形式の補間が残っている（systemd で参照したい場合は $NAME と書く / "
             "terraform で渡したい場合は templatefile() の variables map に追加する）"
@@ -1182,7 +1134,7 @@ class TestSystemdUnitTemplate:
         When 全文を読む
         Then RTMP URL・stream key・動画パスが直書きされていない (R19/R20)。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         assert not re.search(r"rtmp://[^\s$]+", text), (
             "rtmp:// が直書きされている（secret 漏洩リスク、$RTMP_URL を使うこと）"
         )
@@ -1207,8 +1159,8 @@ class TestMainTfUserData:
         When vultr_instance.this を読む
         Then ``user_data`` 属性が宣言されている (R17)。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(r"^\s*user_data\s*=", block, flags=re.MULTILINE), (
             "vultr_instance.this.user_data が宣言されていない"
@@ -1225,8 +1177,8 @@ class TestMainTfUserData:
         ``Unhandled non-multipart (text/x-not-multipart) userdata`` 警告を出して
         userdata を無視する（実証: 初回 apply 後に ``cloud-init status --long``）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert not re.search(r"base64encode\s*\(", block), (
             "user_data に base64encode(...) が残っている（provider が auto-encode するため二重になる）"
@@ -1237,8 +1189,8 @@ class TestMainTfUserData:
         When user_data の右辺を読む
         Then 外側 ``templatefile("${path.module}/cloud-init.yaml", {...})`` が使われている。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(
             r'templatefile\(\s*"\$\{path\.module\}/cloud-init\.yaml"',
@@ -1252,8 +1204,8 @@ class TestMainTfUserData:
 
         cloud-init.yaml の ``${indent(6, systemd_unit)}`` に渡される値の出元。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(
             r"systemd_unit\s*=\s*templatefile\(\s*"
@@ -1271,8 +1223,8 @@ class TestMainTfUserData:
 
         secret は #125 の `.env` 経由で systemd に渡す責務分離を守る。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert not re.search(r"rtmp://", block), "main.tf に rtmp:// が直書きされている"
         assert not re.search(
@@ -1302,8 +1254,8 @@ class TestVariablesTfNullResource:
 
         動画パスはローカル環境ごとに異なるため、デフォルトを持たせず利用者に明示指定させる。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"video_path"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"video_path"')
         assert block is not None, 'variable "video_path" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "video_path.type が string でない"
         assert re.search(r"description\s*=", block), "video_path.description が無い"
@@ -1318,8 +1270,8 @@ class TestVariablesTfNullResource:
 
         secret は ``vultr_api_key`` と同様 Fail Fast。tfstate に sensitive 扱いで残ることを保証する。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"stream_key"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"stream_key"')
         assert block is not None, 'variable "stream_key" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "stream_key.type が string でない"
         assert re.search(r"sensitive\s*=\s*true", block), (
@@ -1338,8 +1290,8 @@ class TestVariablesTfNullResource:
         connection で ``private_key`` を使わなくなり、変数自体が未使用化したため撤去する。
         残骸として残すと「設定したのに使われない」混乱を招くため、関連テスト D1 と一対で削除する。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"ssh_priv_key_path"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"ssh_priv_key_path"')
         assert block is None, (
             'variable "ssh_priv_key_path" が残っている（issue #154: ssh-agent 切替で未使用化したため削除する）'
         )
@@ -1365,8 +1317,8 @@ class TestVariablesTfFirewall:
 
         order.md スニペット通り `default = []` を保ち、空入力は別途 validation で拒否する。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"allowed_ssh_cidr"')
         assert block is not None, 'variable "allowed_ssh_cidr" が存在しない'
         assert re.search(r"type\s*=\s*list\(\s*string\s*\)", block), "allowed_ssh_cidr.type が list(string) でない"
         # default は空リスト固定
@@ -1382,10 +1334,10 @@ class TestVariablesTfFirewall:
 
         空リストでの apply を fail-fast で拒否する経路（plan §到達経路 (c)）。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"allowed_ssh_cidr"')
         assert block is not None
-        validation = _extract_block(block, r"validation")
+        validation = extract_block(block, r"validation")
         assert validation is not None, (
             "allowed_ssh_cidr.validation ブロックが存在しない（空入力を fail-fast で拒否できない）"
         )
@@ -1402,8 +1354,8 @@ class TestVariablesTfFirewall:
 
         plan §検討したアプローチ「default = ["0.0.0.0/0"] で全開放」は不採用。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"allowed_ssh_cidr"')
         assert block is not None
         # default 値の中身を抽出
         default_match = re.search(r"default\s*=\s*(\[[^\]]*\])", block)
@@ -1422,8 +1374,8 @@ class TestVariablesTfFirewall:
         plan §secret 漏洩リスク確定: CIDR は secret ではない。tfstate に平文で残ってよい。
         ``vultr_api_key`` / ``stream_key`` の sensitive 必須検証の対称形。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"allowed_ssh_cidr"')
         assert block is not None
         assert not re.search(r"sensitive\s*=\s*true", block), (
             "allowed_ssh_cidr に sensitive = true が宣言されている（CIDR は secret ではない、YAGNI）"
@@ -1437,10 +1389,10 @@ class TestVariablesTfFirewall:
         plan §到達経路 (c) actionable な fail-fast 文言の担保。
         operator が空入力で plan が落ちた時、error_message から具体的対処を読み取れる必要がある。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"allowed_ssh_cidr"')
         assert block is not None
-        validation = _extract_block(block, r"validation")
+        validation = extract_block(block, r"validation")
         assert validation is not None
         msg_match = re.search(r'error_message\s*=\s*"([^"]*)"', validation)
         assert msg_match is not None, "validation.error_message が文字列リテラルで宣言されていない"
@@ -1459,8 +1411,8 @@ class TestVariablesTfFirewall:
 
         order.md スニペットに無い属性は YAGNI として追加しない（plan §確認したアプローチ参照）。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"allowed_ssh_cidr"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"allowed_ssh_cidr"')
         assert block is not None
         assert not re.search(r"\bnullable\s*=", block), (
             "allowed_ssh_cidr に nullable 属性が宣言されている（order.md スコープ外、YAGNI）"
@@ -1486,12 +1438,12 @@ class TestVersionsTfNullProvider:
         When required_providers.null を読む
         Then source = "hashicorp/null" が宣言されている。
         """
-        text = _strip_hcl_comments(_read(_VERSIONS_TF))
-        terraform_block = _extract_block(text, r"terraform")
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None
-        rp_block = _extract_block(terraform_block, r"required_providers")
+        rp_block = extract_block(terraform_block, r"required_providers")
         assert rp_block is not None, "required_providers ブロックが存在しない"
-        null_block = _extract_block(rp_block, r"null")
+        null_block = extract_block(rp_block, r"null")
         assert null_block is not None, "required_providers.null が宣言されていない"
         assert re.search(r'source\s*=\s*"hashicorp/null"', null_block), (
             'required_providers.null.source が "hashicorp/null" でない'
@@ -1502,12 +1454,12 @@ class TestVersionsTfNullProvider:
         When required_providers.null.version を読む
         Then ">= 3.2" を含む制約が宣言されている（plan §2.2）。
         """
-        text = _strip_hcl_comments(_read(_VERSIONS_TF))
-        terraform_block = _extract_block(text, r"terraform")
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None
-        rp_block = _extract_block(terraform_block, r"required_providers")
+        rp_block = extract_block(terraform_block, r"required_providers")
         assert rp_block is not None
-        null_block = _extract_block(rp_block, r"null")
+        null_block = extract_block(rp_block, r"null")
         assert null_block is not None
         assert re.search(r'version\s*=\s*"[^"]*>=\s*3\.2', null_block), (
             "required_providers.null.version が >= 3.2 を満たしていない"
@@ -1530,8 +1482,8 @@ class TestMainTfNullResource:
         When null_resource.deploy を探す
         Then 定義されている（terraform apply 最終ステップの起点）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None, 'resource "null_resource" "deploy" が存在しない'
 
     def test_triggers_block_has_three_keys(self):
@@ -1543,10 +1495,10 @@ class TestMainTfNullResource:
         - video_hash = filemd5(var.video_path)（動画差分での再 deploy）
         - stream_key（sha256 ハッシュ。stream key 差分での再 deploy）
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None, "null_resource.deploy.triggers ブロックが存在しない"
         assert re.search(r"instance_id\s*=\s*vultr_instance\.this\.id", triggers), (
             "triggers.instance_id が vultr_instance.this.id でない"
@@ -1565,10 +1517,10 @@ class TestMainTfNullResource:
         直接 ``sha256(var.stream_key)`` を置くと「Output refers to sensitive values」でエラー。
         SHA256 は不可逆なので nonsensitive() で剥がす運用判断（plan §2.4）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None
         # nonsensitive(sha256(var.stream_key)) 形式（空白許容）
         assert re.search(
@@ -1588,10 +1540,10 @@ class TestMainTfNullResource:
         ssh-agent 経由で鍵を渡すため、Terraform 自身は鍵に触れない。
         （issue #154 / order.md 推奨対応 R2）
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        connection = _extract_block(block, r"connection")
+        connection = extract_block(block, r"connection")
         assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
         assert re.search(r"\bagent\s*=\s*true\b", connection), (
             "connection.agent = true が無い（ssh-agent 経由経路が宣言されていない）"
@@ -1605,10 +1557,10 @@ class TestMainTfNullResource:
         connection ブロック書き換え（#154）で接続先・プロトコル・ユーザーまで誤って削除しないことの保証。
         order.md 推奨対応の HCL スニペット参照。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        connection = _extract_block(block, r"connection")
+        connection = extract_block(block, r"connection")
         assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
         assert re.search(r'type\s*=\s*"ssh"', connection), 'connection.type が "ssh" でない'
         assert re.search(r'user\s*=\s*"root"', connection), 'connection.user が "root" でない'
@@ -1627,10 +1579,10 @@ class TestMainTfNullResource:
         単語境界 ``\\b`` で ``vultr_ssh_key.this.ssh_key`` などの誤マッチを避ける。
         （issue #154 / order.md 概要・推奨対応 R2）
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        connection = _extract_block(block, r"connection")
+        connection = extract_block(block, r"connection")
         assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
         assert not re.search(r"\bprivate_key\s*=", connection), (
             "connection.private_key が残っている（PEM 全文が Terraform graph / plan / state に取り込まれる漏洩経路）"
@@ -1644,10 +1596,10 @@ class TestMainTfNullResource:
         撤去変数（#154 で variables.tf から削除）への参照復活を防ぐ。connection ブロックに
         スコープを絞って検証することで、コメント行や別箇所の影響を排除する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        connection = _extract_block(block, r"connection")
+        connection = extract_block(block, r"connection")
         assert connection is not None, "null_resource.deploy.connection ブロックが存在しない"
         assert "ssh_priv_key_path" not in connection, (
             "connection ブロック内に var.ssh_priv_key_path 参照が残っている（撤去済み変数への参照復活）"
@@ -1660,8 +1612,8 @@ class TestMainTfNullResource:
 
         cloud-init で作成済みの ``/opt/youtube-stream/videos/`` （cloud-init.yaml:14）に固定名で配置。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         # 動画アップロード provisioner は source=var.video_path で識別
         # ブロック内に「source = var.video_path」と「destination = "/opt/.../current.mp4"」が
@@ -1692,8 +1644,8 @@ class TestMainTfNullResource:
         templatefile は ``${path.module}/templates/youtube-stream.env.tftpl`` を読む。
         secret を tfstate に残さず provisioner 経由で配信する経路。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         # templatefile を引数に取る provisioner "file" を抽出（destination=/etc/youtube-stream.env）
         assert re.search(
@@ -1716,7 +1668,7 @@ class TestMainTfNullResource:
 
         コメント除去ヘルパーは URL 内の ``//`` を削るため、この検証は raw text で行う。
         """
-        text = _read(_MAIN_TF)  # raw（rtmp:// の // を保持するためコメント除去しない）
+        text = read_file(_MAIN_TF)  # raw（rtmp:// の // を保持するためコメント除去しない）
         # video 変数（リテラル文字列）
         assert re.search(
             r'video\s*=\s*"/opt/youtube-stream/videos/current\.mp4"',
@@ -1741,8 +1693,8 @@ class TestMainTfNullResource:
 
         order.md 完了条件「0600 / root 所有」「11h+1h サイクル開始」を満たす。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
@@ -1768,8 +1720,8 @@ class TestMainTfNullResource:
         triggers / connection で ``vultr_instance.this`` を参照することで暗黙の依存が成立しており、
         plan §「特に注意すべきアンチパターン」#10 で「冗長な depends_on を書かない」と明示。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         # 内側ブロック（connection 等）の depends_on は本テストの対象外なので、
         # 「行頭からインデント込みで `depends_on = [`」が現れる箇所が無いことを検証
@@ -1785,8 +1737,8 @@ class TestMainTfNullResource:
 
         plan §「特に注意すべきアンチパターン」#7 のスコープ越境チェック。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         assert not re.search(r"\bon_failure\s*=", block), (
             "provisioner に on_failure 属性が追加されている（order.md スコープ外）"
@@ -1825,9 +1777,9 @@ class TestMainTfLocalsScriptsDir:
 
         新構造の起点。R1（Plan 要件）の存在保証。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
+        text = strip_hcl_comments(read_file(_MAIN_TF))
 
-        block = _extract_block(text, r"^\s*locals")
+        block = extract_block(text, r"^\s*locals")
 
         assert block is not None, "main.tf にトップレベル locals ブロックが宣言されていない"
         assert re.search(r"\bscripts_dir\s*=", block), "locals ブロック内に scripts_dir キーが存在しない"
@@ -1839,8 +1791,8 @@ class TestMainTfLocalsScriptsDir:
 
         集約先の値が誤ると 8 箇所すべての参照先が壊れる。リグレッション影響大。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r"^\s*locals")
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r"^\s*locals")
         assert block is not None
 
         match = re.search(
@@ -1860,10 +1812,10 @@ class TestMainTfLocalsScriptsDir:
 
         triggers/source 不整合（issue #157 の動機）の直接的リグレッション保証。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None
 
         match = re.search(
@@ -1878,10 +1830,10 @@ class TestMainTfLocalsScriptsDir:
         When ``null_resource.deploy.triggers.notify_sh`` を読む
         Then ``filemd5("${local.scripts_dir}/notify.sh")`` で参照している。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None
 
         match = re.search(
@@ -1896,10 +1848,10 @@ class TestMainTfLocalsScriptsDir:
         When ``null_resource.deploy.triggers.logrotate_conf`` を読む
         Then ``filemd5("${local.scripts_dir}/logrotate.conf")`` で参照している。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None
 
         match = re.search(
@@ -1914,10 +1866,10 @@ class TestMainTfLocalsScriptsDir:
         When ``null_resource.deploy.triggers.cron_d`` を読む
         Then ``filemd5("${local.scripts_dir}/cron.d")`` で参照している。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None
 
         match = re.search(
@@ -1935,8 +1887,8 @@ class TestMainTfLocalsScriptsDir:
         refactor で source 4 つの取り違え（並べ替えバグ）を防止するため、
         source/destination のペアリングを順序非依存で検証する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
 
         match = re.search(
@@ -1964,8 +1916,8 @@ class TestMainTfLocalsScriptsDir:
         When notify.sh を /opt/youtube-stream/bin/notify.sh に配置する provisioner を読む
         Then ``source = "${local.scripts_dir}/notify.sh"`` で参照している。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
 
         match = re.search(
@@ -1993,8 +1945,8 @@ class TestMainTfLocalsScriptsDir:
         When logrotate.conf を /etc/logrotate.d/youtube-stream に配置する provisioner を読む
         Then ``source = "${local.scripts_dir}/logrotate.conf"`` で参照している。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
 
         match = re.search(
@@ -2022,8 +1974,8 @@ class TestMainTfLocalsScriptsDir:
         When cron.d を /etc/cron.d/youtube-stream-healthcheck に配置する provisioner を読む
         Then ``source = "${local.scripts_dir}/cron.d"`` で参照している。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
 
         match = re.search(
@@ -2054,7 +2006,7 @@ class TestMainTfLocalsScriptsDir:
         DRY 不変条件のリグレッション保証。Issue #157 の根本動機（triggers vs source
         不整合検知困難）を構造的に解決する。8 箇所の重複が局在化されていることを保証。
         """
-        text = _read(_MAIN_TF)
+        text = read_file(_MAIN_TF)
 
         occurrences = text.count("../../../scripts/streaming")
 
@@ -2071,7 +2023,7 @@ class TestMainTfLocalsScriptsDir:
         旧形式の置換漏れ検知。``${path.module}/cloud-init.yaml`` 等を誤検出しないよう、
         パターンは ``/scripts/streaming/`` まで含めた完全形に限定する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
+        text = strip_hcl_comments(read_file(_MAIN_TF))
 
         # locals ブロックを抽出して残部を作る
         locals_match = re.search(r"^\s*locals\s*\{", text, flags=re.MULTILINE)
@@ -2128,8 +2080,8 @@ class TestMainTfFirewall:
 
         firewall 適用の親リソース。欠ければ rule が孤立する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_group"\s+"stream"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_group"\s+"stream"')
         assert block is not None, 'resource "vultr_firewall_group" "stream" が存在しない'
         assert re.search(r"description\s*=", block), "vultr_firewall_group.stream.description が無い"
 
@@ -2141,8 +2093,8 @@ class TestMainTfFirewall:
         toset() で安定アドレス化することで、中間要素削除時の index ズレ事故（誤 replace）を防ぐ
         （plan §検討したアプローチ参照）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
         assert block is not None, 'resource "vultr_firewall_rule" "ssh" が存在しない'
         assert re.search(
             r"for_each\s*=\s*toset\(\s*var\.allowed_ssh_cidr\s*\)",
@@ -2158,8 +2110,8 @@ class TestMainTfFirewall:
         Then ``firewall_group_id = vultr_firewall_group.stream.id`` で親リソースに結線されている
         (R3a, H5)。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
         assert block is not None
         assert re.search(
             r"firewall_group_id\s*=\s*vultr_firewall_group\.stream\.id",
@@ -2176,8 +2128,8 @@ class TestMainTfFirewall:
 
         SSH 22/tcp 限定の核。order.md スコープ通りに IPv4 の 22/tcp のみ。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
         assert block is not None
         assert re.search(r'protocol\s*=\s*"tcp"', block), 'vultr_firewall_rule.ssh.protocol が "tcp" でない'
         assert re.search(r'ip_type\s*=\s*"v4"', block), 'vultr_firewall_rule.ssh.ip_type が "v4" でない'
@@ -2192,8 +2144,8 @@ class TestMainTfFirewall:
         Vultr API は CIDR ではなく subnet+subnet_size の 2 値で要求するため、
         each.value（"203.0.113.5/32" 形式）を split で分解する必要がある。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
         assert block is not None
         assert re.search(
             r'subnet\s*=\s*split\(\s*"/"\s*,\s*each\.value\s*\)\[\s*0\s*\]',
@@ -2211,8 +2163,8 @@ class TestMainTfFirewall:
 
         plan アンチパターン「全開放リテラル直書き」防止。subnet は each.value 由来であるべき。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
         assert block is not None
         assert not re.search(r'subnet\s*=\s*"0\.0\.0\.0"', block), (
             'vultr_firewall_rule.ssh.subnet が "0.0.0.0" リテラル（全開放）'
@@ -2229,8 +2181,8 @@ class TestMainTfFirewall:
 
         スコープ越境防止: order.md は SSH 22 のみ、80/443 等の追加ポートは別 issue。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
         assert block is not None
         # port = "<value>" の <value> が "22" 以外の値を取っていないこと
         ports = re.findall(r'port\s*=\s*"([^"]*)"', block)
@@ -2247,8 +2199,8 @@ class TestMainTfFirewall:
 
         order.md は IPv4 のみ。IPv6 firewall rule の追加は別 issue。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_firewall_rule"\s+"ssh"')
         assert block is not None
         assert not re.search(r'ip_type\s*=\s*"v6"', block), (
             'vultr_firewall_rule.ssh に ip_type = "v6" が含まれている（order.md スコープ外）'
@@ -2261,7 +2213,7 @@ class TestMainTfFirewall:
 
         スコープ越境防止: 追加 rule リソース（80/443 / IPv6 等）を「ついで」に追加しない。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
+        text = strip_hcl_comments(read_file(_MAIN_TF))
         rules = re.findall(r'resource\s+"vultr_firewall_rule"\s+"(\w+)"', text)
         assert rules == ["ssh"], (
             f"vultr_firewall_rule リソースが ['ssh'] 以外になっている: {rules}（order.md スコープ外。SSH 22 1 個のみ）"
@@ -2274,8 +2226,8 @@ class TestMainTfFirewall:
 
         plan §配線確認チェックリスト #4。配線漏れすると firewall を作っても無効。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(
             r"firewall_group_id\s*=\s*vultr_firewall_group\.stream\.id",
@@ -2293,8 +2245,8 @@ class TestMainTfFirewall:
         plan アンチパターン #3: ``firewall_group_id`` 参照で暗黙依存が成立するため、
         冗長な depends_on は禁止。既存 ``test_no_explicit_depends_on_for_null_resource`` と同方針。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         # 行頭からインデント込みで `depends_on = [` が現れる箇所が無いこと
         assert not re.search(r"^\s*depends_on\s*=\s*\[", block, flags=re.MULTILINE), (
@@ -2329,7 +2281,7 @@ class TestEnvTftpl:
 
         値はクォートしない（systemd EnvironmentFile の慣例。クォートすると文字列に含まれてしまう）。
         """
-        text = _read(_ENV_TFTPL)
+        text = read_file(_ENV_TFTPL)
         assert re.search(r"^VIDEO=\$\{video\}\s*$", text, flags=re.MULTILINE), (
             "VIDEO=${video} 行が存在しない（terraform templatefile 変数記法を使うこと）"
         )
@@ -2339,7 +2291,7 @@ class TestEnvTftpl:
         When 全文を読む
         Then ``RTMP_URL=${rtmp_url}`` 行がある。
         """
-        text = _read(_ENV_TFTPL)
+        text = read_file(_ENV_TFTPL)
         assert re.search(r"^RTMP_URL=\$\{rtmp_url\}\s*$", text, flags=re.MULTILINE), (
             "RTMP_URL=${rtmp_url} 行が存在しない（terraform templatefile 変数記法を使うこと）"
         )
@@ -2352,7 +2304,7 @@ class TestEnvTftpl:
         env file 内では既にリテラル値に展開済の値が並ぶべき。``$NAME`` は systemd unit の
         ``ExecStart`` 側で参照する記法であり、env file 内に書くのは誤り。
         """
-        text = _read(_ENV_TFTPL)
+        text = read_file(_ENV_TFTPL)
         # `${VIDEO}` ではなく `$VIDEO`（直後が { でない）パターンを検出
         assert not re.search(r"\$VIDEO\b(?!\s*\})", text), (
             "$VIDEO（systemd 参照記法）が env file に書かれている。${video} を使うこと"
@@ -2368,7 +2320,7 @@ class TestEnvTftpl:
 
         secret は terraform templatefile() の variables map 経由でだけ流入させる。
         """
-        text = _read(_ENV_TFTPL)
+        text = read_file(_ENV_TFTPL)
         assert not re.search(r"rtmp://", text), "rtmp:// が env tftpl に直書きされている（${rtmp_url} を使うこと）"
         assert not re.search(
             r"/opt/youtube-stream/videos/[^\s$]+\.(mp4|mkv|mov|webm)",
@@ -2384,7 +2336,7 @@ class TestEnvTftpl:
         systemd ``EnvironmentFile`` は ``KEY=VALUE`` の VALUE を素のまま読む。クォートすると
         文字列の一部とみなされ、ffmpeg の引数解釈で破綻する。
         """
-        text = _read(_ENV_TFTPL)
+        text = read_file(_ENV_TFTPL)
         assert not re.search(r"^VIDEO=['\"]", text, flags=re.MULTILINE), (
             "VIDEO の値がクォートされている（systemd EnvironmentFile の慣例違反）"
         )
@@ -2409,7 +2361,7 @@ class TestTfvarsExampleStreamKey:
         secret は TF_VAR_stream_key 経由で渡す前提で、サンプルにも値を書かない
         （既存 ``test_does_not_contain_vultr_api_key_assignment`` と同種規約）。
         """
-        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        text = strip_hcl_comments(read_file(_TFVARS_EXAMPLE))
         assert not re.search(r"^\s*stream_key\s*=", text, flags=re.MULTILINE), (
             "stream_key の代入がアクティブ行に存在する（secret 漏洩リスク）"
         )
@@ -2421,7 +2373,7 @@ class TestTfvarsExampleStreamKey:
 
         運用者が secret 注入方法を発見できるよう、`vultr_api_key` と並列で説明する。
         """
-        raw = _read(_TFVARS_EXAMPLE)
+        raw = read_file(_TFVARS_EXAMPLE)
         assert "TF_VAR_stream_key" in raw, (
             "TF_VAR_stream_key の案内コメントが無い（運用者が secret 注入方法を発見できない）"
         )
@@ -2433,7 +2385,7 @@ class TestTfvarsExampleStreamKey:
 
         ルート ``README.md`` / ``infra/terraform/gcp/terraform.tfvars.example`` の慣例を踏襲。
         """
-        raw = _read(_TFVARS_EXAMPLE)
+        raw = read_file(_TFVARS_EXAMPLE)
         assert "op read" in raw, "op read（1Password CLI）による secret 注入手順がコメントに無い"
 
     def test_video_path_assignment_is_active(self):
@@ -2443,7 +2395,7 @@ class TestTfvarsExampleStreamKey:
 
         ``video_path`` はデフォルト値を持たない必須項目のため、サンプルでも明示する。
         """
-        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        text = strip_hcl_comments(read_file(_TFVARS_EXAMPLE))
         assert re.search(r"^\s*video_path\s*=\s*\"", text, flags=re.MULTILINE), (
             'video_path = "..." がアクティブ行に存在しない（必須項目だがサンプルから発見できない）'
         )
@@ -2457,7 +2409,7 @@ class TestTfvarsExampleStreamKey:
         残っていると、利用者がコメントアウト解除した際に「Reference to undeclared input
         variable」で apply が失敗する。
         """
-        raw = _read(_TFVARS_EXAMPLE)
+        raw = read_file(_TFVARS_EXAMPLE)
         assert "ssh_priv_key_path" not in raw, (
             "terraform.tfvars.example に ssh_priv_key_path が残っている"
             "（撤去済み変数。利用者が有効化すると undeclared input variable で fail する）"
@@ -2482,7 +2434,7 @@ class TestTfvarsExampleFirewall:
         operator がサンプルから視認できる必要があるため、``video_path`` と同様にアクティブ代入で示す。
         ``/32``（ホスト 1 台限定）が運用上自然なプレースホルダー。
         """
-        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        text = strip_hcl_comments(read_file(_TFVARS_EXAMPLE))
         # アクティブ行（コメントアウトされていない行）に allowed_ssh_cidr = [...] が存在する
         match = re.search(
             r"^\s*allowed_ssh_cidr\s*=\s*\[([^\]]*)\]",
@@ -2526,7 +2478,7 @@ class TestStreamingReadme:
         When 全文を読む
         Then ``TF_VAR_stream_key`` 環境変数の言及がある（secret 注入の入口）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "TF_VAR_stream_key" in text, "README に TF_VAR_stream_key の言及が無い（secret 注入手順が辿れない）"
 
     def test_mentions_tf_var_vultr_api_key(self):
@@ -2534,7 +2486,7 @@ class TestStreamingReadme:
         When 全文を読む
         Then ``TF_VAR_vultr_api_key`` の言及がある（既存 secret も再掲する）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "TF_VAR_vultr_api_key" in text, (
             "README に TF_VAR_vultr_api_key の言及が無い（運用者が必要 env を網羅できない）"
         )
@@ -2544,7 +2496,7 @@ class TestStreamingReadme:
         When 全文を読む
         Then ``op read`` による 1Password CLI 経由の secret 注入手順がある。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "op read" in text, "README に op read（1Password CLI）の手順が無い"
 
     def test_mentions_terraform_apply_command(self):
@@ -2552,7 +2504,7 @@ class TestStreamingReadme:
         When 全文を読む
         Then ``terraform apply`` 実行手順が含まれている。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert re.search(r"terraform[^\n]*apply", text), "README に terraform apply の実行コマンドが書かれていない"
 
     def test_mentions_systemctl_status_for_verification(self):
@@ -2562,7 +2514,7 @@ class TestStreamingReadme:
 
         order.md「動作確認」セクションの最低限の引用。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "systemctl" in text, "README に systemctl 系の動作確認コマンドが書かれていない"
 
     def test_mentions_11h_1h_streaming_cycle(self):
@@ -2572,7 +2524,7 @@ class TestStreamingReadme:
 
         利用者が「なぜ 11h で勝手に止まるか」を理解できる必要がある（systemd 由来の挙動）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         # 「11h」「11 時間」「RuntimeMaxSec」のいずれかでカバー
         has_11h = "11h" in text or "11 時間" in text or "11時間" in text
         has_runtime_max = "RuntimeMaxSec" in text
@@ -2587,7 +2539,7 @@ class TestStreamingReadme:
 
         ドキュメントとしての例示でも、実際の YouTube stream key 形式（連続英数字）を書かないこと。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         # rtmp://a.rtmp.youtube.com/live2/<英数字 8 文字以上> っぽいパターンを検出
         assert not re.search(
             r"rtmp://[\w.]+/live2/[A-Za-z0-9]{8,}",
@@ -2602,7 +2554,7 @@ class TestStreamingReadme:
         #154 で variables.tf から撤去された変数。README に残るとドキュメント / 実装乖離になり、
         運用者が「設定したのに反映されない」混乱を起こす。仕様準拠（README ↔ 実装）の保証。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "ssh_priv_key_path" not in text, (
             "README に ssh_priv_key_path の言及が残っている（撤去済み変数。ドキュメント / 実装乖離）"
         )
@@ -2617,7 +2569,7 @@ class TestStreamingReadme:
         運用者が前提を満たせる導線として ``ssh-add`` 系コマンドの言及が必要。
         既存 ``test_mentions_*`` 系の緩い包含検査スタイルを踏襲（章立て自由度を残す）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "ssh-add" in text, (
             "README に ssh-add の言及が無い（ssh-agent 登録手順が辿れず terraform apply が失敗する）"
         )
@@ -2646,7 +2598,7 @@ class TestStreamingReadmeVideoSwap:
 
         運用者が見出しから瞬時に当該手順に到達できるよう、章として独立している必要がある。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         # ## または ### 行で「動画の差し替え」または「動画差し替え」を含む見出しがあること
         assert re.search(
             r"^#{2,3}\s+[^\n]*動画(の)?差し替え",
@@ -2662,7 +2614,7 @@ class TestStreamingReadmeVideoSwap:
         差し替え時に新しい動画パスを Terraform に渡すための env 名を運用者が
         正確に知る必要がある（typo すれば ``var.video_path is required`` で失敗する）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "TF_VAR_video_path" in text, (
             "README に TF_VAR_video_path の言及が無い（差し替え時の env 注入手順が辿れない）"
         )
@@ -2675,7 +2627,7 @@ class TestStreamingReadmeVideoSwap:
         order.md「``terraform plan`` で **新動画 only** の差分が出ることの確認手順」要件。
         apply 前に意図しないリソース（``vultr_instance`` 等）の replace を察知する導線。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert re.search(r"terraform[^\n]*plan", text), (
             "README に terraform plan の差分確認手順が無い（apply 前の安全確認導線が欠落）"
         )
@@ -2688,7 +2640,7 @@ class TestStreamingReadmeVideoSwap:
         order.md「休止時間に実施するのが視聴者には透明」運用 tips 要件。
         運用者が「いつ apply すべきか」の判断軸を README から得られる必要がある。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         has_idle = "休止" in text
         has_downtime = "ダウンタイム" in text
         has_zero_sec = "0 秒" in text or "0秒" in text
@@ -2705,7 +2657,7 @@ class TestStreamingReadmeVideoSwap:
         order.md テスト第 3 項「同じ動画で再 apply → no-op（filemd5 不変）」の運用根拠。
         運用者が「動かない」と誤認しないよう、冪等性の仕組みを README から読み取れる必要がある。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         has_filemd5 = "filemd5" in text
         has_noop = "no-op" in text
         has_idempotent = "冪等" in text
@@ -2722,7 +2674,7 @@ class TestStreamingReadmeVideoSwap:
         order.md 完了条件「旧動画は VPS 上に明示的に削除する仕組みを用意」を、
         単一ファイル方式（``provisioner "file"`` が毎回上書き）で満たす根拠を README に明記する。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "current.mp4" in text, (
             "README に current.mp4 への上書きの言及が無い（旧動画が自然消去される根拠が辿れない）"
         )
@@ -2736,7 +2688,7 @@ class TestStreamingReadmeVideoSwap:
         ラッパーとして提供」要件。ラッパーを追加しても README から発見できなければ運用者は
         到達できないため、README が `swap_video.sh` という識別子に言及していることを担保する。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "swap_video.sh" in text, (
             "README に swap_video.sh の言及が無い（1 コマンドラッパーへの到達導線が欠落し、運用者が発見できない）"
         )
@@ -2762,7 +2714,7 @@ class TestStreamingReadmeFirewall:
 
         手順書からの到達経路。設定 key 名を README から発見できる必要がある。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "allowed_ssh_cidr" in text, (
             "README に allowed_ssh_cidr の言及が無い（operator が必須項目を発見できず、CIDR 設定手順が辿れない）"
         )
@@ -2776,7 +2728,7 @@ class TestStreamingReadmeFirewall:
         CIDR 化手順を運用者が辿れる必要がある。固定文言は要求しないが、
         「自分の IP を /32 で書く」という作業に対応するヒント語句が必須。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         has_slash_32 = "/32" in text
         has_ifconfig_me = "ifconfig.me" in text
         has_curl = "curl" in text
@@ -2842,7 +2794,7 @@ class TestSwapVideoScript:
         `-o pipefail`（pipe 中の失敗を伝播）が無いと、provisioning 系の失敗が握りつぶされる。
         既存 ``scripts/gcp-terraform-apply.sh:13`` と同方針。
         """
-        text = _read(_SWAP_VIDEO_SCRIPT)
+        text = read_file(_SWAP_VIDEO_SCRIPT)
         assert re.search(r"^set\s+-euo\s+pipefail\b", text, flags=re.MULTILINE), (
             "swap_video.sh に `set -euo pipefail` が無い（エラー握りつぶしリスク。Fail Fast 原則に違反）"
         )
@@ -2856,7 +2808,7 @@ class TestSwapVideoScript:
         を 1 コマンド化するのが本ラッパーの中核。env 注入が無ければ ``var.video_path``
         が解決できず terraform は ``Missing required argument`` で落ちる。
         """
-        text = _read(_SWAP_VIDEO_SCRIPT)
+        text = read_file(_SWAP_VIDEO_SCRIPT)
         assert re.search(r"export\s+TF_VAR_video_path\b", text), (
             "swap_video.sh に `export TF_VAR_video_path` が無い（差し替え対象の動画パスを Terraform に渡す経路が欠落）"
         )
@@ -2870,7 +2822,7 @@ class TestSwapVideoScript:
         は実行時の cwd に依存するため、相対パスのまま渡すと別ディレクトリから叩いた時に
         破綻する。``realpath`` で絶対化する経路を必ず通す。
         """
-        text = _read(_SWAP_VIDEO_SCRIPT)
+        text = read_file(_SWAP_VIDEO_SCRIPT)
         assert re.search(r"\brealpath\b", text), (
             "swap_video.sh に `realpath` の呼び出しが無い"
             "（相対パス渡しで cwd 依存になり、別ディレクトリから叩くと破綻する）"
@@ -2886,7 +2838,7 @@ class TestSwapVideoScript:
         統一されているため、ラッパー側も ``-chdir=`` を使い記述パターンを揃える
         （plan.md「pushd ではなく -chdir= を使う」）。
         """
-        text = _read(_SWAP_VIDEO_SCRIPT)
+        text = read_file(_SWAP_VIDEO_SCRIPT)
         assert re.search(r"terraform\s+[^\n]*-chdir=", text), (
             "swap_video.sh に `terraform -chdir=...` が無い"
             "（既存 README の記述パターン (-chdir=) と不一致 / pushd 等の cwd 依存実装の疑い）"
@@ -2904,7 +2856,7 @@ class TestSwapVideoScript:
         ``-auto-approve`` を付けると誤 apply 事故のリスクが上がる。``--auto-approve``
         フラグを明示した時のみ ``-auto-approve`` を Terraform に渡す分岐構造であること。
         """
-        text = _read(_SWAP_VIDEO_SCRIPT)
+        text = read_file(_SWAP_VIDEO_SCRIPT)
         # `--auto-approve` のフラグハンドリング（引数パース）が存在する
         assert re.search(r"--auto-approve\b", text), (
             "swap_video.sh に `--auto-approve` 引数の取り扱いが無い"
@@ -2935,7 +2887,7 @@ class TestSwapVideoScript:
         ユーザーが ``--auto-approve`` を渡した時に Terraform 側へ ``-auto-approve``
         が伝播する経路があること。フラグだけ受け取って何もしない実装になっていないか担保する。
         """
-        text = _read(_SWAP_VIDEO_SCRIPT)
+        text = read_file(_SWAP_VIDEO_SCRIPT)
         # ユーザー向けフラグ `--auto-approve` の取り回し
         assert re.search(r"--auto-approve\b", text), "swap_video.sh が `--auto-approve` 引数を受け取っていない"
         # terraform へ渡す `-auto-approve`（シングルダッシュ）
@@ -2973,7 +2925,7 @@ class TestStreamingSkillFirewall:
         operator 索引からの到達経路。明示しないと §1 初回構築の terraform apply が
         SSH 到達不可で詰む。
         """
-        text = _read(_STREAMING_SKILL)
+        text = read_file(_STREAMING_SKILL)
         assert "allowed_ssh_cidr" in text, (
             "SKILL.md に allowed_ssh_cidr の言及が無い"
             "（operator が必須項目を発見できず、§1 初回構築で SSH 到達不可になる）"
@@ -3001,7 +2953,7 @@ class TestStreamingSkillSshAgent:
         #154 で variables.tf から撤去された変数。SKILL.md に残ると README / SKILL.md の整合が
         崩れ、operator が古い前提に従って詰まる。
         """
-        text = _read(_STREAMING_SKILL)
+        text = read_file(_STREAMING_SKILL)
         assert "ssh_priv_key_path" not in text, (
             "SKILL.md に ssh_priv_key_path の言及が残っている（撤去済み変数。README / SKILL 不整合）"
         )
@@ -3015,7 +2967,7 @@ class TestStreamingSkillSshAgent:
         ssh-agent へ鍵を登録する必要がある。SKILL.md 経由のオペレーターも起動条件を把握できる
         必要があるため、README と同じく ``ssh-add`` の緩い包含検査で担保する。
         """
-        text = _read(_STREAMING_SKILL)
+        text = read_file(_STREAMING_SKILL)
         assert "ssh-add" in text, (
             "SKILL.md に ssh-add の言及が無い"
             "（operator が ssh-agent 登録手順を SKILL.md から辿れず terraform apply が失敗する）"
