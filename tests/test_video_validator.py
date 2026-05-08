@@ -4,6 +4,10 @@
 個別楽曲としてカウントすることを検証する。
 """
 
+from pathlib import Path
+from types import SimpleNamespace
+
+from youtube_automation.utils import video_validator as vv_module
 from youtube_automation.utils.video_validator import VideoValidator
 
 
@@ -59,3 +63,45 @@ class TestCheckOverallConsistencyAudioCount:
         issues = VideoValidator()._check_overall_consistency(coll, results)
 
         assert not any("一致しません" in w for w in issues["warnings"])
+
+
+# ---------- argv-injection defense (Issue #186): "--" sentinel ----------
+
+
+class TestGetVideoMetadataSentinel:
+    """`_get_video_metadata` の ffprobe argv に `"--"` sentinel が含まれることを検証する。
+
+    Issue #167 で `utils/probe.py` に導入した defense-in-depth を `video_validator.py`
+    へ横展開したリグレッションガード。`-` 始まりパスがオプションとして
+    誤解釈される余地を遮断する意図を、通常パス・adversarial パスの双方で固定する。
+    """
+
+    def test_places_sentinel_before_path(self, monkeypatch):
+        """通常パスでも argv 末尾は `["--", str(path)]` であること."""
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(stdout='{"streams": [], "format": {}}', returncode=0)
+
+        monkeypatch.setattr(vv_module.subprocess, "run", fake_run)
+
+        VideoValidator()._get_video_metadata(Path("/fake.mp4"))
+
+        assert captured["cmd"][-2] == "--"
+        assert captured["cmd"][-1] == "/fake.mp4"
+
+    def test_keeps_sentinel_for_dash_prefixed_path(self, monkeypatch):
+        """`-` 始まりの adversarial パスでも sentinel が path の直前に保たれること."""
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(stdout='{"streams": [], "format": {}}', returncode=0)
+
+        monkeypatch.setattr(vv_module.subprocess, "run", fake_run)
+
+        VideoValidator()._get_video_metadata(Path("-evil.mp4"))
+
+        assert captured["cmd"][-2] == "--"
+        assert captured["cmd"][-1] == "-evil.mp4"
