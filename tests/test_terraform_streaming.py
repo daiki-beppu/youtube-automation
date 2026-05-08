@@ -468,6 +468,19 @@ class TestRootGitignoreTerraformEntries:
         """
         assert ".terraform/" in gitignore_lines, ".terraform/ が .gitignore に追加されていない"
 
+    def test_ignores_tfplan_files(self, gitignore_lines: list[str]):
+        """Given root .gitignore
+        When 行を走査する
+        Then *.tfplan が ignore 対象。
+
+        `terraform plan -out=` で生成される binary plan ファイルの誤コミット防止
+        （defense-in-depth: #154 で採用した ssh-agent 切替の fallback layer）。
+        """
+        assert "*.tfplan" in gitignore_lines, (
+            "*.tfplan が .gitignore に追加されていない"
+            "（terraform plan -out= ファイルの誤コミット保護が外れている）"
+        )
+
 
 # ============================================================================
 # cloud-init.yaml (#124)
