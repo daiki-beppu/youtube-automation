@@ -79,12 +79,7 @@ def _make_pass1_stderr(
         "normalization_type": "dynamic",
         "target_offset": target_offset,
     }
-    return (
-        "ffmpeg version test\n"
-        "[Parsed_loudnorm_0 @ 0xdeadbeef]\n"
-        + json.dumps(payload, indent=2)
-        + "\n"
-    )
+    return "ffmpeg version test\n[Parsed_loudnorm_0 @ 0xdeadbeef]\n" + json.dumps(payload, indent=2) + "\n"
 
 
 def _patch_skill_config(monkeypatch, cfg: dict) -> MagicMock:
@@ -401,9 +396,7 @@ class TestFinalizeMasterFailure:
         with patch.object(
             finalize_master.subprocess,
             "run",
-            side_effect=_make_fake_run_sequence(
-                captured, pass2_rc=1, pass2_writes_tmp=False
-            ),
+            side_effect=_make_fake_run_sequence(captured, pass2_rc=1, pass2_writes_tmp=False),
         ):
             rc = run_finalize_master(collection, collection, quiet=True)
 
@@ -422,9 +415,7 @@ class TestFinalizeMasterFailure:
         def _run(cmd, **kwargs):
             state["calls"] += 1
             if state["calls"] == 1:
-                return SimpleNamespace(
-                    returncode=0, stderr=_make_pass1_stderr(), stdout=""
-                )
+                return SimpleNamespace(returncode=0, stderr=_make_pass1_stderr(), stdout="")
             tmp = collection / "01-master" / "master.tmp.mp3"
             tmp.write_bytes(b"PARTIAL")
             raise OSError("simulated ffmpeg crash mid-write")

@@ -477,8 +477,7 @@ class TestRootGitignoreTerraformEntries:
         （defense-in-depth: #154 で採用した ssh-agent 切替の fallback layer）。
         """
         assert "*.tfplan" in gitignore_lines, (
-            "*.tfplan が .gitignore に追加されていない"
-            "（terraform plan -out= ファイルの誤コミット保護が外れている）"
+            "*.tfplan が .gitignore に追加されていない（terraform plan -out= ファイルの誤コミット保護が外れている）"
         )
 
 
@@ -1831,9 +1830,7 @@ class TestMainTfLocalsScriptsDir:
         block = _extract_block(text, r"^\s*locals")
 
         assert block is not None, "main.tf にトップレベル locals ブロックが宣言されていない"
-        assert re.search(r"\bscripts_dir\s*=", block), (
-            "locals ブロック内に scripts_dir キーが存在しない"
-        )
+        assert re.search(r"\bscripts_dir\s*=", block), "locals ブロック内に scripts_dir キーが存在しない"
 
     def test_locals_scripts_dir_value_is_canonical_relative_path(self):
         """Given main.tf
@@ -1874,9 +1871,7 @@ class TestMainTfLocalsScriptsDir:
             triggers,
         )
 
-        assert match is not None, (
-            'triggers.healthcheck_sh が filemd5("${local.scripts_dir}/healthcheck.sh") でない'
-        )
+        assert match is not None, 'triggers.healthcheck_sh が filemd5("${local.scripts_dir}/healthcheck.sh") でない'
 
     def test_triggers_notify_sh_uses_local_scripts_dir(self):
         """Given main.tf
@@ -1894,9 +1889,7 @@ class TestMainTfLocalsScriptsDir:
             triggers,
         )
 
-        assert match is not None, (
-            'triggers.notify_sh が filemd5("${local.scripts_dir}/notify.sh") でない'
-        )
+        assert match is not None, 'triggers.notify_sh が filemd5("${local.scripts_dir}/notify.sh") でない'
 
     def test_triggers_logrotate_conf_uses_local_scripts_dir(self):
         """Given main.tf
@@ -1914,9 +1907,7 @@ class TestMainTfLocalsScriptsDir:
             triggers,
         )
 
-        assert match is not None, (
-            'triggers.logrotate_conf が filemd5("${local.scripts_dir}/logrotate.conf") でない'
-        )
+        assert match is not None, 'triggers.logrotate_conf が filemd5("${local.scripts_dir}/logrotate.conf") でない'
 
     def test_triggers_cron_d_uses_local_scripts_dir(self):
         """Given main.tf
@@ -1934,9 +1925,7 @@ class TestMainTfLocalsScriptsDir:
             triggers,
         )
 
-        assert match is not None, (
-            'triggers.cron_d が filemd5("${local.scripts_dir}/cron.d") でない'
-        )
+        assert match is not None, 'triggers.cron_d が filemd5("${local.scripts_dir}/cron.d") でない'
 
     def test_provisioner_file_healthcheck_sh_sources_local_scripts_dir(self):
         """Given main.tf

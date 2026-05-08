@@ -86,9 +86,7 @@ def build_filter(
         label = f"[r{i}]"
         rain_labels.append(label)
         parts.append(
-            f"[{idx}:a]aloop=loop=-1:size=2147483647,"
-            f"volume={volume_db:g}dB,"
-            f"afade=t=in:st=0:d={fadein_s:g}{label}"
+            f"[{idx}:a]aloop=loop=-1:size=2147483647,volume={volume_db:g}dB,afade=t=in:st=0:d={fadein_s:g}{label}"
         )
 
     if n_rain == 1:
@@ -98,18 +96,13 @@ def build_filter(
         parts.append(f"{intermediate}amix=inputs={n_rain}:normalize=0[rainmix]")
         rain_input = "[rainmix]"
 
-    parts.append(
-        f"[0:a]{rain_input}amix=inputs=2:duration=first:normalize=0[mixed]"
-    )
+    parts.append(f"[0:a]{rain_input}amix=inputs=2:duration=first:normalize=0[mixed]")
 
     target_i = loudnorm["I"]
     target_lra = loudnorm["LRA"]
     target_tp = loudnorm["TP"]
     if measured is None:
-        parts.append(
-            f"[mixed]loudnorm=I={target_i:g}:LRA={target_lra:g}:TP={target_tp:g}"
-            f":print_format=json[aout]"
-        )
+        parts.append(f"[mixed]loudnorm=I={target_i:g}:LRA={target_lra:g}:TP={target_tp:g}:print_format=json[aout]")
     else:
         parts.append(
             f"[mixed]loudnorm=I={target_i:g}:LRA={target_lra:g}:TP={target_tp:g}"
@@ -132,14 +125,10 @@ def _parse_loudnorm_json(stderr: str) -> dict[str, str]:
     """
     end = stderr.rfind("}")
     if end == -1:
-        raise ValidationError(
-            "ffmpeg pass1 stderr に loudnorm JSON ブロックが見つかりません"
-        )
+        raise ValidationError("ffmpeg pass1 stderr に loudnorm JSON ブロックが見つかりません")
     start = stderr.rfind("{", 0, end)
     if start == -1:
-        raise ValidationError(
-            "ffmpeg pass1 stderr に loudnorm JSON の開始括弧が見つかりません"
-        )
+        raise ValidationError("ffmpeg pass1 stderr に loudnorm JSON の開始括弧が見つかりません")
     block = stderr[start : end + 1]
     try:
         data = json.loads(block)
@@ -258,13 +247,9 @@ def finalize_master(
             print(f"  Layering {len(rains)} rain layer(s) onto {master.name}...")
 
         # pass1: loudnorm measure (stderr に print_format=json で計測値が出る)
-        pass1_filter = build_filter(
-            len(rains), volume_db, fadein_s, loudnorm, measured=None
-        )
+        pass1_filter = build_filter(len(rains), volume_db, fadein_s, loudnorm, measured=None)
         pass1_cmd = _build_pass1_cmd(master, rains, pass1_filter)
-        pass1 = subprocess.run(
-            pass1_cmd, capture_output=True, text=True, check=False
-        )
+        pass1 = subprocess.run(pass1_cmd, capture_output=True, text=True, check=False)
         if pass1.returncode != 0:
             print(
                 f"ERROR: ffmpeg pass1 (loudnorm measure) failed (rc={pass1.returncode})",
@@ -277,13 +262,9 @@ def finalize_master(
         measured = _parse_loudnorm_json(pass1.stderr)
 
         # pass2: measured を fold-in して apply + encode (master.tmp.mp3 へ書く)
-        pass2_filter = build_filter(
-            len(rains), volume_db, fadein_s, loudnorm, measured=measured
-        )
+        pass2_filter = build_filter(len(rains), volume_db, fadein_s, loudnorm, measured=measured)
         pass2_cmd = _build_pass2_cmd(master, rains, pass2_filter, tmp, bitrate)
-        pass2 = subprocess.run(
-            pass2_cmd, capture_output=True, text=True, check=False
-        )
+        pass2 = subprocess.run(pass2_cmd, capture_output=True, text=True, check=False)
         if pass2.returncode != 0:
             print(
                 f"ERROR: ffmpeg pass2 (apply) failed (rc={pass2.returncode})",

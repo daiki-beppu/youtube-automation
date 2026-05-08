@@ -296,11 +296,7 @@ class TestHealthcheckShBehavior:
 
         # 偽 notify.sh（呼ばれたら called_marker に追記）
         fake_notify = bin_dir / "notify.sh"
-        fake_notify.write_text(
-            "#!/usr/bin/env bash\n"
-            f'echo "$@" >> "{called_marker}"\n'
-            "exit 0\n"
-        )
+        fake_notify.write_text(f'#!/usr/bin/env bash\necho "$@" >> "{called_marker}"\nexit 0\n')
         fake_notify.chmod(0o755)
 
         # healthcheck.sh を tmp_dir/bin にコピー（同ディレクトリ参照に対応）
@@ -353,9 +349,7 @@ class TestHealthcheckShBehavior:
 
         order.md「5 分 × 12 回抑止」要件の core test。
         """
-        proc = self._run_with_state(
-            fake_env, active="activating", sub="auto-restart", result="success"
-        )
+        proc = self._run_with_state(fake_env, active="activating", sub="auto-restart", result="success")
         assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
         assert not fake_env["called_marker"].exists(), (
             "1h 休止中（idle）で notify.sh が呼ばれた（5 分間隔で誤検知が 12 回飛ぶ）"
@@ -379,9 +373,7 @@ class TestHealthcheckShBehavior:
         """
         proc = self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
         assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
-        assert fake_env["called_marker"].exists(), (
-            "anomaly 状態で notify.sh が呼ばれていない（異常通知が飛ばない）"
-        )
+        assert fake_env["called_marker"].exists(), "anomaly 状態で notify.sh が呼ばれていない（異常通知が飛ばない）"
         # メッセージが空でないこと
         called_text = fake_env["called_marker"].read_text()
         assert called_text.strip(), "notify.sh が空メッセージで呼ばれた（Discord 表示が無意味）"
@@ -416,9 +408,7 @@ class TestNotifyShStructure:
         Then ``set -euo pipefail`` が含まれている。
         """
         text = _read(_NOTIFY_SH)
-        assert re.search(r"^set\s+-euo\s+pipefail\s*$", text, flags=re.MULTILINE), (
-            "set -euo pipefail が無い"
-        )
+        assert re.search(r"^set\s+-euo\s+pipefail\s*$", text, flags=re.MULTILINE), "set -euo pipefail が無い"
 
     def test_loads_env_file_for_webhook(self):
         """Given notify.sh
@@ -505,9 +495,7 @@ class TestLogrotateConf:
         Then ``/opt/youtube-stream/logs/*.log`` を対象としている。
         """
         text = _read(_LOGROTATE_CONF)
-        assert re.search(r"/opt/youtube-stream/logs/\*\.log", text), (
-            "/opt/youtube-stream/logs/*.log を対象としていない"
-        )
+        assert re.search(r"/opt/youtube-stream/logs/\*\.log", text), "/opt/youtube-stream/logs/*.log を対象としていない"
 
     @pytest.mark.parametrize(
         "directive",
@@ -581,9 +569,7 @@ class TestHealthcheckEnvTftpl:
         When youtube-stream-healthcheck.env.tftpl を探す
         Then 存在する。
         """
-        assert _HEALTHCHECK_ENV_TFTPL.exists(), (
-            "templates/youtube-stream-healthcheck.env.tftpl が存在しない"
-        )
+        assert _HEALTHCHECK_ENV_TFTPL.exists(), "templates/youtube-stream-healthcheck.env.tftpl が存在しない"
 
     def test_contains_webhook_variable_assignment(self):
         """Given env tftpl
@@ -672,10 +658,7 @@ class TestMainTfHealthcheckDeploy:
         assert re.search(
             r"nonsensitive\(\s*sha256\(\s*var\.discord_webhook_url\s*\)\s*\)",
             triggers,
-        ), (
-            "triggers に nonsensitive(sha256(var.discord_webhook_url)) が無い "
-            "（webhook 差し替えで再 deploy されない）"
-        )
+        ), "triggers に nonsensitive(sha256(var.discord_webhook_url)) が無い （webhook 差し替えで再 deploy されない）"
 
     @pytest.mark.parametrize(
         "destination",
@@ -928,11 +911,9 @@ class TestStreamingReadmeHealthcheck:
         """
         text = _read(_STREAMING_README)
         if scenario_keyword == "再開":
-            assert (
-                "再開" in text
-                or "auto-restart" in text
-                or "RestartSec" in text
-            ), "README に自動再開シナリオの言及が無い"
+            assert "再開" in text or "auto-restart" in text or "RestartSec" in text, (
+                "README に自動再開シナリオの言及が無い"
+            )
         else:
             assert scenario_keyword in text, (
                 f"README に '{scenario_keyword}' シナリオの言及が無い（4 シナリオ運用手順未網羅）"
@@ -1206,9 +1187,7 @@ class TestStreamingArchiveCheckCli:
                 streaming_archive_check.main()
             except SystemExit:
                 pass
-            assert mock_post.called, (
-                "--notify-on-shortage を指定しても Discord に POST していない（通知が飛ばない）"
-            )
+            assert mock_post.called, "--notify-on-shortage を指定しても Discord に POST していない（通知が飛ばない）"
 
 
 # ============================================================================
@@ -1269,9 +1248,7 @@ class TestHealthcheckDoc:
         order.md「各シナリオが運用手順書に記載済み」要件。
         """
         text = _read(_HEALTHCHECK_DOC)
-        assert scenario_keyword in text, (
-            f"運用手順書に '{scenario_keyword}' シナリオの記載が無い"
-        )
+        assert scenario_keyword in text, f"運用手順書に '{scenario_keyword}' シナリオの記載が無い"
 
     def test_documents_auto_restart_scenario(self):
         """Given streaming-healthcheck.md
@@ -1279,8 +1256,6 @@ class TestHealthcheckDoc:
         Then 1 時間後の自動再開（RestartSec / auto-restart / 再開 のいずれか）の言及がある。
         """
         text = _read(_HEALTHCHECK_DOC)
-        assert (
-            "再開" in text
-            or "RestartSec" in text
-            or "auto-restart" in text
-        ), "運用手順書に自動再開シナリオの記載が無い"
+        assert "再開" in text or "RestartSec" in text or "auto-restart" in text, (
+            "運用手順書に自動再開シナリオの記載が無い"
+        )

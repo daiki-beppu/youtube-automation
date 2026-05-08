@@ -363,17 +363,13 @@ class TestResolveCollectionDir:
         monkeypatch.chdir(tmp_path)
         assert resolve_collection_dir(None) == Path.cwd()
 
-    def test_raises_validation_error_when_cwd_missing_master_dir(
-        self, tmp_path, monkeypatch
-    ):
+    def test_raises_validation_error_when_cwd_missing_master_dir(self, tmp_path, monkeypatch):
         (tmp_path / "02-Individual-music").mkdir()
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValidationError):
             resolve_collection_dir(None)
 
-    def test_raises_validation_error_when_cwd_missing_music_dir(
-        self, tmp_path, monkeypatch
-    ):
+    def test_raises_validation_error_when_cwd_missing_music_dir(self, tmp_path, monkeypatch):
         (tmp_path / "01-master").mkdir()
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValidationError):
