@@ -79,7 +79,6 @@ _CLOUD_INIT_YAML = _INFRA_DIR / "cloud-init.yaml"
 _TFVARS_EXAMPLE = _INFRA_DIR / "terraform.tfvars.example"
 _STREAMING_README = _INFRA_DIR / "README.md"
 
-_SECRETS_PY = _REPO_ROOT / "src" / "youtube_automation" / "utils" / "secrets.py"
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _HEALTHCHECK_DOC = _REPO_ROOT / "docs" / "streaming-healthcheck.md"
 
