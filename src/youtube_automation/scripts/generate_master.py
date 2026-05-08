@@ -21,7 +21,10 @@ import threading
 import time
 from pathlib import Path
 
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.collection_paths import (
+    CollectionPaths,
+    resolve_collection_dir,
+)
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
@@ -39,20 +42,6 @@ _SHUFFLE_SEED_KEY = "shuffle_seed"
 
 # 自動生成 seed の上限（ログ・再現用に 32-bit unsigned 範囲）。
 _AUTO_SEED_BOUND = 2**32
-
-
-def resolve_collection_dir(arg: str | None) -> Path:
-    if arg:
-        return Path(arg).resolve()
-
-    cwd = Path.cwd()
-    if (cwd / "01-master").is_dir() and (cwd / "02-Individual-music").is_dir():
-        return cwd
-
-    raise ValidationError(
-        "コレクションディレクトリを解決できません。引数で指定するか、"
-        "01-master/ と 02-Individual-music/ を持つディレクトリで実行してください。"
-    )
 
 
 def build_filter(n: int, crossfade: float) -> str:
