@@ -10,6 +10,8 @@ Usage:
 
 from pathlib import Path
 
+from youtube_automation.utils.exceptions import ValidationError
+
 
 class CollectionPaths:
     """標準コレクションディレクトリ構造のパスリゾルバ。
@@ -117,3 +119,25 @@ class CollectionPaths:
         if len(parts) >= 3 and parts[0].isdigit():
             return parts[2]
         return name
+
+
+def resolve_collection_dir(arg: str | None) -> Path:
+    """CLI 引数から collection ディレクトリを解決する (CWD フォールバック)。
+
+    `arg` 指定時はそのパスを resolve して返す。未指定時は CWD が
+    `01-master/` と `02-Individual-music/` を持つコレクションディレクトリで
+    あることを `CollectionPaths` 経由で検証して返す。判定に失敗した場合は
+    `ValidationError` を raise する (Fail Fast)。
+    """
+    if arg:
+        return Path(arg).resolve()
+
+    cwd = Path.cwd()
+    paths = CollectionPaths(cwd)
+    if paths.master_dir.is_dir() and paths.music_dir.is_dir():
+        return cwd
+
+    raise ValidationError(
+        "コレクションディレクトリを解決できません。引数で指定するか、"
+        "01-master/ と 02-Individual-music/ を持つディレクトリで実行してください。"
+    )
