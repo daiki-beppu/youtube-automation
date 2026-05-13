@@ -82,6 +82,9 @@ packages = ["src/youtube_automation"]
 # Claude Code スキルファイルをパッケージ内 _skills/ として同梱
 # (yt-skills sync --asset skills が importlib.resources で参照する)
 ".claude/skills" = "youtube_automation/_skills"
+# BGM チャンネル運営方針テンプレ (CLAUDE.md) を _claude_md/ として同梱
+# (yt-skills sync --asset claude-md が importlib.resources で参照する)
+".claude/CLAUDE.template.md" = "youtube_automation/_claude_md/CLAUDE.template.md"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 
@@ -90,6 +93,7 @@ include = [
     "src/",
     "tests/",
     ".claude/skills/",
+    ".claude/CLAUDE.template.md",
     "scripts/",
     "auth/SETUP.md",
     "auth/client_secrets_template.json",
