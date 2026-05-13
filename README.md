@@ -205,9 +205,8 @@ uv run ruff check .
 |---------|-------------|
 | `yt-skills` | Claude Code スキルの sync / list / diff |
 | `yt-analytics` | Analytics データ収集 |
-| `yt-generate-image` | Gemini API で画像生成 |
-| `yt-generate-thumbnail` | コレクションサムネイル生成 |
-| `yt-generate-music` / `yt-generate-music-dj` | Lyria 音楽生成 |
+| `yt-generate-image` | Gemini / OpenAI で画像生成（サムネイル兼用） |
+| `yt-generate-music-dj` | Lyria 音楽生成（DJ フェーズ展開） |
 | `yt-generate-suno` | Suno プロンプト生成 |
 | `yt-generate-loop-video` | Veo ループ動画生成 |
 | `yt-init-collection` | 新規コレクションの雛形作成 |
@@ -218,7 +217,6 @@ uv run ruff check .
 | `yt-video-analyze` | Gemini で YouTube 動画を直接解析（フック構造・BGM 展開・シーン・サムネ整合性・編集指標） |
 | `yt-channel-status` | チャンネル最新状況 |
 | `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
-| `yt-video-uploader` | 動画アップロード補助 |
 
 完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
 
