@@ -89,10 +89,6 @@ class TestFilePathProperties:
         paths = CollectionPaths(tmp_path)
         assert paths.thumbnail_prompts_path == tmp_path / "20-documentation" / "thumbnail-prompts.md"
 
-    def test_composition_path(self, tmp_path):
-        paths = CollectionPaths(tmp_path)
-        assert paths.composition_path == tmp_path / "20-documentation" / "composition.json"
-
 
 # ---------------------------------------------------------------------------
 # find_master_video

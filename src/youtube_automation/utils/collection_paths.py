@@ -65,10 +65,6 @@ class CollectionPaths:
     def thumbnail_prompts_path(self) -> Path:
         return self.root / "20-documentation" / "thumbnail-prompts.md"
 
-    @property
-    def composition_path(self) -> Path:
-        return self.root / "20-documentation" / "composition.json"
-
     def find_master_video(self) -> Path | None:
         """01-master/ からマスター動画（.mp4）を探す。"""
         for p in sorted(self.master_dir.glob("*.mp4")):
