@@ -9,12 +9,15 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 ## プロジェクト固有コマンド
 
 ```bash
-uv run yt-skills sync                       # チャンネルリポジトリへ .claude/skills を配布
-uv run yt-skills list                       # 同梱スキル一覧
-uv run yt-skills diff                       # 同梱版との差分確認
-uv run yt-config-migrate diff               # 旧 channel_config.json → 責務別分割のプレビュー
-uv run yt-config-migrate migrate --apply    # 実際に分割実行
-uv run yt-config-migrate verify             # 新 loader で読み込み検証
+uv run yt-skills sync                                # チャンネルリポジトリへ .claude/skills を配布
+uv run yt-skills sync --asset claude-md              # .claude/CLAUDE.md (BGM 運営方針テンプレ) を配布
+uv run yt-skills list                                # 同梱スキル一覧
+uv run yt-skills list --asset claude-md              # 同梱 CLAUDE.md テンプレ一覧
+uv run yt-skills diff                                # 同梱版と target の差分確認
+uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの差分確認
+uv run yt-config-migrate diff                        # 旧 channel_config.json → 責務別分割のプレビュー
+uv run yt-config-migrate migrate --apply             # 実際に分割実行
+uv run yt-config-migrate verify                      # 新 loader で読み込み検証
 ```
 
 `yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。
@@ -31,6 +34,7 @@ uv run yt-config-migrate verify             # 新 loader で読み込み検証
 - `src/youtube_automation/cli/` — ユーザー向け CLI（`yt-skills`, `yt-config-migrate`, `yt-cost-report`）
 - `src/youtube_automation/templates/` — 説明文テンプレート
 - `.claude/skills/` — Claude Code スキル群。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
+- `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
 - `utils/`, `agents/`, `auth/`, `scripts/` — submodule 利用者向け **後方互換 shim**（新規開発は `src/youtube_automation/` 側で行う）
 
 ### 下流チャンネルリポジトリ（`CHANNEL_DIR` が指す先）
@@ -111,6 +115,8 @@ collections/            # コンテンツ成果物
 ### パッケージング
 
 - `.claude/skills/` は `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_skills/` に同梱され、`yt-skills sync` が `importlib.resources` で参照する
+- `.claude/CLAUDE.template.md` も同様に `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_claude_md/CLAUDE.template.md` に同梱され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として展開される
+- 配布アセットの追加は `src/youtube_automation/cli/skills_sync.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートされる（`kind="dir" | "file"` を選ぶ）
 - バージョン bump は `pyproject.toml` の `version` と `src/youtube_automation/__init__.py` の `__version__` の **両方**
 
 ## セキュリティ

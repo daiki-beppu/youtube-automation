@@ -25,6 +25,19 @@ from youtube_automation.scripts.generate_music_dj import (
 from youtube_automation.utils.exceptions import ConfigError
 
 
+@pytest.fixture(autouse=True)
+def _isolate_channel_dir(tmp_path, monkeypatch):
+    """`CHANNEL_DIR` を tmp_path に向けてフィクスチャ汚染を防ぐ。
+
+    `generate_segmented` 経路は `cost_tracker.log_generation` →
+    `cost_tracker._channel_dir()` で `CHANNEL_DIR` を直接参照し
+    `CHANNEL_DIR/data/audio_costs.json` に追記する（`load_config()` は不使用）。
+    conftest のセッション値 (tests/fixtures/sample_channel/) のまま走らせると
+    audio_costs.json が汚染されるため env のみ差し替える。
+    """
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+
+
 def make_composition(phases_count=6, total_min=60, *, base_extras=None, phase_extras_by_index=None):
     """テスト用 composition を生成。
 
