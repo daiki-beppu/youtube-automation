@@ -80,7 +80,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
    - それ以外のモード: `/thumbnail <theme>` を Agent で実行（テキストオーバーレイ生成）
 4. **音楽素材生成**: Agent ツールで音楽エンジンに応じたスキルを実行:
    - Suno: `/suno <theme>` を Skill ツールで実行（プロンプト生成）
-   - Lyria: `/lyria <theme>` を Skill ツールで実行（composition.json 生成のみ。セグメント生成はしない。`/wf-next` で実行）
+   - Lyria: `/lyria <theme>` を Skill ツールで実行（プロンプト設計のみ。Lyria 3 API 呼び出しは `/wf-next` で実行）
 5. `workflow-state.json` を更新:
    - `assets.music_prompts`: `true`
 
@@ -125,7 +125,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
 
    音楽エンジンに応じた次ステップ案内:
    - **Suno**: 「`suno-prompts.md` のプロンプトを SunoAI に投入 → プレイリスト作成後 `/wf-next` を実行してください」
-   - **Lyria**: 「`/wf-next` を実行するとセグメント自動生成が始まります → ミキシング+マスタリング後に再度 `/wf-next`」
+   - **Lyria**: 「`/wf-next` を実行すると Lyria 3 API が呼ばれ、コレクション尺に応じてセグメントが生成されます → ミキシング+マスタリング後に再度 `/wf-next`」
 
 **重要**: `/wf-next` への自動接続はしない。ユーザーが手動で `/wf-next` を呼ぶ。
 
@@ -135,6 +135,6 @@ Phase 1 の成果物を `20-documentation/` に保存:
 - サムネイル生成: `/thumbnail` スキル
 - ループ動画生成: `/loop-video` スキル
 - 音楽プロンプト生成: `/suno` スキル
-- 音楽コンポジション生成: `/lyria` スキル
+- 音楽プロンプト設計 + Lyria 3 API 呼び出し: `/lyria` スキル
 - 後続ステップ管理: `/wf-next`
 - 進捗確認: `/wf-status`

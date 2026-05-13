@@ -113,6 +113,7 @@ class BAHMetadataGenerator:
         self.config = load_config()
         self._masterup_config = load_skill_config("masterup")
         self._crossfade_sec = float(self._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
+        self._video_description_config = load_skill_config("video-description")
         self.collection_path = Path(collection_path)
         self.collection_name = self._extract_collection_name()
         self.bit_depth = self.config.content.genre.style
@@ -492,6 +493,13 @@ class BAHMetadataGenerator:
             tagline = desc_data.get("tagline", self.config.meta.tagline)
             hashtags = desc_data.get("hashtags", self.config.content.descriptions.hashtag_line)
 
+            section_headers = self._video_description_config.get("section_headers", {})
+            track_list_header = section_headers.get("track_list", "")
+            usage_header = section_headers.get("usage_attribution", "")
+            channel_link_header = section_headers.get("channel_link_template", "🔗 {channel_name}:").format(
+                channel_name=self.config.meta.channel_name
+            )
+
             desc_parts = []
             if opening_poem:
                 desc_parts.append(opening_poem)
@@ -502,13 +510,13 @@ class BAHMetadataGenerator:
                     f"- Vibe : {vibe_line}",
                     f"- Best for : {best_for_line}",
                     "",
-                    "⎯⎯⎯⎯ ✦ Track List ✦ ⎯⎯⎯⎯",
+                    track_list_header,
                     timestamp_body,
                     "",
-                    "📝 Usage & Attribution:",
+                    usage_header,
                     usage_lines,
                     "",
-                    f"🔗 {self.config.meta.channel_name}:",
+                    channel_link_header,
                     cta,
                     tagline,
                     "",
@@ -561,21 +569,26 @@ class BAHMetadataGenerator:
         # config から説明文パーツを構築
         perfect_for_lines = "\n".join(f"• {item}" for item in list(self.config.content.descriptions.perfect_for))
 
+        section_headers = self._video_description_config.get("section_headers", {})
+        usage_header = section_headers.get("usage_attribution", "")
+        perfect_for_header = section_headers.get("perfect_for", "")
+        channel_link_header = section_headers.get("channel_link_template", "🔗 {channel_name}:").format(
+            channel_name=self.config.meta.channel_name
+        )
+        usage_lines_cfg = self._video_description_config.get("usage_attribution_lines", [])
+
         description_parts.extend(
             [
                 "",
                 self.config.content.descriptions.render_opening(),
                 self.config.content.descriptions.sub_opening,
                 "",
-                "📝 Usage & Attribution:",
-                "• This music is original AI composition",
-                "• Free to use for personal & commercial projects",
-                "• Attribution appreciated but not required",
-                "• Redistribution as-is prohibited",
+                usage_header,
+                *usage_lines_cfg,
                 "",
-                f"🎮 Perfect for:\n{perfect_for_lines}",
+                f"{perfect_for_header}\n{perfect_for_lines}",
                 "",
-                f"🔗 {self.config.meta.channel_name}:",
+                channel_link_header,
                 self.config.meta.cta_subscribe,
                 self.config.meta.tagline,
                 "",
