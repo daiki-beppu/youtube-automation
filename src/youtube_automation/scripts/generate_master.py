@@ -150,8 +150,7 @@ def _collect_audio_inputs(music_dir: Path) -> tuple[list[Path], str]:
     if len(matches_by_ext) > 1:
         found_labels = ", ".join(f".{e}({len(v)})" for e, v in matches_by_ext.items())
         raise ValidationError(
-            "音声フォーマットが混在しています (出力フォーマットを一意に決められません): "
-            f"{music_dir} [{found_labels}]"
+            f"音声フォーマットが混在しています (出力フォーマットを一意に決められません): {music_dir} [{found_labels}]"
         )
     ext, files = next(iter(matches_by_ext.items()))
     return files, ext

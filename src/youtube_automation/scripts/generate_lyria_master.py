@@ -345,8 +345,7 @@ def main() -> int:
         print("  ──────────────────────────────────────────")
         print(f"  Collection : {collection_dir}")
         print(
-            f"  Segments   : {n}  (target {target_min:g}min + padding {padding_min:g}min "
-            f"@ {_LYRIA_SEGMENT_SEC}s/seg)"
+            f"  Segments   : {n}  (target {target_min:g}min + padding {padding_min:g}min @ {_LYRIA_SEGMENT_SEC}s/seg)"
         )
         print(f"  Model      : {model}")
         if args.bpm is not None:
