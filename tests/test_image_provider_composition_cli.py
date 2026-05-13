@@ -170,13 +170,9 @@ class TestCliHelperShared:
         """インラインの 16 行ブロック特徴語が残っていないこと（再発検知）。"""
         src = self._read_script()
         # 元の重複ブロック特有の連続フレーズ
-        assert "上書きしますか? (y/N):" not in src, (
-            f"{self.SCRIPT_NAME} に旧 inline overwrite prompt が再発している"
-        )
+        assert "上書きしますか? (y/N):" not in src, f"{self.SCRIPT_NAME} に旧 inline overwrite prompt が再発している"
 
     def test_script_does_not_inline_reference_loop(self):
         """インラインの参照画像存在チェック特徴語が残っていないこと（再発検知）。"""
         src = self._read_script()
-        assert "参照画像が見つかりません" not in src, (
-            f"{self.SCRIPT_NAME} に旧 inline 参照画像チェックが再発している"
-        )
+        assert "参照画像が見つかりません" not in src, f"{self.SCRIPT_NAME} に旧 inline 参照画像チェックが再発している"
