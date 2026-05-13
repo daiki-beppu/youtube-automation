@@ -2,6 +2,8 @@
 
 YouTube チャンネル運営を自動化するツールキット。Analytics データ収集、AI コンテンツ生成、動画アップロード、メタデータ管理をまとめて提供します。
 
+> **新規利用者の方へ**: セットアップ手順は [`ONBOARDING.md`](ONBOARDING.md) を参照してください。
+
 ## Features
 
 - **Analytics 収集・分析** - YouTube Analytics API からデータを自動収集し、CTR・エンゲージメント分析レポートを生成
