@@ -123,6 +123,18 @@ Gemini を案件単位で切り替えられるようにした。OpenAI provider 
 - `.claude/skills/channel-setup/references/claude-md-template.md`: `uv run yt-video-uploader`
   行を削除
 
+### Migration
+
+downstream チャンネルリポジトリで v5.3.0 → v5.4.0 への追従手順は
+[docs/upgrades/v5.4.0.md](docs/upgrades/v5.4.0.md) を参照。
+
+サマリ:
+
+- スキル名 rename 8 件（`analyze` → `analytics-analyze` など、破壊的）
+- `image_generator.py` 削除 → `image_provider/` モジュール（直 import している場合のみ書き換え必要）
+- (オプトイン) `/streaming` スキル + `infra/terraform/streaming/` 追加
+- (追加のみ) `yt-discover-competitors` CLI + `discover-competitors` スキル
+
 ## [5.2.0] - 2026-04-29
 
 ### Added

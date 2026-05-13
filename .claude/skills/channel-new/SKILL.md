@@ -49,13 +49,29 @@ uv run yt-skills sync
 
 `/channel-new` 段階では **リサーチ用の最低限認証** のみ整える（競合ベンチマーク収集のため）。本番用 GCP プロジェクトと OAuth クライアントは `/channel-setup` の GCP / Vertex AI ブートストラップ step で自動化する。
 
-**リサーチ用ショートカット**: 既存チャンネルのトークンをコピーして使用可能（YouTube Data API はチャンネル所有権に関係なく動作）:
+**リサーチ用ショートカット**: 既存チャンネルのトークンをコピーして使用可能（YouTube Data API はチャンネル所有権に関係なく動作）。コピー元は **その場で動的に列挙** する。特定リポジトリ名はハードコードしない:
 
-```bash
-cp /path/to/existing-channel-repo/auth/token.json auth/token.json
-```
+1. **候補の動的列挙**: 新リポジトリの親ディレクトリ（このリポジトリの 1 つ上、例: `~/01-dev/projects/`）配下の各サブディレクトリを走査し、`auth/token.json` が存在するものをコピー元候補として収集する:
 
-デフォルトのコピー元は `youtube-fantasy-celtic-music`。他のチャンネルを使いたい場合はユーザーに確認。
+   ```bash
+   ls -d ../*/auth/token.json 2>/dev/null
+   ```
+
+2. **ユーザーに選択を提示**: 候補が 1 件以上見つかったら、リポジトリ名と最終更新日時を一覧で提示し、どれをコピー元にするかユーザーに選んでもらう。1 件しかない場合も自動採用せず必ず確認する。
+
+3. **明示入力フォールバック**: 候補が 0 件、または提示した候補をユーザーが採用しない場合は、コピー元の `auth/token.json` への **絶対パス** をユーザーに入力してもらう:
+
+   ```
+   コピー元の token.json の絶対パスを教えてください（例: /Users/<you>/path/to/some-channel/auth/token.json）
+   ```
+
+4. **コピー実行**: 選択 or 入力されたパスを使ってコピー:
+
+   ```bash
+   cp <選択されたパス> auth/token.json
+   ```
+
+5. **コピー可能なトークンが用意できない場合**: 本 Step はスキップし、本番認証の整備をそのまま `/channel-setup` の GCP / Vertex AI ブートストラップ step に委ねる。リサーチ用ベンチマーク収集は本番認証が整ったあとに実行する。
 
 本番用の GCP プロジェクト作成 / API 有効化 / Vertex AI 設定 / `.env` 書き出しは `/channel-setup` の GCP ブートストラップ step で AI セッション内完結させる（判断フローは `channel-setup/references/gcp-bootstrap.md`）。
 

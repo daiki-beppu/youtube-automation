@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-channels-automation"
-version = "5.4.0"
+version = "5.5.0"
 description = "YouTube channel automation toolkit - analytics, AI content generation, and auto-upload"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -48,6 +48,7 @@ yt-config-migrate = "youtube_automation.cli.config_migrate:main"
 yt-cost-report = "youtube_automation.cli.cost_report:main"
 yt-discover-competitors = "youtube_automation.scripts.discover_competitors:main"
 yt-fetch-stream-key = "youtube_automation.scripts.fetch_stream_key:main"
+yt-finalize-master = "youtube_automation.scripts.finalize_master:main"
 yt-fix-timestamps = "youtube_automation.scripts.fix_per_theme_timestamps:main"
 yt-generate-image = "youtube_automation.scripts.generate_image:main"
 yt-generate-loop-video = "youtube_automation.scripts.generate_loop_video:main"

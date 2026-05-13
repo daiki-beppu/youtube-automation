@@ -10,7 +10,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from youtube_automation.utils.collection_paths import CollectionPaths
+import pytest
+
+from youtube_automation.utils.collection_paths import (
+    CollectionPaths,
+    resolve_collection_dir,
+)
+from youtube_automation.utils.exceptions import ValidationError
 
 # ---------------------------------------------------------------------------
 # コンストラクタ
@@ -323,3 +329,53 @@ class TestCollectionName:
         paths = CollectionPaths(col)
         # Only 2 parts, so len(parts) < 3 → returns full name
         assert paths.collection_name == "123-name"
+
+
+# ---------------------------------------------------------------------------
+# resolve_collection_dir (DRY 統合: generate_master / finalize_master 共通)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveCollectionDir:
+    """`generate_master.py` / `finalize_master.py` から共通利用される CLI 引数解決。
+
+    `01-master/` / `02-Individual-music/` の契約文字列がこの関数のエラーメッセージと
+    `CollectionPaths.master_dir` / `music_dir` プロパティの 1 系統だけに集約され、
+    各 script 側でローカル複製しないことの再発防止テスト。
+    """
+
+    def test_explicit_arg_returns_resolved_path(self, tmp_path):
+        target = tmp_path / "some-collection"
+        target.mkdir()
+        result = resolve_collection_dir(str(target))
+        assert result == target.resolve()
+
+    def test_explicit_arg_does_not_require_subdirs(self, tmp_path):
+        # 明示引数のときは存在検証しない (既存挙動の踏襲)。
+        target = tmp_path / "no-subdirs"
+        target.mkdir()
+        result = resolve_collection_dir(str(target))
+        assert result == target.resolve()
+
+    def test_cwd_fallback_when_arg_none_and_subdirs_exist(self, tmp_path, monkeypatch):
+        (tmp_path / "01-master").mkdir()
+        (tmp_path / "02-Individual-music").mkdir()
+        monkeypatch.chdir(tmp_path)
+        assert resolve_collection_dir(None) == Path.cwd()
+
+    def test_raises_validation_error_when_cwd_missing_master_dir(self, tmp_path, monkeypatch):
+        (tmp_path / "02-Individual-music").mkdir()
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValidationError):
+            resolve_collection_dir(None)
+
+    def test_raises_validation_error_when_cwd_missing_music_dir(self, tmp_path, monkeypatch):
+        (tmp_path / "01-master").mkdir()
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValidationError):
+            resolve_collection_dir(None)
+
+    def test_raises_validation_error_when_cwd_has_neither(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValidationError):
+            resolve_collection_dir(None)
