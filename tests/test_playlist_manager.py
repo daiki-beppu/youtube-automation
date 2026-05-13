@@ -67,11 +67,7 @@ def manager(mock_config, mock_youtube):
         patch("youtube_automation.scripts.playlist_manager.load_config", return_value=mock_config),
         patch("youtube_automation.scripts.playlist_manager.channel_dir", return_value=Path("/tmp/fake_channel")),
         patch("youtube_automation.scripts.playlist_manager.get_youtube", return_value=mock_youtube),
-        patch("youtube_automation.scripts.playlist_manager.VideoUploader") as MockUploader,
     ):
-        mock_uploader_instance = MagicMock()
-        MockUploader.return_value = mock_uploader_instance
-
         from youtube_automation.scripts.playlist_manager import PlaylistManager
 
         obj = PlaylistManager()
@@ -142,10 +138,10 @@ class TestResolvePlaylists:
 class TestCreateAllPlaylists:
     def test_dry_run_no_api_calls(self, manager, capsys):
         """dry_run モードでは API コールが発生しない"""
-        result = manager.create_all_playlists(dry_run=True)
+        with patch.object(manager, "_create_playlist") as mock_create:
+            result = manager.create_all_playlists(dry_run=True)
         assert result == {}
-        # uploader.create_playlist が呼ばれていないことを確認
-        manager.uploader.create_playlist.assert_not_called()
+        mock_create.assert_not_called()
 
     def test_dry_run_prints_plan(self, manager, capsys):
         """dry_run モードで作成予定を表示する"""
@@ -156,11 +152,14 @@ class TestCreateAllPlaylists:
 
     def test_skips_existing_playlists(self, manager):
         """playlist_id 既存のプレイリストはスキップする"""
-        manager.uploader.create_playlist.return_value = {
-            "status": "success",
-            "playlist_id": "PL_NEW",
-        }
-        with patch.object(manager, "_write_back_playlist_ids"):
+        with (
+            patch.object(
+                manager,
+                "_create_playlist",
+                return_value={"status": "success", "playlist_id": "PL_NEW"},
+            ),
+            patch.object(manager, "_write_back_playlist_ids"),
+        ):
             result = manager.create_all_playlists(dry_run=False)
         # new_playlist だけ作成される
         assert "new_playlist" in result
@@ -168,11 +167,14 @@ class TestCreateAllPlaylists:
 
     def test_create_success_writes_back(self, manager):
         """作成成功時に _write_back_playlist_ids が呼ばれる"""
-        manager.uploader.create_playlist.return_value = {
-            "status": "success",
-            "playlist_id": "PL_CREATED",
-        }
-        with patch.object(manager, "_write_back_playlist_ids") as mock_write:
+        with (
+            patch.object(
+                manager,
+                "_create_playlist",
+                return_value={"status": "success", "playlist_id": "PL_CREATED"},
+            ),
+            patch.object(manager, "_write_back_playlist_ids") as mock_write,
+        ):
             manager.create_all_playlists(dry_run=False)
             mock_write.assert_called_once()
 
@@ -185,10 +187,11 @@ class TestCreateAllPlaylists:
 class TestAssignVideo:
     def test_dry_run_no_api_calls(self, manager, capsys):
         """dry_run モードでは API コールが発生しない"""
-        result = manager.assign_video("VID123", "ocean waves", dry_run=True)
+        with patch.object(manager, "_add_video_to_playlist") as mock_add:
+            result = manager.assign_video("VID123", "ocean waves", dry_run=True)
         # auto_add の 'all' と theme match の 'relaxation' がマッチ
         assert "all" in result
-        manager.uploader.add_video_to_playlist.assert_not_called()
+        mock_add.assert_not_called()
 
     def test_dry_run_prints_assignments(self, manager, capsys):
         """dry_run モードで割り当て予定を表示する"""
@@ -200,8 +203,10 @@ class TestAssignVideo:
         """playlist_id 未設定のプレイリストはスキップする"""
         # new_playlist を auto_add にしてマッチさせる
         manager.config.playlists.items["new_playlist"]["auto_add"] = True
-        with patch.object(manager, "_list_playlist_video_ids", return_value=set()):
-            manager.uploader.add_video_to_playlist.return_value = True
+        with (
+            patch.object(manager, "_list_playlist_video_ids", return_value=set()),
+            patch.object(manager, "_add_video_to_playlist", return_value=True),
+        ):
             result = manager.assign_video("VID1", "test", dry_run=False)
         # new_playlist は playlist_id 未設定なのでスキップ
         assert "new_playlist" not in result
@@ -289,3 +294,104 @@ class TestListPlaylistVideoIds:
 
         result = manager._list_playlist_video_ids("PL_FAIL")
         assert result == set()
+
+
+# ---------------------------------------------------------------------------
+# _create_playlist (旧 VideoUploader.create_playlist から PlaylistManager に内包)
+# ---------------------------------------------------------------------------
+
+
+class TestCreatePlaylist:
+    def test_success(self, manager, mock_youtube):
+        """プレイリスト作成成功時に playlist_id と URL を含む dict を返す"""
+        mock_youtube.playlists.return_value.insert.return_value.execute.return_value = {"id": "PLabc123"}
+
+        result = manager._create_playlist("My Playlist", "Desc")
+
+        assert result["status"] == "success"
+        assert result["playlist_id"] == "PLabc123"
+        assert "PLabc123" in result["playlist_url"]
+        assert result["title"] == "My Playlist"
+
+    def test_failure(self, manager, mock_youtube):
+        """API 例外時は status=failed と error メッセージを返す"""
+        mock_youtube.playlists.return_value.insert.return_value.execute.side_effect = Exception("Quota exceeded")
+
+        result = manager._create_playlist("Fail PL", "Desc")
+
+        assert result["status"] == "failed"
+        assert "Quota exceeded" in result["error"]
+        assert result["title"] == "Fail PL"
+
+    def test_passes_privacy_status(self, manager, mock_youtube):
+        """privacy_status が body.status.privacyStatus に渡される"""
+        mock_insert = mock_youtube.playlists.return_value.insert
+        mock_insert.return_value.execute.return_value = {"id": "PL1"}
+
+        manager._create_playlist("T", "D", privacy_status="unlisted")
+
+        call_kwargs = mock_insert.call_args
+        body = call_kwargs[1]["body"]
+        assert body["status"]["privacyStatus"] == "unlisted"
+        assert body["snippet"]["title"] == "T"
+
+
+# ---------------------------------------------------------------------------
+# _add_video_to_playlist (旧 VideoUploader.add_video_to_playlist から内包)
+# ---------------------------------------------------------------------------
+
+
+class TestAddVideoToPlaylist:
+    def test_success(self, manager, mock_youtube):
+        """動画追加成功時に True を返す"""
+        mock_youtube.playlistItems.return_value.insert.return_value.execute.return_value = {}
+
+        result = manager._add_video_to_playlist("PL123", "VID456", position=0)
+
+        assert result is True
+
+    def test_failure(self, manager, mock_youtube):
+        """API 例外時は False を返す"""
+        mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = Exception("API Error")
+
+        result = manager._add_video_to_playlist("PL123", "VID456")
+
+        assert result is False
+
+    def test_passes_correct_body(self, manager, mock_youtube):
+        """playlistId / resourceId / position が body に渡される"""
+        mock_insert = mock_youtube.playlistItems.return_value.insert
+        mock_insert.return_value.execute.return_value = {}
+
+        manager._add_video_to_playlist("PL_ABC", "VID_XYZ", position=3)
+
+        call_kwargs = mock_insert.call_args
+        assert call_kwargs[1]["part"] == "snippet"
+        body = call_kwargs[1]["body"]
+        assert body["snippet"]["playlistId"] == "PL_ABC"
+        assert body["snippet"]["resourceId"]["videoId"] == "VID_XYZ"
+        assert body["snippet"]["position"] == 3
+
+    def test_position_none_omits_position_key(self, manager, mock_youtube):
+        """position=None 指定時は body.snippet に position キーが含まれない（末尾追加を API に委ねる）"""
+        mock_insert = mock_youtube.playlistItems.return_value.insert
+        mock_insert.return_value.execute.return_value = {}
+
+        result = manager._add_video_to_playlist("PL_END", "VID_TAIL", position=None)
+
+        assert result is True
+        call_kwargs = mock_insert.call_args
+        body = call_kwargs[1]["body"]
+        assert body["snippet"]["playlistId"] == "PL_END"
+        assert body["snippet"]["resourceId"]["videoId"] == "VID_TAIL"
+        assert "position" not in body["snippet"]
+
+    def test_position_zero_includes_position_key(self, manager, mock_youtube):
+        """position=0 は明示的に先頭挿入として body に含まれる（falsy 0 を None と誤判定しない）"""
+        mock_insert = mock_youtube.playlistItems.return_value.insert
+        mock_insert.return_value.execute.return_value = {}
+
+        manager._add_video_to_playlist("PL_HEAD", "VID_FIRST", position=0)
+
+        body = mock_insert.call_args[1]["body"]
+        assert body["snippet"]["position"] == 0

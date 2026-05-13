@@ -97,7 +97,7 @@ collections/            # コンテンツ成果物
 
 ### スクリプト配置
 
-- **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`、`.claude/skills/lyria/references/generate_music.py`）
+- **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`）
 - ルート `scripts/` には複数の文脈から共有される **共通スクリプトのみ** を置く（例: `gcp-bootstrap.sh`, `gcp-terraform-apply.sh`）
 - 単一 skill からしか呼ばれないものを `scripts/` に残すと、skill の自己完結性が崩れて配布時に取り残されるので避ける
 
