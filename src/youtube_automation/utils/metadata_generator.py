@@ -269,45 +269,17 @@ class BAHMetadataGenerator:
     # ─── タイムスタンプ生成 ─────────────────────────────
 
     def generate_timestamps(self) -> list[dict]:
-        """3ソース対応のタイムスタンプ生成
+        """個別トラックからタイムスタンプ生成
 
-        優先順位:
-        1. 個別トラックがある場合 → analyze_audio_files()
-        2. composition.json がある場合 → phases[].at_min
-        3. いずれもない場合 → 空リスト
+        02-Individual-music/ にトラックがあれば analyze_audio_files() で生成する。
+        なければ空リスト。
         """
-        # 1. 個別トラックがある場合
         audio_dir = self.collection_path / "02-Individual-music"
         if audio_dir.exists() and any(audio_dir.iterdir()):
             tracks = self.analyze_audio_files()
             return [{"timestamp": t["timestamp"], "title": t["title"]} for t in tracks]
 
-        # 2. composition.json がある場合（Lyria DJ 生成）
-        comp_path = self.collection_path / "20-documentation" / "composition.json"
-        if comp_path.exists():
-            return self._timestamps_from_composition(comp_path)
-
         return []
-
-    def _timestamps_from_composition(self, comp_path: Path) -> list[dict]:
-        """composition.json の phases からタイムスタンプを生成"""
-        with open(comp_path, "r", encoding="utf-8") as f:
-            composition = json.load(f)
-
-        timestamps = []
-        for phase in composition.get("phases", []):
-            at_min = phase.get("at_min", 0)
-            at_sec = at_min * 60
-            name = phase.get("name_en", phase.get("name", ""))
-            timestamps.append(
-                {
-                    "timestamp": self._format_timestamp(at_sec),
-                    "title": name,
-                }
-            )
-
-        logger.info(f"composition.json から {len(timestamps)} チャプター生成")
-        return timestamps
 
     def format_timestamps_text(self) -> str:
         """タイムスタンプをYouTube概要欄用テキストに整形"""
