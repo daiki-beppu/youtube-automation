@@ -131,9 +131,8 @@ def test_load_all_sections(tmp_path, monkeypatch):
         "benchmark": {"channels": [{"name": "Rival", "id": "UC123"}]},
     }
     sections["playlists.json"] = {"playlists": {"main": "PLtest123"}}
-    # v4.0.0 で post_upload / short セクションは撤去されたが、downstream の
-    # workflow.json に残存していても loader が素通し（ConfigError を投げない）
-    # ことを保証するための後方互換レグレッションとしてここに残す。
+    # post_upload.short_publish_time（Shorts 公開時刻）は workflow dataclass にロードされる。
+    # `workflow` / `short` セクションは未使用キーとして素通し（後方互換）。
     sections["workflow.json"] = {
         "workflow": {},
         "post_upload": {"short_publish_time": "09:30"},
@@ -196,6 +195,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.comments.rules[0].keywords == ["こんにちは"]
     assert config.comments.templates == {"ja": {"greet": "ありがとうございます！"}}
     assert config.comments.ng_words == ["spam"]
+    assert config.workflow.post_upload.short_publish_time == "09:30"
 
 
 def test_comments_rule_name_required(tmp_path, monkeypatch):
@@ -297,6 +297,19 @@ def test_optional_sections_default(tmp_path, monkeypatch):
     assert config.analytics.benchmark.channels == []
     assert config.playlists.items == {}
     assert config.audio.target_duration_min is None
+    # workflow.json が無くても PostUpload はデフォルト ("08:00")
+    assert config.workflow.post_upload.short_publish_time == "08:00"
+
+
+def test_workflow_post_upload_short_publish_time_loaded(tmp_path, monkeypatch):
+    """workflow.json::post_upload.short_publish_time が dataclass に反映される"""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"post_upload": {"short_publish_time": "07:15"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+    assert config.workflow.post_upload.short_publish_time == "07:15"
 
 
 def test_localizations_missing(tmp_path, monkeypatch):

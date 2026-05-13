@@ -4,6 +4,8 @@
     "ja": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
       "activities": "ゲーム · 勉強 · 集中",
+      "short_title_template": "{theme} ✦ {channel_name} #Shorts",
+      "short_description_template": "{collection_name} | {channel_name}\n\n♫ フルバージョン → {cc_video_url}\n\n{tagline}\n\n#chiptune #8bit #BGM #Shorts",
       "description": {
         "opening_poem": "ピクセルの夜、冒険の調べ",
         "cta_subscribe": "チャンネル登録お願いします！",
@@ -14,6 +16,8 @@
     "ko": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
       "activities": "게임 · 공부 · 집중",
+      "short_title_template": "{theme} ✦ {channel_name} #Shorts",
+      "short_description_template": "{collection_name} | {channel_name}\n\n♫ 전체 버전 → {cc_video_url}\n\n{tagline}\n\n#chiptune #8bit #BGM #Shorts",
       "description": {
         "opening_poem": "픽셀의 밤, 모험의 선율",
         "cta_subscribe": "채널을 구독해 주세요!",
@@ -24,6 +28,8 @@
     "es": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
       "activities": "Gaming · Estudio · Foco",
+      "short_title_template": "{theme} ✦ {channel_name} #Shorts",
+      "short_description_template": "{collection_name} | {channel_name}\n\n♫ Versión completa → {cc_video_url}\n\n{tagline}\n\n#chiptune #8bit #BGM #Shorts",
       "description": {
         "opening_poem": "Noche de píxeles, melodía de aventura",
         "cta_subscribe": "Suscríbete para nuevas aventuras chiptune!",
@@ -34,6 +40,8 @@
     "pt": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
       "activities": "Gaming · Estudo · Foco",
+      "short_title_template": "{theme} ✦ {channel_name} #Shorts",
+      "short_description_template": "{collection_name} | {channel_name}\n\n♫ Versão completa → {cc_video_url}\n\n{tagline}\n\n#chiptune #8bit #BGM #Shorts",
       "description": {
         "opening_poem": "Noite de pixels, melodia de aventura",
         "cta_subscribe": "Inscreva-se para novas aventuras chiptune!",
@@ -44,6 +52,8 @@
     "zh-CN": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
       "activities": "游戏 · 学习 · 专注",
+      "short_title_template": "{theme} ✦ {channel_name} #Shorts",
+      "short_description_template": "{collection_name} | {channel_name}\n\n♫ 完整版 → {cc_video_url}\n\n{tagline}\n\n#chiptune #8bit #BGM #Shorts",
       "description": {
         "opening_poem": "像素之夜，冒险旋律",
         "cta_subscribe": "订阅频道获取更多芯片音乐冒险！",

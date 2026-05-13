@@ -15,7 +15,7 @@ from youtube_automation.utils.config.content import Content, Descriptions, Genre
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import Branding, ChannelMeta
 from youtube_automation.utils.config.playlists import Playlists
-from youtube_automation.utils.config.workflow import Workflow
+from youtube_automation.utils.config.workflow import PostUpload, Workflow
 from youtube_automation.utils.config.youtube import ContentModel, YoutubeApi, YoutubeSection
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -264,11 +264,15 @@ def _build_playlists(merged: dict) -> Playlists:
 
 
 def _build_workflow(merged: dict) -> Workflow:
-    # v4.0.0 で short / community_post 関連セクションを撤去。
-    # `workflow` / `post_upload` / `short` / `community` が downstream に残っていても
-    # `_validate_required` は workflow.json に必須キーを登録していないため
-    # 素通しする（後方互換）。
-    return Workflow()
+    # `post_upload.short_publish_time` のみ参照する（Shorts スケジュール公開時刻）。
+    # downstream の `workflow` / `short` / `community` セクションは
+    # `_validate_required` に必須登録していないため未使用キーは素通しする。
+    post_upload_data = merged.get("post_upload") or {}
+    return Workflow(
+        post_upload=PostUpload(
+            short_publish_time=post_upload_data.get("short_publish_time", "08:00"),
+        ),
+    )
 
 
 def _build_audio(merged: dict) -> Audio:

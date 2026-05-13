@@ -603,6 +603,117 @@ class BAHMetadataGenerator:
         """YouTube タグ生成（config/channel/content.json 駆動）"""
         return self.config.content.tags.for_collection(self.collection_name)
 
+    # ─── Shorts メタデータ生成 ─────────────────────────
+
+    def _format_duration_phrase(self) -> str:
+        """`config.audio.target_duration_min` から `Full X-hour collection` 表現を返す.
+
+        Shorts 概要欄で CC への流入導線として使う「Full N-hour collection → URL」を
+        組み立てる際の N 部分を整数時間で表現する。`target_duration_min` が未設定なら
+        `Full collection` を返す（時間表現を省略）。
+        """
+        target_min = self.config.audio.target_duration_min
+        if not target_min:
+            return "Full collection"
+        hours = int(target_min // 60)
+        if hours <= 0:
+            return "Full collection"
+        return f"Full {hours}-hour collection"
+
+    def _generate_shorts_localizations(self, cc_video_url: str) -> Dict:
+        """Shorts 用に各言語の title / description を生成する.
+
+        `localizations.json.languages.<lang>.short_title_template` /
+        `short_description_template` が存在する言語のみ出力する（テンプレ未定義の
+        言語はスキップ → fail-silent ではなく明示的に「該当言語の翻訳なし」を表現）。
+        """
+        localizations: Dict[str, Dict[str, str]] = {}
+        loc_config = self.config.localizations.data
+        channel_name = self.config.meta.channel_name
+        tagline_default = self.config.meta.tagline
+
+        for lang in loc_config.get("supported_languages", []):
+            lang_data = loc_config.get("languages", {}).get(lang, {})
+
+            short_title_tpl = lang_data.get("short_title_template")
+            if not short_title_tpl:
+                continue
+
+            loc_title = short_title_tpl.format(
+                theme=self.collection_name,
+                channel_name=channel_name,
+            )[:100]
+
+            short_desc_tpl = lang_data.get("short_description_template")
+            tagline = lang_data.get("description", {}).get("tagline", tagline_default)
+
+            if short_desc_tpl:
+                loc_desc = short_desc_tpl.format(
+                    collection_name=self.collection_name,
+                    channel_name=channel_name,
+                    cc_video_url=cc_video_url,
+                    tagline=tagline,
+                )[:5000]
+            else:
+                loc_desc = "\n".join(
+                    [
+                        f"{self.collection_name} | {channel_name}",
+                        "",
+                        f"♫ → {cc_video_url}",
+                        "",
+                        tagline,
+                    ]
+                )[:5000]
+
+            localizations[lang] = {
+                "title": loc_title,
+                "description": loc_desc,
+            }
+
+        return localizations
+
+    def generate_shorts_metadata(self, cc_video_url: str) -> Dict:
+        """Shorts 動画用のメタデータを生成する（EN デフォルト + 多言語）.
+
+        Args:
+            cc_video_url: 対応する Complete Collection の YouTube URL。
+                Shorts 概要欄に流入導線として埋め込まれる。
+
+        Returns:
+            YouTube アップロード用メタデータ dict
+            （title / description / tags / category_id / privacy_status / language / localizations）
+        """
+        channel_name = self.config.meta.channel_name
+        tagline = self.config.meta.tagline
+        hashtags = self.config.content.descriptions.hashtag_line
+        duration_phrase = self._format_duration_phrase()
+
+        title = f"{self.collection_name} ✦ {channel_name} #Shorts"
+        description = "\n".join(
+            [
+                f"{self.collection_name} | {channel_name}",
+                "",
+                f"♫ {duration_phrase} → {cc_video_url}",
+                "",
+                tagline,
+                "",
+                f"{hashtags} #Shorts",
+            ]
+        )
+
+        base_tags = list(self.config.content.tags.base)
+        tags = ["Shorts"] + base_tags
+
+        return {
+            "title": title[:100],
+            "description": description[:5000],
+            "tags": tags[:50],
+            "category_id": self.config.youtube.api.category_id,
+            "privacy_status": "public",
+            "language": self.config.youtube.api.language,
+            "localizations": self._generate_shorts_localizations(cc_video_url),
+        }
+
     def generate_metadata_report(self) -> str:
         """
         メタデータ生成レポート作成

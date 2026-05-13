@@ -42,7 +42,7 @@ config/channel/         # 責務別分割設定（v2.0.0 以降）
   youtube.json          # youtube / music_engine / content_model
   analytics.json        # analytics / benchmark
   playlists.json        # playlists
-  workflow.json         # (v4.0.0 で short / community 撤去、後方互換で素通し)
+  workflow.json         # post_upload.short_publish_time (Shorts 公開時刻、デフォルト "08:00")
   audio.json            # audio
 config/localizations.json
 auth/{client_secrets,token}.json

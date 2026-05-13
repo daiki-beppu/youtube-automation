@@ -728,3 +728,154 @@ class TestGenerateLocalizationsBulkReport:
         msg = str(excinfo.value)
         for lang in config.localizations.supported_languages:
             assert f"[{lang}]" in msg
+
+
+# ===========================================================================
+# 13. generate_shorts_metadata のテスト（Shorts 専用）
+# ===========================================================================
+
+
+class TestGenerateShortsMetadata:
+    """Shorts 用メタデータ生成の検証."""
+
+    CC_URL = "https://youtu.be/test-cc-id"
+
+    def test_title_contains_shorts_hashtag(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert meta["title"].endswith("#Shorts")
+        assert len(meta["title"]) <= 100
+
+    def test_title_contains_collection_and_channel(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        config = load_config()
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert gen.collection_name in meta["title"]
+        assert config.meta.channel_name in meta["title"]
+
+    def test_description_contains_cc_url(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert self.CC_URL in meta["description"]
+
+    def test_description_contains_shorts_hashtag(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert "#Shorts" in meta["description"]
+
+    def test_description_within_5000_chars(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert len(meta["description"]) <= 5000
+
+    def test_tags_contain_shorts(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert "Shorts" in meta["tags"]
+        assert len(meta["tags"]) <= 50
+
+    def test_privacy_status_is_public(self):
+        """Shorts は流入導線として常に public"""
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert meta["privacy_status"] == "public"
+
+    def test_category_and_language_from_config(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        config = load_config()
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert meta["category_id"] == config.youtube.api.category_id
+        assert meta["language"] == config.youtube.api.language
+
+    def test_localizations_populated_from_fixture(self):
+        """sample_channel fixture の全 supported_languages に short_title_template があるため出力に乗る"""
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        config = load_config()
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        for lang in config.localizations.supported_languages:
+            assert lang in meta["localizations"]
+            loc = meta["localizations"][lang]
+            assert "#Shorts" in loc["title"]
+            assert self.CC_URL in loc["description"]
+            # YouTube 仕様の codepoint 上限
+            assert len(loc["title"]) <= 100
+            assert len(loc["description"]) <= 5000
+
+    def test_localizations_skips_lang_without_short_template(self):
+        """short_title_template が無い言語はスキップされる"""
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        from youtube_automation.utils.config.localizations import Localizations
+
+        # ja のみ template あり、en はテンプレートなし
+        new_data = {
+            "supported_languages": ["ja", "en"],
+            "languages": {
+                "ja": {
+                    "short_title_template": "{theme} #Shorts",
+                    "description": {"tagline": "JA タグライン"},
+                },
+                "en": {
+                    "title_template": "anything",
+                    "description": {"tagline": "EN tagline"},
+                    # short_title_template 未定義 → スキップされる
+                },
+            },
+        }
+        gen.config = type(gen.config)(
+            meta=gen.config.meta,
+            content=gen.config.content,
+            youtube=gen.config.youtube,
+            analytics=gen.config.analytics,
+            playlists=gen.config.playlists,
+            workflow=gen.config.workflow,
+            audio=gen.config.audio,
+            localizations=Localizations(
+                data=new_data, exists=True, supported_languages=["ja", "en"], default_language="ja"
+            ),
+            comments=gen.config.comments,
+        )
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert "ja" in meta["localizations"]
+        assert "en" not in meta["localizations"]
+
+    def test_localizations_uses_short_title_template(self, monkeypatch):
+        """short_title_template が定義されていれば各言語の title が format 展開される"""
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        # localizations.data を上書きして short テンプレートを注入
+        new_data = {
+            "supported_languages": ["ja"],
+            "languages": {
+                "ja": {
+                    "short_title_template": "{theme} で集中タイム — {channel_name} #Shorts",
+                    "short_description_template": "{collection_name} | {channel_name}\n\n→ {cc_video_url}\n\n{tagline}",
+                    "description": {"tagline": "JA タグライン"},
+                }
+            },
+        }
+        from youtube_automation.utils.config.localizations import Localizations
+
+        gen.config = type(gen.config)(
+            meta=gen.config.meta,
+            content=gen.config.content,
+            youtube=gen.config.youtube,
+            analytics=gen.config.analytics,
+            playlists=gen.config.playlists,
+            workflow=gen.config.workflow,
+            audio=gen.config.audio,
+            localizations=Localizations(
+                data=new_data,
+                exists=True,
+                supported_languages=["ja"],
+                default_language="ja",
+            ),
+            comments=gen.config.comments,
+        )
+
+        meta = gen.generate_shorts_metadata(self.CC_URL)
+        assert "ja" in meta["localizations"]
+        ja_title = meta["localizations"]["ja"]["title"]
+        assert gen.collection_name in ja_title
+        assert "#Shorts" in ja_title
+        ja_desc = meta["localizations"]["ja"]["description"]
+        assert self.CC_URL in ja_desc
+        assert "JA タグライン" in ja_desc

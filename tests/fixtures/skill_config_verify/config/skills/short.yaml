@@ -1,0 +1,10 @@
+# verify fixture: short 上書き
+duration_sec: 33
+fade_in_sec: 2.5
+fade_out_sec: 3.0
+default_count: 7
+chapter_offset_sec: 60
+font_path: "/verify/font.ttc"
+release:
+  start_sec: 11
+  duration_sec: 22

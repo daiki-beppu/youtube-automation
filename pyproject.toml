@@ -62,6 +62,8 @@ yt-metadata-audit = "youtube_automation.scripts.metadata_audit:main"
 yt-playlist-manager = "youtube_automation.scripts.playlist_manager:main"
 yt-playlist-status = "youtube_automation.scripts.playlist_status:main"
 yt-populate-scene-phrases = "youtube_automation.scripts.populate_scene_phrases:main"
+yt-shorts-bulk-update-loc = "youtube_automation.scripts.bulk_update_short_localizations:main"
+yt-shorts-generate-loop = "youtube_automation.scripts.generate_short_loop:main"
 yt-stream-archive-check = "youtube_automation.scripts.streaming_archive_check:main"
 yt-stream-bandwidth = "youtube_automation.cli.stream_bandwidth:main"
 yt-theme-compare = "youtube_automation.scripts.theme_compare:main"
@@ -71,6 +73,7 @@ yt-video-analyze = "youtube_automation.scripts.video_analyze:main"
 yt-video-uploader = "youtube_automation.scripts.video_uploader:main"
 
 # Agent entry points
+yt-shorts-upload = "youtube_automation.agents.short_uploader:main"
 yt-upload-auto = "youtube_automation.agents.youtube_auto_uploader:main"
 yt-upload-collection = "youtube_automation.agents.collection_uploader:main"
 
