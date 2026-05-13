@@ -208,6 +208,8 @@ uv run ruff check .
 | `yt-skills` | Claude Code スキルの sync / list / diff |
 | `yt-analytics` | Analytics データ収集 |
 | `yt-generate-image` | Gemini / OpenAI で画像生成（サムネイル兼用） |
+| `yt-generate-lyria-master` | Lyria 3 で N セグメント生成 + クロスフェード結合してマスター音源を作成 |
+| `yt-generate-master` | 個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を作成 |
 | `yt-generate-music-dj` | Lyria 音楽生成（DJ フェーズ展開） |
 | `yt-generate-suno` | Suno プロンプト生成 |
 | `yt-generate-loop-video` | Veo ループ動画生成 |
