@@ -71,9 +71,7 @@ def test_asset_root_claude_md_falls_back_to_editable(fake_repo_with_claude_md: P
 
 def test_list_entries_file_returns_single_filename(fake_repo_with_claude_md: Path) -> None:
     root = _asset_root("claude-md")
-    assert _list_entries(root, kind="file", source_filename="CLAUDE.template.md") == [
-        "CLAUDE.template.md"
-    ]
+    assert _list_entries(root, kind="file", source_filename="CLAUDE.template.md") == ["CLAUDE.template.md"]
 
 
 def test_list_entries_file_requires_source_filename(fake_repo_with_claude_md: Path) -> None:
@@ -84,9 +82,7 @@ def test_list_entries_file_requires_source_filename(fake_repo_with_claude_md: Pa
 # ---------- cmd_list ----------
 
 
-def test_cmd_list_claude_md_shows_template(
-    fake_repo_with_claude_md: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cmd_list_claude_md_shows_template(fake_repo_with_claude_md: Path, capsys: pytest.CaptureFixture[str]) -> None:
     parser = build_parser()
     args = parser.parse_args(["list", "--asset", "claude-md"])
     rc = args.func(args)
@@ -106,23 +102,17 @@ def test_cmd_sync_claude_md_default_target_is_file_path(fake_repo_with_claude_md
     assert args.target == ".claude/CLAUDE.md"
 
 
-def test_cmd_sync_claude_md_creates_file_at_target(
-    fake_repo_with_claude_md: Path, tmp_path: Path
-) -> None:
+def test_cmd_sync_claude_md_creates_file_at_target(fake_repo_with_claude_md: Path, tmp_path: Path) -> None:
     target = tmp_path / "downstream" / ".claude" / "CLAUDE.md"
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--force"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--force"])
     rc = args.func(args)
     assert rc == 0
     assert target.is_file()
     assert target.read_text(encoding="utf-8") == "# BGM template v0\n"
 
 
-def test_cmd_sync_claude_md_does_not_overwrite_local_md(
-    fake_repo_with_claude_md: Path, tmp_path: Path
-) -> None:
+def test_cmd_sync_claude_md_does_not_overwrite_local_md(fake_repo_with_claude_md: Path, tmp_path: Path) -> None:
     """`--force` で `.claude/CLAUDE.md` を上書きしても `.claude/CLAUDE.local.md` は触られない。"""
     target_dir = tmp_path / "downstream" / ".claude"
     target_dir.mkdir(parents=True)
@@ -133,9 +123,7 @@ def test_cmd_sync_claude_md_does_not_overwrite_local_md(
     local_mtime = local.stat().st_mtime
 
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--force"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--force"])
     rc = args.func(args)
     assert rc == 0
     assert target.read_text(encoding="utf-8") == "# BGM template v0\n"
@@ -160,28 +148,20 @@ def test_cmd_sync_claude_md_skips_existing_without_force(
     assert target.read_text(encoding="utf-8") == "# OLD\n"
 
 
-def test_cmd_sync_claude_md_dry_run_does_not_write(
-    fake_repo_with_claude_md: Path, tmp_path: Path
-) -> None:
+def test_cmd_sync_claude_md_dry_run_does_not_write(fake_repo_with_claude_md: Path, tmp_path: Path) -> None:
     target = tmp_path / "downstream" / ".claude" / "CLAUDE.md"
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--dry-run"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--dry-run"])
     rc = args.func(args)
     assert rc == 0
     assert not target.exists()
 
 
-def test_cmd_sync_claude_md_symlink_creates_symlink(
-    fake_repo_with_claude_md: Path, tmp_path: Path
-) -> None:
+def test_cmd_sync_claude_md_symlink_creates_symlink(fake_repo_with_claude_md: Path, tmp_path: Path) -> None:
     """`--symlink --asset claude-md` で target が source への symlink になる。"""
     target = tmp_path / "downstream" / ".claude" / "CLAUDE.md"
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--symlink"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--symlink"])
     rc = args.func(args)
     assert rc == 0
     assert target.is_symlink()
@@ -201,9 +181,7 @@ def test_cmd_sync_claude_md_symlink_force_replaces_existing_file(
     assert not target.is_symlink()
 
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--symlink", "--force"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--symlink", "--force"])
     rc = args.func(args)
     assert rc == 0
     assert target.is_symlink()
@@ -219,9 +197,7 @@ def test_cmd_sync_claude_md_symlink_skips_existing_without_force(
     target.write_text("# OLD\n", encoding="utf-8")
 
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--symlink"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--symlink"])
     rc = args.func(args)
     out = capsys.readouterr().out
     assert rc == 0
