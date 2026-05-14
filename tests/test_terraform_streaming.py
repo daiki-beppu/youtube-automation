@@ -43,6 +43,7 @@ _STREAMING_SKILL = _REPO_ROOT / ".claude" / "skills" / "streaming" / "SKILL.md"
 
 _SCRIPTS_STREAMING_DIR = _REPO_ROOT / "scripts" / "streaming"
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
+_RUN_FFMPEG_SCRIPT = _SCRIPTS_STREAMING_DIR / "run-ffmpeg.sh"
 
 
 # ---------- ヘルパー ----------
@@ -919,33 +920,41 @@ class TestSystemdUnitTemplate:
             flags=re.MULTILINE,
         ), "[Service].EnvironmentFile=/etc/youtube-stream.env が無い（secret 隔離が破綻）"
 
-    def test_service_exec_start_uses_env_vars_not_literals(self):
+    def test_service_exec_start_invokes_wrapper_without_env_expansion(self):
         """Given .tftpl
         When [Service].ExecStart を読む
-        Then 動画ファイル自体の音声トラックを ``-c:a copy`` で送出する ffmpeg コマンドが
-        宣言されている (R12 再改訂 / #185)。
+        Then ラッパー ``/opt/youtube-stream/bin/run-ffmpeg.sh`` のみを呼び、
+        ``$RTMP_URL`` 等の env 参照を unit 行に残さない (#160)。
 
-        旧仕様 (R12 改訂) では ``-f lavfi -i anullsrc=...`` で仮想無音入力を 2 番目に
-        足し ``-c:a aac -b:a 128k -map 0:v -map 1:a`` で音声を上書きしていたため、
-        動画に音声があっても配信は無音になっていた。#185 で anullsrc 経路を撤去し、
-        ffmpeg の自動マッピング（best v/a 各 1 ストリーム）に任せて
-        ``-c:a copy`` で再エンコードなしに送出する。
-
-        ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO``
-        ``-c:v copy -c:a copy -f flv $RTMP_URL``
+        旧仕様（#185）では ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO
+        -c:v copy -c:a copy -f flv $RTMP_URL`` のように systemd が ``$RTMP_URL`` を
+        argv 展開していたため、``systemctl show youtube-stream`` /
+        ``/proc/<pid>/cmdline`` の unit レベル経路から stream_key を含む RTMP URL が
+        平文露出していた。#160 で ``ExecStart`` をラッパーに差し替え、ffmpeg 引数構築は
+        ``scripts/streaming/run-ffmpeg.sh`` 側へ移送した。
         """
         text = _read(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
-        expected = (
-            r"^ExecStart=/usr/bin/ffmpeg\s+-re\s+-stream_loop\s+-1\s+"
-            r"-i\s+\$VIDEO\s+"
-            r"-c:v\s+copy\s+-c:a\s+copy\s+"
-            r"-f\s+flv\s+\$RTMP_URL\s*$"
-        )
+        expected = r"^ExecStart=/opt/youtube-stream/bin/run-ffmpeg\.sh\s*$"
         assert re.search(expected, service, flags=re.MULTILINE), (
-            "[Service].ExecStart が #185 改訂後の ffmpeg コマンド（動画音声をそのまま -c:a copy で送出）と一致しない"
+            "[Service].ExecStart が /opt/youtube-stream/bin/run-ffmpeg.sh のみを呼ぶ"
+            "ラッパー化形式（#160）と一致しない"
         )
+
+        # ラッパー化の核は unit 行に env 参照 ($RTMP_URL / $VIDEO) を残さないこと。
+        # 念のため [Service] セクション内に $RTMP_URL / $VIDEO が現れないことも検証する。
+        exec_lines = [
+            line for line in service.splitlines() if line.lstrip().startswith("ExecStart=")
+        ]
+        assert exec_lines, "[Service] に ExecStart= 行が無い"
+        for line in exec_lines:
+            assert "$RTMP_URL" not in line and "${RTMP_URL}" not in line, (
+                f"ExecStart に $RTMP_URL が残っている（#160 で argv 経路を遮断する hardening）: {line!r}"
+            )
+            assert "$VIDEO" not in line and "${VIDEO}" not in line, (
+                f"ExecStart に $VIDEO が残っている（#160 でラッパー側に移送）: {line!r}"
+            )
 
     def test_service_runtime_max_sec_11h(self):
         """Given .tftpl
@@ -3017,4 +3026,276 @@ class TestStreamingSkillSshAgent:
         assert "ssh-add" in text, (
             "SKILL.md に ssh-add の言及が無い"
             "（operator が ssh-agent 登録手順を SKILL.md から辿れず terraform apply が失敗する）"
+        )
+
+
+# ============================================================================
+# scripts/streaming/run-ffmpeg.sh — #160 ffmpeg ラッパー本体
+# ============================================================================
+
+
+class TestRunFfmpegScript:
+    """``scripts/streaming/run-ffmpeg.sh`` の静的検査（#160）。
+
+    systemd unit の ``ExecStart`` から呼ばれる ffmpeg 起動ラッパー。systemd が
+    ``EnvironmentFile=/etc/youtube-stream.env`` 経由で注入する ``$VIDEO`` /
+    ``$RTMP_URL`` をそのまま受け取り、``exec /usr/bin/ffmpeg ...`` でプロセス置換する
+    ことで、unit 行に ``$RTMP_URL`` を残さない経路を提供する。``DynamicUser=yes``
+    + 0600 root:root の env file 構成のため、ラッパー側で ``source`` してはならない。
+
+    本テストは terraform バイナリ非依存方針に従い、ファイルテキスト・主要キーワードの
+    包含のみ正規表現で検証する（既存 ``TestSwapVideoScript`` と同じスタイル）。
+    """
+
+    def test_script_exists(self):
+        """Given リポジトリ
+        When ``scripts/streaming/run-ffmpeg.sh`` を探す
+        Then 当該ファイルが存在する。
+
+        ExecStart の差し替え先が物理的に欠落すると ``systemctl start`` が
+        ``status=203/EXEC`` で fail する。最低限の存在保証。
+        """
+        assert _RUN_FFMPEG_SCRIPT.exists(), (
+            f"{_RUN_FFMPEG_SCRIPT.relative_to(_REPO_ROOT)} が存在しない（#160 ラッパーが未実装）"
+        )
+
+    def test_script_has_bash_shebang(self):
+        """Given ラッパー本文
+        When 1 行目を読む
+        Then ``#!/usr/bin/env bash`` で始まる。
+
+        既存 ``healthcheck.sh`` / ``notify.sh`` と同じ shebang で揃える。``set -eu`` の
+        厳密モードと、``"$VIDEO"`` / ``"$RTMP_URL"`` のダブルクォート展開挙動を
+        POSIX sh と互換取りにせず bash 固定で扱う。
+        """
+        text = _read(_RUN_FFMPEG_SCRIPT)
+        first_line = text.splitlines()[0] if text else ""
+        assert first_line == "#!/usr/bin/env bash", (
+            f"run-ffmpeg.sh の shebang が '#!/usr/bin/env bash' でない: {first_line!r}"
+        )
+
+    def test_script_uses_set_strict(self):
+        """Given ラッパー本文
+        When 全文を読む
+        Then ``set -eu``（または ``set -euo pipefail``）が記載されている。
+
+        ``set -u`` が必須: env file に VIDEO / RTMP_URL のどちらかが欠けたまま
+        ffmpeg を呼ぶと argv が壊れて起動に失敗するため、未定義変数で Fail Fast する。
+        """
+        text = _read(_RUN_FFMPEG_SCRIPT)
+        assert re.search(r"^set\s+-eu(o\s+pipefail)?\b", text, flags=re.MULTILINE), (
+            "run-ffmpeg.sh に `set -eu`（または `set -euo pipefail`）が無い"
+            "（env 欠落でも気付けず argv が壊れる）"
+        )
+
+    def test_script_does_not_source_env_file(self):
+        """Given ラッパー本文
+        When 全文を読む
+        Then ``source /etc/youtube-stream.env``（または ``. /etc/youtube-stream.env``）が記載されていない。
+
+        ``/etc/youtube-stream.env`` は ``chmod 600 root:root``（main.tf）で配置され、
+        unit 側の ``DynamicUser=yes``（#159）配下のラッパーは読み取れない。env は
+        systemd 自身が ``EnvironmentFile=`` 経由（PID 1 / root）で注入するため、
+        ラッパー側で ``source`` するとパーミッション拒否で ``set -e`` により即 fail する。
+        後続 fix で「念のため」復活させるリグレッションを止めるための not-contains 検証。
+        """
+        text = _read(_RUN_FFMPEG_SCRIPT)
+        match = re.search(
+            r"^\s*(?:source|\.)\s+/etc/youtube-stream\.env\b",
+            text,
+            flags=re.MULTILINE,
+        )
+        assert match is None, (
+            "run-ffmpeg.sh に `source /etc/youtube-stream.env` 行が残っている"
+            "（DynamicUser=yes + 0600 root:root の env file は読めず即 fail する。"
+            "env は EnvironmentFile= 経由で systemd が注入する）"
+        )
+
+    def test_script_execs_ffmpeg(self):
+        """Given ラッパー本文
+        When 全文を読む
+        Then ``exec /usr/bin/ffmpeg ...`` で起動している。
+
+        ``exec`` 必須: 中継 shell が残ると systemd の ``Restart`` /
+        ``RuntimeMaxSec`` シグナルが ffmpeg に直接届かなくなる。
+        plan §「実装ガイドライン」最重要項目。
+        """
+        text = _read(_RUN_FFMPEG_SCRIPT)
+        assert re.search(r"^\s*exec\s+/usr/bin/ffmpeg\b", text, flags=re.MULTILINE), (
+            "run-ffmpeg.sh が `exec /usr/bin/ffmpeg ...` でプロセス置換していない"
+            "（中継 shell が残ると systemd シグナルが ffmpeg に直接届かない）"
+        )
+
+    def test_script_ffmpeg_argv_matches_pre_wrapper_spec(self):
+        """Given ラッパー本文
+        When ``exec /usr/bin/ffmpeg ...`` 行を読む
+        Then ``-re -stream_loop -1 -i "$VIDEO" -c:v copy -c:a copy -f flv "$RTMP_URL"``
+        の引数列が宣言されている (#185 互換)。
+
+        #185 で systemd unit 側に ``-c:v copy -c:a copy``（再エンコードなし、
+        動画音声をそのまま送出）を明示分離した意図を後退させない。``-c copy``
+        ショートハンドや anullsrc 復活を禁止する。``$VIDEO`` / ``$RTMP_URL`` は
+        ``set -u`` 配下の word-splitting 防止のためダブルクォート必須。
+        """
+        text = _read(_RUN_FFMPEG_SCRIPT)
+        expected = (
+            r"exec\s+/usr/bin/ffmpeg\s+-re\s+-stream_loop\s+-1\s+"
+            r'-i\s+"\$VIDEO"\s+'
+            r"-c:v\s+copy\s+-c:a\s+copy\s+"
+            r'-f\s+flv\s+"\$RTMP_URL"\s*$'
+        )
+        assert re.search(expected, text, flags=re.MULTILINE), (
+            "run-ffmpeg.sh の ffmpeg argv が #185 仕様"
+            '（-re -stream_loop -1 -i "$VIDEO" -c:v copy -c:a copy -f flv "$RTMP_URL"）'
+            "と一致しない"
+        )
+
+    def test_script_does_not_use_c_copy_shorthand(self):
+        """Given ラッパー本文
+        When 全文を読む
+        Then ``-c copy`` ショートハンド（``-c:v copy -c:a copy`` 分離前の形）が含まれていない。
+
+        order.md 例の ``-c copy`` 短縮形は使わない（plan §採用しない選択肢）。
+        #185 で動画音声をそのまま送出する明示分離に改訂済みのため、後退禁止。
+        """
+        text = _read(_RUN_FFMPEG_SCRIPT)
+        # `-c copy`（直後がコロンでない c）にマッチ。`-c:v copy` / `-c:a copy` は許容。
+        assert not re.search(r"\s-c\s+copy\b", text), (
+            "run-ffmpeg.sh に `-c copy` ショートハンドが含まれている"
+            "（#185 で `-c:v copy -c:a copy` 明示分離に改訂済み。後退禁止）"
+        )
+
+
+# ============================================================================
+# main.tf — #160 で追加される run-ffmpeg.sh の triggers / provisioner / chmod
+# ============================================================================
+
+
+class TestMainTfRunFfmpegProvisioner:
+    """``main.tf`` の #160 ``run-ffmpeg.sh`` 配信配線を検証する。
+
+    検証観点:
+      - ``null_resource.deploy.triggers.run_ffmpeg_sh`` が
+        ``filemd5("${local.scripts_dir}/run-ffmpeg.sh")`` で参照されている
+        （#157 DRY パターン準拠）
+      - ``provisioner "file"`` で ``${local.scripts_dir}/run-ffmpeg.sh`` を
+        ``/opt/youtube-stream/bin/run-ffmpeg.sh`` にアップロードする
+      - ``provisioner "remote-exec"`` の inline に ``chmod 755 .../run-ffmpeg.sh``
+        が含まれ、``systemctl enable --now`` より前の順序で並ぶ
+    """
+
+    def test_triggers_run_ffmpeg_sh_uses_local_scripts_dir(self):
+        """Given main.tf
+        When ``null_resource.deploy.triggers.run_ffmpeg_sh`` を読む
+        Then ``filemd5("${local.scripts_dir}/run-ffmpeg.sh")`` で参照している。
+
+        #157 の DRY 不変条件（``../../../scripts/streaming`` リテラル 1 回出現）を
+        破壊しないよう、必ず ``${local.scripts_dir}`` 経由で書く。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None
+
+        match = re.search(
+            r'run_ffmpeg_sh\s*=\s*filemd5\(\s*"\$\{local\.scripts_dir\}/run-ffmpeg\.sh"\s*\)',
+            triggers,
+        )
+
+        assert match is not None, (
+            'triggers.run_ffmpeg_sh が filemd5("${local.scripts_dir}/run-ffmpeg.sh") でない'
+            "（ラッパー更新が再デプロイトリガーにならない）"
+        )
+
+    def test_provisioner_file_run_ffmpeg_sh_sources_local_scripts_dir(self):
+        """Given main.tf
+        When run-ffmpeg.sh を /opt/youtube-stream/bin/run-ffmpeg.sh に配置する
+        provisioner を読む
+        Then ``source = "${local.scripts_dir}/run-ffmpeg.sh"`` で参照している。
+
+        既存 ``healthcheck.sh`` / ``notify.sh`` と同形の配線パターン。
+        source/destination のペアリングを順序非依存で検証する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+
+        match = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/run-ffmpeg\.sh"[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/bin/run-ffmpeg\.sh"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+        match_alt = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?'
+            r'destination\s*=\s*"/opt/youtube-stream/bin/run-ffmpeg\.sh"[^}]*?'
+            r'source\s*=\s*"\$\{local\.scripts_dir\}/run-ffmpeg\.sh"[^}]*?\}',
+            block,
+            flags=re.DOTALL,
+        )
+
+        assert match or match_alt, (
+            'provisioner "file" で source="${local.scripts_dir}/run-ffmpeg.sh" → '
+            "/opt/youtube-stream/bin/run-ffmpeg.sh のアップロードが宣言されていない"
+        )
+
+    def test_remote_exec_chmod_includes_run_ffmpeg_sh(self):
+        """Given main.tf
+        When ``provisioner "remote-exec"`` の inline を読む
+        Then ``chmod 755 ... /opt/youtube-stream/bin/run-ffmpeg.sh ...`` が含まれている。
+
+        systemd は ``ExecStart`` 行の絶対パスを実行する。実行ビットが無いと
+        ``status=203/EXEC`` で起動失敗する。``healthcheck.sh`` / ``notify.sh`` と
+        同じ 755 を付与する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        remote_exec = re.search(
+            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
+            block,
+            flags=re.DOTALL,
+        )
+        assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
+        inline = remote_exec.group(1)
+        assert re.search(
+            r"chmod\s+755\b[^\n]*/opt/youtube-stream/bin/run-ffmpeg\.sh\b",
+            inline,
+        ), (
+            "remote-exec の inline に chmod 755 .../run-ffmpeg.sh が無い"
+            "（実行ビット不足で systemctl start が status=203/EXEC で fail する）"
+        )
+
+    def test_chmod_run_ffmpeg_sh_precedes_systemctl_enable(self):
+        """Given main.tf
+        When ``provisioner "remote-exec"`` の inline 順序を読む
+        Then ``chmod 755 .../run-ffmpeg.sh`` が ``systemctl enable --now`` より前に並ぶ。
+
+        順序逆転すると初回 apply 時に ``systemctl enable --now`` が起動を試みた
+        瞬間にラッパーの実行ビットが無く ``status=203/EXEC`` で失敗する。
+        """
+        text = _strip_hcl_comments(_read(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        remote_exec = re.search(
+            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
+            block,
+            flags=re.DOTALL,
+        )
+        assert remote_exec is not None
+        inline = remote_exec.group(1)
+
+        chmod_match = re.search(
+            r"chmod\s+755\b[^\n]*run-ffmpeg\.sh\b",
+            inline,
+        )
+        enable_match = re.search(r"systemctl\s+enable\s+--now\s+youtube-stream", inline)
+
+        assert chmod_match is not None, "chmod 755 .../run-ffmpeg.sh が remote-exec inline に無い"
+        assert enable_match is not None, "systemctl enable --now youtube-stream が remote-exec inline に無い"
+        assert chmod_match.start() < enable_match.start(), (
+            "remote-exec inline で chmod 755 .../run-ffmpeg.sh が "
+            "systemctl enable --now より後に並んでいる（初回 apply で 203/EXEC fail のリスク）"
         )

@@ -52,7 +52,7 @@ systemd unit が以下の挙動を持つ:
 
 - `RuntimeMaxSec=11h`: 配信開始から 11 時間で `ffmpeg` プロセスを強制停止 → YouTube 側でアーカイブ生成
 - `Restart=always` + `RestartSec=1h`: 停止から 1 時間後に自動再起動 → 2 本目の配信が始まる
-- `EnvironmentFile=/etc/youtube-stream.env` から `VIDEO` / `RTMP_URL` を読み込むため、`ExecStart` に stream key が平文で残らない
+- `ExecStart` は `/opt/youtube-stream/bin/run-ffmpeg.sh` ラッパーのみを呼ぶ。`VIDEO` / `RTMP_URL` は systemd の `EnvironmentFile=/etc/youtube-stream.env`（PID 1 が root で読み込み env を子プロセスへ注入）経由で渡るため、unit 行にも、`DynamicUser=yes` 配下のラッパー側の `source` にも露出しない（`systemctl show` / `/proc/<pid>/cmdline` の unit レベル経路を遮断）
 - 音声は動画ファイルの音声トラックを送出（`-c:a copy`、再エンコードなし）
 
 `null_resource.deploy` は `terraform apply` のたびに以下のトリガーを比較し、差分があれば再実行する:
