@@ -13,6 +13,21 @@
 | `inactive+dead+success` | `manual` | しない |
 | その他（`Result≠success` 等） | `anomaly` | **送る** |
 
+## 状態変化チェック（連打防止）
+
+`healthcheck.sh` は cron が 5 分間隔で常時走るため、`anomaly` が続く間に毎回通知すると Discord が連打される（5/8 インシデント発覚）。これを抑止するため、前回の classify 結果を `/var/lib/youtube-stream/last_status` に保存し、**状態が変化したときだけ** 通知する:
+
+| 前回 → 今回 | 通知 | メッセージ |
+|---|---|---|
+| `unknown` → `ok`/`idle`/`manual` | しない | （初回起動の通常確認） |
+| `unknown` → `anomaly` | **送る** | `[youtube-stream] anomaly detected: ...` |
+| `ok`/`idle`/`manual` → 同種類 or 別の正常系 | しない | （平常運用） |
+| `ok`/`idle`/`manual` → `anomaly` | **送る** | `[youtube-stream] anomaly detected: ...` |
+| `anomaly` → `anomaly` | しない | （連打防止） |
+| `anomaly` → `ok`/`idle`/`manual` | **送る** | `[youtube-stream] recovered: <new>` |
+
+`unknown` は `last_status` ファイル不在時のフォールバック値（VPS 再構築直後など）。初回 `ok` は無音、初回 `anomaly` は 1 通だけ通知が来る。
+
 ## テストシナリオ
 
 ### シナリオ 1: `kill -9` による異常停止
@@ -109,6 +124,15 @@ ls -l /etc/youtube-stream-healthcheck.env
 # cron が動いているか
 systemctl status cron
 grep CRON /var/log/syslog | tail
+```
+
+### `last_status` ファイルが破損 / 不整合
+
+`/var/lib/youtube-stream/last_status` には `ok` / `idle` / `manual` / `anomaly` のいずれか 1 行が入る。手動編集や破損で値が壊れた場合は削除すれば次回 cron で再生成される（`unknown` フォールバックで動く）:
+
+```bash
+# 強制リセット（次回 cron で classify 結果が ok ならそのまま無音、anomaly なら 1 通通知）
+rm -f /var/lib/youtube-stream/last_status
 ```
 
 ### ログが肥大化している
