@@ -705,17 +705,20 @@ class TestMainTfHealthcheckDeploy:
     def test_provisioner_file_uploads_healthcheck_env_via_templatefile(self):
         """Given main.tf
         When null_resource.deploy 内の provisioner "file" を走査する
-        Then ``/etc/youtube-stream-healthcheck.env`` への配信があり、
+        Then ``/tmp/youtube-stream-healthcheck.env.tmp`` への配信があり、
              ``templatefile("${path.module}/templates/youtube-stream-healthcheck.env.tftpl", ...)``
              で生成されている。
+
+        SCP 着地後は remote-exec の ``install -m 0600 -o root -g root`` で
+        ``/etc/youtube-stream-healthcheck.env`` へ原子移送される（race window 閉鎖）。
         """
         text = _strip_hcl_comments(_read(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         assert re.search(
-            r'destination\s*=\s*"/etc/youtube-stream-healthcheck\.env"',
+            r'destination\s*=\s*"/tmp/youtube-stream-healthcheck\.env\.tmp"',
             block,
-        ), '/etc/youtube-stream-healthcheck.env への provisioner "file" destination が無い'
+        ), '/tmp/youtube-stream-healthcheck.env.tmp への provisioner "file" destination が無い'
         assert re.search(
             r'templatefile\(\s*"\$\{path\.module\}/templates/youtube-stream-healthcheck\.env\.tftpl"',
             block,
@@ -740,8 +743,11 @@ class TestMainTfHealthcheckDeploy:
     def test_remote_exec_secures_healthcheck_env_file_perms(self):
         """Given main.tf
         When provisioner "remote-exec" の inline を読む
-        Then ``/etc/youtube-stream-healthcheck.env`` に対し chmod 600 と chown root:root が実行される。
+        Then ``/etc/youtube-stream-healthcheck.env`` を
+             ``install -m 0600 -o root -g root`` で原子移送している。
 
+        SCP 経由の ``/tmp/*.tmp`` 着地 → install で /etc/ へ rename(2) 相当の
+        atomic move を行うことで、0600 root:root が確定するまでの race window を閉じる。
         webhook を読める範囲を root に限定する（secret 隔離）。
         """
         text = _strip_hcl_comments(_read(_MAIN_TF))
@@ -755,13 +761,19 @@ class TestMainTfHealthcheckDeploy:
         assert remote_exec is not None
         inline = remote_exec.group(1)
         assert re.search(
-            r"chmod\s+0?600\s+/etc/youtube-stream-healthcheck\.env",
+            r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/tmp/youtube-stream-healthcheck\.env\.tmp\s+/etc/youtube-stream-healthcheck\.env",
             inline,
-        ), "chmod 0600 /etc/youtube-stream-healthcheck.env が無い"
+        ), (
+            "install -m 0600 -o root -g root /tmp/youtube-stream-healthcheck.env.tmp "
+            "/etc/youtube-stream-healthcheck.env が無い（race window が閉じられていない）"
+        )
         assert re.search(
-            r"chown\s+root:root\s+/etc/youtube-stream-healthcheck\.env",
+            r"rm\s+-f\s+/tmp/youtube-stream-healthcheck\.env\.tmp",
             inline,
-        ), "chown root:root /etc/youtube-stream-healthcheck.env が無い"
+        ), (
+            "rm -f /tmp/youtube-stream-healthcheck.env.tmp が無い"
+            "（install 後の /tmp 上の 0644 secret が残置し race window が /tmp/ に横移しになる）"
+        )
 
     def test_remote_exec_makes_bin_dir_and_executable(self):
         """Given main.tf

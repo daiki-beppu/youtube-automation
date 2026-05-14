@@ -1675,19 +1675,21 @@ class TestMainTfNullResource:
     def test_provisioner_file_places_env_via_templatefile(self):
         """Given main.tf
         When 2 つ目の ``provisioner "file"`` を読む
-        Then content=templatefile(...), destination=/etc/youtube-stream.env。
+        Then content=templatefile(...), destination=/tmp/youtube-stream.env.tmp。
 
         templatefile は ``${path.module}/templates/youtube-stream.env.tftpl`` を読む。
         secret を tfstate に残さず provisioner 経由で配信する経路。
+        最終配置先 ``/etc/youtube-stream.env`` は remote-exec の
+        ``install -m 0600 -o root -g root`` で原子移送される（race window 閉鎖）。
         """
         text = _strip_hcl_comments(_read(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        # templatefile を引数に取る provisioner "file" を抽出（destination=/etc/youtube-stream.env）
+        # templatefile を引数に取る provisioner "file" を抽出（destination=/tmp/youtube-stream.env.tmp）
         assert re.search(
-            r'destination\s*=\s*"/etc/youtube-stream\.env"',
+            r'destination\s*=\s*"/tmp/youtube-stream\.env\.tmp"',
             block,
-        ), 'provisioner "file" の destination が "/etc/youtube-stream.env" でない'
+        ), 'provisioner "file" の destination が "/tmp/youtube-stream.env.tmp" でない'
         assert re.search(
             r'templatefile\(\s*"\$\{path\.module\}/templates/youtube-stream\.env\.tftpl"',
             block,
@@ -1719,10 +1721,10 @@ class TestMainTfNullResource:
     def test_provisioner_remote_exec_inline_includes_required_commands(self):
         """Given main.tf
         When ``provisioner "remote-exec"`` の inline を読む
-        Then 仕様通りの 5 コマンドがすべて含まれている（順序固定）。
+        Then 仕様通りのコマンドがすべて含まれている。
 
-        - chmod 600 /etc/youtube-stream.env  （0600 / root 所有）
-        - chown root:root /etc/youtube-stream.env
+        - install -m 0600 -o root -g root /tmp/youtube-stream.env.tmp /etc/youtube-stream.env
+          （0600 / root 所有を原子移送で確定。race window 閉鎖）
         - systemctl daemon-reload  （新 unit / .env 反映）
         - systemctl enable --now youtube-stream  （初回起動）
         - systemctl restart youtube-stream  （再 apply 時に .env 再読込）
@@ -1740,8 +1742,15 @@ class TestMainTfNullResource:
         assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
         inline = remote_exec.group(1)
         for command, hint in [
-            (r"chmod\s+600\s+/etc/youtube-stream\.env", "chmod 600"),
-            (r"chown\s+root:root\s+/etc/youtube-stream\.env", "chown root:root"),
+            (r"umask\s+0077", "umask 0077 (defense-in-depth)"),
+            (
+                r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/tmp/youtube-stream\.env\.tmp\s+/etc/youtube-stream\.env",
+                "install -m 0600 -o root -g root .../etc/youtube-stream.env",
+            ),
+            (
+                r"rm\s+-f\s+/tmp/youtube-stream\.env\.tmp",
+                "rm -f /tmp/youtube-stream.env.tmp (tmp secret cleanup)",
+            ),
             (r"systemctl\s+daemon-reload", "daemon-reload"),
             (r"systemctl\s+enable\s+--now\s+youtube-stream", "enable --now youtube-stream"),
             (r"systemctl\s+restart\s+youtube-stream", "restart youtube-stream"),
