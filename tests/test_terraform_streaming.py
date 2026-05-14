@@ -1181,6 +1181,50 @@ class TestSystemdUnitTemplate:
             flags=re.IGNORECASE,
         ), "ffmpeg -i に動画パスが直書きされている（$VIDEO を使うこと）"
 
+    def test_unit_section_start_limit_interval_sec_zero(self):
+        """Given .tftpl
+        When [Unit] セクションを読む
+        Then ``StartLimitIntervalSec=0`` が宣言されている (#214)。
+
+        起動失敗カウントの時間窓を無効化し、``Restart=always`` + ``RestartSec=1h``
+        サイクルが ``StartLimitHit`` で永続停止する経路を遮断する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        unit = self._section(text, "Unit")
+        assert unit is not None
+        assert re.search(r"^StartLimitIntervalSec=0\s*$", unit, flags=re.MULTILINE), (
+            "[Unit].StartLimitIntervalSec=0 が無い（起動失敗連発で StartLimitHit 永続停止する余地が残る）"
+        )
+
+    def test_service_success_exit_status_sigterm_143(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``SuccessExitStatus=143 SIGTERM`` が宣言されている (#214)。
+
+        ``RuntimeMaxSec=11h`` 到達時の SIGTERM 終了を明示的に success 扱いに揃え、
+        healthcheck の anomaly 誤判定経路を遮断する。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^SuccessExitStatus=143\s+SIGTERM\s*$", service, flags=re.MULTILINE), (
+            "[Service].SuccessExitStatus=143 SIGTERM が無い（SIGTERM 終了を anomaly 誤判定する余地が残る）"
+        )
+
+    def test_service_timeout_stop_sec_30s(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``TimeoutStopSec=30s`` が宣言されている (#214)。
+
+        SIGTERM → SIGKILL 待機を 90s から 30s に短縮し、ffmpeg flush の現実的時間に揃える。
+        """
+        text = _read(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(r"^TimeoutStopSec=30s\s*$", service, flags=re.MULTILINE), (
+            "[Service].TimeoutStopSec=30s が無い（停止待機がデフォルト 90s のままになる）"
+        )
+
 
 # ============================================================================
 # main.tf user_data (#124)
