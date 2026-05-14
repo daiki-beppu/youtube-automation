@@ -31,7 +31,7 @@ if [[ -z "${DISCORD_WEBHOOK_URL:-}" ]]; then
   exit 0
 fi
 
-# webhook URL は Discord 公式ホストの HTTPS endpoint のみ許可（SSRF 防御、Issue #166）。
+# webhook URL は Discord 公式ホストの HTTPS endpoint のみ許可（SSRF 防御、Issue #166 / #174）。
 # secret store 侵害時に file:// / http://169.254.169.254/... 等にすり替えられること
 # を防ぐ。不正値は cron を壊さないよう exit 0 で吸収する。
 if [[ ! "$DISCORD_WEBHOOK_URL" =~ ^https://(discord\.com|discordapp\.com)/api/webhooks/ ]]; then
@@ -62,8 +62,10 @@ escape_json() {
 
 payload="{\"content\":\"$(escape_json "$MESSAGE")\"}"
 
-# HTTP エラーは握りつぶす（cron に伝播させない）
-curl -sS -X POST \
+# HTTP エラーは握りつぶす（cron に伝播させない）。
+# issue #174: Discord 障害時に curl が無限に待ちつつ cron 5 分間隔で累積し FD/メモリが枯渇するのを防ぐため、
+# --connect-timeout / --max-time を必須化する（接続 5 秒・全体 10 秒の硬い天井）。
+curl --connect-timeout 5 --max-time 10 -sS -X POST \
   -H "Content-Type: application/json" \
   --data "$payload" \
   "$DISCORD_WEBHOOK_URL" >/dev/null || true
