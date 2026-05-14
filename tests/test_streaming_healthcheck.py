@@ -1168,11 +1168,11 @@ class TestStreamingArchiveCheckCli:
     def test_notify_on_shortage_posts_to_discord(self):
         """Given count_archives_for_date が不足を返す + --notify-on-shortage
         When main を呼ぶ
-        Then Discord 通知用関数が呼ばれる（webhook POST）。
+        Then 共通 `notify()` が `content=...` / `webhook_url=...` 付きで呼ばれる。
         """
         from youtube_automation.scripts import streaming_archive_check
 
-        # Discord 通知の発火経路は requests.post / urllib どちらでも検出する
+        webhook = "https://discord.com/api/webhooks/123/abc"
         with (
             patch.object(
                 streaming_archive_check,
@@ -1187,9 +1187,9 @@ class TestStreamingArchiveCheckCli:
             patch.object(
                 streaming_archive_check,
                 "get_secret",
-                return_value="https://discord.com/api/webhooks/123/abc",
+                return_value=webhook,
             ),
-            patch("requests.post") as mock_post,
+            patch.object(streaming_archive_check, "notify") as mock_notify,
             patch.object(
                 sys,
                 "argv",
@@ -1207,9 +1207,64 @@ class TestStreamingArchiveCheckCli:
                 streaming_archive_check.main()
             except SystemExit:
                 pass
-            assert mock_post.called, (
-                "--notify-on-shortage を指定しても Discord に POST していない（通知が飛ばない）"
+            assert mock_notify.called, (
+                "--notify-on-shortage を指定しても notify() が呼ばれていない（通知が飛ばない）"
             )
+            kwargs = mock_notify.call_args.kwargs
+            assert kwargs["content"].startswith("[youtube-stream] アーカイブ不足:"), (
+                f"notify() の content prefix が想定外: {kwargs.get('content')!r}"
+            )
+            assert kwargs["webhook_url"] == webhook, (
+                f"notify() に渡された webhook_url が DISCORD_WEBHOOK_URL ではない: {kwargs.get('webhook_url')!r}"
+            )
+
+    def test_notify_failure_returns_exit_code_2(self):
+        """Given --notify-on-shortage 指定下で notify() が NotificationError を raise
+        When main を呼ぶ
+        Then 件数不足 (exit 1) と区別するため exit code 2 を返す。
+        """
+        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.utils.notification import NotificationError
+
+        with (
+            patch.object(
+                streaming_archive_check,
+                "count_archives_for_date",
+                return_value=0,
+            ),
+            patch.object(
+                streaming_archive_check,
+                "build_youtube_service",
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                streaming_archive_check,
+                "get_secret",
+                return_value="https://discord.com/api/webhooks/123/abc",
+            ),
+            patch.object(
+                streaming_archive_check,
+                "notify",
+                side_effect=NotificationError("webhook POST failed: 500"),
+            ),
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "yt-stream-archive-check",
+                    "--date",
+                    "2026-05-01",
+                    "--expected",
+                    "2",
+                    "--notify-on-shortage",
+                ],
+            ),
+        ):
+            try:
+                rc = streaming_archive_check.main()
+            except SystemExit as e:
+                rc = e.code
+        assert rc == 2, f"Discord 通知失敗時は exit 2 を期待: actual={rc!r}"
 
 
 # ============================================================================

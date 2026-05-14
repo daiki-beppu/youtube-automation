@@ -19,8 +19,7 @@ import logging
 import sys
 from datetime import date, datetime, timezone
 
-import requests
-
+from youtube_automation.utils.notification import NotificationError, notify
 from youtube_automation.utils.secrets import get_secret
 from youtube_automation.utils.streaming_archive import count_archives_for_date
 
@@ -55,16 +54,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _post_discord(message: str) -> None:
-    webhook_url = get_secret("DISCORD_WEBHOOK_URL")
-    requests.post(
-        webhook_url,
-        json={"content": message},
-        headers={"Content-Type": "application/json"},
-        timeout=10,
-    )
-
-
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     args = _parse_args(sys.argv[1:])
@@ -85,7 +74,12 @@ def main() -> int:
     )
     logger.warning(message)
     if args.notify_on_shortage:
-        _post_discord(message)
+        try:
+            notify(content=message, webhook_url=get_secret("DISCORD_WEBHOOK_URL"))
+        except NotificationError as e:
+            # cron から件数不足 (exit 1) と通知失敗 (exit 2) を判別するため別コードを返す
+            logger.error("Discord 通知失敗: %s", e)
+            return 2
     return 1
 
 
