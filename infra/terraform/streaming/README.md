@@ -1,6 +1,6 @@
 # infra/terraform/streaming
 
-Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に常時配信する Terraform モジュール。`terraform apply` 一発で「VPS 作成 → cloud-init で systemd unit 配置 → 動画アップロード → `.env` 配置 → 配信開始」までを完結する。
+Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に常時配信する Terraform モジュール。`terraform apply` 一発で「VPS 作成 → cloud-init で OS 準備 → 動画 + systemd unit + 設定ファイル配置 → 配信開始」までを完結する。
 
 配信は systemd の `RuntimeMaxSec=11h` + `RestartSec=1h` により **11 時間配信 → 1 時間休止 → 自動再開** のサイクルで自律的に回る（YouTube が 12 時間以上のライブをアーカイブしない仕様への対応）。
 
@@ -62,6 +62,7 @@ systemd unit が以下の挙動を持つ:
 | `instance_id` | VPS 再作成 |
 | `video_hash`（`filemd5(var.video_path)`）| 動画ファイルの差し替え |
 | `stream_key`（`nonsensitive(sha256(var.stream_key))`）| ストリームキーの差し替え |
+| `systemd_unit`（`filemd5("${path.module}/templates/youtube-stream.service.tftpl")`）| systemd unit テンプレートの編集（VPS 再構築不要で反映） |
 
 同じ動画 / 同じキーで再 apply すると no-op（冪等）。
 
