@@ -31,6 +31,15 @@ if [[ -z "${DISCORD_WEBHOOK_URL:-}" ]]; then
   exit 0
 fi
 
+# issue #174: env ファイル改ざんで metadata IP 等の任意ホストに POST が飛ぶ SSRF を防ぐ。
+# Discord の正規 webhook host (discord.com / discordapp.com) 以外は exit 0 で吸収する
+# （cron 5 分後再走でログを汚さない方針。既存 L21, L32 と一貫）。
+# bash regex の右辺は quote しない（quote するとリテラル文字列マッチに退化する）。
+if [[ ! "$DISCORD_WEBHOOK_URL" =~ ^https://(discord\.com|discordapp\.com)/api/webhooks/ ]]; then
+  echo "notify.sh: DISCORD_WEBHOOK_URL が Discord webhook URL でない（host 検証失敗）" >&2
+  exit 0
+fi
+
 # 引数なしで呼ばれるのは healthcheck.sh 側のバグ。Fail Fast で原因特定可能にする
 # （Discord に "(empty)" が流れて原因不明アラートになるのを避ける）。
 if [[ $# -lt 1 ]]; then
@@ -54,8 +63,10 @@ escape_json() {
 
 payload="{\"content\":\"$(escape_json "$MESSAGE")\"}"
 
-# HTTP エラーは握りつぶす（cron に伝播させない）
-curl -sS -X POST \
+# HTTP エラーは握りつぶす（cron に伝播させない）。
+# issue #174: Discord 障害時に curl が無限に待ちつつ cron 5 分間隔で累積し FD/メモリが枯渇するのを防ぐため、
+# --connect-timeout / --max-time を必須化する（接続 5 秒・全体 10 秒の硬い天井）。
+curl --connect-timeout 5 --max-time 10 -sS -X POST \
   -H "Content-Type: application/json" \
   --data "$payload" \
   "$DISCORD_WEBHOOK_URL" >/dev/null || true
