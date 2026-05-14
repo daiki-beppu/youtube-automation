@@ -2,21 +2,21 @@
 
 検証対象:
 
-1. ``scripts/streaming/healthcheck.sh``
+1. ``.claude/skills/streaming/references/healthcheck.sh``
      - shebang / ``set -euo pipefail`` / cron 安全な ``PATH`` 宣言
      - ``classify_status`` 関数（純関数）の 4-way 判定
        (``ok`` / ``idle`` / ``manual`` / ``anomaly``)
      - ``systemctl show youtube-stream -p ActiveState,SubState,Result`` 呼び出し
      - 異常時のみ ``notify.sh`` を呼ぶ／正常・休止・手動停止では呼ばない
-2. ``scripts/streaming/notify.sh``
+2. ``.claude/skills/streaming/references/notify.sh``
      - shebang / ``set -euo pipefail``
      - ``DISCORD_WEBHOOK_URL`` を ``/etc/youtube-stream-healthcheck.env`` から読む
      - ``curl`` で Discord に JSON POST する
      - cron を壊さないため ``exit 0`` で終わる
-3. ``scripts/streaming/logrotate.conf``
+3. ``.claude/skills/streaming/references/logrotate.conf``
      - ``/opt/youtube-stream/logs/*.log`` を対象とする
      - ``daily`` / ``rotate 7`` / ``compress`` / ``copytruncate`` / ``missingok`` / ``notifempty``
-4. ``scripts/streaming/cron.d``
+4. ``.claude/skills/streaming/references/cron.d``
      - ``*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh`` 行を含む
 5. ``infra/terraform/streaming/templates/youtube-stream-healthcheck.env.tftpl``
      - ``DISCORD_WEBHOOK_URL=${webhook}`` の 1 行
@@ -65,7 +65,7 @@ from tests.test_terraform_streaming import _extract_block, _read, _strip_hcl_com
 # ---------- パス定数 ----------
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_STREAMING_SCRIPTS_DIR = _REPO_ROOT / "scripts" / "streaming"
+_STREAMING_SCRIPTS_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "references"
 _HEALTHCHECK_SH = _STREAMING_SCRIPTS_DIR / "healthcheck.sh"
 _NOTIFY_SH = _STREAMING_SCRIPTS_DIR / "notify.sh"
 _LOGROTATE_CONF = _STREAMING_SCRIPTS_DIR / "logrotate.conf"
@@ -120,19 +120,22 @@ def _classify(active: str, sub: str, result: str) -> tuple[int, str, str]:
 
 
 # ============================================================================
-# scripts/streaming/healthcheck.sh
+# .claude/skills/streaming/references/healthcheck.sh
 # ============================================================================
 
 
 class TestHealthcheckShStructure:
-    """``scripts/streaming/healthcheck.sh`` の静的構造（shebang / set -euo / PATH）。"""
+    """``.claude/skills/streaming/references/healthcheck.sh`` の静的構造
+    （shebang / set -euo / PATH）。"""
 
     def test_file_exists(self):
-        """Given scripts/streaming/
+        """Given .claude/skills/streaming/references/
         When healthcheck.sh を探す
         Then 存在する。
         """
-        assert _HEALTHCHECK_SH.exists(), "scripts/streaming/healthcheck.sh が存在しない"
+        assert _HEALTHCHECK_SH.exists(), (
+            ".claude/skills/streaming/references/healthcheck.sh が存在しない"
+        )
 
     def test_has_bash_shebang(self):
         """Given healthcheck.sh
@@ -389,19 +392,21 @@ class TestHealthcheckShBehavior:
 
 
 # ============================================================================
-# scripts/streaming/notify.sh
+# .claude/skills/streaming/references/notify.sh
 # ============================================================================
 
 
 class TestNotifyShStructure:
-    """``scripts/streaming/notify.sh`` の静的構造。"""
+    """``.claude/skills/streaming/references/notify.sh`` の静的構造。"""
 
     def test_file_exists(self):
-        """Given scripts/streaming/
+        """Given .claude/skills/streaming/references/
         When notify.sh を探す
         Then 存在する。
         """
-        assert _NOTIFY_SH.exists(), "scripts/streaming/notify.sh が存在しない"
+        assert _NOTIFY_SH.exists(), (
+            ".claude/skills/streaming/references/notify.sh が存在しない"
+        )
 
     def test_has_bash_shebang(self):
         """Given notify.sh
@@ -486,19 +491,21 @@ class TestNotifyShStructure:
 
 
 # ============================================================================
-# scripts/streaming/logrotate.conf
+# .claude/skills/streaming/references/logrotate.conf
 # ============================================================================
 
 
 class TestLogrotateConf:
-    """``scripts/streaming/logrotate.conf`` の最低限のディレクティブ。"""
+    """``.claude/skills/streaming/references/logrotate.conf`` の最低限のディレクティブ。"""
 
     def test_file_exists(self):
-        """Given scripts/streaming/
+        """Given .claude/skills/streaming/references/
         When logrotate.conf を探す
         Then 存在する。
         """
-        assert _LOGROTATE_CONF.exists(), "scripts/streaming/logrotate.conf が存在しない"
+        assert _LOGROTATE_CONF.exists(), (
+            ".claude/skills/streaming/references/logrotate.conf が存在しない"
+        )
 
     def test_targets_youtube_stream_logs(self):
         """Given logrotate.conf
@@ -536,19 +543,21 @@ class TestLogrotateConf:
 
 
 # ============================================================================
-# scripts/streaming/cron.d
+# .claude/skills/streaming/references/cron.d
 # ============================================================================
 
 
 class TestCronD:
-    """``scripts/streaming/cron.d`` の cron job 宣言。"""
+    """``.claude/skills/streaming/references/cron.d`` の cron job 宣言。"""
 
     def test_file_exists(self):
-        """Given scripts/streaming/
+        """Given .claude/skills/streaming/references/
         When cron.d を探す
         Then 存在する。
         """
-        assert _CRON_D.exists(), "scripts/streaming/cron.d が存在しない"
+        assert _CRON_D.exists(), (
+            ".claude/skills/streaming/references/cron.d が存在しない"
+        )
 
     def test_has_5min_schedule_for_healthcheck(self):
         """Given cron.d

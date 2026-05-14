@@ -84,14 +84,14 @@ terraform -chdir=infra/terraform/streaming apply
 
 ### 1 コマンドラッパー: `swap_video.sh`
 
-上記 3 ステップを 1 コマンドに畳んだラッパー `scripts/streaming/swap_video.sh` を同梱している。引数の動画パスを `realpath` で絶対化し `TF_VAR_video_path` に export してから `terraform -chdir=infra/terraform/streaming plan` → `apply` を順に実行する。
+上記 3 ステップを 1 コマンドに畳んだラッパー `.claude/skills/streaming/references/swap_video.sh` を同梱している。引数の動画パスを `realpath` で絶対化し `TF_VAR_video_path` に export してから `terraform -chdir=infra/terraform/streaming plan` → `apply` を順に実行する。
 
 ```bash
 # 対話確認あり（既定）
-scripts/streaming/swap_video.sh ./new_video.mp4
+"$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh" ./new_video.mp4
 
 # 非対話 apply（CI / 確信があるとき）
-scripts/streaming/swap_video.sh --auto-approve ./new_video.mp4
+"$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh" --auto-approve ./new_video.mp4
 ```
 
 secret 系（`TF_VAR_stream_key` / `TF_VAR_vultr_api_key`）はラッパーが扱わない方針のため、呼び出し側で事前 export しておくこと（§使い方 の手順 2 と同じ）。`terraform init` も実行しないため、初回のみ手動で `terraform -chdir=infra/terraform/streaming init` を一度走らせる。

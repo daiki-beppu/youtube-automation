@@ -2,7 +2,7 @@
 # swap_video.sh — 配信中動画を 1 コマンドで差し替えるラッパー
 #
 # Usage:
-#   scripts/streaming/swap_video.sh [--tf-dir DIR] [--auto-approve] <video-path>
+#   .claude/skills/streaming/references/swap_video.sh [--tf-dir DIR] [--auto-approve] <video-path>
 #
 # Options:
 #   --tf-dir DIR       Terraform モジュールパス (既定: infra/terraform/streaming)

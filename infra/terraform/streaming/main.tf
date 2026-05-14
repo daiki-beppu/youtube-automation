@@ -1,5 +1,5 @@
 locals {
-  scripts_dir = "${path.module}/../../../scripts/streaming"
+  scripts_dir = "${path.module}/../../../.claude/skills/streaming/references"
 }
 
 resource "vultr_ssh_key" "this" {

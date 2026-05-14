@@ -41,7 +41,7 @@ _ENV_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.env.tftpl"
 _STREAMING_README = _STREAMING_DIR / "README.md"
 _STREAMING_SKILL = _REPO_ROOT / ".claude" / "skills" / "streaming" / "SKILL.md"
 
-_SCRIPTS_STREAMING_DIR = _REPO_ROOT / "scripts" / "streaming"
+_SCRIPTS_STREAMING_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "references"
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
 
 
@@ -1792,18 +1792,22 @@ class TestMainTfNullResource:
 class TestMainTfLocalsScriptsDir:
     """``main.tf`` の ``locals.scripts_dir``（#157）構造とその参照経路を検証する。
 
-    Issue #157: ``${path.module}/../../../scripts/streaming/`` のハードコードが
-    triggers の ``filemd5`` 4 件 + provisioner ``source`` 4 件 = 8 箇所に散在し、
-    scripts 移動時に triggers/source 不整合が検知困難になる構造的リスクを解消する。
+    Issue #157: ``${path.module}/../../../.claude/skills/streaming/references/`` の
+    ハードコードが triggers の ``filemd5`` 4 件 + provisioner ``source`` 4 件 = 8 箇所に
+    散在し、scripts 移動時に triggers/source 不整合が検知困難になる構造的リスクを解消する。
+    Issue #229 で旧パス ``scripts/streaming/`` から ``.claude/skills/streaming/references/``
+    へ移動済み（skill の自己完結性確保のため）。
 
     検証観点:
       - ``locals { scripts_dir = "..." }`` の宣言と値
       - triggers の 4 つの filemd5 が ``${local.scripts_dir}/...`` を参照
       - provisioner ``"file"`` の 4 つの source が ``${local.scripts_dir}/...`` を参照
         （対応する destination とのペアリング保証）
-      - ``../../../scripts/streaming`` リテラルが locals 内に **1 度だけ**出現する DRY 不変条件
-      - locals ブロックを除いた残部に旧形式 ``${path.module}/../../../scripts/streaming/``
-        が残っていない（置換漏れ検知）
+      - ``../../../.claude/skills/streaming/references`` リテラルが locals 内に
+        **1 度だけ**出現する DRY 不変条件
+      - locals ブロックを除いた残部に旧形式
+        ``${path.module}/../../../.claude/skills/streaming/references/`` が残っていない
+        （置換漏れ検知）
     """
 
     def test_locals_block_declares_scripts_dir(self):
@@ -1825,21 +1829,23 @@ class TestMainTfLocalsScriptsDir:
     def test_locals_scripts_dir_value_is_canonical_relative_path(self):
         """Given main.tf
         When ``locals.scripts_dir`` の右辺リテラルを読む
-        Then ``"${path.module}/../../../scripts/streaming"`` と一致する。
+        Then ``"${path.module}/../../../.claude/skills/streaming/references"`` と一致する。
 
         集約先の値が誤ると 8 箇所すべての参照先が壊れる。リグレッション影響大。
+        Issue #229: skill 配布対象に入れるため
+        ``scripts/streaming/`` → ``.claude/skills/streaming/references/`` に移動済み。
         """
         text = _strip_hcl_comments(_read(_MAIN_TF))
         block = _extract_block(text, r"^\s*locals")
         assert block is not None
 
         match = re.search(
-            r'scripts_dir\s*=\s*"\$\{path\.module\}/\.\./\.\./\.\./scripts/streaming"',
+            r'scripts_dir\s*=\s*"\$\{path\.module\}/\.\./\.\./\.\./\.claude/skills/streaming/references"',
             block,
         )
 
         assert match is not None, (
-            'locals.scripts_dir が "${path.module}/../../../scripts/streaming" でない '
+            'locals.scripts_dir が "${path.module}/../../../.claude/skills/streaming/references" でない '
             "（値が誤ると 8 箇所の参照先が壊れる）"
         )
 
@@ -2046,7 +2052,7 @@ class TestMainTfLocalsScriptsDir:
 
     def test_canonical_relative_path_literal_appears_exactly_once(self):
         """Given main.tf 全体（コメント除去前の生テキスト）
-        When ``../../../scripts/streaming`` リテラルの出現回数を数える
+        When ``../../../.claude/skills/streaming/references`` リテラルの出現回数を数える
         Then 1 回だけ出現する（locals.scripts_dir の右辺のみ）。
 
         DRY 不変条件のリグレッション保証。Issue #157 の根本動機（triggers vs source
@@ -2054,20 +2060,20 @@ class TestMainTfLocalsScriptsDir:
         """
         text = _read(_MAIN_TF)
 
-        occurrences = text.count("../../../scripts/streaming")
+        occurrences = text.count("../../../.claude/skills/streaming/references")
 
         assert occurrences == 1, (
-            f"main.tf に ../../../scripts/streaming リテラルが {occurrences} 回出現している "
+            f"main.tf に ../../../.claude/skills/streaming/references リテラルが {occurrences} 回出現している "
             "（locals に集約後、リテラルは locals 内 1 箇所のみであるべき）"
         )
 
     def test_no_hardcoded_path_module_scripts_streaming_outside_locals(self):
         """Given main.tf からコメントを除去し、さらに locals ブロックを除いた残部
-        When ``${path.module}/../../../scripts/streaming/`` パターンを探す
+        When ``${path.module}/../../../.claude/skills/streaming/references/`` パターンを探す
         Then 一切ヒットしない（locals 外に旧形式の path.module 直書きが残っていない）。
 
         旧形式の置換漏れ検知。``${path.module}/cloud-init.yaml`` 等を誤検出しないよう、
-        パターンは ``/scripts/streaming/`` まで含めた完全形に限定する。
+        パターンは ``/.claude/skills/streaming/references/`` まで含めた完全形に限定する。
         """
         text = _strip_hcl_comments(_read(_MAIN_TF))
 
@@ -2094,12 +2100,13 @@ class TestMainTfLocalsScriptsDir:
         remainder = text[:block_start] + text[block_end:]
 
         match = re.search(
-            r"\$\{path\.module\}/\.\./\.\./\.\./scripts/streaming/",
+            r"\$\{path\.module\}/\.\./\.\./\.\./\.claude/skills/streaming/references/",
             remainder,
         )
 
         assert match is None, (
-            "locals ブロックの外側に ${path.module}/../../../scripts/streaming/ "
+            "locals ブロックの外側に "
+            "${path.module}/../../../.claude/skills/streaming/references/ "
             "の旧形式リテラルが残っている（locals.scripts_dir への置換漏れ）"
         )
 
@@ -2785,12 +2792,13 @@ class TestStreamingReadmeFirewall:
 
 
 # ============================================================================
-# scripts/streaming/swap_video.sh — #111 1 コマンドラッパー
+# .claude/skills/streaming/references/swap_video.sh — #111 1 コマンドラッパー
 # ============================================================================
 
 
 class TestSwapVideoScript:
-    """``scripts/streaming/swap_video.sh`` の静的検査（#111 任意要件「1 コマンドラッパー」）。
+    """``.claude/skills/streaming/references/swap_video.sh`` の静的検査
+    （#111 任意要件「1 コマンドラッパー」、#229 で skill 配布対象へ移動）。
 
     本スクリプトは ``TF_VAR_video_path`` を解決して export し、``terraform -chdir=...
     apply`` を起動するシェルラッパー。``terraform apply`` 単体運用も引き続き有効だが、
@@ -2803,10 +2811,10 @@ class TestSwapVideoScript:
 
     def test_script_exists(self):
         """Given リポジトリ
-        When ``scripts/streaming/swap_video.sh`` を探す
+        When ``.claude/skills/streaming/references/swap_video.sh`` を探す
         Then 当該ファイルが存在する。
 
-        order.md「スクリプト化（任意）: ``scripts/streaming/swap_video.sh``」要件の最低条件。
+        order.md「スクリプト化（任意）: ``swap_video.sh``」要件の最低条件。
         ラッパーは README から発見可能であっても、ファイルが無ければ叩けない。
         """
         assert _SWAP_VIDEO_SCRIPT.exists(), (
@@ -2818,8 +2826,8 @@ class TestSwapVideoScript:
         When ファイル属性を確認
         Then 実行ビット（owner ``x``）が立っている。
 
-        ``./scripts/streaming/swap_video.sh <video>`` 形式で直接叩けるよう、
-        実行属性が必要。``bash scripts/streaming/swap_video.sh`` 経由でしか動かないと
+        ``./.claude/skills/streaming/references/swap_video.sh <video>`` 形式で直接叩けるよう、
+        実行属性が必要。``bash <path>/swap_video.sh`` 経由でしか動かないと
         運用者が事故る（タブ補完で失敗する）。
         """
         if not _SWAP_VIDEO_SCRIPT.exists():
