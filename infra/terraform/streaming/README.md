@@ -44,7 +44,11 @@ terraform plan
 terraform apply
 ```
 
-`terraform.tfvars` および環境変数いずれにも secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ。tfstate には sensitive 扱いで保存される）。
+`terraform.tfvars` および環境変数いずれにも secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
+
+> **tfstate と secret の関係（誤解しやすいので明記）**
+>
+> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ** で、`*.tfstate` JSON 自体は **平文**である。本モジュールでは `stream_key` を `triggers` に保存する際 `nonsensitive(sha256(var.stream_key))` で SHA256 ラップしているため、tfstate を取得されても元のストリームキーは復元できない（SHA256 は不可逆）。`*.tfstate*` は `.gitignore` 済みだが、ローカル / バックアップ / 共有時もファイルパーミッションでアクセス制御すること。
 
 ## 配信サイクル（11h + 1h）
 
@@ -183,7 +187,7 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 
 | 操作 | 期待結果 |
 |---|---|
-| `kill -9 $(pgrep ffmpeg)` | 5 分以内に Discord に anomaly 通知が届く |
+| `pkill -KILL -f 'ffmpeg .*current\.mp4'` | 5 分以内に Discord に anomaly 通知が届く |
 | `systemctl stop youtube-stream` | 通知は飛ばない（`manual` 分類） |
 | 11h `RuntimeMaxSec` 到達による正常停止 | 通知は飛ばない（`activating+auto-restart+success` = `idle`） |
 | 1 時間後の自動再開（`RestartSec=1h` / `auto-restart`） | 通知は飛ばない（休止中は `idle`、再開後は `ok`） |
