@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(.claude/skills/**)",
+      "Write(.claude/skills/**)",
+      "MultiEdit(.claude/skills/**)",
+      "Edit(.claude/CLAUDE.template.md)",
+      "Write(.claude/CLAUDE.template.md)"
+    ]
+  }
+}
