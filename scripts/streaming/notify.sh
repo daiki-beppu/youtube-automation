@@ -20,8 +20,11 @@ if [[ ! -r "$ENV_FILE" ]]; then
   exit 0
 fi
 
-# shellcheck disable=SC1090
-source "$ENV_FILE"
+# source は使わず限定パーサで読む（env ファイル改ざん時の任意コード実行を防ぐ）。
+# 形式: 1 行 1 KEY=VALUE。値が "..." で囲まれていても tr で剥がす（CRLF 混入も同様）。
+# grep が一致行を見つけられないケースでも cron を壊さないよう `|| true` で吸収する
+# （`set -euo pipefail` 下で grep の exit 1 が pipefail 経由で script 自体を落とすのを防ぐ）。
+DISCORD_WEBHOOK_URL=$(grep -E '^DISCORD_WEBHOOK_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r"' || true)
 
 if [[ -z "${DISCORD_WEBHOOK_URL:-}" ]]; then
   echo "notify.sh: DISCORD_WEBHOOK_URL が未設定" >&2
