@@ -109,6 +109,38 @@ $ARGUMENTS
 
 ## Step 2: composition.json の設計
 
+### ベンチマーク BGM 構造の参照
+
+`composition.json` のフェーズ境界・尺を設計する前に、`config/channel/analytics.json` の
+`benchmark.channels[].slug` を列挙し、各 slug について `data/video_analysis/<slug>/*.json`
+（`/video-analyze` の出力）が存在するか確認する。
+
+- **存在する場合**: `bgm_arc.intro` / `bgm_arc.peak` / `bgm_arc.outro` / `bgm_arc.energy_curve` を
+  読み込み、slug ごとに intro 秒・peak 秒・outro 開始秒の平均と代表的な `energy_curve` パターンを
+  抽出する。これを `composition.json` のフェーズ境界・各 `phase.at_min` の初期値として利用する。
+  複数 slug の場合は中央値を採用。DJ フェーズ展開の長さ配分（intro 派系の短い phase / peak 派系の
+  長い phase / outro 派系の減衰 phase）はこの平均構造から逆算する。
+- **`data/video_analysis/<slug>/*.json` 不在 + `data/benchmark_*.json` も不在**: ユーザーに
+  「`/benchmark` を先行実行してください」と案内し、本サブセクションはスキップして警告のみで続行。
+- **`data/benchmark_*.json` は存在するが分析未実行**: `AskUserQuestion` で
+  `uv run yt-video-analyze --source benchmark --channel <slug> --top 5` の自動実行を提案。承認時のみ
+  実行、拒否時は警告のみで続行。
+- **鮮度警告**: 各 `.json` の `analyzed_at` が最新 `data/benchmark_*.json` のファイル名日付より古い場合は
+  警告のみ（中断しない）。
+
+サマリー出力フォーマット:
+
+```
+**ベンチマーク BGM 構造（video-analyze 平均）**
+
+| slug | intro (avg) | peak (avg) | outro 開始 (avg) | energy 代表 |
+|---|---|---|---|---|
+| <slug> | 12s | 1:45 | 8:20 | 「徐々に上昇 → 中盤ピーク → ゆるやかなフェード」 |
+```
+
+このサマリーを後述の「フェーズ設計」表の `at_min` 初期値に反映する。**完全模倣しない** —
+コレクションの target_duration_min とジャンル特性に合わせて配分を調整する。
+
 ### 設計原則
 
 1. **楽器切り替え式**: 全楽器を同時に鳴らさず、フェーズごとに主役楽器を変える
@@ -126,6 +158,10 @@ $ARGUMENTS
 | フェーズ数 | `target_duration_min` に応じて調整（120 分なら **30 前後、各 3.5-4.5 分**推奨）|
 | **各フェーズの上限** | **実質なし**（実装が自動で 2 分サブセグメントに分割する）|
 | total_duration_min | `audio.target_duration_min` + `lyria.duration_padding_min` |
+
+**フェーズ数・各 phase の `at_min` はベンチマーク `bgm_arc` 平均を初期値の参考にする。** 複数 slug の
+場合は中央値を採用し、コレクションの `target_duration_min` に合わせてスケールする。
+ベンチマークデータが不在の場合は上表の推奨値を使う。
 
 **セグメント分割の仕組み**:
 - `generate_music_dj.py` は各 phase を `duration_hint_sec`（デフォルト **180 秒**）単位でサブ分割し、1 サブセグメント＝1 API コール（`lyria-3-pro-preview` の ~184 秒上限内）として生成する
