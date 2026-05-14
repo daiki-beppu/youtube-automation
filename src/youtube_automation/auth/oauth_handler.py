@@ -292,8 +292,17 @@ def main():
         else:
             print("\n❌ 接続テストに失敗しました。設定を確認してください。")
 
-    except Exception as e:
-        print(f"\n❌ エラー: {e}")
+    except KeyboardInterrupt:
+        # Ctrl-C: UNIX 慣例 (128 + SIGINT=2 → 130)
+        print("\n🛑 処理が中断されました")
+        sys.exit(130)
+    except (AuthError, ConfigError, YouTubeAPIError, OSError) as e:
+        logger.exception("CLI 実行失敗: %s", _redact(str(e)))
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001 - CLI top-level panic-handler: exit code 1 で必ず終了させる契約
+        # 想定外例外の最終 fallback。traceback は logger.exception が付与し、
+        # _redact で token 値・絶対パスの leak を防ぐ。
+        logger.exception("CLI 実行中に想定外のエラー: %s", _redact(str(e)))
         sys.exit(1)
 
 
