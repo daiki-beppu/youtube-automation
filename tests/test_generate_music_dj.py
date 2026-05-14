@@ -25,19 +25,6 @@ from youtube_automation.scripts.generate_music_dj import (
 from youtube_automation.utils.exceptions import ConfigError
 
 
-@pytest.fixture(autouse=True)
-def _silence_cost_tracker(monkeypatch):
-    """generate_segmented 経由の cost_tracker 副作用を抑止し、sample_channel/data/ への pollution を防ぐ (Issue #170)。"""
-    monkeypatch.setattr(
-        "youtube_automation.scripts.generate_music_dj.cost_tracker.log_generation",
-        lambda *a, **kw: None,
-    )
-    monkeypatch.setattr(
-        "youtube_automation.scripts.generate_music_dj.cost_tracker.print_last_report",
-        lambda *a, **kw: None,
-    )
-
-
 def make_composition(phases_count=6, total_min=60, *, base_extras=None, phase_extras_by_index=None):
     """テスト用 composition を生成。
 

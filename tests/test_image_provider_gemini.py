@@ -108,19 +108,6 @@ def patched_genai_client():
 
 
 @pytest.fixture(autouse=True)
-def _silence_cost_tracker(monkeypatch):
-    """テスト中の cost_tracker.log_generation 副作用を抑止。"""
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.gemini.cost_tracker.log_generation",
-        lambda *a, **kw: {"estimated_cost_usd": 0.101, "category": "image", "model": kw.get("model", "")},
-    )
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.gemini.cost_tracker.print_last_report",
-        lambda *a, **kw: None,
-    )
-
-
-@pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     """リトライバックオフを高速化（time.sleep を no-op に）。"""
     monkeypatch.setattr(
