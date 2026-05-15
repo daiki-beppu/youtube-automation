@@ -59,8 +59,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# 既存ヘルパーを再利用 (`tests/test_terraform_streaming.py:46-93`)
-from tests.test_terraform_streaming import _extract_block, _read, _strip_hcl_comments
+from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
 
 # ---------- パス定数 ----------
 
@@ -79,7 +78,6 @@ _CLOUD_INIT_YAML = _INFRA_DIR / "cloud-init.yaml"
 _TFVARS_EXAMPLE = _INFRA_DIR / "terraform.tfvars.example"
 _STREAMING_README = _INFRA_DIR / "README.md"
 
-_SECRETS_PY = _REPO_ROOT / "src" / "youtube_automation" / "utils" / "secrets.py"
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _HEALTHCHECK_DOC = _REPO_ROOT / "docs" / "streaming-healthcheck.md"
 
@@ -139,7 +137,7 @@ class TestHealthcheckShStructure:
         When 1 行目を読む
         Then ``#!/usr/bin/env bash`` で始まる（POSIX sh ではなく bash 機能を使うため）。
         """
-        first_line = _read(_HEALTHCHECK_SH).splitlines()[0]
+        first_line = read_file(_HEALTHCHECK_SH).splitlines()[0]
         assert first_line == "#!/usr/bin/env bash", f"shebang が #!/usr/bin/env bash でない: {first_line!r}"
 
     def test_has_set_strict_mode(self):
@@ -147,7 +145,7 @@ class TestHealthcheckShStructure:
         When 全文を読む
         Then ``set -euo pipefail`` が含まれている（Fail Fast 原則）。
         """
-        text = _read(_HEALTHCHECK_SH)
+        text = read_file(_HEALTHCHECK_SH)
         assert re.search(r"^set\s+-euo\s+pipefail\s*$", text, flags=re.MULTILINE), (
             "set -euo pipefail が無い（cron 実行時にエラーが握りつぶされる）"
         )
@@ -160,7 +158,7 @@ class TestHealthcheckShStructure:
         cron は最小 PATH で実行される（``/usr/bin:/bin`` のみ）。systemctl など
         ``/sbin`` 系コマンドを呼ぶため、スクリプト側で標準パスを export する必要がある。
         """
-        text = _read(_HEALTHCHECK_SH)
+        text = read_file(_HEALTHCHECK_SH)
         # PATH=... が明示的に export または assignment されている
         assert re.search(
             r"^(?:export\s+)?PATH=[^\n]*(?:/usr/sbin|/usr/bin|/sbin|/bin)",
@@ -271,8 +269,10 @@ class TestHealthcheckShBehavior:
         """偽 systemctl + 偽 notify.sh を配置した tmp 環境を構築する。
 
         ``systemctl`` は ``ActiveState=...\\nSubState=...\\nResult=...`` を
-        ``--value`` 形式で 3 行出力する偽実装にする。値は環境変数経由で差し替える。
-        ``notify.sh`` は呼ばれたら ``called`` ファイルにメッセージを書き込むだけ。
+        ``KEY=VALUE`` 形式で 3 行出力する偽実装にする（順序非依存パースを反映）。値は環境
+        変数経由で差し替える。``notify.sh`` は呼ばれたら ``called`` ファイルにメッセージを
+        書き込むだけ。``state_dir`` は ``YT_STREAM_STATE_DIR`` で healthcheck.sh に渡し、
+        ``last_status`` ファイルを tmp 配下に閉じ込める。
         """
         if not _HEALTHCHECK_SH.exists():
             pytest.skip("healthcheck.sh が未作成のため skip")
@@ -282,26 +282,25 @@ class TestHealthcheckShBehavior:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        state_dir = tmp_path / "state"
+
         called_marker = tmp_path / "notify_called.log"
 
         # 偽 systemctl（環境変数 FAKE_ACTIVE / FAKE_SUB / FAKE_RESULT を読み出す）
+        # 順序非依存パースに合わせて KEY=VALUE 形式で出力する。
         fake_systemctl = bin_dir / "systemctl"
         fake_systemctl.write_text(
             "#!/usr/bin/env bash\n"
-            "# 偽 systemctl: -p ActiveState -p SubState -p Result --value のとき値を 3 行出力\n"
-            'echo "${FAKE_ACTIVE:-active}"\n'
-            'echo "${FAKE_SUB:-running}"\n'
-            'echo "${FAKE_RESULT:-success}"\n'
+            "# 偽 systemctl: -p ActiveState -p SubState -p Result のとき KEY=VALUE で 3 行出力\n"
+            'echo "ActiveState=${FAKE_ACTIVE:-active}"\n'
+            'echo "SubState=${FAKE_SUB:-running}"\n'
+            'echo "Result=${FAKE_RESULT:-success}"\n'
         )
         fake_systemctl.chmod(0o755)
 
         # 偽 notify.sh（呼ばれたら called_marker に追記）
         fake_notify = bin_dir / "notify.sh"
-        fake_notify.write_text(
-            "#!/usr/bin/env bash\n"
-            f'echo "$@" >> "{called_marker}"\n'
-            "exit 0\n"
-        )
+        fake_notify.write_text(f'#!/usr/bin/env bash\necho "$@" >> "{called_marker}"\nexit 0\n')
         fake_notify.chmod(0o755)
 
         # healthcheck.sh を tmp_dir/bin にコピー（同ディレクトリ参照に対応）
@@ -313,6 +312,7 @@ class TestHealthcheckShBehavior:
             "bin_dir": bin_dir,
             "called_marker": called_marker,
             "healthcheck": shimmed_healthcheck,
+            "state_dir": state_dir,
         }
 
     def _run_with_state(
@@ -330,6 +330,8 @@ class TestHealthcheckShBehavior:
         env["FAKE_ACTIVE"] = active
         env["FAKE_SUB"] = sub
         env["FAKE_RESULT"] = result
+        # last_status を tmp に閉じ込める（本番では /var/lib/youtube-stream/last_status）
+        env["YT_STREAM_STATE_DIR"] = str(fake_env["state_dir"])
         return subprocess.run(
             ["bash", str(fake_env["healthcheck"])],
             capture_output=True,
@@ -354,9 +356,7 @@ class TestHealthcheckShBehavior:
 
         order.md「5 分 × 12 回抑止」要件の core test。
         """
-        proc = self._run_with_state(
-            fake_env, active="activating", sub="auto-restart", result="success"
-        )
+        proc = self._run_with_state(fake_env, active="activating", sub="auto-restart", result="success")
         assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
         assert not fake_env["called_marker"].exists(), (
             "1h 休止中（idle）で notify.sh が呼ばれた（5 分間隔で誤検知が 12 回飛ぶ）"
@@ -380,12 +380,180 @@ class TestHealthcheckShBehavior:
         """
         proc = self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
         assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
-        assert fake_env["called_marker"].exists(), (
-            "anomaly 状態で notify.sh が呼ばれていない（異常通知が飛ばない）"
-        )
+        assert fake_env["called_marker"].exists(), "anomaly 状態で notify.sh が呼ばれていない（異常通知が飛ばない）"
         # メッセージが空でないこと
         called_text = fake_env["called_marker"].read_text()
         assert called_text.strip(), "notify.sh が空メッセージで呼ばれた（Discord 表示が無意味）"
+
+    def test_consecutive_anomaly_does_not_renotify(self, fake_env):
+        """Given 1 回目で anomaly 通知が発火、last_status に "anomaly" が保存された後
+        When 2 回目も anomaly 状態で healthcheck.sh を実行する
+        Then notify.sh は 2 回目では呼ばれない（連打防止）。
+
+        order.md「anomaly → anomaly は無音（連打防止）」要件の core test。
+        """
+        # 1 回目: unknown → anomaly で通知
+        self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
+        assert fake_env["called_marker"].exists(), "1 回目の anomaly で notify が呼ばれていない"
+        first_call_size = fake_env["called_marker"].stat().st_size
+
+        # 2 回目: anomaly → anomaly で無音
+        proc = self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
+        assert proc.returncode == 0
+        second_call_size = fake_env["called_marker"].stat().st_size
+        assert second_call_size == first_call_size, (
+            "anomaly → anomaly でも notify が再度呼ばれた（5 分ごと連打）"
+        )
+
+    def test_recovered_from_anomaly_calls_notify(self, fake_env):
+        """Given 1 回目で anomaly 状態（last_status に "anomaly" が保存される）
+        When 2 回目に ok 状態（active+running+success）で healthcheck.sh を実行する
+        Then notify.sh が呼ばれ、メッセージに "recovered" が含まれる。
+
+        order.md「anomaly → ok/idle/manual の遷移で "recovered: <new>" 通知」要件。
+        """
+        # 1 回目: anomaly
+        self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
+        first_text = fake_env["called_marker"].read_text()
+
+        # 2 回目: anomaly → ok で recovered 通知
+        proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
+        assert proc.returncode == 0
+        assert fake_env["called_marker"].exists(), (
+            "anomaly → ok の復帰で notify が呼ばれていない（recovered 通知欠損）"
+        )
+        full_text = fake_env["called_marker"].read_text()
+        new_text = full_text[len(first_text):]
+        assert "recovered" in new_text, (
+            f"recovered メッセージが notify に渡されていない: {new_text!r}"
+        )
+        assert "ok" in new_text, f"recovered メッセージに復帰先 'ok' が含まれない: {new_text!r}"
+
+    def test_initial_ok_does_not_call_notify(self, fake_env):
+        """Given last_status ファイル不在（VPS 再構築直後など）
+        When healthcheck.sh を初回 ok 状態で実行する
+        Then notify.sh は呼ばれない（unknown → ok は同種類扱い、initial state confirmation）。
+        """
+        assert not (fake_env["state_dir"] / "last_status").exists(), (
+            "前提: last_status が事前に存在してはいけない"
+        )
+        proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
+        assert proc.returncode == 0
+        assert not fake_env["called_marker"].exists(), (
+            "初回 ok で notify が呼ばれた（unknown→ok は無音であるべき）"
+        )
+
+    def test_state_dir_is_created_if_missing(self, fake_env):
+        """Given STATE_DIR が存在しない
+        When healthcheck.sh を実行する
+        Then mkdir -p で STATE_DIR が作成され、last_status が書き込まれる。
+        """
+        assert not fake_env["state_dir"].exists(), "前提: state_dir が事前に存在してはいけない"
+        proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
+        assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
+        last_status = fake_env["state_dir"] / "last_status"
+        assert last_status.exists(), "STATE_DIR/last_status が作成されていない"
+        assert last_status.read_text().strip() == "ok", (
+            f"last_status の内容が想定外: {last_status.read_text()!r}"
+        )
+
+
+class TestHealthcheckShOrderIndependentParse:
+    """``parse_systemctl_kv`` 関数の順序非依存性。
+
+    `systemctl show ... --value` の引数順序非保証バグの真因に対する単体検証。
+    全 6 順列（3! = 6）を網羅し、どの順序でも ActiveState/SubState/Result が
+    正しい変数に割り当てられることを担保する。
+    """
+
+    @pytest.mark.parametrize(
+        "lines",
+        [
+            ("ActiveState=active", "SubState=running", "Result=success"),
+            ("ActiveState=active", "Result=success", "SubState=running"),
+            ("SubState=running", "ActiveState=active", "Result=success"),
+            ("SubState=running", "Result=success", "ActiveState=active"),
+            ("Result=success", "ActiveState=active", "SubState=running"),
+            ("Result=success", "SubState=running", "ActiveState=active"),
+        ],
+    )
+    def test_parses_kv_regardless_of_line_order(self, lines: tuple[str, str, str]):
+        """Given KEY=VALUE 形式の 3 行（順序は任意）
+        When parse_systemctl_kv を呼ぶ
+        Then active=active, sub=running, result=success が呼び出し元 scope にセットされる。
+        """
+        if not _HEALTHCHECK_SH.exists():
+            pytest.skip("healthcheck.sh が未作成のため skip")
+        # heredoc に行を流し込んで parse_systemctl_kv を呼び、結果を 3 行 echo する
+        heredoc_body = "\n".join(lines)
+        snippet = (
+            f'source "{_HEALTHCHECK_SH}"\n'
+            f'parse_systemctl_kv <<EOF\n{heredoc_body}\nEOF\n'
+            'echo "active=$active"\n'
+            'echo "sub=$sub"\n'
+            'echo "result=$result"\n'
+        )
+        proc = _run_bash(snippet)
+        assert proc.returncode == 0, f"parse_systemctl_kv が non-zero: {proc.stderr}"
+        out = proc.stdout
+        assert "active=active" in out, f"active が正しく束ねられていない: {out!r}"
+        assert "sub=running" in out, f"sub が正しく束ねられていない: {out!r}"
+        assert "result=success" in out, f"result が正しく束ねられていない: {out!r}"
+
+
+class TestHealthcheckShStateChange:
+    """``decide_notification`` 関数の遷移判定（state-change ロジック）。
+
+    order.md 遷移表:
+      prev\\current | ok/idle/manual | anomaly
+      -------------|----------------|--------
+      unknown      | ""             | anomaly
+      ok/idle/manual | ""           | anomaly
+      anomaly      | recovered      | ""
+    """
+
+    @pytest.mark.parametrize(
+        "prev,current,expected",
+        [
+            # 初回（last_status 不在）
+            ("unknown", "ok", ""),
+            ("unknown", "anomaly", "anomaly"),
+            # 同種類の連続は無音
+            ("ok", "ok", ""),
+            ("idle", "idle", ""),
+            ("manual", "manual", ""),
+            # ok/idle/manual 間の遷移も無音（同 "正常" カテゴリ）
+            ("ok", "idle", ""),
+            ("manual", "ok", ""),
+            # → anomaly は通知
+            ("ok", "anomaly", "anomaly"),
+            ("idle", "anomaly", "anomaly"),
+            ("manual", "anomaly", "anomaly"),
+            # anomaly → 正常系は recovered
+            ("anomaly", "ok", "recovered"),
+            ("anomaly", "idle", "recovered"),
+            ("anomaly", "manual", "recovered"),
+            # anomaly 連打抑止
+            ("anomaly", "anomaly", ""),
+        ],
+    )
+    def test_decide_notification(self, prev: str, current: str, expected: str):
+        """Given (prev, current) の組み合わせ
+        When decide_notification を呼ぶ
+        Then 期待アクション（""/"anomaly"/"recovered"）を 1 行 echo する。
+        """
+        if not _HEALTHCHECK_SH.exists():
+            pytest.skip("healthcheck.sh が未作成のため skip")
+        snippet = (
+            f'source "{_HEALTHCHECK_SH}"\n'
+            f'decide_notification "{prev}" "{current}"\n'
+        )
+        proc = _run_bash(snippet)
+        assert proc.returncode == 0, f"decide_notification が non-zero: {proc.stderr}"
+        assert proc.stdout.strip() == expected, (
+            f"({prev!r}, {current!r}) の判定が期待値と異なる: "
+            f"got={proc.stdout.strip()!r}, expected={expected!r}"
+        )
 
 
 # ============================================================================
@@ -408,7 +576,7 @@ class TestNotifyShStructure:
         When 1 行目を読む
         Then ``#!/usr/bin/env bash`` で始まる。
         """
-        first_line = _read(_NOTIFY_SH).splitlines()[0]
+        first_line = read_file(_NOTIFY_SH).splitlines()[0]
         assert first_line == "#!/usr/bin/env bash", f"shebang が不正: {first_line!r}"
 
     def test_has_set_strict_mode(self):
@@ -416,22 +584,57 @@ class TestNotifyShStructure:
         When 全文を読む
         Then ``set -euo pipefail`` が含まれている。
         """
-        text = _read(_NOTIFY_SH)
-        assert re.search(r"^set\s+-euo\s+pipefail\s*$", text, flags=re.MULTILINE), (
-            "set -euo pipefail が無い"
-        )
+        text = read_file(_NOTIFY_SH)
+        assert re.search(r"^set\s+-euo\s+pipefail\s*$", text, flags=re.MULTILINE), "set -euo pipefail が無い"
 
     def test_loads_env_file_for_webhook(self):
         """Given notify.sh
         When 全文を読む
-        Then ``/etc/youtube-stream-healthcheck.env`` を source または読み込んでいる。
+        Then ``/etc/youtube-stream-healthcheck.env`` を参照している。
 
         secret は env file で配信され notify.sh に直書きしない（plan §15）。
         """
-        text = _read(_NOTIFY_SH)
+        text = read_file(_NOTIFY_SH)
         # source / `.` / set -a + . どれでも環境変数を読み込めばよい
         assert "/etc/youtube-stream-healthcheck.env" in text, (
             "/etc/youtube-stream-healthcheck.env を参照していない（webhook を読み込めない）"
+        )
+
+    def test_does_not_source_env_file(self):
+        """Given notify.sh
+        When 全文を読む
+        Then env ファイルを ``source`` / ``.`` で評価していない。
+
+        issue #161: env ファイルを bash として評価すると改ざん時に root 任意コード
+        実行を許す。``grep + cut`` の限定パーサで読むのが正しい経路。
+        """
+        text = read_file(_NOTIFY_SH)
+        # `source "$ENV_FILE"` / `source /etc/...` / `. "$ENV_FILE"` / `. /etc/...` のいずれも禁止
+        assert not re.search(
+            r'^\s*(?:source|\.)\s+["\']?(?:\$\{?ENV_FILE\}?|/etc/youtube-stream-healthcheck\.env)',
+            text,
+            flags=re.MULTILINE,
+        ), (
+            "env ファイルを source / . で評価している（改ざん時に root 任意コード実行のリスク）"
+        )
+
+    def test_parses_webhook_with_grep_cut(self):
+        """Given notify.sh
+        When 全文を読む
+        Then ``DISCORD_WEBHOOK_URL`` を ``grep + cut`` の限定パーサで取得している。
+
+        issue #161 推奨実装: ``grep -E '^DISCORD_WEBHOOK_URL=' ... | cut -d= -f2- | tr ...``
+        """
+        text = read_file(_NOTIFY_SH)
+        assert re.search(
+            r"DISCORD_WEBHOOK_URL=\$\(\s*grep\s+-E\s+'\^DISCORD_WEBHOOK_URL=",
+            text,
+        ), (
+            "DISCORD_WEBHOOK_URL の grep ベース限定パーサが見つからない "
+            "（行頭アンカー '^' は必須: コメント内代入や行中代入を拾わないため）"
+        )
+        assert re.search(r"cut\s+-d=\s+-f2-", text), (
+            "cut -d= -f2- が見つからない（webhook トークンに = が混じった場合に切り詰めるリスク）"
         )
 
     def test_does_not_hardcode_webhook_url(self):
@@ -441,7 +644,7 @@ class TestNotifyShStructure:
 
         secret 漏洩防止の最重要要件。
         """
-        text = _read(_NOTIFY_SH)
+        text = read_file(_NOTIFY_SH)
         assert not re.search(
             r"https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_\-]{20,}",
             text,
@@ -452,7 +655,7 @@ class TestNotifyShStructure:
         When 全文を読む
         Then ``curl`` が呼ばれ、``-X POST`` または ``--data`` 系の POST 経路がある。
         """
-        text = _read(_NOTIFY_SH)
+        text = read_file(_NOTIFY_SH)
         assert re.search(r"\bcurl\b", text), "curl が使われていない（HTTP POST する手段が無い）"
 
     def test_posts_json_with_content_field(self):
@@ -462,7 +665,7 @@ class TestNotifyShStructure:
 
         Discord Webhook の仕様: ``{"content": "..."}`` 形式が最低限。
         """
-        text = _read(_NOTIFY_SH)
+        text = read_file(_NOTIFY_SH)
         assert "application/json" in text, "Content-Type: application/json が指定されていない"
         assert re.search(r'"content"', text), 'Discord JSON の "content" フィールドが無い'
 
@@ -473,7 +676,7 @@ class TestNotifyShStructure:
 
         plan §「実装アプローチ 3」: HTTP エラーでも exit 0（cron を壊さない）。
         """
-        text = _read(_NOTIFY_SH)
+        text = read_file(_NOTIFY_SH)
         # curl ... || true / curl ... || : / 末尾に exit 0 / curl 行を if/||  で囲む 等
         has_or_true = re.search(r"curl[^\n]*\|\|\s*(true|:)", text)
         has_exit_zero = re.search(r"^exit\s+0\s*$", text, flags=re.MULTILINE)
@@ -482,6 +685,145 @@ class TestNotifyShStructure:
         assert has_or_true or has_exit_zero or has_set_plus_e, (
             "curl 失敗時に cron へエラーが伝播する書き方になっている "
             "（|| true / exit 0 / set +e のいずれかで吸収すること）"
+        )
+
+    def test_validates_webhook_url_scheme_and_host(self):
+        """Given notify.sh
+        When 全文を読む
+        Then ``^https://(discord\\.com|discordapp\\.com)/api/webhooks/`` の正規表現で
+             webhook URL を検証している（Issue #166 SSRF 防御）。
+
+        secret store 侵害時に file:// / http://169.254.169.254/... へすり替えられる
+        ことを防ぐ。
+        """
+        text = read_file(_NOTIFY_SH)
+        # bash の =~ 演算子で上記の正規表現が現れること
+        # `\\.` のバックスラッシュは Python 文字列内で `\\\\\.` だが、ファイル上は `\.`
+        assert re.search(
+            r"=~\s*\^https://\(discord\\\.com\|discordapp\\\.com\)/api/webhooks/",
+            text,
+        ), (
+            "notify.sh に webhook URL スキーム/ホスト検証の正規表現が無い "
+            "（^https://(discord\\.com|discordapp\\.com)/api/webhooks/ を =~ で照合すること）"
+        )
+
+
+class TestNotifyShEnvParser:
+    """notify.sh の env パーサ動作確認（issue #161 セキュリティ回帰テスト）。
+
+    `grep + cut + tr` の限定パーサが
+    - 正常な KEY=VALUE 形式から webhook を取り出せる
+    - 改ざんされた env ファイル（コマンド注入を仕込んだ内容）を bash として
+      評価しない（任意コード実行が起きない）
+    ことを確認する。
+    """
+
+    def _extract_parser_line(self) -> str:
+        """notify.sh から DISCORD_WEBHOOK_URL= の限定パーサ行を抜き出す。"""
+        text = read_file(_NOTIFY_SH)
+        match = re.search(r"^DISCORD_WEBHOOK_URL=\$\(.+?\)$", text, flags=re.MULTILINE)
+        assert match, "DISCORD_WEBHOOK_URL の限定パーサ行が見つからない"
+        return match.group(0)
+
+    def _run_parser_with_env(self, env_file: Path) -> subprocess.CompletedProcess:
+        """env_file を入力に notify.sh の限定パーサ行を bash 実行する。
+
+        3 つのパーサ単体テストで共通の snippet 構築 + ``_run_bash`` 呼び出しを集約する
+        helper（同ファイル ``_classify`` と同型の責務分離）。env_file 内容のみが差分。
+        """
+        snippet = (
+            f'ENV_FILE="{env_file}"\n'
+            f"{self._extract_parser_line()}\n"
+            'printf "%s" "$DISCORD_WEBHOOK_URL"\n'
+        )
+        return _run_bash(snippet)
+
+    def test_parses_valid_webhook(self, tmp_path: Path):
+        """Given DISCORD_WEBHOOK_URL=<url> のみが書かれた env ファイル
+        When notify.sh のパーサ行を実行する
+        Then 値が正しく取り出される。
+        """
+        env_file = tmp_path / "env"
+        env_file.write_text(
+            "DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123/abc=def\n"
+        )
+        proc = self._run_parser_with_env(env_file)
+        assert proc.returncode == 0, f"パーサがエラー終了: stderr={proc.stderr}"
+        # cut -d= -f2- が効いて、トークン側の '=' も保持される
+        assert proc.stdout == "https://discord.com/api/webhooks/123/abc=def", (
+            f"webhook 値が想定通り抽出されていない: {proc.stdout!r}"
+        )
+
+    def test_strips_quotes_and_cr(self, tmp_path: Path):
+        """Given 引用符付き値・CRLF 改行が混入した env ファイル
+        When notify.sh のパーサ行を実行する
+        Then ``"`` と ``\\r`` が除去される。
+        """
+        env_file = tmp_path / "env"
+        # CRLF + ダブルクオート両方を含める
+        env_file.write_bytes(b'DISCORD_WEBHOOK_URL="https://example.com/hook"\r\n')
+        proc = self._run_parser_with_env(env_file)
+        assert proc.returncode == 0
+        assert proc.stdout == "https://example.com/hook", (
+            f"引用符/CR が除去されていない: {proc.stdout!r}"
+        )
+
+    def test_does_not_execute_malicious_payload(self, tmp_path: Path):
+        """Given env ファイルにコマンド注入が仕込まれている
+        When notify.sh のパーサ行を実行する
+        Then 注入されたコマンドは実行されない（issue #161 セキュリティ要件）。
+
+        ``source`` 経路では ``DISCORD_WEBHOOK_URL=$(touch ...)`` のような書き方で
+        任意コードが走るが、``grep + cut`` パーサでは値が単なる文字列として扱われる。
+        """
+        env_file = tmp_path / "env"
+        marker = tmp_path / "pwned"
+        # source されると `touch <marker>` の戻り値が代入され marker ファイルが作られる
+        env_file.write_text(
+            f"DISCORD_WEBHOOK_URL=$(touch {marker})\n"
+            f"PATH=/tmp/evil:$PATH\n"
+        )
+        proc = self._run_parser_with_env(env_file)
+        assert proc.returncode == 0
+        # marker が作られていない = コマンド置換が走っていない
+        assert not marker.exists(), (
+            f"env ファイルのコマンド置換が実行された（脆弱性が残存）: {marker}"
+        )
+        # 値はリテラル文字列としてそのまま取れる
+        assert proc.stdout == f"$(touch {marker})", (
+            f"値がリテラルとして取れていない: {proc.stdout!r}"
+        )
+
+    def test_full_script_exits_zero_when_webhook_key_missing(self, tmp_path: Path):
+        """Given env ファイルに ``DISCORD_WEBHOOK_URL=`` 行が無い
+        When notify.sh をフルスクリプトとして ``set -euo pipefail`` 込みで実行する
+        Then exit 0 で終わる（cron を壊さない）。
+
+        回帰防止: ``grep`` の non-match (exit 1) が pipefail で伝播し
+        ``set -e`` で silent に script 自体を落とすバグを防ぐ。
+        ``scripts/streaming/notify.sh:11-12`` の「cron を壊さないため exit 0 で吸収」方針。
+        """
+        env_file = tmp_path / "env"
+        # DISCORD_WEBHOOK_URL= 行を含まない env ファイル（他のキーのみ）
+        env_file.write_text("SOME_OTHER_KEY=value\n")
+        # ENV_FILE 定数を上書きするため notify.sh 本文の ``readonly ENV_FILE=...`` 行を
+        # tmp_path のパスに差し替えてから実行する（ファイル自体は変更しない）。
+        notify_text = read_file(_NOTIFY_SH)
+        rewritten = re.sub(
+            r'^readonly\s+ENV_FILE="[^"]+"$',
+            f'readonly ENV_FILE="{env_file}"',
+            notify_text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        assert rewritten != notify_text, "ENV_FILE の readonly 宣言を差し替えられなかった"
+        script_path = tmp_path / "notify.sh"
+        script_path.write_text(rewritten)
+        script_path.chmod(0o755)
+        proc = _run_bash(f'"{script_path}" "test message"')
+        assert proc.returncode == 0, (
+            f"webhook キー未設定 env で exit 0 にならない（cron が壊れる）: "
+            f"rc={proc.returncode}, stderr={proc.stderr!r}"
         )
 
 
@@ -505,10 +847,8 @@ class TestLogrotateConf:
         When 全文を読む
         Then ``/opt/youtube-stream/logs/*.log`` を対象としている。
         """
-        text = _read(_LOGROTATE_CONF)
-        assert re.search(r"/opt/youtube-stream/logs/\*\.log", text), (
-            "/opt/youtube-stream/logs/*.log を対象としていない"
-        )
+        text = read_file(_LOGROTATE_CONF)
+        assert re.search(r"/opt/youtube-stream/logs/\*\.log", text), "/opt/youtube-stream/logs/*.log を対象としていない"
 
     @pytest.mark.parametrize(
         "directive",
@@ -529,7 +869,7 @@ class TestLogrotateConf:
         ``copytruncate`` は ffmpeg の長時間配信を中断せずローテするため必須
         （inode を保持したまま truncate するため file descriptor が引き続き有効）。
         """
-        text = _read(_LOGROTATE_CONF)
+        text = read_file(_LOGROTATE_CONF)
         # 単語境界でマッチ（"rotate 7" のような space を含むディレクティブもそのまま）
         pattern = rf"(?m)^\s*{re.escape(directive)}\s*$"
         assert re.search(pattern, text), f"logrotate.conf に '{directive}' ディレクティブが無い"
@@ -557,7 +897,7 @@ class TestCronD:
 
         cron.d 形式は ``user`` フィールド（``root``）を含むのが特徴。crontab 形式と区別される。
         """
-        text = _read(_CRON_D)
+        text = read_file(_CRON_D)
         assert re.search(
             r"^\s*\*/5\s+\*\s+\*\s+\*\s+\*\s+root\s+/opt/youtube-stream/bin/healthcheck\.sh\b",
             text,
@@ -582,16 +922,14 @@ class TestHealthcheckEnvTftpl:
         When youtube-stream-healthcheck.env.tftpl を探す
         Then 存在する。
         """
-        assert _HEALTHCHECK_ENV_TFTPL.exists(), (
-            "templates/youtube-stream-healthcheck.env.tftpl が存在しない"
-        )
+        assert _HEALTHCHECK_ENV_TFTPL.exists(), "templates/youtube-stream-healthcheck.env.tftpl が存在しない"
 
     def test_contains_webhook_variable_assignment(self):
         """Given env tftpl
         When 全文を読む
         Then ``DISCORD_WEBHOOK_URL=${webhook}`` 行がある（terraform templatefile 変数記法）。
         """
-        text = _read(_HEALTHCHECK_ENV_TFTPL)
+        text = read_file(_HEALTHCHECK_ENV_TFTPL)
         assert re.search(r"^DISCORD_WEBHOOK_URL=\$\{webhook\}\s*$", text, flags=re.MULTILINE), (
             "DISCORD_WEBHOOK_URL=${webhook} 行が存在しない"
         )
@@ -603,7 +941,7 @@ class TestHealthcheckEnvTftpl:
 
         systemd EnvironmentFile はクォートを文字列の一部とみなす（curl URL に余計な文字が混入する）。
         """
-        text = _read(_HEALTHCHECK_ENV_TFTPL)
+        text = read_file(_HEALTHCHECK_ENV_TFTPL)
         assert not re.search(r"^DISCORD_WEBHOOK_URL=['\"]", text, flags=re.MULTILINE), (
             "DISCORD_WEBHOOK_URL の値がクォートされている（systemd EnvironmentFile 慣例違反）"
         )
@@ -615,7 +953,7 @@ class TestHealthcheckEnvTftpl:
 
         secret は terraform templatefile() の variables map 経由でだけ流入させる。
         """
-        text = _read(_HEALTHCHECK_ENV_TFTPL)
+        text = read_file(_HEALTHCHECK_ENV_TFTPL)
         assert not re.search(r"https://discord(?:app)?\.com/api/webhooks/", text), (
             "Discord Webhook URL が直書きされている（${webhook} を使うこと）"
         )
@@ -636,8 +974,8 @@ class TestVariablesTfDiscordWebhook:
 
         既存 ``stream_key`` / ``vultr_api_key`` と同種規約（Fail Fast、tfstate にも sensitive 扱い）。
         """
-        text = _strip_hcl_comments(_read(_VARIABLES_TF))
-        block = _extract_block(text, r'variable\s+"discord_webhook_url"')
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"discord_webhook_url"')
         assert block is not None, 'variable "discord_webhook_url" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "discord_webhook_url.type が string でない"
         assert re.search(r"sensitive\s*=\s*true", block), (
@@ -665,18 +1003,15 @@ class TestMainTfHealthcheckDeploy:
         既存 stream_key と同パターン: secret 派生は terraform 1.5+ で sensitive 扱いされるため
         nonsensitive() で剥がす。SHA256 は不可逆なので脱 sensitive 安全。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None, "null_resource.deploy.triggers ブロックが存在しない"
         assert re.search(
             r"nonsensitive\(\s*sha256\(\s*var\.discord_webhook_url\s*\)\s*\)",
             triggers,
-        ), (
-            "triggers に nonsensitive(sha256(var.discord_webhook_url)) が無い "
-            "（webhook 差し替えで再 deploy されない）"
-        )
+        ), "triggers に nonsensitive(sha256(var.discord_webhook_url)) が無い （webhook 差し替えで再 deploy されない）"
 
     @pytest.mark.parametrize(
         "destination",
@@ -694,8 +1029,8 @@ class TestMainTfHealthcheckDeploy:
 
         4 アセット（healthcheck.sh / notify.sh / logrotate.conf / cron.d）すべて配信されること。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         assert re.search(
             rf'destination\s*=\s*"{re.escape(destination)}"',
@@ -709,8 +1044,8 @@ class TestMainTfHealthcheckDeploy:
              ``templatefile("${path.module}/templates/youtube-stream-healthcheck.env.tftpl", ...)``
              で生成されている。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         assert re.search(
             r'destination\s*=\s*"/etc/youtube-stream-healthcheck\.env"',
@@ -730,7 +1065,7 @@ class TestMainTfHealthcheckDeploy:
         Then ``webhook = var.discord_webhook_url`` が渡されている。
         """
         # raw を読む（コメント除去で消える可能性のある記号は無いが、test_terraform_streaming.py の慣例に倣う）
-        text = _read(_MAIN_TF)
+        text = read_file(_MAIN_TF)
         # 同じ行近傍に webhook = var.discord_webhook_url が現れること
         assert re.search(
             r"webhook\s*=\s*var\.discord_webhook_url",
@@ -744,8 +1079,8 @@ class TestMainTfHealthcheckDeploy:
 
         webhook を読める範囲を root に限定する（secret 隔離）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
@@ -770,8 +1105,8 @@ class TestMainTfHealthcheckDeploy:
 
         ``mkdir -p /opt/youtube-stream/bin`` または ``install -d`` 系のいずれか + ``chmod 755`` 系。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
@@ -799,8 +1134,8 @@ class TestMainTfHealthcheckDeploy:
         cron.d は配置するだけでは即時反映されない場合があるため、明示的に再起動を呼ぶ必要がある
         （Ubuntu 24.04 の vixie-cron / cron は通常自動検知するが、明示で確実にする）。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
@@ -832,7 +1167,7 @@ class TestCloudInitCronPackage:
         Ubuntu 24.04 minimal は cron が同梱されない場合があり、cron.d を配置しても起動しない
         （既存 ffmpeg と同パターンで宣言する）。
         """
-        text = _read(_CLOUD_INIT_YAML)
+        text = read_file(_CLOUD_INIT_YAML)
         match = re.search(
             r"^packages:\s*\n((?:[ \t]+.*\n)+)",
             text,
@@ -860,7 +1195,7 @@ class TestTfvarsExampleDiscordWebhook:
 
         secret は TF_VAR_discord_webhook_url 経由で渡す前提（既存 stream_key と同種規約）。
         """
-        text = _strip_hcl_comments(_read(_TFVARS_EXAMPLE))
+        text = strip_hcl_comments(read_file(_TFVARS_EXAMPLE))
         assert not re.search(r"^\s*discord_webhook_url\s*=", text, flags=re.MULTILINE), (
             "discord_webhook_url の代入がアクティブ行に存在する（secret 漏洩リスク）"
         )
@@ -870,7 +1205,7 @@ class TestTfvarsExampleDiscordWebhook:
         When ファイル内容（コメント込み）を読む
         Then ``TF_VAR_discord_webhook_url`` の使い方がコメントに記載されている。
         """
-        raw = _read(_TFVARS_EXAMPLE)
+        raw = read_file(_TFVARS_EXAMPLE)
         assert "TF_VAR_discord_webhook_url" in raw, (
             "TF_VAR_discord_webhook_url の案内コメントが無い（運用者が secret 注入方法を発見できない）"
         )
@@ -889,7 +1224,7 @@ class TestStreamingReadmeHealthcheck:
         When 全文を読む
         Then Discord 言及がある（通知手段の説明）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "Discord" in text, "README に Discord 言及が無い（死活監視の通知手段が説明されない）"
 
     def test_mentions_tf_var_discord_webhook_url(self):
@@ -897,7 +1232,7 @@ class TestStreamingReadmeHealthcheck:
         When 全文を読む
         Then ``TF_VAR_discord_webhook_url`` 環境変数の言及がある（secret 注入の入口）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "TF_VAR_discord_webhook_url" in text, (
             "README に TF_VAR_discord_webhook_url の言及が無い（secret 注入手順が辿れない）"
         )
@@ -907,7 +1242,7 @@ class TestStreamingReadmeHealthcheck:
         When 全文を読む
         Then ``healthcheck.sh`` の言及がある（運用者が cron で何が動くかを把握できる）。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         assert "healthcheck.sh" in text, "README に healthcheck.sh の言及が無い"
 
     @pytest.mark.parametrize(
@@ -927,13 +1262,11 @@ class TestStreamingReadmeHealthcheck:
         ``再開`` は systemd の自動再起動文脈。"restart" 単独は他箇所と被るため、
         日本語キーワードまたは "RestartSec" / "auto-restart" を緩く受け入れる。
         """
-        text = _read(_STREAMING_README)
+        text = read_file(_STREAMING_README)
         if scenario_keyword == "再開":
-            assert (
-                "再開" in text
-                or "auto-restart" in text
-                or "RestartSec" in text
-            ), "README に自動再開シナリオの言及が無い"
+            assert "再開" in text or "auto-restart" in text or "RestartSec" in text, (
+                "README に自動再開シナリオの言及が無い"
+            )
         else:
             assert scenario_keyword in text, (
                 f"README に '{scenario_keyword}' シナリオの言及が無い（4 シナリオ運用手順未網羅）"
@@ -1207,9 +1540,7 @@ class TestStreamingArchiveCheckCli:
                 streaming_archive_check.main()
             except SystemExit:
                 pass
-            assert mock_post.called, (
-                "--notify-on-shortage を指定しても Discord に POST していない（通知が飛ばない）"
-            )
+            assert mock_post.called, "--notify-on-shortage を指定しても Discord に POST していない（通知が飛ばない）"
 
 
 # ============================================================================
@@ -1227,7 +1558,7 @@ class TestPyprojectEntryPoint:
 
         ``yt-*`` プレフィックス規約 (CLAUDE.md) に従う。
         """
-        text = _read(_PYPROJECT)
+        text = read_file(_PYPROJECT)
         # `yt-stream-archive-check = "..."` 行が [project.scripts] にあること
         assert re.search(
             r'^yt-stream-archive-check\s*=\s*"youtube_automation\.scripts\.streaming_archive_check:main"',
@@ -1269,19 +1600,15 @@ class TestHealthcheckDoc:
 
         order.md「各シナリオが運用手順書に記載済み」要件。
         """
-        text = _read(_HEALTHCHECK_DOC)
-        assert scenario_keyword in text, (
-            f"運用手順書に '{scenario_keyword}' シナリオの記載が無い"
-        )
+        text = read_file(_HEALTHCHECK_DOC)
+        assert scenario_keyword in text, f"運用手順書に '{scenario_keyword}' シナリオの記載が無い"
 
     def test_documents_auto_restart_scenario(self):
         """Given streaming-healthcheck.md
         When 全文を読む
         Then 1 時間後の自動再開（RestartSec / auto-restart / 再開 のいずれか）の言及がある。
         """
-        text = _read(_HEALTHCHECK_DOC)
-        assert (
-            "再開" in text
-            or "RestartSec" in text
-            or "auto-restart" in text
-        ), "運用手順書に自動再開シナリオの記載が無い"
+        text = read_file(_HEALTHCHECK_DOC)
+        assert "再開" in text or "RestartSec" in text or "auto-restart" in text, (
+            "運用手順書に自動再開シナリオの記載が無い"
+        )

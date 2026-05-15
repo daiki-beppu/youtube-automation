@@ -63,6 +63,7 @@ def get_duration(mp3: Path) -> float:
             "format=duration",
             "-of",
             "default=noprint_wrappers=1:nokey=1",
+            "--",
             str(mp3),
         ],
         check=True,

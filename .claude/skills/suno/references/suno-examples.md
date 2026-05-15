@@ -3,7 +3,7 @@
 品質が高い情景フレーズ + スタイルプロンプトの参考例。
 **これは例示のみ** — 各チャンネルの `config/skills/suno.yaml` の `genre_line` + `style_variants` に合わせて調整すること。
 
-## 例 1: jazzhop / lo-fi 系（bobble）
+## 例 1: jazzhop / lo-fi 系
 
 ### 品質基準プロンプト（C-1 パターン）
 
