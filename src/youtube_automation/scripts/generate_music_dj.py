@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from youtube_automation.utils import cost_tracker, lyria_client  # noqa: E402
+from youtube_automation.utils.audio_units import unit_for_audio  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 from youtube_automation.utils.time_utils import format_duration_mmss  # noqa: E402
 
@@ -394,7 +395,13 @@ def _generate_one_segment(i: int, seg: dict, seg_path: Path, max_retries: int) -
                 metadata["reference_image"] = str(seg["reference_image"])
             if seg.get("lyrics"):
                 metadata["has_lyrics"] = True
-            cost_tracker.log_generation("audio", model=seg["model"], quantity=1, metadata=metadata)
+            cost_tracker.log_generation(
+                "audio",
+                model=seg["model"],
+                quantity=1,
+                unit=unit_for_audio(seg["model"]),
+                metadata=metadata,
+            )
             return True
 
     print(f"  [{label}] {max_retries + 1} 回失敗")

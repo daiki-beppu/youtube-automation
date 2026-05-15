@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from youtube_automation.utils import cost_tracker, lyria_client
+from youtube_automation.utils.audio_units import unit_for_audio
 from youtube_automation.utils.exceptions import ConfigError
 
 
@@ -92,6 +93,7 @@ def main():
         "audio",
         model=args.model,
         quantity=1,
+        unit=unit_for_audio(args.model),
         metadata={
             "prompt_preview": args.prompt[:120],
             "output_file": cost_tracker.relative_to_channel_dir(output),

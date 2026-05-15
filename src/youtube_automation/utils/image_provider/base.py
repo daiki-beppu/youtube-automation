@@ -29,7 +29,6 @@ class ImageGenerationRequest:
         image_size: Provider 固有の解像度ヒント（Gemini は "1K"/"2K"/"4K"、
             OpenAI は "1536x1024" 等の生 size 文字列）
         references: 参照画像パス（空なら参照なしモード）
-        cost_per_image_usd: PRICING を上書きするカスタム単価（None なら自動算出）
     """
 
     prompt: str
@@ -37,7 +36,6 @@ class ImageGenerationRequest:
     aspect_ratio: str
     image_size: str
     references: Sequence[Path] = field(default_factory=tuple)
-    cost_per_image_usd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -59,13 +57,11 @@ class ImageProvider(Protocol):
 
     実装クラスは以下を備える:
     - ``name``: 識別子（"gemini" / "openai"）
-    - ``pricing_model_id``: ``cost_tracker.PRICING`` のキーと一致するモデル ID
     - ``supported_aspect_ratios``: 許容するアスペクト比の列。空タプルは「制限なし」を意味する
     - ``generate(req)``: 1 枚生成して保存
     """
 
     name: str
-    pricing_model_id: str
     supported_aspect_ratios: tuple[str, ...]
 
     def generate(self, req: ImageGenerationRequest) -> ImageGenerationResult: ...

@@ -31,10 +31,6 @@ class GeminiImageProvider:
     def __init__(self, config: GeminiConfig) -> None:
         self._config = config
 
-    @property
-    def pricing_model_id(self) -> str:
-        return self._config.model
-
     def generate(self, req: ImageGenerationRequest) -> ImageGenerationResult:
         """req に従って画像を生成して保存する。成功時は ImageGenerationResult.success=True。"""
         from google.genai import types
@@ -89,7 +85,6 @@ class GeminiImageProvider:
                             image_size=image_size,
                             aspect_ratio=aspect_ratio,
                             output_file=saved_path,
-                            cost_usd=req.cost_per_image_usd,
                             reference_count=len(references),
                         )
                         cost_tracker.print_last_report(entry)

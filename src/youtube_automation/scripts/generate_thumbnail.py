@@ -169,7 +169,7 @@ def main():
 
     composition_source = resolve_composition_source(skill_cfg, cfg.provider)
 
-    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider, model, image_size)
+    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider)
 
     use_text_overlay = args.reference is not None and args.variation is None
     raw_prompt = extract_prompt(prompts_md, args.variation, use_text_overlay=use_text_overlay)
@@ -216,7 +216,6 @@ def main():
         aspect_ratio=_THUMBNAIL_ASPECT_RATIO,
         image_size=image_size,
         references=reference_images,
-        cost_per_image_usd=cost_per_image,
     )
 
     start_time = time.monotonic()
@@ -236,7 +235,8 @@ def main():
             print(f"  ファイル: {saved.relative_to(_channel_root())}")
         except ValueError:
             print(f"  ファイル: {saved}")
-        print(f"  コスト:   ${cost_per_image:.3f}")
+        cost_label = f"${cost_per_image:.3f}" if cost_per_image is not None else "不明"
+        print(f"  コスト:   {cost_label}")
         print(f"  時間:     {elapsed:.1f}秒")
         update_workflow_state(workflow_state)
     else:

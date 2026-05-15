@@ -26,8 +26,6 @@ _CHANNEL_DIR = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
 def set_channel_dir():
     """テストセッション全体で CHANNEL_DIR を設定する"""
     os.environ.setdefault("CHANNEL_DIR", str(_CHANNEL_DIR))
-    # USD→JPY レートはテストでは固定値にしてネットワーク依存を外す
-    os.environ.setdefault("JPY_PER_USD", "160")
     yield
 
 

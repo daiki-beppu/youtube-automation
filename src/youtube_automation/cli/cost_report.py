@@ -31,9 +31,11 @@ def _print_detail(entries: list[dict]) -> None:
         meta = e.get("metadata") or {}
         out = meta.get("output_file", "-")
         extra = " ".join(f"{k}={v}" for k, v in meta.items() if k != "output_file")
+        cost = e.get("estimated_cost_usd")
+        cost_label = f"${cost:.4f}" if isinstance(cost, (int, float)) else "-"
         print(
             f"  {e['timestamp']}  [{e['category']:>5s}]  {e['model']}  "
-            f"{e['quantity']}{e['unit']}  ${e['estimated_cost_usd']:.4f}  {out}  {extra}"
+            f"{e['quantity']}{e['unit']}  {cost_label}  {out}  {extra}"
         )
     print()
 
