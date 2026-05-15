@@ -128,8 +128,8 @@ def main():
         model = cfg.openai.model
         image_size = cfg.openai.quality
 
-    # コスト算出: skill-config の cost_per_image_usd 上書きがあれば優先、なければ PRICING
-    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider, model, image_size)
+    # コスト算出: skill-config の cost_per_image_usd を尊重。未設定なら None。
+    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider)
 
     print("\nモード:       ダイレクト")
     print(f"プロバイダー: {cfg.provider}")
@@ -167,7 +167,6 @@ def main():
         aspect_ratio=args.aspect_ratio,
         image_size=image_size,
         references=reference_images,
-        cost_per_image_usd=cost_per_image,
     )
 
     start_time = time.monotonic()
@@ -192,7 +191,8 @@ def main():
             print(f"  ファイル: {saved.relative_to(_channel_root())}")
         except ValueError:
             print(f"  ファイル: {saved}")
-        print(f"  コスト:   ${cost_per_image:.3f}")
+        cost_label = f"${cost_per_image:.3f}" if cost_per_image is not None else "不明"
+        print(f"  コスト:   {cost_label}")
         print(f"  時間:     {elapsed:.1f}秒")
     else:
         print("  画像生成: 失敗")

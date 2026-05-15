@@ -184,7 +184,7 @@ uv run yt-generate-image \
 - **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで完全継承される。変えたい部分だけ明示指示
 - **ブランド置換**: `Replace every occurrence of the word 'X' with 'Y'` で文字列差し替え可
 - **キャラサイズ**: 縮小傾向がある場合は `fills about 55% of the frame, bust-up portrait` を追記
-- **コスト**: 単価は `cost_tracker.PRICING` 参照（最大 3 回試行込み = 初回 + 最大 2 回リトライ）。provider・モデル・画像サイズ別に自動算出される
+- **コスト**: 事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を指定したときのみ CLI 表示に出る。未指定なら「不明」と表示され、実コストは GCP Cloud Console > Billing で確認する（最大 3 回試行込み = 初回 + 最大 2 回リトライ）
 
 ### Single-Step モード（`generation_mode: "single_step"`）
 

@@ -53,9 +53,6 @@ def _prepare_isolated_channel_dir() -> None:
 
 _prepare_isolated_channel_dir()
 
-# USD→JPY レートはテストでは固定値にしてネットワーク依存を外す
-os.environ.setdefault("JPY_PER_USD", "160")
-
 
 @pytest.fixture(autouse=True)
 def _reset_config_singleton():

@@ -1,18 +1,18 @@
-"""skill ドキュメント上の画像生成コスト表記が cost_tracker.PRICING に追従しているかを検証する。
+"""skill ドキュメント上の画像生成コスト表記が撤廃 (Issue #132) に揃っているか検証する。
 
-Issue #102: 画像生成コスト ($0.04/枚) のハードコーディング解消。
+Issue #132 で `cost_tracker.PRICING` / `estimate_cost` を撤廃したため、
+それらを参照していた既存ドキュメントを以下のスタイルに反転する:
+
+- 撤廃された API 名 (`cost_tracker.PRICING` / `estimate_cost`) を含まない
+- 単価は `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd`
+  で指定し、未指定なら GCP Cloud Console で実コスト確認、という説明を含む
+- `collection-ideate` Phase 4-2 のワンライナーは `load_skill_config` + `cost_per_image_usd`
+  直接参照 (`estimate_cost` 不使用)
+
 対象ファイル:
 - .claude/skills/thumbnail/SKILL.md (ttp_swap モードのコスト記述)
 - .claude/skills/collection-ideate/SKILL.md (Phase 4-2 のコスト一括確認)
 - .claude/skills/thumbnail/config.default.yaml (cost_per_image_usd コメント例)
-
-ドキュメント変更のため、テストは
-- 旧ハードコード値が残っていないこと（負の検証）
-- cost_tracker.PRICING / estimate_cost を single source of truth として参照していること（正の検証）
-の 2 観点で行う。
-
-Issue #130: `ideate` skill は `collection-ideate` に rename されたため、
-本テストの skill パス定数も新名を参照する。
 """
 
 from __future__ import annotations
@@ -39,10 +39,7 @@ def _read(path: Path) -> str:
 
 
 def _ttp_swap_cost_section(text: str) -> str:
-    """thumbnail/SKILL.md の ttp_swap モード「運用上の注意」配下、'**コスト**' の行を返す。
-
-    別モード (single_step / two_phase 等) の説明と区別するため、'**コスト**' 行のみを取り出す。
-    """
+    """thumbnail/SKILL.md の ttp_swap モード「運用上の注意」配下、'**コスト**' の行を返す。"""
     for line in text.splitlines():
         if line.lstrip().startswith("- **コスト**"):
             return line
@@ -62,11 +59,7 @@ def _phase_4_2_block(text: str) -> str:
 
 
 def _config_yaml_image_generation_block(text: str) -> str:
-    """thumbnail/config.default.yaml の image_generation セクションを抽出。
-
-    Issue #67 のプロバイダー切り替え対応で、旧 `gemini_image:` ルートキーは
-    `image_generation:` 配下の `gemini:` サブセクションに移行された。
-    """
+    """thumbnail/config.default.yaml の image_generation セクションを抽出。"""
     match = re.search(
         r"^image_generation:.*?(?=^[a-z_]+:|\Z)",
         text,
@@ -77,7 +70,7 @@ def _config_yaml_image_generation_block(text: str) -> str:
     return match.group(0)
 
 
-# ---------- skill ファイル存在確認（テスト基盤の sanity check） ----------
+# ---------- skill ファイル存在確認 ----------
 
 
 @pytest.mark.parametrize(
@@ -90,32 +83,44 @@ def test_target_skill_files_exist(path: Path) -> None:
     assert path.exists(), f"{path} が存在しません"
 
 
-# ---------- thumbnail/SKILL.md (ttp_swap モードのコスト行) ----------
+# ---------- thumbnail/SKILL.md (ttp_swap モードのコスト行) (Test #43) ----------
 
 
-def test_thumbnail_skill_md_cost_line_drops_hardcoded_dollar_04() -> None:
+def test_thumbnail_skill_md_cost_line_drops_legacy_hardcoded_values() -> None:
     """Given thumbnail/SKILL.md ttp_swap '**コスト**' 行
     When 修正後のドキュメントを読む
-    Then `$0.04〜$0.08` のハードコード値が消えている。
+    Then 旧ハードコード値 (`$0.04〜$0.08`) が消えている。
     """
     line = _ttp_swap_cost_section(_read(THUMBNAIL_SKILL_MD))
     assert "$0.04" not in line, f"`$0.04` ハードコードが残存: {line}"
     assert "$0.08" not in line, f"`$0.08` ハードコードが残存: {line}"
 
 
-def test_thumbnail_skill_md_cost_line_references_cost_tracker_pricing() -> None:
+def test_thumbnail_skill_md_cost_line_drops_cost_tracker_pricing_reference() -> None:
     """Given thumbnail/SKILL.md ttp_swap '**コスト**' 行
     When 修正後のドキュメントを読む
-    Then 単価の根拠として `cost_tracker.PRICING` が明記される。
+    Then `cost_tracker.PRICING` 参照が削除されている (Issue #132 で撤廃済み)。
     """
     line = _ttp_swap_cost_section(_read(THUMBNAIL_SKILL_MD))
-    assert "cost_tracker.PRICING" in line, f"`cost_tracker.PRICING` 参照がない (single source of truth でない): {line}"
+    assert "cost_tracker.PRICING" not in line, f"`cost_tracker.PRICING` 参照が残存 (Issue #132 で撤廃済み): {line}"
 
 
-# ---------- ideate/SKILL.md Phase 4-2 (コスト一括確認) ----------
+def test_thumbnail_skill_md_cost_line_points_to_gcp_or_skill_config() -> None:
+    """Given thumbnail/SKILL.md ttp_swap '**コスト**' 行
+    When 修正後のドキュメントを読む
+    Then 単価ソースとして "GCP Cloud Console" もしくは
+        skill-config の `cost_per_image_usd` を案内している。
+    """
+    line = _ttp_swap_cost_section(_read(THUMBNAIL_SKILL_MD))
+    assert ("GCP Cloud Console" in line) or ("cost_per_image_usd" in line), (
+        f"単価ソース (GCP Cloud Console / cost_per_image_usd) のいずれも案内されていない: {line}"
+    )
 
 
-def test_ideate_phase_4_2_drops_static_cost_string() -> None:
+# ---------- collection-ideate/SKILL.md Phase 4-2 (Test #44) ----------
+
+
+def test_ideate_phase_4_2_drops_legacy_static_cost_string() -> None:
     """Given ideate/SKILL.md Phase 4-2
     When 修正後のドキュメントを読む
     Then 静的な `3 枚 × $0.04 = $0.120` が削除されている。
@@ -126,19 +131,20 @@ def test_ideate_phase_4_2_drops_static_cost_string() -> None:
     assert "3 枚 × $0.04" not in block
 
 
-def test_ideate_phase_4_2_uses_dynamic_estimate_cost() -> None:
-    """Given ideate/SKILL.md Phase 4-2
-    When 修正後のドキュメントを読む
-    Then `cost_tracker.estimate_cost` を呼ぶ動的算出ワンライナーが含まれる。
-    """
-    block = _phase_4_2_block(_read(IDEATE_SKILL_MD))
-    assert "estimate_cost" in block, f"Phase 4-2 が `estimate_cost` を呼んでいない (動的算出になっていない):\n{block}"
-
-
-def test_ideate_phase_4_2_loads_skill_config_for_overrides() -> None:
+def test_ideate_phase_4_2_drops_estimate_cost_reference() -> None:
     """Given ideate/SKILL.md Phase 4-2 ワンライナー
     When 修正後のドキュメントを読む
-    Then `load_skill_config` 経由でチャンネル側の設定（candidate_count / model 等）を取得する。
+    Then `cost_tracker.estimate_cost` / `estimate_cost` の参照が消えている
+        (Issue #132 で API 自体が撤廃されたため)。
+    """
+    block = _phase_4_2_block(_read(IDEATE_SKILL_MD))
+    assert "estimate_cost" not in block, f"`estimate_cost` 参照が残存 (Issue #132 で撤廃済み):\n{block}"
+
+
+def test_ideate_phase_4_2_still_loads_skill_config() -> None:
+    """Given ideate/SKILL.md Phase 4-2 ワンライナー
+    When 修正後のドキュメントを読む
+    Then `load_skill_config` 経由で skill-config を取得する経路は維持される。
     """
     block = _phase_4_2_block(_read(IDEATE_SKILL_MD))
     assert "load_skill_config" in block, (
@@ -146,52 +152,45 @@ def test_ideate_phase_4_2_loads_skill_config_for_overrides() -> None:
     )
 
 
-def test_ideate_phase_4_2_respects_custom_cost_per_image_usd() -> None:
+def test_ideate_phase_4_2_references_cost_per_image_usd_key() -> None:
     """Given ideate/SKILL.md Phase 4-2 ワンライナー
     When 修正後のドキュメントを読む
-    Then カスタム単価 `cost_per_image_usd` を優先する分岐が含まれる
-        (generate_image.py:90-94 の挙動と一致させるため)。
+    Then カスタム単価キー `cost_per_image_usd` を直接参照している
+        (PRICING フォールバック撤廃後の唯一のソース)。
     """
     block = _phase_4_2_block(_read(IDEATE_SKILL_MD))
-    assert "cost_per_image_usd" in block, f"Phase 4-2 がカスタム単価 `cost_per_image_usd` 優先になっていない:\n{block}"
+    assert "cost_per_image_usd" in block, f"Phase 4-2 が `cost_per_image_usd` 直接参照になっていない:\n{block}"
 
 
 def test_ideate_phase_4_2_keeps_user_reject_fallback_text() -> None:
     """Given ideate/SKILL.md Phase 4-2
     When 修正後のドキュメントを読む
-    Then 「ユーザーが拒否した場合 → テキストのみで提示」のフォールバック説明は維持される
-        (実装ガイドラインで明示的に維持指示あり)。
+    Then 「ユーザーが拒否した場合 → テキストのみで提示」のフォールバック説明は維持される。
     """
     block = _phase_4_2_block(_read(IDEATE_SKILL_MD))
     assert "ユーザーが拒否した場合" in block, f"ユーザー拒否時のフォールバック説明が削除されている:\n{block}"
     assert "テキストのみ" in block
 
 
-# ---------- thumbnail/config.default.yaml (image_generation namespace - Issue #67) ----------
+# ---------- thumbnail/config.default.yaml (Test #45) ----------
 
 
 def test_thumbnail_config_yaml_uses_image_generation_namespace() -> None:
     """Given thumbnail/config.default.yaml
     When ファイルを読む
-    Then ルートキーが `image_generation:` に移行されている
-        (Issue #67: provider 切り替え対応で `gemini_image:` から rename)。
+    Then ルートキーが `image_generation:` に移行されている。
     """
     text = _read(THUMBNAIL_CONFIG_YAML)
-    assert re.search(r"^image_generation:", text, flags=re.MULTILINE), (
-        "ルートキー `image_generation:` が見つかりません (Issue #67 で `gemini_image:` から移行)"
-    )
+    assert re.search(r"^image_generation:", text, flags=re.MULTILINE), "ルートキー `image_generation:` が見つかりません"
 
 
 def test_thumbnail_config_yaml_drops_legacy_gemini_image_root_key() -> None:
     """Given thumbnail/config.default.yaml
     When ファイルを読む
-    Then 旧ルートキー `gemini_image:` は削除されている
-        (旧 namespace は loader 側でのみ後方互換、デフォルト yaml には残さない)。
+    Then 旧ルートキー `gemini_image:` は削除されている。
     """
     text = _read(THUMBNAIL_CONFIG_YAML)
-    assert not re.search(r"^gemini_image:", text, flags=re.MULTILINE), (
-        "旧ルートキー `gemini_image:` が残存。新 namespace `image_generation:` のみ使用すること"
-    )
+    assert not re.search(r"^gemini_image:", text, flags=re.MULTILINE), "旧ルートキー `gemini_image:` が残存"
 
 
 def test_thumbnail_config_yaml_declares_provider_field() -> None:
@@ -210,25 +209,25 @@ def test_thumbnail_config_yaml_drops_hardcoded_004_example() -> None:
     """
     block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
     assert "cost_per_image_usd: 0.04" not in block, f"`cost_per_image_usd: 0.04` の誤解を招く数値例が残存:\n{block}"
-    # 念のため 単独の $0.04 系表記も拒否
     assert "$0.04" not in block
 
 
-def test_thumbnail_config_yaml_keeps_pricing_auto_calc_comment() -> None:
+def test_thumbnail_config_yaml_drops_cost_tracker_pricing_reference() -> None:
     """Given image_generation ブロック
     When コメントを読む
-    Then 「PRICING から自動算出」の既存コメントは維持される
-        (Issue 補足で「自動算出が正」と明示されているため)。
+    Then `cost_tracker.PRICING` 参照コメントが消えている (Issue #132 で撤廃済み)。
     """
     block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
-    assert "cost_tracker.PRICING" in block, f"`cost_tracker.PRICING` 参照コメントが消えている:\n{block}"
+    assert "cost_tracker.PRICING" not in block, (
+        f"`cost_tracker.PRICING` 参照コメントが残存 (Issue #132 で撤廃済み):\n{block}"
+    )
 
 
 def test_thumbnail_config_yaml_keeps_cost_per_image_usd_key_doc() -> None:
     """Given image_generation ブロック
     When コメントを読む
     Then カスタム単価キー `cost_per_image_usd` のドキュメント自体は残る
-        (キーの存在意義の説明が必要なため)。
+        (skill-config 経由の事前見積もり用 override 用途は維持)。
     """
     block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
     assert "cost_per_image_usd" in block, f"`cost_per_image_usd` キーの説明が消えている:\n{block}"
@@ -240,8 +239,7 @@ def test_thumbnail_config_yaml_keeps_cost_per_image_usd_key_doc() -> None:
 def test_no_hardcoded_image_cost_in_other_skill_docs() -> None:
     """Given .claude/skills/ 配下の全 skill ドキュメント
     When 修正後の skill ツリー全体を走査する
-    Then 画像生成コストの旧ハードコード `$0.04` / `$0.08` がどこにも残っていない
-        (修正対象 3 ファイル含む)。
+    Then 画像生成コストの旧ハードコード `$0.04` / `$0.08` がどこにも残っていない。
     """
     offenders: list[str] = []
     for path in _SKILLS_DIR.rglob("*"):

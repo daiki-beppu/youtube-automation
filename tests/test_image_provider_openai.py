@@ -66,7 +66,6 @@ def request_factory(tmp_path: Path):
         aspect_ratio: str = "16:9",
         image_size: str = "1536x1024",
         output_name: str = "out.jpg",
-        cost_per_image_usd: float | None = 0.21,
     ) -> ImageGenerationRequest:
         return ImageGenerationRequest(
             prompt=prompt,
@@ -74,7 +73,6 @@ def request_factory(tmp_path: Path):
             aspect_ratio=aspect_ratio,
             image_size=image_size,
             references=list(references or []),
-            cost_per_image_usd=cost_per_image_usd,
         )
 
     return _make

@@ -56,10 +56,6 @@ class OpenAIImageProvider:
                 stacklevel=2,
             )
 
-    @property
-    def pricing_model_id(self) -> str:
-        return self._config.model
-
     def generate(self, req: ImageGenerationRequest) -> ImageGenerationResult:
         """req に従って画像を生成して保存する。"""
         from PIL import Image as PILImage
@@ -115,10 +111,9 @@ class OpenAIImageProvider:
                     saved_path = persist_image(pil_image, req.output_path, save_as_png=save_as_png)
                     entry = log_image_cost(
                         model=model,
-                        image_size=quality,  # OpenAI は quality で課金階層が決まる → PRICING の by_size key と一致
+                        image_size=quality,  # OpenAI は quality で課金階層が決まる（メタ情報として記録）
                         aspect_ratio=req.aspect_ratio,
                         output_file=saved_path,
-                        cost_usd=req.cost_per_image_usd,
                         reference_count=len(references),
                     )
                     cost_tracker.print_last_report(entry)

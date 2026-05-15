@@ -334,7 +334,7 @@ class TestCli:
         collection = _make_collection(tmp_path / "coll")
         call_log = _patch_lyria_generate(monkeypatch)
         _patch_ffmpeg(monkeypatch)
-        _patch_skill_configs(monkeypatch, lyria={"model": "m", "duration_padding_min": 0})
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
         _patch_load_config(monkeypatch, target_duration_min=6)  # 6 * 60 / 184 = 1.95 → 2
         _patch_generate_master(monkeypatch)
 
@@ -393,7 +393,7 @@ class TestCli:
 
         call_log = _patch_lyria_generate(monkeypatch)
         _patch_ffmpeg(monkeypatch)
-        _patch_skill_configs(monkeypatch, lyria={"model": "m", "duration_padding_min": 0})
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
         _patch_load_config(monkeypatch, target_duration_min=None)
         _patch_generate_master(monkeypatch)
 
@@ -436,7 +436,7 @@ class TestCli:
         collection = _make_collection(tmp_path / "coll")
         _patch_lyria_generate(monkeypatch)
         _patch_ffmpeg(monkeypatch)
-        _patch_skill_configs(monkeypatch, lyria={"model": "m", "duration_padding_min": 0})
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
         _patch_load_config(monkeypatch, target_duration_min=2)
         _patch_generate_master(monkeypatch)
 

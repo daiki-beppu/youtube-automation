@@ -110,14 +110,12 @@ Phase 1-1〜1-3 の入力を統合し:
 
 **4-2: コスト一括確認**
 
-`cost_tracker.PRICING` 参照で動的算出する（`cost_per_image_usd` カスタム単価があれば優先）。
-チャンネル設定 (`config/skills/collection-ideate.yaml` の `preview.candidate_count` /
-`config/skills/thumbnail.yaml` の `image_generation.<provider>.model` / `cost_per_image_usd`) に追従するため、
-以下のワンライナーを実行して結果をそのまま提示する:
+事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を
+指定したときのみ提示する（Issue #132 以降、ハードコード単価表は撤廃済み）。実コストは GCP Cloud
+Console > Billing で確認する。以下のワンライナーを実行して結果をそのまま提示する:
 
 ```bash
 uv run python3 -c "
-from youtube_automation.utils.cost_tracker import estimate_cost
 from youtube_automation.utils.image_provider import load_image_generation_config
 from youtube_automation.utils.skill_config import load_skill_config
 ic = load_skill_config('collection-ideate').get('preview', {})
@@ -132,12 +130,13 @@ else:
 tc = load_skill_config('thumbnail').get('image_generation', {}).get(cfg.provider, {})
 per = tc.get('cost_per_image_usd')
 if per is None:
-    per = estimate_cost(model, image_size=image_size) or 0.0
-print(f'{count} 枚 × \${per:.3f} = \${count*per:.3f} ({model} / {image_size})')
+    print(f'{count} 枚 × 不明 ({model} / {image_size}) — config/skills/thumbnail.yaml の cost_per_image_usd 未設定')
+else:
+    print(f'{count} 枚 × \${per:.3f} = \${count*per:.3f} ({model} / {image_size})')
 "
 ```
 
-例: `3 枚 × $0.101 = $0.303 (gemini-3.1-flash-image-preview / 2K)`
+例（cost_per_image_usd が設定済みの場合）: `3 枚 × $0.101 = $0.303 (gemini-3.1-flash-image-preview / 2K)`
 
 ユーザーが拒否した場合 → テキストのみで提示（プレビューサムネイル生成はブロッキングにしない）
 

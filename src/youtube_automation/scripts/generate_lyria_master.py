@@ -38,6 +38,7 @@ from typing import cast
 
 from youtube_automation.scripts import generate_master
 from youtube_automation.utils import cost_tracker, lyria_client
+from youtube_automation.utils.audio_units import unit_for_audio
 from youtube_automation.utils.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
@@ -176,7 +177,13 @@ def _generate_one_segment(
             metadata["reference_image"] = str(reference_image)
         if lyrics:
             metadata["has_lyrics"] = True
-        cost_tracker.log_generation("audio", model=model, quantity=1, metadata=metadata)
+        cost_tracker.log_generation(
+            "audio",
+            model=model,
+            quantity=1,
+            unit=unit_for_audio(model),
+            metadata=metadata,
+        )
         return True
 
     print(f"  [{label}] {max_retries + 1} 回失敗")

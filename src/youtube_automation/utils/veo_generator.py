@@ -103,6 +103,7 @@ def generate_loop_video(
         "video",
         model=model,
         quantity=duration_seconds,
+        unit="second",
         metadata={
             "duration_sec": duration_seconds,
             "aspect_ratio": aspect_ratio,
