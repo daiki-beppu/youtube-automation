@@ -1,0 +1,1 @@
+../../../../src/youtube_automation/scripts/finalize_master.py

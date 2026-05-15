@@ -1,6 +1,6 @@
 ---
 name: channel-research
-description: Use when /channel-new で収集したベンチマークデータを徹底分析したいとき。「競合分析」「ベンチマーク分析」「チャンネルリサーチ」「競合を調べて」など、新チャンネル開設時の競合チャンネル分析に関わる場面で使用すること。/channel-new の後、/channel-direction の前に実行する
+description: Use when /channel-new で収集したベンチマークデータを徹底分析したいとき。「競合分析」「ベンチマーク分析」「チャンネルリサーチ」「競合を調べて」「TTP 対象抽出」など、新チャンネル開設時の競合チャンネル分析に関わる場面で使用すること。/channel-new の後、/channel-direction の前に実行する
 ---
 
 ## Overview
@@ -12,6 +12,17 @@ description: Use when /channel-new で収集したベンチマークデータを
 - `data/comments_YYYYMMDD.json` — 競合動画のコメント
 - `docs/benchmarks/*.md` — 各チャンネルの個別レポート
 - `docs/benchmarks/thumbnails/` — サムネイル画像（ある場合）
+
+## TTP 原則（ベンチマーク参照）
+
+ベンチマーク分析の根本姿勢は **TTP（徹底的にパクる）**。
+パクるのは「テーマそのもの」ではなく、競合動画に内在する **構造・パターン・型** —
+タイトルのフォーマット、サムネイルの構図、動画尺の分布、投稿スケジュール、
+コメントに現れる利用シーンの語彙、勝ち動画の共通要素。
+これらをそのまま自チャンネルの初期値として転写し、差別化はその上に重ねる。
+
+既存実装の参照: `.claude/skills/thumbnail/SKILL.md` の TTP Swap モード、
+`src/youtube_automation/utils/metadata_generator.py` の TTP 形式タイトル生成。
 
 ## Instructions
 
@@ -36,6 +47,7 @@ description: Use when /channel-new で収集したベンチマークデータを
 - **成長段階**: 各チャンネルの推定フェーズ（立ち上げ/成長/安定/停滞）
 - **投稿トレンド**: 加速/減速/安定
 - **勝ちパターン**: 高再生数動画の共通点
+- **TTP 対象**: 上記から自チャンネルに転写すべき構造・パターン・型を明示（後段 `/channel-direction` の入力になる）
 
 ### Step 3: コンテンツ戦略分析
 

@@ -7,7 +7,7 @@ description: Use when /channel-direction で方向性が確定し、チャンネ
 
 `/channel-direction` で確定した方向性をもとに、`config/channel/*.json` を完成させ、全設定ファイル+ディレクトリ構造を一括生成する。
 
-**前提**: `/channel-direction` が完了し、`docs/channel-direction.md` が存在すること。
+**前提**: `/channel-direction` が完了し、`docs/channel/channel-direction.md` が存在すること。
 
 ## Instructions
 
@@ -15,7 +15,7 @@ description: Use when /channel-direction で方向性が確定し、チャンネ
 
 ### Step 1: 方向性ドキュメントの読み込み
 
-`docs/channel-direction.md` を読み、確定した方向性を把握:
+`docs/channel/channel-direction.md` を読み、確定した方向性を把握:
 - チャンネル名、短縮名、ジャンル、スタイル、コンテキスト
 - コアメッセージ、差別化ポイント
 - 動画の長さ、投稿頻度、音楽エンジン

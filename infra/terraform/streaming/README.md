@@ -19,6 +19,8 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
 - SSH 鍵ペア `~/.ssh/yt_stream_key` / `~/.ssh/yt_stream_key.pub` を生成済み
 - ssh-agent が起動済み（`SSH_AUTH_SOCK` が設定されている）かつ秘密鍵が登録済み（`ssh-add ~/.ssh/yt_stream_key`）。`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続するため、ssh-agent 未起動 / 鍵未登録 のいずれでも apply 時に `Permission denied (publickey)` で失敗する。`ssh-add -l` で登録済み鍵を確認できる（`Could not open a connection to your authentication agent.` が返れば agent 未起動）
+    - **ssh-agent への登録は OS 起動時に自動では行われない**: macOS の launchd keychain 連携を別途設定していない限り、再起動・再ログインで agent は空になる。毎セッションで `ssh-add ~/.ssh/yt_stream_key` を実行する必要がある
+    - **`ssh -i ~/.ssh/yt_stream_key root@<ip>` で SSH できることは agent 登録の検証にならない**: `-i` 指定は鍵ファイルを直接読むため agent 状態と無関係に成功する。Terraform provisioner は `agent = true` のみで動作するため、検証は **必ず `ssh-add -l`** で行う
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
 - operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
 
@@ -44,7 +46,11 @@ terraform plan
 terraform apply
 ```
 
-`terraform.tfvars` および環境変数いずれにも secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ。tfstate には sensitive 扱いで保存される）。
+`terraform.tfvars` および環境変数いずれにも secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
+
+> **tfstate と secret の関係（誤解しやすいので明記）**
+>
+> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ** で、`*.tfstate` JSON 自体は **平文**である。本モジュールでは `stream_key` を `triggers` に保存する際 `nonsensitive(sha256(var.stream_key))` で SHA256 ラップしているため、tfstate を取得されても元のストリームキーは復元できない（SHA256 は不可逆）。`*.tfstate*` は `.gitignore` 済みだが、ローカル / バックアップ / 共有時もファイルパーミッションでアクセス制御すること。
 
 ## 配信サイクル（11h + 1h）
 
@@ -52,7 +58,7 @@ systemd unit が以下の挙動を持つ:
 
 - `RuntimeMaxSec=11h`: 配信開始から 11 時間で `ffmpeg` プロセスを強制停止 → YouTube 側でアーカイブ生成
 - `Restart=always` + `RestartSec=1h`: 停止から 1 時間後に自動再起動 → 2 本目の配信が始まる
-- `EnvironmentFile=/etc/youtube-stream.env` から `VIDEO` / `RTMP_URL` を読み込むため、`ExecStart` に stream key が平文で残らない
+- `ExecStart` は `/opt/youtube-stream/bin/run-ffmpeg.sh` ラッパーのみを呼ぶ。`VIDEO` / `RTMP_URL` は systemd の `EnvironmentFile=/etc/youtube-stream.env`（PID 1 が root で読み込み env を子プロセスへ注入）経由で渡るため、unit 行にも、`DynamicUser=yes` 配下のラッパー側の `source` にも露出しない（`systemctl show` / `/proc/<pid>/cmdline` の unit レベル経路を遮断）
 - 音声は動画ファイルの音声トラックを送出（`-c:a copy`、再エンコードなし）
 
 `null_resource.deploy` は `terraform apply` のたびに以下のトリガーを比較し、差分があれば再実行する:
@@ -183,7 +189,7 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 
 | 操作 | 期待結果 |
 |---|---|
-| `kill -9 $(pgrep ffmpeg)` | 5 分以内に Discord に anomaly 通知が届く |
+| `pkill -KILL -f 'ffmpeg .*current\.mp4'` | 5 分以内に Discord に anomaly 通知が届く |
 | `systemctl stop youtube-stream` | 通知は飛ばない（`manual` 分類） |
 | 11h `RuntimeMaxSec` 到達による正常停止 | 通知は飛ばない（`activating+auto-restart+success` = `idle`） |
 | 1 時間後の自動再開（`RestartSec=1h` / `auto-restart`） | 通知は飛ばない（休止中は `idle`、再開後は `ok`） |
@@ -197,9 +203,9 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 `triggers.stream_key` を `sha256(var.stream_key)` のまま書くとこのエラーが出る。本モジュールでは `nonsensitive(sha256(...))` でラップ済み（SHA256 は不可逆なので脱 sensitive 安全）。
 
 ### `Permission denied (publickey)`（provisioner SSH 失敗）
-`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続する（鍵を Terraform graph に持ち込まないため）。失敗時は以下を順に確認する:
+`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続する（鍵を Terraform graph に持ち込まないため）。**`ssh -i ~/.ssh/yt_stream_key root@<ip>` 経由の手動 SSH が通っても agent 状態とは独立で原因切り分けにならない**（`-i` は鍵ファイル直読み、provisioner は agent 経由）。判定は `ssh-add -l` の出力のみで行う。失敗時は以下を順に確認する:
 
-1. `ssh-add -l` で `~/.ssh/yt_stream_key` 系の鍵が登録されているか。未登録なら `ssh-add ~/.ssh/yt_stream_key` で登録してから `terraform apply` を再実行
+1. `ssh-add -l` で `~/.ssh/yt_stream_key` 系の鍵が登録されているか。未登録なら `ssh-add ~/.ssh/yt_stream_key` で登録してから apply を再実行（OS 再起動・再ログイン後は agent が空になっている可能性が高い）
 2. 登録済みの鍵が `~/.ssh/yt_stream_key.pub`（`ssh_pub_key_path`）と対になっているか。鍵ペアが食い違っていれば `ssh-keygen -t ed25519 -f ~/.ssh/yt_stream_key` で再生成し、`ssh-add ~/.ssh/yt_stream_key` で登録
 
 ### `terraform apply` 後に配信が始まらない
