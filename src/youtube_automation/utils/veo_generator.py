@@ -19,7 +19,7 @@ DEFAULT_PROMPT = (
     "No smoke, no magical effects, no particles, no falling objects. "
     "Keep the scene calm and grounded, like a living painting."
 )
-POLL_INTERVAL_SEC = 20
+POLL_INTERVAL_SEC = 5
 MAX_POLL_SEC = 600  # 10分タイムアウト
 
 
