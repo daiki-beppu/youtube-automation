@@ -9,12 +9,15 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 ## プロジェクト固有コマンド
 
 ```bash
-uv run yt-skills sync                       # チャンネルリポジトリへ .claude/skills を配布
-uv run yt-skills list                       # 同梱スキル一覧
-uv run yt-skills diff                       # 同梱版との差分確認
-uv run yt-config-migrate diff               # 旧 channel_config.json → 責務別分割のプレビュー
-uv run yt-config-migrate migrate --apply    # 実際に分割実行
-uv run yt-config-migrate verify             # 新 loader で読み込み検証
+uv run yt-skills sync                                # チャンネルリポジトリへ .claude/skills を配布
+uv run yt-skills sync --asset claude-md              # .claude/CLAUDE.md (BGM 運営方針テンプレ) を配布
+uv run yt-skills list                                # 同梱スキル一覧
+uv run yt-skills list --asset claude-md              # 同梱 CLAUDE.md テンプレ一覧
+uv run yt-skills diff                                # 同梱版と target の差分確認
+uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの差分確認
+uv run yt-config-migrate diff                        # 旧 channel_config.json → 責務別分割のプレビュー
+uv run yt-config-migrate migrate --apply             # 実際に分割実行
+uv run yt-config-migrate verify                      # 新 loader で読み込み検証
 ```
 
 `yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。
@@ -31,6 +34,7 @@ uv run yt-config-migrate verify             # 新 loader で読み込み検証
 - `src/youtube_automation/cli/` — ユーザー向け CLI（`yt-skills`, `yt-config-migrate`, `yt-cost-report`）
 - `src/youtube_automation/templates/` — 説明文テンプレート
 - `.claude/skills/` — Claude Code スキル群。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
+- `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
 - `utils/`, `agents/`, `auth/`, `scripts/` — submodule 利用者向け **後方互換 shim**（新規開発は `src/youtube_automation/` 側で行う）
 
 ### 下流チャンネルリポジトリ（`CHANNEL_DIR` が指す先）
@@ -97,7 +101,7 @@ collections/            # コンテンツ成果物
 
 ### スクリプト配置
 
-- **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`、`.claude/skills/lyria/references/generate_music.py`）
+- **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`）
 - ルート `scripts/` には複数の文脈から共有される **共通スクリプトのみ** を置く（例: `gcp-bootstrap.sh`, `gcp-terraform-apply.sh`）
 - 単一 skill からしか呼ばれないものを `scripts/` に残すと、skill の自己完結性が崩れて配布時に取り残されるので避ける
 
@@ -111,6 +115,8 @@ collections/            # コンテンツ成果物
 ### パッケージング
 
 - `.claude/skills/` は `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_skills/` に同梱され、`yt-skills sync` が `importlib.resources` で参照する
+- `.claude/CLAUDE.template.md` も同様に `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_claude_md/CLAUDE.template.md` に同梱され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として展開される
+- 配布アセットの追加は `src/youtube_automation/cli/skills_sync.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートされる（`kind="dir" | "file"` を選ぶ）
 - バージョン bump は `pyproject.toml` の `version` と `src/youtube_automation/__init__.py` の `__version__` の **両方**
 
 ## セキュリティ
@@ -129,3 +135,11 @@ collections/            # コンテンツ成果物
 - **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`。`commit-convention` スキル参照
 - **takt 設定**: リポジトリ固有 `.takt/config.yaml`（`draft_pr: false`）、グローバル `~/.takt/config.yaml`（`provider: claude`, `language: ja`）
 - workflow は組み込み **default**（plan → review → ... → reviewers の 9 step）
+
+### skill 編集は takt 経由で行わない
+
+`.claude/skills/**` を含む `.claude/` 配下は Claude Code の **protected paths**（`acceptEdits` モードでも write 時に必ず prompt が出る領域）に該当する。takt は Claude Agent SDK を `settingSources: ['project']` + `permissionMode: 'acceptEdits'` で呼ぶため prompt に答える人間がおらず、`.claude/skills/<name>/SKILL.md` 等への Edit/Write は必ず `Claude requested permissions to write to ..., but you haven't granted it yet.` で deny される（`permissions.allow` ルールでは bypass 不可、`bypassPermissions` のみが bypass）。
+
+そのため **skill 関連の修正は takt にやらせず、通常の Claude Code 対話セッション（cmux pane 等）で直接行う**。Claude Code 対話セッションでは prompt に手動 Allow できるため、`.claude/skills/**` への編集が通る。コミット・PR 作成は `commit-convention` / `pr` スキル経由で実施する。
+
+例外: `.claude/skills/` 配下を一切編集しない issue（純粋にコードや config のみ触る）は takt 経由で問題なく回せる。
