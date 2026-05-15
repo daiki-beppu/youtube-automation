@@ -46,16 +46,17 @@ $ARGUMENTS
 
 ### Complete Collection テンプレート
 
-BGM チャンネル向けにアダプトした概要欄テンプレート（情景フック＋タイムスタンプ＋Perfect for 構成）を使用する。
+情景フック＋タイムスタンプ＋Perfect for 構成のテンプレート。装飾ヘッダー・Usage & Attribution 本文は
+`config.default.yaml` の `section_headers` / `usage_attribution_lines` に集約されており、
+チャンネル特性に応じて `config/skills/video-description.yaml` で上書きできる（BGM 系・ゲーム音楽系・ASMR 系などへ展開可能）。
 
-テンプレート本文・ポイント解説は `references/description-templates.md` の「Complete Collection 概要欄テンプレート」セクションを参照すること。
+テンプレート本文・ポイント解説は `references/description-templates.md` の「Complete Collection 概要欄テンプレート」セクションを参照すること（記載値はデフォルトのサンプル）。
 
 ### タイムスタンプ生成手順
 
 1. **個別トラックがある場合**（`02-Individual-music/`）: `metadata_generator.py` の `analyze_audio_files()` で自動計算
-2. **composition.json がある場合**（Lyria DJ 生成）: `phases[].at_min` と `phases[].name_en` を使用
-3. チャプター名は `composition.json` の `name_en` またはトラックタイトルを使用
-4. `00:00` から始まること（YouTube チャプター要件）、最低3チャプター
+2. チャプター名はトラックタイトル（ファイル名から生成）を使用
+3. `00:00` から始まること（YouTube チャプター要件）、最低3チャプター
 
 ### Perfect for テーマ別カスタマイズ
 

@@ -57,9 +57,7 @@ def count_archives_for_date(youtube_service: Any, target_date: date) -> int:
         return 0
 
     videos_response = (
-        youtube_service.videos()
-        .list(id=",".join(video_ids), part="snippet,liveStreamingDetails")
-        .execute()
+        youtube_service.videos().list(id=",".join(video_ids), part="snippet,liveStreamingDetails").execute()
     )
 
     count = 0

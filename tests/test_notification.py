@@ -92,7 +92,7 @@ def test_notify_propagates_http_error():
     with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
         mock_open.side_effect = urllib.error.URLError("dns failure")
         with pytest.raises(AutomationError):
-            notification.notify(content="x", webhook_url="https://example.com/hook")
+            notification.notify(content="x", webhook_url="https://discord.com/api/webhooks/123/abc")
 
 
 def test_notify_passes_content_root_shape_not_envelope():
@@ -107,10 +107,71 @@ def test_notify_passes_content_root_shape_not_envelope():
         return _fake_urlopen()
 
     with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=fake_open):
-        notification.notify(content="root-shape", webhook_url="https://example.com/h")
+        notification.notify(content="root-shape", webhook_url="https://discord.com/api/webhooks/1/x")
 
     body = json.loads(captured["data"].decode("utf-8"))
     assert "content" in body
     assert body["content"] == "root-shape"
     # envelope 流用の検査: 余分なキーが付いていない
     assert set(body.keys()) == {"content"}
+
+
+# ============================================================================
+# Issue #166: webhook URL validation
+# ============================================================================
+
+
+def test_notify_rejects_http_scheme():
+    """Given webhook_url が http:// (HTTPS でない)
+    When notify を呼ぶ
+    Then NotificationError が raise され HTTP は呼ばれない（SSRF 防御）。
+    """
+    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+        with pytest.raises(notification.NotificationError, match="https"):
+            notification.notify(
+                content="x", webhook_url="http://discord.com/api/webhooks/1/x"
+            )
+    mock_open.assert_not_called()
+
+
+def test_notify_rejects_file_scheme():
+    """Given webhook_url が file:// (SSRF 攻撃ベクトル本丸)
+    When notify を呼ぶ
+    Then NotificationError が raise される（secret store 侵害シナリオを塞ぐ）。
+    """
+    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+        with pytest.raises(notification.NotificationError, match="https"):
+            notification.notify(content="x", webhook_url="file:///etc/passwd")
+    mock_open.assert_not_called()
+
+
+def test_notify_rejects_non_discord_host():
+    """Given webhook_url が https だが Discord 以外のホスト
+    When notify を呼ぶ
+    Then NotificationError が raise される（ホスト whitelist）。
+    """
+    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+        with pytest.raises(notification.NotificationError, match="host"):
+            notification.notify(
+                content="x", webhook_url="https://evil.com/api/webhooks/1/x"
+            )
+    mock_open.assert_not_called()
+
+
+def test_notify_accepts_discordapp_alias():
+    """Given webhook_url が https://discordapp.com/... (legacy alias)
+    When notify を呼ぶ
+    Then 正常に HTTP POST される（discordapp.com も whitelist 内）。
+    """
+    captured = {}
+
+    def fake_open(req, timeout=None):
+        captured["url"] = req.full_url
+        return _fake_urlopen()
+
+    with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=fake_open):
+        notification.notify(
+            content="x", webhook_url="https://discordapp.com/api/webhooks/1/x"
+        )
+
+    assert captured["url"] == "https://discordapp.com/api/webhooks/1/x"

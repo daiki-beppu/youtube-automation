@@ -14,6 +14,7 @@ jobs:
       - uses: cachix/install-nix-action@v30
       - run: nix develop --command uv sync --extra dev
       - run: nix develop --command uv run ruff check .
+      - run: nix develop --command uv run ruff format --check .
 
   test:
     runs-on: ubuntu-latest

@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""コレクションの個別 MP3 をクロスフェード結合してマスター音源を生成する。
+"""コレクションの個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を生成する。
 
 skill-config (`masterup.audio.crossfade_duration` / `bitrate`) を参照するため、
 `metadata_generator` のタイムスタンプ計算と常に同じクロスフェード秒数で結合される。
+
+入力ファイルの拡張子に追従して出力フォーマットが決まる:
+- すべて `.mp3` → `master.mp3` (`libmp3lame -b:a {bitrate} -q:a 0`)
+- すべて `.wav` → `master.wav` (`pcm_s16le`、ビットレートは無視)
+MP3 と WAV が混在しているディレクトリは `ValidationError` で明示的に失敗させる
+(出力フォーマットを一意に決められないため)。
 
 Usage:
     yt-generate-master                   # CWD がコレクションディレクトリ
@@ -21,7 +27,10 @@ import threading
 import time
 from pathlib import Path
 
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.collection_paths import (
+    CollectionPaths,
+    resolve_collection_dir,
+)
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
@@ -40,19 +49,12 @@ _SHUFFLE_SEED_KEY = "shuffle_seed"
 # 自動生成 seed の上限（ログ・再現用に 32-bit unsigned 範囲）。
 _AUTO_SEED_BOUND = 2**32
 
-
-def resolve_collection_dir(arg: str | None) -> Path:
-    if arg:
-        return Path(arg).resolve()
-
-    cwd = Path.cwd()
-    if (cwd / "01-master").is_dir() and (cwd / "02-Individual-music").is_dir():
-        return cwd
-
-    raise ValidationError(
-        "コレクションディレクトリを解決できません。引数で指定するか、"
-        "01-master/ と 02-Individual-music/ を持つディレクトリで実行してください。"
-    )
+# 対応する入力音声フォーマット。拡張子 (lower, ドットなし) → ffmpeg コーデックオプション。
+# 出力 `master.<ext>` の拡張子もここで決まる。
+_AUDIO_FORMATS: dict[str, list[str]] = {
+    "mp3": ["-c:a", "libmp3lame"],
+    "wav": ["-c:a", "pcm_s16le"],
+}
 
 
 def build_filter(n: int, crossfade: float) -> str:
@@ -129,6 +131,31 @@ def _spin(stop_event: threading.Event, start: float, segments: int) -> None:
         i += 1
 
 
+def _collect_audio_inputs(music_dir: Path) -> tuple[list[Path], str]:
+    """`music_dir` から `_AUDIO_FORMATS` 対応の音声ファイルを列挙し、(files, ext) を返す。
+
+    - すべて同一拡張子なら (sorted files, ext) を返す。
+    - 2 種類以上の拡張子が混在していれば `ValidationError` (出力 master.<ext> を一意に決められない)。
+    - 1 件も見つからなければ `ValidationError`。
+    """
+    matches_by_ext: dict[str, list[Path]] = {}
+    for ext in _AUDIO_FORMATS:
+        found = sorted(music_dir.glob(f"*.{ext}"))
+        if found:
+            matches_by_ext[ext] = found
+
+    if not matches_by_ext:
+        supported = ", ".join(f".{e}" for e in _AUDIO_FORMATS)
+        raise ValidationError(f"音声ファイル ({supported}) が見つかりません: {music_dir}")
+    if len(matches_by_ext) > 1:
+        found_labels = ", ".join(f".{e}({len(v)})" for e, v in matches_by_ext.items())
+        raise ValidationError(
+            f"音声フォーマットが混在しています (出力フォーマットを一意に決められません): {music_dir} [{found_labels}]"
+        )
+    ext, files = next(iter(matches_by_ext.items()))
+    return files, ext
+
+
 def generate_master(
     collection_dir: Path,
     crossfade: float,
@@ -149,10 +176,8 @@ def generate_master(
     if not music_dir.is_dir():
         raise ValidationError(f"ディレクトリが見つかりません: {music_dir}")
 
-    files = sorted(music_dir.glob("*.mp3"))
+    files, audio_ext = _collect_audio_inputs(music_dir)
     n = len(files)
-    if n == 0:
-        raise ValidationError(f"MP3 ファイルが見つかりません: {music_dir}")
 
     # ループ展開前にシャッフルする (要件 8: 同一シャッフル順を N 回繰り返す)。
     # 再現性ログは quiet モードでも常に stdout に出す (要件 4)。
@@ -168,7 +193,10 @@ def generate_master(
     n_effective = len(expanded)
 
     master_dir.mkdir(parents=True, exist_ok=True)
-    output = master_dir / "master.mp3"
+    output = master_dir / f"master.{audio_ext}"
+
+    # WAV (PCM) は bitrate オプションを取らないため、表示と ffmpeg コマンドの両方で扱いを分ける。
+    use_bitrate = audio_ext == "mp3"
 
     if not quiet:
         loop_note = f" × {effective_loops} loops = {n_effective} segments" if effective_loops > 1 else ""
@@ -176,10 +204,11 @@ def generate_master(
         print("  yt-generate-master")
         print("  ──────────────────────────────────────────")
         print()
-        print(f"  Input : {n} MP3 files{loop_note}")
+        print(f"  Input : {n} {audio_ext.upper()} files{loop_note}")
         print(f"  Output: {output.name}")
         print(f"  Crossfade: {crossfade:g}s (triangle curve)")
-        print(f"  Bitrate  : {bitrate}")
+        if use_bitrate:
+            print(f"  Bitrate  : {bitrate}")
         print()
 
     if n_effective == 1:
@@ -197,17 +226,12 @@ def generate_master(
             build_filter(n_effective, crossfade),
             "-map",
             "[aout]",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            bitrate,
-            "-q:a",
-            "0",
-            str(output),
-            "-loglevel",
-            "error",
+            *_AUDIO_FORMATS[audio_ext],
         ]
     )
+    if use_bitrate:
+        cmd.extend(["-b:a", bitrate, "-q:a", "0"])
+    cmd.extend([str(output), "-loglevel", "error"])
 
     start = time.monotonic()
     stop_event = threading.Event()
@@ -255,7 +279,7 @@ def generate_master(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="個別 MP3 をクロスフェード結合してマスター音源を生成",
+        description="個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を生成",
     )
     parser.add_argument(
         "collection",

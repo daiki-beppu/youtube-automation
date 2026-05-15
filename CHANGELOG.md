@@ -89,6 +89,52 @@ Gemini を案件単位で切り替えられるようにした。OpenAI provider 
 - `src/youtube_automation/utils/image_generator.py`: `image_provider` パッケージへ
   ロジックを完全移植したため削除（grep 上の外部参照ゼロ確認済み）
 
+#### 廃止予定 CLI 3 件を撤去 (#264)
+
+廃止予定だった 3 つの CLI エントリーポイントを `[project.scripts]` から削除し、
+配線元 `.py` モジュール・関連テスト・スキル参照を後継 CLI に書き換えた。
+
+- `yt-generate-music`（後継: `yt-generate-music-dj` / `/lyria` スキル経由）#250
+- `yt-generate-thumbnail`（後継: `yt-generate-image` / `/thumbnail` スキル経由）#251
+- `yt-video-uploader`（後継: `yt-upload-auto` / `yt-upload-collection` / `/video-upload` スキル経由）#252
+
+あわせて `scripts/video_uploader.py` の `VideoUploader.create_playlist` /
+`add_video_to_playlist` が `scripts/playlist_manager.py` だけから参照されていた中間層
+だったため、両メソッドを `PlaylistManager._create_playlist` /
+`PlaylistManager._add_video_to_playlist` として内包し、`VideoUploader` クラスごと撤去した。
+これによりプレイリスト操作は `PlaylistManager` に集約される。
+
+- `pyproject.toml`: `yt-generate-music` / `yt-generate-thumbnail` / `yt-video-uploader` の
+  3 entry point を削除
+- `src/youtube_automation/scripts/generate_music.py` / `generate_thumbnail.py` /
+  `video_uploader.py`: 削除
+- `src/youtube_automation/scripts/playlist_manager.py`: `VideoUploader` import / 初期化
+  を撤去。`_create_playlist` / `_add_video_to_playlist` を内部メソッド化
+- `tests/test_video_uploader.py`: 削除（対象モジュール撤去に伴う）
+- `tests/test_playlist_manager.py`: `VideoUploader` モック patch を撤去し、新メソッド
+  （`_create_playlist` / `_add_video_to_playlist`）の単体テストを追加
+- `tests/test_image_provider_composition_cli.py`: parametrize から
+  `generate_thumbnail.py` を外す
+- `README.md`: CLI 一覧から 3 行を削除し、`yt-generate-image` を「サムネイル兼用」と明記
+- `.claude/skills/collection-ideate/references/collection-lifecycle.md`: サムネ生成手順を
+  `/thumbnail` スキル経由（`yt-generate-image`）に書き換え
+- `.claude/skills/video-upload/SKILL.md`: `video_uploader.py を直接使用` を
+  `yt-upload-auto を使用` に置換
+- `.claude/skills/channel-setup/references/claude-md-template.md`: `uv run yt-video-uploader`
+  行を削除
+
+### Migration
+
+downstream チャンネルリポジトリで v5.3.0 → v5.4.0 への追従手順は
+[docs/upgrades/v5.4.0.md](docs/upgrades/v5.4.0.md) を参照。
+
+サマリ:
+
+- スキル名 rename 8 件（`analyze` → `analytics-analyze` など、破壊的）
+- `image_generator.py` 削除 → `image_provider/` モジュール（直 import している場合のみ書き換え必要）
+- (オプトイン) `/streaming` スキル + `infra/terraform/streaming/` 追加
+- (追加のみ) `yt-discover-competitors` CLI + `discover-competitors` スキル
+
 ## [5.2.0] - 2026-04-29
 
 ### Added

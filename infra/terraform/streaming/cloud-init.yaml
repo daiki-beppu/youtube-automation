@@ -7,13 +7,6 @@ packages:
   - cron
   - unattended-upgrades
 
-write_files:
-  - path: /etc/systemd/system/youtube-stream.service
-    owner: root:root
-    permissions: '0644'
-    content: |
-      ${indent(6, systemd_unit)}
-
 runcmd:
   - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
   - systemctl reload ssh || systemctl reload sshd
@@ -23,4 +16,3 @@ runcmd:
   # bin/ は terraform の provisioner "file" がスクリプトを upload する宛先。
   # SFTP は親ディレクトリを自動作成しないため、cloud-init の段階で先に作っておく。
   - install -d -m 0755 -o root -g root /opt/youtube-stream/bin
-  - systemctl daemon-reload
