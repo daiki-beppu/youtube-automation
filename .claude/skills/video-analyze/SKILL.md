@@ -66,6 +66,18 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 - Shorts は Gemini の 1fps サンプリング制約により精度が落ちるため非推奨
 - API レート制限対策で動画間に `delay_sec` 秒スリープ
 
+## 呼び出し側スキル
+
+以下の skill は `data/video_analysis/<slug>/*.json` の `bgm_arc` / `scene_timeline` を入力として
+参照する。`/video-analyze` が未実行のときは警告で続行するが、ベンチマークデータがあれば自動実行を提案する。
+
+- `/channel-direction` — Step 1 の分析サマリーで `bgm_arc` 平均（intro / peak / outro 秒）を提示し、
+  Step 2 の議論ポイント「6. 競合の BGM 構造」と Step 3 決定事項「BGM 構造方針」の根拠データとして使う
+- `/suno` — Instructions 冒頭で `bgm_arc` 平均を読み込み、4 パターンの起伏配置の初期値とする。
+  `scene_timeline[].summary` は情景フレーズ設計ルール 5 の素材として利用（コピペ禁止、世界観翻訳）
+- `/lyria` — Step 2「ベンチマーク BGM 構造の参照」で `bgm_arc` 平均を読み込み、`composition.json`
+  のフェーズ境界・各 `phase.at_min` の初期値として活用
+
 ## 関連ファイル
 
 - `yt-video-analyze` (`youtube_automation.scripts.video_analyze`) — CLI 本体

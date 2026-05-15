@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
+from youtube_automation.utils.profile import section
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,15 +48,22 @@ class VideoDailyAnalyticsMixin:
         if video_ids:
             query_kwargs["filters"] = "video==" + ",".join(video_ids)
 
-        response = (
-            self.analytics_service.reports()
-            .query(
-                metrics="views",
-                **query_kwargs,
+        with section(
+            "video_daily.query",
+            days=(start_date, end_date),
+            filtered=bool(video_ids),
+        ):
+            response = (
+                self.analytics_service.reports()
+                .query(
+                    metrics="views",
+                    **query_kwargs,
+                )
+                .execute()
             )
-            .execute()
-        )
-        return self._parse_video_daily_rows(response)
+        rows = self._parse_video_daily_rows(response)
+        logger.debug("video_daily rows=%d", len(rows))
+        return rows
 
     @staticmethod
     def _parse_video_daily_rows(response: Dict) -> List[Dict]:

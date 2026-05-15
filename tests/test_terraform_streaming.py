@@ -1571,9 +1571,9 @@ class TestMainTfNullResource:
         動画再 SCP）を伴わずに新 unit を反映できる。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None, "null_resource.deploy.triggers ブロックが存在しない"
         assert re.search(
             r"systemd_unit\s*=\s*filemd5\(\s*"
@@ -1596,7 +1596,7 @@ class TestMainTfNullResource:
         既存 video / env と同じ source/destination 順序非依存マッチパターンで検証する。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         content_pattern = (
             r'content\s*=\s*templatefile\(\s*'
@@ -3266,9 +3266,9 @@ class TestMainTfRunFfmpegProvisioner:
         破壊しないよう、必ず ``${local.scripts_dir}`` 経由で書く。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        triggers = _extract_block(block, r"triggers")
+        triggers = extract_block(block, r"triggers")
         assert triggers is not None
 
         match = re.search(
@@ -3291,7 +3291,7 @@ class TestMainTfRunFfmpegProvisioner:
         source/destination のペアリングを順序非依存で検証する。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
 
         match = re.search(
@@ -3324,7 +3324,7 @@ class TestMainTfRunFfmpegProvisioner:
         同じ 755 を付与する。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
@@ -3350,7 +3350,7 @@ class TestMainTfRunFfmpegProvisioner:
         瞬間にラッパーの実行ビットが無く ``status=203/EXEC`` で失敗する。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
