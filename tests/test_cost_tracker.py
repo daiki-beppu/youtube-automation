@@ -176,9 +176,7 @@ def test_log_generation_gpt_image_2_keeps_image_size_metadata_without_cost(tmp_c
         ("audio", "lyria-3-pro-preview", "song"),
     ],
 )
-def test_log_generation_estimated_cost_usd_is_always_none(
-    tmp_channel: Path, category: str, model: str, unit: str
-):
+def test_log_generation_estimated_cost_usd_is_always_none(tmp_channel: Path, category: str, model: str, unit: str):
     """Given 全カテゴリ (image / video / audio)
     When log_generation で新規エントリを書く
     Then estimated_cost_usd は必ず None (要件 2 のリグレッション対策)。

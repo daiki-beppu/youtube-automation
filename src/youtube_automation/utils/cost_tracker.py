@@ -108,9 +108,7 @@ def log_generation(
     （失敗時 `None`）。
     """
     if not unit:
-        raise ValueError(
-            f"unit is required for log_generation (category={category}, model={model})"
-        )
+        raise ValueError(f"unit is required for log_generation (category={category}, model={model})")
 
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -227,13 +225,8 @@ def print_last_report(last_entry: dict | None = None) -> None:
 
     print()
     print("=== Generation Cost Report ===")
-    print(
-        f"  今回:   [{cat_label}] {last['model']} / {last['quantity']}{last['unit']} / "
-        f"file={output_file}"
-    )
-    month_detail = " / ".join(
-        f"{_CATEGORY_LABELS[c]} {month_by_cat.get(c, 0)} 件" for c in ("image", "video", "audio")
-    )
+    print(f"  今回:   [{cat_label}] {last['model']} / {last['quantity']}{last['unit']} / file={output_file}")
+    month_detail = " / ".join(f"{_CATEGORY_LABELS[c]} {month_by_cat.get(c, 0)} 件" for c in ("image", "video", "audio"))
     print(f"  今月({month}): {month_total} 件")
     print(f"    内訳: {month_detail}")
     print(f"  累計:   {len(entries)} 件")
