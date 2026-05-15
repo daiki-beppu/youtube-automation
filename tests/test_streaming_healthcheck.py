@@ -590,7 +590,7 @@ class TestNotifyShStructure:
     def test_loads_env_file_for_webhook(self):
         """Given notify.sh
         When 全文を読む
-        Then ``/etc/youtube-stream-healthcheck.env`` を source または読み込んでいる。
+        Then ``/etc/youtube-stream-healthcheck.env`` を参照している。
 
         secret は env file で配信され notify.sh に直書きしない（plan §15）。
         """
@@ -598,6 +598,43 @@ class TestNotifyShStructure:
         # source / `.` / set -a + . どれでも環境変数を読み込めばよい
         assert "/etc/youtube-stream-healthcheck.env" in text, (
             "/etc/youtube-stream-healthcheck.env を参照していない（webhook を読み込めない）"
+        )
+
+    def test_does_not_source_env_file(self):
+        """Given notify.sh
+        When 全文を読む
+        Then env ファイルを ``source`` / ``.`` で評価していない。
+
+        issue #161: env ファイルを bash として評価すると改ざん時に root 任意コード
+        実行を許す。``grep + cut`` の限定パーサで読むのが正しい経路。
+        """
+        text = read_file(_NOTIFY_SH)
+        # `source "$ENV_FILE"` / `source /etc/...` / `. "$ENV_FILE"` / `. /etc/...` のいずれも禁止
+        assert not re.search(
+            r'^\s*(?:source|\.)\s+["\']?(?:\$\{?ENV_FILE\}?|/etc/youtube-stream-healthcheck\.env)',
+            text,
+            flags=re.MULTILINE,
+        ), (
+            "env ファイルを source / . で評価している（改ざん時に root 任意コード実行のリスク）"
+        )
+
+    def test_parses_webhook_with_grep_cut(self):
+        """Given notify.sh
+        When 全文を読む
+        Then ``DISCORD_WEBHOOK_URL`` を ``grep + cut`` の限定パーサで取得している。
+
+        issue #161 推奨実装: ``grep -E '^DISCORD_WEBHOOK_URL=' ... | cut -d= -f2- | tr ...``
+        """
+        text = read_file(_NOTIFY_SH)
+        assert re.search(
+            r"DISCORD_WEBHOOK_URL=\$\(\s*grep\s+-E\s+'\^DISCORD_WEBHOOK_URL=",
+            text,
+        ), (
+            "DISCORD_WEBHOOK_URL の grep ベース限定パーサが見つからない "
+            "（行頭アンカー '^' は必須: コメント内代入や行中代入を拾わないため）"
+        )
+        assert re.search(r"cut\s+-d=\s+-f2-", text), (
+            "cut -d= -f2- が見つからない（webhook トークンに = が混じった場合に切り詰めるリスク）"
         )
 
     def test_does_not_hardcode_webhook_url(self):
@@ -659,7 +696,7 @@ class TestNotifyShStructure:
         secret store 侵害時に file:// / http://169.254.169.254/... へすり替えられる
         ことを防ぐ。
         """
-        text = _read(_NOTIFY_SH)
+        text = read_file(_NOTIFY_SH)
         # bash の =~ 演算子で上記の正規表現が現れること
         # `\\.` のバックスラッシュは Python 文字列内で `\\\\\.` だが、ファイル上は `\.`
         assert re.search(
@@ -668,6 +705,125 @@ class TestNotifyShStructure:
         ), (
             "notify.sh に webhook URL スキーム/ホスト検証の正規表現が無い "
             "（^https://(discord\\.com|discordapp\\.com)/api/webhooks/ を =~ で照合すること）"
+        )
+
+
+class TestNotifyShEnvParser:
+    """notify.sh の env パーサ動作確認（issue #161 セキュリティ回帰テスト）。
+
+    `grep + cut + tr` の限定パーサが
+    - 正常な KEY=VALUE 形式から webhook を取り出せる
+    - 改ざんされた env ファイル（コマンド注入を仕込んだ内容）を bash として
+      評価しない（任意コード実行が起きない）
+    ことを確認する。
+    """
+
+    def _extract_parser_line(self) -> str:
+        """notify.sh から DISCORD_WEBHOOK_URL= の限定パーサ行を抜き出す。"""
+        text = read_file(_NOTIFY_SH)
+        match = re.search(r"^DISCORD_WEBHOOK_URL=\$\(.+?\)$", text, flags=re.MULTILINE)
+        assert match, "DISCORD_WEBHOOK_URL の限定パーサ行が見つからない"
+        return match.group(0)
+
+    def _run_parser_with_env(self, env_file: Path) -> subprocess.CompletedProcess:
+        """env_file を入力に notify.sh の限定パーサ行を bash 実行する。
+
+        3 つのパーサ単体テストで共通の snippet 構築 + ``_run_bash`` 呼び出しを集約する
+        helper（同ファイル ``_classify`` と同型の責務分離）。env_file 内容のみが差分。
+        """
+        snippet = (
+            f'ENV_FILE="{env_file}"\n'
+            f"{self._extract_parser_line()}\n"
+            'printf "%s" "$DISCORD_WEBHOOK_URL"\n'
+        )
+        return _run_bash(snippet)
+
+    def test_parses_valid_webhook(self, tmp_path: Path):
+        """Given DISCORD_WEBHOOK_URL=<url> のみが書かれた env ファイル
+        When notify.sh のパーサ行を実行する
+        Then 値が正しく取り出される。
+        """
+        env_file = tmp_path / "env"
+        env_file.write_text(
+            "DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123/abc=def\n"
+        )
+        proc = self._run_parser_with_env(env_file)
+        assert proc.returncode == 0, f"パーサがエラー終了: stderr={proc.stderr}"
+        # cut -d= -f2- が効いて、トークン側の '=' も保持される
+        assert proc.stdout == "https://discord.com/api/webhooks/123/abc=def", (
+            f"webhook 値が想定通り抽出されていない: {proc.stdout!r}"
+        )
+
+    def test_strips_quotes_and_cr(self, tmp_path: Path):
+        """Given 引用符付き値・CRLF 改行が混入した env ファイル
+        When notify.sh のパーサ行を実行する
+        Then ``"`` と ``\\r`` が除去される。
+        """
+        env_file = tmp_path / "env"
+        # CRLF + ダブルクオート両方を含める
+        env_file.write_bytes(b'DISCORD_WEBHOOK_URL="https://example.com/hook"\r\n')
+        proc = self._run_parser_with_env(env_file)
+        assert proc.returncode == 0
+        assert proc.stdout == "https://example.com/hook", (
+            f"引用符/CR が除去されていない: {proc.stdout!r}"
+        )
+
+    def test_does_not_execute_malicious_payload(self, tmp_path: Path):
+        """Given env ファイルにコマンド注入が仕込まれている
+        When notify.sh のパーサ行を実行する
+        Then 注入されたコマンドは実行されない（issue #161 セキュリティ要件）。
+
+        ``source`` 経路では ``DISCORD_WEBHOOK_URL=$(touch ...)`` のような書き方で
+        任意コードが走るが、``grep + cut`` パーサでは値が単なる文字列として扱われる。
+        """
+        env_file = tmp_path / "env"
+        marker = tmp_path / "pwned"
+        # source されると `touch <marker>` の戻り値が代入され marker ファイルが作られる
+        env_file.write_text(
+            f"DISCORD_WEBHOOK_URL=$(touch {marker})\n"
+            f"PATH=/tmp/evil:$PATH\n"
+        )
+        proc = self._run_parser_with_env(env_file)
+        assert proc.returncode == 0
+        # marker が作られていない = コマンド置換が走っていない
+        assert not marker.exists(), (
+            f"env ファイルのコマンド置換が実行された（脆弱性が残存）: {marker}"
+        )
+        # 値はリテラル文字列としてそのまま取れる
+        assert proc.stdout == f"$(touch {marker})", (
+            f"値がリテラルとして取れていない: {proc.stdout!r}"
+        )
+
+    def test_full_script_exits_zero_when_webhook_key_missing(self, tmp_path: Path):
+        """Given env ファイルに ``DISCORD_WEBHOOK_URL=`` 行が無い
+        When notify.sh をフルスクリプトとして ``set -euo pipefail`` 込みで実行する
+        Then exit 0 で終わる（cron を壊さない）。
+
+        回帰防止: ``grep`` の non-match (exit 1) が pipefail で伝播し
+        ``set -e`` で silent に script 自体を落とすバグを防ぐ。
+        ``scripts/streaming/notify.sh:11-12`` の「cron を壊さないため exit 0 で吸収」方針。
+        """
+        env_file = tmp_path / "env"
+        # DISCORD_WEBHOOK_URL= 行を含まない env ファイル（他のキーのみ）
+        env_file.write_text("SOME_OTHER_KEY=value\n")
+        # ENV_FILE 定数を上書きするため notify.sh 本文の ``readonly ENV_FILE=...`` 行を
+        # tmp_path のパスに差し替えてから実行する（ファイル自体は変更しない）。
+        notify_text = read_file(_NOTIFY_SH)
+        rewritten = re.sub(
+            r'^readonly\s+ENV_FILE="[^"]+"$',
+            f'readonly ENV_FILE="{env_file}"',
+            notify_text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        assert rewritten != notify_text, "ENV_FILE の readonly 宣言を差し替えられなかった"
+        script_path = tmp_path / "notify.sh"
+        script_path.write_text(rewritten)
+        script_path.chmod(0o755)
+        proc = _run_bash(f'"{script_path}" "test message"')
+        assert proc.returncode == 0, (
+            f"webhook キー未設定 env で exit 0 にならない（cron が壊れる）: "
+            f"rc={proc.returncode}, stderr={proc.stderr!r}"
         )
 
 
