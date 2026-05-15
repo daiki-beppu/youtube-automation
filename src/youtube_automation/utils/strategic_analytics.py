@@ -6,6 +6,7 @@ YouTubeAnalyticsCollector の統合・戦略的動画分析メソッド群
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Dict, List
 
@@ -18,6 +19,10 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+# YouTube Analytics API は 720 req/min クォータ。w=8 で 50ms レイテンシ時の理論上限 160 req/s
+# はクォータ側がボトルネックになるため安全。指示書 #311 の計測で w=8 → 7.7x speedup。
+_MAX_WORKERS = 8
 
 
 class StrategicAnalyticsMixin:
@@ -250,25 +255,10 @@ class StrategicAnalyticsMixin:
 
         logger.info(f"{len(all_videos)}本の動画のAnalyticsデータを取得開始...")
 
-        # Step 2: 各動画のAnalyticsデータを取得
-        videos_data = []
-        with section("strategic_analytics.all_videos_loop", count=len(all_videos)):
-            for i, video in enumerate(all_videos, 1):
-                logger.info(f"[{i}/{len(all_videos)}] {video['title'][:50]}...")
-
-                with section("strategic_analytics.get_video_analytics_by_id"):
-                    analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
-
-                # 動画情報とAnalyticsデータを結合
-                combined_data = {
-                    **video,  # title, published_at, description
-                    **analytics_data,  # views, estimated_minutes_watched, average_view_duration
-                }
-                videos_data.append(combined_data)
-
-                # 進行状況表示（10件ごと）
-                if i % 10 == 0:
-                    logger.info(f"{i}本完了...")
+        # Step 2: 各動画のAnalyticsデータを並列取得
+        videos_data = self._fetch_videos_analytics_parallel(
+            all_videos, start_date, end_date, "strategic_analytics.all_videos_loop"
+        )
 
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
@@ -385,21 +375,68 @@ class StrategicAnalyticsMixin:
 
         logger.info(f"{len(recent_videos)}本の直近動画のAnalyticsデータを取得開始...")
 
-        # 各動画のAnalyticsデータを取得
-        videos_data = []
-        with section("strategic_analytics.recent_videos_loop", count=len(recent_videos)):
-            for i, video in enumerate(recent_videos, 1):
-                logger.info(f"[{i}/{len(recent_videos)}] {video['title'][:50]}...")
-
-                with section("strategic_analytics.get_video_analytics_by_id"):
-                    analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
-
-                # 動画情報とAnalyticsデータを結合
-                combined_data = {**video, **analytics_data}
-                videos_data.append(combined_data)
+        # 各動画のAnalyticsデータを並列取得
+        videos_data = self._fetch_videos_analytics_parallel(
+            recent_videos, start_date, end_date, "strategic_analytics.recent_videos_loop"
+        )
 
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
 
         logger.info(f"直近動画Analytics取得完了: {len(videos_data)}本")
+        return videos_data
+
+    def _fetch_videos_analytics_parallel(
+        self,
+        videos: List[Dict],
+        start_date: str,
+        end_date: str,
+        section_label: str,
+    ) -> List[Dict]:
+        """動画リストに対し `get_video_analytics_by_id` を `ThreadPoolExecutor` で並列実行する.
+
+        `get_video_analytics_by_id` は HttpError を内部で catch し、`error` キー付きの
+        ゼロ値 dict を返すため、worker レベルでの partial failure は既に degrade 済み。
+        Future 側では `fut.result()` の予期せぬ例外のみ catch して `logger.error` でスキップする。
+
+        Args:
+            videos: video_id を含む動画 dict のリスト
+            start_date: 分析開始日 (YYYY-MM-DD)
+            end_date: 分析終了日 (YYYY-MM-DD)
+            section_label: アウター section プロファイラのラベル
+
+        Returns:
+            元動画情報と Analytics データを merge した dict のリスト（完了順、未ソート）
+        """
+        videos_data: List[Dict] = []
+        completed = 0
+        total = len(videos)
+
+        with section(section_label, count=total):
+            with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+                futures = {
+                    executor.submit(
+                        self.get_video_analytics_by_id, video["video_id"], start_date, end_date
+                    ): video
+                    for video in videos
+                }
+
+                for future in as_completed(futures):
+                    video = futures[future]
+                    completed += 1
+                    logger.info(f"[{completed}/{total}] {video['title'][:50]}...")
+
+                    try:
+                        with section("strategic_analytics.get_video_analytics_by_id"):
+                            analytics_data = future.result()
+                    except Exception as e:
+                        logger.error(f"動画 {video['video_id']} の analytics 取得に失敗: {e}")
+                        continue
+
+                    videos_data.append({**video, **analytics_data})
+
+                    # 進行状況表示（10件ごと）
+                    if completed % 10 == 0:
+                        logger.info(f"{completed}本完了...")
+
         return videos_data
