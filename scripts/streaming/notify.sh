@@ -31,6 +31,14 @@ if [[ -z "${DISCORD_WEBHOOK_URL:-}" ]]; then
   exit 0
 fi
 
+# webhook URL は Discord 公式ホストの HTTPS endpoint のみ許可（SSRF 防御、Issue #166）。
+# secret store 侵害時に file:// / http://169.254.169.254/... 等にすり替えられること
+# を防ぐ。不正値は cron を壊さないよう exit 0 で吸収する。
+if [[ ! "$DISCORD_WEBHOOK_URL" =~ ^https://(discord\.com|discordapp\.com)/api/webhooks/ ]]; then
+  echo "notify.sh: DISCORD_WEBHOOK_URL が不正なホスト/スキーム" >&2
+  exit 0
+fi
+
 # 引数なしで呼ばれるのは healthcheck.sh 側のバグ。Fail Fast で原因特定可能にする
 # （Discord に "(empty)" が流れて原因不明アラートになるのを避ける）。
 if [[ $# -lt 1 ]]; then

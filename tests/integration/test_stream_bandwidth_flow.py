@@ -58,7 +58,7 @@ def test_report_flow_posts_combined_report(monkeypatch):
         url = req.full_url
         if "vultr.com" in url:
             return _fake_urlopen_for_vultr(bandwidth_payload)
-        if "example.com" in url:
+        if "discord.com" in url:
             captured["webhook_url"] = url
             captured["webhook_body"] = req.data
             return _fake_urlopen_for_vultr({"ok": True})
@@ -68,7 +68,7 @@ def test_report_flow_posts_combined_report(monkeypatch):
     def fake_get_secret(name: str):
         return {
             "VULTR_API_KEY": "fake-vultr-key",
-            "STREAM_WEBHOOK_URL": "https://example.com/hook",
+            "STREAM_WEBHOOK_URL": "https://discord.com/api/webhooks/123/abc",
         }[name]
 
     # アーカイブ計数を直接モック (YouTube API は複雑な mock になるため境界で切る)
@@ -121,7 +121,7 @@ def test_check_threshold_flow_silent_under_limit():
         url = req.full_url
         if "vultr.com" in url:
             return _fake_urlopen_for_vultr(bandwidth_payload)
-        if "example.com" in url:
+        if "discord.com" in url:
             webhook_calls.append(url)
             return _fake_urlopen_for_vultr({"ok": True})
         raise AssertionError(f"unexpected URL: {url}")
@@ -129,7 +129,7 @@ def test_check_threshold_flow_silent_under_limit():
     def fake_get_secret(name: str):
         return {
             "VULTR_API_KEY": "fake-vultr-key",
-            "STREAM_WEBHOOK_URL": "https://example.com/hook",
+            "STREAM_WEBHOOK_URL": "https://discord.com/api/webhooks/123/abc",
         }[name]
 
     with (

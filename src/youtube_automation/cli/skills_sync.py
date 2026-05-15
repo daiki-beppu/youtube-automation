@@ -1,8 +1,9 @@
-"""yt-skills — Claude Code スキルを downstream リポに同期する。
+"""yt-skills — Claude Code 配布物を downstream リポに同期する。
 
 `uv add git+https://github.com/daiki-beppu/youtube-automation` で本パッケージを
 インストールしたあと、`yt-skills sync` を実行することで、wheel に同梱された
-配布物 (Claude Code スキル) を任意のチャンネルリポジトリへ展開できる。
+配布物 (Claude Code スキル / CLAUDE.md テンプレ) を任意のチャンネルリポジトリへ
+展開できる。
 
 Subcommands:
     list   : 同梱アセット一覧を表示
@@ -10,10 +11,11 @@ Subcommands:
     diff   : 同梱版と target の差分を表示
 
 Asset 種別 (`--asset`):
-    skills : Claude Code スキル (`.claude/skills/`、ディレクトリ単位で 1 entry)
+    skills    : Claude Code スキル (`.claude/skills/`、ディレクトリ単位で 1 entry)
+    claude-md : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
 
 将来別種類の配布物を追加する場合は `_ASSET_SPECS` に entry を追加するだけで
-list/sync/diff の各 subcommand が自動的にサポートする。
+list/sync/diff の各 subcommand が自動的にサポートする (kind="dir" / "file" を選ぶ)。
 """
 
 from __future__ import annotations
@@ -26,14 +28,27 @@ from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Iterable
 
-# asset ごとの wheel resource 名・開発時 fallback・デフォルト target を集約。
-# (pyproject.toml の force-include で source_subdir が resource_name/ に同梱される)
+# asset ごとの kind / wheel resource 名・開発時 fallback・デフォルト target を集約。
+# (pyproject.toml の force-include で source_subdir 配下が resource_name/ に同梱される)
+#
+# kind="dir"  : ディレクトリ全体を 1 entry = 1 サブディレクトリとして配布。
+# kind="file" : 単一ファイルを配布。source_filename が source 側のファイル名、
+#               default_target が target 側のファイルパス (リネーム配布も可)。
 _ASSET_SPECS: dict[str, dict[str, str]] = {
     "skills": {
+        "kind": "dir",
         "resource_name": "_skills",
         "source_subdir": ".claude/skills",
         "default_target": ".claude/skills",
         "label": "スキル",
+    },
+    "claude-md": {
+        "kind": "file",
+        "resource_name": "_claude_md",
+        "source_subdir": ".claude",
+        "source_filename": "CLAUDE.template.md",
+        "default_target": ".claude/CLAUDE.md",
+        "label": "CLAUDE.md テンプレ",
     },
 }
 
@@ -49,6 +64,9 @@ def _asset_root(asset: str) -> Path:
     解決順:
         1. インストール済み wheel の `youtube_automation/<resource_name>/`
         2. リポジトリルート直下の `<source_subdir>/` (editable / 開発時)
+
+    kind="file" の場合は同梱ファイルの **親ディレクトリ** を返す。
+    実体ファイルは `_asset_root(asset) / spec["source_filename"]` で取得する。
     """
     spec = _ASSET_SPECS[asset]  # KeyError on unknown asset
 
@@ -71,8 +89,16 @@ def _asset_root(asset: str) -> Path:
     )
 
 
-def _list_entries(root: Path) -> list[str]:
-    """root 直下の全エントリ (dir / file) を名前ソートで返す。"""
+def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = None) -> list[str]:
+    """asset 配下の entry 名を返す。
+
+    kind="dir"  : `root.iterdir()` の名前を sort して返す。
+    kind="file" : `[source_filename]` を返す (単一エントリ)。
+    """
+    if kind == "file":
+        if source_filename is None:
+            raise ValueError("kind='file' の asset には source_filename が必要です")
+        return [source_filename]
     return sorted(p.name for p in root.iterdir())
 
 
@@ -121,7 +147,7 @@ def _symlink_entry(src: Path, dst: Path, force: bool, dry_run: bool) -> str:
 def cmd_list(args: argparse.Namespace) -> int:
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
-    entries = _list_entries(root)
+    entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
     print(f"同梱{spec['label']} {len(entries)} 件 (source: {root})")
     for name in entries:
         print(f"  - {name}")
@@ -129,12 +155,56 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
+    spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
-    target_dir = Path(args.target).resolve()
-    _ensure_target_parent(target_dir)
+    target = Path(args.target).resolve()
+
+    if spec["kind"] == "file":
+        return _sync_file_asset(spec, root, target, args)
+    return _sync_dir_asset(spec, root, target, args)
+
+
+def _sync_file_asset(
+    spec: dict[str, str],
+    root: Path,
+    target: Path,
+    args: argparse.Namespace,
+) -> int:
+    """単一ファイル asset の sync。target は **ファイルパス** として扱う。"""
+    if args.only:
+        # file asset は entry が 1 つしかないため --only は意味を成さない。
+        # 黙殺せず警告で知らせることで設定ミスに気付けるようにする (sync は継続)。
+        print(
+            f"  [warn] --only は kind='file' の asset ({args.asset}) では使えません",
+            file=sys.stderr,
+        )
+
+    src = root / spec["source_filename"]
+    _ensure_target_parent(target)
+
+    op = _symlink_entry if args.symlink else _copy_entry
+    result = op(src, target, force=args.force, dry_run=args.dry_run)
+    prefix = "[dry-run] " if args.dry_run else ""
+    print(f"  {prefix}{result:>8}: {target.name}")
+
+    counts = {result: 1}
+    print()
+    print(f"完了: {sum(counts.values())} 件処理 — {counts}")
+    if result == "skipped":
+        print("  (skipped を上書きするには --force を指定してください)")
+    return 0
+
+
+def _sync_dir_asset(
+    spec: dict[str, str],
+    root: Path,
+    target_dir: Path,
+    args: argparse.Namespace,
+) -> int:
+    """ディレクトリ asset の sync。target は **ディレクトリパス** として扱う。"""
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    entries = _list_entries(root)
+    entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
     if args.only:
         only = set(args.only)
         entries = [s for s in entries if s in only]
@@ -160,13 +230,37 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
+    spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
-    target_dir = Path(args.target).resolve()
+    target = Path(args.target).resolve()
+
+    if spec["kind"] == "file":
+        return _diff_file_asset(spec, root, target)
+    return _diff_dir_asset(spec, root, target)
+
+
+def _diff_file_asset(spec: dict[str, str], root: Path, target: Path) -> int:
+    src = root / spec["source_filename"]
+    if not target.exists():
+        print(f"target が存在しません: {target}", file=sys.stderr)
+        return 1
+    if not target.is_file():
+        print(f"target がファイルではありません (kind='file' の asset): {target}", file=sys.stderr)
+        return 1
+    if filecmp.cmp(src, target, shallow=False):
+        print("差分なし。target は同梱版と一致しています。")
+    else:
+        print("内容が異なる:")
+        print(f"  ~ {target.name}")
+    return 0
+
+
+def _diff_dir_asset(spec: dict[str, str], root: Path, target_dir: Path) -> int:
     if not target_dir.exists():
         print(f"target が存在しません: {target_dir}", file=sys.stderr)
         return 1
 
-    bundled = set(_list_entries(root))
+    bundled = set(_list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename")))
     on_disk = set(p.name for p in target_dir.iterdir())
 
     only_bundled = sorted(bundled - on_disk)
@@ -229,7 +323,7 @@ def _resolve_default_target(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-skills",
-        description=("Claude Code スキル の同期ツール (youtube-channels-automation)"),
+        description=("Claude Code 配布物の同期ツール (youtube-channels-automation)"),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -242,7 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.add_argument(
         "--target",
         default=None,
-        help=("展開先ディレクトリ (default: --asset の default_target に従う)"),
+        help=("展開先パス (default: --asset の default_target に従う、kind='file' の場合はファイルパス)"),
     )
     p_sync.add_argument(
         "--symlink",
@@ -263,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--only",
         nargs="+",
         metavar="ENTRY",
-        help="指定した entry だけ同期 (省略時は全件)",
+        help="指定した entry だけ同期 (省略時は全件、kind='file' では無効)",
     )
     p_sync.set_defaults(func=cmd_sync)
 
@@ -272,7 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_diff.add_argument(
         "--target",
         default=None,
-        help=("比較先ディレクトリ (default: --asset の default_target に従う)"),
+        help=("比較先パス (default: --asset の default_target に従う、kind='file' の場合はファイルパス)"),
     )
     p_diff.set_defaults(func=cmd_diff)
 

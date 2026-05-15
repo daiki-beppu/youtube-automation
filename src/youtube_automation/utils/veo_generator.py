@@ -138,6 +138,7 @@ def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
         "format=duration",
         "-of",
         "default=noprint_wrappers=1:nokey=1",
+        "--",
         str(video_path),
     ]
     try:
@@ -184,6 +185,7 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
         "format=duration",
         "-of",
         "default=noprint_wrappers=1:nokey=1",
+        "--",
         str(video_path),
     ]
     try:

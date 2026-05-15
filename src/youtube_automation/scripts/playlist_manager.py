@@ -17,7 +17,6 @@ import logging
 import sys
 from pathlib import Path
 
-from youtube_automation.scripts.video_uploader import VideoUploader
 from youtube_automation.utils.config import channel_dir, load_config, reset
 from youtube_automation.utils.youtube_service import get_youtube
 
@@ -33,7 +32,6 @@ class PlaylistManager:
 
     def __init__(self):
         self.config = load_config()
-        self.uploader = VideoUploader()
         self._config_path = channel_dir() / "config" / "channel" / "playlists.json"
         self._youtube = None
 
@@ -41,6 +39,61 @@ class PlaylistManager:
         if self._youtube is None:
             self._youtube = get_youtube()
         return self._youtube
+
+    # ─── YouTube API ラッパ ────────────────────────────
+
+    def _create_playlist(self, title: str, description: str, privacy_status: str = "public") -> dict | None:
+        """新規プレイリストを YouTube に作成する。
+
+        Returns:
+            成功時: ``{"status": "success", "playlist_id": ..., "playlist_url": ..., "title": ...}``
+            失敗時: ``{"status": "failed", "error": ..., "title": ...}``
+        """
+        youtube = self._get_youtube()
+        logger.info(f"📋 Creating playlist: {title}")
+
+        try:
+            body = {
+                "snippet": {"title": title, "description": description},
+                "status": {"privacyStatus": privacy_status},
+            }
+            response = youtube.playlists().insert(part="snippet,status", body=body).execute()
+            playlist_id = response["id"]
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            logger.info(f"✅ Playlist created: {playlist_id} ({playlist_url})")
+            return {
+                "status": "success",
+                "playlist_id": playlist_id,
+                "playlist_url": playlist_url,
+                "title": title,
+            }
+        except Exception as e:
+            logger.error(f"❌ Playlist creation failed: {e}")
+            return {"status": "failed", "error": str(e), "title": title}
+
+    def _add_video_to_playlist(self, playlist_id: str, video_id: str, position: int | None = None) -> bool:
+        """動画をプレイリストに追加する。
+
+        ``position`` を省略（``None``）すると YouTube API に位置指定を渡さず末尾に追加される。
+        ``position`` を整数指定するとその位置に挿入される（0 で先頭）。
+        """
+        youtube = self._get_youtube()
+        where = "末尾" if position is None else f"position={position}"
+        logger.info(f"➕ Adding video {video_id} to playlist {playlist_id} ({where})")
+
+        try:
+            snippet: dict = {
+                "playlistId": playlist_id,
+                "resourceId": {"kind": "youtube#video", "videoId": video_id},
+            }
+            if position is not None:
+                snippet["position"] = position
+            youtube.playlistItems().insert(part="snippet", body={"snippet": snippet}).execute()
+            logger.info(f"✅ Video added to playlist ({where})")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to add video to playlist: {e}")
+            return False
 
     # ─── プレイリスト解決 ──────────────────────────────
 
@@ -99,7 +152,7 @@ class PlaylistManager:
                 print(f"  [DRY-RUN] 作成予定: {title}")
                 continue
 
-            result = self.uploader.create_playlist(title, description)
+            result = self._create_playlist(title, description)
             if result and result.get("status") == "success":
                 playlist_id = result["playlist_id"]
                 created[key] = playlist_id
@@ -206,34 +259,14 @@ class PlaylistManager:
                 assigned.append(key)
                 continue
 
-            # "all" プレイリストは末尾追加、その他は先頭追加
+            # "all" プレイリストは末尾追加（position=None）、その他は先頭追加（position=0）
             position = None if key == "all" else 0
-
-            if position is not None:
-                success = self.uploader.add_video_to_playlist(playlist_id, video_id, position)
-            else:
-                success = self._add_video_to_playlist_end(playlist_id, video_id)
+            success = self._add_video_to_playlist(playlist_id, video_id, position)
 
             if success:
                 assigned.append(key)
 
         return assigned
-
-    def _add_video_to_playlist_end(self, playlist_id: str, video_id: str) -> bool:
-        """プレイリスト末尾に動画を追加（position を省略して API に任せる）"""
-        if not self.uploader.youtube:
-            self.uploader.authenticate()
-
-        try:
-            body = {
-                "snippet": {"playlistId": playlist_id, "resourceId": {"kind": "youtube#video", "videoId": video_id}}
-            }
-            self.uploader.youtube.playlistItems().insert(part="snippet", body=body).execute()
-            logger.info(f"  {video_id} -> {playlist_id} (末尾)")
-            return True
-        except Exception as e:
-            logger.error(f"  プレイリスト追加失敗: {e}")
-            return False
 
     # ─── 既存動画の一括同期 ────────────────────────────
 

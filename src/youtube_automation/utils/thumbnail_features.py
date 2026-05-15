@@ -47,12 +47,12 @@ def extract_features(img: Image.Image) -> Dict[str, float]:
 
 
 def _mean(band: Image.Image) -> float:
-    pixels = list(band.getdata())
+    pixels = list(band.get_flattened_data())
     return sum(pixels) / len(pixels) if pixels else 0.0
 
 
 def _stdev(band: Image.Image) -> float:
-    pixels = list(band.getdata())
+    pixels = list(band.get_flattened_data())
     if not pixels:
         return 0.0
     m = sum(pixels) / len(pixels)
@@ -60,8 +60,8 @@ def _stdev(band: Image.Image) -> float:
 
 
 def _abs_diff(band_a: Image.Image, band_b: Image.Image) -> Image.Image:
-    a = list(band_a.getdata())
-    b = list(band_b.getdata())
+    a = list(band_a.get_flattened_data())
+    b = list(band_b.get_flattened_data())
     out = Image.new("L", band_a.size)
     out.putdata([abs(x - y) for x, y in zip(a, b)])
     return out
@@ -69,9 +69,9 @@ def _abs_diff(band_a: Image.Image, band_b: Image.Image) -> Image.Image:
 
 def _abs_diff_half_sum(r: Image.Image, g: Image.Image, b: Image.Image) -> Image.Image:
     """|0.5*(R+G) - B| を計算する (Hasler-Süsstrunk の yb)"""
-    rp = list(r.getdata())
-    gp = list(g.getdata())
-    bp = list(b.getdata())
+    rp = list(r.get_flattened_data())
+    gp = list(g.get_flattened_data())
+    bp = list(b.get_flattened_data())
     out = Image.new("L", r.size)
     out.putdata([min(255, int(abs(0.5 * (rr + gg) - bb))) for rr, gg, bb in zip(rp, gp, bp)])
     return out

@@ -12,6 +12,12 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
+from googleapiclient.errors import HttpError
+
+# `patch("youtube_automation.scripts.analytics_system.X")` がモジュール属性として
+# 解決できるよう、トップレベルで submodule を import しておく。
+import youtube_automation.scripts.analytics_system  # noqa: F401
+from youtube_automation.utils.exceptions import AuthError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -111,18 +117,32 @@ class TestAuthenticate:
             assert system.authenticated is False
 
     def test_authenticate_exception(self, system):
-        """認証中に例外が発生した場合 False を返す"""
+        """認証中にドメイン例外（AuthError）が発生した場合 False を返す"""
         with patch.dict(
             "sys.modules",
             {
                 "youtube_automation.auth": MagicMock(),
                 "youtube_automation.auth.oauth_handler": MagicMock(
-                    YouTubeOAuthHandler=MagicMock(side_effect=Exception("Token expired"))
+                    YouTubeOAuthHandler=MagicMock(side_effect=AuthError("Token expired"))
                 ),
             },
         ):
             result = system.authenticate()
             assert result is False
+
+    def test_authenticate_unexpected_exception_propagates(self, system):
+        """narrow catch 範囲外の例外は伝播する（fail-fast）"""
+        with patch.dict(
+            "sys.modules",
+            {
+                "youtube_automation.auth": MagicMock(),
+                "youtube_automation.auth.oauth_handler": MagicMock(
+                    YouTubeOAuthHandler=MagicMock(side_effect=RuntimeError("unexpected"))
+                ),
+            },
+        ):
+            with pytest.raises(RuntimeError, match="unexpected"):
+                system.authenticate()
 
 
 # ---------------------------------------------------------------------------
@@ -179,12 +199,75 @@ class TestCollectAnalyticsData:
         result = system.collect_analytics_data(days=14, save_data=False)
         assert result == expected_data
 
-    def test_collector_exception(self, system):
-        """コレクター例外時に None を返す"""
+    def test_collector_domain_exception(self, system):
+        """ドメイン例外（YouTubeAPIError）発生時に None を返す"""
         system.authenticated = True
-        system.collector.collect_basic_analytics.side_effect = Exception("API quota exceeded")
+        system.collector.collect_basic_analytics.side_effect = YouTubeAPIError("API quota exceeded")
 
         result = system.collect_analytics_data(days=30)
+        assert result is None
+
+    def test_collector_unexpected_exception_propagates(self, system):
+        """narrow catch 範囲外の例外は伝播する（fail-fast）"""
+        system.authenticated = True
+        system.collector.collect_basic_analytics.side_effect = RuntimeError("unexpected")
+
+        with pytest.raises(RuntimeError, match="unexpected"):
+            system.collect_analytics_data(days=30)
+
+    def test_video_daily_failure_continues(self, system, tmp_path):
+        """動画×日次データ取得失敗時は warning ログ + 続行（analytics_data は返す）"""
+        system.authenticated = True
+        expected_data = {"views": 1000}
+        system.collector.collect_basic_analytics.return_value = expected_data
+        # 動画一覧取得は成功、日次取得で KeyError（データ整合性エラー）
+        system.collector.get_all_channel_videos.return_value = [{"video_id": "vid_A"}]
+        system.collector.get_video_daily_analytics.side_effect = KeyError("missing field")
+
+        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+            result = system.collect_analytics_data(days=7, save_data=True)
+
+        # 失敗しても analytics_data 本体は返る（fail-open）
+        assert result == expected_data
+        # 動画×日次ファイルは保存されていない
+        daily_files = list((tmp_path / "data" / "analytics" / "daily_per_video").glob("*.json"))
+        assert len(daily_files) == 0
+
+    def test_video_daily_httperror_continues(self, system, tmp_path):
+        """動画×日次データ取得で HttpError 発生時は warning + 続行（fail-open）。
+
+        HttpError 専用分岐（`YouTubeAPIError.from_http_error` ラップ + warning + 続行）の検証。
+        """
+        system.authenticated = True
+        expected_data = {"views": 1000}
+        system.collector.collect_basic_analytics.return_value = expected_data
+        system.collector.get_all_channel_videos.return_value = [{"video_id": "vid_A"}]
+        # 内側ブロックで HttpError 発生 → 専用 catch で warning + 続行
+        system.collector.get_video_daily_analytics.side_effect = HttpError(
+            MagicMock(status=403), b"quotaExceeded"
+        )
+
+        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+            result = system.collect_analytics_data(days=7, save_data=True)
+
+        # fail-open: analytics_data 本体は返る
+        assert result == expected_data
+        # 動画×日次ファイルは保存されていない
+        daily_files = list((tmp_path / "data" / "analytics" / "daily_per_video").glob("*.json"))
+        assert len(daily_files) == 0
+
+    def test_collector_httperror_returns_none(self, system):
+        """外周 HttpError 発生時は None を返す（fail-stop）。
+
+        外周 HttpError 専用分岐（`YouTubeAPIError.from_http_error` ラップ + logger.exception + None 返却）の検証。
+        """
+        system.authenticated = True
+        system.collector.collect_basic_analytics.side_effect = HttpError(
+            MagicMock(status=500), b"internalError"
+        )
+
+        result = system.collect_analytics_data(days=30)
+        # fail-stop: None が返る
         assert result is None
 
 
@@ -228,14 +311,12 @@ class TestRunDataCollection:
         assert result["success"] is False
         assert "error" in result
 
-    def test_data_collection_exception(self, system, mock_config):
-        """データ収集中に例外が発生した場合"""
+    def test_data_collection_exception_propagates(self, system, mock_config):
+        """collect_analytics_data からの例外は run_data_collection で握りつぶさず伝播する"""
         with patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config):
             with (
                 patch.object(system, "authenticate", return_value=True),
-                patch.object(system, "collect_analytics_data", side_effect=Exception("Network error")),
+                patch.object(system, "collect_analytics_data", side_effect=RuntimeError("Network error")),
             ):
-                result = system.run_data_collection(days=30)
-
-        assert result["success"] is False
-        assert "error" in result
+                with pytest.raises(RuntimeError, match="Network error"):
+                    system.run_data_collection(days=30)

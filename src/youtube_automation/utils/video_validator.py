@@ -186,7 +186,17 @@ class VideoValidator:
     def _get_video_metadata(self, video_path: Path) -> Optional[Dict]:
         """ffprobe で動画メタデータを取得"""
         try:
-            cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(video_path)]
+            cmd = [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                "--",
+                str(video_path),
+            ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
