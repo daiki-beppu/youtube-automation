@@ -117,6 +117,18 @@ yt-generate-master --shuffle-seed 42        # 再現性 seed 指定（--shuffle 
 
 **シャッフル時の注意**: `--shuffle` はループ展開の**前**に 1 回だけ実行され、シャッフルされた順序がループごとに同じ並びで N 回繰り返される（ループごとに独立してシャッフルし直すわけではない）。再現性が必要な場合は `--shuffle-seed N` を指定するか、`--shuffle` 単独実行時に stdout に出る `[Shuffle] seed=<N>` の値を控えておけば後で同じ並びを再現できる。再現性ログは `--quiet` 指定時も常に出力される。
 
+### Step 5.5: 雨音レイヤー（オプション）
+
+`branding/rain_layers/rain_*.wav` を持つチャンネルでは、マスター生成後に雨音をレイヤーする:
+
+```bash
+yt-finalize-master                       # CWD がコレクションディレクトリ
+yt-finalize-master <collection-path>     # 明示指定
+```
+
+`branding/rain_layers/` ディレクトリが無い／`rain_*.wav` が 0 件のチャンネルでは何もせず exit 0（pass-through）。
+レイヤー音量・フェードイン・loudnorm target は skill-config の `rain_layer:` namespace で制御する。`master.mp3` は `master.tmp.mp3` 経由 atomic rename で in-place 上書きされる（pass2 失敗時は元 master が保護される）。
+
 ### Step 6: ワークツリー実行時のメインへのコピー
 
 git worktree 内で実行している場合（パスに `.claude/worktrees/` を含む場合）、生成した音源ファイルをメインワークツリーにもコピーする。

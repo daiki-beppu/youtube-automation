@@ -31,3 +31,12 @@ audio:
 # Suno CDN ダウンロード設定
 suno_download:
   cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"
+
+# 雨音レイヤー設定 (branding/rain_layers/rain_*.wav が存在するチャンネルでのみ有効)
+# rain_layer:
+#   volume_db: -19         # 各レイヤー音量 dB
+#   fadein_s: 0.5          # 頭の不連続抑制
+#   loudnorm:
+#     I: -14
+#     LRA: 11
+#     TP: -1.5

@@ -141,8 +141,7 @@ def test_skill_reference_script_is_real_file_not_symlink(path: Path) -> None:
     Issue #140 で実体を skill 側に移したため、symlink への逆戻りを禁止する。
     """
     assert not path.is_symlink(), (
-        f"{path.relative_to(_REPO_ROOT)} が symlink になっている。"
-        " 実ファイルとして配置すること (Issue #140)"
+        f"{path.relative_to(_REPO_ROOT)} が symlink になっている。 実ファイルとして配置すること (Issue #140)"
     )
 
 
@@ -163,8 +162,7 @@ def test_skill_reference_script_is_executable(path: Path) -> None:
     chmod 漏れによる「動かないスクリプト」regression を検出する。
     """
     assert os.access(path, os.X_OK), (
-        f"{path.relative_to(_REPO_ROOT)} に実行ビットがない。"
-        " 移動時に実行ビットを保持すること (chmod +x)"
+        f"{path.relative_to(_REPO_ROOT)} に実行ビットがない。 移動時に実行ビットを保持すること (chmod +x)"
     )
 
 
@@ -194,9 +192,7 @@ def test_skill_reference_script_passes_bash_syntax_check(path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, (
-        f"{path.relative_to(_REPO_ROOT)} の bash 構文チェックに失敗:\n{result.stderr}"
-    )
+    assert result.returncode == 0, f"{path.relative_to(_REPO_ROOT)} の bash 構文チェックに失敗:\n{result.stderr}"
 
 
 # ---------- スクリプト本体の同一性 (内容が壊れていないこと) ----------
@@ -221,8 +217,7 @@ def test_worktree_sync_keeps_purpose_header() -> None:
     """
     text = _read(_NEW_WORKTREE_SYNC)
     assert "ワークツリー" in text, (
-        "ヘッダ用途コメントが消えている。"
-        " ファイル本体が破損または別ファイルに置き換わっている可能性がある"
+        "ヘッダ用途コメントが消えている。 ファイル本体が破損または別ファイルに置き換わっている可能性がある"
     )
 
 
@@ -239,8 +234,7 @@ def test_generate_videos_usage_comment_points_to_new_path() -> None:
     """
     text = _read(_NEW_GENERATE_VIDEOS)
     assert ".claude/skills/videoup/references/generate_videos.sh" in text, (
-        "Usage コメントが新パスを参照していない。"
-        " skill 経由・直接実行の両方で利用者が実行できるパスを示すこと"
+        "Usage コメントが新パスを参照していない。 skill 経由・直接実行の両方で利用者が実行できるパスを示すこと"
     )
 
 
@@ -266,8 +260,7 @@ def test_worktree_sync_usage_comment_points_to_new_path() -> None:
     """
     text = _read(_NEW_WORKTREE_SYNC)
     assert ".claude/skills/lyria/references/worktree_sync.sh" in text, (
-        "Usage コメントが新パスを参照していない。"
-        " skill 経由・直接実行の両方で利用者が実行できるパスを示すこと"
+        "Usage コメントが新パスを参照していない。 skill 経由・直接実行の両方で利用者が実行できるパスを示すこと"
     )
 
 

@@ -6,6 +6,23 @@
 # 複数スキル（metadata_generator / short / upload 等）から参照される横断属性のため、
 # 引き続き config/channel/*.json で管理する。ここには description 固有の派生マッピングのみ置く。
 
+# 概要欄セクションの装飾ヘッダー。チャンネル特性に応じて差し替え可能。
+# `channel_link_template` は `{channel_name}` を含むテンプレート文字列。
+# デフォルトは BGM チャンネル想定（絵文字 + 装飾罫線）。ゲーム音楽 / ASMR /
+# トーク系などでチャンネル独自の装飾に差し替えたい場合は config/skills/video-description.yaml で上書きする。
+section_headers:
+  track_list: "⎯⎯⎯⎯ ✦ Track List ✦ ⎯⎯⎯⎯"
+  usage_attribution: "📝 Usage & Attribution:"
+  perfect_for: "🎮 Perfect for:"
+  channel_link_template: "🔗 {channel_name}:"
+
+# Usage & Attribution セクションの本文行（チャンネル単位で書き換え可能）。
+usage_attribution_lines:
+  - "• This music is original AI composition"
+  - "• Free to use for personal & commercial projects"
+  - "• Attribution appreciated but not required"
+  - "• Redistribution as-is prohibited"
+
 # テーマ→Perfect for 用途マッピング
 # コレクション名と部分一致したキーの用途リストを採用する。
 # 未マッチ時は config/channel/content.json の descriptions.perfect_for がフォールバック。

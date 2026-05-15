@@ -113,6 +113,7 @@ class BAHMetadataGenerator:
         self.config = load_config()
         self._masterup_config = load_skill_config("masterup")
         self._crossfade_sec = float(self._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
+        self._video_description_config = load_skill_config("video-description")
         self.collection_path = Path(collection_path)
         self.collection_name = self._extract_collection_name()
         self.bit_depth = self.config.content.genre.style
@@ -268,45 +269,17 @@ class BAHMetadataGenerator:
     # ─── タイムスタンプ生成 ─────────────────────────────
 
     def generate_timestamps(self) -> list[dict]:
-        """3ソース対応のタイムスタンプ生成
+        """個別トラックからタイムスタンプ生成
 
-        優先順位:
-        1. 個別トラックがある場合 → analyze_audio_files()
-        2. composition.json がある場合 → phases[].at_min
-        3. いずれもない場合 → 空リスト
+        02-Individual-music/ にトラックがあれば analyze_audio_files() で生成する。
+        なければ空リスト。
         """
-        # 1. 個別トラックがある場合
         audio_dir = self.collection_path / "02-Individual-music"
         if audio_dir.exists() and any(audio_dir.iterdir()):
             tracks = self.analyze_audio_files()
             return [{"timestamp": t["timestamp"], "title": t["title"]} for t in tracks]
 
-        # 2. composition.json がある場合（Lyria DJ 生成）
-        comp_path = self.collection_path / "20-documentation" / "composition.json"
-        if comp_path.exists():
-            return self._timestamps_from_composition(comp_path)
-
         return []
-
-    def _timestamps_from_composition(self, comp_path: Path) -> list[dict]:
-        """composition.json の phases からタイムスタンプを生成"""
-        with open(comp_path, "r", encoding="utf-8") as f:
-            composition = json.load(f)
-
-        timestamps = []
-        for phase in composition.get("phases", []):
-            at_min = phase.get("at_min", 0)
-            at_sec = at_min * 60
-            name = phase.get("name_en", phase.get("name", ""))
-            timestamps.append(
-                {
-                    "timestamp": self._format_timestamp(at_sec),
-                    "title": name,
-                }
-            )
-
-        logger.info(f"composition.json から {len(timestamps)} チャプター生成")
-        return timestamps
 
     def format_timestamps_text(self) -> str:
         """タイムスタンプをYouTube概要欄用テキストに整形"""
@@ -492,6 +465,13 @@ class BAHMetadataGenerator:
             tagline = desc_data.get("tagline", self.config.meta.tagline)
             hashtags = desc_data.get("hashtags", self.config.content.descriptions.hashtag_line)
 
+            section_headers = self._video_description_config.get("section_headers", {})
+            track_list_header = section_headers.get("track_list", "")
+            usage_header = section_headers.get("usage_attribution", "")
+            channel_link_header = section_headers.get("channel_link_template", "🔗 {channel_name}:").format(
+                channel_name=self.config.meta.channel_name
+            )
+
             desc_parts = []
             if opening_poem:
                 desc_parts.append(opening_poem)
@@ -502,13 +482,13 @@ class BAHMetadataGenerator:
                     f"- Vibe : {vibe_line}",
                     f"- Best for : {best_for_line}",
                     "",
-                    "⎯⎯⎯⎯ ✦ Track List ✦ ⎯⎯⎯⎯",
+                    track_list_header,
                     timestamp_body,
                     "",
-                    "📝 Usage & Attribution:",
+                    usage_header,
                     usage_lines,
                     "",
-                    f"🔗 {self.config.meta.channel_name}:",
+                    channel_link_header,
                     cta,
                     tagline,
                     "",
@@ -561,21 +541,26 @@ class BAHMetadataGenerator:
         # config から説明文パーツを構築
         perfect_for_lines = "\n".join(f"• {item}" for item in list(self.config.content.descriptions.perfect_for))
 
+        section_headers = self._video_description_config.get("section_headers", {})
+        usage_header = section_headers.get("usage_attribution", "")
+        perfect_for_header = section_headers.get("perfect_for", "")
+        channel_link_header = section_headers.get("channel_link_template", "🔗 {channel_name}:").format(
+            channel_name=self.config.meta.channel_name
+        )
+        usage_lines_cfg = self._video_description_config.get("usage_attribution_lines", [])
+
         description_parts.extend(
             [
                 "",
                 self.config.content.descriptions.render_opening(),
                 self.config.content.descriptions.sub_opening,
                 "",
-                "📝 Usage & Attribution:",
-                "• This music is original AI composition",
-                "• Free to use for personal & commercial projects",
-                "• Attribution appreciated but not required",
-                "• Redistribution as-is prohibited",
+                usage_header,
+                *usage_lines_cfg,
                 "",
-                f"🎮 Perfect for:\n{perfect_for_lines}",
+                f"{perfect_for_header}\n{perfect_for_lines}",
                 "",
-                f"🔗 {self.config.meta.channel_name}:",
+                channel_link_header,
                 self.config.meta.cta_subscribe,
                 self.config.meta.tagline,
                 "",
