@@ -105,7 +105,7 @@ healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通
 | 配信が始まらない | `journalctl -u youtube-stream -f`（ffmpeg のエラー / stream key 不正 / 動画破損）|
 | `Permission denied (publickey)` | ssh-agent に鍵が登録されていない or 鍵ペアが食い違っている。`ssh-add -l` で確認し、未登録なら `ssh-add ~/.ssh/yt_stream_key`。鍵ペアが対になっていなければ `ssh-keygen -t ed25519 -f ~/.ssh/yt_stream_key` で再生成して `ssh-add` し直す。**`ssh -i` 経由の手動 SSH が通っても判定材料にならない（provisioner は agent 経由）** |
 | `Error: Output refers to sensitive values` | `triggers` を `nonsensitive(sha256(...))` でラップ済みのはず。`main.tf` を確認 |
-| Discord 通知が来ない | `/etc/youtube-stream-healthcheck.env` の `DISCORD_WEBHOOK_URL` を確認 / `bash -x /opt/youtube-stream/bin/healthcheck.sh` で手動実行 |
+| Discord 通知が来ない | `/etc/youtube-stream-healthcheck.env` の `DISCORD_WEBHOOK_URL` を確認 / 実行ログは `journalctl -t youtube-stream-healthcheck --since '15 min ago'` で参照 / 構文だけ確かめたい場合は `bash -n /opt/youtube-stream/bin/healthcheck.sh`（実行されない）。**`bash -x` は trace 出力に `DISCORD_WEBHOOK_URL` が展開されるため使わない。誤って実行した場合も出力をどこにも貼り付けない**（`notify.sh` が `/etc/youtube-stream-healthcheck.env` を `source` してそのまま `curl` するため） |
 | 帯域 80% 超アラート | README §超過時の対応方針（4 Mbps → 3 Mbps 化 / プランアップ）|
 | 1 日のアーカイブが 2 本未満 | `RuntimeMaxSec` 到達前に `failed` した可能性。`journalctl -u youtube-stream --since today` |
 | `Invalid value for variable` (`allowed_ssh_cidr`) で plan が落ちる | `terraform.tfvars` の `allowed_ssh_cidr` が空 `[]`。`curl -s ifconfig.me` で取得した IP を `/32` 付きで 1 件以上記入 |

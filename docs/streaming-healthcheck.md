@@ -30,13 +30,15 @@
 
 ## テストシナリオ
 
-### シナリオ 1: `kill -9` による異常停止
+### シナリオ 1: `pkill` による異常停止
 
 ```bash
 ssh -i ~/.ssh/yt_stream_key root@<instance_ip>
-pgrep -f ffmpeg
-kill -9 <pid>
+# streaming 用 ffmpeg だけを狙い撃ち（コマンドラインに current.mp4 を含むプロセスに限定）
+pkill -KILL -f 'ffmpeg .*current\.mp4'
 ```
+
+`pgrep -f ffmpeg` で列挙 → `kill -9 <pid>` の手順は使わない。文字列 `ffmpeg` を含む別プロセス（手動デバッグ呼び出し等）を巻き込む可能性がある。
 
 期待挙動:
 
