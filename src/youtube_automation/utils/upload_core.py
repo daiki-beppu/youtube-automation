@@ -1,8 +1,8 @@
 """
 YouTube Upload Core - 動画アップロード・サムネイル設定の共通コア機能
 
-YouTubeAutoUploader / VideoUploader 等で重複していたアップロードロジックを
-単一モジュールに集約。各アップローダーはこのクラスを継承または委譲で利用する。
+各アップローダー（``YouTubeAutoUploader`` / ``CollectionUploader`` 等）で重複していた
+アップロードロジックを単一モジュールに集約。継承または委譲で利用する。
 """
 
 import logging

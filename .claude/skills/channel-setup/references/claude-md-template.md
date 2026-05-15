@@ -39,7 +39,7 @@ uv run yt-benchmark-collect --force    # 全チャンネル強制更新
 
 # 動画アップロード
 uv run yt-upload-collection            # コレクション一括アップロード
-uv run yt-video-uploader               # 手動アップロード
+uv run yt-upload-auto                  # planning/ 配下を自動検出して順次アップロード
 ```
 
 **注意**: OAuth 認証で `client_secrets.json` が必要。`auth/` に配置するか `CLIENT_SECRETS_DIR` 環境変数で指定。
