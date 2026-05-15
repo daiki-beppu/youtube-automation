@@ -87,9 +87,7 @@ class TestFetchVideosAnalyticsParallel:
         """動画 meta と Analytics 結果が dict マージされる"""
         videos = [_video_meta("VID_A", "Title A")]
 
-        result = collector._fetch_videos_analytics_parallel(
-            videos, "2026-01-01", "2026-04-01", "test.section"
-        )
+        result = collector._fetch_videos_analytics_parallel(videos, "2026-01-01", "2026-04-01", "test.section")
 
         assert len(result) == 1
         assert result[0]["video_id"] == "VID_A"
@@ -97,9 +95,7 @@ class TestFetchVideosAnalyticsParallel:
         assert result[0]["views"] == 100
         assert result[0]["likes"] == 10
 
-    def test_all_videos_returned_regardless_of_completion_order(
-        self, collector: _StubCollector
-    ) -> None:
+    def test_all_videos_returned_regardless_of_completion_order(self, collector: _StubCollector) -> None:
         """worker の完了順に関わらず全動画が結果に含まれる"""
         videos = [
             _video_meta("VID_A", "A"),
@@ -107,9 +103,7 @@ class TestFetchVideosAnalyticsParallel:
             _video_meta("VID_C", "C"),
         ]
 
-        result = collector._fetch_videos_analytics_parallel(
-            videos, "2026-01-01", "2026-04-01", "test.section"
-        )
+        result = collector._fetch_videos_analytics_parallel(videos, "2026-01-01", "2026-04-01", "test.section")
 
         assert {r["video_id"] for r in result} == {"VID_A", "VID_B", "VID_C"}
 
@@ -125,9 +119,7 @@ class TestFetchVideosAnalyticsParallel:
         ]
 
         with caplog.at_level("ERROR"):
-            result = collector._fetch_videos_analytics_parallel(
-                videos, "2026-01-01", "2026-04-01", "test.section"
-            )
+            result = collector._fetch_videos_analytics_parallel(videos, "2026-01-01", "2026-04-01", "test.section")
 
         returned_ids = {r["video_id"] for r in result}
         assert returned_ids == {"VID_A", "VID_C"}
@@ -135,9 +127,7 @@ class TestFetchVideosAnalyticsParallel:
 
     def test_empty_video_list_returns_empty(self, collector: _StubCollector) -> None:
         """空リスト入力で空リスト返却・get_video_analytics_by_id 呼び出しなし"""
-        result = collector._fetch_videos_analytics_parallel(
-            [], "2026-01-01", "2026-04-01", "test.section"
-        )
+        result = collector._fetch_videos_analytics_parallel([], "2026-01-01", "2026-04-01", "test.section")
 
         assert result == []
         assert collector._call_log == []

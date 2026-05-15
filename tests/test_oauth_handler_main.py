@@ -245,9 +245,7 @@ class TestMainFallbackException:
             oauth_handler.main()
 
         errors = [r for r in caplog.records if r.levelno == logging.ERROR]
-        assert any("CLI 実行中に想定外のエラー" in r.getMessage() for r in errors), (
-            "fallback の error ログが出ていない"
-        )
+        assert any("CLI 実行中に想定外のエラー" in r.getMessage() for r in errors), "fallback の error ログが出ていない"
         assert any(r.exc_info is not None for r in errors), "fallback で traceback (exc_info) が記録されていない"
         for record in caplog.records:
             assert _LEAKY_ACCESS_TOKEN not in record.getMessage()

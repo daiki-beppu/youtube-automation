@@ -86,9 +86,7 @@ def _bench_read_all(size: int) -> Stats:
             for cat in ("image", "video", "audio"):
                 _seed_log(channel_dir / "data" / f"{cat}_costs.json", size)
 
-            return time_calls(
-                cost_tracker.read_all, n=20, warmup=1, name=f"read_all_n{size}"
-            )
+            return time_calls(cost_tracker.read_all, n=20, warmup=1, name=f"read_all_n{size}")
 
 
 def run() -> Sequence[Stats]:

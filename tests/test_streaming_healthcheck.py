@@ -131,9 +131,7 @@ class TestHealthcheckShStructure:
         When healthcheck.sh を探す
         Then 存在する。
         """
-        assert _HEALTHCHECK_SH.exists(), (
-            ".claude/skills/streaming/references/healthcheck.sh が存在しない"
-        )
+        assert _HEALTHCHECK_SH.exists(), ".claude/skills/streaming/references/healthcheck.sh が存在しない"
 
     def test_has_bash_shebang(self):
         """Given healthcheck.sh
@@ -404,9 +402,7 @@ class TestHealthcheckShBehavior:
         proc = self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
         assert proc.returncode == 0
         second_call_size = fake_env["called_marker"].stat().st_size
-        assert second_call_size == first_call_size, (
-            "anomaly → anomaly でも notify が再度呼ばれた（5 分ごと連打）"
-        )
+        assert second_call_size == first_call_size, "anomaly → anomaly でも notify が再度呼ばれた（5 分ごと連打）"
 
     def test_recovered_from_anomaly_calls_notify(self, fake_env):
         """Given 1 回目で anomaly 状態（last_status に "anomaly" が保存される）
@@ -422,14 +418,10 @@ class TestHealthcheckShBehavior:
         # 2 回目: anomaly → ok で recovered 通知
         proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
         assert proc.returncode == 0
-        assert fake_env["called_marker"].exists(), (
-            "anomaly → ok の復帰で notify が呼ばれていない（recovered 通知欠損）"
-        )
+        assert fake_env["called_marker"].exists(), "anomaly → ok の復帰で notify が呼ばれていない（recovered 通知欠損）"
         full_text = fake_env["called_marker"].read_text()
-        new_text = full_text[len(first_text):]
-        assert "recovered" in new_text, (
-            f"recovered メッセージが notify に渡されていない: {new_text!r}"
-        )
+        new_text = full_text[len(first_text) :]
+        assert "recovered" in new_text, f"recovered メッセージが notify に渡されていない: {new_text!r}"
         assert "ok" in new_text, f"recovered メッセージに復帰先 'ok' が含まれない: {new_text!r}"
 
     def test_initial_ok_does_not_call_notify(self, fake_env):
@@ -437,14 +429,10 @@ class TestHealthcheckShBehavior:
         When healthcheck.sh を初回 ok 状態で実行する
         Then notify.sh は呼ばれない（unknown → ok は同種類扱い、initial state confirmation）。
         """
-        assert not (fake_env["state_dir"] / "last_status").exists(), (
-            "前提: last_status が事前に存在してはいけない"
-        )
+        assert not (fake_env["state_dir"] / "last_status").exists(), "前提: last_status が事前に存在してはいけない"
         proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
         assert proc.returncode == 0
-        assert not fake_env["called_marker"].exists(), (
-            "初回 ok で notify が呼ばれた（unknown→ok は無音であるべき）"
-        )
+        assert not fake_env["called_marker"].exists(), "初回 ok で notify が呼ばれた（unknown→ok は無音であるべき）"
 
     def test_state_dir_is_created_if_missing(self, fake_env):
         """Given STATE_DIR が存在しない
@@ -456,9 +444,7 @@ class TestHealthcheckShBehavior:
         assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
         last_status = fake_env["state_dir"] / "last_status"
         assert last_status.exists(), "STATE_DIR/last_status が作成されていない"
-        assert last_status.read_text().strip() == "ok", (
-            f"last_status の内容が想定外: {last_status.read_text()!r}"
-        )
+        assert last_status.read_text().strip() == "ok", f"last_status の内容が想定外: {last_status.read_text()!r}"
 
 
 class TestHealthcheckShOrderIndependentParse:
@@ -491,7 +477,7 @@ class TestHealthcheckShOrderIndependentParse:
         heredoc_body = "\n".join(lines)
         snippet = (
             f'source "{_HEALTHCHECK_SH}"\n'
-            f'parse_systemctl_kv <<EOF\n{heredoc_body}\nEOF\n'
+            f"parse_systemctl_kv <<EOF\n{heredoc_body}\nEOF\n"
             'echo "active=$active"\n'
             'echo "sub=$sub"\n'
             'echo "result=$result"\n'
@@ -547,15 +533,11 @@ class TestHealthcheckShStateChange:
         """
         if not _HEALTHCHECK_SH.exists():
             pytest.skip("healthcheck.sh が未作成のため skip")
-        snippet = (
-            f'source "{_HEALTHCHECK_SH}"\n'
-            f'decide_notification "{prev}" "{current}"\n'
-        )
+        snippet = f'source "{_HEALTHCHECK_SH}"\ndecide_notification "{prev}" "{current}"\n'
         proc = _run_bash(snippet)
         assert proc.returncode == 0, f"decide_notification が non-zero: {proc.stderr}"
         assert proc.stdout.strip() == expected, (
-            f"({prev!r}, {current!r}) の判定が期待値と異なる: "
-            f"got={proc.stdout.strip()!r}, expected={expected!r}"
+            f"({prev!r}, {current!r}) の判定が期待値と異なる: got={proc.stdout.strip()!r}, expected={expected!r}"
         )
 
 
@@ -572,9 +554,7 @@ class TestNotifyShStructure:
         When notify.sh を探す
         Then 存在する。
         """
-        assert _NOTIFY_SH.exists(), (
-            ".claude/skills/streaming/references/notify.sh が存在しない"
-        )
+        assert _NOTIFY_SH.exists(), ".claude/skills/streaming/references/notify.sh が存在しない"
 
     def test_has_bash_shebang(self):
         """Given notify.sh
@@ -619,9 +599,7 @@ class TestNotifyShStructure:
             r'^\s*(?:source|\.)\s+["\']?(?:\$\{?ENV_FILE\}?|/etc/youtube-stream-healthcheck\.env)',
             text,
             flags=re.MULTILINE,
-        ), (
-            "env ファイルを source / . で評価している（改ざん時に root 任意コード実行のリスク）"
-        )
+        ), "env ファイルを source / . で評価している（改ざん時に root 任意コード実行のリスク）"
 
     def test_parses_webhook_with_grep_cut(self):
         """Given notify.sh
@@ -736,11 +714,7 @@ class TestNotifyShEnvParser:
         3 つのパーサ単体テストで共通の snippet 構築 + ``_run_bash`` 呼び出しを集約する
         helper（同ファイル ``_classify`` と同型の責務分離）。env_file 内容のみが差分。
         """
-        snippet = (
-            f'ENV_FILE="{env_file}"\n'
-            f"{self._extract_parser_line()}\n"
-            'printf "%s" "$DISCORD_WEBHOOK_URL"\n'
-        )
+        snippet = f'ENV_FILE="{env_file}"\n{self._extract_parser_line()}\nprintf "%s" "$DISCORD_WEBHOOK_URL"\n'
         return _run_bash(snippet)
 
     def test_parses_valid_webhook(self, tmp_path: Path):
@@ -749,9 +723,7 @@ class TestNotifyShEnvParser:
         Then 値が正しく取り出される。
         """
         env_file = tmp_path / "env"
-        env_file.write_text(
-            "DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123/abc=def\n"
-        )
+        env_file.write_text("DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123/abc=def\n")
         proc = self._run_parser_with_env(env_file)
         assert proc.returncode == 0, f"パーサがエラー終了: stderr={proc.stderr}"
         # cut -d= -f2- が効いて、トークン側の '=' も保持される
@@ -769,9 +741,7 @@ class TestNotifyShEnvParser:
         env_file.write_bytes(b'DISCORD_WEBHOOK_URL="https://example.com/hook"\r\n')
         proc = self._run_parser_with_env(env_file)
         assert proc.returncode == 0
-        assert proc.stdout == "https://example.com/hook", (
-            f"引用符/CR が除去されていない: {proc.stdout!r}"
-        )
+        assert proc.stdout == "https://example.com/hook", f"引用符/CR が除去されていない: {proc.stdout!r}"
 
     def test_does_not_execute_malicious_payload(self, tmp_path: Path):
         """Given env ファイルにコマンド注入が仕込まれている
@@ -784,20 +754,13 @@ class TestNotifyShEnvParser:
         env_file = tmp_path / "env"
         marker = tmp_path / "pwned"
         # source されると `touch <marker>` の戻り値が代入され marker ファイルが作られる
-        env_file.write_text(
-            f"DISCORD_WEBHOOK_URL=$(touch {marker})\n"
-            f"PATH=/tmp/evil:$PATH\n"
-        )
+        env_file.write_text(f"DISCORD_WEBHOOK_URL=$(touch {marker})\nPATH=/tmp/evil:$PATH\n")
         proc = self._run_parser_with_env(env_file)
         assert proc.returncode == 0
         # marker が作られていない = コマンド置換が走っていない
-        assert not marker.exists(), (
-            f"env ファイルのコマンド置換が実行された（脆弱性が残存）: {marker}"
-        )
+        assert not marker.exists(), f"env ファイルのコマンド置換が実行された（脆弱性が残存）: {marker}"
         # 値はリテラル文字列としてそのまま取れる
-        assert proc.stdout == f"$(touch {marker})", (
-            f"値がリテラルとして取れていない: {proc.stdout!r}"
-        )
+        assert proc.stdout == f"$(touch {marker})", f"値がリテラルとして取れていない: {proc.stdout!r}"
 
     def test_full_script_exits_zero_when_webhook_key_missing(self, tmp_path: Path):
         """Given env ファイルに ``DISCORD_WEBHOOK_URL=`` 行が無い
@@ -845,9 +808,7 @@ class TestLogrotateConf:
         When logrotate.conf を探す
         Then 存在する。
         """
-        assert _LOGROTATE_CONF.exists(), (
-            ".claude/skills/streaming/references/logrotate.conf が存在しない"
-        )
+        assert _LOGROTATE_CONF.exists(), ".claude/skills/streaming/references/logrotate.conf が存在しない"
 
     def test_targets_youtube_stream_logs(self):
         """Given logrotate.conf
@@ -895,9 +856,7 @@ class TestCronD:
         When cron.d を探す
         Then 存在する。
         """
-        assert _CRON_D.exists(), (
-            ".claude/skills/streaming/references/cron.d が存在しない"
-        )
+        assert _CRON_D.exists(), ".claude/skills/streaming/references/cron.d が存在しない"
 
     def test_has_5min_schedule_for_healthcheck(self):
         """Given cron.d
@@ -1561,9 +1520,7 @@ class TestStreamingArchiveCheckCli:
                 streaming_archive_check.main()
             except SystemExit:
                 pass
-            assert mock_notify.called, (
-                "--notify-on-shortage を指定しても notify() が呼ばれていない（通知が飛ばない）"
-            )
+            assert mock_notify.called, "--notify-on-shortage を指定しても notify() が呼ばれていない（通知が飛ばない）"
             kwargs = mock_notify.call_args.kwargs
             assert kwargs["content"].startswith("[youtube-stream] アーカイブ不足:"), (
                 f"notify() の content prefix が想定外: {kwargs.get('content')!r}"

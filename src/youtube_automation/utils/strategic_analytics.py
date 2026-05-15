@@ -415,9 +415,7 @@ class StrategicAnalyticsMixin:
         with section(section_label, count=total):
             with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
                 futures = {
-                    executor.submit(
-                        self.get_video_analytics_by_id, video["video_id"], start_date, end_date
-                    ): video
+                    executor.submit(self.get_video_analytics_by_id, video["video_id"], start_date, end_date): video
                     for video in videos
                 }
 

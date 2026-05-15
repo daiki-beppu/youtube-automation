@@ -45,14 +45,9 @@ def notify(*, content: str, webhook_url: str | None) -> None:
 
     parts = urlsplit(webhook_url)
     if parts.scheme != _ALLOWED_SCHEME:
-        raise NotificationError(
-            f"webhook URL must be {_ALLOWED_SCHEME}, got {parts.scheme!r}"
-        )
+        raise NotificationError(f"webhook URL must be {_ALLOWED_SCHEME}, got {parts.scheme!r}")
     if parts.hostname not in _ALLOWED_HOSTS:
-        raise NotificationError(
-            f"webhook host must be one of {sorted(_ALLOWED_HOSTS)}, "
-            f"got {parts.hostname!r}"
-        )
+        raise NotificationError(f"webhook host must be one of {sorted(_ALLOWED_HOSTS)}, got {parts.hostname!r}")
 
     body = json.dumps({"content": content}).encode("utf-8")
     request = urllib.request.Request(

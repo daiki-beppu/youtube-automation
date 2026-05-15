@@ -243,9 +243,7 @@ class TestCollectAnalyticsData:
         system.collector.collect_basic_analytics.return_value = expected_data
         system.collector.get_all_channel_videos.return_value = [{"video_id": "vid_A"}]
         # 内側ブロックで HttpError 発生 → 専用 catch で warning + 続行
-        system.collector.get_video_daily_analytics.side_effect = HttpError(
-            MagicMock(status=403), b"quotaExceeded"
-        )
+        system.collector.get_video_daily_analytics.side_effect = HttpError(MagicMock(status=403), b"quotaExceeded")
 
         with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
             result = system.collect_analytics_data(days=7, save_data=True)
@@ -262,9 +260,7 @@ class TestCollectAnalyticsData:
         外周 HttpError 専用分岐（`YouTubeAPIError.from_http_error` ラップ + logger.exception + None 返却）の検証。
         """
         system.authenticated = True
-        system.collector.collect_basic_analytics.side_effect = HttpError(
-            MagicMock(status=500), b"internalError"
-        )
+        system.collector.collect_basic_analytics.side_effect = HttpError(MagicMock(status=500), b"internalError")
 
         result = system.collect_analytics_data(days=30)
         # fail-stop: None が返る

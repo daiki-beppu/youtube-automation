@@ -897,15 +897,12 @@ class TestSystemdUnitTemplate:
         assert service is not None
         expected = r"^ExecStart=/opt/youtube-stream/bin/run-ffmpeg\.sh\s*$"
         assert re.search(expected, service, flags=re.MULTILINE), (
-            "[Service].ExecStart が /opt/youtube-stream/bin/run-ffmpeg.sh のみを呼ぶ"
-            "ラッパー化形式（#160）と一致しない"
+            "[Service].ExecStart が /opt/youtube-stream/bin/run-ffmpeg.sh のみを呼ぶラッパー化形式（#160）と一致しない"
         )
 
         # ラッパー化の核は unit 行に env 参照 ($RTMP_URL / $VIDEO) を残さないこと。
         # 念のため [Service] セクション内に $RTMP_URL / $VIDEO が現れないことも検証する。
-        exec_lines = [
-            line for line in service.splitlines() if line.lstrip().startswith("ExecStart=")
-        ]
+        exec_lines = [line for line in service.splitlines() if line.lstrip().startswith("ExecStart=")]
         assert exec_lines, "[Service] に ExecStart= 行が無い"
         for line in exec_lines:
             assert "$RTMP_URL" not in line and "${RTMP_URL}" not in line, (
@@ -1599,7 +1596,7 @@ class TestMainTfNullResource:
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         content_pattern = (
-            r'content\s*=\s*templatefile\(\s*'
+            r"content\s*=\s*templatefile\(\s*"
             r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"\s*,\s*\{\s*\}\s*\)'
         )
         destination_pattern = r'destination\s*=\s*"/etc/systemd/system/youtube-stream\.service"'
@@ -3157,8 +3154,7 @@ class TestRunFfmpegScript:
         """
         text = read_file(_RUN_FFMPEG_SCRIPT)
         assert re.search(r"^set\s+-eu(o\s+pipefail)?\b", text, flags=re.MULTILINE), (
-            "run-ffmpeg.sh に `set -eu`（または `set -euo pipefail`）が無い"
-            "（env 欠落でも気付けず argv が壊れる）"
+            "run-ffmpeg.sh に `set -eu`（または `set -euo pipefail`）が無い（env 欠落でも気付けず argv が壊れる）"
         )
 
     def test_script_does_not_source_env_file(self):

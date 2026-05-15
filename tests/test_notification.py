@@ -128,9 +128,7 @@ def test_notify_rejects_http_scheme():
     """
     with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
         with pytest.raises(notification.NotificationError, match="https"):
-            notification.notify(
-                content="x", webhook_url="http://discord.com/api/webhooks/1/x"
-            )
+            notification.notify(content="x", webhook_url="http://discord.com/api/webhooks/1/x")
     mock_open.assert_not_called()
 
 
@@ -152,9 +150,7 @@ def test_notify_rejects_non_discord_host():
     """
     with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
         with pytest.raises(notification.NotificationError, match="host"):
-            notification.notify(
-                content="x", webhook_url="https://evil.com/api/webhooks/1/x"
-            )
+            notification.notify(content="x", webhook_url="https://evil.com/api/webhooks/1/x")
     mock_open.assert_not_called()
 
 
@@ -170,8 +166,6 @@ def test_notify_accepts_discordapp_alias():
         return _fake_urlopen()
 
     with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=fake_open):
-        notification.notify(
-            content="x", webhook_url="https://discordapp.com/api/webhooks/1/x"
-        )
+        notification.notify(content="x", webhook_url="https://discordapp.com/api/webhooks/1/x")
 
     assert captured["url"] == "https://discordapp.com/api/webhooks/1/x"
