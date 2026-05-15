@@ -650,6 +650,26 @@ class TestNotifyShStructure:
             "（|| true / exit 0 / set +e のいずれかで吸収すること）"
         )
 
+    def test_validates_webhook_url_scheme_and_host(self):
+        """Given notify.sh
+        When 全文を読む
+        Then ``^https://(discord\\.com|discordapp\\.com)/api/webhooks/`` の正規表現で
+             webhook URL を検証している（Issue #166 SSRF 防御）。
+
+        secret store 侵害時に file:// / http://169.254.169.254/... へすり替えられる
+        ことを防ぐ。
+        """
+        text = _read(_NOTIFY_SH)
+        # bash の =~ 演算子で上記の正規表現が現れること
+        # `\\.` のバックスラッシュは Python 文字列内で `\\\\\.` だが、ファイル上は `\.`
+        assert re.search(
+            r"=~\s*\^https://\(discord\\\.com\|discordapp\\\.com\)/api/webhooks/",
+            text,
+        ), (
+            "notify.sh に webhook URL スキーム/ホスト検証の正規表現が無い "
+            "（^https://(discord\\.com|discordapp\\.com)/api/webhooks/ を =~ で照合すること）"
+        )
+
 
 # ============================================================================
 # scripts/streaming/logrotate.conf
