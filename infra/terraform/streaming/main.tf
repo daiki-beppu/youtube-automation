@@ -114,6 +114,8 @@ resource "null_resource" "deploy" {
       "chmod 0600 /etc/youtube-stream-healthcheck.env",
       "chown root:root /etc/youtube-stream-healthcheck.env",
       "chmod 0644 /etc/cron.d/youtube-stream-healthcheck /etc/logrotate.d/youtube-stream",
+      # 止血措置として手動 rename された .disabled 残骸を除去（merge 後の cron 自動再開のため）
+      "rm -f /etc/cron.d/youtube-stream-healthcheck.disabled",
       "systemctl daemon-reload",
       "systemctl enable --now youtube-stream",
       "systemctl restart youtube-stream",

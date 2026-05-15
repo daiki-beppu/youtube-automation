@@ -269,8 +269,10 @@ class TestHealthcheckShBehavior:
         """偽 systemctl + 偽 notify.sh を配置した tmp 環境を構築する。
 
         ``systemctl`` は ``ActiveState=...\\nSubState=...\\nResult=...`` を
-        ``--value`` 形式で 3 行出力する偽実装にする。値は環境変数経由で差し替える。
-        ``notify.sh`` は呼ばれたら ``called`` ファイルにメッセージを書き込むだけ。
+        ``KEY=VALUE`` 形式で 3 行出力する偽実装にする（順序非依存パースを反映）。値は環境
+        変数経由で差し替える。``notify.sh`` は呼ばれたら ``called`` ファイルにメッセージを
+        書き込むだけ。``state_dir`` は ``YT_STREAM_STATE_DIR`` で healthcheck.sh に渡し、
+        ``last_status`` ファイルを tmp 配下に閉じ込める。
         """
         if not _HEALTHCHECK_SH.exists():
             pytest.skip("healthcheck.sh が未作成のため skip")
@@ -280,16 +282,19 @@ class TestHealthcheckShBehavior:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        state_dir = tmp_path / "state"
+
         called_marker = tmp_path / "notify_called.log"
 
         # 偽 systemctl（環境変数 FAKE_ACTIVE / FAKE_SUB / FAKE_RESULT を読み出す）
+        # 順序非依存パースに合わせて KEY=VALUE 形式で出力する。
         fake_systemctl = bin_dir / "systemctl"
         fake_systemctl.write_text(
             "#!/usr/bin/env bash\n"
-            "# 偽 systemctl: -p ActiveState -p SubState -p Result --value のとき値を 3 行出力\n"
-            'echo "${FAKE_ACTIVE:-active}"\n'
-            'echo "${FAKE_SUB:-running}"\n'
-            'echo "${FAKE_RESULT:-success}"\n'
+            "# 偽 systemctl: -p ActiveState -p SubState -p Result のとき KEY=VALUE で 3 行出力\n"
+            'echo "ActiveState=${FAKE_ACTIVE:-active}"\n'
+            'echo "SubState=${FAKE_SUB:-running}"\n'
+            'echo "Result=${FAKE_RESULT:-success}"\n'
         )
         fake_systemctl.chmod(0o755)
 
@@ -307,6 +312,7 @@ class TestHealthcheckShBehavior:
             "bin_dir": bin_dir,
             "called_marker": called_marker,
             "healthcheck": shimmed_healthcheck,
+            "state_dir": state_dir,
         }
 
     def _run_with_state(
@@ -324,6 +330,8 @@ class TestHealthcheckShBehavior:
         env["FAKE_ACTIVE"] = active
         env["FAKE_SUB"] = sub
         env["FAKE_RESULT"] = result
+        # last_status を tmp に閉じ込める（本番では /var/lib/youtube-stream/last_status）
+        env["YT_STREAM_STATE_DIR"] = str(fake_env["state_dir"])
         return subprocess.run(
             ["bash", str(fake_env["healthcheck"])],
             capture_output=True,
@@ -376,6 +384,176 @@ class TestHealthcheckShBehavior:
         # メッセージが空でないこと
         called_text = fake_env["called_marker"].read_text()
         assert called_text.strip(), "notify.sh が空メッセージで呼ばれた（Discord 表示が無意味）"
+
+    def test_consecutive_anomaly_does_not_renotify(self, fake_env):
+        """Given 1 回目で anomaly 通知が発火、last_status に "anomaly" が保存された後
+        When 2 回目も anomaly 状態で healthcheck.sh を実行する
+        Then notify.sh は 2 回目では呼ばれない（連打防止）。
+
+        order.md「anomaly → anomaly は無音（連打防止）」要件の core test。
+        """
+        # 1 回目: unknown → anomaly で通知
+        self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
+        assert fake_env["called_marker"].exists(), "1 回目の anomaly で notify が呼ばれていない"
+        first_call_size = fake_env["called_marker"].stat().st_size
+
+        # 2 回目: anomaly → anomaly で無音
+        proc = self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
+        assert proc.returncode == 0
+        second_call_size = fake_env["called_marker"].stat().st_size
+        assert second_call_size == first_call_size, (
+            "anomaly → anomaly でも notify が再度呼ばれた（5 分ごと連打）"
+        )
+
+    def test_recovered_from_anomaly_calls_notify(self, fake_env):
+        """Given 1 回目で anomaly 状態（last_status に "anomaly" が保存される）
+        When 2 回目に ok 状態（active+running+success）で healthcheck.sh を実行する
+        Then notify.sh が呼ばれ、メッセージに "recovered" が含まれる。
+
+        order.md「anomaly → ok/idle/manual の遷移で "recovered: <new>" 通知」要件。
+        """
+        # 1 回目: anomaly
+        self._run_with_state(fake_env, active="failed", sub="failed", result="core-dump")
+        first_text = fake_env["called_marker"].read_text()
+
+        # 2 回目: anomaly → ok で recovered 通知
+        proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
+        assert proc.returncode == 0
+        assert fake_env["called_marker"].exists(), (
+            "anomaly → ok の復帰で notify が呼ばれていない（recovered 通知欠損）"
+        )
+        full_text = fake_env["called_marker"].read_text()
+        new_text = full_text[len(first_text):]
+        assert "recovered" in new_text, (
+            f"recovered メッセージが notify に渡されていない: {new_text!r}"
+        )
+        assert "ok" in new_text, f"recovered メッセージに復帰先 'ok' が含まれない: {new_text!r}"
+
+    def test_initial_ok_does_not_call_notify(self, fake_env):
+        """Given last_status ファイル不在（VPS 再構築直後など）
+        When healthcheck.sh を初回 ok 状態で実行する
+        Then notify.sh は呼ばれない（unknown → ok は同種類扱い、initial state confirmation）。
+        """
+        assert not (fake_env["state_dir"] / "last_status").exists(), (
+            "前提: last_status が事前に存在してはいけない"
+        )
+        proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
+        assert proc.returncode == 0
+        assert not fake_env["called_marker"].exists(), (
+            "初回 ok で notify が呼ばれた（unknown→ok は無音であるべき）"
+        )
+
+    def test_state_dir_is_created_if_missing(self, fake_env):
+        """Given STATE_DIR が存在しない
+        When healthcheck.sh を実行する
+        Then mkdir -p で STATE_DIR が作成され、last_status が書き込まれる。
+        """
+        assert not fake_env["state_dir"].exists(), "前提: state_dir が事前に存在してはいけない"
+        proc = self._run_with_state(fake_env, active="active", sub="running", result="success")
+        assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
+        last_status = fake_env["state_dir"] / "last_status"
+        assert last_status.exists(), "STATE_DIR/last_status が作成されていない"
+        assert last_status.read_text().strip() == "ok", (
+            f"last_status の内容が想定外: {last_status.read_text()!r}"
+        )
+
+
+class TestHealthcheckShOrderIndependentParse:
+    """``parse_systemctl_kv`` 関数の順序非依存性。
+
+    `systemctl show ... --value` の引数順序非保証バグの真因に対する単体検証。
+    全 6 順列（3! = 6）を網羅し、どの順序でも ActiveState/SubState/Result が
+    正しい変数に割り当てられることを担保する。
+    """
+
+    @pytest.mark.parametrize(
+        "lines",
+        [
+            ("ActiveState=active", "SubState=running", "Result=success"),
+            ("ActiveState=active", "Result=success", "SubState=running"),
+            ("SubState=running", "ActiveState=active", "Result=success"),
+            ("SubState=running", "Result=success", "ActiveState=active"),
+            ("Result=success", "ActiveState=active", "SubState=running"),
+            ("Result=success", "SubState=running", "ActiveState=active"),
+        ],
+    )
+    def test_parses_kv_regardless_of_line_order(self, lines: tuple[str, str, str]):
+        """Given KEY=VALUE 形式の 3 行（順序は任意）
+        When parse_systemctl_kv を呼ぶ
+        Then active=active, sub=running, result=success が呼び出し元 scope にセットされる。
+        """
+        if not _HEALTHCHECK_SH.exists():
+            pytest.skip("healthcheck.sh が未作成のため skip")
+        # heredoc に行を流し込んで parse_systemctl_kv を呼び、結果を 3 行 echo する
+        heredoc_body = "\n".join(lines)
+        snippet = (
+            f'source "{_HEALTHCHECK_SH}"\n'
+            f'parse_systemctl_kv <<EOF\n{heredoc_body}\nEOF\n'
+            'echo "active=$active"\n'
+            'echo "sub=$sub"\n'
+            'echo "result=$result"\n'
+        )
+        proc = _run_bash(snippet)
+        assert proc.returncode == 0, f"parse_systemctl_kv が non-zero: {proc.stderr}"
+        out = proc.stdout
+        assert "active=active" in out, f"active が正しく束ねられていない: {out!r}"
+        assert "sub=running" in out, f"sub が正しく束ねられていない: {out!r}"
+        assert "result=success" in out, f"result が正しく束ねられていない: {out!r}"
+
+
+class TestHealthcheckShStateChange:
+    """``decide_notification`` 関数の遷移判定（state-change ロジック）。
+
+    order.md 遷移表:
+      prev\\current | ok/idle/manual | anomaly
+      -------------|----------------|--------
+      unknown      | ""             | anomaly
+      ok/idle/manual | ""           | anomaly
+      anomaly      | recovered      | ""
+    """
+
+    @pytest.mark.parametrize(
+        "prev,current,expected",
+        [
+            # 初回（last_status 不在）
+            ("unknown", "ok", ""),
+            ("unknown", "anomaly", "anomaly"),
+            # 同種類の連続は無音
+            ("ok", "ok", ""),
+            ("idle", "idle", ""),
+            ("manual", "manual", ""),
+            # ok/idle/manual 間の遷移も無音（同 "正常" カテゴリ）
+            ("ok", "idle", ""),
+            ("manual", "ok", ""),
+            # → anomaly は通知
+            ("ok", "anomaly", "anomaly"),
+            ("idle", "anomaly", "anomaly"),
+            ("manual", "anomaly", "anomaly"),
+            # anomaly → 正常系は recovered
+            ("anomaly", "ok", "recovered"),
+            ("anomaly", "idle", "recovered"),
+            ("anomaly", "manual", "recovered"),
+            # anomaly 連打抑止
+            ("anomaly", "anomaly", ""),
+        ],
+    )
+    def test_decide_notification(self, prev: str, current: str, expected: str):
+        """Given (prev, current) の組み合わせ
+        When decide_notification を呼ぶ
+        Then 期待アクション（""/"anomaly"/"recovered"）を 1 行 echo する。
+        """
+        if not _HEALTHCHECK_SH.exists():
+            pytest.skip("healthcheck.sh が未作成のため skip")
+        snippet = (
+            f'source "{_HEALTHCHECK_SH}"\n'
+            f'decide_notification "{prev}" "{current}"\n'
+        )
+        proc = _run_bash(snippet)
+        assert proc.returncode == 0, f"decide_notification が non-zero: {proc.stderr}"
+        assert proc.stdout.strip() == expected, (
+            f"({prev!r}, {current!r}) の判定が期待値と異なる: "
+            f"got={proc.stdout.strip()!r}, expected={expected!r}"
+        )
 
 
 # ============================================================================
