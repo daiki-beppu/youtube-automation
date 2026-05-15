@@ -38,6 +38,7 @@ from youtube_automation.utils.benchmark_analyzer import (  # noqa: E402
 from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
+from youtube_automation.utils.profile import section
 from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
@@ -102,14 +103,15 @@ class BenchmarkCollector:
         min_views = self.benchmark_config.get("min_views", 10000)
 
         # チャンネル概要
-        ch_resp = (
-            self.youtube.channels()
-            .list(
-                part="snippet,statistics,contentDetails",
-                id=channel_id,
+        with section("benchmark.channels_list", batch_size=1):
+            ch_resp = (
+                self.youtube.channels()
+                .list(
+                    part="snippet,statistics,contentDetails",
+                    id=channel_id,
+                )
+                .execute()
             )
-            .execute()
-        )
 
         if not ch_resp.get("items"):
             logger.error("チャンネルが見つかりません: %s", channel_id)
@@ -135,16 +137,17 @@ class BenchmarkCollector:
         page_token: str | None = None
         remaining = scan_recent
         while remaining > 0:
-            playlist_resp = (
-                self.youtube.playlistItems()
-                .list(
-                    part="contentDetails",
-                    playlistId=uploads_playlist_id,
-                    maxResults=min(50, remaining),
-                    pageToken=page_token,
+            with section("benchmark.playlist_items", page_size=min(50, remaining)):
+                playlist_resp = (
+                    self.youtube.playlistItems()
+                    .list(
+                        part="contentDetails",
+                        playlistId=uploads_playlist_id,
+                        maxResults=min(50, remaining),
+                        pageToken=page_token,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
             batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
             video_ids.extend(batch_ids)
             page_token = playlist_resp.get("nextPageToken")
@@ -167,14 +170,16 @@ class BenchmarkCollector:
         # 動画詳細取得（50件単位でバッチ）
         raw_videos: list[dict] = []
         for i in range(0, len(video_ids), 50):
-            videos_resp = (
-                self.youtube.videos()
-                .list(
-                    part="snippet,statistics,contentDetails",
-                    id=",".join(video_ids[i : i + 50]),
+            batch = video_ids[i : i + 50]
+            with section("benchmark.videos_list", batch_size=len(batch)):
+                videos_resp = (
+                    self.youtube.videos()
+                    .list(
+                        part="snippet,statistics,contentDetails",
+                        id=",".join(batch),
+                    )
+                    .execute()
                 )
-                .execute()
-            )
 
             for video in videos_resp.get("items", []):
                 snippet = video["snippet"]

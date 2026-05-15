@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Dict, List
 
 from googleapiclient.errors import HttpError
 
+from youtube_automation.utils.profile import section
+
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
 
@@ -250,21 +252,23 @@ class StrategicAnalyticsMixin:
 
         # Step 2: 各動画のAnalyticsデータを取得
         videos_data = []
-        for i, video in enumerate(all_videos, 1):
-            logger.info(f"[{i}/{len(all_videos)}] {video['title'][:50]}...")
+        with section("strategic_analytics.all_videos_loop", count=len(all_videos)):
+            for i, video in enumerate(all_videos, 1):
+                logger.info(f"[{i}/{len(all_videos)}] {video['title'][:50]}...")
 
-            analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
+                with section("strategic_analytics.get_video_analytics_by_id"):
+                    analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
 
-            # 動画情報とAnalyticsデータを結合
-            combined_data = {
-                **video,  # title, published_at, description
-                **analytics_data,  # views, estimated_minutes_watched, average_view_duration
-            }
-            videos_data.append(combined_data)
+                # 動画情報とAnalyticsデータを結合
+                combined_data = {
+                    **video,  # title, published_at, description
+                    **analytics_data,  # views, estimated_minutes_watched, average_view_duration
+                }
+                videos_data.append(combined_data)
 
-            # 進行状況表示（10件ごと）
-            if i % 10 == 0:
-                logger.info(f"{i}本完了...")
+                # 進行状況表示（10件ごと）
+                if i % 10 == 0:
+                    logger.info(f"{i}本完了...")
 
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
@@ -383,14 +387,16 @@ class StrategicAnalyticsMixin:
 
         # 各動画のAnalyticsデータを取得
         videos_data = []
-        for i, video in enumerate(recent_videos, 1):
-            logger.info(f"[{i}/{len(recent_videos)}] {video['title'][:50]}...")
+        with section("strategic_analytics.recent_videos_loop", count=len(recent_videos)):
+            for i, video in enumerate(recent_videos, 1):
+                logger.info(f"[{i}/{len(recent_videos)}] {video['title'][:50]}...")
 
-            analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
+                with section("strategic_analytics.get_video_analytics_by_id"):
+                    analytics_data = self.get_video_analytics_by_id(video["video_id"], start_date, end_date)
 
-            # 動画情報とAnalyticsデータを結合
-            combined_data = {**video, **analytics_data}
-            videos_data.append(combined_data)
+                # 動画情報とAnalyticsデータを結合
+                combined_data = {**video, **analytics_data}
+                videos_data.append(combined_data)
 
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)

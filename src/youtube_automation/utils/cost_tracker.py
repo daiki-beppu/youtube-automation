@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Literal
 
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.profile import section
 
 Category = Literal["image", "video", "audio"]
 
@@ -257,12 +258,14 @@ def log_generation(
         path = _log_path(category)
         path.parent.mkdir(parents=True, exist_ok=True)
         with _file_lock(path):
-            entries = _read_entries(path)
+            with section("cost_tracker.read", category=category):
+                entries = _read_entries(path)
             entries.append(entry)
-            path.write_text(
-                json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
+            with section("cost_tracker.write", category=category, count=len(entries)):
+                path.write_text(
+                    json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
     except Exception as e:
         print(f"  [Warn]   コストログ書き込み失敗 ({category}): {e}")
         return None

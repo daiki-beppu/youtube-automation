@@ -37,3 +37,6 @@ terraform.tfvars
 *.tfstate
 *.tfstate.*
 .terraform/
+
+# Bench results（perf #131 計測フェーズ）
+bench/results/
