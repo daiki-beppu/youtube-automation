@@ -11,7 +11,7 @@
 ``resolve_cost_per_image``、PNG/JPEG の保存と YouTube サムネ 2MB 上限対応の
 ``persist_image`` をここに集約する。
 
-CLI 共通ヘルパー（``generate_image`` / ``generate_thumbnail`` の重複解消）:
+CLI 共通ヘルパー（``generate_image`` の出力上書き分岐 / 参照画像解決を集約）:
 - ``prompt_overwrite_or_rename``: 既存出力ファイル検出時の上書き確認 / -vN 採番
 - ``resolve_reference_paths``: 参照画像パス文字列を絶対 ``Path`` に解決
 """

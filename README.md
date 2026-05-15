@@ -2,6 +2,8 @@
 
 YouTube チャンネル運営を自動化するツールキット。Analytics データ収集、AI コンテンツ生成、動画アップロード、メタデータ管理をまとめて提供します。
 
+> **新規利用者の方へ**: セットアップ手順は [`ONBOARDING.md`](ONBOARDING.md) を参照してください。
+
 ## Features
 
 - **Analytics 収集・分析** - YouTube Analytics API からデータを自動収集し、CTR・エンゲージメント分析レポートを生成
@@ -205,9 +207,9 @@ uv run ruff check .
 |---------|-------------|
 | `yt-skills` | Claude Code スキルの sync / list / diff |
 | `yt-analytics` | Analytics データ収集 |
-| `yt-generate-image` | Gemini API で画像生成 |
-| `yt-generate-thumbnail` | コレクションサムネイル生成 |
-| `yt-generate-music` / `yt-generate-music-dj` | Lyria 音楽生成 |
+| `yt-generate-image` | Gemini / OpenAI で画像生成（サムネイル兼用） |
+| `yt-generate-lyria-master` | Lyria 3 で N セグメント生成 + クロスフェード結合してマスター音源を作成 |
+| `yt-generate-master` | 個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を作成 |
 | `yt-generate-suno` | Suno プロンプト生成 |
 | `yt-generate-loop-video` | Veo ループ動画生成 |
 | `yt-init-collection` | 新規コレクションの雛形作成 |
@@ -218,7 +220,6 @@ uv run ruff check .
 | `yt-video-analyze` | Gemini で YouTube 動画を直接解析（フック構造・BGM 展開・シーン・サムネ整合性・編集指標） |
 | `yt-channel-status` | チャンネル最新状況 |
 | `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
-| `yt-video-uploader` | 動画アップロード補助 |
 
 完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
 

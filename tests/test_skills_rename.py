@@ -182,8 +182,7 @@ def test_renamed_skill_md_front_matter_name_matches_new(old_name: str, new_name:
     skill_md = _SKILLS_DIR / new_name / "SKILL.md"
     if not skill_md.exists():
         pytest.fail(
-            f"{skill_md.relative_to(_REPO_ROOT)} が存在しない。"
-            f" 先に test_new_skill_directory_has_skill_md を満たすこと"
+            f"{skill_md.relative_to(_REPO_ROOT)} が存在しない。 先に test_new_skill_directory_has_skill_md を満たすこと"
         )
     actual = _front_matter_name(skill_md)
     assert actual == new_name, (
@@ -208,12 +207,8 @@ def test_all_skill_md_name_matches_parent_dir() -> None:
         dir_name = skill_md.parent.name
         actual = _front_matter_name(skill_md)
         if actual != dir_name:
-            mismatches.append(
-                f"{skill_md.relative_to(_REPO_ROOT)}: dir=`{dir_name}` vs name=`{actual}`"
-            )
-    assert mismatches == [], "front-matter `name:` が親ディレクトリ名と不一致:\n  " + "\n  ".join(
-        mismatches
-    )
+            mismatches.append(f"{skill_md.relative_to(_REPO_ROOT)}: dir=`{dir_name}` vs name=`{actual}`")
+    assert mismatches == [], "front-matter `name:` が親ディレクトリ名と不一致:\n  " + "\n  ".join(mismatches)
 
 
 # ---------- `.claude/skills/**/*.md` に旧スラッシュコマンド参照が残っていないか ----------
@@ -364,6 +359,4 @@ def test_audit_document_lists_all_eight_renames() -> None:
         # 「`old` → `new`」 / 「old → new」 / table cell `| old | new |` のいずれかにマッチ
         if old not in text or new not in text:
             missing.append(f"{old} -> {new}")
-    assert missing == [], (
-        "監査ドキュメントに rename マッピング記載が不足:\n  " + "\n  ".join(missing)
-    )
+    assert missing == [], "監査ドキュメントに rename マッピング記載が不足:\n  " + "\n  ".join(missing)

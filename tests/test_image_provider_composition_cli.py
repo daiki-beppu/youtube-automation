@@ -1,14 +1,13 @@
 """``image_provider.composition`` の CLI 共通ヘルパーの回帰テスト。
 
-このファイルは ``generate_image.py`` / ``generate_thumbnail.py`` の重複ロジック
-（出力上書き確認 + ``-vN`` 採番、参照画像パス解決）を ``composition.py`` の
-ヘルパーに集約した経路を回帰防止する。
+このファイルは ``generate_image.py`` の出力上書き確認 + ``-vN`` 採番、
+参照画像パス解決を ``composition.py`` のヘルパーに集約した経路を回帰防止する。
 
 family_tag: dry-violation
 - ARCH-NEW-scripts-overwrite-prompt-DRY-L141 → ``prompt_overwrite_or_rename``
 - ARCH-NEW-scripts-reference-resolution-DRY-L161 → ``resolve_reference_paths``
 
-両 CLI が同じ helper を使っていることを保証するため、import 経路の存在も検査する。
+CLI が同じ helper を使っていることを保証するため、import 経路の存在も検査する。
 """
 
 from __future__ import annotations
@@ -145,36 +144,35 @@ class TestResolveReferencePaths:
 
 
 class TestCliHelperShared:
-    """両 CLI が同じ helper 経路を import していることの構造的回帰防止。
+    """``generate_image.py`` が helper 経路を import していることの構造的回帰防止。
 
-    再発（3 箇所目の verbatim 重複）を構造的に防ぐため、
-    両 script ソースに ``prompt_overwrite_or_rename`` / ``resolve_reference_paths``
+    verbatim 重複（旧 inline ブロック）の再導入を構造的に防ぐため、
+    script ソースに ``prompt_overwrite_or_rename`` / ``resolve_reference_paths``
     が import されていることを直接検査する。
     """
 
-    def _read_script(self, name: str) -> str:
-        path = Path(__file__).resolve().parent.parent / "src" / "youtube_automation" / "scripts" / name
+    SCRIPT_NAME = "generate_image.py"
+
+    def _read_script(self) -> str:
+        path = Path(__file__).resolve().parent.parent / "src" / "youtube_automation" / "scripts" / self.SCRIPT_NAME
         return path.read_text(encoding="utf-8")
 
-    @pytest.mark.parametrize("script_name", ["generate_image.py", "generate_thumbnail.py"])
-    def test_scripts_import_shared_helpers(self, script_name: str):
-        src = self._read_script(script_name)
+    def test_script_imports_shared_helpers(self):
+        src = self._read_script()
         assert "prompt_overwrite_or_rename" in src, (
-            f"{script_name} が prompt_overwrite_or_rename を経由していない（DRY 違反の再発）"
+            f"{self.SCRIPT_NAME} が prompt_overwrite_or_rename を経由していない（DRY 違反の再発）"
         )
         assert "resolve_reference_paths" in src, (
-            f"{script_name} が resolve_reference_paths を経由していない（DRY 違反の再発）"
+            f"{self.SCRIPT_NAME} が resolve_reference_paths を経由していない（DRY 違反の再発）"
         )
 
-    @pytest.mark.parametrize("script_name", ["generate_image.py", "generate_thumbnail.py"])
-    def test_scripts_do_not_inline_overwrite_prompt(self, script_name: str):
+    def test_script_does_not_inline_overwrite_prompt(self):
         """インラインの 16 行ブロック特徴語が残っていないこと（再発検知）。"""
-        src = self._read_script(script_name)
+        src = self._read_script()
         # 元の重複ブロック特有の連続フレーズ
-        assert "上書きしますか? (y/N):" not in src, f"{script_name} に旧 inline overwrite prompt が再発している"
+        assert "上書きしますか? (y/N):" not in src, f"{self.SCRIPT_NAME} に旧 inline overwrite prompt が再発している"
 
-    @pytest.mark.parametrize("script_name", ["generate_image.py", "generate_thumbnail.py"])
-    def test_scripts_do_not_inline_reference_loop(self, script_name: str):
+    def test_script_does_not_inline_reference_loop(self):
         """インラインの参照画像存在チェック特徴語が残っていないこと（再発検知）。"""
-        src = self._read_script(script_name)
-        assert "参照画像が見つかりません" not in src, f"{script_name} に旧 inline 参照画像チェックが再発している"
+        src = self._read_script()
+        assert "参照画像が見つかりません" not in src, f"{self.SCRIPT_NAME} に旧 inline 参照画像チェックが再発している"
