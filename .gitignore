@@ -36,4 +36,5 @@ tests/fixtures/sample_channel/data/
 terraform.tfvars
 *.tfstate
 *.tfstate.*
+*.tfplan
 .terraform/

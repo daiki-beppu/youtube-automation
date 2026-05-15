@@ -15,16 +15,8 @@ from youtube_automation.scripts.generate_suno_prompts import generate, main
 from youtube_automation.utils import skill_config
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
-_DEFAULT_YAML = (
-    Path(__file__).resolve().parents[1]
-    / ".claude"
-    / "skills"
-    / "suno"
-    / "config.default.yaml"
-)
-_SKILL_MD = (
-    Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
-)
+_DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
+_SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
 
 
 @pytest.fixture
@@ -63,9 +55,7 @@ def _write_minimal_patterns(dir_: Path) -> Path:
 
 def _write_suno_override(channel: Path, **overrides) -> None:
     """channel 側の config/skills/suno.yaml を生成する."""
-    (channel / "config" / "skills" / "suno.yaml").write_text(
-        yaml.safe_dump(overrides), encoding="utf-8"
-    )
+    (channel / "config" / "skills" / "suno.yaml").write_text(yaml.safe_dump(overrides), encoding="utf-8")
 
 
 def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
@@ -89,8 +79,7 @@ def test_default_yaml_does_not_define_duration_prompt():
     """同梱の config.default.yaml に duration_prompt キーが存在しないこと."""
     data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
     assert "duration_prompt" not in data, (
-        "duration_prompt は issue #128 で完全削除された。"
-        "default.yaml から該当行を削除すること。"
+        "duration_prompt は issue #128 で完全削除された。default.yaml から該当行を削除すること。"
     )
 
 
@@ -123,14 +112,11 @@ def test_generate_styles_block_has_only_tempo_and_style(channel_dir, tmp_path):
     expected_style_line = f"slow, {genre},"
     lines = output.splitlines()
     assert expected_style_line in lines, (
-        f"Styles 行が想定形式になっていない (完全一致なし). "
-        f"expected line: `{expected_style_line}`"
+        f"Styles 行が想定形式になっていない (完全一致なし). expected line: `{expected_style_line}`"
     )
 
 
-def test_generate_ignores_legacy_duration_prompt_in_channel_override(
-    channel_dir, tmp_path
-):
+def test_generate_ignores_legacy_duration_prompt_in_channel_override(channel_dir, tmp_path):
     """チャンネル override に旧 `duration_prompt` キーが残っていても出力に影響しないこと.
 
     削除前のコードを参照しているチャンネル (rain-jazz-night など) は、暫定対応で
@@ -180,8 +166,7 @@ def test_generate_styles_block_no_trailing_duration_token(channel_dir, tmp_path)
     assert tokens[-1] == "", "末尾カンマ仕様 (`...,` で終わる) が壊れている"
     non_empty = [t for t in tokens if t]
     assert len(non_empty) == 2, (
-        f"Styles 1 行目は tempo + style の 2 要素のみ。"
-        f"duration_prompt 残骸の可能性: {non_empty!r}"
+        f"Styles 1 行目は tempo + style の 2 要素のみ。duration_prompt 残骸の可能性: {non_empty!r}"
     )
 
 
@@ -212,10 +197,7 @@ def test_skill_md_describes_extend_for_length_control():
     text = _SKILL_MD.read_text(encoding="utf-8")
 
     # Extend による延長が長さ調整の手段として案内されていること
-    assert "Extend" in text, (
-        "SKILL.md に Extend (Suno の延長機能) の記述が無い。"
-        "曲が短いときの対処として明記すること。"
-    )
+    assert "Extend" in text, "SKILL.md に Extend (Suno の延長機能) の記述が無い。曲が短いときの対処として明記すること。"
 
     # 旧誤記が削除されていること: V5 で Styles 経由の時間指定が効くという表現
     forbidden_phrases = (
@@ -253,9 +235,7 @@ def test_skill_md_warns_about_genre_line_exclude_styles_conflict():
     # 見出しから次の見出しまでをガイド本体として切り出して両概念名の存在を検査する
     after_heading = text.split(heading, 1)[1]
     next_heading_idx = after_heading.find("\n#")
-    section_body = (
-        after_heading if next_heading_idx == -1 else after_heading[:next_heading_idx]
-    )
+    section_body = after_heading if next_heading_idx == -1 else after_heading[:next_heading_idx]
     for term in ("genre_line", "exclude_styles"):
         assert term in section_body, (
             f"`{heading}` 節に `{term}` への言及がない。"

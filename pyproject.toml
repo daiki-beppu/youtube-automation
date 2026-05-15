@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-channels-automation"
-version = "5.4.0"
+version = "5.5.0"
 description = "YouTube channel automation toolkit - analytics, AI content generation, and auto-upload"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -48,14 +48,13 @@ yt-config-migrate = "youtube_automation.cli.config_migrate:main"
 yt-cost-report = "youtube_automation.cli.cost_report:main"
 yt-discover-competitors = "youtube_automation.scripts.discover_competitors:main"
 yt-fetch-stream-key = "youtube_automation.scripts.fetch_stream_key:main"
+yt-finalize-master = "youtube_automation.scripts.finalize_master:main"
 yt-fix-timestamps = "youtube_automation.scripts.fix_per_theme_timestamps:main"
 yt-generate-image = "youtube_automation.scripts.generate_image:main"
 yt-generate-loop-video = "youtube_automation.scripts.generate_loop_video:main"
+yt-generate-lyria-master = "youtube_automation.scripts.generate_lyria_master:main"
 yt-generate-master = "youtube_automation.scripts.generate_master:main"
-yt-generate-music = "youtube_automation.scripts.generate_music:main"
-yt-generate-music-dj = "youtube_automation.scripts.generate_music_dj:main"
 yt-generate-suno = "youtube_automation.scripts.generate_suno_prompts:main"
-yt-generate-thumbnail = "youtube_automation.scripts.generate_thumbnail:main"
 yt-init-collection = "youtube_automation.scripts.init_collection:main"
 yt-launch-curve = "youtube_automation.scripts.launch_curve:main"
 yt-metadata-audit = "youtube_automation.scripts.metadata_audit:main"
@@ -68,7 +67,6 @@ yt-theme-compare = "youtube_automation.scripts.theme_compare:main"
 yt-thumbnail-compare = "youtube_automation.scripts.compare_thumbnails:main"
 yt-thumbnail-correlate = "youtube_automation.scripts.thumbnail_correlate:main"
 yt-video-analyze = "youtube_automation.scripts.video_analyze:main"
-yt-video-uploader = "youtube_automation.scripts.video_uploader:main"
 
 # Agent entry points
 yt-upload-auto = "youtube_automation.agents.youtube_auto_uploader:main"
@@ -84,6 +82,9 @@ packages = ["src/youtube_automation"]
 # Claude Code スキルファイルをパッケージ内 _skills/ として同梱
 # (yt-skills sync --asset skills が importlib.resources で参照する)
 ".claude/skills" = "youtube_automation/_skills"
+# BGM チャンネル運営方針テンプレ (CLAUDE.md) を _claude_md/ として同梱
+# (yt-skills sync --asset claude-md が importlib.resources で参照する)
+".claude/CLAUDE.template.md" = "youtube_automation/_claude_md/CLAUDE.template.md"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 
@@ -92,6 +93,7 @@ include = [
     "src/",
     "tests/",
     ".claude/skills/",
+    ".claude/CLAUDE.template.md",
     "scripts/",
     "auth/SETUP.md",
     "auth/client_secrets_template.json",

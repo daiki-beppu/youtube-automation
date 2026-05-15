@@ -25,8 +25,8 @@ description: Use when 各コレクションの音楽ムード × サムネイル
 **Agent 1: コレクション × サムネ × 音楽プロンプト収集**
 - `collections/live/` の全コレクションを列挙
 - 各コレクションから以下を読み込み:
-  - `workflow-state.json` — タイトル、テーマ、活動タグ
-  - `20-documentation/suno-prompts.md` or `composition.json` — 音楽ムード・楽器・テンポ
+  - `workflow-state.json` — タイトル、テーマ、活動タグ。`planning.music`（mood / atmosphere / tempo / instruments）があれば優先採用
+  - `20-documentation/suno-prompts.md` or `lyria-prompt.md` — 音楽ムード・楽器・テンポの補助資料
 - コレクションごとの [タイトル / 音楽ムード / テーマ] を一覧表にまとめる
 
 **Agent 2: ベンチマークタイトル構造分析**
