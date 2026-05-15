@@ -44,6 +44,9 @@ from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+# channels.list バッチ単位（YouTube Data API 上限）
+_CHANNELS_BATCH_SIZE = 50
+
 
 class BenchmarkCollector:
     """競合チャンネルのベンチマークデータ収集（YouTube Data API）"""
@@ -89,35 +92,53 @@ class BenchmarkCollector:
 
         return stale_channels
 
-    def collect_channel(self, channel_info: dict) -> dict:
+    def _fetch_channels_metadata(self, channel_infos: list[dict]) -> dict[str, dict]:
+        """`channels.list` を `_CHANNELS_BATCH_SIZE` 件単位でバッチ呼び出しし、`{channel_id: item}` を返す。
+
+        Args:
+            channel_infos: `benchmark.channels` 相当のリスト（各要素に `id` を含む）
+
+        Returns:
+            channel_id をキーとした API レスポンス item の辞書。
+            削除済み等で API レスポンスに含まれない channel_id はキーに現れない。
+        """
+        channel_ids = [ch["id"] for ch in channel_infos]
+        items_by_id: dict[str, dict] = {}
+        for i in range(0, len(channel_ids), _CHANNELS_BATCH_SIZE):
+            batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
+            with section("benchmark.channels_list", batch_size=len(batch)):
+                resp = (
+                    self.youtube.channels()
+                    .list(
+                        part="snippet,statistics,contentDetails",
+                        id=",".join(batch),
+                    )
+                    .execute()
+                )
+            for item in resp.get("items", []):
+                items_by_id[item["id"]] = item
+        return items_by_id
+
+    def collect_channel(self, channel_info: dict, ch_item: dict) -> dict:
         """1チャンネル分のデータを YouTube Data API で収集する。
 
         Args:
             channel_info: benchmark.channels の1要素
+            ch_item: `_fetch_channels_metadata` から渡される該当チャンネルの
+                `channels.list` レスポンス item。チャンネルが見つからなければ空辞書
 
         Returns:
-            チャンネルデータ辞書（概要 + 動画リスト + 派生指標）
+            チャンネルデータ辞書（概要 + 動画リスト + 派生指標）。
+            `ch_item` が空のときは空辞書を返す
         """
         channel_id = channel_info["id"]
         scan_recent = self.benchmark_config.get("scan_recent", 50)
         min_views = self.benchmark_config.get("min_views", 10000)
 
-        # チャンネル概要
-        with section("benchmark.channels_list", batch_size=1):
-            ch_resp = (
-                self.youtube.channels()
-                .list(
-                    part="snippet,statistics,contentDetails",
-                    id=channel_id,
-                )
-                .execute()
-            )
-
-        if not ch_resp.get("items"):
+        if not ch_item:
             logger.error("チャンネルが見つかりません: %s", channel_id)
             return {}
 
-        ch_item = ch_resp["items"][0]
         uploads_playlist_id = ch_item["contentDetails"]["relatedPlaylists"]["uploads"]
 
         channel_data = {
@@ -273,10 +294,12 @@ class BenchmarkCollector:
             logger.info("更新が必要なチャンネルはありません")
             return {"channels": [], "collected_at": self.today.isoformat(), "skipped": True}
 
+        ch_items = self._fetch_channels_metadata(targets)
+
         results = []
         for ch in targets:
             logger.info("収集中: %s (%s)", ch["name"], ch["id"])
-            data = self.collect_channel(ch)
+            data = self.collect_channel(ch, ch_items.get(ch["id"], {}))
             if data:
                 results.append(data)
 
