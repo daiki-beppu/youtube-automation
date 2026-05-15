@@ -11,12 +11,11 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 ## 前提
 
-以下の 2 つが揃っていること:
+`config/channel/` が存在すること（`load_config()` でロード可能）。
 
-1. `config/channel/` が存在する（`load_config()` でロード可能）
-2. `config/skills/thumbnail.yaml` が存在する（配布された `.claude/skills/thumbnail/config.default.yaml` をベースにチャンネルでカスタマイズ）
+`config/skills/thumbnail.yaml` はオプション。`yt-skills sync` で配布される `config.default.yaml` がそのまま使われるため、default 動作で問題なければ作成不要。カスタマイズしたい場合のみ `config.default.yaml` をコピーして `config/skills/thumbnail.yaml` に置き、必要な値だけ上書きする（deep-merge される）。
 
-いずれか不足する場合、ユーザーに確認:
+`config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
 

@@ -1,5 +1,5 @@
 locals {
-  scripts_dir = "${path.module}/../../../scripts/streaming"
+  scripts_dir = "${path.module}/../../../.claude/skills/streaming/references"
 }
 
 resource "vultr_ssh_key" "this" {
@@ -33,9 +33,7 @@ resource "vultr_instance" "this" {
 
   ssh_key_ids = [vultr_ssh_key.this.id]
 
-  user_data = templatefile("${path.module}/cloud-init.yaml", {
-    systemd_unit = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})
-  })
+  user_data = templatefile("${path.module}/cloud-init.yaml", {})
 }
 
 resource "null_resource" "deploy" {
@@ -50,6 +48,8 @@ resource "null_resource" "deploy" {
     notify_sh       = filemd5("${local.scripts_dir}/notify.sh")
     logrotate_conf  = filemd5("${local.scripts_dir}/logrotate.conf")
     cron_d          = filemd5("${local.scripts_dir}/cron.d")
+    systemd_unit    = filemd5("${path.module}/templates/youtube-stream.service.tftpl")
+    run_ffmpeg_sh   = filemd5("${local.scripts_dir}/run-ffmpeg.sh")
   }
 
   connection {
@@ -69,14 +69,19 @@ resource "null_resource" "deploy" {
       video    = "/opt/youtube-stream/videos/current.mp4"
       rtmp_url = "rtmp://a.rtmp.youtube.com/live2/${var.stream_key}"
     })
-    destination = "/etc/youtube-stream.env"
+    destination = "/tmp/youtube-stream.env.tmp"
   }
 
   provisioner "file" {
     content = templatefile("${path.module}/templates/youtube-stream-healthcheck.env.tftpl", {
       webhook = var.discord_webhook_url
     })
-    destination = "/etc/youtube-stream-healthcheck.env"
+    destination = "/tmp/youtube-stream-healthcheck.env.tmp"
+  }
+
+  provisioner "file" {
+    content     = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})
+    destination = "/etc/systemd/system/youtube-stream.service"
   }
 
   provisioner "file" {
@@ -87,6 +92,11 @@ resource "null_resource" "deploy" {
   provisioner "file" {
     source      = "${local.scripts_dir}/notify.sh"
     destination = "/opt/youtube-stream/bin/notify.sh"
+  }
+
+  provisioner "file" {
+    source      = "${local.scripts_dir}/run-ffmpeg.sh"
+    destination = "/opt/youtube-stream/bin/run-ffmpeg.sh"
   }
 
   provisioner "file" {
@@ -101,13 +111,18 @@ resource "null_resource" "deploy" {
 
   provisioner "remote-exec" {
     inline = [
-      "chmod 600 /etc/youtube-stream.env",
-      "chown root:root /etc/youtube-stream.env",
+      "umask 0077",
+      "install -m 0600 -o root -g root /tmp/youtube-stream.env.tmp /etc/youtube-stream.env",
+      "rm -f /tmp/youtube-stream.env.tmp",
+      "install -m 0600 -o root -g root /tmp/youtube-stream-healthcheck.env.tmp /etc/youtube-stream-healthcheck.env",
+      "rm -f /tmp/youtube-stream-healthcheck.env.tmp",
       "mkdir -p /opt/youtube-stream/bin",
-      "chmod 755 /opt/youtube-stream/bin/healthcheck.sh /opt/youtube-stream/bin/notify.sh",
+      "chmod 755 /opt/youtube-stream/bin/healthcheck.sh /opt/youtube-stream/bin/notify.sh /opt/youtube-stream/bin/run-ffmpeg.sh",
       "chmod 0600 /etc/youtube-stream-healthcheck.env",
       "chown root:root /etc/youtube-stream-healthcheck.env",
       "chmod 0644 /etc/cron.d/youtube-stream-healthcheck /etc/logrotate.d/youtube-stream",
+      # 止血措置として手動 rename された .disabled 残骸を除去（merge 後の cron 自動再開のため）
+      "rm -f /etc/cron.d/youtube-stream-healthcheck.disabled",
       "systemctl daemon-reload",
       "systemctl enable --now youtube-stream",
       "systemctl restart youtube-stream",

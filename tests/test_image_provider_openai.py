@@ -94,19 +94,6 @@ def _stub_openai_api_key(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _silence_cost_tracker(monkeypatch):
-    """テスト中は cost_tracker への書き込みを抑止。"""
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.openai.cost_tracker.log_generation",
-        lambda *a, **kw: {"estimated_cost_usd": 0.21, "category": "image", "model": kw.get("model", "")},
-    )
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.openai.cost_tracker.print_last_report",
-        lambda *a, **kw: None,
-    )
-
-
-@pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     """リトライバックオフを高速化。"""
     monkeypatch.setattr(

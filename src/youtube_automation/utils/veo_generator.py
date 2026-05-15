@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from youtube_automation.utils import cost_tracker
+from youtube_automation.utils.profile import section
 
 # --- 定数 ---
 DEFAULT_MODEL = "veo-3.1-fast-generate-001"
@@ -18,7 +19,7 @@ DEFAULT_PROMPT = (
     "No smoke, no magical effects, no particles, no falling objects. "
     "Keep the scene calm and grounded, like a living painting."
 )
-POLL_INTERVAL_SEC = 20
+POLL_INTERVAL_SEC = 5
 MAX_POLL_SEC = 600  # 10分タイムアウト
 
 
@@ -63,14 +64,16 @@ def generate_loop_video(
     # ポーリングで完了待ち
     print("  [Wait]   動画生成中...", end="", flush=True)
     start = time.monotonic()
-    while not operation.done:
-        elapsed = time.monotonic() - start
-        if elapsed > MAX_POLL_SEC:
-            print(f"\n  [ERROR]  タイムアウト ({MAX_POLL_SEC}秒)")
-            return False
-        print(".", end="", flush=True)
-        time.sleep(POLL_INTERVAL_SEC)
-        operation = client.operations.get(operation)
+    with section("veo.poll_total", interval_sec=POLL_INTERVAL_SEC):
+        while not operation.done:
+            elapsed = time.monotonic() - start
+            if elapsed > MAX_POLL_SEC:
+                print(f"\n  [ERROR]  タイムアウト ({MAX_POLL_SEC}秒)")
+                return False
+            print(".", end="", flush=True)
+            time.sleep(POLL_INTERVAL_SEC)
+            with section("veo.operations_get"):
+                operation = client.operations.get(operation)
     elapsed = time.monotonic() - start
     print(f" 完了 ({elapsed:.0f}秒)")
 
@@ -139,6 +142,7 @@ def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
         "format=duration",
         "-of",
         "default=noprint_wrappers=1:nokey=1",
+        "--",
         str(video_path),
     ]
     try:
@@ -185,6 +189,7 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
         "format=duration",
         "-of",
         "default=noprint_wrappers=1:nokey=1",
+        "--",
         str(video_path),
     ]
     try:
@@ -232,7 +237,8 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
 
     print(f"  [FFmpeg] クロスフェード補正 ({crossfade_sec}秒)...")
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        with section("veo.smooth_loop.ffmpeg", crossfade_sec=crossfade_sec):
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
         print(f"  [ERROR]  FFmpeg 失敗: {e.stderr[:200]}")
         return False
