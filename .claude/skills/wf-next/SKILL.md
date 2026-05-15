@@ -38,7 +38,7 @@ description: Use when 既存コレクション（collections/planning/ 配下）
 
 **Lyria パス:**
 1. `assets.music_prompts = true` + `assets.raw_master = null`:
-   - Skill ツールで `/lyria <theme>` を実行（composition.json → セグメント生成 → raw master 自動生成）
+   - Skill ツールで `/lyria <theme>` を実行（Lyria 3 API を 1 回以上呼んでセグメント生成、最大 ~184 秒/リクエスト）
    - `assets.raw_master` にファイル名を記録
    - ガイダンス: 「生成されたセグメントをミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
    - **ここでフロー停止**

@@ -290,9 +290,7 @@ class TestGetClientSecretsPath:
         When 2 回目の get_client_secrets_path()
         Then 同じ Path が返り、get_secret は 1 回しか呼ばれない
         """
-        with patch(
-            "youtube_automation.utils.secrets.get_secret", return_value=_TEST_JSON_PAYLOAD
-        ) as mock_get_secret:
+        with patch("youtube_automation.utils.secrets.get_secret", return_value=_TEST_JSON_PAYLOAD) as mock_get_secret:
             first = get_client_secrets_path()
             second = get_client_secrets_path()
         assert first == second

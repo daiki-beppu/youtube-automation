@@ -66,6 +66,38 @@ command -v realpath >/dev/null 2>&1 || {
     error "realpath が見つかりません (macOS なら brew install coreutils)"
     exit 1
 }
+command -v ssh-keygen >/dev/null 2>&1 || {
+    error "ssh-keygen が見つかりません (openssh-client を導入してください)"
+    exit 1
+}
+command -v ssh-add >/dev/null 2>&1 || {
+    error "ssh-add が見つかりません (openssh-client を導入してください)"
+    exit 1
+}
+
+# null_resource.deploy.connection は agent = true で ssh-agent 経由 SSH するため、
+# 鍵が ssh-agent に登録されていないと provisioner 起動時に Permission denied (publickey)
+# で 11GB SCP の前段で失敗する。ここで fail-fast する。
+# 注意: `ssh -i ~/.ssh/yt_stream_key` で通常 SSH が通っても agent には別鍵しか入っていない
+# ケースがあるため、agent 状態は fingerprint 一致で検査する（鍵 comment には依存しない）。
+SSH_KEY_PATH="$HOME/.ssh/yt_stream_key"
+if [[ ! -f "${SSH_KEY_PATH}.pub" ]]; then
+    error "公開鍵が見つかりません: ${SSH_KEY_PATH}.pub"
+    error "       生成: ssh-keygen -t ed25519 -f ${SSH_KEY_PATH}"
+    exit 1
+fi
+EXPECTED_FP="$(ssh-keygen -lf "${SSH_KEY_PATH}.pub" 2>/dev/null | awk '{print $2}')"
+if [[ -z "$EXPECTED_FP" ]]; then
+    error "公開鍵から fingerprint を取得できません: ${SSH_KEY_PATH}.pub"
+    exit 1
+fi
+if ! ssh-add -l 2>/dev/null | grep -qF "$EXPECTED_FP"; then
+    error "ssh-agent に ${SSH_KEY_PATH} が登録されていません (fingerprint: ${EXPECTED_FP})"
+    error "       登録: ssh-add ${SSH_KEY_PATH}"
+    error "       注意: \`ssh -i ${SSH_KEY_PATH}\` で通常 SSH できても agent 登録の確認にはなりません"
+    error "             (provisioner は agent = true で接続するため、ssh-add -l 出力のみが真の判定材料)"
+    exit 1
+fi
 
 [[ -d "$TF_DIR" ]] || { error "tf-dir が存在しません: $TF_DIR"; exit 1; }
 [[ -f "$TF_DIR/main.tf" ]] || { error "tf-dir に main.tf が見当たりません: $TF_DIR"; exit 1; }
