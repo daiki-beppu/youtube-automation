@@ -442,8 +442,8 @@ class TestRootGitignoreTerraformEntries:
 class TestCloudInitYaml:
     """``cloud-init.yaml`` の構造（#124: プロビジョニング起動 YAML）。
 
-    ``${indent(6, systemd_unit)}`` という Terraform テンプレート式を含むため、
-    YAML パーサーで読み込まず、テキストベースで構造検証する。
+    行構造・キー存在を正規表現で直接検証するため、YAML パーサーで読み込まず
+    テキストベースで構造検証する。
     """
 
     def test_file_exists_with_cloud_config_header(self):
@@ -510,46 +510,41 @@ class TestCloudInitYaml:
             text,
         ), "/opt/youtube-stream/logs を root:root 0755 で作成する install コマンドが無い"
 
-    def test_write_files_places_systemd_unit_at_canonical_path(self):
+    def test_cloud_init_yaml_no_longer_bakes_systemd_unit(self):
         """Given cloud-init.yaml
-        When write_files エントリを読む
-        Then ``/etc/systemd/system/youtube-stream.service`` を配置する宣言がある (R5)。
+        When 全文を読む
+        Then ``write_files:`` ブロック・``systemd_unit`` テンプレート変数・
+             ``/etc/systemd/system/youtube-stream.service`` パスのいずれも含まれない (#212)。
 
-        owner=root:root, permissions='0644' の典型的な systemd unit 配置メタデータも併せて検証。
+        systemd unit は ``null_resource.deploy`` の ``provisioner "file"`` で SCP 配信するように
+        統一されたため、cloud-init 側の焼き付け経路を残してはならない。残骸を残すと
+        「設定したのに使われない」混乱と、初回 apply 時の二重配置リスクを招く。
         """
         text = read_file(_CLOUD_INIT_YAML)
-        assert re.search(r"^write_files:", text, flags=re.MULTILINE), "write_files: ブロックが存在しない"
-        assert re.search(
-            r"path:\s*/etc/systemd/system/youtube-stream\.service\b",
-            text,
-        ), "write_files に /etc/systemd/system/youtube-stream.service の path が無い"
-        assert re.search(r"owner:\s*root:root\b", text), "write_files の systemd unit に owner: root:root が無い"
-        assert re.search(r"permissions:\s*['\"]?0644['\"]?", text), (
-            "write_files の systemd unit に permissions: '0644' が無い"
+        assert not re.search(r"^write_files:", text, flags=re.MULTILINE), (
+            "write_files: ブロックが残っている（unit 配置は null_resource 経路に統一）"
+        )
+        assert "systemd_unit" not in text, (
+            "cloud-init.yaml に systemd_unit テンプレート変数が残っている"
+            "（user_data の内側 templatefile 結線が撤去されたため未定義変数になる）"
+        )
+        assert not re.search(r"/etc/systemd/system/youtube-stream\.service", text), (
+            "cloud-init.yaml に /etc/systemd/system/youtube-stream.service の配置宣言が残っている"
         )
 
-    def test_systemd_unit_content_uses_templatefile_interpolation(self):
-        """Given cloud-init.yaml
-        When write_files の content を読む
-        Then ``${indent(N, systemd_unit)}`` 形式で systemd unit が埋め込まれている。
-
-        plan の「templatefile 経由」+「YAML インデント整合のため indent() を使う」を検証。
-        直書き（複数行リテラル）にすると外側 templatefile からの注入経路が消えるため必須。
-        """
-        text = read_file(_CLOUD_INIT_YAML)
-        assert re.search(r"\$\{\s*indent\(\s*\d+\s*,\s*systemd_unit\s*\)\s*\}", text), (
-            "write_files.content が ${indent(N, systemd_unit)} で埋め込まれていない"
-            "（直書きだと systemd unit が templatefile 経由にならない）"
-        )
-
-    def test_runcmd_invokes_systemctl_daemon_reload(self):
+    def test_runcmd_does_not_invoke_systemctl_daemon_reload(self):
         """Given cloud-init.yaml
         When runcmd を読む
-        Then 末尾近くで ``systemctl daemon-reload`` が実行される (R6)。
+        Then ``systemctl daemon-reload`` を含まない (#212)。
+
+        cloud-init 側の write_files から unit を撤去したため、ここでの reload は呼ぶ対象が無い。
+        unit の登録・反映は ``null_resource.deploy`` の ``provisioner "remote-exec"`` 内
+        ``systemctl daemon-reload`` が担う。
         """
         text = read_file(_CLOUD_INIT_YAML)
-        assert re.search(r"\bsystemctl\s+daemon-reload\b", text), (
-            "systemctl daemon-reload が runcmd に無い（write_files 後にユニット定義が認識されない）"
+        assert not re.search(r"\bsystemctl\s+daemon-reload\b", text), (
+            "systemctl daemon-reload が cloud-init.yaml に残っている"
+            "（unit は null_resource 経路で配置されるため、ここで reload する対象が存在しない）"
         )
 
     def test_does_not_enable_or_start_service(self):
@@ -1162,7 +1157,7 @@ class TestSystemdUnitTemplate:
         起動失敗カウントの時間窓を無効化し、``Restart=always`` + ``RestartSec=1h``
         サイクルが ``StartLimitHit`` で永続停止する経路を遮断する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         unit = self._section(text, "Unit")
         assert unit is not None
         assert re.search(r"^StartLimitIntervalSec=0\s*$", unit, flags=re.MULTILINE), (
@@ -1177,7 +1172,7 @@ class TestSystemdUnitTemplate:
         ``RuntimeMaxSec=11h`` 到達時の SIGTERM 終了を明示的に success 扱いに揃え、
         healthcheck の anomaly 誤判定経路を遮断する。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^SuccessExitStatus=143\s+SIGTERM\s*$", service, flags=re.MULTILINE), (
@@ -1191,7 +1186,7 @@ class TestSystemdUnitTemplate:
 
         SIGTERM → SIGKILL 待機を 90s から 30s に短縮し、ffmpeg flush の現実的時間に揃える。
         """
-        text = _read(_SYSTEMD_TFTPL)
+        text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(r"^TimeoutStopSec=30s\s*$", service, flags=re.MULTILINE), (
@@ -1250,24 +1245,26 @@ class TestMainTfUserData:
             block,
         ), 'user_data が templatefile("${path.module}/cloud-init.yaml", ...) を呼んでいない'
 
-    def test_user_data_inner_templatefile_loads_systemd_unit(self):
+    def test_user_data_template_no_longer_passes_systemd_unit(self):
         """Given main.tf
-        When user_data の右辺を読む
-        Then 内側に ``templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})`` がある。
+        When vultr_instance.this.user_data の右辺を読む
+        Then ``systemd_unit = ...`` も内側 ``templatefile(...service.tftpl...)`` の
+             呼び出しも残っていない (#212)。
 
-        cloud-init.yaml の ``${indent(6, systemd_unit)}`` に渡される値の出元。
+        unit 配置は ``null_resource.deploy`` の ``provisioner "file"`` に統一されたため、
+        user_data の templatefile 第 2 引数は空 map ``{}`` でなければならない。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
-        assert re.search(
-            r"systemd_unit\s*=\s*templatefile\(\s*"
-            r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"',
-            block,
-        ), (
-            'systemd_unit = templatefile("${path.module}/templates/youtube-stream.service.tftpl", ...) '
-            "の結線が無い（cloud-init に systemd unit が注入されない）"
+        assert not re.search(r"\bsystemd_unit\s*=", block), (
+            "vultr_instance.this.user_data に systemd_unit = ... が残っている"
+            "（unit は null_resource 経路に統一されたため cloud-init には渡さない）"
         )
+        assert not re.search(
+            r"youtube-stream\.service\.tftpl",
+            block,
+        ), "vultr_instance.this 内に service.tftpl への参照が残っている（user_data の内側 templatefile 撤去漏れ）"
 
     def test_user_data_does_not_contain_plaintext_secrets(self):
         """Given main.tf
@@ -1525,9 +1522,11 @@ class TestVersionsTfNullProvider:
 
 
 class TestMainTfNullResource:
-    """``main.tf`` の ``null_resource.deploy`` 構造（#125）。
+    """``main.tf`` の ``null_resource.deploy`` 構造（#125 起点、#109 / #212 拡張）。
 
-    triggers / connection / 3 provisioners（file / file / remote-exec）の各構造を検証する。
+    triggers / connection / 複数の ``provisioner "file"``（video / env / healthcheck env /
+    systemd unit / healthcheck.sh / notify.sh / logrotate.conf / cron.d）/
+    ``provisioner "remote-exec"`` の各構造を検証する。
     """
 
     def test_null_resource_deploy_exists(self):
@@ -1560,6 +1559,65 @@ class TestMainTfNullResource:
             "triggers.video_hash が filemd5(var.video_path) でない"
         )
         assert re.search(r"\bstream_key\s*=", triggers), "triggers.stream_key が無い"
+
+    def test_triggers_systemd_unit_hashes_service_tftpl(self):
+        """Given main.tf
+        When null_resource.deploy.triggers を読む
+        Then ``systemd_unit = filemd5("${path.module}/templates/youtube-stream.service.tftpl")``
+             が宣言されている (#212)。
+
+        tftpl の変更で ``null_resource.deploy`` のみが replace されるよう、unit ファイルの
+        md5 を triggers map に含める。これにより ``vultr_instance`` 再構築（VPS 再作成 +
+        動画再 SCP）を伴わずに新 unit を反映できる。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        triggers = _extract_block(block, r"triggers")
+        assert triggers is not None, "null_resource.deploy.triggers ブロックが存在しない"
+        assert re.search(
+            r"systemd_unit\s*=\s*filemd5\(\s*"
+            r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"\s*\)',
+            triggers,
+        ), (
+            "triggers.systemd_unit が "
+            'filemd5("${path.module}/templates/youtube-stream.service.tftpl") '
+            "で宣言されていない（tftpl 変更時に null_resource.deploy が replace されない）"
+        )
+
+    def test_provisioner_file_uploads_systemd_unit_to_canonical_path(self):
+        """Given main.tf
+        When ``null_resource.deploy`` 内の ``provisioner "file"`` を読む
+        Then ``content = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})``
+             と ``destination = "/etc/systemd/system/youtube-stream.service"`` のペアが
+             同一 provisioner 内に宣言されている (#212)。
+
+        unit 配置は cloud-init の write_files から ``null_resource.deploy`` に移管された。
+        既存 video / env と同じ source/destination 順序非依存マッチパターンで検証する。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        content_pattern = (
+            r'content\s*=\s*templatefile\(\s*'
+            r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"\s*,\s*\{\s*\}\s*\)'
+        )
+        destination_pattern = r'destination\s*=\s*"/etc/systemd/system/youtube-stream\.service"'
+        match = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?' + content_pattern + r"[^}]*?" + destination_pattern + r"[^}]*?\}",
+            block,
+            flags=re.DOTALL,
+        )
+        match_alt = re.search(
+            r'provisioner\s+"file"\s*\{[^}]*?' + destination_pattern + r"[^}]*?" + content_pattern + r"[^}]*?\}",
+            block,
+            flags=re.DOTALL,
+        )
+        assert match or match_alt, (
+            'provisioner "file" で content=templatefile("${path.module}/templates/'
+            'youtube-stream.service.tftpl", {}) → '
+            "/etc/systemd/system/youtube-stream.service への配信が宣言されていない"
+        )
 
     def test_triggers_stream_key_is_wrapped_with_nonsensitive(self):
         """Given main.tf
@@ -3075,7 +3133,7 @@ class TestRunFfmpegScript:
         厳密モードと、``"$VIDEO"`` / ``"$RTMP_URL"`` のダブルクォート展開挙動を
         POSIX sh と互換取りにせず bash 固定で扱う。
         """
-        text = _read(_RUN_FFMPEG_SCRIPT)
+        text = read_file(_RUN_FFMPEG_SCRIPT)
         first_line = text.splitlines()[0] if text else ""
         assert first_line == "#!/usr/bin/env bash", (
             f"run-ffmpeg.sh の shebang が '#!/usr/bin/env bash' でない: {first_line!r}"
@@ -3089,7 +3147,7 @@ class TestRunFfmpegScript:
         ``set -u`` が必須: env file に VIDEO / RTMP_URL のどちらかが欠けたまま
         ffmpeg を呼ぶと argv が壊れて起動に失敗するため、未定義変数で Fail Fast する。
         """
-        text = _read(_RUN_FFMPEG_SCRIPT)
+        text = read_file(_RUN_FFMPEG_SCRIPT)
         assert re.search(r"^set\s+-eu(o\s+pipefail)?\b", text, flags=re.MULTILINE), (
             "run-ffmpeg.sh に `set -eu`（または `set -euo pipefail`）が無い"
             "（env 欠落でも気付けず argv が壊れる）"
@@ -3106,7 +3164,7 @@ class TestRunFfmpegScript:
         ラッパー側で ``source`` するとパーミッション拒否で ``set -e`` により即 fail する。
         後続 fix で「念のため」復活させるリグレッションを止めるための not-contains 検証。
         """
-        text = _read(_RUN_FFMPEG_SCRIPT)
+        text = read_file(_RUN_FFMPEG_SCRIPT)
         match = re.search(
             r"^\s*(?:source|\.)\s+/etc/youtube-stream\.env\b",
             text,
@@ -3127,7 +3185,7 @@ class TestRunFfmpegScript:
         ``RuntimeMaxSec`` シグナルが ffmpeg に直接届かなくなる。
         plan §「実装ガイドライン」最重要項目。
         """
-        text = _read(_RUN_FFMPEG_SCRIPT)
+        text = read_file(_RUN_FFMPEG_SCRIPT)
         assert re.search(r"^\s*exec\s+/usr/bin/ffmpeg\b", text, flags=re.MULTILINE), (
             "run-ffmpeg.sh が `exec /usr/bin/ffmpeg ...` でプロセス置換していない"
             "（中継 shell が残ると systemd シグナルが ffmpeg に直接届かない）"
@@ -3144,7 +3202,7 @@ class TestRunFfmpegScript:
         ショートハンドや anullsrc 復活を禁止する。``$VIDEO`` / ``$RTMP_URL`` は
         ``set -u`` 配下の word-splitting 防止のためダブルクォート必須。
         """
-        text = _read(_RUN_FFMPEG_SCRIPT)
+        text = read_file(_RUN_FFMPEG_SCRIPT)
         expected = (
             r"exec\s+/usr/bin/ffmpeg\s+-re\s+-stream_loop\s+-1\s+"
             r'-i\s+"\$VIDEO"\s+'
@@ -3165,7 +3223,7 @@ class TestRunFfmpegScript:
         order.md 例の ``-c copy`` 短縮形は使わない（plan §採用しない選択肢）。
         #185 で動画音声をそのまま送出する明示分離に改訂済みのため、後退禁止。
         """
-        text = _read(_RUN_FFMPEG_SCRIPT)
+        text = read_file(_RUN_FFMPEG_SCRIPT)
         # `-c copy`（直後がコロンでない c）にマッチ。`-c:v copy` / `-c:a copy` は許容。
         assert not re.search(r"\s-c\s+copy\b", text), (
             "run-ffmpeg.sh に `-c copy` ショートハンドが含まれている"
@@ -3199,7 +3257,7 @@ class TestMainTfRunFfmpegProvisioner:
         #157 の DRY 不変条件（``../../../scripts/streaming`` リテラル 1 回出現）を
         破壊しないよう、必ず ``${local.scripts_dir}`` 経由で書く。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
+        text = strip_hcl_comments(read_file(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         triggers = _extract_block(block, r"triggers")
@@ -3224,7 +3282,7 @@ class TestMainTfRunFfmpegProvisioner:
         既存 ``healthcheck.sh`` / ``notify.sh`` と同形の配線パターン。
         source/destination のペアリングを順序非依存で検証する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
+        text = strip_hcl_comments(read_file(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
 
@@ -3257,7 +3315,7 @@ class TestMainTfRunFfmpegProvisioner:
         ``status=203/EXEC`` で起動失敗する。``healthcheck.sh`` / ``notify.sh`` と
         同じ 755 を付与する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
+        text = strip_hcl_comments(read_file(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(
@@ -3283,7 +3341,7 @@ class TestMainTfRunFfmpegProvisioner:
         順序逆転すると初回 apply 時に ``systemctl enable --now`` が起動を試みた
         瞬間にラッパーの実行ビットが無く ``status=203/EXEC`` で失敗する。
         """
-        text = _strip_hcl_comments(_read(_MAIN_TF))
+        text = strip_hcl_comments(read_file(_MAIN_TF))
         block = _extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         remote_exec = re.search(

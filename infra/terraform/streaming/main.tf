@@ -33,9 +33,7 @@ resource "vultr_instance" "this" {
 
   ssh_key_ids = [vultr_ssh_key.this.id]
 
-  user_data = templatefile("${path.module}/cloud-init.yaml", {
-    systemd_unit = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})
-  })
+  user_data = templatefile("${path.module}/cloud-init.yaml", {})
 }
 
 resource "null_resource" "deploy" {
@@ -50,6 +48,7 @@ resource "null_resource" "deploy" {
     notify_sh       = filemd5("${local.scripts_dir}/notify.sh")
     logrotate_conf  = filemd5("${local.scripts_dir}/logrotate.conf")
     cron_d          = filemd5("${local.scripts_dir}/cron.d")
+    systemd_unit    = filemd5("${path.module}/templates/youtube-stream.service.tftpl")
     run_ffmpeg_sh   = filemd5("${local.scripts_dir}/run-ffmpeg.sh")
   }
 
@@ -78,6 +77,11 @@ resource "null_resource" "deploy" {
       webhook = var.discord_webhook_url
     })
     destination = "/tmp/youtube-stream-healthcheck.env.tmp"
+  }
+
+  provisioner "file" {
+    content     = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})
+    destination = "/etc/systemd/system/youtube-stream.service"
   }
 
   provisioner "file" {
