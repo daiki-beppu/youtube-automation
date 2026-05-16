@@ -1,4 +1,4 @@
-"""yt-channel-scaffold — 正準ディレクトリ構造 + 最小 config/channel/*.json を一括生成する CLI.
+"""yt-channel-init — 正準ディレクトリ構造 + 最小 config/channel/*.json を一括生成する CLI.
 
 設計原則:
     parse → plan → apply の 3 段で副作用を分離する。
@@ -257,7 +257,7 @@ def _collect_diffs(plan: Plan) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="yt-channel-scaffold",
+        prog="yt-channel-init",
         description=(
             "正準ディレクトリ構造 + 最小 config/channel/*.json を一括生成する。"
             "既存ファイルは --force がない限り上書きしない。"

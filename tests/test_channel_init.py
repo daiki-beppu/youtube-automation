@@ -1,4 +1,4 @@
-"""yt-channel-scaffold CLI のユニット / 結合テスト (tmp_path ベース).
+"""yt-channel-init CLI のユニット / 結合テスト (tmp_path ベース).
 
 設計参考: `tests/test_config_migrate.py` のスタイルを踏襲する。
 - `_auto_reset` autouse fixture で `CHANNEL_DIR` を外し、新 loader シングルトンをリセット。
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli.channel_scaffold import (
+from youtube_automation.cli.channel_init import (
     _resolve_target_dir,
     main,
 )
@@ -318,7 +318,7 @@ def test_target_resolves_from_cwd_when_target_and_env_omitted(tmp_path, monkeypa
 # ===================== Case 15: pyproject.toml entry point 登録 =====================
 
 
-def test_pyproject_registers_yt_channel_scaffold_entry_point():
+def test_pyproject_registers_yt_channel_init_entry_point():
     # Given: リポジトリルートの pyproject.toml
     root = Path(__file__).resolve().parent.parent
     pyproject = root / "pyproject.toml"
@@ -328,9 +328,9 @@ def test_pyproject_registers_yt_channel_scaffold_entry_point():
         data = tomllib.load(f)
     scripts = data["project"]["scripts"]
 
-    # Then: yt-channel-scaffold エントリが登録されている
-    assert "yt-channel-scaffold" in scripts
-    assert scripts["yt-channel-scaffold"] == "youtube_automation.cli.channel_scaffold:main"
+    # Then: yt-channel-init エントリが登録されている
+    assert "yt-channel-init" in scripts
+    assert scripts["yt-channel-init"] == "youtube_automation.cli.channel_init:main"
 
 
 # ===================== Case 16: ディレクトリ既存・.gitkeep 不在 =====================
