@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+#### `yt-populate-scene-phrases` を汎用 CLI として書き直し、`/wf-new` に統合
+
+`yt-populate-scene-phrases` を RJN 専用ハードコード辞書ベースの移行スクリプトから、
+任意のチャンネルで使える汎用 CLI に書き直した。`config/channel/content.json::title.theme_scenes[<theme>].scene`
+を英語ソースとして取得し、`localizations.json::supported_languages` 全件へ Vertex AI Gemini で
+翻訳して `workflow-state.json.scene_phrases` に書き込む。多言語非対応（`supported_languages` が
+1 言語以下）のチャンネルでは no-op で正常終了する。関連: #246
+
+- `src/youtube_automation/scripts/populate_scene_phrases.py`: ハードコード `SCENE_PHRASES` 辞書を
+  削除し、`<collection>` を引数で受ける汎用実装に置き換え。`--en` / `--overwrite` / `--dry-run` /
+  `--model` オプションを追加。`translate_phrase()` は google-genai Client を DI 可能で、テスト時に
+  モック注入できる
+- `.claude/skills/wf-new/SKILL.md`: Phase 2a 直後に `2a-2. scene_phrases 初期化` ステップを追加。
+  多言語非対応チャンネルでは CLI 側で自動スキップされるため条件分岐は不要
+- `.claude/skills/wf-new/references/scene_phrases.md`: CLI 単体実行（再投入・`--dry-run` プレビュー・
+  `--en` 明示指定）のドキュメントを追加
+- `tests/test_populate_scene_phrases.py`: 翻訳・dry-run・overwrite・theme_scenes 解決・コレクション
+  探索の 15 ケースを追加
+
 ### Added
 
 #### サムネイル生成プロバイダーを設定から切り替え可能にする（gpt-image-2 対応）
