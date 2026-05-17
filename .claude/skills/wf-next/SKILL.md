@@ -43,10 +43,16 @@ description: Use when 既存コレクション（collections/planning/ 配下）
    - ガイダンス: 「生成されたセグメントをミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
    - **ここでフロー停止**
 
-**マスター音源検出:**
+**マスター音源検出（音源承認ゲート 2-B）:**
 2. `assets.raw_master != null` + `assets.master_audio = null`:
-   - `01-master/` 内のファイルを走査し、raw_master と異なるファイル（ユーザーが作成した最終マスター）を検出
-   - 検出できた場合: `assets.master_audio` にファイル名記録 → `phase: "mastered"` → 自動的に公開フローへ進む
+   - **走査対象**:
+     - worktree 内 `01-master/` を必ず走査
+     - **worktree 検知**: `git rev-parse --git-common-dir` がカレント `.git` と異なる絶対パスを返したら worktree 内とみなし、メインリポルート（`git-common-dir` の親ディレクトリ）の `collections/planning/<collection-name>/01-master/` も走査対象に追加（worktree は短命で、ユーザーが DAW 書き出しをメインリポ側に置くケースに対応）
+   - **候補抽出**: raw_master と異なるファイルのうち `.m4a` / `.wav` / `.flac` / `.aac` / `.mp3` を最終マスター候補として列挙
+   - 検出できた場合:
+     - 複数候補があればユーザーに採用ファイルを確認（worktree 内と main repo 側で同名ファイルが両方ある場合も含む）
+     - 採用ファイルが worktree 外（main repo 側）にあるときは worktree 側 `01-master/` にコピーしてから処理（state 更新後の動画化が worktree 内で完結するように）
+     - `assets.master_audio` にファイル名のみ記録 → `phase: "mastered"` → 自動的に公開フローへ進む
    - 検出できない場合: ガイダンス「最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
 
 #### `mastered` → 全自動公開フロー（承認なし）
