@@ -99,6 +99,22 @@ class Title:
                     return self.theme_activities[keyword]
         return self.default_activity
 
+    def scene_for_theme(self, theme: str) -> str:
+        """テーマ名から英語シーンフレーズを取得.
+
+        `theme_scenes` の `scene` キーを `activity_for_theme` と同じ longest-match で返す。
+        未定義なら空文字列を返す（`scene_phrases` 初期化時に呼び出し側が `--en` フォールバック判定する）。
+        """
+        if not self.theme_scenes:
+            return ""
+        lowered = theme.lower()
+        if lowered in self.theme_scenes:
+            return self.theme_scenes[lowered].get("scene", "")
+        for keyword in sorted(self.theme_scenes, key=len, reverse=True):
+            if keyword in lowered:
+                return self.theme_scenes[keyword].get("scene", "")
+        return ""
+
 
 @dataclass(frozen=True)
 class Content:

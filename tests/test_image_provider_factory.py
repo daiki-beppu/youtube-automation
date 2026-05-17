@@ -74,20 +74,29 @@ class TestGetProvider:
         with pytest.raises(ConfigError, match="midjourney"):
             get_provider(cfg)
 
-    def test_gemini_provider_exposes_pricing_model_id(self):
+    def test_gemini_provider_does_not_expose_pricing_model_id(self):
+        """Issue #132: PRICING 撤廃に伴い `pricing_model_id` 属性も削除する。
+
+        Given Gemini provider インスタンス
+        When `pricing_model_id` 属性を引く
+        Then 属性が存在しない (PRICING キー紐付けの責務自体が消えるため)。
+        """
         # Given
         cfg = _gemini_config()
 
         # When
         provider = get_provider(cfg)
 
-        # Then: cost_tracker.PRICING のキーと一致する
-        from youtube_automation.utils import cost_tracker
+        # Then
+        assert not hasattr(provider, "pricing_model_id"), "pricing_model_id がまだ残っている (PRICING 撤廃と整合しない)"
 
-        assert provider.pricing_model_id in cost_tracker.PRICING
-        assert provider.pricing_model_id == "gemini-3.1-flash-image-preview"
+    def test_openai_provider_does_not_expose_pricing_model_id(self):
+        """Issue #132: PRICING 撤廃に伴い `pricing_model_id` 属性も削除する。
 
-    def test_openai_provider_exposes_pricing_model_id(self):
+        Given OpenAI provider インスタンス
+        When `pricing_model_id` 属性を引く
+        Then 属性が存在しない。
+        """
         # Given
         cfg = _openai_config()
 
@@ -95,10 +104,7 @@ class TestGetProvider:
         provider = get_provider(cfg)
 
         # Then
-        from youtube_automation.utils import cost_tracker
-
-        assert provider.pricing_model_id in cost_tracker.PRICING
-        assert provider.pricing_model_id == "gpt-image-2"
+        assert not hasattr(provider, "pricing_model_id"), "pricing_model_id がまだ残っている (PRICING 撤廃と整合しない)"
 
 
 class TestSupportedAspectRatios:

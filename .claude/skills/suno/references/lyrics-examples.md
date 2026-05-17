@@ -38,7 +38,7 @@
 1-2 行 or instrumental fade。
 ```
 
-## 例 1: jazzhop / laid-back rap（bobble）
+## 例 1: jazzhop / laid-back rap
 
 **トーン**: conversational、叫ばない、誇張しない
 **韻**: lazy flow に乗る緩い韻。完璧さよりナチュラル感優先

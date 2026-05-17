@@ -62,6 +62,24 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 
 出力されたパスを後続ステップで使用する。フルスキーマは `references/schema.md` を参照。
 
+#### 2a-2. scene_phrases 初期化（多言語対応コレクションのみ）
+
+多言語タイトル生成で必須となる `workflow-state.json.scene_phrases` を投入する:
+
+```bash
+uv run yt-populate-scene-phrases <collection-dir-name>
+```
+
+- `<collection-dir-name>`: 2a で作成された `YYYYMMDD-<short>-<theme>-collection` のディレクトリ名
+- 英語フレーズは `config/channel/content.json` の `title.theme_scenes[<theme>].scene` から自動解決され、Vertex AI Gemini で `localizations.json.supported_languages` 全件に翻訳されて書き込まれる
+- **`supported_languages` が 1 言語以下のチャンネルでは CLI 側で自動スキップ**されるため、条件分岐は不要（そのまま呼んで構わない）
+- 既に `scene_phrases` が存在する場合もスキップ（`--overwrite` で上書き可能）
+- `theme_scenes[<theme>]` が未定義の場合は `--en "<custom phrase>"` で英語フレーズを明示指定する。詳細は `references/scene_phrases.md` 参照
+
+**エラーハンドリング:**
+- `theme_scenes` 未定義 + `--en` 未指定 → エラー終了。`config/channel/content.json` の `title.theme_scenes` に該当 theme を追加するか、`--en` を渡して再実行
+- Gemini 呼び出し失敗 → エラーを報告して続行（メタデータ生成前に `/wf-next` から再実行可能）
+
 #### 2b. ドキュメント保存
 
 Phase 1 の成果物を `20-documentation/` に保存:
@@ -80,7 +98,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
    - それ以外のモード: `/thumbnail <theme>` を Agent で実行（テキストオーバーレイ生成）
 4. **音楽素材生成**: Agent ツールで音楽エンジンに応じたスキルを実行:
    - Suno: `/suno <theme>` を Skill ツールで実行（プロンプト生成）
-   - Lyria: `/lyria <theme>` を Skill ツールで実行（composition.json 生成のみ。セグメント生成はしない。`/wf-next` で実行）
+   - Lyria: `/lyria <theme>` を Skill ツールで実行（プロンプト設計のみ。Lyria 3 API 呼び出しは `/wf-next` で実行）
 5. `workflow-state.json` を更新:
    - `assets.music_prompts`: `true`
 
@@ -125,7 +143,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
 
    音楽エンジンに応じた次ステップ案内:
    - **Suno**: 「`suno-prompts.md` のプロンプトを SunoAI に投入 → プレイリスト作成後 `/wf-next` を実行してください」
-   - **Lyria**: 「`/wf-next` を実行するとセグメント自動生成が始まります → ミキシング+マスタリング後に再度 `/wf-next`」
+   - **Lyria**: 「`/wf-next` を実行すると Lyria 3 API が呼ばれ、コレクション尺に応じてセグメントが生成されます → ミキシング+マスタリング後に再度 `/wf-next`」
 
 **重要**: `/wf-next` への自動接続はしない。ユーザーが手動で `/wf-next` を呼ぶ。
 
@@ -135,6 +153,6 @@ Phase 1 の成果物を `20-documentation/` に保存:
 - サムネイル生成: `/thumbnail` スキル
 - ループ動画生成: `/loop-video` スキル
 - 音楽プロンプト生成: `/suno` スキル
-- 音楽コンポジション生成: `/lyria` スキル
+- 音楽プロンプト設計 + Lyria 3 API 呼び出し: `/lyria` スキル
 - 後続ステップ管理: `/wf-next`
 - 進捗確認: `/wf-status`

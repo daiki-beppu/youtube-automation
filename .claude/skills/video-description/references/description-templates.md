@@ -8,7 +8,9 @@
 
 ## Complete Collection 概要欄テンプレート
 
-BGM チャンネル向けにアダプトした、情景フック＋タイムスタンプ＋Perfect for 構成のテンプレート。
+情景フック＋タイムスタンプ＋Perfect for 構成のテンプレート（BGM 系チャンネル向け既定値のサンプル。
+装飾ヘッダー・Usage & Attribution 本文は `config.default.yaml` の `section_headers` /
+`usage_attribution_lines` で差し替え可能）。
 
 ```
 [絵文字装飾]. [情景フック — 詩的な1行。コレクションの世界に引き込む]

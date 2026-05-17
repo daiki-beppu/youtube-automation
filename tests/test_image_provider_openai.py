@@ -66,7 +66,6 @@ def request_factory(tmp_path: Path):
         aspect_ratio: str = "16:9",
         image_size: str = "1536x1024",
         output_name: str = "out.jpg",
-        cost_per_image_usd: float | None = 0.21,
     ) -> ImageGenerationRequest:
         return ImageGenerationRequest(
             prompt=prompt,
@@ -74,7 +73,6 @@ def request_factory(tmp_path: Path):
             aspect_ratio=aspect_ratio,
             image_size=image_size,
             references=list(references or []),
-            cost_per_image_usd=cost_per_image_usd,
         )
 
     return _make
@@ -92,19 +90,6 @@ def _stub_openai_api_key(monkeypatch):
     monkeypatch.setattr(
         "youtube_automation.utils.image_provider.openai.get_secret",
         _fake_get_secret,
-    )
-
-
-@pytest.fixture(autouse=True)
-def _silence_cost_tracker(monkeypatch):
-    """テスト中は cost_tracker への書き込みを抑止。"""
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.openai.cost_tracker.log_generation",
-        lambda *a, **kw: {"estimated_cost_usd": 0.21, "category": "image", "model": kw.get("model", "")},
-    )
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.openai.cost_tracker.print_last_report",
-        lambda *a, **kw: None,
     )
 
 

@@ -1,261 +1,220 @@
 #!/usr/bin/env python3
-"""Populate workflow-state.json scene_phrases for collections that lack them.
+"""コレクションの workflow-state.json.scene_phrases を多言語翻訳で投入する CLI.
 
-After this script runs, automation/bulk_update_localizations.py will be able
-to regenerate translated localizations for each affected video.
+`config/channel/content.json::title.theme_scenes[<theme>].scene` を英語ソースとして
+取得し、`config/channel/localizations.json::supported_languages` に列挙された全言語へ
+Vertex AI Gemini で翻訳して `collections/<sub>/<collection>/workflow-state.json` の
+`scene_phrases` フィールドに書き込む。
 
-Translations were authored to match the existing pattern of
-20260322-rjn-city-collection (15 supported languages + en source).
+`/wf-new` の Phase 2a（コレクション初期化直後）から呼ばれる想定。多言語非対応チャンネル
+（`supported_languages` が 1 言語以下）では no-op で正常終了する。
+
+Usage:
+    yt-populate-scene-phrases <collection-name>
+    yt-populate-scene-phrases <collection-name> --en "Custom English phrase"
+    yt-populate-scene-phrases <collection-name> --overwrite
+    yt-populate-scene-phrases <collection-name> --dry-run
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import logging
+import sys
+import time
+from pathlib import Path
 
-from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.exceptions import AutomationError, ConfigError, ValidationError
 
-COLLECTIONS_DIR = channel_dir() / "collections" / "live"
+logger = logging.getLogger(__name__)
 
-# {collection_dir_name: {lang: phrase}}
-SCENE_PHRASES: dict[str, dict[str, str]] = {
-    "20260324-rjn-rainy-cafe-collection": {
-        "en": "Rainy night cafe, jazz between the pages and coffee steam",
-        "ja": "雨の夜のカフェ、ページとコーヒーの湯気の間に流れるジャズ",
-        "ko": "비 오는 밤의 카페, 페이지와 커피 향기 사이로 흐르는 재즈",
-        "es": "Café en una noche lluviosa, jazz entre páginas y vapor de café",
-        "pt": "Café em noite chuvosa, jazz entre páginas e vapor de café",
-        "zh-CN": "雨夜咖啡馆，爵士飘荡在书页与咖啡香气之间",
-        "zh-TW": "雨夜咖啡館，爵士飄蕩在書頁與咖啡香氣之間",
-        "fr": "Café sous la pluie nocturne, jazz entre pages et vapeur de café",
-        "de": "Regnerisches Nachtcafé, Jazz zwischen Buchseiten und Kaffeedampf",
-        "it": "Caffè in una notte piovosa, jazz tra pagine e vapore di caffè",
-        "ru": "Кафе дождливой ночью, джаз между страниц и пара кофе",
-        "id": "Kafe di malam hujan, jazz di antara halaman dan uap kopi",
-        "th": "คาเฟ่คืนฝน แจ๊สลอยผ่านหน้ากระดาษและไอกาแฟ",
-        "hi": "बारिश की रात का कैफ़े, पन्नों और कॉफ़ी की भाप के बीच jazz",
-        "tr": "Yağmurlu gece kafesi, sayfalar ve kahve buharı arasında caz",
-        "ar": "مقهى في ليلة ممطرة، جاز بين الصفحات وبخار القهوة",
-    },
-    "20260325-rjn-sleepless-midnight-collection": {
-        "en": "Quiet rain at midnight, gentle jazz drifting into dreams",
-        "ja": "真夜中の静かな雨、夢へと漂う優しいジャズ",
-        "ko": "한밤의 고요한 비, 꿈속으로 스며드는 부드러운 재즈",
-        "es": "Lluvia tranquila a medianoche, jazz suave deslizándose hacia los sueños",
-        "pt": "Chuva calma à meia-noite, jazz suave deslizando para os sonhos",
-        "zh-CN": "午夜静雨，轻柔爵士飘入梦境",
-        "zh-TW": "午夜靜雨，輕柔爵士飄入夢境",
-        "fr": "Pluie calme à minuit, jazz doux glissant vers les rêves",
-        "de": "Stiller Regen um Mitternacht, sanfter Jazz treibt in Träume",
-        "it": "Pioggia tranquilla a mezzanotte, jazz dolce verso i sogni",
-        "ru": "Тихий полночный дождь, нежный джаз уносит в сны",
-        "id": "Hujan tenang tengah malam, jazz lembut menuju mimpi",
-        "th": "ฝนเงียบยามเที่ยงคืน แจ๊สนุ่มล่องสู่ความฝัน",
-        "hi": "आधी रात की शांत बारिश, सपनों में बहता कोमल jazz",
-        "tr": "Gece yarısı sessiz yağmur, rüyalara süzülen yumuşak caz",
-        "ar": "مطر هادئ في منتصف الليل، جاز ناعم ينساب إلى الأحلام",
-    },
-    "20260327-rjn-midnight-blues-collection": {
-        "en": "Lonely streetlamp in the rain, bittersweet jazz",
-        "ja": "雨の中に佇む街灯、ほろ苦いジャズ",
-        "ko": "비 속의 외로운 가로등, 쌉싸름한 재즈",
-        "es": "Farola solitaria bajo la lluvia, jazz agridulce",
-        "pt": "Poste solitário na chuva, jazz agridoce",
-        "zh-CN": "雨中孤独的街灯，苦甜交织的爵士",
-        "zh-TW": "雨中孤獨的街燈，苦甜交織的爵士",
-        "fr": "Réverbère solitaire sous la pluie, jazz doux-amer",
-        "de": "Einsame Straßenlaterne im Regen, bittersüßer Jazz",
-        "it": "Lampione solitario sotto la pioggia, jazz agrodolce",
-        "ru": "Одинокий фонарь под дождём, горько-сладкий джаз",
-        "id": "Lampu jalan sepi di tengah hujan, jazz pahit-manis",
-        "th": "เสาไฟเดียวดายกลางสายฝน แจ๊สหวานปนขม",
-        "hi": "बारिश में अकेला streetlamp, कड़वा-मीठा jazz",
-        "tr": "Yağmurda yalnız bir sokak lambası, buruk caz",
-        "ar": "مصباح شارع وحيد في المطر، جاز حلو مرّ",
-    },
-    "20260328-rjn-last-ember-collection": {
-        "en": "Thunder fading over a mountain cabin, jazz by the last ember",
-        "ja": "山小屋の上で遠ざかる雷鳴、最後の残り火のそばで聴くジャズ",
-        "ko": "산속 오두막 위로 멀어지는 천둥, 마지막 잉걸불 곁의 재즈",
-        "es": "Trueno alejándose sobre una cabaña de montaña, jazz junto a la última brasa",
-        "pt": "Trovão se afastando sobre uma cabana na montanha, jazz junto à última brasa",
-        "zh-CN": "山间小屋上的雷声渐远，最后余烬旁的爵士",
-        "zh-TW": "山間小屋上的雷聲漸遠，最後餘燼旁的爵士",
-        "fr": "Tonnerre s'éloignant au-dessus d'un chalet, jazz auprès de la dernière braise",
-        "de": "Donner verklingt über einer Berghütte, Jazz an der letzten Glut",
-        "it": "Tuono che svanisce sopra un rifugio, jazz vicino all'ultima brace",
-        "ru": "Гром затихает над хижиной в горах, джаз у последних углей",
-        "id": "Guruh menjauh di atas pondok pegunungan, jazz di sisi bara terakhir",
-        "th": "เสียงฟ้าร้องค่อยจางเหนือกระท่อมบนเขา แจ๊สข้างถ่านสุดท้าย",
-        "hi": "पहाड़ी झोपड़ी पर मद्धम होती गड़गड़ाहट, अंतिम अंगारों के पास jazz",
-        "tr": "Dağdaki kulübenin üzerinde uzaklaşan gök gürültüsü, son köz başında caz",
-        "ar": "رعدٌ يبتعد فوق كوخ جبلي، وجاز قرب آخر جمرة",
-    },
-    "20260328-rjn-last-platform-collection": {
-        "en": "Last train gone, jazz on an empty rainy platform",
-        "ja": "最終電車が去った後、雨の無人ホームに流れるジャズ",
-        "ko": "막차가 떠난 뒤, 빗속 텅 빈 플랫폼의 재즈",
-        "es": "El último tren se ha ido, jazz en un andén lluvioso y vacío",
-        "pt": "O último trem partiu, jazz numa plataforma chuvosa e vazia",
-        "zh-CN": "末班车开走后，雨夜空荡站台上的爵士",
-        "zh-TW": "末班車開走後，雨夜空蕩月台上的爵士",
-        "fr": "Dernier train parti, jazz sur un quai pluvieux et désert",
-        "de": "Der letzte Zug ist weg, Jazz auf einem regennassen, leeren Bahnsteig",
-        "it": "L'ultimo treno è partito, jazz su un binario piovoso e vuoto",
-        "ru": "Последний поезд ушёл, джаз на пустом дождливом перроне",
-        "id": "Kereta terakhir telah berlalu, jazz di peron sepi yang basah",
-        "th": "รถไฟเที่ยวสุดท้ายจากไป แจ๊สบนชานชาลาว่างเปล่าใต้ฝน",
-        "hi": "आख़िरी ट्रेन जा चुकी, बारिश में सूने प्लेटफ़ॉर्म पर jazz",
-        "tr": "Son tren gitti, yağmurlu boş peronda caz",
-        "ar": "غادر آخر قطار، وجاز على رصيف ممطر مهجور",
-    },
-    "20260330-rjn-rainy-studio-collection": {
-        "en": "Late night studio, jazz for hands that keep creating",
-        "ja": "深夜のスタジオ、創り続ける手のためのジャズ",
-        "ko": "한밤중 스튜디오, 계속 창작하는 손을 위한 재즈",
-        "es": "Estudio de madrugada, jazz para manos que siguen creando",
-        "pt": "Estúdio de madrugada, jazz para mãos que continuam criando",
-        "zh-CN": "深夜工作室，献给不停创作之手的爵士",
-        "zh-TW": "深夜工作室，獻給不停創作之手的爵士",
-        "fr": "Studio en pleine nuit, jazz pour des mains qui créent encore",
-        "de": "Studio tief in der Nacht, Jazz für Hände, die weiterschaffen",
-        "it": "Studio a tarda notte, jazz per mani che continuano a creare",
-        "ru": "Студия глубокой ночью, джаз для рук, что продолжают творить",
-        "id": "Studio larut malam, jazz untuk tangan yang terus berkarya",
-        "th": "สตูดิโอยามดึก แจ๊สสำหรับมือที่ยังคงสร้างสรรค์",
-        "hi": "देर रात का studio, सृजन में लगे हाथों के लिए jazz",
-        "tr": "Gece geç saatlerde stüdyo, yaratmaya devam eden eller için caz",
-        "ar": "استوديو في وقت متأخر، جاز ليدين لا تكفّان عن الإبداع",
-    },
-    "20260331-rjn-dorm-window-collection": {
-        "en": "Rain against the dorm window, jazz for the long night ahead",
-        "ja": "寮の窓を打つ雨、長い夜のためのジャズ",
-        "ko": "기숙사 창문에 부딪히는 비, 긴 밤을 위한 재즈",
-        "es": "Lluvia contra la ventana del dormitorio, jazz para la larga noche por delante",
-        "pt": "Chuva na janela do dormitório, jazz para a longa noite à frente",
-        "zh-CN": "雨打宿舍的窗，为漫长夜晚而响的爵士",
-        "zh-TW": "雨打宿舍的窗，為漫長夜晚而響的爵士",
-        "fr": "Pluie sur la fenêtre du dortoir, jazz pour la longue nuit à venir",
-        "de": "Regen am Wohnheimfenster, Jazz für die lange Nacht",
-        "it": "Pioggia sulla finestra del dormitorio, jazz per la lunga notte",
-        "ru": "Дождь по окну общежития, джаз для долгой ночи впереди",
-        "id": "Hujan menerpa jendela asrama, jazz untuk malam panjang yang menanti",
-        "th": "ฝนกระทบหน้าต่างหอพัก แจ๊สเพื่อค่ำคืนอันยาวนาน",
-        "hi": "हॉस्टल की खिड़की पर बारिश, लंबी रात के लिए jazz",
-        "tr": "Yurt penceresine vuran yağmur, uzun gece için caz",
-        "ar": "مطر يقرع نافذة المسكن، جاز لليلة طويلة قادمة",
-    },
-    "20260331-rjn-library-after-hours-collection": {
-        "en": "Hushed rain on library glass, jazz for the final chapter",
-        "ja": "図書館のガラスを静かに打つ雨、最終章のためのジャズ",
-        "ko": "도서관 유리창에 잔잔히 내리는 비, 마지막 장을 위한 재즈",
-        "es": "Lluvia silenciosa en el cristal de la biblioteca, jazz para el último capítulo",
-        "pt": "Chuva silenciosa no vidro da biblioteca, jazz para o capítulo final",
-        "zh-CN": "图书馆窗上的细雨，为最后一章而奏的爵士",
-        "zh-TW": "圖書館窗上的細雨，為最後一章而奏的爵士",
-        "fr": "Pluie feutrée sur les vitres de la bibliothèque, jazz pour le dernier chapitre",
-        "de": "Leiser Regen am Bibliotheksfenster, Jazz für das letzte Kapitel",
-        "it": "Pioggia sommessa sui vetri della biblioteca, jazz per l'ultimo capitolo",
-        "ru": "Тихий дождь по окну библиотеки, джаз для последней главы",
-        "id": "Gerimis lirih di kaca perpustakaan, jazz untuk bab terakhir",
-        "th": "สายฝนเบาๆ บนกระจกห้องสมุด แจ๊สสำหรับบทสุดท้าย",
-        "hi": "लाइब्रेरी के शीशे पर धीमी बारिश, अंतिम अध्याय के लिए jazz",
-        "tr": "Kütüphane camında yumuşak yağmur, son bölüm için caz",
-        "ar": "مطر هادئ على زجاج المكتبة، جاز للفصل الأخير",
-    },
-    "20260401-rjn-rain-nest-collection": {
-        "en": "Warm blanket, window rain, jazz fading gently into sleep",
-        "ja": "あたたかな毛布、窓を伝う雨、眠りへと優しく溶けるジャズ",
-        "ko": "따뜻한 담요, 창가의 빗소리, 잠 속으로 부드럽게 스며드는 재즈",
-        "es": "Manta cálida, lluvia en la ventana, jazz que se desvanece suavemente en el sueño",
-        "pt": "Cobertor quente, chuva na janela, jazz se dissipando suavemente no sono",
-        "zh-CN": "温暖的毛毯，窗上的雨声，缓缓融入睡眠的爵士",
-        "zh-TW": "溫暖的毛毯，窗上的雨聲，緩緩融入睡眠的爵士",
-        "fr": "Couverture chaude, pluie à la fenêtre, jazz qui s'évanouit dans le sommeil",
-        "de": "Warme Decke, Regen am Fenster, Jazz, der sanft in den Schlaf gleitet",
-        "it": "Coperta calda, pioggia alla finestra, jazz che svanisce nel sonno",
-        "ru": "Тёплое одеяло, дождь за окном, джаз, мягко уходящий в сон",
-        "id": "Selimut hangat, hujan di jendela, jazz lembut menuju tidur",
-        "th": "ผ้าห่มอุ่น เสียงฝนข้างหน้าต่าง แจ๊สนุ่มเลือนสู่นิทรา",
-        "hi": "गर्म कंबल, खिड़की पर बारिश, नींद में धीरे-धीरे घुलता jazz",
-        "tr": "Sıcak bir battaniye, pencerede yağmur, uykuya yumuşakça karışan caz",
-        "ar": "بطانية دافئة، مطر على النافذة، جاز يذوب بهدوء في النوم",
-    },
-    "20260404-rjn-empty-gallery-collection": {
-        "en": "Empty gallery after hours, jazz between rain and paintings",
-        "ja": "閉館後の無人ギャラリー、雨と絵画の間に流れるジャズ",
-        "ko": "폐관 후 텅 빈 갤러리, 비와 그림 사이를 흐르는 재즈",
-        "es": "Galería vacía después del horario, jazz entre la lluvia y los cuadros",
-        "pt": "Galeria vazia após o expediente, jazz entre a chuva e as pinturas",
-        "zh-CN": "闭馆后的空荡画廊，雨与画作之间流淌的爵士",
-        "zh-TW": "閉館後的空蕩畫廊，雨與畫作之間流淌的爵士",
-        "fr": "Galerie vide après l'heure, jazz entre la pluie et les tableaux",
-        "de": "Leere Galerie nach Feierabend, Jazz zwischen Regen und Gemälden",
-        "it": "Galleria vuota dopo l'orario, jazz tra pioggia e dipinti",
-        "ru": "Пустая галерея после закрытия, джаз между дождём и картинами",
-        "id": "Galeri kosong selepas jam tutup, jazz di antara hujan dan lukisan",
-        "th": "หอศิลป์เงียบเหงาหลังเวลาทำการ แจ๊สลอยระหว่างสายฝนกับภาพวาด",
-        "hi": "बंद होने के बाद की सूनी गैलरी, बारिश और चित्रों के बीच jazz",
-        "tr": "Mesai sonrası boş galeri, yağmur ile tablolar arasında caz",
-        "ar": "معرض فارغ بعد ساعات العمل، جاز بين المطر واللوحات",
-    },
-    "20260404-rjn-parking-garage-collection": {
-        "en": "Windshield rain on the top floor, jazz and flashcards",
-        "ja": "最上階のフロントガラスに降る雨、ジャズと暗記カード",
-        "ko": "꼭대기 층 차창에 내리는 비, 재즈와 단어카드",
-        "es": "Lluvia sobre el parabrisas en el último piso, jazz y tarjetas de estudio",
-        "pt": "Chuva no para-brisa no último andar, jazz e flashcards",
-        "zh-CN": "顶层车窗上的雨，爵士与单词卡",
-        "zh-TW": "頂層車窗上的雨，爵士與單字卡",
-        "fr": "Pluie sur le pare-brise au dernier étage, jazz et fiches de révision",
-        "de": "Regen auf der Windschutzscheibe im obersten Stock, Jazz und Lernkarten",
-        "it": "Pioggia sul parabrezza all'ultimo piano, jazz e flashcard",
-        "ru": "Дождь по лобовому стеклу на верхнем этаже, джаз и карточки для учёбы",
-        "id": "Hujan di kaca depan lantai paling atas, jazz dan kartu hafalan",
-        "th": "ฝนบนกระจกหน้ารถชั้นบนสุด แจ๊สและบัตรคำ",
-        "hi": "टॉप फ़्लोर पर गाड़ी के शीशे पर बारिश, jazz और flashcards",
-        "tr": "En üst katta ön cama yağan yağmur, caz ve kelime kartları",
-        "ar": "مطر على الزجاج الأمامي في الطابق العلوي، جاز وبطاقات مذاكرة",
-    },
-    "20260406-rjn-midnight-jazz-lounge-collection": {
-        "en": "Midnight Jazz Lounge",
-        "ja": "ミッドナイト・ジャズ・ラウンジ",
-        "ko": "미드나잇 재즈 라운지",
-        "es": "Salón de jazz a medianoche",
-        "pt": "Lounge de jazz à meia-noite",
-        "zh-CN": "午夜爵士酒廊",
-        "zh-TW": "午夜爵士酒廊",
-        "fr": "Lounge jazz de minuit",
-        "de": "Mitternachts-Jazz-Lounge",
-        "it": "Lounge jazz di mezzanotte",
-        "ru": "Полуночный джазовый лаунж",
-        "id": "Lounge jazz tengah malam",
-        "th": "เลานจ์แจ๊สยามเที่ยงคืน",
-        "hi": "मध्यरात्रि जैज़ लाउंज",
-        "tr": "Gece yarısı caz salonu",
-        "ar": "صالون الجاز في منتصف الليل",
-    },
-}
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
+SOURCE_LANG = "en"
+_RETRY_MAX = 3
+_RETRY_BACKOFF_SEC = (5, 15)
 
 
-def main() -> None:
-    updated = 0
-    for col, phrases in SCENE_PHRASES.items():
-        ws_path = COLLECTIONS_DIR / col / "workflow-state.json"
+def _resolve_collection_path(name: str) -> Path:
+    root = channel_dir() / "collections"
+    for sub in ("planning", "live"):
+        candidate = root / sub / name
+        if candidate.is_dir():
+            return candidate
+    raise ConfigError(
+        f"コレクション '{name}' が collections/planning/ にも collections/live/ にも見つかりません. "
+        "ディレクトリ名を確認してください"
+    )
+
+
+def _build_prompt(en_phrase: str, target_langs: list[str]) -> str:
+    return (
+        "You are a music YouTube channel localizer. Translate the following English "
+        "scene phrase into each target language for use in video titles. Keep each "
+        "translation evocative and concise (target 30-50 codepoints, max 80).\n\n"
+        f"English source: {en_phrase}\n\n"
+        f"Target languages (BCP-47 codes): {', '.join(target_langs)}\n\n"
+        "Output a single JSON object mapping language code to translation. "
+        'Example: {"ja": "...", "ko": "..."}\n'
+        "No code fences, no explanation, JSON only."
+    )
+
+
+def _strip_fence(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        text = text[first_newline + 1 :] if first_newline != -1 else text[3:]
+        if text.endswith("```"):
+            text = text[: text.rfind("```")]
+    return text.strip()
+
+
+def _generate_with_retry(client, *, model: str, contents) -> str:
+    """一過性 429/503 に備えた指数バックオフ付き generate_content."""
+    last_exc: Exception | None = None
+    for attempt in range(_RETRY_MAX):
+        try:
+            return client.models.generate_content(model=model, contents=contents).text or ""
+        except Exception as exc:
+            last_exc = exc
+            if attempt + 1 >= _RETRY_MAX:
+                break
+            wait = _RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)]
+            logger.warning("Gemini 呼び出し失敗 (%s), %ss 待機して再試行", exc, wait)
+            time.sleep(wait)
+    raise ValidationError(f"Gemini 呼び出しが {_RETRY_MAX} 回失敗しました: {last_exc}") from last_exc
+
+
+def translate_phrase(
+    en_phrase: str,
+    target_langs: list[str],
+    *,
+    client=None,
+    model: str = DEFAULT_GEMINI_MODEL,
+) -> dict[str, str]:
+    """Vertex AI Gemini で英語フレーズを target_langs に翻訳して dict を返す.
+
+    Args:
+        en_phrase: 英語ソースフレーズ
+        target_langs: 翻訳先の BCP-47 言語コード（`en` を含めても自動で除外する）
+        client: テスト用に DI 可能な google-genai Client。None なら ADC で生成
+        model: Gemini モデル名
+
+    Returns:
+        {lang: translated_phrase} の辞書（`en` は含まない）
+
+    Raises:
+        ValidationError: Gemini レスポンスが JSON dict として解釈できない / 言語欠落
+    """
+    targets = [lang for lang in target_langs if lang != SOURCE_LANG]
+    if not targets:
+        return {}
+
+    if client is None:
+        from youtube_automation.utils.genai_client import create_genai_client
+
+        client = create_genai_client()
+
+    prompt = _build_prompt(en_phrase, targets)
+    logger.info("Gemini 翻訳リクエスト: model=%s, langs=%s", model, targets)
+    raw = _generate_with_retry(client, model=model, contents=[prompt])
+    try:
+        payload = json.loads(_strip_fence(raw))
+    except json.JSONDecodeError as exc:
+        raise ValidationError(f"Gemini レスポンスが JSON としてパースできません: {raw!r}") from exc
+    if not isinstance(payload, dict):
+        raise ValidationError(f"Gemini レスポンスが JSON dict ではありません: {payload!r}")
+
+    missing = [lang for lang in targets if not payload.get(lang)]
+    if missing:
+        raise ValidationError(f"Gemini レスポンスに翻訳欠落: {missing}. payload={payload!r}")
+    return {lang: str(payload[lang]) for lang in targets}
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="コレクションの workflow-state.json.scene_phrases を多言語翻訳で投入する"
+    )
+    parser.add_argument(
+        "collection",
+        help="コレクションディレクトリ名 (collections/planning/ または live/ 配下)",
+    )
+    parser.add_argument(
+        "--en",
+        help="英語フレーズの明示指定。省略時は content.json の title.theme_scenes[theme].scene を使用",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="既に scene_phrases が存在する場合も上書きする",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="翻訳結果を表示するだけで workflow-state.json を更新しない",
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_GEMINI_MODEL,
+        help=f"Gemini モデル名 (デフォルト: {DEFAULT_GEMINI_MODEL})",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    args = _build_arg_parser().parse_args(argv)
+
+    try:
+        config = load_config()
+        col_path = _resolve_collection_path(args.collection)
+        ws_path = col_path / "workflow-state.json"
         if not ws_path.exists():
-            print(f"❌ {col}: workflow-state.json not found")
-            continue
+            raise ConfigError(f"{ws_path} が存在しません")
         state = json.loads(ws_path.read_text(encoding="utf-8"))
-        if state.get("scene_phrases"):
-            print(f"⏭️  {col}: already has scene_phrases, overwriting")
-        state["scene_phrases"] = phrases
+
+        supported = list(config.localizations.supported_languages)
+        if len(supported) <= 1:
+            print(
+                f"⏭️  {args.collection}: localizations.supported_languages が 1 言語以下 → "
+                "scene_phrases は不要、スキップ"
+            )
+            return 0
+
+        if state.get("scene_phrases") and not args.overwrite:
+            print(f"⏭️  {args.collection}: scene_phrases は既に存在します （--overwrite で上書き可能）")
+            return 0
+
+        theme = state.get("theme", "")
+        en_phrase = args.en or config.content.title.scene_for_theme(theme)
+        if not en_phrase:
+            raise ConfigError(
+                f"英語フレーズを解決できません: theme={theme!r}. "
+                "--en で明示指定するか、config/channel/content.json の "
+                f"title.theme_scenes[{theme!r}].scene を設定してください"
+            )
+
+        translations = translate_phrase(en_phrase, supported, model=args.model)
+        scene_phrases: dict[str, str] = {SOURCE_LANG: en_phrase, **translations}
+
+        if args.dry_run:
+            print(json.dumps(scene_phrases, ensure_ascii=False, indent=2))
+            print(f"\n--dry-run: {ws_path} には書き込みません")
+            return 0
+
+        state["scene_phrases"] = scene_phrases
         ws_path.write_text(
             json.dumps(state, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        print(f"✅ {col}: {len(phrases)} languages")
-        updated += 1
-    print(f"\n{updated}/{len(SCENE_PHRASES)} collections updated")
+        print(f"✅ {args.collection}: scene_phrases に {len(scene_phrases)} 言語を書き込みました")
+        return 0
+    except AutomationError as exc:
+        print(f"❌ {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

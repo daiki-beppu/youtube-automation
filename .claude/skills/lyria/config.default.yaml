@@ -1,11 +1,12 @@
 # lyria skill default config
 #
-# Vertex AI Lyria 3 (`interactions` endpoint) の DJ 型音楽生成設定。
+# Vertex AI Lyria 3 (`interactions` endpoint) を呼んで音源を生成する設定。
 # チャンネル側で config/skills/lyria.yaml に上書き。
 #
 # Lyria 3 API は text / reference image / BPM / intensity / vocal-instrumental mode / lyrics
 # を受け取れる。reference_image は構造化入力、その他はプロンプトに自動合成される。
-# composition.json の base / phases[] で個別指定可能（下記 default_* はチャンネル共通値）。
+# 1 リクエスト = 1 セグメント (~184 秒上限) で返るため、長尺は複数リクエストを連結する。
+# 下記 default_* はチャンネル共通値で、generate_music() 呼び出し時に個別上書き可能。
 
 # スキル無効化フラグ (true の場合 lyria スキルは /suno を案内して終了)
 _disabled: false
@@ -15,18 +16,18 @@ _disabled: false
 #   lyria-3-clip-preview : 30 秒固定。プレビュー用 (--preview で自動使用)
 model: lyria-3-pro-preview
 
-# base.prompt_prefix に入れる共通ジャンル句 (最小限、楽器名・ムード語は入れない)
+# プロンプト先頭に入れる共通ジャンル句 (最小限、楽器名・ムード語は入れない)
 # 推奨: "{genre} only, clean dry recording, no pads"
 prompt_prefix: ""
 
-# composition.json の base.style_hints に使うスタイルヒント (optional)
-# ジャンル・雰囲気の補足用。phase.prompt と一緒にモデルに送られる。
+# プロンプトに付与する補足スタイル句 (optional)
+# ジャンル・雰囲気の補足用。prompt 本体と一緒にモデルに送られる。
 style_hints: ""
 
-# フェーズ間クロスフェード秒数
+# セグメント間クロスフェード秒数（複数リクエストを連結する場合に使う）
 crossfade_sec: 5
 
-# プロンプトに使わない禁止語 (Claude が composition.json 設計時にチェック)
+# プロンプトに使わない禁止語 (Claude がプロンプト設計時にチェック)
 ng_words:
   - ambient pads
   - ethereal choir
@@ -38,9 +39,9 @@ ng_words:
 # タイミング余裕 (分) — total_duration_min = audio.target_duration_min + duration_padding_min
 duration_padding_min: 3
 
-# チャンネル共通の BPM / intensity / mode / 参照画像のデフォルト
-# lyria スキルが composition.json を設計するとき、base.* に自動マッピングする
-# null の場合は composition.json 側で個別指定する（または未指定）
+# チャンネル共通の BPM / intensity / mode / 参照画像のデフォルト。
+# generate_music() 呼び出し時にチャンネル共通値として渡し、呼び出しごとに個別上書き可能。
+# null の場合は呼び出し側で個別指定する（または未指定）。
 
 # 目安 60-180。例: 90
 default_bpm: null
@@ -51,6 +52,6 @@ default_intensity: null
 # "instrumental" | "vocal" | null
 default_mode: null
 
-# composition.json からの相対パス文字列、または絶対パス。
-# 例: "../10-assets/main.png" — コレクションのサムネイルを参照画像として自動採用
+# コレクションルートからの相対パス文字列、または絶対パス。
+# 例: "10-assets/main.png" — コレクションのサムネイルを参照画像として自動採用
 default_reference_image: null
