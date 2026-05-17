@@ -191,3 +191,9 @@ yt-channel-status
 
 - `/channel-new`: 新規チャンネルリポジトリ作成 + 競合発掘 (`/onboard` 完了後に実行)
 - `/channel-setup`: config 生成 (`/onboard` 完了後に実行、Step 6 は `/onboard` 完了済みなら skip)
+
+## 上級者向け: terraform ルート
+
+複数チャンネルを横断管理したい / 別 PC へ引っ越したい / GCP 側の drift を検出したい場合は `infra/terraform/gcp/` の README を参照。tfstate で構成管理できる代わりに `terraform.tfvars` 編集の 1 ステップが増える。
+
+AI が tfvars を Write して `scripts/gcp-terraform-apply.sh --auto-approve` を Bash で叩けば自動化可能。OAuth クライアント ID の手動配置は両ルート共通。

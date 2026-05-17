@@ -18,7 +18,25 @@
 
 ---
 
-## 🚀 セットアップ: 2 つのルート
+## 🚀 セットアップ: 3 つのルート
+
+| ルート | 推奨対象 | 手数 |
+| --- | --- | --- |
+| **ルート 0**: `/onboard` skill (Claude Code) | GCP / OAuth に不慣れな利用者、初心者 | 1 発話 + 手動 3 ステップ |
+| **ルート A**: `scripts/gcp-bootstrap.sh` | シェルから直接叩きたい、手動派 | 1 コマンド + 手動 1 クリック |
+| **ルート B**: `infra/terraform/gcp/` | 複数プロジェクト管理 / 別 PC 引っ越し / drift 検出が欲しい上級者 | tfvars 編集 + apply + 手動 1 クリック |
+
+「初回 1 チャンネルだけ立ち上げ」ならルート 0 or A、「2 つ目以降」「IaC 管理したい」ならルート B が向く。詳細な選択基準は [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) の「いつ terraform を選ぶか」を参照。
+
+### ルート 0: `/onboard` skill (AI 主導 wizard、推奨)
+
+Claude Code 上で `/onboard` を実行する。AI が `yt-doctor` で API 設定の状態を診断し、GCP プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 配置まで wizard で誘導する。
+
+```
+/onboard
+```
+
+`gcloud auth login` / `gcloud auth application-default login` / Console での OAuth クライアント ID 作成の 3 ステップだけ PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外は AI が gcloud を直接 Bash で実行する。内部では本書のルート A (bootstrap.sh) を呼ぶ。
 
 ### ルート A: `scripts/gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
