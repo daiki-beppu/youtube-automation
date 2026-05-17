@@ -378,15 +378,11 @@ def test_main_preserves_existing_files_and_creates_only_missing_ones(tmp_path):
 # ===================== Case 18: 差分あり + --force なし → diff 出力 + 変更なし =====================
 
 
-def test_existing_file_with_diff_outputs_unified_diff_to_stderr_and_keeps_file(
-    tmp_path, capsys
-):
+def test_existing_file_with_diff_outputs_unified_diff_to_stderr_and_keeps_file(tmp_path, capsys):
     # Given: meta.json に異なる内容を仕込む
     channel_dir = _channel_dir(tmp_path)
     channel_dir.mkdir(parents=True)
-    original_text = json.dumps(
-        {"channel": {"name": "Other", "short": "OT"}}, indent=2, ensure_ascii=False
-    ) + "\n"
+    original_text = json.dumps({"channel": {"name": "Other", "short": "OT"}}, indent=2, ensure_ascii=False) + "\n"
     (channel_dir / "meta.json").write_text(original_text, encoding="utf-8")
 
     # When: 異なる --name で --force なし実行
