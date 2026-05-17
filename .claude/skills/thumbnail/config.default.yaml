@@ -9,9 +9,9 @@ image_generation:
   # - openai: OpenAI gpt-image 系を使用（OPENAI_API_KEY が必要）
   provider: gemini
 
-  # 1 枚あたりのコスト (USD) は cost_tracker.PRICING から自動算出される。
-  # PRICING の値を上書きしたい場合のみ各 provider の cost_per_image_usd を指定する
-  # （用途例: エンタープライズ割引価格や予算上限値の固定）。
+  # 事前見積もり用の 1 枚あたりコスト (USD) は各 provider の cost_per_image_usd で
+  # 指定したときのみ CLI 表示に使われる。未指定なら CLI には「不明」と表示され、
+  # 実コストは GCP Cloud Console > Billing で確認する。
 
   gemini:
     # 使用する Gemini 画像生成モデル
@@ -88,7 +88,7 @@ image_generation:
     # 使用する OpenAI 画像生成モデル
     model: gpt-image-2
 
-    # 品質階層: low | medium | high（cost_tracker.PRICING の by_size key と一致）
+    # 品質階層: low | medium | high
     quality: high
 
     # アスペクト比は "16:9" / "9:16" のみサポート（thumbnail スキルは内部で 16:9 固定）
@@ -100,5 +100,6 @@ image_generation:
     # 1 リクエストで生成する枚数（n パラメータ）
     batch: 1
 
-    # PRICING を上書きしたい場合のみ cost_per_image_usd を指定する
+    # 事前見積もりに使う 1 枚あたり単価を固定したい場合のみ指定する。
+    # 未指定なら CLI 表示は「不明」となり、実コストは GCP Cloud Console > Billing で確認する。
     # cost_per_image_usd: null

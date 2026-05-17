@@ -46,7 +46,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 - **同日2本アップロード**: JP + EN を同日投稿（API クォータ: 2 × 1,600 = 3,200 ユニット）
 - **プレイリスト管理**: `config/channel/playlists.json` の `playlists.jp` / `playlists.en` に自動追加
 - **相互リンク**: アップロード後に概要欄を更新し、JP↔EN 動画 URL を相互記載
-- `video_uploader.py` を直接使用
+- `yt-upload-auto` を使用
 - single_release 型では `content_model.languages` が発音言語リストとして解釈される（collection 型とは意味が異なる）
 
 ## Instructions
@@ -114,3 +114,9 @@ uv run yt-upload-collection --plan [-c NAME]
 - 誇張表現回避（Epic, Ultimate 等の禁止）
 - SEO 最適化タグ（`config/channel/content.json` の `tags.base` 参照）
 - AI 透明性・Usage & Attribution の記載
+
+## Cross References
+
+- `/video-description` — アップロード前に descriptions.md を生成
+- `/playlist` — プレイリスト状態確認・手動 assign・クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
+- `/metadata-audit` — アップロード後のローカル ↔ YouTube 整合性監査

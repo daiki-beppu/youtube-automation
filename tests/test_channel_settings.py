@@ -238,10 +238,47 @@ class TestCLIPushDryRun:
         assert rc == 0
         out = capsys.readouterr().out
         assert "pushed" in out
-        youtube.channels().update.assert_called_once()
-        call_kwargs = youtube.channels().update.call_args.kwargs
-        assert "brandingSettings" in call_kwargs["part"]
-        assert call_kwargs["body"]["brandingSettings"]["channel"]["description"] == "Test channel description for sync."
+
+        # `brandingSettings` を他 part と混在させると YouTube API が 400 を返すため (#230)、
+        # part 単位で個別に channels().update() を呼ぶ。
+        update_calls = youtube.channels().update.call_args_list
+        parts_called = [call.kwargs["part"] for call in update_calls]
+        assert len(update_calls) >= 1
+        for part in parts_called:
+            assert "," not in part, f"part must be a single value, got: {part!r}"
+        assert "brandingSettings" in parts_called
+
+        branding_call = next(call for call in update_calls if call.kwargs["part"] == "brandingSettings")
+        body = branding_call.kwargs["body"]
+        assert body["id"] == "UCfixture"
+        assert body["brandingSettings"]["channel"]["description"] == "Test channel description for sync."
+        assert "status" not in body and "localizations" not in body, (
+            "branding push body must contain only brandingSettings"
+        )
+
+    def test_apply_splits_branding_and_status(self, capsys):
+        """`brandingSettings` と `status` が同時に変更されても、個別の API call として発火する。"""
+        youtube = MagicMock()
+        remote = _mock_remote_response(description="old remote")
+        remote["status"] = {"selfDeclaredMadeForKids": True}  # local fixture は False
+        youtube.channels().list().execute.return_value = {"items": [remote]}
+        with patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        ):
+            rc = channel_settings_cli.main(["push", "--apply", "--no-localizations"])
+        assert rc == 0
+        update_calls = youtube.channels().update.call_args_list
+        parts_called = [call.kwargs["part"] for call in update_calls]
+        assert "brandingSettings" in parts_called
+        assert "status" in parts_called
+        # 1 つの part 文字列に複数 part が混在しないこと
+        for part in parts_called:
+            assert part in ("brandingSettings", "localizations", "status")
+
+        status_call = next(call for call in update_calls if call.kwargs["part"] == "status")
+        assert status_call.kwargs["body"]["status"]["selfDeclaredMadeForKids"] is False
+        assert "brandingSettings" not in status_call.kwargs["body"]
 
     def test_no_diff_skips_update(self, capsys):
         youtube = MagicMock()

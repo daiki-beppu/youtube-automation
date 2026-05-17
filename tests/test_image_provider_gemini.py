@@ -75,7 +75,6 @@ def request_factory(tmp_path: Path):
         aspect_ratio: str = "16:9",
         image_size: str = "2K",
         output_name: str = "out.png",
-        cost_per_image_usd: float | None = 0.101,
     ) -> ImageGenerationRequest:
         return ImageGenerationRequest(
             prompt=prompt,
@@ -83,7 +82,6 @@ def request_factory(tmp_path: Path):
             aspect_ratio=aspect_ratio,
             image_size=image_size,
             references=list(references or []),
-            cost_per_image_usd=cost_per_image_usd,
         )
 
     return _make
@@ -105,19 +103,6 @@ def patched_genai_client():
             yield mock_client
 
     return _ctx
-
-
-@pytest.fixture(autouse=True)
-def _silence_cost_tracker(monkeypatch):
-    """テスト中の cost_tracker.log_generation 副作用を抑止。"""
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.gemini.cost_tracker.log_generation",
-        lambda *a, **kw: {"estimated_cost_usd": 0.101, "category": "image", "model": kw.get("model", "")},
-    )
-    monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.gemini.cost_tracker.print_last_report",
-        lambda *a, **kw: None,
-    )
 
 
 @pytest.fixture(autouse=True)

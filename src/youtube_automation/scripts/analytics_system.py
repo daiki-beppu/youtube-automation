@@ -13,8 +13,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector  # noqa: E402
-from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
+from googleapiclient.errors import HttpError
+
+from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
+from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +73,8 @@ class AnalyticsSystem:
                 logger.error("❌ 認証失敗 - 接続テストに失敗")
                 return False
 
-        except Exception as e:
-            logger.error(f"❌ 認証エラー: {e}")
+        except (AuthError, YouTubeAPIError, ConfigError) as e:
+            logger.error("❌ 認証エラー: %s", e)
             return False
 
     def collect_analytics_data(self, days=30, save_data=True, include_reporting=False):
@@ -146,14 +149,26 @@ class AnalyticsSystem:
                         },
                         "動画×日次データ",
                     )
-                except Exception as e:
-                    logger.warning(f"⚠️ 動画×日次データ保存失敗（続行）: {e}")
+                except HttpError as e:
+                    api_err = YouTubeAPIError.from_http_error(e, "動画×日次データ取得")
+                    logger.warning(
+                        "⚠️ 動画×日次データ取得失敗（続行）: %s (status=%s)",
+                        api_err,
+                        api_err.status_code,
+                        exc_info=True,
+                    )
+                except (OSError, ValueError, KeyError) as e:
+                    logger.warning("⚠️ 動画×日次データ処理失敗（続行）: %s", e, exc_info=True)
 
             logger.info("✅ アナリティクスデータ収集完了")
             return analytics_data
 
-        except Exception as e:
-            logger.error(f"❌ データ収集エラー: {e}")
+        except HttpError as e:
+            api_err = YouTubeAPIError.from_http_error(e, "アナリティクス収集")
+            logger.exception("❌ データ収集 API エラー: %s (status=%s)", api_err, api_err.status_code)
+            return None
+        except (YouTubeAPIError, ConfigError, OSError, ValueError, KeyError) as e:
+            logger.exception("❌ データ収集エラー: %s", e)
             return None
 
     def run_data_collection(self, days=30, include_reporting=False):
@@ -176,15 +191,10 @@ class AnalyticsSystem:
             results["error"] = "Authentication failed"
             return results
 
-        try:
-            analytics_data = self.collect_analytics_data(days=days, include_reporting=include_reporting)
-            if not analytics_data:
-                results["error"] = "Data collection failed"
-                logger.error("🛑 データ収集に失敗したため処理を終了します")
-                return results
-        except Exception as e:
-            results["error"] = f"Data collection error: {e}"
-            logger.error("🛑 データ収集エラーのため処理を終了します")
+        analytics_data = self.collect_analytics_data(days=days, include_reporting=include_reporting)
+        if not analytics_data:
+            results["error"] = "Data collection failed"
+            logger.error("🛑 データ収集に失敗したため処理を終了します")
             return results
 
         logger.info("✅ YouTube Analyticsデータ収集完了")

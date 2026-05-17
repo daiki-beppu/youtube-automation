@@ -11,7 +11,7 @@
 ``resolve_cost_per_image``、PNG/JPEG の保存と YouTube サムネ 2MB 上限対応の
 ``persist_image`` をここに集約する。
 
-CLI 共通ヘルパー（``generate_image`` / ``generate_thumbnail`` の重複解消）:
+CLI 共通ヘルパー（``generate_image`` の出力上書き分岐 / 参照画像解決を集約）:
 - ``prompt_overwrite_or_rename``: 既存出力ファイル検出時の上書き確認 / -vN 採番
 - ``resolve_reference_paths``: 参照画像パス文字列を絶対 ``Path`` に解決
 """
@@ -55,13 +55,20 @@ def apply_composition_rules(prompt: str, config: dict) -> str:
     return f"{prefix} {prompt}"
 
 
-def confirm_cost(model: str, cost_per_image: float) -> bool:
-    """コスト見積もりを表示してユーザー確認を取る。"""
+def confirm_cost(model: str, cost_per_image: float | None) -> bool:
+    """コスト見積もりを表示してユーザー確認を取る。
+
+    `cost_per_image=None` は skill-config に `cost_per_image_usd` が指定されておらず、
+    事前見積もりが出せない状態。その場合も y/N 確認自体は維持し、表示は「不明」とする。
+    """
     print()
     print("=== Image Generation ===")
     print(f"モデル:     {model}")
     print("生成枚数:   1 image")
-    print(f"推定コスト: ${cost_per_image:.3f}")
+    if cost_per_image is None:
+        print("推定コスト: 不明 (skill-config の cost_per_image_usd 未設定)")
+    else:
+        print(f"推定コスト: ${cost_per_image:.3f}")
     print()
     try:
         answer = input("続行しますか? (y/N): ").strip().lower()
@@ -97,7 +104,6 @@ def log_image_cost(
     image_size: str,
     aspect_ratio: str,
     output_file: Path,
-    cost_usd: float | None = None,
     reference_count: int = 0,
 ) -> dict | None:
     """画像生成 1 件分を cost_tracker 経由で記録する。"""
@@ -105,7 +111,7 @@ def log_image_cost(
         "image",
         model=model,
         quantity=1,
-        cost_usd=cost_usd,
+        unit="image",
         metadata={
             "image_size": image_size,
             "aspect_ratio": aspect_ratio,
@@ -159,16 +165,13 @@ def resolve_composition_source(
 def resolve_cost_per_image(
     skill_cfg: dict[str, Any],
     provider: str,
-    model: str,
-    image_size: str,
-) -> float:
-    """skill-config の ``cost_per_image_usd`` 上書きを尊重して 1 枚あたり単価を決定する。
+) -> float | None:
+    """skill-config の ``cost_per_image_usd`` を尊重して 1 枚あたり単価を決定する。
 
     優先順位:
     1. ``skill_cfg["image_generation"][provider]["cost_per_image_usd"]``
     2. （provider="gemini" の場合のみ）legacy ``skill_cfg["gemini_image"]["cost_per_image_usd"]``
-    3. ``cost_tracker.estimate_cost(model, quantity=1, image_size=image_size)``（PRICING）
-    4. すべて未解決なら 0.0
+    3. いずれも未指定なら ``None``（PRICING フォールバックは撤廃済み）。
     """
     custom = None
     image_gen = skill_cfg.get("image_generation")
@@ -180,9 +183,9 @@ def resolve_cost_per_image(
         legacy = skill_cfg.get("gemini_image")
         if isinstance(legacy, dict):
             custom = legacy.get("cost_per_image_usd")
-    if custom is not None:
-        return float(custom)
-    return cost_tracker.estimate_cost(model, quantity=1, image_size=image_size) or 0.0
+    if custom is None:
+        return None
+    return float(custom)
 
 
 def persist_image(image: "PILImage", output_path: Path, *, save_as_png: bool) -> Path:
