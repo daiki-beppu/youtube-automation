@@ -178,6 +178,13 @@ def _sync_file_asset(
             f"  [warn] --only は kind='file' の asset ({args.asset}) では使えません",
             file=sys.stderr,
         )
+    if args.prune:
+        # prune は target ディレクトリ走査が前提のため kind='file' では適用できない。
+        # 黙って無視せず警告で知らせる (sync は継続)。
+        print(
+            f"  [warn] --prune は kind='file' の asset ({args.asset}) では使えません",
+            file=sys.stderr,
+        )
 
     src = root / spec["source_filename"]
     _ensure_target_parent(target)
@@ -222,11 +229,50 @@ def _sync_dir_asset(
         prefix = "[dry-run] " if args.dry_run else ""
         print(f"  {prefix}{result:>8}: {name}")
 
+    if args.prune:
+        # bundled は **全集合** で判定する (--only でフィルタしない)。
+        # `--only` 集合と混同すると bundled の他 entry が誤って prune される。
+        bundled = set(_list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename")))
+        do_delete = args.yes and not args.dry_run
+        prune_counts = _prune_orphans(target_dir, bundled, do_delete=do_delete)
+        for key, val in prune_counts.items():
+            counts[key] = counts.get(key, 0) + val
+
     print()
     print(f"完了: {sum(counts.values())} 件処理 — {counts}")
     if counts.get("skipped"):
         print("  (skipped を上書きするには --force を指定してください)")
+    if args.prune and counts.get("would-prune"):
+        print("  (実削除には --yes を指定してください)")
     return 0
+
+
+def _prune_orphans(
+    target_dir: Path,
+    bundled: set[str],
+    *,
+    do_delete: bool,
+) -> dict[str, int]:
+    """target_dir 直下で bundled に含まれない entry を列挙し、do_delete=True なら削除する。
+
+    戻り値: {"pruned": N} (実削除時) または {"would-prune": N} (列挙のみ)。
+    `iterdir()` は broken symlink も列挙するため、symlink → dir → file の順で判定する。
+    """
+    label = "pruned" if do_delete else "would-prune"
+    count = 0
+    for entry in sorted(target_dir.iterdir(), key=lambda p: p.name):
+        if entry.name in bundled:
+            continue
+        count += 1
+        print(f"  {label:>8}: {entry.name}")
+        if do_delete:
+            if entry.is_symlink():
+                entry.unlink()
+            elif entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+    return {label: count} if count else {}
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
@@ -358,6 +404,19 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         metavar="ENTRY",
         help="指定した entry だけ同期 (省略時は全件、kind='file' では無効)",
+    )
+    p_sync.add_argument(
+        "--prune",
+        action="store_true",
+        help=(
+            "同梱に無い target 側 entry を削除候補として列挙する "
+            "(skills asset のみ、実削除には --yes も必要)"
+        ),
+    )
+    p_sync.add_argument(
+        "--yes",
+        action="store_true",
+        help="--prune と併用したとき、列挙のみではなく実際に削除する",
     )
     p_sync.set_defaults(func=cmd_sync)
 
