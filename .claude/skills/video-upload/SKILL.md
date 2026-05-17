@@ -114,3 +114,9 @@ uv run yt-upload-collection --plan [-c NAME]
 - 誇張表現回避（Epic, Ultimate 等の禁止）
 - SEO 最適化タグ（`config/channel/content.json` の `tags.base` 参照）
 - AI 透明性・Usage & Attribution の記載
+
+## Cross References
+
+- `/video-description` — アップロード前に descriptions.md を生成
+- `/playlist` — プレイリスト状態確認・手動 assign・クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
+- `/metadata-audit` — アップロード後のローカル ↔ YouTube 整合性監査

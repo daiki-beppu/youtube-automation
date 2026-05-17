@@ -102,11 +102,18 @@ def _cmd_push(args: argparse.Namespace) -> int:
         print("⚠️  no updatable fields in local config; nothing to push.")
         return 0
 
-    try:
-        youtube.channels().update(part=",".join(parts), body=body).execute()
-    except Exception as e:
-        raise YouTubeAPIError(f"channels().update() failed: {e}") from e
-    print(f"✅ pushed {len(lines) // 3} change(s) to YouTube.")
+    # YouTube Data API は `brandingSettings` を他の part と同時に送ると 400 を返す
+    # (`branding_settings cannot be used with other parts`)。part 単位で個別に
+    # channels().update() を呼ぶ。(#230)
+    for part in parts:
+        try:
+            youtube.channels().update(
+                part=part,
+                body={"id": channel_id, part: body[part]},
+            ).execute()
+        except Exception as e:
+            raise YouTubeAPIError(f"channels().update(part={part}) failed: {e}") from e
+    print(f"✅ pushed {len(lines) // 3} change(s) to YouTube ({len(parts)} API call(s)).")
     return 0
 
 
