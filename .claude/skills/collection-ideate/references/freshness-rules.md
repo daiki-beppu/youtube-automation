@@ -53,7 +53,8 @@ if [ -n "$LATEST_DATA" ]; then
 fi
 
 # 1b. benchmark — /benchmark スキル内の鮮度チェックに委譲
-#    （freshness_days より古い md があれば自動更新）
+#    （`config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より
+#     mtime が古い md があれば差分更新）
 
 # 2. persona — 存在チェックのみ
 if [ ! -f docs/channel/personas/persona-definition.md ]; then
@@ -72,7 +73,7 @@ fi
 |---|---|
 | `reports/analysis_*.md` が存在しない | `/collection-ideate` を中断し、`/analytics-collect → /analytics-analyze` の先行実行を案内 |
 | `reports/analysis_*.md` が最新 `data/analytics_data_*.json` より古い日付 | `/collection-ideate` を中断し、`/analytics-analyze` の再実行を案内 |
-| `data/benchmark_*.json` が 3 日より古い | `/benchmark` を Skill ツールで自動実行 |
+| `data/benchmark_*.json` が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古い | `/benchmark` を Skill ツールで自動実行 |
 | `persona-definition.md` が存在しない | `/collection-ideate` を中断し、`/audience-persona` の先行実行を案内 |
 | `viewing-scene-matrix.md` が存在しない | `/collection-ideate` を中断し、`/viewing-scene` の先行実行を案内 |
 
