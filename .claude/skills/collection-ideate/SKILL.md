@@ -73,7 +73,7 @@ uv run yt-channel-status
 
 #### Phase 1-3: 競合ベンチマーク分析
 
-**Skill ツールで `/benchmark` を実行** — 3 日以上未更新のファイルがあれば YouTube Data API (OAuth) で最新データを自動取得・更新する。最新であればスキップされる。
+**Skill ツールで `/benchmark` を実行** — `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古いファイルがあれば YouTube Data API (OAuth) で最新データを自動取得・更新する。最新であればスキップされる。
 
 更新完了後、`docs/benchmarks/` 配下の全 `.md` ファイルを Read ツールで読み込み、以下を抽出:
 - 競合チャンネルの高パフォーマンステーマ（再生数上位）
