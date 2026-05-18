@@ -33,7 +33,7 @@
      - ``TF_VAR_discord_webhook_url`` を案内コメントに含む
 10. ``infra/terraform/streaming/README.md``
      - 死活監視セクション / Discord / 4 シナリオ言及
-11. ``src/youtube_automation/utils/streaming_archive.py``
+11. ``src/youtube_automation/utils/streaming/daily_archive.py``
      - ``count_archives_for_date`` のモック検証
 12. ``src/youtube_automation/scripts/streaming_archive_check.py``
      - argparse / 件数不足時 exit 1 / Discord 通知
@@ -1254,7 +1254,7 @@ class TestStreamingReadmeHealthcheck:
 
 
 # ============================================================================
-# src/youtube_automation/utils/streaming_archive.py — count_archives_for_date
+# src/youtube_automation/utils/streaming/daily_archive.py — count_archives_for_date
 # ============================================================================
 
 
@@ -1280,7 +1280,7 @@ class TestStreamingArchiveCount:
         When count_archives_for_date を呼ぶ
         Then 0 を返す（API を 2 回目以降呼ばない最適化は問わない）。
         """
-        from youtube_automation.utils.streaming_archive import count_archives_for_date
+        from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
 
         service = self._make_service(search_items=[], video_items=[])
         count = count_archives_for_date(service, date(2026, 5, 1))
@@ -1293,7 +1293,7 @@ class TestStreamingArchiveCount:
 
         order.md「1 日 2 本のアーカイブ」要件の通常系。
         """
-        from youtube_automation.utils.streaming_archive import count_archives_for_date
+        from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
 
         target = date(2026, 5, 1)
         search_items = [
@@ -1321,7 +1321,7 @@ class TestStreamingArchiveCount:
         When count_archives_for_date を呼ぶ
         Then 数に含めない。
         """
-        from youtube_automation.utils.streaming_archive import count_archives_for_date
+        from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
 
         target = date(2026, 5, 1)
         search_items = [
@@ -1355,7 +1355,7 @@ class TestStreamingArchiveCount:
         When count_archives_for_date を呼ぶ
         Then 数に含めない（アーカイブ済みのみ対象）。
         """
-        from youtube_automation.utils.streaming_archive import count_archives_for_date
+        from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
 
         target = date(2026, 5, 1)
         search_items = [
@@ -1389,7 +1389,7 @@ class TestStreamingArchiveCount:
         When count_archives_for_date を呼ぶ
         Then 数に含めない（ライブ配信由来のアーカイブだけを対象）。
         """
-        from youtube_automation.utils.streaming_archive import count_archives_for_date
+        from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
 
         target = date(2026, 5, 1)
         search_items = [{"id": {"videoId": "v_normal"}}]
@@ -1406,6 +1406,66 @@ class TestStreamingArchiveCount:
         service = self._make_service(search_items, video_items)
         count = count_archives_for_date(service, target)
         assert count == 0, "liveStreamingDetails 不在の通常動画は数えないこと"
+
+
+# ============================================================================
+# move 完全性: 新パス到達 / 旧パス消滅 / __init__ 非露出
+# ============================================================================
+
+
+class TestDailyArchiveModuleSurface:
+    """`utils/streaming_archive.py` → `utils/streaming/daily_archive.py` の move 完全性。
+
+    plan の R1–R2（新パス到達担保）と R8（旧パス shim 不残置）を構造アサーションで担保する。
+    既存 5 ケース（`TestStreamingArchiveCount`）は import 文の付け替えで振る舞いを検証するが、
+    パス文字列を直接 importlib で評価するアサーションを別に持つことで、move の意図を機械的に保証する。
+    """
+
+    def test_new_daily_archive_path_is_importable(self):
+        """Given move 後の構成
+        When `youtube_automation.utils.streaming.daily_archive` を import する
+        Then モジュールが解決可能で `count_archives_for_date` を公開している。
+        """
+        import importlib
+
+        mod = importlib.import_module("youtube_automation.utils.streaming.daily_archive")
+        assert hasattr(mod, "count_archives_for_date"), (
+            "新パス `streaming/daily_archive` が `count_archives_for_date` を公開していない"
+        )
+
+    def test_old_flat_streaming_archive_path_is_not_importable(self):
+        """Given move 後の構成（後方互換 shim 不残置）
+        When 旧パス `youtube_automation.utils.streaming_archive` を import する
+        Then `ModuleNotFoundError` を投げる。
+
+        order.md「move のみ（新公開 API を増やさない）」+ CLAUDE.md「後方互換コードは不要」を担保。
+        """
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("youtube_automation.utils.streaming_archive")
+
+
+class TestStreamingPackageSurface:
+    """`utils/streaming/__init__.py` の公開 API surface。
+
+    plan R7（`__init__.py` で新公開 API を増やさない）を担保。
+    `streaming/__init__.py` は定数集中モジュールであり、関数の再 export は方針として行わない。
+    """
+
+    def test_streaming_package_does_not_export_daily_count(self):
+        """Given `streaming/__init__.py` は定数のみ集約する方針
+        When `youtube_automation.utils.streaming` を import する
+        Then `count_archives_for_date` は package 直下から見えない。
+
+        order.md「新公開 API は増やさない」と `streaming/__init__.py` の既存方針の整合。
+        """
+        import youtube_automation.utils.streaming as pkg
+
+        assert not hasattr(pkg, "count_archives_for_date"), (
+            "streaming/__init__.py に count_archives_for_date を re-export してはならない"
+            "（order.md: 新公開 API を増やさない）"
+        )
 
 
 # ============================================================================
