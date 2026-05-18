@@ -37,6 +37,109 @@ class SceneTitleViolation:
     template: str
 
 
+# ---------------------------------------------------------------------------
+# Shorts 用 module-level helpers
+# ---------------------------------------------------------------------------
+# Shorts の description / localizations は 3 経路（`generate_shorts_metadata`,
+# `bulk_update_short_localizations`, テストの parity 比較）から呼ばれるため、
+# クラスメソッドではなく module-level helper にして単一の事実源にする
+# （AI-NEW-shorts-localizations-DRY / AI-NEW-bulk-update-loc-L161 対応）。
+
+
+def _format_short_duration_phrase(config) -> str:
+    """`config.audio.target_duration_min` から「2 hours」等の文字列を組み立てる.
+
+    `target_duration_min is None` のときは `round(min / 60)` で TypeError に
+    ならないよう "Full collection" にフォールバックする（plan §152）。
+    """
+    target_min = config.audio.target_duration_min
+    if target_min is None:
+        return "Full collection"
+    hours = round(target_min / 60)
+    return f"{hours} hour" if hours == 1 else f"{hours} hours"
+
+
+def build_short_description(
+    config,
+    *,
+    collection_name: str,
+    cc_video_url: str,
+) -> str:
+    """Shorts デフォルト description（fallback と default 両方で使う共通組み立て）.
+
+    `cc_video_url` が空なら `♫` 行を含めない（plan 要件 #3 / アンチパターン #5）。
+    末尾に `#Shorts` を必ず付ける（YouTube 検出最適化）。
+    """
+    duration_phrase = _format_short_duration_phrase(config)
+    parts = [
+        f"{collection_name} ({duration_phrase}) | {config.meta.channel_name}",
+        "",
+    ]
+    if cc_video_url:
+        parts.append(f"♫ Full → {cc_video_url}")
+        parts.append("")
+    parts.append("#Shorts")
+    return "\n".join(parts)
+
+
+def build_short_localizations(
+    config,
+    *,
+    collection_name: str,
+    theme: str,
+    cc_video_url: str,
+) -> Dict[str, Dict[str, str]]:
+    """Shorts 用 localizations を生成する（`generate_shorts_metadata` / bulk_update 共通）.
+
+    - `short_title_template` を持たない言語は skip（plan 要件 #5）.
+    - `short_description_template` が無い言語は `build_short_description` フォールバック.
+    - `theme` を必須引数にして、bulk_update が theme 抜き(`""`) で初回 upload の
+      タイトルを破壊する事故（AI-NEW-bulk-update-loc-L161）を構造的に防ぐ.
+    """
+    loc_config = config.localizations.data
+    if not loc_config:
+        return {}
+
+    channel_name = config.meta.channel_name
+    default_tagline = config.meta.tagline
+    localizations: Dict[str, Dict[str, str]] = {}
+
+    for lang in loc_config.get("supported_languages", []):
+        lang_data = loc_config.get("languages", {}).get(lang, {})
+        title_tpl = lang_data.get("short_title_template")
+        if not title_tpl:
+            continue
+
+        loc_title = title_tpl.format(
+            theme=theme,
+            channel_name=channel_name,
+            collection_name=collection_name,
+        )
+
+        desc_data = lang_data.get("description", {}) or {}
+        tagline = desc_data.get("tagline", default_tagline)
+        desc_tpl = lang_data.get("short_description_template")
+        if desc_tpl:
+            loc_desc = desc_tpl.format(
+                collection_name=collection_name,
+                channel_name=channel_name,
+                cc_video_url=cc_video_url,
+                tagline=tagline,
+            )
+        else:
+            loc_desc = build_short_description(
+                config,
+                collection_name=collection_name,
+                cc_video_url=cc_video_url,
+            )
+
+        localizations[lang] = {
+            "title": loc_title,
+            "description": loc_desc[:5000],
+        }
+    return localizations
+
+
 def validate_scene_phrases(
     scene_phrases: Dict[str, str],
     config,
@@ -587,6 +690,83 @@ class BAHMetadataGenerator:
     def _generate_tags(self) -> List[str]:
         """YouTube タグ生成（config/channel/content.json 駆動）"""
         return self.config.content.tags.for_collection(self.collection_name)
+
+    # ─── Shorts 用メタデータ ────────────────────────────
+
+    def _load_theme(self) -> str:
+        """workflow-state.json から `theme` キーを読み込む（無ければ空文字）.
+
+        Shorts のタグ・ローカライズ展開で `tags.themes[<theme>]` 参照に使うため、
+        既存 `_extract_theme_name`（collection_name 派生）ではなく `workflow-state.json`
+        の `theme` キーを優先する（テーマ別 tag を引くキーが workflow-state 側で
+        確定している前提）。
+        """
+        ws_path = self.collection_path / "workflow-state.json"
+        if ws_path.exists():
+            try:
+                with open(ws_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                return state.get("theme", "") or ""
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return ""
+
+    def generate_shorts_metadata(self, cc_video_url: str) -> Dict:
+        """Shorts 用メタデータを生成する.
+
+        Args:
+            cc_video_url: 紐づく Complete Collection の YouTube URL。
+                空文字を渡すと CC リンク行を skip（例外は投げない、plan 要件 #3）。
+
+        Returns:
+            {title, description, tags, category_id, privacy_status, language, localizations}
+
+        Raises:
+            ValueError: 生成タイトルが 100 codepoint を超過したとき（silent slice 禁止、
+                plan 補足設計判断 §153）。
+        """
+        channel_name = self.config.meta.channel_name
+        theme = self._load_theme()
+
+        # タイトル: 旧版踏襲 "{collection_name} ✦ {channel_name} #Shorts"
+        title = f"{self.collection_name} ✦ {channel_name} #Shorts"
+        if len(title) > 100:
+            raise ValueError(
+                f"生成した Shorts タイトルが {len(title)} codepoint と 100 を超過: "
+                f"{title}\n"
+                "→ コレクションディレクトリ名（_extract_collection_name 経路）を短縮してください"
+            )
+
+        # description: 共通組み立て（fallback と同じロジックを再利用）
+        description = build_short_description(
+            self.config,
+            collection_name=self.collection_name,
+            cc_video_url=cc_video_url,
+        )
+
+        # tags: ["Shorts"] + base + themes.get(theme, []) を [:50] でスライス
+        # 順序は保持し、重複除去はしない（先勝ち）。plan 要件 #4-a/b/c/d 補足設計判断 §154。
+        tag_list: List[str] = ["Shorts"]
+        tag_list.extend(self.config.content.tags.base)
+        tag_list.extend(self.config.content.tags.themes.get(theme, []))
+        tag_list = tag_list[:50]
+
+        localizations = build_short_localizations(
+            self.config,
+            collection_name=self.collection_name,
+            theme=theme,
+            cc_video_url=cc_video_url,
+        )
+
+        return {
+            "title": title,
+            "description": description,
+            "tags": tag_list,
+            "category_id": self.config.youtube.api.category_id,
+            "privacy_status": "public",
+            "language": self.config.youtube.api.language,
+            "localizations": localizations,
+        }
 
     def generate_metadata_report(self) -> str:
         """

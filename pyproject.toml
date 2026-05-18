@@ -73,6 +73,11 @@ yt-video-analyze = "youtube_automation.scripts.video_analyze:main"
 # Agent entry points
 yt-upload-auto = "youtube_automation.agents.youtube_auto_uploader:main"
 yt-upload-collection = "youtube_automation.agents.collection_uploader:main"
+yt-upload-shorts = "youtube_automation.agents.short_uploader:main"
+
+# Shorts script entry points
+yt-generate-shorts-loop = "youtube_automation.scripts.generate_short_loop:main"
+yt-shorts-bulk-update-loc = "youtube_automation.scripts.bulk_update_short_localizations:main"
 
 # Skill management
 yt-skills = "youtube_automation.cli.skills_sync:main"

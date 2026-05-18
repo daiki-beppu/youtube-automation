@@ -1,141 +1,127 @@
 #!/usr/bin/env python3
-"""ショート用 9:16 ループ動画を Veo 3.1 API で生成する。
+"""Shorts (9:16) 用ループ動画を Veo 3.1 API で生成する.
 
-short.png（9:16 縦型サムネイル）を開始・終了フレームに指定し、
-キャラクターアニメーション付きの 8秒シームレスループ動画を生成する。
+`10-assets/short.png`（無ければ `short.jpg`）を入力に、`aspect_ratio="9:16"` で
+8秒の縦型シームレスループ動画を生成し `10-assets/short-loop.mp4` に保存する.
 
 Usage:
-    # コレクションパス指定
-    python3 generate_short_loop.py <collection-path>
-    python3 generate_short_loop.py <collection-path> --prompt "gentle wind..."
-
-    # CWD がコレクションディレクトリの場合
-    python3 generate_short_loop.py
-
-    # 末尾トリムなし
-    python3 generate_short_loop.py <collection-path> --no-trim
+    yt-generate-shorts-loop <collection-path>
+    yt-generate-shorts-loop <collection-path> --model veo-3.1-lite-generate-preview
+    yt-generate-shorts-loop <collection-path> -y    # 確認スキップ
 """
+
+from __future__ import annotations
 
 import argparse
 import sys
 import time
 from pathlib import Path
 
+from dotenv import find_dotenv, load_dotenv
 
-# --- パス解決 ---
-def _channel_root() -> Path:
-    from youtube_automation.utils.config import channel_dir
-
-    return channel_dir()
-
-
-from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
-from youtube_automation.utils.veo_generator import (  # noqa: E402
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.genai_client import create_genai_client
+from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.veo_generator import (
     DEFAULT_MODEL,
+    DEFAULT_PROMPT,
     generate_loop_video,
-    trim_tail,
 )
 
-SHORT_DEFAULT_PROMPT = (
-    "Gentle character animation: the character slowly moves their head, "
-    "hair sways softly in the breeze, clothing ripples with subtle movement, "
-    "hand gently reaches toward a light source. "
-    "Flowers and plants sway gently in the wind. "
-    "Soft flickering light shifts on surfaces. "
-    "Keep all text completely static and unchanged. "
-    "No smoke, no particles, no falling objects."
-)
-
-
-def load_config() -> dict:
-    """loop-video skill-config から veo セクションを読み込む。"""
-    try:
-        from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
-
-        return load_skill_config("loop-video").get("veo", {})
-    except Exception:
-        return {}
+# ファイル名・ディレクトリ名は契約文字列のため定数で 1 箇所に集約
+ASSETS_DIR = "10-assets"
+INPUT_PNG = "short.png"
+INPUT_JPG = "short.jpg"
+OUTPUT_MP4 = "short-loop.mp4"
+SHORT_ASPECT_RATIO = "9:16"
+SHORT_SKILL_NAME = "short"
 
 
 def resolve_paths(collection_path: Path) -> tuple[Path, Path]:
-    """コレクションパスから short.png と出力動画のパスを解決する。"""
-    image_path = collection_path / "10-assets" / "short.png"
-    output_path = collection_path / "10-assets" / "short-loop.mp4"
+    """コレクションパスから入力画像と出力動画のパスを解決する.
+
+    `short.png` を優先、無ければ `short.jpg` にフォールバック.
+    出力は常に `short-loop.mp4`.
+
+    Returns:
+        (image_path, output_path)
+    """
+    assets = collection_path / ASSETS_DIR
+    image_path = assets / INPUT_PNG
+    if not image_path.exists():
+        image_path = assets / INPUT_JPG
+    output_path = assets / OUTPUT_MP4
     return image_path, output_path
 
 
-def main():
-    from dotenv import find_dotenv, load_dotenv
-
-    load_dotenv(find_dotenv())
-
-    parser = argparse.ArgumentParser(description="Veo 3.1 ショート用 9:16 ループ動画生成")
-    parser.add_argument("collection", nargs="?", help="コレクションパス")
-    parser.add_argument("--prompt", help="動画生成プロンプト")
+def _build_parser() -> argparse.ArgumentParser:
+    # `generate_loop_video.py` と同じく `--model` は preview/GA 切替を許容するため
+    # choices で縛らず任意文字列を受ける（未知モデルは Vertex AI 側でエラー）.
+    parser = argparse.ArgumentParser(
+        description="Veo 3.1 Shorts (9:16) ループ動画生成",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument("collection", nargs="?", help="コレクションパス (collections/live/<name>/)")
+    parser.add_argument("--prompt", help="動画生成プロンプト (default: skill-config の veo.default_prompt)")
     parser.add_argument(
         "--model",
-        choices=["veo-3.1-fast-generate-001", "veo-3.1-generate-001"],
-        help="Veo モデル名 (default: veo-3.1-fast-generate-001)",
+        help=(
+            "Veo モデル名 (default: skill-config の veo.model, fallback: veo-3.1-fast-generate-001)。"
+            " 例: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview"
+        ),
     )
-    parser.add_argument("--no-trim", action="store_true", help="末尾トリムをスキップ")
-    parser.add_argument("--trim-tail", type=float, default=1.0, help="末尾トリム秒数 (デフォルト: 1.0)")
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
+    return parser
+
+
+def main() -> None:
+    load_dotenv(find_dotenv())
+
+    parser = _build_parser()
     args = parser.parse_args()
 
-    # 設定読み込み
-    veo_config = load_config()
-    model = args.model or veo_config.get("model", DEFAULT_MODEL)
-    prompt = args.prompt or SHORT_DEFAULT_PROMPT
+    # short skill-config から veo セクションを読み込む（plan 要件 14-c）
+    skill_cfg = load_skill_config(SHORT_SKILL_NAME)
+    veo_cfg = skill_cfg.get("veo", {})
+    model = args.model or veo_cfg.get("model", DEFAULT_MODEL)
+    prompt = args.prompt or veo_cfg.get("default_prompt", DEFAULT_PROMPT)
 
-    # パス解決
+    # コレクションパス解決
     if args.collection:
         collection_path = Path(args.collection)
         if not collection_path.is_absolute():
             collection_path = Path.cwd() / collection_path
-        image_path, output_path = resolve_paths(collection_path)
     else:
         cwd = Path.cwd()
-        if (cwd / "10-assets").exists():
-            image_path, output_path = resolve_paths(cwd)
+        if (cwd / ASSETS_DIR).exists():
+            collection_path = cwd
         else:
             parser.error("コレクションパスを指定するか、コレクションディレクトリ内で実行してください")
             return
 
-    # バリデーション
+    image_path, output_path = resolve_paths(collection_path)
+
     if not image_path.exists():
-        print(f"[ERROR] short.png が見つかりません: {image_path}")
-        print("  /short-thumbnail で先に 9:16 サムネイルを生成してください")
+        print(f"[ERROR] 入力画像が見つかりません: {image_path}")
         sys.exit(1)
 
-    # 確認
+    # 確認プロンプト
     print()
     print("===========================================")
-    print("  Veo 3.1 ショート用ループ動画生成")
+    print("  Veo 3.1 Shorts (9:16) ループ動画生成")
     print("===========================================")
-    print(f"  入力:   {image_path}")
-    print(f"  出力:   {output_path}")
-    print(f"  モデル: {model}")
-    print("  比率:   9:16（縦型）")
-    print(f"  トリム: {'なし' if args.no_trim else f'末尾 {args.trim_tail}秒カット'}")
+    print(f"  入力:     {image_path}")
+    print(f"  出力:     {output_path}")
+    print(f"  モデル:   {model}")
+    print(f"  比率:     {SHORT_ASPECT_RATIO}")
     print("===========================================")
     print()
 
     if not args.yes:
-        try:
-            answer = input("  生成しますか？ [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print("\n  キャンセルしました。")
-            sys.exit(0)
+        answer = input("  生成しますか？ [y/N] ").strip().lower()
         if answer not in ("y", "yes"):
             print("  キャンセルしました。")
             sys.exit(0)
-
-    try:
-        from youtube_automation.utils.genai_client import create_genai_client
-    except ImportError:
-        print("[ERROR] google-genai がインストールされていません。")
-        print("  pip3 install google-genai --break-system-packages")
-        sys.exit(1)
 
     # 生成実行
     try:
@@ -143,26 +129,26 @@ def main():
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
+
     start_time = time.monotonic()
-    success = generate_loop_video(client, image_path, output_path, model, prompt, aspect_ratio="9:16")
-
-    if success and not args.no_trim:
-        trim_tail(output_path, args.trim_tail)
-
+    success = generate_loop_video(
+        client,
+        image_path,
+        output_path,
+        model,
+        prompt,
+        aspect_ratio=SHORT_ASPECT_RATIO,
+    )
     elapsed = time.monotonic() - start_time
 
-    # レポート
     print()
     print("===========================================")
     if success:
-        print("  ショートループ動画生成: 完了")
-        try:
-            print(f"  ファイル: {output_path.relative_to(_channel_root())}")
-        except ValueError:
-            print(f"  ファイル: {output_path}")
+        print("  Shorts ループ動画生成: 完了")
+        print(f"  ファイル: {output_path}")
         print(f"  時間:     {elapsed:.1f}秒")
     else:
-        print("  ショートループ動画生成: 失敗")
+        print("  Shorts ループ動画生成: 失敗")
         print("  --prompt でプロンプトを変えて再試行してください。")
     print("===========================================")
     print()
