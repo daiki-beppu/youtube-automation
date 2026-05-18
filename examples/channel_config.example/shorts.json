@@ -1,0 +1,17 @@
+{
+  "shorts": {
+    "enabled": false,
+    "publish_time": "08:00",
+    "min_hours_between_shorts_per_collection": 24,
+    "mode": "auto",
+    "collection": {
+      "default_count": 3,
+      "chapter_offset_sec": 30
+    },
+    "release": {
+      "languages": ["jp", "en"],
+      "start_sec": 30,
+      "duration_sec": 40
+    }
+  }
+}

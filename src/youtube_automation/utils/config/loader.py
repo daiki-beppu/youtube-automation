@@ -15,7 +15,8 @@ from youtube_automation.utils.config.content import Content, Descriptions, Genre
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import Branding, ChannelMeta
 from youtube_automation.utils.config.playlists import Playlists
-from youtube_automation.utils.config.workflow import DEFAULT_SHORT_PUBLISH_TIME, PostUpload, Workflow
+from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
+from youtube_automation.utils.config.workflow import Workflow
 from youtube_automation.utils.config.youtube import ContentModel, YoutubeApi, YoutubeSection
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -159,6 +160,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
     analytics = _build_analytics(merged)
     playlists = _build_playlists(merged)
     workflow = _build_workflow(merged)
+    shorts = _build_shorts(merged)
     audio = _build_audio(merged)
     localizations = _load_localizations(channel_dir_path, youtube.api.language)
     comments = _build_comments(merged)
@@ -172,6 +174,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
         analytics=analytics,
         playlists=playlists,
         workflow=workflow,
+        shorts=shorts,
         audio=audio,
         localizations=localizations,
         comments=comments,
@@ -264,17 +267,36 @@ def _build_playlists(merged: dict) -> Playlists:
 
 
 def _build_workflow(merged: dict) -> Workflow:
-    # v5 で `workflow.post_upload.short_publish_time` を Shorts スケジュール用に再導入。
-    # 旧 top-level `post_upload` / `short` キーが downstream に残っていても
-    # silently ignore する（後方互換）。`_REQUIRED_KEYS_BY_SECTION` に
-    # workflow.json キーを登録していないため、ファイル不在 / セクション欠如時は
-    # default `"08:00"` で動く。
-    workflow_section = merged.get("workflow") or {}
-    pu_section = workflow_section.get("post_upload") or {}
-    post_upload = PostUpload(
-        short_publish_time=pu_section.get("short_publish_time", DEFAULT_SHORT_PUBLISH_TIME),
+    # v5 では空 dataclass。旧 top-level `post_upload` / `short` キーが残っていても
+    # silently ignore する（`_REQUIRED_KEYS_BY_SECTION` に workflow.json キーを
+    # 登録していないため）。Shorts スケジュール公開時刻は `shorts.publish_time` に移動。
+    return Workflow()
+
+
+def _build_shorts(merged: dict) -> Shorts:
+    """`shorts` セクション（optional）.
+
+    未配置のチャンネルは `Shorts.enabled = False`（オプトイン）でロードされる。
+    `ShortUploader.__init__` が起動時に `UploadError` を投げる。
+    """
+    sh = merged.get("shorts") or {}
+    col = sh.get("collection") or {}
+    rel = sh.get("release") or {}
+    return Shorts(
+        enabled=bool(sh.get("enabled", False)),
+        publish_time=str(sh.get("publish_time", "08:00")),
+        min_hours_between_shorts_per_collection=int(sh.get("min_hours_between_shorts_per_collection", 24)),
+        mode=str(sh.get("mode", "auto")),
+        collection=ShortsCollection(
+            default_count=int(col.get("default_count", 3)),
+            chapter_offset_sec=int(col.get("chapter_offset_sec", 30)),
+        ),
+        release=ShortsRelease(
+            languages=tuple(rel.get("languages", ["jp", "en"])),
+            start_sec=int(rel.get("start_sec", 30)),
+            duration_sec=int(rel.get("duration_sec", 40)),
+        ),
     )
-    return Workflow(post_upload=post_upload)
 
 
 def _build_audio(merged: dict) -> Audio:

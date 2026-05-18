@@ -2,10 +2,13 @@
 """Short Uploader - YouTube Shorts 投稿エージェント
 
 `YouTubeAutoUploader` を **委譲** で利用し、Shorts 専用のメタデータ生成・
-スケジュール公開（CC 公開日 + 1day + `short_publish_time`）・投稿間隔チェック
-（`schedule_config.json::shorts.min_hours_between_shorts`、default 24h）を実装する。
+スケジュール公開（CC 公開日 + 1day + `config.shorts.publish_time`）・投稿間隔チェック
+（`config.shorts.min_hours_between_shorts_per_collection`、default 24h）を実装する。
 
-`CollectionUploader` と同じ委譲パターン。継承は禁止（plan 要件 6.6 + アンチパターン #2）。
+`CollectionUploader` と同じ委譲パターン。継承は禁止。
+
+機能の有効化は `config/channel/shorts.json` の `shorts.enabled: true` で行う
+（未配置 / false の場合は `__init__` で `UploadError`）。
 
 公開 API:
     - `upload_short(collection_path, short_num=None)` → 投稿実行
@@ -26,6 +29,7 @@ from zoneinfo import ZoneInfo
 
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
 from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.exceptions import UploadError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 
 logger = logging.getLogger(__name__)
@@ -37,8 +41,6 @@ ACTION_UPLOADED = "short_uploaded"
 ACTION_BLOCKED = "short_upload_blocked"
 ACTION_FAILED = "short_upload_failed"
 
-# schedule_config.shorts.min_hours_between_shorts のデフォルト（plan 要件 6.1）
-DEFAULT_MIN_HOURS_BETWEEN_SHORTS = 24
 DEFAULT_TIMEZONE = "Asia/Tokyo"
 
 
@@ -51,6 +53,11 @@ class ShortUploader:
     """
 
     def __init__(self, collections_root: Optional[str] = None):
+        self.config = load_config()
+        if not self.config.shorts.enabled:
+            raise UploadError(
+                "Shorts 機能が無効です。`config/channel/shorts.json` で `shorts.enabled: true` にしてください"
+            )
         if collections_root is None:
             collections_root = str(channel_dir() / "collections")
         self.collections_root = Path(collections_root)
@@ -80,13 +87,12 @@ class ShortUploader:
     # ─── 投稿間隔チェック (plan 要件 6.1) ─────────────
 
     def _check_upload_interval(self) -> tuple[bool, str]:
-        """直近の Shorts 投稿から `min_hours_between_shorts` 経過しているか.
+        """直近の Shorts 投稿から `shorts.min_hours_between_shorts_per_collection` 経過しているか.
 
         Returns:
             (ok, msg): ok=True なら投稿可、False なら blocked。
         """
-        shorts_cfg = self.schedule_config.get("shorts") or {}
-        min_hours = shorts_cfg.get("min_hours_between_shorts", DEFAULT_MIN_HOURS_BETWEEN_SHORTS)
+        min_hours = self.config.shorts.min_hours_between_shorts_per_collection
         tz = ZoneInfo(self.schedule_config.get("schedule", {}).get("timezone", DEFAULT_TIMEZONE))
         now = datetime.now(tz)
 
@@ -152,7 +158,7 @@ class ShortUploader:
             return None
 
         tz = ZoneInfo(self.schedule_config.get("schedule", {}).get("timezone", DEFAULT_TIMEZONE))
-        short_publish_time = load_config().workflow.post_upload.short_publish_time
+        short_publish_time = self.config.shorts.publish_time
         try:
             hour, minute = (int(x) for x in short_publish_time.split(":"))
         except ValueError:
@@ -205,9 +211,7 @@ class ShortUploader:
         if numbered_glob:
             searched.append(str(master / numbered_glob))
         searched.append(str(fallback))
-        raise FileNotFoundError(
-            f"Shorts 動画が見つかりません。探索パス: {', '.join(searched)}"
-        )
+        raise FileNotFoundError(f"Shorts 動画が見つかりません。探索パス: {', '.join(searched)}")
 
     # ─── upload オーケストレーション (plan 要件 6.4) ──
 

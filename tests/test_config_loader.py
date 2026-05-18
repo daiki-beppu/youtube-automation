@@ -131,12 +131,17 @@ def test_load_all_sections(tmp_path, monkeypatch):
         "benchmark": {"channels": [{"name": "Rival", "id": "UC123"}]},
     }
     sections["playlists.json"] = {"playlists": {"main": "PLtest123"}}
-    # plan 要件 1 / 17: 新構造 `workflow.post_upload.short_publish_time` が
-    # ChannelConfig.workflow.post_upload.short_publish_time として読み取れる
-    # ことを positive assert で保護する。silent ignore のみだと S1 の core 仕様が
-    # 回帰検出されない。
-    sections["workflow.json"] = {
-        "workflow": {"post_upload": {"short_publish_time": "09:30"}},
+    # `config/channel/shorts.json` がチャンネル運用設定を保持する。
+    # ChannelConfig.shorts に正しく組み立てられるかを positive assert で守る。
+    sections["shorts.json"] = {
+        "shorts": {
+            "enabled": True,
+            "publish_time": "09:30",
+            "min_hours_between_shorts_per_collection": 12,
+            "mode": "collection",
+            "collection": {"default_count": 5, "chapter_offset_sec": 45},
+            "release": {"languages": ["jp"], "start_sec": 20, "duration_sec": 30},
+        }
     }
     sections["audio.json"] = {"audio": {"target_duration_min": 120.0}}
     sections["comments.json"] = {
@@ -195,70 +200,64 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.comments.rules[0].keywords == ["こんにちは"]
     assert config.comments.templates == {"ja": {"greet": "ありがとうございます！"}}
     assert config.comments.ng_words == ["spam"]
-    # plan 要件 1 / 17: 新構造の short_publish_time が positive assert で読める
-    assert config.workflow.post_upload.short_publish_time == "09:30"
+    # shorts セクションが全フィールド組み立てられている
+    assert config.shorts.enabled is True
+    assert config.shorts.publish_time == "09:30"
+    assert config.shorts.min_hours_between_shorts_per_collection == 12
+    assert config.shorts.mode == "collection"
+    assert config.shorts.collection.default_count == 5
+    assert config.shorts.collection.chapter_offset_sec == 45
+    assert config.shorts.release.languages == ("jp",)
+    assert config.shorts.release.start_sec == 20
+    assert config.shorts.release.duration_sec == 30
 
 
-def test_workflow_post_upload_default_short_publish_time(tmp_path, monkeypatch):
-    """plan 要件 1 / アンチパターン #6: workflow.json 自体省略時に default `"08:00"` で動く。
-
-    Given workflow.json を 1 ファイルも置かない（optional セクション扱い）
-    When load_config() を呼ぶ
-    Then config.workflow.post_upload.short_publish_time == "08:00" が返る
-    """
-    # Given
-    ch = _setup_channel(tmp_path, _minimal_sections())  # workflow.json なし
+def test_shorts_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
+    """shorts.json を 1 ファイルも置かない場合、enabled=False（オプトイン）で全 default が返る."""
+    ch = _setup_channel(tmp_path, _minimal_sections())  # shorts.json なし
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    # When
     config = load_config()
 
-    # Then
-    assert config.workflow.post_upload.short_publish_time == "08:00"
+    assert config.shorts.enabled is False
+    assert config.shorts.publish_time == "08:00"
+    assert config.shorts.min_hours_between_shorts_per_collection == 24
+    assert config.shorts.mode == "auto"
+    assert config.shorts.collection.default_count == 3
+    assert config.shorts.release.languages == ("jp", "en")
 
 
-def test_workflow_post_upload_section_missing_uses_default(tmp_path, monkeypatch):
-    """plan 要件 1: workflow セクションがあっても post_upload が無ければ default `"08:00"`.
-
-    Given `workflow.json` に `workflow: {}` のみ（post_upload セクション欠如）
-    When load_config() を呼ぶ
-    Then config.workflow.post_upload.short_publish_time == "08:00" が返る
-    """
-    # Given
+def test_shorts_section_empty_uses_defaults(tmp_path, monkeypatch):
+    """`shorts.json` に `shorts: {}` のみのとき、すべて default で返る."""
     sections = _minimal_sections()
-    sections["workflow.json"] = {"workflow": {}}
+    sections["shorts.json"] = {"shorts": {}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    # When
     config = load_config()
 
-    # Then
-    assert config.workflow.post_upload.short_publish_time == "08:00"
+    assert config.shorts.enabled is False
+    assert config.shorts.publish_time == "08:00"
 
 
-def test_workflow_legacy_top_level_post_upload_silently_ignored(tmp_path, monkeypatch):
-    """plan 要件 18: 旧 top-level `post_upload` / `short` キーは silently ignore.
+def test_workflow_legacy_post_upload_silently_ignored(tmp_path, monkeypatch):
+    """旧 `workflow.post_upload.short_publish_time` キーは silently ignore.
 
-    v4.0.0 で `post_upload` / `short` セクションは `workflow` 配下に統合された。
-    downstream に残存していても loader が ConfigError を投げず、
-    新構造側の default `"08:00"` が採用される（後方互換レグレッション）。
+    v5.5 から Shorts スケジュール公開時刻は `config.shorts.publish_time` に移動した。
+    downstream の `workflow.json` に旧キーが残っていても ConfigError を投げず、
+    新構造 `shorts` の default `"08:00"` が採用される。
     """
-    # Given
     sections = _minimal_sections()
     sections["workflow.json"] = {
-        "workflow": {},
-        "post_upload": {"short_publish_time": "09:30"},  # legacy top-level
-        "short": {"foo": "bar"},  # legacy top-level
+        "workflow": {"post_upload": {"short_publish_time": "09:30"}},
     }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    # When: ConfigError を投げず読み込めて
     config = load_config()
 
-    # Then: legacy top-level は無視され、default "08:00" になる
-    assert config.workflow.post_upload.short_publish_time == "08:00"
+    # 旧 workflow.post_upload キーは無視され、shorts.publish_time の default "08:00" が採用される
+    assert config.shorts.publish_time == "08:00"
 
 
 def test_comments_rule_name_required(tmp_path, monkeypatch):

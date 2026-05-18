@@ -27,7 +27,6 @@ import pytest
 from youtube_automation.utils.config import load_config, reset
 from youtube_automation.utils.metadata_generator import build_short_localizations
 
-
 # ---------------------------------------------------------------------------
 # ヘルパー
 # ---------------------------------------------------------------------------
@@ -61,9 +60,7 @@ def _setup_channel(tmp_path: Path, *, with_short_template: bool = True) -> Path:
         loc_data["languages"]["en"]["short_description_template"] = (
             "{collection_name} | {channel_name}\n♫ → {cc_video_url}\n{tagline}"
         )
-    (dst / "config" / "localizations.json").write_text(
-        json.dumps(loc_data, ensure_ascii=False), encoding="utf-8"
-    )
+    (dst / "config" / "localizations.json").write_text(json.dumps(loc_data, ensure_ascii=False), encoding="utf-8")
     yt_path = dst / "config" / "channel" / "youtube.json"
     yt = json.loads(yt_path.read_text(encoding="utf-8"))
     yt.setdefault("content_model", {})["languages"] = list(loc_data["supported_languages"])
@@ -71,9 +68,7 @@ def _setup_channel(tmp_path: Path, *, with_short_template: bool = True) -> Path:
     return dst
 
 
-def _make_collection_with_shorts(
-    ch: Path, name: str, *, shorts: list[dict], cc_video_url: str = "https://youtu.be/CC"
-):
+def _make_collection_with_shorts(ch: Path, name: str, *, shorts: list[dict], cc_video_url: str = "https://youtu.be/CC"):
     """live/<name>/ コレクションを作る (post_upload.shorts list 形式)."""
     col = ch / "collections" / "live" / name
     col.mkdir(parents=True)
@@ -135,13 +130,7 @@ class TestCollectShortVideos:
         col = ch / "collections" / "live" / "20250101-live-no-tracking"
         col.mkdir(parents=True)
         (col / "workflow-state.json").write_text(
-            json.dumps(
-                {
-                    "post_upload": {
-                        "shorts": [{"short_num": 1, "video_id": "V_NOTRACK"}]
-                    }
-                }
-            ),
+            json.dumps({"post_upload": {"shorts": [{"short_num": 1, "video_id": "V_NOTRACK"}]}}),
             encoding="utf-8",
         )
         # tracking ファイル無し

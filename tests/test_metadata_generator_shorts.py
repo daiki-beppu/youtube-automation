@@ -72,9 +72,7 @@ def _make_collection(tmp_path: Path, dir_name: str, *, theme: str | None = None)
     ws = {"collection_name": dir_name}
     if theme is not None:
         ws["theme"] = theme
-    (col / "workflow-state.json").write_text(
-        json.dumps(ws, ensure_ascii=False), encoding="utf-8"
-    )
+    (col / "workflow-state.json").write_text(json.dumps(ws, ensure_ascii=False), encoding="utf-8")
     return col
 
 
@@ -95,9 +93,7 @@ def _short_localizations_full() -> dict:
                 "activities": "ゲーム · 勉強",
                 "short_title_template": "{theme} | {channel_name} #Shorts",
                 "short_description_template": (
-                    "{collection_name} | {channel_name}\n\n"
-                    "♫ Full → {cc_video_url}\n\n"
-                    "{tagline}"
+                    "{collection_name} | {channel_name}\n\n♫ Full → {cc_video_url}\n\n{tagline}"
                 ),
                 "description": {
                     "opening_poem": "夜の旋律",
@@ -111,9 +107,7 @@ def _short_localizations_full() -> dict:
                 "activities": "Gaming · Study",
                 "short_title_template": "{theme} ✦ {channel_name} #Shorts",
                 "short_description_template": (
-                    "{collection_name} | {channel_name}\n\n"
-                    "♫ Full → {cc_video_url}\n\n"
-                    "{tagline}"
+                    "{collection_name} | {channel_name}\n\n♫ Full → {cc_video_url}\n\n{tagline}"
                 ),
                 "description": {
                     "opening_poem": "Night melody",

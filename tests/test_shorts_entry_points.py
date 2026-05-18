@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
@@ -47,9 +46,7 @@ def test_yt_upload_shorts_entry_registered(scripts):
     target = scripts.get("yt-upload-shorts")
 
     # Then
-    assert target == "youtube_automation.agents.short_uploader:main", (
-        f"yt-upload-shorts が期待値と異なる: {target!r}"
-    )
+    assert target == "youtube_automation.agents.short_uploader:main", f"yt-upload-shorts が期待値と異なる: {target!r}"
 
 
 def test_yt_generate_shorts_loop_entry_registered(scripts):
