@@ -17,8 +17,23 @@ description: Use when コレクションのYouTube概要欄を自動生成する
 
 ## When to Use
 
-- コレクションの動画が完成し、YouTube 概要欄が必要なとき
-- Complete Collection の概要欄を作成するとき
+このスキルは **2 つのモード** を持つ。発動時に最初にユーザー意図を分岐させること。
+
+### モード A: 単発生成（既存パス）
+
+- 1 つのコレクションについて新規に概要欄を作りたい
+- 例: 「20260303-clm-merlin-study-collection の概要欄作って」「アクティブなコレクションの概要欄」
+- 例: 「Complete Collection の説明文を生成して」
+- → 後述の「Instructions」セクションに従ってコレクション 1 件分の `descriptions.md` を生成する
+
+### モード B: Bulk-update（一括反映、新規）
+
+- `collections/live/` 配下にある **既にアップロード済み** の複数動画について、ローカル `descriptions.md` を YouTube へ一括反映したい
+- 例: 「`collections/live/` 配下の説明欄をまとめて YouTube に反映して」「ローカルで直した説明欄を一括で push」
+- 例: 「全コレクションの概要欄を最新の `descriptions.md` で更新して」
+- → 後述の「Bulk-update モード」セクションに進む
+
+> 単一コレクションのアップロード時の反映は `/video-upload` が担うため、本スキルの bulk モードは **複数件をまとめて再反映** したいケース専用と考えてよい。
 
 ## Quick Reference
 
@@ -26,6 +41,7 @@ description: Use when コレクションのYouTube概要欄を自動生成する
 |------|------|-----|
 | `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/video-description collections/planning/20260303-clm-merlin-study-collection/` |
 | 未指定 | アクティブなコレクションを自動検出 | `/video-description` |
+| `bulk` 系発話 | bulk-update モードへ分岐 | 「`collections/live/` の説明欄を一括反映」 |
 
 ## Channel Adaptation
 
@@ -117,7 +133,49 @@ skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き
 
 保存後、`workflow-state.json` の `description.generated = true` に更新する。
 
+## Bulk-update モード
+
+`collections/live/` 配下の既にアップロード済み動画について、ローカルの `descriptions.md` を **YouTube 側へ一括反映** するモード。生成（モード A）と反映（モード B）を 1 つのスキル経路で扱えるように、CLI `yt-bulk-update-desc` をこのモードから呼び出す。
+
+### 適用範囲
+
+- 対象は `collections/live/<col>/20-documentation/descriptions.md` と `upload_tracking.json` が揃っているコレクションのみ
+- 各コレクションの `descriptions.md` から `Complete Collection 概要欄` / `タイトル案` / `タグ（YouTube タグ欄）` セクションを抽出し、`videos().update(part='snippet')` で反映する
+- 対象コレクション一覧およびフィルタリング引数の詳細は `src/youtube_automation/scripts/bulk_update_descriptions_from_md.py` 側に集約されている（SKILL.md ではフラグ仕様を二重管理しない）
+
+### 手順
+
+1. **dry-run（必須）**: まず差分プレビューを取る。
+   ```bash
+   uv run yt-bulk-update-desc --dry-run
+   ```
+   各コレクションについて以下が表示される:
+   - 対象 `video_id` とコレクション名
+   - `title (old → new)`: 旧タイトル → 新タイトル（+ UTF-16 units 表示）
+   - `description first lines (old → new)`: 旧説明欄の冒頭 6 行（`-` 付き）と新説明欄の冒頭 6 行（`+` 付き）
+   - 末尾に `🔍 dry-run; N videos would be updated` のサマリ
+
+   差分の読み方:
+   - `-` で始まる行が **現在 YouTube 上にある説明欄**（変更前）
+   - `+` で始まる行が **`descriptions.md` から抽出された新しい説明欄**（変更後）
+   - タイトルが 100 UTF-16 units を超える場合は `⚠️` が出て、その動画はタイトルを保持して説明欄のみ更新される
+
+2. **ユーザー確認**: dry-run の出力を提示し、差分が意図通りか必ずユーザーに確認する。問題があれば `descriptions.md` 側を修正してから再 dry-run。
+
+3. **apply（実反映）**: 確認が取れたら `--dry-run` を外して実行。
+   ```bash
+   uv run yt-bulk-update-desc
+   ```
+   各動画について `✅ updated` / `❌ update failed: ...` が表示される。完了時に `✅ done`。
+
+### CLI 単体実行は残す
+
+`yt-bulk-update-desc` は CI / バッチ用途を想定して CLI として残してある。Claude 経路を介さず、CI ジョブやシェルから直接実行しても等価に動く（人間レビューを挟まないため、運用上は dry-run の自動検査と組み合わせること）。
+
 ## Next Step
 
 概要欄生成後:
 → `/video-upload <collection-path>` で YouTube へアップロード
+
+Bulk-update 実行後:
+→ `/metadata-audit` で YouTube 上のメタデータがローカルと一致しているか確認
