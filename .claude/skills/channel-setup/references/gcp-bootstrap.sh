@@ -15,13 +15,6 @@
 #   7. .env に GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI を書き出し
 #   8. OAuth クライアント ID 作成のための Console URL を案内 (この 1 クリックだけ手動)
 #
-# 注意:
-#   Claude Code / CI / パイプ等の非対話セッション (TTY を持たない環境) からは実行しないこと。
-#   gcloud の OAuth フロー (PKCE) は code_verifier をプロセス内に秘匿して同一プロセス内で
-#   トークン取得まで完結させる設計のため、非対話環境では認証コードを渡しても
-#   別プロセスとなり invalid_grant ループに陥ります。
-#   必ず TTY を持つ通常ターミナル (cmux pane 外) で直接実行してください。
-#
 # Usage:
 #   scripts/gcp-bootstrap.sh [OPTIONS] <project-id>
 #
@@ -111,15 +104,6 @@ run() {
 
 log "Step 1: 前提チェック"
 
-# 非対話セッション (Claude Code / CI / pipe 経由) は gcloud の PKCE フローが
-# プロセスを跨げず認証ループに陥るため拒否する
-if ! $DRY_RUN && { [[ ! -t 0 ]] || [[ ! -t 1 ]]; }; then
-    error "非対話セッション (TTY なし) では実行できません"
-    error "Claude Code / CI / パイプ経由から呼ばれた場合、gcloud auth フローが PKCE の制約で同一プロセス内で完結できず、"
-    error "認証ループに陥ります。必ずあなた自身のターミナル (cmux pane 外) で直接実行してください。"
-    exit 1
-fi
-
 if ! command -v gcloud >/dev/null 2>&1; then
     error "gcloud CLI が見つかりません。https://cloud.google.com/sdk/docs/install を参照してインストールしてください"
     exit 1
@@ -127,9 +111,7 @@ fi
 ok "gcloud: $(gcloud --version | head -n1)"
 
 if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q '@'; then
-    error "gcloud にログインしていません"
-    error "あなた自身のターミナルで \`gcloud auth login\` を実行してから再度このスクリプトを実行してください"
-    error "(Claude Code 等の AI セッション内で gcloud auth login を呼ぶと PKCE の code_verifier がプロセスを跨げず認証ループになります)"
+    error "gcloud にログインしていません。先に \`gcloud auth login\` を実行してください"
     exit 1
 fi
 CURRENT_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -n1)

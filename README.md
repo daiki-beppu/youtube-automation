@@ -93,8 +93,6 @@ yt-skills sync                       # ./.claude/skills/ にコピー
 yt-skills sync --symlink             # 開発時はシンボリックリンク
 yt-skills diff                       # 同梱版との差分表示
 yt-skills sync --force               # 既存ファイルを上書き
-yt-skills sync --prune               # 同梱に無い skill ディレクトリを列挙 (実削除しない)
-yt-skills sync --prune --yes         # 列挙したうえで実際に削除する (rename リリース後の掃除用)
 ```
 
 ### 3. チャンネル設定を作成
