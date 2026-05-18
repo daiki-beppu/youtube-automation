@@ -115,7 +115,7 @@ open <collection-path>/10-assets/short-loop.mp4
 - **`--aspect-ratio "9:16"` 必須**: 省略すると 16:9 で生成される
 - **参照画像 (`--reference`) は使わない**: 16:9 構図に引っ張られるため。シーンを言葉で再描写する
 - **CTA 文言の尺**: `config/channel/audio.json` の `audio.target_duration_min` を 60 で割って「Full N-hour collection」を埋める
-- **コスト**: サムネ ~$0.04（Gemini Flash）、ループ動画は Veo 3.1（別途課金、Vertex AI コンソールで確認）
+- **コスト**: サムネは Gemini Flash 課金（事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を指定したときのみ CLI 表示に出る。未指定なら GCP Cloud Console > Billing で実コスト確認）、ループ動画は Veo 3.1（別途課金、Vertex AI コンソールで確認）
 - **Veo テキスト安定性**: プロンプトに `Keep all text completely static and unchanged` を含める。`last_frame=image` で開始 / 終了フレームのテキストを固定
 - **Veo 末尾ノイズ**: 末尾 ~1 秒にノイズが入ることがある。`generate_short_loop.py` がデフォルトで末尾 1 秒をトリム
 
