@@ -358,9 +358,7 @@ def test_cmd_sync_prune_recursively_deletes_nested_files(fake_repo: Path, tmp_pa
     assert not nested.exists()
 
 
-def test_cmd_sync_prune_removes_orphan_symlink_but_keeps_link_target(
-    fake_repo: Path, tmp_path: Path
-) -> None:
+def test_cmd_sync_prune_removes_orphan_symlink_but_keeps_link_target(fake_repo: Path, tmp_path: Path) -> None:
     # Given: 孤児 symlink (link 先は別の場所にある実体ディレクトリ)
     target = tmp_path / "out" / ".claude" / "skills"
     _seed_bundled_target(target)
@@ -476,9 +474,7 @@ def test_cmd_sync_prune_dry_run_wins_over_yes(
 
     # When: --prune --dry-run --yes （dry-run が優先）
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--target", str(target), "--force", "--prune", "--dry-run", "--yes"]
-    )
+    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--dry-run", "--yes"])
     rc = args.func(args)
 
     # Then: 削除されず would-prune のみ
@@ -559,9 +555,7 @@ def test_cmd_sync_prune_file_asset_warns_on_stderr(
 
     # When: --asset claude-md --prune
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--force", "--prune"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--force", "--prune"])
     rc = args.func(args)
 
     # Then: stderr に file asset での prune 不可警告
@@ -570,9 +564,7 @@ def test_cmd_sync_prune_file_asset_warns_on_stderr(
     assert "[warn] --prune は kind='file'" in err
 
 
-def test_cmd_sync_prune_file_asset_does_not_delete_neighbors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cmd_sync_prune_file_asset_does_not_delete_neighbors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: claude-md asset 用 fake_repo、target 親に他ファイル
     claude_dir = tmp_path / ".claude"
     claude_dir.mkdir(parents=True)
@@ -588,9 +580,7 @@ def test_cmd_sync_prune_file_asset_does_not_delete_neighbors(
 
     # When: --asset claude-md --prune --yes
     parser = build_parser()
-    args = parser.parse_args(
-        ["sync", "--asset", "claude-md", "--target", str(target), "--force", "--prune", "--yes"]
-    )
+    args = parser.parse_args(["sync", "--asset", "claude-md", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: 他ファイルは保護される (file asset では prune は実行されない)
