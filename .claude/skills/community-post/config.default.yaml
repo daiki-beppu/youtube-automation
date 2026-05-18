@@ -1,0 +1,43 @@
+# community-post skill デフォルト設定（プレースホルダ）
+#
+# このファイルはドキュメント用途。実行時に読み込まれるのは
+# downstream チャンネルリポジトリ側の `config/channel/community.json`。
+# チャンネル開設時は `examples/channel_config.example/community.example.json`
+# をコピー → `config/channel/community.json` に配置し、テンプレ文面と
+# studio_url を自チャンネル向けに書き換える。
+#
+# Flow365 TTP の前提:
+#   - 完全固定テンプレ（動画 1 本 = 投稿 1 本）
+#   - 変数展開なし（ブランドボイスの反復刷り込みが狙い）
+#   - macOS 専用（pbcopy / open）
+
+# ----------------------------------------------------------------------
+# テンプレ本文（5 ブロック構造の例）
+# ----------------------------------------------------------------------
+# 1. オープニングフック（絵文字 + 「New session is live.」相当）
+# 2. ジャンル/コンセプト一行
+# 3. リスナーへの感謝とブランドボイス（discipline / focus 等）
+# 4. アクションを促す短いコール
+# 5. クロージング（Press play 等）
+template: |
+  🎧 New session is live.
+
+  {brand_concept_oneliner}
+
+  Appreciate everyone showing up every day with {brand_name}. {brand_voice_sentence}
+
+  {call_to_action}
+
+  ▶ {closing_line}
+
+# ----------------------------------------------------------------------
+# YouTube Studio のコミュニティ投稿作成ページ URL
+# ----------------------------------------------------------------------
+# 自チャンネルの channel_id を埋める。例:
+#   https://www.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx/posts
+studio_url: "https://www.youtube.com/channel/{channel_id}/posts"
+
+# ----------------------------------------------------------------------
+# 動画添付のリマインド表示（自動添付は API 制約で不可）
+# ----------------------------------------------------------------------
+attach_video: true
