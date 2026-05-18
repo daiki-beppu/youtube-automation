@@ -47,13 +47,19 @@ description: Use when 既存コレクション（collections/planning/ 配下）
 2. `assets.raw_master != null` + `assets.master_audio = null`:
    - **走査対象**:
      - worktree 内 `01-master/` を必ず走査
-     - **worktree 検知**: `git rev-parse --git-common-dir` がカレント `.git` と異なる絶対パスを返したら worktree 内とみなし、メインリポルート（`git-common-dir` の親ディレクトリ）の `collections/planning/<collection-name>/01-master/` も走査対象に追加（worktree は短命で、ユーザーが DAW 書き出しをメインリポ側に置くケースに対応）
-   - **候補抽出**: raw_master と異なるファイルのうち `.m4a` / `.wav` / `.flac` / `.aac` / `.mp3` を最終マスター候補として列挙
+     - **worktree 検知**: `git rev-parse --git-common-dir` がカレント `.git`（`git rev-parse --git-dir` の絶対パス）と異なる絶対パスを返したら worktree 内とみなす。
+     - **main repo 側パス導出**: worktree 内のときは `git rev-parse --git-common-dir` の親ディレクトリ（= main repo ルート）配下の `collections/planning/<collection-name>/01-master/` も走査対象に追加（worktree は短命で、ユーザーが DAW 書き出しを main repo 側に置くケースに対応）。
+   - **候補抽出**:
+     - 拡張子: `.m4a` / `.wav` / `.flac` / `.aac` / `.mp3` のみ
+     - `raw_master`（典型的には `master.mp3`）と同名のファイルは除外（raw を最終マスターと誤検出しない）
+     - 拡張子が候補に含まれていても raw_master と同一ファイル名のものは候補にしない
    - 検出できた場合:
-     - 複数候補があればユーザーに採用ファイルを確認（worktree 内と main repo 側で同名ファイルが両方ある場合も含む）
-     - 採用ファイルが worktree 外（main repo 側）にあるときは worktree 側 `01-master/` にコピーしてから処理（state 更新後の動画化が worktree 内で完結するように）
-     - `assets.master_audio` にファイル名のみ記録 → `phase: "mastered"` → 自動的に公開フローへ進む
-   - 検出できない場合: ガイダンス「最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
+     - 複数候補があればユーザーに採用ファイルを確認（worktree 内と main repo 側で同名ファイルが両方ある場合は両方提示してどちらを採用するか聞く）
+     - 採用ファイルが worktree 外（main repo 側）にあるときは worktree 側 `01-master/` にコピーしてから処理（state 更新後の動画化・後続 skill が worktree 内で完結するように）
+     - `assets.master_audio` にはコピー後の **ファイル名のみ** 記録 → `phase: "mastered"` → 自動的に公開フローへ進む
+   - 検出できない場合: ガイダンス「最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」（worktree 実行時は「worktree 側 `01-master/` か main repo 側 `01-master/` のいずれかに配置」と案内）
+
+> Note: `/videoup` 側の `generate_videos.sh` も同様に worktree 実行時の main repo 側 master-mix 検出に未対応。別 issue で追従予定（本 skill のスコープ外）。
 
 #### `mastered` → 全自動公開フロー（承認なし）
 
