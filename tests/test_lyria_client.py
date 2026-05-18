@@ -21,6 +21,16 @@ def clean_env():
         os.environ["GOOGLE_CLOUD_PROJECT"] = saved
 
 
+@pytest.fixture(autouse=True)
+def mock_adc():
+    """`google.auth.default()` を差し替える。デフォルトでは project None を返す。"""
+    with patch(
+        "youtube_automation.utils.google_cloud_project.google_auth_default",
+        return_value=(MagicMock(), None),
+    ) as m:
+        yield m
+
+
 @pytest.fixture
 def mock_token():
     with patch("youtube_automation.utils.lyria_client._access_token", return_value="fake-token"):
@@ -62,8 +72,22 @@ class TestGenerateMusic:
     def test_without_project_raises_config_error(self):
         from youtube_automation.utils import lyria_client
 
-        with pytest.raises(ConfigError, match="GOOGLE_CLOUD_PROJECT"):
+        with pytest.raises(ConfigError, match="ADC credentials に project_id が含まれていません"):
             lyria_client.generate_music("prompt", "lyria-3-pro-preview")
+
+    def test_falls_back_to_adc_project(self, mock_token, mock_adc):
+        """env 未設定でも ADC quota project から URL を組み立てる"""
+        mock_adc.return_value = (MagicMock(), "adc-project")
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+
+        from youtube_automation.utils import lyria_client
+
+        with patch.object(lyria_client.requests, "post", return_value=_ok_response(audio)) as mock_post:
+            result = lyria_client.generate_music("ambient test", "lyria-3-pro-preview")
+
+        assert result == audio
+        args, _ = mock_post.call_args
+        assert args[0] == "https://aiplatform.googleapis.com/v1beta1/projects/adc-project/locations/global/interactions"
 
     def test_returns_none_on_http_error(self, mock_token):
         os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
