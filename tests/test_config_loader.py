@@ -359,6 +359,19 @@ def test_optional_sections_default(tmp_path, monkeypatch):
     assert config.analytics.benchmark.channels == []
     assert config.playlists.items == {}
     assert config.audio.target_duration_min is None
+    # chapter_max のデフォルト = 100（YouTube 実用上限近く、per-track 14〜28 を許容）
+    assert config.audio.chapter_max == 100
+
+
+def test_audio_chapter_max_override(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["audio.json"] = {"audio": {"chapter_max": 50}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.audio.chapter_max == 50
 
 
 def test_localizations_missing(tmp_path, monkeypatch):

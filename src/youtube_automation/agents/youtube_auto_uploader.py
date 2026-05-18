@@ -26,6 +26,8 @@ from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
 from youtube_automation.utils.preflight_checks import (  # noqa: E402
+    check_chapter_count,
+    check_chapter_variation_suffix,
     check_duration,
     check_tags_count,
     check_tags_yt_chars,
@@ -176,8 +178,9 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         1. descriptions.md が存在すること（Track 01 仮名フォールバックを防ぐ）
         2. workflow-state.json.scene_phrases に EN + 全 supported_languages が
            揃っていること（多言語タイトルが EN ベタコピーになる事故を防ぐ）
-        3. タイムスタンプが per-theme 粒度であること（パターンバリエーション
-           を v1〜v6 ごとに別チャプターに展開していないことを確認）
+        3. タイムスタンプ件数が `audio.chapter_max` 以内かつ chapter 名に
+           パターン展開接尾辞（v1〜v6 / ロマン数字 I〜VIII）を含まないこと
+           （個別トラック = 1 chapter の per-track 命名はデフォルトで許容）
         4. タイトルが 100 codepoint 以内（YouTube 制限）
         5. タグ件数が `tags.min_count` を満たすこと（戦略書違反防止）
         6. タグの quotation 込み文字数が YouTube の 500 制限内
@@ -198,25 +201,24 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         if len(title) > 100:
             raise RuntimeError(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}")
 
+        config = load_config()
+
         # タイムスタンプ粒度検証
         ts_lines = [line for line in description.split("\n") if re.match(r"^\d{1,2}:\d{2}", line.strip())]
         if len(ts_lines) < 3:
             raise RuntimeError(f"❌ タイムスタンプ {len(ts_lines)} 個 (最低 3 必要)")
-        # per-theme 粒度: 通常 3〜10 程度。20 を超えるならバリエーション展開疑い。
-        if len(ts_lines) > 12:
-            raise RuntimeError(
-                f"❌ タイムスタンプ {len(ts_lines)} 個。"
-                f"パターンバリエーション (v1〜v6) を別チャプターに"
-                f"展開している疑い。1 パターン = 1 チャプター "
-                f"(通常 3〜6 個) で再生成してください。"
-            )
+        msg = check_chapter_count(len(ts_lines), config.audio.chapter_max)
+        if msg:
+            raise RuntimeError(f"❌ {msg}。config.audio.chapter_max を見直してください。")
+        msg = check_chapter_variation_suffix(ts_lines)
+        if msg:
+            raise RuntimeError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
 
         # scene_phrases 完全性検証
         ws_path = collection_dir / "workflow-state.json"
         state = json.loads(ws_path.read_text(encoding="utf-8")) if ws_path.exists() else {}
         scene_phrases = state.get("scene_phrases") or {}
 
-        config = load_config()
         required_langs = ["en"] + list(config.localizations.supported_languages)
         missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
         if missing:
