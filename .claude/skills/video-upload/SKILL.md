@@ -75,6 +75,7 @@ $ARGUMENTS
 
 1. **Complete Collection アップロード** — マスター動画、メタデータ（descriptions.md から読み込み）、サムネイル設定
 2. **live 移動** — `collections/planning/` → `collections/live/`
+3. **コミュニティ投稿準備** — `config/channel/community.json` が存在する場合、`/community-post` を呼び出してテンプレ展開 → pbcopy → YouTube Studio 起動まで自動で行う（投稿ボタン押下は Studio 上で手動）。`community.json` が無いチャンネルではスキップ
 
 メタデータは `descriptions.md` から title / description / tags を優先使用。存在しない場合は `BAHMetadataGenerator` で自動生成にフォールバック。
 
@@ -120,3 +121,4 @@ uv run yt-upload-collection --plan [-c NAME]
 - `/video-description` — アップロード前に descriptions.md を生成
 - `/playlist` — プレイリスト状態確認・手動 assign・クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
 - `/metadata-audit` — アップロード後のローカル ↔ YouTube 整合性監査
+- `/community-post` — アップロード完了後にコミュニティ投稿テンプレを展開して Studio を起動（`config/channel/community.json` がある場合のみ）

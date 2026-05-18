@@ -1,3 +1,6 @@
 # automation リポジトリの takt 設定
 # provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
 draft_pr: false
+
+# release/v5.5.1 へのバッチ投入用に base_branch を一時切替（全 PR merge 後に削除して main 既定に戻す）
+base_branch: release/v5.5.1

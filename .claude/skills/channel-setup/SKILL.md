@@ -58,14 +58,11 @@ Phase 1 で `/channel-new` が作成した最小 config を完全版に拡張。
 
 ### Step 6: GCP / Vertex AI ブートストラップ
 
-新チャンネルの GCP プロジェクト + API + IAM + `.env` をセットアップする。判断基準・コマンド・リカバリ手順は **`references/gcp-bootstrap.md`** を参照。
+**`/onboard` を実行してください**。GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 作成までを AI 主導の wizard で進める。
 
-ユーザーに以下を確認してから実行する:
-- 既存プロジェクトを流用するか / 新規作成するか
-- terraform ルート（IaC 管理）を使うか / bootstrap.sh（最速）か
-- Billing account ID（新規作成時のみ必要）
+事前に `yt-doctor --json` を叩き、`summary.next_check_id == null` (全 check 緑) なら `/onboard` は完了済みのため本 step を skip して **Step 7 へ進む**。
 
-実行後、スクリプト出力の Console URL を開き OAuth 2.0 クライアント ID を **手動で 1 回作成**して `auth/client_secrets.json` に配置するよう案内する（gcloud / terraform 双方この手順だけ未サポート）。
+旧: bootstrap.sh / terraform を手動で叩く手順は `references/gcp-bootstrap.md` に残してあるが、通常ルートは `/onboard` に統一する。
 
 ### Step 7: 検証
 

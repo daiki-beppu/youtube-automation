@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-05-17
+
 ### Changed
 
 #### `yt-populate-scene-phrases` を汎用 CLI として書き直し、`/wf-new` に統合
@@ -146,15 +148,17 @@ Gemini を案件単位で切り替えられるようにした。OpenAI provider 
 
 ### Migration
 
-downstream チャンネルリポジトリで v5.3.0 → v5.4.0 への追従手順は
-[docs/upgrades/v5.4.0.md](docs/upgrades/v5.4.0.md) を参照。
+downstream チャンネルリポジトリで v5.4.0 → v5.5.0 への追従手順は
+**チャンネル運営者向け** の平易なガイド [docs/upgrades/v5.5.0.md](docs/upgrades/v5.5.0.md) を参照。
 
 サマリ:
 
-- スキル名 rename 8 件（`analyze` → `analytics-analyze` など、破壊的）
-- `image_generator.py` 削除 → `image_provider/` モジュール（直 import している場合のみ書き換え必要）
-- (オプトイン) `/streaming` スキル + `infra/terraform/streaming/` 追加
-- (追加のみ) `yt-discover-competitors` CLI + `discover-competitors` スキル
+- 新規 skill 2 件（`/playlist`, `/metadata-audit`）、新規 CLI 1 件（`yt-channel-init`）
+- 既存 skill の挙動変更（`/masterup` Step 6 を rsync 化 #324、`/wf-next` で main repo の master-mix を検出 #325、`/channel-setup` に設定 push モード #248、`/collection-ideate` を `freshness_days` 参照に統一 #326）
+- `yt-channel-settings push --apply` の `brandingSettings cannot be used with other parts` 400 エラー修正（#230）
+- `/wf-new` に `yt-populate-scene-phrases` 統合で多言語 scene_phrases を自動生成（#246）
+
+なお、v5.3.0 → v5.4.0 への追従手順（スキル名 rename 8 件・`image_generator.py` 削除など、本リリースに累積で含まれる破壊的変更）は引き続き [docs/upgrades/v5.4.0.md](docs/upgrades/v5.4.0.md) を参照。
 
 ## [5.2.0] - 2026-04-29
 
@@ -626,5 +630,10 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.0
+[5.4.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.4.0
+[5.3.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.3.0
+[5.2.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.2.0
+[5.1.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.1.1
 [5.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.0.0
 [2.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v2.0.0

@@ -1,0 +1,5 @@
+{
+  "template": "🎧 New session is live.\n\n{brand_concept_oneliner}\n\nAppreciate everyone showing up every day with {brand_name}. {brand_voice_sentence}\n\n{call_to_action}\n\n▶ {closing_line}",
+  "studio_url": "https://www.youtube.com/channel/{channel_id}/posts",
+  "attach_video": true
+}

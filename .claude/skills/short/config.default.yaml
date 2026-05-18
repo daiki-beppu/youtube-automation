@@ -1,0 +1,15 @@
+# /short skill 動作パラメータ（生成側）。
+#
+# チャンネル運用設定（enabled / publish_time / 本数 / 投稿間隔など）は
+# config/channel/shorts.json に置く。両者を混同しないこと。
+#
+# チャンネル側上書きは config/skills/short.yaml。
+
+# generate-shorts.sh の env デフォルト
+duration_sec: 20          # 1 ショートあたりの尺
+fade_in_sec: 1.0          # フェードイン秒数
+fade_out_sec: 1.5         # フェードアウト秒数
+chapter_offset_sec: 30    # 各チャプター開始からのオフセット秒（Step 3 提案値）
+
+# drawtext で使うフォントパス（macOS デフォルト）
+font_path: "/System/Library/Fonts/Palatino.ttc"
