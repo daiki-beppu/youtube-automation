@@ -70,18 +70,14 @@ class TestEnvFile:
 
     def test_all_keys(self, tmp_path):
         (tmp_path / ".env").write_text(
-            "GOOGLE_CLOUD_PROJECT=foo\n"
-            "GOOGLE_CLOUD_LOCATION=us-central1\n"
-            "GOOGLE_GENAI_USE_VERTEXAI=true\n",
+            "GOOGLE_CLOUD_PROJECT=foo\nGOOGLE_CLOUD_LOCATION=us-central1\nGOOGLE_GENAI_USE_VERTEXAI=true\n",
             encoding="utf-8",
         )
         r = doctor.check_env_file(tmp_path)
         assert r.status == "ok"
 
     def test_partial(self, tmp_path):
-        (tmp_path / ".env").write_text(
-            "GOOGLE_CLOUD_PROJECT=foo\n", encoding="utf-8"
-        )
+        (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=foo\n", encoding="utf-8")
         r = doctor.check_env_file(tmp_path)
         assert r.status == "warn"
 
@@ -95,9 +91,7 @@ class TestClientSecrets:
         assert "credentials" in r.next_action["url"]
 
     def test_missing_with_project(self, tmp_path):
-        (tmp_path / ".env").write_text(
-            "GOOGLE_CLOUD_PROJECT=foo-proj\n", encoding="utf-8"
-        )
+        (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=foo-proj\n", encoding="utf-8")
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "fail"
         assert "foo-proj" in r.next_action["url"]
@@ -123,9 +117,7 @@ class TestClientSecrets:
     def test_missing_keys(self, tmp_path):
         auth = tmp_path / "auth"
         auth.mkdir()
-        (auth / "client_secrets.json").write_text(
-            json.dumps({"installed": {"client_id": "x"}}), encoding="utf-8"
-        )
+        (auth / "client_secrets.json").write_text(json.dumps({"installed": {"client_id": "x"}}), encoding="utf-8")
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "fail"
 
@@ -139,9 +131,7 @@ class TestOAuthToken:
     def test_valid(self, tmp_path):
         auth = tmp_path / "auth"
         auth.mkdir()
-        (auth / "token.json").write_text(
-            json.dumps({"scopes": ["a", "b"]}), encoding="utf-8"
-        )
+        (auth / "token.json").write_text(json.dumps({"scopes": ["a", "b"]}), encoding="utf-8")
         r = doctor.check_oauth_token(tmp_path)
         assert r.status == "ok"
 

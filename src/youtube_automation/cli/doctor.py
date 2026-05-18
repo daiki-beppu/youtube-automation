@@ -35,9 +35,7 @@ class CheckResult:
 
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
     try:
-        r = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, check=False
-        )
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
         return r.returncode, r.stdout, r.stderr
     except FileNotFoundError:
         return 127, "", f"command not found: {cmd[0]}"
@@ -86,9 +84,7 @@ def check_gcloud() -> CheckResult:
 
 
 def check_gcloud_account() -> CheckResult:
-    code, out, err = _run(
-        ["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=json"]
-    )
+    code, out, err = _run(["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=json"])
     if code != 0:
         return CheckResult(
             id="gcloud_account",
@@ -127,18 +123,14 @@ def check_gcp_project(channel_dir: Path) -> CheckResult:
             status="fail",
             message="GOOGLE_CLOUD_PROJECT が .env / 環境変数に無い",
         )
-    code, _, err = _run(
-        ["gcloud", "projects", "describe", project_id, "--format=value(projectId)"]
-    )
+    code, _, err = _run(["gcloud", "projects", "describe", project_id, "--format=value(projectId)"])
     if code != 0:
         return CheckResult(
             id="gcp_project",
             status="fail",
             message=f"プロジェクト {project_id} が見つからない: {err.strip()}",
         )
-    return CheckResult(
-        id="gcp_project", status="ok", message=f"プロジェクト {project_id} 存在"
-    )
+    return CheckResult(id="gcp_project", status="ok", message=f"プロジェクト {project_id} 存在")
 
 
 def check_billing(channel_dir: Path) -> CheckResult:
@@ -151,8 +143,13 @@ def check_billing(channel_dir: Path) -> CheckResult:
         )
     code, out, err = _run(
         [
-            "gcloud", "beta", "billing", "projects", "describe",
-            project_id, "--format=value(billingEnabled)",
+            "gcloud",
+            "beta",
+            "billing",
+            "projects",
+            "describe",
+            project_id,
+            "--format=value(billingEnabled)",
         ]
     )
     if code != 0:
@@ -187,8 +184,12 @@ def check_apis_enabled(channel_dir: Path) -> CheckResult:
         )
     code, out, err = _run(
         [
-            "gcloud", "services", "list", "--enabled",
-            f"--project={project_id}", "--format=value(config.name)",
+            "gcloud",
+            "services",
+            "list",
+            "--enabled",
+            f"--project={project_id}",
+            "--format=value(config.name)",
         ]
     )
     if code != 0:
@@ -245,9 +246,7 @@ def check_adc_quota_project(channel_dir: Path) -> CheckResult:
             status="unknown",
             message="GOOGLE_CLOUD_PROJECT が未設定のため判定不可",
         )
-    adc_json = (
-        Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
-    )
+    adc_json = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
     if not adc_json.exists():
         return CheckResult(
             id="adc_quota_project",
@@ -267,10 +266,7 @@ def check_adc_quota_project(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="adc_quota_project",
             status="warn",
-            message=(
-                f"ADC quota project ({quota}) が GOOGLE_CLOUD_PROJECT "
-                f"({project_id}) と不一致"
-            ),
+            message=(f"ADC quota project ({quota}) が GOOGLE_CLOUD_PROJECT ({project_id}) と不一致"),
             next_action={
                 "kind": "ai-exec",
                 "cmd": f"gcloud auth application-default set-quota-project {project_id}",
@@ -291,9 +287,7 @@ def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
             status="unknown",
             message="project_id が未設定のためスキップ",
         )
-    code, out, _ = _run(
-        ["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"]
-    )
+    code, out, _ = _run(["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"])
     if code != 0 or not out.strip():
         return CheckResult(
             id="iam_aiplatform_user",
@@ -303,12 +297,12 @@ def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
     account = out.strip().splitlines()[0]
     code, out, err = _run(
         [
-            "gcloud", "projects", "get-iam-policy", project_id,
+            "gcloud",
+            "projects",
+            "get-iam-policy",
+            project_id,
             "--flatten=bindings[].members",
-            (
-                f"--filter=bindings.role:roles/aiplatform.user "
-                f"AND bindings.members:user:{account}"
-            ),
+            (f"--filter=bindings.role:roles/aiplatform.user AND bindings.members:user:{account}"),
             "--format=value(bindings.role)",
         ]
     )
@@ -405,9 +399,7 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
             status="fail",
             message=f"client_secrets.json に必須キー不足: {','.join(missing)}",
         )
-    return CheckResult(
-        id="client_secrets", status="ok", message="client_secrets.json 構造妥当"
-    )
+    return CheckResult(id="client_secrets", status="ok", message="client_secrets.json 構造妥当")
 
 
 def check_oauth_token(channel_dir: Path) -> CheckResult:
@@ -483,9 +475,7 @@ _RESET = "\033[0m"
 _STATUS_ICONS = {"ok": "✓", "warn": "!", "fail": "✗", "unknown": "?"}
 
 
-def render_table(
-    results: list[CheckResult], summary: dict, channel_dir: Path
-) -> str:
+def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -> str:
     lines: list[str] = []
     lines.append(f"channel_dir: {channel_dir}")
     lines.append("")
@@ -494,9 +484,7 @@ def render_table(
     for r in results:
         color = _COLORS.get(r.status, "")
         icon = _STATUS_ICONS.get(r.status, "?")
-        lines.append(
-            f"{color}{icon} {r.status:<5}{_RESET} {r.id:<22} {r.message}"
-        )
+        lines.append(f"{color}{icon} {r.status:<5}{_RESET} {r.id:<22} {r.message}")
         if r.next_action:
             kind = r.next_action.get("kind")
             if kind == "human":
@@ -508,8 +496,7 @@ def render_table(
                 lines.append(f"  → run: {r.next_action.get('cmd', '')}")
     lines.append("")
     lines.append(
-        f"summary: ok={summary['ok']} warn={summary['warn']} "
-        f"fail={summary['fail']} unknown={summary.get('unknown', 0)}"
+        f"summary: ok={summary['ok']} warn={summary['warn']} fail={summary['fail']} unknown={summary.get('unknown', 0)}"
     )
     if summary.get("next_check_id"):
         lines.append(f"next: {summary['next_check_id']}")
@@ -517,13 +504,9 @@ def render_table(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="yt-doctor", description="API 設定の状態診断"
-    )
+    parser = argparse.ArgumentParser(prog="yt-doctor", description="API 設定の状態診断")
     parser.add_argument("--json", action="store_true", help="JSON 出力 (AI 用)")
-    parser.add_argument(
-        "--target", help="対象 channel dir (既定: CHANNEL_DIR env → CWD)"
-    )
+    parser.add_argument("--target", help="対象 channel dir (既定: CHANNEL_DIR env → CWD)")
     args = parser.parse_args(argv)
 
     channel_dir = resolve_channel_dir(args.target)
