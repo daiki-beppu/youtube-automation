@@ -15,7 +15,6 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from google.auth.exceptions import DefaultCredentialsError
 
 from youtube_automation.utils.exceptions import ConfigError
