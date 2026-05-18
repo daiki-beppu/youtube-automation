@@ -186,7 +186,7 @@ nix develop
 ```bash
 git clone git@github.com:daiki-beppu/youtube-automation.git
 cd youtube-automation
-uv sync --extra dev --extra veo
+uv sync --extra dev
 ```
 
 ### テスト実行
@@ -194,6 +194,12 @@ uv sync --extra dev --extra veo
 ```bash
 uv run pytest
 ```
+
+`uv sync --extra dev` 単独で `uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。
+
+- テスト用ツール (`pytest` / `ruff`) は `[project.optional-dependencies].dev` 経由で導入されます。
+- テストが間接的に require する `Pillow` / `pandas` / `pyyaml` / `matplotlib` / `japanize-matplotlib` / `seaborn` / `google-api-python-client` / `google-auth-oauthlib` などは `[project] dependencies`（main deps）に同梱されています。
+- 現時点で optional dependency 扱いの test dep は存在しません（Issue #216 で `pyyaml`、コミット `801ffa8` / v5.5.0 で `Pillow` を main deps へ統合済み。本 Issue #329 はその状態を README に明文化したもの）。
 
 ### Lint
 
