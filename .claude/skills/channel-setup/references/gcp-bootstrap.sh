@@ -12,7 +12,8 @@
 #        - generativelanguage.googleapis.com
 #   5. Application Default Credentials (ADC) ログイン + quota project 設定
 #   6. roles/aiplatform.user を ADC ユーザーに付与
-#   7. .env に GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI を書き出し
+#   7. .env に GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI を書き出し
+#      (project_id は ADC quota project から自動解決されるため .env への書き出し不要)
 #   8. OAuth クライアント ID 作成のための Console URL を案内 (この 1 クリックだけ手動)
 #
 # 注意:
@@ -245,9 +246,8 @@ write_env_var() {
 }
 
 write_env_var "GOOGLE_GENAI_USE_VERTEXAI" "true" "$ENV_FILE"
-write_env_var "GOOGLE_CLOUD_PROJECT" "$PROJECT_ID" "$ENV_FILE"
 write_env_var "GOOGLE_CLOUD_LOCATION" "$LOCATION" "$ENV_FILE"
-ok "${ENV_FILE} に Vertex AI 用環境変数を書き出しました"
+ok "${ENV_FILE} に Vertex AI 用環境変数を書き出しました (project_id は ADC quota project から自動解決)"
 
 cat <<EOF
 

@@ -19,7 +19,6 @@ REQUIRED_APIS = [
 ]
 
 REQUIRED_ENV_KEYS = [
-    "GOOGLE_CLOUD_PROJECT",
     "GOOGLE_CLOUD_LOCATION",
     "GOOGLE_GENAI_USE_VERTEXAI",
 ]
@@ -56,9 +55,20 @@ def _read_env_file(env_path: Path) -> dict[str, str]:
     return result
 
 
+def _adc_quota_project() -> Optional[str]:
+    adc_json = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+    if not adc_json.exists():
+        return None
+    try:
+        data = json.loads(adc_json.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data.get("quota_project_id")
+
+
 def _project_id_for(channel_dir: Path) -> Optional[str]:
     env = _read_env_file(channel_dir / ".env")
-    return env.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+    return env.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or _adc_quota_project()
 
 
 # --- checks ---
@@ -121,7 +131,7 @@ def check_gcp_project(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="gcp_project",
             status="fail",
-            message="GOOGLE_CLOUD_PROJECT が .env / 環境変数に無い",
+            message="project_id が .env / 環境変数 / ADC quota project のいずれにも無い",
         )
     code, _, err = _run(["gcloud", "projects", "describe", project_id, "--format=value(projectId)"])
     if code != 0:
@@ -244,7 +254,7 @@ def check_adc_quota_project(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="adc_quota_project",
             status="unknown",
-            message="GOOGLE_CLOUD_PROJECT が未設定のため判定不可",
+            message="project_id が未設定のため判定不可",
         )
     adc_json = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
     if not adc_json.exists():
@@ -266,7 +276,7 @@ def check_adc_quota_project(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="adc_quota_project",
             status="warn",
-            message=(f"ADC quota project ({quota}) が GOOGLE_CLOUD_PROJECT ({project_id}) と不一致"),
+            message=(f"ADC quota project ({quota}) が project_id ({project_id}) と不一致"),
             next_action={
                 "kind": "ai-exec",
                 "cmd": f"gcloud auth application-default set-quota-project {project_id}",
