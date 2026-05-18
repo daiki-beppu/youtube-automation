@@ -17,6 +17,19 @@ youtube-automation の non-trivial なリリース（破壊的変更や新機能
 
 `/release` スキル（Node.js 向け）とは責務が異なる。本スキルは **publish 後の運営者向けノート生成 + 影響波及対応** に特化。
 
+## ⚠ 改修時の注意 / 下流連携先
+
+本スキルが生成する `docs/upgrades/v<ver>.md` は、**下流の private リポジトリ libecity に存在する `release-notes-chat` スキル** が入力としてパースし、リベシティ「リリースノートチャット」向けの digest（プレーンテキスト投稿）に変換している。本スキルや `references/release-notes-template.md` の構造を変えると下流のパースが直接壊れるため、以下のセクション名・構造は **互換性のあるインターフェース** として扱うこと。
+
+libecity 側 `release-notes-chat` スキルが依存している入力構造:
+
+- 冒頭の `所要時間の目安: X〜Y 分` — そのまま転記される
+- `■ AI にお任せする場合のプロンプト` — 本文をほぼそのまま digest にコピーする核セクション（**改変厳禁・最重要**。命名・区切り規約・本文構造の変更は libecity 側パースを直接破壊する）
+- `■ TL;DR（30 秒サマリー）` — 4 項目を 1 行ずつに圧縮して転記
+- `■ このバージョンで何が変わるか` — 運営者価値が高い Top 3 を抽出
+
+上記セクション名（`■` 区切りの見出し含め）または `references/release-notes-template.md` のテンプレ本体を改修する場合は、libecity 側 `release-notes-chat` スキルの Step 3〜6 も **同時に** 更新すること。libecity は private リポジトリのため本ファイル内に直接 URL は載せない（issue #336 参照）。
+
 ## Instructions
 
 **実行場所**: youtube-automation リポジトリのルート（`/Users/mba/02-yt/automation`）
