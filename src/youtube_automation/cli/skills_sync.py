@@ -321,6 +321,7 @@ def _diff_dir_asset(spec: dict[str, str], root: Path, target_dir: Path) -> int:
         print("target にのみ存在 (sync では削除されません):")
         for n in only_disk:
             print(f"  - {n}")
+        print("  (削除するには yt-skills sync --prune --yes を使ってください)")
 
     differing: list[str] = []
     for name in common:
