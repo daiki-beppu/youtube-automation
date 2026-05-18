@@ -123,7 +123,7 @@ uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/tes
 
 ```
 <channel_dir>/
-├── .env                            # GOOGLE_CLOUD_PROJECT 等 (スクリプトが書き出す)
+├── .env                            # GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI (スクリプトが書き出す)
 └── auth/
     ├── client_secrets.json          # OAuth 2.0 認証情報（要作成・gitignore）
     └── token.json                   # 認証トークン（自動生成・gitignore）
@@ -137,11 +137,12 @@ uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/tes
 
 ```bash
 GOOGLE_GENAI_USE_VERTEXAI=true
-GOOGLE_CLOUD_PROJECT=<your-project-id>
 GOOGLE_CLOUD_LOCATION=us-central1
 ```
 
-アプリ側 (`create_genai_client()`) は `GOOGLE_CLOUD_PROJECT` のみを参照し、常に `vertexai=True` で Client を初期化する。`GOOGLE_GENAI_USE_VERTEXAI` は google-genai SDK の自動検出用に置いておく任意フラグ。
+project_id は ADC quota project (`gcloud auth application-default set-quota-project <PROJECT_ID>`) から自動解決されるため `.env` への書き出しは不要。明示したい場合は `GOOGLE_CLOUD_PROJECT=<id>` を追記すれば従来通り優先される。
+
+アプリ側 (`create_genai_client()`) は `utils/google_cloud_project.resolve_project_id()` を介して env var → ADC の順で project_id を解決し、常に `vertexai=True` で Client を初期化する。`GOOGLE_GENAI_USE_VERTEXAI` は google-genai SDK の自動検出用に置いておく任意フラグ。
 
 ### 対応 API
 

@@ -125,7 +125,7 @@ yt-channel-status
 
 ```bash
 cp .env.example .env
-$EDITOR .env  # Vertex AI 用変数 (GOOGLE_CLOUD_PROJECT 等) を書く
+$EDITOR .env  # Vertex AI 用変数 (`GOOGLE_CLOUD_LOCATION` 等) を書く。project_id は ADC quota project から自動解決される
 ```
 
 `scripts/gcp-bootstrap.sh` または `infra/terraform/gcp/` を実行すれば `.env` に自動書き出しされます。`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
@@ -173,7 +173,7 @@ nix develop
 
 | 変数名 | 必須 | 説明 |
 |--------|------|------|
-| `GOOGLE_CLOUD_PROJECT` | AI 生成機能使用時 | Vertex AI を呼ぶ GCP プロジェクト ID |
+| `GOOGLE_CLOUD_PROJECT` | 任意 | Vertex AI を呼ぶ GCP プロジェクト ID。未設定なら ADC quota project から自動解決 |
 | `GOOGLE_CLOUD_LOCATION` | 任意 | Vertex AI リージョン（既定: `us-central1`） |
 | `GOOGLE_GENAI_USE_VERTEXAI` | 任意 | google-genai SDK の自動検出用フラグ（アプリ側は参照しない） |
 | `CHANNEL_DIR` | 自動検出可 | チャンネルリポジトリのルートパス |

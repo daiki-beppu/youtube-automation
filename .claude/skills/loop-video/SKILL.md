@@ -45,7 +45,7 @@ $ARGUMENTS
 ### 前提条件
 
 - `10-assets/main.png` または `main.jpg` が存在すること（サムネイル生成済み）
-- Vertex AI 用環境変数が `.env` に設定されていること (`GOOGLE_CLOUD_PROJECT`)。region は `generate_loop_video.py` 側で `us-central1` を明示固定するため `GOOGLE_CLOUD_LOCATION` は不要
+- Vertex AI ADC が初期化されていること (`gcloud auth application-default login` + `set-quota-project`)。project_id は ADC quota project から自動解決される（`GOOGLE_CLOUD_PROJECT` は任意で上書き可）。region は `generate_loop_video.py` 側で `us-central1` を明示固定するため `GOOGLE_CLOUD_LOCATION` は不要
 - `gcloud auth application-default login` で ADC が取得済みであること
 
 ### ステップ

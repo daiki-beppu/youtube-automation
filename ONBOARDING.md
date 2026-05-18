@@ -247,7 +247,7 @@ uv sync --extra dev --extra veo
 | `ConfigError: missing key ...` | `config/channel/*.json` に必須キーが不足。`utils/config/loader.py::_REQUIRED_KEYS_BY_SECTION` を参照して該当 JSON を埋める |
 | `op read` が失敗する | `op signin` でサインインしているか確認。CLI 取得経路は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`） |
 | `yt-skills sync` がスキルを上書きしない | `--force` を付ける（既存ファイルがあるとデフォルトでスキップ） |
-| Vertex AI 呼び出しで `PERMISSION_DENIED` | `GOOGLE_CLOUD_PROJECT` を確認し、`auth/SETUP.md` の IAM ロール付与節を再実行 |
+| Vertex AI 呼び出しで `PERMISSION_DENIED` | ADC quota project を `gcloud auth application-default set-quota-project <PROJECT_ID>` で確認・修正し、`auth/SETUP.md` の IAM ロール付与節を再実行 |
 | アップロードが `quotaExceeded` で止まる | YouTube Data API の日次クォータ消費上限。翌日に再開するか、別 GCP プロジェクトに切り替える |
 
 詳細なエラー定義は [`src/youtube_automation/utils/exceptions.py`](src/youtube_automation/utils/exceptions.py)。
