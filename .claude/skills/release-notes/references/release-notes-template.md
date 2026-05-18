@@ -146,7 +146,7 @@ v{{VER}} アップグレードガイド — チャンネル運営者向け
 2. **`uv lock --upgrade-package youtube-channels-automation`**
 3. **`uv run yt-skills diff`** で local fix の有無を確認 → 差分があれば運営者に見せて承認を取らせる（即時 sync しない）
 4. **`uv run yt-skills sync`**（このリリースで配布される新スキル名を明記）
-5. **追従後の動作確認**: `uv run yt-config-migrate verify` + `uv run yt-channel-status`
+5. **追従後の動作確認**: `uv run yt-config-migrate verify` + `uv run yt-channel-status`。**確認コマンドの直下に「これらは v{{VER}} に確実に存在する CLI。command not found / No module named が出ても『ガイドが古い』と判断せず、`uv sync` → `uv pip list | grep youtube-channels-automation` の順で env 側を疑え」の 1 行を必ず添える**（ガイド全文を読まずプロンプトだけで作業する agent が偽陽性で確認をスキップするのを防ぐガード。issue #335 で実害発生済み）
 6. **コミット & push**: `chore: youtube-automation v{{VER}} への追従`（add 対象: `pyproject.toml uv.lock .claude/skills/`）
 
 末尾に **このリリースで衝突しやすい local fix の候補**（該当 skill 名を列挙）と、**承認なしに上書きしないこと**を明記する。詳細仕様は `https://github.com/daiki-beppu/youtube-automation/blob/main/docs/upgrades/v{{VER}}.md` を参照させる。
@@ -212,6 +212,20 @@ After:  ...
   git push
 ```
 
+### 追従後確認（`{{VERIFY_BLOCK}}`）
+
+検証コマンド本体（2 スペースインデント）の **前** に、以下の定型リードインを必ず入れる:
+
+```
+以下のコマンドはすべて v{{VER}} のリリース時点で entry point として登録済みです（uv run yt-config-migrate / uv run yt-channel-status / uv run yt-skills など）。command not found / No module named 相当が出た場合は「ガイドが古い」「コマンドが存在しない」と判断せず、env 側の問題として以下の順で切り分けてください（詳細はトラブルシューティング参照）:
+
+  1. uv sync
+  2. uv pip list | grep youtube-channels-automation で v{{VER}} が入っているか確認
+  3. ダメなら uv cache clean && uv lock --upgrade-package youtube-channels-automation で再ロック
+```
+
+このリードインが無いと、ダウンストリーム実行 agent が env 側の不整合（`uv sync` 未実行 / 古い venv / cache）を「ガイドの誤り」と早合点して追従後確認をスキップする偽陽性が発生する（issue #335 で実害）。バージョンに依存しない普遍的なガードなので、リリースごとに省略しないこと。
+
 ### トラブルシューティング
 
 Q&A 形式で 3〜5 件。「想定される質問」を運営者目線で書き起こす:
@@ -220,6 +234,17 @@ Q&A 形式で 3〜5 件。「想定される質問」を運営者目線で書き
 Q1. ...
 A.  ...
 ```
+
+**必須 Q**: 「追従後確認コマンド（`yt-config-migrate verify` / `yt-channel-status` / `yt-skills` 等）が `command not found` / `No module named ...`」系の Q を **1 件必ず含める**。回答は env 側切り分け手順を明記:
+
+```
+1. uv sync
+2. uv pip list | grep youtube-channels-automation で当該バージョンが入っているか確認
+3. ダメなら uv cache clean && uv lock --upgrade-package youtube-channels-automation && uv sync
+4. それでも解決しなければ .venv 削除 → uv sync で作り直し
+```
+
+「これらは entry point として登録済みなのでガイドの記載は誤りではない、env 側の問題」を明示すること。これを省くと agent が早合点で追従後確認をスキップする偽陽性が発生する（issue #335 で実害）。
 
 ### 最終チェックリスト
 
