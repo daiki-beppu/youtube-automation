@@ -9,7 +9,9 @@ from dataclasses import dataclass
 class Workflow:
     """ワークフロー責務の合成（`workflow` セクション）.
 
-    v4.0.0 で short 関連フィールド（`post_upload` / `short`）を撤去した。
-    将来フィールドが増えたら本 dataclass に追加し、`_REQUIRED_KEYS_BY_SECTION` に
-    必須キーを登録すること。
+    現状は空。将来 workflow.json で扱うフィールドが増えたら本 dataclass に追加し、
+    `_REQUIRED_KEYS_BY_SECTION` に必須キーを登録する。
+
+    Shorts スケジュール公開時刻は `Shorts.publish_time`（`config/channel/shorts.json`）に
+    移動した — `workflow.post_upload.short_publish_time` は使わない。
     """

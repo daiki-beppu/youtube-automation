@@ -125,7 +125,7 @@ yt-channel-status
 
 ```bash
 cp .env.example .env
-$EDITOR .env  # Vertex AI 用変数 (GOOGLE_CLOUD_PROJECT 等) を書く
+$EDITOR .env  # Vertex AI 用変数 (`GOOGLE_CLOUD_LOCATION` 等) を書く。project_id は ADC quota project から自動解決される
 ```
 
 `scripts/gcp-bootstrap.sh` または `infra/terraform/gcp/` を実行すれば `.env` に自動書き出しされます。`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
@@ -173,7 +173,7 @@ nix develop
 
 | 変数名 | 必須 | 説明 |
 |--------|------|------|
-| `GOOGLE_CLOUD_PROJECT` | AI 生成機能使用時 | Vertex AI を呼ぶ GCP プロジェクト ID |
+| `GOOGLE_CLOUD_PROJECT` | 任意 | Vertex AI を呼ぶ GCP プロジェクト ID。未設定なら ADC quota project から自動解決 |
 | `GOOGLE_CLOUD_LOCATION` | 任意 | Vertex AI リージョン（既定: `us-central1`） |
 | `GOOGLE_GENAI_USE_VERTEXAI` | 任意 | google-genai SDK の自動検出用フラグ（アプリ側は参照しない） |
 | `CHANNEL_DIR` | 自動検出可 | チャンネルリポジトリのルートパス |
@@ -186,7 +186,7 @@ nix develop
 ```bash
 git clone git@github.com:daiki-beppu/youtube-automation.git
 cd youtube-automation
-uv sync --extra dev --extra veo
+uv sync --extra dev
 ```
 
 ### テスト実行
@@ -194,6 +194,12 @@ uv sync --extra dev --extra veo
 ```bash
 uv run pytest
 ```
+
+`uv sync --extra dev` 単独で `uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。
+
+- テスト用ツール (`pytest` / `ruff`) は `[project.optional-dependencies].dev` 経由で導入されます。
+- テストが間接的に require する `Pillow` / `pandas` / `pyyaml` / `matplotlib` / `japanize-matplotlib` / `seaborn` / `google-api-python-client` / `google-auth-oauthlib` などは `[project] dependencies`（main deps）に同梱されています。
+- 現時点で optional dependency 扱いの test dep は存在しません（Issue #216 で `pyyaml`、コミット `801ffa8` / v5.5.0 で `Pillow` を main deps へ統合済み。本 Issue #329 はその状態を README に明文化したもの）。
 
 ### Lint
 

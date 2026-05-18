@@ -11,3 +11,4 @@ class Audio:
 
     target_duration_min: float | None = None
     target_duration_max: float | None = None
+    chapter_max: int = 100

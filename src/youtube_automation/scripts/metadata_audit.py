@@ -27,6 +27,8 @@ from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.config.config import ChannelConfig  # noqa: E402
 from youtube_automation.utils.preflight_checks import (  # noqa: E402
+    check_chapter_count,
+    check_chapter_variation_suffix,
     check_duration,
     check_tags_count,
     check_tags_yt_chars,
@@ -77,13 +79,13 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
         ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]
         if len(ts_lines) < 3:
             issues.append(f"too few timestamps: {len(ts_lines)} (<3)")
-        elif len(ts_lines) > 12:
-            issues.append(f"too many timestamps: {len(ts_lines)} (>12, likely per-variation regression)")
-
-        # Roman numerals like 'Pattern I', 'Pattern II' suggest variation expansion
-        roman = [line for line in ts_lines if re.search(r"\b(I{1,3}|IV|V|VI{0,3})\b\s*$", line)]
-        if roman:
-            issues.append(f"chapter names contain roman numerals (variation expansion): {len(roman)} lines")
+        else:
+            for msg in (
+                check_chapter_count(len(ts_lines), config.audio.chapter_max),
+                check_chapter_variation_suffix(ts_lines),
+            ):
+                if msg:
+                    issues.append(msg)
 
     # workflow-state.json scene_phrases
     ws = col / "workflow-state.json"

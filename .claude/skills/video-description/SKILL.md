@@ -55,8 +55,17 @@ $ARGUMENTS
 ### タイムスタンプ生成手順
 
 1. **個別トラックがある場合**（`02-Individual-music/`）: `metadata_generator.py` の `analyze_audio_files()` で自動計算
-2. チャプター名はトラックタイトル（ファイル名から生成）を使用
-3. `00:00` から始まること（YouTube チャプター要件）、最低3チャプター
+2. チャプター名は原則トラックタイトル（ファイル名から生成）を使用
+3. **同名トラックの LLM リネーム**:
+   - スクリプト出力を確認し、`02-Individual-music/` 内に case-insensitive で同名のトラックが 2 つ以上ある場合、そのまま descriptions.md に並べてはいけない（視聴者の chapter 識別性が落ちる）
+   - 重複検出と命名はスクリプトに任せず、本 skill を実行している LLM 自身が `20-documentation/suno-prompts.md` と `workflow-state.json` を読み、コレクションのテーマ・シーン展開（時系列／空間／情緒のいずれか）を把握してから固有名に書き換える
+   - 命名方針:
+     - 元曲名のコア語彙は保つ（同一テーマ群であることを視聴者に示すため）
+     - コレクションの物語アークに沿った短い修飾語（英語 2〜3 語）で区別する。例: `Quiet Hours` × 2 → `Quiet Hours — Dusk` / `Quiet Hours — Dawn`、`Rain Window` × 3 → `Rain Window I` 型ではなく `Rain Window — Distant` / `Rain Window — Closer` / `Rain Window — Drift`
+     - 末尾に `v1〜v9` / ロマン数字 `I〜VIII` を付けない（preflight の variation suffix 検出で reject される）
+   - 修正は **descriptions.md の chapter 行のみ** に反映し、`02-Individual-music/` のファイル名や ID3 タグは変更しない
+   - 同名がない場合はこの手順をスキップ
+4. `00:00` から始まること（YouTube チャプター要件）、最低3チャプター
 
 ### Perfect for テーマ別カスタマイズ
 

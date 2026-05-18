@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Push descriptions.md content to YouTube via videos().update(part='snippet').
 
-For each collection in TARGETS, read its 'Complete Collection 概要欄' and
-'タイトル案' sections from descriptions.md, and update the corresponding
-YouTube video's snippet (title, description, tags, categoryId).
+For each collection discovered under ``collections/live/`` that has both
+``20-documentation/descriptions.md`` and ``20-documentation/upload_tracking.json``,
+read its 'Complete Collection 概要欄' and 'タイトル案' sections from
+descriptions.md, and update the corresponding YouTube video's snippet
+(title, description, tags, categoryId).
 
 The required video_id is read from
-collections/live/<col>/20-documentation/upload_tracking.json.
+``collections/live/<col>/20-documentation/upload_tracking.json``.
 
 Usage:
-    python3 automation/bulk_update_descriptions_from_md.py --dry-run
-    python3 automation/bulk_update_descriptions_from_md.py
+    yt-bulk-update-desc --dry-run
+    yt-bulk-update-desc --only midnight-flow-state
+    yt-bulk-update-desc
 """
 
 from __future__ import annotations
@@ -23,18 +26,27 @@ import time
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.youtube_service import get_youtube
 
-COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
-# Collections whose snippet should be refreshed from descriptions.md.
-TARGETS = [
-    "20260328-rjn-last-platform-collection",
-    "20260330-rjn-rainy-studio-collection",
-    "20260331-rjn-dorm-window-collection",
-    "20260331-rjn-library-after-hours-collection",
-    "20260401-rjn-rain-nest-collection",
-    "20260404-rjn-empty-gallery-collection",
-    "20260404-rjn-parking-garage-collection",
-]
+def discover_collections() -> list[str]:
+    """``collections/live/*`` から description 更新可能な collection 名を返す.
+
+    `20-documentation/descriptions.md` と `20-documentation/upload_tracking.json`
+    が **両方** 存在する collection のみを対象とする（silent skip）.
+    戻り値は決定論的な `sorted()` 順.
+    """
+    live_dir = channel_dir() / "collections" / "live"
+    if not live_dir.exists():
+        return []
+
+    results: list[str] = []
+    for col_dir in sorted(live_dir.iterdir()):
+        doc_dir = col_dir / "20-documentation"
+        if not (doc_dir / "descriptions.md").exists():
+            continue
+        if not (doc_dir / "upload_tracking.json").exists():
+            continue
+        results.append(col_dir.name)
+    return results
 
 
 def extract_md_section(md_text: str, header: str) -> str | None:
@@ -48,7 +60,7 @@ def utf16_units(s: str) -> int:
 
 
 def load_collection(col: str) -> dict:
-    col_dir = COLLECTIONS_DIR / col
+    col_dir = channel_dir() / "collections" / "live" / col
     desc_md = (col_dir / "20-documentation" / "descriptions.md").read_text(encoding="utf-8")
     upload_tracking = json.loads((col_dir / "20-documentation" / "upload_tracking.json").read_text(encoding="utf-8"))
     cc = upload_tracking.get("complete_collection") or {}
@@ -81,7 +93,7 @@ def main() -> None:
     parser.add_argument("--only", help="comma-separated substring filter for collection names")
     args = parser.parse_args()
 
-    targets = TARGETS
+    targets = discover_collections()
     if args.only:
         substrs = [s.strip() for s in args.only.split(",") if s.strip()]
         targets = [c for c in targets if any(s in c for s in substrs)]

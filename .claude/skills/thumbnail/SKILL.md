@@ -37,7 +37,7 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 | provider | 特徴 | 必要なシークレット |
 |---|---|---|
-| `gemini` | Gemini Image (Nano Banana 系) | `GOOGLE_CLOUD_PROJECT` ＋ ADC |
+| `gemini` | Gemini Image (Nano Banana 系) | ADC (`GOOGLE_CLOUD_PROJECT` は任意で上書き可) |
 | `openai` | OpenAI gpt-image 系（CJK 文字描画が綺麗、16:9/9:16 ネイティブ対応） | `OPENAI_API_KEY` |
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
