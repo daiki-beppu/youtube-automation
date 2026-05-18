@@ -1,109 +1,55 @@
 ---
 name: short-thumbnail
-description: Use when ショート動画用の 9:16 縦型サムネイル画像（と Veo 3.1 ループ動画化）が必要なとき。Gemini で縦型構図を生成し、必要に応じて 9:16 ループ動画に変換。「ショートサムネ」「縦型サムネイル」「short.png」「short-loop」「9:16 画像」など、ショート用ビジュアル制作の場面で必ず使用すること
+description: Use when ショート動画用の 9:16 縦型サムネイル画像を作りたいとき。または承認済み `short.png` を Veo 3.1 で 9:16 ループ動画に変換したいとき。Gemini で縦型構図を生成し、必要に応じてキャラクターアニメ付きループ動画化。「ショートサムネ」「縦型サムネイル」「short.png」「short-loop」「9:16 画像」「9:16 ループ」など、ショート用ビジュアル制作の場面で必ず使用すること
 ---
 
 ## Overview
 
-ショート動画用の 9:16 縦型サムネイルを Gemini API で生成し、必要に応じて Veo 3.1 で
-キャラクターアニメーション付き 9:16 ループ動画に変換する。`/short` Mode A の `short-loop.mp4`
-または `short.png` 素材を準備するための前段スキル。
+`/short` Mode A の素材として `10-assets/short.png`（9:16 縦型サムネ）と
+`10-assets/short-loop.mp4`（Veo 3.1 で生成した 9:16 ループ動画）を準備するための前段スキル。
 
 ## 前提
 
-`config/channel/` が存在すること（`load_config()` でロード可能）。
-
-存在しない場合、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
-
-## When to Use
-
-- `/short` でショート動画を生成する前に、縦型サムネイルが必要なとき
-- `10-assets/short.png` が存在しない状態で `/short` を実行しようとしたとき
-- 既存のショートサムネイルを改善・再生成したいとき
+- `config/channel/` がロード可能（`load_config()`）
+- `GOOGLE_CLOUD_PROJECT` 設定済み + `gcloud auth application-default login` 済み（Vertex AI ADC）
+- `10-assets/main.png` または `main.jpg`（16:9 サムネイル）が既存（参考用）
 
 ## Quick Reference
 
 | コマンド | 説明 |
 |---------|------|
-| `uv run yt-generate-image --aspect-ratio "9:16" --prompt "<text>" --output <path>/10-assets/short.png -y` | 9:16 縦型サムネイル生成（Gemini） |
+| `uv run yt-generate-image --aspect-ratio "9:16" --prompt "<text>" --output <collection-path>/10-assets/short.png -y` | 9:16 縦型サムネ生成（Gemini） |
 | `uv run yt-generate-shorts-loop <collection-path> -y` | `short.png` → 9:16 ループ動画 (Veo 3.1) |
 | `uv run yt-generate-shorts-loop <collection-path> --prompt "..." -y` | カスタムプロンプトでループ生成 |
 
 ## Instructions
 
-### Step 1: 素材確認
+### Step 1: 既存サムネの確認
 
 ```bash
-ls <collection-path>/10-assets/main.*                        # 既存サムネイル（参考用）
-ls <collection-path>/20-documentation/thumbnail-prompts.md   # 既存プロンプト
+open <collection-path>/10-assets/main.*
 ```
 
-既存の `main.png/jpg`（16:9）を **視覚的に確認** し、シーンの構成要素を把握する。
+シーンの構成要素（キャラクター・背景・小道具・カラー）を把握する。16:9 のクロップではなく **9:16 構図でゼロから再描写** するための参考とする。
 
 ### Step 2: プロンプト作成
 
-既存サムネイルのシーンを **縦型構図で再描写** する。16:9 のクロップではなく、9:16 に最適化した構図をゼロから記述する。
+`references/prompt-template.md` のテンプレートに沿って構築:
 
-**プロンプト構造:**
+1. **冒頭**: `Tall vertical portrait composition.` を必ず明記
+2. **シーン描写**: 既存サムネを参考に、9:16 縦長を活かして上下方向の環境ディテールを追加
+3. **テキスト 3 層**（タイトル / チャンネル名 / CTA）の埋め込み指示
+4. **スタイル句**: `references/prompt-template.md` の末尾テンプレを貼り付け
 
-```
-[縦型構図の指定] → [シーン・キャラクター描写（既存サムネイルを参考に）] → [テキスト指示] → [スタイル句]
-```
+**構図の制約**:
+- 斜め後ろ / 横顔推奨（カメラ目線 NG）
+- キャラクターは画面中央〜やや下に配置（上部にテキスト空間確保）
 
-**テキスト指示（3 層）:**
-
-| 層 | 内容 | 位置 | フォントスタイル |
-|---|------|------|----------------|
-| タイトル | コレクション名 | 上部エリア | 大きめ、暖色アイボリー中世風 |
-| チャンネル名 | `config/channel/meta.json` の `channel.name` | タイトル下 | やや小さめ、同スタイル |
-| CTA | `Full {duration}-hour collection on channel` | 下部エリア | 小さめ、クリーン白 |
-
-`{duration}` は `config/channel/audio.json` の `audio.target_duration_min` を 60 で割った値（例: 120 → `Full 2-hour collection`）。
-
-**テキスト装飾**: テーマに合わせた控えめな装飾（スパークル、葉、Celtic knot 等）。`/thumbnail` スキルの装飾ルールに準拠。
-
-**スタイル句（末尾に付加）:**
-
-```
-Hyper-detailed digital matte painting blending photorealism with subtle painterly
-illustration touches, slightly stylized proportions and soft edges that hint at
-hand-painted artwork, natural cinematic lighting with warm lens diffusion, rich
-saturated colors pushed slightly beyond reality for emotional impact.
-```
-
-**構図の注意点:**
-- `Tall vertical portrait composition` を冒頭に明記
-- 構図ルールは 16:9 と同じ（斜め後ろ・横顔推奨、有名キャラは斜め前可、カメラ目線 NG）
-- 縦長なので天井・床の描写に余裕がある — 環境ディテールを上下に配置
-- キャラクターは画面中央〜やや下に配置（上部にテキスト空間を確保）
-
-**プロンプト例:**
-
-```
-Tall vertical portrait composition. Inside a cozy medieval stone tower room,
-a young woman with impossibly long golden hair sits on a wide stone windowsill
-with her back to the viewer, painting on a canvas propped against the window
-frame. She wears a blue peasant dress with paint stains. Her golden hair
-cascades down and pools in flowing spirals across the wooden floor. Through
-the tall arched window, a breathtaking sunset valley with waterfalls, a winding
-river, distant castles and pine forests stretches below. Warm golden light
-streams in. The room has stone walls, a wooden ceiling with string lights,
-scattered art supplies, and stacked books. In the upper area, elegant white
-fantasy text in stacked layout reads "Rapunzels Tower" in warm ivory
-medieval-style font with subtle golden sparkle accents. Below that, smaller
-text reads "{channel_name}" in matching style. Near the bottom, gentle
-text reads "Full {duration}-hour collection on channel" in clean white font.
-Hyper-detailed digital matte painting blending photorealism with subtle
-painterly illustration touches, natural cinematic lighting with warm lens
-diffusion, rich saturated colors.
-```
+詳細プロンプト例は `references/prompt-template.md` を参照。
 
 ### Step 3: 生成
 
 ```bash
-# リポジトリルートから実行
 export $(grep -v '^#' .env | xargs) && \
 uv run yt-generate-image \
   --aspect-ratio "9:16" \
@@ -112,7 +58,7 @@ uv run yt-generate-image \
   -y
 ```
 
-**出力**: `10-assets/short.png`（1536x2752、9:16）+ 自動生成 `short.jpg`
+出力: `10-assets/short.png`（1536x2752）+ 自動生成 `short.jpg`
 
 ### Step 4: 確認・承認
 
@@ -120,65 +66,68 @@ uv run yt-generate-image \
 open <collection-path>/10-assets/short.png
 ```
 
-**チェック項目:**
-- [ ] 9:16 縦型（1536x2752）
-- [ ] テキスト 3 層が全て読める（タイトル・チャンネル名・CTA）
-- [ ] 斜め後ろ/横顔構図（有名キャラは斜め前可、カメラ目線 NG）
-- [ ] 既存サムネイルとの世界観の一貫性
-- [ ] 明るく鮮やかなカラー（暗すぎない）
+`AskUserQuestion` で承認 / 再生成を選ばせる。再生成時は `--output short-v2.png` のように自動バージョニング。
 
-不満なら `--output` を変えて再生成（自動バージョニング: `short-v2.png` 等）。
+**チェック項目**:
+- [ ] 9:16 縦型（1536x2752）
+- [ ] テキスト 3 層がすべて読める
+- [ ] 斜め後ろ / 横顔構図（カメラ目線 NG）
+- [ ] 既存サムネとの世界観の一貫性
+- [ ] 明るく鮮やかなカラー
 
 ### Step 5: ループ動画化（推奨）
 
-承認された `short.png` を Veo 3.1 で 9:16 ループ動画に変換する。キャラクターアニメーション付きで、ショート動画の映像品質が大幅に向上する。
+承認された `short.png` を Veo 3.1 で 9:16 ループ動画に変換:
 
 ```bash
-# リポジトリルートから実行
 export $(grep -v '^#' .env | xargs) && \
 uv run yt-generate-shorts-loop <collection-path> -y
 ```
 
-**カスタムプロンプト** でキャラクターの動きを指定できる:
+カスタム動作プロンプトで微調整可:
 
 ```bash
 uv run yt-generate-shorts-loop <collection-path> \
-  --prompt "Gentle character animation: the woman slowly turns her head, hair sways in the breeze, flowers sway gently. Keep all text static and unchanged." \
+  --prompt "Gentle character animation: the woman slowly turns her head, hair sways in the breeze. Keep all text static and unchanged." \
   -y
 ```
 
-**出力**: `10-assets/short-loop.mp4`（9:16、~7 秒ループ、末尾 1 秒自動トリム）
+出力: `10-assets/short-loop.mp4`（9:16、~7 秒、末尾 1 秒自動トリム）
 
 ```bash
 open <collection-path>/10-assets/short-loop.mp4
 ```
 
-**チェック項目:**
-- [ ] テキストが崩れていないか（3 層すべて読める）
-- [ ] キャラクターが自然に動いているか
-- [ ] ループの継ぎ目が自然か
+**チェック項目**:
+- [ ] テキストが崩れていない（3 層すべて読める）
+- [ ] キャラクターが自然に動いている
+- [ ] ループの継ぎ目が自然
+
+## 設定
+
+| 配置 | ファイル | 責務 |
+|------|---------|------|
+| ループ動画 skill 動作 | `.claude/skills/short-thumbnail/config.default.yaml`（あれば） | Veo モデル / プロンプト / クロップオフセット |
+| チャンネル上書き | `config/skills/short-thumbnail.yaml` | skill-config 差し替え |
 
 ## Gotchas
 
-- **アスペクト比は `--aspect-ratio "9:16"` で指定**: `image_generator.py` の `aspect_ratio` パラメータが Gemini API に渡される
-- **参照画像を渡すと 16:9 に引っ張られる**: `--reference` は使わず、シーンを言葉で再描写すること
-- **テキストのアポストロフィ**: Gemini はアポストロフィ付きテキストも正しく描画できる（drawtext と異なりエスケープ不要）
-- **CTA の尺**: `config/channel/audio.json` の `audio.target_duration_min` を参照して正確な時間を入れる（例: 120 分 → `Full 2-hour collection`）
-- **コスト**: サムネイル $0.04（Gemini Flash）、ループ動画は Veo 3.1（別途）
-- **Veo テキスト安定性**: `last_frame=image` でテキスト部分は開始・終了フレームで固定されるため崩れにくい。プロンプトに `Keep all text completely static and unchanged` を含めること
-- **Veo 末尾ノイズ**: 末尾 ~1 秒にノイズが入ることがある。`generate_short_loop.py` がデフォルトで末尾 1 秒をトリムする
-- **CLI 命名**: v4.0.0 撤去前は `yt-generate-short-loop`（短数形）だった。v5.5.1 復活以降は `yt-generate-shorts-loop`（複数形）
+- **`--aspect-ratio "9:16"` 必須**: 省略すると 16:9 で生成される
+- **参照画像 (`--reference`) は使わない**: 16:9 構図に引っ張られるため。シーンを言葉で再描写する
+- **CTA 文言の尺**: `config/channel/audio.json` の `audio.target_duration_min` を 60 で割って「Full N-hour collection」を埋める
+- **コスト**: サムネ ~$0.04（Gemini Flash）、ループ動画は Veo 3.1（別途課金、Vertex AI コンソールで確認）
+- **Veo テキスト安定性**: プロンプトに `Keep all text completely static and unchanged` を含める。`last_frame=image` で開始 / 終了フレームのテキストを固定
+- **Veo 末尾ノイズ**: 末尾 ~1 秒にノイズが入ることがある。`generate_short_loop.py` がデフォルトで末尾 1 秒をトリム
 
 ## ファイル構造
 
 ```
 10-assets/
-├── main.png          # 16:9 サムネイル（動画背景用）
-├── main.jpg          # 16:9 サムネイル（一部コレクション）
-├── thumbnail.jpg     # 16:9 テキスト付きサムネイル（YouTube 用）
-├── short.png         # 9:16 ショート用サムネイル（本スキルで生成）
+├── main.png          # 16:9 サムネ（動画背景用）
+├── thumbnail.jpg     # 16:9 テキスト付きサムネ（YouTube 用）
+├── short.png         # 9:16 ショート用サムネ（本スキルで生成）
 ├── short.jpg         # 9:16 JPEG 版（自動生成）
-├── short-loop.mp4    # 9:16 ショート用ループ動画（Step 5 で生成）
+├── short-loop.mp4    # 9:16 ループ動画（Step 5 で生成）
 └── loop.mp4          # 16:9 ループ動画背景
 ```
 

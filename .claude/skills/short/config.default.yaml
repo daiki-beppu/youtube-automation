@@ -1,21 +1,15 @@
-# short skill default config
+# /short skill 動作パラメータ（生成側）。
 #
-# ショート動画生成の設定。チャンネル側では config/skills/short.yaml に上書き値を置く。
+# チャンネル運用設定（enabled / publish_time / 本数 / 投稿間隔など）は
+# config/channel/shorts.json に置く。両者を混同しないこと。
 #
-# 注意: コンテンツモデル判定 (content_model.type) は upload など他スキルとも
-# 共有するため config/channel/youtube.json 側で管理する。この YAML には short 固有の派生値のみ置く。
+# チャンネル側上書きは config/skills/short.yaml。
 
-# モード A (collection): BGM テイスターのデフォルト
-duration_sec: 20          # 1ショートあたりの尺
+# generate-shorts.sh の env デフォルト
+duration_sec: 20          # 1 ショートあたりの尺
 fade_in_sec: 1.0          # フェードイン秒数
 fade_out_sec: 1.5         # フェードアウト秒数
-default_count: 3          # 1コレクションから生成するショート本数
-chapter_offset_sec: 30    # 各チャプター開始位置からのオフセット秒
+chapter_offset_sec: 30    # 各チャプター開始からのオフセット秒（Step 3 提案値）
 
 # drawtext で使うフォントパス（macOS デフォルト）
 font_path: "/System/Library/Fonts/Palatino.ttc"
-
-# モード B (release): 話す系クリップのサビ抽出
-release:
-  start_sec: 30     # サビ開始位置
-  duration_sec: 40  # 抽出する尺

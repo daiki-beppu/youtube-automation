@@ -1,246 +1,109 @@
 ---
 name: short
-description: Use when リリース本編動画の公開後にショート動画を生成・投稿したいとき。collection 型は短尺ループ + 多言語ローカライズ、release 型は JP+EN クリップに対応。「ショート作って」「shorts」「告知ショート」「short-mp4」「縦動画」「テイスター」など、本編→ショートの誘導に関わる場面で必ず使用すること
+description: Use when collection 型チャンネル（BGM テイスター）でショート動画を生成・投稿したいとき。CC 動画公開後に 9:16 ショートを 3 本前後生成し多言語ローカライズで投稿。「ショート作って」「shorts」「ショートテイスター」「BGM 切り抜き」「告知ショート」など、本編 CC → ショート誘導に関わる場面で必ず使用すること。release 型（JP+EN クリップ）チャンネルは `/short-release` を使う
 ---
 
 ## Overview
 
-本編動画の公開後にショート動画を生成し、YouTube に投稿して本編への誘導を行う。
-`config/channel/youtube.json` の `content_model.type` に応じてモードを自動切り替えする。
+`config.youtube.content_model.type == "collection"` のチャンネル向けに、CC（Complete Collection）動画の公開後にショート動画を 3 本前後生成し、`localizations.json` の全 supported language にローカライズして投稿する。
 
-FFmpeg 一括生成は `references/` 配下の bash スクリプトに切り出してあり、本 SKILL は
-それらの呼び出し方と前後の判断フローを示す。
+素材判定 → ハイライト区間決定 → FFmpeg 一括生成 → アップロードを 1 コマンドで進める。
 
 ## 前提
 
-`config/channel/` が存在すること（`load_config()` でロード可能）。
+- `config/channel/` がロード可能（`load_config()`）
+- `config.shorts.enabled == true`（`config/channel/shorts.json`）
+- `config.youtube.content_model.type == "collection"`
+- CC 動画が YouTube にアップ済みで、`20-documentation/upload_tracking.json::complete_collection.video_url` が記録されている
 
-存在しない場合、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
-
-## When to Use
-
-- 本編（Complete Collection / Release）動画のアップロードが完了した後（翌日以降）
-- ショート動画で本編を告知・誘導したいとき
-- `upload_tracking.json` に本編の `video_url` / `publish_at` が記録済みのとき
+いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/channel-import` / `/onboard` / `/video-upload`）。
 
 ## Quick Reference
 
 | コマンド | 説明 |
 |---------|------|
-| `uv run yt-upload-shorts <collection-path>` | 指定コレクションのショートを順次アップロード |
+| `uv run yt-upload-shorts <collection-path>` | 全ショートを順次アップロード |
 | `uv run yt-upload-shorts <collection-path> --short-num 2` | 2 本目だけアップロード |
-| `uv run yt-upload-shorts <collection-path> --dry-run` | メタデータプレビューのみ |
-| `bash .claude/skills/short/references/generate-shorts-mode-a.sh <collection-path>` | Mode A 一括生成（collection 型） |
-| `bash .claude/skills/short/references/generate-shorts-mode-b.sh <release-path>` | Mode B JP/EN クリップ生成（release 型） |
-| `bash .claude/skills/short/references/test-crop-positions.sh <master_video> 30` | loop-mp4 モードのクロップ位置確認 |
-| `uv run yt-generate-shorts-loop <collection-path> -y` | 9:16 ループ動画生成 (Veo 3.1) |
-| `uv run yt-shorts-bulk-update-loc <collection-path>` | 既にアップ済みショートの localizations を一括更新 |
-
-`$ARGUMENTS` をコレクション / リリースディレクトリパスとして使用。
+| `uv run yt-upload-shorts <collection-path> --dry-run` | メタデータプレビュー（API 呼ばない） |
+| `bash .claude/skills/short/references/generate-shorts.sh <collection-path>` | FFmpeg 一括生成 |
+| `bash .claude/skills/short/references/test-crop-positions.sh <master> 30` | loop-mp4 素材時のクロップ位置確認 |
+| `uv run yt-shorts-bulk-update-loc <collection-path>` | 投稿済みショートの localizations を一括差し替え |
 
 ## Instructions
 
-### モード判定
+### Step 1: 前提チェック
 
 ```python
 from youtube_automation.utils.config import load_config
-config = load_config()
-mode = config.youtube.content_model.type
-# "collection" → Mode A: BGM テイスターモード
-# "release"    → Mode B: 話す系クリップモード
+cfg = load_config()
+assert cfg.shorts.enabled, "config/channel/shorts.json で shorts.enabled=true にしてください"
+assert cfg.youtube.content_model.type == "collection", "release 型は /short-release を使ってください"
 ```
 
-### 多言語ローカライゼーション対象
+失敗時は対応 skill を案内して終了。
 
-Mode A では全 supported language に対してショート用メタデータ（title / description）を生成する。
+### Step 2: 素材確認
 
-- **Canonical ソース**: `config/localizations.json` の `supported_languages` + `default_language`
-- **実装**: `load_config().localizations.supported_languages`
-- **テンプレート定義**: `localizations.json.languages.<lang>.short_title_template` / `short_description_template`
-- テンプレート未定義の言語は **スキップ**（多言語化対象外として扱う）
+`generate-shorts.sh` が次の優先順位で映像ソースを自動選択する。最低 1 つ無いと進めない:
 
-### 生成パラメータ
+| 優先 | ファイル | モード |
+|-----|---------|-------|
+| 1 | `10-assets/short-loop.mp4` | Veo 9:16 ループ動画（テキスト焼き込み済み） |
+| 2 | `10-assets/short.png` | 9:16 静止画 + zoompan |
+| 3 | `10-assets/loop.mp4` | 16:9 ループを crop + drawtext で重畳 |
 
-duration / fade / count / font などは skill-config で管理。チャンネル側で上書きする場合は
-`config/skills/short.yaml`。デフォルトは `.claude/skills/short/config.default.yaml` を参照:
+いずれも無ければ `/short-thumbnail` で `short.png` 生成 → `uv run yt-generate-shorts-loop` でループ動画化を案内。
 
-```python
-from youtube_automation.utils.skill_config import load_skill_config
-short_cfg = load_skill_config("short")
-duration = short_cfg.get("duration_sec", 20)
-fade_in = short_cfg.get("fade_in_sec", 1.0)
-fade_out = short_cfg.get("fade_out_sec", 1.5)
-count = short_cfg.get("default_count", 3)
-font = short_cfg.get("font_path")
-release = short_cfg.get("release", {})
-```
+### Step 3: ハイライト区間決定（AskUserQuestion）
 
-`generate-shorts-mode-a.sh` は env で上書きできる（`SHORT_DURATION` / `SHORT_FADE_IN` /
-`SHORT_FADE_OUT` / `SHORT_FONT` / `SHORT_CHANNEL_NAME` / `SHORT_COLLECTION_NAME`）。
-skill-config の値を読み取って呼び出し側で env に設定する。
+`20-documentation/descriptions.md` のチャプター情報を読み、`config.shorts.collection.default_count` 本のハイライトを提案する。各チャプターの先頭 `chapter_offset_sec` 秒経過点を初期値とする。
 
-### ショート動画仕様（共通）
+ユーザーに `AskUserQuestion` で確認:
+- 提案された本数・チャプター選択でよいか / 別本数を指定するか
+- 「いい感じに」等の指示なら自動選択で進める
 
-| 項目 | 値 |
-|------|-----|
-| アスペクト比 | 9:16（縦型） |
-| 最大長 | 60 秒 |
-| 推奨長 | 15-25 秒 |
-| 解像度 | 1080x1920 |
-| フレームレート | 30fps 必須（元動画が低 fps の場合 `fps=30` フィルタ追加） |
+### Step 4: クロップ位置確認（loop-mp4 モードのみ）
 
----
-
-## Mode A: BGM テイスターモード（collection 型）
-
-`content_model.type == "collection"` の場合。
-`generate-shorts-mode-a.sh` が素材の優先順位を自動判定して 3 系統のいずれかで並列生成する。
-
-### Step 1: 素材確認
-
-映像ソースの優先順位（スクリプトが自動選択）:
-
-1. **ショート用ループ動画**: `10-assets/short-loop.mp4` — Veo 3.1 で `short.png` から生成した 9:16 ループ動画（キャラアニメーション + テキスト焼き込み済み）
-2. **ショート専用サムネイル + zoompan**: `10-assets/short.png` — 9:16 縦型、Ken Burns 効果
-3. **16:9 ループ + drawtext**: `10-assets/loop.mp4` — drawtext でチャンネル名 / コレクション名を重畳
-
-いずれも無い場合はマスター動画フォールバックは**提供しない**。素材を揃えてから再実行すること:
-
-- ショート用ループ動画生成: `/short-thumbnail` で `short.png` → `uv run yt-generate-shorts-loop <collection-path> -y`
-
-```bash
-ls <collection-path>/10-assets/short-loop.mp4  # 最優先
-ls <collection-path>/10-assets/short.png       # 次点
-ls <collection-path>/10-assets/loop.mp4        # フォールバック
-ls <collection-path>/10-assets/main.*          # 参考（drawtext 時の参照用）
-```
-
-### Step 2: CC video_url の自動検出
-
-`upload_tracking.json` から本編の `video_url` を取得する。
-
-```python
-import json
-tracking = json.load(open(collection_path / '20-documentation' / 'upload_tracking.json'))
-cc = tracking['complete_collection']
-cc_video_url = cc['video_url']
-cc_publish_at = cc.get('publish_at')
-```
-
-`upload_tracking.json` が無い場合は YouTube API の uploads プレイリストから `privacyStatus == 'private'` な動画を抽出し、`status.publishAt` が付いているものをスケジュール済みとして検出する。`playlistItems().list()` は `maxResults=50` 必須（10 件だとスケジュール済みが漏れる）。
-
-### Step 3: クロップ位置の確認（loop-mp4 モードのみ）
-
-16:9 → 9:16 の中央クロップだとキャラが切れる場合がある。`loop.mp4` ベースのときは**毎回必ず**テストフレームを生成してユーザーに確認する。
+`loop.mp4` ベースのときは中央クロップでキャラが切れる可能性があるため、毎回必ずテストフレームを生成して `AskUserQuestion` でクロップ位置を選ばせる:
 
 ```bash
 bash .claude/skills/short/references/test-crop-positions.sh "$MASTER_VIDEO" 30
 ```
 
-`center` / `x=400` / `x=350` の 3 パターンが `/tmp/short-test-*.jpg` に書き出され `open` で表示される。AskUserQuestion でクロップ位置を選択してもらい、必要に応じてスクリプトに `crop=ih*9/16:ih:<X>:0` を差し替える。
-
-### Step 4: ハイライト区間の選択
-
-`20-documentation/descriptions.md` のチャプター情報を参照し、**全チャプターから均等に** 20 秒ずつ抽出する。
-
-**選択基準:**
-- 各チャプターの開始付近（数十秒後）を選択 — 自然な導入
-- チャプター数に応じて本数を調整（デフォルト 3 本、skill-config の `default_count`）
-- ユーザーが本数を指定した場合はそれに従う
-- 「いい感じに」等の指示なら自動選択して進める
-
-**出力例（6 チャプター → 3 本の場合）:**
-
-| # | チャプター | 開始位置（秒） |
-|---|-----------|-------------|
-| 01 | Chapter 1 | 30 |
-| 02 | Chapter 3 | (chapter_start + 30) |
-| 03 | Chapter 5 | (chapter_start + 30) |
+`center` / `x=400` / `x=350` の 3 パターンを `/tmp/short-test-*.jpg` に書き出し `open` で表示。選択結果を `SHORT_CROP_X` 等の env で `generate-shorts.sh` 側に渡す（`crop=ih*9/16:ih:<X>:0`）。
 
 ### Step 5: 一括生成
 
-`generate-shorts-mode-a.sh` に `SHORT_STARTS` / `SHORT_LABELS` を env で渡して並列実行する:
+`load_skill_config("short")` の生成パラメータを env に詰めて `generate-shorts.sh` を実行する:
 
 ```bash
 export SHORT_STARTS="30 3960 6420"
 export SHORT_LABELS="chapter1 chapter3 chapter5"
-# loop-mp4 モード時のみ必要
+export SHORT_DURATION=20
+export SHORT_FADE_IN=1.0
+export SHORT_FADE_OUT=1.5
+# loop-mp4 モード時のみ
 export SHORT_CHANNEL_NAME="Your Channel"
 export SHORT_COLLECTION_NAME="Collection Title"
 
-bash .claude/skills/short/references/generate-shorts-mode-a.sh <collection-path>
+bash .claude/skills/short/references/generate-shorts.sh <collection-path>
 ```
 
-素材自動判定で以下のいずれかに分岐する:
-
-| 判定 | 処理 |
-|---|---|
-| `short-loop.mp4` あり | `-stream_loop -1` + scale (drawtext / zoompan なし) |
-| `short.png` あり | zoompan + Ken Burns + vignette |
-| `loop.mp4` あり | crop + drawtext でチャンネル名 / コレクション名重畳 |
-
-skill-config の値は `load_skill_config("short")` で読み取り、呼び出し前に `SHORT_DURATION` / `SHORT_FADE_IN` / `SHORT_FADE_OUT` / `SHORT_FONT` に反映する。
-
-### Step 6: プレビュー確認
-
-生成後、ユーザーに `open` で確認を促す:
+### Step 6: プレビュー → アップロード
 
 ```bash
 open <collection>/01-master/shorts/short-01-*.mp4
+uv run yt-upload-shorts <collection-path> --dry-run    # メタデータ確認
+uv run yt-upload-shorts <collection-path>              # 実投稿
 ```
 
-### Step 7: 一括アップロード
+`ShortUploader` が自動で行うこと:
+- CC `publish_at` 基準で `cfg.shorts.publish_time` 翌日公開時刻を計算
+- `cfg.shorts.min_hours_between_shorts_per_collection` で投稿間隔チェック
+- `BAHMetadataGenerator.generate_shorts_metadata(cc_video_url)` で EN + 全 supported_languages のメタデータ生成
+- `workflow-state.json::post_upload.short` に記録
 
-`ShortUploader` を使って全ショートをアップロードする。`localizations.json` の全 supported_languages でタイトル・説明文がローカライズされる。
-
-```bash
-uv run yt-upload-shorts <collection-path>
-# ドライラン（メタデータ確認のみ）
-uv run yt-upload-shorts <collection-path> --dry-run
-```
-
-複数ショートを順番にアップロード:
-
-```bash
-for i in 1 2 3; do
-  uv run yt-upload-shorts <collection-path> --short-num $i
-done
-```
-
-**ShortUploader が自動で行うこと:**
-
-- CC `publish_at` 基準の公開日計算（翌日 `workflow.post_upload.short_publish_time`）
-- EN デフォルトメタデータ生成（`generate_shorts_metadata(cc_video_url)`）
-- `localizations.json` の全言語でタイトル・説明文ローカライズ
-- `workflow-state.json` 更新
-
-#### メタデータ（共通概要欄）
-
-```
-{collection_name} | {channel_name}
-
-♫ Full {duration}-hour collection → {cc_video_url}
-
-{tagline}
-
-{hashtag_line} #Shorts
-```
-
-`{duration}` は `config/channel/audio.json` の `audio.target_duration_min` を 60 で割った値（例: 120 → `Full 2-hour collection`）。
-
-`cc_video_url` が空の場合は CC リンク行を省略する。
-
-**タイトル（EN デフォルト）:**
-
-```
-{collection_name} ✦ {channel_name} #Shorts
-```
-
-**ローカライズタイトル** は `localizations.json.languages.<lang>.short_title_template` を参照。
-
-### Step 8: workflow-state.json 更新
+### Step 7: workflow-state.json 更新
 
 ```json
 "post_upload": {
@@ -250,120 +113,40 @@ done
     "count": 3,
     "publish_at": "2026-03-12T08:00:00+09:00",
     "videos": [
-      {"video_id": "xxx", "title": "Morning Light — ..."},
-      {"video_id": "yyy", "title": "Mixing Colors — ..."}
+      { "video_id": "xxx", "title": "Morning Light — Whispers Across the Hills ✦ Channel #Shorts" }
     ]
   }
 }
 ```
 
-### ファイル構造
+## 設定
 
-```
-01-master/
-├── *Master*.mp4          # マスター動画（ソース）
-├── short.mp4             # 単体ショート（旧方式、互換用）
-└── shorts/               # 一括ショート
-    ├── short-01-morning-light-1.mp4
-    ├── short-02-morning-light-2.mp4
-    └── ...
-```
+| 配置 | ファイル | 責務 |
+|------|---------|------|
+| チャンネル運用 | `config/channel/shorts.json` | enabled / publish_time / mode / 本数（`shorts.collection.default_count`） / 投稿間隔 |
+| skill 動作 | `.claude/skills/short/config.default.yaml` | 尺・フェード・フォント・クロップオフセット（生成側パラメータ） |
+| チャンネル上書き | `config/skills/short.yaml` | skill-config の差し替え |
+| ローカライズ | `config/localizations.json` の `languages.<lang>.short_title_template` / `short_description_template` | 言語別タイトル / 説明テンプレ。テンプレ未定義の言語はスキップ |
 
----
+## ショート動画仕様
 
-## Mode B: 話す系クリップモード（release 型）
-
-`content_model.type == "release"` の場合（JP + EN 2 本対応）。
-
-### Step 1: 素材確認
-
-```bash
-ls <release-path>/video/    # 本編動画確認（${motif}-{jp,en}.mp4）
-ls <release-path>/assets/   # サムネイル素材確認
-```
-
-### Step 2: ショート動画生成
-
-`generate-shorts-mode-b.sh` が `${motif}-jp.mp4` / `${motif}-en.mp4` を 9:16 に変換する:
-
-```bash
-bash .claude/skills/short/references/generate-shorts-mode-b.sh <release-path>
-# 開始位置・長さを指定する場合
-bash .claude/skills/short/references/generate-shorts-mode-b.sh <release-path> -s 30 -t 40
-```
-
-`-s`（開始秒）は楽曲のサビ部分に合わせて調整。ユーザーに確認を取ること。skill-config の `release.start_sec` / `release.duration_sec` がデフォルト。
-
-### Step 3: メタデータ生成
-
-**JP ショート:**
-
-```
-🎵 {motif_ja} | {channel_name}
-
-✨ フル動画はこちら → {jp_video_url}
-
-{tagline}
-
-{hashtag_line} #Shorts
-```
-
-**EN ショート:**
-
-```
-🎵 {motif_en} | {channel_name}
-
-✨ Full version → {en_video_url}
-
-{tagline_en}
-
-{hashtag_line} #Shorts
-```
-
-### Step 4: アップロード & 記録
-
-`yt-upload-shorts` でアップロード:
-
-- プライバシー: `public`
-- カテゴリ: `config/channel/youtube.json` の `youtube.category_id`
-- `#Shorts` を必ず含める
-
-`workflow-state.json` 更新:
-
-```json
-"post_upload": {
-  "short": {
-    "jp": { "generated": true, "uploaded": true, "video_id": "xxx" },
-    "en": { "generated": true, "uploaded": true, "video_id": "xxx" }
-  }
-}
-```
-
----
-
-## 品質チェック（共通）
-
-- [ ] 9:16 縦型（1080x1920）
-- [ ] 30fps 以上
-- [ ] 60 秒以内
-- [ ] 本編動画への URL リンクあり（概要欄）
-- [ ] `#Shorts` タグ含む（タイトル + タグ欄）
-- [ ] 音量が適切（本編と同等、クリッピングなし）
-- [ ] フェードイン/アウトが自然
-- [ ] 誇張表現なし（Epic / Ultimate 等の禁止語）
+| 項目 | 値 |
+|------|-----|
+| アスペクト比 | 9:16（1080x1920） |
+| 推奨長 | 15-25 秒（`shorts.collection.default_count` × `duration_sec`） |
+| 最大長 | 60 秒 |
+| フレームレート | 30fps 必須（`fps=30` フィルタ強制） |
 
 ## Gotchas
 
-- **drawtext フォント**: Nix FFmpeg は libfreetype 付き。macOS では `/System/Library/Fonts/Palatino.ttc` を指定すること
-- **fps=30 必須**: マスター動画が静止画ベース（1fps）の場合、`fps=30` フィルタを追加しないと YouTube がショートとして認識しない
-- **zsh 配列**: zsh で `${!array[@]}` は使えない。スクリプトは全て `#!/usr/bin/env bash` で実行される
-- **スケジュール済み動画の API 検出**: `playlistItems().list()` は `maxResults=50` 必須。10 件だとスケジュール済みが漏れる
-- **drawtext のアポストロフィ**: コレクション名に `'` が含まれる場合、シェルのクォートと衝突する。`SHORT_COLLECTION_NAME` にセットする前にアポストロフィを除去するか `'\''` でエスケープすること
-- **CLI 命名**: v4.0.0 撤去前は `yt-upload-short` / `yt-generate-short-loop`（短数形）だった。v5.5.1 復活以降は `yt-upload-shorts` / `yt-generate-shorts-loop`（複数形）に統一。cron / CI で旧名を叩いていた場合は更新が必要
-- **`short_publish_time` 未設定**: `config/channel/workflow.json` に `workflow.post_upload.short_publish_time` が無い場合は default `"08:00"` が使われる。明示したい場合のみ設定する
+- **drawtext フォント**: Nix FFmpeg は libfreetype 同梱。macOS は `/System/Library/Fonts/Palatino.ttc` を指定すること（`SHORT_FONT` env）
+- **drawtext アポストロフィ**: `SHORT_COLLECTION_NAME` に `'` が含まれるとシェルクォートと衝突。アポストロフィを除去するか `'\''` でエスケープしてから渡す
+- **fps=30 必須**: マスター動画が静止画ベース（1fps）の場合、`fps=30` フィルタなしで生成すると YouTube がショート認識しない
+- **CC video_url 未記録**: `upload_tracking.json::complete_collection.video_url` が空だと CC リンク行が描画欄から省略される（例外は投げない）。完全状態にするには CC 動画アップ後に `yt-upload-collection` の出力で記録を確認
+- **投稿間隔**: 同コレクションで前回投稿から `cfg.shorts.min_hours_between_shorts_per_collection` 時間以内は新規投稿が block される。テスト中は `--ignore-interval` フラグで bypass 可
 
 ## Next Step
 
-ショート動画投稿後:
-- 投稿済み既存ショートの localizations を一括差し替えたいときは `uv run yt-shorts-bulk-update-loc <collection-path>` を実行
-- 全ショートアップロード完了後は `/wf-status` で post_upload の完了確認
+- 投稿済みショートの localizations を一括更新: `uv run yt-shorts-bulk-update-loc <collection-path>`
+- 全本数完了後の進捗確認: `/wf-status`
+- release 型チャンネルでショートを作りたい場合: `/short-release`
