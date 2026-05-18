@@ -131,13 +131,12 @@ def test_load_all_sections(tmp_path, monkeypatch):
         "benchmark": {"channels": [{"name": "Rival", "id": "UC123"}]},
     }
     sections["playlists.json"] = {"playlists": {"main": "PLtest123"}}
-    # v4.0.0 で post_upload / short セクションは撤去されたが、downstream の
-    # workflow.json に残存していても loader が素通し（ConfigError を投げない）
-    # ことを保証するための後方互換レグレッションとしてここに残す。
+    # plan 要件 1 / 17: 新構造 `workflow.post_upload.short_publish_time` が
+    # ChannelConfig.workflow.post_upload.short_publish_time として読み取れる
+    # ことを positive assert で保護する。silent ignore のみだと S1 の core 仕様が
+    # 回帰検出されない。
     sections["workflow.json"] = {
-        "workflow": {},
-        "post_upload": {"short_publish_time": "09:30"},
-        "short": {"foo": "bar"},
+        "workflow": {"post_upload": {"short_publish_time": "09:30"}},
     }
     sections["audio.json"] = {"audio": {"target_duration_min": 120.0}}
     sections["comments.json"] = {
@@ -196,6 +195,70 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.comments.rules[0].keywords == ["こんにちは"]
     assert config.comments.templates == {"ja": {"greet": "ありがとうございます！"}}
     assert config.comments.ng_words == ["spam"]
+    # plan 要件 1 / 17: 新構造の short_publish_time が positive assert で読める
+    assert config.workflow.post_upload.short_publish_time == "09:30"
+
+
+def test_workflow_post_upload_default_short_publish_time(tmp_path, monkeypatch):
+    """plan 要件 1 / アンチパターン #6: workflow.json 自体省略時に default `"08:00"` で動く。
+
+    Given workflow.json を 1 ファイルも置かない（optional セクション扱い）
+    When load_config() を呼ぶ
+    Then config.workflow.post_upload.short_publish_time == "08:00" が返る
+    """
+    # Given
+    ch = _setup_channel(tmp_path, _minimal_sections())  # workflow.json なし
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    # When
+    config = load_config()
+
+    # Then
+    assert config.workflow.post_upload.short_publish_time == "08:00"
+
+
+def test_workflow_post_upload_section_missing_uses_default(tmp_path, monkeypatch):
+    """plan 要件 1: workflow セクションがあっても post_upload が無ければ default `"08:00"`.
+
+    Given `workflow.json` に `workflow: {}` のみ（post_upload セクション欠如）
+    When load_config() を呼ぶ
+    Then config.workflow.post_upload.short_publish_time == "08:00" が返る
+    """
+    # Given
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    # When
+    config = load_config()
+
+    # Then
+    assert config.workflow.post_upload.short_publish_time == "08:00"
+
+
+def test_workflow_legacy_top_level_post_upload_silently_ignored(tmp_path, monkeypatch):
+    """plan 要件 18: 旧 top-level `post_upload` / `short` キーは silently ignore.
+
+    v4.0.0 で `post_upload` / `short` セクションは `workflow` 配下に統合された。
+    downstream に残存していても loader が ConfigError を投げず、
+    新構造側の default `"08:00"` が採用される（後方互換レグレッション）。
+    """
+    # Given
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {},
+        "post_upload": {"short_publish_time": "09:30"},  # legacy top-level
+        "short": {"foo": "bar"},  # legacy top-level
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    # When: ConfigError を投げず読み込めて
+    config = load_config()
+
+    # Then: legacy top-level は無視され、default "08:00" になる
+    assert config.workflow.post_upload.short_publish_time == "08:00"
 
 
 def test_comments_rule_name_required(tmp_path, monkeypatch):
