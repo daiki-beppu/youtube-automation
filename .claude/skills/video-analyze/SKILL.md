@@ -63,7 +63,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 
 - Gemini API には YouTube URL を直接渡す (動画ダウンロードしない)
 - Public/Unlisted のみ対応 (Private 動画は API 側で拒否される)
-- Shorts は Gemini の 1fps サンプリング制約により精度が落ちるため非推奨
+- Shorts は Gemini の 1fps サンプリング制約により短尺フック構造の解析精度が落ちる。`/short` で生成・投稿した自チャンネル Shorts は本 skill の対象外として扱い、リテンション / CTR 分析は `/analytics-analyze` に任せる
 - API レート制限対策で動画間に `delay_sec` 秒スリープ
 
 ## 呼び出し側スキル

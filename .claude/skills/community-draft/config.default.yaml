@@ -1,0 +1,99 @@
+# community-draft skill default config
+#
+# YouTube コミュニティ投稿の下書き生成テンプレ。
+# チャンネル側で config/skills/community-draft.yaml に上書き可能（deep-merge）。
+# チャンネル固有のテキスト・軸定義は config/channel/community-draft.json で扱う。
+
+community_draft:
+  # 投稿全体のトーンガイド（任意 / 上書き想定）
+  tone: ""
+  length_target_chars: 200
+
+  templates:
+    # ---------------- 既存 type（MVP では薄い記述、フル仕様化は follow-up） ----------------
+
+    behind_the_scenes:
+      enabled: true
+      # 構造・例文は config/channel/community-draft.json で定義する。
+      # 既存ダウンストリーム実装は rjn を参照: examples/community-draft-rjn/ (将来追加)
+
+    next_teaser:
+      enabled: true
+
+    poll:
+      enabled: false
+      _status: "DEPRECATED: weekly_feedback を使うこと（後方互換のため残置）"
+
+    # ---------------- 新規 type（issue #309 で追加） ----------------
+
+    day_of_reminder:
+      enabled: true
+      # 装飾フォント（Mathematical Bold sans-serif）on/off。
+      # true にすると 𝐍𝐞𝐰 𝐝𝐫𝐨𝐩 𝐭𝐨𝐝𝐚𝐲 のような Unicode 数式文字で出力。
+      decorative_font: false
+      # 見出しテンプレ。{publish_time_24h_*} は 24h 表記（視聴者向け本文）で扱う。
+      headline_template: "📢 New drop today — {publish_time_24h_primary} {primary_tz} / {publish_time_24h_secondary} {secondary_tz}"
+      timezone:
+        # チャンネル config で上書き想定。primary 必須、secondary 任意。
+        primary: "UTC"
+        secondary: null
+      # 本文セクション順
+      structure:
+        - "headline"
+        - "personal_mood"
+        - "creative_intent"
+        - "listening_cta"
+        - "notification_cta"
+        - "gratitude"
+        - "signature"
+      # 末尾に Premiere URL を貼って Studio に自動カード化させる
+      append_premiere_url: true
+      # 出力先（コレクション紐づき）
+      output_path: "collections/<live_dir>/30-promo/community-post-draft.md"
+
+    weekly_feedback:
+      enabled: false
+      # 投稿スケジュール（人間向けガイド表記）
+      schedule: "Every Sunday"
+      # 運用メモ用の AM/PM 表記（Studio 予約 UI と整合）。
+      # 投稿本文の時刻 (24h) とは別変数で扱うこと。
+      schedule_window_local_ampm: "9:00 AM - 12:00 PM"
+      schedule_timezone: "UTC"
+      decorative_font: false
+      headline_template: "📢 Sunday vote — what's next week?"
+      # チャンネル config（config/channel/community-draft.json）で N 軸を定義。
+      # upstream デフォルトは空。各軸は {key: {label, poll_emoji}} の形式。
+      # 実例は examples/community-draft-rjn/rain-5-axis.yaml を参照。
+      theme_axis_pool: []
+      # ローテーション規則
+      rotation_rule:
+        # 毎週提示する選択肢数。"auto" の場合 axis_count - 1 を採用（rjn は 5 軸 → 4 択）。
+        present_count: "auto"
+        # 1 周にかかる週数。"auto" の場合 axis_count を採用（rjn は 5 週 1 周）。
+        cycle_weeks: "auto"
+      # 投票履歴ログ（vote-log hook の follow-up issue で正式化予定）
+      vote_log_path: "data/community/weekly-vote-log.json"
+      # 本文セクション順
+      structure:
+        - "headline"
+        - "opener"
+        - "intent"
+        - "poll"
+        - "promise"
+        - "notification_cta"
+        - "gratitude"
+        - "signature"
+      # 出力先（コレクション非紐づき / 週次運用）
+      output_path: "branding/community-templates/weekly-feedback.md"
+      # 参考実装（デフォルトには反映されない）
+      example_reference: "examples/community-draft-rjn/rain-5-axis.yaml"
+
+  # クリップボード連携（macOS 専用）
+  clipboard:
+    enabled: true
+    command: "pbcopy"
+
+  # Studio 自動オープン（macOS 専用）
+  studio_open:
+    enabled: true
+    url_template: "https://studio.youtube.com/channel/{channel_id}/community"

@@ -190,6 +190,80 @@ def test_cmd_diff_default_asset_is_skills(fake_repo: Path) -> None:
     assert args.target == ".claude/skills"
 
 
+def test_cmd_diff_skills_only_disk_emits_prune_hint(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Given: target に bundled + 孤児 (only_disk) 1 件
+    target = tmp_path / "out" / ".claude" / "skills"
+    target.mkdir(parents=True)
+    src = _asset_root("skills")
+    for entry in src.iterdir():
+        shutil.copytree(entry, target / entry.name)
+    (target / "legacy-skill").mkdir()
+    (target / "legacy-skill" / "SKILL.md").write_text("# legacy\n", encoding="utf-8")
+
+    # When: diff を実行
+    parser = build_parser()
+    args = parser.parse_args(["diff", "--target", str(target)])
+    rc = args.func(args)
+
+    # Then: 孤児リスト直後に --prune の案内が出る
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "target にのみ存在" in out
+    assert "legacy-skill" in out
+    assert "--prune" in out
+    assert "--yes" in out
+
+
+def test_cmd_diff_skills_no_orphans_does_not_emit_prune_hint(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Given: target は bundled と完全一致 (only_disk なし)
+    target = tmp_path / "out" / ".claude" / "skills"
+    target.mkdir(parents=True)
+    src = _asset_root("skills")
+    for entry in src.iterdir():
+        shutil.copytree(entry, target / entry.name)
+
+    # When: diff を実行
+    parser = build_parser()
+    args = parser.parse_args(["diff", "--target", str(target)])
+    rc = args.func(args)
+
+    # Then: 孤児がないので --prune ヒントは出ない
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "--prune" not in out
+
+
+def test_cmd_diff_claude_md_does_not_emit_prune_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Given: claude-md asset の fake_repo と diff 可能な target
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir(parents=True)
+    (claude_dir / "CLAUDE.template.md").write_text("# template\n", encoding="utf-8")
+    (claude_dir / "skills").mkdir()
+    monkeypatch.setattr(skills_sync, "_editable_root", lambda: tmp_path)
+
+    target_dir = tmp_path / "downstream" / ".claude"
+    target_dir.mkdir(parents=True)
+    target = target_dir / "CLAUDE.md"
+    # 内容を変えて差分を発生させる (only_disk ではなく内容差分)
+    target.write_text("# different\n", encoding="utf-8")
+
+    # When: --asset claude-md で diff
+    parser = build_parser()
+    args = parser.parse_args(["diff", "--asset", "claude-md", "--target", str(target)])
+    rc = args.func(args)
+
+    # Then: file asset では --prune は無関係なのでヒント文字列が出ない
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "--prune" not in out
+
+
 # ---------- cmd_sync --prune ----------
 
 
