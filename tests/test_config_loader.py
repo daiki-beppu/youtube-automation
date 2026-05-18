@@ -183,7 +183,10 @@ def test_load_all_sections(tmp_path, monkeypatch):
 
     assert config.analytics.collection_filter_keywords == ["collection", "complete"]
     assert config.analytics.benchmark.channels == [{"name": "Rival", "id": "UC123"}]
-    assert config.playlists.items == {"main": "PLtest123"}
+    # issue #275: string value は loader で {playlist_id, auto_add, title} に正規化される
+    assert config.playlists.items == {
+        "main": {"playlist_id": "PLtest123", "auto_add": True, "title": None}
+    }
     assert config.audio.target_duration_min == 120.0
     assert config.meta.branding.description == "ch desc"
     assert config.youtube.content_model.type == "collection"
@@ -359,6 +362,102 @@ def test_optional_sections_default(tmp_path, monkeypatch):
     assert config.analytics.benchmark.channels == []
     assert config.playlists.items == {}
     assert config.audio.target_duration_min is None
+
+
+# ----- issue #275: playlists.json string-shape 正規化 ----------------------
+
+
+def test_playlists_string_value_normalized_to_dict(tmp_path, monkeypatch):
+    """#275: string value は {playlist_id, auto_add: True, title: None} に正規化される."""
+    # Given
+    sections = _minimal_sections()
+    sections["playlists.json"] = {"playlists": {"main": "PL_X"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    # When
+    config = load_config()
+
+    # Then
+    assert config.playlists.items == {
+        "main": {"playlist_id": "PL_X", "auto_add": True, "title": None}
+    }
+
+
+def test_playlists_dict_value_preserved_as_is(tmp_path, monkeypatch):
+    """#275: dict 形式は入力 shape のまま loader を通過する（後方互換）."""
+    # Given
+    sections = _minimal_sections()
+    sections["playlists.json"] = {
+        "playlists": {
+            "battle": {
+                "playlist_id": "PL_B",
+                "title": "Battle Music",
+                "auto_add_themes": ["fight"],
+            }
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    # When
+    config = load_config()
+
+    # Then
+    entry = config.playlists.items["battle"]
+    assert entry["playlist_id"] == "PL_B"
+    assert entry["title"] == "Battle Music"
+    assert entry["auto_add_themes"] == ["fight"]
+
+
+def test_playlists_mixed_string_and_dict_entries(tmp_path, monkeypatch):
+    """#275: string と dict が混在しても両方とも正しい shape で得られる."""
+    # Given
+    sections = _minimal_sections()
+    sections["playlists.json"] = {
+        "playlists": {
+            "main": "PL_MAIN",
+            "battle": {
+                "playlist_id": "PL_B",
+                "title": "Battle Music",
+                "auto_add_themes": ["fight"],
+            },
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    # When
+    config = load_config()
+
+    # Then: string entry は正規化済み
+    assert config.playlists.items["main"] == {
+        "playlist_id": "PL_MAIN",
+        "auto_add": True,
+        "title": None,
+    }
+    # And: dict entry は内容保持
+    assert config.playlists.items["battle"]["playlist_id"] == "PL_B"
+    assert config.playlists.items["battle"]["auto_add_themes"] == ["fight"]
+
+
+def test_playlists_dict_entry_is_shallow_copied():
+    """#275: dict entry は入力 dict と同一参照ではない（consumer mutation 漏れ防止）.
+
+    `_build_playlists` の入力 dict と出力 entry の参照分離を直接 verify する。
+    """
+    from youtube_automation.utils.config.loader import _build_playlists
+
+    # Given
+    raw_entry = {"playlist_id": "PL_B", "auto_add_themes": ["fight"]}
+    merged = {"playlists": {"battle": raw_entry}}
+
+    # When
+    playlists = _build_playlists(merged)
+
+    # Then: 参照は分離されているが内容は等価
+    assert playlists.items["battle"] is not raw_entry
+    assert playlists.items["battle"] == raw_entry
 
 
 def test_localizations_missing(tmp_path, monkeypatch):

@@ -263,7 +263,20 @@ def _build_analytics(merged: dict) -> Analytics:
 
 
 def _build_playlists(merged: dict) -> Playlists:
-    return Playlists(items=dict(merged.get("playlists") or {}))
+    # #275: string-shape entry (`{"main": "PL..."}`) を dict shape に正規化する。
+    # 消費側 (`PlaylistManager` / `PlaylistStatusViewer`) が `pl.get(...)` を一律
+    # 呼べるよう、loader 1 箇所で contract を確定させる。dict entry は shallow copy
+    # して入力 dict との参照を切り離す（consumer mutation 漏れ防止）。
+    raw = merged.get("playlists") or {}
+    items: dict[str, dict] = {}
+    for key, value in raw.items():
+        if isinstance(value, str):
+            items[key] = {"playlist_id": value, "auto_add": True, "title": None}
+        elif isinstance(value, dict):
+            items[key] = dict(value)
+        else:
+            items[key] = value
+    return Playlists(items=items)
 
 
 def _build_workflow(merged: dict) -> Workflow:

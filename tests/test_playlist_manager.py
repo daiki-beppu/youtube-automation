@@ -395,3 +395,161 @@ class TestAddVideoToPlaylist:
 
         body = mock_insert.call_args[1]["body"]
         assert body["snippet"]["position"] == 0
+
+
+# ---------------------------------------------------------------------------
+# issue #275: string-shape playlists.json リグレッション
+# ---------------------------------------------------------------------------
+
+
+PLAYLIST_ID_STRING_SHAPE = "PL_test_string_275"
+
+
+def _string_shape_channel(tmp_path: Path) -> Path:
+    """string-shape playlists.json を持つ最小チャンネル fixture を tmp 配下に作る.
+
+    `_video-upload` → `collection_uploader._assign_to_playlists` →
+    `PlaylistManager` の経路を実 `load_config()` で通すために、
+    meta / content / youtube / playlists の 4 ファイルを書き出す。
+    """
+    ch = tmp_path / "channel"
+    cdir = ch / "config" / "channel"
+    cdir.mkdir(parents=True, exist_ok=True)
+    (cdir / "meta.json").write_text(
+        json.dumps(
+            {
+                "channel": {
+                    "name": "Test Channel",
+                    "short": "TC",
+                    "youtube_handle": "@testchannel",
+                    "url": "https://youtube.com/@testchannel",
+                    "tagline": "Test tagline",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cdir / "content.json").write_text(
+        json.dumps(
+            {
+                "genre": {"primary": "chiptune", "style": "8-bit", "context": "RPG"},
+                "tags": {"base": ["chiptune"], "themes": {}},
+                "descriptions": {
+                    "opening": "{style} {primary} for {context}",
+                    "perfect_for": ["Study"],
+                    "hashtags": [],
+                },
+                "title": {"template": "{theme}", "default_activity": "Study"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cdir / "youtube.json").write_text(
+        json.dumps(
+            {
+                "youtube": {
+                    "category_id": "10",
+                    "privacy_status": "public",
+                    "language": "ja",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cdir / "playlists.json").write_text(
+        json.dumps({"playlists": {"main": PLAYLIST_ID_STRING_SHAPE}}),
+        encoding="utf-8",
+    )
+    return ch
+
+
+# Python 3.14 互換: `patch("youtube_automation.scripts.playlist_manager.X")` は
+# モジュールを attribute 解決するため、事前に submodule を import しておく。
+import youtube_automation.scripts.playlist_manager as _playlist_manager_module  # noqa: E402,F401
+
+
+class TestStringShapePlaylistsRegression:
+    """#275: シンプル形式 `playlists.json` で AttributeError が出ないこと.
+
+    `MagicMock` ではなく実 `load_config()` で組み立てた `ChannelConfig` を
+    `PlaylistManager` に注入することで、loader → consumer の契約を verify する。
+    """
+
+    def test_resolve_playlists_does_not_raise_on_string_shape(self, tmp_path, monkeypatch):
+        """#275: string-shape entry でも AttributeError を出さず ["main"] を返す."""
+        # Given
+        ch = _string_shape_channel(tmp_path)
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        with patch.object(
+            _playlist_manager_module, "get_youtube", return_value=MagicMock()
+        ):
+            manager = _playlist_manager_module.PlaylistManager()
+
+            # When
+            result = manager.resolve_playlists("any-theme")
+
+        # Then: string-shape は loader で auto_add=True に正規化されるため常にマッチ
+        assert result == ["main"]
+
+    def test_assign_video_dry_run_does_not_raise_on_string_shape(self, tmp_path, monkeypatch):
+        """#275: `/video-upload` 入口 (collection_uploader._assign_to_playlists) のリグレッション.
+
+        dry_run なので API 呼び出しは発生しない。AttributeError が出ないことが本質。
+        """
+        # Given
+        ch = _string_shape_channel(tmp_path)
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        with patch.object(
+            _playlist_manager_module, "get_youtube", return_value=MagicMock()
+        ):
+            manager = _playlist_manager_module.PlaylistManager()
+
+            # When
+            assigned = manager.assign_video("VID_X", "any-theme", dry_run=True)
+
+        # Then
+        assert assigned == ["main"]
+
+    def test_create_all_playlists_dry_run_skips_string_shape(self, tmp_path, monkeypatch):
+        """#275: string-shape entry は playlist_id 既存と判定されてスキップされる."""
+        # Given
+        ch = _string_shape_channel(tmp_path)
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        with patch.object(
+            _playlist_manager_module, "get_youtube", return_value=MagicMock()
+        ):
+            manager = _playlist_manager_module.PlaylistManager()
+
+            # When
+            created = manager.create_all_playlists(dry_run=True)
+
+        # Then: playlist_id 既存なので作成対象なし
+        assert created == {}
+
+    def test_clean_deleted_entries_dry_run_does_not_raise_on_string_shape(
+        self, tmp_path, monkeypatch
+    ):
+        """#275: clean_deleted_entries が string-shape entry を iterate しても AttributeError を出さない."""
+        # Given
+        ch = _string_shape_channel(tmp_path)
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        mock_youtube = MagicMock()
+        # 削除対象なし: playlistItems().list().execute() が {"items": []} を返す
+        mock_youtube.playlistItems.return_value.list.return_value.execute.return_value = {
+            "items": []
+        }
+
+        with patch.object(
+            _playlist_manager_module, "get_youtube", return_value=mock_youtube
+        ):
+            manager = _playlist_manager_module.PlaylistManager()
+
+            # When
+            result = manager.clean_deleted_entries(dry_run=True)
+
+        # Then: string-shape entry も dict として扱われ、削除対象 0 件
+        assert result == {"main": 0}
