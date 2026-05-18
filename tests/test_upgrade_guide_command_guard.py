@@ -30,12 +30,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 UPGRADE_GUIDE: Final[Path] = _REPO_ROOT / "docs" / "upgrades" / "v5.5.0.md"
 RELEASE_NOTES_TEMPLATE: Final[Path] = (
-    _REPO_ROOT
-    / ".claude"
-    / "skills"
-    / "release-notes"
-    / "references"
-    / "release-notes-template.md"
+    _REPO_ROOT / ".claude" / "skills" / "release-notes" / "references" / "release-notes-template.md"
 )
 
 # ---------- 期待フレーズ定数 ----------
@@ -45,9 +40,7 @@ AI_PROMPT_EXISTENCE_PHRASE: Final[str] = "v5.5.0 に確実に存在する CLI"
 AI_PROMPT_NOT_OUTDATED_PHRASE: Final[str] = "ガイドが古い"
 
 # v5.5.0.md の「■ 追従後に確認すべきこと」リードイン
-EXISTENCE_GUARD_LEADIN: Final[str] = (
-    "v5.5.0 のリリース時点で entry point として登録済み"
-)
+EXISTENCE_GUARD_LEADIN: Final[str] = "v5.5.0 のリリース時点で entry point として登録済み"
 
 # env 切り分け 3 ステップ
 TRIAGE_STEP_1: Final[str] = "uv sync"
@@ -75,9 +68,7 @@ TEMPLATE_NOT_OUTDATED_PHRASE: Final[str] = "ガイドが古い"
 ISSUE_REFERENCE: Final[str] = "issue #335"
 
 TEMPLATE_VERIFY_HEADING: Final[str] = "### 追従後確認"
-TEMPLATE_VERIFY_LEADIN_PHRASE: Final[str] = (
-    "v{{VER}} のリリース時点で entry point として登録済み"
-)
+TEMPLATE_VERIFY_LEADIN_PHRASE: Final[str] = "v{{VER}} のリリース時点で entry point として登録済み"
 TEMPLATE_VERIFY_REQUIRED_NOTE: Final[str] = "リリースごとに省略しないこと"
 
 TEMPLATE_TROUBLESHOOT_HEADING: Final[str] = "### トラブルシューティング"
@@ -125,9 +116,7 @@ def test_upgrade_guide_v550_md_exists() -> None:
     暗黙 skip を避けるため、欠落時は assert で fail させる (FileNotFoundError ではなく
     明示メッセージで誤削除を伝える)。
     """
-    assert UPGRADE_GUIDE.exists(), (
-        f"{UPGRADE_GUIDE} が存在しない (issue #335 ガード対象ガイドが欠落)"
-    )
+    assert UPGRADE_GUIDE.exists(), f"{UPGRADE_GUIDE} が存在しない (issue #335 ガード対象ガイドが欠落)"
 
 
 def test_release_notes_template_md_exists() -> None:
@@ -154,12 +143,10 @@ def test_v550_guide_ai_prompt_embeds_existence_guard_below_step5() -> None:
 
     # Assert: 両フレーズが同一文書内に共起している
     assert AI_PROMPT_EXISTENCE_PHRASE in text, (
-        f"{UPGRADE_GUIDE} に {AI_PROMPT_EXISTENCE_PHRASE!r} が見つからない "
-        "(issue #335 ガード文言が剥がれた可能性)"
+        f"{UPGRADE_GUIDE} に {AI_PROMPT_EXISTENCE_PHRASE!r} が見つからない (issue #335 ガード文言が剥がれた可能性)"
     )
     assert AI_PROMPT_NOT_OUTDATED_PHRASE in text, (
-        f"{UPGRADE_GUIDE} に {AI_PROMPT_NOT_OUTDATED_PHRASE!r} が見つからない "
-        "(issue #335 ガード文言が剥がれた可能性)"
+        f"{UPGRADE_GUIDE} に {AI_PROMPT_NOT_OUTDATED_PHRASE!r} が見つからない (issue #335 ガード文言が剥がれた可能性)"
     )
 
 
@@ -215,12 +202,10 @@ def test_v550_guide_verify_leadin_lists_triage_steps_in_order() -> None:
     assert idx_3_cache != -1, f"{TRIAGE_STEP_3_CACHE!r} が追従後確認節に見つからない"
     assert idx_3_lock != -1, f"{TRIAGE_STEP_3_LOCK!r} が追従後確認節に見つからない"
     assert idx_1 < idx_2 < idx_3_cache, (
-        "env 切り分け 3 ステップの順序が壊れている "
-        f"(uv sync={idx_1}, pip list={idx_2}, cache clean={idx_3_cache})"
+        f"env 切り分け 3 ステップの順序が壊れている (uv sync={idx_1}, pip list={idx_2}, cache clean={idx_3_cache})"
     )
     assert idx_3_cache < idx_3_lock, (
-        f"3 ステップ目で uv cache clean({idx_3_cache}) より uv lock({idx_3_lock}) が"
-        "先行している (順序が壊れている)"
+        f"3 ステップ目で uv cache clean({idx_3_cache}) より uv lock({idx_3_lock}) が先行している (順序が壊れている)"
     )
 
 
@@ -246,8 +231,7 @@ def test_v550_guide_troubleshooting_q4_is_command_not_found_entry() -> None:
 
     # Assert: Q4 が command not found 系の質問
     assert Q4_COMMAND_NOT_FOUND in q4_block, (
-        f"Q4 に {Q4_COMMAND_NOT_FOUND!r} が見つからない "
-        "(issue #335 で導入した必須 Q が剥がれた可能性)"
+        f"Q4 に {Q4_COMMAND_NOT_FOUND!r} が見つからない (issue #335 で導入した必須 Q が剥がれた可能性)"
     )
     assert Q4_NO_MODULE_NAMED in q4_block, (
         f"Q4 に {Q4_NO_MODULE_NAMED!r} が見つからない (Python import エラー系の網羅が欠落)"
@@ -278,8 +262,7 @@ def test_v550_guide_troubleshooting_q4_forbids_skipping_post_followup_check() ->
 
     # Assert
     assert SKIP_FORBIDDEN_PHRASE in q4_block, (
-        f"Q4 A に {SKIP_FORBIDDEN_PHRASE!r} が見つからない "
-        "(issue #335 偽陽性 agent への最終ガードが剥がれた可能性)"
+        f"Q4 A に {SKIP_FORBIDDEN_PHRASE!r} が見つからない (issue #335 偽陽性 agent への最終ガードが剥がれた可能性)"
     )
 
 
@@ -328,15 +311,12 @@ def test_release_notes_template_verify_block_mandates_existence_leadin() -> None
 
     # Assert: バージョン非依存のリードイン (v{{VER}} 付き)
     assert TEMPLATE_VERIFY_LEADIN_PHRASE in verify_block, (
-        f"{RELEASE_NOTES_TEMPLATE} の {{VERIFY_BLOCK}} 節に "
-        f"{TEMPLATE_VERIFY_LEADIN_PHRASE!r} が見つからない"
+        f"{RELEASE_NOTES_TEMPLATE} の {{VERIFY_BLOCK}} 節に {TEMPLATE_VERIFY_LEADIN_PHRASE!r} が見つからない"
     )
 
     # Assert: 3 ステップが含まれる
     for needle in (TRIAGE_STEP_1, TRIAGE_STEP_2, TRIAGE_STEP_3_CACHE):
-        assert needle in verify_block, (
-            f"{{VERIFY_BLOCK}} 節リードインに {needle!r} が見つからない"
-        )
+        assert needle in verify_block, f"{{VERIFY_BLOCK}} 節リードインに {needle!r} が見つからない"
 
     # Assert: 省略不可宣言
     assert TEMPLATE_VERIFY_REQUIRED_NOTE in verify_block, (
@@ -370,12 +350,8 @@ def test_release_notes_template_troubleshooting_mandates_command_not_found_q() -
     )
 
     # Assert: command not found / No module named の明示
-    assert Q4_COMMAND_NOT_FOUND in troubleshoot_block, (
-        f"必須 Q ルールに {Q4_COMMAND_NOT_FOUND!r} が見つからない"
-    )
-    assert Q4_NO_MODULE_NAMED in troubleshoot_block, (
-        f"必須 Q ルールに {Q4_NO_MODULE_NAMED!r} が見つからない"
-    )
+    assert Q4_COMMAND_NOT_FOUND in troubleshoot_block, f"必須 Q ルールに {Q4_COMMAND_NOT_FOUND!r} が見つからない"
+    assert Q4_NO_MODULE_NAMED in troubleshoot_block, f"必須 Q ルールに {Q4_NO_MODULE_NAMED!r} が見つからない"
 
     # Assert: env 切り分け 4 ステップ (.venv 削除を含む)
     for needle in (
@@ -385,9 +361,7 @@ def test_release_notes_template_troubleshooting_mandates_command_not_found_q() -
         TRIAGE_STEP_3_LOCK,
         TEMPLATE_VENV_REBUILD_PHRASE,
     ):
-        assert needle in troubleshoot_block, (
-            f"必須 Q ルール A. に {needle!r} が見つからない"
-        )
+        assert needle in troubleshoot_block, f"必須 Q ルール A. に {needle!r} が見つからない"
 
 
 # ---------- ケース 9: 旧 Q4/Q5 のリナンバリング ----------
@@ -410,12 +384,8 @@ def test_v550_guide_legacy_q_entries_are_renumbered_to_q5_and_q6() -> None:
     q6_block = _extract_block(troubleshoot_block, start_marker="Q6.", end_marker=None)
 
     # Assert
-    assert Q5_BODY_SUBSTRING in q5_block, (
-        f"Q5 に {Q5_BODY_SUBSTRING!r} が見つからない (リナンバリング不整合)"
-    )
-    assert Q6_BODY_SUBSTRING in q6_block, (
-        f"Q6 に {Q6_BODY_SUBSTRING!r} が見つからない (リナンバリング不整合)"
-    )
+    assert Q5_BODY_SUBSTRING in q5_block, f"Q5 に {Q5_BODY_SUBSTRING!r} が見つからない (リナンバリング不整合)"
+    assert Q6_BODY_SUBSTRING in q6_block, f"Q6 に {Q6_BODY_SUBSTRING!r} が見つからない (リナンバリング不整合)"
 
 
 # ---------- ケース 10: Q ナンバリング整合性 ----------
@@ -439,12 +409,9 @@ def test_v550_guide_troubleshooting_q_numbers_are_exactly_1_through_6() -> None:
 
     # Assert: 重複なしの集合一致
     assert set(numbers) == EXPECTED_Q_NUMBERS, (
-        f"トラブルシューティング Q ナンバリングが期待集合 {EXPECTED_Q_NUMBERS} と"
-        f"一致しない: actual={sorted(numbers)}"
+        f"トラブルシューティング Q ナンバリングが期待集合 {EXPECTED_Q_NUMBERS} と一致しない: actual={sorted(numbers)}"
     )
-    assert len(numbers) == len(EXPECTED_Q_NUMBERS), (
-        f"Q 番号に重複がある: {numbers}"
-    )
+    assert len(numbers) == len(EXPECTED_Q_NUMBERS), f"Q 番号に重複がある: {numbers}"
 
 
 # ---------- ケース 11: テンプレ側の issue 参照根拠が複数箇所 ----------

@@ -531,9 +531,11 @@ class TestMainExecution:
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
-        yt_mock = _build_youtube_mock([
-            _snippet("V_ALPHA", title="kept old title", description="old desc"),
-        ])
+        yt_mock = _build_youtube_mock(
+            [
+                _snippet("V_ALPHA", title="kept old title", description="old desc"),
+            ]
+        )
 
         with (
             patch.object(mod, "get_youtube", return_value=yt_mock),
@@ -563,13 +565,9 @@ class TestLoadCollection:
 
         # Given: 同名 collection を 2 チャンネル用意。中身の title だけ違える
         ch_a = _setup_channel(tmp_path / "a")
-        _make_collection_with_descriptions(
-            ch_a, "same-name", video_id="V_A", title="title in A", description="desc A"
-        )
+        _make_collection_with_descriptions(ch_a, "same-name", video_id="V_A", title="title in A", description="desc A")
         ch_b = _setup_channel(tmp_path / "b")
-        _make_collection_with_descriptions(
-            ch_b, "same-name", video_id="V_B", title="title in B", description="desc B"
-        )
+        _make_collection_with_descriptions(ch_b, "same-name", video_id="V_B", title="title in B", description="desc B")
 
         # When: A 指定でロード
         monkeypatch.setenv("CHANNEL_DIR", str(ch_a))

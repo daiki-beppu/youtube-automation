@@ -105,8 +105,7 @@ def test_editable_install_drops_empty_veo_extra() -> None:
     """
     block = _editable_install_block(_development_section(_read(README)))
     assert "--extra veo" not in block, (
-        f"Editable install に空 extra `--extra veo` が残存 "
-        f"(pyproject.toml で `veo = []` なので no-op):\n{block}"
+        f"Editable install に空 extra `--extra veo` が残存 (pyproject.toml で `veo = []` なので no-op):\n{block}"
     )
 
 
@@ -116,9 +115,7 @@ def test_editable_install_uses_uv_sync_extra_dev() -> None:
     Then `uv sync --extra dev` が案内されている。
     """
     block = _editable_install_block(_development_section(_read(README)))
-    assert "uv sync --extra dev" in block, (
-        f"Editable install で `uv sync --extra dev` が案内されていない:\n{block}"
-    )
+    assert "uv sync --extra dev" in block, f"Editable install で `uv sync --extra dev` が案内されていない:\n{block}"
 
 
 # ---------- テスト実行節: Issue #329 完了条件 3 の明文化 ----------
@@ -157,9 +154,7 @@ def test_test_run_section_mentions_pillow_in_main_deps() -> None:
     開発者に伝えるため。
     """
     section = _test_run_section(_development_section(_read(README)))
-    assert "Pillow" in section, (
-        f"テスト実行節に `Pillow` への言及がない (Issue #329 主因の dep):\n{section}"
-    )
+    assert "Pillow" in section, f"テスト実行節に `Pillow` への言及がない (Issue #329 主因の dep):\n{section}"
 
 
 def test_test_run_section_explains_extra_dev_is_sufficient() -> None:
@@ -168,9 +163,7 @@ def test_test_run_section_explains_extra_dev_is_sufficient() -> None:
     Then `uv sync --extra dev` 単独でテストが揃う旨が案内されている。
     """
     section = _test_run_section(_development_section(_read(README)))
-    assert "uv sync --extra dev" in section, (
-        f"テスト実行節に `uv sync --extra dev` で揃う旨の案内がない:\n{section}"
-    )
+    assert "uv sync --extra dev" in section, f"テスト実行節に `uv sync --extra dev` で揃う旨の案内がない:\n{section}"
 
 
 def test_test_run_section_is_expanded_beyond_single_codeblock() -> None:
@@ -208,9 +201,7 @@ def test_readme_does_not_advertise_empty_extras() -> None:
     Editable install ブロック以外の場所にも残っていないかの横断確認。
     """
     text = _read(README)
-    assert "--extra veo" not in text, (
-        "README.md のどこかに `--extra veo` (空 extra) の案内が残存"
-    )
+    assert "--extra veo" not in text, "README.md のどこかに `--extra veo` (空 extra) の案内が残存"
 
 
 @pytest.mark.parametrize(
