@@ -168,11 +168,45 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 # 順次実行（API レート制限回避）
 # <dir> は上で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
 # <slug> はテーマ名をケバブケースに変換（例: "The Wanderer's Road" → "wanderers-road"）
-REF=$(uv run python3 -c "from youtube_automation.utils.skill_config import load_skill_config; c=load_skill_config('thumbnail'); print(c.get('image_generation',{}).get('gemini',{}).get('reference_images',{}).get('default',''))")
-uv run yt-generate-image --reference "$REF" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
-uv run yt-generate-image --reference "$REF" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
-uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
+# THEME はコレクションテーマ slug。ideate 段階の暫定値で OK
+#   (stock_refs.theme_match="exact" で 0 件なら fallback_when_empty=true で default のみで生成)
+THEME="<slug>"
+
+REFS=$(uv run python3 -c "
+from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.image_provider.composition import normalize_reference_default
+from youtube_automation.utils.stock import resolve_stock_refs
+
+thumb = load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {})
+ref_cfg = thumb.get('reference_images', {}) if isinstance(thumb, dict) else {}
+ch = channel_dir()
+defaults = [str(ch / p) for p in normalize_reference_default(ref_cfg.get('default'))]
+
+# PR-B (#364): preview.stock_refs が true なら stock を ideate_preview role で混ぜる
+ideate_cfg = load_skill_config('collection-ideate').get('preview', {})
+stock = []
+if ideate_cfg.get('stock_refs', True):
+    stock_cfg = dict(ref_cfg.get('stock', {}))
+    stock_cfg['source_role'] = 'ideate_preview'   # ideate スキル専用に上書き
+    stock = [str(p) for p in resolve_stock_refs(ch, stock_refs_config=stock_cfg, theme='$THEME')]
+
+for p in defaults + stock:
+    print(p)
+")
+
+REF_ARGS=()
+while IFS= read -r p; do
+  [ -n "$p" ] && REF_ARGS+=(--reference "$p")
+done <<< "$REFS"
+
+uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
+uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
+uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
 ```
+
+- 3 企画とも同じ `REF_ARGS` を共有（stock シャッフル結果も共有）。stock 採用ログは stderr `[INFO] stock 採用: ...` に出る
+- stock 合成を止めたい場合は `config/skills/collection-ideate.yaml` の `preview.stock_refs: false`、または thumbnail 側の `image_generation.gemini.reference_images.stock.enabled: false` を上書き
 
 - 出力先: `collections/planning/_plan-previews/<dir>/plan-{a,b,c}-<slug>.png`
 - `_` プレフィックスで通常コレクションと区別

@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import re
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +33,9 @@ from typing import Any, Literal
 
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.image_provider.composition import resolve_unique_path
+
+_STOCK_REF_MIN_BYTES = 1024
+_STOCK_REF_MAX_BYTES = 15 * 1024 * 1024
 
 STOCK_SCHEMA_VERSION = 1
 META_SUFFIX = ".meta.json"
@@ -241,6 +246,85 @@ def list_stock(
     if limit is not None and limit >= 0:
         return entries[:limit]
     return entries
+
+
+def resolve_stock_refs(
+    channel_dir: Path,
+    *,
+    stock_refs_config: dict[str, Any],
+    theme: str | None,
+    rng: random.Random | None = None,
+) -> list[Path]:
+    """skill-config の ``reference_images.stock`` 設定に従い stock から参照画像を解決する。
+
+    PR-B (#364): ``/thumbnail`` / ``/collection-ideate`` の生成時に、過去退避された
+    ボツ画像 (``assets/stock/<theme>/``) を ``reference_images.default`` の末尾に
+    自動合成するための解決関数。
+
+    Args:
+        channel_dir: チャンネルルート。
+        stock_refs_config: ``image_generation.<provider>.reference_images.stock``
+            dict。期待キー: ``enabled`` / ``max_count`` / ``theme_match`` /
+            ``source_role`` / ``shuffle`` / ``seed`` / ``fallback_when_empty``。
+        theme: 現在のテーマ slug。``theme_match="exact"`` のとき必須。
+        rng: shuffle 用 ``random.Random``。``None`` のとき内部で ``seed`` から生成。
+
+    Returns:
+        絶対 Path のリスト (最大 ``max_count`` 件、存在チェック + サイズフィルタ済み)。
+        ``enabled=False`` または空 stock + ``fallback_when_empty=True`` のときは ``[]``。
+
+    Raises:
+        ValidationError:
+            - ``theme_match="exact"`` なのに ``theme`` が ``None``
+            - stock 0 件かつ ``fallback_when_empty=False``
+            - ``source_role`` が ``SOURCE_ROLES`` 以外
+    """
+
+    if not isinstance(stock_refs_config, dict) or not stock_refs_config.get("enabled"):
+        return []
+
+    theme_match = stock_refs_config.get("theme_match", "exact")
+    if theme_match == "exact" and not theme:
+        raise ValidationError("reference_images.stock.theme_match='exact' のとき theme は必須です")
+
+    source_role = stock_refs_config.get("source_role")
+    _validate_role(source_role)
+
+    entries = list_stock(
+        channel_dir,
+        theme=theme if theme_match == "exact" else None,
+        source_role=source_role,
+    )
+
+    surviving: list[Path] = []
+    for entry in entries:
+        path = entry.image_path
+        if not path.exists():
+            print(f"[WARN] skip missing stock: {path}", file=sys.stderr)
+            continue
+        size = path.stat().st_size
+        if size < _STOCK_REF_MIN_BYTES or size > _STOCK_REF_MAX_BYTES:
+            print(f"[WARN] skip oversized/undersized stock: {path} ({size} bytes)", file=sys.stderr)
+            continue
+        surviving.append(path)
+
+    if not surviving:
+        if stock_refs_config.get("fallback_when_empty", True):
+            return []
+        raise ValidationError("reference_images.stock: 採用可能な stock が 0 件 (fallback_when_empty=False)")
+
+    if stock_refs_config.get("shuffle"):
+        shuffler = rng if rng is not None else random.Random(stock_refs_config.get("seed"))
+        shuffler.shuffle(surviving)
+
+    max_count = int(stock_refs_config.get("max_count", 3))
+    selected = surviving[:max_count] if max_count > 0 else []
+
+    role_label = source_role or "any"
+    for path in selected:
+        print(f"[INFO] stock 採用: {path} (theme={theme or '*'}, role={role_label})", file=sys.stderr)
+
+    return selected
 
 
 def prune_stock(
