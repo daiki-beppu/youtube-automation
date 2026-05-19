@@ -1,0 +1,112 @@
+# prepare チェックリスト
+
+`/automation-release` の prepare フェーズ実行前の前提条件とエッジケース対応。
+
+---
+
+## 実行前の前提（必須）
+
+以下を全て満たしていること。1 つでも欠ければ abort してユーザーに案内する。
+
+### 1. working tree がクリーン
+
+```bash
+git status --porcelain | wc -l
+# → 0 であること
+```
+
+dirty な場合は `git stash` または別 PR でコミットしてからやり直し。
+
+### 2. main が最新
+
+```bash
+git fetch origin
+git rev-list --count HEAD..origin/main
+# → 0 であること（origin/main より遅れていない）
+```
+
+### 3. CHANGELOG.md::[Unreleased] に内容がある
+
+```bash
+# Unreleased セクションの本文（次の ## までを抽出して空白行を除去）
+awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md | grep -v '^$' | head -5
+```
+
+何も出力されない（実質空）場合は「リリースする変更がない」ので abort。
+
+### 4. 開いている release/* ブランチが無い
+
+```bash
+git ls-remote --heads origin "release/v*"
+# → 何も返らないこと
+```
+
+既に存在する場合は次のいずれか:
+- 前回 prepare がマージされず残っている → 手動で確認 → クローズ or 再利用
+- 他者が並行作業中 → 衝突するので abort
+
+### 5. CI が green（推奨、必須ではない）
+
+```bash
+gh run list --branch main --limit 1 --json status,conclusion
+# → status=completed, conclusion=success
+```
+
+main の最新コミットで CI が落ちている場合は警告し、ユーザーに続行可否を確認。
+
+---
+
+## エッジケース
+
+### ケース A: Unreleased が複数バージョン累積している
+
+過去リリース時に昇格を忘れた結果、Unreleased に 2 バージョン分が混在しているケース。
+
+**対応**: `../../release-notes/references/changelog-promotion.md` の「Unreleased 内容が累積している場合の対応」セクション参照。「v<VER> リリースに累積で含まれる」として全体昇格する。
+
+### ケース B: pyproject.toml::version が既に bump 済み
+
+ローカルで手で bump して push し忘れたケース、または前回 prepare が中途半端に終わったケース。
+
+**対応**: 現在の `version` 値とユーザーが希望するバージョンを突き合わせ:
+- 一致 → bump 不要、CHANGELOG 昇格と PR 作成のみ実施
+- 不一致 → どちらが正しいかユーザーに確認
+
+### ケース C: rebase が必要
+
+```bash
+gh pr view --json mergeable
+# → "mergeable": "CONFLICTING"
+```
+
+リリース PR push 時に main が進んでいると稀に発生（同じ pyproject.toml を別 PR が触った等）。
+
+**対応**: ユーザーに rebase を促す:
+```bash
+git fetch origin
+git rebase origin/main
+git push --force-with-lease
+```
+
+---
+
+## チェックリスト（最終確認用）
+
+prepare 完了直前にユーザーへ提示するサマリ:
+
+```
+✅ リリース PR 作成完了
+
+バージョン: vX.Y.Z (bump 種別: minor / patch / major)
+ブランチ: release/vX.Y.Z
+PR: https://github.com/daiki-beppu/youtube-automation/pull/NNN
+
+変更内容:
+- pyproject.toml::version → X.Y.Z
+- CHANGELOG.md [Unreleased] → [X.Y.Z] - YYYY-MM-DD 昇格
+
+次のステップ:
+1. PR をレビュー → マージ
+2. マージ後、`/automation-release` を再実行 → publish フェーズ（tag + GitHub Release）
+3. non-trivial なリリースなら続けて `/release-notes`
+```

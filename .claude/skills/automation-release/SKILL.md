@@ -1,0 +1,225 @@
+---
+name: automation-release
+description: Use when youtube-automation リポジトリ本体の新規リリースを作成したいとき。`/automation-release` 1 コマンドで状態判定し、prepare（リリース PR 作成）または publish（tag + GitHub Release）に自動分岐する。「リリースして」「リリース作って」「新しいバージョン作って」「v5.6.0 出して」「/automation-release」で発動。post-release の運営者向けガイドは `/release-notes` が担当。グローバル `/release` は Node.js 向けで本リポジトリでは使わない。
+---
+
+## Overview
+
+リポジトリ状態を判定して以下の 2 フェーズのいずれかに自動分岐する:
+
+1. **prepare**: `main` の `[Unreleased]` を吸い上げて `release/vX.Y.Z` ブランチを切り、`pyproject.toml::version` を bump し、`CHANGELOG.md` を昇格し、リリース PR を作成する
+2. **publish**: マージ済みリリース PR を tag push + GitHub Release 化し、リリースブランチを削除する
+
+**前提**:
+- バージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）
+- 配布は git+https + tag pin（PyPI 公開しない）
+- `[Unreleased]` セクションに各 PR 時点で内容を書き溜めている運用が前提（書かれていない場合は prepare を中止）
+
+**責務分離**:
+- 本スキル = リリース実施（prepare + publish）
+- `/release-notes` = publish 後の運営者向け `docs/upgrades/v<ver>.md` 生成と下流追従 issue 起票
+- グローバル `/release`（`~/.claude/skills/release/`）= Node.js / npm リポジトリ向けで本リポジトリでは使わない
+
+## Instructions
+
+**実行場所**: youtube-automation リポジトリのルート（`/Users/mba/02-yt/automation`）
+
+### Phase 0: 状態判定
+
+以下のコマンドでリポジトリ状態を取得し、prepare / publish / no-op を判定する:
+
+```bash
+git fetch origin --tags --prune
+latest_tag=$(git tag --sort=-v:refname | head -1)
+main_sha=$(git rev-parse origin/main)
+tag_sha=$(git rev-parse "${latest_tag}^{commit}" 2>/dev/null || echo "")
+open_release_branch=$(git ls-remote --heads origin "release/v*" | head -1)
+```
+
+判定ルール:
+
+| 状態 | 条件 | フェーズ |
+|---|---|---|
+| **prepare** | `open_release_branch` 無し かつ `main_sha != tag_sha` | Phase 1 へ |
+| **publish** | リモートに `release/v<X.Y.Z>` ブランチ無し かつ `main` に bump コミットが含まれる かつ tag 未作成 | Phase 2 へ |
+| **publish (alt)** | リモートに `release/v<X.Y.Z>` ブランチ有り かつ PR が merged 済み | Phase 2 へ（マージ済みブランチが削除前のケース） |
+| **no-op** | `main_sha == tag_sha`（既にリリース済み） | 終了 |
+| **abort** | open release branch 有りで PR が未マージ | 「リリース PR がまだマージされていません」と案内して終了 |
+
+判定結果をユーザーに伝え、`AskUserQuestion` で進行確認する（誤判定時の脱出口を残す）。
+
+### Phase 1: prepare
+
+#### 1-1. バージョン判定
+
+`CHANGELOG.md::[Unreleased]` の内容を読み、semver bump 種別を提案する:
+
+- `### Removed` 有り、または本文中に `BREAKING` / `破壊的変更` 記述 → **major**
+- `### Added` 有り → **minor**
+- `### Fixed` のみ（または `### Changed` のみで挙動変更が patch レベル）→ **patch**
+
+参照: `references/version-rules.md`
+
+`AskUserQuestion` で提案版数を表示し、ユーザーが上書き可能にする。
+
+**Unreleased が空の場合は abort**:
+
+```bash
+# Unreleased セクション直後から次の ## までを抽出
+awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md
+```
+
+出力が実質空（空行のみ）なら「Unreleased に内容がありません。リリースする変更がないようです」と案内して中止。
+
+#### 1-2. release ブランチ作成
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b "release/v${VER}"
+```
+
+事前に `git status --porcelain` で working tree がクリーンであることを確認。dirty なら abort。
+
+#### 1-3. pyproject.toml::version の bump
+
+`Edit` ツールで `pyproject.toml` の `version = "X.Y.Z"` 行のみ差し替える。
+他のフィールドや CLI 一覧には触らない。
+
+#### 1-4. CHANGELOG.md の昇格
+
+`../release-notes/references/changelog-promotion.md` の 3 段階手順をそのまま実行する。
+日付は `date +%Y-%m-%d` で取得して `[VER] - YYYY-MM-DD` のフォーマットに埋める。
+
+#### 1-5. commit
+
+```bash
+git add pyproject.toml CHANGELOG.md
+git commit -m "chore(release): v${VER} リリース PR"
+```
+
+commit メッセージは `commit-convention` スキルの規約に準拠（`chore(release):` プレフィックス + 日本語）。
+
+#### 1-6. push + PR 作成
+
+```bash
+git push -u origin "release/v${VER}"
+```
+
+PR 作成は `gh pr create` を直接呼ぶ（`/pr` スキルは self-review を回すため、リリース PR では不要）:
+
+```bash
+gh pr create --base main --title "chore(release): v${VER}" --body "$(cat <<'EOF'
+## Summary
+
+v${VER} のリリース PR。
+
+- `pyproject.toml::version` を v${VER} に bump
+- `CHANGELOG.md` の `[Unreleased]` を `[${VER}] - $(date +%Y-%m-%d)` に昇格
+
+## Release notes preview
+
+（CHANGELOG.md の [${VER}] セクションをここに貼り付け）
+
+## Next steps
+
+1. このリリース PR をレビュー → マージ
+2. マージ後、`/automation-release` を再実行して publish フェーズに進む（tag + GitHub Release 自動作成）
+3. non-trivial なリリースであれば、続けて `/release-notes` を実行して運営者向けガイドと下流追従 issue を作成
+EOF
+)"
+```
+
+PR 番号を控え、ユーザーに「リリース PR を作成しました。レビュー後にマージ → 再度 `/automation-release` を実行してください」と案内して prepare 終了。
+
+### Phase 2: publish
+
+#### 2-1. 前提検証
+
+```bash
+git checkout main
+git pull origin main
+
+# pyproject.toml::version を取得
+VER=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/version = "(.+)"/\1/')
+
+# tag が既に存在する場合は fast-fail
+if git ls-remote --tags origin "v${VER}" | grep -q "v${VER}"; then
+  echo "Tag v${VER} already exists on origin. Aborting."
+  exit 1
+fi
+```
+
+Phase 0 で `git fetch origin --tags --prune` 済みなので再 fetch は省略（Phase 2 のみで呼ばれた場合は別途 fetch する）。`main` の HEAD commit が `chore(release): v<VER>` であることも確認。
+
+#### 2-2. tag push
+
+```bash
+git tag "v${VER}"
+if ! git push origin "v${VER}"; then
+  # 他者が同 tag を先に push した race を救済（fast-fail を抜けた場合）
+  echo "Tag push rejected. Likely already exists upstream. Skipping to Release creation."
+fi
+```
+
+#### 2-3. GitHub Release 作成
+
+```bash
+gh release create "v${VER}" --generate-notes --title "v${VER}"
+```
+
+`--generate-notes` で PR 一覧が自動生成される。本文の整形は `/release-notes` 側が後工程で実施するため、ここではそのまま。
+
+#### 2-4. リリースブランチのクリーンアップ
+
+```bash
+# リモート
+git push origin --delete "release/v${VER}" 2>/dev/null || true
+
+# ローカル
+git branch -D "release/v${VER}" 2>/dev/null || true
+```
+
+PR マージ時に GitHub 側で自動削除されているケースもあるため、エラーは無視。
+
+#### 2-5. 次工程の案内
+
+```
+✅ v${VER} のリリースが完了しました。
+
+次の選択肢:
+- non-trivial なリリース（破壊的変更・新機能あり）→ `/release-notes` を実行して運営者向けガイド + 下流追従 issue を作成
+- trivial なリリース（軽微な fix のみ）→ 完了
+```
+
+`AskUserQuestion` で `/release-notes` 起動の要否を確認するが、本スキルから直接は呼ばない（責務分離）。
+
+## Gotchas
+
+- **Unreleased 空での実行**: prepare Phase 1-1 で必ず Unreleased の中身を確認。空のままバージョンだけ上がる事故を防ぐ
+- **release ブランチが既に存在**: `git ls-remote --heads origin "release/v${VER}"` で衝突確認。あれば「前回 prepare 後にマージされず残っている」「他者が並行作業中」のいずれかなので、手動確認を促して abort
+- **`pyproject.toml::version` と tag の不一致**: publish Phase 2-1 で必ず突き合わせ。prepare をスキップして手で bump した場合の事故を防ぐ
+- **`__init__.py` の独立 bump**: バージョンは `importlib.metadata` 経由で `pyproject.toml` を読むので `__init__.py` を編集してはいけない。`grep '__version__' src/youtube_automation/__init__.py` で `importlib.metadata` ベースのままであることを確認
+- **main が prepare 中に進む**: 他者が並行で main にマージしてもリリース PR は固定 SHA から枝分かれしているので影響なし。後乗せ機能は次回リリースに自動で乗る。ただし PR mergeable conflict が出たら rebase が必要
+- **tag だけ先に push してしまった場合**: GitHub Release 作成（2-3）を再実行すれば idempotent（gh release create が既存 tag を拾う）
+- **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。`/release-notes` 側でカバーするので publish 時点では問題視しない
+
+## Rules
+
+- このスキル自体の編集は **takt 経由 NG**（CLAUDE.md 規約: skill 編集は通常の Claude Code 対話セッションで）
+- `src/youtube_automation/__init__.py` は **直接編集禁止**（`importlib.metadata` 経由の動的読み込みのため、版数は `pyproject.toml` を bump するだけで追従する）
+- リリース PR の commit メッセージは `chore(release): v<VER> リリース PR` 固定（`commit-convention` 規約準拠 + 検索容易性）
+- `release/v<VER>` ブランチ命名は固定（state detection と publish クリーンアップが依存）
+- publish 後、non-trivial なリリースは **必ず `/release-notes`** を別途実行（本スキルからは呼ばない）
+- 状態判定の結果は `AskUserQuestion` でユーザー確認してから次に進む（誤判定時の脱出口）
+
+## Cross References
+
+- `references/prepare-checklist.md` — prepare 実行前のチェックリストとエッジケース
+- `references/publish-checklist.md` — publish 実行前のチェックリストとエッジケース
+- `references/version-rules.md` — semver bump 判定ルール
+- `../release-notes/references/changelog-promotion.md` — CHANGELOG.md 昇格手順（既存資産を共有）
+- `/release-notes` — publish 後の運営者向けガイド + 下流追従 issue（後工程）
+- `/release` — グローバル Node.js 向け（本リポジトリでは使わない、参考のみ）
+- `commit-convention` — commit メッセージ規約
+- `/pr` — 通常 PR 作成（リリース PR では使わず、`gh pr create` 直接呼び）
