@@ -251,6 +251,40 @@ uv run yt-skills diff
 > a / b / c を返してください。
 ```
 
+#### 自スキル (automation-update) が差分対象に含まれる特例
+
+`yt-skills diff` の出力に **`automation-update` 自身** が含まれる場合、上記 (a)/(b)/(c) prompt の **前に** 自スキル更新の特例 prompt を出して、変更内容を構造的に提示してから確認を取る:
+
+```bash
+# 自スキル分の差分だけを取り出して unified diff として表示
+diff -u .claude/skills/automation-update/SKILL.md <(uv run yt-skills export automation-update 2>/dev/null) \
+  || true   # yt-skills に export がなければ次の手で
+```
+
+`yt-skills` に直接 export コマンドが無い場合は、wheel 内の `_skills/automation-update/SKILL.md` を `python -c "from importlib.resources import files; print(files('youtube_automation._skills.automation-update').joinpath('SKILL.md').read_text())"` で取得して `diff -u` する。
+
+AI は取得した unified diff を **H2 セクション境界（`## `）で集約** し、「Phase X の手順が変わる」「Gotchas に Y が追加」のようなセクション単位の要約を作って提示する:
+
+```
+> [HUMAN STEP]
+> ⚠ このスキル自身 (automation-update) が更新対象に含まれています。
+>
+> 変更内容（セクション単位の要約）:
+>   - Phase 3-3: <要約>
+>   - Step 3-5: <要約>
+>   - Gotchas: <要約>
+>
+> 仕様:
+>   - sync 実行後も、本セッションは旧版 SKILL.md の手順で完走します
+>     （Claude Code はセッション開始時に SKILL.md をロードしてメモリ保持するため）
+>   - 次回 /automation-update を起動した時点から新版が適用されます
+>   - 手書き改造（local fix）がある場合は破棄されます
+>
+> 続行してよければ "yes"、自スキルだけ手動マージしたければ "manual" と返してください。
+```
+
+`"manual"` が返ってきた場合は、Step 3-4 の (b) `--only` で `automation-update` を除外して他スキルだけ sync し、自スキルは利用者に手動マージを依頼する。
+
 ### Step 3-4. skills を同期
 
 選択に応じて以下を実行:
@@ -284,6 +318,33 @@ uv sync
 ```
 
 `yt-doctor` で WARNING / FAILED が出た場合は `/onboard` を起動して再診断するよう案内。
+
+#### 自スキルの frontmatter 健全性チェック
+
+`yt-skills sync` で `.claude/skills/automation-update/SKILL.md` 自身が上書きされた場合、新版の frontmatter が壊れていると **次回起動でスキル発動できなくなる**（YAML パース失敗）。sync 直後に必ず確認:
+
+```bash
+head -5 .claude/skills/automation-update/SKILL.md
+```
+
+期待形式:
+
+```
+---
+name: automation-update
+description: Use when ...
+---
+```
+
+`---` で囲まれた YAML が `name:` と `description:` を含み、2 つ目の `---` で閉じていれば OK。
+
+壊れていた場合（YAML パース不能 / frontmatter 不完全）は git でロールバック:
+
+```bash
+git checkout .claude/skills/automation-update/SKILL.md
+```
+
+その後、本スキルを利用者の手元で再走するのではなく、上流の issue として報告するよう案内する（automation-update 自身に問題があるため再帰的に追従できない状況）。
 
 ## Phase 4: コミット（push は人間）
 
@@ -327,6 +388,8 @@ git commit -m "chore: youtube-automation v<target> への追従 (#N)"
 - **`v*.md` の 404**: 古いバージョンのガイドが retroactively 削除されている可能性がある。警告だけ出してスキップ
 - **`uv.lock` 添付忘れ**: `git add` で uv.lock を含めないと追従が永続化されない。Phase 4-1 で `git status` を必ず確認
 - **同一 tag の再発行**: 稀に upstream が同 tag を force push し直す。`publishedAt` の差分や `gh release view v<target>` で差分有無を確認して人間に判断を仰ぐ
+- **自スキルの self-overwrite**: 本スキル自身が `yt-skills diff` の差分対象に含まれる場合がある（v5.5.x → v5.5.y で本スキルが更新された等）。`yt-skills sync` は file 単位の順次上書き（atomicity なし、`--force` で削除→再作成）だが、Claude Code は SKILL.md をセッション開始時にメモリへロードするため、**同セッションでは旧版の手順で完走**し、**次回 /automation-update 起動以降で新版が適用**される。Step 3-3 の特例 prompt で利用者に明示すること。手書き改造（local fix）を残したい場合は `"manual"` 応答で自スキルだけ sync から除外し手動マージへ
+- **sync 中の部分破損**: `yt-skills sync` のループに atomicity はない。途中失敗すると部分的に壊れた `.claude/skills/` が残る。Step 3-5 で自スキル frontmatter 健全性チェックを必ず実行し、壊れていれば `git checkout` でロールバック
 
 ## Rules
 
