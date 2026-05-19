@@ -117,7 +117,7 @@ collections/            # コンテンツ成果物
 - `.claude/skills/` は `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_skills/` に同梱され、`yt-skills sync` が `importlib.resources` で参照する
 - `.claude/CLAUDE.template.md` も同様に `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_claude_md/CLAUDE.template.md` に同梱され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として展開される
 - 配布アセットの追加は `src/youtube_automation/cli/skills_sync.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートされる（`kind="dir" | "file"` を選ぶ）
-- バージョン bump は `pyproject.toml` の `version` と `src/youtube_automation/__init__.py` の `__version__` の **両方**
+- バージョン bump は `pyproject.toml::version` のみを更新する（`src/youtube_automation/__init__.py::__version__` は `importlib.metadata` 経由で動的に読み込むため触らない）。リリース運用全体は `/automation-release` スキルで一気通貫に実行する
 
 ## セキュリティ
 
@@ -135,6 +135,7 @@ collections/            # コンテンツ成果物
 - **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`。`commit-convention` スキル参照
 - **takt 設定**: リポジトリ固有 `.takt/config.yaml`（`draft_pr: false`）、グローバル `~/.takt/config.yaml`（`provider: claude`, `language: ja`）
 - workflow は組み込み **default**（plan → review → ... → reviewers の 9 step）
+- **リリース**: `/automation-release` スキルで Release PR パターンを自動化（prepare → リリース PR → publish の 2 フェーズ）。post-release の運営者向けガイドと下流追従 issue は `/release-notes` が担当
 
 ### skill 編集は takt 経由で行わない
 

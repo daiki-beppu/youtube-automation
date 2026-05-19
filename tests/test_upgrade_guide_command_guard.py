@@ -7,13 +7,15 @@
     cache) を「ガイドの誤り」と早合点して追従後確認をスキップする偽陽性が発生した
     (issue #335)。
 
-    再発防止として以下 2 ファイルにガード文言を追加済み (commit 8f89dbf):
-      - docs/upgrades/v5.5.0.md (AI プロンプト / 追従後確認リードイン / Q4)
-      - .claude/skills/release-notes/references/release-notes-template.md
-        (Step 5 ルール / {{VERIFY_BLOCK}} 節 / 必須 Q ルール)
+    再発防止として `docs/upgrades/v5.5.0.md` にガード文言を追加済み (commit 8f89dbf):
+      - AI プロンプト / 追従後確認リードイン / Q4
 
     本テストはガード文言が将来の編集で剥がれることを防ぐリグレッションガード。
     マジックストリングをモジュールトップに `Final` 定数で集約し、剥がし耐性を確保する。
+
+    Note: `/release-notes` スキルが issue #434 で廃止されたため、テンプレ側
+    (release-notes-template.md) のガードテストも削除した。v5.5.0.md 側の
+    ガードはガイドが過去資料として保持される限り維持する。
 
 設計参照:
     .takt/runs/20260518-060329-issue-335-bug-docs-v5-5-0-yt-c/reports/test-design.md
@@ -29,9 +31,6 @@ from typing import Final
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 UPGRADE_GUIDE: Final[Path] = _REPO_ROOT / "docs" / "upgrades" / "v5.5.0.md"
-RELEASE_NOTES_TEMPLATE: Final[Path] = (
-    _REPO_ROOT / ".claude" / "skills" / "release-notes" / "references" / "release-notes-template.md"
-)
 
 # ---------- 期待フレーズ定数 ----------
 
@@ -61,20 +60,6 @@ EXPECTED_Q_NUMBERS: Final[set[int]] = {1, 2, 3, 4, 5, 6}
 # 旧 Q4 → Q5 / 旧 Q5 → Q6 リナンバリング後の本文断片
 Q5_BODY_SUBSTRING: Final[str] = ".claude/skills/ に新スキル /playlist が見えない"
 Q6_BODY_SUBSTRING: Final[str] = "/masterup を worktree"
-
-# release-notes-template.md のプレースホルダ・必須要素
-TEMPLATE_EXISTENCE_PHRASE: Final[str] = "v{{VER}} に確実に存在する CLI"
-TEMPLATE_NOT_OUTDATED_PHRASE: Final[str] = "ガイドが古い"
-ISSUE_REFERENCE: Final[str] = "issue #335"
-
-TEMPLATE_VERIFY_HEADING: Final[str] = "### 追従後確認"
-TEMPLATE_VERIFY_LEADIN_PHRASE: Final[str] = "v{{VER}} のリリース時点で entry point として登録済み"
-TEMPLATE_VERIFY_REQUIRED_NOTE: Final[str] = "リリースごとに省略しないこと"
-
-TEMPLATE_TROUBLESHOOT_HEADING: Final[str] = "### トラブルシューティング"
-TEMPLATE_MANDATORY_Q_LABEL: Final[str] = "必須 Q"
-TEMPLATE_VENV_REBUILD_PHRASE: Final[str] = ".venv"
-
 
 # ---------- 共通ヘルパー (モジュールローカル) ----------
 
@@ -117,16 +102,6 @@ def test_upgrade_guide_v550_md_exists() -> None:
     明示メッセージで誤削除を伝える)。
     """
     assert UPGRADE_GUIDE.exists(), f"{UPGRADE_GUIDE} が存在しない (issue #335 ガード対象ガイドが欠落)"
-
-
-def test_release_notes_template_md_exists() -> None:
-    """Given release-notes テンプレのパス
-    When ファイルシステムを参照
-    Then ファイルが存在する。
-    """
-    assert RELEASE_NOTES_TEMPLATE.exists(), (
-        f"{RELEASE_NOTES_TEMPLATE} が存在しない (issue #335 ガード対象テンプレが欠落)"
-    )
 
 
 # ---------- ケース 1: AI プロンプト Step 5 直下のガード ----------
@@ -269,101 +244,6 @@ def test_v550_guide_troubleshooting_q4_forbids_skipping_post_followup_check() ->
 # ---------- ケース 6: テンプレ Step 5 ルール段落 ----------
 
 
-def test_release_notes_template_step5_requires_existence_guard_with_issue_link() -> None:
-    """Given release-notes-template.md の AI_PROMPT 書き方ガイド Step 5
-    When ルール段落を読む
-    Then 「v{{VER}} に確実に存在する CLI」「ガイドが古い と判断せず」「issue #335」の
-        3 要素が共存している (v5.6 以降の自動付与の根幹)。
-    """
-    # Arrange
-    text = _read(RELEASE_NOTES_TEMPLATE)
-
-    # Assert: 3 要素が同一文書内に共起している
-    assert TEMPLATE_EXISTENCE_PHRASE in text, (
-        f"{RELEASE_NOTES_TEMPLATE} に {TEMPLATE_EXISTENCE_PHRASE!r} が見つからない "
-        "(issue #335 テンプレ側ガードが剥がれた可能性)"
-    )
-    assert TEMPLATE_NOT_OUTDATED_PHRASE in text, (
-        f"{RELEASE_NOTES_TEMPLATE} に {TEMPLATE_NOT_OUTDATED_PHRASE!r} が見つからない"
-    )
-    assert ISSUE_REFERENCE in text, (
-        f"{RELEASE_NOTES_TEMPLATE} に {ISSUE_REFERENCE!r} が見つからない "
-        "(根拠 issue リンクが剥がれると将来の編集者が削除する誘惑が増す)"
-    )
-
-
-# ---------- ケース 7: テンプレ {{VERIFY_BLOCK}} 節の必須リードイン ----------
-
-
-def test_release_notes_template_verify_block_mandates_existence_leadin() -> None:
-    """Given release-notes-template.md の「### 追従後確認 ({{VERIFY_BLOCK}})」節
-    When 節本文を読む
-    Then 必須リードイン (3 ステップ + `v{{VER}}` プレースホルダ) と
-        「リリースごとに省略しないこと」が含まれる (将来バージョンで省略不可)。
-    """
-    # Arrange
-    text = _read(RELEASE_NOTES_TEMPLATE)
-    verify_block = _extract_block(
-        text,
-        start_marker=TEMPLATE_VERIFY_HEADING,
-        end_marker=TEMPLATE_TROUBLESHOOT_HEADING,
-    )
-
-    # Assert: バージョン非依存のリードイン (v{{VER}} 付き)
-    assert TEMPLATE_VERIFY_LEADIN_PHRASE in verify_block, (
-        f"{RELEASE_NOTES_TEMPLATE} の {{VERIFY_BLOCK}} 節に {TEMPLATE_VERIFY_LEADIN_PHRASE!r} が見つからない"
-    )
-
-    # Assert: 3 ステップが含まれる
-    for needle in (TRIAGE_STEP_1, TRIAGE_STEP_2, TRIAGE_STEP_3_CACHE):
-        assert needle in verify_block, f"{{VERIFY_BLOCK}} 節リードインに {needle!r} が見つからない"
-
-    # Assert: 省略不可宣言
-    assert TEMPLATE_VERIFY_REQUIRED_NOTE in verify_block, (
-        f"{{VERIFY_BLOCK}} 節に {TEMPLATE_VERIFY_REQUIRED_NOTE!r} が見つからない "
-        "(省略不可宣言が剥がれると将来バージョンで削除される)"
-    )
-
-
-# ---------- ケース 8: テンプレ「必須 Q」ルール ----------
-
-
-def test_release_notes_template_troubleshooting_mandates_command_not_found_q() -> None:
-    """Given release-notes-template.md の「### トラブルシューティング」節
-    When 「必須 Q」ルールを読む
-    Then `command not found` / `No module named` Q を 1 件必ず含める旨が宣言され、
-        A. テンプレに env 切り分け 4 ステップ (uv sync / uv pip list /
-        uv cache clean + uv lock / .venv 削除) が含まれる。
-    """
-    # Arrange
-    text = _read(RELEASE_NOTES_TEMPLATE)
-    troubleshoot_block = _extract_block(
-        text,
-        start_marker=TEMPLATE_TROUBLESHOOT_HEADING,
-        end_marker="### 最終チェックリスト",
-    )
-
-    # Assert: 「必須 Q」ラベルの存在
-    assert TEMPLATE_MANDATORY_Q_LABEL in troubleshoot_block, (
-        f"テンプレ トラブルシューティング節に {TEMPLATE_MANDATORY_Q_LABEL!r} ラベルが"
-        "見つからない (将来バージョンで必須化が剥がれる)"
-    )
-
-    # Assert: command not found / No module named の明示
-    assert Q4_COMMAND_NOT_FOUND in troubleshoot_block, f"必須 Q ルールに {Q4_COMMAND_NOT_FOUND!r} が見つからない"
-    assert Q4_NO_MODULE_NAMED in troubleshoot_block, f"必須 Q ルールに {Q4_NO_MODULE_NAMED!r} が見つからない"
-
-    # Assert: env 切り分け 4 ステップ (.venv 削除を含む)
-    for needle in (
-        TRIAGE_STEP_1,
-        TRIAGE_STEP_2,
-        TRIAGE_STEP_3_CACHE,
-        TRIAGE_STEP_3_LOCK,
-        TEMPLATE_VENV_REBUILD_PHRASE,
-    ):
-        assert needle in troubleshoot_block, f"必須 Q ルール A. に {needle!r} が見つからない"
-
-
 # ---------- ケース 9: 旧 Q4/Q5 のリナンバリング ----------
 
 
@@ -412,25 +292,3 @@ def test_v550_guide_troubleshooting_q_numbers_are_exactly_1_through_6() -> None:
         f"トラブルシューティング Q ナンバリングが期待集合 {EXPECTED_Q_NUMBERS} と一致しない: actual={sorted(numbers)}"
     )
     assert len(numbers) == len(EXPECTED_Q_NUMBERS), f"Q 番号に重複がある: {numbers}"
-
-
-# ---------- ケース 11: テンプレ側の issue 参照根拠が複数箇所 ----------
-
-
-def test_release_notes_template_issue_reference_appears_in_multiple_locations() -> None:
-    """Given release-notes-template.md
-    When `issue #335` の出現回数を数える
-    Then 2 箇所以上に存在する (Step 5 ルール段落 + {{VERIFY_BLOCK}} 以降の必須 Q 節。
-        将来 editor がガード文言を剥がそうとした時の根拠追跡性)。
-    """
-    # Arrange
-    text = _read(RELEASE_NOTES_TEMPLATE)
-
-    # Act
-    count = text.count(ISSUE_REFERENCE)
-
-    # Assert
-    assert count >= 2, (
-        f"{RELEASE_NOTES_TEMPLATE} の {ISSUE_REFERENCE!r} 参照が {count} 件しかない "
-        "(2 箇所以上必要: Step 5 ルール + 必須 Q 節)"
-    )
