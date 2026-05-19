@@ -263,7 +263,20 @@ def _build_analytics(merged: dict) -> Analytics:
 
 
 def _build_playlists(merged: dict) -> Playlists:
-    return Playlists(items=dict(merged.get("playlists") or {}))
+    raw = merged.get("playlists")
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"playlists セクションは object でなければなりません（got {type(raw).__name__}）")
+    items: dict[str, dict] = {}
+    for key, value in raw.items():
+        if isinstance(value, str):
+            items[key] = {"playlist_id": value, "auto_add": True, "title": None}
+        elif isinstance(value, dict):
+            items[key] = dict(value)
+        else:
+            raise ConfigError(f"playlists.{key} は string または object でなければなりません")
+    return Playlists(items=items)
 
 
 def _build_workflow(merged: dict) -> Workflow:

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+#### `playlists.json` の string-shape entry で `PlaylistManager` が `AttributeError` で落ちる問題を修正
+
+`config/channel/playlists.json` がシンプル形式（`{"main": "PL..."}`）のとき、
+`PlaylistManager.resolve_playlists` 内の `pl.get("auto_add")` が
+`'str' object has no attribute 'get'` を投げ、`/video-upload` 経由の playlist
+自動追加が失敗していた。loader (`_build_playlists`) で string value を
+`{"playlist_id": <元値>, "auto_add": True, "title": None}` に正規化し、消費側
+（`PlaylistManager` の各メソッド、`PlaylistStatusViewer.show_status`、
+`collection_uploader._assign_to_playlists`）が常に dict shape を仮定できるよう
+contract を確定させた。dict 形式の既存運用は後方互換性を保つ。関連: #275
+
+- `src/youtube_automation/utils/config/loader.py`: `_build_playlists` で string /
+  dict を分岐し、string は 3 キー固定の dict に展開、dict は shallow copy して
+  入力 dict との参照を切る
+- `src/youtube_automation/utils/config/playlists.py`: `Playlists.items` の型注釈を
+  `dict[str, str]` から `dict[str, dict]` へ。docstring に正規化契約を明記
+
 ## [5.5.1] - 2026-05-19
 
 ※ 本セクションは v5.5.0 リリース後に Unreleased への記述が見送られていたため、
