@@ -211,6 +211,25 @@ veo:
 `loop.mp4` が `10-assets/` に存在すると、`generate_videos.sh` v11.0 が自動検出し、
 静止画の代わりにループ動画を背景として使用します（24fps、CRF 20）。
 
+## 長時間処理の取り扱い
+
+`yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒** 程度（モデルとリージョン次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+
+spawn 例:
+
+```bash
+uv run yt-generate-loop-video <collection-path> -y > /tmp/loop-video-$(date +%s).log 2>&1
+```
+
+これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
+
+> ⏳ Veo 3.1 でループ動画を生成中（推定 30〜90 秒）。完了まで他の質問にもお答えできます。
+> ログ: /tmp/loop-video-*.log
+
+cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "loop-video" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "loop-video"` + `cmux notify --title "loop-video 完了"` を呼ぶ（非 cmux 環境では skip）。
+
+完了通知が届いたらログ末尾から結果サマリー（`10-assets/loop.mp4` のパス）をユーザーへ返す。`--smooth` 再実行時も同じパターンで起動する。IP ガードレールでブロックされた場合のエラーメッセージはログから抜き出して報告する。
+
 ## Next Step
 
 ループ動画生成後:

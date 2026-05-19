@@ -11,7 +11,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.utils.exceptions import UploadError, YouTubeAPIError
+from youtube_automation.utils.exceptions import QuotaExhaustedError, UploadError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -32,9 +32,16 @@ def _make_core_with_mock_youtube():
         return core, mock_youtube
 
 
-def _make_http_error(status: int, message: bytes = b"error") -> HttpError:
+def _make_http_error(
+    status: int,
+    message: bytes = b"error",
+    retry_after: str | None = None,
+) -> HttpError:
     """指定ステータスの HttpError を生成する。"""
-    resp = Response({"status": status})
+    info: dict = {"status": status}
+    if retry_after is not None:
+        info["retry-after"] = retry_after
+    resp = Response(info)
     return HttpError(resp, message)
 
 
@@ -161,3 +168,62 @@ class TestRetryBehavior:
             result = core.upload_video(str(video), {"snippet": {}})
 
         assert result == "retry_ok"
+
+    def test_retries_on_rate_limit_and_succeeds(self, tmp_path):
+        """429 エラー後にリトライし、最終的に成功する"""
+        core, mock_youtube = _make_core_with_mock_youtube()
+
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"video content")
+
+        mock_insert = MagicMock()
+        mock_youtube.videos.return_value.insert.return_value = mock_insert
+        mock_insert.next_chunk.side_effect = [
+            _make_http_error(429),
+            (None, {"id": "rate_limited_then_ok"}),
+        ]
+
+        with patch("youtube_automation.utils.upload_core.time.sleep"):
+            result = core.upload_video(str(video), {"snippet": {}})
+
+        assert result == "rate_limited_then_ok"
+
+    def test_honors_retry_after_header_on_rate_limit(self, tmp_path):
+        """Retry-After header の秒数を sleep に渡す"""
+        core, mock_youtube = _make_core_with_mock_youtube()
+
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"video content")
+
+        mock_insert = MagicMock()
+        mock_youtube.videos.return_value.insert.return_value = mock_insert
+        mock_insert.next_chunk.side_effect = [
+            _make_http_error(429, retry_after="12"),
+            (None, {"id": "after_wait"}),
+        ]
+
+        with patch("youtube_automation.utils.upload_core.time.sleep") as mock_sleep:
+            result = core.upload_video(str(video), {"snippet": {}})
+
+        assert result == "after_wait"
+        mock_sleep.assert_called_once_with(12.0)
+
+    def test_raises_quota_exhausted_after_max_retries(self, tmp_path):
+        """429 リトライ枯渇時は QuotaExhaustedError を raise する"""
+        core, mock_youtube = _make_core_with_mock_youtube()
+
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"video content")
+
+        mock_insert = MagicMock()
+        mock_youtube.videos.return_value.insert.return_value = mock_insert
+        # MAX_RETRY_ATTEMPTS=5 → attempt 0..4 でリトライ、attempt=5 で枯渇
+        # 合計 6 回 429 を返せば必ず exhausted
+        mock_insert.next_chunk.side_effect = [_make_http_error(429, retry_after="1")] * 6
+
+        with patch("youtube_automation.utils.upload_core.time.sleep"):
+            with pytest.raises(QuotaExhaustedError) as exc_info:
+                core.upload_video(str(video), {"snippet": {}})
+
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.retry_after_seconds == 1.0

@@ -41,7 +41,8 @@ LOCALIZATIONS_FILENAME = "localizations.json"  # 複数形で固定
 def _resolve_target_dir(target: str | None) -> Path:
     """対象チャンネルディレクトリを解決する.
 
-    優先順: --target → CHANNEL_DIR → CWD 祖先探索で config/channel_config.json を持つディレクトリ.
+    優先順: --target → CHANNEL_DIR → CWD 祖先探索で
+    新構造 (config/channel/) または旧構造 (config/channel_config.json) を持つディレクトリ.
     """
     if target:
         path = Path(target).resolve()
@@ -57,13 +58,17 @@ def _resolve_target_dir(target: str | None) -> Path:
         return path
 
     for parent in [Path.cwd()] + list(Path.cwd().parents):
+        # 新構造を優先 (post-migrate 後の通常運用状態)
+        if (parent / "config" / "channel").is_dir():
+            return parent
+        # 旧構造 (migrate / diff のプリマイグレーション起動経路)
         if (parent / "config" / "channel_config.json").is_file():
             return parent
 
     raise ConfigError(
         "対象チャンネルディレクトリが特定できません。"
         "--target DIR を指定するか、CHANNEL_DIR 環境変数を設定するか、"
-        "config/channel_config.json を持つディレクトリ配下で実行してください"
+        "config/channel/ または config/channel_config.json を持つディレクトリ配下で実行してください"
     )
 
 
