@@ -1,14 +1,17 @@
 """scripts/generate_loop_video.py の CLI 引数パーサ・制御フローのユニットテスト
 
 Issue #129: `--model` choices 撤廃の regression（既存 11 ケース）
+Issue #358: `--motion-targets` / `--static-targets` の構造化プロンプト対応と
+            `resolve_prompt` の優先順位制御
 Issue #451: `--skip-existing` フラグ追加、`--smooth` の post-process 専用化
            （`main()` 制御フロー検証 + `resolve_collection_paths` の pure 化検証）
 
 検証対象:
-1. `_build_parser`: `--skip-existing` を含む全フラグの parse
-2. `resolve_collection_paths`: pure 化（rename 副作用ゼロ・validation ゼロ）
-3. `_backup_existing_loop`: 既存 `loop.mp4` を `loop-v{n}.mp4` へ rename
-4. `main()`: smooth 早期分岐 / skip-existing 早期分岐 / 通常経路の 3 分岐
+1. `_build_parser`: `--skip-existing` / 構造化プロンプト系を含む全フラグの parse
+2. `resolve_prompt`: 純関数の優先順位制御（CLI > config > default）
+3. `resolve_collection_paths`: pure 化（rename 副作用ゼロ・validation ゼロ）
+4. `_backup_existing_loop`: 既存 `loop.mp4` を `loop-v{n}.mp4` へ rename
+5. `main()`: smooth 早期分岐 / skip-existing 早期分岐 / 通常経路の 3 分岐
 
 外部 IO（Vertex AI / load_skill_config / load_dotenv / 実 stdin 等）は touch しない。
 Veo 実 API は再課金リスクのため絶対に叩かない（全ケース mock）。
@@ -26,7 +29,9 @@ import pytest
 from youtube_automation.scripts.generate_loop_video import (
     _build_parser,
     resolve_collection_paths,
+    resolve_prompt,
 )
+from youtube_automation.utils.veo_generator import DEFAULT_PROMPT
 
 # NOTE: `_backup_existing_loop` は本 issue で新規追加される関数。
 # write_tests phase では未実装のため、module top では import せず、
@@ -201,6 +206,29 @@ class TestBuildParser:
         assert args.crossfade == 0.8
         assert args.yes is True
 
+    def test_parser_accepts_motion_and_static_targets(self):
+        # Issue #358: 構造化プロンプト用 CLI 引数
+        parser = _build_parser()
+
+        args = parser.parse_args(
+            [
+                "--motion-targets",
+                "leaves,steam",
+                "--static-targets",
+                "character,two animals (count remains 2)",
+            ]
+        )
+
+        assert args.motion_targets == "leaves,steam"
+        assert args.static_targets == "character,two animals (count remains 2)"
+
+    def test_parser_motion_static_default_none(self):
+        # 未指定時は None
+        parser = _build_parser()
+        args = parser.parse_args([])
+        assert args.motion_targets is None
+        assert args.static_targets is None
+
     # --- Issue #451: --skip-existing フラグ ---
 
     def test_parser_skip_existing_is_true_when_flag_passed(self):
@@ -222,6 +250,152 @@ class TestBuildParser:
 
         # Then
         assert args.skip_existing is False
+
+
+# ---------- resolve_prompt (Issue #358) ----------
+
+
+_TEMPLATE = (
+    "Static composition. The scene is a living painting: {static_clause} remain exactly as in the source image. "
+    "The only motion is {motion_clause} — subtle. {base_rules} Loop seamlessly."
+)
+_BASE_RULES = "Preserve the original lighting."
+
+
+def _args(prompt=None, motion=None, static=None) -> argparse.Namespace:
+    return argparse.Namespace(prompt=prompt, motion_targets=motion, static_targets=static)
+
+
+class TestResolvePrompt:
+    def test_prompt_overrides_everything(self):
+        # 優先順位 1: --prompt は最強
+        veo_config = {
+            "motion_targets": ["leaves"],
+            "static_targets": ["character"],
+            "prompt_template": _TEMPLATE,
+            "base_rules": _BASE_RULES,
+            "default_prompt": "default value",
+        }
+        args = _args(prompt="custom full prompt", motion="x,y", static="z")
+
+        result = resolve_prompt(args, veo_config)
+
+        assert result == "custom full prompt"
+
+    def test_cli_structured_overrides_skill_config_structured(self):
+        # 優先順位 2: CLI structured が skill-config の structured / default_prompt より優先
+        veo_config = {
+            "motion_targets": ["from-config-motion"],
+            "static_targets": ["from-config-static"],
+            "prompt_template": _TEMPLATE,
+            "base_rules": _BASE_RULES,
+            "default_prompt": "should not be used",
+        }
+        args = _args(motion="from-cli-motion", static="from-cli-static")
+
+        result = resolve_prompt(args, veo_config)
+
+        assert "from-cli-motion" in result
+        assert "from-cli-static" in result
+        assert "from-config-motion" not in result
+        assert "should not be used" not in result
+
+    def test_cli_motion_only_with_empty_static_uses_fallback(self):
+        # CLI で motion のみ指定 → static は "the rest of the scene" にフォールバック
+        veo_config = {
+            "prompt_template": _TEMPLATE,
+            "base_rules": "",
+            "default_prompt": "should not be used",
+        }
+        args = _args(motion="leaves")
+
+        result = resolve_prompt(args, veo_config)
+
+        assert "leaves" in result
+        assert "the rest of the scene" in result
+
+    def test_skill_config_structured_used_when_cli_unspecified(self):
+        # 優先順位 3: CLI 未指定で skill-config の structured が非空
+        veo_config = {
+            "motion_targets": ["config-motion"],
+            "static_targets": ["config-static"],
+            "prompt_template": _TEMPLATE,
+            "base_rules": "",
+            "default_prompt": "should not be used",
+        }
+        args = _args()
+
+        result = resolve_prompt(args, veo_config)
+
+        assert "config-motion" in result
+        assert "config-static" in result
+        assert "should not be used" not in result
+
+    def test_default_prompt_used_when_structured_empty(self):
+        # 優先順位 4: structured 系すべて空 → default_prompt
+        veo_config = {
+            "motion_targets": [],
+            "static_targets": [],
+            "prompt_template": _TEMPLATE,
+            "default_prompt": "channel default prompt",
+        }
+        args = _args()
+
+        result = resolve_prompt(args, veo_config)
+
+        assert result == "channel default prompt"
+
+    def test_hardcoded_default_used_when_no_config(self):
+        # 優先順位 5: skill-config が完全に空
+        veo_config: dict = {}
+        args = _args()
+
+        result = resolve_prompt(args, veo_config)
+
+        assert result == DEFAULT_PROMPT
+
+    def test_structured_skipped_when_template_missing(self):
+        # prompt_template が無い場合は structured 構築をスキップして default_prompt
+        veo_config = {
+            "motion_targets": ["leaves"],
+            "static_targets": ["character"],
+            "default_prompt": "fallback default",
+        }
+        args = _args()
+
+        result = resolve_prompt(args, veo_config)
+
+        assert result == "fallback default"
+
+    def test_cli_static_only_falls_through_to_skill_config(self, capsys):
+        # CLI で static のみ指定 → CLI structured 試行 → motion 空で ValueError →
+        # skill-config の motion_targets が非空ならそちらを採用するが、
+        # static は CLI 側を優先したいケースは現仕様では非サポート（warning 後 fallback）
+        veo_config = {
+            "motion_targets": [],
+            "static_targets": [],
+            "prompt_template": _TEMPLATE,
+            "default_prompt": "channel default",
+        }
+        args = _args(static="character")
+
+        result = resolve_prompt(args, veo_config)
+
+        # CLI motion 空 → structured 構築失敗 → default_prompt
+        assert result == "channel default"
+        captured = capsys.readouterr()
+        assert "CLI structured prompt 構築失敗" in captured.out
+
+    def test_prompt_with_structured_warns(self, capsys):
+        # --prompt 指定 + --motion-targets 指定 → warning 出して --prompt 優先
+        veo_config = {"prompt_template": _TEMPLATE}
+        args = _args(prompt="full", motion="leaves", static="character")
+
+        result = resolve_prompt(args, veo_config)
+
+        assert result == "full"
+        captured = capsys.readouterr()
+        assert "--prompt が指定されたため" in captured.out
 
 
 # ---------------------------------------------------------------------------
