@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from youtube_automation.utils.stock import (
     list_stock,
     load_stock_meta,
     prune_stock,
+    resolve_stock_refs,
     slugify_theme,
     stock_dir,
     theme_dir,
@@ -331,3 +333,270 @@ class TestPruneStock:
         # library は無傷
         library_remaining = list((channel / "assets" / "stock" / "library").glob("*.jpg"))
         assert len(library_remaining) == 3
+
+
+# ---- resolve_stock_refs ---------------------------------------------------
+
+
+def _seed_stock(
+    channel: Path,
+    tmp_path: Path,
+    items: list[tuple[str, str]],
+) -> list[Path]:
+    """archive_to_stock 経由で stock を仕込む。
+
+    items: [(theme, source_role), ...]。stock 参照テスト用に 2KB の本体を持たせる
+    (resolve_stock_refs の min size 1024 バイトフィルタを通すため)。
+    """
+
+    archived: list[Path] = []
+    for idx, (theme, role) in enumerate(items):
+        image = _make_image(tmp_path / f"src-{idx}.jpg", content=b"P" * 2048)
+        dest = archive_to_stock(
+            image,
+            {
+                "theme": theme,
+                "source_role": role,
+                "source_collection": f"col-{idx}",
+            },
+            channel_dir=channel,
+        )
+        assert dest is not None
+        archived.append(dest)
+        time.sleep(0.01)
+    return archived
+
+
+class TestResolveStockRefs:
+    def test_disabled_returns_empty(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(channel, tmp_path, [("tavern", "thumbnail_candidate")])
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={"enabled": False, "max_count": 3},
+            theme="tavern",
+        )
+        assert result == []
+
+    def test_missing_config_returns_empty(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(channel, tmp_path, [("tavern", "thumbnail_candidate")])
+        assert resolve_stock_refs(channel, stock_refs_config={}, theme="tavern") == []
+
+    def test_empty_stock_fallback_returns_empty(self, channel: Path) -> None:
+        # stock 0 件 + fallback_when_empty=True (デフォルト)
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={"enabled": True, "max_count": 3, "theme_match": "exact"},
+            theme="tavern",
+        )
+        assert result == []
+
+    def test_empty_stock_strict_raises(self, channel: Path) -> None:
+        with pytest.raises(ValidationError):
+            resolve_stock_refs(
+                channel,
+                stock_refs_config={
+                    "enabled": True,
+                    "max_count": 3,
+                    "theme_match": "exact",
+                    "fallback_when_empty": False,
+                },
+                theme="tavern",
+            )
+
+    def test_exact_requires_theme(self, channel: Path) -> None:
+        with pytest.raises(ValidationError):
+            resolve_stock_refs(
+                channel,
+                stock_refs_config={"enabled": True, "theme_match": "exact"},
+                theme=None,
+            )
+
+    def test_exact_filters_by_theme(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(
+            channel,
+            tmp_path,
+            [
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+                ("library", "thumbnail_candidate"),
+                ("library", "thumbnail_candidate"),
+            ],
+        )
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={
+                "enabled": True,
+                "max_count": 10,
+                "theme_match": "exact",
+                "shuffle": False,
+            },
+            theme="tavern",
+        )
+        assert len(result) == 3
+        assert all("/tavern/" in str(p) for p in result)
+
+    def test_any_returns_all_themes_in_mtime_order(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(
+            channel,
+            tmp_path,
+            [
+                ("tavern", "thumbnail_candidate"),
+                ("library", "thumbnail_candidate"),
+                ("jazz-bar", "thumbnail_candidate"),
+            ],
+        )
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={
+                "enabled": True,
+                "max_count": 2,
+                "theme_match": "any",
+                "shuffle": False,
+            },
+            theme=None,
+        )
+        assert len(result) == 2
+        # mtime 降順 = 最後に seed した jazz-bar が先頭
+        assert "/jazz-bar/" in str(result[0])
+        assert "/library/" in str(result[1])
+
+    def test_source_role_filter(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(
+            channel,
+            tmp_path,
+            [
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "ideate_preview"),
+                ("tavern", "thumbnail_candidate"),
+            ],
+        )
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={
+                "enabled": True,
+                "max_count": 10,
+                "theme_match": "exact",
+                "source_role": "thumbnail_candidate",
+                "shuffle": False,
+            },
+            theme="tavern",
+        )
+        # ideate_preview 1 件が除外されて 2 件
+        assert len(result) == 2
+        for path in result:
+            meta = load_stock_meta(path)
+            assert meta is not None
+            assert meta["source_role"] == "thumbnail_candidate"
+
+    def test_invalid_source_role_raises(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(channel, tmp_path, [("tavern", "thumbnail_candidate")])
+        with pytest.raises(ValidationError):
+            resolve_stock_refs(
+                channel,
+                stock_refs_config={
+                    "enabled": True,
+                    "theme_match": "exact",
+                    "source_role": "bogus",
+                },
+                theme="tavern",
+            )
+
+    def test_shuffle_with_seeded_rng_is_deterministic(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(
+            channel,
+            tmp_path,
+            [
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+            ],
+        )
+        cfg = {
+            "enabled": True,
+            "max_count": 4,
+            "theme_match": "exact",
+            "shuffle": True,
+        }
+        first = resolve_stock_refs(channel, stock_refs_config=cfg, theme="tavern", rng=random.Random(42))
+        second = resolve_stock_refs(channel, stock_refs_config=cfg, theme="tavern", rng=random.Random(42))
+        assert first == second
+
+    def test_max_count_caps_results(self, channel: Path, tmp_path: Path) -> None:
+        _seed_stock(
+            channel,
+            tmp_path,
+            [
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+            ],
+        )
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={
+                "enabled": True,
+                "max_count": 10,
+                "theme_match": "exact",
+                "shuffle": False,
+            },
+            theme="tavern",
+        )
+        # max_count > stock 件数 でも実件数のみ返す
+        assert len(result) == 3
+
+    def test_unlinked_image_is_excluded(self, channel: Path, tmp_path: Path) -> None:
+        archived = _seed_stock(
+            channel,
+            tmp_path,
+            [
+                ("tavern", "thumbnail_candidate"),
+                ("tavern", "thumbnail_candidate"),
+            ],
+        )
+        # 1 件を手動削除
+        archived[0].unlink()
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={
+                "enabled": True,
+                "max_count": 10,
+                "theme_match": "exact",
+                "shuffle": False,
+            },
+            theme="tavern",
+        )
+        assert len(result) == 1
+        assert archived[0] not in result
+
+    def test_undersized_stock_is_skipped(self, channel: Path, tmp_path: Path) -> None:
+        # 通常サイズの stock を 1 件
+        _seed_stock(channel, tmp_path, [("tavern", "thumbnail_candidate")])
+        # 小さすぎる stock を手動配置 (size filter で除外される想定)
+        tiny_image = channel / "assets" / "stock" / "tavern" / "20990101-tiny-tiny.jpg"
+        tiny_image.write_bytes(b"x")
+        tiny_meta = tiny_image.with_suffix(tiny_image.suffix + META_SUFFIX)
+        tiny_meta.write_text(
+            json.dumps(
+                {
+                    "schema_version": STOCK_SCHEMA_VERSION,
+                    "theme": "tavern",
+                    "source_role": "thumbnail_candidate",
+                    "image": tiny_image.name,
+                }
+            )
+        )
+
+        result = resolve_stock_refs(
+            channel,
+            stock_refs_config={
+                "enabled": True,
+                "max_count": 10,
+                "theme_match": "exact",
+                "shuffle": False,
+            },
+            theme="tavern",
+        )
+        assert tiny_image not in result
+        assert len(result) == 1

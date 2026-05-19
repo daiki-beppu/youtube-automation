@@ -180,22 +180,38 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
 
 #### 生成コマンド
 
-```bash
-# 単一参照（従来通り）
-uv run yt-generate-image \
-  --reference <channel_dir>/<reference_images.default> \
-  --prompt "<diff_prompt_template を置換したプロンプト>" \
-  --output <collection-path>/10-assets/thumbnail-v1.jpg -y
+`reference_images.default` と stock (#364 PR-B) を Python ワンライナーで合成し、`--reference` 引数を組み立てる。stock 採用ログは stderr の `[INFO] stock 採用: ...` で確認できる。
 
-# 複数参照ローテーション（list の reference_images.default をすべて展開）
-uv run yt-generate-image \
-  --reference <channel_dir>/path/to/ref1.jpg \
-  --reference <channel_dir>/path/to/ref2.jpg \
-  --reference <channel_dir>/path/to/ref3.jpg \
+```bash
+THEME="<theme-slug>"   # 例: tavern / library / jazz-bar
+
+REFS=$(uv run python3 -c "
+from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.image_provider.composition import normalize_reference_default
+from youtube_automation.utils.stock import resolve_stock_refs
+
+cfg = load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {})
+ref_cfg = cfg.get('reference_images', {}) if isinstance(cfg, dict) else {}
+ch = channel_dir()
+defaults = [str(ch / p) for p in normalize_reference_default(ref_cfg.get('default'))]
+stock = [str(p) for p in resolve_stock_refs(ch, stock_refs_config=ref_cfg.get('stock', {}), theme='$THEME')]
+for p in defaults + stock:
+    print(p)
+")
+
+REF_ARGS=()
+while IFS= read -r p; do
+  [ -n "$p" ] && REF_ARGS+=(--reference "$p")
+done <<< "$REFS"
+
+uv run yt-generate-image "${REF_ARGS[@]}" \
   --max-attempts 3 \
   --prompt "<diff_prompt_template を置換したプロンプト>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
+
+stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: false` を上書きする（default のみで生成される）。
 
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
 5. 背景画像（テキストなし）も必要な場合は、テキストなしの参照画像で別途生成
@@ -348,6 +364,29 @@ image_generation:
     enabled: true          # false で退避を無効化（unlink のみ）
     retention_days: 90     # yt-stock-prune の保持日数
     max_per_theme: 50      # yt-stock-prune の上限
+```
+
+### stock 再利用（参照画像プールへの自動合成）
+
+PR-B (#364): 上記「生成コマンド」の Python ワンライナーで `resolve_stock_refs()` を呼び、stock 画像を `reference_images.default` の末尾に合成して `--reference` に展開する。`composition.select_reference` の attempt ローテーション対象になるため、`--max-attempts N` を増やすほど stock 由来のバリエーションが反映される。
+
+- **デフォルト動作**: `enabled: true` (opt-out) で `source_role="thumbnail_candidate"` のみ採用、`theme_match="exact"` で同テーマのみ。stock が 0 件なら default のみで生成（`fallback_when_empty: true`）。
+- **採用ログ**: 1 枚採用ごとに stderr へ `[INFO] stock 採用: <path> (theme=<t>, role=thumbnail_candidate)` を出力。監査時は stderr を grep。
+- **無効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: false` を上書き。
+- **チューニング**: `max_count` / `shuffle` / `theme_match: "any"` / `source_role: null` (role フィルタなし) などをチャンネル側で調整。
+
+```yaml
+image_generation:
+  gemini:
+    reference_images:
+      stock:
+        enabled: true
+        max_count: 3
+        theme_match: "exact"     # "any" で全テーマ横断
+        source_role: "thumbnail_candidate"
+        shuffle: true
+        seed: null
+        fallback_when_empty: true
 ```
 
 ## Next Step
