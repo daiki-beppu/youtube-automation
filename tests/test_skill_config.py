@@ -129,3 +129,27 @@ def test_get_collection_ideate_thumbnail_mode_invalid_raises(tmp_path, monkeypat
 
     with pytest.raises(ConfigError, match="thumbnail_mode"):
         skill_config.get_collection_ideate_thumbnail_mode()
+
+
+def test_get_collection_ideate_thumbnail_mode_preview_null_is_default(tmp_path, monkeypatch):
+    """`preview: null` は未設定と等価で sequential を返す"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
+    override.write_text("preview:\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    mode = skill_config.get_collection_ideate_thumbnail_mode()
+    assert mode == skill_config.THUMBNAIL_MODE_SEQUENTIAL
+
+
+def test_get_collection_ideate_thumbnail_mode_preview_non_mapping_raises(tmp_path, monkeypatch):
+    """`preview` が dict 以外（typo で文字列やリスト）の場合は ConfigError"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
+    override.write_text("preview: parallel\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="preview"):
+        skill_config.get_collection_ideate_thumbnail_mode()

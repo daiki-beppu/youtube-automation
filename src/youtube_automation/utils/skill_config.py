@@ -137,10 +137,18 @@ def get_collection_ideate_thumbnail_mode() -> str:
     """collection-ideate skill の thumbnail_mode を返す。
 
     skill-config の `preview.thumbnail_mode` を参照。未設定なら
-    THUMBNAIL_MODE_SEQUENTIAL。不正値は ConfigError。
+    THUMBNAIL_MODE_SEQUENTIAL。不正な shape/値は ConfigError。
     """
     cfg = load_skill_config("collection-ideate")
-    mode = cfg.get("preview", {}).get("thumbnail_mode", THUMBNAIL_MODE_SEQUENTIAL)
+    preview = cfg.get("preview")
+    if preview is None:
+        preview = {}
+    if not isinstance(preview, dict):
+        raise ConfigError(
+            "collection-ideate.preview は mapping である必要があります: "
+            f"{preview!r}"
+        )
+    mode = preview.get("thumbnail_mode", THUMBNAIL_MODE_SEQUENTIAL)
     if mode not in _VALID_THUMBNAIL_MODES:
         raise ConfigError(
             "collection-ideate.preview.thumbnail_mode は "
