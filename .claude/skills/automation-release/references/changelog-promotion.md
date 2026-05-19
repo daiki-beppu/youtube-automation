@@ -1,6 +1,8 @@
 # CHANGELOG.md Unreleased 昇格手順
 
-`/release-notes` スキル Phase 4 で参照する `CHANGELOG.md` 同期手順。Keep a Changelog 1.1.0 準拠。
+`/automation-release` スキル prepare Phase 1-4 で参照する `CHANGELOG.md` 同期手順。Keep a Changelog 1.1.0 準拠。
+
+Migration セクションのフォーマット契約は `docs/changelog-contract.md` を参照。本ドキュメントは昇格手順（[Unreleased] → [VER] への置換）に絞る。
 
 ---
 
@@ -43,21 +45,23 @@
 
 ### Step 2: Migration セクションを v<VER> 用に更新
 
-`### Migration` セクションは v<VER> のリリースに合わせて書き換える:
+`### Migration` セクションは v<VER> のリリースに合わせて書き換える。必須要素は `docs/changelog-contract.md` 参照（所要時間の目安 / local fix 衝突注意 / サマリ）:
 
 ```diff
  ### Migration
  
--downstream チャンネルリポジトリで v<PREV_PREV> → v<PREV> への追従手順は
--[docs/upgrades/v<PREV>.md](docs/upgrades/v<PREV>.md) を参照。
-+downstream チャンネルリポジトリで v<PREV> → v<VER> への追従手順は
-+**チャンネル運営者向け** の平易なガイド [docs/upgrades/v<VER>.md](docs/upgrades/v<VER>.md) を参照。
- 
++所要時間の目安: X〜Y 分
++
++local fix 衝突注意:
++- <該当 skill 名>（または「無し」）
++
  サマリ:
  
 -- （旧サマリ）
 +- （v<VER> リリースに含まれる主要な変更のサマリ、3〜5 行）
 ```
+
+旧版で `[docs/upgrades/v<PREV>.md](docs/upgrades/v<PREV>.md)` への参照が残っていたら、本リリースから削除する（過去資料として `docs/upgrades/` 自体は残るが、Migration セクション本文では言及しない）。
 
 ### Step 3: ファイル末尾のリンク参照定義に新エントリを追加
 
@@ -106,7 +110,7 @@ grep -E "#[0-9]+" CHANGELOG.md | head -20
 
 ## Edit 操作の具体例
 
-`/release-notes` スキルから `Edit` ツールで実施する場合の具体的な変更:
+`/automation-release` の prepare Phase 1-4 から `Edit` ツールで実施する場合の具体的な変更:
 
 ### Edit 1: Unreleased の直後に v<VER> セクション挿入
 

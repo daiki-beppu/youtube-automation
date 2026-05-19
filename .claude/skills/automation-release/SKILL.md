@@ -1,6 +1,6 @@
 ---
 name: automation-release
-description: Use when youtube-automation リポジトリ本体の新規リリースを作成したいとき。`/automation-release` 1 コマンドで状態判定し、prepare（リリース PR 作成）または publish（tag + GitHub Release）に自動分岐する。「リリースして」「リリース作って」「新しいバージョン作って」「v5.6.0 出して」「/automation-release」で発動。post-release の運営者向けガイドは `/release-notes` が担当。グローバル `/release` は Node.js 向けで本リポジトリでは使わない。
+description: Use when youtube-automation リポジトリ本体の新規リリースを作成したいとき。`/automation-release` 1 コマンドで状態判定し、prepare（リリース PR 作成）または publish（tag + GitHub Release）に自動分岐する。「リリースして」「リリース作って」「新しいバージョン作って」「v5.6.0 出して」「/automation-release」で発動。グローバル `/release` は Node.js 向けで本リポジトリでは使わない。
 ---
 
 ## Overview
@@ -17,7 +17,7 @@ description: Use when youtube-automation リポジトリ本体の新規リリー
 
 **責務分離**:
 - 本スキル = リリース実施（prepare + publish）
-- `/release-notes` = publish 後の運営者向け `docs/upgrades/v<ver>.md` 生成と下流追従 issue 起票
+- 下流追従 = 各チャンネルリポジトリで `/automation-update` スキル（本リポジトリで配布）が CHANGELOG.md / GitHub Release 本文を読み取って実施
 - グローバル `/release`（`~/.claude/skills/release/`）= Node.js / npm リポジトリ向けで本リポジトリでは使わない
 
 ## Instructions
@@ -88,8 +88,16 @@ git checkout -b "release/v${VER}"
 
 #### 1-4. CHANGELOG.md の昇格
 
-`../release-notes/references/changelog-promotion.md` の 3 段階手順をそのまま実行する。
+`references/changelog-promotion.md` の 3 段階手順をそのまま実行する。
 日付は `date +%Y-%m-%d` で取得して `[VER] - YYYY-MM-DD` のフォーマットに埋める。
+
+**Migration セクション存在チェック**: `[Unreleased]` 配下に `### Migration` セクションが無い場合は warning を出し、`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation-update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: `docs/changelog-contract.md`）。
+
+```bash
+# Unreleased セクション配下に "### Migration" があるか
+awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md \
+  | grep -q '^### Migration' || echo "WARNING: Unreleased に Migration セクションがありません"
+```
 
 #### 1-5. commit
 
@@ -125,7 +133,7 @@ v${VER} のリリース PR。
 
 1. このリリース PR をレビュー → マージ
 2. マージ後、`/automation-release` を再実行して publish フェーズに進む（tag + GitHub Release 自動作成）
-3. non-trivial なリリースであれば、続けて `/release-notes` を実行して運営者向けガイドと下流追従 issue を作成
+3. publish 後、各チャンネルリポジトリで `/automation-update` を実行すると CHANGELOG.md / Release 本文を読み取って追従できる
 EOF
 )"
 ```
@@ -168,7 +176,23 @@ fi
 gh release create "v${VER}" --generate-notes --title "v${VER}"
 ```
 
-`--generate-notes` で PR 一覧が自動生成される。本文の整形は `/release-notes` 側が後工程で実施するため、ここではそのまま。
+`--generate-notes` で PR 一覧が自動生成される。これだけで運用上は問題ない（下流の `/automation-update` 側が CHANGELOG.md fallback で `### Migration` を抽出するため）。
+
+リリース本文の先頭に CHANGELOG.md::[VER] セクションも含めたい場合は publish 後に `gh release edit` で追記する:
+
+```bash
+section=$(awk -v ver="${VER}" '
+  $0 ~ "^## \\[" ver "\\]" { flag = 1; next }
+  /^## \[/                  { flag = 0 }
+  flag
+' CHANGELOG.md)
+auto=$(gh release view "v${VER}" --json body --jq .body)
+gh release edit "v${VER}" --notes "${section}
+
+---
+
+${auto}"
+```
 
 #### 2-4. リリースブランチのクリーンアップ
 
@@ -188,11 +212,8 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 ✅ v${VER} のリリースが完了しました。
 
 次の選択肢:
-- non-trivial なリリース（破壊的変更・新機能あり）→ `/release-notes` を実行して運営者向けガイド + 下流追従 issue を作成
-- trivial なリリース（軽微な fix のみ）→ 完了
+- 各チャンネルリポジトリで `/automation-update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
 ```
-
-`AskUserQuestion` で `/release-notes` 起動の要否を確認するが、本スキルから直接は呼ばない（責務分離）。
 
 ## Gotchas
 
@@ -202,7 +223,7 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - **`__init__.py` の独立 bump**: バージョンは `importlib.metadata` 経由で `pyproject.toml` を読むので `__init__.py` を編集してはいけない。`grep '__version__' src/youtube_automation/__init__.py` で `importlib.metadata` ベースのままであることを確認
 - **main が prepare 中に進む**: 他者が並行で main にマージしてもリリース PR は固定 SHA から枝分かれしているので影響なし。後乗せ機能は次回リリースに自動で乗る。ただし PR mergeable conflict が出たら rebase が必要
 - **tag だけ先に push してしまった場合**: GitHub Release 作成（2-3）を再実行すれば idempotent（gh release create が既存 tag を拾う）
-- **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。`/release-notes` 側でカバーするので publish 時点では問題視しない
+- **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。下流の `/automation-update` 側が CHANGELOG.md fallback で抽出するため publish 時点では問題視しない
 
 ## Rules
 
@@ -210,7 +231,7 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - `src/youtube_automation/__init__.py` は **直接編集禁止**（`importlib.metadata` 経由の動的読み込みのため、版数は `pyproject.toml` を bump するだけで追従する）
 - リリース PR の commit メッセージは `chore(release): v<VER> リリース PR` 固定（`commit-convention` 規約準拠 + 検索容易性）
 - `release/v<VER>` ブランチ命名は固定（state detection と publish クリーンアップが依存）
-- publish 後、non-trivial なリリースは **必ず `/release-notes`** を別途実行（本スキルからは呼ばない）
+- prepare 1-4 で `Migration` セクション欠落を warning する（下流の `/automation-update` が `所要時間` / `local fix 衝突注意` を抽出する契約上の入力源）
 - 状態判定の結果は `AskUserQuestion` でユーザー確認してから次に進む（誤判定時の脱出口）
 
 ## Cross References
@@ -218,8 +239,9 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - `references/prepare-checklist.md` — prepare 実行前のチェックリストとエッジケース
 - `references/publish-checklist.md` — publish 実行前のチェックリストとエッジケース
 - `references/version-rules.md` — semver bump 判定ルール
-- `../release-notes/references/changelog-promotion.md` — CHANGELOG.md 昇格手順（既存資産を共有）
-- `/release-notes` — publish 後の運営者向けガイド + 下流追従 issue（後工程）
+- `references/changelog-promotion.md` — CHANGELOG.md 昇格手順
+- `docs/changelog-contract.md` — CHANGELOG.md / Release 本文の Migration セクションフォーマット契約（下流 `/automation-update` との接合点）
+- `/automation-update`（下流チャンネルリポジトリ）— publish 後の追従スキル
 - `/release` — グローバル Node.js 向け（本リポジトリでは使わない、参考のみ）
 - `commit-convention` — commit メッセージ規約
 - `/pr` — 通常 PR 作成（リリース PR では使わず、`gh pr create` 直接呼び）

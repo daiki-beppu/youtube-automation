@@ -63,7 +63,7 @@ grep -q "^## \[${VER}\]" CHANGELOG.md
 
 前回 tag から PR が一切無い場合（手動で tag だけ動かしたケース等）に発生。
 
-**対応**: `/release-notes` 側でカバーするので publish 時点では問題視しない。本文は手で補完するか、`gh release edit` で後から差し替え。
+**対応**: 下流の `/automation-update` 側が CHANGELOG.md fallback で抽出するので publish 時点では問題視しない。本文を手で補完したい場合は `gh release edit` で CHANGELOG.md::[VER] セクションを貼り付ける。
 
 ### ケース C: リリースブランチが既に削除されている
 
@@ -85,6 +85,5 @@ GitHub Release: https://github.com/daiki-beppu/youtube-automation/releases/tag/v
 リリースブランチ: release/v${VER}（削除済み）
 
 次のステップ:
-- non-trivial（破壊的変更・新機能あり）→ `/release-notes` 実行
-- trivial（軽微な fix のみ）→ 完了
+- 各チャンネルリポジトリで `/automation-update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
 ```
