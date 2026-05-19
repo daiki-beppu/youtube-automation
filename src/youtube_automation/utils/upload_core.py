@@ -13,7 +13,7 @@ from typing import Callable, Optional
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-from youtube_automation.utils.exceptions import UploadError, YouTubeAPIError
+from youtube_automation.utils.exceptions import QuotaExhaustedError, UploadError, YouTubeAPIError
 from youtube_automation.utils.upload_policy import (
     SESSION_EXPIRED_HTTP_STATUSES,
     RetryDecision,
@@ -34,6 +34,21 @@ def _resume_session_from_persisted_uri(insert_request, resume_session_uri: str) 
     insert_request.resumable_uri = resume_session_uri
     # googleapiclient resume プロトコル発火フラグ。http.py:1023 参照
     insert_request._in_error_state = True
+
+
+def _parse_retry_after(resp) -> float | None:
+    """httplib2 Response から Retry-After header（秒数）を抽出する。
+
+    HTTP-date 形式や解析不能な値の場合は None を返し、呼び出し側で
+    指数 backoff にフォールバックさせる。
+    """
+    raw = resp.get("retry-after") if resp is not None else None
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 class YouTubeUploadCore:
@@ -173,17 +188,24 @@ class YouTubeUploadCore:
                     last_notified_uri = current_uri
 
             except HttpError as e:
-                if e.resp.status in SESSION_EXPIRED_HTTP_STATUSES:
+                status_code = e.resp.status
+                if status_code in SESSION_EXPIRED_HTTP_STATUSES:
                     logger.error(f"resumable session 失効: {e}")
                     if on_session_uri_changed is not None:
                         on_session_uri_changed(None)
                     return None
 
-                decision = RetryDecision.for_http_error(e.resp.status, attempt)
+                retry_after = _parse_retry_after(e.resp)
+                decision = RetryDecision.for_http_error(status_code, attempt, retry_after_seconds=retry_after)
                 if decision.should_retry:
-                    logger.warning(f"再試行可能エラー: {e}")
+                    logger.warning(f"再試行可能エラー (HTTP {status_code}, 待機 {decision.delay_seconds}s): {e}")
                     time.sleep(decision.delay_seconds)
                     attempt += 1
+                elif status_code == 429:
+                    raise QuotaExhaustedError(
+                        f"YouTube API の quota 超過/レート制限。時間をおいて再実行してください: {e}",
+                        retry_after_seconds=retry_after,
+                    ) from e
                 else:
                     logger.error(f"致命的エラー: {e}")
                     return None

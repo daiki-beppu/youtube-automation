@@ -11,7 +11,9 @@ from dataclasses import dataclass
 MAX_THUMBNAIL_BYTES = 2_097_152
 COMPRESSION_QUALITIES = (2, 5)
 MAX_RETRY_ATTEMPTS = 5
-RETRYABLE_HTTP_STATUSES = frozenset({500, 502, 503, 504})
+# 429 (Too Many Requests / quota) も再試行対象。Retry-After header があれば尊重し、
+# なければ指数 backoff にフォールバックする。
+RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 # resumable upload の session URI が失効済みとみなすべき HTTP ステータス。
 # 404 / 410 は googleapiclient が dead resumable session を通知する典型形態で、
 # `RETRYABLE_HTTP_STATUSES` とは交わらない独立分岐（retry せず URI をクリアする）。
@@ -48,10 +50,22 @@ class RetryDecision:
     delay_seconds: float = 0.0
 
     @classmethod
-    def for_http_error(cls, status_code: int, current_attempt: int) -> RetryDecision:
-        """HTTP ステータスとリトライ回数に基づいてリトライ判断を返す。"""
+    def for_http_error(
+        cls,
+        status_code: int,
+        current_attempt: int,
+        retry_after_seconds: float | None = None,
+    ) -> RetryDecision:
+        """HTTP ステータスとリトライ回数に基づいてリトライ判断を返す。
+
+        ``retry_after_seconds`` は Retry-After header から抽出した待機秒数。
+        正の値が与えられた場合はそれを優先し、なければ ``2 ** current_attempt`` の
+        指数 backoff にフォールバックする。
+        """
         if status_code not in RETRYABLE_HTTP_STATUSES:
             return cls(should_retry=False)
         if current_attempt >= MAX_RETRY_ATTEMPTS:
             return cls(should_retry=False)
+        if retry_after_seconds is not None and retry_after_seconds > 0:
+            return cls(should_retry=True, delay_seconds=float(retry_after_seconds))
         return cls(should_retry=True, delay_seconds=float(2**current_attempt))
