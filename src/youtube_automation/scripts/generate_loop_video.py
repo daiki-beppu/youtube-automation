@@ -41,6 +41,7 @@ def _channel_root() -> Path:
 
     return channel_dir()
 
+
 # ファイル名・ディレクトリ名は契約文字列のため定数で 1 箇所に集約
 ASSETS_DIR = "10-assets"
 INPUT_PNG = "main.png"

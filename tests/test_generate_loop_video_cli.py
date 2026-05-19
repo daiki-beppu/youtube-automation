@@ -384,9 +384,7 @@ def _set_default_mocks(mocks: dict) -> None:
 class TestMainSkipExisting:
     """完了条件 1: 既存 `loop.mp4` がある状態で再実行しても Veo を呼ばない。"""
 
-    def test_skips_veo_and_exits_zero_when_skip_existing_and_loop_mp4_exists(
-        self, tmp_path, monkeypatch
-    ):
+    def test_skips_veo_and_exits_zero_when_skip_existing_and_loop_mp4_exists(self, tmp_path, monkeypatch):
         # Given: 既存 loop.mp4 + --skip-existing
         from youtube_automation.scripts import generate_loop_video as mod
 
@@ -429,9 +427,7 @@ class TestMainSkipExisting:
             assert not (col / ASSETS_DIR / LOOP_V1).exists()
             assert excinfo.value.code == 0
 
-    def test_runs_normal_path_when_skip_existing_set_but_loop_mp4_absent(
-        self, tmp_path, monkeypatch
-    ):
+    def test_runs_normal_path_when_skip_existing_set_but_loop_mp4_absent(self, tmp_path, monkeypatch):
         # Given: --skip-existing 指定だが loop.mp4 不在 → 通常 Veo 経路へフォールスルー
         from youtube_automation.scripts import generate_loop_video as mod
 
@@ -560,11 +556,7 @@ class TestMainSmooth:
             assert output_arg == loop
 
             # crossfade 値は 0.8（positional 2nd or kwargs["crossfade"]）
-            crossfade_value = (
-                positional[1]
-                if len(positional) >= 2
-                else kwargs.get("crossfade")
-            )
+            crossfade_value = positional[1] if len(positional) >= 2 else kwargs.get("crossfade")
             assert crossfade_value == 0.8
 
     def test_exits_with_code_1_when_loop_mp4_is_absent(self, tmp_path, monkeypatch):
