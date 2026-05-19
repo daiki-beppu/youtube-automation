@@ -263,11 +263,11 @@ def _build_analytics(merged: dict) -> Analytics:
 
 
 def _build_playlists(merged: dict) -> Playlists:
-    # #275: string-shape entry (`{"main": "PL..."}`) を dict shape に正規化する。
-    # 消費側 (`PlaylistManager` / `PlaylistStatusViewer`) が `pl.get(...)` を一律
-    # 呼べるよう、loader 1 箇所で contract を確定させる。dict entry は shallow copy
-    # して入力 dict との参照を切り離す（consumer mutation 漏れ防止）。
-    raw = merged.get("playlists") or {}
+    raw = merged.get("playlists")
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"playlists セクションは object でなければなりません（got {type(raw).__name__}）")
     items: dict[str, dict] = {}
     for key, value in raw.items():
         if isinstance(value, str):
@@ -275,7 +275,7 @@ def _build_playlists(merged: dict) -> Playlists:
         elif isinstance(value, dict):
             items[key] = dict(value)
         else:
-            items[key] = value
+            raise ConfigError(f"playlists.{key} は string または object でなければなりません")
     return Playlists(items=items)
 
 

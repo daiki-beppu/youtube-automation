@@ -57,16 +57,10 @@ class PlaylistStatusViewer:
         print(f"\n{self.config.meta.channel_name} - Playlists")
         print("=" * 50)
 
-        # playlists が dict 形式と list 形式の両方に対応
-        if isinstance(playlists_config, list):
-            items = enumerate(playlists_config)
-        else:
-            items = playlists_config.items()
-
-        for key, pl in items:
-            playlist_id = pl.get("playlist_id") or pl.get("id")
+        for key, pl in playlists_config.items():
+            playlist_id = pl.get("playlist_id")
             status = playlist_id or "(未作成)"
-            title = pl.get("title") or pl.get("name", f"Playlist {key}")
+            title = pl.get("title") or f"Playlist {key}"
             print(f"\n  [{key}] {title}")
             print(f"    ID: {status}")
 
