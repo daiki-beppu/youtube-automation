@@ -144,10 +144,7 @@ def get_collection_ideate_thumbnail_mode() -> str:
     if preview is None:
         preview = {}
     if not isinstance(preview, dict):
-        raise ConfigError(
-            "collection-ideate.preview は mapping である必要があります: "
-            f"{preview!r}"
-        )
+        raise ConfigError(f"collection-ideate.preview は mapping である必要があります: {preview!r}")
     mode = preview.get("thumbnail_mode", THUMBNAIL_MODE_SEQUENTIAL)
     if mode not in _VALID_THUMBNAIL_MODES:
         raise ConfigError(
