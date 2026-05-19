@@ -1,20 +1,75 @@
 #!/usr/bin/env python3
-"""Generate suno-prompts.md from config/skills/suno.yaml + suno-patterns.yaml."""
+"""Generate suno-prompts.md from config/skills/suno.yaml + suno-patterns.yaml.
+
+`config/skills/suno.yaml` の `genre_line` / `exclude_styles` が空のときは
+`data/video_analysis/<slug>/*.json` の `suno_preset` を集約した推奨値で
+代替する (issue #360)。
+"""
 
 import argparse
+import json
+from collections import Counter
 from pathlib import Path
 
 import yaml
 
-from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
+from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
+
+
+def _split_csv(value: str) -> list[str]:
+    return [p.strip() for p in str(value).split(",") if p.strip()]
+
+
+def _collect_video_analysis_presets() -> tuple[str, str]:
+    """全 slug の video_analysis JSON から (genre_line, exclude_styles) を集約。
+
+    集約方針:
+    - genre_line: 各 JSON のカンマ区切り句を分解 → 出現回数降順で上位 8 句を ", " 結合
+    - exclude_styles: 全 JSON の和集合 (重複排除、出現順保持)
+    どちらも空のときは ("", "") を返す。
+    """
+    try:
+        base = channel_dir() / "data" / VIDEO_ANALYSIS_DIRNAME
+    except Exception:
+        return "", ""
+    if not base.exists():
+        return "", ""
+
+    genre_counter: Counter[str] = Counter()
+    exclude_seen: list[str] = []
+    exclude_set: set[str] = set()
+
+    for slug_dir in sorted(base.iterdir()):
+        if not slug_dir.is_dir():
+            continue
+        for f in sorted(slug_dir.glob("*.json")):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            preset = data.get("suno_preset")
+            if not isinstance(preset, dict):
+                continue
+            for phrase in _split_csv(preset.get("genre_line", "")):
+                genre_counter[phrase] += 1
+            for phrase in _split_csv(preset.get("exclude_styles", "")):
+                if phrase not in exclude_set:
+                    exclude_set.add(phrase)
+                    exclude_seen.append(phrase)
+
+    top_genre = ", ".join(p for p, _ in genre_counter.most_common(8))
+    return top_genre, ", ".join(exclude_seen)
 
 
 def generate(patterns_path: Path) -> str:
     suno = load_skill_config("suno")
+    fb_genre, fb_exclude = _collect_video_analysis_presets()
 
-    genre_line = suno.get("genre_line", "")
+    genre_line = suno.get("genre_line", "") or fb_genre
     mood_descriptors = suno.get("mood_descriptors", "")
-    exclude_styles = suno.get("exclude_styles", "")
+    exclude_styles = suno.get("exclude_styles", "") or fb_exclude
     style_variants = suno.get("style_variants", {})
     style_influence = suno.get("style_influence", 50)
 

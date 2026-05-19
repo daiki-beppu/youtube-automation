@@ -1,10 +1,13 @@
 """generate_suno_prompts CLI / generate() の挙動テスト.
 
 issue #128 で `duration_prompt` を完全削除したため、その回帰防止テストを含む。
+issue #360 で `data/video_analysis/<slug>/*.json` の `suno_preset` を fallback として
+参照するようになったため、その動作テストも含む。
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -56,6 +59,31 @@ def _write_minimal_patterns(dir_: Path) -> Path:
 def _write_suno_override(channel: Path, **overrides) -> None:
     """channel 側の config/skills/suno.yaml を生成する."""
     (channel / "config" / "skills" / "suno.yaml").write_text(yaml.safe_dump(overrides), encoding="utf-8")
+
+
+def _write_video_analysis(
+    channel: Path,
+    *,
+    slug: str,
+    video_id: str,
+    suno_preset: dict | None,
+) -> Path:
+    """`data/video_analysis/<slug>/<video_id>.json` を書き出す.
+
+    `suno_preset=None` のときは preset キー自体を含めず欠落耐性を検証できる。
+    """
+    out_dir = channel / "data" / "video_analysis" / slug
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload: dict = {
+        "video_id": video_id,
+        "slug": slug,
+        "bgm_arc": {"intro": "0:00-0:15", "peak": "1:30", "outro": "4:00-end"},
+    }
+    if suno_preset is not None:
+        payload["suno_preset"] = suno_preset
+    out_path = out_dir / f"{video_id}.json"
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out_path
 
 
 def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
@@ -241,3 +269,152 @@ def test_skill_md_warns_about_genre_line_exclude_styles_conflict():
             f"`{heading}` 節に `{term}` への言及がない。"
             "矛盾防止ガイドは genre_line / exclude_styles 双方を扱う必要がある。"
         )
+
+
+# ---------------------------------------------------------------------------
+# issue #360: video_analysis の suno_preset を fallback として参照する動作
+# ---------------------------------------------------------------------------
+
+
+def test_fallback_uses_video_analysis_genre_line_when_config_empty(channel_dir, tmp_path):
+    """`config/skills/suno.yaml` 空欄時、video_analysis JSON の genre_line を採用."""
+    _write_suno_override(channel_dir)  # 空 override
+    _write_video_analysis(
+        channel_dir,
+        slug="ref-channel",
+        video_id="vid001",
+        suno_preset={
+            "genre_line": "lo-fi jazz, soft piano, warm rhodes",
+            "exclude_styles": "",
+            "rationale": "",
+        },
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    output = generate(patterns_path)
+
+    assert "lo-fi jazz" in output
+    assert "soft piano" in output
+    assert "warm rhodes" in output
+
+
+def test_fallback_uses_video_analysis_exclude_styles_when_config_empty(channel_dir, tmp_path):
+    """`config/skills/suno.yaml` 空欄時、video_analysis JSON の exclude_styles を採用."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")  # exclude_styles だけ空
+    _write_video_analysis(
+        channel_dir,
+        slug="ref-channel",
+        video_id="vid001",
+        suno_preset={
+            "genre_line": "ignored",
+            "exclude_styles": "heavy metal, EDM, dubstep",
+            "rationale": "",
+        },
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    output = generate(patterns_path)
+
+    assert "**Exclude Styles:**" in output
+    assert "heavy metal" in output
+    assert "EDM" in output
+    assert "dubstep" in output
+
+
+def test_user_override_wins_over_video_analysis_fallback(channel_dir, tmp_path):
+    """`config/skills/suno.yaml` に override があれば video_analysis 側は無視."""
+    _write_suno_override(channel_dir, genre_line="ambient piano")
+    _write_video_analysis(
+        channel_dir,
+        slug="ref-channel",
+        video_id="vid001",
+        suno_preset={
+            "genre_line": "lo-fi jazz, soft piano",
+            "exclude_styles": "heavy metal",
+            "rationale": "",
+        },
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    output = generate(patterns_path)
+
+    assert "ambient piano" in output
+    # fallback 側の特徴語が漏れていないこと
+    assert "lo-fi jazz" not in output
+    assert "soft piano" not in output
+
+
+def test_missing_suno_preset_falls_back_silently(channel_dir, tmp_path):
+    """JSON に `suno_preset` キーが欠落していても例外を投げず default 動作."""
+    _write_suno_override(channel_dir)  # 全て空
+    # suno_preset なしの旧形式 JSON
+    _write_video_analysis(
+        channel_dir,
+        slug="ref-channel",
+        video_id="vid001",
+        suno_preset=None,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    # 例外を投げずに生成完了すること
+    output = generate(patterns_path)
+
+    # genre_line が空のままなので Styles 行に何も追加されない
+    assert "lo-fi jazz" not in output
+
+
+def test_aggregates_multiple_video_analysis_jsons(channel_dir, tmp_path):
+    """2 slug × 複数 JSON で genre_line 多数決・exclude_styles 和集合が機能する."""
+    _write_suno_override(channel_dir)  # 空 override で fallback 強制
+
+    # slug A: 2 件、共通 "lo-fi jazz" / 各自固有句あり
+    _write_video_analysis(
+        channel_dir,
+        slug="ref-a",
+        video_id="a1",
+        suno_preset={
+            "genre_line": "lo-fi jazz, soft piano",
+            "exclude_styles": "heavy metal",
+            "rationale": "",
+        },
+    )
+    _write_video_analysis(
+        channel_dir,
+        slug="ref-a",
+        video_id="a2",
+        suno_preset={
+            "genre_line": "lo-fi jazz, warm rhodes",
+            "exclude_styles": "EDM",
+            "rationale": "",
+        },
+    )
+    # slug B: 1 件、新規句と既出除外語
+    _write_video_analysis(
+        channel_dir,
+        slug="ref-b",
+        video_id="b1",
+        suno_preset={
+            "genre_line": "lo-fi jazz, mellow drums",
+            "exclude_styles": "heavy metal, dubstep",
+            "rationale": "",
+        },
+    )
+
+    patterns_path = _write_minimal_patterns(tmp_path)
+    output = generate(patterns_path)
+
+    # genre_line: "lo-fi jazz" が 3 票で先頭、他の句も上位 8 句に含まれる
+    assert "lo-fi jazz" in output
+    assert "soft piano" in output
+    assert "warm rhodes" in output
+    assert "mellow drums" in output
+
+    # exclude_styles: 和集合で重複排除されつつ全種が現れる
+    assert "heavy metal" in output
+    assert "EDM" in output
+    assert "dubstep" in output
+
+    # genre_line の出現順は多数決優先 — "lo-fi jazz" が他の単発句より先
+    lo_fi_idx = output.find("lo-fi jazz")
+    soft_piano_idx = output.find("soft piano")
+    assert lo_fi_idx < soft_piano_idx
