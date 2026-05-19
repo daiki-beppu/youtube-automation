@@ -12,6 +12,10 @@ MAX_THUMBNAIL_BYTES = 2_097_152
 COMPRESSION_QUALITIES = (2, 5)
 MAX_RETRY_ATTEMPTS = 5
 RETRYABLE_HTTP_STATUSES = frozenset({500, 502, 503, 504})
+# resumable upload の session URI が失効済みとみなすべき HTTP ステータス。
+# 404 / 410 は googleapiclient が dead resumable session を通知する典型形態で、
+# `RETRYABLE_HTTP_STATUSES` とは交わらない独立分岐（retry せず URI をクリアする）。
+SESSION_EXPIRED_HTTP_STATUSES = frozenset({404, 410})
 
 
 @dataclass(frozen=True)

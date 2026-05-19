@@ -8,6 +8,8 @@ import pytest
 from youtube_automation.utils.upload_policy import (
     MAX_RETRY_ATTEMPTS,
     MAX_THUMBNAIL_BYTES,
+    RETRYABLE_HTTP_STATUSES,
+    SESSION_EXPIRED_HTTP_STATUSES,
     RetryDecision,
     ThumbnailCompression,
 )
@@ -83,3 +85,37 @@ class TestRetryDecision:
     def test_applies_exponential_backoff(self, attempt, expected_delay):
         decision = RetryDecision.for_http_error(503, current_attempt=attempt)
         assert decision.delay_seconds == expected_delay
+
+
+# ---------------------------------------------------------------------------
+# SESSION_EXPIRED_HTTP_STATUSES: resumable upload セッション失効ステータス集合
+# ---------------------------------------------------------------------------
+
+
+class TestSessionExpiredHttpStatuses:
+    """resumable upload の session URI 失効と判定すべき HTTP ステータス集合."""
+
+    def test_should_include_410_gone_in_expired_set(self):
+        # Given: 定数 SESSION_EXPIRED_HTTP_STATUSES
+        # When: 410 を集合に問い合わせる
+        # Then: 410 (Gone) が含まれる — googleapiclient が dead resumable session を通知する典型
+        assert 410 in SESSION_EXPIRED_HTTP_STATUSES
+
+    def test_should_include_404_not_found_in_expired_set(self):
+        # Given: 定数 SESSION_EXPIRED_HTTP_STATUSES
+        # When: 404 を集合に問い合わせる
+        # Then: 404 (Not Found) が含まれる — 期限切れ resumable session のもう 1 形態
+        assert 404 in SESSION_EXPIRED_HTTP_STATUSES
+
+    def test_should_not_overlap_retryable_statuses(self):
+        # Given: SESSION_EXPIRED と RETRYABLE の 2 集合
+        # When: 共通要素を取得
+        overlap = SESSION_EXPIRED_HTTP_STATUSES & RETRYABLE_HTTP_STATUSES
+
+        # Then: 共通集合は空 — 失効ステータスは「再試行 → セッションクリア」の独立分岐
+        assert overlap == frozenset()
+
+    def test_should_be_frozenset_for_immutability(self):
+        # Given/When: 定数の型を取得
+        # Then: frozenset であり実行時に追加・削除が不可
+        assert isinstance(SESSION_EXPIRED_HTTP_STATUSES, frozenset)

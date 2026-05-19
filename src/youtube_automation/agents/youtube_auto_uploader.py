@@ -17,7 +17,9 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
+
+from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,6 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             collections_root = channel_dir() / "collections"
 
         self.collections_root = Path(collections_root)
-        self.upload_results = []
 
     @property
     def youtube_service(self):
@@ -68,7 +69,16 @@ class YouTubeAutoUploader(YouTubeUploadCore):
     def youtube_service(self, value):
         self.youtube = value
 
-    def upload_video(self, video_path: str, metadata: Dict, thumbnail_path: str = None) -> Optional[str]:
+    def upload_video(
+        self,
+        video_path: str,
+        metadata: Dict,
+        thumbnail_path: str = None,
+        *,
+        resume_session_uri: Optional[str] = None,
+        on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,
+        on_upload_complete: Optional[Callable[[], None]] = None,
+    ) -> Optional[str]:
         """
         メタデータ辞書から YouTube API ボディを構築してアップロード
 
@@ -76,6 +86,9 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             video_path (str): 動画ファイルパス
             metadata (Dict): メタデータ（title, description, tags, privacy_status 等）
             thumbnail_path (str): サムネイルファイルパス
+            resume_session_uri: 前回中断時の resumable upload session URI
+            on_session_uri_changed: session URI 変化通知コールバック
+            on_upload_complete: アップロード成功通知コールバック
 
         Returns:
             str: アップロードされた動画のID（失敗時はNone）
@@ -113,7 +126,46 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         if metadata.get("localizations"):
             body["localizations"] = metadata["localizations"]
 
-        return super().upload_video(video_path, body, thumbnail_path)
+        return super().upload_video(
+            video_path,
+            body,
+            thumbnail_path,
+            resume_session_uri=resume_session_uri,
+            on_session_uri_changed=on_session_uri_changed,
+            on_upload_complete=on_upload_complete,
+        )
+
+    def _find_existing_video_by_title(self, title: str) -> Optional[Dict[str, str]]:
+        """own channel 内に同タイトル（完全一致）の動画があれば video_id / video_url を返す。
+
+        publish 直前の dedup 安全網。session URI 持ち越し（一次対策）が破れた場合の
+        二次防衛線として、`videos().insert()` を呼ぶ前に既存動画の有無を確認する。
+
+        Args:
+            title: 完全一致で検索するタイトル文字列
+
+        Returns:
+            hit: `{"video_id": ..., "video_url": ...}` / miss: None / 検索エラー: None（fail-open）
+        """
+        self._ensure_service()
+        try:
+            resp = (
+                self.youtube.search()
+                .list(forMine=True, type="video", q=title, maxResults=10, part="snippet")
+                .execute()
+            )
+            for item in resp.get("items", []):
+                if item["snippet"]["title"] == title:  # 完全一致のみ採用
+                    vid = item["id"]["videoId"]
+                    return {
+                        "video_id": vid,
+                        "video_url": f"https://www.youtube.com/watch?v={vid}",
+                    }
+            return None
+        except HttpError as e:
+            # fail-open: 安全網のエラーは upload を block しない（一次対策は session URI 持ち越し）
+            logger.warning(f"⚠️  既存動画検索失敗（upload 続行）: {e}")
+            return None
 
     def _load_descriptions_md(self, collection_dir: Path) -> dict | None:
         """descriptions.md から事前生成メタデータを読み込み
@@ -262,13 +314,24 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
         logger.info(f"✅ preflight OK — title={len(title)}c, chapters={len(ts_lines)}, langs={len(scene_phrases)}")
 
-    def upload_collection(self, collection_path: str, publish_at: str = None) -> Dict:
+    def upload_collection(
+        self,
+        collection_path: str,
+        publish_at: str = None,
+        *,
+        resume_session_uri: Optional[str] = None,
+        on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,
+        on_upload_complete: Optional[Callable[[], None]] = None,
+    ) -> Dict:
         """
         Complete Collection のアップロード
 
         Args:
             collection_path (str): コレクションディレクトリパス
             publish_at (str): スケジュール公開日時（ISO 8601）
+            resume_session_uri: 前回中断時の resumable upload session URI
+            on_session_uri_changed: session URI 変化通知コールバック
+            on_upload_complete: アップロード成功通知コールバック
 
         Returns:
             Dict: アップロード結果
@@ -295,7 +358,14 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         }
 
         # Complete Collection アップロード
-        complete_result = self._upload_complete_collection(collection_dir, metadata_gen, publish_at=publish_at)
+        complete_result = self._upload_complete_collection(
+            collection_dir,
+            metadata_gen,
+            publish_at=publish_at,
+            resume_session_uri=resume_session_uri,
+            on_session_uri_changed=on_session_uri_changed,
+            on_upload_complete=on_upload_complete,
+        )
         results["complete_video"] = complete_result
 
         results["end_time"] = datetime.now()
@@ -307,7 +377,14 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         return results
 
     def _upload_complete_collection(
-        self, collection_dir: Path, metadata_gen: BAHMetadataGenerator, publish_at: str = None
+        self,
+        collection_dir: Path,
+        metadata_gen: BAHMetadataGenerator,
+        publish_at: str = None,
+        *,
+        resume_session_uri: Optional[str] = None,
+        on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,
+        on_upload_complete: Optional[Callable[[], None]] = None,
     ) -> Optional[Dict]:
         """Complete Collection 動画アップロード"""
         logger.info("📹 Complete Collection アップロード準備中...")
@@ -355,8 +432,28 @@ class YouTubeAutoUploader(YouTubeUploadCore):
                 thumbnail_path = str(candidate)
                 break
 
+        # publish 直前の dedup 安全網: 同タイトル動画が own channel に既に存在すれば
+        # `videos().insert()` を呼ばず既存 video_id を採用する
+        existing = self._find_existing_video_by_title(metadata["title"])
+        if existing:
+            logger.info(f"⚠️  既存動画を検出（upload skip）: {existing['video_url']}")
+            return {
+                "video_id": existing["video_id"],
+                "video_url": existing["video_url"],
+                "title": metadata["title"],
+                "file_path": str(master_video),
+                "thumbnail_path": thumbnail_path,
+            }
+
         # アップロード実行
-        video_id = self.upload_video(str(master_video), metadata, thumbnail_path)
+        video_id = self.upload_video(
+            str(master_video),
+            metadata,
+            thumbnail_path,
+            resume_session_uri=resume_session_uri,
+            on_session_uri_changed=on_session_uri_changed,
+            on_upload_complete=on_upload_complete,
+        )
 
         if video_id:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
