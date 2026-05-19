@@ -220,10 +220,7 @@ def main():
             print("[ERROR] --reference-index 指定には参照画像が必要です（--reference で指定してください）")
             sys.exit(1)
         if not (0 <= args.reference_index < len(reference_images)):
-            print(
-                f"[ERROR] --reference-index={args.reference_index} は参照画像範囲外 "
-                f"(0..{len(reference_images) - 1})"
-            )
+            print(f"[ERROR] --reference-index={args.reference_index} は参照画像範囲外 (0..{len(reference_images) - 1})")
             sys.exit(1)
         reference_images = [reference_images[args.reference_index]]
         cli_max_attempts = 1
