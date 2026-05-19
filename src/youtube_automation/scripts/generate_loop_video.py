@@ -33,6 +33,7 @@ from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
 from youtube_automation.utils.veo_generator import (  # noqa: E402
     DEFAULT_MODEL,
     DEFAULT_PROMPT,
+    build_structured_prompt,
     generate_loop_video,
     smooth_loop,
 )
@@ -46,6 +47,52 @@ def load_config() -> dict:
         return load_skill_config("loop-video").get("veo", {})
     except Exception:
         return {}
+
+
+def _parse_csv(value: str | None) -> list[str]:
+    """カンマ区切り文字列を strip+filter した list にする。"""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def resolve_prompt(args, veo_config: dict) -> str:
+    """CLI 引数と skill-config から最終プロンプトを決定する。
+
+    優先順位:
+      1. --prompt（全文上書き、最強）
+      2. CLI --motion-targets / --static-targets で structured 構築
+      3. skill-config の motion_targets / static_targets で structured 構築
+      4. skill-config の default_prompt
+      5. ハードコード DEFAULT_PROMPT
+    """
+    if args.prompt:
+        if args.motion_targets or args.static_targets:
+            print("  [Warn]   --prompt が指定されたため --motion-targets / --static-targets は無視されます")
+        return args.prompt
+
+    template = veo_config.get("prompt_template", "")
+    base_rules = veo_config.get("base_rules", "")
+
+    cli_motion = _parse_csv(args.motion_targets)
+    cli_static = _parse_csv(args.static_targets)
+    if (cli_motion or cli_static) and not template:
+        print("  [Warn]   prompt_template が skill-config に無いため structured 構築をスキップ")
+    elif cli_motion or cli_static:
+        try:
+            return build_structured_prompt(cli_motion, cli_static, template, base_rules)
+        except ValueError as e:
+            print(f"  [Warn]   CLI structured prompt 構築失敗 ({e}) → default_prompt にフォールバック")
+
+    cfg_motion = list(veo_config.get("motion_targets") or [])
+    cfg_static = list(veo_config.get("static_targets") or [])
+    if (cfg_motion or cfg_static) and template:
+        try:
+            return build_structured_prompt(cfg_motion, cfg_static, template, base_rules)
+        except ValueError:
+            pass
+
+    return veo_config.get("default_prompt") or DEFAULT_PROMPT
 
 
 def resolve_collection_paths(collection_path: Path) -> tuple[Path, Path]:
@@ -78,7 +125,26 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("collection", nargs="?", help="コレクションパス")
-    parser.add_argument("--prompt", help="動画生成プロンプト")
+    parser.add_argument(
+        "--prompt",
+        help="動画生成プロンプト（全文上書き、最強）。指定時は --motion-targets / --static-targets は無視される",
+    )
+    parser.add_argument(
+        "--motion-targets",
+        dest="motion_targets",
+        help=(
+            "動かす対象（カンマ区切り）。skill-config の prompt_template に展開される。"
+            " 例: 'slow leaves swaying,subtle steam rising from coffee'"
+        ),
+    )
+    parser.add_argument(
+        "--static-targets",
+        dest="static_targets",
+        help=(
+            "固定対象（カンマ区切り）。数や形を保持したい要素はカウントを書く。"
+            " 例: 'the character,two animals (count remains 2),bird bath'"
+        ),
+    )
     parser.add_argument(
         "--model",
         help=(
@@ -103,7 +169,7 @@ def main():
     # 設定読み込み
     veo_config = load_config()
     model = args.model or veo_config.get("model", DEFAULT_MODEL)
-    prompt = args.prompt or veo_config.get("default_prompt", DEFAULT_PROMPT)
+    prompt = resolve_prompt(args, veo_config)
 
     # パス解決
     if args.collection:
