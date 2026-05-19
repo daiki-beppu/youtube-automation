@@ -16,7 +16,7 @@
 │     │  └─ No → ルート A (bootstrap.sh、--create 付き)
 ```
 
-- **ルート A** (`scripts/gcp-bootstrap.sh`): 最速。gcloud を順次叩くだけの冪等シェル。
+- **ルート A** (`.claude/skills/channel-setup/references/gcp-bootstrap.sh`): 最速。gcloud を順次叩くだけの冪等シェル。
 - **ルート B** (`infra/terraform/gcp/`): 宣言的 IaC。複数環境・多人数運用向け。
 
 ## 実行コマンド
@@ -38,7 +38,7 @@ bash "$SKILL_REF/gcp-bootstrap.sh" \
 bash "$SKILL_REF/gcp-bootstrap.sh" <PROJECT_ID>
 ```
 
-automation リポジトリ側で開発中なら `scripts/gcp-bootstrap.sh` を直接叩いてもよい（中身は同じ）。冪等なので何度再実行しても安全。ドライランは `--dry-run`。
+冪等なので何度再実行しても安全。ドライランは `--dry-run`。
 
 ### ルート B: terraform
 

@@ -60,7 +60,7 @@ $ uv run yt-populate-scene-phrases 20260322-rjn-city-collection --dry-run
 | `<collection-dir-name>` が存在しない | 1 | コレクション名を確認 |
 | `theme_scenes[<theme>]` 未定義 + `--en` 未指定 | 1 | `--en` で明示指定、または `content.json::title.theme_scenes` に該当 theme を追加 |
 | Gemini レスポンス JSON 不正 / 言語欠落 | 1 | `--dry-run` で生レスポンスを確認、必要なら `--model` でモデル変更 |
-| ADC 未初期化 (project_id を解決できない) | 1 | `scripts/gcp-bootstrap.sh` または `gcloud auth application-default login` + `set-quota-project` を実行。明示したい場合は `GOOGLE_CLOUD_PROJECT` を `.env` に書く |
+| ADC 未初期化 (project_id を解決できない) | 1 | `.claude/skills/channel-setup/references/gcp-bootstrap.sh` または `gcloud auth application-default login` + `set-quota-project` を実行。明示したい場合は `GOOGLE_CLOUD_PROJECT` を `.env` に書く |
 
 ## 関連
 

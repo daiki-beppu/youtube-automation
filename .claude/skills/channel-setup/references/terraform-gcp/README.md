@@ -2,7 +2,7 @@
 
 新チャンネル用の GCP プロジェクト + 必要 API + IAM を Terraform で IaC 管理するモジュール。
 
-`scripts/gcp-bootstrap.sh` が gcloud ベースの半自動化ルートなら、こちらは **本命の宣言的セットアップ**。プロジェクトの構成を tfstate として管理したい場合はこちらを使う。
+`.claude/skills/channel-setup/references/gcp-bootstrap.sh` が gcloud ベースの半自動化ルートなら、こちらは **本命の宣言的セットアップ**。プロジェクトの構成を tfstate として管理したい場合はこちらを使う。
 
 ## 管理するリソース
 
@@ -36,10 +36,10 @@ terraform plan
 terraform apply
 
 # 3. outputs から .env を更新 (ラッパー推奨)
-bash ../../../scripts/gcp-terraform-apply.sh --tf-dir . --env-file ../../../.env
+bash ../../../.claude/skills/channel-setup/references/gcp-terraform-apply.sh --tf-dir . --env-file ../../../.env
 ```
 
-`scripts/gcp-terraform-apply.sh` は `terraform apply` → `terraform output -json env_vars` → `.env` へマージまで一気通貫で実行する。
+`.claude/skills/channel-setup/references/gcp-terraform-apply.sh` は `terraform apply` → `terraform output -json env_vars` → `.env` へマージまで一気通貫で実行する。
 
 ## 既存プロジェクトを流用する場合
 
