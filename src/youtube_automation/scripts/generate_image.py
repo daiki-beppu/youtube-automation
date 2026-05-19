@@ -31,6 +31,9 @@ from youtube_automation.utils.image_provider.composition import (
     resolve_composition_source,
     resolve_cost_per_image,
     resolve_reference_paths,
+    resolve_unique_path,
+    select_reference,
+    validate_single_step_references,
 )
 from youtube_automation.utils.image_provider.config import replace_model
 from youtube_automation.utils.profile import section
@@ -78,6 +81,27 @@ def main():
     )
     parser.add_argument("--no-composition", action="store_true", help="composition_prefix の自動付加をスキップ")
     parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=None,
+        help=(
+            "single_step モードかつ複数参照画像のときの試行回数。"
+            "各 attempt で参照画像をローテーションし、2 回目以降の出力は -vN で別保存。"
+            "未指定時は skill-config の image_generation.gemini.single_step.max_attempts を使う"
+        ),
+    )
+    parser.add_argument(
+        "--no-rotate",
+        action="store_true",
+        help="複数参照画像のとき attempt 毎の切替を無効化（先頭固定）",
+    )
+    parser.add_argument(
+        "--reference-index",
+        type=int,
+        default=None,
+        help="複数参照画像のうち特定のインデックスのみ使用（attempt ループ無効）",
+    )
+    parser.add_argument(
         "--costs",
         action="store_true",
         help="data/image_costs.json から累積コストサマリを表示して終了",
@@ -109,6 +133,21 @@ def main():
     skill_cfg = load_skill_config("thumbnail")
     composition_source = resolve_composition_source(skill_cfg, cfg.provider)
 
+    # single_step モードのプリフライト: 参照画像未設定の取り違えを早期検知
+    gemini_section = skill_cfg.get("image_generation", {}).get("gemini", {})
+    generation_mode = gemini_section.get("generation_mode") if isinstance(gemini_section, dict) else None
+    if generation_mode == "single_step" and not args.reference:
+        try:
+            validate_single_step_references(skill_cfg)
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+        print(
+            "[ERROR] single_step モードでは --reference の指定が必須です。"
+            "skill-config の image_generation.gemini.reference_images.default を CLI へ展開してください。"
+        )
+        sys.exit(1)
+
     if args.no_composition or args.reference:
         prompt = args.prompt
     else:
@@ -131,6 +170,17 @@ def main():
     # コスト算出: skill-config の cost_per_image_usd を尊重。未設定なら None。
     cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider)
 
+    # max_attempts / rotate / reference_index の解決（コスト表示前に出すため早期解決）
+    single_step_section = gemini_section.get("single_step") if isinstance(gemini_section, dict) else None
+    if not isinstance(single_step_section, dict):
+        single_step_section = {}
+    config_max_attempts = int(single_step_section.get("max_attempts", 1) or 1)
+    config_rotate = bool(single_step_section.get("rotate", True))
+    cli_max_attempts = args.max_attempts if args.max_attempts is not None else config_max_attempts
+    if cli_max_attempts < 1:
+        cli_max_attempts = 1
+    rotate = (not args.no_rotate) and config_rotate
+
     print("\nモード:       ダイレクト")
     print(f"プロバイダー: {cfg.provider}")
     print(f"プロンプト:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
@@ -138,6 +188,9 @@ def main():
     print(f"解像度:       {image_size}")
     if args.reference:
         print(f"参照画像:     {', '.join(args.reference)}")
+    if cli_max_attempts > 1:
+        rotate_label = " (rotate=ON)" if rotate else " (rotate=OFF)"
+        print(f"試行回数:     {cli_max_attempts} attempts{rotate_label}")
 
     # 既存ファイル確認（上書き or -vN 自動採番）
     resolved_path = prompt_overwrite_or_rename(output_path, yes=args.yes)
@@ -161,46 +214,83 @@ def main():
         print(f"[ERROR] {e}")
         sys.exit(1)
 
-    request = ImageGenerationRequest(
-        prompt=prompt,
-        output_path=output_path,
-        aspect_ratio=args.aspect_ratio,
-        image_size=image_size,
-        references=reference_images,
-    )
+    # --reference-index 指定時は単一参照固定 + attempt=1
+    if args.reference_index is not None:
+        if not reference_images:
+            print("[ERROR] --reference-index 指定には参照画像が必要です（--reference で指定してください）")
+            sys.exit(1)
+        if not (0 <= args.reference_index < len(reference_images)):
+            print(f"[ERROR] --reference-index={args.reference_index} は参照画像範囲外 (0..{len(reference_images) - 1})")
+            sys.exit(1)
+        reference_images = [reference_images[args.reference_index]]
+        cli_max_attempts = 1
 
-    start_time = time.monotonic()
-    try:
-        with section(
-            "image_provider.generate",
-            provider=provider.__class__.__name__,
+    saved_paths: list[Path] = []
+    success_flags: list[bool] = []
+    total_start = time.monotonic()
+    current_output_path = output_path
+
+    for attempt in range(cli_max_attempts):
+        if reference_images:
+            selected_ref = select_reference(reference_images, attempt, rotate)
+            request_refs: list[Path] = [selected_ref]
+        else:
+            selected_ref = None
+            request_refs = []
+
+        if attempt > 0:
+            current_output_path = resolve_unique_path(current_output_path)
+            print()
+            print(f"--- attempt {attempt + 1}/{cli_max_attempts} ---")
+            print(f"出力先:       {current_output_path}")
+            if selected_ref is not None:
+                print(f"参照画像:     {selected_ref.name}")
+
+        request = ImageGenerationRequest(
+            prompt=prompt,
+            output_path=current_output_path,
             aspect_ratio=args.aspect_ratio,
-        ):
-            result = provider.generate(request)
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-    elapsed = time.monotonic() - start_time
+            image_size=image_size,
+            references=request_refs,
+        )
+
+        try:
+            with section(
+                "image_provider.generate",
+                provider=provider.__class__.__name__,
+                aspect_ratio=args.aspect_ratio,
+            ):
+                result = provider.generate(request)
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+
+        if result.success:
+            saved_paths.append(result.saved_path or current_output_path)
+        success_flags.append(result.success)
+
+    elapsed = time.monotonic() - total_start
 
     print()
     print("===========================================")
-    if result.success:
-        print("  画像生成: 完了")
-        saved = result.saved_path or output_path
-        try:
-            print(f"  ファイル: {saved.relative_to(_channel_root())}")
-        except ValueError:
-            print(f"  ファイル: {saved}")
+    if any(success_flags):
+        succeeded = sum(success_flags)
+        print(f"  画像生成: 完了 ({succeeded}/{cli_max_attempts} 成功)")
+        for path in saved_paths:
+            try:
+                print(f"  ファイル: {path.relative_to(_channel_root())}")
+            except ValueError:
+                print(f"  ファイル: {path}")
         cost_label = f"${cost_per_image:.3f}" if cost_per_image is not None else "不明"
-        print(f"  コスト:   {cost_label}")
+        print(f"  単価:     {cost_label} × {cli_max_attempts}")
         print(f"  時間:     {elapsed:.1f}秒")
     else:
-        print("  画像生成: 失敗")
-        print("  プロンプトを調整して再試行してください。")
+        print(f"  画像生成: 失敗 (0/{cli_max_attempts})")
+        print("  プロンプト・参照画像・config を調整して再試行してください。")
     print("===========================================")
     print()
 
-    sys.exit(0 if result.success else 1)
+    sys.exit(0 if any(success_flags) else 1)
 
 
 if __name__ == "__main__":
