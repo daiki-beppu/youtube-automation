@@ -2,19 +2,63 @@
 """Generate suno-prompts.md from config/skills/suno.yaml + suno-patterns.yaml."""
 
 import argparse
+import json
+from collections import Counter
 from pathlib import Path
 
 import yaml
 
-from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
+from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
+
+_TOP_GENRE_PHRASES = 8
+
+
+def _split_csv(value: str) -> list[str]:
+    return [p.strip() for p in str(value).split(",") if p.strip()]
+
+
+def _collect_video_analysis_presets() -> tuple[str, str]:
+    """全 slug の video_analysis JSON から `suno_preset` を集約して fallback 値を返す。"""
+    try:
+        base = channel_dir() / "data" / VIDEO_ANALYSIS_DIRNAME
+    except ConfigError:
+        return "", ""
+    if not base.exists():
+        return "", ""
+
+    genre_counter: Counter[str] = Counter()
+    exclude_seen: dict[str, None] = {}
+
+    for slug_dir in sorted(base.iterdir()):
+        if not slug_dir.is_dir():
+            continue
+        for f in sorted(slug_dir.glob("*.json")):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            preset = data.get("suno_preset")
+            if not isinstance(preset, dict):
+                continue
+            for phrase in _split_csv(preset.get("genre_line", "")):
+                genre_counter[phrase] += 1
+            for phrase in _split_csv(preset.get("exclude_styles", "")):
+                exclude_seen.setdefault(phrase, None)
+
+    top_genre = ", ".join(p for p, _ in genre_counter.most_common(_TOP_GENRE_PHRASES))
+    return top_genre, ", ".join(exclude_seen)
 
 
 def generate(patterns_path: Path) -> str:
     suno = load_skill_config("suno")
+    fb_genre, fb_exclude = _collect_video_analysis_presets()
 
-    genre_line = suno.get("genre_line", "")
+    genre_line = suno.get("genre_line", "") or fb_genre
     mood_descriptors = suno.get("mood_descriptors", "")
-    exclude_styles = suno.get("exclude_styles", "")
+    exclude_styles = suno.get("exclude_styles", "") or fb_exclude
     style_variants = suno.get("style_variants", {})
     style_influence = suno.get("style_influence", 50)
 

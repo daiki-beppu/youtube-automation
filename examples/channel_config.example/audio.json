@@ -1,6 +1,7 @@
 {
   "audio": {
     "target_duration_min": 60,
-    "target_duration_max": 75
+    "target_duration_max": 75,
+    "chapter_max": 100
   }
 }

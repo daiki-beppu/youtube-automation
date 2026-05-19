@@ -60,7 +60,7 @@ adc_email      = "you@example.com"
 |------|------|
 | `project_id` | 確定した project ID |
 | `location` | Vertex AI リージョン |
-| `env_vars` | `.env` 用 key/value map (`GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`) |
+| `env_vars` | `.env` 用 key/value map (`GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`)。`GOOGLE_CLOUD_PROJECT` は任意の override で、未設定なら ADC quota project から自動解決される |
 | `oauth_console_url` | OAuth クライアント ID 作成用 Console URL |
 | `enabled_apis` | 有効化した API 一覧 |
 

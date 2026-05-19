@@ -37,7 +37,7 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 | provider | 特徴 | 必要なシークレット |
 |---|---|---|
-| `gemini` | Gemini Image (Nano Banana 系) | `GOOGLE_CLOUD_PROJECT` ＋ ADC |
+| `gemini` | Gemini Image (Nano Banana 系) | ADC (`GOOGLE_CLOUD_PROJECT` は任意で上書き可) |
 | `openai` | OpenAI gpt-image 系（CJK 文字描画が綺麗、16:9/9:16 ネイティブ対応） | `OPENAI_API_KEY` |
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
@@ -71,10 +71,9 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 | モード | 説明 |
 |---|---|
-| `ttp_swap` | 競合サムネ + 自キャラアイコンの 2 参照でキャラ置換 |
-| `single_step` | テキスト付き参照画像から差分のみ指示、1 ステップで完成 |
+| `single_step`（**デフォルト**・TTP 推奨）| テキスト付き参照画像から差分のみ指示、1 ステップで完成。ベンチマーク模倣（TTP）の標準実装 |
 | `diff_from_reference` | 既存キャラ画像を参照に差分指示 |
-| `two_phase`（未指定時のフォールバック）| 従来の 2 フェーズ（背景 → テキストオーバーレイ）|
+| `two_phase` | 従来の 2 フェーズ（背景 → テキストオーバーレイ）|
 
 ### 参照画像モード（`reference_images` が定義されている場合）
 
@@ -145,66 +144,55 @@ illustration touches. Widescreen 16:9 aspect ratio.
 
 ## ワークフロー
 
-### TTP Swap モード（`generation_mode: "ttp_swap"`）
+### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）
 
-ベンチマーク競合の高再生サムネを **構図リファレンス**、自チャンネルのアイコンを **キャラリファレンス**
-として 2 枚同時に渡し、「キャラだけ差し替える」手法。
+ベンチマーク模倣（**TTP**: trace / imitate）の標準実装。テキスト付き参照画像（テキストレイアウト・背景テクスチャ・オブジェクト配置を含む）を参照にして、**変更点だけ**をプロンプトで指示する。背景生成とテキストオーバーレイが 1 回の生成で完了する。
 
-**前提**:
-- `data/thumbnail_compare/benchmark/<channel>-<video_id>.jpg` に競合サムネがキャッシュ済み
-  （未取得なら `uv run yt-thumbnail-compare --no-open` で取得）
-- `branding/icon.png` に自チャンネルキャラのアイコンが配置済み
+**重要**: 参照画像と同じ要素（レイアウト、固定オブジェクト、テキスト配置）はプロンプトに含めない。差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。コピーではなくバリエーションを作るのがゴール。
 
-**プロンプトは短く保つのが重要**（長文はノイズ）。3 段階テンプレ:
+#### プリフライト
 
-```
-# 1. キャラ置換（必須・これだけでも動く）
-Replace the character in the first image with the character from the second image.
+`generation_mode: "single_step"` で `--reference` を指定せずに `yt-generate-image` を起動するとエラー中断する。次の対処が必要:
 
-# 2. リブランド（任意）
-Remove the copyright text in the top-right corner. Remove the logo icon and
-tagline text in the bottom-left corner. Both corners should be clean empty background.
+1. **skill-config に `reference_images.default` が未設定** → `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` にベンチマークサムネのパス（文字列 1 件 or list 複数件）を設定
+2. **設定はあるが CLI 引数に展開していない** → `--reference <path>` で渡す。list なら `--reference A --reference B --reference C` のように複数指定
 
-# 3. オリジナリティ（任意）
-Change the action: <自チャンネル固有の動作>. Change the <小道具のディテール> to <固有要素>.
-```
+#### 参照画像（複数 + ローテーション）
 
-**コマンド**:
+`reference_images.default` は文字列 1 件 / list 複数件の両方を受け付ける。list 指定時は同一ベンチマークチャンネル内の複数サムネ候補を並べておくことで、attempt 毎にローテーションして雰囲気が出る組合せを探れる。
 
-```bash
-uv run yt-generate-image \
-  --reference data/thumbnail_compare/benchmark/<benchmark-thumb>.jpg \
-  --reference branding/icon.png \
-  --prompt "<上記テンプレ>" \
-  --output collections/planning/<collection>/10-assets/main-v1.jpg -y
-```
+| CLI 引数 | 用途 |
+|---|---|
+| `--max-attempts N` | 試行回数。各 attempt で参照を切替、出力は `-vN` で別保存 |
+| `--no-rotate` | 切替を無効化（先頭固定） |
+| `--reference-index N` | 特定の参照のみ使用（ローテーション無効、attempt=1） |
 
-**運用上の注意**:
-- **リトライ前提**: 画像生成プロバイダーは同一プロンプトでも瞬発的にエラーを返す。2〜3 回リトライで通る
-- **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで完全継承される。変えたい部分だけ明示指示
-- **ブランド置換**: `Replace every occurrence of the word 'X' with 'Y'` で文字列差し替え可
-- **キャラサイズ**: 縮小傾向がある場合は `fills about 55% of the frame, bust-up portrait` を追記
-- **コスト**: 事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を指定したときのみ CLI 表示に出る。未指定なら「不明」と表示され、実コストは GCP Cloud Console > Billing で確認する（最大 3 回試行込み = 初回 + 最大 2 回リトライ）
+config 側のデフォルトは `image_generation.gemini.single_step.{max_attempts, rotate}` で設定可能。
 
-### Single-Step モード（`generation_mode: "single_step"`）
-
-テキスト付き参照画像（テキストレイアウト・背景テクスチャ・オブジェクト配置を含む）を参照にして、
-**変更点だけ**をプロンプトで指示する。背景生成とテキストオーバーレイが 1 回の生成で完了する。
-
-**重要**: 参照画像と同じ要素（レイアウト、固定オブジェクト、テキスト配置）はプロンプトに含めない。
-差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。
+#### プロンプト構築
 
 1. `image_generation.gemini.color_themes` からテーマのカラー設定を取得
 2. `image_generation.gemini.diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
    - `{background}`: カラーテーマの背景色（未指定時は `image_generation.gemini.brand_background` を使用）
    - `{candle}`, `{cocktail_description}` などオブジェクト系プレースホルダ: `ideate.objects` や `color_themes` 配下の値
    - `{title_line1}`, `{title_line2}`: コレクションタイトル
+3. 共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause` / `text_strip_clause`）をチャンネル側 `diff_prompt_template` で必要に応じて挿入
 
-3. 生成:
+#### 生成コマンド
 
 ```bash
+# 単一参照（従来通り）
 uv run yt-generate-image \
   --reference <channel_dir>/<reference_images.default> \
+  --prompt "<diff_prompt_template を置換したプロンプト>" \
+  --output <collection-path>/10-assets/thumbnail-v1.jpg -y
+
+# 複数参照ローテーション（list の reference_images.default をすべて展開）
+uv run yt-generate-image \
+  --reference <channel_dir>/path/to/ref1.jpg \
+  --reference <channel_dir>/path/to/ref2.jpg \
+  --reference <channel_dir>/path/to/ref3.jpg \
+  --max-attempts 3 \
   --prompt "<diff_prompt_template を置換したプロンプト>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
@@ -212,7 +200,21 @@ uv run yt-generate-image \
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
 5. 背景画像（テキストなし）も必要な場合は、テキストなしの参照画像で別途生成
 
-差分プロンプトの具体例は skill-config の `image_generation.gemini.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。
+#### 運用上の注意
+
+- **リトライ前提**: 画像生成プロバイダーは同一プロンプトでも瞬発的にエラーを返す。各 attempt 内で内蔵リトライ最大 2 回が走る
+- **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで継承される。変えたい部分だけ明示指示
+- **コスト**: 事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を指定したときのみ CLI 表示に出る。未指定なら「不明」と表示され、実コストは GCP Cloud Console > Billing で確認する（`max_attempts × 1 リクエスト` ＋ 各 attempt で内蔵リトライ最大 2 回）
+
+#### 失敗時の対処
+
+雰囲気が出ない場合、ChatGPT 等の外部ツールで手動生成して `main.png` にコピーする運用は廃止。ツール内で完結する代替策:
+
+1. `--reference-index N` で特定のベンチマーク参照に固定して試す
+2. `reference_images.default` の list を見直し、別のベンチマーク候補を追加
+3. `diff_prompt_template` の差分指示を見直し（特に `variation_clause` / `style_lock_clause` のオン/オフ）
+
+差分プロンプトの具体例は skill-config の `image_generation.gemini.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。実装事例として `daiki-beppu/rjn` の `config/skills/thumbnail.yaml` が参考になる（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。
 
 ### Two-Phase モード（従来方式・フォールバック）
 

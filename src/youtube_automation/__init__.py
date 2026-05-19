@@ -1,3 +1,8 @@
 """YouTube channels automation toolkit."""
 
-__version__ = "5.5.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("youtube-channels-automation")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"

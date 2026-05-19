@@ -68,14 +68,14 @@ brew install --cask google-cloud-sdk
 
 利用者に既存流用か新規作成か聞く:
 
-- 既存流用: project ID を聞いて `.env` の `GOOGLE_CLOUD_PROJECT` に書き込む
+- 既存流用: project ID を聞いて `gcloud config set project <project-id>` と `gcloud auth application-default set-quota-project <project-id>` を実行（`.env` への `GOOGLE_CLOUD_PROJECT` 書き込みは不要 — project_id は ADC quota project から自動解決される）
 - 新規作成: project ID を聞いて (英数字・ハイフン、6-30 文字、グローバルユニーク) AI が以下を実行:
 
 ```bash
 gcloud projects create <project-id> --name="<project-id>"
+gcloud config set project <project-id>
+gcloud auth application-default set-quota-project <project-id>
 ```
-
-その後 `gcloud config set project <project-id>` も実行し、`.env` にも反映する。
 
 ### `billing_linked` — billing 未紐付け
 
@@ -137,11 +137,10 @@ AI が `<channel_dir>/.env` に以下を書き込む (既存値は保持):
 
 ```
 GOOGLE_GENAI_USE_VERTEXAI=true
-GOOGLE_CLOUD_PROJECT=<project-id>
 GOOGLE_CLOUD_LOCATION=us-central1
 ```
 
-`us-central1` はデフォルト。利用者が別リージョンを希望すれば差し替える。
+`us-central1` はデフォルト。利用者が別リージョンを希望すれば差し替える。`GOOGLE_CLOUD_PROJECT` は ADC quota project から自動解決されるため通常は書き込み不要（明示したい場合のみ任意 override として追加）。
 
 ### `client_secrets` — OAuth クライアント秘密ファイル未配置
 

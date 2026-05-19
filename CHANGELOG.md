@@ -26,6 +26,51 @@ contract を確定させた。dict 形式の既存運用は後方互換性を保
 - `src/youtube_automation/utils/config/playlists.py`: `Playlists.items` の型注釈を
   `dict[str, str]` から `dict[str, dict]` へ。docstring に正規化契約を明記
 
+## [5.5.1] - 2026-05-19
+
+※ 本セクションは v5.5.0 リリース後に Unreleased への記述が見送られていたため、
+v5.5.1 で実装されたサマリのみを記録する（詳細実装は各 PR を参照）。
+
+### Added
+
+- `/onboard` AI 主導 wizard と `yt-doctor` 状態診断 CLI で GCP / OAuth セットアップをオンボーディング化（#334 / Phase 1 MVP）
+- `/community-post` スキルと `community.example.json` を共有コアに追加（#237、Flow365 TTP の汎用化）
+- `/community-draft` スキル新設（day-of-reminder / weekly-feedback テンプレを汎用形で配布、#309、jazzgak. TTP 由来）
+- Shorts スキル群を v5 規約でゼロベース再実装し復活: `/short` / `/short-thumbnail` / `/short-release`（#287）
+- `config/channel/shorts.json` 新設で Shorts 投稿可否・公開時刻・収益化設定を集約（#287）
+- `/release-notes` スキル新設と v5.5.0 アップグレードガイド初版（#333 / Closes #253）
+- `/video-description` に bulk-update モードを統合（#247、`yt-bulk-update-desc` の内部呼び出し）
+- `/masterup` に `yt-fix-timestamps` 統合（#249、マスター生成 → タイムスタンプ整合 → 修正の一気通貫）
+- preflight `chapter_max` 設定で per-track 命名運用をデフォルト許容（#421、12 chapters の一律上限を config 化）
+
+### Changed
+
+- `GOOGLE_CLOUD_PROJECT` を ADC fallback 化（#280）。Vertex AI 系の呼び出しが env 設定なしで動くようになり、`.env` の必須行が 1 つ減る
+- `cli/skills_sync.py` (443 行) を 5 サブモジュール構成にリファクタ（#327）。外部 CLI 仕様は不変
+- `yt-skills diff` 出力で `--prune` の存在を案内（#328）
+- `gcp-bootstrap.sh` と `yt-doctor` を ADC ベースに統一（#280）
+- スキル運用リスク監査レポート / スキル汎用化整合性監査レポートを `docs/audits/` に追加（#353 / #372）
+
+### Fixed
+
+- `.claude/skills/short/references/generate_short_loop.py` および `.claude/skills/short-thumbnail/references/generate_short_loop.py` の broken symlink を実体ファイルで復元（#345、wheel ビルド失敗解消）
+- v5.5.0 アップグレードガイドに `command not found` / `No module named` 偽陽性ガードを追記（#335）
+- pytest collection error を解消（#329）
+
+### Migration
+
+downstream チャンネルリポジトリで v5.5.0 → v5.5.1 への追従手順は
+**チャンネル運営者向け** の平易なガイド [docs/upgrades/v5.5.1.md](docs/upgrades/v5.5.1.md) を参照。
+
+サマリ:
+
+- 新規 skill 7 件（`/onboard` / `/release-notes` / `/community-post` / `/community-draft` / `/short` / `/short-thumbnail` / `/short-release`）と新規 CLI 1 件（`yt-doctor`）
+- 既存 skill の挙動変更（`/masterup` に `yt-fix-timestamps` 統合 #249、`/video-description` に bulk-update モード追加 #247、preflight `chapter_max` を config 化 #421、`yt-skills diff` で `--prune` 案内 #328）
+- `GOOGLE_CLOUD_PROJECT` 必須環境変数の撤廃（ADC fallback 化、#280）
+- broken symlink 修正で wheel ビルドエラー解消（#345）
+
+なお、v5.4.0 → v5.5.0 への追従手順は引き続き [docs/upgrades/v5.5.0.md](docs/upgrades/v5.5.0.md) を参照。
+
 ## [5.5.0] - 2026-05-17
 
 ### Changed
@@ -649,6 +694,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.1
 [5.5.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.0
 [5.4.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.4.0
 [5.3.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.3.0

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import base64
 import functools
-import os
 from pathlib import Path
 from typing import Literal
 
@@ -22,6 +21,7 @@ from google.auth import default as google_auth_default
 from google.auth.transport.requests import Request as AuthRequest
 
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.google_cloud_project import resolve_project_id
 
 _ENDPOINT = "https://aiplatform.googleapis.com/v1beta1/projects/{project}/locations/global/interactions"
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -114,13 +114,7 @@ def generate_music(
     API 仕様上、構造化入力は `reference_image` のみ。`bpm` / `intensity` / `mode` / `lyrics` は
     プロンプトテキストに自然言語として合成される。
     """
-    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    if not project:
-        raise ConfigError(
-            "GOOGLE_CLOUD_PROJECT が未設定です。`scripts/gcp-bootstrap.sh` または "
-            "`infra/terraform/gcp/` で .env を書き出し、`gcloud auth application-default login` を実行してください"
-        )
-
+    project = resolve_project_id()
     url = _ENDPOINT.format(project=project)
     composed = _compose_prompt(prompt, bpm, intensity, mode, lyrics)
     inputs: list[dict] = [{"type": "text", "text": composed}]

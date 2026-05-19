@@ -206,5 +206,9 @@ def _render_video_section(result: dict[str, Any]) -> list[str]:
         "",
         f"```json\n{json.dumps(result.get('editing_metrics', {}), ensure_ascii=False, indent=2)}\n```",
         "",
+        "**Suno preset (`suno_preset`)**",
+        "",
+        f"```json\n{json.dumps(result.get('suno_preset', {}), ensure_ascii=False, indent=2)}\n```",
+        "",
     ]
     return block

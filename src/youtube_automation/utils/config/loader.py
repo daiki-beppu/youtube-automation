@@ -317,6 +317,7 @@ def _build_audio(merged: dict) -> Audio:
     return Audio(
         target_duration_min=ad.get("target_duration_min"),
         target_duration_max=ad.get("target_duration_max"),
+        chapter_max=int(ad.get("chapter_max", 100)),
     )
 
 

@@ -70,16 +70,48 @@ class TestEnvFile:
 
     def test_all_keys(self, tmp_path):
         (tmp_path / ".env").write_text(
-            "GOOGLE_CLOUD_PROJECT=foo\nGOOGLE_CLOUD_LOCATION=us-central1\nGOOGLE_GENAI_USE_VERTEXAI=true\n",
+            "GOOGLE_CLOUD_LOCATION=us-central1\nGOOGLE_GENAI_USE_VERTEXAI=true\n",
             encoding="utf-8",
         )
         r = doctor.check_env_file(tmp_path)
         assert r.status == "ok"
 
     def test_partial(self, tmp_path):
-        (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=foo\n", encoding="utf-8")
+        (tmp_path / ".env").write_text("GOOGLE_CLOUD_LOCATION=us-central1\n", encoding="utf-8")
         r = doctor.check_env_file(tmp_path)
         assert r.status == "warn"
+
+    def test_project_alone_is_not_required(self, tmp_path):
+        """`GOOGLE_CLOUD_PROJECT` は必須ではない (ADC fallback で解決可能)"""
+        (tmp_path / ".env").write_text(
+            "GOOGLE_CLOUD_LOCATION=us-central1\nGOOGLE_GENAI_USE_VERTEXAI=true\n",
+            encoding="utf-8",
+        )
+        r = doctor.check_env_file(tmp_path)
+        assert r.status == "ok"
+
+
+class TestProjectIdResolution:
+    def test_env_file_takes_precedence(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        monkeypatch.setattr(doctor, "_adc_quota_project", lambda: "adc-proj")
+        (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=env-file-proj\n", encoding="utf-8")
+        assert doctor._project_id_for(tmp_path) == "env-file-proj"
+
+    def test_env_var_used_when_env_file_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "env-var-proj")
+        monkeypatch.setattr(doctor, "_adc_quota_project", lambda: "adc-proj")
+        assert doctor._project_id_for(tmp_path) == "env-var-proj"
+
+    def test_falls_back_to_adc_quota_project(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        monkeypatch.setattr(doctor, "_adc_quota_project", lambda: "adc-proj")
+        assert doctor._project_id_for(tmp_path) == "adc-proj"
+
+    def test_none_when_nothing_available(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        monkeypatch.setattr(doctor, "_adc_quota_project", lambda: None)
+        assert doctor._project_id_for(tmp_path) is None
 
 
 class TestClientSecrets:

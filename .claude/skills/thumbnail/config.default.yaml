@@ -18,11 +18,34 @@ image_generation:
     model: gemini-3.1-flash-image-preview
 
     # 生成モード:
-    #   single_step   : テキスト付き参照画像から差分のみ指示し 1 ステップで完成
-    #   ttp_swap      : 競合サムネ + 自キャラアイコンの 2 参照でキャラ置換
+    #   single_step   : ベンチマーク模倣 (TTP) の推奨実装。テキスト付き参照画像から
+    #                   差分のみ指示し 1 ステップで完成。reference_images.default が必須。
     #   two_phase     : 従来の 2 フェーズ (背景 → テキストオーバーレイ)
     #   diff_from_reference : 既存キャラ画像を参照に差分のみ指示
-    generation_mode: two_phase
+    generation_mode: single_step
+
+    # single_step モード (推奨 TTP 構成) の挙動制御
+    single_step:
+      # 試行回数。複数参照画像 + max_attempts > 1 のとき attempt 毎に参照画像を
+      # ローテーションし、2 回目以降の出力は -vN で別保存する。
+      # CLI の --max-attempts で都度上書き可。
+      max_attempts: 1
+      # 複数参照画像のとき attempt 毎に切り替えるか (false で先頭固定)
+      rotate: true
+      # diff_prompt_template に挿入できる共通ガイダンス clause。
+      # チャンネル側で diff_prompt_template を組み立てる際に必要に応じて
+      # ${variation_clause} のように展開する想定。空文字に上書きで無効化可。
+      variation_clause: |
+        The reference image is a style guide — produce a variation, not a copy.
+        Vary specific objects, framing details, and decorative elements while
+        preserving the overall aesthetic. The output must clearly differ from
+        the reference in subject details, not be a near-duplicate.
+      style_lock_clause: |
+        Match the lighting direction, color temperature, and overall mood of
+        the reference image.
+      text_strip_clause: |
+        Do not include any text, captions, watermarks, logos, or typography
+        from the reference unless explicitly described in the diff prompt.
 
     # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
     style: ""
@@ -31,9 +54,14 @@ image_generation:
     # 未定義の場合は single_step の差分指示で背景色指示を省略する
     brand_background: ""
 
-    # 参照画像の定義 (省略時はプロンプトベースモード)
+    # 参照画像の定義 (single_step / diff_from_reference モードで必須)
+    # default は文字列 1 件、または list で複数件指定可。list 指定時は
+    # single_step.rotate=true で attempt 毎にローテーション。
     # reference_images:
-    #   default: branding/character-reference/main-ref.png
+    #   default:
+    #     - data/thumbnail_compare/benchmark/<channel>-<vid1>.jpg
+    #     - data/thumbnail_compare/benchmark/<channel>-<vid2>.jpg
+    #     - data/thumbnail_compare/benchmark/<channel>-<vid3>.jpg
     #   path_base: channel_dir  # channel_dir からの相対パス
     #   notes: ""
 

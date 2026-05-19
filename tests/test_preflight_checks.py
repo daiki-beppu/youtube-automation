@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from youtube_automation.utils.preflight_checks import (
+    check_chapter_count,
+    check_chapter_variation_suffix,
     check_duration,
     check_tags_count,
     check_tags_yt_chars,
@@ -78,6 +80,89 @@ class TestCheckDuration:
     def test_only_max_set(self) -> None:
         assert check_duration(200, None, 100) is not None
         assert check_duration(50, None, 100) is None
+
+
+class TestCheckChapterCount:
+    def test_within_limit_passes(self) -> None:
+        assert check_chapter_count(14, 100) is None
+
+    def test_at_limit_passes(self) -> None:
+        assert check_chapter_count(100, 100) is None
+
+    def test_over_limit_returns_message(self) -> None:
+        msg = check_chapter_count(120, 100)
+        assert msg is not None
+        assert "120" in msg
+        assert "chapter_max=100" in msg
+
+    def test_small_chapter_max(self) -> None:
+        # チャンネルごとに小さい chapter_max を設定したケース
+        msg = check_chapter_count(14, 10)
+        assert msg is not None
+        assert "14" in msg
+        assert "chapter_max=10" in msg
+
+
+class TestCheckChapterVariationSuffix:
+    def test_per_track_names_pass(self) -> None:
+        # 個別トラックの曲名は v 末尾を含まないので通過する
+        lines = [
+            "00:00 After the Last Visitor",
+            "06:45 Rainy Studio Loop",
+            "13:20 Dorm Window Dawn",
+            "20:00 Library After Hours",
+            "26:35 Rain Nest Reverie",
+        ]
+        assert check_chapter_variation_suffix(lines) is None
+
+    def test_v_suffix_detected(self) -> None:
+        lines = [
+            "00:00 Pattern A v1",
+            "10:00 Pattern A v2",
+            "20:00 Pattern A v3",
+        ]
+        msg = check_chapter_variation_suffix(lines)
+        assert msg is not None
+        assert "3 lines" in msg
+
+    def test_roman_suffix_detected(self) -> None:
+        lines = [
+            "00:00 Pattern I",
+            "10:00 Pattern II",
+            "20:00 Pattern III",
+            "30:00 Pattern VIII",
+        ]
+        msg = check_chapter_variation_suffix(lines)
+        assert msg is not None
+        assert "4 lines" in msg
+
+    def test_mixed_per_track_with_one_variation_detected(self) -> None:
+        # ほとんど per-track でも 1 件でも v 末尾が混じれば検出
+        lines = [
+            "00:00 After the Last Visitor",
+            "06:45 Rainy Studio Loop",
+            "13:20 Pattern v1",
+        ]
+        msg = check_chapter_variation_suffix(lines)
+        assert msg is not None
+        assert "1 lines" in msg
+
+    def test_word_ending_in_v_not_detected(self) -> None:
+        # 単語末尾の v は単独の v[1-9] パターンには合致しないため誤検知しない
+        lines = [
+            "00:00 Cinematic Move",
+            "10:00 Smooth Groove",
+        ]
+        assert check_chapter_variation_suffix(lines) is None
+
+    def test_track_titles_with_capital_letters_not_detected(self) -> None:
+        # 末尾が普通の単語末尾なら通過すること（誤検知防止のサンプル）
+        lines = [
+            "00:00 After Midnight",
+            "10:00 Empty Gallery",
+            "20:00 Last Train Home",
+        ]
+        assert check_chapter_variation_suffix(lines) is None
 
 
 class TestExtractDescriptionsMdTags:

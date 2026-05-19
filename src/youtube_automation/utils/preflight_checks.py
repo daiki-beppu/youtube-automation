@@ -15,6 +15,31 @@ YT_TAG_CHAR_LIMIT = 500
 
 _DESC_TAGS_RE = re.compile(r"## タグ（YouTube タグ欄）\s*\n+```\n(.*?)```", re.DOTALL)
 
+# v1〜v9 もしくは末尾のロマン数字 (I/II/III/IV/V/VI/VII/VIII) を検出する。
+# chapter 名末尾にこれが現れる場合、1 パターンを複数バリエーションに展開した事故とみなす。
+_VARIATION_SUFFIX_RE = re.compile(r"\b(I{1,3}|IV|V|VI{0,3}|v[1-9])\b\s*$")
+
+
+def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
+    """chapter 件数が上限超過なら issue 文字列、範囲内なら None.
+
+    下限 (< 3) は別途呼び出し側でチェックする。
+    """
+    if ts_count > chapter_max:
+        return f"too many timestamps: {ts_count} (> chapter_max={chapter_max})"
+    return None
+
+
+def check_chapter_variation_suffix(ts_lines: list[str]) -> str | None:
+    """chapter 名末尾にパターン展開接尾辞（v1〜v9 / I〜VIII）を含むなら issue 文字列.
+
+    1 パターン = 1 chapter の事故展開を検出する。なければ None。
+    """
+    hits = [line for line in ts_lines if _VARIATION_SUFFIX_RE.search(line)]
+    if hits:
+        return f"chapter names contain variation suffix (v1〜v9 / I〜VIII): {len(hits)} lines"
+    return None
+
 
 def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
     """`descriptions.md` の「タグ（YouTube タグ欄）」セクションからタグリストを抽出.

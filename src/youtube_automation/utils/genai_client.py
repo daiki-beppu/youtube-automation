@@ -4,8 +4,8 @@
 事前に `scripts/gcp-bootstrap.sh` または `infra/terraform/gcp/` で
 GCP プロジェクト / API 有効化 / ADC を整えたうえで使用する。
 
-必要な環境変数:
-- `GOOGLE_CLOUD_PROJECT` (必須)
+環境変数:
+- `GOOGLE_CLOUD_PROJECT` (任意) — 未設定なら ADC quota project から自動解決
 - `GOOGLE_CLOUD_LOCATION` (任意、既定 `us-central1`)
 
 Vertex AI はモデルごとにサポート region が異なる (2026-04 現在):
@@ -22,7 +22,7 @@ import os
 
 from google import genai
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.google_cloud_project import resolve_project_id
 
 _DEFAULT_LOCATION = "us-central1"
 
@@ -34,11 +34,6 @@ def create_genai_client(location: str | None = None) -> genai.Client:
         location: 明示指定する region。None のときは `GOOGLE_CLOUD_LOCATION` 環境変数 →
             `_DEFAULT_LOCATION` の順でフォールバック。
     """
-    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    if not project:
-        raise ConfigError(
-            "GOOGLE_CLOUD_PROJECT が未設定です。`scripts/gcp-bootstrap.sh` または "
-            "`infra/terraform/gcp/` で .env を書き出し、`gcloud auth application-default login` を実行してください"
-        )
+    project = resolve_project_id()
     resolved_location = location or os.environ.get("GOOGLE_CLOUD_LOCATION", _DEFAULT_LOCATION)
     return genai.Client(vertexai=True, project=project, location=resolved_location)
