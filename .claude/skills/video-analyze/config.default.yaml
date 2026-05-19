@@ -14,6 +14,9 @@ delay_sec: 10
 #
 # 出力 JSON はトップレベルにジャンル横断のドメインキーを置き、CLI 側で
 # video_id / slug / url / title / analyzed_at / model を後付けする。
+#
+# `suno_preset` は SunoAI プロンプト生成 (`/suno`) の初期推奨値として
+# `yt-generate-suno` が config/skills/suno.yaml 空欄時の fallback で参照する。
 prompt: |
   Analyze this YouTube video as a music channel content audit.
   Return ONLY valid JSON (no markdown, no code fences) with this exact shape:
@@ -42,5 +45,10 @@ prompt: |
       "avg_cut_sec": <number>,
       "text_per_min": <number>,
       "transition_style": "brief description"
+    },
+    "suno_preset": {
+      "genre_line": "comma-separated music style phrases (5-8 phrases summarizing observed BGM instruments, tempo, and mood at a granularity Suno can reproduce — e.g. 'lo-fi jazz, soft piano, warm rhodes, mellow drums, vinyl warmth')",
+      "exclude_styles": "comma-separated words SunoAI tends to mis-add but which are absent from this video (e.g. 'heavy metal, EDM, dubstep, techno, vocals, rain sounds')",
+      "rationale": "1-2 sentences grounded in bgm_arc — must not contradict observed dynamics"
     }
   }

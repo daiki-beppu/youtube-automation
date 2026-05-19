@@ -58,7 +58,7 @@ class TestRetryDecision:
         assert decision.should_retry is True
         assert decision.delay_seconds > 0
 
-    @pytest.mark.parametrize("status", [400, 403, 404, 429])
+    @pytest.mark.parametrize("status", [400, 403, 404])
     def test_gives_up_on_client_error(self, status):
         decision = RetryDecision.for_http_error(status, current_attempt=0)
         assert decision.should_retry is False
@@ -83,3 +83,38 @@ class TestRetryDecision:
     def test_applies_exponential_backoff(self, attempt, expected_delay):
         decision = RetryDecision.for_http_error(503, current_attempt=attempt)
         assert decision.delay_seconds == expected_delay
+
+    def test_retries_on_rate_limit(self):
+        """429 (Too Many Requests / quota) は再試行対象。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds > 0
+
+    def test_respects_retry_after_header(self):
+        """Retry-After で与えられた秒数をそのまま delay として採用する。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=0, retry_after_seconds=10.0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 10.0
+
+    def test_falls_back_to_exponential_when_no_retry_after(self):
+        """Retry-After が無ければ ``2 ** attempt`` の指数 backoff。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=2)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 4.0
+
+    def test_retry_after_applies_to_5xx_too(self):
+        """Retry-After は 5xx にも一律適用される（指数 backoff を上書き）。"""
+        decision = RetryDecision.for_http_error(503, current_attempt=0, retry_after_seconds=7.0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 7.0
+
+    def test_falls_back_to_exponential_when_retry_after_non_positive(self):
+        """Retry-After が 0 以下なら指数 backoff にフォールバック。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=1, retry_after_seconds=0.0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 2.0
+
+    def test_gives_up_on_rate_limit_after_max_attempts(self):
+        """429 でも MAX_RETRY_ATTEMPTS を超えれば諦める。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=MAX_RETRY_ATTEMPTS)
+        assert decision.should_retry is False

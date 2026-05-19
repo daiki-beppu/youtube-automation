@@ -321,3 +321,33 @@ def test_resolve_target_dir_not_found(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ConfigError):
         _resolve_target_dir(None)
+
+
+def test_resolve_target_dir_new_structure_cwd(tmp_path, monkeypatch):
+    """post-migrate 状態 (config/channel/ のみ) で CWD 解決が成功すること."""
+    (tmp_path / "config" / "channel").mkdir(parents=True)
+    (tmp_path / "config" / "channel" / "meta.json").write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    result = _resolve_target_dir(None)
+    assert result.samefile(tmp_path)
+
+
+def test_resolve_target_dir_new_structure_ancestor(tmp_path, monkeypatch):
+    """新構造のチャンネルディレクトリの子孫から起動しても祖先を辿って解決できること."""
+    (tmp_path / "config" / "channel").mkdir(parents=True)
+    (tmp_path / "config" / "channel" / "meta.json").write_text("{}", encoding="utf-8")
+    nested = tmp_path / "collections" / "live"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+    result = _resolve_target_dir(None)
+    assert result.samefile(tmp_path)
+
+
+def test_resolve_target_dir_error_message_mentions_both_markers(tmp_path, monkeypatch):
+    """エラーメッセージが新マーカーと旧マーカーの両方を案内すること."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError) as exc_info:
+        _resolve_target_dir(None)
+    msg = str(exc_info.value)
+    assert "config/channel/" in msg
+    assert "config/channel_config.json" in msg

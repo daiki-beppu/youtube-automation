@@ -38,6 +38,18 @@ class YouTubeAPIError(AutomationError):
         )
 
 
+class QuotaExhaustedError(YouTubeAPIError):
+    """quota 切れ / レート制限超過（HTTP 429）。
+
+    時間をおいて再実行することで resume 可能であることを呼び出し側に明示する。
+    ``retry_after_seconds`` は Retry-After header から抽出した推奨待機秒数（取得失敗時 None）。
+    """
+
+    def __init__(self, message: str, retry_after_seconds: float | None = None):
+        super().__init__(message, status_code=429)
+        self.retry_after_seconds = retry_after_seconds
+
+
 class AuthError(AutomationError):
     """OAuth 2.0 認証関連のエラー
 

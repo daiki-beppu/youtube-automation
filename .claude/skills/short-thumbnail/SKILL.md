@@ -131,6 +131,26 @@ open <collection-path>/10-assets/short-loop.mp4
 └── loop.mp4          # 16:9 ループ動画背景
 ```
 
+## 長時間処理の取り扱い
+
+`yt-generate-image`（Gemini で 9:16 サムネ生成、**10〜30 秒**）と `yt-generate-shorts-loop`（Veo 3.1 で 9:16 ループ動画、**30〜90 秒**）はどちらも API 同期呼び出しでブロックする。特にループ動画は長いため、**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+
+spawn 例（ループ動画化）:
+
+```bash
+uv run yt-generate-shorts-loop <collection-path> -y \
+  > /tmp/short-thumbnail-$(date +%s).log 2>&1
+```
+
+これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
+
+> ⏳ Veo 3.1 で 9:16 ループ動画を生成中（推定 30〜90 秒）。完了まで他の質問にもお答えできます。
+> ログ: /tmp/short-thumbnail-*.log
+
+cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "short-thumbnail" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "short-thumbnail"` + `cmux notify --title "short-thumbnail 完了"` を呼ぶ（非 cmux 環境では skip）。
+
+サムネ画像生成（Step 3 の `yt-generate-image`）は 10〜30 秒のため short 化判断はチャンネルポリシー次第だが、再生成を繰り返す運用なら同じ background パターンが安全。完了通知が届いたらログ末尾から結果サマリー（`short.png` / `short-loop.mp4` のパス）をユーザーへ返す。
+
 ## Next Step
 
 `short.png` または `short-loop.mp4` が揃ったら:
