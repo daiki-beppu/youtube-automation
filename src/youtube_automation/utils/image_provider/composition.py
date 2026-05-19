@@ -272,3 +272,69 @@ def resolve_reference_paths(raw_refs: list[str] | None) -> list[Path]:
             raise ConfigError(f"参照画像が見つかりません: {ref_path}")
         resolved.append(ref_path)
     return resolved
+
+
+def select_reference(refs: list[Path], attempt: int, rotate: bool) -> Path:
+    """attempt インデックスに応じて参照画像を 1 枚選択する。
+
+    ``rotate=True`` かつ ``len(refs) > 1`` のときは ``refs[attempt % len(refs)]``、
+    それ以外は ``refs[0]`` を返す。``refs`` が空のときは ``ValueError``。
+    """
+    if not refs:
+        raise ValueError("参照画像リストが空です")
+    if rotate and len(refs) > 1:
+        return refs[attempt % len(refs)]
+    return refs[0]
+
+
+def validate_single_step_references(skill_cfg: dict[str, Any]) -> None:
+    """``generation_mode == "single_step"`` 時に参照画像未設定を検知して ``ConfigError`` を送出する。
+
+    判定:
+      ``image_generation.gemini.generation_mode`` が ``"single_step"`` のとき
+      ``image_generation.gemini.reference_images.default`` が未設定・空文字列・空リスト
+      のいずれかなら ``ConfigError`` を送出する。
+      他モード（``two_phase`` 等）では何もしない。
+    """
+    image_gen = skill_cfg.get("image_generation")
+    if not isinstance(image_gen, dict):
+        return
+    gemini = image_gen.get("gemini")
+    if not isinstance(gemini, dict):
+        return
+    if gemini.get("generation_mode") != "single_step":
+        return
+
+    reference_images = gemini.get("reference_images")
+    default = None
+    if isinstance(reference_images, dict):
+        default = reference_images.get("default")
+
+    is_empty_str = isinstance(default, str) and not default.strip()
+    is_empty_list = isinstance(default, list) and not default
+    if default is None or is_empty_str or is_empty_list:
+        raise ConfigError(
+            "single_step モードには image_generation.gemini.reference_images.default の設定が必須です"
+            "（文字列 1 件、または list で複数件指定）。"
+            "ベンチマークサムネを data/thumbnail_compare/benchmark/ 等に配置し、"
+            "config/skills/thumbnail.yaml で参照してください。"
+        )
+
+
+def normalize_reference_default(default: str | list[str] | None) -> list[str]:
+    """``reference_images.default`` を ``list[str]`` に正規化する。
+
+    - 文字列 → 1 要素リスト
+    - リスト → そのまま
+    - ``None`` / 空 → 空リスト
+
+    パス存在チェックは行わない（``resolve_reference_paths`` 側で実施）。
+    """
+    if default is None:
+        return []
+    if isinstance(default, str):
+        stripped = default.strip()
+        return [stripped] if stripped else []
+    if isinstance(default, list):
+        return [str(item) for item in default if isinstance(item, str) and item.strip()]
+    return []
