@@ -111,6 +111,26 @@ uv run yt-upload-shorts <release-path>              # 実投稿
 - **fps=30 必須**: 元動画が低 fps の場合は `fps=30` フィルタなしで生成すると YouTube がショート認識しない（`generate-shorts.sh` が常時付与）
 - **サビ位置のテスト**: 実機で `open <release-path>/video/short-jp.mp4` 確認前にアップロードしないこと。冒頭が無音だと最後まで再生されない
 
+## 長時間処理の取り扱い
+
+`generate-shorts.sh` は JP / EN 各 1 本の縦型変換を ffmpeg で走らせるため **1〜2 分** 程度かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+
+spawn 例:
+
+```bash
+bash .claude/skills/short-release/references/generate-shorts.sh <release-path> -s 30 -t 40 \
+  > /tmp/short-release-$(date +%s).log 2>&1
+```
+
+これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
+
+> ⏳ JP/EN 縦型クリップを background 生成中（推定 1〜2 分）。完了まで他の質問にもお答えできます。
+> ログ: /tmp/short-release-*.log
+
+cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "short-release" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "short-release"` + `cmux notify --title "short-release 完了"` を呼ぶ（非 cmux 環境では skip）。
+
+完了通知が届いたらログ末尾から結果サマリー（`short-jp.mp4` / `short-en.mp4` のパス）をユーザーへ返す。失敗時は ffmpeg のエラー行を抜き出して報告する。
+
 ## Next Step
 
 - collection 型ショートも作る別チャンネルでは `/short` を使う
