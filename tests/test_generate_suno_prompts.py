@@ -1,9 +1,4 @@
-"""generate_suno_prompts CLI / generate() の挙動テスト.
-
-issue #128 で `duration_prompt` を完全削除したため、その回帰防止テストを含む。
-issue #360 で `data/video_analysis/<slug>/*.json` の `suno_preset` を fallback として
-参照するようになったため、その動作テストも含む。
-"""
+"""generate_suno_prompts CLI / generate() の挙動テスト."""
 
 from __future__ import annotations
 
