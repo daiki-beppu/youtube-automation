@@ -313,18 +313,41 @@ uv run yt-generate-image --reference "$REF" --prompt "<企画Cプロンプト>" 
 
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
-企画確定後、**選択した企画のプレビュー画像をコレクションの `main.png` にコピー**してからプレビューディレクトリを削除する:
+企画確定後、**選択した企画のプレビュー画像をコレクションの `main.png` にコピー**し、残った不採用プレビューを `assets/stock/<theme>/` に退避してからプレビューディレクトリを削除する（#364）:
 
 ```bash
 # 1. 選択した企画のプレビュー画像を main.png としてコピー
-cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.jpg <collection-path>/10-assets/main.png
+cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png
 
-# 2. コピー完了後、自セッションのプレビューディレクトリを削除
+# 2. 不採用プレビューを stock 退避（--exclude で採用 1 枚だけ除外）
+THEME="<theme-slug>"   # コレクションのテーマ slug
+uv run yt-stock-archive \
+  collections/planning/_plan-previews/<session-dir>/plan-*.png \
+  --theme "$THEME" \
+  --source-collection "<collection-path>" \
+  --source-role ideate_preview \
+  --exclude "plan-<x>-<slug>.png" \
+  --meta-json - <<JSON
+{
+  "provider": "<provider>",
+  "model": "<model>",
+  "generation_mode": "<mode>",
+  "prompt": "<企画 X の最終プロンプト>",
+  "reference_images": ["<reference_images.default で使用した paths>"],
+  "persona": "<planning.target_persona>"
+}
+JSON
+
+# 3. 退避後、自セッションのプレビューディレクトリを削除
 rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
+`config/skills/collection-ideate.yaml` の `preview.stock_archive: false` か `config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` のいずれかで stock 退避を無効化できる（無効化時は CLI 経由で単純削除に戻る）。
+
 > **定期クリーンアップ**: 放棄されたセッションのディレクトリが残る場合、7 日以上前のものは手動削除可:
 > `find collections/planning/_plan-previews/ -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +`
+>
+> stock 側の保守は `uv run yt-stock-prune --dry-run` で候補確認 →（必要なら）本実行。
 
 企画選択後:
 → `/thumbnail <theme>` でテキストオーバーレイのみ実行（`main.png` が既に存在するため Phase 2 から開始）

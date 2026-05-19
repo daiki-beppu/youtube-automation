@@ -52,6 +52,7 @@ config/localizations.json
 auth/{client_secrets,token}.json
 .claude/skills/         # yt-skills sync で展開
 collections/            # コンテンツ成果物
+assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下に画像 + .meta.json
 ```
 
 ## 主要モジュール
@@ -70,6 +71,7 @@ collections/            # コンテンツ成果物
 | `utils.launch_curve_*` / `channel_trend` / `theme_performance` | 視聴推移分析（pandas / matplotlib） |
 | `utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量＋ CTR/views 相関（Pillow） |
 | `utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
+| `utils.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `auth.oauth_handler` | OAuth 2.0 トークン管理 |
 | `utils.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
 | `cli.skills_sync` | `yt-skills` 本体 |

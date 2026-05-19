@@ -13,6 +13,17 @@ image_generation:
   # 指定したときのみ CLI 表示に使われる。未指定なら CLI には「不明」と表示され、
   # 実コストは GCP Cloud Console > Billing で確認する。
 
+  # ボツ画像ストック化 (#364): /thumbnail と /collection-ideate で不採用となった
+  # 画像を <channel_dir>/assets/stock/<theme>/ に隣接 .meta.json 付きで退避する。
+  # 別コレクションで参照画像として再利用できる。
+  stock:
+    # false にすると yt-stock-archive は退避せず unlink のみ実施 (従来挙動)
+    enabled: true
+    # yt-stock-prune の保持日数 (mtime 基準、未指定なら CLI 引数必須)
+    retention_days: 90
+    # yt-stock-prune のテーマあたり最大保持件数 (未指定なら CLI 引数必須)
+    max_per_theme: 50
+
   gemini:
     # 使用する Gemini 画像生成モデル
     model: gemini-3.1-flash-image-preview

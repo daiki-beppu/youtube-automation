@@ -300,15 +300,55 @@ Phase 2 生成後:
 | `thumbnail-v{N}.jpg` | テキスト付き候補 |
 | `thumbnail.jpg` | **最終承認後にベスト版をコピー** |
 
-### クリーンアップ（承認後に必ず実行）
+### クリーンアップ（承認後に必ず実行・stock 退避）
+
+不採用候補は `<channel_dir>/assets/stock/<theme>/` に隣接メタデータ付きで退避する（#364）。
 
 ```bash
-rm -f 10-assets/main-v*.jpg 10-assets/thumbnail-v*.jpg
+THEME="<theme-slug>"   # 例: tavern / library / jazz-bar
+uv run yt-stock-archive \
+  10-assets/main-v*.jpg 10-assets/thumbnail-v*.jpg \
+  --theme "$THEME" \
+  --source-collection "$(pwd)" \
+  --source-role thumbnail_candidate \
+  --meta-json - <<JSON
+{
+  "provider": "<provider>",
+  "model": "<model>",
+  "generation_mode": "<mode>",
+  "prompt": "<最終生成プロンプト>",
+  "reference_images": ["<参照画像 1>", "<参照画像 2>"]
+}
+JSON
 ```
+
+`config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` に設定するとこの CLI は退避せず単純削除（従来挙動）に戻る。
 
 ### `workflow-state.json` 更新
 
 画像確認・承認後、`thumbnail.approved = true` を更新する。
+
+## stock 退避と再利用
+
+不採用画像は `<channel_dir>/assets/stock/<theme-slug>/` に画像本体 + 隣接 `<image>.meta.json` で退避される（schema_version=1）。メタには prompt / provider / model / generation_mode / source_collection / reference_images / generated_at / rejected_at を保存し、将来別コレクションの参照画像として再利用できる。
+
+stock の操作 CLI:
+
+| CLI | 用途 |
+|---|---|
+| `yt-stock-list [--theme T] [--source-role R] [--limit N] [--format table\|json]` | stock 一覧（新しい順） |
+| `yt-stock-preview [--theme T] [--limit N]` | macOS `open` でプレビュー起動 |
+| `yt-stock-prune [--retention-days N] [--max-per-theme N] [--dry-run]` | 古い画像 / 上限超過分を削除（config 既定値あり） |
+
+`config/skills/thumbnail.yaml` の `image_generation.stock`:
+
+```yaml
+image_generation:
+  stock:
+    enabled: true          # false で退避を無効化（unlink のみ）
+    retention_days: 90     # yt-stock-prune の保持日数
+    max_per_theme: 50      # yt-stock-prune の上限
+```
 
 ## Next Step
 
