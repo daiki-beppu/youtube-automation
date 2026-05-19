@@ -89,3 +89,43 @@ def test_cache_reset(tmp_path, monkeypatch):
     reset_config()
     cfg3 = skill_config.load_skill_config("thumbnail")
     assert cfg3.get("marker") == "b"
+
+
+def test_get_collection_ideate_thumbnail_mode_default(tmp_path, monkeypatch):
+    """skill-config 未設定なら sequential を返す"""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    mode = skill_config.get_collection_ideate_thumbnail_mode()
+    assert mode == skill_config.THUMBNAIL_MODE_SEQUENTIAL
+
+
+def test_get_collection_ideate_thumbnail_mode_opt_in_parallel(tmp_path, monkeypatch):
+    """channel override で parallel を指定すると parallel を返す"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
+    override.write_text(
+        yaml.safe_dump({"preview": {"thumbnail_mode": "parallel"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    mode = skill_config.get_collection_ideate_thumbnail_mode()
+    assert mode == skill_config.THUMBNAIL_MODE_PARALLEL
+
+
+def test_get_collection_ideate_thumbnail_mode_invalid_raises(tmp_path, monkeypatch):
+    """不正値は ConfigError"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
+    override.write_text(
+        yaml.safe_dump({"preview": {"thumbnail_mode": "bogus"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="thumbnail_mode"):
+        skill_config.get_collection_ideate_thumbnail_mode()
