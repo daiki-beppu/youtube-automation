@@ -14,6 +14,10 @@ MAX_RETRY_ATTEMPTS = 5
 # 429 (Too Many Requests / quota) も再試行対象。Retry-After header があれば尊重し、
 # なければ指数 backoff にフォールバックする。
 RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
+# resumable upload の session URI が失効済みとみなすべき HTTP ステータス。
+# 404 / 410 は googleapiclient が dead resumable session を通知する典型形態で、
+# `RETRYABLE_HTTP_STATUSES` とは交わらない独立分岐（retry せず URI をクリアする）。
+SESSION_EXPIRED_HTTP_STATUSES = frozenset({404, 410})
 
 
 @dataclass(frozen=True)
