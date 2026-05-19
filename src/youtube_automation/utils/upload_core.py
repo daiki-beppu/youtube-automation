@@ -13,11 +13,26 @@ from typing import Optional
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-from youtube_automation.utils.exceptions import UploadError, YouTubeAPIError
+from youtube_automation.utils.exceptions import QuotaExhaustedError, UploadError, YouTubeAPIError
 from youtube_automation.utils.upload_policy import RetryDecision, ThumbnailCompression
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_retry_after(resp) -> float | None:
+    """httplib2 Response から Retry-After header（秒数）を抽出する。
+
+    HTTP-date 形式や解析不能な値の場合は None を返し、呼び出し側で
+    指数 backoff にフォールバックさせる。
+    """
+    raw = resp.get("retry-after") if resp is not None else None
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 class YouTubeUploadCore:
@@ -118,11 +133,18 @@ class YouTubeUploadCore:
                     logger.info(f"   進捗: {progress}%")
 
             except HttpError as e:
-                decision = RetryDecision.for_http_error(e.resp.status, attempt)
+                status_code = e.resp.status
+                retry_after = _parse_retry_after(e.resp)
+                decision = RetryDecision.for_http_error(status_code, attempt, retry_after_seconds=retry_after)
                 if decision.should_retry:
-                    logger.warning(f"再試行可能エラー: {e}")
+                    logger.warning(f"再試行可能エラー (HTTP {status_code}, 待機 {decision.delay_seconds}s): {e}")
                     time.sleep(decision.delay_seconds)
                     attempt += 1
+                elif status_code == 429:
+                    raise QuotaExhaustedError(
+                        f"YouTube API の quota 超過/レート制限。時間をおいて再実行してください: {e}",
+                        retry_after_seconds=retry_after,
+                    ) from e
                 else:
                     logger.error(f"致命的エラー: {e}")
                     return None
