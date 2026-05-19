@@ -20,7 +20,6 @@ from youtube_automation.utils.image_provider.composition import (
     validate_single_step_references,
 )
 
-
 # ---- select_reference ------------------------------------------------------
 
 
