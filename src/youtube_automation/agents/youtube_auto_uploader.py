@@ -150,9 +150,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         self._ensure_service()
         try:
             resp = (
-                self.youtube.search()
-                .list(forMine=True, type="video", q=title, maxResults=10, part="snippet")
-                .execute()
+                self.youtube.search().list(forMine=True, type="video", q=title, maxResults=10, part="snippet").execute()
             )
             for item in resp.get("items", []):
                 if item["snippet"]["title"] == title:  # 完全一致のみ採用

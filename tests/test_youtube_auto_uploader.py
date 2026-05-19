@@ -363,9 +363,7 @@ class TestUploadCompleteCollectionDedup:
         # 実 youtube.search を HttpError で失敗させ、`_find_existing_video_by_title`
         # の fail-open 経路（HttpError → warning + None 返却）を実コードで通す
         mock_youtube = MagicMock()
-        mock_youtube.search.return_value.list.return_value.execute.side_effect = (
-            _make_http_error(500)
-        )
+        mock_youtube.search.return_value.list.return_value.execute.side_effect = _make_http_error(500)
         uploader.youtube = mock_youtube
 
         with (

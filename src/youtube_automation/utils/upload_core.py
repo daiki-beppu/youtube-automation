@@ -168,11 +168,7 @@ class YouTubeUploadCore:
                     logger.info(f"   進捗: {progress}%")
 
                 current_uri = getattr(insert_request, "resumable_uri", None)
-                if (
-                    on_session_uri_changed is not None
-                    and current_uri is not None
-                    and current_uri != last_notified_uri
-                ):
+                if on_session_uri_changed is not None and current_uri is not None and current_uri != last_notified_uri:
                     on_session_uri_changed(current_uri)
                     last_notified_uri = current_uri
 
