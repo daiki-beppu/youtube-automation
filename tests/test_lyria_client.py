@@ -205,6 +205,506 @@ class TestGenerateMusic:
         with pytest.raises(ConfigError, match="参照画像が存在しません"):
             lyria_client.generate_music("p", "lyria-3-pro-preview", reference_image=missing)
 
+    def test_returns_audio_bytes_from_new_schema_response(self, mock_token):
+        # Given: HTTP レスポンスが Gemini 標準の新 schema (candidates[*].content.parts[*].inline_data) のみ
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00new-schema-mp3"
+        resp = MagicMock()
+        resp.ok = True
+        resp.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mime_type": "audio/mpeg",
+                                    "data": base64.b64encode(audio).decode(),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        from youtube_automation.utils import lyria_client
+
+        # When: generate_music を呼ぶ
+        with patch.object(lyria_client.requests, "post", return_value=resp):
+            result = lyria_client.generate_music("p", "lyria-3-pro-preview")
+
+        # Then: 新 schema からデコード済み audio bytes が返る
+        assert result == audio
+
+    def test_prefers_legacy_when_both_schemas_in_http_response(self, mock_token):
+        # Given: HTTP レスポンスに legacy outputs と新 schema candidates が同居
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        legacy_audio = b"\xff\xfb\x90\x00legacy"
+        new_audio = b"\xff\xfb\x90\x00new"
+        resp = MagicMock()
+        resp.ok = True
+        resp.json.return_value = {
+            "outputs": [
+                {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(legacy_audio).decode()},
+            ],
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mime_type": "audio/mpeg",
+                                    "data": base64.b64encode(new_audio).decode(),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ],
+        }
+
+        from youtube_automation.utils import lyria_client
+
+        # When: generate_music を呼ぶ
+        with patch.object(lyria_client.requests, "post", return_value=resp):
+            result = lyria_client.generate_music("p", "lyria-3-pro-preview")
+
+        # Then: 既存挙動互換のため legacy 側が優先される
+        assert result == legacy_audio
+
+
+class TestExtractAudioBytes:
+    def test_returns_audio_from_legacy_outputs(self):
+        # Given: legacy outputs schema の body
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "outputs": [
+                {"type": "text", "text": "lyrics"},
+                {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 原バイト列が返る
+        assert result == audio
+
+    def test_returns_audio_from_new_schema_snake_case(self):
+        # Given: 新 schema (snake_case) の dry-run レスポンス body
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mime_type": "audio/mpeg",
+                                    "data": base64.b64encode(audio).decode(),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 原バイト列が返る
+        assert result == audio
+
+    def test_returns_audio_from_new_schema_camel_case(self):
+        # Given: 新 schema (camelCase) の body
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inlineData": {
+                                    "mimeType": "audio/mpeg",
+                                    "data": base64.b64encode(audio).decode(),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 原バイト列が返る
+        assert result == audio
+
+    def test_returns_audio_when_mixed_snake_and_camel_case(self):
+        # Given: snake_case key (inline_data) と camelCase key (mimeType) が同 part 内で混在
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mimeType": "audio/mpeg",
+                                    "data": base64.b64encode(audio).decode(),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 原バイト列が返る
+        assert result == audio
+
+    def test_prefers_legacy_when_both_schemas_present(self):
+        # Given: legacy outputs と 新 schema candidates が同時に存在する移行期 body
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        legacy_audio = b"\xff\xfb\x90\x00legacy"
+        new_audio = b"\xff\xfb\x90\x00new"
+        body = {
+            "outputs": [
+                {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(legacy_audio).decode()},
+            ],
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mime_type": "audio/mpeg",
+                                    "data": base64.b64encode(new_audio).decode(),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ],
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 既存挙動互換のため legacy が優先される
+        assert result == legacy_audio
+
+    def test_skips_non_audio_parts_in_new_schema(self):
+        # Given: 新 schema で先頭 part が image, 2 番目が audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(b"img").decode()}},
+                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}},
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: audio 系 mime_type の part が拾われる
+        assert result == audio
+
+    def test_picks_audio_across_multiple_candidates(self):
+        # Given: 複数 candidates のうち 2 つ目に audio がある
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        image_part = {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(b"img").decode()}}
+        audio_part = {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}}
+        body = {
+            "candidates": [
+                {"content": {"parts": [image_part]}},
+                {"content": {"parts": [audio_part]}},
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 2 つ目の candidate から audio が拾われる
+        assert result == audio
+
+    def test_skips_legacy_entry_with_non_audio_mime(self):
+        # Given: type=audio だが mime_type が video/mp4 の legacy entry
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        body = {
+            "outputs": [
+                {"type": "audio", "mime_type": "video/mp4", "data": base64.b64encode(b"vid").decode()},
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: startswith("audio/") フィルタで skip → None
+        assert result is None
+
+    def test_skips_legacy_entry_with_missing_mime(self):
+        # Given: legacy entry に mime_type キーが欠落、次の entry に正常 audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "outputs": [
+                {"type": "audio", "data": base64.b64encode(b"x").decode()},
+                {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: mime_type 欠落の entry は skip し、後続の正常 entry を拾う
+        assert result == audio
+
+    def test_skips_legacy_entry_with_missing_data(self):
+        # Given: legacy entry の data キーが欠落、後続 entry に正常 audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "outputs": [
+                {"type": "audio", "mime_type": "audio/mpeg"},
+                {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 例外を投げず skip し、次の audio を返す
+        assert result == audio
+
+    def test_skips_new_schema_entry_with_missing_data(self):
+        # Given: 新 schema で inline_data.data が欠落、後続 part に正常 audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"inline_data": {"mime_type": "audio/mpeg"}},
+                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}},
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: data 欠落は skip し、次の正常 audio を返す
+        assert result == audio
+
+    def test_returns_none_for_empty_body(self):
+        # Given: 空の body
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes({})
+
+        # Then: None
+        assert result is None
+
+    def test_returns_none_when_no_audio_in_either_schema(self):
+        # Given: legacy outputs に text のみ、新 schema candidates にも image のみ
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        body = {
+            "outputs": [
+                {"type": "text", "text": "no audio"},
+            ],
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(b"img").decode()}},
+                        ]
+                    }
+                }
+            ],
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 両 schema いずれにも audio がないため None
+        assert result is None
+
+    def test_returns_none_when_candidates_content_empty(self):
+        # Given: candidates[0].content が空 dict
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        body = {"candidates": [{"content": {}}]}
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: None
+        assert result is None
+
+    def test_returns_none_when_candidates_parts_empty(self):
+        # Given: candidates[0].content.parts が空 list
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        body = {"candidates": [{"content": {"parts": []}}]}
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: None
+        assert result is None
+
+    def test_skips_when_outputs_is_not_list(self):
+        # Given: legacy outputs が dict / 新 schema 側に正常 audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "outputs": {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(b"x").decode()},
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}}
+                        ]
+                    }
+                }
+            ],
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 不正型の outputs は型ガードで skip し、新 schema を拾う
+        assert result == audio
+
+    def test_skips_when_candidates_is_not_list(self):
+        # Given: 新 schema candidates が dict（list 以外）
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        body = {"candidates": {"content": {"parts": []}}}
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 型ガードで skip → None
+        assert result is None
+
+    def test_skips_when_candidate_is_not_dict(self):
+        # Given: candidates の要素が None / 文字列
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "candidates": [
+                None,
+                "not-a-dict",
+                {
+                    "content": {
+                        "parts": [
+                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}}
+                        ]
+                    }
+                },
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 不正な要素は skip し、有効な candidate から audio を返す
+        assert result == audio
+
+    def test_skips_when_parts_is_not_list(self):
+        # Given: content.parts が list 以外
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        body = {"candidates": [{"content": {"parts": "not-a-list"}}]}
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 型ガードで skip → None
+        assert result is None
+
+    def test_skips_when_inline_data_is_not_dict(self):
+        # Given: inline_data が None / 文字列の part、後続に正常 audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"inline_data": None},
+                            {"inline_data": "not-a-dict"},
+                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}},
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 不正な inline_data は skip し、正常 part から audio を返す
+        assert result == audio
+
+    def test_skips_legacy_entry_that_is_not_dict(self):
+        # Given: outputs の要素が None / 文字列、後続に正常 audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "outputs": [
+                None,
+                "not-a-dict",
+                {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: 不正な要素は skip し、後続の正常 entry を返す
+        assert result == audio
+
 
 class TestComposePrompt:
     def test_none_params_returns_base_as_is(self):
