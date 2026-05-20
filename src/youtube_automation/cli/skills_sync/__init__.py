@@ -29,6 +29,7 @@ list/sync/diff の各 subcommand が自動的にサポートする (kind="dir" /
 from __future__ import annotations
 
 import argparse
+import sys
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Iterable
@@ -110,6 +111,24 @@ def _asset_root(asset: str) -> Path:
     )
 
 
+def _guard_target_with_all(args: argparse.Namespace) -> None:
+    """`--asset all` + `--target` の組み合わせを検出して error 終了する。
+
+    asset ごとに default_target が異なるため、all モードで target を 1 つに固定すると
+    意図しない asset (例: claude-md) がユーザー指定の skills 用 path に書き込まれる
+    silent な誤動作になる。これを防ぐためのガードで、CLI 経由 (`_resolve_default_target`)
+    と公開 API 直呼び (`cmd_sync` / `cmd_diff`) の両方の入口から呼ぶ。
+    """
+    if args.asset == "all" and getattr(args, "target", None) is not None:
+        sys.stderr.write(
+            "error: --target は --asset all モードでは使えません "
+            "(asset ごとに default_target が異なるため曖昧)。\n"
+            "  skills だけを独自 path に出すなら --asset skills --target ... のように\n"
+            "  asset を明示してください。全 asset を sync するなら --target を外してください。\n"
+        )
+        sys.exit(2)
+
+
 def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = None) -> list[str]:
     """asset 配下の entry 名を返す。
 
@@ -126,6 +145,7 @@ def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = N
 def cmd_list(args: argparse.Namespace) -> int:
     if args.asset == "all":
         # 全 asset を巡回。dir asset → file asset の順で人間が読みやすい並び。
+        # cmd_list には target がないため _guard_target_with_all は不要。
         for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
             if i > 0:
                 print()

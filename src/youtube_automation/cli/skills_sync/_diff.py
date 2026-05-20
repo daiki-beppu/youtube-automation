@@ -7,11 +7,19 @@ import filecmp
 import sys
 from pathlib import Path
 
-from youtube_automation.cli.skills_sync import _ASSET_SPECS, _asset_root, _list_entries
+from youtube_automation.cli.skills_sync import (
+    _ASSET_SPECS,
+    _asset_root,
+    _guard_target_with_all,
+    _list_entries,
+)
 from youtube_automation.cli.skills_sync._ops import _has_diff
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
+    # CLI 以外 (テスト / 公開 API 直呼び) からの呼び出しに対しても silent な誤動作を防ぐ。
+    # CLI 経由では _resolve_default_target で既に評価済みなため二重実行になるが副作用なし。
+    _guard_target_with_all(args)
     if args.asset == "all":
         return _diff_all(args)
     spec = _ASSET_SPECS[args.asset]

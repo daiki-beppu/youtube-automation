@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
-from youtube_automation.cli.skills_sync import _ASSET_SPECS, cmd_list
+from youtube_automation.cli.skills_sync import _ASSET_SPECS, _guard_target_with_all, cmd_list
 from youtube_automation.cli.skills_sync._diff import cmd_diff
 from youtube_automation.cli.skills_sync._sync import cmd_sync
 
@@ -25,19 +24,12 @@ def _resolve_default_target(args: argparse.Namespace) -> None:
     `--asset all` のときは個別 asset の default_target を使うため埋めない
     (cmd_* 側で each asset を巡回するときに per-asset の default_target を resolve する)。
 
-    `--asset all` + `--target X` の組み合わせは曖昧 (どの asset を X に出すか不定) なため
-    error で止める。これは旧 default = skills 時代に `--target X` で skills を X に sync
-    していたユーザーが silent に default_target へ書き込んでしまう罠を防ぐためのガード。
+    `--asset all` + `--target X` の組み合わせは曖昧なため `_guard_target_with_all`
+    で exit 2 する (CLI 経由のガード。公開 API 直呼びでは cmd_sync / cmd_diff 自身が
+    入口で同じ guard を呼ぶ)。
     """
+    _guard_target_with_all(args)
     if args.asset == "all":
-        if getattr(args, "target", None) is not None:
-            sys.stderr.write(
-                "error: --target は --asset all モードでは使えません "
-                "(asset ごとに default_target が異なるため曖昧)。\n"
-                "  skills だけを独自 path に出すなら --asset skills --target ... のように\n"
-                "  asset を明示してください。全 asset を sync するなら --target を外してください。\n"
-            )
-            sys.exit(2)
         return
     if getattr(args, "target", None) is None:
         args.target = _ASSET_SPECS[args.asset]["default_target"]

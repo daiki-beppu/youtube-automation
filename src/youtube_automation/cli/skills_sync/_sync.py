@@ -6,7 +6,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from youtube_automation.cli.skills_sync import _ASSET_SPECS, _asset_root, _list_entries
+from youtube_automation.cli.skills_sync import (
+    _ASSET_SPECS,
+    _asset_root,
+    _guard_target_with_all,
+    _list_entries,
+)
 from youtube_automation.cli.skills_sync._ops import (
     _copy_entry,
     _ensure_target_parent,
@@ -16,6 +21,10 @@ from youtube_automation.cli.skills_sync._ops import (
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
+    # CLI 以外 (テスト / 公開 API 直呼び) から呼ばれても silent な誤動作にならないよう
+    # 入口でガードする。CLI 経由では _resolve_default_target で既に評価済みなため二重実行になるが
+    # idempotent (条件不一致なら no-op) なので副作用なし。
+    _guard_target_with_all(args)
     if args.asset == "all":
         return _sync_all(args)
     spec = _ASSET_SPECS[args.asset]
