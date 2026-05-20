@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.2] - 2026-05-20
+
+### Added
+
+- `/automation-release` スキル新設とバージョン 1 ソース化（#435）。`pyproject.toml::version` を唯一のソースとし、prepare（リリース PR 作成）→ publish（tag + GitHub Release）の 2 フェーズを 1 コマンドで実行
+- `/automation-update` スキル新設で下流チャンネルリポジトリの upstream 追従を 1 コマンド化（#430）。CHANGELOG.md / GitHub Release 本文を入力源として累積影響を要約
+- `/automation-update` に self-overwrite ハンドリングと `config.default.yaml` 直接編集検出時の移行案内を追加（#430 系）
+- Codex CLI 向け `AGENTS.md` と `.agents/skills` symlink を追加（#477）。`.claude/skills/` を Codex 規約パスから探索可能に
+- `assets/stock/<theme>/` へボツ画像を自動退避する仕組み（#364）。隣接 `.meta.json` で由来を管理
+- `reference_images` プールへの自動合成機構（#364）。退避済み画像を参照プールへ流用可能に
+- `feat(thumbnail)`: single_step を default 化し参照画像ローテーション / プリフライトを追加（#356）
+- `feat(loop-video)`: Veo プロンプトを motion/static targets で構造化（#358）
+- `feat(loop-video)`: 既存 `loop.mp4` 検出時の `--skip-existing` ロジックを追加（#451 / #378）
+- `feat(skills)`: 長時間処理を background 実行 + 「処理中・質問 OK」案内に統一（#361）
+- `feat(suno)`: `video_analysis` の `suno_preset` を fallback として参照（#360）
+- `feat(collection-ideate)`: skill に `thumbnail_mode` フラグ受けを追加（#449）
+- `feat(upload-core)`: resumable upload の session URI を `upload_tracking.json` に永続化（#381）。失敗後の再実行で二重 publish を防止
+
+### Changed
+
+- `/release-notes` を廃止し、`/automation-update` を CHANGELOG.md / Release 本文ベースに刷新（#434）
+- `scripts/gcp-{bootstrap,terraform-apply}.sh` を `scripts/gcp/` 配下の canonical path に一本化（#388）
+- `pyproject.toml` 全 16 依存に major upper bound を付与（#407）。互換性予防
+- `refactor(suno)`: `suno_preset` fallback collector の self-review 整理（#360）
+
 ### Fixed
 
 #### `playlists.json` の string-shape entry で `PlaylistManager` が `AttributeError` で落ちる問題を修正
@@ -25,6 +50,39 @@ contract を確定させた。dict 形式の既存運用は後方互換性を保
   入力 dict との参照を切る
 - `src/youtube_automation/utils/config/playlists.py`: `Playlists.items` の型注釈を
   `dict[str, str]` から `dict[str, dict]` へ。docstring に正規化契約を明記
+
+#### その他の修正
+
+- `fix(veo)`: Ctrl+C 中断時に `operation_id` 永続化で再開可能に（#453）
+- `fix(skill_config)`: preview 非 mapping 時の `AttributeError` を `ConfigError` に置換（#449）
+- `fix(lyria-client)`: Lyria 3 Interactions API の legacy `outputs` schema 単一依存を解消（#377）。スキーマ切替時のサイレント失敗を防止
+- `fix(upload-policy)`: `429 Too Many Requests` を retryable に追加し backoff 化（#379）
+- `fix(yt-config-migrate)`: `verify` が `--target` 指定なしで複数ファイル構成チャンネルを解決できない問題を修正（#347）
+
+### Removed
+
+- `/release-notes` スキル廃止（#434）。後継は `/automation-update`（下流追従）と `/automation-release`（リリース実施）
+- `scripts/gcp-bootstrap.sh` / `scripts/gcp-terraform-apply.sh` の旧パスを削除（#388、`scripts/gcp/` 配下に移行済み）
+
+### Migration
+
+所要時間の目安: 〜10 分
+
+local fix 衝突注意: 無し（下流が独自に skill を改変していない場合）
+
+サマリ:
+
+- 新 skill: `/automation-release`（本リポジトリ運用）と `/automation-update`（下流追従）
+- `/release-notes` スキル廃止（後継は上記 2 スキル）
+- `upload-core` が resumable session URI を永続化し、失敗後の再実行で二重 publish を防止（#381）
+- `lyria-client` / `upload-policy` / `yt-config-migrate` の安定性修正
+- GCP 系シェルスクリプトを `scripts/gcp/` 配下の canonical path に一本化（#388）
+
+主要な追従ポイント:
+
+1. `uv run yt-skills sync` で新 skill `/automation-release` / `/automation-update` を取り込み
+2. `/release-notes` をローカルで叩いていた場合は `/automation-update` に置き換え
+3. `scripts/gcp-bootstrap.sh` / `scripts/gcp-terraform-apply.sh` を参照する自前スクリプトがあれば `scripts/gcp/` 配下のパスに書き換え
 
 ## [5.5.1] - 2026-05-19
 
@@ -694,6 +752,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.2]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.2
 [5.5.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.1
 [5.5.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.0
 [5.4.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.4.0
