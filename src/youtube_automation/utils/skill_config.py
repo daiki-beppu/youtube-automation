@@ -124,6 +124,36 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     return _load_yaml(path)
 
 
+THUMBNAIL_MODE_SEQUENTIAL = "sequential"
+"""デフォルト: テキスト 3 案 → ユーザー選択 → 選ばれた 1 案だけサムネ生成。"""
+
+THUMBNAIL_MODE_PARALLEL = "parallel"
+"""旧挙動: 3 案すべて本番品質でサムネを即時生成 (opt-in)。"""
+
+_VALID_THUMBNAIL_MODES = frozenset({THUMBNAIL_MODE_SEQUENTIAL, THUMBNAIL_MODE_PARALLEL})
+
+
+def get_collection_ideate_thumbnail_mode() -> str:
+    """collection-ideate skill の thumbnail_mode を返す。
+
+    skill-config の `preview.thumbnail_mode` を参照。未設定なら
+    THUMBNAIL_MODE_SEQUENTIAL。不正な shape/値は ConfigError。
+    """
+    cfg = load_skill_config("collection-ideate")
+    preview = cfg.get("preview")
+    if preview is None:
+        preview = {}
+    if not isinstance(preview, dict):
+        raise ConfigError(f"collection-ideate.preview は mapping である必要があります: {preview!r}")
+    mode = preview.get("thumbnail_mode", THUMBNAIL_MODE_SEQUENTIAL)
+    if mode not in _VALID_THUMBNAIL_MODES:
+        raise ConfigError(
+            "collection-ideate.preview.thumbnail_mode は "
+            f"{sorted(_VALID_THUMBNAIL_MODES)} のいずれかである必要があります: {mode!r}"
+        )
+    return mode
+
+
 def reset(skill: str | None = None) -> None:
     """キャッシュをクリアする (テスト用)。
 
