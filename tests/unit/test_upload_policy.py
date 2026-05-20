@@ -8,6 +8,8 @@ import pytest
 from youtube_automation.utils.upload_policy import (
     MAX_RETRY_ATTEMPTS,
     MAX_THUMBNAIL_BYTES,
+    RETRYABLE_HTTP_STATUSES,
+    SESSION_EXPIRED_HTTP_STATUSES,
     RetryDecision,
     ThumbnailCompression,
 )
@@ -58,7 +60,7 @@ class TestRetryDecision:
         assert decision.should_retry is True
         assert decision.delay_seconds > 0
 
-    @pytest.mark.parametrize("status", [400, 403, 404, 429])
+    @pytest.mark.parametrize("status", [400, 403, 404])
     def test_gives_up_on_client_error(self, status):
         decision = RetryDecision.for_http_error(status, current_attempt=0)
         assert decision.should_retry is False
@@ -83,3 +85,72 @@ class TestRetryDecision:
     def test_applies_exponential_backoff(self, attempt, expected_delay):
         decision = RetryDecision.for_http_error(503, current_attempt=attempt)
         assert decision.delay_seconds == expected_delay
+
+    def test_retries_on_rate_limit(self):
+        """429 (Too Many Requests / quota) は再試行対象。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds > 0
+
+    def test_respects_retry_after_header(self):
+        """Retry-After で与えられた秒数をそのまま delay として採用する。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=0, retry_after_seconds=10.0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 10.0
+
+    def test_falls_back_to_exponential_when_no_retry_after(self):
+        """Retry-After が無ければ ``2 ** attempt`` の指数 backoff。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=2)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 4.0
+
+    def test_retry_after_applies_to_5xx_too(self):
+        """Retry-After は 5xx にも一律適用される（指数 backoff を上書き）。"""
+        decision = RetryDecision.for_http_error(503, current_attempt=0, retry_after_seconds=7.0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 7.0
+
+    def test_falls_back_to_exponential_when_retry_after_non_positive(self):
+        """Retry-After が 0 以下なら指数 backoff にフォールバック。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=1, retry_after_seconds=0.0)
+        assert decision.should_retry is True
+        assert decision.delay_seconds == 2.0
+
+    def test_gives_up_on_rate_limit_after_max_attempts(self):
+        """429 でも MAX_RETRY_ATTEMPTS を超えれば諦める。"""
+        decision = RetryDecision.for_http_error(429, current_attempt=MAX_RETRY_ATTEMPTS)
+        assert decision.should_retry is False
+
+
+# ---------------------------------------------------------------------------
+# SESSION_EXPIRED_HTTP_STATUSES: resumable upload セッション失効ステータス集合
+# ---------------------------------------------------------------------------
+
+
+class TestSessionExpiredHttpStatuses:
+    """resumable upload の session URI 失効と判定すべき HTTP ステータス集合."""
+
+    def test_should_include_410_gone_in_expired_set(self):
+        # Given: 定数 SESSION_EXPIRED_HTTP_STATUSES
+        # When: 410 を集合に問い合わせる
+        # Then: 410 (Gone) が含まれる — googleapiclient が dead resumable session を通知する典型
+        assert 410 in SESSION_EXPIRED_HTTP_STATUSES
+
+    def test_should_include_404_not_found_in_expired_set(self):
+        # Given: 定数 SESSION_EXPIRED_HTTP_STATUSES
+        # When: 404 を集合に問い合わせる
+        # Then: 404 (Not Found) が含まれる — 期限切れ resumable session のもう 1 形態
+        assert 404 in SESSION_EXPIRED_HTTP_STATUSES
+
+    def test_should_not_overlap_retryable_statuses(self):
+        # Given: SESSION_EXPIRED と RETRYABLE の 2 集合
+        # When: 共通要素を取得
+        overlap = SESSION_EXPIRED_HTTP_STATUSES & RETRYABLE_HTTP_STATUSES
+
+        # Then: 共通集合は空 — 失効ステータスは「再試行 → セッションクリア」の独立分岐
+        assert overlap == frozenset()
+
+    def test_should_be_frozenset_for_immutability(self):
+        # Given/When: 定数の型を取得
+        # Then: frozenset であり実行時に追加・削除が不可
+        assert isinstance(SESSION_EXPIRED_HTTP_STATUSES, frozenset)

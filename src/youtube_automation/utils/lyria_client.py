@@ -100,6 +100,77 @@ def _access_token() -> str:
     return credentials.token
 
 
+def _legacy_audio_data(outputs: object) -> str | None:
+    """legacy `outputs` 配列から base64 エンコード済み audio data 文字列を抽出。
+
+    型不正・キー欠落・非 audio mime は skip して次へ進む（例外を投げない）。
+    """
+    if not isinstance(outputs, list):
+        return None
+    for out in outputs:
+        if not isinstance(out, dict) or out.get("type") != "audio":
+            continue
+        mime = out.get("mime_type", "")
+        if not isinstance(mime, str) or not mime.startswith("audio/"):
+            continue
+        data = out.get("data")
+        if isinstance(data, str):
+            return data
+    return None
+
+
+def _audio_data_from_part(part: object) -> str | None:
+    """新 schema `parts[*]` の 1 要素から base64 エンコード済み audio data 文字列を抽出。
+
+    `inline_data` / `inlineData` および `mime_type` / `mimeType` の両表記を defensive に受ける。
+    """
+    if not isinstance(part, dict):
+        return None
+    inline = part.get("inline_data")
+    if not isinstance(inline, dict):
+        inline = part.get("inlineData")
+    if not isinstance(inline, dict):
+        return None
+    mime = inline.get("mime_type") or inline.get("mimeType") or ""
+    if not isinstance(mime, str) or not mime.startswith("audio/"):
+        return None
+    data = inline.get("data")
+    return data if isinstance(data, str) else None
+
+
+def _new_schema_audio_data(candidates: object) -> str | None:
+    """新 schema `candidates[*].content.parts[*].inline_data` から audio data 文字列を抽出。"""
+    if not isinstance(candidates, list):
+        return None
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        content = candidate.get("content")
+        if not isinstance(content, dict):
+            continue
+        parts = content.get("parts")
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            data = _audio_data_from_part(part)
+            if data is not None:
+                return data
+    return None
+
+
+def _extract_audio_bytes(body: dict) -> bytes | None:
+    """Lyria レスポンスから audio bytes を抽出。legacy `outputs` と新 schema の両対応。
+
+    走査順序は legacy → 新 schema 固定。両 schema に audio が同居する移行期レスポンスでは
+    legacy を優先して既存挙動互換を保つ。型不正・キー欠落・非 audio mime は skip し、
+    両 schema いずれにも audio が見つからなければ None。
+    """
+    encoded = _legacy_audio_data(body.get("outputs"))
+    if encoded is None:
+        encoded = _new_schema_audio_data(body.get("candidates"))
+    return base64.b64decode(encoded) if encoded is not None else None
+
+
 def generate_music(
     prompt: str,
     model: str,
@@ -140,9 +211,9 @@ def generate_music(
         return None
 
     body = response.json()
-    for out in body.get("outputs", []):
-        if out.get("type") == "audio" and out.get("mime_type", "").startswith("audio/"):
-            return base64.b64decode(out["data"])
+    audio = _extract_audio_bytes(body)
+    if audio is not None:
+        return audio
 
     print(f"\n[ERROR] Lyria レスポンスにオーディオデータがありません: {body}")
     return None

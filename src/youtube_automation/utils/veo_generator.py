@@ -4,6 +4,7 @@ generate_loop_video.py / generate_veo_video.py から共通利用される
 API 呼び出し・音声除去・クロスフェード補正の関数群。
 """
 
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -67,6 +68,47 @@ def _resume_operation(client, gen_types, output_path: Path, requested_model: str
         _handle_operations_get_error(exc, output_path)
         return None, saved_model
     return operation, saved_model
+
+
+def _join_natural(items: list[str]) -> str:
+    """list[str] を英文として自然に結合する (Oxford comma 付き)。"""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+
+def build_structured_prompt(
+    motion_targets: list[str],
+    static_targets: list[str],
+    template: str,
+    base_rules: str,
+) -> str:
+    """motion / static のリストからテンプレ展開で Veo 3.1 用英文プロンプトを生成する。
+
+    motion_targets が strip + filter 後に空なら ValueError を送出する。
+
+    テンプレ内のプレースホルダ:
+      - {motion_clause}: motion_targets を自然結合した英文
+      - {static_clause}: static_targets を自然結合した英文 (空なら "the rest of the scene")
+      - {base_rules}: 共通追加ルール
+    """
+    motion = [t.strip() for t in motion_targets if t and t.strip()]
+    if not motion:
+        raise ValueError("motion_targets is empty after strip/filter")
+
+    static = [t.strip() for t in static_targets if t and t.strip()]
+    static_clause = _join_natural(static) if static else "the rest of the scene"
+    motion_clause = _join_natural(motion)
+
+    prompt = template
+    prompt = prompt.replace("{motion_clause}", motion_clause)
+    prompt = prompt.replace("{static_clause}", static_clause)
+    prompt = prompt.replace("{base_rules}", base_rules or "")
+    # base_rules が空のときにテンプレ内で連続スペースが残るので 1 個に正規化
+    prompt = re.sub(r" {2,}", " ", prompt)
+    return prompt.strip()
 
 
 def _submit_operation(

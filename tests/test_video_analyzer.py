@@ -296,6 +296,32 @@ class TestVideoAnalysisReport:
         assert "thumbnail_alignment" in md or "サムネ" in md or "Thumbnail" in md
         assert "editing_metrics" in md or "編集" in md or "Editing" in md
 
+    def test_render_includes_suno_preset_section(self):
+        """issue #360: payload に suno_preset が含まれていれば Markdown に登場する."""
+        results = [
+            {
+                "video_id": "VID01",
+                "slug": "celtic-music",
+                "url": "https://www.youtube.com/watch?v=VID01",
+                "title": "Celtic Forest",
+                "analyzed_at": "2026-04-29T10:00:00",
+                "model": "gemini-2.5-flash",
+                **_VALID_PAYLOAD,
+                "suno_preset": {
+                    "genre_line": "celtic folk, soft strings, airy flute",
+                    "exclude_styles": "heavy metal, EDM",
+                    "rationale": "BGM is acoustic celtic with sustained strings.",
+                },
+            },
+        ]
+
+        md = VideoAnalysisReport.render(slug="celtic-music", results=results, failures=[])
+
+        assert "suno_preset" in md or "Suno preset" in md
+        # 内容も Markdown 内に dump されること
+        assert "celtic folk" in md
+        assert "heavy metal" in md
+
     def test_render_reports_failure_count(self):
         # Given: 一部失敗あり
         failures = [

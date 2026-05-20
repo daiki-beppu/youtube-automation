@@ -13,6 +13,17 @@ image_generation:
   # 指定したときのみ CLI 表示に使われる。未指定なら CLI には「不明」と表示され、
   # 実コストは GCP Cloud Console > Billing で確認する。
 
+  # ボツ画像ストック化 (#364): /thumbnail と /collection-ideate で不採用となった
+  # 画像を <channel_dir>/assets/stock/<theme>/ に隣接 .meta.json 付きで退避する。
+  # 別コレクションで参照画像として再利用できる。
+  stock:
+    # false にすると yt-stock-archive は退避せず unlink のみ実施 (従来挙動)
+    enabled: true
+    # yt-stock-prune の保持日数 (mtime 基準、未指定なら CLI 引数必須)
+    retention_days: 90
+    # yt-stock-prune のテーマあたり最大保持件数 (未指定なら CLI 引数必須)
+    max_per_theme: 50
+
   gemini:
     # 使用する Gemini 画像生成モデル
     model: gemini-3.1-flash-image-preview
@@ -64,6 +75,27 @@ image_generation:
     #     - data/thumbnail_compare/benchmark/<channel>-<vid3>.jpg
     #   path_base: channel_dir  # channel_dir からの相対パス
     #   notes: ""
+
+    # stock 再利用 (#364 PR-B): assets/stock/<theme>/ のボツ画像を参照プールに
+    # 自動合成する。default の参照画像と合算され、attempt ローテーションの対象になる。
+    # チャンネル側で config/skills/thumbnail.yaml に override 可。
+    reference_images:
+      stock:
+        # false で stock 合成を完全 OFF (default のみで生成、PR-A merge 直後と同じ挙動)
+        enabled: true
+        # 1 回の生成で混ぜる最大件数 (mtime 降順 or shuffle 後の先頭 N)
+        max_count: 3
+        # "exact" → 同じ theme slug のみ採用 / "any" → 全テーマから採用
+        theme_match: "exact"
+        # SOURCE_ROLES でフィルタ ("thumbnail_candidate" | "ideate_preview" | null)
+        # thumbnail スキルでは thumbnail_candidate のみに絞り意図しない混入を防止
+        source_role: "thumbnail_candidate"
+        # mtime 降順 (false) か、多様化のため shuffle (true)
+        shuffle: true
+        # shuffle 用 seed (null なら毎回ランダム)
+        seed: null
+        # stock が空でもエラーにせず default のみで継続
+        fallback_when_empty: true
 
     # 差分プロンプトのテンプレ (single_step / diff_from_reference モードで使用)
     # プレースホルダ: {scene_description}, {specific_changes}, {background},

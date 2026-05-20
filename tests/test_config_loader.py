@@ -183,7 +183,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
 
     assert config.analytics.collection_filter_keywords == ["collection", "complete"]
     assert config.analytics.benchmark.channels == [{"name": "Rival", "id": "UC123"}]
-    assert config.playlists.items == {"main": "PLtest123"}
+    assert config.playlists.items == {"main": {"playlist_id": "PLtest123", "auto_add": True, "title": None}}
     assert config.audio.target_duration_min == 120.0
     assert config.meta.branding.description == "ch desc"
     assert config.youtube.content_model.type == "collection"
@@ -316,6 +316,31 @@ def test_no_section_files(tmp_path, monkeypatch):
         load_config()
 
 
+# ----- boundary-validation: playlists top-level shape ---------------------
+
+
+def test_playlists_list_shape_raises_config_error(tmp_path, monkeypatch):
+    """playlists セクションが [] のとき ConfigError を投げる（truthy な空 list を黙認しない）."""
+    sections = _minimal_sections()
+    sections["playlists.json"] = {"playlists": []}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="playlists セクションは object でなければなりません"):
+        load_config()
+
+
+def test_playlists_list_with_items_raises_config_error(tmp_path, monkeypatch):
+    """playlists セクションが [1] のとき AttributeError ではなく ConfigError を投げる."""
+    sections = _minimal_sections()
+    sections["playlists.json"] = {"playlists": [1]}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="playlists セクションは object でなければなりません"):
+        load_config()
+
+
 def test_legacy_config_detection(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, _minimal_sections())
     _write_json(ch / "config" / "channel_config.json", {"legacy": True})
@@ -372,6 +397,87 @@ def test_audio_chapter_max_override(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.audio.chapter_max == 50
+
+
+def test_playlists_string_value_normalized_to_dict(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["playlists.json"] = {"playlists": {"main": "PL_X"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.playlists.items == {"main": {"playlist_id": "PL_X", "auto_add": True, "title": None}}
+
+
+def test_playlists_dict_value_preserved_as_is(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["playlists.json"] = {
+        "playlists": {
+            "battle": {
+                "playlist_id": "PL_B",
+                "title": "Battle Music",
+                "auto_add_themes": ["fight"],
+            }
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    entry = config.playlists.items["battle"]
+    assert entry["playlist_id"] == "PL_B"
+    assert entry["title"] == "Battle Music"
+    assert entry["auto_add_themes"] == ["fight"]
+
+
+def test_playlists_mixed_string_and_dict_entries(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["playlists.json"] = {
+        "playlists": {
+            "main": "PL_MAIN",
+            "battle": {
+                "playlist_id": "PL_B",
+                "title": "Battle Music",
+                "auto_add_themes": ["fight"],
+            },
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.playlists.items["main"] == {
+        "playlist_id": "PL_MAIN",
+        "auto_add": True,
+        "title": None,
+    }
+    assert config.playlists.items["battle"]["playlist_id"] == "PL_B"
+    assert config.playlists.items["battle"]["auto_add_themes"] == ["fight"]
+
+
+def test_playlists_dict_entry_is_shallow_copied():
+    from youtube_automation.utils.config.loader import _build_playlists
+
+    raw_entry = {"playlist_id": "PL_B", "auto_add_themes": ["fight"]}
+    merged = {"playlists": {"battle": raw_entry}}
+
+    playlists = _build_playlists(merged)
+
+    assert playlists.items["battle"] is not raw_entry
+    assert playlists.items["battle"] == raw_entry
+
+
+def test_playlists_invalid_shape_raises_config_error():
+    from youtube_automation.utils.config.loader import _build_playlists
+    from youtube_automation.utils.exceptions import ConfigError
+
+    merged = {"playlists": {"main": 42}}
+
+    with pytest.raises(ConfigError, match="playlists.main"):
+        _build_playlists(merged)
 
 
 def test_localizations_missing(tmp_path, monkeypatch):

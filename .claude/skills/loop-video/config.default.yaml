@@ -7,14 +7,40 @@ veo:
   # Veo モデル ID（API デフォルト: veo-3.1-fast-generate-001 / 選択肢: veo-3.1-fast-generate-001 | veo-3.1-generate-001 | veo-3.1-lite-generate-preview）
   model: "veo-3.1-fast-generate-001"
 
-  # 動画生成プロンプト。コレクションの世界観に合わせてチャンネル側で上書き推奨。
+  # 動画生成プロンプト（freeform）。コレクションの世界観に合わせてチャンネル側で上書き推奨。
   # 原則: 静止構図 + 微細な動き（ロウソクの揺らぎ、キャラの呼吸、光のシフト）。
   # 派手なエフェクト / 煙 / パーティクル / 落下物は NG（ループ破綻の原因）。
+  # 構造化プロンプト (motion_targets / static_targets) を使うほうが事故率が下がるため
+  # 新規チャンネルは下の structured 系を優先して使うことを推奨。
   default_prompt: |
     Static scene with only natural subtle movements: gentle flickering of candle flames,
     slight sway of character breathing, soft light shifts on surfaces.
     No smoke, no magical effects, no particles, no falling objects.
     Keep the scene calm and grounded, like a living painting.
+
+  # 構造化プロンプト (issue #358)。
+  # 「動かす対象」「固定対象」をリストで明示し、Veo 3.1 公式推奨の
+  # ポジティブ表現テンプレートに展開する。motion_targets / static_targets の
+  # いずれかが非空なら default_prompt より優先される。
+  # 推奨: 数や形を保持したい要素は "two animals (count remains 2)" のように
+  # 肯定文で固定する書き方が効く。
+  motion_targets: []         # 例: ["slow leaves swaying", "subtle steam rising from coffee"]
+  static_targets: []         # 例: ["the character", "two animals (count remains 2)", "bird bath"]
+
+  # Veo 3.1 公式の 5 要素 (Cinematography + Action + Style) を圧縮し、
+  # ポジティブ表現で「存在の固定」を明示するテンプレート。
+  # {motion_clause} / {static_clause} / {base_rules} がプレースホルダ。
+  prompt_template: |
+    Locked camera, static composition, no camera movement.
+    The scene is a living painting: {static_clause} remain exactly as in the source image — same count, same shape, same position, perfectly still.
+    The only motion is {motion_clause} — subtle, gentle, barely perceptible, natural.
+    {base_rules}
+    Loop seamlessly with the first frame matching the last frame.
+
+  # 共通の追加ルール（{base_rules} に差し込む）。ポジティブ表現でアンビエンス固定。
+  base_rules: |
+    Preserve the original lighting, color palette, depth, and framing.
+    No new objects, no new creatures, no smoke or magical particles appear; the world is closed and stable.
 
   # 生成尺（Veo API 制約で現状 8 秒固定）
   duration_seconds: 8
