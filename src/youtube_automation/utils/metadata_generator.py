@@ -26,6 +26,18 @@ from .time_utils import format_duration_display, format_duration_short, format_t
 
 logger = logging.getLogger(__name__)
 
+# `pattern-b1-` のような variation 接尾辞も許容する（`_clean_track_title` のサニタイズ規約と同じ）。
+# 末尾 `(?![a-z])` で `pattern-e-` のような範囲外文字は明示的に reject する。
+_PATTERN_KEY_RE = re.compile(r"^\d+-pattern-([a-d])(?![a-z])", re.IGNORECASE)
+
+
+def _extract_pattern_key(filename: str) -> str | None:
+    """ファイル名から pattern_key（'a'|'b'|'c'|'d'）を抽出する。マッチしなければ None."""
+    m = _PATTERN_KEY_RE.match(filename)
+    if not m:
+        return None
+    return m.group(1).lower()
+
 
 @dataclass(frozen=True)
 class SceneTitleViolation:
@@ -282,6 +294,7 @@ class BAHMetadataGenerator:
                             "start_time": start_time,
                             "end_time": end_time,
                             "timestamp": self._format_timestamp(start_time),
+                            "pattern_key": _extract_pattern_key(wav_file.name),
                         }
                     )
 
@@ -292,6 +305,8 @@ class BAHMetadataGenerator:
                 continue
 
         self.tracks = tracks
+        # LLM がリネームした表示名が workflow-state.json に永続化されていれば再ロード時にも反映する
+        self._apply_persisted_display_names()
         logger.info(f"楽曲解析完了: {len(tracks)}曲")
         return tracks
 
@@ -372,25 +387,165 @@ class BAHMetadataGenerator:
     # ─── タイムスタンプ生成 ─────────────────────────────
 
     def generate_timestamps(self) -> list[dict]:
-        """個別トラックからタイムスタンプ生成
+        """テーマ見出し + 楽曲行の構造化タイムスタンプを生成する。
 
-        02-Individual-music/ にトラックがあれば analyze_audio_files() で生成する。
-        なければ空リスト。
+        ファイル名規約 `\\d+-pattern-[a-d]` から検出した pattern_key の切り替わりごとに
+        `theme_header` 行を挿入する。pattern_key が無いトラック群はフラットに並べる。
+
+        戻り値: `list[{"type": "theme_header"|"track", "timestamp": str, "title": str}]`。
+        トラックが無ければ空リスト。
+
+        self.tracks が未 populate のときは 02-Individual-music/ の存在を見て
+        analyze_audio_files() を実行する。
         """
-        audio_dir = self.collection_path / "02-Individual-music"
-        if audio_dir.exists() and any(audio_dir.iterdir()):
-            tracks = self.analyze_audio_files()
-            return [{"timestamp": t["timestamp"], "title": t["title"]} for t in tracks]
+        if not self.tracks:
+            audio_dir = self.collection_path / "02-Individual-music"
+            if audio_dir.exists() and any(audio_dir.iterdir()):
+                self.analyze_audio_files()
+        if not self.tracks:
+            return []
 
-        return []
+        theme_names = self._load_theme_display_names()
+        out: list[dict] = []
+        last_pattern: str | None = None
+        for track in self.tracks:
+            pattern = track.get("pattern_key")
+            if pattern and pattern != last_pattern:
+                label = theme_names.get(pattern, f"Pattern {pattern.upper()}")
+                out.append({"type": "theme_header", "timestamp": track["timestamp"], "title": label})
+                last_pattern = pattern
+            out.append({"type": "track", "timestamp": track["timestamp"], "title": track["title"]})
+        return out
 
     def format_timestamps_text(self) -> str:
-        """タイムスタンプをYouTube概要欄用テキストに整形"""
+        """タイムスタンプを YouTube 概要欄用テキストに整形.
+
+        テーマ見出し行は `section_headers.theme_inline.{prefix,suffix}` の装飾を適用。
+        デフォルトは `"── "` / `" ──"` で、`section_headers.theme_inline` を上書きすれば
+        チャンネル別に変更できる。
+        """
         timestamps = self.generate_timestamps()
         if not timestamps:
             return ""
-        lines = [f"{ts['timestamp']} {ts['title']}" for ts in timestamps]
+        section_headers = self._video_description_config.get("section_headers", {})
+        theme_inline = section_headers.get("theme_inline", {}) or {}
+        prefix = theme_inline.get("prefix", "── ")
+        suffix = theme_inline.get("suffix", " ──")
+        lines = []
+        for ts in timestamps:
+            if ts["type"] == "theme_header":
+                lines.append(f"{ts['timestamp']} {prefix}{ts['title']}{suffix}")
+            else:
+                lines.append(f"{ts['timestamp']} {ts['title']}")
         return "\n".join(lines)
+
+    # ─── テーマ表示名・重複検知・リネーム永続化 ────────────────
+
+    def _load_theme_display_names(self) -> Dict[str, str]:
+        """workflow-state.json から pattern 表示名を解決する.
+
+        優先順位:
+        1. `planning.music.patterns[<letter>].display_name`（そのまま採用）
+        2. `planning.music.patterns[<letter>].name`（`Pattern X: <name>` に整形）
+        3. 解決不能 → 呼び出し元で `Pattern X` フォールバック
+        """
+        ws_path = self.collection_path / "workflow-state.json"
+        result: Dict[str, str] = {}
+        if not ws_path.exists():
+            return result
+        try:
+            with open(ws_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return result
+        patterns = ((state.get("planning") or {}).get("music") or {}).get("patterns") or {}
+        for letter, data in patterns.items():
+            key = str(letter).lower()
+            if not isinstance(data, dict):
+                continue
+            if data.get("display_name"):
+                result[key] = data["display_name"]
+            elif data.get("name"):
+                result[key] = f"Pattern {key.upper()}: {data['name']}"
+        return result
+
+    def detect_duplicate_track_titles(self) -> Dict[str, List[int]]:
+        """同名トラックを検出する（case-insensitive）.
+
+        戻り値: `{正規化タイトル: [self.tracks 内の index, ...]}`. 重複が無ければ空 dict。
+        SKILL.md 側はこの結果から LLM リネームの要否を判断する。
+        """
+        groups: Dict[str, List[int]] = {}
+        display: Dict[str, str] = {}
+        for idx, track in enumerate(self.tracks):
+            title = track.get("title", "")
+            key = title.casefold()
+            groups.setdefault(key, []).append(idx)
+            display.setdefault(key, title)
+        return {display[k]: idxs for k, idxs in groups.items() if len(idxs) > 1}
+
+    def _apply_persisted_display_names(self) -> None:
+        """workflow-state.json の `track_display_names` を self.tracks に適用する.
+
+        `analyze_audio_files()` 終端と、SKILL.md からの再ロード時に呼ばれる。
+        対応する filename が無いキーは無視する（後方互換）。
+        """
+        ws_path = self.collection_path / "workflow-state.json"
+        if not ws_path.exists():
+            return
+        try:
+            with open(ws_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return
+        name_map = state.get("track_display_names") or {}
+        if not isinstance(name_map, dict) or not name_map:
+            return
+        for track in self.tracks:
+            persisted = name_map.get(track.get("filename"))
+            if persisted:
+                track["title"] = persisted
+
+    def apply_track_display_names(self, name_map: Dict[int, str]) -> None:
+        """LLM が決定したリネーム結果を反映する.
+
+        Args:
+            name_map: `{self.tracks 内の index: 新表示名}`.
+
+        Side effects:
+            - `self.tracks[i]["title"]` を上書き
+            - `workflow-state.json` の `track_display_names` キーに
+              `{filename: display_name}` 形式で永続化（既存キーは保持）
+        """
+        if not name_map:
+            return
+
+        filename_map: Dict[str, str] = {}
+        for idx, new_title in name_map.items():
+            if idx < 0 or idx >= len(self.tracks):
+                raise IndexError(f"apply_track_display_names: index {idx} は range 外（tracks={len(self.tracks)}）")
+            self.tracks[idx]["title"] = new_title
+            filename = self.tracks[idx].get("filename")
+            if filename:
+                filename_map[filename] = new_title
+
+        if not filename_map:
+            return
+
+        ws_path = self.collection_path / "workflow-state.json"
+        state: Dict = {}
+        if ws_path.exists():
+            try:
+                with open(ws_path, "r", encoding="utf-8") as f:
+                    state = json.load(f) or {}
+            except (json.JSONDecodeError, OSError):
+                state = {}
+        existing = state.get("track_display_names") or {}
+        if not isinstance(existing, dict):
+            existing = {}
+        existing.update(filename_map)
+        state["track_display_names"] = existing
+        ws_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     # ─── タイトル生成（2026リブランド） ─────────────────
 
@@ -631,15 +786,9 @@ class BAHMetadataGenerator:
         description_parts.append(header)
         description_parts.append("")
 
-        # チャプター用タイムスタンプ
-        for i, track in enumerate(self.tracks, 1):
-            description_parts.append(f"{track['timestamp']} {i:02d}. {track['title']}")
-
-        # タイムスタンプ部分（ローカライゼーション用、ヘッダーなし）
-        timestamp_lines = []
-        for i, track in enumerate(self.tracks, 1):
-            timestamp_lines.append(f"{track['timestamp']} {i:02d}. {track['title']}")
-        timestamp_body = "\n".join(timestamp_lines)
+        timestamp_body = self.format_timestamps_text()
+        if timestamp_body:
+            description_parts.append(timestamp_body)
 
         # config から説明文パーツを構築
         perfect_for_lines = "\n".join(f"• {item}" for item in list(self.config.content.descriptions.perfect_for))
