@@ -6,6 +6,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 ## 管理するリソース
 
+- `tls_private_key.ssh_host` × 1（VPS の SSH host key を Terraform state 上で固定管理する Ed25519 鍵ペア）
 - `vultr_ssh_key` × 1（VPS 作成時に登録する SSH 公開鍵）
 - `vultr_firewall_group` × 1（`youtube-stream` インスタンスに適用するファイアウォールグループ）
 - `vultr_firewall_rule` × N（`var.allowed_ssh_cidr` の CIDR ごとに 22/tcp の inbound rule。IPv4 のみ）
@@ -21,6 +22,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - ssh-agent が起動済み（`SSH_AUTH_SOCK` が設定されている）かつ秘密鍵が登録済み（`ssh-add ~/.ssh/yt_stream_key`）。`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続するため、ssh-agent 未起動 / 鍵未登録 のいずれでも apply 時に `Permission denied (publickey)` で失敗する。`ssh-add -l` で登録済み鍵を確認できる（`Could not open a connection to your authentication agent.` が返れば agent 未起動）
     - **ssh-agent への登録は OS 起動時に自動では行われない**: macOS の launchd keychain 連携を別途設定していない限り、再起動・再ログインで agent は空になる。毎セッションで `ssh-add ~/.ssh/yt_stream_key` を実行する必要がある
     - **`ssh -i ~/.ssh/yt_stream_key root@<ip>` で SSH できることは agent 登録の検証にならない**: `-i` 指定は鍵ファイルを直接読むため agent 状態と無関係に成功する。Terraform provisioner は `agent = true` のみで動作するため、検証は **必ず `ssh-add -l`** で行う
+- `null_resource.deploy.connection` は `host_key` 検証を有効化している。host 鍵は Terraform が `tls_private_key.ssh_host` として生成し、cloud-init の `ssh_keys` で `/etc/ssh/ssh_host_ed25519_key{,.pub}` に固定配置するため、初回 apply でも TOFU に依存せず接続先ホストを検証できる
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
 - operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
 
@@ -50,7 +52,7 @@ terraform apply
 
 > **tfstate と secret の関係（誤解しやすいので明記）**
 >
-> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ** で、`*.tfstate` JSON 自体は **平文**である。本モジュールでは `stream_key` を `triggers` に保存する際 `nonsensitive(sha256(var.stream_key))` で SHA256 ラップしているため、tfstate を取得されても元のストリームキーは復元できない（SHA256 は不可逆）。`*.tfstate*` は `.gitignore` 済みだが、ローカル / バックアップ / 共有時もファイルパーミッションでアクセス制御すること。
+> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ** で、`*.tfstate` JSON 自体は **平文**である。本モジュールでは `stream_key` を `triggers` に保存する際 `nonsensitive(sha256(var.stream_key))` で SHA256 ラップしているため、tfstate を取得されても元のストリームキーは復元できない（SHA256 は不可逆）。一方で `tls_private_key.ssh_host.private_key_openssh` は host 鍵の秘密鍵そのものが state に保存される。`*.tfstate*` は `.gitignore` 済みでも、ローカル / バックアップ / 共有時は機微情報としてアクセス制御すること。
 
 ## 配信サイクル（11h + 1h）
 

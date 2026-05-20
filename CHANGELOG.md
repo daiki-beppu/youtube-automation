@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(terraform)`: streaming VM の SSH host key 検証を追加（#164）。`null_resource.deploy.connection.host_key` を結線し、`tls_private_key` で生成した Ed25519 host key を cloud-init の `ssh_keys` で VM に固定配置。`hashicorp/tls` provider を `versions.tf` / `.terraform.lock.hcl` に追加
+
+### Changed
+
+- `utils/daily_archive.py` を `utils/streaming_archive.py` に rename（#164）。`streaming_archive_check.py` の import を追従
+
 ## [5.5.2] - 2026-05-20
 
 ### Added

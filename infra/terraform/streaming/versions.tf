@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/null"
       version = ">= 3.2"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = ">= 4.0"
+    }
   }
 }
 
