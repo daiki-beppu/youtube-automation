@@ -835,14 +835,13 @@ class TestFormatTimestampsTextWithThemes:
             _track("01-pattern-a-foo.mp3", "Foo", "00:00", "a"),
             _track("02-pattern-b-bar.mp3", "Bar", "03:00", "b"),
         ]
-        monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {"a": "Pattern A: Awakening", "b": "Pattern B: Flow"})
-        text = gen.format_timestamps_text()
-        assert text == (
-            "── Pattern A: Awakening ──\n"
-            "00:00 Foo\n"
-            "── Pattern B: Flow ──\n"
-            "03:00 Bar"
+        monkeypatch.setattr(
+            gen,
+            "_load_theme_display_names",
+            lambda: {"a": "Pattern A: Awakening", "b": "Pattern B: Flow"},
         )
+        text = gen.format_timestamps_text()
+        assert text == ("── Pattern A: Awakening ──\n00:00 Foo\n── Pattern B: Flow ──\n03:00 Bar")
 
     def test_flat_format_for_no_pattern_keys(self, monkeypatch):
         gen = _make_generator()
