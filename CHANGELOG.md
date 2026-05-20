@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(image_provider)`: Codex CLI 経由のサブスク認証で画像を生成する `CodexImageProvider` を追加（#472）。`utils/image_provider/codex.py` と `tests/test_image_provider_codex.py`、対応する `parse_image_generation_config()` 拡張・`thumbnail` skill 設定（`config.default.yaml` / `SKILL.md`）の Codex provider 切り替え対応を含む
+
 ## [5.5.2] - 2026-05-20
 
 ### Added

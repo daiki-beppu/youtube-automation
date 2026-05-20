@@ -14,7 +14,6 @@ import pytest
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.config import (
-    CodexConfig,
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
