@@ -200,6 +200,25 @@ fi
 |------|-----|------|
 | MP3 | `https://cdn1.suno.ai/{song_id}.mp3` | 不要 |
 
+## 長時間処理の取り扱い
+
+`yt-generate-master`（ffmpeg クロスフェード結合）は **30 秒〜2 分** 程度かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+
+spawn 例:
+
+```bash
+yt-generate-master > /tmp/masterup-$(date +%s).log 2>&1
+```
+
+これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
+
+> ⏳ マスター音源生成を background 実行中（推定 1〜2 分）。完了まで他の質問にもお答えできます。
+> ログ: /tmp/masterup-*.log
+
+cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "masterup" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "masterup"` + `cmux notify --title "masterup 完了"` を呼ぶ（非 cmux 環境では skip）。
+
+`curl` での MP3 一括ダウンロード（Step 3）も曲数が多いと数十秒〜分単位かかるため、同じ background パターンで起動してよい。完了通知が届いたらログ末尾から結果サマリー（`master.mp3` のパス、ダウンロード成功曲数）をユーザーへ返す。
+
 ## Next Step
 
 → `/videoup` で動画生成を実行

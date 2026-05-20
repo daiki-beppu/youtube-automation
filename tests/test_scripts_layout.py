@@ -130,14 +130,15 @@ def test_root_scripts_gcp_terraform_apply_is_removed() -> None:
 def test_root_scripts_dir_only_contains_common_scripts() -> None:
     """Given Issue #140 + #388 の整理後の ``scripts/`` ディレクトリ
     When 直下のエントリを列挙する
-    Then ファイルが1件も存在しない（scripts/ は空）。
+    Then ファイルが1件も存在しない（scripts/ は空、またはディレクトリ自体が存在しない）。
 
     Issue #140 で skill 固有スクリプトを削除し、Issue #388 で残っていた
     ``gcp-bootstrap.sh`` / ``gcp-terraform-apply.sh`` も削除された。
+    git は空ディレクトリを track しないため、ディレクトリ自体が消えても OK。
     新規スクリプトを誤ってルートに置いてしまう regression を検出する。
     """
     if not _SCRIPTS_DIR.exists():
-        pytest.fail(f"{_SCRIPTS_DIR.relative_to(_REPO_ROOT)} が存在しない")
+        return
 
     actual = {entry.name for entry in _SCRIPTS_DIR.iterdir() if entry.is_file()}
     unexpected = actual - _COMMON_SCRIPTS

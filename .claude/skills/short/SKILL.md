@@ -145,6 +145,26 @@ uv run yt-upload-shorts <collection-path>              # 実投稿
 - **CC video_url 未記録**: `upload_tracking.json::complete_collection.video_url` が空だと CC リンク行が描画欄から省略される（例外は投げない）。完全状態にするには CC 動画アップ後に `yt-upload-collection` の出力で記録を確認
 - **投稿間隔**: 同コレクションで前回投稿から `cfg.shorts.min_hours_between_shorts_per_collection` 時間以内は新規投稿が block される。テスト中は `--ignore-interval` フラグで bypass 可
 
+## 長時間処理の取り扱い
+
+`generate-shorts.sh` は ffmpeg を本数分（既定 3 本）並列で走らせるため **1〜3 分** 程度かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+
+spawn 例:
+
+```bash
+bash .claude/skills/short/references/generate-shorts.sh <collection-path> \
+  > /tmp/short-$(date +%s).log 2>&1
+```
+
+env で渡している `SHORT_STARTS` / `SHORT_LABELS` 等は spawn 前に export しておく。これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
+
+> ⏳ ショート動画 N 本を background 生成中（推定 1〜3 分）。完了まで他の質問にもお答えできます。
+> ログ: /tmp/short-*.log
+
+cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "short" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "short"` + `cmux notify --title "short 完了"` を呼ぶ（非 cmux 環境では skip）。
+
+完了通知が届いたらログ末尾から結果サマリー（生成された `short-NN-*.mp4` のパス一覧）をユーザーへ返す。失敗時は ffmpeg のエラー行を抜き出して報告する。`yt-upload-shorts` 本実投稿は API 同期呼び出しなので、ここも同じ background パターンで起動してよい（ただし数秒で完了するため省略可）。
+
 ## Next Step
 
 - 投稿済みショートの localizations を一括更新: `uv run yt-shorts-bulk-update-loc <collection-path>`

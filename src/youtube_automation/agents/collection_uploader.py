@@ -300,8 +300,36 @@ class CollectionUploader:
         if publish_at:
             logger.info(f"📅 スケジュール公開: {publish_at}")
 
+        # tracking から resumable upload session URI を取り出す（無ければ None でフレッシュ実行）
+        cc = tracking.get("complete_collection", {})
+        resume_session_uri = cc.get("resume_session_uri")
+
+        def _on_session_uri_changed(uri: str | None) -> None:
+            """upload 中の URI 変化を tracking に永続化する。
+
+            並行更新（プレイリスト追加等が tracking を書く可能性）に備え、
+            毎回 disk から再ロードしてから書き戻す。
+            """
+            current = self._load_tracking(collection_path) or {}
+            cc_current = current.setdefault("complete_collection", {})
+            if uri is None:
+                cc_current.pop("resume_session_uri", None)
+            else:
+                cc_current["resume_session_uri"] = uri
+            self._save_tracking(collection_path, current)
+
+        def _on_upload_complete() -> None:
+            """upload 成功通知。後続の status="completed" 書き込みと整合させるため URI を消す。"""
+            _on_session_uri_changed(None)
+
         try:
-            result = self.uploader.upload_collection(str(collection_path), publish_at=publish_at)
+            result = self.uploader.upload_collection(
+                str(collection_path),
+                publish_at=publish_at,
+                resume_session_uri=resume_session_uri,
+                on_session_uri_changed=_on_session_uri_changed,
+                on_upload_complete=_on_upload_complete,
+            )
             complete_video = result.get("complete_video")
 
             if complete_video and "video_id" in complete_video:
@@ -329,16 +357,23 @@ class CollectionUploader:
                 return {"action": "complete_collection_uploaded", "details": {**tracking["complete_collection"]}}
             else:
                 error_msg = (complete_video or {}).get("error", "Unknown error")
-                tracking["complete_collection"]["status"] = "failed"
-                tracking["complete_collection"]["error"] = error_msg
-                self._save_tracking(collection_path, tracking)
+                # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
+                # status 更新を載せるため、disk から再ロードしてから書き戻す。
+                current = self._load_tracking(collection_path) or tracking
+                cc_current = current.setdefault("complete_collection", {})
+                cc_current["status"] = "failed"
+                cc_current["error"] = error_msg
+                self._save_tracking(collection_path, current)
                 logger.error(f"❌ Complete Collection 失敗: {error_msg}")
                 return {"action": "complete_collection_failed", "details": {"error": error_msg}}
 
         except Exception as e:
-            tracking["complete_collection"]["status"] = "failed"
-            tracking["complete_collection"]["error"] = str(e)
-            self._save_tracking(collection_path, tracking)
+            # 例外パスでも callback が書いた disk 状態を尊重するため再ロード
+            current = self._load_tracking(collection_path) or tracking
+            cc_current = current.setdefault("complete_collection", {})
+            cc_current["status"] = "failed"
+            cc_current["error"] = str(e)
+            self._save_tracking(collection_path, current)
             logger.error(f"❌ Complete Collection エラー: {e}")
             return {"action": "complete_collection_failed", "details": {"error": str(e)}}
 
@@ -413,7 +448,8 @@ class CollectionUploader:
             print("  📅 公開設定: 即時公開 (public)")
         print()
         # 実測クォータ: 約84ユニット/アップロード
-        estimated_quota = 84 + 100  # CC + search API
+        # CC アップロード (84) + 公開日一覧 search (100) + dedup 直前 search (100)
+        estimated_quota = 84 + 100 + 100
         print(f"  推定クォータ消費: 約 {estimated_quota:,}/10,000 ユニット")
 
     # ─── コレクション管理 ────────────────────────────

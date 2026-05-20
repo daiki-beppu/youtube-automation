@@ -58,6 +58,26 @@ $ARGUMENTS
 - ユーザーが DAW でミックスした `master-mix.{wav,m4a}` がある場合、`yt-generate-master` は不要
 - `set -e` は使用しない（明示的エラーハンドリング）
 
+## 長時間処理の取り扱い
+
+`generate_videos.sh` は ffmpeg を走らせるため **1〜10 分程度**（コレクション尺次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+
+spawn 例:
+
+```bash
+bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
+  > /tmp/videoup-$(date +%s).log 2>&1
+```
+
+これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
+
+> ⏳ マスター動画生成を background 実行中（推定 N 分）。完了まで他の質問にもお答えできます。
+> ログ: /tmp/videoup-*.log
+
+cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "videoup" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "videoup"` + `cmux notify --title "videoup 完了"` を呼ぶ（非 cmux 環境では skip）。
+
+完了通知が届いたらログ末尾から結果サマリー（生成された `.mp4` のパス）をユーザーへ返す。失敗時は ffmpeg のエラー行を抜き出して報告する。
+
 ## Next Step
 
 動画生成後:
