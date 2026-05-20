@@ -116,6 +116,29 @@ def test_cmd_sync_all_keeps_target_unset_after_resolve() -> None:
     assert args.target is None
 
 
+def test_cmd_sync_all_with_target_exits_with_error(capsys: pytest.CaptureFixture[str]) -> None:
+    """`--asset all` + `--target` は silent な誤動作を防ぐため error で止める。"""
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--target", "/tmp/custom-path"])
+    with pytest.raises(SystemExit) as exc_info:
+        skills_sync._resolve_default_target(args)
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "--target は --asset all モードでは使えません" in err
+    assert "--asset skills --target" in err
+
+
+def test_cmd_diff_all_with_target_exits_with_error(capsys: pytest.CaptureFixture[str]) -> None:
+    """`yt-skills diff --target X` (asset 未指定) も同様に error で止める。"""
+    parser = build_parser()
+    args = parser.parse_args(["diff", "--target", "/tmp/custom-path"])
+    with pytest.raises(SystemExit) as exc_info:
+        skills_sync._resolve_default_target(args)
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "--target は --asset all モードでは使えません" in err
+
+
 def test_cmd_sync_skills_dry_run_does_not_write(fake_repo: Path, tmp_path: Path) -> None:
     target = tmp_path / "downstream" / ".claude" / "skills"
     parser = build_parser()

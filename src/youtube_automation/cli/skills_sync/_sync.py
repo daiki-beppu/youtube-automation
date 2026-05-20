@@ -28,13 +28,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 
 def _sync_all(args: argparse.Namespace) -> int:
-    """全 asset を順次 sync。各 asset の default_target を使う。"""
-    if args.target is not None:
-        # all モードでは asset ごとに default_target が違うため --target は無視。
-        print(
-            "  [warn] --asset all モードでは --target は無視されます (asset ごとの default_target を使用)",
-            file=sys.stderr,
-        )
+    """全 asset を順次 sync。各 asset の default_target を使う。
+
+    `--target` 指定時は parser 側 (`_resolve_default_target`) で既に error 終了
+    しているため、ここでは args.target は必ず None。
+    """
     overall_rc = 0
     for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
         if i > 0:

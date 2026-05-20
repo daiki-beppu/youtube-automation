@@ -24,12 +24,11 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 
 def _diff_all(args: argparse.Namespace) -> int:
-    """全 asset を順次 diff。各 asset の default_target を使う。"""
-    if args.target is not None:
-        print(
-            "  [warn] --asset all モードでは --target は無視されます",
-            file=sys.stderr,
-        )
+    """全 asset を順次 diff。各 asset の default_target を使う。
+
+    `--target` 指定時は parser 側 (`_resolve_default_target`) で既に error 終了
+    しているため、ここでは args.target は必ず None。
+    """
     overall_rc = 0
     for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
         if i > 0:

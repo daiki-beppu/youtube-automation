@@ -106,6 +106,8 @@ yt-skills sync --asset skills --prune --yes  # 列挙したうえで実際に削
 ```
 
 > `yt-skills sync` のデフォルト挙動は `--asset all` で、`.claude/skills/`・`.claude/CLAUDE.md`・`docs/{workflow-cheatsheet,features}.md` の全てを 1 コマンドで配布します。配布される SKILL.md / CLAUDE.md は `docs/` 配下に相対 link を張るため、`--asset skills` だけを単独で sync すると link 切れになります。
+>
+> `--target` で配布先を独自パスに変えたい場合は `--asset <name>` を必ず明示してください（`--asset all` + `--target` は asset ごとに default_target が異なり曖昧なため error 終了します）。
 
 ### 3. チャンネル設定を作成
 
