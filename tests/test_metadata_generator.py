@@ -236,6 +236,9 @@ class TestGenerateCompleteCollectionMetadata:
         # generate_complete_collection_metadata は _load_scene_phrases() を経由するが、
         # /tmp の fake collection には workflow-state.json が無いためモックで差し替える
         _phrases = {
+            "en": "8-bit adventure world",
+            "de": "8-Bit-Abenteuerwelt",
+            "no": "8-bit eventyrverden",
             "ja": "8ビット冒険の世界",
             "ko": "8비트 모험의 세계",
             "es": "Mundo de aventura de 8 bits",
@@ -343,6 +346,9 @@ class TestGenerateCompleteCollectionMetadata:
     @staticmethod
     def _all_phrases() -> dict:
         return {
+            "en": "Rainy city night test",
+            "de": "Regenstadtnacht Test",
+            "no": "Regnby natt test",
             "ja": "雨の街の夜テスト",
             "ko": "비 오는 도시 밤 테스트",
             "es": "Noche urbana lluviosa test",

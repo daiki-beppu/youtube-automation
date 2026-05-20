@@ -1,0 +1,179 @@
+"""utils/localization_strategy.py のユニットテスト."""
+
+from __future__ import annotations
+
+import pytest
+
+from youtube_automation.utils.localization_strategy import (
+    COUNTRY_CPM_USD,
+    COUNTRY_TO_PRIMARY_LANGUAGE,
+    DEFAULT_CPM_FALLBACK_USD,
+    MANDATORY_LANGUAGES,
+    OTHER_LANGUAGE_BUCKET,
+    TOP_CPM_COUNTRIES,
+    aggregate_by_language,
+    compute_estimated_revenue,
+    recommend_supported_languages,
+)
+
+
+class TestTablesCompleteness:
+    def test_country_keys_are_iso2_uppercase(self):
+        for code in COUNTRY_TO_PRIMARY_LANGUAGE:
+            assert len(code) == 2 and code.isupper(), code
+        for code in COUNTRY_CPM_USD:
+            assert len(code) == 2 and code.isupper(), code
+
+    def test_cpm_keys_subset_of_language_map(self):
+        cpm_only = set(COUNTRY_CPM_USD) - set(COUNTRY_TO_PRIMARY_LANGUAGE)
+        assert cpm_only == set(), f"CPM 表のキーは言語マップにも登録すること: {cpm_only}"
+
+    def test_cpm_values_positive(self):
+        for code, cpm in COUNTRY_CPM_USD.items():
+            assert cpm > 0, f"{code} CPM は正の値であること: {cpm}"
+
+    def test_fallback_cpm_is_positive(self):
+        assert DEFAULT_CPM_FALLBACK_USD > 0
+
+    def test_major_spanish_markets_mapped_to_es(self):
+        """es 言語シェアが過小評価されないよう、主要中南米市場を登録すること."""
+        for code in ["AR", "CO", "CL", "PE", "VE", "EC", "UY", "MX"]:
+            assert COUNTRY_TO_PRIMARY_LANGUAGE.get(code) == "es", code
+
+    def test_major_arabic_markets_mapped_to_ar(self):
+        """中東・北アフリカ主要市場が `other` に落ちないこと."""
+        for code in ["SA", "AE", "EG", "MA", "DZ", "JO", "LB"]:
+            assert COUNTRY_TO_PRIMARY_LANGUAGE.get(code) == "ar", code
+
+    def test_major_southeast_asian_markets_mapped(self):
+        """東南アジア主要市場の言語コードが個別に登録されていること."""
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("TH") == "th"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("VN") == "vi"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("ID") == "id"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("MY") == "ms"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("PH") == "tl"
+
+    def test_major_slavic_markets_mapped(self):
+        """ロシア語圏 / 東欧主要市場が個別に登録されていること."""
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("RU") == "ru"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("UA") == "uk"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("PL") == "pl"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("CZ") == "cs"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("TR") == "tr"
+
+    def test_english_markets_include_africa_and_anz(self):
+        """en 言語シェアが過小評価されないよう、英語圏の主要 ANZ + アフリカ市場を含むこと."""
+        for code in ["ZA", "NG", "KE", "AU", "NZ"]:
+            assert COUNTRY_TO_PRIMARY_LANGUAGE.get(code) == "en", code
+
+    def test_singapore_mapped_to_en(self):
+        """SG は en/zh/ms 多言語だが、広告・行政共通言語の en に寄せる (Codex 2026-05 監査)."""
+        assert COUNTRY_TO_PRIMARY_LANGUAGE["SG"] == "en"
+
+    def test_top_cpm_countries_length(self):
+        """Top 10 CPM 国は 10 ヶ国."""
+        assert len(TOP_CPM_COUNTRIES) == 10
+
+    def test_top_cpm_countries_all_have_language_mapping(self):
+        """Top 10 CPM 国は全て言語マッピング登録済み (MANDATORY 自動導出の前提)."""
+        for code in TOP_CPM_COUNTRIES:
+            assert code in COUNTRY_TO_PRIMARY_LANGUAGE, code
+
+    def test_mandatory_languages_covers_en_de_no(self):
+        """Top 10 の主要言語は en / de / no (2026 Q1)."""
+        assert MANDATORY_LANGUAGES == frozenset({"en", "de", "no"})
+
+
+class TestAggregateByLanguage:
+    def test_groups_countries_into_language_buckets(self):
+        countries = {
+            "US": {"views": 100},
+            "GB": {"views": 50},
+            "JP": {"views": 30},
+        }
+        by_lang = aggregate_by_language(countries)
+        assert by_lang["en"]["views"] == 150
+        assert by_lang["en"]["country_count"] == 2
+        assert by_lang["ja"]["views"] == 30
+
+    def test_unmapped_country_goes_to_other(self):
+        countries = {"ZW": {"views": 100}, "US": {"views": 50}}
+        by_lang = aggregate_by_language(countries)
+        assert OTHER_LANGUAGE_BUCKET in by_lang
+        assert by_lang[OTHER_LANGUAGE_BUCKET]["views"] == 100
+
+    def test_view_share_percent_sums_close_to_100(self):
+        countries = {"US": {"views": 60}, "JP": {"views": 40}}
+        by_lang = aggregate_by_language(countries)
+        total = sum(b["view_share_percent"] for b in by_lang.values())
+        assert total == pytest.approx(100.0, abs=0.01)
+
+    def test_top_countries_sorted_descending(self):
+        countries = {
+            "US": {"views": 100},
+            "GB": {"views": 200},
+            "CA": {"views": 50},
+        }
+        by_lang = aggregate_by_language(countries)
+        en_top = by_lang["en"]["top_countries"]
+        assert [c for c, _ in en_top] == ["GB", "US", "CA"]
+
+    def test_empty_input(self):
+        assert aggregate_by_language({}) == {}
+
+
+class TestComputeEstimatedRevenue:
+    def test_uses_country_cpm_for_known_countries(self):
+        countries = {"US": {"views": 1000}}
+        by_lang = aggregate_by_language(countries)
+        revenue = compute_estimated_revenue(countries, by_lang)
+        expected = 1000 / 1000 * COUNTRY_CPM_USD["US"]
+        assert revenue["en"] == pytest.approx(expected, abs=0.01)
+
+    def test_uses_fallback_for_unmapped_countries(self):
+        countries = {"ZW": {"views": 1000}}
+        by_lang = aggregate_by_language(countries)
+        revenue = compute_estimated_revenue(countries, by_lang)
+        expected = 1000 / 1000 * DEFAULT_CPM_FALLBACK_USD
+        assert revenue[OTHER_LANGUAGE_BUCKET] == pytest.approx(expected, abs=0.01)
+
+    def test_aggregates_multi_country_languages(self):
+        countries = {"US": {"views": 1000}, "GB": {"views": 1000}}
+        by_lang = aggregate_by_language(countries)
+        revenue = compute_estimated_revenue(countries, by_lang)
+        expected = COUNTRY_CPM_USD["US"] + COUNTRY_CPM_USD["GB"]
+        assert revenue["en"] == pytest.approx(expected, abs=0.01)
+
+
+class TestRecommendSupportedLanguages:
+    def test_adds_high_share_unsupported(self):
+        countries = {"US": {"views": 5000}, "DE": {"views": 4000}, "JP": {"views": 1000}}
+        by_lang = aggregate_by_language(countries)
+        revenue = compute_estimated_revenue(countries, by_lang)
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5)
+        assert "en" in rec["add"]
+        assert "de" in rec["add"]
+        assert "ja" in rec["keep"]
+
+    def test_removes_low_share_supported(self):
+        countries = {"US": {"views": 9990}, "KR": {"views": 10}}
+        by_lang = aggregate_by_language(countries)
+        revenue = compute_estimated_revenue(countries, by_lang)
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja", "ko"], add_floor=1.0, keep_floor=0.5)
+        assert "ko" in rec["remove"]
+
+    def test_other_bucket_excluded_from_add(self):
+        countries = {"ZW": {"views": 5000}, "US": {"views": 5000}}
+        by_lang = aggregate_by_language(countries)
+        revenue = compute_estimated_revenue(countries, by_lang)
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5)
+        assert OTHER_LANGUAGE_BUCKET not in rec["add"]
+        assert OTHER_LANGUAGE_BUCKET not in rec["keep"]
+
+    def test_current_lang_without_data_kept_with_rationale(self):
+        countries = {"US": {"views": 1000}}
+        by_lang = aggregate_by_language(countries)
+        revenue = compute_estimated_revenue(countries, by_lang)
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5)
+        assert "ja" in rec["keep"]
+        assert any("ja" in note and "判定保留" in note for note in rec["rationale"])

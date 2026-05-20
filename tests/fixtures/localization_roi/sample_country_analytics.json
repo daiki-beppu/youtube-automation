@@ -1,0 +1,15 @@
+{
+  "countries": {
+    "US": {"views": 50000, "watch_time_minutes": 120000, "avg_view_duration": 144, "subscribers_gained": 80, "view_share_percent": 50.0},
+    "JP": {"views": 20000, "watch_time_minutes": 60000, "avg_view_duration": 180, "subscribers_gained": 30, "view_share_percent": 20.0},
+    "DE": {"views": 10000, "watch_time_minutes": 28000, "avg_view_duration": 168, "subscribers_gained": 15, "view_share_percent": 10.0},
+    "GB": {"views": 8000, "watch_time_minutes": 18000, "avg_view_duration": 135, "subscribers_gained": 12, "view_share_percent": 8.0},
+    "FR": {"views": 5000, "watch_time_minutes": 11000, "avg_view_duration": 132, "subscribers_gained": 8, "view_share_percent": 5.0},
+    "AT": {"views": 3000, "watch_time_minutes": 8000, "avg_view_duration": 160, "subscribers_gained": 4, "view_share_percent": 3.0},
+    "KR": {"views": 400, "watch_time_minutes": 800, "avg_view_duration": 120, "subscribers_gained": 0, "view_share_percent": 0.4},
+    "CN": {"views": 800, "watch_time_minutes": 1600, "avg_view_duration": 120, "subscribers_gained": 1, "view_share_percent": 0.8},
+    "BR": {"views": 1500, "watch_time_minutes": 3000, "avg_view_duration": 120, "subscribers_gained": 2, "view_share_percent": 1.5},
+    "ZW": {"views": 1300, "watch_time_minutes": 2000, "avg_view_duration": 92, "subscribers_gained": 0, "view_share_percent": 1.3}
+  },
+  "total_views": 100000
+}
