@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `yt-localization-roi` CLI と `utils/localization_strategy.py` 追加（#272）。YouTube Analytics の国別 views と公開参考 CPM テーブルを組み合わせて言語別 ROI を推定し、`supported_languages` 見直し用 Markdown レポートを `<channel_dir>/data/localization_roi/<YYYY-MM-DD>.md` に出力
+- `.claude/skills/localization-strategy/` 新設（#272）。ローカライズ戦略見直しワークフローを skill 化し、追加・維持・削除候補の判断補助を提供
+
 ## [5.5.2] - 2026-05-20
 
 ### Added
