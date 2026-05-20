@@ -11,8 +11,10 @@ Subcommands:
     diff   : 同梱版と target の差分を表示
 
 Asset 種別 (`--asset`):
-    skills    : Claude Code スキル (`.claude/skills/`、ディレクトリ単位で 1 entry)
-    claude-md : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
+    skills              : Claude Code スキル (`.claude/skills/`、ディレクトリ単位で 1 entry)
+    claude-md           : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
+    workflow-cheatsheet : workflow 使い分けチートシート (`docs/workflow-cheatsheet.md`、単一ファイル)
+    features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
 
 将来別種類の配布物を追加する場合は `_ASSET_SPECS` に entry を追加するだけで
 list/sync/diff の各 subcommand が自動的にサポートする (kind="dir" / "file" を選ぶ)。
@@ -46,6 +48,22 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
         "source_filename": "CLAUDE.template.md",
         "default_target": ".claude/CLAUDE.md",
         "label": "CLAUDE.md テンプレ",
+    },
+    "workflow-cheatsheet": {
+        "kind": "file",
+        "resource_name": "_docs",
+        "source_subdir": "docs",
+        "source_filename": "workflow-cheatsheet.md",
+        "default_target": "docs/workflow-cheatsheet.md",
+        "label": "workflow チートシート",
+    },
+    "features": {
+        "kind": "file",
+        "resource_name": "_docs",
+        "source_subdir": "docs",
+        "source_filename": "features.md",
+        "default_target": "docs/features.md",
+        "label": "skill カタログ",
     },
 }
 
