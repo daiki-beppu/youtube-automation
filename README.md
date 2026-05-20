@@ -87,19 +87,25 @@ pip install "git+https://github.com/daiki-beppu/youtube-automation@v1.1.0"
 
 > **submodule 形式 (legacy)**: `auth/` shim のみ後方互換を維持します。GCP セットアップスクリプト（`.claude/skills/channel-setup/references/`）は、submodule 利用者は `automation/.claude/skills/channel-setup/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
 
-### 2. Claude Code スキルを同期
+### 2. Claude Code 配布物を同期
 
 チャンネルリポジトリのルートで:
 
 ```bash
-yt-skills list                       # 同梱スキル一覧 (28 件)
-yt-skills sync                       # ./.claude/skills/ にコピー
-yt-skills sync --symlink             # 開発時はシンボリックリンク
-yt-skills diff                       # 同梱版との差分表示
-yt-skills sync --force               # 既存ファイルを上書き
-yt-skills sync --prune               # 同梱に無い skill ディレクトリを列挙 (実削除しない)
-yt-skills sync --prune --yes         # 列挙したうえで実際に削除する (rename リリース後の掃除用)
+yt-skills list                            # 全 asset の同梱一覧（skills / CLAUDE.md / docs）
+yt-skills sync                            # 全 asset を一括展開 (--asset all がデフォルト)
+yt-skills sync --asset skills             # 個別: Claude Code スキルだけ
+yt-skills sync --asset claude-md          # 個別: 運営方針テンプレ (.claude/CLAUDE.md)
+yt-skills sync --asset workflow-cheatsheet  # 個別: workflow チートシート (docs/workflow-cheatsheet.md)
+yt-skills sync --asset features           # 個別: 全 skill カタログ (docs/features.md)
+yt-skills sync --symlink                  # 開発時はシンボリックリンク
+yt-skills diff                            # 全 asset で同梱版との差分表示
+yt-skills sync --force                    # 既存ファイルを上書き
+yt-skills sync --asset skills --prune     # skills で同梱に無い entry を列挙 (実削除しない)
+yt-skills sync --asset skills --prune --yes  # 列挙したうえで実際に削除する
 ```
+
+> `yt-skills sync` のデフォルト挙動は `--asset all` で、`.claude/skills/`・`.claude/CLAUDE.md`・`docs/{workflow-cheatsheet,features}.md` の全てを 1 コマンドで配布します。配布される SKILL.md / CLAUDE.md は `docs/` 配下に相対 link を張るため、`--asset skills` だけを単独で sync すると link 切れになります。
 
 ### 3. チャンネル設定を作成
 

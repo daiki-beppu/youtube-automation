@@ -11,13 +11,19 @@ Subcommands:
     diff   : 同梱版と target の差分を表示
 
 Asset 種別 (`--asset`):
+    all                 : デフォルト。下記すべての asset を一括処理する
     skills              : Claude Code スキル (`.claude/skills/`、ディレクトリ単位で 1 entry)
     claude-md           : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
     workflow-cheatsheet : workflow 使い分けチートシート (`docs/workflow-cheatsheet.md`、単一ファイル)
     features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
 
+`yt-skills sync` (asset 未指定) は `--asset all` と同等で、配布物が `docs/`
+にリンクを張る前提で動くため、デフォルトで全 asset を sync する設計に
+なっている。skill だけ更新したい場合は `--asset skills` を明示する。
+
 将来別種類の配布物を追加する場合は `_ASSET_SPECS` に entry を追加するだけで
 list/sync/diff の各 subcommand が自動的にサポートする (kind="dir" / "file" を選ぶ)。
+`--asset all` モードも追加された entry を自動的に巡回するため追加実装は不要。
 """
 
 from __future__ import annotations
@@ -118,6 +124,13 @@ def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = N
 
 
 def cmd_list(args: argparse.Namespace) -> int:
+    if args.asset == "all":
+        # 全 asset を巡回。dir asset → file asset の順で人間が読みやすい並び。
+        for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
+            if i > 0:
+                print()
+            cmd_list(argparse.Namespace(asset=asset_name))
+        return 0
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
     entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))

@@ -12,15 +12,19 @@ from youtube_automation.cli.skills_sync._sync import cmd_sync
 def _add_asset_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--asset",
-        choices=sorted(_ASSET_SPECS.keys()),
-        default="skills",
-        help="配布対象 (default: skills)",
+        choices=sorted([*_ASSET_SPECS.keys(), "all"]),
+        default="all",
+        help="配布対象 (default: all = 全 asset を一括処理)",
     )
 
 
 def _resolve_default_target(args: argparse.Namespace) -> None:
-    """`--target` 未指定 (None) 時に `--asset` 別のデフォルトを埋める。"""
-    if getattr(args, "target", None) is None:
+    """`--target` 未指定 (None) 時に `--asset` 別のデフォルトを埋める。
+
+    `--asset all` のときは個別 asset の default_target を使うため埋めない
+    (cmd_* 側で each asset を巡回するときに per-asset の default_target を resolve する)。
+    """
+    if getattr(args, "target", None) is None and args.asset != "all":
         args.target = _ASSET_SPECS[args.asset]["default_target"]
 
 

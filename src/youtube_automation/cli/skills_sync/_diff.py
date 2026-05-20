@@ -12,6 +12,8 @@ from youtube_automation.cli.skills_sync._ops import _has_diff
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
+    if args.asset == "all":
+        return _diff_all(args)
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
     target = Path(args.target).resolve()
@@ -19,6 +21,28 @@ def cmd_diff(args: argparse.Namespace) -> int:
     if spec["kind"] == "file":
         return _diff_file_asset(spec, root, target)
     return _diff_dir_asset(spec, root, target)
+
+
+def _diff_all(args: argparse.Namespace) -> int:
+    """全 asset を順次 diff。各 asset の default_target を使う。"""
+    if args.target is not None:
+        print(
+            "  [warn] --asset all モードでは --target は無視されます",
+            file=sys.stderr,
+        )
+    overall_rc = 0
+    for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
+        if i > 0:
+            print()
+        print(f"=== [{asset_name}] diff ===")
+        sub_args = argparse.Namespace(
+            asset=asset_name,
+            target=_ASSET_SPECS[asset_name]["default_target"],
+        )
+        rc = cmd_diff(sub_args)
+        if rc != 0:
+            overall_rc = rc
+    return overall_rc
 
 
 def _diff_file_asset(spec: dict[str, str], root: Path, target: Path) -> int:

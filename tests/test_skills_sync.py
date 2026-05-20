@@ -73,9 +73,9 @@ def test_list_entries_skills_lists_directories_only(fake_repo: Path) -> None:
 # ---------- cmd_list ----------
 
 
-def test_cmd_list_default_asset_is_skills(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cmd_list_skills_asset_lists_skill_dirs(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     parser = build_parser()
-    args = parser.parse_args(["list"])
+    args = parser.parse_args(["list", "--asset", "skills"])
     rc = args.func(args)
     out = capsys.readouterr().out
     assert rc == 0
@@ -83,21 +83,43 @@ def test_cmd_list_default_asset_is_skills(fake_repo: Path, capsys: pytest.Captur
     assert "channel-direction" in out
 
 
+def test_cmd_list_default_asset_is_all() -> None:
+    """default の `yt-skills list` は `--asset all` 相当で全 asset を一覧する。"""
+    parser = build_parser()
+    args = parser.parse_args(["list"])
+    assert args.asset == "all"
+
+
 # ---------- cmd_sync ----------
 
 
-def test_cmd_sync_default_target_skills(fake_repo: Path) -> None:
+def test_cmd_sync_default_target_resolves_for_skills(fake_repo: Path) -> None:
     parser = build_parser()
-    args = parser.parse_args(["sync", "--dry-run"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--dry-run"])
     skills_sync._resolve_default_target(args)
     assert args.target == ".claude/skills"
     assert args.asset == "skills"
 
 
+def test_cmd_sync_default_asset_is_all() -> None:
+    """default の `yt-skills sync` は `--asset all` で全 asset を sync する。"""
+    parser = build_parser()
+    args = parser.parse_args(["sync"])
+    assert args.asset == "all"
+
+
+def test_cmd_sync_all_keeps_target_unset_after_resolve() -> None:
+    """`--asset all` では target は asset ごとに resolve するため、parse 直後は None のまま。"""
+    parser = build_parser()
+    args = parser.parse_args(["sync"])
+    skills_sync._resolve_default_target(args)
+    assert args.target is None
+
+
 def test_cmd_sync_skills_dry_run_does_not_write(fake_repo: Path, tmp_path: Path) -> None:
     target = tmp_path / "downstream" / ".claude" / "skills"
     parser = build_parser()
-    args = parser.parse_args(["sync", "--dry-run", "--target", str(target)])
+    args = parser.parse_args(["sync", "--asset", "skills", "--dry-run", "--target", str(target)])
     rc = args.func(args)
     assert rc == 0
     assert not (target / "channel-research").exists()
@@ -106,7 +128,7 @@ def test_cmd_sync_skills_dry_run_does_not_write(fake_repo: Path, tmp_path: Path)
 def test_cmd_sync_skills_copies_skill_dirs(fake_repo: Path, tmp_path: Path) -> None:
     target = tmp_path / "out" / ".claude" / "skills"
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
     rc = args.func(args)
     assert rc == 0
     assert (target / "channel-research" / "SKILL.md").read_text(encoding="utf-8") == "# research\n"
@@ -121,7 +143,7 @@ def test_cmd_sync_force_overwrites_existing_skill(fake_repo: Path, tmp_path: Pat
     (existing / "SKILL.md").write_text("OLD\n", encoding="utf-8")
 
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
     rc = args.func(args)
     assert rc == 0
     assert (target / "channel-research" / "SKILL.md").read_text(encoding="utf-8") == "# research\n"
@@ -137,7 +159,7 @@ def test_cmd_sync_skips_existing_without_force(
     (existing / "SKILL.md").write_text("OLD\n", encoding="utf-8")
 
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target)])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target)])
     rc = args.func(args)
     assert rc == 0
     out = capsys.readouterr().out
@@ -151,6 +173,8 @@ def test_cmd_sync_only_filters_entries(fake_repo: Path, tmp_path: Path) -> None:
     args = parser.parse_args(
         [
             "sync",
+            "--asset",
+            "skills",
             "--target",
             str(target),
             "--force",
@@ -175,19 +199,26 @@ def test_cmd_diff_skills_no_diff(fake_repo: Path, tmp_path: Path, capsys: pytest
         shutil.copytree(entry, target / entry.name)
 
     parser = build_parser()
-    args = parser.parse_args(["diff", "--target", str(target)])
+    args = parser.parse_args(["diff", "--asset", "skills", "--target", str(target)])
     rc = args.func(args)
     out = capsys.readouterr().out
     assert rc == 0
     assert "差分なし" in out
 
 
-def test_cmd_diff_default_asset_is_skills(fake_repo: Path) -> None:
+def test_cmd_diff_default_target_resolves_for_skills(fake_repo: Path) -> None:
     parser = build_parser()
-    args = parser.parse_args(["diff"])
+    args = parser.parse_args(["diff", "--asset", "skills"])
     skills_sync._resolve_default_target(args)
     assert args.asset == "skills"
     assert args.target == ".claude/skills"
+
+
+def test_cmd_diff_default_asset_is_all() -> None:
+    """default の `yt-skills diff` も `--asset all` で全 asset を diff する。"""
+    parser = build_parser()
+    args = parser.parse_args(["diff"])
+    assert args.asset == "all"
 
 
 def test_cmd_diff_skills_only_disk_emits_prune_hint(
@@ -204,7 +235,7 @@ def test_cmd_diff_skills_only_disk_emits_prune_hint(
 
     # When: diff を実行
     parser = build_parser()
-    args = parser.parse_args(["diff", "--target", str(target)])
+    args = parser.parse_args(["diff", "--asset", "skills", "--target", str(target)])
     rc = args.func(args)
 
     # Then: 孤児リスト直後に --prune の案内が出る
@@ -228,7 +259,7 @@ def test_cmd_diff_skills_no_orphans_does_not_emit_prune_hint(
 
     # When: diff を実行
     parser = build_parser()
-    args = parser.parse_args(["diff", "--target", str(target)])
+    args = parser.parse_args(["diff", "--asset", "skills", "--target", str(target)])
     rc = args.func(args)
 
     # Then: 孤児がないので --prune ヒントは出ない
@@ -284,7 +315,7 @@ def test_cmd_sync_prune_removes_orphan_dir_when_yes(fake_repo: Path, tmp_path: P
 
     # When: --prune --yes で sync
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: 孤児が消える
@@ -300,7 +331,7 @@ def test_cmd_sync_prune_keeps_bundled_entries_when_yes(fake_repo: Path, tmp_path
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: bundled (channel-research / channel-direction) は残る
@@ -319,7 +350,7 @@ def test_cmd_sync_prune_yes_emits_pruned_label_on_stdout(
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: stdout に pruned: analyze が出る
@@ -339,7 +370,7 @@ def test_cmd_sync_prune_yes_summary_counts_include_pruned(
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: 完了行に 'pruned': 1 が含まれる
@@ -360,7 +391,7 @@ def test_cmd_sync_prune_without_yes_emits_would_prune(
 
     # When: --prune 単体（--yes なし）
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune"])
     rc = args.func(args)
 
     # Then: 削除されない + stdout に would-prune: analyze
@@ -381,7 +412,7 @@ def test_cmd_sync_prune_without_yes_emits_hint(
 
     # When: --prune 単体
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune"])
     rc = args.func(args)
 
     # Then: 「実削除には --yes」ヒントが stdout に出る
@@ -393,7 +424,7 @@ def test_cmd_sync_prune_without_yes_emits_hint(
 def test_build_parser_exposes_prune_and_yes() -> None:
     # Given/When: parse_args に --prune --yes を渡す
     parser = build_parser()
-    args = parser.parse_args(["sync", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--prune", "--yes"])
 
     # Then: args 属性で受け取れる
     assert args.prune is True
@@ -403,7 +434,7 @@ def test_build_parser_exposes_prune_and_yes() -> None:
 def test_build_parser_prune_defaults_false() -> None:
     # Given/When: フラグ省略
     parser = build_parser()
-    args = parser.parse_args(["sync"])
+    args = parser.parse_args(["sync", "--asset", "skills"])
 
     # Then: 既存挙動が破壊されないようデフォルトは False
     assert args.prune is False
@@ -423,7 +454,7 @@ def test_cmd_sync_prune_recursively_deletes_nested_files(fake_repo: Path, tmp_pa
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: ネスト含めて消える
@@ -444,7 +475,7 @@ def test_cmd_sync_prune_removes_orphan_symlink_but_keeps_link_target(fake_repo: 
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: symlink は消えるが link 先は残る
@@ -465,7 +496,7 @@ def test_cmd_sync_prune_removes_orphan_broken_symlink(fake_repo: Path, tmp_path:
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: broken symlink も消える
@@ -482,7 +513,7 @@ def test_cmd_sync_prune_removes_orphan_file(fake_repo: Path, tmp_path: Path) -> 
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: ファイルでも削除される
@@ -499,7 +530,7 @@ def test_cmd_sync_prune_yes_with_no_orphans_is_noop(
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: 何も消えず、pruned 行が出ない
@@ -526,7 +557,7 @@ def test_cmd_sync_prune_yes_removes_multiple_orphans(
 
     # When: --prune --yes
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--yes"])
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
     # Then: 3 件全て消える + summary に 'pruned': 3
@@ -548,7 +579,9 @@ def test_cmd_sync_prune_dry_run_wins_over_yes(
 
     # When: --prune --dry-run --yes （dry-run が優先）
     parser = build_parser()
-    args = parser.parse_args(["sync", "--target", str(target), "--force", "--prune", "--dry-run", "--yes"])
+    args = parser.parse_args(
+        ["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--dry-run", "--yes"]
+    )
     rc = args.func(args)
 
     # Then: 削除されず would-prune のみ
@@ -571,6 +604,8 @@ def test_cmd_sync_prune_only_does_not_prune_bundled(fake_repo: Path, tmp_path: P
     args = parser.parse_args(
         [
             "sync",
+            "--asset",
+            "skills",
             "--target",
             str(target),
             "--force",
@@ -599,6 +634,8 @@ def test_cmd_sync_prune_only_removes_real_orphan(fake_repo: Path, tmp_path: Path
     args = parser.parse_args(
         [
             "sync",
+            "--asset",
+            "skills",
             "--target",
             str(target),
             "--force",

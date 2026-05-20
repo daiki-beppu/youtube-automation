@@ -16,6 +16,8 @@ from youtube_automation.cli.skills_sync._ops import (
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
+    if args.asset == "all":
+        return _sync_all(args)
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
     target = Path(args.target).resolve()
@@ -23,6 +25,37 @@ def cmd_sync(args: argparse.Namespace) -> int:
     if spec["kind"] == "file":
         return _sync_file_asset(spec, root, target, args)
     return _sync_dir_asset(spec, root, target, args)
+
+
+def _sync_all(args: argparse.Namespace) -> int:
+    """全 asset を順次 sync。各 asset の default_target を使う。"""
+    if args.target is not None:
+        # all モードでは asset ごとに default_target が違うため --target は無視。
+        print(
+            "  [warn] --asset all モードでは --target は無視されます (asset ごとの default_target を使用)",
+            file=sys.stderr,
+        )
+    overall_rc = 0
+    for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
+        if i > 0:
+            print()
+        print(f"=== [{asset_name}] sync ===")
+        # --only / --prune は dir asset (skills) でのみ意味を持つ。
+        # それ以外の asset に伝搬すると warning が出るが処理は継続する設計。
+        sub_args = argparse.Namespace(
+            asset=asset_name,
+            target=_ASSET_SPECS[asset_name]["default_target"],
+            symlink=args.symlink,
+            force=args.force,
+            dry_run=args.dry_run,
+            only=args.only,
+            prune=args.prune,
+            yes=args.yes,
+        )
+        rc = cmd_sync(sub_args)
+        if rc != 0:
+            overall_rc = rc
+    return overall_rc
 
 
 def _sync_file_asset(
