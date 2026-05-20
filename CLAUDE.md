@@ -132,7 +132,16 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 
 ## 開発ワークフロー
 
-このリポジトリの開発は **takt + GitHub issue** に乗せる。手作業でブランチを切らず、`takt-issue` スキル経由で issue → worktree → PR を統一手順化する。
+このリポジトリの開発は **必ず worktree 上で行う**。メインの作業ツリー（リポジトリ本体のチェックアウト先）で直接ブランチを切って作業してはならない — 作業状態の競合や他作業との干渉を避けるため。
+
+標準ルートは **takt + GitHub issue**（`takt-issue` スキル経由で issue → worktree → PR を統一手順化）。takt を使わないアドホックな修正でも、`git worktree add` で worktree を作成してから作業すること。
+
+worktree の置き場は以下に統一する:
+
+- **takt 自動生成**: `<repo-parent>/takt-worktrees/<timestamp>-<N>-<slug>/`（takt が自動管理）
+- **手動 `git worktree add`**: `$REPO_ROOT/.worktrees/<slug>/`（リポジトリ内・gitignore 済み・`parallel` スキルと共通）
+
+`<repo-parent>/automation-worktrees/` 等のリポジトリ外手動置き場は非推奨（過去の残骸のみ）。
 
 - **issue 起票**: `gh issue create` または `/issue` スキル
 - **takt 起動**: `takt add '#<N>'` → `takt run`（base branch は **main** 固定、PR は通常 PR）
