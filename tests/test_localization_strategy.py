@@ -33,6 +33,37 @@ class TestTablesCompleteness:
     def test_fallback_cpm_is_positive(self):
         assert DEFAULT_CPM_FALLBACK_USD > 0
 
+    def test_major_spanish_markets_mapped_to_es(self):
+        """es 言語シェアが過小評価されないよう、主要中南米市場を登録すること."""
+        for code in ["AR", "CO", "CL", "PE", "VE", "EC", "UY", "MX"]:
+            assert COUNTRY_TO_PRIMARY_LANGUAGE.get(code) == "es", code
+
+    def test_major_arabic_markets_mapped_to_ar(self):
+        """中東・北アフリカ主要市場が `other` に落ちないこと."""
+        for code in ["SA", "AE", "EG", "MA", "DZ", "JO", "LB"]:
+            assert COUNTRY_TO_PRIMARY_LANGUAGE.get(code) == "ar", code
+
+    def test_major_southeast_asian_markets_mapped(self):
+        """東南アジア主要市場の言語コードが個別に登録されていること."""
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("TH") == "th"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("VN") == "vi"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("ID") == "id"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("MY") == "ms"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("PH") == "tl"
+
+    def test_major_slavic_markets_mapped(self):
+        """ロシア語圏 / 東欧主要市場が個別に登録されていること."""
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("RU") == "ru"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("UA") == "uk"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("PL") == "pl"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("CZ") == "cs"
+        assert COUNTRY_TO_PRIMARY_LANGUAGE.get("TR") == "tr"
+
+    def test_english_markets_include_africa_and_anz(self):
+        """en 言語シェアが過小評価されないよう、英語圏の主要 ANZ + アフリカ市場を含むこと."""
+        for code in ["ZA", "NG", "KE", "AU", "NZ"]:
+            assert COUNTRY_TO_PRIMARY_LANGUAGE.get(code) == "en", code
+
 
 class TestAggregateByLanguage:
     def test_groups_countries_into_language_buckets(self):
