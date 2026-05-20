@@ -7,7 +7,7 @@ description: Use when 既存コレクション（collections/planning/ 配下）
 
 既存コレクションを次工程へ進めるオーケストレーター。完了済みの素材を自動検出し、未完了のステップから再開する。
 
-> **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](https://github.com/daiki-beppu/youtube-automation/blob/main/docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**（CLAUDE.md §6 参照）。
+> **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**（CLAUDE.md §6 参照）。
 
 ## When to Use
 
@@ -18,7 +18,7 @@ description: Use when 既存コレクション（collections/planning/ 配下）
 | 「進んでる？」と読み取りだけ求められた | ❌ `/wf-status` を使う |
 | 公開済み動画の振り返り | ❌ `/analytics-analyze` または `/postmortem` |
 
-`/wf-next` は `workflow-state.json::phase` を読み取り、対応する次工程を 1 段だけ実行して `assets` / `phase` を更新する。**冪等性あり**：途中エラーで停止しても、再実行で未完了ステップから再開する。ユーザーが `workflow-state.json` を手で編集すると冪等性の前提が崩れる（[扱い基準](https://github.com/daiki-beppu/youtube-automation/blob/main/docs/workflow-cheatsheet.md#workflow-statejson-の扱い)）。
+`/wf-next` は `workflow-state.json::phase` を読み取り、対応する次工程を 1 段だけ実行して `assets` / `phase` を更新する。**冪等性あり**：途中エラーで停止しても、再実行で未完了ステップから再開する。ユーザーが `workflow-state.json` を手で編集すると冪等性の前提が崩れる（[扱い基準](../../../docs/workflow-cheatsheet.md#workflow-statejson-の扱い)）。
 
 ## 前提
 
