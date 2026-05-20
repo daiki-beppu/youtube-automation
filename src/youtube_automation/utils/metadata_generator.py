@@ -423,6 +423,10 @@ class BAHMetadataGenerator:
         テーマ見出し行は `section_headers.theme_inline.{prefix,suffix}` の装飾を適用。
         デフォルトは `"── "` / `" ──"` で、`section_headers.theme_inline` を上書きすれば
         チャンネル別に変更できる。
+
+        YouTube のチャプター仕様は timestamps が strictly ascending である必要があるため、
+        テーマ見出し行には **leading timestamp を載せない**（直後の楽曲行と同秒になると
+        chapter list 全体が無効化される）。
         """
         timestamps = self.generate_timestamps()
         if not timestamps:
@@ -434,7 +438,7 @@ class BAHMetadataGenerator:
         lines = []
         for ts in timestamps:
             if ts["type"] == "theme_header":
-                lines.append(f"{ts['timestamp']} {prefix}{ts['title']}{suffix}")
+                lines.append(f"{prefix}{ts['title']}{suffix}")
             else:
                 lines.append(f"{ts['timestamp']} {ts['title']}")
         return "\n".join(lines)

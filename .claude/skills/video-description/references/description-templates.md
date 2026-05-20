@@ -28,10 +28,10 @@
 
 💽 [コレクション名 — 英語ボールド Unicode]
 
-00:00 ── Pattern A: [Theme A name] ──
+── Pattern A: [Theme A name] ──
 00:00 [Track 1 of pattern A]
 XX:XX [Track 2 of pattern A]
-XX:XX ── Pattern B: [Theme B name] ──
+── Pattern B: [Theme B name] ──
 XX:XX [Track 1 of pattern B]
 ...
 

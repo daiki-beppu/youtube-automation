@@ -838,9 +838,9 @@ class TestFormatTimestampsTextWithThemes:
         monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {"a": "Pattern A: Awakening", "b": "Pattern B: Flow"})
         text = gen.format_timestamps_text()
         assert text == (
-            "00:00 ── Pattern A: Awakening ──\n"
+            "── Pattern A: Awakening ──\n"
             "00:00 Foo\n"
-            "03:00 ── Pattern B: Flow ──\n"
+            "── Pattern B: Flow ──\n"
             "03:00 Bar"
         )
 
@@ -852,6 +852,30 @@ class TestFormatTimestampsTextWithThemes:
         ]
         monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {})
         assert gen.format_timestamps_text() == "00:00 Solo\n05:00 Duet"
+
+    def test_chapter_lines_are_strictly_ascending(self, monkeypatch):
+        """YouTube の chapter parser は timestamps の strict ascending を要求する。
+        テーマ見出し行が先頭 timestamp を持っていると直後の楽曲行と重複し
+        chapter list 全体が invalid 化するため、見出し行は timestamp を持たない."""
+        import re
+
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-pattern-a-foo.mp3", "Foo", "00:00", "a"),
+            _track("02-pattern-b-bar.mp3", "Bar", "03:00", "b"),
+        ]
+        monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {"a": "Pattern A", "b": "Pattern B"})
+
+        ts_line_re = re.compile(r"^(\d+):(\d{2})(?::(\d{2}))?\s")
+        prev_seconds = -1
+        for line in gen.format_timestamps_text().splitlines():
+            m = ts_line_re.match(line)
+            if not m:
+                continue
+            parts = [int(p) for p in m.groups() if p is not None]
+            seconds = parts[0] * 60 + parts[1] if len(parts) == 2 else parts[0] * 3600 + parts[1] * 60 + parts[2]
+            assert seconds > prev_seconds, f"timestamp line not strictly ascending: {line!r}"
+            prev_seconds = seconds
 
 
 # ===========================================================================

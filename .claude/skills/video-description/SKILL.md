@@ -55,7 +55,7 @@ $ARGUMENTS
 ### タイムスタンプ生成手順
 
 1. **個別トラックがある場合**（`02-Individual-music/`）: `metadata_generator.py` の `analyze_audio_files()` で自動計算
-2. ファイル名規約 `\d+-pattern-[a-d]` を持つコレクションでは、`format_timestamps_text()` がテーマ見出し（`00:00 ── Pattern A: <name> ──`）と楽曲行（`00:00 Track 1`）を組み合わせた **個別楽曲単位** のタイムスタンプを返す
+2. ファイル名規約 `\d+-pattern-[a-d]` を持つコレクションでは、`format_timestamps_text()` がテーマ見出し（`── Pattern A: <name> ──`）と楽曲行（`00:00 Track 1`）を組み合わせた **個別楽曲単位** のタイムスタンプを返す。テーマ見出し行は YouTube のチャプター parser に拾われないよう先頭 timestamp を持たない（重複 timestamp は chapter list 全体を無効化する）
    - テーマ表示名は `workflow-state.json` の `planning.music.patterns[<letter>].display_name`（無ければ `.name` を `Pattern X: <name>` に整形）から解決される。両方無ければ `Pattern X` にフォールバック
    - pattern 規約に従わない legacy コレクションはテーマ見出し無しのフラット出力（後方互換）
 3. チャプター名は原則トラックタイトル（ファイル名から生成）を使用

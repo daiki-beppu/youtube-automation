@@ -16,7 +16,8 @@ section_headers:
   perfect_for: "🎮 Perfect for:"
   channel_link_template: "🔗 {channel_name}:"
   # pattern 切り替わりに挿入するテーマ見出し行の装飾。
-  # 例: `00:00 ── Pattern A: Awakening ──`。チャンネル個性に合わせて prefix / suffix を上書きできる。
+  # 例: `── Pattern A: Awakening ──`（YouTube chapter parser に拾われないよう先頭 timestamp は持たない）。
+  # チャンネル個性に合わせて prefix / suffix を上書きできる。
   theme_inline:
     prefix: "── "
     suffix: " ──"
