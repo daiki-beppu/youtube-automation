@@ -8,7 +8,9 @@ from youtube_automation.utils.localization_strategy import (
     COUNTRY_CPM_USD,
     COUNTRY_TO_PRIMARY_LANGUAGE,
     DEFAULT_CPM_FALLBACK_USD,
+    MANDATORY_LANGUAGES,
     OTHER_LANGUAGE_BUCKET,
+    TOP_CPM_COUNTRIES,
     aggregate_by_language,
     compute_estimated_revenue,
     recommend_supported_languages,
@@ -63,6 +65,23 @@ class TestTablesCompleteness:
         """en 言語シェアが過小評価されないよう、英語圏の主要 ANZ + アフリカ市場を含むこと."""
         for code in ["ZA", "NG", "KE", "AU", "NZ"]:
             assert COUNTRY_TO_PRIMARY_LANGUAGE.get(code) == "en", code
+
+    def test_singapore_mapped_to_en(self):
+        """SG は en/zh/ms 多言語だが、広告・行政共通言語の en に寄せる (Codex 2026-05 監査)."""
+        assert COUNTRY_TO_PRIMARY_LANGUAGE["SG"] == "en"
+
+    def test_top_cpm_countries_length(self):
+        """Top 10 CPM 国は 10 ヶ国."""
+        assert len(TOP_CPM_COUNTRIES) == 10
+
+    def test_top_cpm_countries_all_have_language_mapping(self):
+        """Top 10 CPM 国は全て言語マッピング登録済み (MANDATORY 自動導出の前提)."""
+        for code in TOP_CPM_COUNTRIES:
+            assert code in COUNTRY_TO_PRIMARY_LANGUAGE, code
+
+    def test_mandatory_languages_covers_en_de_no(self):
+        """Top 10 の主要言語は en / de / no (2026 Q1)."""
+        assert MANDATORY_LANGUAGES == frozenset({"en", "de", "no"})
 
 
 class TestAggregateByLanguage:

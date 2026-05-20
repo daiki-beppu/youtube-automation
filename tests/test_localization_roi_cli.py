@@ -100,7 +100,9 @@ def test_main_writes_markdown_and_json(monkeypatch, tmp_path, fixture_countries,
     payload = json.loads(captured.out)
     assert payload["window_days"] == 90
     assert payload["output_path"] == str(output)
-    assert "en" in payload["recommended"]["add"]
+    # 新 example の supported_languages は [en, de, no, ja]。en は既に含まれるので keep 側
+    assert "en" in payload["recommended"]["keep"]
+    assert payload["recommended"]["mandatory_languages"] == ["de", "en", "no"]
 
 
 def test_main_text_mode_emits_summary(monkeypatch, tmp_path, fixture_countries, capsys):

@@ -92,7 +92,7 @@ COUNTRY_TO_PRIMARY_LANGUAGE: dict[str, str] = {
     "HK": "zh-HK",
     "TW": "zh-TW",
     "CN": "zh-CN",
-    "SG": "zh-CN",
+    "SG": "en",
     # Southeast Asian
     "TH": "th",
     "VN": "vi",
@@ -162,6 +162,19 @@ DEFAULT_CPM_FALLBACK_USD: float = 5.0
 
 # 未登録国を集約する仮想言語コード。
 OTHER_LANGUAGE_BUCKET: str = "other"
+
+# CPM 上位 10 ヶ国 (2026 Q1, 複数ソース照合). 順位は upgrowth 値を主軸に、
+# YTface / CreatiCalc / Mediacube / FluxNote / InstantViews で構成を照合済み。
+TOP_CPM_COUNTRIES: tuple[str, ...] = (
+    "AU", "US", "CA", "NZ", "GB", "CH", "DE", "NO", "IE", "SG",
+)
+
+# Top 10 国の主要言語. Issue #272 で **必須対応** とする言語セット。
+# COUNTRY_TO_PRIMARY_LANGUAGE と TOP_CPM_COUNTRIES から自動導出して
+# Top 10 の構成変更時にも追従させる。現状値は {"en", "de", "no"}。
+MANDATORY_LANGUAGES: frozenset[str] = frozenset(
+    COUNTRY_TO_PRIMARY_LANGUAGE[code] for code in TOP_CPM_COUNTRIES
+)
 
 
 def aggregate_by_language(countries: Mapping[str, Mapping[str, float]]) -> dict[str, dict]:
@@ -256,7 +269,15 @@ def recommend_supported_languages(
     rationale: list[str] = []
 
     for lang, share, revenue in candidates:
-        if lang in current_set:
+        if lang in MANDATORY_LANGUAGES:
+            if lang in current_set:
+                keep.append(lang)
+            else:
+                add.append(lang)
+                rationale.append(
+                    f"{lang}: Top 10 CPM 国の主要言語のため必須対応 (view_share {share}%)"
+                )
+        elif lang in current_set:
             if share >= keep_floor:
                 keep.append(lang)
             else:
@@ -271,11 +292,24 @@ def recommend_supported_languages(
                     f"{lang}: view_share {share}% / est. revenue ${revenue} で add_floor {add_floor}% を超過、追加推奨"
                 )
 
-    # 現在 supported だが Analytics に出てこない言語は data なしで保持判定不能。
-    # 「データなし」として rationale に明示し、remove ではなく keep に残す。
+    # Analytics に出てこない MANDATORY 言語も必ず add に含める (Top 10 必須化)。
     seen_langs = {lang for lang, _, _ in candidates}
+    for lang in sorted(MANDATORY_LANGUAGES):
+        if lang in seen_langs:
+            continue
+        if lang in current_set:
+            if lang not in keep:
+                keep.append(lang)
+        else:
+            if lang not in add:
+                add.append(lang)
+                rationale.append(
+                    f"{lang}: Top 10 CPM 国の主要言語のため必須対応 (視聴データなしだが必須化)"
+                )
+
+    # 現在 supported だが Analytics に出てこない非 MANDATORY 言語は判定保留。
     for lang in current:
-        if lang not in seen_langs and lang not in keep and lang not in remove:
+        if lang not in seen_langs and lang not in keep and lang not in remove and lang not in add:
             keep.append(lang)
             rationale.append(f"{lang}: 過去 90 日の views データなし。判定保留")
 
@@ -284,4 +318,5 @@ def recommend_supported_languages(
         "keep": keep,
         "remove": remove,
         "rationale": rationale,
+        "mandatory_languages": sorted(MANDATORY_LANGUAGES),
     }

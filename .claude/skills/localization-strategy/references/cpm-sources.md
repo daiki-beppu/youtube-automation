@@ -9,6 +9,27 @@
 | [upgrowth.in - YouTube CPM by Country 2026](https://upgrowth.in/youtube-cpm-by-country-global-comparison-2026/) | 2026-02-21 | 22 ヶ国 (AU/US/CA/NZ/GB/CH/DE/NO/IE/SG/DK/HK/SE/FI/ES/IL/PT 等) |
 | [lenostube.com - YouTube CPM & RPM Rates 2026](https://www.lenostube.com/en/youtube-cpm-rpm-rates/) | 2026-04-02 | JP / AT / SG / IN / MX 等補完 |
 | [fluxnote.io - Highest Paying YouTube Countries 2026](https://fluxnote.io/guides/highest-paying-youtube-countries-2026) | 2026-03-06 | FR / KR (レンジ提示) |
+| [ytface.com - YouTube CPM Rates 2026](https://www.ytface.com/cpm-rates-by-country) | 2026-05-21 | Top 10 構成照合 |
+| [creaticalc.com - YouTube CPM Rates 2026](https://creaticalc.com/blog/youtube-cpm-rates-by-country) | 2026-05-21 | NO / CH 順位の照合 |
+| [mediacube.io - Average YouTube CPM 2026](https://mediacube.io/en-US/blog/youtube-cpm) | 2026-05-21 | Top 10 構成照合 |
+
+## Top 10 CPM 国 (MANDATORY_LANGUAGES の根拠)
+
+| Rank | Country | ISO | CPM (USD) | Primary Language |
+|---|---|---|---|---|
+| 1 | Australia | AU | 36.21 | en |
+| 2 | United States | US | 32.75 | en |
+| 3 | Canada | CA | 29.15 | en |
+| 4 | New Zealand | NZ | 28.15 | en |
+| 5 | United Kingdom | GB | 24.00 | en |
+| 6 | Switzerland | CH | 23.13 | de |
+| 7 | Germany | DE | 22.00 | de |
+| 8 | Norway | NO | 20.17 | no |
+| 9 | Ireland | IE | 19.50 | en |
+| 10 | Singapore | SG | 18.28 | en |
+
+導出される `MANDATORY_LANGUAGES = {"en", "de", "no"}`。半年ごとの再評価時に Top 10
+構成が入れ替わったら `TOP_CPM_COUNTRIES` を更新するだけで `MANDATORY_LANGUAGES` も自動追従する。
 
 ## 採用ルール
 

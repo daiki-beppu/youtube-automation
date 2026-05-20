@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `yt-localization-roi` CLI と `utils/localization_strategy.py` 追加（#272）。YouTube Analytics の国別 views と公開参考 CPM テーブルを組み合わせて言語別 ROI を推定し、`supported_languages` 見直し用 Markdown レポートを `<channel_dir>/data/localization_roi/<YYYY-MM-DD>.md` に出力
 - `.claude/skills/localization-strategy/` 新設（#272）。ローカライズ戦略見直しワークフローを skill 化し、追加・維持・削除候補の判断補助を提供
+- `localization_strategy` に `TOP_CPM_COUNTRIES` / `MANDATORY_LANGUAGES` を追加（#272）。CPM 上位 10 ヶ国 (AU/US/CA/NZ/GB/CH/DE/NO/IE/SG) の主要言語 (en/de/no) を必須対応として `recommend_supported_languages` が常に `add` または `keep` に含めるよう保証
+
+### Changed
+
+- `examples/localizations.example.json` の `supported_languages` を `["en", "de", "no", "ja"]` に刷新（#272）。CPM 上位 10 ヶ国の主要言語 (en/de/no) を必須対応、ja をベース言語として維持。旧来の ko/es/pt/zh-CN は CPM が低く ROI が見合わないため削除
+- `COUNTRY_TO_PRIMARY_LANGUAGE["SG"]` を `zh-CN` から `en` に修正（#272）。SG は en/zh/ms 多言語国だが、広告・行政共通言語の en に寄せることで言語別 view_share 集計が systematically にずれる問題を解消
 
 ## [5.5.2] - 2026-05-20
 
