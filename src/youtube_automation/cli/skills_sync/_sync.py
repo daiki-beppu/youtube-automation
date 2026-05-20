@@ -22,8 +22,9 @@ from youtube_automation.cli.skills_sync._ops import (
 
 def cmd_sync(args: argparse.Namespace) -> int:
     # CLI 以外 (テスト / 公開 API 直呼び) から呼ばれても silent な誤動作にならないよう
-    # 入口でガードする。CLI 経由では _resolve_default_target で既に評価済みなため二重実行になるが
-    # idempotent (条件不一致なら no-op) なので副作用なし。
+    # 入口でガードする (asset=all + target 指定なら ValueError)。CLI 経由では
+    # _resolve_default_target が先に ValueError を catch して exit 2 するため、
+    # 通常はここまで到達しない。直呼び caller は ValueError を try/except で扱える。
     _guard_target_with_all(args)
     if args.asset == "all":
         return _sync_all(args)

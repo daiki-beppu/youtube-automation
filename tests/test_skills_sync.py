@@ -140,11 +140,12 @@ def test_cmd_diff_all_with_target_exits_with_error(capsys: pytest.CaptureFixture
     assert "--target は --asset all モードでは使えません" in err
 
 
-def test_cmd_sync_public_api_with_all_and_target_exits(capsys: pytest.CaptureFixture[str]) -> None:
-    """`cmd_sync` を公開 API 直呼びしても asset=all + target は exit 2 で止める。
+def test_cmd_sync_public_api_with_all_and_target_raises_value_error() -> None:
+    """`cmd_sync` 公開 API 直呼びで asset=all + target は `ValueError` を raise する。
 
-    `_resolve_default_target` を経由しない経路 (テスト / 内部利用) を経ても
-    silent な誤動作にならないことを保証する。
+    Library 呼び出し元が `SystemExit` で強制終了されないよう、`sys.exit` ではなく
+    通常の Python 例外で通知する設計。CLI 経由では `_resolve_default_target` が
+    catch して exit 2 に変換する。
     """
     from youtube_automation.cli.skills_sync._sync import cmd_sync
 
@@ -158,23 +159,27 @@ def test_cmd_sync_public_api_with_all_and_target_exits(capsys: pytest.CaptureFix
         prune=False,
         yes=False,
     )
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(ValueError, match="--target は --asset all モードでは使えません"):
         cmd_sync(args)
-    assert exc_info.value.code == 2
-    err = capsys.readouterr().err
-    assert "--target は --asset all モードでは使えません" in err
 
 
-def test_cmd_diff_public_api_with_all_and_target_exits(capsys: pytest.CaptureFixture[str]) -> None:
-    """`cmd_diff` 公開 API 直呼びでも同様に exit 2 で止める。"""
+def test_cmd_diff_public_api_with_all_and_target_raises_value_error() -> None:
+    """`cmd_diff` 公開 API 直呼びでも同様に `ValueError` を raise する。"""
     from youtube_automation.cli.skills_sync._diff import cmd_diff
 
     args = argparse.Namespace(asset="all", target="/tmp/custom-path")
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(ValueError, match="--target は --asset all モードでは使えません"):
         cmd_diff(args)
-    assert exc_info.value.code == 2
-    err = capsys.readouterr().err
-    assert "--target は --asset all モードでは使えません" in err
+
+
+def test_guard_target_with_all_is_noop_for_compatible_args() -> None:
+    """正当な組み合わせでは `_guard_target_with_all` は何もしない。"""
+    # asset=all + target=None
+    skills_sync._guard_target_with_all(argparse.Namespace(asset="all", target=None))
+    # asset=skills + target=指定
+    skills_sync._guard_target_with_all(argparse.Namespace(asset="skills", target="/tmp/x"))
+    # asset=skills + target=None
+    skills_sync._guard_target_with_all(argparse.Namespace(asset="skills", target=None))
 
 
 def test_cmd_sync_skills_dry_run_does_not_write(fake_repo: Path, tmp_path: Path) -> None:
