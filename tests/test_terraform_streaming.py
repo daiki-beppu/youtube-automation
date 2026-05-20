@@ -822,6 +822,13 @@ class TestSystemdUnitTemplate:
         )
         return match.group(1) if match else None
 
+    def _assert_service_directive(self, pattern: str, message: str) -> None:
+        """[Service] セクションに directive が 1 行で存在することを検証する。"""
+        text = read_file(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(pattern, service, flags=re.MULTILINE), message
+
     def test_file_exists(self):
         """Given infra/terraform/streaming/templates/
         When youtube-stream.service.tftpl を探す
@@ -1198,16 +1205,9 @@ class TestSystemdUnitTemplate:
         ffmpeg は RTMP TCP (AF_INET/AF_INET6) と journald (AF_UNIX) のみで動作するため、
         他の AF (AF_PACKET / AF_NETLINK 等) を遮断して攻撃面を最小化する。順序はリテラル固定。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(
+        self._assert_service_directive(
             r"^RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\s*$",
-            service,
-            flags=re.MULTILINE,
-        ), (
-            "[Service].RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 が無い"
-            "（不要な AF 経由の攻撃面が残る）"
+            ("[Service].RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 が無い（不要な AF 経由の攻撃面が残る）"),
         )
 
     def test_service_lock_personality_yes(self):
@@ -1218,11 +1218,9 @@ class TestSystemdUnitTemplate:
         ``personality(2)`` syscall を遮断し、古い ABI（PER_LINUX32 等）経由の
         exploit 経路を塞ぐ hardening。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^LockPersonality=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].LockPersonality=yes が無い（personality(2) 経由の ABI 切替 exploit が残る）"
+        self._assert_service_directive(
+            r"^LockPersonality=yes\s*$",
+            ("[Service].LockPersonality=yes が無い（personality(2) 経由の ABI 切替 exploit が残る）"),
         )
 
     def test_service_memory_deny_write_execute_yes(self):
@@ -1233,11 +1231,9 @@ class TestSystemdUnitTemplate:
         書き込み + 実行可能 (W+X) メモリページを禁止。``run-ffmpeg.sh`` が
         ``-c:v copy -c:a copy`` 固定で JIT を呼ばない現状仕様で静的に安全。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^MemoryDenyWriteExecute=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].MemoryDenyWriteExecute=yes が無い（W+X メモリ経由の shellcode 注入が残る）"
+        self._assert_service_directive(
+            r"^MemoryDenyWriteExecute=yes\s*$",
+            ("[Service].MemoryDenyWriteExecute=yes が無い（W+X メモリ経由の shellcode 注入が残る）"),
         )
 
     def test_service_restrict_suid_sgid_yes(self):
@@ -1248,11 +1244,9 @@ class TestSystemdUnitTemplate:
         setuid/setgid 付きファイルの新規作成を禁止し、特権ファイル経由の
         持続化経路を遮断する。directive 名の大小文字（SUIDSGID）も仕様の一部。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^RestrictSUIDSGID=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].RestrictSUIDSGID=yes が無い（setuid/setgid ファイル作成による持続化経路が残る）"
+        self._assert_service_directive(
+            r"^RestrictSUIDSGID=yes\s*$",
+            ("[Service].RestrictSUIDSGID=yes が無い（setuid/setgid ファイル作成による持続化経路が残る）"),
         )
 
     def test_service_restrict_namespaces_yes(self):
@@ -1263,11 +1257,9 @@ class TestSystemdUnitTemplate:
         新規 namespace（mount/pid/net/user 等）作成を禁止し、namespace 経由の
         sandbox 逸脱経路を遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^RestrictNamespaces=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].RestrictNamespaces=yes が無い（新規 namespace 作成経由の sandbox 逸脱が残る）"
+        self._assert_service_directive(
+            r"^RestrictNamespaces=yes\s*$",
+            ("[Service].RestrictNamespaces=yes が無い（新規 namespace 作成経由の sandbox 逸脱が残る）"),
         )
 
     def test_service_restrict_realtime_yes(self):
@@ -1278,11 +1270,9 @@ class TestSystemdUnitTemplate:
         ``SCHED_FIFO`` / ``SCHED_RR`` 等のリアルタイムスケジューリングを禁止し、
         CPU 占有による DoS 経路を遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^RestrictRealtime=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].RestrictRealtime=yes が無い（リアルタイムスケジューリングによる CPU 占有経路が残る）"
+        self._assert_service_directive(
+            r"^RestrictRealtime=yes\s*$",
+            ("[Service].RestrictRealtime=yes が無い（リアルタイムスケジューリングによる CPU 占有経路が残る）"),
         )
 
     def test_service_system_call_filter_system_service(self):
@@ -1293,16 +1283,9 @@ class TestSystemdUnitTemplate:
         systemd 既定の ``@system-service`` セットを syscall whitelist として適用。
         ``@`` プレフィックス + セット名をリテラル固定し、任意 syscall 列を許容しない。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(
+        self._assert_service_directive(
             r"^SystemCallFilter=@system-service\s*$",
-            service,
-            flags=re.MULTILINE,
-        ), (
-            "[Service].SystemCallFilter=@system-service が無い"
-            "（syscall whitelist が無いと攻撃面が最大化する）"
+            ("[Service].SystemCallFilter=@system-service が無い（syscall whitelist が無いと攻撃面が最大化する）"),
         )
 
     def test_service_system_call_architectures_native(self):
@@ -1313,16 +1296,9 @@ class TestSystemdUnitTemplate:
         ホスト arch 以外の syscall ABI（32-bit on 64-bit 等）を遮断し、
         arch 切替 exploit 経路を塞ぐ。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(
+        self._assert_service_directive(
             r"^SystemCallArchitectures=native\s*$",
-            service,
-            flags=re.MULTILINE,
-        ), (
-            "[Service].SystemCallArchitectures=native が無い"
-            "（非ネイティブ arch syscall 経由の exploit 経路が残る）"
+            ("[Service].SystemCallArchitectures=native が無い（非ネイティブ arch syscall 経由の exploit 経路が残る）"),
         )
 
     def test_service_protect_kernel_tunables_yes(self):
@@ -1333,11 +1309,9 @@ class TestSystemdUnitTemplate:
         ``/proc/sys`` / ``/sys`` 配下の kernel tunable への書き込みを禁止し、
         ランタイムでの kernel パラメータ改竄経路を遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^ProtectKernelTunables=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].ProtectKernelTunables=yes が無い（/proc/sys 経由の kernel 改竄が残る）"
+        self._assert_service_directive(
+            r"^ProtectKernelTunables=yes\s*$",
+            ("[Service].ProtectKernelTunables=yes が無い（/proc/sys 経由の kernel 改竄が残る）"),
         )
 
     def test_service_protect_kernel_modules_yes(self):
@@ -1348,11 +1322,9 @@ class TestSystemdUnitTemplate:
         ``modprobe`` 等によるカーネルモジュール load/unload を遮断し、
         rootkit 系モジュール挿入の経路を塞ぐ。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^ProtectKernelModules=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].ProtectKernelModules=yes が無い（kernel module load 経由の rootkit 経路が残る）"
+        self._assert_service_directive(
+            r"^ProtectKernelModules=yes\s*$",
+            ("[Service].ProtectKernelModules=yes が無い（kernel module load 経由の rootkit 経路が残る）"),
         )
 
     def test_service_protect_kernel_logs_yes(self):
@@ -1363,11 +1335,9 @@ class TestSystemdUnitTemplate:
         ``/dev/kmsg`` 等のカーネルログへのアクセスを禁止し、
         dmesg 経由の情報漏洩（KASLR offset 等）を遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^ProtectKernelLogs=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].ProtectKernelLogs=yes が無い（/dev/kmsg 経由の kernel 情報漏洩が残る）"
+        self._assert_service_directive(
+            r"^ProtectKernelLogs=yes\s*$",
+            ("[Service].ProtectKernelLogs=yes が無い（/dev/kmsg 経由の kernel 情報漏洩が残る）"),
         )
 
     def test_service_protect_control_groups_yes(self):
@@ -1378,11 +1348,9 @@ class TestSystemdUnitTemplate:
         ``/sys/fs/cgroup`` を read-only にし、cgroup 構成の改竄による
         resource 隔離迂回経路を遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^ProtectControlGroups=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].ProtectControlGroups=yes が無い（cgroup 改竄による resource 隔離迂回が残る）"
+        self._assert_service_directive(
+            r"^ProtectControlGroups=yes\s*$",
+            ("[Service].ProtectControlGroups=yes が無い（cgroup 改竄による resource 隔離迂回が残る）"),
         )
 
     def test_service_remove_ipc_yes(self):
@@ -1393,11 +1361,9 @@ class TestSystemdUnitTemplate:
         ``DynamicUser=yes`` 連動でサービス終了時に IPC オブジェクト（SysV shm/sem/msg、
         POSIX shm）を掃除し、UID 再利用時の残骸経由のリークを遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^RemoveIPC=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].RemoveIPC=yes が無い（DynamicUser 連動の IPC 掃除が効かず残骸が残る）"
+        self._assert_service_directive(
+            r"^RemoveIPC=yes\s*$",
+            ("[Service].RemoveIPC=yes が無い（DynamicUser 連動の IPC 掃除が効かず残骸が残る）"),
         )
 
 
