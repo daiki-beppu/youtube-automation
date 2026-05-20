@@ -54,6 +54,13 @@ def get_provider(cfg: ImageGenerationConfig) -> ImageProvider:
             raise ConfigError("provider=openai だが openai 設定が見つかりません")
         return OpenAIImageProvider(cfg.openai)
 
+    if cfg.provider == "codex":
+        from youtube_automation.utils.image_provider.codex import CodexImageProvider
+
+        if cfg.codex is None:
+            raise ConfigError("provider=codex だが codex 設定が見つかりません")
+        return CodexImageProvider(cfg.codex)
+
     raise ConfigError(f"未対応の provider={cfg.provider!r}")
 
 

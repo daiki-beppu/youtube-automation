@@ -17,8 +17,8 @@ from typing import Any, Literal
 from youtube_automation.utils.exceptions import ConfigError
 
 # プロバイダー識別子。`get_provider` の dispatch キーと一致させる。
-ProviderName = Literal["gemini", "openai"]
-SUPPORTED_PROVIDERS: tuple[str, ...] = ("gemini", "openai")
+ProviderName = Literal["gemini", "openai", "codex"]
+SUPPORTED_PROVIDERS: tuple[str, ...] = ("gemini", "openai", "codex")
 
 # OpenAI が受理するアスペクト比（order.md "期待する動作 1": 16:9 と 9:16 のみ）
 OPENAI_SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = ("16:9", "9:16")
@@ -26,6 +26,12 @@ OPENAI_SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = ("16:9", "9:16")
 # 既定値（skill-config 不在時のフォールバック）
 _DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-image-preview"
 _DEFAULT_GEMINI_IMAGE_SIZE = "2K"
+
+# Codex CLI 既定値（imagegen tool のデフォルトに合わせる）
+_DEFAULT_CODEX_MODEL = "gpt-image-1"
+_DEFAULT_CODEX_IMAGE_SIZE = "1024x1024"
+_DEFAULT_CODEX_ASPECT_RATIO = "16:9"
+_DEFAULT_CODEX_TIMEOUT = 300
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,21 @@ class OpenAIConfig:
 
 
 @dataclass(frozen=True)
+class CodexConfig:
+    """Codex CLI（ChatGPT サブスク認証）経由の画像生成プロバイダー設定。
+
+    `codex exec` 経由で `imagegen` ツールを呼ぶため、追加の API key は不要
+    （事前に `codex login` 済みであることが前提）。サブスク枠での生成のため
+    cost_tracker への金額計上は 0 扱い。
+    """
+
+    model: str = _DEFAULT_CODEX_MODEL
+    image_size: str = _DEFAULT_CODEX_IMAGE_SIZE
+    aspect_ratio: str = _DEFAULT_CODEX_ASPECT_RATIO
+    timeout_seconds: int = _DEFAULT_CODEX_TIMEOUT
+
+
+@dataclass(frozen=True)
 class ImageGenerationConfig:
     """provider 切り替え可能な画像生成設定の親 dataclass。
 
@@ -75,6 +96,7 @@ class ImageGenerationConfig:
     provider: ProviderName
     gemini: GeminiConfig | None = None
     openai: OpenAIConfig | None = None
+    codex: CodexConfig | None = None
 
     @classmethod
     def default(cls) -> "ImageGenerationConfig":
@@ -83,6 +105,7 @@ class ImageGenerationConfig:
             provider="gemini",
             gemini=GeminiConfig(model=_DEFAULT_GEMINI_MODEL, image_size=_DEFAULT_GEMINI_IMAGE_SIZE),
             openai=None,
+            codex=None,
         )
 
 
@@ -123,10 +146,14 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
 
     if provider == "gemini":
         gemini_cfg = _build_gemini(section.get("gemini") or {})
-        return ImageGenerationConfig(provider="gemini", gemini=gemini_cfg, openai=None)
+        return ImageGenerationConfig(provider="gemini", gemini=gemini_cfg, openai=None, codex=None)
 
-    openai_cfg = _build_openai(section.get("openai") or {})
-    return ImageGenerationConfig(provider="openai", gemini=None, openai=openai_cfg)
+    if provider == "openai":
+        openai_cfg = _build_openai(section.get("openai") or {})
+        return ImageGenerationConfig(provider="openai", gemini=None, openai=openai_cfg, codex=None)
+
+    codex_cfg = _build_codex(section.get("codex") or {})
+    return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
 
 def _build_from_legacy_gemini(legacy: dict[str, Any]) -> ImageGenerationConfig:
@@ -135,6 +162,7 @@ def _build_from_legacy_gemini(legacy: dict[str, Any]) -> ImageGenerationConfig:
         provider="gemini",
         gemini=_build_gemini(legacy),
         openai=None,
+        codex=None,
     )
 
 
@@ -155,6 +183,15 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
     )
 
 
+def _build_codex(d: dict[str, Any]) -> CodexConfig:
+    return CodexConfig(
+        model=d.get("model", _DEFAULT_CODEX_MODEL),
+        image_size=d.get("image_size", _DEFAULT_CODEX_IMAGE_SIZE),
+        aspect_ratio=d.get("aspect_ratio", _DEFAULT_CODEX_ASPECT_RATIO),
+        timeout_seconds=int(d.get("timeout_seconds", _DEFAULT_CODEX_TIMEOUT)),
+    )
+
+
 def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConfig:
     """``ImageGenerationConfig`` の active provider 側のモデル ID を差し替えた複製を返す。
 
@@ -169,4 +206,8 @@ def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConf
         if cfg.openai is None:
             raise ConfigError("provider=openai だが openai 設定が見つかりません")
         return replace(cfg, openai=replace(cfg.openai, model=model))
+    if cfg.provider == "codex":
+        if cfg.codex is None:
+            raise ConfigError("provider=codex だが codex 設定が見つかりません")
+        return replace(cfg, codex=replace(cfg.codex, model=model))
     raise ConfigError(f"未対応の provider={cfg.provider!r}")

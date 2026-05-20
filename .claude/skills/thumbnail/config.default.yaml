@@ -163,3 +163,12 @@ image_generation:
     # 事前見積もりに使う 1 枚あたり単価を固定したい場合のみ指定する。
     # 未指定なら CLI 表示は「不明」となり、実コストは GCP Cloud Console > Billing で確認する。
     # cost_per_image_usd: null
+
+  # codex:
+  #   # Codex CLI 経由（ChatGPT サブスク認証）。API 課金 0 だが `codex exec` の
+  #   # agent 経路で遅め。事前に `codex login status` で
+  #   # "Logged in using ChatGPT" 表示を確認してから provider を切り替えること。
+  #   model: "gpt-image-1"
+  #   image_size: "1024x1024"
+  #   aspect_ratio: "16:9"      # "16:9" / "9:16" / "1:1" のみ
+  #   timeout_seconds: 300      # codex exec 1 回あたりの上限秒数

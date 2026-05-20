@@ -14,6 +14,7 @@ import pytest
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.config import (
+    CodexConfig,
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
@@ -119,6 +120,71 @@ class TestParseImageGenerationConfig:
         assert cfg.provider == "openai"
         assert cfg.openai.model == "gpt-image-2"
 
+    def test_parses_image_generation_namespace_for_codex(self):
+        # Given: 新 namespace + provider=codex（全フィールド明示）
+        skill_cfg = {
+            "image_generation": {
+                "provider": "codex",
+                "codex": {
+                    "model": "gpt-image-1",
+                    "image_size": "1024x1024",
+                    "aspect_ratio": "9:16",
+                    "timeout_seconds": 600,
+                },
+            }
+        }
+
+        # When
+        cfg = parse_image_generation_config(skill_cfg)
+
+        # Then
+        assert cfg.provider == "codex"
+        assert cfg.codex is not None
+        assert cfg.codex.model == "gpt-image-1"
+        assert cfg.codex.image_size == "1024x1024"
+        assert cfg.codex.aspect_ratio == "9:16"
+        assert cfg.codex.timeout_seconds == 600
+        # 他 provider 側は None
+        assert cfg.gemini is None
+        assert cfg.openai is None
+
+    def test_codex_config_uses_defaults_when_fields_missing(self):
+        # Given: codex セクションが空 dict（既定値フォールバックを期待）
+        skill_cfg = {
+            "image_generation": {
+                "provider": "codex",
+                "codex": {},
+            }
+        }
+
+        # When
+        cfg = parse_image_generation_config(skill_cfg)
+
+        # Then: CodexConfig の既定値が適用される
+        assert cfg.provider == "codex"
+        assert cfg.codex is not None
+        assert cfg.codex.model == "gpt-image-1"
+        assert cfg.codex.image_size == "1024x1024"
+        assert cfg.codex.aspect_ratio == "16:9"
+        assert cfg.codex.timeout_seconds == 300
+
+    def test_codex_config_casts_timeout_seconds_to_int(self):
+        # Given: timeout_seconds が文字列で渡される（YAML パーサーが str を返すケース）
+        skill_cfg = {
+            "image_generation": {
+                "provider": "codex",
+                "codex": {"timeout_seconds": "450"},
+            }
+        }
+
+        # When
+        cfg = parse_image_generation_config(skill_cfg)
+
+        # Then: int にキャストされる
+        assert cfg.codex is not None
+        assert cfg.codex.timeout_seconds == 450
+        assert isinstance(cfg.codex.timeout_seconds, int)
+
     def test_unknown_provider_raises_config_error(self):
         # Given: 未対応 provider 名
         skill_cfg = {
@@ -129,6 +195,14 @@ class TestParseImageGenerationConfig:
 
         # When / Then
         with pytest.raises(ConfigError, match="midjourney"):
+            parse_image_generation_config(skill_cfg)
+
+    def test_unknown_provider_error_lists_codex_in_supported_values(self):
+        # Given: 未対応 provider 名
+        skill_cfg = {"image_generation": {"provider": "midjourney"}}
+
+        # When / Then: エラーメッセージ内に "codex" を含む（SUPPORTED_PROVIDERS に追加されたこと）
+        with pytest.raises(ConfigError, match="codex"):
             parse_image_generation_config(skill_cfg)
 
     def test_empty_skill_cfg_returns_default_config(self):

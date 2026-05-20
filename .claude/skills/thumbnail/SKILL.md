@@ -39,8 +39,21 @@ description: Use when コレクションのサムネイル画像が必要で、C
 |---|---|---|
 | `gemini` | Gemini Image (Nano Banana 系) | ADC (`GOOGLE_CLOUD_PROJECT` は任意で上書き可) |
 | `openai` | OpenAI gpt-image 系（CJK 文字描画が綺麗、16:9/9:16 ネイティブ対応） | `OPENAI_API_KEY` |
+| `codex` | Codex CLI 経由（ChatGPT サブスク認証、API 課金なし、agent 経路で遅め） | `codex login` 済みであること（API key 不要） |
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
+
+Codex provider 使用時は事前に `codex login status` を実行し `Logged in using ChatGPT` 表示を確認すること。`imagegen` ツール経由のため Gemini/OpenAI 直 API より生成時間が長く、ChatGPT サブスクの fair-use 上限に当たる可能性もあるため、大量生成時は他 provider にフォールバックする運用を推奨。サポート aspect_ratio は `"16:9"` / `"9:16"` / `"1:1"` の 3 種。設定例:
+
+```yaml
+image_generation:
+  provider: codex
+  codex:
+    model: "gpt-image-1"
+    image_size: "1024x1024"
+    aspect_ratio: "16:9"     # "16:9" / "9:16" / "1:1"
+    timeout_seconds: 300     # `codex exec` 1 回あたりの上限
+```
 
 ## Channel Adaptation
 
