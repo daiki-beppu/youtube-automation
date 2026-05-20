@@ -1416,7 +1416,7 @@ class TestStreamingArchiveCount:
 class TestDailyArchiveModuleSurface:
     """`utils/streaming_archive.py` → `utils/streaming/daily_archive.py` の move 完全性。
 
-    plan の R1–R2（新パス到達担保）と R8（旧パス shim 不残置）を構造アサーションで担保する。
+    plan の R1–R2（新パス到達担保）と R7（旧パス shim 不残置）を構造アサーションで担保する。
     既存 5 ケース（`TestStreamingArchiveCount`）は import 文の付け替えで振る舞いを検証するが、
     パス文字列を直接 importlib で評価するアサーションを別に持つことで、move の意図を機械的に保証する。
     """
@@ -1449,7 +1449,7 @@ class TestDailyArchiveModuleSurface:
 class TestStreamingPackageSurface:
     """`utils/streaming/__init__.py` の公開 API surface。
 
-    plan R7（`__init__.py` で新公開 API を増やさない）を担保。
+    plan R6（`__init__.py` で新公開 API を増やさない）を担保。
     `streaming/__init__.py` は定数集中モジュールであり、関数の再 export は方針として行わない。
     """
 
