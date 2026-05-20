@@ -98,29 +98,40 @@ Phase 1-1〜1-3 の入力を統合し:
 
 ### Phase 4: プレビューサムネイル生成
 
-**重要**: サムネイルを見てからテーマを決定するため、この段階ではユーザーにテーマ選択を求めない。全企画のプレビューを先に生成する。
+既定では `preview.thumbnail_mode: parallel` ── テキストで `preview.candidate_count` 案（デフォルト 3）を先に提示して合意を取り、その後 `candidate_count` 枚を一括生成して比較選択する。コストを抑えたい場合は `sequential` に切り替えると「テキスト `candidate_count` 案 → 選択 → 選択 1 案だけ生成」フローになる（コスト 1/`candidate_count`、節末「Phase 4 補足: sequential モード (opt-in)」参照）。
 
-**4-1: 各企画の本番品質プロンプト生成**
+以下、本文中の Bash 例・テーブル・採番（A/B/C / plan-a/b/c）はすべて `candidate_count = 3` のときのサンプル。`candidate_count` を変更した場合は連打回数・採番をその値に合わせて調整すること。
 
-`config/skills/collection-ideate.yaml` の `preview.candidate_count`（デフォルト 3）個の企画について、`/thumbnail` スキルの Phase 1 と同等の本番品質プロンプトを生成する:
+両モード共通の前半（4-1〜4-2）でテキスト案提示とコスト合意を済ませてから、後半（4-3〜4-5）で生成・比較・選択に進む。
+
+**4-1: 企画 `candidate_count` 案（プロンプト本文込み）をテキストで提示**
+
+`preview.candidate_count`（デフォルト 3）個の企画について、`/thumbnail` スキルの Phase 1 と同等の本番品質プロンプトを **テキストで** 生成・提示する。この段階では画像は生成しない。
 
 - `config/skills/thumbnail.yaml` の `image_generation.gemini.prompt_prefix` + `composition_rules` を完全適用
 - 英語 1 段落、誇張表現禁止、16:9 構図、テキスト除外
-- **本番品質で生成する**（選択後そのまま `main.png` として使用するため）
+- **本番品質で生成する**（選択された企画のプロンプトをそのまま `yt-generate-image` に渡すため、再生成によるばらつきを避ける）
+
+各企画について、テーマ・タイトル・オブジェクト定義・サムネプロンプト全文をユーザーに提示する。プロンプト本文も比較材料に含めることで、視覚出力を見る前にユーザーが意図を把握できる。
 
 **4-2: コスト一括確認**
 
 事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を
 指定したときのみ提示する（Issue #132 以降、ハードコード単価表は撤廃済み）。実コストは GCP Cloud
-Console > Billing で確認する。以下のワンライナーを実行して結果をそのまま提示する:
+Console > Billing で確認する。`thumbnail_mode` によって生成枚数が異なるため、ワンライナーで自動分岐させる:
 
 ```bash
 uv run python3 -c "
 from youtube_automation.utils.image_provider import load_image_generation_config
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.skill_config import (
+    load_skill_config,
+    get_collection_ideate_thumbnail_mode,
+    THUMBNAIL_MODE_SEQUENTIAL,
+)
 ic = load_skill_config('collection-ideate').get('preview', {})
 cfg = load_image_generation_config()
-count = ic.get('candidate_count', 3)
+mode = get_collection_ideate_thumbnail_mode()
+count = 1 if mode == THUMBNAIL_MODE_SEQUENTIAL else ic.get('candidate_count', 3)
 if cfg.provider == 'gemini':
     model = cfg.gemini.model
     image_size = cfg.gemini.image_size
@@ -130,19 +141,19 @@ else:
 tc = load_skill_config('thumbnail').get('image_generation', {}).get(cfg.provider, {})
 per = tc.get('cost_per_image_usd')
 if per is None:
-    print(f'{count} 枚 × 不明 ({model} / {image_size}) — config/skills/thumbnail.yaml の cost_per_image_usd 未設定')
+    print(f'{count} 枚 × 不明 ({mode} / {model} / {image_size}) — config/skills/thumbnail.yaml の cost_per_image_usd 未設定')
 else:
-    print(f'{count} 枚 × \${per:.3f} = \${count*per:.3f} ({model} / {image_size})')
+    print(f'{count} 枚 × \${per:.3f} = \${count*per:.3f} ({mode} / {model} / {image_size})')
 "
 ```
 
-例（cost_per_image_usd が設定済みの場合）: `3 枚 × $0.101 = $0.303 (gemini-3.1-flash-image-preview / 2K)`
+例（`cost_per_image_usd` が設定済み・parallel・`candidate_count=3` の場合）: `3 枚 × $0.101 = $0.303 (parallel / gemini-3.1-flash-image-preview / 2K)`
 
-ユーザーが拒否した場合 → テキストのみで提示（プレビューサムネイル生成はブロッキングにしない）
+**ユーザーが拒否した場合** → サムネ生成を完全スキップしテキストのみで提示（プレビューサムネイル生成はブロッキングにしない）。`main.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` が `main.png` 不在を検出して Phase 1 から本番サムネを新規生成する（Next Step の「コスト拒否 / 生成失敗で main.png が無い場合」参照）。
 
-**4-3: generate_image.py でプレビュー生成**
+**4-3: セッションディレクトリ作成**
 
-セッション固有のディレクトリを作成し、その中にテーマスラッグ付きで保存する:
+両モード共通。生成出力先となるセッション固有のディレクトリを作成する:
 
 ```bash
 # <YYYYMMDD> は実行日（例: 20260306）
@@ -153,7 +164,9 @@ PREVIEW_DIR="<YYYYMMDD>-${SESSION_ID}"
 mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 ```
 
-**プロンプト構築**:
+`_` プレフィックスで通常コレクションと区別。セッション ID 付きディレクトリで並列実行時の競合を回避する。
+
+**4-4: プロンプト構築 + 一括生成（parallel デフォルト）**
 
 `config/skills/thumbnail.yaml` の `image_generation.gemini.generation_mode` を確認:
 
@@ -162,11 +175,12 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
   - **差別化はオブジェクトで行う**: `ideate.objects.swappable` で定義されたスロットを企画ごとに変える
   - 具体的な差分プロンプトの書き方は `references/object-design-examples.md` を参照
 
-- **それ以外の場合**: `image_generation.gemini.prompt_prefix` + `composition_rules` を適用した本番品質プロンプトを生成（従来方式）
+- **それ以外の場合**: 4-1 で生成済みの本番品質プロンプトをそのまま流用
+
+`REF_ARGS` を構築してから `preview.candidate_count` 枚を順次生成する:
 
 ```bash
-# 順次実行（API レート制限回避）
-# <dir> は上で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
+# <dir> は 4-3 で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
 # <slug> はテーマ名をケバブケースに変換（例: "The Wanderer's Road" → "wanderers-road"）
 # THEME はコレクションテーマ slug。ideate 段階の暫定値で OK
 #   (stock_refs.theme_match="exact" で 0 件なら fallback_when_empty=true で default のみで生成)
@@ -200,30 +214,69 @@ while IFS= read -r p; do
   [ -n "$p" ] && REF_ARGS+=(--reference "$p")
 done <<< "$REFS"
 
+# 順次実行（API レート制限回避）。以下は candidate_count=3 のサンプル。
+# 違う値の場合は連打数と plan-{a,b,c,...} の採番をその値に合わせて調整する。
 uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
 uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
 uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
 ```
 
-- 3 企画とも同じ `REF_ARGS` を共有（stock シャッフル結果も共有）。stock 採用ログは stderr `[INFO] stock 採用: ...` に出る
+- 全企画とも同じ `REF_ARGS` を共有（stock シャッフル結果も共有）。stock 採用ログは stderr `[INFO] stock 採用: ...` に出る
+- 出力先: `collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png`（`<x>` は a/b/c/... のラベル、`candidate_count` 枚ぶん）
+- `-y` 指定時、同名ファイルが既存なら自動で `-v2`, `-v3` ... と採番（追加の安全策）
 - stock 合成を止めたい場合は `config/skills/collection-ideate.yaml` の `preview.stock_refs: false`、または thumbnail 側の `image_generation.gemini.reference_images.stock.enabled: false` を上書き
 
-- 出力先: `collections/planning/_plan-previews/<dir>/plan-{a,b,c}-<slug>.png`
-- `_` プレフィックスで通常コレクションと区別
-- セッション ID 付きディレクトリで並列実行時の競合を回避
-- `-y` 指定時、同名ファイルが既存なら自動で `-v2`, `-v3` ... と採番（追加の安全策）
+**4-5: 全枚を比較提示 → ユーザー選択**
 
-**4-4: 画像付きで企画を提示**
-
-1. まず `open` コマンドで全枚を同時にプレビューアプリで開く:
+1. `open` で全枚を同時にプレビューアプリで開く（`candidate_count=3` の例。違う値の場合はブレース展開を調整）:
 
    ```bash
-   open collections/planning/_plan-previews/<dir>/plan-{a,b,c}-*.jpg
+   open collections/planning/_plan-previews/<dir>/plan-{a,b,c}-*.png
    ```
 
 2. Read ツールでも各プレビュー画像を表示しながら企画を提示する
 3. 各企画にはサムネイル情報に加え、`ideate.objects` で定義されたオブジェクトの名前・ストーリーを併記する（`objects` 未定義時は省略）
 4. 生成に失敗した分はテキストのみで提示（「プレビュー生成失敗」と明記）
+
+ユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取る。NG だった場合の戻り経路:
+
+- 同じペルソナで再生成したい → Phase 3 から再実行
+- 別ペルソナに切り替えたい → ペルソナローテーション（後述）に従って次ペルソナで再実行
+- 個別画像だけ気に入らない → 該当企画を 4-4 のコマンドで単発再生成
+
+parallel モードでは Next Step で `yt-stock-archive` による不採用 (`candidate_count` - 1) 枚の stock 退避が走る（「Next Step」参照）。
+
+---
+
+### Phase 4 補足: sequential モード (opt-in)
+
+`config/skills/collection-ideate.yaml` で `preview.thumbnail_mode: sequential` に切り替えた場合のみ実行する。コストは parallel の 1/`candidate_count`（`candidate_count=3` で例えば `1 枚 × $0.101 = $0.101`）。テキスト案のプロンプト本文だけで企画を絞り込めるときに有効。
+
+**sequential 用 4-1 / 4-2**: 共通。4-2 のコストワンライナーは `mode == sequential` のとき `count = 1` を返すため自動的に `1 枚 × $X` 表示になる。コスト拒否時の挙動も共通。
+
+**sequential 用 4-3 (セッションディレクトリ作成)**: 共通。
+
+**sequential 用 4-4 (選択 → 1 枚生成)**:
+
+先にユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取り（不採用 (`candidate_count` - 1) 案は破棄、画像は未生成なので副作用なし）、選択 1 案のみ `yt-generate-image` を 1 回呼ぶ:
+
+```bash
+# <x> は選択された企画の番号（a/b/c）
+uv run yt-generate-image "${REF_ARGS[@]}" \
+  --prompt "<選択された企画のプロンプト>" \
+  --output collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png -y
+```
+
+**sequential 用 4-5 (1 枚承認)**:
+
+1. `open` で生成 1 枚をプレビューアプリで開く
+2. Read ツールでもプレビュー画像を表示する
+3. オブジェクトの名前・ストーリーを併記する
+4. 承認 NG / 生成失敗の場合は次のいずれかの経路で復帰:
+   - 同じ企画で再生成 → 4-4 を再実行
+   - 別の企画に切り替え → 4-4 の選択からやり直し
+
+sequential モードでは Next Step で stock 退避は走らない（不採用画像が生成されていない）。
 
 ## ペルソナベース企画フレームワーク
 
@@ -240,13 +293,15 @@ uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --
    （チャンネル立ち上げ直後なら `/channel-direction` → `/audience-persona` → `/collection-ideate` の順）
 ```
 
-今回のターゲットペルソナに対し、差別化軸（`config/skills/collection-ideate.yaml` の `differentiation_axes`、デフォルト: location / time_of_day / activity / mood）の掛け合わせで候補を生成:
+今回のターゲットペルソナに対し、差別化軸（`config/skills/collection-ideate.yaml` の `differentiation_axes`、デフォルト: location / time_of_day / activity / mood）の掛け合わせで `candidate_count` 個の候補を生成する。以下は `candidate_count=3` のときのテンプレ:
 
 | 企画 | 差別化の切り口 |
 |------|---------------|
 | **企画 1** | 軸 A × 軸 B のバリエーション |
 | **企画 2** | 軸 C × 軸 D のバリエーション |
 | **企画 3** | 競合の高再生パターンをペルソナ視点で再解釈 |
+
+`candidate_count` を変えた場合は枠を増減し、各企画ごとに異なる差別化軸の組み合わせ or 競合パターン再解釈を割り当てる。
 
 ### カラールール
 
@@ -334,7 +389,7 @@ uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --
 2. 直近の選択ペルソナの次を今回のターゲットにする
 3. 初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ
 
-**3 候補の差別化軸**:
+**`candidate_count` 候補の差別化軸**:
 同一ペルソナ向けに、`differentiation_axes` の掛け合わせを変えてバリエーションを生成する。
 
 ### 企画レポート保存
@@ -347,7 +402,11 @@ uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --
 
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
-企画確定後、**選択した企画のプレビュー画像をコレクションの `main.png` にコピー**し、残った不採用プレビューを `assets/stock/<theme>/` に退避してからプレビューディレクトリを削除する（#364）:
+企画確定後、**選択した企画のプレビュー画像を `main.png` にコピー**してセッションディレクトリを削除する。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
+
+### parallel モード（デフォルト）
+
+不採用 (`candidate_count` - 1) 枚を `assets/stock/<theme>/` に退避してからプレビューディレクトリを削除する（#364）:
 
 ```bash
 # 1. 選択した企画のプレビュー画像を main.png としてコピー
@@ -376,7 +435,31 @@ JSON
 rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-`config/skills/collection-ideate.yaml` の `preview.stock_archive: false` か `config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` のいずれかで stock 退避を無効化できる（無効化時は CLI 経由で単純削除に戻る）。
+parallel モードでは `config/skills/collection-ideate.yaml` の `preview.stock_archive: false` か `config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` のいずれかで stock 退避を無効化できる（無効化時は CLI 経由で単純削除に戻る）。
+
+### sequential モード時の Next Step
+
+不採用 (`candidate_count` - 1) 案は画像が未生成なので stock 退避は不要。`cp` 1 回 + `rm -rf` だけで済む:
+
+```bash
+# 1. 選択した企画のプレビュー画像を main.png としてコピー
+cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png
+
+# 2. セッションディレクトリ削除
+rm -rf collections/planning/_plan-previews/<session-dir>/
+```
+
+### コスト拒否 / 生成失敗で main.png が無い場合
+
+4-2 でユーザーがコストを拒否、または 4-4 / 4-5 で全枚生成失敗した場合は `main.png` が未生成のまま Next Step を抜ける。`cp` は実行せず、セッションディレクトリが存在すれば削除する:
+
+```bash
+# 採用画像が無いので main.png コピーはスキップ
+# セッションディレクトリが残っていれば削除（部分生成のゴミ掃除）
+[ -d collections/planning/_plan-previews/<session-dir> ] && rm -rf collections/planning/_plan-previews/<session-dir>/
+```
+
+このケースでは下流の `/thumbnail <theme>` が `main.png` 不在を検出し、**Phase 1 から** 本番サムネを新規生成する流れに合流する（下記「企画選択後」参照）。
 
 > **定期クリーンアップ**: 放棄されたセッションのディレクトリが残る場合、7 日以上前のものは手動削除可:
 > `find collections/planning/_plan-previews/ -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +`
@@ -384,5 +467,5 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 > stock 側の保守は `uv run yt-stock-prune --dry-run` で候補確認 →（必要なら）本実行。
 
 企画選択後:
-→ `/thumbnail <theme>` でテキストオーバーレイのみ実行（`main.png` が既に存在するため Phase 2 から開始）
+→ `/thumbnail <theme>` でサムネ仕上げに進む。`main.png` が既に存在する場合は Phase 2 からテキストオーバーレイのみ実行。コスト拒否や生成失敗で `main.png` が無い場合は Phase 1 から本番サムネを新規生成する
 → サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）
