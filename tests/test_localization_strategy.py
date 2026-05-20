@@ -150,9 +150,7 @@ class TestRecommendSupportedLanguages:
         countries = {"US": {"views": 5000}, "DE": {"views": 4000}, "JP": {"views": 1000}}
         by_lang = aggregate_by_language(countries)
         revenue = compute_estimated_revenue(countries, by_lang)
-        rec = recommend_supported_languages(
-            by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5
-        )
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5)
         assert "en" in rec["add"]
         assert "de" in rec["add"]
         assert "ja" in rec["keep"]
@@ -161,18 +159,14 @@ class TestRecommendSupportedLanguages:
         countries = {"US": {"views": 9990}, "KR": {"views": 10}}
         by_lang = aggregate_by_language(countries)
         revenue = compute_estimated_revenue(countries, by_lang)
-        rec = recommend_supported_languages(
-            by_lang, revenue, current=["ja", "ko"], add_floor=1.0, keep_floor=0.5
-        )
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja", "ko"], add_floor=1.0, keep_floor=0.5)
         assert "ko" in rec["remove"]
 
     def test_other_bucket_excluded_from_add(self):
         countries = {"ZW": {"views": 5000}, "US": {"views": 5000}}
         by_lang = aggregate_by_language(countries)
         revenue = compute_estimated_revenue(countries, by_lang)
-        rec = recommend_supported_languages(
-            by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5
-        )
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5)
         assert OTHER_LANGUAGE_BUCKET not in rec["add"]
         assert OTHER_LANGUAGE_BUCKET not in rec["keep"]
 
@@ -180,8 +174,6 @@ class TestRecommendSupportedLanguages:
         countries = {"US": {"views": 1000}}
         by_lang = aggregate_by_language(countries)
         revenue = compute_estimated_revenue(countries, by_lang)
-        rec = recommend_supported_languages(
-            by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5
-        )
+        rec = recommend_supported_languages(by_lang, revenue, current=["ja"], add_floor=1.0, keep_floor=0.5)
         assert "ja" in rec["keep"]
         assert any("ja" in note and "判定保留" in note for note in rec["rationale"])

@@ -11,12 +11,7 @@ import pytest
 
 from youtube_automation.scripts import localization_roi
 
-_FIXTURE = (
-    Path(__file__).resolve().parent
-    / "fixtures"
-    / "localization_roi"
-    / "sample_country_analytics.json"
-)
+_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "localization_roi" / "sample_country_analytics.json"
 
 
 @pytest.fixture
@@ -81,13 +76,17 @@ def test_main_writes_markdown_and_json(monkeypatch, tmp_path, fixture_countries,
     _patch_collector(monkeypatch, fixture_countries)
 
     output = tmp_path / "report.md"
-    monkeypatch.setattr(sys, "argv", [
-        "yt-localization-roi",
-        "--days",
-        "90",
-        "--output",
-        str(output),
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "yt-localization-roi",
+            "--days",
+            "90",
+            "--output",
+            str(output),
+        ],
+    )
 
     code = localization_roi.main()
 
@@ -109,12 +108,16 @@ def test_main_text_mode_emits_summary(monkeypatch, tmp_path, fixture_countries, 
     _patch_collector(monkeypatch, fixture_countries)
 
     output = tmp_path / "report.md"
-    monkeypatch.setattr(sys, "argv", [
-        "yt-localization-roi",
-        "--text",
-        "--output",
-        str(output),
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "yt-localization-roi",
+            "--text",
+            "--output",
+            str(output),
+        ],
+    )
 
     code = localization_roi.main()
 
@@ -127,11 +130,15 @@ def test_main_text_mode_emits_summary(monkeypatch, tmp_path, fixture_countries, 
 def test_main_returns_1_when_country_analytics_empty(monkeypatch, tmp_path, capsys):
     _patch_collector(monkeypatch, {"countries": {}, "total_views": 0})
 
-    monkeypatch.setattr(sys, "argv", [
-        "yt-localization-roi",
-        "--output",
-        str(tmp_path / "r.md"),
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "yt-localization-roi",
+            "--output",
+            str(tmp_path / "r.md"),
+        ],
+    )
 
     code = localization_roi.main()
     assert code == 1
@@ -143,11 +150,15 @@ def test_main_returns_1_when_api_error(monkeypatch, tmp_path):
         {"countries": {}, "total_views": 0, "error": "quota exceeded"},
     )
 
-    monkeypatch.setattr(sys, "argv", [
-        "yt-localization-roi",
-        "--output",
-        str(tmp_path / "r.md"),
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "yt-localization-roi",
+            "--output",
+            str(tmp_path / "r.md"),
+        ],
+    )
 
     code = localization_roi.main()
     assert code == 1

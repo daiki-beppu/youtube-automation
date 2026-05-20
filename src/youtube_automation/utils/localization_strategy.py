@@ -166,15 +166,22 @@ OTHER_LANGUAGE_BUCKET: str = "other"
 # CPM 上位 10 ヶ国 (2026 Q1, 複数ソース照合). 順位は upgrowth 値を主軸に、
 # YTface / CreatiCalc / Mediacube / FluxNote / InstantViews で構成を照合済み。
 TOP_CPM_COUNTRIES: tuple[str, ...] = (
-    "AU", "US", "CA", "NZ", "GB", "CH", "DE", "NO", "IE", "SG",
+    "AU",
+    "US",
+    "CA",
+    "NZ",
+    "GB",
+    "CH",
+    "DE",
+    "NO",
+    "IE",
+    "SG",
 )
 
 # Top 10 国の主要言語. Issue #272 で **必須対応** とする言語セット。
 # COUNTRY_TO_PRIMARY_LANGUAGE と TOP_CPM_COUNTRIES から自動導出して
 # Top 10 の構成変更時にも追従させる。現状値は {"en", "de", "no"}。
-MANDATORY_LANGUAGES: frozenset[str] = frozenset(
-    COUNTRY_TO_PRIMARY_LANGUAGE[code] for code in TOP_CPM_COUNTRIES
-)
+MANDATORY_LANGUAGES: frozenset[str] = frozenset(COUNTRY_TO_PRIMARY_LANGUAGE[code] for code in TOP_CPM_COUNTRIES)
 
 
 def aggregate_by_language(countries: Mapping[str, Mapping[str, float]]) -> dict[str, dict]:
@@ -202,9 +209,7 @@ def aggregate_by_language(countries: Mapping[str, Mapping[str, float]]) -> dict[
 
     total_views = sum(b["views"] for b in by_lang.values())
     for bucket in by_lang.values():
-        bucket["view_share_percent"] = (
-            round(bucket["views"] / total_views * 100, 2) if total_views > 0 else 0.0
-        )
+        bucket["view_share_percent"] = round(bucket["views"] / total_views * 100, 2) if total_views > 0 else 0.0
         bucket["top_countries"].sort(key=lambda pair: pair[1], reverse=True)
     return by_lang
 
@@ -274,17 +279,13 @@ def recommend_supported_languages(
                 keep.append(lang)
             else:
                 add.append(lang)
-                rationale.append(
-                    f"{lang}: Top 10 CPM 国の主要言語のため必須対応 (view_share {share}%)"
-                )
+                rationale.append(f"{lang}: Top 10 CPM 国の主要言語のため必須対応 (view_share {share}%)")
         elif lang in current_set:
             if share >= keep_floor:
                 keep.append(lang)
             else:
                 remove.append(lang)
-                rationale.append(
-                    f"{lang}: view_share {share}% が keep_floor {keep_floor}% を下回るため削除候補"
-                )
+                rationale.append(f"{lang}: view_share {share}% が keep_floor {keep_floor}% を下回るため削除候補")
         else:
             if share >= add_floor:
                 add.append(lang)
@@ -303,9 +304,7 @@ def recommend_supported_languages(
         else:
             if lang not in add:
                 add.append(lang)
-                rationale.append(
-                    f"{lang}: Top 10 CPM 国の主要言語のため必須対応 (視聴データなしだが必須化)"
-                )
+                rationale.append(f"{lang}: Top 10 CPM 国の主要言語のため必須対応 (視聴データなしだが必須化)")
 
     # 現在 supported だが Analytics に出てこない非 MANDATORY 言語は判定保留。
     for lang in current:

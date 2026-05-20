@@ -77,9 +77,7 @@ def build_analysis(
             "views": bucket["views"],
             "view_share_percent": bucket["view_share_percent"],
             "country_count": bucket["country_count"],
-            "top_countries": [
-                {"country": c, "views": v} for c, v in bucket["top_countries"][:5]
-            ],
+            "top_countries": [{"country": c, "views": v} for c, v in bucket["top_countries"][:5]],
             "estimated_revenue_usd": estimated_revenue.get(lang, 0.0),
         }
         for lang, bucket in by_language.items()
@@ -104,9 +102,7 @@ def render_markdown(analysis: dict) -> str:
     lines.append("")
     lines.append(f"- **Generated**: {analysis['generated_at']}")
     lines.append(f"- **Period**: {analysis['window_days']} days")
-    lines.append(
-        f"- **Current supported_languages**: {', '.join(analysis['current_supported_languages']) or '(none)'}"
-    )
+    lines.append(f"- **Current supported_languages**: {', '.join(analysis['current_supported_languages']) or '(none)'}")
     lines.append("")
     lines.append("## 国別 views (Top 30)")
     lines.append("")
@@ -153,13 +149,9 @@ def render_markdown(analysis: dict) -> str:
 
     lines.append("## 注記")
     lines.append("")
-    lines.append(
-        "- Est. Revenue は公開参考 CPM × views/1000 の単純積算であり、実 AdSense 値とは乖離する"
-    )
+    lines.append("- Est. Revenue は公開参考 CPM × views/1000 の単純積算であり、実 AdSense 値とは乖離する")
     lines.append("- 同言語でも国別 CPM 差が大きい (ES vs MX で 10x、PT vs BR で 6x)")
-    lines.append(
-        "- CPM 出典: upgrowth.in (2026-02-21), lenostube.com (2026-04-02), fluxnote.io (2026-03-06)"
-    )
+    lines.append("- CPM 出典: upgrowth.in (2026-02-21), lenostube.com (2026-04-02), fluxnote.io (2026-03-06)")
     return "\n".join(lines) + "\n"
 
 
@@ -175,18 +167,14 @@ def main() -> int:
         description="国別 views × 公開参考 CPM で言語別 ROI を推定し supported_languages の見直し材料を生成"
     )
     parser.add_argument("--days", type=int, default=90, help="過去日数 (default: 90)")
-    parser.add_argument(
-        "--max-countries", type=int, default=30, help="取得する国数の上限 (default: 30)"
-    )
+    parser.add_argument("--max-countries", type=int, default=30, help="取得する国数の上限 (default: 30)")
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
         help="Markdown 出力先 (default: <channel_dir>/data/localization_roi/<YYYY-MM-DD>.md)",
     )
-    parser.add_argument(
-        "--json", action="store_true", help="stdout に構造化 JSON のみ出力 (default)"
-    )
+    parser.add_argument("--json", action="store_true", help="stdout に構造化 JSON のみ出力 (default)")
     parser.add_argument("--text", action="store_true", help="stdout に人間向け要約を出力")
     parser.add_argument(
         "--keep-floor",
@@ -213,9 +201,7 @@ def main() -> int:
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=args.days)).strftime("%Y-%m-%d")
 
-        result = collector.get_country_analytics(
-            start_date, end_date, max_countries=args.max_countries
-        )
+        result = collector.get_country_analytics(start_date, end_date, max_countries=args.max_countries)
         if "error" in result:
             raise YouTubeAPIError(f"get_country_analytics 失敗: {result['error']}")
         countries = result.get("countries", {}) or {}
