@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- workflow チートシート `docs/workflow-cheatsheet.md` を新設（#363）。`/wf-new` `/wf-next` `/wf-status` `/collection-ideate` の判定フローと `workflow-state.json` の扱い基準（OK / NG / 限定 OK の操作別表）を 1 枚にまとめ、初心者でも使い分けに迷わないようガイド化
+- 全 skill カタログ `docs/features.md` を新設（#355）。`.claude/skills/` 配下 43 skill すべてをカテゴリ別テーブルで「なにができるか」1 行で列挙
+- `yt-skills sync --asset workflow-cheatsheet` / `--asset features` を新設。`pyproject.toml::force-include` で wheel 内 `_docs/` に同梱し、配布される SKILL.md / CLAUDE.md の docs 相対 link が同 version で整合
+- `.claude/skills/{wf-new,wf-next,wf-status}/SKILL.md` の冒頭に「When to Use」短表を追加（#363）。他 wf-* skill との使い分け境界を明示
+- `.claude/CLAUDE.template.md` §6 に Claude への明示指示を追加（#363）。新セッションで workflow 起点の質問を受けたら `docs/workflow-cheatsheet.md` を 1 回だけ提示するよう運用化
+
+### Changed
+
+- **破壊的変更**: `yt-skills sync` のデフォルトを `--asset all` に変更（#363, #355）。skills / claude-md / workflow-cheatsheet / features を 1 コマンドで一括配布。配布される SKILL.md / CLAUDE.md の docs 相対 link が link 切れになる問題を解消。skill 単独 sync は `--asset skills` を明示
+- **破壊的変更**: `yt-skills sync --target X` を asset 未指定で叩くと `exit 2` で止まるように変更（#363, #355）。asset ごとに default_target が異なる all モードで silent に意図しない場所へ書き込まれる事故を防止。skills 単独で X に出すには `--asset skills --target X` のように asset を明示
+- `_guard_target_with_all` を導入し、library 経路（`cmd_sync` / `cmd_diff` の直呼び）では `ValueError`、CLI 経路では `sys.exit(2)` という 2 段構成で経路別に振る舞いを分離
+
 ## [5.5.2] - 2026-05-20
 
 ### Added
