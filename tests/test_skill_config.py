@@ -92,13 +92,24 @@ def test_cache_reset(tmp_path, monkeypatch):
 
 
 def test_get_collection_ideate_thumbnail_mode_default(tmp_path, monkeypatch):
-    """skill-config 未設定なら sequential を返す"""
+    """channel override 無しなら default.yaml の preview.thumbnail_mode (= sequential) を返す"""
     channel_dir = tmp_path / "ch"
     channel_dir.mkdir()
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     mode = skill_config.get_collection_ideate_thumbnail_mode()
     assert mode == skill_config.THUMBNAIL_MODE_SEQUENTIAL
+
+
+def test_default_yaml_thumbnail_mode_matches_constant(tmp_path, monkeypatch):
+    """`.claude/skills/collection-ideate/config.default.yaml` の
+    preview.thumbnail_mode がコード側 THUMBNAIL_MODE_SEQUENTIAL と同期していること"""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("collection-ideate", use_cache=False)
+    assert cfg["preview"]["thumbnail_mode"] == skill_config.THUMBNAIL_MODE_SEQUENTIAL
 
 
 def test_get_collection_ideate_thumbnail_mode_opt_in_parallel(tmp_path, monkeypatch):

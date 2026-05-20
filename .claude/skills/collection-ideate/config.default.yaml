@@ -16,6 +16,11 @@ preview:
   candidate_count: 3
   # セッション ID のバイト数 (hex 文字列化後の長さは 2 倍)
   session_id_bytes: 2
+  # サムネ生成モード:
+  # - "sequential" (default): テキスト 3 案 → ユーザーが 1 案選択 → 選ばれた 1 案だけサムネ生成 (課金 1 枚分、推奨)
+  # - "parallel": 3 案すべて本番品質でサムネを即時生成 (課金 3 枚分、opt-in)
+  # コード側は youtube_automation.utils.skill_config.get_collection_ideate_thumbnail_mode() で参照する
+  thumbnail_mode: sequential
 
 # 差し替え可能オブジェクトの定義 (省略可、未定義時はサムネイル差別化は色・テーマのみ)
 # 詳しい例は references/object-design-examples.md を参照
