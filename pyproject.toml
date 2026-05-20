@@ -105,7 +105,6 @@ include = [
     "tests/",
     ".claude/skills/",
     ".claude/CLAUDE.template.md",
-    "scripts/",
     "auth/SETUP.md",
     "auth/client_secrets_template.json",
     "README.md",

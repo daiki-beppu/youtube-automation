@@ -2,7 +2,7 @@
 # gcp-terraform-apply.sh — Terraform apply → .env 書き出しまでを 1 コマンドで
 #
 # Usage:
-#   scripts/gcp-terraform-apply.sh [--tf-dir DIR] [--env-file PATH] [--auto-approve]
+#   .claude/skills/channel-setup/references/gcp-terraform-apply.sh [--tf-dir DIR] [--env-file PATH] [--auto-approve]
 #
 # Options:
 #   --tf-dir DIR       Terraform モジュールパス (既定: infra/terraform/gcp)
@@ -90,6 +90,13 @@ while IFS=$'\t' read -r key value; do
 done < <(echo "$ENV_JSON" | jq -r 'to_entries[] | "\(.key)\t\(.value)"')
 
 ok ".env updated: $ENV_FILE_ABS (project=$PROJECT_ID)"
+
+# ADC quota project を確定プロジェクトに揃える (gcp-bootstrap.sh と機能等価にするため)
+if command -v gcloud >/dev/null 2>&1; then
+    log "ADC quota project を $PROJECT_ID に設定"
+    gcloud auth application-default set-quota-project "$PROJECT_ID"
+    ok "ADC quota project: $PROJECT_ID"
+fi
 
 cat <<EOF
 

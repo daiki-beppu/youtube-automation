@@ -24,7 +24,7 @@
 #   必ず TTY を持つ通常ターミナル (cmux pane 外) で直接実行してください。
 #
 # Usage:
-#   scripts/gcp-bootstrap.sh [OPTIONS] <project-id>
+#   .claude/skills/channel-setup/references/gcp-bootstrap.sh [OPTIONS] <project-id>
 #
 # Options:
 #   --create                      プロジェクトが存在しなければ作成する
@@ -37,9 +37,9 @@
 #   -h, --help                    このヘルプを表示
 #
 # Examples:
-#   scripts/gcp-bootstrap.sh my-yt-channel
-#   scripts/gcp-bootstrap.sh --create --billing-account 01ABCD-234567-89EFGH my-new-channel
-#   scripts/gcp-bootstrap.sh --env-file .env.local --location asia-northeast1 my-proj
+#   .claude/skills/channel-setup/references/gcp-bootstrap.sh my-yt-channel
+#   .claude/skills/channel-setup/references/gcp-bootstrap.sh --create --billing-account 01ABCD-234567-89EFGH my-new-channel
+#   .claude/skills/channel-setup/references/gcp-bootstrap.sh --env-file .env.local --location asia-northeast1 my-proj
 
 set -euo pipefail
 

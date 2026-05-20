@@ -60,7 +60,7 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 
 `gcloud auth login` / `gcloud auth application-default login` / Google Cloud Console での OAuth クライアント ID 作成の 3 ステップだけは PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外 (プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・トークン取得など) は AI が gcloud を直接 Bash で実行する。
 
-手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`auth/SETUP.md`](auth/SETUP.md) と `scripts/gcp-bootstrap.sh` / `infra/terraform/gcp/` を参照。
+手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`auth/SETUP.md`](auth/SETUP.md) と `.claude/skills/channel-setup/references/gcp-bootstrap.sh` / `infra/terraform/gcp/` を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。
 
 ---
 

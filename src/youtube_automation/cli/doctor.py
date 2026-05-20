@@ -352,7 +352,9 @@ def check_env_file(channel_dir: Path) -> CheckResult:
             message=f"{env_path} が無い",
             next_action={
                 "kind": "ai-exec",
-                "cmd": "scripts/gcp-bootstrap.sh <project-id> を実行して .env を書き出す",
+                "cmd": (
+                    ".claude/skills/channel-setup/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
+                ),
             },
         )
     env = _read_env_file(env_path)

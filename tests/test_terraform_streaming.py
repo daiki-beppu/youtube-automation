@@ -2917,7 +2917,7 @@ class TestSwapVideoScript:
 
         bash スクリプトの最低限の規律。`-e`（失敗即終了）, `-u`（未定義変数を fail）,
         `-o pipefail`（pipe 中の失敗を伝播）が無いと、provisioning 系の失敗が握りつぶされる。
-        既存 ``scripts/gcp-terraform-apply.sh:13`` と同方針。
+        既存 ``.claude/skills/channel-setup/references/gcp-terraform-apply.sh:13`` と同方針。
         """
         text = read_file(_SWAP_VIDEO_SCRIPT)
         assert re.search(r"^set\s+-euo\s+pipefail\b", text, flags=re.MULTILINE), (

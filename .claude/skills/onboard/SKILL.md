@@ -195,4 +195,4 @@ yt-channel-status
 
 複数チャンネルを横断管理したい / 別 PC へ引っ越したい / GCP 側の drift を検出したい場合は `infra/terraform/gcp/` の README を参照。tfstate で構成管理できる代わりに `terraform.tfvars` 編集の 1 ステップが増える。
 
-AI が tfvars を Write して `scripts/gcp-terraform-apply.sh --auto-approve` を Bash で叩けば自動化可能。OAuth クライアント ID の手動配置は両ルート共通。
+AI が tfvars を Write して `.claude/skills/channel-setup/references/gcp-terraform-apply.sh --auto-approve` を Bash で叩けば自動化可能。OAuth クライアント ID の手動配置は両ルート共通。

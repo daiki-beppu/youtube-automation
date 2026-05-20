@@ -4,7 +4,7 @@
 
 ## いつ terraform を選ぶか
 
-`scripts/gcp-bootstrap.sh` と機能ほぼ同等だが、tfstate を持つ分以下のシナリオで強い:
+`.claude/skills/channel-setup/references/gcp-bootstrap.sh` と機能ほぼ同等だが、tfstate を持つ分以下のシナリオで強い:
 
 | シナリオ | 推奨 |
 | --- | --- |
@@ -50,10 +50,10 @@ terraform plan
 terraform apply
 
 # 3. outputs から .env を更新 (ラッパー推奨)
-bash ../../../scripts/gcp-terraform-apply.sh --tf-dir . --env-file ../../../.env
+bash ../../../.claude/skills/channel-setup/references/gcp-terraform-apply.sh --tf-dir . --env-file ../../../.env
 ```
 
-`scripts/gcp-terraform-apply.sh` は `terraform apply` → `terraform output -json env_vars` → `.env` へマージまで一気通貫で実行する。
+`.claude/skills/channel-setup/references/gcp-terraform-apply.sh` は `terraform apply` → `terraform output -json env_vars` → `.env` へマージまで一気通貫で実行する。
 
 ## 既存プロジェクトを流用する場合
 
