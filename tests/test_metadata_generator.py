@@ -729,3 +729,292 @@ class TestGenerateLocalizationsBulkReport:
         msg = str(excinfo.value)
         for lang in config.localizations.supported_languages:
             assert f"[{lang}]" in msg
+
+
+# ===========================================================================
+# 13. pattern_key 抽出ヘルパー
+# ===========================================================================
+
+
+class TestExtractPatternKey:
+    """`\\d+-pattern-[a-d]` パターンから pattern_key を抽出するロジックの検証."""
+
+    def test_pattern_a_lowercase(self):
+        from youtube_automation.utils.metadata_generator import _extract_pattern_key
+
+        assert _extract_pattern_key("01-pattern-a-intro.mp3") == "a"
+
+    def test_pattern_b_with_variation_suffix(self):
+        from youtube_automation.utils.metadata_generator import _extract_pattern_key
+
+        assert _extract_pattern_key("05-pattern-b1-quiet-hours.mp3") == "b"
+
+    def test_pattern_c_uppercase(self):
+        from youtube_automation.utils.metadata_generator import _extract_pattern_key
+
+        assert _extract_pattern_key("10-Pattern-C-finale.mp3") == "c"
+
+    def test_no_pattern_returns_none(self):
+        from youtube_automation.utils.metadata_generator import _extract_pattern_key
+
+        assert _extract_pattern_key("01-Hero_Theme.wav") is None
+
+    def test_pattern_e_out_of_range(self):
+        """[a-d] 範囲外（e 以降）は None"""
+        from youtube_automation.utils.metadata_generator import _extract_pattern_key
+
+        assert _extract_pattern_key("01-pattern-e-extra.mp3") is None
+
+
+# ===========================================================================
+# 14. テーマ見出し付きタイムスタンプ生成
+# ===========================================================================
+
+
+def _track(filename, title, timestamp, pattern_key, duration=180):
+    """テスト用トラック辞書を組み立てる shorthand."""
+    return {
+        "filename": filename,
+        "title": title,
+        "duration": duration,
+        "start_time": 0,
+        "end_time": duration,
+        "timestamp": timestamp,
+        "pattern_key": pattern_key,
+    }
+
+
+class TestGenerateTimestampsWithThemes:
+    """pattern_key に基づくテーマ見出しの挿入と、未指定時のフラット出力を検証."""
+
+    def test_inserts_theme_headers_at_pattern_transitions(self, monkeypatch):
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-pattern-a-foo.mp3", "Foo", "00:00", "a"),
+            _track("02-pattern-a-bar.mp3", "Bar", "03:00", "a"),
+            _track("03-pattern-b-baz.mp3", "Baz", "06:00", "b"),
+        ]
+        monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {"a": "Awakening", "b": "Focused Flow"})
+        result = gen.generate_timestamps()
+
+        types = [e["type"] for e in result]
+        assert types == ["theme_header", "track", "track", "theme_header", "track"]
+        assert result[0]["title"] == "Awakening"
+        assert result[0]["timestamp"] == "00:00"
+        assert result[3]["title"] == "Focused Flow"
+        assert result[3]["timestamp"] == "06:00"
+
+    def test_no_pattern_keys_returns_flat_tracks(self, monkeypatch):
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-Hero.wav", "Hero", "00:00", None),
+            _track("02-Forest.wav", "Forest", "03:00", None),
+        ]
+        monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {})
+        result = gen.generate_timestamps()
+
+        assert all(e["type"] == "track" for e in result)
+        assert [e["title"] for e in result] == ["Hero", "Forest"]
+
+    def test_fallback_label_when_display_name_missing(self, monkeypatch):
+        """workflow-state.json に表示名が無い pattern は `Pattern X` にフォールバック."""
+        gen = _make_generator()
+        gen.tracks = [_track("01-pattern-c-x.mp3", "X", "00:00", "c")]
+        monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {})
+        result = gen.generate_timestamps()
+        assert result[0]["type"] == "theme_header"
+        assert result[0]["title"] == "Pattern C"
+
+
+class TestFormatTimestampsTextWithThemes:
+    """テーマ見出し行のフォーマットを検証."""
+
+    def test_theme_header_uses_inline_decoration(self, monkeypatch):
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-pattern-a-foo.mp3", "Foo", "00:00", "a"),
+            _track("02-pattern-b-bar.mp3", "Bar", "03:00", "b"),
+        ]
+        monkeypatch.setattr(
+            gen,
+            "_load_theme_display_names",
+            lambda: {"a": "Pattern A: Awakening", "b": "Pattern B: Flow"},
+        )
+        text = gen.format_timestamps_text()
+        assert text == ("── Pattern A: Awakening ──\n00:00 Foo\n── Pattern B: Flow ──\n03:00 Bar")
+
+    def test_flat_format_for_no_pattern_keys(self, monkeypatch):
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-Solo.wav", "Solo", "00:00", None),
+            _track("02-Duet.wav", "Duet", "05:00", None),
+        ]
+        monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {})
+        assert gen.format_timestamps_text() == "00:00 Solo\n05:00 Duet"
+
+    def test_chapter_lines_are_strictly_ascending(self, monkeypatch):
+        """YouTube の chapter parser は timestamps の strict ascending を要求する。
+        テーマ見出し行が先頭 timestamp を持っていると直後の楽曲行と重複し
+        chapter list 全体が invalid 化するため、見出し行は timestamp を持たない."""
+        import re
+
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-pattern-a-foo.mp3", "Foo", "00:00", "a"),
+            _track("02-pattern-b-bar.mp3", "Bar", "03:00", "b"),
+        ]
+        monkeypatch.setattr(gen, "_load_theme_display_names", lambda: {"a": "Pattern A", "b": "Pattern B"})
+
+        ts_line_re = re.compile(r"^(\d+):(\d{2})(?::(\d{2}))?\s")
+        prev_seconds = -1
+        for line in gen.format_timestamps_text().splitlines():
+            m = ts_line_re.match(line)
+            if not m:
+                continue
+            parts = [int(p) for p in m.groups() if p is not None]
+            seconds = parts[0] * 60 + parts[1] if len(parts) == 2 else parts[0] * 3600 + parts[1] * 60 + parts[2]
+            assert seconds > prev_seconds, f"timestamp line not strictly ascending: {line!r}"
+            prev_seconds = seconds
+
+
+# ===========================================================================
+# 15. 同名楽曲の重複検知
+# ===========================================================================
+
+
+class TestDetectDuplicateTrackTitles:
+    """同名楽曲の検出ロジックの検証."""
+
+    def test_no_duplicates_returns_empty(self):
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-a.mp3", "Unique One", "00:00", "a"),
+            _track("02-b.mp3", "Unique Two", "03:00", "b"),
+        ]
+        assert gen.detect_duplicate_track_titles() == {}
+
+    def test_single_duplicate_pair(self):
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-a.mp3", "Quiet Hours", "00:00", "a"),
+            _track("02-b.mp3", "Other", "03:00", "b"),
+            _track("03-c.mp3", "Quiet Hours", "06:00", "c"),
+        ]
+        result = gen.detect_duplicate_track_titles()
+        assert "Quiet Hours" in result
+        assert sorted(result["Quiet Hours"]) == [0, 2]
+
+    def test_case_insensitive_grouping(self):
+        gen = _make_generator()
+        gen.tracks = [
+            _track("01-a.mp3", "Rain Window", "00:00", "a"),
+            _track("02-b.mp3", "rain window", "03:00", "b"),
+        ]
+        result = gen.detect_duplicate_track_titles()
+        # 表現は元のタイトルどちらか 1 つに正規化される（実装依存）が、indices は両方含む
+        assert any(sorted(v) == [0, 1] for v in result.values())
+
+
+# ===========================================================================
+# 16. 同名楽曲リネームの適用と永続化
+# ===========================================================================
+
+
+class TestApplyTrackDisplayNames:
+    """LLM 命名結果を self.tracks と workflow-state.json に反映するロジックの検証."""
+
+    def test_updates_tracks_and_persists_to_state(self, tmp_path):
+        import json as _json
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        ws_path = tmp_path / "workflow-state.json"
+        ws_path.write_text(_json.dumps({"collection_name": "Test"}), encoding="utf-8")
+
+        gen.tracks = [
+            _track("01-pattern-a-foo.mp3", "Original A", "00:00", "a"),
+            _track("02-pattern-b-bar.mp3", "Original B", "03:00", "b"),
+        ]
+        gen.apply_track_display_names({0: "Awakening Drift", 1: "Focused Pulse"})
+
+        assert gen.tracks[0]["title"] == "Awakening Drift"
+        assert gen.tracks[1]["title"] == "Focused Pulse"
+
+        state = _json.loads(ws_path.read_text(encoding="utf-8"))
+        assert state["track_display_names"]["01-pattern-a-foo.mp3"] == "Awakening Drift"
+        assert state["track_display_names"]["02-pattern-b-bar.mp3"] == "Focused Pulse"
+        # 既存キーが壊れない
+        assert state["collection_name"] == "Test"
+
+    def test_loads_persisted_names_in_analyze(self, tmp_path, monkeypatch):
+        """workflow-state.json の track_display_names が次回ロード時に適用される."""
+        import json as _json
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        ws_path = tmp_path / "workflow-state.json"
+        ws_path.write_text(
+            _json.dumps(
+                {
+                    "track_display_names": {
+                        "01-pattern-a-foo.mp3": "Persisted Name",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        gen.tracks = [
+            _track("01-pattern-a-foo.mp3", "Original", "00:00", "a"),
+        ]
+        gen._apply_persisted_display_names()
+        assert gen.tracks[0]["title"] == "Persisted Name"
+
+
+# ===========================================================================
+# 17. pattern 表示名解決ロジック
+# ===========================================================================
+
+
+class TestLoadThemeDisplayNames:
+    """workflow-state.json の planning.music.patterns から表示名を解決する."""
+
+    def test_display_name_preferred(self, tmp_path):
+        import json as _json
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        (tmp_path / "workflow-state.json").write_text(
+            _json.dumps(
+                {
+                    "planning": {
+                        "music": {
+                            "patterns": {
+                                "a": {"display_name": "Pattern A: Awakening", "name": "Awakening"},
+                            }
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        names = gen._load_theme_display_names()
+        assert names == {"a": "Pattern A: Awakening"}
+
+    def test_name_fallback_with_prefix(self, tmp_path):
+        import json as _json
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        (tmp_path / "workflow-state.json").write_text(
+            _json.dumps({"planning": {"music": {"patterns": {"b": {"name": "Focused Flow"}}}}}),
+            encoding="utf-8",
+        )
+        assert gen._load_theme_display_names() == {"b": "Pattern B: Focused Flow"}
+
+    def test_missing_patterns_returns_empty(self, tmp_path):
+        import json as _json
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        (tmp_path / "workflow-state.json").write_text(_json.dumps({}), encoding="utf-8")
+        assert gen._load_theme_display_names() == {}
