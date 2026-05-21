@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `thumbnail` スキルに `codex exec --enable image_generation` を直接 shell 実行する補助導線を追加（#501）。`.claude/skills/thumbnail/references/codex-image.sh` で stdout の `generated image <id> <base64>` を PNG に保存し、`SKILL.md` から独立経路として案内
+
 ## [5.5.2] - 2026-05-20
 
 ### Added

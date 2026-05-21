@@ -42,6 +42,31 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
 
+## codex 経由の補助生成
+
+API 課金を増やさずに複数案を出したいときや、CTR 比較用のラフを素早く作りたいときは、`codex exec --enable image_generation` を**独立した shell 経路**で使う。これは `yt-generate-image` / `ImageProvider` 抽象化には組み込まず、補助導線としてのみ扱う。
+
+前提:
+- `codex login status` が `Logged in using ChatGPT` を返す
+- `image_generation` feature は under development のため、codex 側の出力形式変更で壊れる可能性がある
+- ChatGPT サブスクの fair-use 上限は明文化されていないため、大量生成には使わない
+
+直接実行例:
+
+```bash
+bash .claude/skills/thumbnail/references/codex-image.sh \
+  "a cozy cafe table with steaming coffee, soft morning light" \
+  collections/planning/sample/main-codex.png
+```
+
+参照画像つきで雰囲気を寄せたい場合は、3 引数目以降に画像パスを追加する。
+
+この補助導線のスコープ:
+- `yt-generate-image` 連携なし
+- `ImageProvider` 連携なし
+- リトライなし
+- コスト計測連携なし
+
 ## Channel Adaptation
 
 **すべての設定は `config/skills/thumbnail.yaml` から読み取る。**
