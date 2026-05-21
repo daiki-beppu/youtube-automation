@@ -43,8 +43,7 @@ def test_features_doc_exists() -> None:
 def test_readme_has_features_section_link_to_catalog() -> None:
     features_section = _features_section(_read(README_PATH))
     assert README_FEATURES_LINK in features_section, (
-        "README.md の `## Features` セクションに "
-        f"{README_FEATURES_LINK} へのリンクがありません"
+        f"README.md の `## Features` セクションに {README_FEATURES_LINK} へのリンクがありません"
     )
 
 
@@ -52,8 +51,7 @@ def test_features_doc_lists_every_skill_directory_once() -> None:
     expected = _skill_names()
     actual = sorted(_catalog_skill_names())
     assert actual == expected, (
-        "docs/features.md の skill 行が `.claude/skills/` と一致しません\n"
-        f"expected={expected}\nactual={actual}"
+        f"docs/features.md の skill 行が `.claude/skills/` と一致しません\nexpected={expected}\nactual={actual}"
     )
 
 
