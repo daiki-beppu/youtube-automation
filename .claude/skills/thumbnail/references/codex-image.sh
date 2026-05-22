@@ -12,7 +12,7 @@ if ! command -v codex >/dev/null 2>&1; then
   exit 1
 fi
 
-login_status=$(codex login status)
+login_status=$(codex login status 2>&1)
 if [[ "$login_status" != *"Logged in"* ]]; then
   echo "ERROR: codex login status で Logged in using ChatGPT を確認してから再実行してください" >&2
   exit 1
@@ -23,8 +23,8 @@ for ref in "$@"; do
   image_args+=(--image "$ref")
 done
 
-codex exec --enable image_generation "${image_args[@]+"${image_args[@]}"}" "$prompt" \
-  | awk '/^generated image / {print $3; exit}' \
+codex exec --enable image_generation "${image_args[@]+"${image_args[@]}"}" -- "$prompt" \
+  | awk '/^generated image / {print $4; exit}' \
   | base64 -d > "$out"
 
 if [ ! -s "$out" ]; then
