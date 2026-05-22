@@ -28,8 +28,11 @@
 
 💽 [コレクション名 — 英語ボールド Unicode]
 
-00:00 [Track/Chapter 1]
-XX:XX [Track/Chapter 2]
+── Pattern A: [Theme A name] ──
+00:00 [Track 1 of pattern A]
+XX:XX [Track 2 of pattern A]
+── Pattern B: [Theme B name] ──
+XX:XX [Track 1 of pattern B]
 ...
 
 
@@ -54,6 +57,7 @@ XX:XX [Track/Chapter 2]
 - 冒頭は **詩的な情景** + **リスナーへの語りかけ**（YouTube の折りたたみ前に表示される）
 - メタデータは `Genre / Vibe / Best for` の3行（検索性 + 一目で内容がわかる）
 - タイムスタンプセクションは装飾付きヘッダー（`⎯⎯✦ ⋆˚ Music Time ⋆˚✦⎯⎯`）
+- タイムスタンプ本文は **個別楽曲単位**。`\d+-pattern-[a-d]` 規約のコレクションでは pattern 切り替わりにテーマ見出し行（`── Pattern A: <name> ──`）が自動挿入される
 - CTA は短く温かい語調（「保存＆登録」をさりげなく）
 - クレジットは最小限（Art & Music by）
 - ハッシュタグは最後にまとめて配置

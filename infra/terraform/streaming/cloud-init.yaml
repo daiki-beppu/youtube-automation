@@ -1,5 +1,9 @@
 #cloud-config
 ssh_pwauth: false
+ssh_keys:
+  ed25519_private: |
+    ${replace(trimspace(ssh_host_private_key), "\n", "\n    ")}
+  ed25519_public: ${trimspace(ssh_host_public_key)}
 package_update: true
 package_upgrade: true
 packages:

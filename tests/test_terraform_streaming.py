@@ -108,6 +108,22 @@ class TestVersionsTf:
             'required_providers.vultr.source が "vultr/vultr" でない'
         )
 
+    def test_required_providers_declares_tls_source(self):
+        """Given versions.tf
+        When required_providers ブロックを読む
+        Then tls.source = "hashicorp/tls" が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None, "required_providers ブロックが存在しない"
+        tls_block = extract_block(rp_block, r"tls")
+        assert tls_block is not None, "required_providers.tls が宣言されていない"
+        assert re.search(r'source\s*=\s*"hashicorp/tls"', tls_block), (
+            'required_providers.tls.source が "hashicorp/tls" でない'
+        )
+
     def test_required_providers_vultr_version_at_least_2(self):
         """Given versions.tf
         When required_providers.vultr.version を読む
@@ -122,6 +138,22 @@ class TestVersionsTf:
         assert vultr_block is not None
         assert re.search(r'version\s*=\s*"[^"]*>=\s*2', vultr_block), (
             "required_providers.vultr.version が >= 2 を満たしていない"
+        )
+
+    def test_required_providers_tls_version_at_least_4(self):
+        """Given versions.tf
+        When required_providers.tls.version を読む
+        Then ">= 4" を含む制約が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None
+        tls_block = extract_block(rp_block, r"tls")
+        assert tls_block is not None
+        assert re.search(r'version\s*=\s*"[^"]*>=\s*4', tls_block), (
+            "required_providers.tls.version が >= 4 を満たしていない"
         )
 
     def test_provider_vultr_block_uses_var_api_key(self):
@@ -221,6 +253,21 @@ class TestVariablesTf:
 class TestMainTf:
     """``main.tf`` の vultr_ssh_key + vultr_instance 定義。"""
 
+    def test_tls_private_key_resource_uses_ed25519(self):
+        """Given main.tf
+        When tls_private_key.ssh_host を読む
+        Then algorithm が ED25519 に固定されている。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"tls_private_key"\s+"ssh_host"')
+        assert block is not None, 'resource "tls_private_key" "ssh_host" が存在しない'
+        assert re.search(r"algorithm\s*=\s*local\.ssh_host_key_algorithm", block), (
+            "tls_private_key.ssh_host.algorithm が local.ssh_host_key_algorithm を参照していない"
+        )
+        assert re.search(r'ssh_host_key_algorithm\s*=\s*"ED25519"', text), (
+            'locals.ssh_host_key_algorithm が "ED25519" でない'
+        )
+
     def test_vultr_ssh_key_resource_uses_pathexpand(self):
         """Given main.tf
         When vultr_ssh_key.this を読む
@@ -269,6 +316,53 @@ class TestMainTf:
             r"ssh_key_ids\s*=\s*\[\s*vultr_ssh_key\.this\.id\s*\]",
             block,
         ), "ssh_key_ids が [vultr_ssh_key.this.id] でない（SSH 鍵未紐付け）"
+
+    def test_vultr_instance_user_data_passes_host_key_material(self):
+        """Given main.tf
+        When vultr_instance.this.user_data を読む
+        Then cloud-init template に host 鍵の private/public を明示的に渡している。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(r'user_data\s*=\s*templatefile\(\s*"\$\{path\.module\}/cloud-init\.yaml"\s*,\s*\{', block), (
+            'user_data が templatefile("${path.module}/cloud-init.yaml", { ... }) でない'
+        )
+        assert re.search(r"ssh_host_private_key\s*=\s*tls_private_key\.ssh_host\.private_key_openssh", block), (
+            "cloud-init に ssh_host_private_key が渡されていない"
+        )
+        assert re.search(r"ssh_host_public_key\s*=\s*local\.ssh_host_public_key", block), (
+            "cloud-init に ssh_host_public_key が渡されていない"
+        )
+
+    def test_null_resource_connection_enables_host_key_verification(self):
+        """Given main.tf
+        When null_resource.deploy.connection を読む
+        Then host_key = local.ssh_host_public_key で検証を有効化している。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None, 'resource "null_resource" "deploy" が存在しない'
+        connection_block = extract_block(deploy_block, r"connection")
+        assert connection_block is not None, "null_resource.deploy.connection が存在しない"
+        assert re.search(r"agent\s*=\s*true", connection_block), "connection.agent = true が無い"
+        assert re.search(r"host_key\s*=\s*local\.ssh_host_public_key", connection_block), (
+            "connection.host_key が local.ssh_host_public_key を参照していない"
+        )
+
+    def test_null_resource_triggers_include_host_key_hash(self):
+        """Given main.tf
+        When null_resource.deploy.triggers を読む
+        Then ssh_host_key トリガーで host 鍵変更時に再実行される。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None
+        triggers_block = extract_block(deploy_block, r"triggers")
+        assert triggers_block is not None, "null_resource.deploy.triggers が存在しない"
+        assert re.search(r"ssh_host_key\s*=\s*local\.ssh_host_public_key_sha", triggers_block), (
+            "triggers.ssh_host_key が local.ssh_host_public_key_sha を参照していない"
+        )
 
     def test_vultr_instance_uses_plural_tags_not_deprecated_tag(self):
         """Given main.tf
@@ -462,6 +556,23 @@ class TestCloudInitYaml:
         first_line = text.splitlines()[0] if text.splitlines() else ""
         assert first_line.strip() == "#cloud-config", (
             f"先頭行が #cloud-config でない: {first_line!r}（cloud-init が認識しない）"
+        )
+
+    def test_declares_ssh_keys_block_for_ed25519_host_key(self):
+        """Given cloud-init.yaml
+        When ssh_keys ブロックを読む
+        Then ed25519_private / ed25519_public の両方を template 変数経由で埋め込む。
+        """
+        text = read_file(_CLOUD_INIT_YAML)
+        assert re.search(r"^ssh_keys:\s*$", text, flags=re.MULTILINE), "ssh_keys: ブロックが存在しない"
+        assert re.search(r"^\s+ed25519_private:\s+\|$", text, flags=re.MULTILINE), (
+            "ssh_keys.ed25519_private の block scalar 宣言が無い"
+        )
+        assert '${replace(trimspace(ssh_host_private_key), "\\n", "\\n    ")}' in text, (
+            "ssh_keys.ed25519_private が ssh_host_private_key template を参照していない"
+        )
+        assert "${trimspace(ssh_host_public_key)}" in text, (
+            "ssh_keys.ed25519_public が ssh_host_public_key template を参照していない"
         )
 
     def test_package_update_is_true(self):
@@ -1426,14 +1537,15 @@ class TestMainTfUserData:
             block,
         ), 'user_data が templatefile("${path.module}/cloud-init.yaml", ...) を呼んでいない'
 
-    def test_user_data_template_passes_only_install_root(self):
+    def test_user_data_template_passes_required_variables(self):
         """Given main.tf
         When vultr_instance.this.user_data の右辺を読む
         Then ``systemd_unit = ...`` も内側 ``templatefile(...service.tftpl...)`` の
-             呼び出しも残らず、``install_root = var.install_root`` だけが渡されている (#212/#195)。
+             呼び出しも残らず、cloud-init の配置 root (``install_root``) と
+             host 鍵配布用の ``ssh_host_*`` 変数だけが渡されている (#212/#195)。
 
         unit 配置は ``null_resource.deploy`` の ``provisioner "file"`` に統一されたため、
-        user_data は cloud-init 用の配置 root だけを受け取る。
+        user_data には cloud-init 用の配置 root と host 鍵配布用変数のみを渡す。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
@@ -1450,6 +1562,12 @@ class TestMainTfUserData:
             r"install_root\s*=\s*var\.install_root",
             block,
         ), "cloud-init templatefile に install_root = var.install_root が渡されていない"
+        assert re.search(r"\bssh_host_private_key\s*=", block), (
+            "user_data の variables map に ssh_host_private_key が無い（host 鍵配布経路が欠落）"
+        )
+        assert re.search(r"\bssh_host_public_key\s*=", block), (
+            "user_data の variables map に ssh_host_public_key が無い（host 鍵配布経路が欠落）"
+        )
 
     def test_user_data_does_not_contain_plaintext_secrets(self):
         """Given main.tf
@@ -2955,6 +3073,25 @@ class TestStreamingReadme:
         text = read_file(_STREAMING_README)
         assert "ssh-add" in text, (
             "README に ssh-add の言及が無い（ssh-agent 登録手順が辿れず terraform apply が失敗する）"
+        )
+
+    def test_mentions_host_key_verification(self):
+        """Given README
+        When 前提セクション周辺を読む
+        Then host_key と ssh_keys による host 鍵固定化の説明がある。
+        """
+        text = read_file(_STREAMING_README)
+        assert "host_key" in text, "README に host_key の言及が無い（検証有効化の説明不足）"
+        assert "ssh_keys" in text, "README に ssh_keys の言及が無い（host 鍵配布経路が辿れない）"
+
+    def test_tfstate_section_mentions_tls_private_key(self):
+        """Given README
+        When tfstate と secret の説明を読む
+        Then tls_private_key.ssh_host.private_key_openssh の注意がある。
+        """
+        text = read_file(_STREAMING_README)
+        assert "tls_private_key.ssh_host.private_key_openssh" in text, (
+            "README の tfstate 注意書きに host 鍵秘密鍵の保存先が明記されていない"
         )
 
 

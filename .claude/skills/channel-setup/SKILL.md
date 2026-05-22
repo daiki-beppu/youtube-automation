@@ -53,7 +53,7 @@ Phase 1 で `/channel-new` が作成した最小 config を完全版に拡張。
 |---------|---------|
 | `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整 |
 | `config/upload_settings.json` | `references/upload-settings-template.json` をコピー |
-| `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。多言語展開しないチャンネルは省略可（`load_config().localizations.supported_languages` は `youtube.api.language` へフォールバック）。`config/localizations.json` が唯一の Canonical ソース |
+| `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。`supported_languages` は `["ja", "en", "de"]` を必ず含める（広告単価が高い 3 言語、issue #272）。低 CPM 言語は原則追加しない。多言語展開しないチャンネルは省略可（`load_config().localizations.supported_languages` は `youtube.api.language` へフォールバック）。`config/localizations.json` が唯一の Canonical ソース |
 | `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
 
 ### Step 6: GCP / Vertex AI ブートストラップ

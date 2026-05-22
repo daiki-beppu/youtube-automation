@@ -208,9 +208,21 @@ def _finalize_generated_video(
     effective_model: str,
     duration_seconds: int,
     aspect_ratio: str,
+    compression: dict | None = None,
 ) -> None:
-    """保存済み動画の後処理と課金ログ出力を行う。"""
-    strip_audio(output_path)
+    """保存済み動画の後処理と課金ログ出力を行う。
+
+    compression が有効なら libx264 再エンコードで音声除去も同時に行うため
+    `strip_audio` の stream copy パスを skip し、ffmpeg 起動を 1 回に集約する。
+    """
+    if compression and compression.get("enabled", True):
+        compress_loop(
+            output_path,
+            crf=int(compression.get("crf", 22)),
+            preset=str(compression.get("preset", "slow")),
+        )
+    else:
+        strip_audio(output_path)
     size_mb = output_path.stat().st_size / (1024 * 1024)
     print(f"  [Done]   保存完了 → {output_path} ({size_mb:.1f} MB)")
 
@@ -238,6 +250,7 @@ def generate_loop_video(
     prompt: str,
     aspect_ratio: str = "16:9",
     duration_seconds: int = 8,
+    compression: dict | None = None,
 ) -> bool:
     """Veo 3.1 API でループ動画を生成する。
 
@@ -273,7 +286,7 @@ def generate_loop_video(
 
     if not _persist_generated_video(operation, output_path):
         return False
-    _finalize_generated_video(output_path, effective_model, duration_seconds, aspect_ratio)
+    _finalize_generated_video(output_path, effective_model, duration_seconds, aspect_ratio, compression=compression)
     return True
 
 
@@ -344,11 +357,58 @@ def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
         return False
 
 
-def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: float = 1.0) -> bool:
+def compress_loop(video_path: Path, crf: int = 22, preset: str = "slow") -> bool:
+    """libx264 で loop.mp4 を再エンコードして容量削減する（Issue #175）。
+
+    Veo 3.1 由来の `loop.mp4` は 1080p で 5.6〜6.0 Mbps あり、`generate_videos.sh` が
+    stream copy で本編動画を組むため最終マスター動画もそのビットレートを継承する。
+    本編動画は YouTube 側で VP9/AV1 に再 transcoding されるため、CRF 22 程度の
+    再圧縮では視聴品質に有意な影響は出ない（issue 本文の検証参照）。
+    """
+    tmp = video_path.with_stem(video_path.stem + "_compressed")
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-c:v",
+        "libx264",
+        "-crf",
+        str(crf),
+        "-preset",
+        preset,
+        "-pix_fmt",
+        "yuv420p",
+        "-an",
+        str(tmp),
+    ]
+    try:
+        with section("veo.compress_loop.ffmpeg", crf=crf, preset=preset):
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"  [ERROR]  圧縮失敗: {e.stderr[:200]}")
+        if tmp.exists():
+            tmp.unlink()
+        return False
+    tmp.rename(video_path)
+    size_mb = video_path.stat().st_size / (1024 * 1024)
+    print(f"  [Compress] CRF {crf} / preset {preset} → {size_mb:.1f} MB")
+    return True
+
+
+def smooth_loop(
+    video_path: Path,
+    crossfade_sec: float = 0.5,
+    trim_tail_sec: float = 1.0,
+    crf: int = 18,
+    preset: str = "slow",
+) -> bool:
     """末尾トリム + FFmpeg クロスフェードでループの継ぎ目を滑らかにする。
 
     Veo 3.1 は末尾にノイズ/歪みを生成することがあるため、
     trim_tail_sec でカットしてからクロスフェードで結合する。
+    再エンコード時の crf/preset は compress_loop と揃えると `--smooth` 実行後も
+    `compress_loop` 由来の容量削減効果を維持できる（Issue #175）。
     """
     output = video_path.with_stem(video_path.stem + "_smooth")
     duration_cmd = [
@@ -398,14 +458,14 @@ def smooth_loop(video_path: Path, crossfade_sec: float = 0.5, trim_tail_sec: flo
         "-c:v",
         "libx264",
         "-preset",
-        "slow",
+        preset,
         "-crf",
-        "18",
+        str(crf),
         "-an",
         str(output),
     ]
 
-    print(f"  [FFmpeg] クロスフェード補正 ({crossfade_sec}秒)...")
+    print(f"  [FFmpeg] クロスフェード補正 ({crossfade_sec}秒, CRF {crf} / preset {preset})...")
     try:
         with section("veo.smooth_loop.ffmpeg", crossfade_sec=crossfade_sec):
             subprocess.run(cmd, check=True, capture_output=True, text=True)
