@@ -292,12 +292,8 @@ class TestShortsPaths:
     def test_short_video_search_paths_for_multiple_numbers(self, tmp_path):
         paths = CollectionPaths(tmp_path)
 
-        assert paths.short_video_search_paths(1)[0] == str(
-            tmp_path / "01-master" / "shorts" / "short-01-*.mp4"
-        )
-        assert paths.short_video_search_paths(12)[0] == str(
-            tmp_path / "01-master" / "shorts" / "short-12-*.mp4"
-        )
+        assert paths.short_video_search_paths(1)[0] == str(tmp_path / "01-master" / "shorts" / "short-01-*.mp4")
+        assert paths.short_video_search_paths(12)[0] == str(tmp_path / "01-master" / "shorts" / "short-12-*.mp4")
 
     def test_find_short_thumbnail_prefers_jpg(self, tmp_path):
         paths = CollectionPaths(tmp_path)
