@@ -124,11 +124,11 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     return _load_yaml(path)
 
 
-THUMBNAIL_MODE_SEQUENTIAL = "sequential"
-"""デフォルト: テキスト 3 案 → ユーザー選択 → 選ばれた 1 案だけサムネ生成。"""
-
 THUMBNAIL_MODE_PARALLEL = "parallel"
-"""旧挙動: 3 案すべて本番品質でサムネを即時生成 (opt-in)。"""
+"""デフォルト: テキスト candidate_count 案 → 確認 → candidate_count 枚を一括生成 → 比較選択。"""
+
+THUMBNAIL_MODE_SEQUENTIAL = "sequential"
+"""コスト 1/candidate_count opt-in: テキスト candidate_count 案 → 選択 → 選ばれた 1 案だけサムネ生成。"""
 
 _VALID_THUMBNAIL_MODES = frozenset({THUMBNAIL_MODE_SEQUENTIAL, THUMBNAIL_MODE_PARALLEL})
 
@@ -136,8 +136,9 @@ _VALID_THUMBNAIL_MODES = frozenset({THUMBNAIL_MODE_SEQUENTIAL, THUMBNAIL_MODE_PA
 def get_collection_ideate_thumbnail_mode() -> str:
     """collection-ideate skill の thumbnail_mode を返す。
 
-    skill-config の `preview.thumbnail_mode` を参照。未設定なら
-    THUMBNAIL_MODE_SEQUENTIAL。不正な shape/値は ConfigError。
+    skill-config の `preview.thumbnail_mode` を参照。配布 default は
+    THUMBNAIL_MODE_PARALLEL。default.yaml も override も無い場合は
+    THUMBNAIL_MODE_PARALLEL にフォールバック。不正な shape/値は ConfigError。
     """
     cfg = load_skill_config("collection-ideate")
     preview = cfg.get("preview")
@@ -145,7 +146,7 @@ def get_collection_ideate_thumbnail_mode() -> str:
         preview = {}
     if not isinstance(preview, dict):
         raise ConfigError(f"collection-ideate.preview は mapping である必要があります: {preview!r}")
-    mode = preview.get("thumbnail_mode", THUMBNAIL_MODE_SEQUENTIAL)
+    mode = preview.get("thumbnail_mode", THUMBNAIL_MODE_PARALLEL)
     if mode not in _VALID_THUMBNAIL_MODES:
         raise ConfigError(
             "collection-ideate.preview.thumbnail_mode は "
