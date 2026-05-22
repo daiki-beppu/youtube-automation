@@ -49,6 +49,8 @@ _SCRIPTS_STREAMING_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "refe
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
 _RUN_FFMPEG_SCRIPT = _SCRIPTS_STREAMING_DIR / "run-ffmpeg.sh"
 
+_TFSTATE_BACKEND_PREFIX = "streaming"
+_TFSTATE_GCS_OBJECT = "streaming/default.tfstate"
 _DEFAULT_INSTALL_ROOT = "/opt/youtube-stream"
 _INSTALL_ROOT_TFTPL = r"\$\{install_root\}"
 _INSTALL_ROOT_VAR = r"\$\{var\.install_root\}"
@@ -91,6 +93,21 @@ class TestVersionsTf:
         assert re.search(r'required_version\s*=\s*"[^"]*>=\s*1\.5', terraform_block), (
             "required_version が >= 1.5 を含んでいない"
         )
+
+    def test_backend_uses_gcs_remote_state(self):
+        """Given versions.tf
+        When terraform backend を読む
+        Then GCS backend は streaming prefix を宣言している。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None, "terraform { ... } ブロックが存在しない"
+        backend_block = extract_block(terraform_block, r'backend\s+"gcs"')
+        assert backend_block is not None, 'backend "gcs" ブロックが存在しない'
+        assert re.search(rf'prefix\s*=\s*"{re.escape(_TFSTATE_BACKEND_PREFIX)}"', backend_block), (
+            "GCS backend prefix が streaming でない"
+        )
+        assert extract_block(terraform_block, r'backend\s+"s3"') is None, 'backend "s3" が残っている'
 
     def test_required_providers_declares_vultr_source(self):
         """Given versions.tf
@@ -3007,6 +3024,40 @@ class TestStreamingReadme:
         """
         text = read_file(_STREAMING_README)
         assert re.search(r"terraform[^\n]*apply", text), "README に terraform apply の実行コマンドが書かれていない"
+
+    def test_documents_encrypted_remote_tfstate_backend(self):
+        """Given README
+        When tfstate の説明を読む
+        Then remote backend と暗号化 state の保存先が説明されている。
+        """
+        text = read_file(_STREAMING_README)
+        assert 'backend "gcs"' in text, 'README に backend "gcs" の説明が無い'
+        assert "Google 管理鍵" in text, "README に Google 管理鍵による暗号化の説明が無い"
+        assert _TFSTATE_GCS_OBJECT in text, "README に streaming state object の説明が無い"
+        assert 'terraform init -backend-config="bucket=<bucket-name>" -migrate-state' in text, (
+            "README に GCS backend への state 移行手順が無い"
+        )
+
+    def test_documents_sensitive_is_cli_mask_only(self):
+        """Given README
+        When sensitive と tfstate の説明を読む
+        Then sensitive=true は CLI 出力マスクのみであると説明されている。
+        """
+        text = read_file(_STREAMING_README)
+        assert "CLI 出力マスクのみ" in text, "README に sensitive=true が CLI マスクのみである説明が無い"
+        assert "tfstate JSON の値を暗号化しない" in text, (
+            "README に sensitive=true が tfstate JSON を暗号化しない説明が無い"
+        )
+
+    def test_does_not_describe_nonsensitive_hash_as_unconditionally_safe(self):
+        """Given README
+        When nonsensitive(sha256(...)) の説明を読む
+        Then hash 化の安全性を高エントロピー secret に限定している。
+        """
+        text = read_file(_STREAMING_README)
+        assert "脱 sensitive 安全" not in text, "README が nonsensitive(sha256(...)) を常に安全と誤読させる"
+        assert "高エントロピー" in text, "README に hash 化の前提が高エントロピー secret である説明が無い"
+        assert "低エントロピー値" in text, "README に低エントロピー値の hash 化が secret 保護でない説明が無い"
 
     def test_mentions_systemctl_status_for_verification(self):
         """Given README

@@ -1,6 +1,10 @@
 terraform {
   required_version = ">= 1.5"
 
+  backend "gcs" {
+    prefix = "streaming"
+  }
+
   required_providers {
     vultr = {
       source  = "vultr/vultr"
