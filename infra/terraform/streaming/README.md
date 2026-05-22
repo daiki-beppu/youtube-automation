@@ -24,6 +24,10 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
 - operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
 
+## 配置 root
+
+VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。cloud-init、Terraform provisioner、systemd unit は同じ `var.install_root` を参照するため、配置先を変える場合は `install_root` だけを上書きする。
+
 ## 使い方
 
 ```bash
@@ -58,7 +62,7 @@ systemd unit が以下の挙動を持つ:
 
 - `RuntimeMaxSec=11h`: 配信開始から 11 時間で `ffmpeg` プロセスを強制停止 → YouTube 側でアーカイブ生成
 - `Restart=always` + `RestartSec=1h`: 停止から 1 時間後に自動再起動 → 2 本目の配信が始まる
-- `ExecStart` は `/opt/youtube-stream/bin/run-ffmpeg.sh` ラッパーのみを呼ぶ。`VIDEO` / `RTMP_URL` は systemd の `EnvironmentFile=/etc/youtube-stream.env`（PID 1 が root で読み込み env を子プロセスへ注入）経由で渡るため、unit 行にも、`DynamicUser=yes` 配下のラッパー側の `source` にも露出しない（`systemctl show` / `/proc/<pid>/cmdline` の unit レベル経路を遮断）
+- `ExecStart` は `${var.install_root}/bin/run-ffmpeg.sh` へ展開されたラッパーのみを呼ぶ。`VIDEO` / `RTMP_URL` は systemd の `EnvironmentFile=/etc/youtube-stream.env`（PID 1 が root で読み込み env を子プロセスへ注入）経由で渡るため、unit 行にも、`DynamicUser=yes` 配下のラッパー側の `source` にも露出しない（`systemctl show` / `/proc/<pid>/cmdline` の unit レベル経路を遮断）
 - 音声は動画ファイルの音声トラックを送出（`-c:a copy`、再エンコードなし）
 
 `null_resource.deploy` は `terraform apply` のたびに以下のトリガーを比較し、差分があれば再実行する:
@@ -126,7 +130,7 @@ ssh -i ~/.ssh/yt_stream_key root@<instance_ip> systemctl show youtube-stream | g
 
 ### 旧動画の扱い
 
-`provisioner "file"` の `destination` が `/opt/youtube-stream/videos/current.mp4` に固定されており、毎回同一パスへ上書きされる。VPS 上に旧動画は残らないため、明示的な削除手順は不要（単一ファイル方式の自然な振る舞い）。
+`provisioner "file"` の `destination` が `${var.install_root}/videos/current.mp4` に固定されており、毎回同一パスへ上書きされる。VPS 上に旧動画は残らないため、明示的な削除手順は不要（単一ファイル方式の自然な振る舞い）。
 
 ### トラブルシューティング（差し替え時）
 
@@ -180,10 +184,10 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 
 | パス | 役割 |
 |---|---|
-| `/opt/youtube-stream/bin/healthcheck.sh` | systemd 状態を 4 通り分類し、anomaly のみ `notify.sh` を呼ぶ |
-| `/opt/youtube-stream/bin/notify.sh` | Discord Webhook へ POST。HTTP 失敗は cron に伝播させない |
-| `/etc/cron.d/youtube-stream-healthcheck` | `*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh` |
-| `/etc/logrotate.d/youtube-stream` | `/opt/youtube-stream/logs/*.log` を `daily / rotate 7 / copytruncate` でローテート（ffmpeg を再起動しない） |
+| `${var.install_root}/bin/healthcheck.sh` | systemd 状態を 4 通り分類し、anomaly のみ `notify.sh` を呼ぶ |
+| `${var.install_root}/bin/notify.sh` | Discord Webhook へ POST。HTTP 失敗は cron に伝播させない |
+| `/etc/cron.d/youtube-stream-healthcheck` | `*/5 * * * * root ${var.install_root}/bin/healthcheck.sh` |
+| `/etc/logrotate.d/youtube-stream` | `${var.install_root}/logs/*.log` を `daily / rotate 7 / copytruncate` でローテート（ffmpeg を再起動しない） |
 | `/etc/youtube-stream-healthcheck.env` | mode 0600 root:root、`DISCORD_WEBHOOK_URL=...` |
 
 ### テストシナリオ（VPS 上で確認）

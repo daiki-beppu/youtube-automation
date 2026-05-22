@@ -11,8 +11,8 @@ runcmd:
   - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
   - systemctl reload ssh || systemctl reload sshd
   - dpkg-reconfigure --priority=low unattended-upgrades
-  - install -d -m 0755 -o root -g root /opt/youtube-stream/videos
-  - install -d -m 0755 -o root -g root /opt/youtube-stream/logs
+  - install -d -m 0755 -o root -g root ${install_root}/videos
+  - install -d -m 0755 -o root -g root ${install_root}/logs
   # bin/ は terraform の provisioner "file" がスクリプトを upload する宛先。
   # SFTP は親ディレクトリを自動作成しないため、cloud-init の段階で先に作っておく。
-  - install -d -m 0755 -o root -g root /opt/youtube-stream/bin
+  - install -d -m 0755 -o root -g root ${install_root}/bin
