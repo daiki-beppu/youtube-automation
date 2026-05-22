@@ -1,5 +1,5 @@
 {
-  "supported_languages": ["ja", "ko", "es", "pt", "zh-CN"],
+  "supported_languages": ["ja", "en", "de"],
   "languages": {
     "ja": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
@@ -11,43 +11,23 @@
         "hashtags": "#chiptune #8bit #BGM"
       }
     },
-    "ko": {
+    "en": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
-      "activities": "게임 · 공부 · 집중",
+      "activities": "Gaming · Study · Focus",
       "description": {
-        "opening_poem": "픽셀의 밤, 모험의 선율",
-        "cta_subscribe": "채널을 구독해 주세요!",
-        "tagline": "칩튠 어드벤처를 전달합니다!",
+        "opening_poem": "Pixel nights, melodies of adventure",
+        "cta_subscribe": "Subscribe for more adventures!",
+        "tagline": "Chiptune adventures await you!",
         "hashtags": "#chiptune #8bit #BGM"
       }
     },
-    "es": {
+    "de": {
       "title_template": "{scene_phrase} | RPG BGM ({activities})",
-      "activities": "Gaming · Estudio · Foco",
+      "activities": "Gaming · Lernen · Fokus",
       "description": {
-        "opening_poem": "Noche de píxeles, melodía de aventura",
-        "cta_subscribe": "Suscríbete para nuevas aventuras chiptune!",
-        "tagline": "Tu destino para aventuras chiptune!",
-        "hashtags": "#chiptune #8bit #BGM"
-      }
-    },
-    "pt": {
-      "title_template": "{scene_phrase} | RPG BGM ({activities})",
-      "activities": "Gaming · Estudo · Foco",
-      "description": {
-        "opening_poem": "Noite de pixels, melodia de aventura",
-        "cta_subscribe": "Inscreva-se para novas aventuras chiptune!",
-        "tagline": "Seu destino para aventuras chiptune!",
-        "hashtags": "#chiptune #8bit #BGM"
-      }
-    },
-    "zh-CN": {
-      "title_template": "{scene_phrase} | RPG BGM ({activities})",
-      "activities": "游戏 · 学习 · 专注",
-      "description": {
-        "opening_poem": "像素之夜，冒险旋律",
-        "cta_subscribe": "订阅频道获取更多芯片音乐冒险！",
-        "tagline": "您的芯片音乐冒险目的地！",
+        "opening_poem": "Pixelnacht, Melodie des Abenteuers",
+        "cta_subscribe": "Abonniere für neue Abenteuer!",
+        "tagline": "Chiptune-Abenteuer für dich!",
         "hashtags": "#chiptune #8bit #BGM"
       }
     }

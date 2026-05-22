@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `examples/localizations.example.json` と `channel-setup` の `localizations-template.json` を high-CPM tier の `ja` / `en` / `de` に更新し、low-CPM 言語 `ko` / `es` / `pt` / `zh-CN` を canonical テンプレから削除（#272）
 - `thumbnail` スキルの TTP 運用を再点検し、`TTP プリフライト・チェックリスト` と `/thumbnail-compare` × `/alignment-check` の役割分担を追記（#493）
 - `refactor(cli)`: `cli/skills_sync/_sync.py::_sync_dir_asset` で重複していた `_list_entries` 呼び出しを 1 回に統一（#369）
+
+### Added
+
+- high-CPM locale へ移行するための運用ガイド `docs/migration/high-cpm-locales.md` を追加（#272）
 
 ## [5.5.2] - 2026-05-20
 
