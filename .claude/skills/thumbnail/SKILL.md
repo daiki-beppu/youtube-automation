@@ -42,6 +42,48 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
 
+## codex 経由の補助生成
+
+API 課金を増やさずに複数案を出したいときや、CTR 比較用のラフを素早く作りたいときは、`codex exec` を**独立した shell 経路**で使う。これは `yt-generate-image` / `ImageProvider` 抽象化には組み込まず、補助導線としてのみ扱う。
+
+前提:
+- codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
+- `codex login status` が `Logged in using ChatGPT` を返す
+- `jq` が PATH 上にある（`--json` の JSONL 解析に使う）
+- ChatGPT サブスクの fair-use 上限は明文化されていないため、大量生成には使わない
+
+直接実行例:
+
+```bash
+bash .claude/skills/thumbnail/references/codex-image.sh \
+  "a cozy cafe table with steaming coffee, soft morning light" \
+  collections/planning/sample/main-codex.png
+```
+
+参照画像つきで雰囲気を寄せたい場合は、3 引数目以降に画像パスを追加する。
+
+内部実装の要約:
+
+- wrapper は `codex exec --json --sandbox workspace-write --add-dir <out_dir> --skip-git-repo-check` で起動する
+- 受け取った prompt 末尾に `Generate a new image with the image_generation tool. Do not copy any provided reference image; produce a freshly generated PNG. After generation, copy the produced PNG to <out>. Then reply with exactly <out>.` を自動付与する（後述の reference cp failure mode を抑止するため、tool 呼び出しと「reference を copy するな」を明示）
+- agent 自身が `~/.codex/generated_images/<thread_id>/ig_*.png` から `<out>` へ `cp` し、最終 `agent_message.text` で `<out>` を返す
+- wrapper は事前に `rm -f <out>` で stale artifact を確実に削除してから `codex exec` を起動する
+- wrapper は JSONL を `jq` でフィルタし、`tail -n 1` で最後の `agent_message.text` を取得。これを JSON プロトコル契約として `<out>` と完全一致することを検証し（不一致なら非0終了）、その後 `<out>` の存在・サイズと PNG ヘッダ（`89504e470d0a1a0a`）を検証する
+- reference 画像を渡したときは、wrapper が事前に各 reference の MD5 を控えておき、最終的に `<out>` の MD5 と一致したら「agent が `image_generation` tool を skip して reference をそのまま cp した」failure mode として非0終了する
+- wrapper 側で指定した `<out>` がそのまま最終 path として使えるので、生成後に呼び出し側で path 解決し直す必要はない
+
+運用上の注意:
+
+- **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。`/tmp/rjn-codex-prompt-short.txt` のように参照画像つきでも 14 行・600〜800 字に収めるとほぼ通る。失敗したら短縮を最優先で試す
+- **reference 画像つきは prompt で「変更点」を明示する**: 「reference を参考に」程度の弱い指示だと agent が `image_generation` tool を skip して reference を `<out>` に cp するだけで終わる failure mode がある。wrapper の自動付与文 + MD5 一致検証で抑止しているが、prompt 側でも reference からの差分（色味の参考 / 構図だけ流用 / 主役を差し替え 等）を明示しておくと安定する
+- 失敗時 wrapper は `agent_message (最終)` と codex stderr の末尾 30 行を診断 dump するので、これを見て prompt 短縮 or 参照画像見直しに切り替える
+
+この補助導線のスコープ:
+- `yt-generate-image` 連携なし
+- `ImageProvider` 連携なし
+- リトライなし
+- コスト計測連携なし
+
 ## Channel Adaptation
 
 **すべての設定は `config/skills/thumbnail.yaml` から読み取る。**
