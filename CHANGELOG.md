@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(loop-video)`: 末尾に CRF 圧縮ステップを追加し本編動画容量を約 40% 削減（#175）。Veo 3.1 由来の `loop.mp4` を libx264 CRF 22 / preset slow（既定）で再エンコード。`compression.{enabled,crf,preset}` を skill-config で上書き可能。`--smooth` 経路も同 crf/preset を継承して圧縮効果を維持。`generate_videos.sh` 側は stream copy 設計を維持
 - high-CPM locale へ移行するための運用ガイド `docs/migration/high-cpm-locales.md` を追加（#272）
 
 ### Changed
