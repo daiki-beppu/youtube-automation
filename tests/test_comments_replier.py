@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.utils.comments.generator.base import GeneratedReply
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import CommentReplier
-from youtube_automation.utils.config.comments import CommentRule, Comments
+from youtube_automation.utils.config.comments import CommentRule, Comments, GeneratorConfig
 
 
 def _mock_youtube(
@@ -101,6 +103,14 @@ def _make_config(**overrides) -> Comments:
         delay_between_replies_sec=0.0,
         history_file="comment_reply_history.json",
         skip_held_for_review=True,
+        generator=GeneratorConfig(
+            type="template",
+            model="",
+            channel_persona="",
+            max_length=280,
+            fallback_on_error="template",
+            min_interval_sec=0.0,
+        ),
     )
     base.update(overrides)
     return Comments(**base)
@@ -301,3 +311,284 @@ def test_no_match_reasons(tmp_path, reason_text, expected_reason):
     plan = replier.run(dry_run=True)
     assert plan.planned == []
     assert any(row["reason"] == expected_reason for row in plan.skipped)
+
+
+def test_dry_run_records_llm_prompt_and_generator_metadata(tmp_path, monkeypatch):
+    class _Generator:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, ctx):
+            self.calls.append(ctx)
+            return GeneratedReply(
+                text="Aliceさん、来てくれてありがとう！",
+                prompt="reply to Alice in rainy jazz tone",
+            )
+
+    generator = _Generator()
+    monkeypatch.setattr(
+        "youtube_automation.utils.comments.replier.build_generators",
+        lambda config: {"gemini": generator},
+    )
+
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(
+            rules=[CommentRule(name="default_ai", pattern=r".+", language="en", priority=0, generator="gemini")],
+            templates={},
+            generator=GeneratorConfig(
+                type="gemini",
+                model="gemini-2.5-flash",
+                channel_persona="Rain Jazz Night host",
+                max_length=180,
+                fallback_on_error="template",
+                min_interval_sec=0.0,
+            ),
+        ),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["generator"] == "gemini"
+    assert plan.planned[0]["template_key"] is None
+    assert plan.planned[0]["prompt"] == "reply to Alice in rainy jazz tone"
+    assert plan.planned[0]["reply_text"] == "Aliceさん、来てくれてありがとう！"
+    assert plan.planned[0]["language"] is None
+    assert generator.calls[0].language is None
+    assert generator.calls[0].parent_thread is None
+    assert generator.calls[0].channel_persona == "Rain Jazz Night host"
+    assert generator.calls[0].max_length == 180
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_dry_run_truncates_generated_reply_to_max_length_and_warns(tmp_path, monkeypatch, caplog):
+    class _Generator:
+        def generate(self, _ctx):
+            return GeneratedReply(text="ABCDEFGHIJKLMN", prompt="reply briefly")
+
+    monkeypatch.setattr(
+        "youtube_automation.utils.comments.replier.build_generators",
+        lambda config: {"gemini": _Generator()},
+    )
+
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(
+            rules=[CommentRule(name="default_ai", pattern=r".+", priority=0, generator="gemini")],
+            templates={},
+            generator=GeneratorConfig(
+                type="gemini",
+                model="gemini-2.5-flash",
+                channel_persona="Rain Jazz Night host",
+                max_length=10,
+                fallback_on_error="template",
+                min_interval_sec=0.0,
+            ),
+        ),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    with caplog.at_level("WARNING"):
+        plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["reply_text"] == "ABCDEFGHIJ"
+    assert any("max_length" in record.message for record in caplog.records)
+
+
+def test_generator_error_falls_back_to_template(tmp_path, monkeypatch):
+    class _FailingGenerator:
+        def generate(self, _ctx):
+            raise RuntimeError("gemini unavailable")
+
+    class _TemplateGenerator:
+        def __init__(self):
+            self.called = 0
+
+        def generate(self, _ctx):
+            self.called += 1
+            return GeneratedReply(text="Aliceさん、ありがとう！", prompt=None)
+
+    template_generator = _TemplateGenerator()
+    monkeypatch.setattr(
+        "youtube_automation.utils.comments.replier.build_generators",
+        lambda config: {
+            "gemini": _FailingGenerator(),
+            "template": template_generator,
+        },
+    )
+
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(
+            rules=[CommentRule(name="greeting", keywords=["こんにちは"], template_key="greet", generator="gemini")],
+            generator=GeneratorConfig(
+                type="gemini",
+                model="gemini-2.5-flash",
+                channel_persona="Rain Jazz Night host",
+                max_length=180,
+                fallback_on_error="template",
+                min_interval_sec=0.0,
+            ),
+        ),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["reply_text"] == "Aliceさん、ありがとう！"
+    assert template_generator.called == 1
+    assert plan.errors == []
+
+
+def test_generator_error_with_skip_fallback_records_skipped_without_insert(tmp_path, monkeypatch):
+    class _FailingGenerator:
+        def generate(self, _ctx):
+            raise RuntimeError("gemini unavailable")
+
+    monkeypatch.setattr(
+        "youtube_automation.utils.comments.replier.build_generators",
+        lambda config: {"gemini": _FailingGenerator()},
+    )
+
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(
+            rules=[CommentRule(name="greeting", keywords=["こんにちは"], template_key="greet", generator="gemini")],
+            generator=GeneratorConfig(
+                type="gemini",
+                model="gemini-2.5-flash",
+                channel_persona="Rain Jazz Night host",
+                max_length=180,
+                fallback_on_error="skip",
+                min_interval_sec=0.0,
+            ),
+        ),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    plan = replier.run(dry_run=False)
+
+    assert plan.planned == []
+    assert plan.replied == []
+    assert any(row["comment_id"] == "c1" for row in plan.skipped)
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_dry_run_rate_limits_llm_generation_separately_from_reply_delay(tmp_path, monkeypatch):
+    class _Generator:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, ctx):
+            self.calls.append(ctx.comment_id)
+            return GeneratedReply(text=f"reply-{ctx.comment_id}", prompt=f"prompt-{ctx.comment_id}")
+
+    generator = _Generator()
+    monkeypatch.setattr(
+        "youtube_automation.utils.comments.replier.build_generators",
+        lambda config: {"gemini": generator},
+    )
+
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {"comment_id": "c1", "text": "first!", "author": "Alice"},
+                {"comment_id": "c2", "text": "nice!", "author": "Bob"},
+            ]
+        },
+    )
+    sleep_calls: list[float] = []
+    replier = CommentReplier(
+        yt,
+        config=_make_config(
+            rules=[CommentRule(name="default_ai", pattern=r".+", priority=0, generator="gemini")],
+            templates={},
+            delay_between_replies_sec=0.0,
+            generator=GeneratorConfig(
+                type="gemini",
+                model="gemini-2.5-flash",
+                channel_persona="Rain Jazz Night host",
+                max_length=180,
+                fallback_on_error="template",
+                min_interval_sec=2.5,
+            ),
+        ),
+        channel_dir=tmp_path,
+        default_language="ja",
+        sleep_fn=sleep_calls.append,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert [row["comment_id"] for row in plan.planned] == ["c1", "c2"]
+    assert generator.calls == ["c1", "c2"]
+    assert sleep_calls == [2.5]
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_apply_persists_generator_metadata_in_history(tmp_path, monkeypatch):
+    class _Generator:
+        def generate(self, _ctx):
+            return GeneratedReply(text="Custom reply", prompt="custom prompt")
+
+    monkeypatch.setattr(
+        "youtube_automation.utils.comments.replier.build_generators",
+        lambda config: {"gemini": _Generator()},
+    )
+
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(
+            rules=[CommentRule(name="default_ai", pattern=r".+", priority=0, generator="gemini")],
+            templates={},
+            generator=GeneratorConfig(
+                type="gemini",
+                model="gemini-2.5-flash",
+                channel_persona="Rain Jazz Night host",
+                max_length=180,
+                fallback_on_error="template",
+                min_interval_sec=0.0,
+            ),
+        ),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    plan = replier.run(dry_run=False)
+    history_data = json.loads((tmp_path / "comment_reply_history.json").read_text(encoding="utf-8"))
+
+    assert len(plan.replied) == 1
+    assert plan.replied[0]["generator"] == "gemini"
+    assert plan.replied[0]["template_key"] is None
+    assert history_data["replied"]["c1"]["generator"] == "gemini"
+    assert history_data["replied"]["c1"]["template_key"] is None
+    assert history_data["replied"]["c1"]["prompt"] == "custom prompt"

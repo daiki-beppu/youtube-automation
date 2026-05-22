@@ -4,6 +4,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+SUPPORTED_REPLY_GENERATORS = ("template", "gemini")
+SUPPORTED_GENERATOR_ERROR_FALLBACKS = ("template", "skip")
+
+
+@dataclass(frozen=True)
+class GeneratorConfig:
+    """返信 generator の既定設定."""
+
+    type: str = "template"
+    model: str = ""
+    channel_persona: str = ""
+    max_length: int = 280
+    fallback_on_error: str = "template"
+    min_interval_sec: float = 0.0
+
 
 @dataclass(frozen=True)
 class CommentRule:
@@ -22,6 +37,7 @@ class CommentRule:
     template_key: str = "default"
     language: str | None = None
     priority: int = 0
+    generator: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,3 +62,4 @@ class Comments:
     delay_between_replies_sec: float = 2.0
     history_file: str = "comment_reply_history.json"
     skip_held_for_review: bool = True
+    generator: GeneratorConfig = field(default_factory=GeneratorConfig)

@@ -12,6 +12,7 @@ def _engine(rules, templates, ng_words=None, default_language="ja"):
         templates=templates,
         default_language=default_language,
         ng_words=ng_words,
+        default_generator_name="template",
     )
 
 
@@ -96,3 +97,71 @@ def test_case_insensitive_keyword():
         templates={"ja": {"g": "hi"}},
     )
     assert engine.evaluate("HELLO world") is not None
+
+
+def test_non_template_rule_returns_match_without_template_resolution():
+    engine = RuleEngine(
+        rules=[CommentRule(name="catch_all_ai", pattern=r".+", generator="gemini")],
+        templates={},
+        default_language="ja",
+        default_generator_name="template",
+    )
+
+    match = engine.evaluate("first!")
+
+    assert match is not None
+    assert match.rule.name == "catch_all_ai"
+    assert match.generator_name == "gemini"
+    assert match.template_language is None
+    assert match.template_text is None
+
+
+def test_generator_rule_ignores_rule_language_when_matching():
+    engine = RuleEngine(
+        rules=[CommentRule(name="catch_all_ai", pattern=r".+", language="en", generator="gemini")],
+        templates={},
+        default_language="ja",
+        default_generator_name="template",
+    )
+
+    match = engine.evaluate("first!")
+
+    assert match is not None
+    assert match.rule.name == "catch_all_ai"
+    assert match.generator_name == "gemini"
+    assert match.template_language is None
+    assert match.template_text is None
+
+
+def test_default_generator_applies_when_rule_has_no_override():
+    engine = RuleEngine(
+        rules=[CommentRule(name="greet", keywords=["hello"], template_key="missing")],
+        templates={},
+        default_language="en",
+        default_generator_name="gemini",
+    )
+
+    match = engine.evaluate("hello there")
+
+    assert match is not None
+    assert match.rule.name == "greet"
+    assert match.generator_name == "gemini"
+    assert match.template_language is None
+    assert match.template_text is None
+
+
+def test_template_rule_can_override_global_gemini_default():
+    engine = RuleEngine(
+        rules=[CommentRule(name="greet", keywords=["hello"], template_key="greet", generator="template")],
+        templates={"en": {"greet": "Thanks for listening!"}},
+        default_language="en",
+        default_generator_name="gemini",
+    )
+
+    match = engine.evaluate("hello there")
+
+    assert match is not None
+    assert match.rule.name == "greet"
+    assert match.generator_name == "template"
+    assert match.template_language == "en"
+    assert match.template_text == "Thanks for listening!"

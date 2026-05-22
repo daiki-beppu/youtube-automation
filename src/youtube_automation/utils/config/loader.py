@@ -9,7 +9,13 @@ from pathlib import Path
 
 from youtube_automation.utils.config.analytics import Analytics, Benchmark
 from youtube_automation.utils.config.audio import Audio
-from youtube_automation.utils.config.comments import CommentRule, Comments
+from youtube_automation.utils.config.comments import (
+    SUPPORTED_GENERATOR_ERROR_FALLBACKS,
+    SUPPORTED_REPLY_GENERATORS,
+    CommentRule,
+    Comments,
+    GeneratorConfig,
+)
 from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
 from youtube_automation.utils.config.localizations import Localizations
@@ -323,6 +329,16 @@ def _build_audio(merged: dict) -> Audio:
 
 def _build_comments(merged: dict) -> Comments:
     cm = merged.get("comments") or {}
+    generator_raw = cm.get("generator") or {}
+    generator_type = str(generator_raw.get("type", "template"))
+    if generator_type not in SUPPORTED_REPLY_GENERATORS:
+        raise ConfigError(f"comments.generator.type は {SUPPORTED_REPLY_GENERATORS} のいずれかでなければなりません")
+    fallback_on_error = str(generator_raw.get("fallback_on_error", "template"))
+    if fallback_on_error not in SUPPORTED_GENERATOR_ERROR_FALLBACKS:
+        raise ConfigError(
+            "comments.generator.fallback_on_error は "
+            f"{SUPPORTED_GENERATOR_ERROR_FALLBACKS} のいずれかでなければなりません"
+        )
     rules_raw = cm.get("rules") or []
     rules: list[CommentRule] = []
     for i, raw in enumerate(rules_raw):
@@ -331,6 +347,11 @@ def _build_comments(merged: dict) -> Comments:
         name = raw.get("name")
         if not name:
             raise ConfigError(f"comments.rules[{i}].name が必須です")
+        rule_generator = raw.get("generator")
+        if rule_generator is not None and rule_generator not in SUPPORTED_REPLY_GENERATORS:
+            raise ConfigError(
+                f"comments.rules[{i}].generator は {SUPPORTED_REPLY_GENERATORS} のいずれかでなければなりません"
+            )
         rules.append(
             CommentRule(
                 name=name,
@@ -339,6 +360,7 @@ def _build_comments(merged: dict) -> Comments:
                 template_key=raw.get("template_key", "default"),
                 language=raw.get("language"),
                 priority=int(raw.get("priority", 0)),
+                generator=rule_generator,
             )
         )
     templates_raw = cm.get("templates") or {}
@@ -359,6 +381,14 @@ def _build_comments(merged: dict) -> Comments:
         delay_between_replies_sec=float(cm.get("delay_between_replies_sec", 2.0)),
         history_file=str(cm.get("history_file", "comment_reply_history.json")),
         skip_held_for_review=bool(cm.get("skip_held_for_review", True)),
+        generator=GeneratorConfig(
+            type=generator_type,
+            model=str(generator_raw.get("model", "")),
+            channel_persona=str(generator_raw.get("channel_persona", "")),
+            max_length=int(generator_raw.get("max_length", 280)),
+            fallback_on_error=fallback_on_error,
+            min_interval_sec=float(generator_raw.get("min_interval_sec", 0.0)),
+        ),
     )
 
 

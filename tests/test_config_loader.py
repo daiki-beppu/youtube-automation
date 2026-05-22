@@ -122,6 +122,12 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.comments.rules == []
     assert config.comments.templates == {}
     assert config.comments.max_replies_per_run == 20
+    assert config.comments.generator.type == "template"
+    assert config.comments.generator.model == ""
+    assert config.comments.generator.channel_persona == ""
+    assert config.comments.generator.max_length == 280
+    assert config.comments.generator.fallback_on_error == "template"
+    assert config.comments.generator.min_interval_sec == 0.0
 
 
 def test_load_all_sections(tmp_path, monkeypatch):
@@ -149,6 +155,14 @@ def test_load_all_sections(tmp_path, monkeypatch):
             "enabled": True,
             "max_replies_per_run": 5,
             "delay_between_replies_sec": 1.0,
+            "generator": {
+                "type": "gemini",
+                "model": "gemini-2.5-flash",
+                "channel_persona": "Rain Jazz Night host",
+                "max_length": 180,
+                "fallback_on_error": "skip",
+                "min_interval_sec": 3.5,
+            },
             "rules": [
                 {
                     "name": "greet_ja",
@@ -156,6 +170,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
                     "template_key": "greet",
                     "language": "ja",
                     "priority": 10,
+                    "generator": "gemini",
                 }
             ],
             "templates": {"ja": {"greet": "ありがとうございます！"}},
@@ -195,9 +210,16 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.comments.enabled is True
     assert config.comments.max_replies_per_run == 5
     assert config.comments.delay_between_replies_sec == 1.0
+    assert config.comments.generator.type == "gemini"
+    assert config.comments.generator.model == "gemini-2.5-flash"
+    assert config.comments.generator.channel_persona == "Rain Jazz Night host"
+    assert config.comments.generator.max_length == 180
+    assert config.comments.generator.fallback_on_error == "skip"
+    assert config.comments.generator.min_interval_sec == 3.5
     assert len(config.comments.rules) == 1
     assert config.comments.rules[0].name == "greet_ja"
     assert config.comments.rules[0].keywords == ["こんにちは"]
+    assert config.comments.rules[0].generator == "gemini"
     assert config.comments.templates == {"ja": {"greet": "ありがとうございます！"}}
     assert config.comments.ng_words == ["spam"]
     # shorts セクションが全フィールド組み立てられている
@@ -283,6 +305,22 @@ def test_comments_templates_must_be_object(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     with pytest.raises(ConfigError, match="comments.templates"):
+        load_config()
+
+
+def test_comments_generator_type_must_be_supported(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "generator": {
+                "type": "unknown",
+            }
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.generator.type"):
         load_config()
 
 

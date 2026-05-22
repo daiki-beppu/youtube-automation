@@ -66,16 +66,20 @@ def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
     for row in plan.planned:
         print(
             f"  [planned] video={row['video_id']} comment_id={row['comment_id']} "
-            f"rule={row.get('rule')} lang={row.get('language')}"
+            f"rule={row.get('rule')} generator={row.get('generator')} lang={row.get('language')}"
         )
         print(f"    author: {row.get('comment_author')}")
         print(f"    text  : {row.get('comment_text', '')[:80]}")
+        if row.get("prompt"):
+            print(f"    prompt: {row.get('prompt', '')[:120]}")
         print(f"    reply : {row.get('reply_text', '')[:120]}")
     for row in plan.replied:
         print(
             f"  [replied] video={row['video_id']} comment_id={row['comment_id']} "
-            f"rule={row.get('rule')} lang={row.get('language')}"
+            f"rule={row.get('rule')} generator={row.get('generator')} lang={row.get('language')}"
         )
+        if row.get("prompt"):
+            print(f"    prompt: {row.get('prompt', '')[:120]}")
         print(f"    reply : {row.get('reply_text', '')[:120]}")
     for row in plan.skipped:
         print(f"  [skipped] video={row['video_id']} comment_id={row['comment_id']} reason={row.get('reason')}")
