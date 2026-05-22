@@ -727,6 +727,8 @@ def test_cmd_sync_prune_only_lists_entries_once(
     args = parser.parse_args(
         [
             "sync",
+            "--asset",
+            "skills",
             "--target",
             str(target),
             "--force",
