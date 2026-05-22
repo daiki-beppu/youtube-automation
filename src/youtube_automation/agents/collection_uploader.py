@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader  # noqa: E402
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
+from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
 from youtube_automation.utils.schedule import get_schedule_timezone  # noqa: E402
@@ -215,7 +216,7 @@ class CollectionUploader:
     # ─── Tracking ────────────────────────────────
 
     def _get_tracking_path(self, collection_path: Path) -> Path:
-        return collection_path / "20-documentation" / "upload_tracking.json"
+        return CollectionPaths(collection_path).tracking_path
 
     def _load_tracking(self, collection_path: Path) -> dict | None:
         """tracking ファイル読み込み"""
@@ -379,7 +380,7 @@ class CollectionUploader:
 
     def _assign_to_playlists(self, video_id: str, collection_path: Path):
         """アップロード後にプレイリストへ自動追加（失敗してもアップロードはブロックしない）"""
-        ws_path = collection_path / "workflow-state.json"
+        ws_path = CollectionPaths(collection_path).workflow_state_path
         if not ws_path.exists():
             return
 

@@ -89,6 +89,14 @@ class TestFilePathProperties:
         paths = CollectionPaths(tmp_path)
         assert paths.thumbnail_prompts_path == tmp_path / "20-documentation" / "thumbnail-prompts.md"
 
+    def test_shorts_dir(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        assert paths.shorts_dir == tmp_path / "01-master" / "shorts"
+
+    def test_short_loop_path(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        assert paths.short_loop == tmp_path / "10-assets" / "short-loop.mp4"
+
 
 # ---------------------------------------------------------------------------
 # find_master_video
@@ -236,6 +244,91 @@ class TestFindLoopVideo:
 
 
 # ---------------------------------------------------------------------------
+# Shorts paths
+# ---------------------------------------------------------------------------
+
+
+class TestShortsPaths:
+    def test_find_short_video_prefers_numbered_match(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.shorts_dir.mkdir(parents=True)
+        (paths.shorts_dir / "short-01-beta.mp4").touch()
+        (paths.shorts_dir / "short-01-alpha.mp4").touch()
+        (paths.master_dir / "short.mp4").touch()
+
+        result = paths.find_short_video(1)
+
+        assert result == paths.shorts_dir / "short-01-alpha.mp4"
+
+    def test_find_short_video_falls_back_to_short_mp4(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.master_dir.mkdir()
+        fallback = paths.master_dir / "short.mp4"
+        fallback.touch()
+
+        assert paths.find_short_video(1) == fallback
+
+    def test_find_short_video_returns_none_when_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.master_dir.mkdir()
+
+        assert paths.find_short_video(1) is None
+
+    def test_short_video_search_paths_with_short_num(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+
+        assert paths.short_video_search_paths(2) == [
+            str(tmp_path / "01-master" / "shorts" / "short-02-*.mp4"),
+            str(tmp_path / "01-master" / "short.mp4"),
+        ]
+
+    def test_short_video_search_paths_without_short_num(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+
+        assert paths.short_video_search_paths() == [
+            str(tmp_path / "01-master" / "short.mp4"),
+        ]
+
+    def test_short_video_search_paths_for_multiple_numbers(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+
+        assert paths.short_video_search_paths(1)[0] == str(tmp_path / "01-master" / "shorts" / "short-01-*.mp4")
+        assert paths.short_video_search_paths(12)[0] == str(tmp_path / "01-master" / "shorts" / "short-12-*.mp4")
+
+    def test_find_short_thumbnail_prefers_jpg(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir()
+        (paths.assets_dir / "short-thumbnail.png").touch()
+        jpg = paths.assets_dir / "short-thumbnail.jpg"
+        jpg.touch()
+
+        assert paths.find_short_thumbnail() == jpg
+
+    def test_find_short_loop_input_image_prefers_png(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir()
+        (paths.assets_dir / "short.jpg").touch()
+        png = paths.assets_dir / "short.png"
+        png.touch()
+
+        assert paths.find_short_loop_input_image() == png
+
+    def test_find_short_loop_input_image_finds_jpg_when_png_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir()
+        jpg = paths.assets_dir / "short.jpg"
+        jpg.touch()
+
+        assert paths.find_short_loop_input_image() == jpg
+
+    def test_find_short_loop_input_image_returns_none_when_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir()
+
+        assert paths.find_short_loop_input_image() is None
+
+
+# ---------------------------------------------------------------------------
 # individual_music_files
 # ---------------------------------------------------------------------------
 
@@ -375,3 +468,75 @@ class TestResolveCollectionDir:
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValidationError):
             resolve_collection_dir(None)
+
+
+# ---------------------------------------------------------------------------
+# リテラルパス散在の回帰テスト（issue #357）
+# ---------------------------------------------------------------------------
+
+
+class TestLiteralCollectionSubpathRegression:
+    """CollectionPaths 採用済みモジュールでコレクションサブパスのリテラル Path
+    演算がないことの回帰テスト。
+
+    将来の変更で CollectionPaths を迂回したリテラル Path 演算が混入しないよう、
+    issue #357 の移行対象 4 ファイルを機械的に検査する安全網。
+    """
+
+    _MIGRATED_FILES = [
+        "src/youtube_automation/agents/short_uploader.py",
+        "src/youtube_automation/agents/collection_uploader.py",
+        "src/youtube_automation/agents/youtube_auto_uploader.py",
+        "src/youtube_automation/scripts/generate_short_loop.py",
+        "src/youtube_automation/scripts/bulk_update_short_localizations.py",
+    ]
+
+    # CollectionPaths が唯一の参照元であるべきコレクションサブパス文字列
+    _COLLECTION_SUBPATH_LITERALS = [
+        "01-master",
+        "10-assets",
+        "20-documentation",
+        "workflow-state.json",
+        "upload_tracking.json",
+    ]
+
+    def _repo_root(self) -> Path:
+        return Path(__file__).resolve().parents[1]
+
+    def _violates(self, line: str) -> bool:
+        """コメント行を除く行で、リテラル Path 演算を検出する。
+
+        / "literal" および .glob("literal/...") パターンを対象にする。
+        コメント行（# で始まる）は除外。
+        """
+        import re
+
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return False
+        escaped = "|".join(re.escape(lit) for lit in self._COLLECTION_SUBPATH_LITERALS)
+        # / "literal" パターン（Path 演算子による直接構築）
+        if re.search(rf'/ "(?:{escaped})"', line):
+            return True
+        # .glob("literal/... パターン（glob による直接参照）
+        if re.search(rf'\.glob\("(?:{escaped})/', line):
+            return True
+        return False
+
+    def test_no_literal_path_construction_in_migrated_files(self):
+        """migrated files にコレクションサブパスのリテラル Path 演算がないこと。"""
+        repo_root = self._repo_root()
+        violations: list[str] = []
+
+        for rel_path in self._MIGRATED_FILES:
+            file_path = repo_root / rel_path
+            assert file_path.exists(), f"移行済みファイルが見つかりません: {rel_path}"
+            lines = file_path.read_text(encoding="utf-8").splitlines()
+            for lineno, line in enumerate(lines, 1):
+                if self._violates(line):
+                    violations.append(f"{rel_path}:{lineno}: {line.strip()}")
+
+        assert not violations, (
+            "以下のファイルにコレクションサブパスのリテラル Path 演算があります。"
+            "CollectionPaths を使用してください:\n" + "\n".join(violations)
+        )

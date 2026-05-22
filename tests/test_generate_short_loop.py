@@ -109,6 +109,19 @@ class TestResolvePaths:
         # Then
         assert image_path == jpg
 
+    def test_raises_when_input_image_missing(self, tmp_path):
+        from youtube_automation.scripts.generate_short_loop import resolve_paths
+
+        col = tmp_path / "20250101-live-empty"
+        (col / "10-assets").mkdir(parents=True)
+
+        with pytest.raises(FileNotFoundError) as excinfo:
+            resolve_paths(col)
+
+        message = str(excinfo.value)
+        assert str(col / "10-assets" / "short.png") in message
+        assert str(col / "10-assets" / "short.jpg") in message
+
 
 # ---------------------------------------------------------------------------
 # 3. main(): Veo に aspect_ratio="9:16" が渡るか

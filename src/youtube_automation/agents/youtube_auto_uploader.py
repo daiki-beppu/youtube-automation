@@ -172,12 +172,13 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         title / description / tags を抽出して返す。
         ファイルが存在しない or パース失敗時は None（BAHMetadataGenerator にフォールバック）。
         """
-        desc_path = collection_dir / "20-documentation" / "descriptions.md"
+        paths = CollectionPaths(collection_dir)
+        desc_path = paths.descriptions_md_path
         if not desc_path.exists():
             # 過去事例: description.txt 等の別名でもファイルが存在し、
             # その場合 fallback 経路で「Track 01」のような汎用名が
             # アップロードされてしまった。意図しないフォールバックを早期発見する。
-            stray = list((collection_dir / "20-documentation").glob("description*"))
+            stray = list(paths.docs_dir.glob("description*"))
             if stray:
                 raise RuntimeError(
                     f"descriptions.md が無いのに別名ファイルが存在します: "
@@ -236,8 +237,8 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         6. タグの quotation 込み文字数が YouTube の 500 制限内
         7. master 動画尺が `audio.target_duration_min/max` 範囲内
         """
-        doc_dir = collection_dir / "20-documentation"
-        desc_path = doc_dir / "descriptions.md"
+        paths = CollectionPaths(collection_dir)
+        desc_path = paths.descriptions_md_path
         if not desc_path.exists():
             raise RuntimeError(f"❌ {desc_path} が存在しません。/video-description を実行してください。")
 
@@ -265,7 +266,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             raise RuntimeError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
 
         # scene_phrases 完全性検証
-        ws_path = collection_dir / "workflow-state.json"
+        ws_path = paths.workflow_state_path
         state = json.loads(ws_path.read_text(encoding="utf-8")) if ws_path.exists() else {}
         scene_phrases = state.get("scene_phrases") or {}
 
@@ -293,7 +294,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
         # 動画尺チェック（target_duration が設定済みかつ master mp4 が存在する場合のみ）
         if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
-            master_video = CollectionPaths(collection_dir).find_master_video()
+            master_video = paths.find_master_video()
             if master_video:
                 dur = probe_duration(master_video)
                 if dur is None:
@@ -387,10 +388,12 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         """Complete Collection 動画アップロード"""
         logger.info("📹 Complete Collection アップロード準備中...")
 
+        paths = CollectionPaths(collection_dir)
+
         # マスター動画ファイル検索
-        video_files = list(collection_dir.glob("03-Individual-movie/*master*.mp4"))
+        video_files = list(paths.movie_dir.glob("*master*.mp4"))
         if not video_files:
-            video_files = list(collection_dir.glob("01-master/*.mp4"))
+            video_files = list(paths.master_dir.glob("*.mp4"))
 
         if not video_files:
             error_msg = "マスター動画ファイルが見つかりません"
@@ -425,7 +428,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         # サムネイル検索（thumbnail.jpg を優先）
         thumbnail_path = None
         for tn in ["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"]:
-            candidate = collection_dir / "10-assets" / tn
+            candidate = paths.assets_dir / tn
             if candidate.exists():
                 thumbnail_path = str(candidate)
                 break
