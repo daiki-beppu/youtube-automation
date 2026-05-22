@@ -47,3 +47,11 @@ veo:
 
   # FFmpeg ループ補正のクロスフェード秒数
   crossfade_sec: 0.5
+
+# Veo 出力直後に libx264 で再エンコードして容量削減（Issue #175）。
+# YouTube は受信動画を VP9/AV1 に再 transcoding するため CRF 22 程度では視聴品質に影響しない。
+# `--smooth` 経路でも同じ crf/preset が適用され、圧縮効果が維持される。
+compression:
+  enabled: true       # false で完全 skip（互換性確保用）
+  crf: 22             # H.264 CRF（小さいほど高品質）。CRF 24 なら約 55% 削減（攻める設定）
+  preset: slow        # libx264 preset

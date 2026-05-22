@@ -6,6 +6,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 ## 管理するリソース
 
+- `tls_private_key.ssh_host` × 1（VPS の SSH host key を Terraform state 上で固定管理する Ed25519 鍵ペア）
 - `vultr_ssh_key` × 1（VPS 作成時に登録する SSH 公開鍵）
 - `vultr_firewall_group` × 1（`youtube-stream` インスタンスに適用するファイアウォールグループ）
 - `vultr_firewall_rule` × N（`var.allowed_ssh_cidr` の CIDR ごとに 22/tcp の inbound rule。IPv4 のみ）
@@ -21,8 +22,13 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - ssh-agent が起動済み（`SSH_AUTH_SOCK` が設定されている）かつ秘密鍵が登録済み（`ssh-add ~/.ssh/yt_stream_key`）。`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続するため、ssh-agent 未起動 / 鍵未登録 のいずれでも apply 時に `Permission denied (publickey)` で失敗する。`ssh-add -l` で登録済み鍵を確認できる（`Could not open a connection to your authentication agent.` が返れば agent 未起動）
     - **ssh-agent への登録は OS 起動時に自動では行われない**: macOS の launchd keychain 連携を別途設定していない限り、再起動・再ログインで agent は空になる。毎セッションで `ssh-add ~/.ssh/yt_stream_key` を実行する必要がある
     - **`ssh -i ~/.ssh/yt_stream_key root@<ip>` で SSH できることは agent 登録の検証にならない**: `-i` 指定は鍵ファイルを直接読むため agent 状態と無関係に成功する。Terraform provisioner は `agent = true` のみで動作するため、検証は **必ず `ssh-add -l`** で行う
+- `null_resource.deploy.connection` は `host_key` 検証を有効化している。host 鍵は Terraform が `tls_private_key.ssh_host` として生成し、cloud-init の `ssh_keys` で `/etc/ssh/ssh_host_ed25519_key{,.pub}` に固定配置するため、初回 apply でも TOFU に依存せず接続先ホストを検証できる
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
 - operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
+
+## 配置 root
+
+VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。cloud-init、Terraform provisioner、systemd unit は同じ `var.install_root` を参照するため、配置先を変える場合は `install_root` だけを上書きする。
 
 ## 使い方
 
@@ -50,7 +56,7 @@ terraform apply
 
 > **tfstate と secret の関係（誤解しやすいので明記）**
 >
-> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ** で、`*.tfstate` JSON 自体は **平文**である。本モジュールでは `stream_key` を `triggers` に保存する際 `nonsensitive(sha256(var.stream_key))` で SHA256 ラップしているため、tfstate を取得されても元のストリームキーは復元できない（SHA256 は不可逆）。`*.tfstate*` は `.gitignore` 済みだが、ローカル / バックアップ / 共有時もファイルパーミッションでアクセス制御すること。
+> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ** で、`*.tfstate` JSON 自体は **平文**である。本モジュールでは `stream_key` を `triggers` に保存する際 `nonsensitive(sha256(var.stream_key))` で SHA256 ラップしているため、tfstate を取得されても元のストリームキーは復元できない（SHA256 は不可逆）。一方で `tls_private_key.ssh_host.private_key_openssh` は host 鍵の秘密鍵そのものが state に保存される。`*.tfstate*` は `.gitignore` 済みでも、ローカル / バックアップ / 共有時は機微情報としてアクセス制御すること。
 
 ## 配信サイクル（11h + 1h）
 
@@ -58,7 +64,7 @@ systemd unit が以下の挙動を持つ:
 
 - `RuntimeMaxSec=11h`: 配信開始から 11 時間で `ffmpeg` プロセスを強制停止 → YouTube 側でアーカイブ生成
 - `Restart=always` + `RestartSec=1h`: 停止から 1 時間後に自動再起動 → 2 本目の配信が始まる
-- `ExecStart` は `/opt/youtube-stream/bin/run-ffmpeg.sh` ラッパーのみを呼ぶ。`VIDEO` / `RTMP_URL` は systemd の `EnvironmentFile=/etc/youtube-stream.env`（PID 1 が root で読み込み env を子プロセスへ注入）経由で渡るため、unit 行にも、`DynamicUser=yes` 配下のラッパー側の `source` にも露出しない（`systemctl show` / `/proc/<pid>/cmdline` の unit レベル経路を遮断）
+- `ExecStart` は `${var.install_root}/bin/run-ffmpeg.sh` へ展開されたラッパーのみを呼ぶ。`VIDEO` / `RTMP_URL` は systemd の `EnvironmentFile=/etc/youtube-stream.env`（PID 1 が root で読み込み env を子プロセスへ注入）経由で渡るため、unit 行にも、`DynamicUser=yes` 配下のラッパー側の `source` にも露出しない（`systemctl show` / `/proc/<pid>/cmdline` の unit レベル経路を遮断）
 - 音声は動画ファイルの音声トラックを送出（`-c:a copy`、再エンコードなし）
 
 `null_resource.deploy` は `terraform apply` のたびに以下のトリガーを比較し、差分があれば再実行する:
@@ -126,7 +132,7 @@ ssh -i ~/.ssh/yt_stream_key root@<instance_ip> systemctl show youtube-stream | g
 
 ### 旧動画の扱い
 
-`provisioner "file"` の `destination` が `/opt/youtube-stream/videos/current.mp4` に固定されており、毎回同一パスへ上書きされる。VPS 上に旧動画は残らないため、明示的な削除手順は不要（単一ファイル方式の自然な振る舞い）。
+`provisioner "file"` の `destination` が `${var.install_root}/videos/current.mp4` に固定されており、毎回同一パスへ上書きされる。VPS 上に旧動画は残らないため、明示的な削除手順は不要（単一ファイル方式の自然な振る舞い）。
 
 ### トラブルシューティング（差し替え時）
 
@@ -180,10 +186,10 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 
 | パス | 役割 |
 |---|---|
-| `/opt/youtube-stream/bin/healthcheck.sh` | systemd 状態を 4 通り分類し、anomaly のみ `notify.sh` を呼ぶ |
-| `/opt/youtube-stream/bin/notify.sh` | Discord Webhook へ POST。HTTP 失敗は cron に伝播させない |
-| `/etc/cron.d/youtube-stream-healthcheck` | `*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh` |
-| `/etc/logrotate.d/youtube-stream` | `/opt/youtube-stream/logs/*.log` を `daily / rotate 7 / copytruncate` でローテート（ffmpeg を再起動しない） |
+| `${var.install_root}/bin/healthcheck.sh` | systemd 状態を 4 通り分類し、anomaly のみ `notify.sh` を呼ぶ |
+| `${var.install_root}/bin/notify.sh` | Discord Webhook へ POST。HTTP 失敗は cron に伝播させない |
+| `/etc/cron.d/youtube-stream-healthcheck` | `*/5 * * * * root ${var.install_root}/bin/healthcheck.sh` |
+| `/etc/logrotate.d/youtube-stream` | `${var.install_root}/logs/*.log` を `daily / rotate 7 / copytruncate` でローテート（ffmpeg を再起動しない） |
 | `/etc/youtube-stream-healthcheck.env` | mode 0600 root:root、`DISCORD_WEBHOOK_URL=...` |
 
 ### テストシナリオ（VPS 上で確認）

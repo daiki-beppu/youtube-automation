@@ -25,13 +25,13 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import UploadError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
+from youtube_automation.utils.schedule import get_schedule_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,6 @@ logger = logging.getLogger(__name__)
 ACTION_UPLOADED = "short_uploaded"
 ACTION_BLOCKED = "short_upload_blocked"
 ACTION_FAILED = "short_upload_failed"
-
-DEFAULT_TIMEZONE = "Asia/Tokyo"
 
 
 class ShortUploader:
@@ -94,7 +92,7 @@ class ShortUploader:
             (ok, msg): ok=True なら投稿可、False なら blocked。
         """
         min_hours = self.config.shorts.min_hours_between_shorts_per_collection
-        tz = ZoneInfo(self.schedule_config.get("schedule", {}).get("timezone", DEFAULT_TIMEZONE))
+        tz = get_schedule_timezone(self.schedule_config)
         now = datetime.now(tz)
 
         live_dir = self.channel_dir / "collections" / "live"
@@ -158,7 +156,7 @@ class ShortUploader:
         if not base_str:
             return None
 
-        tz = ZoneInfo(self.schedule_config.get("schedule", {}).get("timezone", DEFAULT_TIMEZONE))
+        tz = get_schedule_timezone(self.schedule_config)
         short_publish_time = self.config.shorts.publish_time
         try:
             hour, minute = (int(x) for x in short_publish_time.split(":"))
@@ -332,7 +330,7 @@ class ShortUploader:
         entry = {
             "short_num": short_num,
             "video_id": video_id,
-            "uploaded_at": datetime.now().isoformat(),
+            "uploaded_at": datetime.now(get_schedule_timezone(self.schedule_config)).isoformat(),
             "publish_at": publish_at,
         }
 

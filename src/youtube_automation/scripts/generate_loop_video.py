@@ -53,11 +53,11 @@ BACKUP_SUFFIX = ".mp4"
 
 
 def load_config() -> dict:
-    """loop-video skill-config から veo セクションを読み込む。"""
+    """loop-video skill-config 全体を読み込む（veo / compression を含む）。"""
     try:
         from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 
-        return load_skill_config("loop-video").get("veo", {})
+        return load_skill_config("loop-video")
     except Exception:
         return {}
 
@@ -214,7 +214,7 @@ def _resolve_collection_path(args: argparse.Namespace, parser: argparse.Argument
     raise SystemExit(2)  # parser.error は NoReturn だが型推論補助
 
 
-def _run_smooth_only(output_path: Path, crossfade: float) -> None:
+def _run_smooth_only(output_path: Path, crossfade: float, compression: dict | None = None) -> None:
     """`--smooth` 早期分岐: 既存 loop.mp4 に post-process のみ適用する。
 
     Veo クライアントは生成せず、confirm prompt も出さない（IR3）。
@@ -224,17 +224,27 @@ def _run_smooth_only(output_path: Path, crossfade: float) -> None:
         print(f"[ERROR] --smooth は既存 {output_path.name} を必要としますが見つかりません: {output_path}")
         sys.exit(1)
 
+    crf, preset = _resolve_smooth_codec(compression)
+
     print()
     print("===========================================")
     print("  ループ動画 post-process (--smooth)")
     print("===========================================")
     print(f"  対象:       {output_path}")
     print(f"  crossfade:  {crossfade}s")
+    print(f"  encode:     CRF {crf} / preset {preset}")
     print("===========================================")
     print()
 
-    smooth_loop(output_path, crossfade, trim_tail_sec=0.0)
+    smooth_loop(output_path, crossfade, trim_tail_sec=0.0, crf=crf, preset=preset)
     sys.exit(0)
+
+
+def _resolve_smooth_codec(compression: dict | None) -> tuple[int, str]:
+    """`--smooth` の crf/preset を解決する。compression 無効時は legacy CRF 18 に倒す。"""
+    if compression and compression.get("enabled", True):
+        return int(compression.get("crf", 22)), str(compression.get("preset", "slow"))
+    return 18, "slow"
 
 
 def _run_skip_existing(output_path: Path) -> None:
@@ -257,6 +267,7 @@ def _run_generate(
     prompt: str,
     *,
     assume_yes: bool,
+    compression: dict | None = None,
 ) -> None:
     """通常経路: image 検証 → confirm → backup → Veo 生成 → report。"""
     if not image_path.exists():
@@ -289,7 +300,7 @@ def _run_generate(
         sys.exit(1)
 
     start_time = time.monotonic()
-    success = generate_loop_video(client, image_path, output_path, model, prompt)
+    success = generate_loop_video(client, image_path, output_path, model, prompt, compression=compression)
     elapsed = time.monotonic() - start_time
 
     print()
@@ -316,7 +327,9 @@ def main():
     parser = _build_parser()
     args = parser.parse_args()
 
-    veo_config = load_config()
+    skill_config = load_config()
+    veo_config = skill_config.get("veo", {})
+    compression_config = skill_config.get("compression", {})
     model = args.model or veo_config.get("model", DEFAULT_MODEL)
     prompt = resolve_prompt(args, veo_config)
 
@@ -325,12 +338,12 @@ def main():
 
     # 分岐優先順位: --smooth (明示アクション) > --skip-existing (no-op) > 通常経路
     if args.smooth:
-        _run_smooth_only(output_path, args.crossfade)
+        _run_smooth_only(output_path, args.crossfade, compression=compression_config)
 
     if args.skip_existing and output_path.exists():
         _run_skip_existing(output_path)
 
-    _run_generate(image_path, output_path, model, prompt, assume_yes=args.yes)
+    _run_generate(image_path, output_path, model, prompt, assume_yes=args.yes, compression=compression_config)
 
 
 if __name__ == "__main__":

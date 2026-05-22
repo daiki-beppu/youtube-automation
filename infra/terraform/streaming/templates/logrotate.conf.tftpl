@@ -1,7 +1,7 @@
 # /etc/logrotate.d/youtube-stream として配置する。
 # ffmpeg は同じ file descriptor を持ち続けるため copytruncate 必須
 # （rename + create では descriptor が古いファイルに残り、新ファイルに書き込まれない）。
-/opt/youtube-stream/logs/*.log {
+${install_root}/logs/*.log {
     daily
     rotate 7
     compress

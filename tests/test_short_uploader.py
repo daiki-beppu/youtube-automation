@@ -685,6 +685,18 @@ class TestUpdateWorkflowState:
         assert shorts[0]["short_num"] == 1
         assert shorts[0]["video_id"] == "V1"
 
+    def test_uploaded_at_is_schedule_timezone_aware(self, tmp_path):
+        """uploaded_at は schedule timezone 付き ISO 8601 で書かれる."""
+        col = _setup_collection(tmp_path)
+        with _make_short_uploader(schedule_config={"schedule": {"timezone": "UTC"}}) as (uploader, _):
+            uploader._update_workflow_state(col, short_num=1, video_id="V1", publish_at=None)
+
+        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
+        uploaded_at = ws["post_upload"]["shorts"][0]["uploaded_at"]
+        dt = datetime.fromisoformat(uploaded_at)
+        assert dt.tzinfo is not None
+        assert dt.utcoffset() == timedelta(0)
+
     def test_same_short_num_replaces_existing_entry(self, tmp_path):
         """同じ `short_num` を再 upsert したら既存 entry が置換される."""
         # Given: 既に short_num=1 で V1 を書いた状態

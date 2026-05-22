@@ -11,11 +11,19 @@ Subcommands:
     diff   : 同梱版と target の差分を表示
 
 Asset 種別 (`--asset`):
-    skills    : Claude Code スキル (`.claude/skills/`、ディレクトリ単位で 1 entry)
-    claude-md : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
+    all                 : デフォルト。下記すべての asset を一括処理する
+    skills              : Claude Code スキル (`.claude/skills/`、ディレクトリ単位で 1 entry)
+    claude-md           : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
+    workflow-cheatsheet : workflow 使い分けチートシート (`docs/workflow-cheatsheet.md`、単一ファイル)
+    features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
+
+`yt-skills sync` (asset 未指定) は `--asset all` と同等で、配布物が `docs/`
+にリンクを張る前提で動くため、デフォルトで全 asset を sync する設計に
+なっている。skill だけ更新したい場合は `--asset skills` を明示する。
 
 将来別種類の配布物を追加する場合は `_ASSET_SPECS` に entry を追加するだけで
 list/sync/diff の各 subcommand が自動的にサポートする (kind="dir" / "file" を選ぶ)。
+`--asset all` モードも追加された entry を自動的に巡回するため追加実装は不要。
 """
 
 from __future__ import annotations
@@ -46,6 +54,22 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
         "source_filename": "CLAUDE.template.md",
         "default_target": ".claude/CLAUDE.md",
         "label": "CLAUDE.md テンプレ",
+    },
+    "workflow-cheatsheet": {
+        "kind": "file",
+        "resource_name": "_docs",
+        "source_subdir": "docs",
+        "source_filename": "workflow-cheatsheet.md",
+        "default_target": "docs/workflow-cheatsheet.md",
+        "label": "workflow チートシート",
+    },
+    "features": {
+        "kind": "file",
+        "resource_name": "_docs",
+        "source_subdir": "docs",
+        "source_filename": "features.md",
+        "default_target": "docs/features.md",
+        "label": "skill カタログ",
     },
 }
 
@@ -86,6 +110,29 @@ def _asset_root(asset: str) -> Path:
     )
 
 
+def _guard_target_with_all(args: argparse.Namespace) -> None:
+    """`--asset all` + `--target` の組み合わせを検出して `ValueError` を raise する。
+
+    asset ごとに default_target が異なるため、all モードで target を 1 つに固定すると
+    意図しない asset (例: claude-md) がユーザー指定の skills 用 path に書き込まれる
+    silent な誤動作になる。これを防ぐためのガードで、CLI 経由 (`_resolve_default_target`)
+    と公開 API 直呼び (`cmd_sync` / `cmd_diff`) の両方の入口から呼ぶ。
+
+    例外の使い分け:
+      - ライブラリとして import して呼ぶ caller は `ValueError` を受け取って
+        通常の Python 例外ハンドリングで処理できる (SystemExit で強制終了されない)
+      - CLI 経由 (`yt-skills` コマンド) では `_resolve_default_target` が
+        この `ValueError` を catch して stderr + `sys.exit(2)` に変換する
+    """
+    if args.asset == "all" and getattr(args, "target", None) is not None:
+        raise ValueError(
+            "--target は --asset all モードでは使えません "
+            "(asset ごとに default_target が異なるため曖昧)。"
+            " skills だけを独自 path に出すなら --asset skills --target ... のように"
+            " asset を明示してください。全 asset を sync するなら --target を外してください。"
+        )
+
+
 def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = None) -> list[str]:
     """asset 配下の entry 名を返す。
 
@@ -100,6 +147,14 @@ def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = N
 
 
 def cmd_list(args: argparse.Namespace) -> int:
+    if args.asset == "all":
+        # 全 asset を巡回。dir asset → file asset の順で人間が読みやすい並び。
+        # cmd_list には target がないため _guard_target_with_all は不要。
+        for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
+            if i > 0:
+                print()
+            cmd_list(argparse.Namespace(asset=asset_name))
+        return 0
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
     entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
