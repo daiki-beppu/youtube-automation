@@ -205,11 +205,18 @@ veo:
 | `veo.default_prompt` | 汎用微動プロンプト | structured 未使用時の freeform プロンプト |
 | `veo.duration_seconds` | 8 | 生成尺（Veo API 制約で 8 秒固定） |
 | `veo.crossfade_sec` | 0.5 | FFmpeg ループ補正のクロスフェード秒数 |
+| `compression.enabled` | `true` | Veo 出力直後に libx264 で再エンコードして容量削減（Issue #175）。`false` で完全 skip |
+| `compression.crf` | 22 | H.264 CRF。22 で約 40% 削減、24 なら約 55% 削減（攻める設定） |
+| `compression.preset` | slow | libx264 preset |
 
 ## Integration
 
 `loop.mp4` が `10-assets/` に存在すると、`generate_videos.sh` v11.0 が自動検出し、
 静止画の代わりにループ動画を背景として使用します（24fps、CRF 20）。
+
+パイプラインは **Veo 生成 → strip_audio → CRF 圧縮**（`compression.enabled=true` のとき）。
+`--smooth` 経路でも同じ crf/preset が適用されるため、`/loop-video` → `--smooth` のいずれの順でも
+最終的な `loop.mp4` ビットレートは設定値（既定 CRF 22 ≒ 3〜4 Mbps）に揃う。
 
 ## 長時間処理の取り扱い
 
