@@ -9,6 +9,7 @@ CollectionUploader のユニットテスト
 
 import json
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -164,6 +165,24 @@ def _make_uploader_with_collection_mock(tmp_path: Path):
         return uploader, mock_inner
 
 
+def _make_uploader_with_schedule_config(tmp_path: Path, schedule_config: dict):
+    """schedule_config.json を指定して CollectionUploader を構築する."""
+    from youtube_automation.agents.collection_uploader import CollectionUploader
+
+    config_path = tmp_path / "schedule_config.json"
+    config_path.write_text(json.dumps(schedule_config), encoding="utf-8")
+
+    with patch("youtube_automation.agents.collection_uploader.YouTubeAutoUploader") as mock_cls:
+        mock_inner = MagicMock()
+        mock_cls.return_value = mock_inner
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(config_path),
+        )
+        uploader.config["collections_management"]["auto_move_to_live"] = False
+        return uploader, mock_inner
+
+
 def _read_resume_uri(tracking_path: Path) -> str | None:
     data = json.loads(tracking_path.read_text(encoding="utf-8"))
     return data.get("complete_collection", {}).get("resume_session_uri")
@@ -220,6 +239,31 @@ class TestExecuteCompleteCollectionResume:
         # Then
         call_kwargs = mock_inner.upload_collection.call_args.kwargs
         assert call_kwargs.get("resume_session_uri") is None
+
+    def test_should_write_timezone_aware_upload_time(self, tmp_path):
+        """Complete Collection 成功時の upload_time は schedule timezone 付き ISO 8601."""
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"timezone": "UTC"}},
+        )
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_TZ",
+                "video_url": "u",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        tracking = uploader._load_tracking(col)
+        uploader._execute_complete_collection(col, tracking, publish_at=None)
+
+        saved = json.loads(tracking_path.read_text(encoding="utf-8"))
+        upload_time = saved["complete_collection"]["upload_time"]
+        dt = datetime.fromisoformat(upload_time)
+        assert dt.tzinfo is not None
+        assert dt.utcoffset() == timedelta(0)
 
     def test_should_persist_uri_to_tracking_when_on_session_uri_changed_is_invoked(self, tmp_path):
         """plan 要件 #1 + #2: コールバック発火直後に URI が tracking JSON に永続化される.

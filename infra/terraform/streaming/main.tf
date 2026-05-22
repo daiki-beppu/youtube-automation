@@ -1,5 +1,12 @@
 locals {
-  scripts_dir = "${path.module}/../../../.claude/skills/streaming/references"
+  scripts_dir             = "${path.module}/../../../.claude/skills/streaming/references"
+  ssh_host_key_algorithm  = "ED25519"
+  ssh_host_public_key     = trimspace(tls_private_key.ssh_host.public_key_openssh)
+  ssh_host_public_key_sha = sha256(local.ssh_host_public_key)
+}
+
+resource "tls_private_key" "ssh_host" {
+  algorithm = local.ssh_host_key_algorithm
 }
 
 resource "vultr_ssh_key" "this" {
@@ -33,40 +40,46 @@ resource "vultr_instance" "this" {
 
   ssh_key_ids = [vultr_ssh_key.this.id]
 
-  user_data = templatefile("${path.module}/cloud-init.yaml", {})
+  user_data = templatefile("${path.module}/cloud-init.yaml", {
+    install_root         = var.install_root
+    ssh_host_private_key = tls_private_key.ssh_host.private_key_openssh
+    ssh_host_public_key  = local.ssh_host_public_key
+  })
 }
 
 resource "null_resource" "deploy" {
   triggers = {
-    instance_id = vultr_instance.this.id
-    video_hash  = filemd5(var.video_path)
+    instance_id  = vultr_instance.this.id
+    video_hash   = filemd5(var.video_path)
+    ssh_host_key = local.ssh_host_public_key_sha
     # SHA256 は不可逆なので nonsensitive() で剥がし triggers map に格納する
     # （terraform 1.5+ は sensitive 値の派生も sensitive 扱いするため必須）
     stream_key      = nonsensitive(sha256(var.stream_key))
     discord_webhook = nonsensitive(sha256(var.discord_webhook_url))
     healthcheck_sh  = filemd5("${local.scripts_dir}/healthcheck.sh")
     notify_sh       = filemd5("${local.scripts_dir}/notify.sh")
-    logrotate_conf  = filemd5("${local.scripts_dir}/logrotate.conf")
-    cron_d          = filemd5("${local.scripts_dir}/cron.d")
+    logrotate_conf  = filemd5("${path.module}/templates/logrotate.conf.tftpl")
+    cron_d          = filemd5("${path.module}/templates/cron.d.tftpl")
     systemd_unit    = filemd5("${path.module}/templates/youtube-stream.service.tftpl")
     run_ffmpeg_sh   = filemd5("${local.scripts_dir}/run-ffmpeg.sh")
   }
 
   connection {
-    type  = "ssh"
-    host  = vultr_instance.this.main_ip
-    user  = "root"
-    agent = true
+    type     = "ssh"
+    host     = vultr_instance.this.main_ip
+    user     = "root"
+    agent    = true
+    host_key = local.ssh_host_public_key
   }
 
   provisioner "file" {
     source      = var.video_path
-    destination = "/opt/youtube-stream/videos/current.mp4"
+    destination = "${var.install_root}/videos/current.mp4"
   }
 
   provisioner "file" {
     content = templatefile("${path.module}/templates/youtube-stream.env.tftpl", {
-      video    = "/opt/youtube-stream/videos/current.mp4"
+      video    = "${var.install_root}/videos/current.mp4"
       rtmp_url = "rtmp://a.rtmp.youtube.com/live2/${var.stream_key}"
     })
     destination = "/tmp/youtube-stream.env.tmp"
@@ -80,32 +93,38 @@ resource "null_resource" "deploy" {
   }
 
   provisioner "file" {
-    content     = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})
+    content = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {
+      install_root = var.install_root
+    })
     destination = "/etc/systemd/system/youtube-stream.service"
   }
 
   provisioner "file" {
     source      = "${local.scripts_dir}/healthcheck.sh"
-    destination = "/opt/youtube-stream/bin/healthcheck.sh"
+    destination = "${var.install_root}/bin/healthcheck.sh"
   }
 
   provisioner "file" {
     source      = "${local.scripts_dir}/notify.sh"
-    destination = "/opt/youtube-stream/bin/notify.sh"
+    destination = "${var.install_root}/bin/notify.sh"
   }
 
   provisioner "file" {
     source      = "${local.scripts_dir}/run-ffmpeg.sh"
-    destination = "/opt/youtube-stream/bin/run-ffmpeg.sh"
+    destination = "${var.install_root}/bin/run-ffmpeg.sh"
   }
 
   provisioner "file" {
-    source      = "${local.scripts_dir}/logrotate.conf"
+    content = templatefile("${path.module}/templates/logrotate.conf.tftpl", {
+      install_root = var.install_root
+    })
     destination = "/etc/logrotate.d/youtube-stream"
   }
 
   provisioner "file" {
-    source      = "${local.scripts_dir}/cron.d"
+    content = templatefile("${path.module}/templates/cron.d.tftpl", {
+      install_root = var.install_root
+    })
     destination = "/etc/cron.d/youtube-stream-healthcheck"
   }
 
@@ -116,8 +135,8 @@ resource "null_resource" "deploy" {
       "rm -f /tmp/youtube-stream.env.tmp",
       "install -m 0600 -o root -g root /tmp/youtube-stream-healthcheck.env.tmp /etc/youtube-stream-healthcheck.env",
       "rm -f /tmp/youtube-stream-healthcheck.env.tmp",
-      "mkdir -p /opt/youtube-stream/bin",
-      "chmod 755 /opt/youtube-stream/bin/healthcheck.sh /opt/youtube-stream/bin/notify.sh /opt/youtube-stream/bin/run-ffmpeg.sh",
+      "mkdir -p ${var.install_root}/bin",
+      "chmod 755 ${var.install_root}/bin/healthcheck.sh ${var.install_root}/bin/notify.sh ${var.install_root}/bin/run-ffmpeg.sh",
       "chmod 0600 /etc/youtube-stream-healthcheck.env",
       "chown root:root /etc/youtube-stream-healthcheck.env",
       "chmod 0644 /etc/cron.d/youtube-stream-healthcheck /etc/logrotate.d/youtube-stream",

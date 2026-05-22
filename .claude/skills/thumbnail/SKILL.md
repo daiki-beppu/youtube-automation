@@ -42,6 +42,48 @@ description: Use when コレクションのサムネイル画像が必要で、C
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
 
+## codex 経由の補助生成
+
+API 課金を増やさずに複数案を出したいときや、CTR 比較用のラフを素早く作りたいときは、`codex exec` を**独立した shell 経路**で使う。これは `yt-generate-image` / `ImageProvider` 抽象化には組み込まず、補助導線としてのみ扱う。
+
+前提:
+- codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
+- `codex login status` が `Logged in using ChatGPT` を返す
+- `jq` が PATH 上にある（`--json` の JSONL 解析に使う）
+- ChatGPT サブスクの fair-use 上限は明文化されていないため、大量生成には使わない
+
+直接実行例:
+
+```bash
+bash .claude/skills/thumbnail/references/codex-image.sh \
+  "a cozy cafe table with steaming coffee, soft morning light" \
+  collections/planning/sample/main-codex.png
+```
+
+参照画像つきで雰囲気を寄せたい場合は、3 引数目以降に画像パスを追加する。
+
+内部実装の要約:
+
+- wrapper は `codex exec --json --sandbox workspace-write --add-dir <out_dir> --skip-git-repo-check` で起動する
+- 受け取った prompt 末尾に `Generate a new image with the image_generation tool. Do not copy any provided reference image; produce a freshly generated PNG. After generation, copy the produced PNG to <out>. Then reply with exactly <out>.` を自動付与する（後述の reference cp failure mode を抑止するため、tool 呼び出しと「reference を copy するな」を明示）
+- agent 自身が `~/.codex/generated_images/<thread_id>/ig_*.png` から `<out>` へ `cp` し、最終 `agent_message.text` で `<out>` を返す
+- wrapper は事前に `rm -f <out>` で stale artifact を確実に削除してから `codex exec` を起動する
+- wrapper は JSONL を `jq` でフィルタし、`tail -n 1` で最後の `agent_message.text` を取得。これを JSON プロトコル契約として `<out>` と完全一致することを検証し（不一致なら非0終了）、その後 `<out>` の存在・サイズと PNG ヘッダ（`89504e470d0a1a0a`）を検証する
+- reference 画像を渡したときは、wrapper が事前に各 reference の MD5 を控えておき、最終的に `<out>` の MD5 と一致したら「agent が `image_generation` tool を skip して reference をそのまま cp した」failure mode として非0終了する
+- wrapper 側で指定した `<out>` がそのまま最終 path として使えるので、生成後に呼び出し側で path 解決し直す必要はない
+
+運用上の注意:
+
+- **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。`/tmp/rjn-codex-prompt-short.txt` のように参照画像つきでも 14 行・600〜800 字に収めるとほぼ通る。失敗したら短縮を最優先で試す
+- **reference 画像つきは prompt で「変更点」を明示する**: 「reference を参考に」程度の弱い指示だと agent が `image_generation` tool を skip して reference を `<out>` に cp するだけで終わる failure mode がある。wrapper の自動付与文 + MD5 一致検証で抑止しているが、prompt 側でも reference からの差分（色味の参考 / 構図だけ流用 / 主役を差し替え 等）を明示しておくと安定する
+- 失敗時 wrapper は `agent_message (最終)` と codex stderr の末尾 30 行を診断 dump するので、これを見て prompt 短縮 or 参照画像見直しに切り替える
+
+この補助導線のスコープ:
+- `yt-generate-image` 連携なし
+- `ImageProvider` 連携なし
+- リトライなし
+- コスト計測連携なし
+
 ## Channel Adaptation
 
 **すべての設定は `config/skills/thumbnail.yaml` から読み取る。**
@@ -232,6 +274,21 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 
 差分プロンプトの具体例は skill-config の `image_generation.gemini.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。実装事例として `daiki-beppu/rjn` の `config/skills/thumbnail.yaml` が参考になる（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。
 
+#### TTP プリフライト・チェックリスト
+
+コレクション着手時は、本章上部のプロンプト構築や生成コマンドへ進む**前**に必ずここを通す。1 項目でも欠けると TTP モードの再現性が落ちる。
+
+- [ ] `reference_images.default` が設定済みで、直近の高再生ベンチマークサムネを指している
+  ```bash
+  uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {}).get('reference_images', {}).get('default'), ensure_ascii=False, indent=2))"
+  ```
+- [ ] `image_generation.gemini.generation_mode` が `generation_mode: "single_step"` になっている。`two_phase` / `diff_from_reference` を使うなら理由を明示する
+- [ ] `diff_prompt_template` に参照と重複する要素（レイアウト・固定オブジェクト・テキスト配置・既知の色味）を書いていない。差分のみを記述する
+- [ ] stock 合成（#364）の扱いを確認し、`image_generation.gemini.reference_images.stock.enabled` が意図どおりになっている
+- [ ] サムネ承認**前**に `/thumbnail-compare` を実行し、320px 縮小時の文字可読性・コントラスト・主役認識を検証する段取りになっている
+
+チェック通過後に本章上部の手順へ戻って `/thumbnail` を進める。CLI エラーで止まったときは、このチェックリストではなく本章上部の `#### プリフライト` を参照する。
+
 ### Two-Phase モード（従来方式・フォールバック）
 
 #### Phase 1: 背景候補生成（main.png）
@@ -281,6 +338,19 @@ Phase 2 生成後:
 - [ ] 背景が変わっていないか
 - [ ] タイトルテキストが `composition_rules.text_lines` の制約内か
 - [ ] `thumbnail_text.channel_name` が表示されているか
+
+## 視認性検証と整合性監査の役割分担
+
+`/thumbnail-compare` と `/alignment-check` は並走で使うが、見る対象とタイミングが異なる。
+
+| スキル | 役割 | スコープ | 主指標 | 実行タイミング |
+|---|---|---|---|---|
+| `/thumbnail-compare` | 視認性検証 | 単体サムネ × ベンチマーク | 320px 縮小可読性・コントラスト・キャラ認識 | サムネ承認**前**（TTP プリフライトでも確認） |
+| `/alignment-check` | 整合性監査 | コレクション全体（音楽 × サムネ × タイトル） | ムード / ビジュアル / タイトル訴求の一致 | 公開**後**、または方向性見直し時 |
+
+1. `/thumbnail` で候補生成後、承認前に `/thumbnail-compare` を実行して視認性検証を通す。
+2. 承認・公開後、または方向性見直し時に `/alignment-check` でコレクション全体の整合性監査を行う。
+3. `/alignment-check` で不整合が出たコレクションは `/thumbnail` で再生成し、再度 `/thumbnail-compare` で 320px 視認性を確認する。
 
 ## プロンプト保存
 

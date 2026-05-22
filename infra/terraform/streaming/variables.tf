@@ -33,6 +33,12 @@ variable "video_path" {
   description = "VPS にアップロードするローカル動画ファイルの絶対パス（環境依存のため必須項目）"
 }
 
+variable "install_root" {
+  type        = string
+  description = "VPS 上で動画・ログ・運用スクリプトを配置する root ディレクトリ"
+  default     = "/opt/youtube-stream"
+}
+
 variable "stream_key" {
   type        = string
   description = "YouTube Live のストリームキー。TF_VAR_stream_key 経由で 1Password から注入する想定（sensitive=true は CLI 出力マスク）"

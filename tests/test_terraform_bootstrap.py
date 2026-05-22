@@ -100,9 +100,7 @@ def test_bootstrap_outputs_and_example_expose_bucket_name():
     assert f'bucket_name = "{_TFSTATE_BUCKET_EXAMPLE}"' in tfvars_text, (
         "terraform.tfvars.example に tfstate bucket 名の例が無い"
     )
-    assert f'location    = "{_BOOTSTRAP_LOCATION}"' in tfvars_text, (
-        "terraform.tfvars.example に location 例が無い"
-    )
+    assert f'location    = "{_BOOTSTRAP_LOCATION}"' in tfvars_text, "terraform.tfvars.example に location 例が無い"
 
 
 def test_gcp_module_enables_storage_api_for_bootstrap():
@@ -117,7 +115,7 @@ def test_streaming_readme_documents_executable_state_migration_commands():
     assert "cd infra/terraform/bootstrap" in streaming_text, (
         "streaming README に bootstrap stack へ移動する移行コマンドが無い"
     )
-    assert "terraform init -backend-config=\"bucket=<bucket-name>\" -migrate-state" in streaming_text, (
+    assert 'terraform init -backend-config="bucket=<bucket-name>" -migrate-state' in streaming_text, (
         "streaming README に remote backend への state 移行コマンドが無い"
     )
     assert "rm -f terraform.tfstate terraform.tfstate.backup" in streaming_text, (

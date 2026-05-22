@@ -17,7 +17,6 @@ import logging
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import schedule  # noqa: E402
 from googleapiclient.errors import HttpError  # noqa: E402
@@ -29,6 +28,7 @@ from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader 
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
+from youtube_automation.utils.schedule import get_schedule_timezone  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 
@@ -114,9 +114,8 @@ class CollectionUploader:
         if not schedule_cfg.get("auto_schedule_enabled", False):
             return None
 
-        tz_name = schedule_cfg.get("timezone", "Asia/Tokyo")
         publish_time = schedule_cfg.get("publish_time", schedule_cfg.get("day1_time", "17:00"))
-        tz = ZoneInfo(tz_name)
+        tz = get_schedule_timezone(self.config)
         hour, minute = map(int, publish_time.split(":"))
 
         # cadence 曜日を isoweekday に変換（未設定なら全曜日許可）
@@ -153,8 +152,7 @@ class CollectionUploader:
         if not self.youtube_service:
             self.initialize_youtube_service()
 
-        tz_name = self.config.get("schedule", {}).get("timezone", "Asia/Tokyo")
-        tz = ZoneInfo(tz_name)
+        tz = get_schedule_timezone(self.config)
         dates = set()
 
         try:
@@ -336,7 +334,7 @@ class CollectionUploader:
                 tracking["complete_collection"] = {
                     "video_id": complete_video["video_id"],
                     "video_url": complete_video["video_url"],
-                    "upload_time": datetime.now().isoformat(),
+                    "upload_time": datetime.now(get_schedule_timezone(self.config)).isoformat(),
                     "publish_at": publish_at,
                     "status": "completed",
                 }

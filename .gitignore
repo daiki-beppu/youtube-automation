@@ -8,6 +8,9 @@ __pycache__/
 .env
 .direnv/
 
+# Nix / tooling caches (do not commit eval / fetcher / tarball caches)
+.cache/
+
 # Auth（client_secrets / token は手動配置、git 管理しない）
 auth/client_secrets.json
 auth/token*.json

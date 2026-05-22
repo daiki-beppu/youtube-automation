@@ -96,6 +96,11 @@ packages = ["src/youtube_automation"]
 # BGM チャンネル運営方針テンプレ (CLAUDE.md) を _claude_md/ として同梱
 # (yt-skills sync --asset claude-md が importlib.resources で参照する)
 ".claude/CLAUDE.template.md" = "youtube_automation/_claude_md/CLAUDE.template.md"
+# workflow チートシート / 全 skill カタログを _docs/ として同梱
+# (yt-skills sync --asset workflow-cheatsheet / features が importlib.resources で参照する)
+# 配布された SKILL.md / CLAUDE.md の相対 link が install 版と同 version の docs/ を指せる
+"docs/workflow-cheatsheet.md" = "youtube_automation/_docs/workflow-cheatsheet.md"
+"docs/features.md" = "youtube_automation/_docs/features.md"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 
@@ -105,6 +110,8 @@ include = [
     "tests/",
     ".claude/skills/",
     ".claude/CLAUDE.template.md",
+    "docs/workflow-cheatsheet.md",
+    "docs/features.md",
     "auth/SETUP.md",
     "auth/client_secrets_template.json",
     "README.md",
