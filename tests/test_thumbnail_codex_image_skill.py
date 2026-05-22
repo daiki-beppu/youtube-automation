@@ -466,9 +466,7 @@ def test_codex_image_script_rejects_not_logged_in_substring_false_positive(tmp_p
 
     result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
 
-    assert result.returncode != 0, (
-        "`Not Logged in` でも `Logged in` の部分一致が通って未ログインで進んでしまっている"
-    )
+    assert result.returncode != 0, "`Not Logged in` でも `Logged in` の部分一致が通って未ログインで進んでしまっている"
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
     assert invocations == [["login", "status"]], (
         f"`Not Logged in` 時に `codex exec` を呼んではいけない: {invocations!r}"
@@ -487,7 +485,7 @@ def test_codex_image_script_requires_chatgpt_login_phrase() -> None:
     text = _read(_CODEX_IMAGE_SH)
     assert '!= *"Logged in using ChatGPT"*' in text, (
         "ログイン判定が `Logged in using ChatGPT` の厳密一致になっていない（"
-        "`*\"Logged in\"*` だと `Not Logged in` を通してしまう）"
+        '`*"Logged in"*` だと `Not Logged in` を通してしまう）'
     )
 
 
@@ -516,12 +514,9 @@ def test_codex_image_script_surfaces_codex_login_status_nonzero_exit(tmp_path: P
     result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
 
     assert result.returncode != 0, (
-        "`codex login status` が非 0 で終了したのに wrapper が 0 で終わっている "
-        "(silent abort 再発)"
+        "`codex login status` が非 0 で終了したのに wrapper が 0 で終わっている (silent abort 再発)"
     )
-    assert "ERROR" in result.stderr, (
-        f"非 0 終了時の ERROR 診断行が stderr に届いていない: {result.stderr!r}"
-    )
+    assert "ERROR" in result.stderr, f"非 0 終了時の ERROR 診断行が stderr に届いていない: {result.stderr!r}"
     assert "rc=42" in result.stderr, (
         "非 0 終了時の実 exit code (rc=42) が stderr に出ていない。"
         "`if ! cmd=$(...); then rc=$?` パターンだと bash の `!` 反転後の `$?` "
@@ -532,9 +527,7 @@ def test_codex_image_script_surfaces_codex_login_status_nonzero_exit(tmp_path: P
     assert invocations == [["login", "status"]], (
         f"`codex login status` 非 0 終了時に `codex exec` を呼んではいけない: {invocations!r}"
     )
-    assert not output_path.exists(), (
-        "`codex login status` 非 0 終了時は出力ファイルを作らない"
-    )
+    assert not output_path.exists(), "`codex login status` 非 0 終了時は出力ファイルを作らない"
 
 
 def test_codex_image_script_surfaces_codex_exec_failure_diagnostics(tmp_path: Path) -> None:
@@ -593,9 +586,7 @@ def test_codex_image_script_rejects_stale_artifact_when_agent_skips_cp(tmp_path:
         "agent が cp していないのに wrapper が 0 で終わっている "
         "(stale artifact による偽陽性 success が再発: ARCH-547-002)"
     )
-    assert "ERROR" in result.stderr, (
-        f"stale artifact 検知時の ERROR 診断行が stderr に届いていない: {result.stderr!r}"
-    )
+    assert "ERROR" in result.stderr, f"stale artifact 検知時の ERROR 診断行が stderr に届いていない: {result.stderr!r}"
 
 
 def test_codex_image_script_rejects_when_agent_message_does_not_match_out(tmp_path: Path) -> None:
@@ -624,9 +615,7 @@ def test_codex_image_script_rejects_when_agent_message_does_not_match_out(tmp_pa
         "agent_message が $out と一致しないのに wrapper が 0 で終わっている "
         "(JSON プロトコル契約検証が抜けている: ARCH-547-002)"
     )
-    assert "ERROR" in result.stderr, (
-        f"agent_message 不一致時の ERROR 診断行が stderr に届いていない: {result.stderr!r}"
-    )
+    assert "ERROR" in result.stderr, f"agent_message 不一致時の ERROR 診断行が stderr に届いていない: {result.stderr!r}"
     assert str(tmp_path / "elsewhere.png") in result.stderr, (
         f"不一致 path の診断が stderr に出ていない: {result.stderr!r}"
     )
@@ -662,8 +651,7 @@ def test_codex_image_script_validates_final_msg_matches_out() -> None:
     """
     text = _read(_CODEX_IMAGE_SH)
     assert re.search(r'\[\s*"\$final_msg"\s+!=\s+"\$out"\s*\]', text), (
-        '`final_msg == "$out"` の契約検証が無い'
-        '（agent_message の path と出力先の境界が緩く ARCH-547-002 が再発する）'
+        '`final_msg == "$out"` の契約検証が無い（agent_message の path と出力先の境界が緩く ARCH-547-002 が再発する）'
     )
 
 
@@ -729,7 +717,7 @@ def test_codex_image_script_centralizes_stderr_tail_dump_in_helper() -> None:
     # コピペブロックが再び発生していないことを確認
     duplicated_pattern = re.findall(r'echo "--- codex stderr \(tail\) ---" >&2', text)
     assert len(duplicated_pattern) == 1, (
-        f"`echo \"--- codex stderr (tail) ---\"` がヘルパ以外で再びコピペされている (現在 {len(duplicated_pattern)} 件)"
+        f'`echo "--- codex stderr (tail) ---"` がヘルパ以外で再びコピペされている (現在 {len(duplicated_pattern)} 件)'
     )
 
 
@@ -752,10 +740,10 @@ def test_codex_image_script_drops_unreachable_defense_around_final_msg_after_con
         text,
         flags=re.DOTALL,
     )
-    assert match is not None, "`[ ! -s \"$out\" ]` 分岐が見つからない"
+    assert match is not None, '`[ ! -s "$out" ]` 分岐が見つからない'
     body = match.group("body")
     assert re.search(r'if \[ -n "\$final_msg" \]; then', body) is None, (
-        "`[ ! -s \"$out\" ]` 分岐内の `if [ -n \"$final_msg\" ]` 防御 if は論理到達不能なので削除されている必要がある "
+        '`[ ! -s "$out" ]` 分岐内の `if [ -n "$final_msg" ]` 防御 if は論理到達不能なので削除されている必要がある '
         "(AI 由来の防御コピペ再発: AI-547-006-N1)"
     )
     assert 'echo "agent_message (最終): $final_msg" >&2' in body, (
