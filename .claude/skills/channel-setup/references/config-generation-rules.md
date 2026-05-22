@@ -9,7 +9,7 @@
 
 - `channel` — name, short, core_message, channel_id, youtube_handle, url
 - `content_model` — collection / release など
-- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版の対象言語、単一ソース宣言）
+- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版の対象言語、単一ソース宣言）。`supported_languages` は広告単価が高い 3 言語（`ja` / `en` / `de`）を必ず含め、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）
 - `music_engine` — `"suno"` または `"lyria"`（チャンネルのデフォルト音楽エンジン）
 - `genre` — primary, style, context
 - `youtube` — デフォルトのアップロード設定
