@@ -81,6 +81,104 @@ def test_smooth_loop_keeps_sentinel_for_dash_prefixed_path(monkeypatch) -> None:
     assert captured["cmd"][-1] == "-evil.mp4"
 
 
+# ---------- compress_loop / smooth_loop crf 引数化 (Issue #175) ----------
+
+
+def _install_run_capture(monkeypatch) -> dict:
+    """`subprocess.run` を fake 化し、argv を捕捉して即座に CalledProcessError を返す。
+
+    rename / stat の副作用に到達する前に失敗で抜けさせ、argv 検証だけに絞る。
+    """
+    import subprocess as _sp
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        raise _sp.CalledProcessError(1, cmd, output=b"", stderr=b"forced")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+    return captured
+
+
+def test_compress_loop_uses_configured_crf_and_preset(monkeypatch) -> None:
+    captured = _install_run_capture(monkeypatch)
+
+    result = veo_generator.compress_loop(Path("/fake.mp4"), crf=22, preset="slow")
+
+    assert result is False
+    cmd = captured["cmd"]
+    assert cmd[:2] == ["ffmpeg", "-y"]
+    # libx264 / -crf 22 / -preset slow / -pix_fmt yuv420p / -an が argv に含まれる
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert cmd[cmd.index("-crf") + 1] == "22"
+    assert cmd[cmd.index("-preset") + 1] == "slow"
+    assert cmd[cmd.index("-pix_fmt") + 1] == "yuv420p"
+    assert "-an" in cmd
+
+
+def test_compress_loop_uses_custom_crf_value(monkeypatch) -> None:
+    """CRF 24（攻める設定）が argv に正しく反映される。"""
+    captured = _install_run_capture(monkeypatch)
+
+    veo_generator.compress_loop(Path("/fake.mp4"), crf=24, preset="veryslow")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("-crf") + 1] == "24"
+    assert cmd[cmd.index("-preset") + 1] == "veryslow"
+
+
+def test_compress_loop_returns_false_on_ffmpeg_failure(monkeypatch) -> None:
+    """ffmpeg 失敗時は False を返す。"""
+    _install_run_capture(monkeypatch)
+
+    result = veo_generator.compress_loop(Path("/nonexistent.mp4"))
+    assert result is False
+
+
+def test_smooth_loop_accepts_custom_crf_preset(monkeypatch) -> None:
+    """smooth_loop の crf/preset 引数が ffmpeg argv に伝播する（Issue #175）。"""
+    import subprocess as _sp
+
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda cmd, **_: "10.0")
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        raise _sp.CalledProcessError(1, cmd, output=b"", stderr=b"forced")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+    veo_generator.smooth_loop(Path("/fake.mp4"), crossfade_sec=0.5, crf=22, preset="slow")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert cmd[cmd.index("-crf") + 1] == "22"
+    assert cmd[cmd.index("-preset") + 1] == "slow"
+
+
+def test_smooth_loop_defaults_to_legacy_crf_18(monkeypatch) -> None:
+    """smooth_loop の crf/preset デフォルトは従来の 18 / slow を維持する（後方互換）。"""
+    import subprocess as _sp
+
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda cmd, **_: "10.0")
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        raise _sp.CalledProcessError(1, cmd, output=b"", stderr=b"forced")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+    veo_generator.smooth_loop(Path("/fake.mp4"))
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("-crf") + 1] == "18"
+    assert cmd[cmd.index("-preset") + 1] == "slow"
+
+
 # =============================================================================
 # generate_loop_video: resume / SIGINT / state lifecycle
 # Issue #453

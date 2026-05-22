@@ -1,5 +1,12 @@
 locals {
-  scripts_dir = "${path.module}/../../../.claude/skills/streaming/references"
+  scripts_dir             = "${path.module}/../../../.claude/skills/streaming/references"
+  ssh_host_key_algorithm  = "ED25519"
+  ssh_host_public_key     = trimspace(tls_private_key.ssh_host.public_key_openssh)
+  ssh_host_public_key_sha = sha256(local.ssh_host_public_key)
+}
+
+resource "tls_private_key" "ssh_host" {
+  algorithm = local.ssh_host_key_algorithm
 }
 
 resource "vultr_ssh_key" "this" {
@@ -33,13 +40,17 @@ resource "vultr_instance" "this" {
 
   ssh_key_ids = [vultr_ssh_key.this.id]
 
-  user_data = templatefile("${path.module}/cloud-init.yaml", {})
+  user_data = templatefile("${path.module}/cloud-init.yaml", {
+    ssh_host_private_key = tls_private_key.ssh_host.private_key_openssh
+    ssh_host_public_key  = local.ssh_host_public_key
+  })
 }
 
 resource "null_resource" "deploy" {
   triggers = {
-    instance_id = vultr_instance.this.id
-    video_hash  = filemd5(var.video_path)
+    instance_id  = vultr_instance.this.id
+    video_hash   = filemd5(var.video_path)
+    ssh_host_key = local.ssh_host_public_key_sha
     # SHA256 は不可逆なので nonsensitive() で剥がし triggers map に格納する
     # （terraform 1.5+ は sensitive 値の派生も sensitive 扱いするため必須）
     stream_key      = nonsensitive(sha256(var.stream_key))
@@ -53,10 +64,11 @@ resource "null_resource" "deploy" {
   }
 
   connection {
-    type  = "ssh"
-    host  = vultr_instance.this.main_ip
-    user  = "root"
-    agent = true
+    type     = "ssh"
+    host     = vultr_instance.this.main_ip
+    user     = "root"
+    agent    = true
+    host_key = local.ssh_host_public_key
   }
 
   provisioner "file" {

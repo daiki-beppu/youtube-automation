@@ -25,3 +25,34 @@ jobs:
         run: nix develop --command uv sync --extra dev
       - name: Test
         run: nix develop --command uv run pytest
+
+  changelog:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check CHANGELOG update
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          if [[ ",${PR_LABELS}," == *",skip-changelog,"* ]]; then
+            echo "skip-changelog label present, skipping CHANGELOG check"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files:"
+          echo "$changed"
+          if ! echo "$changed" | grep -qE '^(src/youtube_automation/|\.claude/skills/|\.claude/CLAUDE\.template\.md$|pyproject\.toml$)'; then
+            echo "No significant code changes, skipping CHANGELOG check"
+            exit 0
+          fi
+          if ! echo "$changed" | grep -q '^CHANGELOG\.md$'; then
+            echo "::error::CHANGELOG.md must be updated under [Unreleased]. Add an entry or apply 'skip-changelog' label."
+            exit 1
+          fi
+          echo "CHANGELOG.md updated"

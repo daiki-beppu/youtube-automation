@@ -113,7 +113,8 @@ def _sync_dir_asset(
     """ディレクトリ asset の sync。target は **ディレクトリパス** として扱う。"""
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
+    all_entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
+    entries = list(all_entries)
     if args.only:
         only = set(args.only)
         entries = [s for s in entries if s in only]
@@ -134,7 +135,7 @@ def _sync_dir_asset(
     if args.prune:
         # bundled は **全集合** で判定する (--only でフィルタしない)。
         # `--only` 集合と混同すると bundled の他 entry が誤って prune される。
-        bundled = set(_list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename")))
+        bundled = set(all_entries)
         do_delete = args.yes and not args.dry_run
         prune_counts = _prune_orphans(target_dir, bundled, do_delete=do_delete)
         for key, val in prune_counts.items():

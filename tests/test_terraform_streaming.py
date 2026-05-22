@@ -102,6 +102,22 @@ class TestVersionsTf:
             'required_providers.vultr.source が "vultr/vultr" でない'
         )
 
+    def test_required_providers_declares_tls_source(self):
+        """Given versions.tf
+        When required_providers ブロックを読む
+        Then tls.source = "hashicorp/tls" が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None, "required_providers ブロックが存在しない"
+        tls_block = extract_block(rp_block, r"tls")
+        assert tls_block is not None, "required_providers.tls が宣言されていない"
+        assert re.search(r'source\s*=\s*"hashicorp/tls"', tls_block), (
+            'required_providers.tls.source が "hashicorp/tls" でない'
+        )
+
     def test_required_providers_vultr_version_at_least_2(self):
         """Given versions.tf
         When required_providers.vultr.version を読む
@@ -116,6 +132,22 @@ class TestVersionsTf:
         assert vultr_block is not None
         assert re.search(r'version\s*=\s*"[^"]*>=\s*2', vultr_block), (
             "required_providers.vultr.version が >= 2 を満たしていない"
+        )
+
+    def test_required_providers_tls_version_at_least_4(self):
+        """Given versions.tf
+        When required_providers.tls.version を読む
+        Then ">= 4" を含む制約が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None
+        tls_block = extract_block(rp_block, r"tls")
+        assert tls_block is not None
+        assert re.search(r'version\s*=\s*"[^"]*>=\s*4', tls_block), (
+            "required_providers.tls.version が >= 4 を満たしていない"
         )
 
     def test_provider_vultr_block_uses_var_api_key(self):
@@ -215,6 +247,21 @@ class TestVariablesTf:
 class TestMainTf:
     """``main.tf`` の vultr_ssh_key + vultr_instance 定義。"""
 
+    def test_tls_private_key_resource_uses_ed25519(self):
+        """Given main.tf
+        When tls_private_key.ssh_host を読む
+        Then algorithm が ED25519 に固定されている。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"tls_private_key"\s+"ssh_host"')
+        assert block is not None, 'resource "tls_private_key" "ssh_host" が存在しない'
+        assert re.search(r"algorithm\s*=\s*local\.ssh_host_key_algorithm", block), (
+            "tls_private_key.ssh_host.algorithm が local.ssh_host_key_algorithm を参照していない"
+        )
+        assert re.search(r'ssh_host_key_algorithm\s*=\s*"ED25519"', text), (
+            'locals.ssh_host_key_algorithm が "ED25519" でない'
+        )
+
     def test_vultr_ssh_key_resource_uses_pathexpand(self):
         """Given main.tf
         When vultr_ssh_key.this を読む
@@ -263,6 +310,53 @@ class TestMainTf:
             r"ssh_key_ids\s*=\s*\[\s*vultr_ssh_key\.this\.id\s*\]",
             block,
         ), "ssh_key_ids が [vultr_ssh_key.this.id] でない（SSH 鍵未紐付け）"
+
+    def test_vultr_instance_user_data_passes_host_key_material(self):
+        """Given main.tf
+        When vultr_instance.this.user_data を読む
+        Then cloud-init template に host 鍵の private/public を明示的に渡している。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        assert re.search(r'user_data\s*=\s*templatefile\(\s*"\$\{path\.module\}/cloud-init\.yaml"\s*,\s*\{', block), (
+            'user_data が templatefile("${path.module}/cloud-init.yaml", { ... }) でない'
+        )
+        assert re.search(r"ssh_host_private_key\s*=\s*tls_private_key\.ssh_host\.private_key_openssh", block), (
+            "cloud-init に ssh_host_private_key が渡されていない"
+        )
+        assert re.search(r"ssh_host_public_key\s*=\s*local\.ssh_host_public_key", block), (
+            "cloud-init に ssh_host_public_key が渡されていない"
+        )
+
+    def test_null_resource_connection_enables_host_key_verification(self):
+        """Given main.tf
+        When null_resource.deploy.connection を読む
+        Then host_key = local.ssh_host_public_key で検証を有効化している。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None, 'resource "null_resource" "deploy" が存在しない'
+        connection_block = extract_block(deploy_block, r"connection")
+        assert connection_block is not None, "null_resource.deploy.connection が存在しない"
+        assert re.search(r"agent\s*=\s*true", connection_block), "connection.agent = true が無い"
+        assert re.search(r"host_key\s*=\s*local\.ssh_host_public_key", connection_block), (
+            "connection.host_key が local.ssh_host_public_key を参照していない"
+        )
+
+    def test_null_resource_triggers_include_host_key_hash(self):
+        """Given main.tf
+        When null_resource.deploy.triggers を読む
+        Then ssh_host_key トリガーで host 鍵変更時に再実行される。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None
+        triggers_block = extract_block(deploy_block, r"triggers")
+        assert triggers_block is not None, "null_resource.deploy.triggers が存在しない"
+        assert re.search(r"ssh_host_key\s*=\s*local\.ssh_host_public_key_sha", triggers_block), (
+            "triggers.ssh_host_key が local.ssh_host_public_key_sha を参照していない"
+        )
 
     def test_vultr_instance_uses_plural_tags_not_deprecated_tag(self):
         """Given main.tf
@@ -456,6 +550,23 @@ class TestCloudInitYaml:
         first_line = text.splitlines()[0] if text.splitlines() else ""
         assert first_line.strip() == "#cloud-config", (
             f"先頭行が #cloud-config でない: {first_line!r}（cloud-init が認識しない）"
+        )
+
+    def test_declares_ssh_keys_block_for_ed25519_host_key(self):
+        """Given cloud-init.yaml
+        When ssh_keys ブロックを読む
+        Then ed25519_private / ed25519_public の両方を template 変数経由で埋め込む。
+        """
+        text = read_file(_CLOUD_INIT_YAML)
+        assert re.search(r"^ssh_keys:\s*$", text, flags=re.MULTILINE), "ssh_keys: ブロックが存在しない"
+        assert re.search(r"^\s+ed25519_private:\s+\|$", text, flags=re.MULTILINE), (
+            "ssh_keys.ed25519_private の block scalar 宣言が無い"
+        )
+        assert '${replace(trimspace(ssh_host_private_key), "\\n", "\\n    ")}' in text, (
+            "ssh_keys.ed25519_private が ssh_host_private_key template を参照していない"
+        )
+        assert "${trimspace(ssh_host_public_key)}" in text, (
+            "ssh_keys.ed25519_public が ssh_host_public_key template を参照していない"
         )
 
     def test_package_update_is_true(self):
@@ -821,6 +932,13 @@ class TestSystemdUnitTemplate:
             flags=re.MULTILINE | re.DOTALL,
         )
         return match.group(1) if match else None
+
+    def _assert_service_directive(self, pattern: str, message: str) -> None:
+        """[Service] セクションに directive が 1 行で存在することを検証する。"""
+        text = read_file(_SYSTEMD_TFTPL)
+        service = self._section(text, "Service")
+        assert service is not None
+        assert re.search(pattern, service, flags=re.MULTILINE), message
 
     def test_file_exists(self):
         """Given infra/terraform/streaming/templates/
@@ -1190,6 +1308,175 @@ class TestSystemdUnitTemplate:
             "[Service].TimeoutStopSec=30s が無い（停止待機がデフォルト 90s のままになる）"
         )
 
+    def test_service_restrict_address_families_af_unix_inet_inet6(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`` が宣言されている (#196 R21)。
+
+        ffmpeg は RTMP TCP (AF_INET/AF_INET6) と journald (AF_UNIX) のみで動作するため、
+        他の AF (AF_PACKET / AF_NETLINK 等) を遮断して攻撃面を最小化する。順序はリテラル固定。
+        """
+        self._assert_service_directive(
+            r"^RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\s*$",
+            ("[Service].RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 が無い（不要な AF 経由の攻撃面が残る）"),
+        )
+
+    def test_service_lock_personality_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``LockPersonality=yes`` が宣言されている (#196 R22)。
+
+        ``personality(2)`` syscall を遮断し、古い ABI（PER_LINUX32 等）経由の
+        exploit 経路を塞ぐ hardening。
+        """
+        self._assert_service_directive(
+            r"^LockPersonality=yes\s*$",
+            ("[Service].LockPersonality=yes が無い（personality(2) 経由の ABI 切替 exploit が残る）"),
+        )
+
+    def test_service_memory_deny_write_execute_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``MemoryDenyWriteExecute=yes`` が宣言されている (#196 R23)。
+
+        書き込み + 実行可能 (W+X) メモリページを禁止。``run-ffmpeg.sh`` が
+        ``-c:v copy -c:a copy`` 固定で JIT を呼ばない現状仕様で静的に安全。
+        """
+        self._assert_service_directive(
+            r"^MemoryDenyWriteExecute=yes\s*$",
+            ("[Service].MemoryDenyWriteExecute=yes が無い（W+X メモリ経由の shellcode 注入が残る）"),
+        )
+
+    def test_service_restrict_suid_sgid_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``RestrictSUIDSGID=yes`` が宣言されている (#196 R24)。
+
+        setuid/setgid 付きファイルの新規作成を禁止し、特権ファイル経由の
+        持続化経路を遮断する。directive 名の大小文字（SUIDSGID）も仕様の一部。
+        """
+        self._assert_service_directive(
+            r"^RestrictSUIDSGID=yes\s*$",
+            ("[Service].RestrictSUIDSGID=yes が無い（setuid/setgid ファイル作成による持続化経路が残る）"),
+        )
+
+    def test_service_restrict_namespaces_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``RestrictNamespaces=yes`` が宣言されている (#196 R25)。
+
+        新規 namespace（mount/pid/net/user 等）作成を禁止し、namespace 経由の
+        sandbox 逸脱経路を遮断する。
+        """
+        self._assert_service_directive(
+            r"^RestrictNamespaces=yes\s*$",
+            ("[Service].RestrictNamespaces=yes が無い（新規 namespace 作成経由の sandbox 逸脱が残る）"),
+        )
+
+    def test_service_restrict_realtime_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``RestrictRealtime=yes`` が宣言されている (#196 R26)。
+
+        ``SCHED_FIFO`` / ``SCHED_RR`` 等のリアルタイムスケジューリングを禁止し、
+        CPU 占有による DoS 経路を遮断する。
+        """
+        self._assert_service_directive(
+            r"^RestrictRealtime=yes\s*$",
+            ("[Service].RestrictRealtime=yes が無い（リアルタイムスケジューリングによる CPU 占有経路が残る）"),
+        )
+
+    def test_service_system_call_filter_system_service(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``SystemCallFilter=@system-service`` が宣言されている (#196 R27)。
+
+        systemd 既定の ``@system-service`` セットを syscall whitelist として適用。
+        ``@`` プレフィックス + セット名をリテラル固定し、任意 syscall 列を許容しない。
+        """
+        self._assert_service_directive(
+            r"^SystemCallFilter=@system-service\s*$",
+            ("[Service].SystemCallFilter=@system-service が無い（syscall whitelist が無いと攻撃面が最大化する）"),
+        )
+
+    def test_service_system_call_architectures_native(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``SystemCallArchitectures=native`` が宣言されている (#196 R28)。
+
+        ホスト arch 以外の syscall ABI（32-bit on 64-bit 等）を遮断し、
+        arch 切替 exploit 経路を塞ぐ。
+        """
+        self._assert_service_directive(
+            r"^SystemCallArchitectures=native\s*$",
+            ("[Service].SystemCallArchitectures=native が無い（非ネイティブ arch syscall 経由の exploit 経路が残る）"),
+        )
+
+    def test_service_protect_kernel_tunables_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ProtectKernelTunables=yes`` が宣言されている (#196 R29)。
+
+        ``/proc/sys`` / ``/sys`` 配下の kernel tunable への書き込みを禁止し、
+        ランタイムでの kernel パラメータ改竄経路を遮断する。
+        """
+        self._assert_service_directive(
+            r"^ProtectKernelTunables=yes\s*$",
+            ("[Service].ProtectKernelTunables=yes が無い（/proc/sys 経由の kernel 改竄が残る）"),
+        )
+
+    def test_service_protect_kernel_modules_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ProtectKernelModules=yes`` が宣言されている (#196 R30)。
+
+        ``modprobe`` 等によるカーネルモジュール load/unload を遮断し、
+        rootkit 系モジュール挿入の経路を塞ぐ。
+        """
+        self._assert_service_directive(
+            r"^ProtectKernelModules=yes\s*$",
+            ("[Service].ProtectKernelModules=yes が無い（kernel module load 経由の rootkit 経路が残る）"),
+        )
+
+    def test_service_protect_kernel_logs_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ProtectKernelLogs=yes`` が宣言されている (#196 R31)。
+
+        ``/dev/kmsg`` 等のカーネルログへのアクセスを禁止し、
+        dmesg 経由の情報漏洩（KASLR offset 等）を遮断する。
+        """
+        self._assert_service_directive(
+            r"^ProtectKernelLogs=yes\s*$",
+            ("[Service].ProtectKernelLogs=yes が無い（/dev/kmsg 経由の kernel 情報漏洩が残る）"),
+        )
+
+    def test_service_protect_control_groups_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``ProtectControlGroups=yes`` が宣言されている (#196 R32)。
+
+        ``/sys/fs/cgroup`` を read-only にし、cgroup 構成の改竄による
+        resource 隔離迂回経路を遮断する。
+        """
+        self._assert_service_directive(
+            r"^ProtectControlGroups=yes\s*$",
+            ("[Service].ProtectControlGroups=yes が無い（cgroup 改竄による resource 隔離迂回が残る）"),
+        )
+
+    def test_service_remove_ipc_yes(self):
+        """Given .tftpl
+        When [Service] セクションを読む
+        Then ``RemoveIPC=yes`` が宣言されている (#196 R33)。
+
+        ``DynamicUser=yes`` 連動でサービス終了時に IPC オブジェクト（SysV shm/sem/msg、
+        POSIX shm）を掃除し、UID 再利用時の残骸経由のリークを遮断する。
+        """
+        self._assert_service_directive(
+            r"^RemoveIPC=yes\s*$",
+            ("[Service].RemoveIPC=yes が無い（DynamicUser 連動の IPC 掃除が効かず残骸が残る）"),
+        )
+
 
 # ============================================================================
 # main.tf user_data (#124)
@@ -1249,7 +1536,7 @@ class TestMainTfUserData:
              呼び出しも残っていない (#212)。
 
         unit 配置は ``null_resource.deploy`` の ``provisioner "file"`` に統一されたため、
-        user_data の templatefile 第 2 引数は空 map ``{}`` でなければならない。
+        cloud-init に渡す変数は host 鍵配布用の ``ssh_host_*`` のみに限定する。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
@@ -1262,6 +1549,12 @@ class TestMainTfUserData:
             r"youtube-stream\.service\.tftpl",
             block,
         ), "vultr_instance.this 内に service.tftpl への参照が残っている（user_data の内側 templatefile 撤去漏れ）"
+        assert re.search(r"\bssh_host_private_key\s*=", block), (
+            "user_data の variables map に ssh_host_private_key が無い（host 鍵配布経路が欠落）"
+        )
+        assert re.search(r"\bssh_host_public_key\s*=", block), (
+            "user_data の variables map に ssh_host_public_key が無い（host 鍵配布経路が欠落）"
+        )
 
     def test_user_data_does_not_contain_plaintext_secrets(self):
         """Given main.tf
@@ -2696,6 +2989,25 @@ class TestStreamingReadme:
         text = read_file(_STREAMING_README)
         assert "ssh-add" in text, (
             "README に ssh-add の言及が無い（ssh-agent 登録手順が辿れず terraform apply が失敗する）"
+        )
+
+    def test_mentions_host_key_verification(self):
+        """Given README
+        When 前提セクション周辺を読む
+        Then host_key と ssh_keys による host 鍵固定化の説明がある。
+        """
+        text = read_file(_STREAMING_README)
+        assert "host_key" in text, "README に host_key の言及が無い（検証有効化の説明不足）"
+        assert "ssh_keys" in text, "README に ssh_keys の言及が無い（host 鍵配布経路が辿れない）"
+
+    def test_tfstate_section_mentions_tls_private_key(self):
+        """Given README
+        When tfstate と secret の説明を読む
+        Then tls_private_key.ssh_host.private_key_openssh の注意がある。
+        """
+        text = read_file(_STREAMING_README)
+        assert "tls_private_key.ssh_host.private_key_openssh" in text, (
+            "README の tfstate 注意書きに host 鍵秘密鍵の保存先が明記されていない"
         )
 
 
