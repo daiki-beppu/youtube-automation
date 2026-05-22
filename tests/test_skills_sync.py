@@ -615,6 +615,45 @@ def test_cmd_sync_prune_only_removes_real_orphan(fake_repo: Path, tmp_path: Path
     assert not (target / "analyze").exists()
 
 
+def test_cmd_sync_prune_only_lists_entries_once(
+    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: `--only` と `--prune` を併用しても bundled 判定は初回取得結果を再利用する
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "sync",
+            "--target",
+            str(target),
+            "--force",
+            "--only",
+            "channel-research",
+            "--prune",
+            "--yes",
+        ]
+    )
+
+    import youtube_automation.cli.skills_sync._sync as sync_module
+
+    call_count = 0
+    original_list_entries = sync_module._list_entries
+
+    def counting_list_entries(*args: object, **kwargs: object) -> list[str]:
+        nonlocal call_count
+        call_count += 1
+        return original_list_entries(*args, **kwargs)
+
+    monkeypatch.setattr(sync_module, "_list_entries", counting_list_entries)
+
+    # When: sync を実行
+    rc = args.func(args)
+
+    # Then: `_list_entries` は 1 回だけ呼ばれる
+    assert rc == 0
+    assert call_count == 1
+
+
 def test_cmd_sync_prune_file_asset_warns_on_stderr(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

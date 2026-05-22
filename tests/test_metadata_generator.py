@@ -237,10 +237,8 @@ class TestGenerateCompleteCollectionMetadata:
         # /tmp の fake collection には workflow-state.json が無いためモックで差し替える
         _phrases = {
             "ja": "8ビット冒険の世界",
-            "ko": "8비트 모험의 세계",
-            "es": "Mundo de aventura de 8 bits",
-            "pt": "Mundo de aventura 8 bits",
-            "zh-CN": "8位冒险世界",
+            "en": "World of 8-bit adventure",
+            "de": "Welt des 8-Bit-Abenteuers",
         }
         gen._load_scene_phrases = lambda: _phrases
         gen.tracks = [
@@ -325,7 +323,7 @@ class TestGenerateCompleteCollectionMetadata:
         assert len(meta["tags"]) > 0
 
     def test_localizations_present(self, gen_with_tracks):
-        """全15言語のローカライゼーションが返り値に含まれること"""
+        """全対応言語のローカライゼーションが返り値に含まれること"""
         meta = gen_with_tracks.generate_complete_collection_metadata()
         assert "localizations" in meta
         config = load_config()
@@ -344,10 +342,8 @@ class TestGenerateCompleteCollectionMetadata:
     def _all_phrases() -> dict:
         return {
             "ja": "雨の街の夜テスト",
-            "ko": "비 오는 도시 밤 테스트",
-            "es": "Noche urbana lluviosa test",
-            "pt": "Noite urbana chuvosa test",
-            "zh-CN": "雨夜城市测试",
+            "en": "Rainy city night test",
+            "de": "Regnerische Stadtnacht Test",
         }
 
     def test_localizations_title_with_scene_phrase(self):

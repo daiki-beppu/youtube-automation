@@ -150,10 +150,10 @@ worktree の置き場は以下に統一する:
 - workflow は組み込み **default**（plan → review → ... → reviewers の 9 step）
 - **リリース**: `/automation-release` スキルで Release PR パターンを自動化（prepare → リリース PR → publish の 2 フェーズ）。post-release の運営者向けガイドと下流追従 issue は `/release-notes` が担当
 
-### skill 編集は takt 経由で行わない
+### skill 編集と takt の関係
 
-`.claude/skills/**` を含む `.claude/` 配下は Claude Code の **protected paths**（`acceptEdits` モードでも write 時に必ず prompt が出る領域）に該当する。takt は Claude Agent SDK を `settingSources: ['project']` + `permissionMode: 'acceptEdits'` で呼ぶため prompt に答える人間がおらず、`.claude/skills/<name>/SKILL.md` 等への Edit/Write は必ず `Claude requested permissions to write to ..., but you haven't granted it yet.` で deny される（`permissions.allow` ルールでは bypass 不可、`bypassPermissions` のみが bypass）。
+`.claude/skills/**` を含む `.claude/` 配下は Claude Code の **protected paths**（`acceptEdits` モードでも write 時に必ず prompt が出る領域）に該当する。takt は Claude Agent SDK を `settingSources: ['project']` + `permissionMode: 'acceptEdits'` で呼ぶため prompt に答える人間がおらず、**Claude provider が走る persona から** `.claude/skills/<name>/SKILL.md` 等への Edit/Write は `Claude requested permissions to write to ..., but you haven't granted it yet.` で deny される（`permissions.allow` ルールでは bypass 不可、`bypassPermissions` のみが bypass）。
 
-そのため **skill 関連の修正は takt にやらせず、通常の Claude Code 対話セッション（cmux pane 等）で直接行う**。Claude Code 対話セッションでは prompt に手動 Allow できるため、`.claude/skills/**` への編集が通る。コミット・PR 作成は `commit-convention` / `pr` スキル経由で実施する。
+ただし、**`coder` persona を codex provider に切り替えれば**、実装ファイルへの編集は Codex CLI 経由で行われ Claude Code の protected paths 制約を回避できる（Codex は独自のサンドボックスで動作し、`$REPO_ROOT/.agents/skills` を探索パスに含む）。本リポジトリは takt-issue skill の "provider 構成" に従って `coder` を codex 化しているため、**skill 配下を変更する issue も takt から問題なく回せる**。実際の運用例として、`.claude/skills/videoup/references/generate_videos.sh` 等の skill 配下スクリプト修正も takt 経由で完走実績がある。
 
-例外: `.claude/skills/` 配下を一切編集しない issue（純粋にコードや config のみ触る）は takt 経由で問題なく回せる。
+逆に `coder` を Claude provider に戻している環境では、従来通り skill 配下の Edit が deny される。その場合は通常の Claude Code 対話セッション（cmux pane 等）で直接編集し、コミット・PR 作成は `commit-convention` / `pr` スキル経由で実施する。
