@@ -232,6 +232,21 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 
 差分プロンプトの具体例は skill-config の `image_generation.gemini.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。実装事例として `daiki-beppu/rjn` の `config/skills/thumbnail.yaml` が参考になる（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。
 
+#### TTP プリフライト・チェックリスト
+
+コレクション着手時は、本章上部のプロンプト構築や生成コマンドへ進む**前**に必ずここを通す。1 項目でも欠けると TTP モードの再現性が落ちる。
+
+- [ ] `reference_images.default` が設定済みで、直近の高再生ベンチマークサムネを指している
+  ```bash
+  uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {}).get('reference_images', {}).get('default'), ensure_ascii=False, indent=2))"
+  ```
+- [ ] `image_generation.gemini.generation_mode` が `generation_mode: "single_step"` になっている。`two_phase` / `diff_from_reference` を使うなら理由を明示する
+- [ ] `diff_prompt_template` に参照と重複する要素（レイアウト・固定オブジェクト・テキスト配置・既知の色味）を書いていない。差分のみを記述する
+- [ ] stock 合成（#364）の扱いを確認し、`image_generation.gemini.reference_images.stock.enabled` が意図どおりになっている
+- [ ] サムネ承認**前**に `/thumbnail-compare` を実行し、320px 縮小時の文字可読性・コントラスト・主役認識を検証する段取りになっている
+
+チェック通過後に本章上部の手順へ戻って `/thumbnail` を進める。CLI エラーで止まったときは、このチェックリストではなく本章上部の `#### プリフライト` を参照する。
+
 ### Two-Phase モード（従来方式・フォールバック）
 
 #### Phase 1: 背景候補生成（main.png）
@@ -281,6 +296,19 @@ Phase 2 生成後:
 - [ ] 背景が変わっていないか
 - [ ] タイトルテキストが `composition_rules.text_lines` の制約内か
 - [ ] `thumbnail_text.channel_name` が表示されているか
+
+## 視認性検証と整合性監査の役割分担
+
+`/thumbnail-compare` と `/alignment-check` は並走で使うが、見る対象とタイミングが異なる。
+
+| スキル | 役割 | スコープ | 主指標 | 実行タイミング |
+|---|---|---|---|---|
+| `/thumbnail-compare` | 視認性検証 | 単体サムネ × ベンチマーク | 320px 縮小可読性・コントラスト・キャラ認識 | サムネ承認**前**（TTP プリフライトでも確認） |
+| `/alignment-check` | 整合性監査 | コレクション全体（音楽 × サムネ × タイトル） | ムード / ビジュアル / タイトル訴求の一致 | 公開**後**、または方向性見直し時 |
+
+1. `/thumbnail` で候補生成後、承認前に `/thumbnail-compare` を実行して視認性検証を通す。
+2. 承認・公開後、または方向性見直し時に `/alignment-check` でコレクション全体の整合性監査を行う。
+3. `/alignment-check` で不整合が出たコレクションは `/thumbnail` で再生成し、再度 `/thumbnail-compare` で 320px 視認性を確認する。
 
 ## プロンプト保存
 
