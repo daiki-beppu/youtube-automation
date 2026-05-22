@@ -41,6 +41,7 @@ ACTION_UPLOADED = "short_uploaded"
 ACTION_BLOCKED = "short_upload_blocked"
 ACTION_FAILED = "short_upload_failed"
 
+
 class ShortUploader:
     """Shorts 投稿エージェント — `YouTubeAutoUploader` 委譲版.
 
