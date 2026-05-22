@@ -2,3 +2,15 @@
 # provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
 draft_pr: false
 base_branch: main
+
+# 一時オーバーライド: codex サブスクが limit hit したので reviewer 3 つを claude に切替 (#547 resume 用)
+persona_providers:
+  architecture-reviewer:
+    provider: claude
+    model: opus
+  ai-antipattern-reviewer:
+    provider: claude
+    model: opus
+  supervisor:
+    provider: claude
+    model: opus

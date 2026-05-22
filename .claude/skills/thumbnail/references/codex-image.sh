@@ -12,8 +12,22 @@ if ! command -v codex >/dev/null 2>&1; then
   exit 1
 fi
 
-login_status=$(codex login status 2>&1)
-if [[ "$login_status" != *"Logged in"* ]]; then
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq CLI が PATH にありません (codex --json の JSONL 解析に必要)" >&2
+  exit 1
+fi
+
+if login_status=$(codex login status 2>&1); then
+  :
+else
+  rc=$?
+  echo "ERROR: codex login status の実行に失敗しました (rc=${rc})" >&2
+  if [ -n "$login_status" ]; then
+    echo "$login_status" >&2
+  fi
+  exit 1
+fi
+if [[ "$login_status" != *"Logged in using ChatGPT"* ]]; then
   echo "ERROR: codex login status で Logged in using ChatGPT を確認してから再実行してください" >&2
   exit 1
 fi
@@ -23,12 +37,60 @@ for ref in "$@"; do
   image_args+=(--image "$ref")
 done
 
-codex exec --enable image_generation "${image_args[@]+"${image_args[@]}"}" -- "$prompt" \
-  | awk '/^generated image / {print $4; exit}' \
-  | base64 -d > "$out"
+out_dir=$(dirname "$out")
+full_prompt="${prompt}
+
+After generation, copy the produced PNG to ${out}. Then reply with exactly ${out}."
+
+# Stale artifact 防止: codex 起動前に既存 $out を確実に消す。
+# 残っていると agent が cp を skip しても -s "$out" / PNG ヘッダ検証が通って
+# 偽陽性 success になる (ARCH-547-002)。
+rm -f "$out"
+
+err_log=$(mktemp -t codex-image.XXXXXX)
+trap 'rm -f "$err_log"' EXIT
+
+# 3 つの error 分岐に同一 4 行ブロックがコピペされていた DRY 違反を解消するための helper。
+# `$err_log` はスクリプト全体で 1 つしか存在しないため引数化せずクロージャ的に参照する。
+dump_codex_stderr() {
+  if [ -s "$err_log" ]; then
+    echo "--- codex stderr (tail) ---" >&2
+    tail -n 30 "$err_log" >&2
+  fi
+}
+
+if ! final_msg=$(codex exec --json --sandbox workspace-write --add-dir "$out_dir" --skip-git-repo-check \
+  "${image_args[@]+"${image_args[@]}"}" -- "$full_prompt" </dev/null 2>"$err_log" \
+  | jq -r 'select(.type=="item.completed") | select(.item.type=="agent_message") | .item.text' \
+  | tail -n 1); then
+  echo "ERROR: codex exec / jq パイプラインが非0で終了しました" >&2
+  echo "ヒント: codex CLI / jq の実行失敗、または出力 JSONL のパース失敗が考えられます。prompt を短縮して再試行することも検討してください" >&2
+  dump_codex_stderr
+  exit 1
+fi
+
+# JSON プロトコル契約検証: prompt 末尾の "reply with exactly <out>" 指示通り、
+# agent が wrapper 指定の $out を最終 agent_message に echo したことを確認する。
+# 別 path を返す / 空 / 別ファイルへ流れる failure mode を阻止する (ARCH-547-002)。
+if [ "$final_msg" != "$out" ]; then
+  echo "ERROR: agent_message の path が出力先 $out と一致しません" >&2
+  if [ -n "$final_msg" ]; then
+    echo "agent_message (最終): $final_msg" >&2
+  else
+    echo "agent_message (最終): <empty>" >&2
+  fi
+  echo "ヒント: prompt が長いと agent が image_generation tool を skip して path だけ返す failure mode があります。プロンプトを短縮して再試行してください" >&2
+  dump_codex_stderr
+  exit 1
+fi
 
 if [ ! -s "$out" ]; then
-  echo "ERROR: 画像が生成されませんでした (stdout に generated image 行なし)" >&2
+  echo "ERROR: 画像が生成されませんでした ($out が空か存在しません)" >&2
+  echo "ヒント: prompt が長いと agent が image_generation tool を skip して path だけ返す failure mode があります。プロンプトを短縮して再試行してください" >&2
+  # この経路に到達した時点で final_msg == $out（直前の契約検証を通過）かつ $out は非空 (out=${2:?...})。
+  # 「念のため」の `[ -n "$final_msg" ]` ガードは論理的に常に真で防御として意味がないため省く。
+  echo "agent_message (最終): $final_msg" >&2
+  dump_codex_stderr
   exit 1
 fi
 

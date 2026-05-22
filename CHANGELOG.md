@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `thumbnail` スキルに `codex exec --enable image_generation` を直接 shell 実行する補助導線を追加（#501）。`.claude/skills/thumbnail/references/codex-image.sh` で stdout の `generated image <id> <base64>` を PNG に保存し、`SKILL.md` から独立経路として案内
+- `thumbnail` スキルに `codex exec` を直接 shell 実行する補助導線を追加（#501, #547）。`.claude/skills/thumbnail/references/codex-image.sh` が codex 0.131 系の `codex exec --json --sandbox workspace-write --add-dir <out_dir> --skip-git-repo-check` で起動し、prompt 末尾に `After generation, copy the produced PNG to <out>. Then reply with exactly <out>.` を自動付与することで agent 自身に生成 PNG を `<out>` まで `cp` させる。wrapper 側は JSONL の最終 `agent_message.text` を `jq` で解析し、起動前の stale 出力削除・`final_msg == <out>` の契約検証・`<out>` の存在・PNG ヘッダ・サイズで多段検証する。`SKILL.md` の `## codex 経由の補助生成` セクションから独立経路として案内
 
 ## [5.5.2] - 2026-05-20
 
