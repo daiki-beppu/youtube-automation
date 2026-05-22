@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *auth/client_secrets.json|*auth/token.json|*.env|*/uv.lock|*/flake.lock) echo \"BLOCKED: $f は AI から直接編集禁止。専用ツール（uv lock / op など）経由で更新してください\" >&2; exit 2;; esac; done"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "files=$(echo \"$CLAUDE_FILE_PATHS\" | tr ' ' '\\n' | grep '\\.py$' || true); if [ -n \"$files\" ]; then uv run ruff format $files >/dev/null 2>&1 && uv run ruff check --fix $files >/dev/null 2>&1 || true; fi"
+          },
+          {
+            "type": "command",
+            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *src/youtube_automation/*|*.claude/skills/*|*.claude/CLAUDE.template.md|*pyproject.toml) echo \"NOTE: $f は CHANGELOG 必須エリア。PR 出す前に CHANGELOG.md [Unreleased] に追記すること（skip-changelog ラベルで escape 可）\" >&2; break;; esac; done; exit 0"
+          },
+          {
+            "type": "command",
+            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *.claude/skills/*) echo \"NOTE: .claude/skills/ を編集しました。下流配布対象なのでマージ後は下流リポジトリ側で /automation-update での追従を忘れずに\" >&2; break;; esac; done; exit 0"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null || true); branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true); if [ \"$root\" = \"/Users/mba/02-yt/automation\" ] && [ \"$branch\" = \"main\" ]; then echo '⚠️  main tree の main branch にいます。コード編集を始める前に worktree（takt or .worktrees/<slug>/）へ移動してください'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

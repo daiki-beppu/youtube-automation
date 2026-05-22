@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
-from youtube_automation.cli.skills_sync import _ASSET_SPECS, cmd_list
+from youtube_automation.cli.skills_sync import _ASSET_SPECS, _guard_target_with_all, cmd_list
 from youtube_automation.cli.skills_sync._diff import cmd_diff
 from youtube_automation.cli.skills_sync._sync import cmd_sync
 
@@ -12,14 +13,30 @@ from youtube_automation.cli.skills_sync._sync import cmd_sync
 def _add_asset_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--asset",
-        choices=sorted(_ASSET_SPECS.keys()),
-        default="skills",
-        help="配布対象 (default: skills)",
+        choices=sorted([*_ASSET_SPECS.keys(), "all"]),
+        default="all",
+        help="配布対象 (default: all = 全 asset を一括処理)",
     )
 
 
 def _resolve_default_target(args: argparse.Namespace) -> None:
-    """`--target` 未指定 (None) 時に `--asset` 別のデフォルトを埋める。"""
+    """`--target` 未指定 (None) 時に `--asset` 別のデフォルトを埋める。
+
+    `--asset all` のときは個別 asset の default_target を使うため埋めない
+    (cmd_* 側で each asset を巡回するときに per-asset の default_target を resolve する)。
+
+    `--asset all` + `--target X` の組み合わせは曖昧なため `_guard_target_with_all`
+    が `ValueError` を raise する。CLI 経由ではここで catch して stderr + `sys.exit(2)`
+    に変換し、ユーザーには誘導付きエラーメッセージを表示する。ライブラリ呼び出し元
+    (`cmd_sync` / `cmd_diff` を import して使う caller) は `ValueError` をそのまま受け取る。
+    """
+    try:
+        _guard_target_with_all(args)
+    except ValueError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        sys.exit(2)
+    if args.asset == "all":
+        return
     if getattr(args, "target", None) is None:
         args.target = _ASSET_SPECS[args.asset]["default_target"]
 

@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Fix per-variation timestamp regression in descriptions.md.
+"""[Deprecated / historical] テーマ単位のみのタイムスタンプ書き戻しスクリプト.
 
-For each collection in TARGET_COLLECTIONS, rewrite the
-"## Complete Collection 概要欄" code block so that the timestamp
-section has one chapter per pattern (theme) instead of one chapter
-per variation (v1〜v6).
+`TARGET_COLLECTIONS` にハードコードされた 2026-03/04 のコレクション群を対象に、
+`## Complete Collection 概要欄` のタイムスタンプ行をパターン単位（テーマのみ）に
+書き換える単発移行スクリプト。3 秒固定クロスフェード（CROSSFADE_SEC）も pipeline
+本流（masterup 1.0 秒）と異なる固有値で、純粋に当時の状態を再現するためのもの。
+
+**現行フォーマット（概要欄タイムスタンプ）は「テーマ見出し + 個別楽曲」が正となり、
+本スクリプトが出力する「テーマ単位のみ」フォーマットは廃止された**。
+新規コレクションには `metadata_generator.generate_timestamps()` /
+`format_timestamps_text()`（テーマ見出し付き楽曲単位）を使うこと。
+
+本スクリプトは過去の生成結果を再現する用途でのみ残置している。新規追加・呼び出し
+増設は行わない。CLI entry `yt-fix-timestamps` も互換のために維持しているのみ。
 
 Steps per collection:
 1. Read pattern names from suno-prompts.md (## Pattern X: 日本語 — English Name)

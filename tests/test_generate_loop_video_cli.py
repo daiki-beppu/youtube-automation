@@ -841,3 +841,85 @@ class TestMainNormal:
             assert mocks["generate_loop_video"].call_count == 1
             assert not (col / ASSETS_DIR / LOOP_V1).exists()
             assert excinfo.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# 8. main(): compression skill-config の伝播 (Issue #175)
+# ---------------------------------------------------------------------------
+
+
+class TestMainCompressionPropagation:
+    """skill-config の `compression:` セクションが Veo / smooth 双方に伝播する。"""
+
+    def test_compression_config_propagates_to_generate_loop_video(self, tmp_path, monkeypatch):
+        # Given: skill-config に compression.crf=24 を上書き
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+
+        compression = {"enabled": True, "crf": 24, "preset": "veryslow"}
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"veo": {}, "compression": compression}
+
+            # When
+            with pytest.raises(SystemExit):
+                mod.main()
+
+            # Then: generate_loop_video が compression= kwarg で呼ばれる
+            assert mocks["generate_loop_video"].call_count == 1
+            assert mocks["generate_loop_video"].call_args.kwargs.get("compression") == compression
+
+    def test_compression_config_propagates_to_smooth_loop(self, tmp_path, monkeypatch):
+        # Given: --smooth + skill-config compression.crf=22
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        _write_loop_mp4(col, LOOP_MP4)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--smooth"])
+
+        compression = {"enabled": True, "crf": 22, "preset": "slow"}
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"veo": {}, "compression": compression}
+
+            # When
+            with pytest.raises(SystemExit):
+                mod.main()
+
+            # Then: smooth_loop が crf=22 / preset="slow" で呼ばれる
+            assert mocks["smooth_loop"].call_count == 1
+            kwargs = mocks["smooth_loop"].call_args.kwargs
+            assert kwargs.get("crf") == 22
+            assert kwargs.get("preset") == "slow"
+
+    def test_smooth_falls_back_to_legacy_crf_when_compression_disabled(self, tmp_path, monkeypatch):
+        # Given: --smooth + compression.enabled=false → smooth_loop は従来デフォルト (CRF 18)
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        _write_loop_mp4(col, LOOP_MP4)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--smooth"])
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {
+                "veo": {},
+                "compression": {"enabled": False, "crf": 22, "preset": "slow"},
+            }
+
+            # When
+            with pytest.raises(SystemExit):
+                mod.main()
+
+            # Then: 互換性確保のため CRF 18 / slow に倒れる
+            assert mocks["smooth_loop"].call_count == 1
+            kwargs = mocks["smooth_loop"].call_args.kwargs
+            assert kwargs.get("crf") == 18
+            assert kwargs.get("preset") == "slow"
