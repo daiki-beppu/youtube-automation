@@ -1,6 +1,6 @@
 variable "vultr_api_key" {
   type        = string
-  description = "Vultr API key. TF_VAR_vultr_api_key 経由で 1Password から注入する想定（state にも残らないよう sensitive=true）"
+  description = "Vultr API key. TF_VAR_vultr_api_key 経由で 1Password から注入する想定（sensitive=true は CLI 出力マスク）"
   sensitive   = true
 }
 
@@ -35,13 +35,13 @@ variable "video_path" {
 
 variable "stream_key" {
   type        = string
-  description = "YouTube Live のストリームキー。TF_VAR_stream_key 経由で 1Password から注入する想定（tfstate にも sensitive 扱いで残す）"
+  description = "YouTube Live のストリームキー。TF_VAR_stream_key 経由で 1Password から注入する想定（sensitive=true は CLI 出力マスク）"
   sensitive   = true
 }
 
 variable "discord_webhook_url" {
   type        = string
-  description = "死活監視通知の送信先 Discord Webhook URL。TF_VAR_discord_webhook_url 経由で 1Password から注入する想定（tfstate にも sensitive 扱いで残す）"
+  description = "死活監視通知の送信先 Discord Webhook URL。TF_VAR_discord_webhook_url 経由で 1Password から注入する想定（sensitive=true は CLI 出力マスク）"
   sensitive   = true
 }
 

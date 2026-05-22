@@ -1,0 +1,3 @@
+project_id  = "your-gcp-project-id"
+bucket_name = "youtube-automation-tfstate"
+location    = "asia-northeast1"

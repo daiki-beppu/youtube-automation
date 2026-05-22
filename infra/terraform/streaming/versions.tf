@@ -1,13 +1,8 @@
 terraform {
   required_version = ">= 1.5"
 
-  backend "s3" {
-    bucket         = "youtube-automation-tfstate"
-    key            = "streaming/terraform.tfstate"
-    region         = "ap-northeast-1"
-    kms_key_id     = "alias/tfstate"
-    encrypt        = true
-    dynamodb_table = "tfstate-lock"
+  backend "gcs" {
+    prefix = "streaming"
   }
 
   required_providers {

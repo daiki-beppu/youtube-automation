@@ -47,11 +47,8 @@ _SCRIPTS_STREAMING_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "refe
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
 _RUN_FFMPEG_SCRIPT = _SCRIPTS_STREAMING_DIR / "run-ffmpeg.sh"
 
-_TFSTATE_BACKEND_BUCKET = "youtube-automation-tfstate"
-_TFSTATE_BACKEND_KEY = "streaming/terraform.tfstate"
-_TFSTATE_BACKEND_REGION = "ap-northeast-1"
-_TFSTATE_BACKEND_KMS_KEY_ID = "alias/tfstate"
-_TFSTATE_BACKEND_LOCK_TABLE = "tfstate-lock"
+_TFSTATE_BACKEND_PREFIX = "streaming"
+_TFSTATE_GCS_OBJECT = "streaming/default.tfstate"
 
 
 # ---------- ヘルパー ----------
@@ -92,32 +89,20 @@ class TestVersionsTf:
             "required_version が >= 1.5 を含んでいない"
         )
 
-    def test_backend_uses_encrypted_s3_remote_state(self):
+    def test_backend_uses_gcs_remote_state(self):
         """Given versions.tf
         When terraform backend を読む
-        Then S3 backend は KMS 暗号化と DynamoDB lock を宣言している。
+        Then GCS backend は streaming prefix を宣言している。
         """
         text = strip_hcl_comments(read_file(_VERSIONS_TF))
         terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None, "terraform { ... } ブロックが存在しない"
-        backend_block = extract_block(terraform_block, r'backend\s+"s3"')
-        assert backend_block is not None, 'backend "s3" ブロックが存在しない'
-        assert re.search(rf'bucket\s*=\s*"{re.escape(_TFSTATE_BACKEND_BUCKET)}"', backend_block), (
-            "S3 backend bucket が tfstate 専用 bucket でない"
+        backend_block = extract_block(terraform_block, r'backend\s+"gcs"')
+        assert backend_block is not None, 'backend "gcs" ブロックが存在しない'
+        assert re.search(rf'prefix\s*=\s*"{re.escape(_TFSTATE_BACKEND_PREFIX)}"', backend_block), (
+            "GCS backend prefix が streaming でない"
         )
-        assert re.search(rf'key\s*=\s*"{re.escape(_TFSTATE_BACKEND_KEY)}"', backend_block), (
-            "S3 backend key が streaming/terraform.tfstate でない"
-        )
-        assert re.search(rf'region\s*=\s*"{re.escape(_TFSTATE_BACKEND_REGION)}"', backend_block), (
-            "S3 backend region が ap-northeast-1 でない"
-        )
-        assert re.search(r'encrypt\s*=\s*true', backend_block), "S3 backend encrypt = true が宣言されていない"
-        assert re.search(rf'kms_key_id\s*=\s*"{re.escape(_TFSTATE_BACKEND_KMS_KEY_ID)}"', backend_block), (
-            "S3 backend kms_key_id が alias/tfstate でない"
-        )
-        assert re.search(rf'dynamodb_table\s*=\s*"{re.escape(_TFSTATE_BACKEND_LOCK_TABLE)}"', backend_block), (
-            "S3 backend dynamodb_table が tfstate-lock でない"
-        )
+        assert extract_block(terraform_block, r'backend\s+"s3"') is None, 'backend "s3" が残っている'
 
     def test_required_providers_declares_vultr_source(self):
         """Given versions.tf
@@ -2846,11 +2831,12 @@ class TestStreamingReadme:
         Then remote backend と暗号化 state の保存先が説明されている。
         """
         text = read_file(_STREAMING_README)
-        assert 'backend "s3"' in text, 'README に backend "s3" の説明が無い'
-        assert _TFSTATE_BACKEND_BUCKET in text, "README に tfstate bucket 名の説明が無い"
-        assert _TFSTATE_BACKEND_KEY in text, "README に streaming tfstate key の説明が無い"
-        assert "KMS" in text, "README に KMS 暗号化の説明が無い"
-        assert "DynamoDB lock" in text, "README に DynamoDB lock の説明が無い"
+        assert 'backend "gcs"' in text, 'README に backend "gcs" の説明が無い'
+        assert "Google 管理鍵" in text, "README に Google 管理鍵による暗号化の説明が無い"
+        assert _TFSTATE_GCS_OBJECT in text, "README に streaming state object の説明が無い"
+        assert 'terraform init -backend-config="bucket=<bucket-name>" -migrate-state' in text, (
+            "README に GCS backend への state 移行手順が無い"
+        )
 
     def test_documents_sensitive_is_cli_mask_only(self):
         """Given README

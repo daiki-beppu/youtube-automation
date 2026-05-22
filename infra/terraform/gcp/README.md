@@ -21,11 +21,12 @@
 ## 管理するリソース
 
 - `google_project`（`create_project=true` 時のみ）
-- `google_project_service` × 4
+- `google_project_service` × 5
   - `youtube.googleapis.com`
   - `youtubeanalytics.googleapis.com`
   - `aiplatform.googleapis.com`
   - `generativelanguage.googleapis.com`
+  - `storage.googleapis.com`
 - `google_project_iam_member` = `roles/aiplatform.user` → `var.adc_email`
 
 **OAuth 2.0 クライアント ID は google provider で未サポート** のため、別途 Console から作成する（この 1 ステップだけ手動）。
