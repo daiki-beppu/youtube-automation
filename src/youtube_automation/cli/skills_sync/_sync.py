@@ -6,7 +6,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from youtube_automation.cli.skills_sync import _ASSET_SPECS, _asset_root, _list_entries
+from youtube_automation.cli.skills_sync import (
+    _ASSET_SPECS,
+    _asset_root,
+    _guard_target_with_all,
+    _list_entries,
+)
 from youtube_automation.cli.skills_sync._ops import (
     _copy_entry,
     _ensure_target_parent,
@@ -16,6 +21,13 @@ from youtube_automation.cli.skills_sync._ops import (
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
+    # CLI 以外 (テスト / 公開 API 直呼び) から呼ばれても silent な誤動作にならないよう
+    # 入口でガードする (asset=all + target 指定なら ValueError)。CLI 経由では
+    # _resolve_default_target が先に ValueError を catch して exit 2 するため、
+    # 通常はここまで到達しない。直呼び caller は ValueError を try/except で扱える。
+    _guard_target_with_all(args)
+    if args.asset == "all":
+        return _sync_all(args)
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
     target = Path(args.target).resolve()
@@ -23,6 +35,35 @@ def cmd_sync(args: argparse.Namespace) -> int:
     if spec["kind"] == "file":
         return _sync_file_asset(spec, root, target, args)
     return _sync_dir_asset(spec, root, target, args)
+
+
+def _sync_all(args: argparse.Namespace) -> int:
+    """全 asset を順次 sync。各 asset の default_target を使う。
+
+    `--target` 指定時は parser 側 (`_resolve_default_target`) で既に error 終了
+    しているため、ここでは args.target は必ず None。
+    """
+    overall_rc = 0
+    for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
+        if i > 0:
+            print()
+        print(f"=== [{asset_name}] sync ===")
+        # --only / --prune は dir asset (skills) でのみ意味を持つ。
+        # それ以外の asset に伝搬すると warning が出るが処理は継続する設計。
+        sub_args = argparse.Namespace(
+            asset=asset_name,
+            target=_ASSET_SPECS[asset_name]["default_target"],
+            symlink=args.symlink,
+            force=args.force,
+            dry_run=args.dry_run,
+            only=args.only,
+            prune=args.prune,
+            yes=args.yes,
+        )
+        rc = cmd_sync(sub_args)
+        if rc != 0:
+            overall_rc = rc
+    return overall_rc
 
 
 def _sync_file_asset(

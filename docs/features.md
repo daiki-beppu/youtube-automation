@@ -1,98 +1,115 @@
-# Skill Catalog
+# 全 skill カタログ
 
-`yt-skills sync` で配布される skill の一覧です。各行は「なにができるか」が 1 行で分かる粒度にそろえています。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **43 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
-## ワークフロー全体管理
+> 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
+
+## ワークフロー管理
+
+コレクション制作ループ（企画 → 素材準備 → 制作 → 公開）の進行管理。詳しい使い分けは [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md) を参照。
 
 | Skill | なにができるか |
 |---|---|
-| /wf-new | 新規コレクションの企画選択からディレクトリ作成と素材準備までを立ち上げる |
-| /wf-next | 制作中コレクションの次工程を進める |
-| /wf-status | コレクション制作の進捗を読み取り専用で確認する |
+| /wf-new | 新規コレクションの企画選択・ディレクトリ作成・素材準備（Phase 1） |
+| /wf-next | 既存コレクションを次の工程に 1 段進める（Phase 2-3） |
+| /wf-status | 制作中コレクションの進捗を読み取り表示（実行はしない） |
+| /collection-ideate | データドリブンに次の企画候補を提案 |
 
 ## チャンネル立ち上げ
 
+新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップの一連の工程。
+
 | Skill | なにができるか |
 |---|---|
-| /channel-new | 新規チャンネル用リポジトリ作成から初期セットアップの入口を担う |
-| /channel-research | 競合チャンネルのベンチマークデータを分析して方向性判断の材料を作る |
-| /channel-direction | 競合分析結果をもとにチャンネルの方向性とポジショニングを決める |
-| /channel-setup | 新規チャンネルの設定生成や既存チャンネルの YouTube 設定反映を行う |
-| /channel-import | 既存 YouTube チャンネルを自動化用設定に取り込む |
-| /channel-status | チャンネル全体の登録者数や動画別パフォーマンスを取得する |
-| /discover-competitors | ニッチキーワードから競合候補チャンネルを自動発掘する |
-| /onboard | GCP と OAuth の API セットアップを診断しながら進める |
+| /channel-new | 新規チャンネル用リポジトリの作成・全工程のエントリポイント |
+| /channel-research | ベンチマーク済み競合データを徹底分析 |
+| /channel-direction | 競合分析から方向性・ポジショニングを対話で決定 |
+| /channel-setup | config 生成と YouTube 側設定（branding / status / localizations）の push |
+| /channel-import | 既存 YouTube チャンネルを自動化システムに取り込み |
+| /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
+| /discover-competitors | ニッチキーワードから競合候補を YouTube Data API で自動発掘 |
+| /onboard | GCP / OAuth 設定を wizard 形式で診断・セットアップ |
 
 ## オーディエンス・ポジショニング検証
 
+視聴者像と訴求軸を決め、サムネ × タイトル × 音楽の整合性を担保する。
+
 | Skill | なにができるか |
 |---|---|
-| /viewer-voice | 競合コメント分析から視聴者インサイトを抽出する |
-| /audience-persona | ターゲット視聴者ペルソナを定義する |
-| /viewing-scene | 視聴シーンと用途を検証して注力先を定める |
-| /alignment-check | 音楽ムードとサムネとタイトル訴求の整合性を監査する |
-| /thumbnail-compare | サムネイルを競合と並べて視認性を比較検証する |
+| /viewer-voice | 競合コメント収集で視聴者インサイトを抽出 |
+| /audience-persona | ターゲット視聴者のペルソナを定義 |
+| /viewing-scene | 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義 |
+| /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
+| /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |
 
 ## 企画・コンテンツ生成
 
-| Skill | なにができるか |
-|---|---|
-| /collection-ideate | 次に作るコレクション候補をデータに基づいて提案する |
-| /thumbnail | コレクション用サムネイル画像を生成する |
-| /lyria | Vertex AI Lyria 3 で長尺マスター音源を自動生成する |
-| /suno | Suno UI に投入する音楽プロンプトを生成する |
-| /masterup | Suno で作った楽曲群をダウンロードしてマスター音源化する |
-| /loop-video | サムネイル画像からシームレスなループ背景動画を作る |
-| /videoup | 音声素材とビジュアル素材から動画ファイルを生成する |
-
-## ショート動画
+サムネ・音源・動画など制作物の生成。`config/channel/youtube.json::music_engine` により `/lyria` 経路と `/suno` + `/masterup` 経路を切り替える。
 
 | Skill | なにができるか |
 |---|---|
-| /short | collection 型チャンネル向けのショート動画を生成して投稿する |
-| /short-release | release 型チャンネル向けの縦型ショートを生成して投稿する |
-| /short-thumbnail | ショート用の 9:16 サムネイルやループ素材を作る |
+| /thumbnail | CTR 最適化プロンプトでサムネイル画像を生成（Gemini / OpenAI） |
+| /lyria | Vertex AI Lyria 3 で長尺マスター音源を自動生成（API 完結） |
+| /suno | Suno UI 用プロンプト（Style + Lyrics）を生成 |
+| /masterup | Suno で生成した楽曲を DL + クロスフェードマスター化 |
+| /loop-video | 静止画から 8 秒シームレスループ動画を生成（Veo 3.1） |
+| /videoup | マスター音源 + 背景画像 / 動画から最終 MP4 を合成 |
+| /short-thumbnail | ショート用 9:16 縦型サムネ生成 + ループ動画化（Veo） |
 
 ## 公開・運用
 
+YouTube への公開、視聴者対応、容量整理、コミュニティ投稿。
+
 | Skill | なにができるか |
 |---|---|
-| /video-description | YouTube 概要欄や投稿用メタデータ文面を生成する |
-| /video-upload | Complete Collection のアップロードと live 移行を実行する |
-| /playlist | プレイリストの作成と動画割り当てと状態確認を行う |
-| /comments-reply | ルールに沿って YouTube コメントへ自動返信する |
-| /metadata-audit | ローカル記述と YouTube 上のメタデータ差分を監査する |
-| /live-clean | 公開済みコレクションの不要メディアを削除して容量を回復する |
-| /community-draft | YouTube コミュニティ投稿の下書きを生成する |
-| /community-post | コミュニティ投稿文を作成して投稿準備まで進める |
+| /video-description | YouTube 概要欄を自動生成（情景フック + タイムスタンプ + Perfect for） |
+| /video-upload | Complete Collection を YouTube へアップロード + live 移行 |
+| /playlist | プレイリストの作成・動画割当・状態確認（`playlists.json` 駆動） |
+| /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
+| /metadata-audit | ローカル descriptions.md と YouTube 上メタデータの整合性監査 |
+| /live-clean | live コレクションの大容量メディアを削除してディスク回復 |
+| /community-draft | コミュニティ投稿の下書きを type 別に生成 + クリップボードコピー |
+| /community-post | 動画公開と連動した固定テンプレ投稿（Studio 起動まで） |
+| /short | BGM テイスター（collection 型）チャンネル用 9:16 ショートを生成・投稿 |
+| /short-release | 楽曲リリース（release 型）チャンネル用 JP+EN クリップショート生成 |
 
 ## 分析・振り返り
 
+YouTube Analytics と動画本体の解析。
+
 | Skill | なにができるか |
 |---|---|
-| /analytics-collect | YouTube Analytics データを収集して最新化する |
-| /analytics-analyze | 収集済み Analytics データを分析して改善提案を出す |
-| /analytics-report | 既存の Analytics レポートを表示して比較する |
-| /postmortem | 伸び悩んだ動画の原因を仮説検証で切り分ける |
-| /video-analyze | YouTube 動画本体を解析して構成や演出の特徴を抽出する |
+| /analytics-collect | YouTube Analytics データの収集・最新化 |
+| /analytics-analyze | 収集済みデータを詳細分析し戦略的改善提案を生成 |
+| /analytics-report | 過去レポートの表示・比較 |
+| /postmortem | 伸びなかった動画の原因を仮説 → 検証で切り分け |
+| /video-analyze | Gemini で YouTube 動画本体を直接解析（フック・BGM・シーン・サムネ整合性） |
 
 ## ベンチマーク
 
+競合チャンネルの最新動向を取得。
+
 | Skill | なにができるか |
 |---|---|
-| /benchmark | 競合チャンネルの最新動画データを取得して更新する |
+| /benchmark | 競合チャンネルの最新動画データを取得し `docs/benchmarks/*.md` を更新 |
 
 ## 配信インフラ
 
-| Skill | なにができるか |
-|---|---|
-| /streaming | YouTube ライブ配信用 VPS の構築と運用を行う |
-
-## メタ運用・リリース
+24/7 ライブ配信用 VPS のプロビジョニングと運用。
 
 | Skill | なにができるか |
 |---|---|
-| /automation-release | このリポジトリ本体のリリース準備と公開を進める |
-| /automation-update | 下流チャンネルリポジトリの automation 依存を最新版へ追従させる |
+| /streaming | YouTube ライブ配信用 Vultr VPS を Terraform で操作（構築・差し替え・死活監視） |
 
-> 各説明は `.claude/skills/<name>/SKILL.md` の frontmatter をもとに要約しています。
+## リポジトリメンテ
+
+`youtube-channels-automation` 本体のリリースと、下流チャンネルの追従。
+
+| Skill | なにができるか |
+|---|---|
+| /automation-release | 本リポジトリの新規リリースを作成（prepare → publish の 2 フェーズ） |
+| /automation-update | 下流チャンネルを upstream 最新版に追従（pin bump + `yt-skills sync` + 動作確認） |
+
+---
+
+> このカタログの整合性は CI で担保していない。新規 skill を追加・削除した場合は本ファイルも更新すること。`ls .claude/skills/ | wc -l` の結果と本ファイルの行数（`| /` 始まり）が一致することを確認する。
