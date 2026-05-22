@@ -13,33 +13,28 @@
      - ``DISCORD_WEBHOOK_URL`` を ``/etc/youtube-stream-healthcheck.env`` から読む
      - ``curl`` で Discord に JSON POST する
      - cron を壊さないため ``exit 0`` で終わる
-3. ``.claude/skills/streaming/references/logrotate.conf``
-     - ``/opt/youtube-stream/logs/*.log`` を対象とする
-     - ``daily`` / ``rotate 7`` / ``compress`` / ``copytruncate`` / ``missingok`` / ``notifempty``
-4. ``.claude/skills/streaming/references/cron.d``
-     - ``*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh`` 行を含む
-5. ``infra/terraform/streaming/templates/youtube-stream-healthcheck.env.tftpl``
+3. ``infra/terraform/streaming/templates/youtube-stream-healthcheck.env.tftpl``
      - ``DISCORD_WEBHOOK_URL=${webhook}`` の 1 行
-6. ``infra/terraform/streaming/variables.tf``
+4. ``infra/terraform/streaming/variables.tf``
      - ``discord_webhook_url`` (sensitive=true, default なし)
-7. ``infra/terraform/streaming/main.tf``
+5. ``infra/terraform/streaming/main.tf``
      - triggers に ``nonsensitive(sha256(var.discord_webhook_url))``
      - provisioner で 4 ファイル + env tftpl を配信
      - remote-exec で chmod / chown / cron 再起動
-8. ``infra/terraform/streaming/cloud-init.yaml``
+6. ``infra/terraform/streaming/cloud-init.yaml``
      - ``packages:`` に ``cron`` を追加
-9. ``infra/terraform/streaming/terraform.tfvars.example``
+7. ``infra/terraform/streaming/terraform.tfvars.example``
      - ``discord_webhook_url`` のアクティブ代入が無い
      - ``TF_VAR_discord_webhook_url`` を案内コメントに含む
-10. ``infra/terraform/streaming/README.md``
+8. ``infra/terraform/streaming/README.md``
      - 死活監視セクション / Discord / 4 シナリオ言及
-11. ``src/youtube_automation/utils/streaming/daily_archive.py``
+9. ``src/youtube_automation/utils/streaming/daily_archive.py``
      - ``count_archives_for_date`` のモック検証
-12. ``src/youtube_automation/scripts/streaming_archive_check.py``
+10. ``src/youtube_automation/scripts/streaming_archive_check.py``
      - argparse / 件数不足時 exit 1 / Discord 通知
-13. ``pyproject.toml``
+11. ``pyproject.toml``
      - ``yt-stream-archive-check`` entry point 登録
-14. ``docs/streaming-healthcheck.md``
+12. ``docs/streaming-healthcheck.md``
      - 4 シナリオ言及
 
 shell スクリプト系は ``bash`` バイナリに依存するため subprocess で直接実行する。
@@ -67,8 +62,6 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _STREAMING_SCRIPTS_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "references"
 _HEALTHCHECK_SH = _STREAMING_SCRIPTS_DIR / "healthcheck.sh"
 _NOTIFY_SH = _STREAMING_SCRIPTS_DIR / "notify.sh"
-_LOGROTATE_CONF = _STREAMING_SCRIPTS_DIR / "logrotate.conf"
-_CRON_D = _STREAMING_SCRIPTS_DIR / "cron.d"
 
 _INFRA_DIR = _REPO_ROOT / "infra" / "terraform" / "streaming"
 _HEALTHCHECK_ENV_TFTPL = _INFRA_DIR / "templates" / "youtube-stream-healthcheck.env.tftpl"
@@ -77,6 +70,8 @@ _MAIN_TF = _INFRA_DIR / "main.tf"
 _CLOUD_INIT_YAML = _INFRA_DIR / "cloud-init.yaml"
 _TFVARS_EXAMPLE = _INFRA_DIR / "terraform.tfvars.example"
 _STREAMING_README = _INFRA_DIR / "README.md"
+
+_INSTALL_ROOT_VAR = r"\$\{var\.install_root\}"
 
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _HEALTHCHECK_DOC = _REPO_ROOT / "docs" / "streaming-healthcheck.md"
@@ -796,84 +791,6 @@ class TestNotifyShEnvParser:
 
 
 # ============================================================================
-# .claude/skills/streaming/references/logrotate.conf
-# ============================================================================
-
-
-class TestLogrotateConf:
-    """``.claude/skills/streaming/references/logrotate.conf`` の最低限のディレクティブ。"""
-
-    def test_file_exists(self):
-        """Given .claude/skills/streaming/references/
-        When logrotate.conf を探す
-        Then 存在する。
-        """
-        assert _LOGROTATE_CONF.exists(), ".claude/skills/streaming/references/logrotate.conf が存在しない"
-
-    def test_targets_youtube_stream_logs(self):
-        """Given logrotate.conf
-        When 全文を読む
-        Then ``/opt/youtube-stream/logs/*.log`` を対象としている。
-        """
-        text = read_file(_LOGROTATE_CONF)
-        assert re.search(r"/opt/youtube-stream/logs/\*\.log", text), "/opt/youtube-stream/logs/*.log を対象としていない"
-
-    @pytest.mark.parametrize(
-        "directive",
-        [
-            "daily",  # 1 日 1 ローテ
-            "rotate 7",  # 7 日分保持
-            "compress",  # gzip 圧縮
-            "copytruncate",  # ffmpeg を再起動せずに済ませる
-            "missingok",  # ログ未生成でもエラーにしない
-            "notifempty",  # 空ファイルはローテ対象外
-        ],
-    )
-    def test_contains_required_directive(self, directive: str):
-        """Given logrotate.conf
-        When ファイル内容を走査する
-        Then 指定ディレクティブが宣言されている。
-
-        ``copytruncate`` は ffmpeg の長時間配信を中断せずローテするため必須
-        （inode を保持したまま truncate するため file descriptor が引き続き有効）。
-        """
-        text = read_file(_LOGROTATE_CONF)
-        # 単語境界でマッチ（"rotate 7" のような space を含むディレクティブもそのまま）
-        pattern = rf"(?m)^\s*{re.escape(directive)}\s*$"
-        assert re.search(pattern, text), f"logrotate.conf に '{directive}' ディレクティブが無い"
-
-
-# ============================================================================
-# .claude/skills/streaming/references/cron.d
-# ============================================================================
-
-
-class TestCronD:
-    """``.claude/skills/streaming/references/cron.d`` の cron job 宣言。"""
-
-    def test_file_exists(self):
-        """Given .claude/skills/streaming/references/
-        When cron.d を探す
-        Then 存在する。
-        """
-        assert _CRON_D.exists(), ".claude/skills/streaming/references/cron.d が存在しない"
-
-    def test_has_5min_schedule_for_healthcheck(self):
-        """Given cron.d
-        When 全文を読む
-        Then ``*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh`` 行がある。
-
-        cron.d 形式は ``user`` フィールド（``root``）を含むのが特徴。crontab 形式と区別される。
-        """
-        text = read_file(_CRON_D)
-        assert re.search(
-            r"^\s*\*/5\s+\*\s+\*\s+\*\s+\*\s+root\s+/opt/youtube-stream/bin/healthcheck\.sh\b",
-            text,
-            flags=re.MULTILINE,
-        ), "*/5 * * * * root /opt/youtube-stream/bin/healthcheck.sh の cron.d 行が無い"
-
-
-# ============================================================================
 # infra/terraform/streaming/templates/youtube-stream-healthcheck.env.tftpl
 # ============================================================================
 
@@ -984,8 +901,8 @@ class TestMainTfHealthcheckDeploy:
     @pytest.mark.parametrize(
         "destination",
         [
-            "/opt/youtube-stream/bin/healthcheck.sh",
-            "/opt/youtube-stream/bin/notify.sh",
+            rf"{_INSTALL_ROOT_VAR}/bin/healthcheck\.sh",
+            rf"{_INSTALL_ROOT_VAR}/bin/notify\.sh",
             "/etc/logrotate.d/youtube-stream",
             "/etc/cron.d/youtube-stream-healthcheck",
         ],
@@ -1001,7 +918,7 @@ class TestMainTfHealthcheckDeploy:
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         assert re.search(
-            rf'destination\s*=\s*"{re.escape(destination)}"',
+            rf'destination\s*=\s*"{destination}"',
             block,
         ), f'provisioner "file" で destination="{destination}" が宣言されていない'
 
@@ -1081,9 +998,9 @@ class TestMainTfHealthcheckDeploy:
     def test_remote_exec_makes_bin_dir_and_executable(self):
         """Given main.tf
         When provisioner "remote-exec" の inline を読む
-        Then ``/opt/youtube-stream/bin`` を作成し、配置した shell スクリプトを実行可能にしている。
+        Then ``${var.install_root}/bin`` を作成し、配置した shell スクリプトを実行可能にしている。
 
-        ``mkdir -p /opt/youtube-stream/bin`` または ``install -d`` 系のいずれか + ``chmod 755`` 系。
+        ``mkdir -p ${var.install_root}/bin`` または ``install -d`` 系のいずれか + ``chmod 755`` 系。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
@@ -1097,14 +1014,14 @@ class TestMainTfHealthcheckDeploy:
         inline = remote_exec.group(1)
         # ディレクトリ作成（mkdir -p または install -d）
         assert re.search(
-            r"(mkdir\s+-p|install\s+-d)[^\n]*/opt/youtube-stream/bin\b",
+            rf"(mkdir\s+-p|install\s+-d)[^\n]*{_INSTALL_ROOT_VAR}/bin\b",
             inline,
-        ), "/opt/youtube-stream/bin の作成コマンドが無い"
+        ), "${var.install_root}/bin の作成コマンドが無い"
         # 実行権限付与（個別 chmod 755 でも /opt/.../bin/*.sh への一括でも可）
         assert re.search(
-            r"chmod\s+(?:0?7?55|\+x)[^\n]*/opt/youtube-stream/bin",
+            rf"chmod\s+(?:0?7?55|\+x)[^\n]*{_INSTALL_ROOT_VAR}/bin",
             inline,
-        ), "/opt/youtube-stream/bin 配下のスクリプトに実行権限が付与されていない"
+        ), "${var.install_root}/bin 配下のスクリプトに実行権限が付与されていない"
 
     def test_remote_exec_reloads_cron(self):
         """Given main.tf

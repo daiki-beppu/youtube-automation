@@ -40,12 +40,18 @@ _ROOT_GITIGNORE = _REPO_ROOT / ".gitignore"
 _CLOUD_INIT_YAML = _STREAMING_DIR / "cloud-init.yaml"
 _SYSTEMD_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.service.tftpl"
 _ENV_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.env.tftpl"
+_LOGROTATE_TFTPL = _STREAMING_DIR / "templates" / "logrotate.conf.tftpl"
+_CRON_D_TFTPL = _STREAMING_DIR / "templates" / "cron.d.tftpl"
 _STREAMING_README = _STREAMING_DIR / "README.md"
 _STREAMING_SKILL = _REPO_ROOT / ".claude" / "skills" / "streaming" / "SKILL.md"
 
 _SCRIPTS_STREAMING_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "references"
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
 _RUN_FFMPEG_SCRIPT = _SCRIPTS_STREAMING_DIR / "run-ffmpeg.sh"
+
+_DEFAULT_INSTALL_ROOT = "/opt/youtube-stream"
+_INSTALL_ROOT_TFTPL = r"\$\{install_root\}"
+_INSTALL_ROOT_VAR = r"\$\{var\.install_root\}"
 
 
 # ---------- ヘルパー ----------
@@ -600,26 +606,26 @@ class TestCloudInitYaml:
     def test_runcmd_creates_videos_dir_with_root_owner_and_0755(self):
         """Given cloud-init.yaml
         When runcmd を読む
-        Then ``/opt/youtube-stream/videos`` を root:root, 0755 で作成するコマンドがある (R3)。
+        Then ``${install_root}/videos`` を root:root, 0755 で作成するコマンドがある (R3)。
 
         ``install -d -m 0755 -o root -g root <path>`` 形式でパーミッションと所有者を明示する。
         """
         text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
-            r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/videos\b",
+            rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_TFTPL}/videos\b",
             text,
-        ), "/opt/youtube-stream/videos を root:root 0755 で作成する install コマンドが無い"
+        ), "${install_root}/videos を root:root 0755 で作成する install コマンドが無い"
 
     def test_runcmd_creates_logs_dir_with_root_owner_and_0755(self):
         """Given cloud-init.yaml
         When runcmd を読む
-        Then ``/opt/youtube-stream/logs`` を root:root, 0755 で作成するコマンドがある (R4)。
+        Then ``${install_root}/logs`` を root:root, 0755 で作成するコマンドがある (R4)。
         """
         text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
-            r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/logs\b",
+            rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_TFTPL}/logs\b",
             text,
-        ), "/opt/youtube-stream/logs を root:root 0755 で作成する install コマンドが無い"
+        ), "${install_root}/logs を root:root 0755 で作成する install コマンドが無い"
 
     def test_cloud_init_yaml_no_longer_bakes_systemd_unit(self):
         """Given cloud-init.yaml
@@ -798,7 +804,7 @@ class TestCloudInitYaml:
         """Given cloud-init.yaml
         When runcmd の出現順序を読む
         Then hardening 3 行（``sed`` / ``systemctl reload ssh`` / ``dpkg-reconfigure``）が
-             既存の ``install -d ... /opt/youtube-stream/videos`` より前に配置されている (R-172-IMP-1)。
+             既存の ``install -d ... ${install_root}/videos`` より前に配置されている (R-172-IMP-1)。
 
         早期 hardening の意図に従い、issue 推奨形どおり 3 行を runcmd 先頭に挿入する。
         """
@@ -806,16 +812,16 @@ class TestCloudInitYaml:
         sed_idx = text.find("sed -i")
         reload_idx = text.find("systemctl reload ssh")
         reconfigure_idx = text.find("dpkg-reconfigure")
-        install_videos_idx = text.find("install -d -m 0755 -o root -g root /opt/youtube-stream/videos")
+        install_videos_idx = text.find("install -d -m 0755 -o root -g root ${install_root}/videos")
         assert sed_idx != -1, "sed -i 行が cloud-init.yaml に見つからない（前段確認）"
         assert reload_idx != -1, "systemctl reload ssh 行が cloud-init.yaml に見つからない（前段確認）"
         assert reconfigure_idx != -1, "dpkg-reconfigure 行が cloud-init.yaml に見つからない（前段確認）"
         assert install_videos_idx != -1, (
-            "install -d ... /opt/youtube-stream/videos 行が cloud-init.yaml に見つからない（前段確認）"
+            "install -d ... ${install_root}/videos 行が cloud-init.yaml に見つからない（前段確認）"
         )
         assert sed_idx < reload_idx < reconfigure_idx < install_videos_idx, (
             "hardening 3 行（sed → systemctl reload ssh → dpkg-reconfigure）が "
-            "install -d ... /opt/youtube-stream/videos より前に並んでいない"
+            "install -d ... ${install_root}/videos より前に並んでいない"
             f"（順序: sed={sed_idx}, reload={reload_idx}, "
             f"reconfigure={reconfigure_idx}, install_videos={install_videos_idx}）"
         )
@@ -853,18 +859,18 @@ class TestCloudInitYaml:
     def test_runcmd_retains_install_d_bin(self):
         """Given hardening 反映後の cloud-init.yaml
         When runcmd を読む
-        Then 既存の ``install -d ... /opt/youtube-stream/bin`` 行が保持されている (R-172-IMP-2)。
+        Then 既存の ``install -d ... ${install_root}/bin`` 行が保持されている (R-172-IMP-2)。
 
-        ``/opt/youtube-stream/bin`` は terraform の ``provisioner "file"`` がスクリプトを
+        ``${install_root}/bin`` は terraform の ``provisioner "file"`` がスクリプトを
         upload する宛先（既存コメント参照）。新規 hardening 3 行先頭挿入時に
         誤って削除されていないことを保証する。
         """
         text = read_file(_CLOUD_INIT_YAML)
         assert re.search(
-            r"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+/opt/youtube-stream/bin\b",
+            rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_TFTPL}/bin\b",
             text,
         ), (
-            "/opt/youtube-stream/bin を root:root 0755 で作成する install コマンドが消えている"
+            "${install_root}/bin を root:root 0755 で作成する install コマンドが消えている"
             '（terraform provisioner "file" のスクリプト upload 先が失われる）'
         )
 
@@ -1000,7 +1006,7 @@ class TestSystemdUnitTemplate:
     def test_service_exec_start_invokes_wrapper_without_env_expansion(self):
         """Given .tftpl
         When [Service].ExecStart を読む
-        Then ラッパー ``/opt/youtube-stream/bin/run-ffmpeg.sh`` のみを呼び、
+        Then ラッパー ``${install_root}/bin/run-ffmpeg.sh`` のみを呼び、
         ``$RTMP_URL`` 等の env 参照を unit 行に残さない (#160)。
 
         旧仕様（#185）では ``ExecStart=/usr/bin/ffmpeg -re -stream_loop -1 -i $VIDEO
@@ -1013,9 +1019,9 @@ class TestSystemdUnitTemplate:
         text = read_file(_SYSTEMD_TFTPL)
         service = self._section(text, "Service")
         assert service is not None
-        expected = r"^ExecStart=/opt/youtube-stream/bin/run-ffmpeg\.sh\s*$"
+        expected = rf"^ExecStart={_INSTALL_ROOT_TFTPL}/bin/run-ffmpeg\.sh\s*$"
         assert re.search(expected, service, flags=re.MULTILINE), (
-            "[Service].ExecStart が /opt/youtube-stream/bin/run-ffmpeg.sh のみを呼ぶラッパー化形式（#160）と一致しない"
+            "[Service].ExecStart が ${install_root}/bin/run-ffmpeg.sh のみを呼ぶラッパー化形式（#160）と一致しない"
         )
 
         # ラッパー化の核は unit 行に env 参照 ($RTMP_URL / $VIDEO) を残さないこと。
@@ -1203,7 +1209,7 @@ class TestSystemdUnitTemplate:
     def test_service_read_only_paths_videos(self):
         """Given .tftpl
         When [Service] セクションを読む
-        Then ``ReadOnlyPaths=/opt/youtube-stream/videos`` が宣言されている (#159 R9)。
+        Then ``ReadOnlyPaths=${install_root}/videos`` が宣言されている (#159 R9)。
 
         動画ファイルの書き換え防止。``ProtectSystem=strict`` と組み合わせて
         書き込み可能領域を最小化する。
@@ -1212,15 +1218,15 @@ class TestSystemdUnitTemplate:
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(
-            r"^ReadOnlyPaths=/opt/youtube-stream/videos\s*$",
+            rf"^ReadOnlyPaths={_INSTALL_ROOT_TFTPL}/videos\s*$",
             service,
             flags=re.MULTILINE,
-        ), "[Service].ReadOnlyPaths=/opt/youtube-stream/videos が無い（動画ファイルの書き換え防止が効かない）"
+        ), "[Service].ReadOnlyPaths=${install_root}/videos が無い（動画ファイルの書き換え防止が効かない）"
 
     def test_service_read_write_paths_logs(self):
         """Given .tftpl
         When [Service] セクションを読む
-        Then ``ReadWritePaths=/opt/youtube-stream/logs`` が宣言されている (#159 R10)。
+        Then ``ReadWritePaths=${install_root}/logs`` が宣言されている (#159 R10)。
 
         logrotate 対象パスの書き込み許可（spec 指示）。``ProtectSystem=strict`` 下で
         書き込みが必要な領域を明示する。
@@ -1229,22 +1235,24 @@ class TestSystemdUnitTemplate:
         service = self._section(text, "Service")
         assert service is not None
         assert re.search(
-            r"^ReadWritePaths=/opt/youtube-stream/logs\s*$",
+            rf"^ReadWritePaths={_INSTALL_ROOT_TFTPL}/logs\s*$",
             service,
             flags=re.MULTILINE,
-        ), "[Service].ReadWritePaths=/opt/youtube-stream/logs が無い（logs ディレクトリへの書き込み経路が破綻）"
+        ), "[Service].ReadWritePaths=${install_root}/logs が無い（logs ディレクトリへの書き込み経路が破綻）"
 
-    def test_no_terraform_interpolation_remains(self):
+    def test_only_install_root_terraform_interpolation_remains(self):
         """Given .tftpl
         When 全文を読む
-        Then ``${...}`` 形式の Terraform 補間が残っていない (R20 の片側)。
+        Then ``${install_root}`` 以外の Terraform 補間が残っていない (R20 の片側)。
 
         ``$VIDEO`` ``$RTMP_URL`` は systemd の env 参照（波括弧なし）であり terraform は素通しする。
-        ``${...}`` を書くと terraform templatefile 評価時に未定義変数で fail する。
+        ``${install_root}`` 以外を書くと terraform templatefile 評価時に未定義変数で fail する。
         """
         text = read_file(_SYSTEMD_TFTPL)
-        assert not re.search(r"\$\{[^}]+\}", text), (
-            "${...} 形式の補間が残っている（systemd で参照したい場合は $NAME と書く / "
+        interpolations = re.findall(r"\$\{[^}]+\}", text)
+        assert interpolations, "Terraform 補間が無い（install_root の配線検証になっていない）"
+        assert set(interpolations) <= {"${install_root}"}, (
+            "${install_root} 以外の補間が残っている（systemd で参照したい場合は $NAME と書く / "
             "terraform で渡したい場合は templatefile() の variables map に追加する）"
         )
 
@@ -1529,14 +1537,15 @@ class TestMainTfUserData:
             block,
         ), 'user_data が templatefile("${path.module}/cloud-init.yaml", ...) を呼んでいない'
 
-    def test_user_data_template_no_longer_passes_systemd_unit(self):
+    def test_user_data_template_passes_required_variables(self):
         """Given main.tf
         When vultr_instance.this.user_data の右辺を読む
         Then ``systemd_unit = ...`` も内側 ``templatefile(...service.tftpl...)`` の
-             呼び出しも残っていない (#212)。
+             呼び出しも残らず、cloud-init の配置 root (``install_root``) と
+             host 鍵配布用の ``ssh_host_*`` 変数だけが渡されている (#212/#195)。
 
         unit 配置は ``null_resource.deploy`` の ``provisioner "file"`` に統一されたため、
-        cloud-init に渡す変数は host 鍵配布用の ``ssh_host_*`` のみに限定する。
+        user_data には cloud-init 用の配置 root と host 鍵配布用変数のみを渡す。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
@@ -1549,6 +1558,10 @@ class TestMainTfUserData:
             r"youtube-stream\.service\.tftpl",
             block,
         ), "vultr_instance.this 内に service.tftpl への参照が残っている（user_data の内側 templatefile 撤去漏れ）"
+        assert re.search(
+            r"install_root\s*=\s*var\.install_root",
+            block,
+        ), "cloud-init templatefile に install_root = var.install_root が渡されていない"
         assert re.search(r"\bssh_host_private_key\s*=", block), (
             "user_data の variables map に ssh_host_private_key が無い（host 鍵配布経路が欠落）"
         )
@@ -1602,6 +1615,23 @@ class TestVariablesTfNullResource:
         assert not re.search(r"\bdefault\s*=", block), (
             "video_path には default を設定してはならない（環境依存・必須項目）"
         )
+
+    def test_install_root_is_string_with_default_youtube_stream_root(self):
+        """Given variables.tf
+        When install_root 変数定義を読む
+        Then type=string, default は /opt/youtube-stream で宣言されている。
+
+        既存挙動は保ったまま、配置 root だけを上書き可能にする。
+        """
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"install_root"')
+        assert block is not None, 'variable "install_root" が存在しない'
+        assert re.search(r"type\s*=\s*string", block), "install_root.type が string でない"
+        assert re.search(r"description\s*=", block), "install_root.description が無い"
+        assert re.search(
+            rf'default\s*=\s*"{re.escape(_DEFAULT_INSTALL_ROOT)}"',
+            block,
+        ), 'install_root.default が "/opt/youtube-stream" でない'
 
     def test_stream_key_is_sensitive_string_with_no_default(self):
         """Given variables.tf
@@ -1878,7 +1908,8 @@ class TestMainTfNullResource:
     def test_provisioner_file_uploads_systemd_unit_to_canonical_path(self):
         """Given main.tf
         When ``null_resource.deploy`` 内の ``provisioner "file"`` を読む
-        Then ``content = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {})``
+        Then ``content = templatefile("${path.module}/templates/youtube-stream.service.tftpl",``
+             ``{ install_root = var.install_root })``
              と ``destination = "/etc/systemd/system/youtube-stream.service"`` のペアが
              同一 provisioner 内に宣言されている (#212)。
 
@@ -1890,7 +1921,8 @@ class TestMainTfNullResource:
         assert block is not None
         content_pattern = (
             r"content\s*=\s*templatefile\(\s*"
-            r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"\s*,\s*\{\s*\}\s*\)'
+            r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"\s*,\s*\{'
+            r"[^}]*install_root\s*=\s*var\.install_root[^}]*\}\s*\)"
         )
         destination_pattern = r'destination\s*=\s*"/etc/systemd/system/youtube-stream\.service"'
         match = re.search(
@@ -1905,7 +1937,7 @@ class TestMainTfNullResource:
         )
         assert match or match_alt, (
             'provisioner "file" で content=templatefile("${path.module}/templates/'
-            'youtube-stream.service.tftpl", {}) → '
+            'youtube-stream.service.tftpl", { install_root = var.install_root }) → '
             "/etc/systemd/system/youtube-stream.service への配信が宣言されていない"
         )
 
@@ -2009,32 +2041,32 @@ class TestMainTfNullResource:
     def test_provisioner_file_uploads_video_to_canonical_path(self):
         """Given main.tf
         When 1 つ目の ``provisioner "file"`` を読む
-        Then source=var.video_path, destination=/opt/youtube-stream/videos/current.mp4。
+        Then source=var.video_path, destination=${var.install_root}/videos/current.mp4。
 
-        cloud-init で作成済みの ``/opt/youtube-stream/videos/`` （cloud-init.yaml:14）に固定名で配置。
+        cloud-init で作成済みの ``${install_root}/videos/`` （cloud-init.yaml:14）に固定名で配置。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         # 動画アップロード provisioner は source=var.video_path で識別
-        # ブロック内に「source = var.video_path」と「destination = "/opt/.../current.mp4"」が
+        # ブロック内に「source = var.video_path」と「destination = "${var.install_root}/.../current.mp4"」が
         # 同じ provisioner "file" 内にあることを検証（順序は問わない）
         match = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?source\s*=\s*var\.video_path[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/videos/current\.mp4"[^}]*?\}',
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/videos/current\.mp4"[^}}]*?\}}',
             block,
             flags=re.DOTALL,
         )
         match_alt = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/videos/current\.mp4"[^}]*?'
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/videos/current\.mp4"[^}}]*?'
             r"source\s*=\s*var\.video_path[^}]*?\}",
             block,
             flags=re.DOTALL,
         )
         assert match or match_alt, (
             'provisioner "file" で source=var.video_path → '
-            "/opt/youtube-stream/videos/current.mp4 へのアップロードが宣言されていない"
+            "${var.install_root}/videos/current.mp4 へのアップロードが宣言されていない"
         )
 
     def test_provisioner_file_places_env_via_templatefile(self):
@@ -2066,7 +2098,7 @@ class TestMainTfNullResource:
     def test_env_templatefile_passes_video_and_rtmp_url_variables(self):
         """Given main.tf
         When env を配置する templatefile() の variables map を読む
-        Then ``video = "/opt/youtube-stream/videos/current.mp4"`` と
+        Then ``video = "${var.install_root}/videos/current.mp4"`` と
              ``rtmp_url = "rtmp://a.rtmp.youtube.com/live2/${var.stream_key}"`` が渡されている。
 
         コメント除去ヘルパーは URL 内の ``//`` を削るため、この検証は raw text で行う。
@@ -2074,9 +2106,9 @@ class TestMainTfNullResource:
         text = read_file(_MAIN_TF)  # raw（rtmp:// の // を保持するためコメント除去しない）
         # video 変数（リテラル文字列）
         assert re.search(
-            r'video\s*=\s*"/opt/youtube-stream/videos/current\.mp4"',
+            rf'video\s*=\s*"{_INSTALL_ROOT_VAR}/videos/current\.mp4"',
             text,
-        ), 'templatefile に video = "/opt/youtube-stream/videos/current.mp4" が渡されていない'
+        ), 'templatefile に video = "${var.install_root}/videos/current.mp4" が渡されていない'
         # rtmp_url 変数（${var.stream_key} 補間を含む）
         assert re.search(
             r'rtmp_url\s*=\s*"rtmp://a\.rtmp\.youtube\.com/live2/\$\{var\.stream_key\}"',
@@ -2259,10 +2291,10 @@ class TestMainTfLocalsScriptsDir:
 
         assert match is not None, 'triggers.notify_sh が filemd5("${local.scripts_dir}/notify.sh") でない'
 
-    def test_triggers_logrotate_conf_uses_local_scripts_dir(self):
+    def test_triggers_logrotate_conf_uses_template_path(self):
         """Given main.tf
         When ``null_resource.deploy.triggers.logrotate_conf`` を読む
-        Then ``filemd5("${local.scripts_dir}/logrotate.conf")`` で参照している。
+        Then ``filemd5("${path.module}/templates/logrotate.conf.tftpl")`` で参照している。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
@@ -2271,16 +2303,18 @@ class TestMainTfLocalsScriptsDir:
         assert triggers is not None
 
         match = re.search(
-            r'logrotate_conf\s*=\s*filemd5\(\s*"\$\{local\.scripts_dir\}/logrotate\.conf"\s*\)',
+            r'logrotate_conf\s*=\s*filemd5\(\s*"\$\{path\.module\}/templates/logrotate\.conf\.tftpl"\s*\)',
             triggers,
         )
 
-        assert match is not None, 'triggers.logrotate_conf が filemd5("${local.scripts_dir}/logrotate.conf") でない'
+        assert match is not None, (
+            'triggers.logrotate_conf が filemd5("${path.module}/templates/logrotate.conf.tftpl") でない'
+        )
 
-    def test_triggers_cron_d_uses_local_scripts_dir(self):
+    def test_triggers_cron_d_uses_template_path(self):
         """Given main.tf
         When ``null_resource.deploy.triggers.cron_d`` を読む
-        Then ``filemd5("${local.scripts_dir}/cron.d")`` で参照している。
+        Then ``filemd5("${path.module}/templates/cron.d.tftpl")`` で参照している。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
@@ -2289,15 +2323,15 @@ class TestMainTfLocalsScriptsDir:
         assert triggers is not None
 
         match = re.search(
-            r'cron_d\s*=\s*filemd5\(\s*"\$\{local\.scripts_dir\}/cron\.d"\s*\)',
+            r'cron_d\s*=\s*filemd5\(\s*"\$\{path\.module\}/templates/cron\.d\.tftpl"\s*\)',
             triggers,
         )
 
-        assert match is not None, 'triggers.cron_d が filemd5("${local.scripts_dir}/cron.d") でない'
+        assert match is not None, 'triggers.cron_d が filemd5("${path.module}/templates/cron.d.tftpl") でない'
 
     def test_provisioner_file_healthcheck_sh_sources_local_scripts_dir(self):
         """Given main.tf
-        When healthcheck.sh を /opt/youtube-stream/bin/healthcheck.sh に配置する provisioner を読む
+        When healthcheck.sh を ${var.install_root}/bin/healthcheck.sh に配置する provisioner を読む
         Then ``source = "${local.scripts_dir}/healthcheck.sh"`` で参照している。
 
         refactor で source 4 つの取り違え（並べ替えバグ）を防止するため、
@@ -2310,13 +2344,13 @@ class TestMainTfLocalsScriptsDir:
         match = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
             r'source\s*=\s*"\$\{local\.scripts_dir\}/healthcheck\.sh"[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/bin/healthcheck\.sh"[^}]*?\}',
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/bin/healthcheck\.sh"[^}}]*?\}}',
             block,
             flags=re.DOTALL,
         )
         match_alt = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/bin/healthcheck\.sh"[^}]*?'
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/bin/healthcheck\.sh"[^}}]*?'
             r'source\s*=\s*"\$\{local\.scripts_dir\}/healthcheck\.sh"[^}]*?\}',
             block,
             flags=re.DOTALL,
@@ -2324,12 +2358,12 @@ class TestMainTfLocalsScriptsDir:
 
         assert match or match_alt, (
             'provisioner "file" で source="${local.scripts_dir}/healthcheck.sh" → '
-            "/opt/youtube-stream/bin/healthcheck.sh のアップロードが宣言されていない"
+            "${var.install_root}/bin/healthcheck.sh のアップロードが宣言されていない"
         )
 
     def test_provisioner_file_notify_sh_sources_local_scripts_dir(self):
         """Given main.tf
-        When notify.sh を /opt/youtube-stream/bin/notify.sh に配置する provisioner を読む
+        When notify.sh を ${var.install_root}/bin/notify.sh に配置する provisioner を読む
         Then ``source = "${local.scripts_dir}/notify.sh"`` で参照している。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
@@ -2339,13 +2373,13 @@ class TestMainTfLocalsScriptsDir:
         match = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
             r'source\s*=\s*"\$\{local\.scripts_dir\}/notify\.sh"[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/bin/notify\.sh"[^}]*?\}',
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/bin/notify\.sh"[^}}]*?\}}',
             block,
             flags=re.DOTALL,
         )
         match_alt = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/bin/notify\.sh"[^}]*?'
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/bin/notify\.sh"[^}}]*?'
             r'source\s*=\s*"\$\{local\.scripts_dir\}/notify\.sh"[^}]*?\}',
             block,
             flags=re.DOTALL,
@@ -2353,13 +2387,13 @@ class TestMainTfLocalsScriptsDir:
 
         assert match or match_alt, (
             'provisioner "file" で source="${local.scripts_dir}/notify.sh" → '
-            "/opt/youtube-stream/bin/notify.sh のアップロードが宣言されていない"
+            "${var.install_root}/bin/notify.sh のアップロードが宣言されていない"
         )
 
-    def test_provisioner_file_logrotate_conf_sources_local_scripts_dir(self):
+    def test_provisioner_file_logrotate_conf_uses_templatefile(self):
         """Given main.tf
         When logrotate.conf を /etc/logrotate.d/youtube-stream に配置する provisioner を読む
-        Then ``source = "${local.scripts_dir}/logrotate.conf"`` で参照している。
+        Then ``templatefile("${path.module}/templates/logrotate.conf.tftpl", ...)`` で生成している。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
@@ -2367,7 +2401,8 @@ class TestMainTfLocalsScriptsDir:
 
         match = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
-            r'source\s*=\s*"\$\{local\.scripts_dir\}/logrotate\.conf"[^}]*?'
+            r'content\s*=\s*templatefile\(\s*"\$\{path\.module\}/templates/logrotate\.conf\.tftpl"'
+            r"[^}]*install_root\s*=\s*var\.install_root[^}]*\}\s*\)[^}]*?"
             r'destination\s*=\s*"/etc/logrotate\.d/youtube-stream"[^}]*?\}',
             block,
             flags=re.DOTALL,
@@ -2375,20 +2410,21 @@ class TestMainTfLocalsScriptsDir:
         match_alt = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
             r'destination\s*=\s*"/etc/logrotate\.d/youtube-stream"[^}]*?'
-            r'source\s*=\s*"\$\{local\.scripts_dir\}/logrotate\.conf"[^}]*?\}',
+            r'content\s*=\s*templatefile\(\s*"\$\{path\.module\}/templates/logrotate\.conf\.tftpl"'
+            r"[^}]*install_root\s*=\s*var\.install_root[^}]*\}\s*\)[^}]*?\}",
             block,
             flags=re.DOTALL,
         )
 
         assert match or match_alt, (
-            'provisioner "file" で source="${local.scripts_dir}/logrotate.conf" → '
+            'provisioner "file" で templatefile("${path.module}/templates/logrotate.conf.tftpl", ...) → '
             "/etc/logrotate.d/youtube-stream のアップロードが宣言されていない"
         )
 
-    def test_provisioner_file_cron_d_sources_local_scripts_dir(self):
+    def test_provisioner_file_cron_d_uses_templatefile(self):
         """Given main.tf
         When cron.d を /etc/cron.d/youtube-stream-healthcheck に配置する provisioner を読む
-        Then ``source = "${local.scripts_dir}/cron.d"`` で参照している。
+        Then ``templatefile("${path.module}/templates/cron.d.tftpl", ...)`` で生成している。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
@@ -2396,7 +2432,8 @@ class TestMainTfLocalsScriptsDir:
 
         match = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
-            r'source\s*=\s*"\$\{local\.scripts_dir\}/cron\.d"[^}]*?'
+            r'content\s*=\s*templatefile\(\s*"\$\{path\.module\}/templates/cron\.d\.tftpl"'
+            r"[^}]*install_root\s*=\s*var\.install_root[^}]*\}\s*\)[^}]*?"
             r'destination\s*=\s*"/etc/cron\.d/youtube-stream-healthcheck"[^}]*?\}',
             block,
             flags=re.DOTALL,
@@ -2404,13 +2441,14 @@ class TestMainTfLocalsScriptsDir:
         match_alt = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
             r'destination\s*=\s*"/etc/cron\.d/youtube-stream-healthcheck"[^}]*?'
-            r'source\s*=\s*"\$\{local\.scripts_dir\}/cron\.d"[^}]*?\}',
+            r'content\s*=\s*templatefile\(\s*"\$\{path\.module\}/templates/cron\.d\.tftpl"'
+            r"[^}]*install_root\s*=\s*var\.install_root[^}]*\}\s*\)[^}]*?\}",
             block,
             flags=re.DOTALL,
         )
 
         assert match or match_alt, (
-            'provisioner "file" で source="${local.scripts_dir}/cron.d" → '
+            'provisioner "file" で templatefile("${path.module}/templates/cron.d.tftpl", ...) → '
             "/etc/cron.d/youtube-stream-healthcheck のアップロードが宣言されていない"
         )
 
@@ -2473,6 +2511,52 @@ class TestMainTfLocalsScriptsDir:
             "${path.module}/../../../.claude/skills/streaming/references/ "
             "の旧形式リテラルが残っている（locals.scripts_dir への置換漏れ）"
         )
+
+
+# ============================================================================
+# templates/logrotate.conf.tftpl / templates/cron.d.tftpl — install_root 展開
+# ============================================================================
+
+
+class TestInstallRootTemplates:
+    """``install_root`` を受け取る運用アセットテンプレート。"""
+
+    def test_logrotate_template_uses_install_root_logs_path(self):
+        """Given logrotate.conf.tftpl
+        When 全文を読む
+        Then ``${install_root}/logs/*.log`` を対象にしている。
+        """
+        text = read_file(_LOGROTATE_TFTPL)
+        assert re.search(
+            rf"^{_INSTALL_ROOT_TFTPL}/logs/\*\.log\s+\{{",
+            text,
+            flags=re.MULTILINE,
+        ), "logrotate.conf.tftpl が ${install_root}/logs/*.log を対象にしていない"
+
+    @pytest.mark.parametrize(
+        "directive",
+        ["daily", "rotate 7", "compress", "copytruncate", "missingok", "notifempty"],
+    )
+    def test_logrotate_template_contains_required_directive(self, directive):
+        """Given logrotate.conf.tftpl
+        When 全文を読む
+        Then ffmpeg ログ運用に必要な logrotate directive が残っている。
+        """
+        text = read_file(_LOGROTATE_TFTPL)
+        pattern = rf"(?m)^\s*{re.escape(directive)}\s*$"
+        assert re.search(pattern, text), f"logrotate.conf.tftpl に {directive} が無い"
+
+    def test_cron_template_uses_install_root_healthcheck_path(self):
+        """Given cron.d.tftpl
+        When cron 行を読む
+        Then ``${install_root}/bin/healthcheck.sh`` を呼ぶ。
+        """
+        text = read_file(_CRON_D_TFTPL)
+        assert re.search(
+            rf"^\s*\*/5\s+\*\s+\*\s+\*\s+\*\s+root\s+{_INSTALL_ROOT_TFTPL}/bin/healthcheck\.sh\b",
+            text,
+            flags=re.MULTILINE,
+        ), "cron.d.tftpl が ${install_root}/bin/healthcheck.sh を呼んでいない"
 
 
 # ============================================================================
@@ -2740,7 +2824,7 @@ class TestEnvTftpl:
         text = read_file(_ENV_TFTPL)
         assert not re.search(r"rtmp://", text), "rtmp:// が env tftpl に直書きされている（${rtmp_url} を使うこと）"
         assert not re.search(
-            r"/opt/youtube-stream/videos/[^\s$]+\.(mp4|mkv|mov|webm)",
+            rf"{re.escape(_DEFAULT_INSTALL_ROOT)}/videos/[^\s$]+\.(mp4|mkv|mov|webm)",
             text,
             flags=re.IGNORECASE,
         ), "動画ファイルパスが env tftpl に直書きされている（${video} を使うこと）"
@@ -3560,7 +3644,7 @@ class TestMainTfRunFfmpegProvisioner:
         ``filemd5("${local.scripts_dir}/run-ffmpeg.sh")`` で参照されている
         （#157 DRY パターン準拠）
       - ``provisioner "file"`` で ``${local.scripts_dir}/run-ffmpeg.sh`` を
-        ``/opt/youtube-stream/bin/run-ffmpeg.sh`` にアップロードする
+        ``${var.install_root}/bin/run-ffmpeg.sh`` にアップロードする
       - ``provisioner "remote-exec"`` の inline に ``chmod 755 .../run-ffmpeg.sh``
         が含まれ、``systemctl enable --now`` より前の順序で並ぶ
     """
@@ -3591,7 +3675,7 @@ class TestMainTfRunFfmpegProvisioner:
 
     def test_provisioner_file_run_ffmpeg_sh_sources_local_scripts_dir(self):
         """Given main.tf
-        When run-ffmpeg.sh を /opt/youtube-stream/bin/run-ffmpeg.sh に配置する
+        When run-ffmpeg.sh を ${var.install_root}/bin/run-ffmpeg.sh に配置する
         provisioner を読む
         Then ``source = "${local.scripts_dir}/run-ffmpeg.sh"`` で参照している。
 
@@ -3605,13 +3689,13 @@ class TestMainTfRunFfmpegProvisioner:
         match = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
             r'source\s*=\s*"\$\{local\.scripts_dir\}/run-ffmpeg\.sh"[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/bin/run-ffmpeg\.sh"[^}]*?\}',
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/bin/run-ffmpeg\.sh"[^}}]*?\}}',
             block,
             flags=re.DOTALL,
         )
         match_alt = re.search(
             r'provisioner\s+"file"\s*\{[^}]*?'
-            r'destination\s*=\s*"/opt/youtube-stream/bin/run-ffmpeg\.sh"[^}]*?'
+            rf'destination\s*=\s*"{_INSTALL_ROOT_VAR}/bin/run-ffmpeg\.sh"[^}}]*?'
             r'source\s*=\s*"\$\{local\.scripts_dir\}/run-ffmpeg\.sh"[^}]*?\}',
             block,
             flags=re.DOTALL,
@@ -3619,13 +3703,13 @@ class TestMainTfRunFfmpegProvisioner:
 
         assert match or match_alt, (
             'provisioner "file" で source="${local.scripts_dir}/run-ffmpeg.sh" → '
-            "/opt/youtube-stream/bin/run-ffmpeg.sh のアップロードが宣言されていない"
+            "${var.install_root}/bin/run-ffmpeg.sh のアップロードが宣言されていない"
         )
 
     def test_remote_exec_chmod_includes_run_ffmpeg_sh(self):
         """Given main.tf
         When ``provisioner "remote-exec"`` の inline を読む
-        Then ``chmod 755 ... /opt/youtube-stream/bin/run-ffmpeg.sh ...`` が含まれている。
+        Then ``chmod 755 ... ${var.install_root}/bin/run-ffmpeg.sh ...`` が含まれている。
 
         systemd は ``ExecStart`` 行の絶対パスを実行する。実行ビットが無いと
         ``status=203/EXEC`` で起動失敗する。``healthcheck.sh`` / ``notify.sh`` と
@@ -3642,7 +3726,7 @@ class TestMainTfRunFfmpegProvisioner:
         assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
         inline = remote_exec.group(1)
         assert re.search(
-            r"chmod\s+755\b[^\n]*/opt/youtube-stream/bin/run-ffmpeg\.sh\b",
+            rf"chmod\s+755\b[^\n]*{_INSTALL_ROOT_VAR}/bin/run-ffmpeg\.sh\b",
             inline,
         ), (
             "remote-exec の inline に chmod 755 .../run-ffmpeg.sh が無い"
