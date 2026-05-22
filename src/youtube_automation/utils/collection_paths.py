@@ -12,7 +12,6 @@ from pathlib import Path
 
 from youtube_automation.utils.exceptions import ValidationError
 
-
 class CollectionPaths:
     """標準コレクションディレクトリ構造のパスリゾルバ。
 
@@ -55,15 +54,27 @@ class CollectionPaths:
 
     @property
     def tracking_path(self) -> Path:
-        return self.root / "20-documentation" / "upload_tracking.json"
+        return self.docs_dir / "upload_tracking.json"
 
     @property
     def descriptions_md_path(self) -> Path:
-        return self.root / "20-documentation" / "descriptions.md"
+        return self.docs_dir / "descriptions.md"
 
     @property
     def thumbnail_prompts_path(self) -> Path:
-        return self.root / "20-documentation" / "thumbnail-prompts.md"
+        return self.docs_dir / "thumbnail-prompts.md"
+
+    @property
+    def shorts_dir(self) -> Path:
+        return self.master_dir / "shorts"
+
+    @property
+    def short_video_path(self) -> Path:
+        return self.master_dir / "short.mp4"
+
+    @property
+    def short_loop_path(self) -> Path:
+        return self.assets_dir / "short-loop.mp4"
 
     def find_master_video(self) -> Path | None:
         """01-master/ からマスター動画（.mp4）を探す。"""
@@ -97,6 +108,35 @@ class CollectionPaths:
         """10-assets/ からループ動画を探す。"""
         path = self.assets_dir / "loop.mp4"
         return path if path.exists() else None
+
+    def find_short_video(self, short_num: int | None = None) -> Path | None:
+        """Shorts 用動画を探す (`shorts/short-NN-*.mp4` > `short.mp4`)。"""
+        if short_num is not None and self.shorts_dir.exists():
+            pattern = f"short-{short_num:02d}-*.mp4"
+            for path in sorted(self.shorts_dir.glob(pattern)):
+                return path
+
+        if self.short_video_path.exists():
+            return self.short_video_path
+        return None
+
+    def find_short_thumbnail(self) -> Path | None:
+        """Shorts 用サムネイルを探す (`.jpg` > `.png`)。"""
+        for ext in ("jpg", "png"):
+            path = self.assets_dir / f"short-thumbnail.{ext}"
+            if path.exists():
+                return path
+        return None
+
+    def find_short_input_image(self) -> Path | None:
+        """Shorts ループ生成の入力画像を探す (`.png` > `.jpg`)。"""
+        png_path = self.assets_dir / "short.png"
+        if png_path.exists():
+            return png_path
+        jpg_path = self.assets_dir / "short.jpg"
+        if jpg_path.exists():
+            return jpg_path
+        return None
 
     def individual_music_files(self) -> list[Path]:
         """02-Individual-music/ の音声ファイル一覧（ソート済み）。"""

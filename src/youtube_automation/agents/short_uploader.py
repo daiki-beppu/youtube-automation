@@ -28,6 +28,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import UploadError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
@@ -102,7 +103,7 @@ class ShortUploader:
 
         latest_dt: Optional[datetime] = None
         for col_dir in live_dir.iterdir():
-            ws_path = col_dir / "workflow-state.json"
+            ws_path = CollectionPaths(col_dir).workflow_state_path
             if not ws_path.exists():
                 continue
             try:
@@ -143,7 +144,7 @@ class ShortUploader:
         Returns:
             ISO 8601 文字列 or None
         """
-        tracking_path = collection_path / "20-documentation" / "upload_tracking.json"
+        tracking_path = CollectionPaths(collection_path).tracking_path
         if not tracking_path.exists():
             return None
         try:
@@ -192,25 +193,16 @@ class ShortUploader:
         Raises:
             FileNotFoundError: 両方無いとき（plan §171 厳密準拠）
         """
-        master = collection_path / "01-master"
-        numbered_glob = None
-        if short_num is not None:
-            shorts_dir = master / "shorts"
-            numbered_glob = f"shorts/short-{short_num:02d}-*.mp4"
-            if shorts_dir.exists():
-                matches = sorted(shorts_dir.glob(f"short-{short_num:02d}-*.mp4"))
-                if matches:
-                    return matches[0]
-
-        fallback = master / "short.mp4"
-        if fallback.exists():
-            return fallback
+        paths = CollectionPaths(collection_path)
+        video_path = paths.find_short_video(short_num)
+        if video_path is not None:
+            return video_path
 
         # 両方無 → FileNotFoundError（呼び出し側で握り潰す責務）
         searched = []
-        if numbered_glob:
-            searched.append(str(master / numbered_glob))
-        searched.append(str(fallback))
+        if short_num is not None:
+            searched.append(str(paths.shorts_dir / f"short-{short_num:02d}-*.mp4"))
+        searched.append(str(paths.short_video_path))
         raise FileNotFoundError(f"Shorts 動画が見つかりません。探索パス: {', '.join(searched)}")
 
     # ─── upload オーケストレーション (plan 要件 6.4) ──
@@ -226,6 +218,8 @@ class ShortUploader:
             {"action": str, "details": dict}
                 action: "short_uploaded" / "short_upload_blocked" / "short_upload_failed"
         """
+        paths = CollectionPaths(collection_path)
+
         # 1. 投稿間隔チェック（24h 制約）
         ok, msg = self._check_upload_interval()
         if not ok:
@@ -233,7 +227,7 @@ class ShortUploader:
             return {"action": ACTION_BLOCKED, "details": {"reason": msg}}
 
         # 2. tracking 読み込み（CC URL 抽出のため）
-        tracking_path = collection_path / "20-documentation" / "upload_tracking.json"
+        tracking_path = paths.tracking_path
         if not tracking_path.exists():
             logger.error(f"❌ upload_tracking.json が無いため Shorts 投稿不可: {tracking_path}")
             return {"action": ACTION_FAILED, "details": {"error": f"tracking missing: {tracking_path}"}}
@@ -299,12 +293,13 @@ class ShortUploader:
 
     def _find_short_thumbnail(self, collection_path: Path) -> Optional[str]:
         """plan 要件 6.5: `10-assets/short-thumbnail.{jpg,png}` の順に探索。両方無は None."""
-        assets = collection_path / "10-assets"
-        for ext in ("jpg", "png"):
-            candidate = assets / f"short-thumbnail.{ext}"
-            if candidate.exists():
-                return str(candidate)
-        logger.warning(f"short-thumbnail.{{jpg,png}} が見つかりません — サムネ未設定で upload します: {assets}")
+        paths = CollectionPaths(collection_path)
+        thumbnail_path = paths.find_short_thumbnail()
+        if thumbnail_path is not None:
+            return str(thumbnail_path)
+        logger.warning(
+            f"short-thumbnail.{{jpg,png}} が見つかりません — サムネ未設定で upload します: {paths.assets_dir}"
+        )
         return None
 
     # ─── workflow-state 更新 (plan アンチパターン #10) ─
@@ -323,7 +318,7 @@ class ShortUploader:
         書き手（本メソッド）と読み手（`bulk_update_short_localizations.collect_short_videos`）が
         同 PR 内で対称検証されるスキーマ.
         """
-        ws_path = collection_path / "workflow-state.json"
+        ws_path = CollectionPaths(collection_path).workflow_state_path
         if not ws_path.exists():
             logger.warning(f"workflow-state.json が無いため short upload 記録を skip: {ws_path}")
             return

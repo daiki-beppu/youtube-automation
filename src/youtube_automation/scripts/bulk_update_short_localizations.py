@@ -18,6 +18,7 @@ import logging
 import sys
 import time
 
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.metadata_generator import build_short_localizations
 from youtube_automation.utils.youtube_service import get_youtube
@@ -47,10 +48,11 @@ def collect_short_videos() -> list[dict]:
 
     results: list[dict] = []
     for col_dir in sorted(live_dir.iterdir()):
-        ws_path = col_dir / "workflow-state.json"
+        paths = CollectionPaths(col_dir)
+        ws_path = paths.workflow_state_path
         if not ws_path.exists():
             continue
-        tracking_path = col_dir / "20-documentation" / "upload_tracking.json"
+        tracking_path = paths.tracking_path
         if not tracking_path.exists():
             # tracking 無は CC URL を引けないので Shorts も skip
             continue

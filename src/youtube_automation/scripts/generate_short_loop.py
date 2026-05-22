@@ -19,6 +19,7 @@ from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.genai_client import create_genai_client
 from youtube_automation.utils.skill_config import load_skill_config
@@ -28,11 +29,6 @@ from youtube_automation.utils.veo_generator import (
     generate_loop_video,
 )
 
-# ファイル名・ディレクトリ名は契約文字列のため定数で 1 箇所に集約
-ASSETS_DIR = "10-assets"
-INPUT_PNG = "short.png"
-INPUT_JPG = "short.jpg"
-OUTPUT_MP4 = "short-loop.mp4"
 SHORT_ASPECT_RATIO = "9:16"
 SHORT_SKILL_NAME = "short"
 
@@ -46,11 +42,11 @@ def resolve_paths(collection_path: Path) -> tuple[Path, Path]:
     Returns:
         (image_path, output_path)
     """
-    assets = collection_path / ASSETS_DIR
-    image_path = assets / INPUT_PNG
-    if not image_path.exists():
-        image_path = assets / INPUT_JPG
-    output_path = assets / OUTPUT_MP4
+    paths = CollectionPaths(collection_path)
+    image_path = paths.find_short_input_image()
+    if image_path is None:
+        image_path = paths.assets_dir / "short.png"
+    output_path = paths.short_loop_path
     return image_path, output_path
 
 
@@ -93,7 +89,7 @@ def main() -> None:
             collection_path = Path.cwd() / collection_path
     else:
         cwd = Path.cwd()
-        if (cwd / ASSETS_DIR).exists():
+        if CollectionPaths(cwd).assets_dir.exists():
             collection_path = cwd
         else:
             parser.error("コレクションパスを指定するか、コレクションディレクトリ内で実行してください")

@@ -91,6 +91,25 @@ class TestFilePathProperties:
 
 
 # ---------------------------------------------------------------------------
+# Shorts パスプロパティ
+# ---------------------------------------------------------------------------
+
+
+class TestShortsProperties:
+    def test_shorts_dir(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        assert paths.shorts_dir == tmp_path / "01-master" / "shorts"
+
+    def test_short_video_path(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        assert paths.short_video_path == tmp_path / "01-master" / "short.mp4"
+
+    def test_short_loop_path(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        assert paths.short_loop_path == tmp_path / "10-assets" / "short-loop.mp4"
+
+
+# ---------------------------------------------------------------------------
 # find_master_video
 # ---------------------------------------------------------------------------
 
@@ -233,6 +252,132 @@ class TestFindLoopVideo:
         paths = CollectionPaths(tmp_path)
         paths.assets_dir.mkdir()
         assert paths.find_loop_video() is None
+
+
+# ---------------------------------------------------------------------------
+# find_short_video
+# ---------------------------------------------------------------------------
+
+
+class TestFindShortVideo:
+    def test_prefers_numbered_short_when_short_num_provided(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.shorts_dir.mkdir(parents=True)
+        numbered = paths.shorts_dir / "short-01-alpha.mp4"
+        numbered.touch()
+        paths.short_video_path.touch()
+
+        assert paths.find_short_video(1) == numbered
+
+    def test_falls_back_to_short_mp4_when_short_num_is_none(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.short_video_path.parent.mkdir(parents=True)
+        paths.short_video_path.touch()
+
+        assert paths.find_short_video() == paths.short_video_path
+
+    def test_falls_back_to_short_mp4_when_numbered_short_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.shorts_dir.mkdir(parents=True)
+        paths.short_video_path.touch()
+
+        assert paths.find_short_video(2) == paths.short_video_path
+
+    def test_returns_first_sorted_numbered_short(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.shorts_dir.mkdir(parents=True)
+        later = paths.shorts_dir / "short-01-beta.mp4"
+        earlier = paths.shorts_dir / "short-01-alpha.mp4"
+        later.touch()
+        earlier.touch()
+
+        assert paths.find_short_video(1) == earlier
+
+    def test_returns_none_when_numbered_and_fallback_both_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.shorts_dir.mkdir(parents=True)
+
+        assert paths.find_short_video(1) is None
+
+    def test_skips_numbered_search_when_short_num_is_none(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.shorts_dir.mkdir(parents=True)
+        (paths.shorts_dir / "short-01-alpha.mp4").touch()
+        paths.short_video_path.touch()
+
+        assert paths.find_short_video(None) == paths.short_video_path
+
+    def test_returns_none_when_shorts_dir_missing_and_fallback_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+
+        assert paths.find_short_video(1) is None
+
+
+# ---------------------------------------------------------------------------
+# find_short_thumbnail
+# ---------------------------------------------------------------------------
+
+
+class TestFindShortThumbnail:
+    def test_prefers_jpg(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir(parents=True)
+        jpg = paths.assets_dir / "short-thumbnail.jpg"
+        png = paths.assets_dir / "short-thumbnail.png"
+        jpg.touch()
+        png.touch()
+
+        assert paths.find_short_thumbnail() == jpg
+
+    def test_falls_back_to_png(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir(parents=True)
+        png = paths.assets_dir / "short-thumbnail.png"
+        png.touch()
+
+        assert paths.find_short_thumbnail() == png
+
+    def test_returns_none_when_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir(parents=True)
+
+        assert paths.find_short_thumbnail() is None
+
+    def test_returns_none_when_assets_dir_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+
+        assert paths.find_short_thumbnail() is None
+
+
+# ---------------------------------------------------------------------------
+# find_short_input_image
+# ---------------------------------------------------------------------------
+
+
+class TestFindShortInputImage:
+    def test_prefers_png(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir(parents=True)
+        png = paths.assets_dir / "short.png"
+        jpg = paths.assets_dir / "short.jpg"
+        png.touch()
+        jpg.touch()
+
+        assert paths.find_short_input_image() == png
+
+    def test_falls_back_to_jpg(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir(parents=True)
+        jpg = paths.assets_dir / "short.jpg"
+        jpg.touch()
+
+        assert paths.find_short_input_image() == jpg
+
+    def test_returns_none_when_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir(parents=True)
+
+        assert paths.find_short_input_image() is None
 
 
 # ---------------------------------------------------------------------------
