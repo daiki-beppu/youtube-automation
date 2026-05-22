@@ -17,6 +17,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - `terraform` >= 1.5 インストール済み
 - Vultr API キーを 1Password に保管済み（または環境変数で渡せる状態）
 - `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
+- Terraform state 用の S3 bucket `youtube-automation-tfstate`、KMS key `alias/tfstate`、DynamoDB lock table `tfstate-lock` を AWS `ap-northeast-1` に作成済み
 - SSH 鍵ペア `~/.ssh/yt_stream_key` / `~/.ssh/yt_stream_key.pub` を生成済み
 - ssh-agent が起動済み（`SSH_AUTH_SOCK` が設定されている）かつ秘密鍵が登録済み（`ssh-add ~/.ssh/yt_stream_key`）。`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続するため、ssh-agent 未起動 / 鍵未登録 のいずれでも apply 時に `Permission denied (publickey)` で失敗する。`ssh-add -l` で登録済み鍵を確認できる（`Could not open a connection to your authentication agent.` が返れば agent 未起動）
     - **ssh-agent への登録は OS 起動時に自動では行われない**: macOS の launchd keychain 連携を別途設定していない限り、再起動・再ログインで agent は空になる。毎セッションで `ssh-add ~/.ssh/yt_stream_key` を実行する必要がある
@@ -40,17 +41,21 @@ export TF_VAR_vultr_api_key=$(op read 'op://Personal/Vultr/api_key')
 export TF_VAR_stream_key=$(op read 'op://Personal/YouTube/stream_key')
 export TF_VAR_discord_webhook_url=$(op read 'op://Personal/YouTube_Stream_Discord_Webhook/url')
 
-# 3. apply
+# 3. backend を初期化
 terraform init
+
+# 4. apply
 terraform plan
 terraform apply
 ```
 
-`terraform.tfvars` および環境変数いずれにも secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
+`terraform.tfvars` には secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
 
 > **tfstate と secret の関係（誤解しやすいので明記）**
 >
-> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ** で、`*.tfstate` JSON 自体は **平文**である。本モジュールでは `stream_key` を `triggers` に保存する際 `nonsensitive(sha256(var.stream_key))` で SHA256 ラップしているため、tfstate を取得されても元のストリームキーは復元できない（SHA256 は不可逆）。`*.tfstate*` は `.gitignore` 済みだが、ローカル / バックアップ / 共有時もファイルパーミッションでアクセス制御すること。
+> Terraform の `sensitive = true` は `terraform plan` / `apply` の **CLI 出力マスクのみ**で、tfstate JSON の値を暗号化しない。本モジュールは `backend "s3"` を使い、S3 server-side encryption（KMS）と DynamoDB lock で `streaming/terraform.tfstate` をリモート管理する。`triggers` に保存する `stream_key` / Discord Webhook URL は `nonsensitive(sha256(...))` で高エントロピー値の不可逆ハッシュだけを残すため、元値は復元できない。この扱いは高エントロピーの secret に限る。低エントロピー値や IP アドレスなどを hash 化しても secret 保護にはならない。
+>
+> 既存のローカル state がある環境で初回 `terraform init` を実行すると backend 移行確認が出る。移行する場合は state の保存先が `youtube-automation-tfstate` bucket / `streaming/terraform.tfstate` に変わることを確認してから承認する。
 
 ## 配信サイクル（11h + 1h）
 
@@ -201,7 +206,7 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 `var.allowed_ssh_cidr` が空 `[]` のまま `terraform plan` / `apply` を実行している（`validation { condition = length(var.allowed_ssh_cidr) > 0 }` で fail-fast）。`terraform.tfvars` の `allowed_ssh_cidr` に operator の IP/32 を 1 件以上記入する。`curl -s ifconfig.me` で自分のグローバル IP を取得し、`["203.0.113.5/32"]` 形式で渡す。
 
 ### `Error: Output refers to sensitive values`
-`triggers.stream_key` を `sha256(var.stream_key)` のまま書くとこのエラーが出る。本モジュールでは `nonsensitive(sha256(...))` でラップ済み（SHA256 は不可逆なので脱 sensitive 安全）。
+`triggers.stream_key` を `sha256(var.stream_key)` のまま書くとこのエラーが出る。本モジュールでは高エントロピーの secret だけを `nonsensitive(sha256(...))` で不可逆ハッシュ化し、変更検知用の値として state に保存している。
 
 ### `Permission denied (publickey)`（provisioner SSH 失敗）
 `null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続する（鍵を Terraform graph に持ち込まないため）。**`ssh -i ~/.ssh/yt_stream_key root@<ip>` 経由の手動 SSH が通っても agent 状態とは独立で原因切り分けにならない**（`-i` は鍵ファイル直読み、provisioner は agent 経由）。判定は `ssh-add -l` の出力のみで行う。失敗時は以下を順に確認する:

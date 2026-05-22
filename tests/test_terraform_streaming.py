@@ -47,6 +47,12 @@ _SCRIPTS_STREAMING_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "refe
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
 _RUN_FFMPEG_SCRIPT = _SCRIPTS_STREAMING_DIR / "run-ffmpeg.sh"
 
+_TFSTATE_BACKEND_BUCKET = "youtube-automation-tfstate"
+_TFSTATE_BACKEND_KEY = "streaming/terraform.tfstate"
+_TFSTATE_BACKEND_REGION = "ap-northeast-1"
+_TFSTATE_BACKEND_KMS_KEY_ID = "alias/tfstate"
+_TFSTATE_BACKEND_LOCK_TABLE = "tfstate-lock"
+
 
 # ---------- ヘルパー ----------
 
@@ -84,6 +90,33 @@ class TestVersionsTf:
         assert terraform_block is not None, "terraform { ... } ブロックが存在しない"
         assert re.search(r'required_version\s*=\s*"[^"]*>=\s*1\.5', terraform_block), (
             "required_version が >= 1.5 を含んでいない"
+        )
+
+    def test_backend_uses_encrypted_s3_remote_state(self):
+        """Given versions.tf
+        When terraform backend を読む
+        Then S3 backend は KMS 暗号化と DynamoDB lock を宣言している。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None, "terraform { ... } ブロックが存在しない"
+        backend_block = extract_block(terraform_block, r'backend\s+"s3"')
+        assert backend_block is not None, 'backend "s3" ブロックが存在しない'
+        assert re.search(rf'bucket\s*=\s*"{re.escape(_TFSTATE_BACKEND_BUCKET)}"', backend_block), (
+            "S3 backend bucket が tfstate 専用 bucket でない"
+        )
+        assert re.search(rf'key\s*=\s*"{re.escape(_TFSTATE_BACKEND_KEY)}"', backend_block), (
+            "S3 backend key が streaming/terraform.tfstate でない"
+        )
+        assert re.search(rf'region\s*=\s*"{re.escape(_TFSTATE_BACKEND_REGION)}"', backend_block), (
+            "S3 backend region が ap-northeast-1 でない"
+        )
+        assert re.search(r'encrypt\s*=\s*true', backend_block), "S3 backend encrypt = true が宣言されていない"
+        assert re.search(rf'kms_key_id\s*=\s*"{re.escape(_TFSTATE_BACKEND_KMS_KEY_ID)}"', backend_block), (
+            "S3 backend kms_key_id が alias/tfstate でない"
+        )
+        assert re.search(rf'dynamodb_table\s*=\s*"{re.escape(_TFSTATE_BACKEND_LOCK_TABLE)}"', backend_block), (
+            "S3 backend dynamodb_table が tfstate-lock でない"
         )
 
     def test_required_providers_declares_vultr_source(self):
@@ -2806,6 +2839,47 @@ class TestStreamingReadme:
         """
         text = read_file(_STREAMING_README)
         assert re.search(r"terraform[^\n]*apply", text), "README に terraform apply の実行コマンドが書かれていない"
+
+    def test_documents_encrypted_remote_tfstate_backend(self):
+        """Given README
+        When tfstate の説明を読む
+        Then remote backend と暗号化 state の保存先が説明されている。
+        """
+        text = read_file(_STREAMING_README)
+        assert 'backend "s3"' in text, 'README に backend "s3" の説明が無い'
+        assert _TFSTATE_BACKEND_BUCKET in text, "README に tfstate bucket 名の説明が無い"
+        assert _TFSTATE_BACKEND_KEY in text, "README に streaming tfstate key の説明が無い"
+        assert "KMS" in text, "README に KMS 暗号化の説明が無い"
+        assert "DynamoDB lock" in text, "README に DynamoDB lock の説明が無い"
+
+    def test_documents_sensitive_is_cli_mask_only(self):
+        """Given README
+        When sensitive と tfstate の説明を読む
+        Then sensitive=true は CLI 出力マスクのみであると説明されている。
+        """
+        text = read_file(_STREAMING_README)
+        assert "CLI 出力マスクのみ" in text, (
+            "README に sensitive=true が CLI マスクのみである説明が無い"
+        )
+        assert "tfstate JSON の値を暗号化しない" in text, (
+            "README に sensitive=true が tfstate JSON を暗号化しない説明が無い"
+        )
+
+    def test_does_not_describe_nonsensitive_hash_as_unconditionally_safe(self):
+        """Given README
+        When nonsensitive(sha256(...)) の説明を読む
+        Then hash 化の安全性を高エントロピー secret に限定している。
+        """
+        text = read_file(_STREAMING_README)
+        assert "脱 sensitive 安全" not in text, (
+            "README が nonsensitive(sha256(...)) を常に安全と誤読させる"
+        )
+        assert "高エントロピー" in text, (
+            "README に hash 化の前提が高エントロピー secret である説明が無い"
+        )
+        assert "低エントロピー値" in text, (
+            "README に低エントロピー値の hash 化が secret 保護でない説明が無い"
+        )
 
     def test_mentions_systemctl_status_for_verification(self):
         """Given README
