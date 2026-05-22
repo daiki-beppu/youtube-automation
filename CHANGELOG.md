@@ -14,9 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(video-description)`: 概要欄タイムスタンプを **テーマ単位** から **テーマ見出し + 個別楽曲単位** に変更（#494）。`metadata_generator` に pattern_key 抽出と pattern 表示名解決を追加し、`format_timestamps_text()` がテーマ見出し + 楽曲行の構造化出力を返すように。`NN.` 番号付けは廃止。`\d+-pattern-[a-d]` 規約に従わない legacy コレクションはフラット出力で後方互換。テーマ見出し行は YouTube chapter parser の strictly-ascending 要件に合わせて先頭 timestamp を持たない形式
+- `feat(video-description)`: 同名楽曲の自動リネーム機構（#494）。`detect_duplicate_track_titles()` で重複検出、`apply_track_display_names()` で LLM 命名結果を `workflow-state.json` の `track_display_names` に永続化。次回ロード時は `_apply_persisted_display_names()` で自動再適用
 - `examples/localizations.example.json` と `channel-setup` の `localizations-template.json` を high-CPM tier の `ja` / `en` / `de` に更新し、low-CPM 言語 `ko` / `es` / `pt` / `zh-CN` を canonical テンプレから削除（#272）
 - `thumbnail` スキルの TTP 運用を再点検し、`TTP プリフライト・チェックリスト` と `/thumbnail-compare` × `/alignment-check` の役割分担を追記（#493）
 - `refactor(cli)`: `cli/skills_sync/_sync.py::_sync_dir_asset` で重複していた `_list_entries` 呼び出しを 1 回に統一（#369）
+
+### Deprecated
+
+- `yt-fix-timestamps` (`scripts/fix_per_theme_timestamps.py`) を deprecation 注記付きで残置（#494）。新規コレクションは `metadata_generator.format_timestamps_text()` を使うこと
 
 ### Fixed
 
