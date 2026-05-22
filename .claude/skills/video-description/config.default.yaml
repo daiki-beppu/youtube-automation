@@ -15,6 +15,12 @@ section_headers:
   usage_attribution: "📝 Usage & Attribution:"
   perfect_for: "🎮 Perfect for:"
   channel_link_template: "🔗 {channel_name}:"
+  # pattern 切り替わりに挿入するテーマ見出し行の装飾。
+  # 例: `── Pattern A: Awakening ──`（YouTube chapter parser に拾われないよう先頭 timestamp は持たない）。
+  # チャンネル個性に合わせて prefix / suffix を上書きできる。
+  theme_inline:
+    prefix: "── "
+    suffix: " ──"
 
 # Usage & Attribution セクションの本文行（チャンネル単位で書き換え可能）。
 usage_attribution_lines:

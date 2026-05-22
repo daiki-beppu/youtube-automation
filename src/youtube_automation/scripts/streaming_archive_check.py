@@ -21,7 +21,7 @@ from datetime import date, datetime, timezone
 
 from youtube_automation.utils.notification import NotificationError, notify
 from youtube_automation.utils.secrets import get_secret
-from youtube_automation.utils.streaming_archive import count_archives_for_date
+from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
 
 # テスト側 patch.object("build_youtube_service") との契約を保つため別名で取り込む
 from youtube_automation.utils.youtube_service import get_youtube as build_youtube_service

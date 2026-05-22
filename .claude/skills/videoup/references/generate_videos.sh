@@ -54,6 +54,11 @@ for ext in wav m4a aac mp3 flac; do
 done
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
+LOOP_TARGET_WIDTH="1920"
+LOOP_TARGET_HEIGHT="1080"
+LOOP_TARGET_PIX_FMT="yuv420p"
+LOOP_TARGET_FRAME_RATE="24/1"
+LOOP_OUTPUT_FRAME_RATE="24"
 
 # ─── Audio encoder 自動選択 (macOS は AudioToolbox 優先) ─
 if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
@@ -130,13 +135,14 @@ if [[ -n "$LOOP_VIDEO" ]]; then
     # 戦略: ソースを 1 度だけ yuv420p / 1920x1080 に正規化キャッシュし、
     # 以降のマスター動画生成は -c:v copy で stream copy する（音声のみエンコード）
     loop_specs="$(ffprobe -v error -select_streams v:0 \
-        -show_entries stream=width,height,pix_fmt -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
-    # csv=p=0 出力は "width,height,pix_fmt" の順
+        -show_entries stream=width,height,pix_fmt,r_frame_rate -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
+    # csv=p=0 出力は "width,height,pix_fmt,r_frame_rate" の順
     loop_w="$(echo "$loop_specs" | cut -d, -f1)"
     loop_h="$(echo "$loop_specs" | cut -d, -f2)"
     loop_pix="$(echo "$loop_specs" | cut -d, -f3)"
+    loop_fps="$(echo "$loop_specs" | cut -d, -f4)"
 
-    if [[ "$loop_w" == "1920" && "$loop_h" == "1080" && "$loop_pix" == "yuv420p" ]]; then
+    if [[ "$loop_w" == "$LOOP_TARGET_WIDTH" && "$loop_h" == "$LOOP_TARGET_HEIGHT" && "$loop_pix" == "$LOOP_TARGET_PIX_FMT" && "$loop_fps" == "$LOOP_TARGET_FRAME_RATE" ]]; then
         # 既に正規化済み: そのまま使う
         LOOP_SOURCE="$LOOP_VIDEO"
     else
@@ -147,6 +153,7 @@ if [[ -n "$LOOP_VIDEO" ]]; then
             ffmpeg -y -i "$LOOP_VIDEO" \
                 -c:v libx264 -preset slow -crf 18 -profile:v high -pix_fmt yuv420p \
                 -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
+                -r "$LOOP_OUTPUT_FRAME_RATE" \
                 -an -movflags +faststart \
                 -loglevel error \
                 "$LOOP_SOURCE"
