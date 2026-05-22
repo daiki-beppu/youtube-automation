@@ -33,14 +33,25 @@ if [[ "$login_status" != *"Logged in using ChatGPT"* ]]; then
 fi
 
 image_args=()
+ref_hashes=()
 for ref in "$@"; do
   image_args+=(--image "$ref")
+  # reference 画像との一致検証用に MD5 を控える。
+  # macOS は `md5 -q`、Linux は `md5sum` を持つので両対応する。
+  if command -v md5sum >/dev/null 2>&1; then
+    ref_hashes+=("$(md5sum "$ref" | awk '{print $1}')")
+  elif command -v md5 >/dev/null 2>&1; then
+    ref_hashes+=("$(md5 -q "$ref")")
+  fi
 done
 
 out_dir=$(dirname "$out")
+# prompt 末尾の自動付与文は agent が image_generation tool を skip して
+# reference 画像を cp するだけで終わる failure mode を抑止するため、
+# 「新画像を生成」「reference を copy するな」を明示する。
 full_prompt="${prompt}
 
-After generation, copy the produced PNG to ${out}. Then reply with exactly ${out}."
+Generate a new image with the image_generation tool. Do not copy any provided reference image; produce a freshly generated PNG. After generation, copy the produced PNG to ${out}. Then reply with exactly ${out}."
 
 # Stale artifact 防止: codex 起動前に既存 $out を確実に消す。
 # 残っていると agent が cp を skip しても -s "$out" / PNG ヘッダ検証が通って
@@ -98,6 +109,25 @@ header=$(head -c 8 "$out" | xxd -p)
 if [ "${header:0:16}" != "89504e470d0a1a0a" ]; then
   echo "ERROR: 出力ファイルが PNG ヘッダで始まっていません: $out" >&2
   exit 1
+fi
+
+# Reference cp failure mode 検出: agent が image_generation tool を skip して
+# reference 画像をそのまま $out に cp するだけで終わるケースを潰す。
+# wrapper の他の検証 (agent_message path 一致 / 非空 / PNG ヘッダ) は通過してしまうので
+# ここでバイト列ハッシュの一致を最終ゲートに使う。
+if [ "${#ref_hashes[@]}" -gt 0 ]; then
+  if command -v md5sum >/dev/null 2>&1; then
+    out_hash=$(md5sum "$out" | awk '{print $1}')
+  else
+    out_hash=$(md5 -q "$out")
+  fi
+  for h in "${ref_hashes[@]}"; do
+    if [ "$h" = "$out_hash" ]; then
+      echo "ERROR: 出力ファイルが reference 画像と完全一致しています (agent が image_generation tool を skip した可能性)" >&2
+      echo "ヒント: prompt で reference からの変更点を明示するか、参照画像の役割を「色味の参考」程度に弱めて再試行してください" >&2
+      exit 1
+    fi
+  done
 fi
 
 echo "saved: $out ($(stat -f%z "$out" 2>/dev/null || stat -c%s "$out") bytes)"

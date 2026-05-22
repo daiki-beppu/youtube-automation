@@ -78,6 +78,10 @@ def _write_fake_codex(bin_dir: Path) -> Path:
     - `$FAKE_CODEX_AGENT_MESSAGE_OVERRIDE` が指定された場合、最終 agent_message の
       `text` を prompt から抽出した `<path>` ではなくこの値で上書きする（`final_msg
       != $out` の failure mode の再現用）
+    - `$FAKE_CODEX_OUT_FROM_REF` が指定された場合、`exec` で PNG マジックを書き出す
+      代わりにそのパスのファイルをそのまま `<path>` へコピーする（agent が
+      image_generation tool を skip して reference 画像を $out に cp するだけで
+      終わる failure mode の再現用）
     - 引数は `$FAKE_CODEX_LOG` に invocation 単位で記録する（`invocation_start` /
       `arg_b64: <base64(arg)>` × N / `invocation_end` フォーマット。改行を含む
       prompt 引数も復元できるよう base64 でエンコードする）
@@ -137,9 +141,15 @@ if [[ "${1:-}" == "exec" ]]; then
   fi
 
   if [ -n "$out_path" ] && [ -z "${FAKE_CODEX_SKIP_CP:-}" ]; then
-    # PNG マジック (89 50 4E 47 0D 0A 1A 0A) + 最小 IEND チャンク
-    printf '\x89PNG\r\n\x1a\n' > "$out_path"
-    printf 'IEND\xae\x42\x60\x82' >> "$out_path"
+    if [ -n "${FAKE_CODEX_OUT_FROM_REF:-}" ]; then
+      # agent が image_generation tool を skip して reference をそのまま
+      # $out に cp する failure mode を再現する。
+      cp "${FAKE_CODEX_OUT_FROM_REF}" "$out_path"
+    else
+      # PNG マジック (89 50 4E 47 0D 0A 1A 0A) + 最小 IEND チャンク
+      printf '\x89PNG\r\n\x1a\n' > "$out_path"
+      printf 'IEND\xae\x42\x60\x82' >> "$out_path"
+    fi
   fi
 
   final_text="$out_path"
@@ -175,6 +185,7 @@ def _prepare_fake_codex_env(
     login_status_rc: int | None = None,
     skip_cp: bool = False,
     agent_message_override: str | None = None,
+    out_from_ref: Path | None = None,
 ) -> tuple[dict[str, str], Path]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -194,6 +205,8 @@ def _prepare_fake_codex_env(
         env["FAKE_CODEX_SKIP_CP"] = "1"
     if agent_message_override is not None:
         env["FAKE_CODEX_AGENT_MESSAGE_OVERRIDE"] = agent_message_override
+    if out_from_ref is not None:
+        env["FAKE_CODEX_OUT_FROM_REF"] = str(out_from_ref)
 
     return env, log_file
 
@@ -339,6 +352,38 @@ def test_codex_image_script_appends_cp_instructions_to_prompt(tmp_path: Path) ->
     assert "tiny prompt" in prompt, f"元 prompt が prompt 引数に含まれていない: {prompt!r}"
     assert expected_cp in prompt, f"prompt 末尾に `{expected_cp}` が自動付与されていない: {prompt!r}"
     assert expected_reply in prompt, f"prompt 末尾に `{expected_reply}` が自動付与されていない: {prompt!r}"
+
+
+def test_codex_image_script_appends_generate_new_image_directive(tmp_path: Path) -> None:
+    """Given codex-image.sh
+    When 偽 codex で `codex exec` の `--` 後 prompt を観測する
+    Then prompt 末尾に「image_generation tool で新画像を生成」「reference を copy するな」
+    という指示が自動付与されている（agent が reference を $out へ cp するだけで終わる
+    failure mode を抑止するため）。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    output_path = tmp_path / "output.png"
+
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), env=env)
+    assert result.returncode == 0, result.stderr
+
+    invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
+    exec_invocations = [args for args in invocations if args and args[0] == "exec"]
+    assert exec_invocations, f"`codex exec` の呼び出しが記録されていない: {invocations!r}"
+
+    exec_args = exec_invocations[-1]
+    sep_index = exec_args.index("--")
+    prompt = exec_args[sep_index + 1]
+
+    assert "image_generation tool" in prompt, (
+        f"prompt 末尾に image_generation tool 指示が自動付与されていない: {prompt!r}"
+    )
+    assert re.search(r"[Dd]o not copy.*reference", prompt), (
+        f"prompt 末尾に reference を copy するなという指示が自動付与されていない: {prompt!r}"
+    )
 
 
 def test_codex_image_script_passes_reference_images_as_repeated_image_flags(tmp_path: Path) -> None:
@@ -619,6 +664,41 @@ def test_codex_image_script_rejects_when_agent_message_does_not_match_out(tmp_pa
     assert str(tmp_path / "elsewhere.png") in result.stderr, (
         f"不一致 path の診断が stderr に出ていない: {result.stderr!r}"
     )
+
+
+def test_codex_image_script_rejects_output_matching_reference(tmp_path: Path) -> None:
+    """Given fake codex が image_generation tool を skip して reference 画像を
+        そのまま `$out` に cp する failure mode
+    When codex-image.sh を reference 画像つきで実行する
+    Then 非 0 で停止し、reference との一致を ERROR で報告する。
+
+    `final_msg == "$out"` / PNG ヘッダ検証は通過してしまうため、
+    バイト列ハッシュの一致で最終ゲートを敷くという契約を担保する。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    # reference 画像として有効な PNG ヘッダを持つファイルを 1 つ用意する
+    ref_path = tmp_path / "ref.png"
+    ref_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"IEND\xae\x42\x60\x82")
+
+    output_path = tmp_path / "output.png"
+    env, _ = _prepare_fake_codex_env(tmp_path, out_from_ref=ref_path)
+
+    result = _run_script(
+        _CODEX_IMAGE_SH,
+        "tiny prompt",
+        str(output_path),
+        str(ref_path),
+        env=env,
+    )
+
+    assert result.returncode != 0, (
+        "出力 PNG が reference 画像とバイト一致しているのに wrapper が 0 で終わっている "
+        "(agent が image_generation tool を skip した failure mode を検出できていない)"
+    )
+    assert "ERROR" in result.stderr, f"reference 一致時の ERROR 診断行が stderr に届いていない: {result.stderr!r}"
+    assert "reference" in result.stderr, f"reference 一致を示す診断文が stderr に出ていない: {result.stderr!r}"
 
 
 def test_codex_image_script_removes_stale_out_before_invoking_codex() -> None:
