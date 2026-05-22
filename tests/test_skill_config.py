@@ -92,28 +92,28 @@ def test_cache_reset(tmp_path, monkeypatch):
 
 
 def test_get_collection_ideate_thumbnail_mode_default(tmp_path, monkeypatch):
-    """skill-config 未設定なら sequential を返す"""
+    """channel override 無しなら配布 default.yaml の parallel を返す"""
     channel_dir = tmp_path / "ch"
     channel_dir.mkdir()
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     mode = skill_config.get_collection_ideate_thumbnail_mode()
-    assert mode == skill_config.THUMBNAIL_MODE_SEQUENTIAL
+    assert mode == skill_config.THUMBNAIL_MODE_PARALLEL
 
 
-def test_get_collection_ideate_thumbnail_mode_opt_in_parallel(tmp_path, monkeypatch):
-    """channel override で parallel を指定すると parallel を返す"""
+def test_get_collection_ideate_thumbnail_mode_opt_in_sequential(tmp_path, monkeypatch):
+    """channel override で sequential を指定すると sequential を返す"""
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
     override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
     override.write_text(
-        yaml.safe_dump({"preview": {"thumbnail_mode": "parallel"}}),
+        yaml.safe_dump({"preview": {"thumbnail_mode": "sequential"}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     mode = skill_config.get_collection_ideate_thumbnail_mode()
-    assert mode == skill_config.THUMBNAIL_MODE_PARALLEL
+    assert mode == skill_config.THUMBNAIL_MODE_SEQUENTIAL
 
 
 def test_get_collection_ideate_thumbnail_mode_invalid_raises(tmp_path, monkeypatch):
@@ -132,7 +132,7 @@ def test_get_collection_ideate_thumbnail_mode_invalid_raises(tmp_path, monkeypat
 
 
 def test_get_collection_ideate_thumbnail_mode_preview_null_is_default(tmp_path, monkeypatch):
-    """`preview: null` は未設定と等価で sequential を返す"""
+    """`preview: null` でも配布 default.yaml がマージ後に preview を補うため parallel を返す"""
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
     override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
@@ -140,7 +140,7 @@ def test_get_collection_ideate_thumbnail_mode_preview_null_is_default(tmp_path, 
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     mode = skill_config.get_collection_ideate_thumbnail_mode()
-    assert mode == skill_config.THUMBNAIL_MODE_SEQUENTIAL
+    assert mode == skill_config.THUMBNAIL_MODE_PARALLEL
 
 
 def test_get_collection_ideate_thumbnail_mode_preview_non_mapping_raises(tmp_path, monkeypatch):
