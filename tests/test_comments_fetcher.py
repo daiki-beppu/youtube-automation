@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from youtube_automation.utils.comments.fetcher import fetch_comments
 
 
@@ -200,7 +198,6 @@ def test_paginated_replies_handles_multiple_pages():
 
 
 def test_since_filter_excludes_old_top_level_comments():
-    from datetime import timezone
 
     since = "2026-05-10T00:00:00+00:00"
     # Given: 新旧混在のコメント
