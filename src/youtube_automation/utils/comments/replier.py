@@ -11,7 +11,7 @@ from typing import Iterator
 
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.comments.fetcher import FetchedComment, fetch_top_level_comments
+from youtube_automation.utils.comments.fetcher import FetchedComment, fetch_comments
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.rule_engine import RuleEngine, RuleMatch
 from youtube_automation.utils.comments.template import render_template
@@ -33,40 +33,6 @@ class ReplyPlan:
     errors: list[dict] = field(default_factory=list)
 
 
-def _iter_uploaded_video_ids(youtube) -> Iterator[str]:
-    """自チャンネルのアップロード動画 ID を generator で返す（早期 break 可能）."""
-    try:
-        channel_resp = youtube.channels().list(part="contentDetails", mine=True).execute()
-    except HttpError as e:
-        raise YouTubeAPIError.from_http_error(e, "channels.list (mine=True) 失敗") from e
-
-    items = channel_resp.get("items") or []
-    if not items:
-        return
-    uploads_playlist_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
-
-    page_token: str | None = None
-    while True:
-        try:
-            resp = (
-                youtube.playlistItems()
-                .list(
-                    part="contentDetails",
-                    playlistId=uploads_playlist_id,
-                    maxResults=50,
-                    pageToken=page_token,
-                )
-                .execute()
-            )
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "playlistItems.list 失敗") from e
-        for item in resp.get("items", []):
-            yield item["contentDetails"]["videoId"]
-        page_token = resp.get("nextPageToken")
-        if not page_token:
-            return
-
-
 class CommentReplier:
     """コメント自動返信の実行司令塔."""
 
@@ -77,12 +43,14 @@ class CommentReplier:
         config: Comments,
         channel_dir: Path,
         default_language: str,
+        owner_channel_id: str | None = None,
         sleep_fn=time.sleep,
     ):
         self._youtube = youtube
         self._config = config
         self._channel_dir = channel_dir
         self._default_language = default_language
+        self._owner_channel_id = owner_channel_id
         self._sleep = sleep_fn
         self._history = ReplyHistory(channel_dir / config.history_file)
         self._title_cache: dict[str, str] = {}
@@ -90,6 +58,53 @@ class CommentReplier:
     @property
     def history(self) -> ReplyHistory:
         return self._history
+
+    def _resolve_owner_channel_id(self) -> None:
+        """owner_channel_id が未解決の場合に channels.list API で取得しキャッシュする."""
+        if self._owner_channel_id is not None:
+            return
+        try:
+            resp = self._youtube.channels().list(part="id", mine=True).execute()
+        except HttpError as e:
+            raise YouTubeAPIError.from_http_error(e, "channels.list (owner channel ID) 失敗") from e
+        items = resp.get("items") or []
+        if not items:
+            raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
+        self._owner_channel_id = items[0]["id"]
+
+    def _fetch_channel_info(self) -> tuple[str, str]:
+        """channels().list(part="contentDetails") から (owner_id, uploads_playlist_id) を返す."""
+        try:
+            resp = self._youtube.channels().list(part="contentDetails", mine=True).execute()
+        except HttpError as e:
+            raise YouTubeAPIError.from_http_error(e, "channels.list (mine=True) 失敗") from e
+        items = resp.get("items") or []
+        if not items:
+            raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
+        return items[0]["id"], items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+    def _iter_uploaded_video_ids(self, uploads_playlist_id: str) -> Iterator[str]:
+        """自チャンネルのアップロード動画 ID を generator で返す（早期 break 可能）."""
+        page_token: str | None = None
+        while True:
+            try:
+                resp = (
+                    self._youtube.playlistItems()
+                    .list(
+                        part="contentDetails",
+                        playlistId=uploads_playlist_id,
+                        maxResults=50,
+                        pageToken=page_token,
+                    )
+                    .execute()
+                )
+            except HttpError as e:
+                raise YouTubeAPIError.from_http_error(e, "playlistItems.list 失敗") from e
+            for item in resp.get("items", []):
+                yield item["contentDetails"]["videoId"]
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                return
 
     def run(
         self,
@@ -113,14 +128,19 @@ class CommentReplier:
         plan = ReplyPlan()
         limit = self._config.max_replies_per_run
 
-        video_source: Iterator[str] = iter(video_ids) if video_ids else _iter_uploaded_video_ids(self._youtube)
+        if video_ids is not None:
+            # 明示指定時: uploads playlist 解決は不要だが owner_channel_id は別途解決する
+            self._resolve_owner_channel_id()
+            video_source: Iterator[str] = iter(video_ids)
+        else:
+            owner_id, uploads_playlist_id = self._fetch_channel_info()
+            self._owner_channel_id = self._owner_channel_id or owner_id
+            video_source = self._iter_uploaded_video_ids(uploads_playlist_id)
 
         for vid in video_source:
             if len(plan.planned) >= limit:
                 break
-            for comment in fetch_top_level_comments(
-                self._youtube, video_id=vid, max_results=per_video_limit, since=since
-            ):
+            for comment in fetch_comments(self._youtube, video_id=vid, max_results=per_video_limit, since=since):
                 if len(plan.planned) >= limit:
                     break
                 self._process_comment(comment, engine, plan, dry_run)
@@ -200,6 +220,9 @@ class CommentReplier:
             return f"moderationStatus={_HELD_FOR_REVIEW}"
         if self._history.has_replied(comment.comment_id):
             return "already_replied"
+        # reply 走査時に履歴外の自分のコメントを拾わないよう authorChannelId で除外する
+        if self._owner_channel_id and comment.author_channel_id == self._owner_channel_id:
+            return "own_comment"
         return None
 
     def _post_reply(

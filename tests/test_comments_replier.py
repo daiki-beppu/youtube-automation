@@ -21,8 +21,9 @@ def _mock_youtube(
     yt = MagicMock()
 
     # channels().list(part=..., mine=True).execute()
+    # id は part に関わらず常に返るため両方のユースケース（part="id" / "contentDetails"）に対応
     yt.channels.return_value.list.return_value.execute.return_value = {
-        "items": [{"contentDetails": {"relatedPlaylists": {"uploads": "PLuploads"}}}]
+        "items": [{"id": "UCtest", "contentDetails": {"relatedPlaylists": {"uploads": "PLuploads"}}}]
     }
 
     # playlistItems().list().execute() — 全動画一発返却
@@ -42,6 +43,14 @@ def _mock_youtube(
         raw = comments_by_video.get(video_id, [])
         items = []
         for c in raw:
+            top_snippet: dict = {
+                "authorDisplayName": c.get("author", "Unknown"),
+                "textOriginal": c["text"],
+                "publishedAt": c.get("published_at", "2026-04-01T00:00:00Z"),
+                "moderationStatus": c.get("moderation_status"),
+            }
+            if c.get("author_channel_id"):
+                top_snippet["authorChannelId"] = {"value": c["author_channel_id"]}
             items.append(
                 {
                     "snippet": {
@@ -49,12 +58,7 @@ def _mock_youtube(
                         "totalReplyCount": c.get("total_reply_count", 0),
                         "topLevelComment": {
                             "id": c["comment_id"],
-                            "snippet": {
-                                "authorDisplayName": c.get("author", "Unknown"),
-                                "textOriginal": c["text"],
-                                "publishedAt": c.get("published_at", "2026-04-01T00:00:00Z"),
-                                "moderationStatus": c.get("moderation_status"),
-                            },
+                            "snippet": top_snippet,
                         },
                     }
                 }
@@ -243,7 +247,7 @@ def test_ng_word_excludes_comment(tmp_path):
     assert any(row["reason"] == "no_rule_matched" for row in plan.skipped if row["comment_id"] == "c1")
 
 
-def test_explicit_video_ids_skip_channel_resolution(tmp_path):
+def test_explicit_video_ids_skip_playlist_items_lookup(tmp_path):
     yt = _mock_youtube(
         video_ids=["v1", "v2"],
         comments_by_video={"v2": [{"comment_id": "c2", "text": "こんにちは！", "author": "B"}]},
@@ -253,8 +257,8 @@ def test_explicit_video_ids_skip_channel_resolution(tmp_path):
 
     assert len(plan.planned) == 1
     assert plan.planned[0]["video_id"] == "v2"
-    # mine=True 解決は呼ばれない
-    yt.channels.return_value.list.assert_not_called()
+    # video_ids 指定時は uploads playlist（playlistItems）は解決されない
+    yt.playlistItems.return_value.list.assert_not_called()
 
 
 def test_api_error_recorded_in_errors(tmp_path):
@@ -301,3 +305,158 @@ def test_no_match_reasons(tmp_path, reason_text, expected_reason):
     plan = replier.run(dry_run=True)
     assert plan.planned == []
     assert any(row["reason"] == expected_reason for row in plan.skipped)
+
+
+def test_own_comment_is_skipped_when_owner_channel_id_provided(tmp_path):
+    # Given: owner_channel_id が設定されており、同じ channel_id のコメントが混在
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                # チャンネルオーナー自身のコメント（自分の返信に視聴者が反応したケース等）
+                {
+                    "comment_id": "c_own",
+                    "text": "こんにちは！",
+                    "author": "Owner",
+                    "author_channel_id": owner_id,
+                },
+                # 視聴者のコメント
+                {
+                    "comment_id": "c_viewer",
+                    "text": "こんにちは！",
+                    "author": "Viewer",
+                    "author_channel_id": "UCviewer",
+                },
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+    plan = replier.run(dry_run=True)
+
+    # Then: オーナーのコメントはスキップ、視聴者のは計画に含まれる
+    planned_ids = [row["comment_id"] for row in plan.planned]
+    assert "c_own" not in planned_ids
+    assert "c_viewer" in planned_ids
+    assert any(row["comment_id"] == "c_own" and row["reason"] == "own_comment" for row in plan.skipped)
+
+
+def test_resolve_owner_channel_id_returns_and_caches(tmp_path):
+    """正常系: channels().list(part="id") から channel_id を取得してキャッシュする."""
+    yt = MagicMock()
+    yt.channels.return_value.list.return_value.execute.return_value = {"items": [{"id": "UC12345"}]}
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    replier._resolve_owner_channel_id()
+
+    assert replier._owner_channel_id == "UC12345"
+    yt.channels.return_value.list.assert_called_once_with(part="id", mine=True)
+
+
+def test_resolve_owner_channel_id_raises_on_empty_items(tmp_path):
+    """空 items 系: YouTubeAPIError が送出される."""
+    from youtube_automation.utils.exceptions import YouTubeAPIError
+
+    yt = MagicMock()
+    yt.channels.return_value.list.return_value.execute.return_value = {"items": []}
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    with pytest.raises(YouTubeAPIError, match="チャンネルが見つかりません"):
+        replier._resolve_owner_channel_id()
+
+
+def test_resolve_owner_channel_id_raises_on_http_error(tmp_path):
+    """HttpError 系: YouTubeAPIError に変換される."""
+    from googleapiclient.errors import HttpError
+
+    from youtube_automation.utils.exceptions import YouTubeAPIError
+
+    class _FakeResp:
+        status = 403
+        reason = "Forbidden"
+
+        def __getitem__(self, _key):
+            return "application/json"
+
+        def get(self, _key, default=None):
+            return default
+
+    err = HttpError(_FakeResp(), b'{"error": "forbidden"}')
+    yt = MagicMock()
+    yt.channels.return_value.list.return_value.execute.side_effect = err
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    with pytest.raises(YouTubeAPIError):
+        replier._resolve_owner_channel_id()
+
+
+def test_resolve_owner_channel_id_skips_if_already_set(tmp_path):
+    """既設定時: API を呼ばずキャッシュ値を維持する."""
+    yt = MagicMock()
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id="UCpre",
+    )
+
+    replier._resolve_owner_channel_id()
+
+    yt.channels.assert_not_called()
+    assert replier._owner_channel_id == "UCpre"
+
+
+def test_own_comment_not_skipped_when_owner_channel_id_is_none(tmp_path):
+    # Given: owner_channel_id が未設定（デフォルト）
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "c1",
+                    "text": "こんにちは！",
+                    "author": "Anyone",
+                    "author_channel_id": "UCsomeone",
+                }
+            ]
+        },
+    )
+    # owner_channel_id を渡さない
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    plan = replier.run(dry_run=True)
+
+    # Then: own_comment スキップは働かない
+    assert any(row["comment_id"] == "c1" for row in plan.planned)
+    assert not any(row.get("reason") == "own_comment" for row in plan.skipped)
+
+
+# --- リグレッション防止テスト（SRP: _fetch_channel_info / _iter_uploaded_video_ids） ---
+
+
+def test_fetch_channel_info_returns_owner_and_uploads_playlist_id(tmp_path):
+    """_fetch_channel_info が (owner_id, uploads_playlist_id) タプルを返すことを確認."""
+    yt = _mock_youtube(video_ids=[], comments_by_video={})
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    owner_id, uploads_id = replier._fetch_channel_info()
+
+    assert owner_id == "UCtest"
+    assert uploads_id == "PLuploads"
+
+
+def test_iter_uploaded_video_ids_does_not_mutate_owner_channel_id(tmp_path):
+    """_iter_uploaded_video_ids が _owner_channel_id を変更せず channels.list を呼ばないことを確認（SRP）."""
+    yt = _mock_youtube(video_ids=["v1", "v2"], comments_by_video={})
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    assert replier._owner_channel_id is None
+    list(replier._iter_uploaded_video_ids("PLuploads"))
+    assert replier._owner_channel_id is None
+    yt.channels.assert_not_called()
