@@ -2,3 +2,11 @@
 # provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
 draft_pr: false
 base_branch: main
+
+# Codex rate limit 回避のため coder persona を Claude に一時上書き
+# （グローバルの persona_providers.coder.provider: codex を override）
+# Codex の rate limit が解消したら本ブロックを削除してグローバル設定に戻す
+persona_providers:
+  coder:
+    provider: claude
+    model: sonnet
