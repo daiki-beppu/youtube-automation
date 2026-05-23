@@ -12,11 +12,23 @@ from typing import Iterator
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.comments.fetcher import FetchedComment, fetch_comments
+from youtube_automation.utils.comments.generator import (
+    GeminiGenerator,
+    ReplyContext,
+    ReplyGenerator,
+    TemplateGenerator,
+)
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.rule_engine import RuleEngine, RuleMatch
-from youtube_automation.utils.comments.template import render_template
-from youtube_automation.utils.config.comments import Comments
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.config.comments import (
+    CHANNEL_PERSONA_DEFAULT,
+    FALLBACK_TEMPLATE,
+    GENERATOR_TYPE_GEMINI,
+    GENERATOR_TYPE_TEMPLATE,
+    MAX_LENGTH_DEFAULT,
+    Comments,
+)
+from youtube_automation.utils.exceptions import ConfigError, GeneratorError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +66,7 @@ class CommentReplier:
         self._sleep = sleep_fn
         self._history = ReplyHistory(channel_dir / config.history_file)
         self._title_cache: dict[str, str] = {}
+        self._gemini_generator: GeminiGenerator | None = self._create_gemini_generator()
 
     @property
     def history(self) -> ReplyHistory:
@@ -106,6 +119,21 @@ class CommentReplier:
             if not page_token:
                 return
 
+    def _create_gemini_generator(self) -> GeminiGenerator | None:
+        uses_gemini_rule = any(r.generator == GENERATOR_TYPE_GEMINI for r in self._config.rules)
+        global_is_gemini = self._config.generator is not None and self._config.generator.type == GENERATOR_TYPE_GEMINI
+
+        if not (uses_gemini_rule or global_is_gemini):
+            return None
+
+        cfg = self._config.generator
+        return GeminiGenerator(
+            model=cfg.model,
+            max_length=cfg.max_length,
+            requests_per_minute=cfg.requests_per_minute,
+            sleep_fn=self._sleep,
+        )
+
     def run(
         self,
         *,
@@ -119,11 +147,13 @@ class CommentReplier:
             logger.warning("comments.enabled=false のため、何もしません")
             return ReplyPlan()
 
+        default_generator_type = self._config.generator.type if self._config.generator else GENERATOR_TYPE_TEMPLATE
         engine = RuleEngine(
             rules=self._config.rules,
             templates=self._config.templates,
             default_language=self._default_language,
             ng_words=self._config.ng_words,
+            default_generator_type=default_generator_type,
         )
         plan = ReplyPlan()
         limit = self._config.max_replies_per_run
@@ -179,18 +209,24 @@ class CommentReplier:
             return
 
         video_title = self._get_title(comment.video_id)
-        try:
-            reply_text = render_template(
-                match.template_text,
-                context={
-                    "video_title": video_title,
-                    "video_id": comment.video_id,
-                    "comment_author": comment.author,
-                    "comment_text": comment.text,
-                },
-            )
-        except Exception as e:  # noqa: BLE001
-            plan.errors.append(self._error_record(comment, f"template_error: {e}"))
+        effective_generator_type = match.effective_generator_type
+
+        gen = self._config.generator
+        ctx = ReplyContext(
+            video_id=comment.video_id,
+            video_title=video_title,
+            comment_id=comment.comment_id,
+            comment_text=comment.text,
+            comment_author=comment.author,
+            language=match.template_language,
+            channel_persona=gen.channel_persona if gen else CHANNEL_PERSONA_DEFAULT,
+            max_length=gen.max_length if gen else MAX_LENGTH_DEFAULT,
+            parent_thread=None,
+            dry_run=dry_run,
+        )
+
+        reply_text = self._generate_reply(comment, match, ctx, effective_generator_type, plan)
+        if reply_text is None:
             return
 
         plan.planned.append(
@@ -201,7 +237,7 @@ class CommentReplier:
                 "comment_author": comment.author,
                 "comment_text": comment.text,
                 "rule": match.rule.name,
-                "template_key": match.rule.template_key,
+                **self._generator_metadata(match, effective_generator_type),
                 "language": match.template_language,
                 "reply_text": reply_text,
             }
@@ -210,8 +246,70 @@ class CommentReplier:
         if dry_run:
             return
 
-        if self._post_reply(comment, reply_text, match, video_title, plan):
+        if self._post_reply(comment, reply_text, match, video_title, effective_generator_type, plan):
             self._sleep(self._config.delay_between_replies_sec)
+
+    def _generate_reply(
+        self,
+        comment: FetchedComment,
+        match: RuleMatch,
+        ctx: ReplyContext,
+        effective_generator_type: str,
+        plan: ReplyPlan,
+    ) -> str | None:
+        """返信テキストを生成する. Gemini 失敗時は plan を更新して None を返す.
+
+        GeneratorError は GeminiGenerator のみが送出する（外部 SDK 境界で昇格）。
+        TemplateGenerator が送出する ValidationError はコンフィグ不備のため上位へ伝播させる。
+        """
+        generator = self._resolve_generator(match, effective_generator_type)
+        try:
+            return generator.generate(ctx)
+        except GeneratorError as e:
+            return self._handle_gemini_error(comment, match, ctx, e, plan)
+
+    def _resolve_generator(self, match: RuleMatch, effective_generator_type: str) -> ReplyGenerator:
+        if effective_generator_type == GENERATOR_TYPE_GEMINI:
+            if self._gemini_generator is None:
+                raise ConfigError(
+                    f"rule '{match.rule.name}' の effective generator='gemini' だが "
+                    "GeminiGenerator が初期化されていません"
+                )
+            return self._gemini_generator
+        if match.template_text is None:
+            raise ConfigError(
+                f"rule '{match.rule.name}' の effective generator='template' だが テンプレートが解決されていません"
+            )
+        return TemplateGenerator(match.template_text)
+
+    def _handle_gemini_error(
+        self,
+        comment: FetchedComment,
+        match: RuleMatch,
+        ctx: ReplyContext,
+        error: GeneratorError,
+        plan: ReplyPlan,
+    ) -> str | None:
+        """Gemini 生成エラー時に fallback_on_error 設定に従って処理する.
+
+        _create_gemini_generator() で gemini 使用時は必ず generator セクションが
+        存在することを保証しているため、self._config.generator は非 None。
+        template fallback の ValidationError（コンフィグ不備）は上位へ伝播させる（fail-fast）。
+        """
+        assert self._config.generator is not None  # __post_init__ + _create_gemini_generator で保証
+        fallback = self._config.generator.fallback_on_error
+        if fallback == FALLBACK_TEMPLATE:
+            if match.template_text is not None:
+                logger.warning("Gemini 生成失敗、テンプレートにフォールバック: %s", error)
+                template_gen = TemplateGenerator(match.template_text)
+                return template_gen.generate(ctx)
+            logger.warning("Gemini 生成失敗かつテンプレートなし、スキップ: %s", error)
+            plan.skipped.append(self._skip_record(comment, "llm_error_no_fallback"))
+            return None
+        # FALLBACK_SKIP
+        logger.warning("Gemini 生成失敗、スキップ: %s", error)
+        plan.skipped.append(self._skip_record(comment, "llm_error_skip"))
+        return None
 
     def _skip_reason(self, comment: FetchedComment) -> str | None:
         if not comment.can_reply:
@@ -231,6 +329,7 @@ class CommentReplier:
         reply_text: str,
         match: RuleMatch,
         video_title: str,
+        effective_generator_type: str,
         plan: ReplyPlan,
     ) -> bool:
         try:
@@ -258,7 +357,7 @@ class CommentReplier:
             "video_title": video_title,
             "comment_author": comment.author,
             "rule": match.rule.name,
-            "template_key": match.rule.template_key,
+            **self._generator_metadata(match, effective_generator_type),
             "language": match.template_language,
             "replied_at": datetime.now(timezone.utc).isoformat(),
             "reply_text": reply_text,
@@ -268,6 +367,14 @@ class CommentReplier:
         self._history.save()
         plan.replied.append({"comment_id": comment.comment_id, **metadata})
         return True
+
+    @staticmethod
+    def _generator_metadata(match: RuleMatch, effective_generator_type: str) -> dict:
+        """planned / replied 両レコードで共通する generator メタデータを返す."""
+        return {
+            "template_key": match.rule.template_key if effective_generator_type == GENERATOR_TYPE_TEMPLATE else None,
+            "generator": effective_generator_type if effective_generator_type != GENERATOR_TYPE_TEMPLATE else None,
+        }
 
     @staticmethod
     def _skip_record(comment: FetchedComment, reason: str) -> dict:
