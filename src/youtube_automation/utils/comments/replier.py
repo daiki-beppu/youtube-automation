@@ -211,6 +211,7 @@ class CommentReplier:
         video_title = self._get_title(comment.video_id)
         effective_generator_type = match.effective_generator_type
 
+        gen = self._config.generator
         ctx = ReplyContext(
             video_id=comment.video_id,
             video_title=video_title,
@@ -218,10 +219,8 @@ class CommentReplier:
             comment_text=comment.text,
             comment_author=comment.author,
             language=match.template_language,
-            channel_persona=self._config.generator.channel_persona
-            if self._config.generator
-            else CHANNEL_PERSONA_DEFAULT,
-            max_length=self._config.generator.max_length if self._config.generator else MAX_LENGTH_DEFAULT,
+            channel_persona=gen.channel_persona if gen else CHANNEL_PERSONA_DEFAULT,
+            max_length=gen.max_length if gen else MAX_LENGTH_DEFAULT,
             parent_thread=None,
             dry_run=dry_run,
         )

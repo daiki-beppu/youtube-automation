@@ -342,7 +342,8 @@ def _build_generator_config(raw: dict) -> GeneratorConfig:
     fallback = raw.get("fallback_on_error", FALLBACK_TEMPLATE)
     if fallback not in VALID_FALLBACK_VALUES:
         raise ConfigError(
-            f"comments.generator.fallback_on_error は {VALID_FALLBACK_VALUES} のいずれかでなければなりません: {fallback!r}"
+            f"comments.generator.fallback_on_error は {VALID_FALLBACK_VALUES} "
+            f"のいずれかでなければなりません: {fallback!r}"
         )
 
     return GeneratorConfig(
@@ -368,7 +369,8 @@ def _build_comments(merged: dict) -> Comments:
         rule_generator = raw.get("generator")
         if rule_generator is not None and rule_generator not in VALID_GENERATOR_TYPES:
             raise ConfigError(
-                f"comments.rules[{i}].generator は {VALID_GENERATOR_TYPES} のいずれかでなければなりません: {rule_generator!r}"
+                f"comments.rules[{i}].generator は {VALID_GENERATOR_TYPES} "
+                f"のいずれかでなければなりません: {rule_generator!r}"
             )
         rules.append(
             CommentRule(
