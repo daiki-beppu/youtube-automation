@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import CommentReplier
-from youtube_automation.utils.config.comments import CommentRule, Comments
+from youtube_automation.utils.config.comments import (
+    GENERATOR_TYPE_GEMINI,
+    CommentRule,
+    Comments,
+    GeneratorConfig,
+)
+
+_PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
 
 
 def _mock_youtube(
@@ -460,3 +467,219 @@ def test_iter_uploaded_video_ids_does_not_mutate_owner_channel_id(tmp_path):
     list(replier._iter_uploaded_video_ids("PLuploads"))
     assert replier._owner_channel_id is None
     yt.channels.assert_not_called()
+
+
+# ─── Gemini ジェネレーター関連 ─────────────────────────────────────────────────
+
+
+def _make_gemini_config(**overrides) -> Comments:
+    """global generator=gemini を設定した Comments を返す."""
+    base = dict(
+        enabled=True,
+        rules=[
+            CommentRule(
+                name="catch_all",
+                pattern=".+",
+                priority=0,
+                generator=GENERATOR_TYPE_GEMINI,
+            )
+        ],
+        templates={},
+        ng_words=[],
+        max_replies_per_run=20,
+        delay_between_replies_sec=0.0,
+        history_file="comment_reply_history.json",
+        skip_held_for_review=True,
+        generator=GeneratorConfig(
+            type=GENERATOR_TYPE_GEMINI,
+            model="gemini-2.5-flash",
+            channel_persona="Warm lo-fi host",
+            max_length=280,
+            fallback_on_error="template",
+            requests_per_minute=30,
+        ),
+    )
+    base.update(overrides)
+    return Comments(**base)
+
+
+def _make_mock_genai_client(reply_text: str = "AI reply") -> MagicMock:
+    mock_response = MagicMock()
+    mock_response.text = reply_text
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+    return mock_client
+
+
+def test_gemini_generator_used_when_configured(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!", "author": "Alice"}]},
+    )
+    mock_client = _make_mock_genai_client("Thanks for being first!")
+
+    with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
+        replier = CommentReplier(
+            yt,
+            config=_make_gemini_config(),
+            channel_dir=tmp_path,
+            default_language="ja",
+        )
+        plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["reply_text"] == "Thanks for being first!"
+    assert plan.planned[0]["generator"] == GENERATOR_TYPE_GEMINI
+    assert plan.planned[0]["template_key"] is None
+
+
+def test_gemini_generator_history_metadata_includes_generator(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "nice!", "author": "Bob"}]},
+    )
+    mock_client = _make_mock_genai_client("Thanks!")
+
+    with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
+        replier = CommentReplier(
+            yt,
+            config=_make_gemini_config(delay_between_replies_sec=0.0),
+            channel_dir=tmp_path,
+            default_language="ja",
+        )
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    history = ReplyHistory(tmp_path / "comment_reply_history.json")
+    assert history.has_replied("c1")
+    metadata = history._data["replied"]["c1"]
+    assert metadata["generator"] == GENERATOR_TYPE_GEMINI
+    assert metadata["template_key"] is None
+
+
+def test_gemini_fallback_to_template_on_error(tmp_path):
+    """Gemini が失敗し fallback_on_error='template' のとき、テンプレートで返信する."""
+    config = _make_gemini_config(
+        rules=[
+            CommentRule(
+                name="with_fallback",
+                keywords=["nice"],
+                generator=GENERATOR_TYPE_GEMINI,
+                template_key="greet",
+                language="ja",
+            )
+        ],
+        templates={"ja": {"greet": "ありがとう！"}},
+        generator=GeneratorConfig(
+            type=GENERATOR_TYPE_GEMINI,
+            model="gemini-2.5-flash",
+            channel_persona="Warm lo-fi host",
+            max_length=280,
+            fallback_on_error="template",
+            requests_per_minute=30,
+        ),
+    )
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "nice video!", "author": "Alice"}]},
+    )
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = RuntimeError("API 失敗")
+
+    with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
+        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["reply_text"] == "ありがとう！"
+    assert plan.errors == []
+
+
+def test_gemini_skip_on_error_when_fallback_is_skip(tmp_path):
+    """fallback_on_error='skip' のとき、Gemini 失敗でコメントをスキップする."""
+    config = _make_gemini_config(
+        generator=GeneratorConfig(
+            type=GENERATOR_TYPE_GEMINI,
+            model="gemini-2.5-flash",
+            channel_persona="persona",
+            max_length=280,
+            fallback_on_error="skip",
+            requests_per_minute=30,
+        ),
+    )
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!"}]},
+    )
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = RuntimeError("API 失敗")
+
+    with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
+        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        plan = replier.run(dry_run=True)
+
+    assert plan.planned == []
+    assert any(row["reason"] == "llm_error_skip" for row in plan.skipped)
+
+
+def test_gemini_fallback_skip_when_no_template(tmp_path):
+    """fallback_on_error='template' だがテンプレートなし → llm_error_no_fallback でスキップ."""
+    config = _make_gemini_config(
+        rules=[
+            CommentRule(
+                name="no_template",
+                pattern=".+",
+                generator=GENERATOR_TYPE_GEMINI,
+            )
+        ],
+        templates={},  # テンプレートなし
+        generator=GeneratorConfig(
+            type=GENERATOR_TYPE_GEMINI,
+            model="gemini-2.5-flash",
+            channel_persona="persona",
+            max_length=280,
+            fallback_on_error="template",
+            requests_per_minute=30,
+        ),
+    )
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!"}]},
+    )
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = RuntimeError("API 失敗")
+
+    with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
+        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        plan = replier.run(dry_run=True)
+
+    assert plan.planned == []
+    assert any(row["reason"] == "llm_error_no_fallback" for row in plan.skipped)
+
+
+def test_no_gemini_generator_created_for_template_only_config(tmp_path):
+    """generator 設定なし（テンプレートのみ）のとき GeminiGenerator は作られない."""
+    yt = _mock_youtube(video_ids=[], comments_by_video={})
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    assert replier._gemini_generator is None
+
+
+def test_config_error_when_rule_uses_gemini_but_no_generator_section():
+    """ルールに generator='gemini' があるが comments.generator セクションなし → loader が ConfigError。
+
+    このクロスバリデーションは _build_comments（loader レイヤー）で実施される。
+    詳細は tests/test_config_loader.py の test_comments_rule_gemini_without_generator_section_raises を参照。
+    """
+    from youtube_automation.utils.config.loader import _build_comments
+    from youtube_automation.utils.exceptions import ConfigError
+
+    merged = {
+        "comments": {
+            "enabled": True,
+            "rules": [{"name": "bad", "keywords": ["hi"], "generator": "gemini"}],
+            "templates": {},
+            # generator セクションなし
+        }
+    }
+    with pytest.raises(ConfigError, match="gemini"):
+        _build_comments(merged)

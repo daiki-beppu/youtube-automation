@@ -75,3 +75,7 @@ class UploadError(AutomationError):
     - ファイル不在
     - サムネイル圧縮失敗
     """
+
+
+class GeneratorError(AutomationError):
+    """返信生成バックエンドの失敗（API エラー・レスポンス不正等）"""

@@ -9,7 +9,16 @@ from pathlib import Path
 
 from youtube_automation.utils.config.analytics import Analytics, Benchmark
 from youtube_automation.utils.config.audio import Audio
-from youtube_automation.utils.config.comments import CommentRule, Comments
+from youtube_automation.utils.config.comments import (
+    FALLBACK_TEMPLATE,
+    GENERATOR_TYPE_GEMINI,
+    MAX_LENGTH_DEFAULT,
+    VALID_FALLBACK_VALUES,
+    VALID_GENERATOR_TYPES,
+    CommentRule,
+    Comments,
+    GeneratorConfig,
+)
 from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
 from youtube_automation.utils.config.localizations import Localizations
@@ -321,6 +330,31 @@ def _build_audio(merged: dict) -> Audio:
     )
 
 
+def _build_generator_config(raw: dict) -> GeneratorConfig:
+    gen_type = raw.get("type")
+    if gen_type not in VALID_GENERATOR_TYPES:
+        raise ConfigError(
+            f"comments.generator.type は {VALID_GENERATOR_TYPES} のいずれかでなければなりません: {gen_type!r}"
+        )
+    if gen_type == GENERATOR_TYPE_GEMINI and not raw.get("model"):
+        raise ConfigError("comments.generator.type='gemini' の場合 model は必須です")
+
+    fallback = raw.get("fallback_on_error", FALLBACK_TEMPLATE)
+    if fallback not in VALID_FALLBACK_VALUES:
+        raise ConfigError(
+            f"comments.generator.fallback_on_error は {VALID_FALLBACK_VALUES} のいずれかでなければなりません: {fallback!r}"
+        )
+
+    return GeneratorConfig(
+        type=gen_type,
+        model=raw.get("model"),
+        channel_persona=str(raw.get("channel_persona", "")),
+        max_length=int(raw.get("max_length", MAX_LENGTH_DEFAULT)),
+        fallback_on_error=fallback,
+        requests_per_minute=int(raw.get("requests_per_minute", 30)),
+    )
+
+
 def _build_comments(merged: dict) -> Comments:
     cm = merged.get("comments") or {}
     rules_raw = cm.get("rules") or []
@@ -331,6 +365,11 @@ def _build_comments(merged: dict) -> Comments:
         name = raw.get("name")
         if not name:
             raise ConfigError(f"comments.rules[{i}].name が必須です")
+        rule_generator = raw.get("generator")
+        if rule_generator is not None and rule_generator not in VALID_GENERATOR_TYPES:
+            raise ConfigError(
+                f"comments.rules[{i}].generator は {VALID_GENERATOR_TYPES} のいずれかでなければなりません: {rule_generator!r}"
+            )
         rules.append(
             CommentRule(
                 name=name,
@@ -339,6 +378,7 @@ def _build_comments(merged: dict) -> Comments:
                 template_key=raw.get("template_key", "default"),
                 language=raw.get("language"),
                 priority=int(raw.get("priority", 0)),
+                generator=rule_generator,
             )
         )
     templates_raw = cm.get("templates") or {}
@@ -350,6 +390,13 @@ def _build_comments(merged: dict) -> Comments:
             raise ConfigError(f"comments.templates.{lang} は object でなければなりません")
         templates[str(lang)] = {str(k): str(v) for k, v in bucket.items()}
 
+    gen_raw = cm.get("generator")
+    generator: GeneratorConfig | None = None
+    if gen_raw is not None:
+        if not isinstance(gen_raw, dict):
+            raise ConfigError("comments.generator は object でなければなりません")
+        generator = _build_generator_config(gen_raw)
+
     return Comments(
         enabled=bool(cm.get("enabled", False)),
         rules=rules,
@@ -359,6 +406,7 @@ def _build_comments(merged: dict) -> Comments:
         delay_between_replies_sec=float(cm.get("delay_between_replies_sec", 2.0)),
         history_file=str(cm.get("history_file", "comment_reply_history.json")),
         skip_held_for_review=bool(cm.get("skip_held_for_review", True)),
+        generator=generator,
     )
 
 
