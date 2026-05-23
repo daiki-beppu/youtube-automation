@@ -140,9 +140,7 @@ class CommentReplier:
         for vid in video_source:
             if len(plan.planned) >= limit:
                 break
-            for comment in fetch_comments(
-                self._youtube, video_id=vid, max_results=per_video_limit, since=since
-            ):
+            for comment in fetch_comments(self._youtube, video_id=vid, max_results=per_video_limit, since=since):
                 if len(plan.planned) >= limit:
                     break
                 self._process_comment(comment, engine, plan, dry_run)

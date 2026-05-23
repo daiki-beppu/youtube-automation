@@ -86,9 +86,7 @@ def test_top_level_comment_has_parent_id_none():
 
 def test_top_level_comment_includes_author_channel_id():
     # Given: author_channel_id を持つコメント
-    yt = _mock_youtube_threads(
-        [_make_thread_item(thread_id="t1", text="hi", author_channel_id="UCfoo")]
-    )
+    yt = _mock_youtube_threads([_make_thread_item(thread_id="t1", text="hi", author_channel_id="UCfoo")])
 
     # When
     comments = list(fetch_comments(yt, video_id="v1"))
@@ -154,10 +152,7 @@ def test_paginated_replies_fetched_when_total_reply_count_exceeds_five():
     yt = _mock_youtube_threads([thread])
 
     # comments().list() モック：7件を1ページで返す
-    paginated_replies = [
-        _make_reply_item(reply_id=f"r{i}", text=f"reply{i}", parent_id="t1")
-        for i in range(7)
-    ]
+    paginated_replies = [_make_reply_item(reply_id=f"r{i}", text=f"reply{i}", parent_id="t1") for i in range(7)]
     yt.comments.return_value.list.return_value.execute.return_value = {
         "items": paginated_replies,
     }
@@ -245,10 +240,7 @@ def test_since_filter_applies_to_inline_replies():
 
 def test_max_results_limits_top_level_count():
     # Given: 5 件のスレッド
-    items = [
-        _make_thread_item(thread_id=f"t{i}", text=f"text{i}")
-        for i in range(5)
-    ]
+    items = [_make_thread_item(thread_id=f"t{i}", text=f"text{i}") for i in range(5)]
     yt = _mock_youtube_threads(items)
 
     # When: max_results=3

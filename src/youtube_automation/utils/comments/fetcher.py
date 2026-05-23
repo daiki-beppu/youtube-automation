@@ -97,9 +97,7 @@ def _fetch_replies_paginated(
                 .execute()
             )
         except HttpError as e:
-            raise YouTubeAPIError.from_http_error(
-                e, f"comments.list 失敗 (parentId={top_comment_id})"
-            ) from e
+            raise YouTubeAPIError.from_http_error(e, f"comments.list 失敗 (parentId={top_comment_id})") from e
 
         for item in response.get("items", []):
             if _after_since(item["snippet"].get("publishedAt", ""), since):
