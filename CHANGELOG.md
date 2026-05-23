@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.3] - 2026-05-23
+
 ### Added
 
 - workflow チートシート `docs/workflow-cheatsheet.md` を新設（#363）。`/wf-new` `/wf-next` `/wf-status` `/collection-ideate` の判定フローと `workflow-state.json` の扱い基準（OK / NG / 限定 OK の操作別表）を 1 枚にまとめ、初心者でも使い分けに迷わないようガイド化
@@ -41,6 +43,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(videoup)`: `generate_videos.sh` の loop 正規化判定に `r_frame_rate` を追加し、24fps 以外の `loop.mp4` を `-r 24` 付き `loop_normalized.mp4` 経路へ強制するよう修正。30fps loop と 24fps 系アセットの concat/stream copy 不整合を予防
+
+### Migration
+
+所要時間の目安: 〜10 分
+
+local fix 衝突注意: 下流で `youtube_automation.utils.daily_archive` を直接 import している箇所は `streaming_archive` への rename に追従が必要（#164）
+
+サマリ:
+
+- **破壊的変更**: `yt-skills sync` の default が `--asset all` に変わり、skills / claude-md / workflow-cheatsheet / features を一括配布する（#363, #355）。skill 単独 sync に戻すには `--asset skills` を明示
+- **破壊的変更**: `yt-skills sync --target X` を asset 未指定で叩くと `exit 2` で止まる（#363, #355）。asset ごとに default_target が異なる all モードで意図しない出力先への silent 書き込みを防止。skills を別 target に出すには `--asset skills --target X`
+- `utils/daily_archive.py` → `utils/streaming_archive.py` への rename（#164）。direct import している箇所は import path 修正
+- `feat(comments-reply)`: replies 走査の追加 + Gemini 駆動の返信生成バックエンドを追加（#365, #366）。`comments.generator.type` で `template` / `gemini` を切り替え可能
+- `feat(video-description)`: 概要欄タイムスタンプを個別楽曲単位に変更 + 同名楽曲の自動リネーム機構（#494）。`\d+-pattern-[a-d]` 規約外の legacy コレクションはフラット出力で後方互換
+- `feat(loop-video)`: 末尾 CRF 圧縮ステップで本編動画容量を約 40% 削減（#175）。`compression.{enabled,crf,preset}` で skill-config 上書き可能
+- `feat(thumbnail)`: codex 0.131 系の `codex exec` を直接 shell 実行する補助導線を追加（#501, #547）
+- `feat(terraform)`: streaming VM の SSH host key 検証（#164）
+- 新規 docs: `docs/workflow-cheatsheet.md`（#363）/ `docs/features.md`（#355）/ `docs/migration/high-cpm-locales.md`（#272）
 
 ## [5.5.2] - 2026-05-20
 
