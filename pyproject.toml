@@ -41,6 +41,7 @@ yt-benchmark-collect = "youtube_automation.scripts.benchmark_collector:main"
 yt-benchmark-comments = "youtube_automation.scripts.fetch_benchmark_comments:main"
 yt-bulk-update-desc = "youtube_automation.scripts.bulk_update_descriptions_from_md:main"
 yt-channel-init = "youtube_automation.cli.channel_init:main"
+yt-channel-seed = "youtube_automation.scripts.channel_seed:main"
 yt-channel-settings = "youtube_automation.scripts.channel_settings_cli:main"
 yt-channel-status = "youtube_automation.scripts.get_channel_status:main"
 yt-channel-trend = "youtube_automation.scripts.channel_trend:main"
@@ -105,6 +106,7 @@ packages = ["src/youtube_automation"]
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 
 [tool.hatch.build.targets.sdist]
+skip-excluded-dirs = true
 include = [
     "src/",
     "tests/",
@@ -117,6 +119,9 @@ include = [
     "README.md",
     "LICENSE",
     "pyproject.toml",
+]
+exclude = [
+    ".agents/",
 ]
 
 [tool.ruff]

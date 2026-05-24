@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `yt-channel-seed` を追加し、`/channel-new` で参考チャンネル URL / handle を YouTube Data API で早期 fetch して `benchmark.channels` に初期反映できるようにした（#559）
+
 ## [5.5.3] - 2026-05-23
 
 ### Added
