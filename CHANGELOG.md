@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(pinned-comment)`: 固定コメント（オーナーコメント）自動投稿の `yt-pinned-comment` CLI と `pinned-comment` skill を upstream に同梱した（#575）。`commentThreads.insert` で自チャンネル動画にトップレベルコメントを投稿し、`comments-reply` と同じ dry-run / apply / history（`pinned_comment_history.json`）パターンで二重投稿を防止する。設定は config loader 統合で `config/channel/pinned-comment.json`（トップキー `pinned_comment`、`enabled` はオプトイン）を `config.pinned_comment` dataclass として読む。**preflight**: 投稿前に `videos.list(part="status")` を 50 件 chunk で一括し、削除済み動画 → `SKIP video_not_found` / `privacyStatus=="private"` → `SKIP video_private` を dry-run / apply 共に事前 skip（unlisted は通過）。history 未記録 video のみ status check して quota を節約する。video_id は `20-documentation/upload_tracking.json` の `complete_collection.video_id` → `workflow-state.json` の `upload.video_id` → トップレベル `video_id` の fallback chain で解決。ピン留めは Data API v3 非対応のため投稿後に Studio UI で手動
 - `feat(loop-video)`: skill-config にトップレベル `enabled`（default: `true`）を追加し、channel 単位でループ動画化を停止可能にした（#577）。`config/skills/loop-video.yaml::enabled: false` のチャンネルでは `yt-generate-loop-video` を fail-loud で停止（`--smooth` / `--skip-existing` 含む全経路をブロック）し、取り消し不可な Veo 課金のうっかり実行を防ぐ。`comments-reply` / `pinned-comment` の `enabled` semantic と統一（`compression.enabled` の FFmpeg 圧縮 on/off とは別概念）。`videoup` skill の Step 3 は `enabled: false` のとき `/loop-video` を案内せず `10-assets/main.png` を静止背景にフォールバックする
 
 ### Changed

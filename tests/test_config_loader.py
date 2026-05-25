@@ -122,6 +122,44 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.comments.rules == []
     assert config.comments.templates == {}
     assert config.comments.max_replies_per_run == 20
+    # pinned_comment も optional、欠如時は enabled=False のデフォルト
+    assert config.pinned_comment.enabled is False
+    assert config.pinned_comment.templates == {}
+    assert config.pinned_comment.history_file == "pinned_comment_history.json"
+    assert config.pinned_comment.default_language == "en"
+
+
+def test_load_pinned_comment_section(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["pinned-comment.json"] = {
+        "pinned_comment": {
+            "enabled": True,
+            "history_file": "pins.json",
+            "delay_between_posts_sec": 1.5,
+            "default_language": "ja",
+            "templates": {"ja": "{scene_phrase} {scene_emoji}", "en": "{scene_phrase}"},
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.pinned_comment.enabled is True
+    assert config.pinned_comment.history_file == "pins.json"
+    assert config.pinned_comment.delay_between_posts_sec == 1.5
+    assert config.pinned_comment.default_language == "ja"
+    assert config.pinned_comment.templates["ja"] == "{scene_phrase} {scene_emoji}"
+
+
+def test_pinned_comment_templates_must_be_object(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["pinned-comment.json"] = {"pinned_comment": {"templates": ["not", "an", "object"]}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="pinned_comment.templates"):
+        load_config()
 
 
 def test_load_all_sections(tmp_path, monkeypatch):

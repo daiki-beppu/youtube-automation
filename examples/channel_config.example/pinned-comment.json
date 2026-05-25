@@ -1,0 +1,12 @@
+{
+  "pinned_comment": {
+    "enabled": false,
+    "history_file": "pinned_comment_history.json",
+    "delay_between_posts_sec": 2.5,
+    "default_language": "en",
+    "templates": {
+      "ja": "{scene_phrase} {scene_emoji}\n\nこれを聴きながら今、何をしていますか？コメント欄で教えてくれると嬉しいです。\n\n🔔 新しいセッションを見逃さないようチャンネル登録お願いします。",
+      "en": "{scene_phrase} {scene_emoji}\n\nWhat are you doing while this plays? I'd love to hear where this finds you — drop a comment below.\n\n🔔 SUBSCRIBE so you never miss a new session."
+    }
+  }
+}

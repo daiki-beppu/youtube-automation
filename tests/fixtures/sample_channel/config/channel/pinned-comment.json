@@ -1,0 +1,12 @@
+{
+  "pinned_comment": {
+    "enabled": true,
+    "history_file": "pinned_comment_history.json",
+    "delay_between_posts_sec": 0,
+    "default_language": "en",
+    "templates": {
+      "ja": "{scene_phrase} {scene_emoji}\n\nコメントお待ちしています。",
+      "en": "{scene_phrase} {scene_emoji}\n\nLet me know what you think."
+    }
+  }
+}

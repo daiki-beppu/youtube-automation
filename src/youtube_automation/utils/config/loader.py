@@ -23,6 +23,7 @@ from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import Branding, ChannelMeta
+from youtube_automation.utils.config.pinned_comment import PinnedComment
 from youtube_automation.utils.config.playlists import Playlists
 from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
 from youtube_automation.utils.config.workflow import Workflow
@@ -173,6 +174,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
     audio = _build_audio(merged)
     localizations = _load_localizations(channel_dir_path, youtube.api.language)
     comments = _build_comments(merged)
+    pinned_comment = _build_pinned_comment(merged)
 
     _validate_cross_file(youtube, content, localizations)
 
@@ -187,6 +189,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
         audio=audio,
         localizations=localizations,
         comments=comments,
+        pinned_comment=pinned_comment,
     )
 
 
@@ -409,6 +412,23 @@ def _build_comments(merged: dict) -> Comments:
         history_file=str(cm.get("history_file", "comment_reply_history.json")),
         skip_held_for_review=bool(cm.get("skip_held_for_review", True)),
         generator=generator,
+    )
+
+
+def _build_pinned_comment(merged: dict) -> PinnedComment:
+    pc = merged.get("pinned_comment") or {}
+    if not isinstance(pc, dict):
+        raise ConfigError("pinned_comment セクションは object でなければなりません")
+    templates_raw = pc.get("templates") or {}
+    if not isinstance(templates_raw, dict):
+        raise ConfigError("pinned_comment.templates は {言語: テンプレート文字列} の object でなければなりません")
+    templates = {str(lang): str(text) for lang, text in templates_raw.items()}
+    return PinnedComment(
+        enabled=bool(pc.get("enabled", False)),
+        history_file=str(pc.get("history_file", "pinned_comment_history.json")),
+        delay_between_posts_sec=float(pc.get("delay_between_posts_sec", 2.5)),
+        default_language=str(pc.get("default_language", "en")),
+        templates=templates,
     )
 
 

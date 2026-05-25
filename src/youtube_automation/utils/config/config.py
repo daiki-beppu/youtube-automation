@@ -10,6 +10,7 @@ from youtube_automation.utils.config.comments import Comments
 from youtube_automation.utils.config.content import Content
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import ChannelMeta
+from youtube_automation.utils.config.pinned_comment import PinnedComment
 from youtube_automation.utils.config.playlists import Playlists
 from youtube_automation.utils.config.shorts import Shorts
 from youtube_automation.utils.config.workflow import Workflow
@@ -30,3 +31,4 @@ class ChannelConfig:
     audio: Audio
     localizations: Localizations
     comments: Comments
+    pinned_comment: PinnedComment
