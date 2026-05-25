@@ -304,7 +304,9 @@ class VideoValidator:
                     lo, hi = BITRATE_720P
                     if bitrate < lo or bitrate > hi:
                         warnings.append("720p動画のビットレートが推奨範囲外です（5-7.5 Mbps）")
-            except Exception:
+            except (ValueError, TypeError, AttributeError):
+                # resolution が "WxH" 形式でない / 数値変換できない場合は
+                # ビットレート警告をスキップする（判定はベストエフォート）
                 pass
 
         # フレームレート警告

@@ -152,8 +152,7 @@ class BenchmarkCollector:
             "min_views_threshold": min_views,
         }
 
-        # 最新動画ID取得（scan_recent 件を走査プールとする）
-        # TODO: scan_recent > 50 の場合は nextPageToken によるページング対応
+        # 最新動画ID取得（scan_recent 件を走査プールとする。50 件超は nextPageToken でページング）
         video_ids: list[str] = []
         page_token: str | None = None
         remaining = scan_recent

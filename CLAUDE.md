@@ -101,13 +101,11 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 ### Import 規約
 
 - パッケージ内コードは必ず `from youtube_automation.xxx import ...` の fully-qualified import を使う
-- ルート直下の `scripts/` にはシェルスクリプト（`.sh`）のみ配置。Python shim は廃止済み
 
 ### スクリプト配置
 
 - **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`）
-- ルート `scripts/` には複数の文脈から共有される **共通スクリプトのみ** を置く
-- 単一 skill からしか呼ばれないものを `scripts/` に残すと、skill の自己完結性が崩れて配布時に取り残されるので避ける
+- 共通スクリプト（例: `gcp-bootstrap.sh` / `gcp-terraform-apply.sh`）も該当 skill の `references/` 配下に置く（現状は `.claude/skills/channel-setup/references/`）。ルート直下に `scripts/` ディレクトリは設けない
 
 ### テスト
 
