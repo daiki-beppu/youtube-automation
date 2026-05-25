@@ -20,6 +20,7 @@ import yaml
 
 from youtube_automation.utils import skill_config
 from youtube_automation.utils.config import reset as reset_config
+from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider import (
     get_provider,
     load_image_generation_config,
@@ -111,6 +112,27 @@ class TestProviderSwitchEndToEnd:
         assert cfg.provider == "gemini"
         assert isinstance(provider, GeminiImageProvider)
         assert cfg.gemini.model == "gemini-3.1-flash-image-preview"
+
+    def test_codex_provider_selected_from_yaml_and_rejected_by_api_factory(self, tmp_path: Path, monkeypatch):
+        """Given skill-config YAML が `image_generation.provider: codex` を宣言
+        When load_image_generation_config → get_provider を順に呼ぶ
+        Then config 層では codex が伝搬し、API provider factory は codex-image.sh 経路へ誘導する。
+        """
+        # Given
+        channel_dir = tmp_path / "ch"
+        channel_dir.mkdir()
+        monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+        _write_thumbnail_override(channel_dir, {"image_generation": {"provider": "codex"}})
+
+        # When
+        cfg = load_image_generation_config()
+
+        # Then
+        assert cfg.provider == "codex"
+        assert cfg.gemini is None
+        assert cfg.openai is None
+        with pytest.raises(ConfigError, match="codex-image\\.sh"):
+            get_provider(cfg)
 
     def test_legacy_gemini_image_yaml_still_loads_with_warning(self, tmp_path: Path, monkeypatch):
         """Given 旧 namespace (`gemini_image:`) のみを持つ channel override yaml

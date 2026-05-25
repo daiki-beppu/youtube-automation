@@ -103,7 +103,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
 1. 選択した企画のプレビュー画像をコレクションの `10-assets/main.png` にコピー（`/collection-ideate` で本番品質で生成済み）
 2. プレビューディレクトリの自セッション分を削除
 3. **サムネイル確定**:
-   - `single_step` モードの場合: `/collection-ideate` のプレビュー画像がテキスト込みの完成サムネイルなので、`/thumbnail` は**不要**。
+   - `single_step` モードまたは `image_generation.provider: codex` の場合: `/collection-ideate` のプレビュー画像がテキスト込みの完成サムネイルなので、`/thumbnail` は**不要**。
      `main.png` をそのまま `thumbnail.jpg` にコピーする:
      ```bash
      cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg

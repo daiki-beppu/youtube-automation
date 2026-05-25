@@ -110,7 +110,6 @@ skip-excluded-dirs = true
 include = [
     "src/",
     "tests/",
-    ".claude/skills/",
     ".claude/CLAUDE.template.md",
     "docs/workflow-cheatsheet.md",
     "docs/features.md",
@@ -123,6 +122,9 @@ include = [
 exclude = [
     ".agents/",
 ]
+
+[tool.hatch.build.targets.sdist.force-include]
+".claude/skills" = ".claude/skills"
 
 [tool.ruff]
 target-version = "py311"

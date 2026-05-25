@@ -41,6 +41,10 @@ def _openai_config() -> ImageGenerationConfig:
     )
 
 
+def _codex_config() -> ImageGenerationConfig:
+    return ImageGenerationConfig(provider="codex", gemini=None, openai=None)
+
+
 class TestGetProvider:
     def test_returns_gemini_provider_when_provider_is_gemini(self):
         # Given
@@ -72,6 +76,18 @@ class TestGetProvider:
 
         # When / Then
         with pytest.raises(ConfigError, match="midjourney"):
+            get_provider(cfg)
+
+    def test_codex_provider_is_rejected_from_api_factory_with_route_guidance(self):
+        """Given provider=codex の ImageGenerationConfig
+        When API provider factory を呼ぶ
+        Then ImageProvider 実装は返さず codex-image.sh 経路へ誘導する。
+        """
+        # Given
+        cfg = _codex_config()
+
+        # When / Then
+        with pytest.raises(ConfigError, match="codex-image\\.sh"):
             get_provider(cfg)
 
     def test_gemini_provider_does_not_expose_pricing_model_id(self):

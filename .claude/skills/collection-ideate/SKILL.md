@@ -134,7 +134,10 @@ ic = load_skill_config('collection-ideate').get('preview', {})
 cfg = load_image_generation_config()
 mode = get_collection_ideate_thumbnail_mode()
 count = 1 if mode == THUMBNAIL_MODE_SEQUENTIAL else ic.get('candidate_count', 3)
-if cfg.provider == 'gemini':
+if cfg.provider == 'codex':
+    print(f'{count} 枚 × GCP 課金なし ({mode} / codex-image.sh / ChatGPT fair-use)')
+    raise SystemExit
+elif cfg.provider == 'gemini':
     model = cfg.gemini.model
     image_size = cfg.gemini.image_size
 else:
@@ -179,7 +182,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 
 - **それ以外の場合**: 4-1 で生成済みの本番品質プロンプトをそのまま流用
 
-`REF_ARGS` を構築してから `preview.candidate_count` 枚を順次生成する:
+`REF_ARGS` / `REF_PATHS` を構築してから provider に応じた経路で `preview.candidate_count` 枚を順次生成する:
 
 ```bash
 # <dir> は 4-3 で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
@@ -212,15 +215,24 @@ for p in defaults + stock:
 ")
 
 REF_ARGS=()
+REF_PATHS=()
 while IFS= read -r p; do
-  [ -n "$p" ] && REF_ARGS+=(--reference "$p")
+  [ -n "$p" ] && REF_ARGS+=(--reference "$p") && REF_PATHS+=("$p")
 done <<< "$REFS"
 
-# 順次実行（API レート制限回避）。以下は candidate_count=3 のサンプル。
+# 順次実行。以下は candidate_count=3 のサンプル。
 # 違う値の場合は連打数と plan-{a,b,c,...} の採番をその値に合わせて調整する。
-uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
-uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
-uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
+PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
+if [ "$PROVIDER" = "codex" ]; then
+  # codex は長文 prompt で失敗しやすいため、4-1 の本番プロンプトを短縮して差分だけを書く。
+  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Aの短縮プロンプト>" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Bの短縮プロンプト>" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Cの短縮プロンプト>" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[@]}"
+else
+  uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
+  uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
+  uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
+fi
 ```
 
 - 全企画とも同じ `REF_ARGS` を共有（stock シャッフル結果も共有）。stock 採用ログは stderr `[INFO] stock 採用: ...` に出る
@@ -260,13 +272,21 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 
 **sequential 用 4-4 (選択 → 1 枚生成)**:
 
-先にユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取り（不採用 (`candidate_count` - 1) 案は破棄、画像は未生成なので副作用なし）、選択 1 案のみ `yt-generate-image` を 1 回呼ぶ:
+先にユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取り（不採用 (`candidate_count` - 1) 案は破棄、画像は未生成なので副作用なし）、選択 1 案のみ provider に応じた生成経路を 1 回呼ぶ:
 
 ```bash
 # <x> は選択された企画の番号（a/b/c）
-uv run yt-generate-image "${REF_ARGS[@]}" \
-  --prompt "<選択された企画のプロンプト>" \
-  --output collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png -y
+PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
+if [ "$PROVIDER" = "codex" ]; then
+  bash .claude/skills/thumbnail/references/codex-image.sh \
+    "<選択された企画の短縮プロンプト>" \
+    collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png \
+    "${REF_PATHS[@]}"
+else
+  uv run yt-generate-image "${REF_ARGS[@]}" \
+    --prompt "<選択された企画のプロンプト>" \
+    --output collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png -y
+fi
 ```
 
 **sequential 用 4-5 (1 枚承認)**:

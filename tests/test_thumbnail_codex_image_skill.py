@@ -14,9 +14,8 @@ Issue #501 では provider 抽象化 (`yt-generate-image` / `ImageProvider`) に
    `After generation, copy the produced PNG to <out>. Then reply with exactly <out>.`
    を自動付与する
 3. script が未ログイン検知 (`codex login status`)・空出力検知・PNG ヘッダ検証を行う
-4. `thumbnail/SKILL.md` に provider 表とは独立した
-   `## codex 経由の補助生成` セクションがあり、新プロトコル（`--json` + `jq` + agent
-   が cp + prompt は短く保つ）を案内する
+4. `thumbnail/SKILL.md` に provider 表の `codex` 行と codex 経路セクションがあり、
+   新プロトコル（`--json` + `jq` + agent が cp + prompt は短く保つ）を案内する
 """
 
 from __future__ import annotations
@@ -232,12 +231,12 @@ def _parse_invocations(log_text: str) -> list[list[str]]:
 
 def _codex_section(text: str) -> str:
     match = re.search(
-        r"^## codex 経由の補助生成\b.*?(?=^## |\Z)",
+        r"^## codex 経由.*?(?=^## |\Z)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
     if not match:
-        raise AssertionError("thumbnail/SKILL.md に `## codex 経由の補助生成` セクションが見つかりません")
+        raise AssertionError("thumbnail/SKILL.md に `## codex 経由...` セクションが見つかりません")
     return match.group(0)
 
 
@@ -831,26 +830,28 @@ def test_codex_image_script_drops_unreachable_defense_around_final_msg_after_con
     )
 
 
-def test_thumbnail_skill_keeps_codex_out_of_provider_switch_table() -> None:
+def test_thumbnail_skill_lists_codex_in_provider_switch_table() -> None:
     """Given thumbnail/SKILL.md の provider 表
     When `## プロバイダー切り替え` セクションだけを読む
-    Then `codex` は provider 行として追加されていない。
+    Then `codex` は正規 provider 行として追加されている。
     """
     section = _provider_section(_read(_THUMBNAIL_SKILL_MD))
-    assert "| `codex` |" not in section, "`codex` は provider 抽象化に追加せず、独立導線として文書化する必要がある"
+    assert "| `codex` |" in section, "`codex` が provider 表に正規 provider として載っていない"
+    assert "ChatGPT" in section
+    assert "GCP" in section
 
 
-def test_thumbnail_skill_has_codex_helper_generation_section() -> None:
+def test_thumbnail_skill_has_codex_generation_section() -> None:
     """Given thumbnail/SKILL.md
     When 該当セクションを抽出する
-    Then `## codex 経由の補助生成` セクションが存在する。
+    Then codex 経路のセクションが存在する。
     """
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
-    assert "codex 経由の補助生成" in section
+    assert "codex 経由" in section
 
 
 def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> None:
-    """Given `## codex 経由の補助生成` セクション
+    """Given codex 経路セクション
     When 本文を読む
     Then `codex login status` 前提と `codex-image.sh` の直接実行例を案内している。
     """
@@ -860,19 +861,33 @@ def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> N
     assert "main-codex.png" in section
 
 
-def test_thumbnail_skill_codex_section_mentions_independent_scope() -> None:
-    """Given `## codex 経由の補助生成` セクション
+def test_thumbnail_skill_codex_section_documents_api_route_boundary() -> None:
+    """Given codex 経路セクション
     When 本文を読む
-    Then provider 抽象化に乗せない独立経路であることが分かる説明を含む。
+    Then 正規 provider だが yt-generate-image / ImageProvider の API 経路ではないことを説明する。
     """
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
-    assert ("yt-generate-image" in section) or ("ImageProvider" in section), (
-        "独立経路であり provider 抽象化に組み込まないことへの言及が無い"
-    )
+    assert "正規" in section
+    assert "yt-generate-image" in section
+    assert "ImageProvider" in section
+    assert "codex-image.sh" in section
+
+
+def test_thumbnail_skill_codex_section_documents_cost_and_retry_policy() -> None:
+    """Given codex 経路セクション
+    When 本文を読む
+    Then GCP 課金・cost_tracker・fair-use と自動リトライなしの扱いが明文化されている。
+    """
+    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
+    assert "GCP" in section
+    assert "cost_tracker" in section
+    assert "fair-use" in section
+    assert "リトライ" in section
+    assert "自動" in section
 
 
 def test_thumbnail_skill_codex_section_documents_prompt_length_caveat() -> None:
-    """Given `## codex 経由の補助生成` セクション
+    """Given codex 経路セクション
     When 本文を読む
     Then 「prompt は短く保つ（長いと agent が image_generation tool を skip する
         failure mode あり）」「画像は agent が cp してくるので wrapper 側 path

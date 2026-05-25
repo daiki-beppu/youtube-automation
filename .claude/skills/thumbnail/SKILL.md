@@ -1,13 +1,13 @@
 ---
 name: thumbnail
-description: Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + 画像生成プロバイダー（Gemini / OpenAI）での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること
+description: Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + 画像生成プロバイダー（Gemini / OpenAI / codex）での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること
 ---
 
 ## Overview
 
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。
 チャンネルごとにスタイル・キャラ・参照画像が異なり、すべて skill-config から動的に読み取る。
-画像生成プロバイダー（Gemini / OpenAI）は `image_generation.provider` で切り替え可能。
+画像生成プロバイダー（Gemini / OpenAI / codex）は `image_generation.provider` で切り替え可能。
 
 ## 前提
 
@@ -39,12 +39,13 @@ description: Use when コレクションのサムネイル画像が必要で、C
 |---|---|---|
 | `gemini` | Gemini Image (Nano Banana 系) | ADC (`GOOGLE_CLOUD_PROJECT` は任意で上書き可) |
 | `openai` | OpenAI gpt-image 系（CJK 文字描画が綺麗、16:9/9:16 ネイティブ対応） | `OPENAI_API_KEY` |
+| `codex` | `codex-image.sh` 経由で ChatGPT サブスク認証を使う（GCP 課金なし） | `codex login status` が `Logged in using ChatGPT` |
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
 
-## codex 経由の補助生成
+## codex 経由の生成
 
-API 課金を増やさずに複数案を出したいときや、CTR 比較用のラフを素早く作りたいときは、`codex exec` を**独立した shell 経路**で使う。これは `yt-generate-image` / `ImageProvider` 抽象化には組み込まず、補助導線としてのみ扱う。
+`image_generation.provider: codex` のチャンネルでは、`yt-generate-image` ではなく `codex-image.sh` を正規の生成経路として使う。`ImageProvider` API 実装は持たないため、`yt-generate-image` に誤配線した場合は明示エラーでこの shell 経路へ誘導される。
 
 前提:
 - codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
@@ -78,11 +79,12 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 - **reference 画像つきは prompt で「変更点」を明示する**: 「reference を参考に」程度の弱い指示だと agent が `image_generation` tool を skip して reference を `<out>` に cp するだけで終わる failure mode がある。wrapper の自動付与文 + MD5 一致検証で抑止しているが、prompt 側でも reference からの差分（色味の参考 / 構図だけ流用 / 主役を差し替え 等）を明示しておくと安定する
 - 失敗時 wrapper は `agent_message (最終)` と codex stderr の末尾 30 行を診断 dump するので、これを見て prompt 短縮 or 参照画像見直しに切り替える
 
-この補助導線のスコープ:
-- `yt-generate-image` 連携なし
-- `ImageProvider` 連携なし
-- リトライなし
-- コスト計測連携なし
+この経路のスコープ:
+- `yt-generate-image` の API 呼び出しは使わない
+- `ImageProvider` 実装は持たない
+- wrapper 自体のリトライなし
+- GCP 課金なし。ChatGPT サブスクの fair-use 対象で、`cost_per_image_usd` は通常 `null`
+- `cost_tracker` 連携なし。生成回数は shell 実行ログで確認する
 
 ## Channel Adaptation
 
@@ -95,7 +97,7 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 実行前に以下を確認:
 
-1. `image_generation.provider` → 使用するプロバイダー（`gemini` / `openai`）
+1. `image_generation.provider` → 使用するプロバイダー（`gemini` / `openai` / `codex`）
 2. `image_generation.gemini.model` → 使用する Gemini モデル
 3. `image_generation.gemini.style` → スタイル説明（参照画像ベース or プロンプトベース）
 4. `image_generation.gemini.prompt_prefix` → プロンプト冒頭の固定文（キャラ描写等）

@@ -121,6 +121,13 @@ def main():
         print(f"[ERROR] skill-config 読み込み失敗: {e}")
         sys.exit(1)
 
+    if cfg.provider == "codex":
+        print(
+            "[ERROR] image_generation.provider=codex は yt-generate-image の API 経路では実行できません。"
+            ".claude/skills/thumbnail/references/codex-image.sh を使ってください。"
+        )
+        sys.exit(1)
+
     # provider オーバーライド: --model 指定時は cfg のモデル値を差し替える
     if args.model:
         cfg = replace_model(cfg, args.model)
