@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(loop-video)`: skill-config にトップレベル `enabled`（default: `true`）を追加し、channel 単位でループ動画化を停止可能にした（#577）。`config/skills/loop-video.yaml::enabled: false` のチャンネルでは `yt-generate-loop-video` を fail-loud で停止（`--smooth` / `--skip-existing` 含む全経路をブロック）し、取り消し不可な Veo 課金のうっかり実行を防ぐ。`comments-reply` / `pinned-comment` の `enabled` semantic と統一（`compression.enabled` の FFmpeg 圧縮 on/off とは別概念）。`videoup` skill の Step 3 は `enabled: false` のとき `/loop-video` を案内せず `10-assets/main.png` を静止背景にフォールバックする
 
+### Changed
+
+- `feat(videoup)`: 静止画 fallback 経路（`loop.mp4` 不在時）の master.mp4 生成 ffmpeg オプションを最適化（#579）。`generate_videos.sh` の静止画モードで全フレームを I-frame 化していた `-x264opts keyint=1:min-keyint=1` を廃止し `-g 300`（1fps で 5 分間隔）へ、`-preset ultrafast` → `-preset medium`、`-crf 23` → `-crf 28` に変更。変化のないフレームを P-frame で圧縮し容量を大幅削減する（rjn / 2h17m 公開実績 3.35GB に対し ~450-500MB の試算。実機ベンチは未取得で rjn 次回コレクション公開時に取得予定）。ループ動画背景モード（`-c:v copy` の stream copy 経路）は変更なし
+
 ## [5.5.4] - 2026-05-25
 
 ### Added
