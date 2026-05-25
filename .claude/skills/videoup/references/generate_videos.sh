@@ -177,10 +177,12 @@ if [[ -n "$LOOP_VIDEO" ]]; then
         "$MASTER_OUTPUT" &
 else
     # 静止画背景モード（従来）
+    # I-frame を 5 分間隔（1fps なので 300 フレーム）に間引き、変化のないフレームを P-frame で
+    # 圧縮することで master.mp4 を大幅に小型化する（#579）。keyint=1 全 I-frame 化は容量が膨らむため廃止。
     ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" -i "$MASTER_AUDIO" \
-        -c:v libx264 -tune stillimage -preset ultrafast -crf 23 -pix_fmt yuv420p \
+        -c:v libx264 -tune stillimage -preset medium -crf 28 -pix_fmt yuv420p \
         -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
-        -x264opts keyint=1:min-keyint=1 \
+        -g 300 \
         -r 1 \
         "${AUDIO_OUT_OPTS[@]}" \
         -t "$duration" \
