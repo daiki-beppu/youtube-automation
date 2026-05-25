@@ -4,14 +4,16 @@
 # deep-merge でマージされる (dict は再帰マージ、リスト・スカラは上書き)。
 
 image_generation:
-  # provider: "gemini" | "openai"
+  # provider: "gemini" | "openai" | "codex"
   # - gemini: Gemini Image (Nano Banana 系) を使用
   # - openai: OpenAI gpt-image 系を使用（OPENAI_API_KEY が必要）
+  # - codex: codex-image.sh 経由で ChatGPT サブスク認証を使用（GCP 課金なし）
   provider: gemini
 
   # 事前見積もり用の 1 枚あたりコスト (USD) は各 provider の cost_per_image_usd で
   # 指定したときのみ CLI 表示に使われる。未指定なら CLI には「不明」と表示され、
-  # 実コストは GCP Cloud Console > Billing で確認する。
+  # 実コストは provider の課金画面で確認する。codex は GCP 課金なし、ChatGPT
+  # サブスクの fair-use 対象。
 
   # ボツ画像ストック化 (#364): /thumbnail と /collection-ideate で不採用となった
   # 画像を <channel_dir>/assets/stock/<theme>/ に隣接 .meta.json 付きで退避する。
@@ -162,4 +164,9 @@ image_generation:
 
     # 事前見積もりに使う 1 枚あたり単価を固定したい場合のみ指定する。
     # 未指定なら CLI 表示は「不明」となり、実コストは GCP Cloud Console > Billing で確認する。
+    # cost_per_image_usd: null
+
+  codex:
+    # codex-image.sh 経路は API provider ではないため model / quality は持たない。
+    # ChatGPT サブスクの fair-use 上限内で使い、大量生成には使わない。
     # cost_per_image_usd: null

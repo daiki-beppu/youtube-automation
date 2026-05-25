@@ -1,8 +1,8 @@
 """画像生成プロバイダーの設定 dataclass と skill-config パーサ。
 
 skill-config の `image_generation:` namespace を解析し、
-`provider` 値に応じた `GeminiConfig` / `OpenAIConfig` を保持する
-`ImageGenerationConfig` を構築する。
+`provider` 値に応じた `GeminiConfig` / `OpenAIConfig` または
+codex shell 経路を保持する `ImageGenerationConfig` を構築する。
 
 旧 `gemini_image:` namespace は ``DeprecationWarning`` 付きで読み込み継続する
 （後方互換性。新 namespace と共存時は新 namespace を優先）。
@@ -17,8 +17,8 @@ from typing import Any, Literal
 from youtube_automation.utils.exceptions import ConfigError
 
 # プロバイダー識別子。`get_provider` の dispatch キーと一致させる。
-ProviderName = Literal["gemini", "openai"]
-SUPPORTED_PROVIDERS: tuple[str, ...] = ("gemini", "openai")
+ProviderName = Literal["gemini", "openai", "codex"]
+SUPPORTED_PROVIDERS: tuple[str, ...] = ("gemini", "openai", "codex")
 
 # OpenAI が受理するアスペクト比（order.md "期待する動作 1": 16:9 と 9:16 のみ）
 OPENAI_SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = ("16:9", "9:16")
@@ -69,7 +69,7 @@ class ImageGenerationConfig:
     """provider 切り替え可能な画像生成設定の親 dataclass。
 
     ``provider`` の値に対応する側のみが非 None（例: provider="gemini" なら
-    ``gemini`` のみ）。``get_provider(cfg)`` で provider 実装にディスパッチする。
+    ``gemini`` のみ）。``codex`` は shell 経路なので API provider sub-config を持たない。
     """
 
     provider: ProviderName
@@ -125,8 +125,11 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         gemini_cfg = _build_gemini(section.get("gemini") or {})
         return ImageGenerationConfig(provider="gemini", gemini=gemini_cfg, openai=None)
 
-    openai_cfg = _build_openai(section.get("openai") or {})
-    return ImageGenerationConfig(provider="openai", gemini=None, openai=openai_cfg)
+    if provider == "openai":
+        openai_cfg = _build_openai(section.get("openai") or {})
+        return ImageGenerationConfig(provider="openai", gemini=None, openai=openai_cfg)
+
+    return ImageGenerationConfig(provider="codex", gemini=None, openai=None)
 
 
 def _build_from_legacy_gemini(legacy: dict[str, Any]) -> ImageGenerationConfig:

@@ -14,6 +14,7 @@ import pytest
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.config import (
+    SUPPORTED_PROVIDERS,
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
@@ -70,6 +71,29 @@ class TestParseImageGenerationConfig:
         assert cfg.openai.aspect_ratio == "16:9"
         assert cfg.openai.thinking == "medium"
         assert cfg.openai.batch == 1
+
+    def test_parses_image_generation_namespace_for_codex_without_api_sub_config(self):
+        """Given image_generation.provider が codex
+        When skill-config を parse する
+        Then codex は正規 provider として通り、API provider 用 sub-config は作られない。
+        """
+        # Given
+        skill_cfg = {"image_generation": {"provider": "codex"}}
+
+        # When
+        cfg = parse_image_generation_config(skill_cfg)
+
+        # Then
+        assert cfg.provider == "codex"
+        assert cfg.gemini is None
+        assert cfg.openai is None
+
+    def test_supported_providers_declares_codex(self):
+        """Given provider 設定の許容値
+        When SUPPORTED_PROVIDERS を読む
+        Then codex が gemini/openai と同じ provider 値として列挙される。
+        """
+        assert SUPPORTED_PROVIDERS == ("gemini", "openai", "codex")
 
     def test_legacy_gemini_image_namespace_emits_deprecation_warning(self):
         # Given: 旧 namespace

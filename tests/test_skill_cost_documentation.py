@@ -162,6 +162,26 @@ def test_ideate_phase_4_2_references_cost_per_image_usd_key() -> None:
     assert "cost_per_image_usd" in block, f"Phase 4-2 が `cost_per_image_usd` 直接参照になっていない:\n{block}"
 
 
+def test_ideate_phase_4_2_handles_codex_before_api_provider_fields() -> None:
+    """Given ideate/SKILL.md Phase 4-2 ワンライナー
+    When provider=codex が来る
+    Then cfg.gemini/cfg.openai の model 参照前に codex 専用分岐で GCP 課金なしを表示する。
+    """
+    block = _phase_4_2_block(_read(IDEATE_SKILL_MD))
+    codex_branch = block.find("cfg.provider == 'codex'")
+    if codex_branch == -1:
+        codex_branch = block.find('cfg.provider == "codex"')
+    gemini_branch = block.find("cfg.provider == 'gemini'")
+    if gemini_branch == -1:
+        gemini_branch = block.find('cfg.provider == "gemini"')
+
+    assert codex_branch != -1, f"Phase 4-2 に codex 専用分岐がありません:\n{block}"
+    assert gemini_branch != -1, f"Phase 4-2 に既存 API provider 分岐がありません:\n{block}"
+    assert codex_branch < gemini_branch, f"codex 分岐は cfg.gemini/cfg.openai 参照前に必要です:\n{block}"
+    assert "GCP" in block
+    assert "fair-use" in block
+
+
 def test_ideate_phase_4_2_keeps_user_reject_fallback_text() -> None:
     """Given ideate/SKILL.md Phase 4-2
     When 修正後のドキュメントを読む
@@ -196,10 +216,11 @@ def test_thumbnail_config_yaml_drops_legacy_gemini_image_root_key() -> None:
 def test_thumbnail_config_yaml_declares_provider_field() -> None:
     """Given image_generation ブロック
     When 内容を読む
-    Then provider フィールドで gemini/openai を切り替え可能と明示されている。
+    Then provider フィールドで gemini/openai/codex を切り替え可能と明示されている。
     """
     block = _config_yaml_image_generation_block(_read(THUMBNAIL_CONFIG_YAML))
     assert re.search(r"\bprovider:\s*\w+", block), f"`provider:` キーが見当たりません:\n{block}"
+    assert "codex" in block, f"`provider` の選択肢に codex が明示されていません:\n{block}"
 
 
 def test_thumbnail_config_yaml_drops_hardcoded_004_example() -> None:

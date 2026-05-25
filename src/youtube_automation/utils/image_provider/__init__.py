@@ -38,7 +38,7 @@ __all__ = [
 def get_provider(cfg: ImageGenerationConfig) -> ImageProvider:
     """``ImageGenerationConfig`` から対応する provider 実装を返す。
 
-    未知の provider 名は ``ConfigError``。
+    ``codex`` は API provider ではないため ``ConfigError`` で shell 経路へ誘導する。
     """
     if cfg.provider == "gemini":
         from youtube_automation.utils.image_provider.gemini import GeminiImageProvider
@@ -53,6 +53,12 @@ def get_provider(cfg: ImageGenerationConfig) -> ImageProvider:
         if cfg.openai is None:
             raise ConfigError("provider=openai だが openai 設定が見つかりません")
         return OpenAIImageProvider(cfg.openai)
+
+    if cfg.provider == "codex":
+        raise ConfigError(
+            "provider=codex は ImageProvider API 経路では実行できません。"
+            ".claude/skills/thumbnail/references/codex-image.sh を使ってください"
+        )
 
     raise ConfigError(f"未対応の provider={cfg.provider!r}")
 
