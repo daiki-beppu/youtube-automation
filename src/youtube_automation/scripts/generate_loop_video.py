@@ -328,6 +328,13 @@ def main():
     args = parser.parse_args()
 
     skill_config = load_config()
+    if not skill_config.get("enabled", True):
+        print(
+            "ループ動画化はチャンネル設定で無効化されています。"
+            "config/skills/loop-video.yaml::enabled を確認してください",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     veo_config = skill_config.get("veo", {})
     compression_config = skill_config.get("compression", {})
     model = args.model or veo_config.get("model", DEFAULT_MODEL)

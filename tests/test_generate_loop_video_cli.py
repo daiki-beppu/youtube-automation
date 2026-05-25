@@ -923,3 +923,95 @@ class TestMainCompressionPropagation:
             kwargs = mocks["smooth_loop"].call_args.kwargs
             assert kwargs.get("crf") == 18
             assert kwargs.get("preset") == "slow"
+
+
+# ---------------------------------------------------------------------------
+# 9. main(): トップレベル enabled ゲート (Issue #577)
+# ---------------------------------------------------------------------------
+
+
+class TestMainEnabledGate:
+    """skill-config の トップレベル `enabled: false` で全経路を fail-loud 停止する。
+
+    `enabled` 未指定時は default `true` で従来挙動（regression）。
+    `compression.enabled`（FFmpeg 圧縮の on/off）とは別概念であることに注意。
+    """
+
+    def test_disabled_fails_loud_and_skips_veo(self, tmp_path, monkeypatch, capsys):
+        # Given: skill-config が enabled: false（このチャンネルはループ動画化を停止）
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"enabled": False}
+
+            # When/Then: fail-loud で exit 1。Veo もクライアント生成も呼ばれない（課金経路遮断）
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+            assert excinfo.value.code == 1
+            assert mocks["generate_loop_video"].call_count == 0
+            assert mocks["create_genai_client"].call_count == 0
+
+        # メッセージは設定確認を促す（issue 指定文言）
+        err = capsys.readouterr().err
+        assert "無効化されています" in err
+        assert "config/skills/loop-video.yaml::enabled" in err
+
+    def test_disabled_blocks_smooth_path(self, tmp_path, monkeypatch):
+        # Given: enabled: false + --smooth（課金は無いが全経路ブロックの確認）
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        _write_loop_mp4(col, LOOP_MP4)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--smooth"])
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"enabled": False}
+
+            # When/Then: smooth 早期分岐より前で停止 → exit 1、smooth_loop 非呼出
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+            assert excinfo.value.code == 1
+            assert mocks["smooth_loop"].call_count == 0
+
+    def test_enabled_absent_defaults_to_true(self, tmp_path, monkeypatch):
+        # Given: トップレベル enabled 未指定（既存チャンネル相当）→ default true
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"veo": {}}
+
+            # When/Then: 従来通り Veo 呼出 + exit 0（regression）
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+            assert excinfo.value.code == 0
+            assert mocks["generate_loop_video"].call_count == 1
+
+    def test_enabled_true_runs_normally(self, tmp_path, monkeypatch):
+        # Given: enabled: true 明示
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"enabled": True, "veo": {}}
+
+            # When/Then: Veo 呼出 + exit 0
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+            assert excinfo.value.code == 0
+            assert mocks["generate_loop_video"].call_count == 1

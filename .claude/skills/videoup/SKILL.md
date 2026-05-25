@@ -39,7 +39,10 @@ $ARGUMENTS
 
 1. **対象コレクション確認**: `workflow-state.json` で状態確認
 2. **マスター音源**: `master-mix.{wav,m4a,aac,mp3,flac}` が既にあればスキップ。なければ `/masterup` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可）
-3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。なければ `/loop-video` でのループ動画生成を案内。`loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
+3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
+   `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/loop-video` を案内せず `10-assets/main.png` を静止背景として使用する。
+   それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
+   `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
 4. **動画生成**: `generate_videos.sh` の実行コマンドを案内
 5. **workflow-state.json 更新**: `production.generated = true` に更新
 
