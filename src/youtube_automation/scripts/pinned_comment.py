@@ -170,11 +170,7 @@ def _resolve_scene(state: dict | None, lang: str) -> dict[str, str]:
     state = state or {}
     planning = state.get("planning") or {}
     scene_phrases = state.get("scene_phrases") or {}
-    video_title = (
-        planning.get("final_title_en")
-        or planning.get("final_title")
-        or state.get("collection_name", "")
-    )
+    video_title = planning.get("final_title_en") or planning.get("final_title") or state.get("collection_name", "")
     scene_phrase = scene_phrases.get(lang) or scene_phrases.get("en", "")
     return {
         "video_title": video_title,
@@ -238,9 +234,7 @@ def build_plan(
             comment_id = post_top_level_comment(youtube, vid, text)
         except HttpError as e:
             status_code = getattr(getattr(e, "resp", None), "status", None)
-            plan["errors"].append(
-                {"video_id": vid, "error": f"commentThreads.insert 失敗: status={status_code} {e}"}
-            )
+            plan["errors"].append({"video_id": vid, "error": f"commentThreads.insert 失敗: status={status_code} {e}"})
             continue
 
         metadata = {**record, "comment_id": comment_id, "posted_at": datetime.now(timezone.utc).isoformat()}

@@ -324,9 +324,7 @@ def _make_collection(tmp_path: Path, *, tracking=None, workflow=None) -> Path:
     col = tmp_path / "20260101-test-collection"
     (col / "20-documentation").mkdir(parents=True)
     if tracking is not None:
-        (col / "20-documentation" / "upload_tracking.json").write_text(
-            json.dumps(tracking), encoding="utf-8"
-        )
+        (col / "20-documentation" / "upload_tracking.json").write_text(json.dumps(tracking), encoding="utf-8")
     if workflow is not None:
         (col / "workflow-state.json").write_text(json.dumps(workflow), encoding="utf-8")
     return col
