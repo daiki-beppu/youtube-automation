@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.4] - 2026-05-25
+
 ### Added
 
 - `feat(image-provider)`: サムネ/画像生成の provider に `codex`（`codex-image.sh`・ChatGPT サブスク認証・GCP 課金なし）を正規 provider として追加（#568, root cause #567）。`image_provider/config.py` の `ProviderName` / `SUPPORTED_PROVIDERS` に `codex` を許容値として追加し、`_build_from_new_namespace` で `ImageGenerationConfig(provider="codex")` を構築可能に。`collection-ideate` Phase 4（コスト確認・生成）と `wf-new` Phase 2c がチャンネル config の `image_generation.provider` を見て分岐し、`codex` 指定時は `codex-image.sh`（位置引数 `<prompt> <output> [refs...]`）を呼ぶ。`thumbnail` skill は codex を従来の「補助生成」から「正規の生成経路」へ再ポジションし、コスト（GCP 課金なし・`cost_tracker` 非記録・ChatGPT サブスクの fair-use 対象）とリトライ（wrapper 自体の自動リトライなし・失敗時は prompt 短縮で手動再実行）を文書化。レイヤ逆転を避けるため `yt-generate-image` / `get_provider` の API 経路は `codex` を明示エラー（`ConfigError` / `sys.exit(1)`）で拒否し `codex-image.sh` 経路へ誘導する
@@ -812,6 +814,8 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.4]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.4
+[5.5.3]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.3
 [5.5.2]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.2
 [5.5.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.1
 [5.5.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.0
