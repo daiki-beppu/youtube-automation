@@ -134,6 +134,20 @@ def _make_tracking_collection(
     (col / "01-master").mkdir()
     doc = col / "20-documentation"
     doc.mkdir()
+    (col / "workflow-state.json").write_text(
+        json.dumps(
+            {
+                "collection_name": col.name,
+                "theme": "",
+                "stage": "planning",
+                "phase": "publishing",
+                "upload": {"video_id": None, "video_url": None, "publish_at": None},
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     cc: dict = {"status": cc_status}
     if resume_uri is not None:
@@ -264,6 +278,64 @@ class TestExecuteCompleteCollectionResume:
         dt = datetime.fromisoformat(upload_time)
         assert dt.tzinfo is not None
         assert dt.utcoffset() == timedelta(0)
+
+    def test_should_update_workflow_upload_when_complete_collection_succeeds(self, tmp_path):
+        """成功時は workflow-state.json の upload を tracking と同じ video_id/url/publish_at で更新する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_WORKFLOW",
+                "video_url": "https://www.youtube.com/watch?v=V_WORKFLOW",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        tracking = uploader._load_tracking(col)
+        uploader._execute_complete_collection(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
+
+        state = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
+        assert state["upload"] == {
+            "video_id": "V_WORKFLOW",
+            "video_url": "https://www.youtube.com/watch?v=V_WORKFLOW",
+            "publish_at": "2099-01-01T10:00:00+09:00",
+        }
+
+    def test_should_distinguish_dedup_skip_and_keep_tracking_workflow_consistent_after_live_move(self, tmp_path):
+        """dedup skip 時も live 移動後の tracking/workflow-state に既存 video_id を記録する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        uploader.config["collections_management"]["auto_move_to_live"] = True
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_EXISTING",
+                "video_url": "https://www.youtube.com/watch?v=V_EXISTING",
+                "upload_source": "existing_video",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        tracking = uploader._load_tracking(col)
+        result = uploader._execute_complete_collection(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
+
+        live_col = tmp_path / "collections" / "live" / col.name
+        saved_tracking = json.loads(
+            (live_col / "20-documentation" / "upload_tracking.json").read_text(encoding="utf-8")
+        )
+        saved_state = json.loads((live_col / "workflow-state.json").read_text(encoding="utf-8"))
+        assert result["action"] == "complete_collection_dedup_skipped"
+        assert saved_tracking["status"] == "completed"
+        assert saved_tracking["complete_collection"]["video_id"] == "V_EXISTING"
+        assert saved_tracking["complete_collection"]["upload_source"] == "existing_video"
+        assert saved_state["stage"] == "live"
+        assert saved_state["phase"] == "complete"
+        assert saved_state["upload"] == {
+            "video_id": "V_EXISTING",
+            "video_url": "https://www.youtube.com/watch?v=V_EXISTING",
+            "publish_at": "2099-01-01T10:00:00+09:00",
+        }
 
     def test_should_persist_uri_to_tracking_when_on_session_uri_changed_is_invoked(self, tmp_path):
         """plan 要件 #1 + #2: コールバック発火直後に URI が tracking JSON に永続化される.
