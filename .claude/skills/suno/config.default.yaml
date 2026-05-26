@@ -47,6 +47,9 @@ lyrics_guidelines:
   tone: ""
   # 視点 (first-person / second-person / third-person)
   perspective: ""
+  # 歌詞の語り手 gender。サムネのキャラ性別・genre_line のボーカル性別と一致させる。
+  # male / female / neutral / auto (auto はサムネ main.png のキャラ性別から判定)
+  vocal_gender: ""
   # 韻スタイル (loose / strict / natural)
   rhyme_style: "natural"
   # 言語 (youtube.language と揃える)
