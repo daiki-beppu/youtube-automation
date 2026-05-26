@@ -33,6 +33,8 @@ from youtube_automation.utils.exceptions import ConfigError, GeneratorError, You
 logger = logging.getLogger(__name__)
 
 _HELD_FOR_REVIEW = "heldForReview"
+_COMMENTS_DISABLED_API_REASON = "commentsDisabled"
+_COMMENTS_DISABLED_SKIP_REASON = "comments_disabled"
 
 
 @dataclass
@@ -170,12 +172,32 @@ class CommentReplier:
         for vid in video_source:
             if len(plan.planned) >= limit:
                 break
-            for comment in fetch_comments(self._youtube, video_id=vid, max_results=per_video_limit, since=since):
-                if len(plan.planned) >= limit:
-                    break
-                self._process_comment(comment, engine, plan, dry_run)
+            self._process_video_comments(vid, engine, plan, dry_run, per_video_limit, since, limit)
 
         return plan
+
+    def _process_video_comments(
+        self,
+        video_id: str,
+        engine: RuleEngine,
+        plan: ReplyPlan,
+        dry_run: bool,
+        per_video_limit: int,
+        since: datetime | None,
+        limit: int,
+    ) -> None:
+        comments = fetch_comments(self._youtube, video_id=video_id, max_results=per_video_limit, since=since)
+        while len(plan.planned) < limit:
+            try:
+                comment = next(comments)
+            except StopIteration:
+                return
+            except YouTubeAPIError as e:
+                if not _is_comments_disabled_error(e):
+                    raise
+                plan.skipped.append(self._video_skip_record(video_id, _COMMENTS_DISABLED_SKIP_REASON))
+                return
+            self._process_comment(comment, engine, plan, dry_run)
 
     def _get_title(self, video_id: str) -> str:
         if video_id in self._title_cache:
@@ -386,6 +408,15 @@ class CommentReplier:
         }
 
     @staticmethod
+    def _video_skip_record(video_id: str, reason: str) -> dict:
+        return {
+            "comment_id": None,
+            "video_id": video_id,
+            "comment_author": None,
+            "reason": reason,
+        }
+
+    @staticmethod
     def _error_record(comment: FetchedComment, message: str) -> dict:
         return {
             "comment_id": comment.comment_id,
@@ -393,3 +424,7 @@ class CommentReplier:
             "comment_author": comment.author,
             "error": message,
         }
+
+
+def _is_comments_disabled_error(error: YouTubeAPIError) -> bool:
+    return error.status_code == 403 and error.reason == _COMMENTS_DISABLED_API_REASON

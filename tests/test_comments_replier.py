@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import CommentReplier
@@ -14,6 +15,7 @@ from youtube_automation.utils.config.comments import (
     Comments,
     GeneratorConfig,
 )
+from youtube_automation.utils.exceptions import YouTubeAPIError
 
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
 
@@ -21,7 +23,7 @@ _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client
 def _mock_youtube(
     *,
     video_ids: list[str],
-    comments_by_video: dict[str, list[dict]],
+    comments_by_video: dict[str, list[dict] | BaseException],
     insert_side_effect=None,
 ) -> MagicMock:
     """youtube.* チェーン呼び出しを MagicMock で構築."""
@@ -48,6 +50,8 @@ def _mock_youtube(
         # videoId はキーワード引数として渡される想定
         video_id = _list_execute.current_video_id
         raw = comments_by_video.get(video_id, [])
+        if isinstance(raw, BaseException):
+            raise raw
         items = []
         for c in raw:
             top_snippet: dict = {
@@ -92,6 +96,23 @@ def _mock_youtube(
     yt.comments.return_value.insert.return_value = insert_mock
     yt._insert_mock = insert_mock
     return yt
+
+
+class _FakeResp:
+    def __init__(self, status: int, reason: str):
+        self.status = status
+        self.reason = reason
+
+    def __getitem__(self, _key):
+        return "application/json"
+
+    def get(self, _key, default=None):
+        return default
+
+
+def _make_http_error(status: int, reason: str, api_reason: str) -> HttpError:
+    content = f'{{"error": {{"errors": [{{"reason": "{api_reason}"}}], "message": "{api_reason}"}}}}'.encode()
+    return HttpError(_FakeResp(status, reason), content)
 
 
 def _make_config(**overrides) -> Comments:
@@ -268,20 +289,58 @@ def test_explicit_video_ids_skip_playlist_items_lookup(tmp_path):
     yt.playlistItems.return_value.list.assert_not_called()
 
 
+def test_comments_disabled_video_is_skipped_and_next_video_is_processed(tmp_path):
+    err = _make_http_error(403, "Forbidden", "commentsDisabled")
+    yt = _mock_youtube(
+        video_ids=["disabled", "enabled"],
+        comments_by_video={
+            "disabled": err,
+            "enabled": [{"comment_id": "c1", "text": "こんにちは！", "author": "Viewer"}],
+        },
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["video_id"] == "enabled"
+    assert any(
+        row["video_id"] == "disabled" and row["comment_id"] is None and row["reason"] == "comments_disabled"
+        for row in plan.skipped
+    )
+
+
+def test_comments_disabled_explicit_video_id_is_skipped(tmp_path):
+    err = _make_http_error(403, "Forbidden", "commentsDisabled")
+    yt = _mock_youtube(video_ids=["disabled"], comments_by_video={"disabled": err})
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    plan = replier.run(dry_run=True, video_ids=["disabled"])
+
+    assert plan.planned == []
+    assert plan.skipped == [
+        {
+            "comment_id": None,
+            "video_id": "disabled",
+            "comment_author": None,
+            "reason": "comments_disabled",
+        }
+    ]
+
+
+def test_comment_threads_api_error_other_than_comments_disabled_is_raised(tmp_path):
+    err = _make_http_error(403, "Forbidden", "quotaExceeded")
+    yt = _mock_youtube(video_ids=["v1"], comments_by_video={"v1": err})
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    with pytest.raises(YouTubeAPIError) as exc_info:
+        replier.run(dry_run=True)
+
+    assert "quotaExceeded" in str(exc_info.value)
+
+
 def test_api_error_recorded_in_errors(tmp_path):
-    from googleapiclient.errors import HttpError
-
-    class _FakeResp:
-        status = 403
-        reason = "Forbidden"
-
-        def __getitem__(self, _key):
-            return "application/json"
-
-        def get(self, _key, default=None):
-            return default
-
-    err = HttpError(_FakeResp(), b'{"error": "forbidden"}')
+    err = HttpError(_FakeResp(403, "Forbidden"), b'{"error": "forbidden"}')
     yt = _mock_youtube(
         video_ids=["v1"],
         comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！"}]},
