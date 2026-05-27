@@ -232,9 +232,7 @@ class TestCodexGenerator:
     def test_returns_agent_message_from_codex_jsonl(self):
         gen = self._make_gen()
         ctx = _make_ctx()
-        completed = (
-            '{"type":"item.completed","item":{"type":"agent_message","text":"  Thanks for listening!  "}}\n'
-        )
+        completed = '{"type":"item.completed","item":{"type":"agent_message","text":"  Thanks for listening!  "}}\n'
 
         with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
@@ -266,9 +264,7 @@ class TestCodexGenerator:
 
         with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = (
-                '{"type":"item.completed","item":{"type":"agent_message","text":"Nice!"}}\n'
-            )
+            mock_run.return_value.stdout = '{"type":"item.completed","item":{"type":"agent_message","text":"Nice!"}}\n'
             mock_run.return_value.stderr = ""
             gen.generate(ctx)
 

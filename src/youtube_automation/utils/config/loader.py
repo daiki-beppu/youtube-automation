@@ -382,8 +382,7 @@ def _build_comments(merged: dict) -> Comments:
         rule_provider = raw.get("provider")
         if rule_provider is not None and rule_provider not in VALID_PROVIDERS:
             raise ConfigError(
-                f"comments.rules[{i}].provider は {VALID_PROVIDERS} "
-                f"のいずれかでなければなりません: {rule_provider!r}"
+                f"comments.rules[{i}].provider は {VALID_PROVIDERS} のいずれかでなければなりません: {rule_provider!r}"
             )
         rules.append(
             CommentRule(
