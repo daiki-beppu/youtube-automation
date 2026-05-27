@@ -10,11 +10,13 @@ from pathlib import Path
 from youtube_automation.utils.config.analytics import Analytics, Benchmark
 from youtube_automation.utils.config.audio import Audio
 from youtube_automation.utils.config.comments import (
-    FALLBACK_TEMPLATE,
-    GENERATOR_TYPE_GEMINI,
+    FALLBACK_SKIP,
     MAX_LENGTH_DEFAULT,
+    PROVIDER_CODEX,
+    PROVIDER_GEMINI,
+    REQUESTS_PER_MINUTE_DEFAULT,
     VALID_FALLBACK_VALUES,
-    VALID_GENERATOR_TYPES,
+    VALID_PROVIDERS,
     CommentRule,
     Comments,
     GeneratorConfig,
@@ -334,15 +336,17 @@ def _build_audio(merged: dict) -> Audio:
 
 
 def _build_generator_config(raw: dict) -> GeneratorConfig:
-    gen_type = raw.get("type")
-    if gen_type not in VALID_GENERATOR_TYPES:
+    if "type" in raw:
+        raise ConfigError("comments.generator.type は廃止されました。comments.generator.provider を使用してください")
+    provider = raw.get("provider", PROVIDER_CODEX)
+    if provider not in VALID_PROVIDERS:
         raise ConfigError(
-            f"comments.generator.type は {VALID_GENERATOR_TYPES} のいずれかでなければなりません: {gen_type!r}"
+            f"comments.generator.provider は {VALID_PROVIDERS} のいずれかでなければなりません: {provider!r}"
         )
-    if gen_type == GENERATOR_TYPE_GEMINI and not raw.get("model"):
-        raise ConfigError("comments.generator.type='gemini' の場合 model は必須です")
+    if provider == PROVIDER_GEMINI and not raw.get("model"):
+        raise ConfigError("comments.generator.provider='gemini' の場合 model は必須です")
 
-    fallback = raw.get("fallback_on_error", FALLBACK_TEMPLATE)
+    fallback = raw.get("fallback_on_error", FALLBACK_SKIP)
     if fallback not in VALID_FALLBACK_VALUES:
         raise ConfigError(
             f"comments.generator.fallback_on_error は {VALID_FALLBACK_VALUES} "
@@ -350,17 +354,19 @@ def _build_generator_config(raw: dict) -> GeneratorConfig:
         )
 
     return GeneratorConfig(
-        type=gen_type,
+        provider=provider,
         model=raw.get("model"),
         channel_persona=str(raw.get("channel_persona", "")),
         max_length=int(raw.get("max_length", MAX_LENGTH_DEFAULT)),
         fallback_on_error=fallback,
-        requests_per_minute=int(raw.get("requests_per_minute", 30)),
+        requests_per_minute=int(raw.get("requests_per_minute", REQUESTS_PER_MINUTE_DEFAULT)),
     )
 
 
 def _build_comments(merged: dict) -> Comments:
     cm = merged.get("comments") or {}
+    if "templates" in cm:
+        raise ConfigError("comments.templates は廃止されました。LLM provider で返信を生成してください")
     rules_raw = cm.get("rules") or []
     rules: list[CommentRule] = []
     for i, raw in enumerate(rules_raw):
@@ -369,34 +375,29 @@ def _build_comments(merged: dict) -> Comments:
         name = raw.get("name")
         if not name:
             raise ConfigError(f"comments.rules[{i}].name が必須です")
-        rule_generator = raw.get("generator")
-        if rule_generator is not None and rule_generator not in VALID_GENERATOR_TYPES:
+        if "template_key" in raw:
+            raise ConfigError(f"comments.rules[{i}].template_key は廃止されました")
+        if "generator" in raw:
+            raise ConfigError(f"comments.rules[{i}].generator は廃止されました。provider を使用してください")
+        rule_provider = raw.get("provider")
+        if rule_provider is not None and rule_provider not in VALID_PROVIDERS:
             raise ConfigError(
-                f"comments.rules[{i}].generator は {VALID_GENERATOR_TYPES} "
-                f"のいずれかでなければなりません: {rule_generator!r}"
+                f"comments.rules[{i}].provider は {VALID_PROVIDERS} "
+                f"のいずれかでなければなりません: {rule_provider!r}"
             )
         rules.append(
             CommentRule(
                 name=name,
                 keywords=list(raw.get("keywords", [])),
                 pattern=raw.get("pattern"),
-                template_key=raw.get("template_key", "default"),
                 language=raw.get("language"),
                 priority=int(raw.get("priority", 0)),
-                generator=rule_generator,
+                provider=rule_provider,
             )
         )
-    templates_raw = cm.get("templates") or {}
-    if not isinstance(templates_raw, dict):
-        raise ConfigError("comments.templates は {言語: {key: text}} の object でなければなりません")
-    templates: dict[str, dict[str, str]] = {}
-    for lang, bucket in templates_raw.items():
-        if not isinstance(bucket, dict):
-            raise ConfigError(f"comments.templates.{lang} は object でなければなりません")
-        templates[str(lang)] = {str(k): str(v) for k, v in bucket.items()}
 
     gen_raw = cm.get("generator")
-    generator: GeneratorConfig | None = None
+    generator = GeneratorConfig()
     if gen_raw is not None:
         if not isinstance(gen_raw, dict):
             raise ConfigError("comments.generator は object でなければなりません")
@@ -405,7 +406,6 @@ def _build_comments(merged: dict) -> Comments:
     return Comments(
         enabled=bool(cm.get("enabled", False)),
         rules=rules,
-        templates=templates,
         ng_words=list(cm.get("ng_words", [])),
         max_replies_per_run=int(cm.get("max_replies_per_run", 20)),
         delay_between_replies_sec=float(cm.get("delay_between_replies_sec", 2.0)),

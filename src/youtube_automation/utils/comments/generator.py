@@ -1,4 +1,4 @@
-"""コメント返信生成インターフェースと実装（TemplateGenerator / GeminiGenerator）."""
+"""コメント返信生成インターフェースと Gemini 実装."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from youtube_automation.utils.comments.template import render_template
 from youtube_automation.utils.exceptions import GeneratorError
 
 if TYPE_CHECKING:
@@ -19,7 +18,6 @@ __all__ = [
     "GeminiGenerator",
     "ReplyContext",
     "ReplyGenerator",
-    "TemplateGenerator",
 ]
 
 
@@ -47,24 +45,6 @@ class ReplyGenerator(Protocol):
     """コメント返信テキストを生成するジェネレーターのインターフェース."""
 
     def generate(self, ctx: ReplyContext) -> str: ...
-
-
-class TemplateGenerator:
-    """テンプレート文字列を展開して返信テキストを生成する."""
-
-    def __init__(self, template_text: str) -> None:
-        self._template_text = template_text
-
-    def generate(self, ctx: ReplyContext) -> str:
-        return render_template(
-            self._template_text,
-            context={
-                "video_title": ctx.video_title,
-                "video_id": ctx.video_id,
-                "comment_author": ctx.comment_author,
-                "comment_text": ctx.comment_text,
-            },
-        )
 
 
 class GeminiGenerator:

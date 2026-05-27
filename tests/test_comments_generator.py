@@ -1,4 +1,4 @@
-"""TemplateGenerator / GeminiGenerator の単体テスト."""
+"""GeminiGenerator / CodexGenerator の単体テスト."""
 
 from __future__ import annotations
 
@@ -6,12 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.utils.comments.generator import (
-    GeminiGenerator,
-    ReplyContext,
-    TemplateGenerator,
-)
-from youtube_automation.utils.exceptions import GeneratorError, ValidationError
+from youtube_automation.utils.comments.codex_generator import CodexGenerator
+from youtube_automation.utils.comments.generator import GeminiGenerator, ReplyContext
+from youtube_automation.utils.exceptions import GeneratorError
 
 # create_genai_client はソースモジュールで patch する
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
@@ -44,32 +41,6 @@ def _make_mock_client(response_text: str = "Reply") -> MagicMock:
     mock_client = MagicMock()
     mock_client.models.generate_content.return_value = _make_mock_response(response_text)
     return mock_client
-
-
-# ─── TemplateGenerator ──────────────────────────────────────────────────────
-
-
-class TestTemplateGenerator:
-    def test_renders_placeholders(self):
-        gen = TemplateGenerator("Hi {comment_author}, thanks for watching {video_title}!")
-        ctx = _make_ctx(comment_author="Bob", video_title="Jazz Night")
-        result = gen.generate(ctx)
-        assert result == "Hi Bob, thanks for watching Jazz Night!"
-
-    def test_renders_video_id_placeholder(self):
-        gen = TemplateGenerator("Video: {video_id}")
-        ctx = _make_ctx(video_id="abc123")
-        assert gen.generate(ctx) == "Video: abc123"
-
-    def test_renders_comment_text_placeholder(self):
-        gen = TemplateGenerator("You said: {comment_text}")
-        ctx = _make_ctx(comment_text="nice vibes")
-        assert gen.generate(ctx) == "You said: nice vibes"
-
-    def test_undefined_placeholder_raises(self):
-        gen = TemplateGenerator("Hello {unknown_key}!")
-        with pytest.raises(ValidationError):
-            gen.generate(_make_ctx())
 
 
 # ─── GeminiGenerator ────────────────────────────────────────────────────────
@@ -244,3 +215,128 @@ class TestGeminiGenerator:
 
         prompt = mock_client.models.generate_content.call_args.kwargs["contents"][0]
         assert "Reply in the same language" in prompt
+
+
+# ─── CodexGenerator ─────────────────────────────────────────────────────────
+
+
+class TestCodexGenerator:
+    def _make_gen(self, *, max_length: int = 280, requests_per_minute: int = 60, sleep_fn=None, model=None):
+        return CodexGenerator(
+            model=model,
+            max_length=max_length,
+            requests_per_minute=requests_per_minute,
+            sleep_fn=sleep_fn or (lambda _: None),
+        )
+
+    def test_returns_agent_message_from_codex_jsonl(self):
+        gen = self._make_gen()
+        ctx = _make_ctx()
+        completed = (
+            '{"type":"item.completed","item":{"type":"agent_message","text":"  Thanks for listening!  "}}\n'
+        )
+
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = completed
+            mock_run.return_value.stderr = ""
+            result = gen.generate(ctx)
+
+        assert result == "Thanks for listening!"
+
+    def test_returns_last_agent_message_from_codex_jsonl(self):
+        gen = self._make_gen()
+        ctx = _make_ctx()
+        completed = (
+            '{"type":"item.completed","item":{"type":"agent_message","text":"draft reply"}}\n'
+            '{"type":"item.completed","item":{"type":"agent_message","text":"final reply"}}\n'
+        )
+
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = completed
+            mock_run.return_value.stderr = ""
+            result = gen.generate(ctx)
+
+        assert result == "final reply"
+
+    def test_passes_prompt_as_stdin_and_uses_read_only_sandbox(self):
+        gen = self._make_gen(model="gpt-5.4-mini")
+        ctx = _make_ctx(comment_text="so relaxing", comment_author="Bob")
+
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = (
+                '{"type":"item.completed","item":{"type":"agent_message","text":"Nice!"}}\n'
+            )
+            mock_run.return_value.stderr = ""
+            gen.generate(ctx)
+
+        args = mock_run.call_args.args[0]
+        kwargs = mock_run.call_args.kwargs
+        assert args[:3] == ["codex", "exec", "--json"]
+        assert "--sandbox" in args
+        assert "read-only" in args
+        assert "--model" in args
+        assert "gpt-5.4-mini" in args
+        assert "Bob" in kwargs["input"]
+        assert "so relaxing" in kwargs["input"]
+
+    def test_truncates_when_exceeds_max_length(self):
+        gen = self._make_gen(max_length=10)
+        ctx = _make_ctx()
+        completed = (
+            '{"type":"item.completed","item":{"type":"agent_message",'
+            '"text":"This is a very long reply that exceeds max_length"}}\n'
+        )
+
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = completed
+            mock_run.return_value.stderr = ""
+            result = gen.generate(ctx)
+
+        assert result == "This is a "
+
+    def test_cli_failure_wrapped_as_generator_error(self):
+        gen = self._make_gen()
+        ctx = _make_ctx()
+
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stdout = ""
+            mock_run.return_value.stderr = "auth failed"
+            with pytest.raises(GeneratorError, match="codex"):
+                gen.generate(ctx)
+
+    def test_missing_agent_message_wrapped_as_generator_error(self):
+        gen = self._make_gen()
+        ctx = _make_ctx()
+
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = '{"type":"session.started"}\n'
+            mock_run.return_value.stderr = ""
+            with pytest.raises(GeneratorError, match="agent_message"):
+                gen.generate(ctx)
+
+    def test_dry_run_logs_prompt_and_reply(self, caplog):
+        import logging
+
+        gen = self._make_gen()
+        ctx = _make_ctx(dry_run=True)
+
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = (
+                '{"type":"item.completed","item":{"type":"agent_message","text":"Test reply"}}\n'
+            )
+            mock_run.return_value.stderr = ""
+            with caplog.at_level(logging.INFO, logger="youtube_automation.utils.comments.codex_generator"):
+                result = gen.generate(ctx)
+
+        assert result == "Test reply"
+        log_messages = " ".join(caplog.messages)
+        assert "[dry-run]" in log_messages
+        assert "Codex prompt" in log_messages
+        assert "Codex reply" in log_messages
