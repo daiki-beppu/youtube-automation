@@ -8,6 +8,8 @@ from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
     check_duration,
+    check_low_cpm_localization_languages,
+    check_required_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
     extract_descriptions_md_tags,
@@ -163,6 +165,43 @@ class TestCheckChapterVariationSuffix:
             "20:00 Last Train Home",
         ]
         assert check_chapter_variation_suffix(lines) is None
+
+
+class TestCheckRequiredLocalizationLanguages:
+    def test_passes_when_high_cpm_languages_are_present(self) -> None:
+        assert check_required_localization_languages(["ja", "en", "de"]) is None
+
+    def test_passes_when_extra_languages_are_present(self) -> None:
+        assert check_required_localization_languages(["ja", "en", "de", "ko"]) is None
+
+    def test_returns_message_when_one_high_cpm_language_is_missing(self) -> None:
+        msg = check_required_localization_languages(["ja", "en"])
+
+        assert msg is not None
+        assert "de" in msg
+
+    def test_returns_message_when_all_high_cpm_languages_are_missing(self) -> None:
+        msg = check_required_localization_languages([])
+
+        assert msg is not None
+        assert "de" in msg
+        assert "en" in msg
+        assert "ja" in msg
+
+
+class TestCheckLowCpmLocalizationLanguages:
+    def test_passes_without_low_cpm_languages(self) -> None:
+        assert check_low_cpm_localization_languages(["ja", "en", "de"]) is None
+
+    def test_returns_message_for_low_cpm_languages(self) -> None:
+        msg = check_low_cpm_localization_languages(["ja", "en", "de", "ko", "zh-CN"])
+
+        assert msg is not None
+        assert "ko" in msg
+        assert "zh-CN" in msg
+
+    def test_ignores_languages_outside_low_cpm_set(self) -> None:
+        assert check_low_cpm_localization_languages(["ja", "en", "de", "fr"]) is None
 
 
 class TestExtractDescriptionsMdTags:

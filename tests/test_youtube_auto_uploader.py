@@ -15,11 +15,14 @@ issue #381 (P0-5) で追加される以下の振る舞いを検証する:
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
@@ -49,6 +52,107 @@ def _make_metadata(title: str = "Rainy Jazz") -> dict:
         "language": "en",
         "privacy_status": "private",
     }
+
+
+def _make_preflight_config(supported_languages: list[str]) -> SimpleNamespace:
+    return SimpleNamespace(
+        audio=SimpleNamespace(
+            chapter_max=100,
+            target_duration_min=None,
+            target_duration_max=None,
+        ),
+        content=SimpleNamespace(
+            tags=SimpleNamespace(
+                min_count=None,
+                for_collection=lambda _name: ["fallback"],
+            ),
+        ),
+        localizations=SimpleNamespace(supported_languages=supported_languages),
+    )
+
+
+def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> Path:
+    col_dir = tmp_path / "20990101-foo-collection"
+    doc_dir = col_dir / "20-documentation"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "descriptions.md").write_text(
+        "\n".join(
+            [
+                "## タイトル案",
+                "```",
+                "Rainy Jazz for Focus",
+                "```",
+                "",
+                "## Complete Collection 概要欄",
+                "```",
+                "00:00 Opening Rain",
+                "10:00 Warm Desk Light",
+                "20:00 Last Train Home",
+                "```",
+                "",
+                "## タグ（YouTube タグ欄）",
+                "```",
+                "rainy jazz, focus music, night study",
+                "```",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    scene_phrases = {lang: {"title": f"title-{lang}"} for lang in scene_languages}
+    (col_dir / "workflow-state.json").write_text(
+        json.dumps({"scene_phrases": scene_phrases}),
+        encoding="utf-8",
+    )
+    return col_dir
+
+
+# ---------------------------------------------------------------------------
+# Issue #587: `_preflight_check` localization quality gates
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightLocalizationLanguages:
+    def test_should_fail_when_required_high_cpm_language_is_missing(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.load_config",
+            return_value=_make_preflight_config(["ja", "en"]),
+        ):
+            with pytest.raises(RuntimeError, match="de"):
+                uploader._preflight_check(col_dir)
+
+    def test_should_pass_when_required_high_cpm_languages_are_present(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de"])
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.load_config",
+            return_value=_make_preflight_config(["ja", "en", "de"]),
+        ):
+            uploader._preflight_check(col_dir)
+
+    def test_should_warn_and_continue_when_low_cpm_language_is_present(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de", "ko"])
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader.load_config",
+                return_value=_make_preflight_config(["ja", "en", "de", "ko"]),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            uploader._preflight_check(col_dir)
+
+        assert any("ko" in rec.message for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------
