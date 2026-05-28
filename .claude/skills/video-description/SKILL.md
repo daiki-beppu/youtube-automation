@@ -44,6 +44,15 @@ $ARGUMENTS
 
 対象コレクションの `workflow-state.json` と `20-documentation/suno-prompts.md` を読み込み、コレクションのテーマ・雰囲気を把握してから概要欄を生成してください。
 
+### Benchmark 概要欄 TTP 参照
+
+概要欄生成前に、最新の `docs/benchmarks/*.md` または `data/benchmark_*.json` を確認する。
+
+1. `docs/benchmarks/*.md` に `概要欄TTPサンプル` がある場合は、そのサンプルを優先して参照する
+2. Markdown にサンプルがない場合は、最新の `data/benchmark_*.json` の `channels[].videos[].description` を参照する
+3. 参照した概要欄から、冒頭文の構造・Tracklist/目次書式・CTA・ハッシュタグ記法・装飾量を抽出し、TTP 対象として生成内容へ反映する
+4. benchmark 概要欄データが存在しない場合のみ、既存の Complete Collection テンプレートへフォールバックする
+
 ### Complete Collection テンプレート
 
 情景フック＋タイムスタンプ＋Perfect for 構成のテンプレート。装飾ヘッダー・Usage & Attribution 本文は
