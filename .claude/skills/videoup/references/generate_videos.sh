@@ -1,7 +1,7 @@
 #!/bin/bash
-# generate_videos.sh v12.0 — Master video generator
+# generate_videos.sh v12.1 — Master video generator
 # Static image + master audio → MP4 (macOS optimized)
-# v12: ループモードを正規化キャッシュ + stream copy 化（クオリティ完全保持で大幅高速化）
+# v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -59,6 +59,8 @@ LOOP_TARGET_HEIGHT="1080"
 LOOP_TARGET_PIX_FMT="yuv420p"
 LOOP_TARGET_FRAME_RATE="24/1"
 LOOP_OUTPUT_FRAME_RATE="24"
+LOOP_MAX_BITRATE="6000k"
+LOOP_BUFSIZE="12000k"
 
 # ─── Audio encoder 自動選択 (macOS は AudioToolbox 優先) ─
 if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
@@ -109,9 +111,47 @@ format_duration() {
     printf "%dh %02dm %02ds" $((secs/3600)) $((secs%3600/60)) $((secs%60))
 }
 
+bitrate_to_bps() {
+    local value="$1"
+    local unit number
+
+    if [[ -z "$value" || "$value" == "N/A" ]]; then
+        echo ""
+        return
+    fi
+
+    unit="$(echo "${value: -1}" | tr '[:upper:]' '[:lower:]')"
+    case "$unit" in
+        k)
+            number="${value%?}"
+            awk "BEGIN{printf \"%.0f\", $number * 1000}"
+            ;;
+        m)
+            number="${value%?}"
+            awk "BEGIN{printf \"%.0f\", $number * 1000000}"
+            ;;
+        *)
+            awk "BEGIN{printf \"%.0f\", $value}"
+            ;;
+    esac
+}
+
+video_bitrate_bps() {
+    local file="$1"
+    local bitrate
+
+    bitrate="$(ffprobe -v error -select_streams v:0 \
+        -show_entries stream=bit_rate -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | head -1)"
+    if [[ -z "$bitrate" || "$bitrate" == "N/A" ]]; then
+        bitrate="$(ffprobe -v error \
+            -show_entries format=bit_rate -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | head -1)"
+    fi
+    bitrate_to_bps "$bitrate"
+}
+
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v12.0 — ${COLLECTION_NAME}"
+echo "  generate_videos.sh v12.1 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
@@ -141,17 +181,27 @@ if [[ -n "$LOOP_VIDEO" ]]; then
     loop_h="$(echo "$loop_specs" | cut -d, -f2)"
     loop_pix="$(echo "$loop_specs" | cut -d, -f3)"
     loop_fps="$(echo "$loop_specs" | cut -d, -f4)"
+    loop_bitrate_bps="$(video_bitrate_bps "$LOOP_VIDEO")"
+    max_bitrate_bps="$(bitrate_to_bps "$LOOP_MAX_BITRATE")"
 
-    if [[ "$loop_w" == "$LOOP_TARGET_WIDTH" && "$loop_h" == "$LOOP_TARGET_HEIGHT" && "$loop_pix" == "$LOOP_TARGET_PIX_FMT" && "$loop_fps" == "$LOOP_TARGET_FRAME_RATE" ]]; then
+    if [[ "$loop_w" == "$LOOP_TARGET_WIDTH" && "$loop_h" == "$LOOP_TARGET_HEIGHT" && "$loop_pix" == "$LOOP_TARGET_PIX_FMT" && "$loop_fps" == "$LOOP_TARGET_FRAME_RATE" \
+          && ( -z "$loop_bitrate_bps" || "$loop_bitrate_bps" -le "$max_bitrate_bps" ) ]]; then
         # 既に正規化済み: そのまま使う
         LOOP_SOURCE="$LOOP_VIDEO"
     else
         # 正規化キャッシュを使用
         LOOP_SOURCE="${ASSETS_DIR}/loop_normalized.mp4"
-        if [[ ! -f "$LOOP_SOURCE" || "$LOOP_VIDEO" -nt "$LOOP_SOURCE" ]]; then
+        normalized_bitrate_bps=""
+        if [[ -f "$LOOP_SOURCE" ]]; then
+            normalized_bitrate_bps="$(video_bitrate_bps "$LOOP_SOURCE")"
+        fi
+        if [[ ! -f "$LOOP_SOURCE" || "$LOOP_VIDEO" -nt "$LOOP_SOURCE" || ( -n "$normalized_bitrate_bps" && "$normalized_bitrate_bps" -gt "$max_bitrate_bps" ) ]]; then
             echo "  Normalizing loop source (1 回だけ実行) → loop_normalized.mp4"
+            if [[ -n "$loop_bitrate_bps" && "$loop_bitrate_bps" -gt "$max_bitrate_bps" ]]; then
+                echo "  Loop bitrate exceeds ${LOOP_MAX_BITRATE}; re-encoding with maxrate guard"
+            fi
             ffmpeg -y -i "$LOOP_VIDEO" \
-                -c:v libx264 -preset slow -crf 18 -profile:v high -pix_fmt yuv420p \
+                -c:v libx264 -preset slow -crf 22 -maxrate "$LOOP_MAX_BITRATE" -bufsize "$LOOP_BUFSIZE" -profile:v high -pix_fmt yuv420p \
                 -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
                 -r "$LOOP_OUTPUT_FRAME_RATE" \
                 -an -movflags +faststart \

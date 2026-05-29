@@ -43,6 +43,14 @@ if [[ "$args" == *"stream=width,height,pix_fmt,r_frame_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_STREAM_OUTPUT}"
     exit 0
 fi
+if [[ "$args" == *"stream=bit_rate"* ]]; then
+    printf '%s\\n' "${FFPROBE_STREAM_BITRATE_OUTPUT:-}"
+    exit 0
+fi
+if [[ "$args" == *"format=bit_rate"* ]]; then
+    printf '%s\\n' "${FFPROBE_FORMAT_BITRATE_OUTPUT:-}"
+    exit 0
+fi
 exit 0
 """,
     )
@@ -80,13 +88,19 @@ printf 'stub-output' > "$output_path"
     return bin_dir
 
 
-def _run_generate_videos(tmp_path: Path, stream_output: str) -> tuple[subprocess.CompletedProcess[str], Path]:
+def _run_generate_videos(
+    tmp_path: Path,
+    stream_output: str,
+    *,
+    stream_bitrate_output: str = "",
+) -> tuple[subprocess.CompletedProcess[str], Path]:
     collection = _create_collection(tmp_path)
     bin_dir = _create_stub_bin(tmp_path)
     ffmpeg_log = tmp_path / "ffmpeg.log"
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
     env["FFPROBE_STREAM_OUTPUT"] = stream_output
+    env["FFPROBE_STREAM_BITRATE_OUTPUT"] = stream_bitrate_output
     env["FFMPEG_LOG"] = str(ffmpeg_log)
     result = subprocess.run(
         ["bash", str(_SCRIPT_PATH), str(collection)],
@@ -99,13 +113,34 @@ def _run_generate_videos(tmp_path: Path, stream_output: str) -> tuple[subprocess
 
 
 def test_24fps_loop_skips_normalization(tmp_path: Path) -> None:
-    result, ffmpeg_log = _run_generate_videos(tmp_path, "1920,1080,yuv420p,24/1")
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+    )
 
     assert result.returncode == 0, result.stderr
     commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
     assert len(commands) == 1
     assert "loop_normalized.mp4" not in commands[0]
     assert "10-assets/loop.mp4" in commands[0]
+
+
+def test_high_bitrate_24fps_loop_runs_normalization(tmp_path: Path) -> None:
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="15650000",
+    )
+
+    assert result.returncode == 0, result.stderr
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    assert len(commands) == 2
+    assert "loop_normalized.mp4" in commands[0]
+    assert " -crf 22 " in f" {commands[0]} "
+    assert " -maxrate 6000k " in f" {commands[0]} "
+    assert " -bufsize 12000k " in f" {commands[0]} "
+    assert "10-assets/loop_normalized.mp4" in commands[1]
 
 
 def test_non_24fps_loop_runs_normalization_with_fixed_24fps(tmp_path: Path) -> None:

@@ -10,27 +10,23 @@
       {
         "name": "greeting_ja",
         "keywords": ["こんにちは", "はじめまして"],
-        "template_key": "greeting",
         "language": "ja",
-        "priority": 10
+        "priority": 10,
+        "provider": "codex"
       },
       {
         "name": "thanks_en",
         "keywords": ["thank you", "thanks"],
-        "template_key": "thanks",
         "language": "en",
         "priority": 5
       }
     ],
-    "templates": {
-      "ja": {
-        "greeting": "コメントありがとうございます！『{video_title}』を楽しんでいただけて嬉しいです。",
-        "thanks": "ありがとうございます、{comment_author}さん！"
-      },
-      "en": {
-        "greeting": "Thank you for your comment on '{video_title}'!",
-        "thanks": "Thank you, {comment_author}!"
-      }
+    "generator": {
+      "provider": "codex",
+      "channel_persona": "Warm YouTube channel host",
+      "max_length": 280,
+      "fallback_on_error": "skip",
+      "requests_per_minute": 30
     }
   }
 }

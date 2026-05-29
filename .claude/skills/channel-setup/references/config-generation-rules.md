@@ -58,7 +58,9 @@
 | masterup（`audio.crossfade_duration` 等） | `config/skills/masterup.yaml` |
 | loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |
 
-**Suno の場合**: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` を上書き可能。
+**Suno の場合**: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` / `lyrics_guidelines.style_reference` / `lyrics_generation.provider` を上書き可能。
+英語歌詞のネイティブ感を寄せたいチャンネルでは、参考歌詞を `lyrics_guidelines.style_reference` に置き、歌詞本文のコピーではなく語り口・行長・韻の緩さだけを `/suno` に渡す。
+`lyrics_generation.provider: codex` は Codex CLI 経由の初稿生成を使う場合のみ指定する。
 
 ## オプションセクション
 

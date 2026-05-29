@@ -3,6 +3,8 @@
 アプリケーション全体で一貫したエラーハンドリングを提供する。
 """
 
+import json
+
 
 class AutomationError(Exception):
     """youtube-channels-automation の基底例外"""
@@ -25,9 +27,10 @@ class YouTubeAPIError(AutomationError):
     - レスポンス不正
     """
 
-    def __init__(self, message: str, status_code: int | None = None):
+    def __init__(self, message: str, status_code: int | None = None, reason: str | None = None):
         super().__init__(message)
         self.status_code = status_code
+        self.reason = reason
 
     @classmethod
     def from_http_error(cls, error, context: str) -> "YouTubeAPIError":
@@ -35,6 +38,7 @@ class YouTubeAPIError(AutomationError):
         return cls(
             f"{context}: {error}",
             status_code=int(status) if status is not None else None,
+            reason=_http_error_reason(error),
         )
 
 
@@ -79,3 +83,29 @@ class UploadError(AutomationError):
 
 class GeneratorError(AutomationError):
     """返信生成バックエンドの失敗（API エラー・レスポンス不正等）"""
+
+
+def _http_error_reason(error) -> str | None:
+    content = getattr(error, "content", b"")
+    if isinstance(content, bytes):
+        content = content.decode("utf-8", errors="replace")
+    try:
+        payload = json.loads(content)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return _payload_reason(payload)
+
+
+def _payload_reason(payload: object) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return None
+    errors = error.get("errors")
+    if isinstance(errors, list):
+        for item in errors:
+            if isinstance(item, dict) and isinstance(item.get("reason"), str):
+                return item["reason"]
+    reason = error.get("reason")
+    return reason if isinstance(reason, str) else None
