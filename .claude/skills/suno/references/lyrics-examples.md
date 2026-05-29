@@ -109,11 +109,20 @@ lyrics_guidelines:
   rhyme_style: "loose, natural flow"
   language: en
   catchphrase: "Mind off, groove on"
+  style_reference:
+    - |
+      [Verse]
+      a kettle hums under the hallway light
+      your shoes by the door, still leaning right
+      we leave the big words on the shelf
+      and let the quiet speak for itself
   forbidden_topics:
     - politics
     - religion
     - explicit
   template_reference: jazzhop
+lyrics_generation:
+  provider: claude
 ```
 
 `template_reference` は `references/lyrics-examples.md`（このファイル）内のどの例をベースにするかの識別子。
