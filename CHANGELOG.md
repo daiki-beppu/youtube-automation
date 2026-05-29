@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.5] - 2026-05-30
+
 ### Added
 
 - `feat(suno)`: サムネのキャラ性別と歌詞の語り手 gender・`genre_line` のボーカル性別を一致させる gender 整合ルールを追加した（#591）。`lyrics_guidelines.vocal_gender`（`male` / `female` / `neutral` / `auto`、既定 `""` は従来通り AI がサムネを見て判断）を新設し、SKILL.md のボーカルモード歌詞設計に「8. gender 整合（サムネ連動）」を明文化。サムネと歌唱の性別不一致による没入崩れ・AI 生成バレを防ぐ。ドキュメント / 設定のみで `generate_suno_prompts.py` は改修不要
@@ -24,6 +26,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `chore(repo-audit)`: AGENTS.md / CLAUDE.md のドキュメント陳腐化を解消（#538, #539, #540）。`utils/`・`agents/`・`scripts/` のルート shim 記述を `auth/` のみへ修正、実体のないルート `scripts/` 配置ルールを AGENTS.md / CLAUDE.md 双方から削除して共通スクリプトは該当 skill の `references/` 配下に置く方針へ統一、「skill 編集は takt 経由で行わない」を「skill 編集と takt の関係」へ改題し `coder=codex` なら skill 配下も takt で回せる条件付き事実へ追従
 - `refactor`: `video_validator` のビットレート判定の `except Exception: pass` を `(ValueError, TypeError, AttributeError)` に絞りスキップ意図をコメント化（#541）。`benchmark_collector` の実装済みページング処理に残った TODO コメントを削除（#542）
 - `docs(community-draft)`: SKILL.md の `poll` type を deprecated 表記に統一し、現役 type の列挙から除去（#544）。config 側は後方互換受理のため維持
+
+### Migration
+
+所要時間の目安: 〜15 分（`comments.json` 移行 + `yt-skills sync`）
+
+local fix 衝突注意:
+
+- **`config/channel/comments.json`（#589 破壊的変更・対応必須）**: `comments.templates` / `comments.rules[].template_key` / `comments.rules[].generator` / `comments.generator.type` を廃止。`comments.generator.provider`（`codex` / `gemini`、既定 `codex`）へ手動移行が必要。`fallback_on_error` は `skip` / `retry` のみ有効で旧 `template` fallback は利用不可
+- **`config/localizations.json`（#587）**: アップロード preflight が高 CPM 必須言語 `ja` / `en` / `de` を検証し、欠落時は fail-loud で停止する。`supported_languages` に 3 言語が揃っているか確認すること
+- **`generate_videos.sh`（#579）**: 静止画 fallback 経路の ffmpeg オプションを変更。`videoup` skill のスクリプトを下流で local 改変している場合は `yt-skills sync` で上書きされるため diff 確認推奨
+
+サマリ:
+
+- **破壊的変更**: `comments-reply` を LLM 生成専用化（#589）。downstream の `comments.json` は `provider` 軸へ移行必須
+- `feat(video-upload)`: dedup 安全網が削除済み動画を実在検証するよう修正 + preflight で高 CPM 言語 `ja`/`en`/`de` を fail-loud 検証（#593, #587）
+- `feat(pinned-comment)`: 固定コメント自動投稿の `yt-pinned-comment` CLI / `pinned-comment` skill を同梱（#575）。`yt-skills sync` で取得、`config/channel/pinned-comment.json`（`enabled` オプトイン）で有効化
+- `feat(loop-video)`: skill-config に `enabled`（既定 `true`）を追加しチャンネル単位でループ動画化を停止可能に（#577）
+- `feat(suno)`: gender 整合ルール + 英語歌詞の `style_reference` / `lyrics_generation.provider`（codex 委譲）を追加（#591, #586）
+- `feat(videoup)`: 静止画 fallback master.mp4 の ffmpeg 最適化で容量を大幅削減（#579）
+- `feat(benchmark)`: channel-video 収集で競合概要欄全文を保存し `/video-description` の TTP サンプルに活用（#588）
 
 ## [5.5.4] - 2026-05-25
 
@@ -834,6 +856,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.5]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.5
 [5.5.4]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.4
 [5.5.3]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.3
 [5.5.2]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.2
