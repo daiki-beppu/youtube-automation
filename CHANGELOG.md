@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(comments-reply)`: コメント無効動画で `yt-comments-reply` の全動画走査が停止する問題を修正（#590）。`commentThreads.list` の 403 `commentsDisabled` は動画単位で `skipped(reason=comments_disabled)` に記録して次の動画へ継続し、quota/auth など他の API エラーは従来どおり伝播する。`--video-id` 明示指定時も同じ skip 挙動に統一
 - `fix(videoup)`: `generate_videos.sh` の loop 背景モードで高ビットレート `loop.mp4` を `-c:v copy` して長尺 master.mp4 が肥大化する問題を修正（#592）。正規化済み判定に実測ビットレート上限（6Mbps）を追加し、超過時は `loop_normalized.mp4` を CRF22 / maxrate 6000k / bufsize 12000k で再エンコードしてから stream copy する
 - `fix(videoup)`: `generate_videos.sh` の loop 正規化判定に `r_frame_rate` を追加し、24fps 以外の `loop.mp4` を `-r 24` 付き `loop_normalized.mp4` 経路へ強制するよう修正。30fps loop と 24fps 系アセットの concat/stream copy 不整合を予防
 
