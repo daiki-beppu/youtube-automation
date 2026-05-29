@@ -12,12 +12,14 @@
 
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from youtube_automation.scripts.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
     BenchmarkCollector,
+    BenchmarkReportGenerator,
 )
 
 
@@ -46,6 +48,32 @@ def _ch_item(channel_id: str, *, uploads: str = "UU_DUMMY") -> dict:
         "snippet": {"title": channel_id},
         "statistics": {"subscriberCount": "1000", "videoCount": "10"},
         "contentDetails": {"relatedPlaylists": {"uploads": uploads}},
+    }
+
+
+def _video_item(
+    video_id: str,
+    *,
+    title: str = "Benchmark Video",
+    description: str = "",
+    view_count: str = "20000",
+    duration: str = "PT1H30M",
+) -> dict:
+    return {
+        "id": video_id,
+        "snippet": {
+            "title": title,
+            "publishedAt": "2026-05-01T12:00:00Z",
+            "description": description,
+            "tags": ["ambient", "study"],
+            "thumbnails": {"high": {"url": f"https://example.com/{video_id}.jpg"}},
+        },
+        "statistics": {
+            "viewCount": view_count,
+            "likeCount": "1000",
+            "commentCount": "25",
+        },
+        "contentDetails": {"duration": duration},
     }
 
 
@@ -162,6 +190,38 @@ class TestCollectChannelWithPrefetchedItem:
         assert result["channel_id"] == "UC_OK"
         assert result["subscribers"] == 1000
 
+    def test_preserves_full_description_on_collected_video(self):
+        # Given: 動画詳細 API が TTP 対象になる概要欄本文を返す
+        description = (
+            "A calm opening paragraph for late-night focus.\n\n"
+            "In this mix, you'll find:\n"
+            "- Warm keys and soft tape texture\n\n"
+            "Tracklist:\n"
+            "00:00 - First Theme\n"
+            "08:12 - Second Theme\n\n"
+            "Subscribe for more sessions.\n"
+            "#DeepFocus #AmbientStudy"
+        )
+        youtube = MagicMock()
+        youtube.playlistItems.return_value.list.return_value.execute.return_value = {
+            "items": [{"contentDetails": {"videoId": "VID_FULL_DESC"}}],
+            "nextPageToken": None,
+        }
+        youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [_video_item("VID_FULL_DESC", description=description)],
+        }
+        collector = _make_collector(youtube)
+        collector.benchmark_config = {"scan_recent": 1, "min_views": 10000}
+
+        # When
+        result = collector.collect_channel({"id": "UC_OK", "name": "ok", "slug": "ok"}, _ch_item("UC_OK"))
+
+        # Then: playlist 系パスと同じ `description` キーで本文を保持し、既存キーワードも維持する
+        video = result["videos"][0]
+        assert video["description"] == description
+        assert "description_keywords" in video
+        assert "ambientstudy" in video["description_keywords"]
+
 
 class TestCollectAllPrefetchesChannels:
     def test_collect_all_prefetches_metadata_in_single_batch(self):
@@ -212,3 +272,158 @@ class TestCollectAllPrefetchesChannels:
 
         # Then: 削除済みは結果に含まれず、生存分のみ返る
         assert [c["channel_id"] for c in data["channels"]] == ["UC_OK"]
+
+
+class TestBenchmarkReportGeneratorDescriptionSamples:
+    def test_channel_markdown_includes_description_ttp_samples(self, tmp_path):
+        # Given: benchmark JSON 相当の channel data に概要欄本文つき Long 動画がある
+        description = (
+            "A direct prose hook that should be visible in the benchmark report.\n\n"
+            "In this mix, you'll find:\n"
+            "- Warm keys\n"
+            "- Slow dusty drums\n\n"
+            "Tracklist:\n"
+            "00:00 - First Theme\n"
+            "08:12 - Second Theme\n\n"
+            "Subscribe for more sessions.\n"
+            "#DeepFocus #AmbientStudy"
+        )
+        channel = {
+            "name": "Reference Channel",
+            "channel_id": "UC_REF",
+            "slug": "reference",
+            "collected_at": "2026-05-28",
+            "subscribers": 120000,
+            "total_videos": 80,
+            "relationship": "TTP target",
+            "min_views_threshold": 10000,
+            "scanned_count": 1,
+            "avg_views": 50000,
+            "avg_daily_views": 1000,
+            "avg_engagement_rate": 2.1,
+            "posting_trend": {},
+            "top_tags": [],
+            "videos": [
+                {
+                    "video_id": "VID_REF",
+                    "title": "Reference Mix",
+                    "published_at": "2026-05-01",
+                    "published_at_utc": "2026-05-01T12:00:00Z",
+                    "views": 50000,
+                    "daily_views": 1000.0,
+                    "likes": 1000,
+                    "comments": 50,
+                    "engagement_rate": 2.1,
+                    "duration_iso": "PT1H30M",
+                    "duration_display": "1h30m",
+                    "tags": [],
+                    "description": description,
+                    "description_keywords": ["ambientstudy"],
+                    "thumbnail_analysis": None,
+                }
+            ],
+        }
+        config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))
+        generator = BenchmarkReportGenerator(config, tmp_path, date(2026, 5, 28))
+
+        # When
+        markdown = generator._generate_channel_md(channel)
+
+        # Then: docs/benchmarks/*.md から概要欄の型を参照できる
+        assert "## 概要欄TTPサンプル" in markdown
+        assert "Reference Mix" in markdown
+        assert "A direct prose hook that should be visible in the benchmark report." in markdown
+        assert "Tracklist:" in markdown
+        assert "#DeepFocus #AmbientStudy" in markdown
+
+    def test_channel_markdown_uses_longer_fence_when_description_contains_backticks(self, tmp_path):
+        description = "Opening hook.\n\n```text\nexample block\n```\n\nTracklist:\n00:00 - First"
+        channel = {
+            "name": "Reference Channel",
+            "channel_id": "UC_REF",
+            "slug": "reference",
+            "collected_at": "2026-05-28",
+            "subscribers": 120000,
+            "total_videos": 80,
+            "relationship": "TTP target",
+            "min_views_threshold": 10000,
+            "scanned_count": 1,
+            "avg_views": 50000,
+            "avg_daily_views": 1000,
+            "avg_engagement_rate": 2.1,
+            "posting_trend": {},
+            "top_tags": [],
+            "videos": [
+                {
+                    "video_id": "VID_REF",
+                    "title": "Reference Mix",
+                    "published_at": "2026-05-01",
+                    "published_at_utc": "2026-05-01T12:00:00Z",
+                    "views": 50000,
+                    "daily_views": 1000.0,
+                    "likes": 1000,
+                    "comments": 50,
+                    "engagement_rate": 2.1,
+                    "duration_iso": "PT1H30M",
+                    "duration_display": "1h30m",
+                    "tags": [],
+                    "description": description,
+                    "description_keywords": ["ambientstudy"],
+                    "thumbnail_analysis": None,
+                }
+            ],
+        }
+        config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))
+        generator = BenchmarkReportGenerator(config, tmp_path, date(2026, 5, 28))
+
+        markdown = generator._generate_channel_md(channel)
+
+        assert "\n````text\n" in markdown
+        assert "\n````\n" in markdown
+        assert description in markdown
+
+    def test_channel_markdown_omits_description_samples_when_all_descriptions_empty(self, tmp_path):
+        # Given: 動画はあるが概要欄本文が保存されていない channel data
+        channel = {
+            "name": "Reference Channel",
+            "channel_id": "UC_REF",
+            "slug": "reference",
+            "collected_at": "2026-05-28",
+            "subscribers": 120000,
+            "total_videos": 80,
+            "relationship": "TTP target",
+            "min_views_threshold": 10000,
+            "scanned_count": 1,
+            "avg_views": 50000,
+            "avg_daily_views": 1000,
+            "avg_engagement_rate": 2.1,
+            "posting_trend": {},
+            "top_tags": [],
+            "videos": [
+                {
+                    "video_id": "VID_EMPTY",
+                    "title": "Reference Mix",
+                    "published_at": "2026-05-01",
+                    "published_at_utc": "2026-05-01T12:00:00Z",
+                    "views": 50000,
+                    "daily_views": 1000.0,
+                    "likes": 1000,
+                    "comments": 50,
+                    "engagement_rate": 2.1,
+                    "duration_iso": "PT1H30M",
+                    "duration_display": "1h30m",
+                    "tags": [],
+                    "description": "",
+                    "description_keywords": [],
+                    "thumbnail_analysis": None,
+                }
+            ],
+        }
+        config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))
+        generator = BenchmarkReportGenerator(config, tmp_path, date(2026, 5, 28))
+
+        # When
+        markdown = generator._generate_channel_md(channel)
+
+        # Then: 空の概要欄セクションを作らない
+        assert "## 概要欄TTPサンプル" not in markdown

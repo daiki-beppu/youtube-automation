@@ -46,6 +46,14 @@ logger = logging.getLogger(__name__)
 
 # channels.list バッチ単位（YouTube Data API 上限）
 _CHANNELS_BATCH_SIZE = 50
+_VIDEO_DESCRIPTION_FIELD = "description"
+_DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
+_DESCRIPTION_TTP_SAMPLE_LIMIT = 3
+
+
+def _markdown_code_fence(content: str) -> str:
+    max_backticks = max((len(match.group(0)) for match in re.finditer(r"`+", content)), default=0)
+    return "`" * max(3, max_backticks + 1)
 
 
 class BenchmarkCollector:
@@ -223,7 +231,8 @@ class BenchmarkCollector:
                     "duration_iso": duration_iso,
                     "duration_display": parse_iso_duration(duration_iso),
                     "tags": snippet.get("tags", []),
-                    "description_keywords": extract_description_keywords(snippet.get("description", "")),
+                    _VIDEO_DESCRIPTION_FIELD: snippet.get(_VIDEO_DESCRIPTION_FIELD, ""),
+                    "description_keywords": extract_description_keywords(snippet.get(_VIDEO_DESCRIPTION_FIELD, "")),
                     "thumbnail_url": self._best_thumbnail_url(snippet.get("thumbnails", {})),
                     "thumbnail_analysis": None,
                 }
@@ -867,6 +876,8 @@ class BenchmarkReportGenerator:
             )
         lines.append("")
 
+        self._append_description_ttp_samples(lines, long_videos)
+
         # サムネイル分析
         analyzed = [
             v
@@ -893,6 +904,30 @@ class BenchmarkReportGenerator:
                 )
 
         return "\n".join(lines)
+
+    def _append_description_ttp_samples(self, lines: list[str], videos: list[dict]) -> None:
+        description_videos = [
+            v
+            for v in videos
+            if isinstance(v.get(_VIDEO_DESCRIPTION_FIELD), str) and v[_VIDEO_DESCRIPTION_FIELD].strip()
+        ]
+        if not description_videos:
+            return
+
+        lines.extend([f"## {_DESCRIPTION_TTP_SECTION_TITLE}", ""])
+        for i, video in enumerate(description_videos[:_DESCRIPTION_TTP_SAMPLE_LIMIT], 1):
+            description = video[_VIDEO_DESCRIPTION_FIELD].strip()
+            fence = _markdown_code_fence(description)
+            lines.extend(
+                [
+                    f'### {i}. "{self._escape_md_table(video["title"])}" ({video["views"]:,}再生)',
+                    "",
+                    f"{fence}text",
+                    description,
+                    fence,
+                    "",
+                ]
+            )
 
     def _generate_common_patterns(self, data: dict) -> str:
         """common-patterns.md を生成する。
