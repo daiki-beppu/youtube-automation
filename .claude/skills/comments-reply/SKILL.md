@@ -1,6 +1,6 @@
 ---
 name: comments-reply
-description: Use when YouTube のコメントに自動返信したいとき。`config/channel/comments.json` のルール・テンプレートに沿って、dry-run で生成返信をプレビューしてから apply で実反映する。二重返信は履歴ファイル (`comment_reply_history.json`) で防止。「コメント返信」「自動返信」「コメント対応」「視聴者返信」「リプライ」など、コメント対応の自動化に関わる場面で使用すること
+description: Use when YouTube のコメントに自動返信したいとき。`config/channel/comments.json` のルールに沿って LLM 生成返信を dry-run でプレビューしてから apply で実反映する。二重返信は履歴ファイル (`comment_reply_history.json`) で防止。「コメント返信」「自動返信」「コメント対応」「視聴者返信」「リプライ」など、コメント対応の自動化に関わる場面で使用すること
 ---
 
 ## Overview
@@ -19,10 +19,11 @@ YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、
 
 ## 実行フロー
 
-### Phase 1: ルール / テンプレートの確認
+### Phase 1: ルール / provider の確認
 
-`config/channel/comments.json` の `rules` と `templates` を Read ツールで確認する。
+`config/channel/comments.json` の `rules` と `generator` を Read ツールで確認する。
 ルールは `priority` の降順で評価され、最初にマッチしたものが採用される。
+返信文は常に LLM が生成する。既定 provider は `codex`、`provider: "gemini"` を使う場合は `model` を設定する。
 
 ### Phase 2: dry-run で内容をプレビュー
 
@@ -36,8 +37,40 @@ uv run yt-comments-reply --dry-run --limit 5
 
 出力の確認ポイント:
 - `返信候補` が期待件数になっているか
-- `reply` 欄のテンプレート展開（`{video_title}` 等）が正しいか
+- `reply` 欄の LLM 生成文がチャンネル persona とコメント言語に合っているか
 - `skipped` に `already_replied` / `no_rule_matched` があるかを確認
+
+## 設定スキーマ
+
+```json
+{
+  "comments": {
+    "enabled": true,
+    "rules": [
+      {
+        "name": "greeting_ja",
+        "keywords": ["こんにちは"],
+        "language": "ja",
+        "priority": 10,
+        "provider": "codex"
+      }
+    ],
+    "generator": {
+      "provider": "codex",
+      "model": null,
+      "channel_persona": "Warm YouTube channel host",
+      "max_length": 280,
+      "fallback_on_error": "skip",
+      "requests_per_minute": 30
+    }
+  }
+}
+```
+
+- `comments.generator.provider`: `codex` / `gemini`。省略時は `codex`
+- `comments.rules[].provider`: ルール単位の provider override。省略時は global provider
+- `fallback_on_error`: `skip` / `retry`
+- **破壊的変更**: 旧 `comments.generator.type`、`comments.templates`、`comments.rules[].template_key`、`comments.rules[].generator`、`fallback_on_error: "template"` は廃止。downstream の `config/channel/comments.json` は `provider` 軸へ移行する
 
 ### Phase 3: apply で反映
 
