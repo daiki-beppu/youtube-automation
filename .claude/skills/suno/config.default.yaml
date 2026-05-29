@@ -60,3 +60,10 @@ lyrics_guidelines:
     - explicit
   # references/lyrics-examples.md 内のどのテンプレを参考にするか (jazzhop / folk / piano など)
   template_reference: ""
+  # 英語歌詞の文体参照。歌詞本文の意味や固有表現はコピーせず、語り口・行長・韻の緩さだけを抽出する
+  style_reference: []
+
+# ボーカルモード時の歌詞初稿生成 provider
+# claude: skill 実行中の通常生成 / codex: references/codex-lyrics.sh で Codex CLI に委譲
+lyrics_generation:
+  provider: claude

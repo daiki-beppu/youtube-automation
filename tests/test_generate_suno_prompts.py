@@ -15,6 +15,14 @@ from youtube_automation.utils import skill_config
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
 _SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
+_CONFIG_RULES_MD = (
+    Path(__file__).resolve().parents[1]
+    / ".claude"
+    / "skills"
+    / "channel-setup"
+    / "references"
+    / "config-generation-rules.md"
+)
 
 
 @pytest.fixture
@@ -264,6 +272,74 @@ def test_skill_md_warns_about_genre_line_exclude_styles_conflict():
             f"`{heading}` 節に `{term}` への言及がない。"
             "矛盾防止ガイドは genre_line / exclude_styles 双方を扱う必要がある。"
         )
+
+
+# ---------------------------------------------------------------------------
+# issue #586: 英語歌詞の style reference / Codex 経由生成
+# ---------------------------------------------------------------------------
+
+
+def test_default_yaml_defines_lyrics_style_reference_and_generation_provider():
+    """Given suno skill の default config
+    When lyrics 関連設定を読む
+    Then style reference と provider 切替の初期値が定義されている。
+    """
+    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+
+    lyrics_guidelines = data["lyrics_guidelines"]
+    assert lyrics_guidelines["style_reference"] == []
+
+    lyrics_generation = data["lyrics_generation"]
+    assert lyrics_generation["provider"] == "claude"
+    assert set(lyrics_generation) == {"provider"}
+
+
+def test_skill_md_describes_style_reference_as_style_only_input():
+    """Given /suno の歌詞生成手順
+    When style_reference の説明を読む
+    Then 参考歌詞を文体抽出だけに使い、複製しない契約がある。
+    """
+    text = _SKILL_MD.read_text(encoding="utf-8")
+
+    assert "lyrics_guidelines.style_reference" in text
+    assert "style_reference" in text
+    assert "verbatim" in text.lower() or "そのまま" in text
+    assert "copy" in text.lower() or "コピペ" in text or "複製" in text
+
+
+def test_skill_md_describes_codex_provider_without_openai_api_direct_call():
+    """Given /suno の provider 切替手順
+    When Codex 経由の説明を読む
+    Then config provider、wrapper、ログイン確認が導線として揃っている。
+    """
+    text = _SKILL_MD.read_text(encoding="utf-8")
+
+    assert "lyrics_generation.provider" in text
+    assert "codex-lyrics.sh" in text
+    assert "codex login status" in text
+    assert "ChatGPT API" in text
+    assert "直叩き" in text or "直接" in text
+
+
+def test_skill_md_includes_native_english_lyrics_quality_guards():
+    """Given /suno の英語歌詞生成ルール
+    When 品質ガードを読む
+    Then 意味反転語と benchmark 由来の英語歌詞スタイルが明示されている。
+    """
+    text = _SKILL_MD.read_text(encoding="utf-8")
+
+    assert "downfall" in text
+    assert "観察日記" in text
+    assert "loose rhyme" in text or "ルーズ韻" in text
+    assert "mantra" in text.lower() or "マントラ" in text
+
+
+def test_channel_setup_rules_list_suno_lyrics_override_keys():
+    text = _CONFIG_RULES_MD.read_text(encoding="utf-8")
+
+    assert "lyrics_guidelines.style_reference" in text
+    assert "lyrics_generation.provider" in text
+    assert "config/skills/suno.yaml" in text
 
 
 # ---------------------------------------------------------------------------

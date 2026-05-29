@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from pathlib import Path
 
 from youtube_automation.utils.youtube_tag import youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
+REQUIRED_LOCALIZATION_LANGUAGES = ("ja", "en", "de")
+LOW_CPM_LOCALIZATION_LANGUAGES = ("ko", "es", "pt", "zh-CN")
 
 _DESC_TAGS_RE = re.compile(r"## タグ（YouTube タグ欄）\s*\n+```\n(.*?)```", re.DOTALL)
 
@@ -39,6 +42,32 @@ def check_chapter_variation_suffix(ts_lines: list[str]) -> str | None:
     if hits:
         return f"chapter names contain variation suffix (v1〜v9 / I〜VIII): {len(hits)} lines"
     return None
+
+
+def check_required_localization_languages(
+    supported_languages: Collection[str],
+    *,
+    required: Collection[str] = REQUIRED_LOCALIZATION_LANGUAGES,
+) -> str | None:
+    missing = _ordered_intersection(required, set(required) - set(supported_languages))
+    if missing:
+        return f"required localization languages missing: {', '.join(missing)}"
+    return None
+
+
+def check_low_cpm_localization_languages(
+    supported_languages: Collection[str],
+    *,
+    low_cpm: Collection[str] = LOW_CPM_LOCALIZATION_LANGUAGES,
+) -> str | None:
+    included = _ordered_intersection(low_cpm, set(supported_languages) & set(low_cpm))
+    if included:
+        return f"low CPM localization languages included: {', '.join(included)}"
+    return None
+
+
+def _ordered_intersection(order: Collection[str], values: set[str]) -> list[str]:
+    return [lang for lang in order if lang in values]
 
 
 def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
