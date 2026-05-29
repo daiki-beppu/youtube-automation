@@ -330,6 +330,11 @@ class TestFindExistingVideoByTitle:
                 {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
             ]
         }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
 
         # When
         result = uploader._find_existing_video_by_title("Rainy Jazz")
@@ -339,6 +344,86 @@ class TestFindExistingVideoByTitle:
             "video_id": "v9",
             "video_url": "https://www.youtube.com/watch?v=v9",
         }
+
+    def test_should_revalidate_exact_search_match_with_videos_list(self, tmp_path):
+        """search の完全一致候補は videos.list で再検証してから採用する."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
+
+        # When
+        uploader._find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        mock_youtube.videos.return_value.list.assert_called_once_with(id="v9", part="status,snippet")
+
+    def test_should_return_none_when_search_hit_no_longer_exists_in_videos_list(self, tmp_path):
+        """削除済み動画が search index に残っていても dedup hit にしない."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "stale"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {"items": []}
+
+        # When
+        result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+
+    def test_should_return_none_when_videos_list_title_differs_from_search_hit(self, tmp_path):
+        """videos.list 側のタイトルが一致しない候補は採用しない."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz Remastered"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
+
+        # When
+        result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+
+    def test_should_return_none_when_videos_list_upload_status_is_not_reusable(self, tmp_path):
+        """videos.list 側の uploadStatus が failed の候補は採用しない."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "failed"}},
+            ]
+        }
+
+        # When
+        result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
 
     def test_should_call_youtube_search_with_for_mine_true_type_video(self, tmp_path):
         """plan 要件 #8: search API は forMine=True / type=video / q=title で叩く."""
@@ -441,6 +526,7 @@ class TestUploadCompleteCollectionDedup:
         mock_upload_video.assert_not_called()
         assert result["video_id"] == "v9"
         assert result["video_url"] == "https://www.youtube.com/watch?v=v9"
+        assert result["upload_source"] == "existing_video"
 
     def test_should_proceed_with_upload_when_dedup_search_returns_none(self, tmp_path):
         """dedup miss 時は通常通り `upload_video` を呼ぶ."""
@@ -458,6 +544,7 @@ class TestUploadCompleteCollectionDedup:
         # Then
         mock_upload_video.assert_called_once()
         assert result["video_id"] == "VID_NEW"
+        assert result["upload_source"] == "new_upload"
 
     def test_should_proceed_with_upload_when_search_api_raises_http_error(self, tmp_path, caplog):
         """plan 要件 #10: search API 自体が HttpError を投げたケースで fail-open で upload 続行."""

@@ -24,13 +24,22 @@ from googleapiclient.errors import HttpError  # noqa: E402
 logger = logging.getLogger(__name__)
 
 
-from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader  # noqa: E402
+from youtube_automation.agents.youtube_auto_uploader import (  # noqa: E402
+    UPLOAD_SOURCE_EXISTING,
+    YouTubeAutoUploader,
+)
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
 from youtube_automation.utils.schedule import get_schedule_timezone  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
+
+ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED = "complete_collection_dedup_skipped"
+ACTION_COMPLETE_COLLECTION_UPLOADED = "complete_collection_uploaded"
+TRACKING_STATUS_COMPLETED = "completed"
+WORKFLOW_PHASE_COMPLETE = "complete"
+WORKFLOW_STAGE_LIVE = "live"
 
 
 class CollectionUploader:
@@ -240,6 +249,47 @@ class CollectionUploader:
         except Exception as e:
             logger.warning(f"⚠️  追跡ファイル保存エラー: {e}")
 
+    def _completed_tracking_record(self, complete_video: dict, publish_at: str | None) -> dict:
+        record = {
+            "video_id": complete_video["video_id"],
+            "video_url": complete_video["video_url"],
+            "upload_time": datetime.now(get_schedule_timezone(self.config)).isoformat(),
+            "publish_at": publish_at,
+            "status": TRACKING_STATUS_COMPLETED,
+        }
+        if complete_video.get("upload_source"):
+            record["upload_source"] = complete_video["upload_source"]
+        return record
+
+    def _update_workflow_upload(self, collection_path: Path, complete_video: dict, publish_at: str | None) -> None:
+        ws_path = CollectionPaths(collection_path).workflow_state_path
+        if not ws_path.exists():
+            return
+
+        state = json.loads(ws_path.read_text(encoding="utf-8"))
+        upload = state.get("upload")
+        if not isinstance(upload, dict):
+            raise ValueError(f"workflow-state.json upload must be object: {ws_path}")
+
+        updated_upload = {
+            **upload,
+            "video_id": complete_video["video_id"],
+            "video_url": complete_video["video_url"],
+            "publish_at": publish_at,
+        }
+        updated_state = {
+            **state,
+            "upload": updated_upload,
+            "updated_at": datetime.now(get_schedule_timezone(self.config)).isoformat(),
+        }
+        if collection_path.parent.name == WORKFLOW_STAGE_LIVE:
+            updated_state = {
+                **updated_state,
+                "stage": WORKFLOW_STAGE_LIVE,
+                "phase": WORKFLOW_PHASE_COMPLETE,
+            }
+        ws_path.write_text(json.dumps(updated_state, indent=2, ensure_ascii=False), encoding="utf-8")
+
     def _initialize_tracking(self, collection_path: Path) -> dict:
         """tracking を初期化"""
         tracking = {
@@ -332,28 +382,34 @@ class CollectionUploader:
             complete_video = result.get("complete_video")
 
             if complete_video and "video_id" in complete_video:
-                tracking["complete_collection"] = {
-                    "video_id": complete_video["video_id"],
-                    "video_url": complete_video["video_url"],
-                    "upload_time": datetime.now(get_schedule_timezone(self.config)).isoformat(),
-                    "publish_at": publish_at,
-                    "status": "completed",
+                tracking = {
+                    **tracking,
+                    "complete_collection": self._completed_tracking_record(complete_video, publish_at),
+                    "status": TRACKING_STATUS_COMPLETED,
                 }
-                tracking["status"] = "completed"
 
                 # live 移動
                 if self.config["collections_management"].get("auto_move_to_live", True):
                     collection_path = self._move_collection_to_live(collection_path)
 
+                self._update_workflow_upload(collection_path, complete_video, publish_at)
                 self._save_tracking(collection_path, tracking)
 
-                logger.info("✅ Complete Collection アップロード完了")
+                if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING:
+                    logger.info("⏭️  Complete Collection は既存動画を流用")
+                else:
+                    logger.info("✅ Complete Collection アップロード完了")
                 logger.info(f"📹 {complete_video['video_url']}")
 
                 # プレイリスト自動追加
                 self._assign_to_playlists(complete_video["video_id"], collection_path)
 
-                return {"action": "complete_collection_uploaded", "details": {**tracking["complete_collection"]}}
+                action = (
+                    ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED
+                    if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING
+                    else ACTION_COMPLETE_COLLECTION_UPLOADED
+                )
+                return {"action": action, "details": {**tracking["complete_collection"]}}
             else:
                 error_msg = (complete_video or {}).get("error", "Unknown error")
                 # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
