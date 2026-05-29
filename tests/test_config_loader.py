@@ -120,7 +120,7 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     # comments は optional セクション、欠如時は enabled=False のデフォルト
     assert config.comments.enabled is False
     assert config.comments.rules == []
-    assert config.comments.templates == {}
+    assert config.comments.generator.provider == "codex"
     assert config.comments.max_replies_per_run == 20
     # pinned_comment も optional、欠如時は enabled=False のデフォルト
     assert config.pinned_comment.enabled is False
@@ -191,12 +191,16 @@ def test_load_all_sections(tmp_path, monkeypatch):
                 {
                     "name": "greet_ja",
                     "keywords": ["こんにちは"],
-                    "template_key": "greet",
                     "language": "ja",
                     "priority": 10,
+                    "provider": "gemini",
                 }
             ],
-            "templates": {"ja": {"greet": "ありがとうございます！"}},
+            "generator": {
+                "provider": "gemini",
+                "model": "gemini-2.5-flash",
+                "fallback_on_error": "retry",
+            },
             "ng_words": ["spam"],
         }
     }
@@ -236,7 +240,9 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert len(config.comments.rules) == 1
     assert config.comments.rules[0].name == "greet_ja"
     assert config.comments.rules[0].keywords == ["こんにちは"]
-    assert config.comments.templates == {"ja": {"greet": "ありがとうございます！"}}
+    assert config.comments.rules[0].provider == "gemini"
+    assert config.comments.generator.provider == "gemini"
+    assert config.comments.generator.fallback_on_error == "retry"
     assert config.comments.ng_words == ["spam"]
     # shorts セクションが全フィールド組み立てられている
     assert config.shorts.enabled is True
@@ -304,7 +310,6 @@ def test_comments_rule_name_required(tmp_path, monkeypatch):
         "comments": {
             "enabled": True,
             "rules": [{"keywords": ["hi"]}],  # name 未指定
-            "templates": {"ja": {"default": "hello"}},
         }
     }
     ch = _setup_channel(tmp_path, sections)
@@ -699,21 +704,20 @@ def _comments_with_generator(generator_raw: dict) -> dict:
                     "name": "catch_all",
                     "pattern": ".+",
                     "priority": 0,
-                    "generator": "gemini",
+                    "provider": "gemini",
                 }
             ],
-            "templates": {},
             "generator": generator_raw,
         }
     }
 
 
 def test_comments_generator_gemini_loads_correctly(tmp_path, monkeypatch):
-    """comments.generator.type='gemini' の全フィールドが GeneratorConfig に正しく組み立てられる."""
+    """comments.generator.provider='gemini' の全フィールドが GeneratorConfig に正しく組み立てられる."""
     sections = _minimal_sections()
     sections["comments.json"] = _comments_with_generator(
         {
-            "type": "gemini",
+            "provider": "gemini",
             "model": "gemini-2.5-flash",
             "channel_persona": "Warm lo-fi jazz host",
             "max_length": 300,
@@ -728,7 +732,7 @@ def test_comments_generator_gemini_loads_correctly(tmp_path, monkeypatch):
 
     gen = config.comments.generator
     assert gen is not None
-    assert gen.type == "gemini"
+    assert gen.provider == "gemini"
     assert gen.model == "gemini-2.5-flash"
     assert gen.channel_persona == "Warm lo-fi jazz host"
     assert gen.max_length == 300
@@ -736,15 +740,14 @@ def test_comments_generator_gemini_loads_correctly(tmp_path, monkeypatch):
     assert gen.requests_per_minute == 10
 
 
-def test_comments_generator_template_type_loads_correctly(tmp_path, monkeypatch):
-    """comments.generator.type='template' は model=None でも有効."""
+def test_comments_generator_codex_provider_loads_correctly(tmp_path, monkeypatch):
+    """comments.generator.provider='codex' は model=None でも有効."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
             "enabled": True,
             "rules": [],
-            "templates": {},
-            "generator": {"type": "template"},
+            "generator": {"provider": "codex"},
         }
     }
     ch = _setup_channel(tmp_path, sections)
@@ -754,21 +757,20 @@ def test_comments_generator_template_type_loads_correctly(tmp_path, monkeypatch)
 
     gen = config.comments.generator
     assert gen is not None
-    assert gen.type == "template"
+    assert gen.provider == "codex"
     assert gen.model is None
-    assert gen.fallback_on_error == "template"  # default
+    assert gen.fallback_on_error == "skip"  # default
     assert gen.max_length == 280  # default
     assert gen.requests_per_minute == 30  # default
 
 
-def test_comments_generator_absent_returns_none(tmp_path, monkeypatch):
-    """comments.generator セクションが省略されたとき generator=None になる."""
+def test_comments_generator_absent_defaults_to_codex(tmp_path, monkeypatch):
+    """comments.generator セクションが省略されたとき codex provider になる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
             "enabled": True,
             "rules": [],
-            "templates": {},
         }
     }
     ch = _setup_channel(tmp_path, sections)
@@ -776,35 +778,44 @@ def test_comments_generator_absent_returns_none(tmp_path, monkeypatch):
 
     config = load_config()
 
-    assert config.comments.generator is None
+    assert config.comments.generator.provider == "codex"
+    assert config.comments.generator.fallback_on_error == "skip"
 
 
-def test_comments_generator_invalid_type_raises(tmp_path, monkeypatch):
-    """comments.generator.type が無効な値のとき ConfigError を送出する."""
+def test_comments_generator_invalid_provider_raises(tmp_path, monkeypatch):
+    """comments.generator.provider が無効な値のとき ConfigError を送出する."""
     sections = _minimal_sections()
-    sections["comments.json"] = _comments_with_generator({"type": "openai"})
+    sections["comments.json"] = _comments_with_generator({"provider": "openai"})
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.generator.type"):
+    with pytest.raises(ConfigError, match="comments.generator.provider"):
         load_config()
 
 
-def test_comments_generator_type_missing_raises(tmp_path, monkeypatch):
-    """comments.generator.type が省略されたとき ConfigError を送出する."""
+def test_comments_generator_provider_missing_defaults_to_codex(tmp_path, monkeypatch):
+    """comments.generator.provider が省略されたとき codex provider になる."""
     sections = _minimal_sections()
-    sections["comments.json"] = _comments_with_generator({"model": "gemini-2.5-flash"})
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [{"name": "catch_all", "pattern": ".+"}],
+            "generator": {"max_length": 120},
+        }
+    }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.generator.type"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.generator.provider == "codex"
+    assert config.comments.generator.max_length == 120
 
 
 def test_comments_generator_gemini_without_model_raises(tmp_path, monkeypatch):
-    """comments.generator.type='gemini' で model が省略されたとき ConfigError を送出する."""
+    """comments.generator.provider='gemini' で model が省略されたとき ConfigError を送出する."""
     sections = _minimal_sections()
-    sections["comments.json"] = _comments_with_generator({"type": "gemini"})
+    sections["comments.json"] = _comments_with_generator({"provider": "gemini"})
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
@@ -817,9 +828,9 @@ def test_comments_generator_invalid_fallback_raises(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = _comments_with_generator(
         {
-            "type": "gemini",
+            "provider": "gemini",
             "model": "gemini-2.5-flash",
-            "fallback_on_error": "retry",
+            "fallback_on_error": "template",
         }
     )
     ch = _setup_channel(tmp_path, sections)
@@ -840,8 +851,8 @@ def test_comments_generator_not_object_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_invalid_generator_raises(tmp_path, monkeypatch):
-    """comments.rules[i].generator が無効な値のとき ConfigError を送出する."""
+def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
+    """comments.rules[i].provider が無効な値のとき ConfigError を送出する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -850,21 +861,20 @@ def test_comments_rule_invalid_generator_raises(tmp_path, monkeypatch):
                 {
                     "name": "bad_rule",
                     "keywords": ["hi"],
-                    "generator": "openai",
+                    "provider": "openai",
                 }
             ],
-            "templates": {},
         }
     }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].generator"):
+    with pytest.raises(ConfigError, match="comments.rules\\[0\\].provider"):
         load_config()
 
 
-def test_comments_rule_gemini_without_generator_section_raises(tmp_path, monkeypatch):
-    """rules に generator='gemini' があるが comments.generator セクションなし → ConfigError."""
+def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypatch):
+    """rule provider='gemini' は rule 単位の override として有効."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -873,86 +883,96 @@ def test_comments_rule_gemini_without_generator_section_raises(tmp_path, monkeyp
                 {
                     "name": "ai_rule",
                     "pattern": ".+",
-                    "generator": "gemini",
+                    "provider": "gemini",
                 }
             ],
-            "templates": {},
-            # generator セクションなし
+            "generator": {"provider": "codex"},
         }
     }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="gemini"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.generator.provider == "codex"
+    assert config.comments.rules[0].provider == "gemini"
 
 
-def test_comments_dataclass_crossvalidation_without_loader():
-    """Comments dataclass を直接構築した場合でもクロスバリデーションが機能する.
-
-    loader を通さず Comments(...) を直接生成しても rules に gemini がある
-    場合は ConfigError が上がることを保証する（bypass path を塞ぐ）。
-    """
+def test_comments_dataclass_defaults_to_codex_without_loader():
+    """Comments dataclass を直接構築した場合でも codex 既定になる."""
     from youtube_automation.utils.config.comments import CommentRule, Comments
 
-    with pytest.raises(ConfigError, match="gemini"):
-        Comments(
-            enabled=True,
-            rules=[CommentRule(name="bad", keywords=["hi"], generator="gemini")],
-            generator=None,
-        )
+    comments = Comments(enabled=True, rules=[CommentRule(name="ok", keywords=["hi"], provider="gemini")])
+
+    assert comments.generator.provider == "codex"
+    assert comments.rules[0].provider == "gemini"
 
 
-def test_comments_dataclass_crossvalidation_generator_type_mismatch():
-    """rules に generator='gemini' があるが comments.generator.type='template' → ConfigError.
-
-    generator セクションが存在しても type が gemini でなければ無効な組み合わせとして
-    即時検出することを保証する（silent fallback の防止）。
-    """
+def test_comments_dataclass_rejects_invalid_rule_provider():
+    """Comments dataclass を直接構築した場合も rule provider を検証する."""
     from youtube_automation.utils.config.comments import (
         CommentRule,
         Comments,
-        GeneratorConfig,
     )
 
-    template_generator = GeneratorConfig(
-        type="template",
-        model=None,
-        channel_persona="",
-        max_length=280,
-        fallback_on_error="template",
-        requests_per_minute=60,
-    )
-    with pytest.raises(ConfigError, match="gemini"):
+    with pytest.raises(ConfigError, match="provider"):
         Comments(
             enabled=True,
-            rules=[CommentRule(name="bad", keywords=["hi"], generator="gemini")],
-            generator=template_generator,
+            rules=[CommentRule(name="bad", keywords=["hi"], provider="openai")],
         )
 
 
-def test_comments_rule_gemini_with_template_generator_section_raises(tmp_path, monkeypatch):
-    """rules に generator='gemini' があるが comments.generator.type='template' → ConfigError.
-
-    loader 経路でも type mismatch を検出することを保証する。
-    """
+def test_comments_legacy_type_key_raises(tmp_path, monkeypatch):
+    """旧 comments.generator.type は互換変換せず ConfigError にする."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
-            "enabled": True,
-            "rules": [
-                {
-                    "name": "ai_rule",
-                    "pattern": ".+",
-                    "generator": "gemini",
-                }
-            ],
-            "templates": {},
             "generator": {"type": "template"},
         }
     }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="gemini"):
+    with pytest.raises(ConfigError, match="comments.generator.type"):
+        load_config()
+
+
+def test_comments_legacy_templates_key_raises(tmp_path, monkeypatch):
+    """旧 comments.templates は互換変換せず ConfigError にする."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"templates": {"ja": {"default": "hello"}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.templates"):
+        load_config()
+
+
+def test_comments_legacy_template_key_raises(tmp_path, monkeypatch):
+    """旧 comments.rules[].template_key は互換変換せず ConfigError にする."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "rules": [{"name": "legacy", "keywords": ["hi"], "template_key": "default"}],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.rules\\[0\\].template_key"):
+        load_config()
+
+
+def test_comments_legacy_rule_generator_key_raises(tmp_path, monkeypatch):
+    """旧 comments.rules[].generator は互換変換せず ConfigError にする."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "rules": [{"name": "legacy", "keywords": ["hi"], "generator": "gemini"}],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.rules\\[0\\].generator"):
         load_config()
