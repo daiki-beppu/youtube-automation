@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(video-upload)`: アップロード preflight で `config.localizations.supported_languages` の高 CPM 必須言語 `ja` / `en` / `de` を検証し、欠落時はアップロード前に fail-loud で停止するようにした（#587）。低 CPM 言語 `ko` / `es` / `pt` / `zh-CN` が混在する場合は意図的な例外を許容するため警告ログに留める
 - `feat(benchmark)`: channel-video 収集でも競合動画の `snippet.description` 全文を `description` として保存し、benchmark Markdown に概要欄 TTP サンプルを出力するようにした（#588）。`/video-description` skill は生成前に `docs/benchmarks/*.md` の概要欄サンプルまたは `data/benchmark_*.json` の `videos[].description` を参照し、冒頭文・目次/Tracklist 書式・CTA・ハッシュタグ記法・装飾量を転写対象にする。benchmark データがない場合のみ既存テンプレートへフォールバックする
 - **破壊的変更**: `comments-reply` を LLM 生成専用に変更（#589）。`TemplateGenerator` / `comments.templates` / `comments.rules[].template_key` / `comments.rules[].generator` / `comments.generator.type` を廃止し、`comments.generator.provider`（`codex` / `gemini`、既定 `codex`）へ一本化。`fallback_on_error` は `skip` / `retry` のみ有効で、旧 `template` fallback は利用不可。downstream の `config/channel/comments.json` は `provider` 軸へ移行が必要
 - `feat(videoup)`: 静止画 fallback 経路（`loop.mp4` 不在時）の master.mp4 生成 ffmpeg オプションを最適化（#579）。`generate_videos.sh` の静止画モードで全フレームを I-frame 化していた `-x264opts keyint=1:min-keyint=1` を廃止し `-g 300`（1fps で 5 分間隔）へ、`-preset ultrafast` → `-preset medium`、`-crf 23` → `-crf 28` に変更。変化のないフレームを P-frame で圧縮し容量を大幅削減する（rjn / 2h17m 公開実績 3.35GB に対し ~450-500MB の試算。実機ベンチは未取得で rjn 次回コレクション公開時に取得予定）。ループ動画背景モード（`-c:v copy` の stream copy 経路）は変更なし

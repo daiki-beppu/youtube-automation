@@ -31,6 +31,8 @@ from youtube_automation.utils.preflight_checks import (  # noqa: E402
     check_chapter_count,
     check_chapter_variation_suffix,
     check_duration,
+    check_low_cpm_localization_languages,
+    check_required_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
     extract_descriptions_md_tags,
@@ -236,6 +238,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         5. タグ件数が `tags.min_count` を満たすこと（戦略書違反防止）
         6. タグの quotation 込み文字数が YouTube の 500 制限内
         7. master 動画尺が `audio.target_duration_min/max` 範囲内
+        8. supported_languages が高 CPM 必須言語 ja/en/de を含むこと
         """
         paths = CollectionPaths(collection_dir)
         desc_path = paths.descriptions_md_path
@@ -253,6 +256,12 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             raise RuntimeError(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}")
 
         config = load_config()
+        msg = check_required_localization_languages(config.localizations.supported_languages)
+        if msg:
+            raise RuntimeError(f"❌ {msg}。config/localizations.json を見直してください。")
+        msg = check_low_cpm_localization_languages(config.localizations.supported_languages)
+        if msg:
+            logger.warning(f"⚠️  {msg}。意図的な例外でなければ config/localizations.json を見直してください。")
 
         # タイムスタンプ粒度検証
         ts_lines = [line for line in description.split("\n") if re.match(r"^\d{1,2}:\d{2}", line.strip())]
