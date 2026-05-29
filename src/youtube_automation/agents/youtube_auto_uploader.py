@@ -164,9 +164,7 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             if not candidate_ids:
                 return None
 
-            videos_response = (
-                self.youtube.videos().list(id=",".join(candidate_ids), part="status,snippet").execute()
-            )
+            videos_response = self.youtube.videos().list(id=",".join(candidate_ids), part="status,snippet").execute()
             return self._first_reusable_video(videos_response.get("items", []), title)
         except HttpError as e:
             # fail-open: 安全網のエラーは upload を block しない（一次対策は session URI 持ち越し）
