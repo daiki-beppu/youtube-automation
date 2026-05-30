@@ -196,6 +196,26 @@ class TestUploadVideoForwarding:
         assert call_kwargs.get("on_session_uri_changed") is on_session
         assert call_kwargs.get("on_upload_complete") is on_complete
 
+    def test_should_declare_contains_synthetic_media_true(self, tmp_path):
+        """#603: AI 生成音楽を主軸とするため status.containsSyntheticMedia を true で申告する."""
+        # Given
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+            return_value="VID_SYNTHETIC",
+        ) as mock_core_upload:
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then: super().upload_video(video_path, body, ...) の body[status] を検証
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["containsSyntheticMedia"] is True
+
     def test_should_default_resume_kwargs_to_none_when_omitted(self, tmp_path):
         """resume kwargs を渡さなければコアにも None 相当が渡る（後方互換）."""
         # Given

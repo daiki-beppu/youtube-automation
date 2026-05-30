@@ -109,7 +109,9 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         status_body = {
             "privacyStatus": metadata.get("privacy_status", "private"),
             "selfDeclaredMadeForKids": False,
-            "containsSyntheticMedia": False,
+            # AI 生成音楽（Lyria / Suno）を主軸とするため、YouTube の AI 開示
+            # （altered or synthetic content）ポリシー上 true を申告する (#603)
+            "containsSyntheticMedia": True,
         }
 
         # スケジュール公開: publishAt 指定時は private 必須
