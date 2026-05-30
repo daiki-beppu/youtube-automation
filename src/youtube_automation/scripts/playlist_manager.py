@@ -17,6 +17,7 @@ import logging
 import sys
 from pathlib import Path
 
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config, reset
 from youtube_automation.utils.youtube_service import get_youtube
 
@@ -189,7 +190,7 @@ class PlaylistManager:
         ファイル欠落・JSON 壊れ・キー欠落はいずれも `None` を返して呼び出し側に
         `activity_for_theme` fallback させる（プレイリスト追加は非致命的機能のため）。
         """
-        ws_path = collection_path / "workflow-state.json"
+        ws_path = CollectionPaths(collection_path).workflow_state_path
         if not ws_path.exists():
             return None
         try:
@@ -288,8 +289,10 @@ class PlaylistManager:
             if not col_path.is_dir() or col_path.name.startswith("."):
                 continue
 
+            paths = CollectionPaths(col_path)
+
             # workflow-state.json からテーマ取得
-            ws_path = col_path / "workflow-state.json"
+            ws_path = paths.workflow_state_path
             if not ws_path.exists():
                 logger.warning(f"  {col_path.name}: workflow-state.json なし — スキップ")
                 continue
@@ -303,7 +306,7 @@ class PlaylistManager:
                 continue
 
             # upload_tracking.json から video_id 取得
-            tracking_path = col_path / "20-documentation" / "upload_tracking.json"
+            tracking_path = paths.tracking_path
             if not tracking_path.exists():
                 logger.warning(f"  {col_path.name}: upload_tracking.json なし — スキップ")
                 continue
