@@ -467,17 +467,22 @@ def smooth_loop(
 
     print(f"  [FFmpeg] クロスフェード補正 ({crossfade_sec}秒, CRF {crf} / preset {preset})...")
     try:
-        with section("veo.smooth_loop.ffmpeg", crossfade_sec=crossfade_sec):
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-        print(f"  [ERROR]  FFmpeg 失敗: {e.stderr[:200]}")
-        return False
+        try:
+            with section("veo.smooth_loop.ffmpeg", crossfade_sec=crossfade_sec):
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"  [ERROR]  FFmpeg 失敗: {e.stderr[:200]}")
+            return False
 
-    # 元ファイルをバックアップして置き換え
-    backup = video_path.with_stem(video_path.stem + "_raw")
-    video_path.rename(backup)
-    output.rename(video_path)
-    size_mb = video_path.stat().st_size / (1024 * 1024)
-    print(f"  [Done]   補正完了 → {video_path} ({size_mb:.1f} MB)")
-    print(f"  [Backup] 元ファイル → {backup}")
-    return True
+        # 元ファイルをバックアップして置き換え
+        backup = video_path.with_stem(video_path.stem + "_raw")
+        video_path.rename(backup)
+        output.rename(video_path)
+        size_mb = video_path.stat().st_size / (1024 * 1024)
+        print(f"  [Done]   補正完了 → {video_path} ({size_mb:.1f} MB)")
+        print(f"  [Backup] 元ファイル → {backup}")
+        return True
+    finally:
+        # FFmpeg 失敗時に部分書き出しされた tmp (_smooth.mp4) を残さない。
+        # 成功時は output.rename(video_path) が消費済みのため no-op。
+        output.unlink(missing_ok=True)
