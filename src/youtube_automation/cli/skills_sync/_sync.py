@@ -14,6 +14,7 @@ from youtube_automation.cli.skills_sync import (
 )
 from youtube_automation.cli.skills_sync._ops import (
     _copy_entry,
+    _ensure_agents_skills_symlink,
     _ensure_target_parent,
     _prune_orphans,
     _symlink_entry,
@@ -140,6 +141,20 @@ def _sync_dir_asset(
         prune_counts = _prune_orphans(target_dir, bundled, do_delete=do_delete)
         for key, val in prune_counts.items():
             counts[key] = counts.get(key, 0) + val
+
+    # skills 配布時は Codex CLI の探索パス `.agents/skills` も併設する。
+    # 標準レイアウト (`.claude/skills`) でないときは対象外 (None) でスキップ。
+    if args.asset == "skills":
+        mirror = _ensure_agents_skills_symlink(target_dir, force=args.force, dry_run=args.dry_run)
+        prefix = "[dry-run] " if args.dry_run else ""
+        if mirror == "unsupported":
+            print(
+                "  [warn] .agents/skills の symlink を作成できませんでした (symlink 非対応環境)",
+                file=sys.stderr,
+            )
+        elif mirror is not None:
+            print(f"  {prefix}{mirror:>8}: .agents/skills -> ../.claude/skills")
+            counts[mirror] = counts.get(mirror, 0) + 1
 
     print()
     print(f"完了: {sum(counts.values())} 件処理 — {counts}")

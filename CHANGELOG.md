@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(scripts)`: 公開済み動画の `status.containsSyntheticMedia` を遡及的に `True` へ一括是正する `yt-bulk-update-synthetic-media` を追加した（#606、#603 の遡及対応）。#603 是正前にアップロードされた公開動画は `False` のまま残るため、チャンネルの uploads playlist から全公開動画を列挙し、`videos().list(part="status")` で現状 `True` でないものを抽出して `videos().update(part="status")` で反映する。`videos.update(part="status")` は status リソース全体を置換するため、現 status をコピーして read-only キー（`uploadStatus` / `madeForKids` 等）を除去し `containsSyntheticMedia` だけ差し替える read-modify-write で `privacyStatus` / `publishAt` / `selfDeclaredMadeForKids` 等を保持する。デフォルト dry-run（read のみ）、`--apply` で実反映、`--include-private` で private も対象化。冪等（再実行で対象 0 件なら遡及完了）。手動 fallback 手順は `docs/investigations/2026-05-30-606-bulk-update-synthetic-media.md`
+- `feat(skills-sync)`: `yt-skills sync`（`skills` asset）を標準レイアウト（`.claude/skills`）へ展開すると、下流チャンネルリポジトリにも `.agents/skills -> ../.claude/skills` の相対 symlink を併設するようにした（#617）。upstream リポと同じ Codex CLI 探索パス規約（`$REPO_ROOT/.agents/skills`）を下流でも成立させ、これまで `.claude/skills` だけが配布され下流の Codex が同期済みスキルを発見できなかった問題を解消する。既存の正しい symlink は冪等にスキップ、張り直しは `--force`、`--dry-run` では作成予定のみ表示、symlink 非対応環境では警告のみで sync 全体は継続する。`--target` で非標準パスを指定した場合は `.agents` 規約が成立しないため対象外（`_ops.py::_ensure_agents_skills_symlink`）
 
 ### Changed
 

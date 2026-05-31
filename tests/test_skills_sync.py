@@ -254,6 +254,176 @@ def test_cmd_sync_only_filters_entries(fake_repo: Path, tmp_path: Path) -> None:
     assert not (target / "channel-direction").exists()
 
 
+# ---------- .agents/skills symlink (Codex 探索パス) ----------
+
+
+def test_cmd_sync_skills_creates_agents_symlink(fake_repo: Path, tmp_path: Path) -> None:
+    # Given: 標準レイアウトの target
+    target = tmp_path / "out" / ".claude" / "skills"
+
+    # When: skills を sync
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # Then: .claude の隣に .agents/skills が ../.claude/skills を指す symlink として作られる
+    assert rc == 0
+    link = tmp_path / "out" / ".agents" / "skills"
+    assert link.is_symlink()
+    assert os.readlink(link) == str(Path("..") / ".claude" / "skills")
+    # 相対リンクが実体の skills ディレクトリに解決する
+    assert (link / "channel-research" / "SKILL.md").read_text(encoding="utf-8") == "# research\n"
+
+
+def test_cmd_sync_skills_agents_symlink_in_summary_and_stdout(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "linked: .agents/skills -> ../.claude/skills" in out
+    assert "'linked': 1" in out
+
+
+def test_cmd_sync_skills_agents_symlink_is_idempotent(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+
+    # 1 回目: linked
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    assert args.func(args) == 0
+    capsys.readouterr()
+
+    link = tmp_path / "out" / ".agents" / "skills"
+    before = os.readlink(link)
+
+    # 2 回目 (--force なし): 既存の正しい symlink は skipped で触らない
+    args2 = parser.parse_args(["sync", "--asset", "skills", "--target", str(target)])
+    assert args2.func(args2) == 0
+    out = capsys.readouterr().out
+
+    assert link.is_symlink()
+    assert os.readlink(link) == before
+    assert "skipped: .agents/skills -> ../.claude/skills" in out
+
+
+def test_cmd_sync_skills_agents_symlink_dry_run_does_not_write(fake_repo: Path, tmp_path: Path) -> None:
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--dry-run"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert not (tmp_path / "out" / ".agents").exists()
+
+
+def test_cmd_sync_skills_force_relinks_wrong_agents_symlink(fake_repo: Path, tmp_path: Path) -> None:
+    # Given: 既存の .agents/skills が誤った場所を指している
+    agents_dir = tmp_path / "out" / ".agents"
+    agents_dir.mkdir(parents=True)
+    wrong = agents_dir / "skills"
+    wrong.symlink_to(tmp_path / "somewhere-else")
+    assert os.readlink(wrong) == str(tmp_path / "somewhere-else")
+
+    # When: --force 付きで sync
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # Then: 正しい相対リンクに張り直される
+    assert rc == 0
+    assert os.readlink(wrong) == str(Path("..") / ".claude" / "skills")
+
+
+def test_cmd_sync_skills_keeps_wrong_agents_symlink_without_force(fake_repo: Path, tmp_path: Path) -> None:
+    # Given: 既存の誤 symlink (--force なし)
+    agents_dir = tmp_path / "out" / ".agents"
+    agents_dir.mkdir(parents=True)
+    wrong = agents_dir / "skills"
+    wrong.symlink_to(tmp_path / "somewhere-else")
+
+    # When: --force なしで sync
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target)])
+    rc = args.func(args)
+
+    # Then: 既存は冪等に温存される (上書きには --force が必要)
+    assert rc == 0
+    assert os.readlink(wrong) == str(tmp_path / "somewhere-else")
+
+
+def test_cmd_sync_skills_non_standard_target_skips_agents(fake_repo: Path, tmp_path: Path) -> None:
+    # Given: `.claude/skills` レイアウトでない target
+    target = tmp_path / "custom" / "skills"
+
+    # When: skills を sync
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # Then: .agents 規約が成立しないので symlink は作られない
+    assert rc == 0
+    assert (target / "channel-research").exists()
+    assert not (tmp_path / "custom" / ".agents").exists()
+    assert not (tmp_path / ".agents").exists()
+
+
+def test_ensure_agents_skills_symlink_unsupported_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: symlink 非対応環境を模す (symlink_to が OSError)
+    from youtube_automation.cli.skills_sync import _ops
+
+    def raise_oserror(self: Path, *a: object, **k: object) -> None:
+        raise OSError("symlink not supported")
+
+    monkeypatch.setattr(Path, "symlink_to", raise_oserror)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    target.mkdir(parents=True)
+
+    # When/Then: 例外を握りつぶし 'unsupported' を返す (sync 全体は失敗させない)
+    result = _ops._ensure_agents_skills_symlink(target, force=False, dry_run=False)
+    assert result == "unsupported"
+
+
+def test_ensure_agents_skills_symlink_unsupported_warns_but_sync_succeeds(
+    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Given: symlink 非対応環境
+    def raise_oserror(self: Path, *a: object, **k: object) -> None:
+        raise OSError("symlink not supported")
+
+    monkeypatch.setattr(Path, "symlink_to", raise_oserror)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+
+    # When: sync (symlink だけ失敗)
+    rc = args.func(args)
+
+    # Then: skills 本体は配布され、rc は 0、stderr に警告
+    assert rc == 0
+    assert (target / "channel-research" / "SKILL.md").exists()
+    err = capsys.readouterr().err
+    assert ".agents/skills" in err
+
+
+def test_ensure_agents_skills_symlink_returns_none_for_non_standard_layout(tmp_path: Path) -> None:
+    from youtube_automation.cli.skills_sync import _ops
+
+    target = tmp_path / "custom" / "skills"
+    target.mkdir(parents=True)
+    assert _ops._ensure_agents_skills_symlink(target, force=False, dry_run=False) is None
+
+
 # ---------- cmd_diff ----------
 
 
