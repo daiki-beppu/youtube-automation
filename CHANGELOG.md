@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(comment-reply)`: `yt-comments-reply` にメインループ先頭で動く video status preflight を追加した（#576）。`commentThreads.list` の前に対象 video の `status` を `videos.list`（50 件単位で chunk 化）で一括取得し、API 応答に存在しない（削除済み）video は `plan.skipped` に `reason="video_not_found"`、`privacyStatus="private"` の video は `reason="video_private"` で積んで除外する。これまで apply 段階でしか出なかった 404 / 403 を dry-run プレビューで事前可視化し、無駄な `comments.insert` の quota 消費を避ける。unlisted はオーナーがコメント可能なため通過、quota 節約のため history に返信実績がある video は status check 対象外。dry-run / apply 共通で動作（`utils/comments/replier.py::fetch_video_status` / `_preflight_video_status`、`ReplyHistory.replied_video_ids`）
 
+### Changed
+
+- `refactor(video-upload)`: 動画アップロード時の AI 開示フラグ `status.containsSyntheticMedia` と子供向け申告 `status.selfDeclaredMadeForKids` を `youtube_auto_uploader.py` のハードコードから config 解決へ外出しした（#605、audit R-5）。`config/channel/youtube.json` の `youtube.contains_synthetic_media` / `youtube.self_declared_made_for_kids` で上書きでき、`YoutubeApi` dataclass の任意フィールド（デフォルト `True` / `False`）として `channel_settings.build_upload_status_flags()` 経由で解決する。未設定時は現行の振る舞い（`containsSyntheticMedia: True` / `selfDeclaredMadeForKids: False`）を維持するため挙動は不変。YouTube 側ポリシー変更や下流チャンネルごとの開示要否差異への追従が容易になる
+
 ## [5.5.6] - 2026-05-31
 
 ### Added
