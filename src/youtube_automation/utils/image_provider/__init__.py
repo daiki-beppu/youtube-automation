@@ -54,6 +54,13 @@ def get_provider(cfg: ImageGenerationConfig) -> ImageProvider:
             raise ConfigError("provider=openai だが openai 設定が見つかりません")
         return OpenAIImageProvider(cfg.openai)
 
+    if cfg.provider == "gemini_cli":
+        from youtube_automation.utils.image_provider.gemini_cli import GeminiCliImageProvider
+
+        if cfg.gemini_cli is None:
+            raise ConfigError("provider=gemini_cli だが gemini_cli 設定が見つかりません")
+        return GeminiCliImageProvider(cfg.gemini_cli)
+
     if cfg.provider == "codex":
         raise ConfigError(
             "provider=codex は ImageProvider API 経路では実行できません。"
