@@ -13,6 +13,8 @@ Usage:
 """
 
 import argparse
+import concurrent.futures
+import re
 import sys
 import time
 from pathlib import Path
@@ -31,7 +33,6 @@ from youtube_automation.utils.image_provider.composition import (
     resolve_composition_source,
     resolve_cost_per_image,
     resolve_reference_paths,
-    resolve_unique_path,
     select_reference,
     validate_single_step_references,
 )
@@ -42,11 +43,139 @@ from youtube_automation.utils.profile import section
 _GEMINI_VALID_IMAGE_SIZES = ("1K", "2K", "4K")
 _GEMINI_DEFAULT_IMAGE_SIZE = "2K"
 
+# attempt ループ並列化のデフォルト並列度。Gemini / OpenAI のレート制限に
+# 抵触しないよう控えめに固定する（CLI --max-workers で上書き可能）。
+_DEFAULT_MAX_WORKERS = 3
+
+# resolve_unique_path と同じ -vN 採番規則を事前計画でも使うための正規表現。
+_VERSION_RE = re.compile(r"^(.+)-v(\d+)$")
+
 
 def _channel_root() -> Path:
     from youtube_automation.utils.config import channel_dir
 
     return channel_dir()
+
+
+def _next_planned_path(output_path: Path, taken: set[Path]) -> Path:
+    """``resolve_unique_path`` と同一の -vN 採番規則で次の一意パスを返す。
+
+    逐次実行では直前 attempt が生成したファイルが disk 上に存在することを根拠に
+    採番していたが、並列実行ではファイル生成前にパスを確定する必要がある。そこで
+    disk 上の存在に加えて ``taken``（既に計画済みのパス）も「使用済み」とみなす。
+    """
+    stem = output_path.stem
+    suffix = output_path.suffix
+    parent = output_path.parent
+    base_match = _VERSION_RE.match(stem)
+    if base_match:
+        base = base_match.group(1)
+        start = int(base_match.group(2)) + 1
+    else:
+        base = stem
+        start = 2
+    for n in range(start, start + 100):
+        candidate = parent / f"{base}-v{n}{suffix}"
+        if candidate not in taken and not candidate.exists():
+            return candidate
+    return parent / f"{base}-v{start + 100}{suffix}"
+
+
+def plan_output_paths(first_path: Path, count: int) -> list[Path]:
+    """逐次実行の ``resolve_unique_path`` チェーンと同一の出力パス列を事前確定する。
+
+    先頭は ``first_path``（呼び出し側で一意化済み）。2 件目以降は直前のパスを
+    起点に -vN を採番し、計画済みパスを ``taken`` に積むことで逐次時と同じ採番を
+    ファイル生成前に再現する。
+    """
+    if count < 1:
+        return []
+    paths = [first_path]
+    taken = {first_path}
+    current = first_path
+    for _ in range(count - 1):
+        nxt = _next_planned_path(current, taken)
+        paths.append(nxt)
+        taken.add(nxt)
+        current = nxt
+    return paths
+
+
+def plan_reference_assignments(reference_images: list[Path], count: int, rotate: bool) -> list[Path | None]:
+    """各 attempt に割り当てる参照画像を逐次時と同じ規則で確定する。
+
+    参照画像が無い場合は ``None`` を並べる。ある場合は ``select_reference`` で
+    attempt インデックスに応じたローテーション割り当てを再現する。
+    """
+    if not reference_images:
+        return [None] * count
+    return [select_reference(reference_images, attempt, rotate) for attempt in range(count)]
+
+
+def build_requests(
+    prompt: str,
+    planned_paths: list[Path],
+    reference_assignments: list[Path | None],
+    *,
+    aspect_ratio: str,
+    image_size: str,
+) -> list[ImageGenerationRequest]:
+    """確定済みの出力パス・参照割り当てから attempt 順の生成リクエストを組み立てる。"""
+    requests: list[ImageGenerationRequest] = []
+    for output_path, selected_ref in zip(planned_paths, reference_assignments):
+        request_refs = [selected_ref] if selected_ref is not None else []
+        requests.append(
+            ImageGenerationRequest(
+                prompt=prompt,
+                output_path=output_path,
+                aspect_ratio=aspect_ratio,
+                image_size=image_size,
+                references=request_refs,
+            )
+        )
+    return requests
+
+
+def run_requests_parallel(
+    provider,
+    requests: list[ImageGenerationRequest],
+    *,
+    max_workers: int,
+    aspect_ratio: str,
+) -> tuple[list, list[tuple[int, ConfigError]]]:
+    """リクエスト列を ThreadPoolExecutor で並列実行する（API は I/O バウンド）。
+
+    戻り値は ``(results, errors)``。``results`` は attempt 順に整列した結果
+    （失敗 attempt は ``None``）、``errors`` は ``(attempt_index, ConfigError)`` の
+    リスト。失敗は future の例外として回収し、ここでは ``sys.exit`` しない
+    （集約・終了判定は呼び出し側に委ねる）。
+    """
+    results: list = [None] * len(requests)
+    errors: list[tuple[int, ConfigError]] = []
+    if not requests:
+        return results, errors
+
+    effective_workers = max(1, min(max_workers, len(requests)))
+
+    def _run(request: ImageGenerationRequest):
+        with section(
+            "image_provider.generate",
+            provider=provider.__class__.__name__,
+            aspect_ratio=aspect_ratio,
+        ):
+            return provider.generate(request)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=effective_workers) as executor:
+        future_to_index = {executor.submit(_run, req): idx for idx, req in enumerate(requests)}
+        for future in concurrent.futures.as_completed(future_to_index):
+            idx = future_to_index[future]
+            try:
+                results[idx] = future.result()
+            except ConfigError as e:
+                errors.append((idx, e))
+
+    errors.sort(key=lambda item: item[0])
+    return results, errors
 
 
 def main():
@@ -100,6 +229,16 @@ def main():
         type=int,
         default=None,
         help="複数参照画像のうち特定のインデックスのみ使用（attempt ループ無効）",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=None,
+        help=(
+            "複数 attempt を並列生成するときの最大同時実行数。"
+            f"未指定時は {_DEFAULT_MAX_WORKERS}（レート制限を考慮した控えめな固定値）。"
+            "attempt 数より大きい値は attempt 数に丸められる"
+        ),
     )
     parser.add_argument(
         "--costs",
@@ -232,51 +371,55 @@ def main():
         reference_images = [reference_images[args.reference_index]]
         cli_max_attempts = 1
 
+    # 並列度: レート制限を考慮した控えめなデフォルト。1 attempt なら 1。
+    max_workers = args.max_workers if args.max_workers is not None else _DEFAULT_MAX_WORKERS
+    if max_workers < 1:
+        max_workers = 1
+
+    # 出力パス（-vN）と参照画像をループ前に全 attempt ぶん確定し、
+    # resolve_unique_path の直列依存を排除してから並列 submit する。
+    planned_paths = plan_output_paths(output_path, cli_max_attempts)
+    reference_assignments = plan_reference_assignments(reference_images, cli_max_attempts, rotate)
+
+    # attempt>0 のヘッダは並列実行前にまとめて表示し、stdout の交錯を避ける。
+    for attempt in range(1, cli_max_attempts):
+        selected_ref = reference_assignments[attempt]
+        print()
+        print(f"--- attempt {attempt + 1}/{cli_max_attempts} ---")
+        print(f"出力先:       {planned_paths[attempt]}")
+        if selected_ref is not None:
+            print(f"参照画像:     {selected_ref.name}")
+
+    requests = build_requests(
+        prompt,
+        planned_paths,
+        reference_assignments,
+        aspect_ratio=args.aspect_ratio,
+        image_size=image_size,
+    )
+
+    total_start = time.monotonic()
+    results, errors = run_requests_parallel(
+        provider,
+        requests,
+        max_workers=max_workers,
+        aspect_ratio=args.aspect_ratio,
+    )
+    elapsed = time.monotonic() - total_start
+
+    # ConfigError はループ外に集約して終了する（1 件でも失敗ならプロセスを落とす）。
+    if errors:
+        for attempt, error in errors:
+            prefix = f"attempt {attempt + 1}: " if cli_max_attempts > 1 else ""
+            print(f"[ERROR] {prefix}{error}")
+        sys.exit(1)
+
     saved_paths: list[Path] = []
     success_flags: list[bool] = []
-    total_start = time.monotonic()
-    current_output_path = output_path
-
-    for attempt in range(cli_max_attempts):
-        if reference_images:
-            selected_ref = select_reference(reference_images, attempt, rotate)
-            request_refs: list[Path] = [selected_ref]
-        else:
-            selected_ref = None
-            request_refs = []
-
-        if attempt > 0:
-            current_output_path = resolve_unique_path(current_output_path)
-            print()
-            print(f"--- attempt {attempt + 1}/{cli_max_attempts} ---")
-            print(f"出力先:       {current_output_path}")
-            if selected_ref is not None:
-                print(f"参照画像:     {selected_ref.name}")
-
-        request = ImageGenerationRequest(
-            prompt=prompt,
-            output_path=current_output_path,
-            aspect_ratio=args.aspect_ratio,
-            image_size=image_size,
-            references=request_refs,
-        )
-
-        try:
-            with section(
-                "image_provider.generate",
-                provider=provider.__class__.__name__,
-                aspect_ratio=args.aspect_ratio,
-            ):
-                result = provider.generate(request)
-        except ConfigError as e:
-            print(f"[ERROR] {e}")
-            sys.exit(1)
-
+    for attempt, result in enumerate(results):
         if result.success:
-            saved_paths.append(result.saved_path or current_output_path)
+            saved_paths.append(result.saved_path or planned_paths[attempt])
         success_flags.append(result.success)
-
-    elapsed = time.monotonic() - total_start
 
     print()
     print("===========================================")

@@ -129,6 +129,31 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.pinned_comment.default_language == "en"
 
 
+def test_synthetic_media_flags_default(tmp_path, monkeypatch):
+    """#605: youtube.json 未設定時は現行の振る舞い（synthetic=True / made_for_kids=False）。"""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.contains_synthetic_media is True
+    assert config.youtube.api.self_declared_made_for_kids is False
+
+
+def test_synthetic_media_flags_override(tmp_path, monkeypatch):
+    """#605: youtube.json で AI 開示 / 子供向け申告を上書きできる。"""
+    sections = _minimal_sections()
+    sections["youtube.json"]["youtube"]["contains_synthetic_media"] = False
+    sections["youtube.json"]["youtube"]["self_declared_made_for_kids"] = True
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.contains_synthetic_media is False
+    assert config.youtube.api.self_declared_made_for_kids is True
+
+
 def test_load_pinned_comment_section(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["pinned-comment.json"] = {

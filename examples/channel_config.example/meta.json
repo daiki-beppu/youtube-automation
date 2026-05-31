@@ -4,6 +4,7 @@
     "short": "TC",
     "youtube_handle": "@testchannel",
     "url": "https://youtube.com/@testchannel",
+    "channel_id": "UCxxxxxxxxxxxxxxxxxxxxxx",
     "core_message": "Test core message",
     "cta_subscribe": "Subscribe now!",
     "tagline": "Test tagline"
