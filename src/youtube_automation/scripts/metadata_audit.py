@@ -53,9 +53,10 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     """Return a list of issue descriptions for this collection."""
     issues: list[str] = []
     supported_langs = list(config.localizations.supported_languages)
+    paths = CollectionPaths(col)
 
-    desc_md = col / "20-documentation" / "descriptions.md"
-    stray = list((col / "20-documentation").glob("description*"))
+    desc_md = paths.descriptions_md_path
+    stray = list(paths.docs_dir.glob("description*"))
     stray = [p for p in stray if p.name != "descriptions.md"]
     if stray:
         issues.append(f"stray description file(s): {[p.name for p in stray]}")
@@ -88,7 +89,7 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
                     issues.append(msg)
 
     # workflow-state.json scene_phrases
-    ws = col / "workflow-state.json"
+    ws = paths.workflow_state_path
     if ws.exists():
         state = json.loads(ws.read_text(encoding="utf-8"))
         sp = state.get("scene_phrases") or {}
@@ -112,7 +113,7 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     # 動画尺チェック（master mp4 がローカルに残っている場合のみ。
     # /live-clean 後のコレクションでは skip して偽陽性を防ぐ）
     if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
-        master_video = CollectionPaths(col).find_master_video()
+        master_video = paths.find_master_video()
         if master_video:
             dur = probe_duration(master_video)
             if dur is None:
@@ -177,7 +178,7 @@ def collect_video_ids() -> dict[str, str]:
     for col in sorted(COLLECTIONS_DIR.iterdir()):
         if not col.is_dir():
             continue
-        tracking = col / "20-documentation" / "upload_tracking.json"
+        tracking = CollectionPaths(col).tracking_path
         if not tracking.exists():
             continue
         try:

@@ -999,10 +999,7 @@ class TestSystemdUnitTemplate:
         When [Service] セクションを読む
         Then ``Type=simple`` が宣言されている (R10)。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None, "[Service] セクションが存在しない"
-        assert re.search(r"^Type=simple\s*$", service, flags=re.MULTILINE), "[Service].Type=simple が無い"
+        self._assert_service_directive(r"^Type=simple\s*$", "[Service].Type=simple が無い")
 
     def test_service_environment_file_path(self):
         """Given .tftpl
@@ -1011,14 +1008,10 @@ class TestSystemdUnitTemplate:
 
         secret 隔離の核。VIDEO/RTMP_URL を unit 内に直書きせず .env から読む経路を強制する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(
+        self._assert_service_directive(
             r"^EnvironmentFile=/etc/youtube-stream\.env\s*$",
-            service,
-            flags=re.MULTILINE,
-        ), "[Service].EnvironmentFile=/etc/youtube-stream.env が無い（secret 隔離が破綻）"
+            "[Service].EnvironmentFile=/etc/youtube-stream.env が無い（secret 隔離が破綻）",
+        )
 
     def test_service_exec_start_invokes_wrapper_without_env_expansion(self):
         """Given .tftpl
@@ -1060,11 +1053,9 @@ class TestSystemdUnitTemplate:
 
         12h 以上で配信するとアーカイブされない YouTube 仕様の回避策。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^RuntimeMaxSec=11h\s*$", service, flags=re.MULTILINE), (
-            "[Service].RuntimeMaxSec=11h が無い（11h で停止しないとアーカイブされない）"
+        self._assert_service_directive(
+            r"^RuntimeMaxSec=11h\s*$",
+            "[Service].RuntimeMaxSec=11h が無い（11h で停止しないとアーカイブされない）",
         )
 
     def test_service_restart_always(self):
@@ -1072,11 +1063,9 @@ class TestSystemdUnitTemplate:
         When [Service] を読む
         Then ``Restart=always`` が宣言されている (R14)。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^Restart=always\s*$", service, flags=re.MULTILINE), (
-            "[Service].Restart=always が無い（11h 停止後に自動再開しない）"
+        self._assert_service_directive(
+            r"^Restart=always\s*$",
+            "[Service].Restart=always が無い（11h 停止後に自動再開しない）",
         )
 
     def test_service_restart_sec_1h(self):
@@ -1084,11 +1073,9 @@ class TestSystemdUnitTemplate:
         When [Service] を読む
         Then ``RestartSec=1h`` が宣言されている (R15)。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^RestartSec=1h\s*$", service, flags=re.MULTILINE), (
-            "[Service].RestartSec=1h が無い（11h+1h サイクルが成立しない）"
+        self._assert_service_directive(
+            r"^RestartSec=1h\s*$",
+            "[Service].RestartSec=1h が無い（11h+1h サイクルが成立しない）",
         )
 
     def test_install_section_wanted_by_multi_user(self):
@@ -1111,11 +1098,9 @@ class TestSystemdUnitTemplate:
         root 実行 → 動的非特権ユーザ実行への切り替え。demuxer CVE
         （CVE-2023-49502 等）から root RCE への到達経路を遮断する hardening の核。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^DynamicUser=yes\s*$", service, flags=re.MULTILINE), (
-            "[Service].DynamicUser=yes が無い（root 実行のままだと CVE 経路が塞がらない）"
+        self._assert_service_directive(
+            r"^DynamicUser=yes\s*$",
+            "[Service].DynamicUser=yes が無い（root 実行のままだと CVE 経路が塞がらない）",
         )
 
     def test_service_no_new_privileges(self):
@@ -1125,11 +1110,9 @@ class TestSystemdUnitTemplate:
 
         setuid バイナリによる権限昇格を遮断する hardening の核。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^NoNewPrivileges=true\s*$", service, flags=re.MULTILINE), (
-            "[Service].NoNewPrivileges=true が無い（setuid 経由の権限昇格を許す）"
+        self._assert_service_directive(
+            r"^NoNewPrivileges=true\s*$",
+            "[Service].NoNewPrivileges=true が無い（setuid 経由の権限昇格を許す）",
         )
 
     def test_service_protect_system_strict(self):
@@ -1139,11 +1122,9 @@ class TestSystemdUnitTemplate:
 
         ``/`` ``/usr`` ``/boot`` ``/etc`` を read-only にする hardening の核。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^ProtectSystem=strict\s*$", service, flags=re.MULTILINE), (
-            "[Service].ProtectSystem=strict が無い（/usr などへの書き込みが防げない）"
+        self._assert_service_directive(
+            r"^ProtectSystem=strict\s*$",
+            "[Service].ProtectSystem=strict が無い（/usr などへの書き込みが防げない）",
         )
 
     def test_service_protect_home_true(self):
@@ -1153,11 +1134,9 @@ class TestSystemdUnitTemplate:
 
         ``/home`` の不可視化による secret 漏洩経路の遮断。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^ProtectHome=true\s*$", service, flags=re.MULTILINE), (
-            "[Service].ProtectHome=true が無い（/home からの secret 漏洩経路が残る）"
+        self._assert_service_directive(
+            r"^ProtectHome=true\s*$",
+            "[Service].ProtectHome=true が無い（/home からの secret 漏洩経路が残る）",
         )
 
     def test_service_private_tmp(self):
@@ -1167,11 +1146,9 @@ class TestSystemdUnitTemplate:
 
         ``/tmp`` を namespace で隔離し他プロセスとの共有を遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^PrivateTmp=true\s*$", service, flags=re.MULTILINE), (
-            "[Service].PrivateTmp=true が無い（/tmp 経由の干渉が防げない）"
+        self._assert_service_directive(
+            r"^PrivateTmp=true\s*$",
+            "[Service].PrivateTmp=true が無い（/tmp 経由の干渉が防げない）",
         )
 
     def test_service_private_devices(self):
@@ -1181,11 +1158,9 @@ class TestSystemdUnitTemplate:
 
         ``/dev`` を最小サブセット化し物理デバイスへの直接アクセスを遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^PrivateDevices=true\s*$", service, flags=re.MULTILINE), (
-            "[Service].PrivateDevices=true が無い（/dev 経由の物理デバイス露出が残る）"
+        self._assert_service_directive(
+            r"^PrivateDevices=true\s*$",
+            "[Service].PrivateDevices=true が無い（/dev 経由の物理デバイス露出が残る）",
         )
 
     def test_service_capability_bounding_set_empty(self):
@@ -1231,14 +1206,10 @@ class TestSystemdUnitTemplate:
         動画ファイルの書き換え防止。``ProtectSystem=strict`` と組み合わせて
         書き込み可能領域を最小化する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(
+        self._assert_service_directive(
             rf"^ReadOnlyPaths={_INSTALL_ROOT_TFTPL}/videos\s*$",
-            service,
-            flags=re.MULTILINE,
-        ), "[Service].ReadOnlyPaths=${install_root}/videos が無い（動画ファイルの書き換え防止が効かない）"
+            "[Service].ReadOnlyPaths=${install_root}/videos が無い（動画ファイルの書き換え防止が効かない）",
+        )
 
     def test_service_read_write_paths_logs(self):
         """Given .tftpl
@@ -1248,14 +1219,10 @@ class TestSystemdUnitTemplate:
         logrotate 対象パスの書き込み許可（spec 指示）。``ProtectSystem=strict`` 下で
         書き込みが必要な領域を明示する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(
+        self._assert_service_directive(
             rf"^ReadWritePaths={_INSTALL_ROOT_TFTPL}/logs\s*$",
-            service,
-            flags=re.MULTILINE,
-        ), "[Service].ReadWritePaths=${install_root}/logs が無い（logs ディレクトリへの書き込み経路が破綻）"
+            "[Service].ReadWritePaths=${install_root}/logs が無い（logs ディレクトリへの書き込み経路が破綻）",
+        )
 
     def test_only_install_root_terraform_interpolation_remains(self):
         """Given .tftpl
@@ -1312,11 +1279,9 @@ class TestSystemdUnitTemplate:
         ``RuntimeMaxSec=11h`` 到達時の SIGTERM 終了を明示的に success 扱いに揃え、
         healthcheck の anomaly 誤判定経路を遮断する。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^SuccessExitStatus=143\s+SIGTERM\s*$", service, flags=re.MULTILINE), (
-            "[Service].SuccessExitStatus=143 SIGTERM が無い（SIGTERM 終了を anomaly 誤判定する余地が残る）"
+        self._assert_service_directive(
+            r"^SuccessExitStatus=143\s+SIGTERM\s*$",
+            "[Service].SuccessExitStatus=143 SIGTERM が無い（SIGTERM 終了を anomaly 誤判定する余地が残る）",
         )
 
     def test_service_timeout_stop_sec_30s(self):
@@ -1326,11 +1291,9 @@ class TestSystemdUnitTemplate:
 
         SIGTERM → SIGKILL 待機を 90s から 30s に短縮し、ffmpeg flush の現実的時間に揃える。
         """
-        text = read_file(_SYSTEMD_TFTPL)
-        service = self._section(text, "Service")
-        assert service is not None
-        assert re.search(r"^TimeoutStopSec=30s\s*$", service, flags=re.MULTILINE), (
-            "[Service].TimeoutStopSec=30s が無い（停止待機がデフォルト 90s のままになる）"
+        self._assert_service_directive(
+            r"^TimeoutStopSec=30s\s*$",
+            "[Service].TimeoutStopSec=30s が無い（停止待機がデフォルト 90s のままになる）",
         )
 
     def test_service_restrict_address_families_af_unix_inet_inet6(self):
