@@ -242,6 +242,7 @@ def _build_content(merged: dict, meta: ChannelMeta) -> Content:
         default_activity=default_activity,
         theme_scenes=dict(tl.get("theme_scenes", {})),
         theme_activities=dict(tl.get("theme_activities", {})),
+        template_check=dict(tl.get("template_check", {})),
     )
 
     return Content(genre=genre, tags=tags, descriptions=descriptions, title=title)
@@ -253,6 +254,8 @@ def _build_youtube(merged: dict) -> YoutubeSection:
         category_id=yt["category_id"],
         privacy_status=yt["privacy_status"],
         language=yt["language"],
+        contains_synthetic_media=bool(yt.get("contains_synthetic_media", True)),
+        self_declared_made_for_kids=bool(yt.get("self_declared_made_for_kids", False)),
     )
 
     cm_data = merged.get("content_model") or {}

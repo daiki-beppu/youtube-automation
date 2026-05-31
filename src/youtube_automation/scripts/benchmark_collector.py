@@ -28,6 +28,8 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
+from googleapiclient.errors import HttpError  # noqa: E402
+
 from youtube_automation.utils.benchmark_analyzer import (  # noqa: E402
     compute_daily_views,
     compute_engagement_rate,
@@ -37,7 +39,7 @@ from youtube_automation.utils.benchmark_analyzer import (  # noqa: E402
 )
 from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
 from youtube_automation.utils.config import load_config
-from youtube_automation.utils.exceptions import ConfigError  # noqa: E402
+from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
 from youtube_automation.utils.profile import section
 from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
@@ -115,14 +117,17 @@ class BenchmarkCollector:
         for i in range(0, len(channel_ids), _CHANNELS_BATCH_SIZE):
             batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
             with section("benchmark.channels_list", batch_size=len(batch)):
-                resp = (
-                    self.youtube.channels()
-                    .list(
-                        part="snippet,statistics,contentDetails",
-                        id=",".join(batch),
+                try:
+                    resp = (
+                        self.youtube.channels()
+                        .list(
+                            part="snippet,statistics,contentDetails",
+                            id=",".join(batch),
+                        )
+                        .execute()
                     )
-                    .execute()
-                )
+                except HttpError as e:
+                    raise YouTubeAPIError.from_http_error(e, f"benchmark.channels_list (id={','.join(batch)})") from e
             for item in resp.get("items", []):
                 items_by_id[item["id"]] = item
         return items_by_id
@@ -137,15 +142,21 @@ class BenchmarkCollector:
 
         Returns:
             チャンネルデータ辞書（概要 + 動画リスト + 派生指標）。
-            `ch_item` が空のときは空辞書を返す
+
+        Raises:
+            YouTubeAPIError: `ch_item` が空（チャンネルが API レスポンスに存在しない）のとき。
+                空辞書で握りつぶさず、欠落を呼び出し側へ伝播させる
         """
         channel_id = channel_info["id"]
         scan_recent = self.benchmark_config.get("scan_recent", 50)
         min_views = self.benchmark_config.get("min_views", 10000)
 
         if not ch_item:
-            logger.error("チャンネルが見つかりません: %s", channel_id)
-            return {}
+            raise YouTubeAPIError(
+                f"ベンチマーク対象チャンネルが見つかりません: {channel_info.get('name', channel_id)} "
+                f"(id={channel_id})。削除・非公開・ID 誤りの可能性があります。"
+                "config/channel/analytics.json の benchmark.channels の id を確認してください。"
+            )
 
         uploads_playlist_id = ch_item["contentDetails"]["relatedPlaylists"]["uploads"]
 
@@ -166,16 +177,21 @@ class BenchmarkCollector:
         remaining = scan_recent
         while remaining > 0:
             with section("benchmark.playlist_items", page_size=min(50, remaining)):
-                playlist_resp = (
-                    self.youtube.playlistItems()
-                    .list(
-                        part="contentDetails",
-                        playlistId=uploads_playlist_id,
-                        maxResults=min(50, remaining),
-                        pageToken=page_token,
+                try:
+                    playlist_resp = (
+                        self.youtube.playlistItems()
+                        .list(
+                            part="contentDetails",
+                            playlistId=uploads_playlist_id,
+                            maxResults=min(50, remaining),
+                            pageToken=page_token,
+                        )
+                        .execute()
                     )
-                    .execute()
-                )
+                except HttpError as e:
+                    raise YouTubeAPIError.from_http_error(
+                        e, f"benchmark.playlist_items ({channel_info.get('name', channel_id)})"
+                    ) from e
             batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
             video_ids.extend(batch_ids)
             page_token = playlist_resp.get("nextPageToken")
@@ -200,14 +216,19 @@ class BenchmarkCollector:
         for i in range(0, len(video_ids), 50):
             batch = video_ids[i : i + 50]
             with section("benchmark.videos_list", batch_size=len(batch)):
-                videos_resp = (
-                    self.youtube.videos()
-                    .list(
-                        part="snippet,statistics,contentDetails",
-                        id=",".join(batch),
+                try:
+                    videos_resp = (
+                        self.youtube.videos()
+                        .list(
+                            part="snippet,statistics,contentDetails",
+                            id=",".join(batch),
+                        )
+                        .execute()
                     )
-                    .execute()
-                )
+                except HttpError as e:
+                    raise YouTubeAPIError.from_http_error(
+                        e, f"benchmark.videos_list ({channel_info.get('name', channel_id)})"
+                    ) from e
 
             for video in videos_resp.get("items", []):
                 snippet = video["snippet"]
@@ -287,12 +308,18 @@ class BenchmarkCollector:
 
         Returns:
             全チャンネルの収集結果
+
+        Raises:
+            ConfigError: 指定 `channel_slug` が benchmark.channels に存在しないとき
+            YouTubeAPIError: 収集対象の一部が API レスポンスに存在しない（欠落）とき
         """
         if channel_slug:
             targets = [ch for ch in self.config.analytics.benchmark.channels if ch["slug"] == channel_slug]
             if not targets:
-                logger.error("チャンネルが見つかりません: %s", channel_slug)
-                return {"channels": [], "collected_at": self.today.isoformat()}
+                raise ConfigError(
+                    f"指定されたチャンネルが見つかりません: {channel_slug}。"
+                    "config/channel/analytics.json の benchmark.channels に slug を登録してください。"
+                )
         elif force:
             targets = list(self.config.analytics.benchmark.channels)
         else:
@@ -304,12 +331,21 @@ class BenchmarkCollector:
 
         ch_items = self._fetch_channels_metadata(targets)
 
+        # API レスポンスに含まれないチャンネル（削除・非公開・ID 誤り）を明示検知。
+        # 空辞書を黙ってスキップせず、欠落があれば収集失敗として停止する。
+        missing = [ch for ch in targets if ch["id"] not in ch_items]
+        if missing:
+            detail = ", ".join(f"{ch.get('name', ch['id'])} (id={ch['id']})" for ch in missing)
+            raise YouTubeAPIError(
+                f"ベンチマーク対象チャンネルが YouTube API レスポンスに見つかりません: {detail}。"
+                "削除・非公開・ID 誤りの可能性があります。"
+                "config/channel/analytics.json の benchmark.channels の id を確認してください。"
+            )
+
         results = []
         for ch in targets:
             logger.info("収集中: %s (%s)", ch["name"], ch["id"])
-            data = self.collect_channel(ch, ch_items.get(ch["id"], {}))
-            if data:
-                results.append(data)
+            results.append(self.collect_channel(ch, ch_items[ch["id"]]))
 
         return {
             "channels": results,
@@ -1092,10 +1128,18 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
 
     Returns:
         動画情報リスト（再生数降順）
+
+    Raises:
+        ConfigError: ベンチマーク JSON が未取得、または抽出条件
+            （min_views / require_thumbnail）を満たす動画が 0 件のとき。
+            空リストを黙って返さず、下流の無効データ完走を防ぐ
     """
     benchmark_path = find_latest_benchmark_json(data_dir)
     if not benchmark_path:
-        return []
+        raise ConfigError(
+            f"ベンチマーク JSON が見つかりません ({data_dir})。"
+            "先に `/benchmark`（uv run yt-benchmark-collect）を実行して競合データを収集してください。"
+        )
 
     with open(benchmark_path) as f:
         data = json.load(f)
@@ -1128,6 +1172,14 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
                 }
             )
 
+    if not targets:
+        thumb_note = "（かつサムネイル URL あり）" if require_thumbnail else ""
+        raise ConfigError(
+            f"ベンチマーク JSON に {min_views:,} 再生以上の動画{thumb_note}が 1 件もありません "
+            f"({benchmark_path.name})。min_views しきい値を見直すか、"
+            "`/benchmark`（uv run yt-benchmark-collect）で最新データを再収集してください。"
+        )
+
     targets.sort(key=lambda x: x["views"], reverse=True)
     return targets
 
@@ -1136,10 +1188,21 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
     """ベンチマークデータの鮮度を確認し、全チャンネルが1つの JSON に揃った状態を保証する。
 
     1つでも古い or 欠けているチャンネルがあれば --force で全チャンネル一括更新。
+
+    Raises:
+        ConfigError: benchmark.channels が未設定のとき
+        YouTubeAPIError: 最新化を試みたが 1 チャンネルも収集できなかったとき。
+            黙って return せず、最新化失敗を呼び出し側へ通知する
     """
     collector = BenchmarkCollector()
     if data_dir is None:
         data_dir = collector.data_dir
+
+    if not collector.config.analytics.benchmark.channels:
+        raise ConfigError(
+            "ベンチマーク対象チャンネルが未設定です。"
+            "config/channel/analytics.json の benchmark.channels を設定してください。"
+        )
 
     # 最新 JSON に全チャンネルが含まれているか検証
     need_update = False
@@ -1172,7 +1235,11 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
     data = collector.collect_all(force=True)
 
     if data.get("skipped") or not data.get("channels"):
-        return
+        raise YouTubeAPIError(
+            "ベンチマークの最新化に失敗しました（収集結果が空）。"
+            "API 認証・クォータ・benchmark.channels の設定を確認のうえ "
+            "`/benchmark`（uv run yt-benchmark-collect）を再実行してください。"
+        )
 
     if collector.benchmark_config.get("analyze_thumbnails", True):
         analyzer = BenchmarkThumbnailAnalyzer(collector.benchmarks_dir)
@@ -1266,7 +1333,11 @@ def main():
     collector.initialize()
 
     # 収集
-    data = collector.collect_all(force=args.force, channel_slug=args.channel)
+    try:
+        data = collector.collect_all(force=args.force, channel_slug=args.channel)
+    except (ConfigError, YouTubeAPIError) as e:
+        print(f"[ERROR] ベンチマーク収集に失敗しました: {e}")
+        sys.exit(1)
 
     if data.get("skipped"):
         print("すべてのベンチマークは最新です。--force で強制更新できます。")
