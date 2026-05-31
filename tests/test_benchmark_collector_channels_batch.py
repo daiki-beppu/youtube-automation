@@ -16,11 +16,14 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from youtube_automation.scripts.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
     BenchmarkCollector,
     BenchmarkReportGenerator,
 )
+from youtube_automation.utils.exceptions import YouTubeAPIError
 
 
 def _make_collector(youtube_mock: MagicMock, *, benchmark_channels: list[dict] | None = None) -> BenchmarkCollector:
@@ -160,16 +163,16 @@ class TestFetchChannelsMetadata:
 
 
 class TestCollectChannelWithPrefetchedItem:
-    def test_returns_empty_dict_when_ch_item_is_empty(self):
+    def test_raises_when_ch_item_is_empty(self):
         # Given: 上位で API レスポンスに含まれていなかったケースを模倣
         youtube = MagicMock()
         collector = _make_collector(youtube)
 
-        # When
-        result = collector.collect_channel({"id": "UC_X", "name": "x", "slug": "x"}, {})
+        # When / Then: 空辞書で握りつぶさず欠落を例外で伝播（issue #619）
+        with pytest.raises(YouTubeAPIError, match="UC_X"):
+            collector.collect_channel({"id": "UC_X", "name": "x", "slug": "x"}, {})
 
-        # Then: 空辞書 + channels.list を再呼び出ししない（プリフェッチ済みの契約）
-        assert result == {}
+        # channels.list は再呼び出ししない（プリフェッチ済みの契約）
         youtube.channels.return_value.list.assert_not_called()
 
     def test_does_not_call_channels_list_when_ch_item_provided(self):
@@ -251,7 +254,7 @@ class TestCollectAllPrefetchesChannels:
         assert len(data["channels"]) == 2
         assert {c["channel_id"] for c in data["channels"]} == {"UC_A", "UC_B"}
 
-    def test_collect_all_skips_channels_missing_from_api(self):
+    def test_collect_all_raises_when_channel_missing_from_api(self):
         # Given: 設定上は 2 件だが API は 1 件のみ返す（片方は削除済み等）
         channels_cfg = [
             {"id": "UC_OK", "name": "ok", "slug": "ok"},
@@ -267,11 +270,9 @@ class TestCollectAllPrefetchesChannels:
         }
         collector = _make_collector(youtube, benchmark_channels=channels_cfg)
 
-        # When
-        data = collector.collect_all(force=True)
-
-        # Then: 削除済みは結果に含まれず、生存分のみ返る
-        assert [c["channel_id"] for c in data["channels"]] == ["UC_OK"]
+        # When / Then: 欠落を黙ってスキップせず収集失敗として停止（issue #619）
+        with pytest.raises(YouTubeAPIError, match="UC_DEL"):
+            collector.collect_all(force=True)
 
 
 class TestBenchmarkReportGeneratorDescriptionSamples:
