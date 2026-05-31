@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `refactor(agents)`: 600 行超で責務肥大していた `youtube_auto_uploader.py`（602 行）を責務別 mixin モジュールへ分割した（#465）。preflight 検証（`_preflight.py::PreflightMixin`）/ descriptions.md 解析（`_descriptions_md.py`）/ 重複検索（`_dedup_search.py`）/ Complete Collection 戦略（`_complete_collection_strategy.py`）/ 定数（`_uploader_constants.py`）に切り出し、`YouTubeAutoUploader` は各 mixin を合成する形に整理して本体を 356 行へ縮小した。機能・公開 API・挙動はすべて不変（既存 upload 系テスト 68 件 green で担保）。`_preflight_check` の移動に伴いテストの `load_config` パッチ対象を `_preflight` モジュールへ追従。`collection_uploader.py` の分割は follow-up
 ### Added
 
 - `feat(doctor)`: `yt-doctor` の診断範囲を api/channel/data/upload のカテゴリ 4 段階に拡張した（#565）。`CheckResult` に `category` フィールドを追加し `render_table` でカテゴリ別に段階表示する。新 check として `channel_config`（config/channel/ ロード可能性）・`analytics_report`（reports/analysis_*.md 存在確認）・`benchmark_data`（docs/benchmarks/*.md 存在確認）・`upload_ready`（upload 必須 scope 充足・channel_id 紐付け）を追加し、api check 通過後に `/wf-new` 起動前提とアップロード可能性まで連続診断できるようにした。`onboard` SKILL.md を新カテゴリ Steps・ハイブリッド方針（analytics=案内/benchmark=ai-exec/scope=HUMAN STEP）・完了メッセージ（wf-new 起動 + アップロード可能）へ更新し、`channel-setup` SKILL.md の skip 条件を api カテゴリ限定へ整合した
