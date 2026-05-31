@@ -236,6 +236,94 @@ class TestFetchChannel:
             fetch_channel(youtube)
 
 
+class TestFetchChannelLocalizationsFreshness:
+    """#564: localizations を combined fetch のキャッシュ層から切り離して取り直す。"""
+
+    @staticmethod
+    def _youtube_with_split(combined: dict, localizations: dict) -> MagicMock:
+        """part に応じて combined / localizations 別レスポンスを返す youtube モック。"""
+        youtube = MagicMock()
+
+        def _list(**kwargs):
+            req = MagicMock()
+            if kwargs.get("part") == "localizations":
+                req.execute.return_value = localizations
+            else:
+                req.execute.return_value = combined
+            return req
+
+        youtube.channels.return_value.list.side_effect = _list
+        return youtube
+
+    def test_localizations_taken_from_separate_fetch(self):
+        # Given: combined fetch は旧版 localizations、単独 part は新版を返す
+        combined = {
+            "items": [
+                {
+                    "id": "UCx",
+                    "brandingSettings": {"channel": {"description": "branding desc"}},
+                    "localizations": {"ja": {"title": "T", "description": "OLD (cached)"}},
+                }
+            ]
+        }
+        fresh = {"items": [{"id": "UCx", "localizations": {"ja": {"title": "T", "description": "NEW"}}}]}
+        youtube = self._youtube_with_split(combined, fresh)
+
+        # When
+        result = fetch_channel(youtube)
+
+        # Then: localizations は単独 fetch の新版で上書きされる
+        assert result["localizations"]["ja"]["description"] == "NEW"
+        # brandingSettings は combined fetch 由来
+        assert result["brandingSettings"]["channel"]["description"] == "branding desc"
+
+    def test_combined_fetch_omits_localizations_part(self):
+        # Given
+        combined = {"items": [{"id": "UCx", "brandingSettings": {"channel": {}}}]}
+        fresh = {"items": [{"id": "UCx", "localizations": {"en": {"title": "t", "description": "d"}}}]}
+        youtube = self._youtube_with_split(combined, fresh)
+
+        # When
+        fetch_channel(youtube)
+
+        # Then: combined call は localizations を part に含めず、別途 localizations 単独 fetch する
+        parts_used = [c.kwargs.get("part") for c in youtube.channels.return_value.list.call_args_list]
+        assert "brandingSettings,status,snippet" in parts_used
+        assert "localizations" in parts_used
+        assert not any("brandingSettings" in p and "localizations" in p for p in parts_used if p)
+
+    def test_no_localizations_results_in_empty_dict(self):
+        # Given: チャンネルに localizations が無い（単独 fetch も localizations キー無し）
+        combined = {"items": [{"id": "UCx", "brandingSettings": {"channel": {}}}]}
+        no_loc = {"items": [{"id": "UCx"}]}
+        youtube = self._youtube_with_split(combined, no_loc)
+
+        # When
+        result = fetch_channel(youtube)
+
+        # Then: 空辞書（parse_api_response 側が安全に処理できる）
+        assert result["localizations"] == {}
+
+    def test_localizations_fetch_failure_wrapped(self):
+        # Given: combined は成功するが localizations 単独 fetch が API エラー
+        combined = {"items": [{"id": "UCx", "brandingSettings": {"channel": {}}}]}
+        youtube = MagicMock()
+
+        def _list(**kwargs):
+            req = MagicMock()
+            if kwargs.get("part") == "localizations":
+                req.execute.side_effect = RuntimeError("loc boom")
+            else:
+                req.execute.return_value = combined
+            return req
+
+        youtube.channels.return_value.list.side_effect = _list
+
+        # When / Then: 生 Exception ではなくドメイン例外に変換
+        with pytest.raises(YouTubeAPIError, match="localizations"):
+            fetch_channel(youtube)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------

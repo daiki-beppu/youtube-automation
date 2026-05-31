@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `fix(channel-settings)`: `yt-channel-settings push --apply` 直後の `diff` に旧 localizations が表示される問題を修正した（#564）。`fetch_channel()` が `channels.list(part="brandingSettings,localizations,status,snippet")` で一括取得していたが、`localizations` を他 part と同じ呼び出しに混ぜると YouTube Data API のキャッシュ層に当たり push 直後に旧版が返る。combined fetch は `brandingSettings,status,snippet` に絞り、`localizations` は単独 part で取り直してマージする二段 fetch に変更した（push 反映済みの新版が安定して返る）。`diff` / `push` / `pull` はいずれも `fetch_channel()` 経由のため自動的に最新化される
 ### Added
 
 - `feat(yt-channel-settings)`: `keywords` の合計 500 文字制限を push 前に事前バリデーションするようにした（#563）。`build_update_body` で `_keywords_to_api()` の結果長を検証し、500 文字を超える場合は `channels().update()` の汎用的な 400（`Request contains an invalid argument.`）を待たずに `YouTubeAPIError` で停止する。エラーメッセージに現在の文字数・超過分・長い順の短縮候補タグを含め、原因が keywords 長であることを即座に判別できるようにした

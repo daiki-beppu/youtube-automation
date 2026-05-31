@@ -259,18 +259,49 @@ def _fmt(value: Any) -> str:
     return repr(value)
 
 
+# combined fetch では `localizations` を要求しない。`brandingSettings` 等と同じ
+# `channels.list` 呼び出しに `localizations` を混ぜると、push 直後に旧版が返る
+# YouTube Data API のキャッシュ層に当たる（#564）。`localizations` だけを単独
+# part で取り直すと push 反映済みの新版が安定して返るため、二段 fetch する。
+_COMBINED_PARTS = "brandingSettings,status,snippet"
+_LOCALIZATIONS_PART = "localizations"
+
+
 def fetch_channel(youtube) -> dict[str, Any]:
     """`channels().list(mine=True, part=...)` の薄いラッパ。
+
+    `localizations` は combined fetch のキャッシュ層を避けるため単独 part で
+    取得し直し、combined fetch の結果へマージする（#564）。
 
     Raises:
         YouTubeAPIError: チャンネルが取得できない / レスポンスが空
     """
     try:
-        resp = youtube.channels().list(part="brandingSettings,localizations,status,snippet", mine=True).execute()
+        resp = youtube.channels().list(part=_COMBINED_PARTS, mine=True).execute()
     except Exception as e:
         raise YouTubeAPIError(f"channels().list() failed: {e}") from e
 
     items = resp.get("items") or []
     if not items:
         raise YouTubeAPIError("authenticated user has no YouTube channel")
-    return items[0]
+    item = items[0]
+
+    item["localizations"] = _fetch_localizations(youtube)
+    return item
+
+
+def _fetch_localizations(youtube) -> dict[str, Any]:
+    """`localizations` だけを単独 part で取得する（push 直後のキャッシュ回避, #564）。
+
+    Returns:
+        `localizations` 辞書（チャンネルに localizations が無ければ空辞書）
+    """
+    try:
+        resp = youtube.channels().list(part=_LOCALIZATIONS_PART, mine=True).execute()
+    except Exception as e:
+        raise YouTubeAPIError(f"channels().list(part={_LOCALIZATIONS_PART}) failed: {e}") from e
+
+    items = resp.get("items") or []
+    if not items:
+        return {}
+    return items[0].get("localizations") or {}
