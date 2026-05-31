@@ -516,13 +516,9 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         if publish_at:
             metadata["publish_at"] = publish_at
 
-        # サムネイル検索（thumbnail.jpg を優先）
-        thumbnail_path = None
-        for tn in ["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"]:
-            candidate = paths.assets_dir / tn
-            if candidate.exists():
-                thumbnail_path = str(candidate)
-                break
+        # サムネイル検索（候補順は CollectionPaths.find_thumbnail に集約・統一）
+        thumbnail = paths.find_thumbnail()
+        thumbnail_path = str(thumbnail) if thumbnail is not None else None
 
         # publish 直前の dedup 安全網: 同タイトル動画が own channel に既に存在すれば
         # `videos().insert()` を呼ばず既存 video_id を採用する
