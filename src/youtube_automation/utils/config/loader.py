@@ -15,8 +15,10 @@ from youtube_automation.utils.config.comments import (
     PROVIDER_CODEX,
     PROVIDER_GEMINI,
     REQUESTS_PER_MINUTE_DEFAULT,
+    SCOPE_ANY,
     VALID_FALLBACK_VALUES,
     VALID_PROVIDERS,
+    VALID_SCOPES,
     CommentRule,
     Comments,
     GeneratorConfig,
@@ -384,6 +386,11 @@ def _build_comments(merged: dict) -> Comments:
             raise ConfigError(
                 f"comments.rules[{i}].provider は {VALID_PROVIDERS} のいずれかでなければなりません: {rule_provider!r}"
             )
+        rule_scope = raw.get("scope", SCOPE_ANY)
+        if rule_scope not in VALID_SCOPES:
+            raise ConfigError(
+                f"comments.rules[{i}].scope は {VALID_SCOPES} のいずれかでなければなりません: {rule_scope!r}"
+            )
         rules.append(
             CommentRule(
                 name=name,
@@ -392,6 +399,7 @@ def _build_comments(merged: dict) -> Comments:
                 language=raw.get("language"),
                 priority=int(raw.get("priority", 0)),
                 provider=rule_provider,
+                scope=rule_scope,
             )
         )
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(comments-reply)`: `CommentRule` に `scope: "top_level" | "reply" | "any"` を追加した（#524）。#365 で reply も返信対象に含まれるようになり keyword/pattern ルールが top-level / reply の区別なく当たっていたため、ルール単位でマッチ対象の階層を絞れるようにした。`rule_engine` が `FetchedComment.parent_id`（reply 判定）と scope を突合し、`top_level` は top-level のみ・`reply` は reply のみ・`any`（既定）は両方にマッチする。`scope` 未指定の既存ルールは `"any"` として #365 以前と等価のマッチ挙動を維持する。`config/channel/comments.json` の rules に任意指定でき、無効値は `ConfigError`。`examples/channel_config.example/comments.json` に指定例を追加
+
 ## [5.5.6] - 2026-05-31
 
 ### Added
