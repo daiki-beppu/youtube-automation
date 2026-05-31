@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
 
 from .audio_formats import AUDIO_EXTS
@@ -453,7 +454,8 @@ class BAHMetadataGenerator:
         2. `planning.music.patterns[<letter>].name`（`Pattern X: <name>` に整形）
         3. 解決不能 → 呼び出し元で `Pattern X` フォールバック
         """
-        ws_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        ws_path = paths.workflow_state_path
         result: Dict[str, str] = {}
         if not ws_path.exists():
             return result
@@ -494,7 +496,8 @@ class BAHMetadataGenerator:
         `analyze_audio_files()` 終端と、SKILL.md からの再ロード時に呼ばれる。
         対応する filename が無いキーは無視する（後方互換）。
         """
-        ws_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        ws_path = paths.workflow_state_path
         if not ws_path.exists():
             return
         try:
@@ -536,7 +539,8 @@ class BAHMetadataGenerator:
         if not filename_map:
             return
 
-        ws_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        ws_path = paths.workflow_state_path
         state: Dict = {}
         if ws_path.exists():
             try:
@@ -558,7 +562,8 @@ class BAHMetadataGenerator:
 
         優先順位: workflow-state.json の collection_name → _extract_collection_name() から "Collection" 除去
         """
-        workflow_state_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        workflow_state_path = paths.workflow_state_path
         if workflow_state_path.exists():
             try:
                 with open(workflow_state_path, "r", encoding="utf-8") as f:
@@ -579,7 +584,8 @@ class BAHMetadataGenerator:
 
         優先順位: workflow-state.json の title_activity → config のテーママッチング → デフォルト
         """
-        workflow_state_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        workflow_state_path = paths.workflow_state_path
         if workflow_state_path.exists():
             try:
                 with open(workflow_state_path, "r", encoding="utf-8") as f:
@@ -644,7 +650,8 @@ class BAHMetadataGenerator:
 
     def _load_scene_phrases(self) -> Dict[str, str]:
         """workflow-state.json から scene_phrases を読み込み"""
-        ws_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        ws_path = paths.workflow_state_path
         if ws_path.exists():
             try:
                 with open(ws_path, "r", encoding="utf-8") as f:
@@ -656,7 +663,8 @@ class BAHMetadataGenerator:
 
     def _load_scene_emoji(self) -> str:
         """workflow-state.json から planning.scene_emoji を読み込み"""
-        ws_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        ws_path = paths.workflow_state_path
         if ws_path.exists():
             try:
                 with open(ws_path, "r", encoding="utf-8") as f:
@@ -854,7 +862,8 @@ class BAHMetadataGenerator:
         の `theme` キーを優先する（テーマ別 tag を引くキーが workflow-state 側で
         確定している前提）。
         """
-        ws_path = self.collection_path / "workflow-state.json"
+        paths = CollectionPaths(self.collection_path)
+        ws_path = paths.workflow_state_path
         if ws_path.exists():
             try:
                 with open(ws_path, "r", encoding="utf-8") as f:
