@@ -23,6 +23,7 @@
             python311
             uv
             ffmpeg
+            lefthook
           ];
 
           # ランタイム供給のみ。秘密は youtube_automation.utils.secrets から
@@ -40,6 +41,11 @@
             # PyPI バイナリホイール (numpy 等) が dlopen する GCC ランタイムと zlib を
             # Nix 環境でも見えるようにする。Linux CI 用の救済で、darwin では無害。
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ]}:''${LD_LIBRARY_PATH:-}"
+
+            # Git hooks (lefthook) を有効化。冪等なので devShell 入室ごとに実行してよい。
+            if git rev-parse --git-dir >/dev/null 2>&1; then
+              lefthook install >/dev/null 2>&1 || true
+            fi
           '';
         };
       }
