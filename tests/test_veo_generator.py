@@ -179,6 +179,34 @@ def test_smooth_loop_defaults_to_legacy_crf_18(monkeypatch) -> None:
     assert cmd[cmd.index("-preset") + 1] == "slow"
 
 
+# ---------- smooth_loop 失敗時の tmp クリーンアップ (Issue #480) ----------
+
+
+def test_smooth_loop_removes_tmp_when_ffmpeg_fails(tmp_path: Path, monkeypatch) -> None:
+    """FFmpeg が CalledProcessError で失敗したとき _smooth.mp4 を残さない（Issue #480）。"""
+    import subprocess as _sp
+
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"original")
+    output = video.with_stem(video.stem + "_smooth")
+
+    # ffprobe は十分な尺を返し、ffmpeg は tmp を部分書き出ししてから失敗する
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda cmd, **_: "10.0")
+
+    def fake_run(cmd, **kwargs):
+        # ffmpeg が出力 tmp を作る挙動を再現
+        output.write_bytes(b"partial")
+        raise _sp.CalledProcessError(1, cmd, output=b"", stderr=b"forced failure")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+    result = veo_generator.smooth_loop(video)
+
+    assert result is False
+    # 部分書き出しされた tmp は finally で削除されている
+    assert not output.exists()
+
+
 # =============================================================================
 # generate_loop_video: resume / SIGINT / state lifecycle
 # Issue #453
