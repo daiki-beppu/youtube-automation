@@ -45,6 +45,20 @@ class ReplyHistory:
     def has_replied(self, comment_id: str) -> bool:
         return comment_id in self._data["replied"]
 
+    def replied_video_ids(self) -> set[str]:
+        """履歴に記録済みコメントの video_id 集合を返す（preflight の quota 節約用）.
+
+        過去に返信実績がある video は既に到達可能だったとみなし、status preflight の
+        対象から除外する。metadata に video_id を持たない古いレコードは無視する。
+        """
+        ids: set[str] = set()
+        for metadata in self._data["replied"].values():
+            if isinstance(metadata, dict):
+                video_id = metadata.get("video_id")
+                if video_id:
+                    ids.add(video_id)
+        return ids
+
     def mark_replied(self, comment_id: str, metadata: dict[str, Any]) -> None:
         self._data["replied"][comment_id] = metadata
 

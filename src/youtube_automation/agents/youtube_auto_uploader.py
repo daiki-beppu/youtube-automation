@@ -24,6 +24,7 @@ from googleapiclient.errors import HttpError
 logger = logging.getLogger(__name__)
 
 
+from youtube_automation.utils.channel_settings import build_upload_status_flags  # noqa: E402
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
@@ -106,12 +107,14 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             raise ValueError(f"タイトルが100文字を超えています（{len(title)}文字）: {title}")
 
         # リクエストボディ作成
+        # AI 開示（containsSyntheticMedia）/ 子供向け申告（selfDeclaredMadeForKids）は
+        # config/channel/youtube.json で上書き可能。未設定時は現行の振る舞い
+        # （synthetic=True / made_for_kids=False）を維持する (#605)。
+        # AI 生成音楽（Lyria / Suno）を主軸とするチャンネルは YouTube の AI 開示
+        # （altered or synthetic content）ポリシー上 true を申告する (#603)。
         status_body = {
             "privacyStatus": metadata.get("privacy_status", "private"),
-            "selfDeclaredMadeForKids": False,
-            # AI 生成音楽（Lyria / Suno）を主軸とするため、YouTube の AI 開示
-            # （altered or synthetic content）ポリシー上 true を申告する (#603)
-            "containsSyntheticMedia": True,
+            **build_upload_status_flags(load_config().youtube.api),
         }
 
         # スケジュール公開: publishAt 指定時は private 必須
