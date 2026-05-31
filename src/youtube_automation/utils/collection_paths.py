@@ -15,6 +15,11 @@ from youtube_automation.utils.exceptions import ValidationError
 _SHORT_THUMBNAIL_EXTENSIONS = ("jpg", "png")
 _SHORT_LOOP_INPUT_NAMES = ("short.png", "short.jpg")
 
+# サムネイル候補ファイルの優先順。アップロード経路
+# （agents/youtube_auto_uploader.py::_upload_complete_collection）と統一し、
+# 呼び出し経路によらず同一コレクションで同じ画像が選ばれることを保証する。
+_THUMBNAIL_CANDIDATES = ("thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png")
+
 
 class CollectionPaths:
     """標準コレクションディレクトリ構造のパスリゾルバ。
@@ -107,8 +112,14 @@ class CollectionPaths:
         return None
 
     def find_thumbnail(self) -> Path | None:
-        """10-assets/ からサムネイル画像を探す（thumbnail.jpg > main.png）。"""
-        for name in ["thumbnail.jpg", "main.png", "main.jpg"]:
+        """10-assets/ からサムネイル画像を探す。
+
+        候補順は ``thumbnail.jpg > thumbnail.png > main.jpg > main.png``
+        （``_THUMBNAIL_CANDIDATES``）。アップロード経路
+        （``_upload_complete_collection``）と統一しており、呼び出し経路によらず
+        同一コレクションで同じ画像が選ばれる。
+        """
+        for name in _THUMBNAIL_CANDIDATES:
             path = self.assets_dir / name
             if path.exists():
                 return path

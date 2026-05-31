@@ -58,4 +58,7 @@ class ChannelMeta:
     core_message: str = ""
     cta_subscribe: str = ""
     tagline: str = ""
+    # YouTube チャンネル ID（`UC...`）。OAuth トークン取り違え防止の照合に使う (#561)。
+    # 未設定（空文字）のチャンネルでは照合をスキップする。
+    channel_id: str = ""
     branding: Branding = field(default_factory=Branding)

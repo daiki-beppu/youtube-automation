@@ -34,6 +34,38 @@ _HELD_FOR_REVIEW = "heldForReview"
 _COMMENTS_DISABLED_API_REASON = "commentsDisabled"
 _COMMENTS_DISABLED_SKIP_REASON = "comments_disabled"
 
+# videos.list の id 上限（1 リクエストあたり 50 件）
+_VIDEOS_LIST_CHUNK = 50
+_PRIVACY_STATUS_PRIVATE = "private"
+_SKIP_VIDEO_NOT_FOUND = "video_not_found"
+_SKIP_VIDEO_PRIVATE = "video_private"
+
+
+def fetch_video_status(youtube, video_ids: list[str]) -> dict[str, dict | None]:
+    """video_ids の status を videos.list で一括取得する（50 件単位で chunk 化）.
+
+    Args:
+        youtube: `youtube_service.get_youtube()` / `ServiceRegistry.youtube`
+        video_ids: status を確認したい動画 ID のリスト
+
+    Returns:
+        `{video_id: status_dict | None}`。API 応答に存在しない（削除済み等）video は
+        `None`。status_dict は videos.list の `status` part（`privacyStatus` 等）。
+
+    Raises:
+        YouTubeAPIError: HttpError を status_code 付きでラップ（取得失敗は握りつぶさない）
+    """
+    result: dict[str, dict | None] = {vid: None for vid in video_ids}
+    for start in range(0, len(video_ids), _VIDEOS_LIST_CHUNK):
+        chunk = video_ids[start : start + _VIDEOS_LIST_CHUNK]
+        try:
+            resp = youtube.videos().list(part="status", id=",".join(chunk)).execute()
+        except HttpError as e:
+            raise YouTubeAPIError.from_http_error(e, f"videos.list (status) 失敗 (count={len(chunk)})") from e
+        for item in resp.get("items", []):
+            result[item["id"]] = item.get("status", {})
+    return result
+
 
 @dataclass
 class ReplyPlan:
@@ -170,18 +202,49 @@ class CommentReplier:
         if video_ids is not None:
             # 明示指定時: uploads playlist 解決は不要だが owner_channel_id は別途解決する
             self._resolve_owner_channel_id()
-            video_source: Iterator[str] = iter(video_ids)
+            target_video_ids = list(video_ids)
         else:
             owner_id, uploads_playlist_id = self._fetch_channel_info()
             self._owner_channel_id = self._owner_channel_id or owner_id
-            video_source = self._iter_uploaded_video_ids(uploads_playlist_id)
+            target_video_ids = list(self._iter_uploaded_video_ids(uploads_playlist_id))
 
-        for vid in video_source:
+        # preflight: 削除済み / private video を dry-run / apply 共通で事前 skip する
+        target_video_ids = self._preflight_video_status(target_video_ids, plan)
+
+        for vid in target_video_ids:
             if len(plan.planned) >= limit:
                 break
             self._process_video_comments(vid, engine, plan, dry_run, per_video_limit, since, limit)
 
         return plan
+
+    def _preflight_video_status(self, video_ids: list[str], plan: ReplyPlan) -> list[str]:
+        """video status を一括取得し、削除済み / private を plan.skipped に積んで除外する.
+
+        quota 節約のため、history に返信実績がある video は status check を省く
+        （過去に到達できた video は引き続き存在するとみなす）。
+
+        Returns:
+            preflight を通過した（コメント処理を続行すべき）video_id のリスト。
+        """
+        replied_videos = self._history.replied_video_ids()
+        to_check = [vid for vid in video_ids if vid not in replied_videos]
+        statuses = fetch_video_status(self._youtube, to_check) if to_check else {}
+
+        allowed: list[str] = []
+        for vid in video_ids:
+            if vid in replied_videos:
+                allowed.append(vid)
+                continue
+            status = statuses.get(vid)
+            if status is None:
+                plan.skipped.append(self._video_skip_record(vid, _SKIP_VIDEO_NOT_FOUND))
+                continue
+            if status.get("privacyStatus") == _PRIVACY_STATUS_PRIVATE:
+                plan.skipped.append(self._video_skip_record(vid, _SKIP_VIDEO_PRIVATE))
+                continue
+            allowed.append(vid)
+        return allowed
 
     def _process_video_comments(
         self,
@@ -232,7 +295,7 @@ class CommentReplier:
             plan.skipped.append(self._skip_record(comment, skip_reason))
             return
 
-        match = engine.evaluate(comment.text)
+        match = engine.evaluate(comment.text, is_reply=comment.parent_id is not None)
         if match is None:
             plan.skipped.append(self._skip_record(comment, "no_rule_matched"))
             return

@@ -12,6 +12,7 @@ from youtube_automation.utils.preflight_checks import (
     check_required_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
+    check_title_template_compliance,
     extract_descriptions_md_tags,
 )
 
@@ -233,3 +234,94 @@ class TestExtractDescriptionsMdTags:
         p = tmp_path / "descriptions.md"
         p.write_text("## タグ（YouTube タグ欄）\n```\n\n```\n", encoding="utf-8")
         assert extract_descriptions_md_tags(p) is None
+
+
+class TestCheckTitleTemplateCompliance:
+    """`check_title_template_compliance` の鋳型逸脱・巻数表記・RHS 重複検出 (#602)."""
+
+    # soulful-grooves チャンネルを想定した鋳型設定
+    CFG = {
+        "template": "{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
+        "core_vocabulary": ["Soul", "Funk"],
+    }
+    EXISTING = [
+        "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
+        "Golden Hour Soul Flow | 4 Hours of Smooth City Funk",
+    ]
+
+    def test_compliant_title_passes(self) -> None:
+        title = "Bright Funk & Soul Spirit | 3 Hours of Feel-Good Retro Grooves"
+        assert check_title_template_compliance(title, self.EXISTING, self.CFG) is None
+
+    def test_volume_notation_rejected(self) -> None:
+        title = "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves"
+        msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "巻数表記" in msg
+
+    def test_part_notation_rejected(self) -> None:
+        title = "Funky Soul Spirit Part 3 | 3 Hours of Feel-Good Retro Grooves"
+        msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "巻数表記" in msg
+
+    def test_hash_number_rejected(self) -> None:
+        title = "Funky Soul Spirit #2 | 3 Hours of Feel-Good Retro Grooves"
+        msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "巻数表記" in msg
+
+    def test_trailing_roman_numeral_rejected(self) -> None:
+        title = "Funky Soul Spirit III | 3 Hours of Feel-Good Retro Grooves"
+        msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "巻数表記" in msg
+
+    def test_rhs_duplicate_rejected(self) -> None:
+        title = "Brand New Soul Funk Energy | 3 Hours of Soulful Retro Funk Grooves"
+        msg = check_title_template_compliance(title, self.EXISTING, self.CFG)
+        assert msg is not None
+        assert "RHS が既存 live タイトルと完全重複" in msg
+
+    def test_volume_and_rhs_duplicate_both_reported(self) -> None:
+        # issue の事故事例: 巻数表記 + RHS 重複の両方を検出して block
+        title = "Funky Spirit Vol.2 | 3 Hours of Soulful Retro Funk Grooves"
+        msg = check_title_template_compliance(title, self.EXISTING, self.CFG)
+        assert msg is not None
+        assert "巻数表記" in msg
+        assert "RHS が既存 live タイトルと完全重複" in msg
+
+    def test_rhs_not_matching_template_rejected(self) -> None:
+        title = "Bright Funk & Soul Spirit | A Cozy Funk Mix"
+        msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "RHS が鋳型に一致しません" in msg
+
+    def test_missing_separator_rejected(self) -> None:
+        title = "Bright Funk & Soul Spirit 3 Hours of Feel-Good Retro Grooves"
+        msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "鋳型形式逸脱" in msg
+
+    def test_missing_core_vocabulary_rejected(self) -> None:
+        title = "Bright Mellow Spirit | 3 Hours of Feel-Good Retro Grooves"
+        msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "鋳型語彙" in msg
+
+    def test_skips_when_template_has_no_separator(self) -> None:
+        # ` | ` 鋳型を使わないチャンネル（例: RPG BGM）は自動スキップ
+        cfg = {"template": "{style} {theme} RPG Music - {activity} BGM [{duration_display}]"}
+        title = "Epic Battle RPG Music - Gaming BGM [3:00:00]"
+        assert check_title_template_compliance(title, [], cfg) is None
+
+    def test_no_config_uses_defaults(self) -> None:
+        # config 未指定でも既定鋳型（N Hours of ...）で検証できる
+        title = "Bright Funk & Soul Spirit | 3 Hours of Feel-Good Retro Grooves"
+        assert check_title_template_compliance(title) is None
+
+    def test_existing_live_titles_pass(self) -> None:
+        # 既存 live タイトルは自分自身を比較対象に含めなければ全て pass（回帰確認）
+        for i, title in enumerate(self.EXISTING):
+            others = [t for j, t in enumerate(self.EXISTING) if j != i]
+            assert check_title_template_compliance(title, others, self.CFG) is None
