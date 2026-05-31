@@ -157,7 +157,8 @@ class TestFindMasterAudio:
 
 
 # ---------------------------------------------------------------------------
-# find_thumbnail: thumbnail.jpg > main.png > main.jpg
+# find_thumbnail: thumbnail.jpg > thumbnail.png > main.jpg > main.png
+# （アップロード経路 _upload_complete_collection と候補順を統一 / Issue #535）
 # ---------------------------------------------------------------------------
 
 
@@ -166,22 +167,32 @@ class TestFindThumbnail:
         paths = CollectionPaths(tmp_path)
         paths.assets_dir.mkdir()
         (paths.assets_dir / "thumbnail.jpg").touch()
+        (paths.assets_dir / "thumbnail.png").touch()
         (paths.assets_dir / "main.png").touch()
         (paths.assets_dir / "main.jpg").touch()
         assert paths.find_thumbnail().name == "thumbnail.jpg"
+
+    def test_prefers_thumbnail_png_over_main(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir()
+        (paths.assets_dir / "thumbnail.png").touch()
+        (paths.assets_dir / "main.png").touch()
+        (paths.assets_dir / "main.jpg").touch()
+        assert paths.find_thumbnail().name == "thumbnail.png"
+
+    def test_prefers_main_jpg_over_main_png(self, tmp_path):
+        # 統一後は main.jpg が main.png より優先（旧 find_thumbnail とは逆）
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir()
+        (paths.assets_dir / "main.png").touch()
+        (paths.assets_dir / "main.jpg").touch()
+        assert paths.find_thumbnail().name == "main.jpg"
 
     def test_falls_back_to_main_png(self, tmp_path):
         paths = CollectionPaths(tmp_path)
         paths.assets_dir.mkdir()
         (paths.assets_dir / "main.png").touch()
-        (paths.assets_dir / "main.jpg").touch()
         assert paths.find_thumbnail().name == "main.png"
-
-    def test_falls_back_to_main_jpg(self, tmp_path):
-        paths = CollectionPaths(tmp_path)
-        paths.assets_dir.mkdir()
-        (paths.assets_dir / "main.jpg").touch()
-        assert paths.find_thumbnail().name == "main.jpg"
 
     def test_returns_none_when_no_image(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -191,6 +202,51 @@ class TestFindThumbnail:
     def test_returns_none_when_dir_missing(self, tmp_path):
         paths = CollectionPaths(tmp_path)
         assert paths.find_thumbnail() is None
+
+
+# ---------------------------------------------------------------------------
+# 回帰: find_thumbnail が統一前の _upload_complete_collection と同じファイルを指す
+# （Issue #535 — 呼び出し経路によらず同一コレクションで同一サムネが選ばれること）
+# ---------------------------------------------------------------------------
+
+
+class TestFindThumbnailMatchesUploaderOrder:
+    # 統一前に _upload_complete_collection が使っていた候補順（live behavior）。
+    _LEGACY_UPLOADER_ORDER = ["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"]
+
+    @staticmethod
+    def _legacy_uploader_pick(assets_dir, order):
+        for tn in order:
+            candidate = assets_dir / tn
+            if candidate.exists():
+                return candidate
+        return None
+
+    @pytest.mark.parametrize(
+        "present",
+        [
+            [],
+            ["thumbnail.jpg"],
+            ["thumbnail.png"],
+            ["main.jpg"],
+            ["main.png"],
+            ["thumbnail.jpg", "thumbnail.png"],
+            ["thumbnail.png", "main.jpg"],
+            ["thumbnail.png", "main.png"],
+            ["main.jpg", "main.png"],
+            ["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"],
+        ],
+    )
+    def test_matches_legacy_uploader_for_all_combinations(self, tmp_path, present):
+        paths = CollectionPaths(tmp_path)
+        paths.assets_dir.mkdir()
+        for name in present:
+            (paths.assets_dir / name).touch()
+
+        expected = self._legacy_uploader_pick(paths.assets_dir, self._LEGACY_UPLOADER_ORDER)
+        result = paths.find_thumbnail()
+
+        assert result == expected
 
 
 # ---------------------------------------------------------------------------
