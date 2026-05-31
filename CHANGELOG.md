@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(doctor)`: `yt-doctor` の診断範囲を api/channel/data/upload のカテゴリ 4 段階に拡張した（#565）。`CheckResult` に `category` フィールドを追加し `render_table` でカテゴリ別に段階表示する。新 check として `channel_config`（config/channel/ ロード可能性）・`analytics_report`（reports/analysis_*.md 存在確認）・`benchmark_data`（docs/benchmarks/*.md 存在確認）・`upload_ready`（upload 必須 scope 充足・channel_id 紐付け）を追加し、api check 通過後に `/wf-new` 起動前提とアップロード可能性まで連続診断できるようにした。`onboard` SKILL.md を新カテゴリ Steps・ハイブリッド方針（analytics=案内/benchmark=ai-exec/scope=HUMAN STEP）・完了メッセージ（wf-new 起動 + アップロード可能）へ更新し、`channel-setup` SKILL.md の skip 条件を api カテゴリ限定へ整合した
 - `feat(image_provider)`: gemini CLI 経由のサブスク認証で画像生成する新 provider `gemini_cli` を追加した（#474）。Google AI Pro/Ultra サブスクで認証済みの `gemini` CLI（`@google/gemini-cli`）を subprocess で非対話起動（`gemini --yolo -m <model> -p <prompt>`）し、出力パスをプロンプトに埋め込んで画像を書き出させる。GCP 従量課金（ADC 経由の既存 `gemini` provider）を発生させずに枚数の多いサムネ生成のコストを抑えられる。`image_generation.provider: gemini_cli` + `image_generation.gemini_cli.{model,image_size,timeout_seconds}` で設定。CLI 未導入時は `ConfigError`、生成後は出力ファイルの存在と PNG 妥当性を検証し指数バックオフでリトライする。既存 ADC 経由 `gemini` provider はそのまま温存（非破壊）。skill デフォルトの provider は `gemini` のまま（切り替えはスコープ外）
 ### Changed
 

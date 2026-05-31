@@ -3,10 +3,67 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import pytest
 
 from youtube_automation.cli import doctor
+
+# ---------------------------------------------------------------------------
+# テストヘルパー
+# ---------------------------------------------------------------------------
+
+
+def _write_minimal_config(base: Path) -> None:
+    """検証に必要な最小限の config/channel/*.json を base に書き出す.
+
+    load_config() が成功するための必須キーのみを含む。
+    localizations.json は省略可能（exists=False として扱われる）。
+    """
+    config_dir = base / "config" / "channel"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    (config_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "channel": {
+                    "name": "TestCh",
+                    "short": "TC",
+                    "youtube_handle": "@testch",
+                    "url": "https://youtube.com/@testch",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (config_dir / "content.json").write_text(
+        json.dumps(
+            {
+                "genre": {"primary": "bgm", "style": "ambient", "context": "study"},
+                "tags": {"base": ["bgm"], "themes": {}},
+                "descriptions": {
+                    "opening": "Relaxing {style}.",
+                    "perfect_for": ["Study"],
+                    "hashtags": ["#bgm"],
+                },
+                "title": {"template": "{theme} bgm"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (config_dir / "youtube.json").write_text(
+        json.dumps(
+            {
+                "youtube": {
+                    "category_id": "10",
+                    "privacy_status": "public",
+                    "language": "ja",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 @pytest.fixture
@@ -213,9 +270,13 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        assert len(payload["checks"]) == 11
+        # 11 api + 1 channel + 2 data + 1 upload = 15
+        assert len(payload["checks"]) == 15
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
+            # category フィールドが JSON に含まれていること
+            assert "category" in c
+            assert c["category"] in ("api", "channel", "data", "upload")
 
     def test_human_output(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
@@ -225,3 +286,581 @@ class TestMain:
         out = capsys.readouterr().out
         assert "summary:" in out
         assert "channel_dir:" in out
+
+
+# ---------------------------------------------------------------------------
+# CheckResult.category フィールド
+# ---------------------------------------------------------------------------
+
+
+class TestCheckResultCategory:
+    def test_default_category_is_api(self):
+        """category 省略時のデフォルト値は "api"."""
+        r = doctor.CheckResult(id="x", status="ok", message="m")
+        assert r.category == "api"
+
+    def test_category_can_be_set(self):
+        """category に任意のカテゴリ値を設定できる."""
+        r = doctor.CheckResult(id="x", status="ok", message="m", category="channel")
+        assert r.category == "channel"
+
+    def test_positional_three_args_backward_compat(self):
+        """既存の位置引数 3 つ構築が壊れていない (TestSummarize 互換)."""
+        r = doctor.CheckResult("x", "ok", "m")
+        assert r.id == "x"
+        assert r.status == "ok"
+        assert r.message == "m"
+        assert r.category == "api"
+
+    def test_existing_api_checks_have_api_category(self, stub_run):
+        """既存の api チェック (gcloud 等) が category="api" を持つ."""
+        stub_run((0, "Google Cloud SDK 552.0.0\n", ""))
+        r = doctor.check_gcloud()
+        assert r.category == "api"
+
+
+# ---------------------------------------------------------------------------
+# check_channel_config
+# ---------------------------------------------------------------------------
+
+
+class TestCheckChannelConfig:
+    def test_id_and_category(self, tmp_path):
+        """id="channel_config", category="channel" であること."""
+        r = doctor.check_channel_config(tmp_path)
+        assert r.id == "channel_config"
+        assert r.category == "channel"
+
+    def test_config_dir_absent_is_fail_with_channel_new(self, tmp_path):
+        """config/channel/ ディレクトリが存在しない場合: fail + /channel-new 案内."""
+        r = doctor.check_channel_config(tmp_path)
+        assert r.status == "fail"
+        assert r.next_action is not None
+        action_str = json.dumps(r.next_action)
+        assert "/channel-new" in action_str
+
+    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_import(self, tmp_path):
+        """config/channel/ 存在・JSON 破損: fail + /channel-import 案内 (既存チャンネル)."""
+        config_dir = tmp_path / "config" / "channel"
+        config_dir.mkdir(parents=True)
+        (config_dir / "meta.json").write_text("{broken json", encoding="utf-8")
+        r = doctor.check_channel_config(tmp_path)
+        assert r.status == "fail"
+        assert r.next_action is not None
+        action_str = json.dumps(r.next_action)
+        assert "/channel-import" in action_str
+
+    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_import(self, tmp_path):
+        """config/channel/ 存在・必須キー不足: fail + /channel-import 案内."""
+        config_dir = tmp_path / "config" / "channel"
+        config_dir.mkdir(parents=True)
+        # meta.json のみ（必須キーも不足）
+        (config_dir / "meta.json").write_text(json.dumps({"channel": {}}), encoding="utf-8")
+        r = doctor.check_channel_config(tmp_path)
+        assert r.status == "fail"
+        action_str = json.dumps(r.next_action)
+        assert "/channel-import" in action_str
+
+    def test_valid_config_is_ok(self, tmp_path):
+        """load_config() が成功する設定: ok."""
+        _write_minimal_config(tmp_path)
+        r = doctor.check_channel_config(tmp_path)
+        assert r.status == "ok"
+
+    def test_channel_dir_env_restored_after_call(self, tmp_path, monkeypatch):
+        """check_channel_config 呼び出し後、CHANNEL_DIR 環境変数が元に戻っている."""
+        original = str(tmp_path / "original")
+        monkeypatch.setenv("CHANNEL_DIR", original)
+
+        other = tmp_path / "other"
+        _write_minimal_config(other)
+        doctor.check_channel_config(other)
+
+        assert os.environ.get("CHANNEL_DIR") == original
+
+    def test_channel_dir_env_deleted_when_originally_absent(self, tmp_path, monkeypatch):
+        """元々 CHANNEL_DIR 未設定の場合、呼び出し後も未設定のまま."""
+        monkeypatch.delenv("CHANNEL_DIR", raising=False)
+
+        doctor.check_channel_config(tmp_path)
+
+        assert "CHANNEL_DIR" not in os.environ
+
+
+# ---------------------------------------------------------------------------
+# _check_data_files helper（DRY 違反再発防止）
+# ---------------------------------------------------------------------------
+
+
+class TestCheckDataFilesHelper:
+    """_check_data_files が3ブランチ（dir無し/file無し/ok）を共通化していることを検証する。
+
+    check_analytics_report / check_benchmark_data の共通ロジックが
+    helper に統合されていることを証明し、重複実装への退行を防ぐ。
+    """
+
+    def _call(self, tmp_path, extra_dir="", *, create_dir=False, files=None):
+        directory = tmp_path / extra_dir if extra_dir else tmp_path / "testdir"
+        if create_dir:
+            directory.mkdir(parents=True)
+        if files:
+            for name in files:
+                (directory / name).write_text("x", encoding="utf-8")
+        return doctor._check_data_files(
+            check_id="test_check",
+            directory=directory,
+            pattern="*.txt",
+            empty_dir_message="dir なし",
+            no_files_message="files なし",
+            ok_message="{count} 件",
+            next_action={"kind": "human", "instructions": "do something"},
+        )
+
+    def test_no_directory_returns_fail_with_empty_dir_message(self, tmp_path):
+        """ディレクトリが存在しない場合: empty_dir_message で fail."""
+        r = self._call(tmp_path)
+        assert r.status == "fail"
+        assert r.message == "dir なし"
+        assert r.category == "data"
+        assert r.id == "test_check"
+
+    def test_directory_exists_but_no_files_returns_fail_with_no_files_message(self, tmp_path):
+        """ディレクトリ存在・ファイルなし: no_files_message で fail."""
+        r = self._call(tmp_path, create_dir=True)
+        assert r.status == "fail"
+        assert r.message == "files なし"
+
+    def test_files_present_returns_ok_with_count(self, tmp_path):
+        """ファイルが存在: ok_message に件数を埋め込んで ok."""
+        r = self._call(tmp_path, create_dir=True, files=["a.txt", "b.txt"])
+        assert r.status == "ok"
+        assert r.message == "2 件"
+        assert r.next_action is None
+
+
+# ---------------------------------------------------------------------------
+# check_analytics_report
+# ---------------------------------------------------------------------------
+
+
+class TestCheckAnalyticsReport:
+    def test_id_and_category(self, tmp_path):
+        """id="analytics_report", category="data" であること."""
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.id == "analytics_report"
+        assert r.category == "data"
+
+    def test_no_reports_dir_is_fail(self, tmp_path):
+        """reports/ ディレクトリが存在しない: fail."""
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "fail"
+
+    def test_fail_next_action_is_human_not_ai_exec(self, tmp_path):
+        """fail 時の next_action は human (AI 推論コストのため ai-exec にしない)."""
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+
+    def test_reports_dir_exists_but_no_analysis_file_is_fail(self, tmp_path):
+        """reports/ 存在・analysis_*.md なし: fail."""
+        (tmp_path / "reports").mkdir()
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "fail"
+
+    def test_analysis_file_present_is_ok(self, tmp_path):
+        """reports/analysis_YYYYMMDD.md が 1 件以上存在: ok."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+
+    def test_multiple_analysis_files_is_ok(self, tmp_path):
+        """analysis_*.md が複数存在しても ok."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# A1", encoding="utf-8")
+        (reports_dir / "analysis_20240201.md").write_text("# A2", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+
+    def test_non_analysis_file_does_not_count(self, tmp_path):
+        """analysis_ プレフィックスがないファイルは対象外."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "other_report.md").write_text("# Other", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "fail"
+
+    def test_fail_next_action_mentions_analytics_tools(self, tmp_path):
+        """fail 時の案内に /analytics-collect と /analytics-analyze が含まれる."""
+        r = doctor.check_analytics_report(tmp_path)
+        action_str = json.dumps(r.next_action)
+        assert "analytics" in action_str.lower()
+        # 2 ステップ両方が言及されていること
+        assert "collect" in action_str.lower() or "analytics-collect" in action_str
+        assert "analyze" in action_str.lower() or "analytics-analyze" in action_str
+
+
+# ---------------------------------------------------------------------------
+# check_benchmark_data
+# ---------------------------------------------------------------------------
+
+
+class TestCheckBenchmarkData:
+    def test_id_and_category(self, tmp_path):
+        """id="benchmark_data", category="data" であること."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.id == "benchmark_data"
+        assert r.category == "data"
+
+    def test_no_benchmarks_dir_is_fail(self, tmp_path):
+        """docs/benchmarks/ が存在しない: fail."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "fail"
+
+    def test_fail_next_action_is_ai_exec(self, tmp_path):
+        """fail 時の next_action は ai-exec (/benchmark は AI 主導)."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "ai-exec"
+
+    def test_fail_next_action_cmd_mentions_benchmark(self, tmp_path):
+        """fail 時の cmd に /benchmark が含まれる."""
+        r = doctor.check_benchmark_data(tmp_path)
+        cmd = r.next_action.get("cmd", "")
+        assert "benchmark" in cmd
+
+    def test_benchmarks_dir_exists_but_no_md_is_fail(self, tmp_path):
+        """docs/benchmarks/ 存在・.md ファイルなし: fail."""
+        (tmp_path / "docs" / "benchmarks").mkdir(parents=True)
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "fail"
+
+    def test_benchmark_md_present_is_ok(self, tmp_path):
+        """docs/benchmarks/*.md が 1 件以上存在: ok."""
+        bm_dir = tmp_path / "docs" / "benchmarks"
+        bm_dir.mkdir(parents=True)
+        (bm_dir / "benchmark_2024.md").write_text("# Benchmark", encoding="utf-8")
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+
+    def test_multiple_benchmark_files_is_ok(self, tmp_path):
+        """複数の .md ファイルが存在しても ok."""
+        bm_dir = tmp_path / "docs" / "benchmarks"
+        bm_dir.mkdir(parents=True)
+        (bm_dir / "ch_a.md").write_text("# A", encoding="utf-8")
+        (bm_dir / "ch_b.md").write_text("# B", encoding="utf-8")
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+
+    def test_non_md_file_does_not_count(self, tmp_path):
+        """.csv や .txt など .md 以外のファイルは対象外."""
+        bm_dir = tmp_path / "docs" / "benchmarks"
+        bm_dir.mkdir(parents=True)
+        (bm_dir / "data.csv").write_text("col1,col2", encoding="utf-8")
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "fail"
+
+
+# ---------------------------------------------------------------------------
+# check_upload_ready
+# ---------------------------------------------------------------------------
+
+_SCOPE_YOUTUBE = "https://www.googleapis.com/auth/youtube"
+_SCOPE_FORCE_SSL = "https://www.googleapis.com/auth/youtube.force-ssl"
+_SCOPE_ANALYTICS_RO = "https://www.googleapis.com/auth/yt-analytics.readonly"
+_FULL_SCOPES = [_SCOPE_YOUTUBE, _SCOPE_FORCE_SSL, _SCOPE_ANALYTICS_RO]
+_CHANNEL_ID = "UCxxxxxxxxxxxxxxxxxxxxxxxx"
+
+
+def _write_token(base: Path, scopes: list[str]) -> None:
+    auth = base / "auth"
+    auth.mkdir(exist_ok=True)
+    (auth / "token.json").write_text(json.dumps({"scopes": scopes}), encoding="utf-8")
+
+
+def _write_meta_channel_id(base: Path, channel_id: str | None) -> None:
+    meta_dir = base / "config" / "channel"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    ch: dict = {}
+    if channel_id is not None:
+        ch["channel_id"] = channel_id
+    (meta_dir / "meta.json").write_text(json.dumps({"channel": ch}), encoding="utf-8")
+
+
+class TestCheckUploadReady:
+    def test_id_and_category(self, tmp_path):
+        """id="upload_ready", category="upload" であること."""
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.id == "upload_ready"
+        assert r.category == "upload"
+
+    def test_token_missing_is_fail_with_ai_exec(self, tmp_path):
+        """token.json が存在しない: fail + ai-exec (最優先事由)."""
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "ai-exec"
+
+    def test_token_parse_error_is_fail(self, tmp_path):
+        """token.json が JSON として不正: fail."""
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        (auth / "token.json").write_text("{broken json", encoding="utf-8")
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_all_conditions_met_is_ok(self, tmp_path):
+        """必須 scope 充足 + channel_id 設定済み: ok."""
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "ok"
+
+    def test_missing_youtube_scope_is_fail(self, tmp_path):
+        """youtube scope (フル URL) が欠けている: fail."""
+        # force-ssl のみで youtube がない
+        _write_token(tmp_path, [_SCOPE_FORCE_SSL, _SCOPE_ANALYTICS_RO])
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_missing_force_ssl_scope_is_fail(self, tmp_path):
+        """youtube.force-ssl scope が欠けている: fail."""
+        # youtube のみで force-ssl がない
+        _write_token(tmp_path, [_SCOPE_YOUTUBE, _SCOPE_ANALYTICS_RO])
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_youtube_readonly_does_not_satisfy_youtube_scope(self, tmp_path):
+        """youtube.readonly は youtube scope の代替にならない (部分一致禁止)."""
+        readonly_scope = "https://www.googleapis.com/auth/youtube.readonly"
+        _write_token(tmp_path, [readonly_scope, _SCOPE_FORCE_SSL])
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_empty_scopes_is_fail(self, tmp_path):
+        """scopes リストが空: fail."""
+        _write_token(tmp_path, [])
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_scope_fail_next_action_is_human(self, tmp_path):
+        """scope 不足時の next_action は human (再認証案内)."""
+        _write_token(tmp_path, [])
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+
+    def test_channel_id_missing_key_is_fail(self, tmp_path):
+        """meta.json に channel.channel_id キーがない: fail."""
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, None)  # channel_id キー自体なし
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_channel_id_empty_string_is_fail(self, tmp_path):
+        """channel.channel_id が空文字: fail."""
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, "")
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_meta_json_absent_is_fail(self, tmp_path):
+        """config/channel/meta.json が存在しない: fail."""
+        _write_token(tmp_path, _FULL_SCOPES)
+        # meta.json を書かない
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+
+    def test_channel_id_fail_next_action_is_human(self, tmp_path):
+        """channel_id 未設定時の next_action は human (取得コマンド案内)."""
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, "")
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+
+    def test_message_contains_all_issues_when_multiple(self, tmp_path):
+        """scope 不足と channel_id 未設定が同時の場合、message に両方の事由が含まれる."""
+        _write_token(tmp_path, [])
+        _write_meta_channel_id(tmp_path, "")
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+        # 複数事由が message に記載されること
+        assert r.message  # 空でない
+
+    def test_channel_null_in_meta_is_fail_not_crash(self, tmp_path):
+        """meta.json が {"channel": null} の場合、クラッシュせず fail を返す.
+
+        .get("channel", {}) は null を返し None.get() で AttributeError になるバグの回帰テスト。
+        (or {} 規約で null-safe に処理されること)
+        """
+        _write_token(tmp_path, _FULL_SCOPES)
+        meta_dir = tmp_path / "config" / "channel"
+        meta_dir.mkdir(parents=True, exist_ok=True)
+        (meta_dir / "meta.json").write_text(json.dumps({"channel": None}), encoding="utf-8")
+        # AttributeError ではなく CheckResult が返ること
+        r = doctor.check_upload_ready(tmp_path)
+        assert r.status == "fail"
+        assert r.id == "upload_ready"
+
+    def test_meta_toplevel_non_dict_is_fail_not_crash(self, tmp_path):
+        """meta.json がトップレベル非 dict（null / [] / "str"）でも fail を返す."""
+        _write_token(tmp_path, _FULL_SCOPES)
+        meta_dir = tmp_path / "config" / "channel"
+        meta_dir.mkdir(parents=True, exist_ok=True)
+        for invalid_content in ["null", "[]", '"string"']:
+            (meta_dir / "meta.json").write_text(invalid_content, encoding="utf-8")
+            r = doctor.check_upload_ready(tmp_path)
+            assert r.status == "fail", f"expected fail for meta.json={invalid_content}"
+            assert r.id == "upload_ready"
+
+
+# ---------------------------------------------------------------------------
+# UPLOAD_REQUIRED_SCOPES 定数
+# ---------------------------------------------------------------------------
+
+
+class TestUploadRequiredScopes:
+    def test_contains_youtube_full_url(self):
+        """youtube フル URL が含まれている."""
+        assert _SCOPE_YOUTUBE in doctor.UPLOAD_REQUIRED_SCOPES
+
+    def test_contains_force_ssl_full_url(self):
+        """youtube.force-ssl フル URL が含まれている."""
+        assert _SCOPE_FORCE_SSL in doctor.UPLOAD_REQUIRED_SCOPES
+
+    def test_scopes_are_full_https_urls(self):
+        """全スコープがフル HTTPS URL 形式 (部分文字列でない)."""
+        for scope in doctor.UPLOAD_REQUIRED_SCOPES:
+            assert scope.startswith("https://www.googleapis.com/auth/")
+
+    def test_does_not_include_readonly_scopes(self):
+        """readonly 系 scope は含まない."""
+        for scope in doctor.UPLOAD_REQUIRED_SCOPES:
+            assert "readonly" not in scope
+
+    def test_exactly_two_scopes(self):
+        """必須 scope は youtube + youtube.force-ssl の 2 件."""
+        assert len(doctor.UPLOAD_REQUIRED_SCOPES) == 2
+
+
+# ---------------------------------------------------------------------------
+# run_all_checks の拡張
+# ---------------------------------------------------------------------------
+
+
+class TestRunAllChecksExtended:
+    def test_returns_15_checks(self, monkeypatch, tmp_path):
+        """11 api + 1 channel + 2 data + 1 upload = 計 15 件."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        assert len(results) == 15
+
+    def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
+        """既存 11 check が全て api カテゴリで含まれている."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        api_results = [r for r in results if r.category == "api"]
+        assert len(api_results) == 11
+
+    def test_new_check_ids_present(self, monkeypatch, tmp_path):
+        """新規 4 check (channel_config / analytics_report / benchmark_data / upload_ready) が含まれる."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        ids = {r.id for r in results}
+        assert "channel_config" in ids
+        assert "analytics_report" in ids
+        assert "benchmark_data" in ids
+        assert "upload_ready" in ids
+
+    def test_category_order_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
+        """runway 順序: api → channel → data → upload."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        categories = [r.category for r in results]
+
+        last_api = max(i for i, c in enumerate(categories) if c == "api")
+        first_channel = next(i for i, c in enumerate(categories) if c == "channel")
+        first_data = next(i for i, c in enumerate(categories) if c == "data")
+        first_upload = next(i for i, c in enumerate(categories) if c == "upload")
+
+        assert last_api < first_channel
+        assert first_channel < first_data
+        assert first_data < first_upload
+
+    def test_channel_config_is_only_channel_check(self, monkeypatch, tmp_path):
+        """channel カテゴリは channel_config の 1 件のみ."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        channel_results = [r for r in results if r.category == "channel"]
+        assert len(channel_results) == 1
+        assert channel_results[0].id == "channel_config"
+
+    def test_data_checks_are_analytics_report_and_benchmark_data(self, monkeypatch, tmp_path):
+        """data カテゴリは analytics_report と benchmark_data の 2 件."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        data_ids = {r.id for r in results if r.category == "data"}
+        assert data_ids == {"analytics_report", "benchmark_data"}
+
+    def test_upload_ready_is_only_upload_check(self, monkeypatch, tmp_path):
+        """upload カテゴリは upload_ready の 1 件のみ."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        upload_results = [r for r in results if r.category == "upload"]
+        assert len(upload_results) == 1
+        assert upload_results[0].id == "upload_ready"
+
+
+# ---------------------------------------------------------------------------
+# render_table のカテゴリ別段階表示
+# ---------------------------------------------------------------------------
+
+
+class TestRenderTableCategories:
+    def test_all_four_category_labels_in_output(self, monkeypatch, tmp_path):
+        """render_table 出力に api / channel / data / upload のカテゴリラベルが含まれる."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        summary = doctor.summarize(results)
+        output = doctor.render_table(results, summary, tmp_path)
+        lower = output.lower()
+        assert "api" in lower
+        assert "channel" in lower
+        assert "data" in lower
+        assert "upload" in lower
+
+    def test_new_check_ids_appear_in_output(self, monkeypatch, tmp_path):
+        """render_table に新規 check の id が含まれる."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        summary = doctor.summarize(results)
+        output = doctor.render_table(results, summary, tmp_path)
+        assert "channel_config" in output
+        assert "analytics_report" in output
+        assert "benchmark_data" in output
+        assert "upload_ready" in output
+
+    def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):
+        """出力内でのカテゴリ出現順: api → channel → data → upload."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        summary = doctor.summarize(results)
+        output = doctor.render_table(results, summary, tmp_path)
+
+        # 各 check id の出現位置で順序を確認する（category label の形式に依存しない）
+        pos_gcloud = output.find("gcloud")
+        pos_channel_config = output.find("channel_config")
+        pos_analytics = output.find("analytics_report")
+        pos_upload_ready = output.find("upload_ready")
+
+        assert pos_gcloud < pos_channel_config
+        assert pos_channel_config < pos_analytics
+        assert pos_analytics < pos_upload_ready
