@@ -51,6 +51,25 @@ _FIELD_MAP: dict[str, str] = {
 KEYWORDS_MAX_LENGTH = 500
 
 
+def build_upload_status_flags(youtube_api: Any) -> dict[str, bool]:
+    """動画アップロード時の `status` 用 AI 開示・子供向け申告フラグを解決する。
+
+    `config.youtube.api` の `contains_synthetic_media` / `self_declared_made_for_kids`
+    を YouTube `videos.insert` の `status` キーへマッピングする。未設定時のデフォルトは
+    dataclass 側で現行の振る舞い（synthetic=True / made_for_kids=False）に固定されている。
+
+    Args:
+        youtube_api: `config.youtube.api`（`YoutubeApi` dataclass）
+
+    Returns:
+        `{"selfDeclaredMadeForKids": bool, "containsSyntheticMedia": bool}`
+    """
+    return {
+        "selfDeclaredMadeForKids": bool(youtube_api.self_declared_made_for_kids),
+        "containsSyntheticMedia": bool(youtube_api.contains_synthetic_media),
+    }
+
+
 def _keywords_to_api(keywords: list[str]) -> str:
     """['bgm', 'lo fi beats'] → 'bgm "lo fi beats"' (YouTube 仕様のスペース区切り)。"""
     return " ".join(shlex.quote(k) if " " in k else k for k in keywords)

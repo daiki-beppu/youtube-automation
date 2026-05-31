@@ -13,11 +13,44 @@ from youtube_automation.scripts import channel_settings_cli
 from youtube_automation.utils.channel_settings import (
     KEYWORDS_MAX_LENGTH,
     build_update_body,
+    build_upload_status_flags,
     diff_settings,
     fetch_channel,
     parse_api_response,
 )
+from youtube_automation.utils.config.youtube import YoutubeApi
 from youtube_automation.utils.exceptions import YouTubeAPIError
+
+# ---------------------------------------------------------------------------
+# build_upload_status_flags (#605)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildUploadStatusFlags:
+    def test_defaults_preserve_current_behavior(self):
+        """未設定時のデフォルトは現行の振る舞い（synthetic=True / made_for_kids=False）。"""
+        api = YoutubeApi(category_id="10", privacy_status="public", language="ja")
+        flags = build_upload_status_flags(api)
+        assert flags == {
+            "selfDeclaredMadeForKids": False,
+            "containsSyntheticMedia": True,
+        }
+
+    def test_config_override(self):
+        """config で上書きした値が status フラグへ反映される。"""
+        api = YoutubeApi(
+            category_id="10",
+            privacy_status="public",
+            language="ja",
+            contains_synthetic_media=False,
+            self_declared_made_for_kids=True,
+        )
+        flags = build_upload_status_flags(api)
+        assert flags == {
+            "selfDeclaredMadeForKids": True,
+            "containsSyntheticMedia": False,
+        }
+
 
 # ---------------------------------------------------------------------------
 # build_update_body
