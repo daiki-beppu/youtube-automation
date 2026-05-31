@@ -33,7 +33,7 @@ import logging
 import shlex
 from typing import Any
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,60 @@ _FIELD_MAP: dict[str, str] = {
     "unsubscribed_trailer": "unsubscribedTrailer",
 }
 
+# YouTube Data API の brandingSettings.channel.keywords は合計 500 文字までに制限される。
+# 超過すると channels().update() が 400 (`Request contains an invalid argument.`) を返すが、
+# 原因が keywords 長だとは判別できないため push 前にこの定数で事前検証する (#563)。
+KEYWORDS_MAX_LENGTH = 500
+
+
+def build_upload_status_flags(youtube_api: Any) -> dict[str, bool]:
+    """動画アップロード時の `status` 用 AI 開示・子供向け申告フラグを解決する。
+
+    `config.youtube.api` の `contains_synthetic_media` / `self_declared_made_for_kids`
+    を YouTube `videos.insert` の `status` キーへマッピングする。未設定時のデフォルトは
+    dataclass 側で現行の振る舞い（synthetic=True / made_for_kids=False）に固定されている。
+
+    Args:
+        youtube_api: `config.youtube.api`（`YoutubeApi` dataclass）
+
+    Returns:
+        `{"selfDeclaredMadeForKids": bool, "containsSyntheticMedia": bool}`
+    """
+    return {
+        "selfDeclaredMadeForKids": bool(youtube_api.self_declared_made_for_kids),
+        "containsSyntheticMedia": bool(youtube_api.contains_synthetic_media),
+    }
+
 
 def _keywords_to_api(keywords: list[str]) -> str:
     """['bgm', 'lo fi beats'] → 'bgm "lo fi beats"' (YouTube 仕様のスペース区切り)。"""
     return " ".join(shlex.quote(k) if " " in k else k for k in keywords)
+
+
+def _validate_keywords_length(api_keywords: str, keywords: list[str]) -> None:
+    """API 形式 keywords の合計長が 500 文字制限内かを検証する (#563)。
+
+    超過時は YouTube に push する前に `YouTubeAPIError` で止め、短縮候補として
+    長い順に上位タグを提示する。400 応答待ちより原因が即座に分かる。
+
+    Args:
+        api_keywords: `_keywords_to_api()` が返す API 送信形式の文字列
+        keywords: 元のタグリスト（短縮ヒント生成用）
+
+    Raises:
+        YouTubeAPIError: api_keywords が `KEYWORDS_MAX_LENGTH` を超える場合
+    """
+    length = len(api_keywords)
+    if length <= KEYWORDS_MAX_LENGTH:
+        return
+    longest = sorted(keywords, key=len, reverse=True)[:3]
+    hint = ", ".join(repr(k) for k in longest)
+    raise YouTubeAPIError(
+        f"keywords exceeds {KEYWORDS_MAX_LENGTH} chars "
+        f"(got {length}, over by {length - KEYWORDS_MAX_LENGTH}). "
+        f"remove some tags to fit. longest tags: {hint}. "
+        f"current: {api_keywords!r}"
+    )
 
 
 def _keywords_from_api(raw: str) -> list[str]:
@@ -83,7 +133,9 @@ def build_update_body(
             continue
         value = local[local_key]
         if local_key == "keywords":
-            value = _keywords_to_api(list(value))
+            keywords_list = list(value)
+            value = _keywords_to_api(keywords_list)
+            _validate_keywords_length(value, keywords_list)
         branding[api_key] = value
     if branding:
         body["brandingSettings"] = {"channel": branding}
@@ -207,18 +259,78 @@ def _fmt(value: Any) -> str:
     return repr(value)
 
 
+# combined fetch では `localizations` を要求しない。`brandingSettings` 等と同じ
+# `channels.list` 呼び出しに `localizations` を混ぜると、push 直後に旧版が返る
+# YouTube Data API のキャッシュ層に当たる（#564）。`localizations` だけを単独
+# part で取り直すと push 反映済みの新版が安定して返るため、二段 fetch する。
+_COMBINED_PARTS = "brandingSettings,status,snippet"
+_LOCALIZATIONS_PART = "localizations"
+
+
 def fetch_channel(youtube) -> dict[str, Any]:
     """`channels().list(mine=True, part=...)` の薄いラッパ。
+
+    `localizations` は combined fetch のキャッシュ層を避けるため単独 part で
+    取得し直し、combined fetch の結果へマージする（#564）。
 
     Raises:
         YouTubeAPIError: チャンネルが取得できない / レスポンスが空
     """
     try:
-        resp = youtube.channels().list(part="brandingSettings,localizations,status,snippet", mine=True).execute()
+        resp = youtube.channels().list(part=_COMBINED_PARTS, mine=True).execute()
     except Exception as e:
         raise YouTubeAPIError(f"channels().list() failed: {e}") from e
 
     items = resp.get("items") or []
     if not items:
         raise YouTubeAPIError("authenticated user has no YouTube channel")
-    return items[0]
+    item = items[0]
+
+    item["localizations"] = _fetch_localizations(youtube)
+    return item
+
+
+def _fetch_localizations(youtube) -> dict[str, Any]:
+    """`localizations` だけを単独 part で取得する（push 直後のキャッシュ回避, #564）。
+
+    Returns:
+        `localizations` 辞書（チャンネルに localizations が無ければ空辞書）
+    """
+    try:
+        resp = youtube.channels().list(part=_LOCALIZATIONS_PART, mine=True).execute()
+    except Exception as e:
+        raise YouTubeAPIError(f"channels().list(part={_LOCALIZATIONS_PART}) failed: {e}") from e
+
+    items = resp.get("items") or []
+    if not items:
+        return {}
+    return items[0].get("localizations") or {}
+
+
+def verify_channel_id(expected_channel_id: str | None, remote_channel_id: str) -> None:
+    """ローカル config の channel_id と認証済みチャンネルの id が一致するか検証する (#561)。
+
+    `auth/token.json` が別チャンネルの OAuth トークンのまま push すると、意図しない
+    チャンネルの設定を上書きしてしまう。`config/channel/meta.json` の
+    `channel.channel_id` と `channels().list(mine=True).id` を照合し、不一致なら
+    取り違え事故として push を拒否する。
+
+    Args:
+        expected_channel_id: ローカル config の `channel.channel_id`。未設定（None /
+            空文字）ならチェックをスキップする（後方互換）。
+        remote_channel_id: 認証済みチャンネルの id（`channels().list` の結果）。
+
+    Raises:
+        ConfigError: channel_id が設定済みかつ remote と一致しない場合。
+    """
+    if not expected_channel_id:
+        return
+    if expected_channel_id != remote_channel_id:
+        raise ConfigError(
+            "channel_id mismatch: ローカル config と認証済みチャンネルが一致しません。\n"
+            f"  config/channel/meta.json (channel.channel_id): {expected_channel_id}\n"
+            f"  authenticated channel (channels().list mine=True): {remote_channel_id}\n"
+            "→ 別チャンネルの OAuth トークンで設定を上書きする事故を防ぐため push を中止しました。\n"
+            "  対処1: auth/token.json を削除して再認証し、対象チャンネルを選び直す（yt-channel-status）\n"
+            "  対処2: meta.json の channel.channel_id を正しい値に修正する"
+        )

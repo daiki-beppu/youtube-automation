@@ -17,6 +17,7 @@ plan §171 / test-design.md §44-50 §86 §117-122 §146-147 を満たすケー�
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -262,6 +263,43 @@ class TestCalculateShortPublishAt:
         # offset が +09:00 (Asia/Tokyo)
         assert dt.utcoffset() == timedelta(hours=9)
 
+    def test_naive_datetime_emits_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: tracking の datetime が TZ-naive なら backfill 直前に warning を出す（ファイル名 + フィールド）."""
+        # Given: upload_time が naive
+        col = _setup_collection(tmp_path, has_publish_at=False)
+        tracking_path = col / "20-documentation" / "upload_tracking.json"
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        tracking["complete_collection"]["upload_time"] = "2099-01-02T10:00:00"
+        tracking_path.write_text(json.dumps(tracking), encoding="utf-8")
+
+        with _make_short_uploader(schedule_config={"schedule": {"timezone": "Asia/Tokyo"}}) as (uploader, _):
+            self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._calculate_short_publish_at(col)
+
+        # Then: warning にファイル名・フィールド名・naive 検知が含まれる
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("TZ-naive" in r.getMessage() for r in warnings)
+        joined = "\n".join(r.getMessage() for r in warnings)
+        assert "complete_collection.upload_time" in joined
+        assert "upload_tracking.json" in joined
+
+    def test_aware_datetime_emits_no_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: TZ-aware な datetime（#359 統一後の新規書き込み）では warning を出さない."""
+        # Given: publish_at は TZ-aware（_setup_collection のデフォルト）
+        col = _setup_collection(tmp_path, publish_at="2099-01-02T10:00:00+09:00")
+        with _make_short_uploader(schedule_config={"schedule": {"timezone": "Asia/Tokyo"}}) as (uploader, _):
+            self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._calculate_short_publish_at(col)
+
+        # Then: TZ-naive warning は出ない
+        assert not any("TZ-naive" in r.getMessage() for r in caplog.records)
+
     def test_returns_none_when_tracking_missing(self, tmp_path):
         """tracking 自体が無いと publish_at は None 扱い."""
         # Given: tracking 無し
@@ -398,6 +436,80 @@ class TestCheckUploadInterval:
 
         # Then: default 24h で 23h は不足 → False
         assert ok is False
+
+    def test_naive_uploaded_at_emits_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: workflow-state.json の uploaded_at が TZ-naive なら warning を出す（ファイル名 + フィールド）."""
+        # Given: naive な uploaded_at を持つ short upload 記録
+        live = tmp_path / "collections" / "live" / "20250101-live-prev"
+        live.mkdir(parents=True)
+        (live / "workflow-state.json").write_text(
+            json.dumps(
+                {
+                    "post_upload": {
+                        "shorts": [
+                            {
+                                "short_num": None,
+                                "video_id": "SHORT_PREV",
+                                "uploaded_at": "2099-01-09T08:00:00",
+                            }
+                        ]
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with _make_short_uploader(
+            schedule_config={"shorts": {"min_hours_between_shorts": 24}, "schedule": {"timezone": "Asia/Tokyo"}}
+        ) as (uploader, _):
+            uploader.channel_dir = tmp_path
+            self._freeze_now(monkeypatch, datetime(2099, 1, 10, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._check_upload_interval()
+
+        # Then: warning にファイル名・フィールド名が含まれる
+        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        joined = "\n".join(warnings)
+        assert "TZ-naive" in joined
+        assert "post_upload.shorts[].uploaded_at" in joined
+        assert "workflow-state.json" in joined
+
+    def test_aware_uploaded_at_emits_no_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: TZ-aware な uploaded_at では warning を出さない."""
+        # Given: TZ-aware な uploaded_at
+        live = tmp_path / "collections" / "live" / "20250101-live-prev"
+        live.mkdir(parents=True)
+        (live / "workflow-state.json").write_text(
+            json.dumps(
+                {
+                    "post_upload": {
+                        "shorts": [
+                            {
+                                "short_num": None,
+                                "video_id": "SHORT_PREV",
+                                "uploaded_at": "2099-01-09T08:00:00+09:00",
+                            }
+                        ]
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with _make_short_uploader(
+            schedule_config={"shorts": {"min_hours_between_shorts": 24}, "schedule": {"timezone": "Asia/Tokyo"}}
+        ) as (uploader, _):
+            uploader.channel_dir = tmp_path
+            self._freeze_now(monkeypatch, datetime(2099, 1, 10, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._check_upload_interval()
+
+        # Then: TZ-naive warning は出ない
+        assert not any("TZ-naive" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -738,3 +850,121 @@ class TestUpdateWorkflowState:
 
         # Then: ファイルは作成されない
         assert not (col / "workflow-state.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# 8. TestShortResumableUri (#466)
+# ---------------------------------------------------------------------------
+
+
+class TestShortResumableUri:
+    """`upload_short` の resumable upload session URI 永続化 (#466)。
+
+    CC 経路（#381）と同等に、中断→再実行で同一 session を再開し video_id 重複を防ぐ。
+    tracking 媒体は workflow-state.json.post_upload.shorts[].resume_session_uri。
+    """
+
+    def _patch_interval_ok(self, uploader):
+        uploader._check_upload_interval = lambda: (True, "ok")
+
+    def _write_shorts_state(self, col: Path, shorts: list[dict]) -> None:
+        ws_path = col / "workflow-state.json"
+        state = json.loads(ws_path.read_text(encoding="utf-8"))
+        state["post_upload"] = {"shorts": shorts}
+        ws_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+    def test_fresh_upload_passes_resume_uri_none(self, tmp_path):
+        """既存 entry が無ければ resume_session_uri=None でフレッシュ実行する."""
+        col = _setup_collection(tmp_path)
+        with _make_short_uploader() as (uploader, mock_inner):
+            self._patch_interval_ok(uploader)
+            mock_inner.upload_video.return_value = "V"
+            uploader.upload_short(col)
+            call = mock_inner.upload_video.call_args
+        assert call.kwargs.get("resume_session_uri") is None
+
+    def test_persisted_uri_passed_into_upload_video(self, tmp_path):
+        """workflow-state に保存済みの URI が upload_video に渡る（再開）."""
+        col = _setup_collection(tmp_path)
+        self._write_shorts_state(col, [{"short_num": None, "resume_session_uri": "https://resume/SESS"}])
+        with _make_short_uploader() as (uploader, mock_inner):
+            self._patch_interval_ok(uploader)
+            mock_inner.upload_video.return_value = "V"
+            uploader.upload_short(col)
+            call = mock_inner.upload_video.call_args
+        assert call.kwargs.get("resume_session_uri") == "https://resume/SESS"
+
+    def test_on_session_uri_changed_persists_uri(self, tmp_path):
+        """on_session_uri_changed コールバックが該当 short entry に URI を upsert する."""
+        col = _setup_collection(tmp_path)
+        with _make_short_uploader() as (uploader, mock_inner):
+            self._patch_interval_ok(uploader)
+
+            # upload_video 実行中に session URI が確定したことをシミュレート
+            def _fake_upload(video_path, metadata, thumbnail_path, **kwargs):
+                kwargs["on_session_uri_changed"]("https://resume/NEW")
+                return "V"
+
+            mock_inner.upload_video.side_effect = _fake_upload
+            uploader.upload_short(col, short_num=3)
+
+        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
+        entry = next(s for s in ws["post_upload"]["shorts"] if s["short_num"] == 3)
+        # 最終記録（_update_workflow_state）で video_id が載り、URI は除去される
+        assert entry["video_id"] == "V"
+        assert "resume_session_uri" not in entry
+
+    def test_on_upload_complete_clears_uri(self, tmp_path):
+        """on_upload_complete コールバックが URI を削除する（成功後クリア）."""
+        col = _setup_collection(tmp_path)
+        self._write_shorts_state(col, [{"short_num": None, "resume_session_uri": "https://resume/OLD"}])
+        with _make_short_uploader() as (uploader, mock_inner):
+            self._patch_interval_ok(uploader)
+
+            def _fake_upload(video_path, metadata, thumbnail_path, **kwargs):
+                kwargs["on_upload_complete"]()
+                return "V"
+
+            mock_inner.upload_video.side_effect = _fake_upload
+            uploader.upload_short(col)
+
+        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
+        entry = next(s for s in ws["post_upload"]["shorts"] if s["short_num"] is None)
+        assert "resume_session_uri" not in entry
+
+    def test_failed_upload_keeps_persisted_uri(self, tmp_path):
+        """upload 失敗（中断）時は保存済み URI が残り、次回再開できる."""
+        col = _setup_collection(tmp_path)
+        with _make_short_uploader() as (uploader, mock_inner):
+            self._patch_interval_ok(uploader)
+
+            def _fake_upload(video_path, metadata, thumbnail_path, **kwargs):
+                # session URI が確定した直後に中断（例外）
+                kwargs["on_session_uri_changed"]("https://resume/MID")
+                raise RuntimeError("network interrupted")
+
+            mock_inner.upload_video.side_effect = _fake_upload
+            result = uploader.upload_short(col, short_num=5)
+
+        assert result["action"] == "short_upload_failed"
+        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
+        entry = next(s for s in ws["post_upload"]["shorts"] if s["short_num"] == 5)
+        assert entry["resume_session_uri"] == "https://resume/MID"
+
+    def test_read_resume_uri_helper(self, tmp_path):
+        """_read_short_resume_uri: entry 無→None / 保存済→値."""
+        col = _setup_collection(tmp_path)
+        ws_path = col / "workflow-state.json"
+        with _make_short_uploader() as (uploader, _):
+            assert uploader._read_short_resume_uri(ws_path, 1) is None
+            self._write_shorts_state(col, [{"short_num": 1, "resume_session_uri": "https://resume/X"}])
+            assert uploader._read_short_resume_uri(ws_path, 1) == "https://resume/X"
+
+    def test_persist_resume_uri_skips_when_state_missing(self, tmp_path):
+        """workflow-state.json が無ければ resume URI 永続化を skip（致命的にしない）."""
+        col = tmp_path / "collections" / "live" / "ws-missing"
+        col.mkdir(parents=True)
+        ws_path = col / "workflow-state.json"
+        with _make_short_uploader() as (uploader, _):
+            uploader._persist_short_resume_uri(ws_path, 1, "https://resume/X")
+        assert not ws_path.exists()

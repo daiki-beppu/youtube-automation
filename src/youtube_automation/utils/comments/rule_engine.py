@@ -5,7 +5,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from youtube_automation.utils.config.comments import PROVIDER_CODEX, CommentRule
+from youtube_automation.utils.config.comments import (
+    PROVIDER_CODEX,
+    SCOPE_REPLY,
+    SCOPE_TOP_LEVEL,
+    CommentRule,
+)
 
 
 @dataclass(frozen=True)
@@ -55,16 +60,36 @@ class RuleEngine:
             return True
         return False
 
+    def _scope_matches(self, rule: CommentRule, is_reply: bool) -> bool:
+        """rule.scope とコメント階層（top-level / reply）の突合 (#524)。
+
+        `top_level` は top-level のみ、`reply` は reply のみ、`any` は両方に当たる。
+        """
+        if rule.scope == SCOPE_TOP_LEVEL:
+            return not is_reply
+        if rule.scope == SCOPE_REPLY:
+            return is_reply
+        return True  # SCOPE_ANY（後方互換のデフォルト）
+
     def _effective_provider(self, rule: CommentRule) -> str:
         return rule.provider or self._default_provider
 
-    def evaluate(self, text: str) -> RuleMatch | None:
+    def evaluate(self, text: str, *, is_reply: bool = False) -> RuleMatch | None:
+        """本文 `text` にマッチする最優先ルールを返す。
+
+        Args:
+            text: コメント本文
+            is_reply: reply コメントなら True、top-level なら False。
+                `FetchedComment.parent_id is not None` を渡す想定 (#524)
+        """
         if not text:
             return None
         lowered = text.lower()
         if any(word in lowered for word in self._ng_words):
             return None
         for _, rule in self._rules:
+            if not self._scope_matches(rule, is_reply):
+                continue
             if not self._rule_matches(rule, text, lowered):
                 continue
             return RuleMatch(

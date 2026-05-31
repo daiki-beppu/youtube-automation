@@ -7,11 +7,19 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class YoutubeApi:
-    """`youtube` セクション（API 基本設定）."""
+    """`youtube` セクション（API 基本設定）.
+
+    `contains_synthetic_media`: アップロード時に申告する AI 開示フラグ
+        (`status.containsSyntheticMedia`)。未設定時は現行の振る舞いに合わせ `True`。
+    `self_declared_made_for_kids`: 子供向け申告 (`status.selfDeclaredMadeForKids`)。
+        未設定時は現行の振る舞いに合わせ `False`。
+    """
 
     category_id: str
     privacy_status: str
     language: str
+    contains_synthetic_media: bool = True
+    self_declared_made_for_kids: bool = False
 
 
 @dataclass(frozen=True)
