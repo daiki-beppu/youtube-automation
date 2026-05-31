@@ -325,6 +325,62 @@ class TestUploadVideoForwarding:
         body = mock_core_upload.call_args.args[1]
         assert body["status"]["containsSyntheticMedia"] is True
 
+    def test_should_default_self_declared_made_for_kids_false(self, tmp_path):
+        """#605: config 未設定時は selfDeclaredMadeForKids=False の現行挙動を維持する."""
+        # Given
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+            return_value="VID_KIDS",
+        ) as mock_core_upload:
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["selfDeclaredMadeForKids"] is False
+
+    def test_should_resolve_synthetic_media_flags_from_config(self, tmp_path):
+        """#605: status フラグを config（youtube.api）から解決する."""
+        # Given
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        fake_config = SimpleNamespace(
+            youtube=SimpleNamespace(
+                api=SimpleNamespace(
+                    contains_synthetic_media=False,
+                    self_declared_made_for_kids=True,
+                )
+            )
+        )
+
+        with (
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader.load_config",
+                return_value=fake_config,
+            ),
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+                return_value="VID_CONFIG",
+            ) as mock_core_upload,
+        ):
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then: config の値が status へ反映される
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["containsSyntheticMedia"] is False
+        assert body["status"]["selfDeclaredMadeForKids"] is True
+
     def test_should_default_resume_kwargs_to_none_when_omitted(self, tmp_path):
         """resume kwargs を渡さなければコアにも None 相当が渡る（後方互換）."""
         # Given
