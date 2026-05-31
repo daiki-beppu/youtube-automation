@@ -206,6 +206,7 @@ def _build_meta(merged: dict) -> ChannelMeta:
         core_message=ch.get("core_message", ""),
         cta_subscribe=ch.get("cta_subscribe", ""),
         tagline=ch.get("tagline", ""),
+        channel_id=ch.get("channel_id", ""),
         branding=branding,
     )
 
