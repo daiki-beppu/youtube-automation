@@ -7,10 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(scripts)`: 公開済み動画の `status.containsSyntheticMedia` を遡及的に `True` へ一括是正する `yt-bulk-update-synthetic-media` を追加した（#606、#603 の遡及対応）。#603 是正前にアップロードされた公開動画は `False` のまま残るため、チャンネルの uploads playlist から全公開動画を列挙し、`videos().list(part="status")` で現状 `True` でないものを抽出して `videos().update(part="status")` で反映する。`videos.update(part="status")` は status リソース全体を置換するため、現 status をコピーして read-only キー（`uploadStatus` / `madeForKids` 等）を除去し `containsSyntheticMedia` だけ差し替える read-modify-write で `privacyStatus` / `publishAt` / `selfDeclaredMadeForKids` 等を保持する。デフォルト dry-run（read のみ）、`--apply` で実反映、`--include-private` で private も対象化。冪等（再実行で対象 0 件なら遡及完了）。手動 fallback 手順は `docs/investigations/2026-05-30-606-bulk-update-synthetic-media.md`
+
 ### Changed
 
 - `fix(video-upload)`: 動画アップロード時の `status.containsSyntheticMedia` を `False` 固定から `True` に是正した（#603）。本ツールは AI 生成音楽（Lyria / Suno）を主軸とするため、YouTube の AI 開示（altered or synthetic content）ポリシー上 `true` の申告が正しい。`YouTubeAutoUploader.upload_video()` を経由する全アップロード経路（Auto / Short / Collection は同メソッドへ委譲）に反映され、`.claude/skills/video-upload/SKILL.md` の記載（`true`）とも整合する。値の config 外出し（#605）と公開済み動画への遡及対応（#606）は別 issue
 - `fix(veo)`: `smooth_loop()` の ffmpeg 失敗（`CalledProcessError`）経路で tmp ファイル `_smooth.mp4` が残骸化する問題を修正した（#480）。ffmpeg 実行を `try/finally` で囲み `output.unlink(missing_ok=True)` で確実に削除する（成功時は `rename` 済みのため no-op）
+- `refactor(scripts)`: `metadata_audit` / `playlist_manager` に残っていたコレクションサブパスリテラル（`20-documentation` / `descriptions.md` / `workflow-state.json` / `upload_tracking.json`）を `CollectionPaths` のプロパティ（`docs_dir` / `descriptions_md_path` / `workflow_state_path` / `tracking_path`）経由に統一した（#536）。挙動は不変
 
 ## [5.5.5] - 2026-05-30
 
