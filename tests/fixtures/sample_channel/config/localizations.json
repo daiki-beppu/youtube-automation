@@ -1,1 +1,35 @@
-../../../../examples/localizations.example.json
+{
+  "supported_languages": ["ja", "en", "de"],
+  "languages": {
+    "ja": {
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "ゲーム · 勉強 · 集中",
+      "description": {
+        "opening_poem": "ピクセルの夜、冒険の調べ",
+        "cta_subscribe": "チャンネル登録お願いします！",
+        "tagline": "チップチューンアドベンチャーをお届けします！",
+        "hashtags": "#chiptune #8bit #BGM"
+      }
+    },
+    "en": {
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "Gaming · Study · Focus",
+      "description": {
+        "opening_poem": "Pixel nights, melodies of adventure",
+        "cta_subscribe": "Subscribe for more adventures!",
+        "tagline": "Chiptune adventures await you!",
+        "hashtags": "#chiptune #8bit #BGM"
+      }
+    },
+    "de": {
+      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "activities": "Gaming · Lernen · Fokus",
+      "description": {
+        "opening_poem": "Pixelnacht, Melodie des Abenteuers",
+        "cta_subscribe": "Abonniere für neue Abenteuer!",
+        "tagline": "Chiptune-Abenteuer für dich!",
+        "hashtags": "#chiptune #8bit #BGM"
+      }
+    }
+  }
+}
