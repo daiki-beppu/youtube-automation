@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(yt-channel-settings)`: `keywords` の合計 500 文字制限を push 前に事前バリデーションするようにした（#563）。`build_update_body` で `_keywords_to_api()` の結果長を検証し、500 文字を超える場合は `channels().update()` の汎用的な 400（`Request contains an invalid argument.`）を待たずに `YouTubeAPIError` で停止する。エラーメッセージに現在の文字数・超過分・長い順の短縮候補タグを含め、原因が keywords 長であることを即座に判別できるようにした
 - `feat(video-upload)`: アップロード preflight に公開タイトルの TTP 鋳型準拠チェックを追加した（#602）。`preflight_checks.check_title_template_compliance()` が「鋳型逸脱（` | ` で LHS/RHS に分割でき RHS が `N Hours of ...` 系に一致）」「巻数表記（`Vol.` / `Vol N` / `Part N` / 末尾ローマ数字 / `#N`）」「既存 live タイトルとの RHS 完全重複」「核語彙欠落（任意）」を機械検出し、`youtube_auto_uploader._preflight_check` で違反時にアップロードを block する。soulful-grooves で発生した `Funky Spirit Vol.2 | 3 Hours of Soulful Retro Funk Grooves`（コレクション内部名の公開タイトル流用）を巻数表記 + RHS 重複で停止できる。鋳型語彙・パターン・セパレータは `content.json::title.template_check` から導出し、`title.template` に ` | ` を含まないチャンネルは自動スキップ（既定値はフォールバック、ハードコードなし）。既存 live タイトルは `collections/live/*/20-documentation/descriptions.md` の `## タイトル案` から収集する
 ### Changed
 

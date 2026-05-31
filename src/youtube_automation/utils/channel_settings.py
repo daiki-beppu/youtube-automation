@@ -45,6 +45,11 @@ _FIELD_MAP: dict[str, str] = {
     "unsubscribed_trailer": "unsubscribedTrailer",
 }
 
+# YouTube Data API の brandingSettings.channel.keywords は合計 500 文字までに制限される。
+# 超過すると channels().update() が 400 (`Request contains an invalid argument.`) を返すが、
+# 原因が keywords 長だとは判別できないため push 前にこの定数で事前検証する (#563)。
+KEYWORDS_MAX_LENGTH = 500
+
 
 def build_upload_status_flags(youtube_api: Any) -> dict[str, bool]:
     """動画アップロード時の `status` 用 AI 開示・子供向け申告フラグを解決する。
@@ -68,6 +73,32 @@ def build_upload_status_flags(youtube_api: Any) -> dict[str, bool]:
 def _keywords_to_api(keywords: list[str]) -> str:
     """['bgm', 'lo fi beats'] → 'bgm "lo fi beats"' (YouTube 仕様のスペース区切り)。"""
     return " ".join(shlex.quote(k) if " " in k else k for k in keywords)
+
+
+def _validate_keywords_length(api_keywords: str, keywords: list[str]) -> None:
+    """API 形式 keywords の合計長が 500 文字制限内かを検証する (#563)。
+
+    超過時は YouTube に push する前に `YouTubeAPIError` で止め、短縮候補として
+    長い順に上位タグを提示する。400 応答待ちより原因が即座に分かる。
+
+    Args:
+        api_keywords: `_keywords_to_api()` が返す API 送信形式の文字列
+        keywords: 元のタグリスト（短縮ヒント生成用）
+
+    Raises:
+        YouTubeAPIError: api_keywords が `KEYWORDS_MAX_LENGTH` を超える場合
+    """
+    length = len(api_keywords)
+    if length <= KEYWORDS_MAX_LENGTH:
+        return
+    longest = sorted(keywords, key=len, reverse=True)[:3]
+    hint = ", ".join(repr(k) for k in longest)
+    raise YouTubeAPIError(
+        f"keywords exceeds {KEYWORDS_MAX_LENGTH} chars "
+        f"(got {length}, over by {length - KEYWORDS_MAX_LENGTH}). "
+        f"remove some tags to fit. longest tags: {hint}. "
+        f"current: {api_keywords!r}"
+    )
 
 
 def _keywords_from_api(raw: str) -> list[str]:
@@ -102,7 +133,9 @@ def build_update_body(
             continue
         value = local[local_key]
         if local_key == "keywords":
-            value = _keywords_to_api(list(value))
+            keywords_list = list(value)
+            value = _keywords_to_api(keywords_list)
+            _validate_keywords_length(value, keywords_list)
         branding[api_key] = value
     if branding:
         body["brandingSettings"] = {"channel": branding}
