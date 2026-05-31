@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `fix(metadata-generator)`: `title.template` / `localizations.json::title_template` に metadata_generator が提供しない未知プレースホルダ（例 `{adjective}`）が含まれていても、Complete Collection アップロード全体が `KeyError` でクラッシュしないようにした（#574）。(1) `descriptions.md` の `## タイトル案` が最終タイトルを供給する経路では `generate_complete_collection_metadata(title_override=...)` で本来捨てられる中間タイトル生成（`_generate_title`）をスキップし完走させる。(2) 中間タイトル生成や localizations タイトル整形では新ヘルパー `format_title_template()` を経由し、未知プレースホルダを opaque な `KeyError` ではなく「不正プレースホルダ名 + 許可キー一覧」を含む actionable な `ValidationError` に変換して fail-loud する。`youtube_auto_uploader._upload_complete_collection()` は `descriptions.md` を先に読み込み `title_override` として渡す
+
 ## [5.5.6] - 2026-05-31
 
 ### Added
