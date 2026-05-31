@@ -119,7 +119,7 @@ class TestPreflightLocalizationLanguages:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with patch(
-            "youtube_automation.agents.youtube_auto_uploader.load_config",
+            "youtube_automation.agents._preflight.load_config",
             return_value=_make_preflight_config(["ja", "en"]),
         ):
             with pytest.raises(RuntimeError, match="de"):
@@ -132,7 +132,7 @@ class TestPreflightLocalizationLanguages:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with patch(
-            "youtube_automation.agents.youtube_auto_uploader.load_config",
+            "youtube_automation.agents._preflight.load_config",
             return_value=_make_preflight_config(["ja", "en", "de"]),
         ):
             uploader._preflight_check(col_dir)
@@ -145,7 +145,7 @@ class TestPreflightLocalizationLanguages:
 
         with (
             patch(
-                "youtube_automation.agents.youtube_auto_uploader.load_config",
+                "youtube_automation.agents._preflight.load_config",
                 return_value=_make_preflight_config(["ja", "en", "de", "ko"]),
             ),
             caplog.at_level(logging.WARNING),
