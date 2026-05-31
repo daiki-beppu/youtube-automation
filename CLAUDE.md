@@ -128,12 +128,18 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 - 参照定義は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）
 - AI 系（Vertex AI）は ADC 認証のため `op` 取得は不要
 
-### Git hooks（CHANGELOG ゲート）
+### Git hooks（lefthook）
 
-CI（`.github/workflows/ci.yml` の `changelog` ジョブ）は、実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更した PR に対し **`CHANGELOG.md` の `[Unreleased]` 更新を必須**とする（`skip-changelog` ラベルで免除）。これを push 時点でローカル再現する `pre-push` hook を `.githooks/` に同梱している。
+Git hooks は [lefthook](https://lefthook.dev) で宣言的に管理する（設定は `lefthook.yml`）。
 
-- **有効化（クローン後 1 回・worktree 全体に効く）**: `git config core.hooksPath .githooks`
-- **意図的に省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
+- **pre-commit**: 変更した Python ファイルに `ruff check` / `ruff format --check` をかける（CI の lint ジョブと同等）
+- **pre-push**: CHANGELOG ゲート。CI（`.github/workflows/ci.yml` の `changelog` ジョブ）と同じく、実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `CHANGELOG.md` の `[Unreleased]` が未更新なら push を止める。ロジック本体は `.lefthook/pre-push/changelog-gate.sh`
+
+有効化と運用:
+
+- **有効化**: `nix develop`（または direnv `use flake`）で devShell に入ると `flake.nix` の shellHook が `lefthook install` を自動実行する。手動なら `lefthook install`（クローン後 1 回）
+- **全 hook をスキップ**: `LEFTHOOK=0 git push` / `LEFTHOOK=0 git commit`
+- **CHANGELOG ゲートのみ省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
 - refactor / fix でも src を触れば CHANGELOG 追記が要る。tests / docs だけの変更はゲート対象外（hook も CI も自動 skip）
 
 ## 開発ワークフロー

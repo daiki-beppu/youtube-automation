@@ -1,0 +1,25 @@
+# Lefthook 設定（https://lefthook.dev）
+#
+# 有効化: devShell（`nix develop` / direnv `use flake`）に入ると flake.nix の
+# shellHook が `lefthook install` を自動実行する。手動なら `lefthook install`。
+#
+# - pre-commit: 変更した Python ファイルに ruff の lint / format チェックをかける
+# - pre-push:   CHANGELOG ゲート（CI の changelog ジョブをローカル再現）
+#
+# 個別スキップ: `LEFTHOOK=0 git push` で全 hook を無効化。
+# CHANGELOG ゲートのみ省く: `SKIP_CHANGELOG=1 git push`
+
+pre-commit:
+  parallel: true
+  commands:
+    ruff-check:
+      glob: "*.py"
+      run: uv run ruff check {staged_files}
+    ruff-format:
+      glob: "*.py"
+      run: uv run ruff format --check {staged_files}
+
+pre-push:
+  commands:
+    changelog-gate:
+      run: bash .lefthook/pre-push/changelog-gate.sh
