@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+#
+# pre-push hook: CHANGELOG ゲート
+#
+# CI（.github/workflows/ci.yml の `changelog` ジョブ）と同じ判定をローカル再現し、
+# 実コードを変更したのに CHANGELOG.md を更新していない push を止める。
+#
+# 有効化（クローン後 1 回・worktree 全体に効く）:
+#   git config core.hooksPath .githooks
+#
+# 意図的に省く:
+#   SKIP_CHANGELOG=1 git push
+#
+# ゲート対象パス（いずれかが変更されたら CHANGELOG.md 更新が必須）:
+#   - src/youtube_automation/
+#   - .claude/skills/
+#   - .claude/CLAUDE.template.md
+#   - pyproject.toml
+#
+# tests/ や docs/ など上記以外のみの変更はゲート対象外（CI も自動 skip）。
+
+set -euo pipefail
+
+# 明示スキップ
+if [ "${SKIP_CHANGELOG:-}" = "1" ]; then
+	echo "pre-push: SKIP_CHANGELOG=1 が設定されているため CHANGELOG ゲートをスキップします。" >&2
+	exit 0
+fi
+
+# 比較基準は origin/main。取得できなければゲートをスキップ（CI が最終判定）。
+BASE_REF="origin/main"
+if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
+	echo "pre-push: ${BASE_REF} が見つからないため CHANGELOG ゲートをスキップします（CI で判定されます）。" >&2
+	exit 0
+fi
+
+# 監視対象パス
+GATED_PATHS=(
+	"src/youtube_automation/"
+	".claude/skills/"
+	".claude/CLAUDE.template.md"
+	"pyproject.toml"
+)
+CHANGELOG_PATH="CHANGELOG.md"
+
+# git が push する各 ref を stdin から読む。
+# 形式: <local ref> <local sha> <remote ref> <remote sha>
+# 削除 push（local sha がゼロ）はスキップ。
+ZERO="0000000000000000000000000000000000000000"
+checked_any=0
+violation=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+	# 入力が空（stdin なし）の場合は読み飛ばし
+	[ -z "${local_ref:-}" ] && continue
+
+	# ブランチ削除はゲート対象外
+	if [ "${local_sha}" = "${ZERO}" ]; then
+		continue
+	fi
+
+	checked_any=1
+
+	# origin/main からの分岐点を基準に diff を取る。
+	# merge-base が取れない場合は origin/main をそのまま基準にする。
+	if base_commit=$(git merge-base "${BASE_REF}" "${local_sha}" 2>/dev/null); then
+		diff_base="${base_commit}"
+	else
+		diff_base="${BASE_REF}"
+	fi
+
+	changed_files=$(git diff --name-only "${diff_base}" "${local_sha}" 2>/dev/null || true)
+	[ -z "${changed_files}" ] && continue
+
+	# ゲート対象パスに該当する変更があるか
+	code_touched=0
+	while IFS= read -r f; do
+		[ -z "$f" ] && continue
+		for p in "${GATED_PATHS[@]}"; do
+			case "$f" in
+			"$p"*)
+				code_touched=1
+				break
+				;;
+			esac
+		done
+		[ "$code_touched" = "1" ] && break
+	done <<EOF
+${changed_files}
+EOF
+
+	[ "${code_touched}" = "0" ] && continue
+
+	# CHANGELOG.md が更新されているか
+	changelog_touched=0
+	while IFS= read -r f; do
+		if [ "$f" = "${CHANGELOG_PATH}" ]; then
+			changelog_touched=1
+			break
+		fi
+	done <<EOF
+${changed_files}
+EOF
+
+	if [ "${changelog_touched}" = "0" ]; then
+		violation=1
+		echo "" >&2
+		echo "pre-push: ❌ CHANGELOG ゲート違反 (${local_ref})" >&2
+		echo "  実コード（src/youtube_automation/ / .claude/skills/ / .claude/CLAUDE.template.md / pyproject.toml）を" >&2
+		echo "  変更していますが ${CHANGELOG_PATH} が更新されていません。" >&2
+		echo "  基準: ${diff_base}" >&2
+		echo "" >&2
+		echo "  対処:" >&2
+		echo "    - ${CHANGELOG_PATH} の [Unreleased] に変更点を追記する" >&2
+		echo "    - もしくは CHANGELOG 不要な変更なら: SKIP_CHANGELOG=1 git push" >&2
+		echo "" >&2
+	fi
+done
+
+if [ "${violation}" = "1" ]; then
+	exit 1
+fi
+
+exit 0
