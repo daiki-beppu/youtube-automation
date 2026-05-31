@@ -923,6 +923,71 @@ def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypa
     assert config.comments.rules[0].provider == "gemini"
 
 
+def test_comments_rule_scope_defaults_to_any(tmp_path, monkeypatch):
+    """#524: scope 未指定の rule は 'any' でロードされる（後方互換）."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [{"name": "g", "keywords": ["hi"]}],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.comments.rules[0].scope == "any"
+
+
+def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
+    """#524: scope を指定すると rule に反映される."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [
+                {"name": "top", "keywords": ["hi"], "scope": "top_level"},
+                {"name": "rep", "keywords": ["bye"], "scope": "reply"},
+            ],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.comments.rules[0].scope == "top_level"
+    assert config.comments.rules[1].scope == "reply"
+
+
+def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
+    """#524: comments.rules[i].scope が無効な値のとき ConfigError を送出する."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [{"name": "bad", "keywords": ["hi"], "scope": "thread"}],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.rules\\[0\\].scope"):
+        load_config()
+
+
+def test_comments_dataclass_rejects_invalid_rule_scope():
+    """#524: Comments dataclass を直接構築した場合も rule scope を検証する."""
+    from youtube_automation.utils.config.comments import CommentRule, Comments
+
+    with pytest.raises(ConfigError, match="scope"):
+        Comments(
+            enabled=True,
+            rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")],
+        )
+
+
 def test_comments_dataclass_defaults_to_codex_without_loader():
     """Comments dataclass を直接構築した場合でも codex 既定になる."""
     from youtube_automation.utils.config.comments import CommentRule, Comments

@@ -295,7 +295,7 @@ class CommentReplier:
             plan.skipped.append(self._skip_record(comment, skip_reason))
             return
 
-        match = engine.evaluate(comment.text)
+        match = engine.evaluate(comment.text, is_reply=comment.parent_id is not None)
         if match is None:
             plan.skipped.append(self._skip_record(comment, "no_rule_matched"))
             return
