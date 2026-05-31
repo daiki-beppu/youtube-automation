@@ -23,12 +23,18 @@ REQUIRED_ENV_KEYS = [
     "GOOGLE_GENAI_USE_VERTEXAI",
 ]
 
+UPLOAD_REQUIRED_SCOPES = [
+    "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+]
+
 
 @dataclass
 class CheckResult:
     id: str
     status: str  # ok / warn / fail / unknown
     message: str
+    category: str = "api"  # api / channel / data / upload
     next_action: Optional[dict] = None
 
 
@@ -69,6 +75,34 @@ def _adc_quota_project() -> Optional[str]:
 def _project_id_for(channel_dir: Path) -> Optional[str]:
     env = _read_env_file(channel_dir / ".env")
     return env.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or _adc_quota_project()
+
+
+def _check_data_files(
+    *,
+    check_id: str,
+    directory: Path,
+    pattern: str,
+    empty_dir_message: str,
+    no_files_message: str,
+    ok_message: str,
+    next_action: dict,
+) -> CheckResult:
+    """data カテゴリ: ディレクトリ存在 + ファイル存在を共通診断する。"""
+    files = list(directory.glob(pattern)) if directory.is_dir() else []
+    if not files:
+        return CheckResult(
+            id=check_id,
+            status="fail",
+            category="data",
+            message=empty_dir_message if not directory.is_dir() else no_files_message,
+            next_action=next_action,
+        )
+    return CheckResult(
+        id=check_id,
+        status="ok",
+        category="data",
+        message=ok_message.format(count=len(files)),
+    )
 
 
 # --- checks ---
@@ -442,6 +476,183 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
     )
 
 
+def check_channel_config(channel_dir: Path) -> CheckResult:
+    config_dir = channel_dir / "config" / "channel"
+
+    if not config_dir.is_dir():
+        return CheckResult(
+            id="channel_config",
+            status="fail",
+            category="channel",
+            message="config/channel/ ディレクトリが存在しない (新規チャンネル)",
+            next_action={
+                "kind": "human",
+                "instructions": "/channel-new を実行して新規チャンネル設定を作成してください",
+            },
+        )
+
+    # config/channel/ 存在 → load_config() でロード可能か検証。
+    # CHANNEL_DIR を一時的に上書きしてシングルトンを差し替え、終了後に必ず復元する。
+    from youtube_automation.utils.config import load_config
+    from youtube_automation.utils.config import reset as reset_config
+    from youtube_automation.utils.exceptions import ConfigError
+
+    old_env = os.environ.get("CHANNEL_DIR")
+    os.environ["CHANNEL_DIR"] = str(channel_dir)
+    try:
+        reset_config()
+        load_config()
+        return CheckResult(
+            id="channel_config",
+            status="ok",
+            category="channel",
+            message="config/channel/ ロード成功",
+        )
+    except ConfigError as e:
+        return CheckResult(
+            id="channel_config",
+            status="fail",
+            category="channel",
+            message=f"config/channel/ ロード失敗: {e}",
+            next_action={
+                "kind": "human",
+                "instructions": "/channel-import を実行して設定を修復してください",
+            },
+        )
+    finally:
+        reset_config()
+        if old_env is None:
+            os.environ.pop("CHANNEL_DIR", None)
+        else:
+            os.environ["CHANNEL_DIR"] = old_env
+
+
+def check_analytics_report(channel_dir: Path) -> CheckResult:
+    return _check_data_files(
+        check_id="analytics_report",
+        directory=channel_dir / "reports",
+        pattern="analysis_*.md",
+        empty_dir_message="reports/ ディレクトリが存在しない",
+        no_files_message="reports/analysis_*.md が存在しない",
+        ok_message="reports/analysis_*.md {count} 件存在",
+        next_action={
+            "kind": "human",
+            "instructions": (
+                "/analytics-collect を実行してデータを収集し、"
+                "その後 /analytics-analyze でレポートを生成してください"
+                "（AI 推論コストのため手動実行が必要）"
+            ),
+        },
+    )
+
+
+def check_benchmark_data(channel_dir: Path) -> CheckResult:
+    return _check_data_files(
+        check_id="benchmark_data",
+        directory=channel_dir / "docs" / "benchmarks",
+        pattern="*.md",
+        empty_dir_message="docs/benchmarks/ ディレクトリが存在しない",
+        no_files_message="docs/benchmarks/*.md が存在しない",
+        ok_message="docs/benchmarks/*.md {count} 件存在",
+        next_action={
+            "kind": "ai-exec",
+            "cmd": "/benchmark を実行してベンチマークデータを生成してください",
+        },
+    )
+
+
+def check_upload_ready(channel_dir: Path) -> CheckResult:
+    token_path = channel_dir / "auth" / "token.json"
+
+    if not token_path.exists():
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category="upload",
+            message="auth/token.json が存在しない",
+            next_action={
+                "kind": "ai-exec",
+                "cmd": "yt-channel-status を実行して OAuth 認証を完了してください",
+            },
+        )
+
+    try:
+        token_data = json.loads(token_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category="upload",
+            message=f"token.json 読み込み失敗: {e}",
+        )
+
+    token_scopes = set(token_data.get("scopes") or [])
+    missing_scopes = [s for s in UPLOAD_REQUIRED_SCOPES if s not in token_scopes]
+
+    meta_path = channel_dir / "config" / "channel" / "meta.json"
+    channel_id: Optional[str] = None
+    meta_issue: Optional[str] = None
+
+    if not meta_path.exists():
+        meta_issue = "config/channel/meta.json が存在しない"
+    else:
+        try:
+            meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
+            if not isinstance(meta_data, dict):
+                meta_issue = "meta.json の形式が不正 (dict でない)"
+            else:
+                raw_channel_id = (meta_data.get("channel") or {}).get("channel_id")
+                channel_id = raw_channel_id if raw_channel_id else None
+                if channel_id is None:
+                    meta_issue = "channel.channel_id が未設定"
+        except (json.JSONDecodeError, OSError) as e:
+            meta_issue = f"meta.json 読み込み失敗: {e}"
+
+    issues = []
+    if missing_scopes:
+        issues.append(f"upload 必須 scope 不足: {', '.join(missing_scopes)}")
+    if meta_issue:
+        issues.append(meta_issue)
+
+    if not issues:
+        return CheckResult(
+            id="upload_ready",
+            status="ok",
+            category="upload",
+            message=f"upload 必須 scope 充足, channel_id 設定済み ({channel_id})",
+        )
+
+    # scope 不足が最優先事由: 再認証が必要
+    if missing_scopes:
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category="upload",
+            message="; ".join(issues),
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "token.json を削除して `yt-channel-status` で再認証し、"
+                    "youtube / youtube.force-ssl scope を含む OAuth 同意で取得し直してください"
+                ),
+            },
+        )
+
+    return CheckResult(
+        id="upload_ready",
+        status="fail",
+        category="upload",
+        message="; ".join(issues),
+        next_action={
+            "kind": "human",
+            "instructions": (
+                "config/channel/meta.json の channel.channel_id に YouTube チャンネル ID を設定してください。"
+                "`yt-channel-status` でチャンネル ID を確認できます。"
+            ),
+        },
+    )
+
+
 def run_all_checks(channel_dir: Path) -> list[CheckResult]:
     return [
         check_gcloud(),
@@ -455,6 +666,10 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_env_file(channel_dir),
         check_client_secrets(channel_dir),
         check_oauth_token(channel_dir),
+        check_channel_config(channel_dir),
+        check_analytics_report(channel_dir),
+        check_benchmark_data(channel_dir),
+        check_upload_ready(channel_dir),
     ]
 
 
@@ -490,10 +705,15 @@ _STATUS_ICONS = {"ok": "✓", "warn": "!", "fail": "✗", "unknown": "?"}
 def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -> str:
     lines: list[str] = []
     lines.append(f"channel_dir: {channel_dir}")
-    lines.append("")
-    lines.append(f"{'STATUS':<8} {'CHECK':<22} MESSAGE")
-    lines.append("-" * 78)
+
+    current_category: Optional[str] = None
     for r in results:
+        if r.category != current_category:
+            current_category = r.category
+            lines.append("")
+            lines.append(f"=== {current_category} ===")
+            lines.append(f"{'STATUS':<8} {'CHECK':<22} MESSAGE")
+            lines.append("-" * 78)
         color = _COLORS.get(r.status, "")
         icon = _STATUS_ICONS.get(r.status, "?")
         lines.append(f"{color}{icon} {r.status:<5}{_RESET} {r.id:<22} {r.message}")
@@ -506,6 +726,7 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
                     lines.append(f"  → {r.next_action['instructions']}")
             elif kind == "ai-exec":
                 lines.append(f"  → run: {r.next_action.get('cmd', '')}")
+
     lines.append("")
     lines.append(
         f"summary: ok={summary['ok']} warn={summary['warn']} fail={summary['fail']} unknown={summary.get('unknown', 0)}"
