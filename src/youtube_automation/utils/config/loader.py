@@ -295,7 +295,12 @@ def _build_playlists(merged: dict) -> Playlists:
         elif isinstance(value, dict):
             items[key] = dict(value)
         else:
-            raise ConfigError(f"playlists.{key} は string または object でなければなりません")
+            # list / int / null など想定外型は Fail Fast で弾く。
+            # silent pass-through すると Playlists.items: dict[str, dict] 型注釈と
+            # 実態が乖離し、consumer 側に防御分岐が必要になる（#419）。
+            raise ConfigError(
+                f"playlists.{key} は string または object でなければなりません（got {type(value).__name__}）"
+            )
     return Playlists(items=items)
 
 

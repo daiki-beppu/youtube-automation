@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `chore(config)`: `_build_playlists` の per-key 想定外型（list / int / null / float / bool 等）に対する `ConfigError` メッセージへ実際の型名（`got <type>`）を含め、トップレベル shape チェックと文言を揃えた（#419）。`Playlists.items: dict[str, dict]` 型注釈とランタイム挙動の乖離を Fail Fast で防ぐ既存ガードの actionable 化。list / null / float / bool での `ConfigError` 発生をパラメトライズドテストで担保
 - `refactor(streaming)`: `utils/streaming/archive_counter.py` を `monthly_archive.py` にリネームし、日単位の `daily_archive.py` との命名対称性を取り戻した（#423、#156 の move only refactor 追従）。`cli/stream_bandwidth.py` の import とテスト（`test_stream_archive_counter.py` → `test_stream_monthly_archive.py`）を追従。公開関数 `count_archives` と `utils/streaming/__init__.py` の公開 API は不変、ロジック変更なし
 ### Added
 
