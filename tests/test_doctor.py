@@ -14,6 +14,7 @@ from youtube_automation.cli import doctor
 # テストヘルパー
 # ---------------------------------------------------------------------------
 
+
 def _write_minimal_config(base: Path) -> None:
     """検証に必要な最小限の config/channel/*.json を base に書き出す.
 
@@ -24,37 +25,43 @@ def _write_minimal_config(base: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
 
     (config_dir / "meta.json").write_text(
-        json.dumps({
-            "channel": {
-                "name": "TestCh",
-                "short": "TC",
-                "youtube_handle": "@testch",
-                "url": "https://youtube.com/@testch",
+        json.dumps(
+            {
+                "channel": {
+                    "name": "TestCh",
+                    "short": "TC",
+                    "youtube_handle": "@testch",
+                    "url": "https://youtube.com/@testch",
+                }
             }
-        }),
+        ),
         encoding="utf-8",
     )
     (config_dir / "content.json").write_text(
-        json.dumps({
-            "genre": {"primary": "bgm", "style": "ambient", "context": "study"},
-            "tags": {"base": ["bgm"], "themes": {}},
-            "descriptions": {
-                "opening": "Relaxing {style}.",
-                "perfect_for": ["Study"],
-                "hashtags": ["#bgm"],
-            },
-            "title": {"template": "{theme} bgm"},
-        }),
+        json.dumps(
+            {
+                "genre": {"primary": "bgm", "style": "ambient", "context": "study"},
+                "tags": {"base": ["bgm"], "themes": {}},
+                "descriptions": {
+                    "opening": "Relaxing {style}.",
+                    "perfect_for": ["Study"],
+                    "hashtags": ["#bgm"],
+                },
+                "title": {"template": "{theme} bgm"},
+            }
+        ),
         encoding="utf-8",
     )
     (config_dir / "youtube.json").write_text(
-        json.dumps({
-            "youtube": {
-                "category_id": "10",
-                "privacy_status": "public",
-                "language": "ja",
+        json.dumps(
+            {
+                "youtube": {
+                    "category_id": "10",
+                    "privacy_status": "public",
+                    "language": "ja",
+                }
             }
-        }),
+        ),
         encoding="utf-8",
     )
 
