@@ -13,10 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 
 from youtube_automation.utils.config import load_config
+from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import (
     BAHMetadataGenerator,
     SceneTitleViolation,
     format_scene_title_violations,
+    format_title_template,
     validate_scene_phrases,
 )
 from youtube_automation.utils.time_utils import format_duration_display
@@ -1014,3 +1016,120 @@ class TestLoadThemeDisplayNames:
         gen.collection_path = tmp_path
         (tmp_path / "workflow-state.json").write_text(_json.dumps({}), encoding="utf-8")
         assert gen._load_theme_display_names() == {}
+
+
+# ===========================================================================
+# 7. title.template / localizations title_template の未知プレースホルダ耐性 (#574)
+# ===========================================================================
+
+
+class TestTitleTemplateUnknownPlaceholder:
+    """#574: 未知プレースホルダで upload 全体が KeyError クラッシュしないことを担保する。
+
+    - `descriptions.md` が最終タイトルを供給する経路（title_override）では中間タイトル
+      生成をスキップして完走する。
+    - override が無い場合は opaque KeyError ではなく actionable な ValidationError
+      （未知プレースホルダ名 + 許可キー一覧）で fail-loud する。
+    - localizations.json::title_template も同じ挙動になる。
+    """
+
+    @pytest.fixture
+    def gen_with_tracks(self):
+        gen = _make_generator("20250907-live-8bit-adventure-music")
+        gen._load_scene_phrases = lambda: {
+            "ja": "8ビット冒険の世界",
+            "en": "World of 8-bit adventure",
+            "de": "Welt des 8-Bit-Abenteuers",
+        }
+        gen.tracks = [
+            {
+                "filename": "01-Hero.wav",
+                "title": "Hero Theme",
+                "duration": 180,
+                "start_time": 0,
+                "end_time": 180,
+                "timestamp": "00:00",
+            },
+            {
+                "filename": "02-Forest.wav",
+                "title": "Forest Path",
+                "duration": 210,
+                "start_time": 180,
+                "end_time": 390,
+                "timestamp": "03:00",
+            },
+            {
+                "filename": "03-Castle.wav",
+                "title": "Castle Gate",
+                "duration": 195,
+                "start_time": 390,
+                "end_time": 585,
+                "timestamp": "06:30",
+            },
+        ]
+        return gen
+
+    @staticmethod
+    def _set_title_template(gen, template: str) -> None:
+        # Title は frozen dataclass のため object.__setattr__ で bypass する
+        object.__setattr__(gen.config.content.title, "template", template)
+
+    # --- helper 単体 -------------------------------------------------------
+
+    def test_format_title_template_ok(self):
+        assert format_title_template("{theme} BGM", {"theme": "Forest"}, context="ctx") == "Forest BGM"
+
+    def test_format_title_template_rejects_unknown_placeholder(self):
+        with pytest.raises(ValidationError) as exc:
+            format_title_template(
+                "{adjective} {theme} BGM",
+                {"theme": "Forest", "duration_display": "3h"},
+                context="content.json: title.template",
+            )
+        msg = str(exc.value)
+        assert "adjective" in msg  # 不正プレースホルダ名
+        assert "theme" in msg  # 許可キー一覧
+        assert "title.template" in msg  # 文脈
+
+    def test_format_title_template_ignores_positional_braces_in_allowed(self):
+        # 提供済みキーのみなら通常通り整形される
+        out = format_title_template(
+            "{scene_phrase} | {activities}", {"scene_phrase": "Rainy", "activities": "Study"}, context="ctx"
+        )
+        assert out == "Rainy | Study"
+
+    # --- _generate_title 経路 ---------------------------------------------
+
+    def test_generate_title_raises_actionable_without_override(self, gen_with_tracks):
+        """未知プレースホルダ + descriptions.md 無し → actionable な ValidationError。"""
+        self._set_title_template(gen_with_tracks, "{adjective} {theme} | {duration_display}")
+        with pytest.raises(ValidationError) as exc:
+            gen_with_tracks.generate_complete_collection_metadata()
+        assert "adjective" in str(exc.value)
+
+    def test_title_override_skips_intermediate_title_generation(self, gen_with_tracks):
+        """未知プレースホルダを含む title.template でも override があれば完走し、最終タイトルが採用される。"""
+        self._set_title_template(gen_with_tracks, "{adjective} {theme} | {duration_display}")
+        meta = gen_with_tracks.generate_complete_collection_metadata(title_override="Curated Final Title")
+        assert meta["title"] == "Curated Final Title"
+        # 概要欄ヘッダーも override タイトルと一致する
+        assert "Curated Final Title" in meta["description"]
+
+    def test_valid_template_still_works(self, gen_with_tracks):
+        """正常系（整形可能なテンプレート）の振る舞いを壊さない。"""
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        assert len(meta["title"]) > 0
+
+    # --- localizations.json::title_template 経路 ---------------------------
+
+    def test_localizations_unknown_placeholder_raises_actionable(self):
+        config = load_config()
+        supported = config.localizations.supported_languages
+        lang = supported[0]
+        config.localizations.data["languages"][lang]["title_template"] = "{adjective} {scene_phrase}"
+        scene_phrases = {lng: "phrase" for lng in supported}
+        with pytest.raises(ValidationError) as exc:
+            validate_scene_phrases(scene_phrases, config)
+        msg = str(exc.value)
+        assert "adjective" in msg
+        assert lang in msg

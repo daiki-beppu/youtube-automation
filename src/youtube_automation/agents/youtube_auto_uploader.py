@@ -24,6 +24,7 @@ from googleapiclient.errors import HttpError
 logger = logging.getLogger(__name__)
 
 
+from youtube_automation.utils.channel_settings import build_upload_status_flags  # noqa: E402
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
@@ -35,6 +36,7 @@ from youtube_automation.utils.preflight_checks import (  # noqa: E402
     check_required_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
+    check_title_template_compliance,
     extract_descriptions_md_tags,
 )
 from youtube_automation.utils.probe import probe_duration  # noqa: E402
@@ -106,12 +108,14 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             raise ValueError(f"タイトルが100文字を超えています（{len(title)}文字）: {title}")
 
         # リクエストボディ作成
+        # AI 開示（containsSyntheticMedia）/ 子供向け申告（selfDeclaredMadeForKids）は
+        # config/channel/youtube.json で上書き可能。未設定時は現行の振る舞い
+        # （synthetic=True / made_for_kids=False）を維持する (#605)。
+        # AI 生成音楽（Lyria / Suno）を主軸とするチャンネルは YouTube の AI 開示
+        # （altered or synthetic content）ポリシー上 true を申告する (#603)。
         status_body = {
             "privacyStatus": metadata.get("privacy_status", "private"),
-            "selfDeclaredMadeForKids": False,
-            # AI 生成音楽（Lyria / Suno）を主軸とするため、YouTube の AI 開示
-            # （altered or synthetic content）ポリシー上 true を申告する (#603)
-            "containsSyntheticMedia": True,
+            **build_upload_status_flags(load_config().youtube.api),
         }
 
         # スケジュール公開: publishAt 指定時は private 必須
@@ -255,6 +259,31 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         m = re.search(pattern, text, re.DOTALL)
         return m.group(1).strip() if m else None
 
+    def _collect_live_titles(self, exclude_dir: Path | None = None) -> list[str]:
+        """既存 live コレクションの公開タイトル（`## タイトル案`）を収集する (#602).
+
+        収集元は `collections/live/*/20-documentation/descriptions.md`。RHS 重複検出の
+        比較対象に使う。live ディレクトリ不在・descriptions.md 不在・セクション欠落は
+        スキップする。`exclude_dir` で指定したコレクション自身は除外する。
+        """
+        titles: list[str] = []
+        live_root = self.collections_root / "live"
+        if not live_root.exists():
+            return titles
+        exclude_resolved = exclude_dir.resolve() if exclude_dir else None
+        for col in sorted(live_root.iterdir()):
+            if not col.is_dir() or col.name.startswith("."):
+                continue
+            if exclude_resolved and col.resolve() == exclude_resolved:
+                continue
+            desc_path = CollectionPaths(col).descriptions_md_path
+            if not desc_path.exists():
+                continue
+            title = self._extract_md_section(desc_path.read_text(encoding="utf-8"), "タイトル案")
+            if title:
+                titles.append(title.strip())
+        return titles
+
     def _preflight_check(self, collection_dir: Path) -> None:
         """アップロード前メタデータ品質チェック (fail-loud)。
 
@@ -265,7 +294,8 @@ class YouTubeAutoUploader(YouTubeUploadCore):
         3. タイムスタンプ件数が `audio.chapter_max` 以内かつ chapter 名に
            パターン展開接尾辞（v1〜v6 / ロマン数字 I〜VIII）を含まないこと
            （個別トラック = 1 chapter の per-track 命名はデフォルトで許容）
-        4. タイトルが 100 codepoint 以内（YouTube 制限）
+        4. タイトルが 100 codepoint 以内（YouTube 制限）、かつ TTP 鋳型に準拠
+           （巻数表記なし・RHS が鋳型一致・既存 live タイトルと RHS 非重複, #602）
         5. タグ件数が `tags.min_count` を満たすこと（戦略書違反防止）
         6. タグの quotation 込み文字数が YouTube の 500 制限内
         7. master 動画尺が `audio.target_duration_min/max` 範囲内
@@ -287,6 +317,20 @@ class YouTubeAutoUploader(YouTubeUploadCore):
             raise RuntimeError(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}")
 
         config = load_config()
+
+        # タイトル鋳型準拠チェック（巻数表記・RHS 重複・鋳型逸脱を機械検出）。
+        # 鋳型語彙・パターンは config 駆動、` | ` 鋳型を使うチャンネルでのみ適用。
+        title_cfg = config.content.title
+        template_check_cfg = {**dict(title_cfg.template_check), "template": title_cfg.template}
+        existing_titles = self._collect_live_titles(exclude_dir=collection_dir)
+        msg = check_title_template_compliance(title, existing_titles, template_check_cfg)
+        if msg:
+            raise RuntimeError(
+                f"❌ タイトル鋳型違反: {msg}\n"
+                f"  title={title!r}\n"
+                f"  → コレクション名の流用ではなく鋳型に沿った公開タイトルを /video-description で再生成してください。"
+            )
+
         msg = check_required_localization_languages(config.localizations.supported_languages)
         if msg:
             raise RuntimeError(f"❌ {msg}。config/localizations.json を見直してください。")
@@ -442,11 +486,18 @@ class YouTubeAutoUploader(YouTubeUploadCore):
 
         master_video = video_files[0]
 
+        # descriptions.md が最終タイトル/概要/タグを供給するなら先に読み込み、
+        # 中間タイトル生成（_generate_title）を title_override でスキップする。
+        # これにより title.template が未知プレースホルダ（例 {adjective}）を含んでも
+        # 本来捨てられる中間タイトル生成で upload 全体がクラッシュしない（#574）。
+        prebuilt = self._load_descriptions_md(collection_dir)
+
         # メタデータ生成（BAHMetadataGenerator — localizations 等）
-        metadata = metadata_gen.generate_complete_collection_metadata()
+        metadata = metadata_gen.generate_complete_collection_metadata(
+            title_override=prebuilt["title"] if prebuilt else None
+        )
 
         # descriptions.md が存在すれば title/description/tags を上書き
-        prebuilt = self._load_descriptions_md(collection_dir)
         if prebuilt:
             metadata["title"] = prebuilt["title"]
             metadata["description"] = prebuilt["description"]
