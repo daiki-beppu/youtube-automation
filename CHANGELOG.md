@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(short-upload)`: `ShortUploader.upload_short` に resumable upload session URI 永続化を適用し、Shorts 投稿の中断→再実行時の video_id 重複（二重 publish）の余地を解消した（#466、CC 経路 #381 と同等）。これまで `upload_video` を `resume_session_uri=None` のまま呼んでいたが、`workflow-state.json` の `post_upload.shorts[].resume_session_uri` に session URI を読み書きするクロージャ（`on_session_uri_changed` / `on_upload_complete`）を配線。開始前に保存済み URI を読んで再開し、成功時はクリア、中断時は残して次回再開する。tracking 媒体は CC の `upload_tracking.json` ではなく Shorts 専用の `workflow-state.json`（既存 entry には key を増やさず書込み時のみ append する schema 互換）。再開不要な単発投稿は従来どおり `resume_session_uri=None` で挙動不変
+
 ## [5.5.6] - 2026-05-31
 
 ### Added

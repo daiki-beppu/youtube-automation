@@ -256,9 +256,30 @@ class ShortUploader:
         # 6. サムネイル探索（plan 要件 6.5: .jpg → .png → None）
         thumbnail_path = self._find_short_thumbnail(collection_path)
 
-        # 7. 委譲 upload
+        # 7. 委譲 upload（resumable upload session URI を workflow-state に永続化, #466）。
+        #    CC 経路（#381 / collection_uploader._execute_complete_collection）と同思想で、
+        #    中断→再実行時に同一 session を再開し video_id 重複を防ぐ。tracking 媒体は
+        #    CC の upload_tracking.json ではなく workflow-state.json.post_upload.shorts[]。
+        ws_path = CollectionPaths(collection_path).workflow_state_path
+        resume_session_uri = self._read_short_resume_uri(ws_path, short_num)
+
+        def _on_session_uri_changed(uri: Optional[str]) -> None:
+            """upload 中の session URI 変化を該当 short entry に永続化する。"""
+            self._persist_short_resume_uri(ws_path, short_num, uri)
+
+        def _on_upload_complete() -> None:
+            """upload 成功通知。後続の最終記録と整合させるため URI を消す。"""
+            _on_session_uri_changed(None)
+
         try:
-            video_id = self.uploader.upload_video(str(video_path), metadata, thumbnail_path)
+            video_id = self.uploader.upload_video(
+                str(video_path),
+                metadata,
+                thumbnail_path,
+                resume_session_uri=resume_session_uri,
+                on_session_uri_changed=_on_session_uri_changed,
+                on_upload_complete=_on_upload_complete,
+            )
         except Exception as e:
             logger.error(f"❌ upload_video 失敗: {e}")
             return {"action": ACTION_FAILED, "details": {"error": str(e)}}
@@ -293,6 +314,79 @@ class ShortUploader:
         logger.warning(f"short-thumbnail.{{jpg,png}} が見つかりません — サムネ未設定で upload します: {assets}")
         return None
 
+    # ─── workflow-state I/O ──────────────────────────
+
+    def _load_workflow_state(self, ws_path: Path) -> Optional[dict]:
+        """workflow-state.json を読み込む。ファイル無 / パース失敗時は None（warning）。"""
+        if not ws_path.exists():
+            return None
+        try:
+            with open(ws_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"workflow-state.json 読み込み失敗: {e}")
+            return None
+
+    def _save_workflow_state(self, ws_path: Path, state: dict) -> None:
+        """workflow-state.json を書き戻す。失敗時は warning のみ（致命的にしない）。"""
+        try:
+            with open(ws_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except OSError as e:
+            logger.warning(f"workflow-state.json 書き込み失敗: {e}")
+
+    @staticmethod
+    def _find_short_entry(shorts: list, short_num: Optional[int]) -> Optional[dict]:
+        """`post_upload.shorts` から short_num 一致の entry を返す（無ければ None）。"""
+        for entry in shorts:
+            if isinstance(entry, dict) and entry.get("short_num") == short_num:
+                return entry
+        return None
+
+    def _read_short_resume_uri(self, ws_path: Path, short_num: Optional[int]) -> Optional[str]:
+        """該当 short entry に永続化済みの resumable upload session URI を読む (#466)。
+
+        ファイル無 / entry 無 / 未保存なら None（＝フレッシュ実行）。
+        """
+        state = self._load_workflow_state(ws_path)
+        if not state:
+            return None
+        shorts = (state.get("post_upload") or {}).get("shorts") or []
+        entry = self._find_short_entry(shorts, short_num)
+        return entry.get("resume_session_uri") if entry else None
+
+    def _persist_short_resume_uri(self, ws_path: Path, short_num: Optional[int], uri: Optional[str]) -> None:
+        """該当 short entry の `resume_session_uri` を upsert / 削除する (#466)。
+
+        並行更新に備え毎回 disk から再ロードしてから書き戻す（CC の
+        `_on_session_uri_changed` と同思想）。`uri=None` で削除。entry が未作成なら
+        short_num のみの entry を append して URI を載せる。ファイル無 → warning skip。
+        """
+        if not ws_path.exists():
+            logger.warning(f"workflow-state.json が無いため resume URI 永続化を skip: {ws_path}")
+            return
+        state = self._load_workflow_state(ws_path)
+        if state is None:
+            return
+
+        post_upload = state.setdefault("post_upload", {})
+        shorts = post_upload.get("shorts")
+        if not isinstance(shorts, list):
+            shorts = []
+            post_upload["shorts"] = shorts
+
+        entry = self._find_short_entry(shorts, short_num)
+        if entry is None:
+            entry = {"short_num": short_num}
+            shorts.append(entry)
+
+        if uri is None:
+            entry.pop("resume_session_uri", None)
+        else:
+            entry["resume_session_uri"] = uri
+
+        self._save_workflow_state(ws_path, state)
+
     # ─── workflow-state 更新 (plan アンチパターン #10) ─
 
     def _update_workflow_state(
@@ -314,11 +408,8 @@ class ShortUploader:
             logger.warning(f"workflow-state.json が無いため short upload 記録を skip: {ws_path}")
             return
 
-        try:
-            with open(ws_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"workflow-state.json 読み込み失敗: {e}")
+        state = self._load_workflow_state(ws_path)
+        if state is None:
             return
 
         post_upload = state.setdefault("post_upload", {})
@@ -341,11 +432,7 @@ class ShortUploader:
         else:
             shorts.append(entry)
 
-        try:
-            with open(ws_path, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
-        except OSError as e:
-            logger.warning(f"workflow-state.json 書き込み失敗: {e}")
+        self._save_workflow_state(ws_path, state)
 
     # ─── ドライラン ──────────────────────────────────
 
