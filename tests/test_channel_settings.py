@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,12 +12,47 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from youtube_automation.scripts import channel_settings_cli
 from youtube_automation.utils.channel_settings import (
+    KEYWORDS_MAX_LENGTH,
     build_update_body,
+    build_upload_status_flags,
     diff_settings,
     fetch_channel,
     parse_api_response,
+    verify_channel_id,
 )
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.config.youtube import YoutubeApi
+from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
+
+# ---------------------------------------------------------------------------
+# build_upload_status_flags (#605)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildUploadStatusFlags:
+    def test_defaults_preserve_current_behavior(self):
+        """未設定時のデフォルトは現行の振る舞い（synthetic=True / made_for_kids=False）。"""
+        api = YoutubeApi(category_id="10", privacy_status="public", language="ja")
+        flags = build_upload_status_flags(api)
+        assert flags == {
+            "selfDeclaredMadeForKids": False,
+            "containsSyntheticMedia": True,
+        }
+
+    def test_config_override(self):
+        """config で上書きした値が status フラグへ反映される。"""
+        api = YoutubeApi(
+            category_id="10",
+            privacy_status="public",
+            language="ja",
+            contains_synthetic_media=False,
+            self_declared_made_for_kids=True,
+        )
+        flags = build_upload_status_flags(api)
+        assert flags == {
+            "selfDeclaredMadeForKids": True,
+            "containsSyntheticMedia": False,
+        }
+
 
 # ---------------------------------------------------------------------------
 # build_update_body
@@ -72,6 +108,31 @@ class TestBuildUpdateBody:
     def test_localizations_without_supported_languages(self):
         body = build_update_body({}, {"supported_languages": []}, "UC1")
         assert "localizations" not in body
+
+    def test_keywords_at_limit_passes(self):
+        """#563: 500 文字ちょうどはバリデーションを通過する（境界値）。"""
+        # スペースを含まないタグは quote されないため api 形式 = タグそのもの。
+        keywords = ["a" * KEYWORDS_MAX_LENGTH]  # 単一タグで 500 文字ちょうど
+        api_keywords = "a" * KEYWORDS_MAX_LENGTH
+        body = build_update_body({"keywords": keywords}, None, "UC1")
+        assert body["brandingSettings"]["channel"]["keywords"] == api_keywords
+
+    def test_keywords_over_limit_raises(self):
+        """#563: 500 文字超過は push 前に YouTubeAPIError で止める。"""
+        keywords = ["a" * (KEYWORDS_MAX_LENGTH + 10)]  # 510 文字
+        with pytest.raises(YouTubeAPIError) as excinfo:
+            build_update_body({"keywords": keywords}, None, "UC1")
+        msg = str(excinfo.value)
+        assert "keywords exceeds 500 chars" in msg
+        assert "got 510" in msg
+        assert "over by 10" in msg
+
+    def test_keywords_over_limit_includes_shortening_hint(self):
+        """#563: エラーメッセージに長い順の短縮候補タグを含める。"""
+        keywords = ["short"] * 90 + ["this is a very long tag candidate"]
+        with pytest.raises(YouTubeAPIError) as excinfo:
+            build_update_body({"keywords": keywords}, None, "UC1")
+        assert "this is a very long tag candidate" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +236,113 @@ class TestFetchChannel:
         youtube.channels().list().execute.side_effect = RuntimeError("boom")
         with pytest.raises(YouTubeAPIError, match="channels\\(\\).list"):
             fetch_channel(youtube)
+
+
+class TestFetchChannelLocalizationsFreshness:
+    """#564: localizations を combined fetch のキャッシュ層から切り離して取り直す。"""
+
+    @staticmethod
+    def _youtube_with_split(combined: dict, localizations: dict) -> MagicMock:
+        """part に応じて combined / localizations 別レスポンスを返す youtube モック。"""
+        youtube = MagicMock()
+
+        def _list(**kwargs):
+            req = MagicMock()
+            if kwargs.get("part") == "localizations":
+                req.execute.return_value = localizations
+            else:
+                req.execute.return_value = combined
+            return req
+
+        youtube.channels.return_value.list.side_effect = _list
+        return youtube
+
+    def test_localizations_taken_from_separate_fetch(self):
+        # Given: combined fetch は旧版 localizations、単独 part は新版を返す
+        combined = {
+            "items": [
+                {
+                    "id": "UCx",
+                    "brandingSettings": {"channel": {"description": "branding desc"}},
+                    "localizations": {"ja": {"title": "T", "description": "OLD (cached)"}},
+                }
+            ]
+        }
+        fresh = {"items": [{"id": "UCx", "localizations": {"ja": {"title": "T", "description": "NEW"}}}]}
+        youtube = self._youtube_with_split(combined, fresh)
+
+        # When
+        result = fetch_channel(youtube)
+
+        # Then: localizations は単独 fetch の新版で上書きされる
+        assert result["localizations"]["ja"]["description"] == "NEW"
+        # brandingSettings は combined fetch 由来
+        assert result["brandingSettings"]["channel"]["description"] == "branding desc"
+
+    def test_combined_fetch_omits_localizations_part(self):
+        # Given
+        combined = {"items": [{"id": "UCx", "brandingSettings": {"channel": {}}}]}
+        fresh = {"items": [{"id": "UCx", "localizations": {"en": {"title": "t", "description": "d"}}}]}
+        youtube = self._youtube_with_split(combined, fresh)
+
+        # When
+        fetch_channel(youtube)
+
+        # Then: combined call は localizations を part に含めず、別途 localizations 単独 fetch する
+        parts_used = [c.kwargs.get("part") for c in youtube.channels.return_value.list.call_args_list]
+        assert "brandingSettings,status,snippet" in parts_used
+        assert "localizations" in parts_used
+        assert not any("brandingSettings" in p and "localizations" in p for p in parts_used if p)
+
+    def test_no_localizations_results_in_empty_dict(self):
+        # Given: チャンネルに localizations が無い（単独 fetch も localizations キー無し）
+        combined = {"items": [{"id": "UCx", "brandingSettings": {"channel": {}}}]}
+        no_loc = {"items": [{"id": "UCx"}]}
+        youtube = self._youtube_with_split(combined, no_loc)
+
+        # When
+        result = fetch_channel(youtube)
+
+        # Then: 空辞書（parse_api_response 側が安全に処理できる）
+        assert result["localizations"] == {}
+
+    def test_localizations_fetch_failure_wrapped(self):
+        # Given: combined は成功するが localizations 単独 fetch が API エラー
+        combined = {"items": [{"id": "UCx", "brandingSettings": {"channel": {}}}]}
+        youtube = MagicMock()
+
+        def _list(**kwargs):
+            req = MagicMock()
+            if kwargs.get("part") == "localizations":
+                req.execute.side_effect = RuntimeError("loc boom")
+            else:
+                req.execute.return_value = combined
+            return req
+
+        youtube.channels.return_value.list.side_effect = _list
+
+        # When / Then: 生 Exception ではなくドメイン例外に変換
+        with pytest.raises(YouTubeAPIError, match="localizations"):
+            fetch_channel(youtube)
+
+
+# ---------------------------------------------------------------------------
+# verify_channel_id (#561)
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyChannelId:
+    def test_match_passes(self):
+        assert verify_channel_id("UCabc", "UCabc") is None
+
+    def test_mismatch_raises(self):
+        with pytest.raises(ConfigError, match="channel_id mismatch"):
+            verify_channel_id("UCmine", "UCother")
+
+    def test_unset_skips(self):
+        # 未設定（後方互換）: remote が何であれ通す
+        assert verify_channel_id("", "UCother") is None
+        assert verify_channel_id(None, "UCother") is None
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +477,67 @@ class TestCLIPushDryRun:
         out = capsys.readouterr().out
         assert "no diff" in out
         youtube.channels().update.assert_not_called()
+
+
+def _fake_config(channel_id: str):
+    """channel_id 照合テスト用の軽量 config スタブ（_cmd_push が触る属性のみ）。"""
+    branding = SimpleNamespace(as_api_dict=lambda: {})
+    localizations = SimpleNamespace(exists=False, data={})
+    meta = SimpleNamespace(channel_id=channel_id, branding=branding)
+    return SimpleNamespace(meta=meta, localizations=localizations)
+
+
+class TestCLIPushChannelIdSafety:
+    """#561: channel_id mismatch 時に push を拒否する。"""
+
+    def test_mismatch_refuses_and_does_not_update(self, capsys):
+        youtube = MagicMock()
+        # remote の id は UCfixture
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
+        with (
+            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.load_config",
+                return_value=_fake_config("UCdifferent"),
+            ),
+        ):
+            rc = channel_settings_cli.main(["push", "--apply"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "channel_id mismatch" in err
+        youtube.channels().update.assert_not_called()
+
+    def test_match_proceeds(self, capsys):
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
+        with (
+            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.load_config",
+                return_value=_fake_config("UCfixture"),
+            ),
+        ):
+            rc = channel_settings_cli.main(["push", "--apply"])
+        # id 一致 → mismatch エラーで止まらず通常フローへ進む
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "channel_id mismatch" not in captured.out
+        assert "channel_id mismatch" not in captured.err
+
+    def test_unset_channel_id_warns_but_proceeds(self, capsys):
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
+        with (
+            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.load_config",
+                return_value=_fake_config(""),
+            ),
+        ):
+            rc = channel_settings_cli.main(["push"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "channel.channel_id が未設定" in out
 
 
 class TestCLIPull:

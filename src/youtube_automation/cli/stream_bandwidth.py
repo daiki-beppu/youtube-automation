@@ -30,8 +30,8 @@ from youtube_automation.utils.streaming import (
     THEORETICAL_BITRATE_MBPS,
     THRESHOLD_RATIO,
 )
-from youtube_automation.utils.streaming.archive_counter import count_archives
 from youtube_automation.utils.streaming.instance_resolver import resolve_instance_id
+from youtube_automation.utils.streaming.monthly_archive import count_archives
 from youtube_automation.utils.streaming.monthly_report import format_monthly_report
 from youtube_automation.utils.streaming.threshold import is_over_threshold
 from youtube_automation.utils.streaming.vultr_bandwidth import (

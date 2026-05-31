@@ -31,7 +31,7 @@ from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import UploadError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
-from youtube_automation.utils.schedule import get_schedule_timezone
+from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,36 @@ logger = logging.getLogger(__name__)
 ACTION_UPLOADED = "short_uploaded"
 ACTION_BLOCKED = "short_upload_blocked"
 ACTION_FAILED = "short_upload_failed"
+
+
+def _backfill_naive_datetime(dt: datetime, tz, *, source: Path, field: str, raw: str) -> datetime:
+    """TZ-naive な datetime を schedule timezone で backfill する（レガシーデータ救済）.
+
+    #359 で書き込み側は `datetime.now(tz).isoformat()` の TZ-aware ISO 8601 に統一済みのため、
+    ここを踏むのは既存 live/ 配下に永続化されたレガシーデータのみ。将来 backfill 補正を
+    撤去するタイミングを判断するシグナルとして、どのファイル・どのフィールドが TZ-naive
+    だったかを warning で記録する（#532）。
+
+    Args:
+        dt: 判定対象の datetime
+        tz: backfill に使う schedule timezone
+        source: 値の出所ファイルパス（ログ用）
+        field: TZ-naive だったフィールド名（ログ用）
+        raw: パース前の生文字列（ログ用）
+
+    Returns:
+        TZ-aware な datetime（元から aware ならそのまま返す）。
+    """
+    if dt.tzinfo is not None:
+        return dt
+    logger.warning(
+        "%s に TZ-naive な %s=%r が含まれます; schedule timezone %s で backfill します（レガシーデータ救済 / #532）",
+        source,
+        field,
+        raw,
+        tz,
+    )
+    return dt.replace(tzinfo=tz)
 
 
 class ShortUploader:
@@ -118,8 +148,9 @@ class ShortUploader:
                     dt = datetime.fromisoformat(uploaded_at)
                 except ValueError:
                     continue
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=tz)
+                dt = _backfill_naive_datetime(
+                    dt, tz, source=ws_path, field="post_upload.shorts[].uploaded_at", raw=uploaded_at
+                )
                 if latest_dt is None or dt > latest_dt:
                     latest_dt = dt
 
@@ -152,7 +183,11 @@ class ShortUploader:
             return None
 
         cc = tracking.get("complete_collection") or {}
-        base_str = cc.get("publish_at") or cc.get("upload_time")
+        base_str = cc.get("publish_at")
+        base_field = "complete_collection.publish_at"
+        if not base_str:
+            base_str = cc.get("upload_time")
+            base_field = "complete_collection.upload_time"
         if not base_str:
             return None
 
@@ -168,8 +203,7 @@ class ShortUploader:
             base_dt = datetime.fromisoformat(base_str)
         except ValueError:
             return None
-        if base_dt.tzinfo is None:
-            base_dt = base_dt.replace(tzinfo=tz)
+        base_dt = _backfill_naive_datetime(base_dt, tz, source=tracking_path, field=base_field, raw=base_str)
 
         publish_dt = base_dt.astimezone(tz) + timedelta(days=1)
         publish_dt = publish_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -421,7 +455,7 @@ class ShortUploader:
         entry = {
             "short_num": short_num,
             "video_id": video_id,
-            "uploaded_at": datetime.now(get_schedule_timezone(self.schedule_config)).isoformat(),
+            "uploaded_at": now_in_schedule_tz(self.schedule_config).isoformat(),
             "publish_at": publish_at,
         }
 

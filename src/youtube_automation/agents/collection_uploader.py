@@ -32,7 +32,7 @@ from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa:
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
-from youtube_automation.utils.schedule import get_schedule_timezone  # noqa: E402
+from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED = "complete_collection_dedup_skipped"
@@ -253,7 +253,7 @@ class CollectionUploader:
         record = {
             "video_id": complete_video["video_id"],
             "video_url": complete_video["video_url"],
-            "upload_time": datetime.now(get_schedule_timezone(self.config)).isoformat(),
+            "upload_time": now_in_schedule_tz(self.config).isoformat(),
             "publish_at": publish_at,
             "status": TRACKING_STATUS_COMPLETED,
         }
@@ -280,7 +280,7 @@ class CollectionUploader:
         updated_state = {
             **state,
             "upload": updated_upload,
-            "updated_at": datetime.now(get_schedule_timezone(self.config)).isoformat(),
+            "updated_at": now_in_schedule_tz(self.config).isoformat(),
         }
         if collection_path.parent.name == WORKFLOW_STAGE_LIVE:
             updated_state = {

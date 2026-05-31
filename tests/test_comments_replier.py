@@ -740,6 +740,175 @@ def test_rule_provider_override_gemini_requires_explicit_gemini_generator_config
         CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
 
 
+def _mock_youtube_with_status(
+    *,
+    video_ids: list[str],
+    privacy_by_video: dict[str, str | None],
+    comments_by_video: dict[str, list[dict]] | None = None,
+) -> tuple[MagicMock, MagicMock]:
+    """videos().list を status preflight 用に side_effect 化した mock を返す.
+
+    privacy_by_video の値が None の video は API 応答に含めない（削除済み扱い）。
+    その他は privacyStatus として返す。`part="snippet"`（title 取得）は従来通り返す。
+    """
+    yt = _mock_youtube(
+        video_ids=video_ids,
+        comments_by_video=comments_by_video or {},
+    )
+
+    status_list_mock = MagicMock()
+
+    def _videos_list(**kwargs):
+        part = kwargs.get("part")
+        if part == "status":
+            requested = kwargs.get("id", "").split(",") if kwargs.get("id") else []
+            items = [
+                {"id": vid, "status": {"privacyStatus": privacy_by_video.get(vid)}}
+                for vid in requested
+                if privacy_by_video.get(vid) is not None
+            ]
+            result = MagicMock()
+            result.execute.return_value = {"items": items}
+            status_list_mock(**kwargs)
+            return result
+        # part="snippet"（title 取得）— video_ids 全件の title を返す
+        result = MagicMock()
+        result.execute.return_value = {
+            "items": [{"id": vid, "snippet": {"title": f"Title of {vid}"}} for vid in video_ids],
+        }
+        return result
+
+    yt.videos.return_value.list.side_effect = _videos_list
+    return yt, status_list_mock
+
+
+def test_preflight_skips_deleted_video(tmp_path):
+    """削除済み video（API 応答に存在しない）は dry-run で video_not_found スキップ."""
+    yt, _ = _mock_youtube_with_status(
+        video_ids=["gone", "alive"],
+        privacy_by_video={"gone": None, "alive": "public"},
+        comments_by_video={"alive": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    plan = replier.run(dry_run=True)
+
+    assert any(
+        row["video_id"] == "gone" and row["comment_id"] is None and row["reason"] == "video_not_found"
+        for row in plan.skipped
+    )
+    # 通過した動画はコメント処理される
+    assert [row["video_id"] for row in plan.planned] == ["alive"]
+
+
+def test_preflight_skips_private_video(tmp_path):
+    """private video は dry-run で video_private スキップ."""
+    yt, _ = _mock_youtube_with_status(
+        video_ids=["secret", "alive"],
+        privacy_by_video={"secret": "private", "alive": "public"},
+        comments_by_video={"alive": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    plan = replier.run(dry_run=True)
+
+    assert any(row["video_id"] == "secret" and row["reason"] == "video_private" for row in plan.skipped)
+    assert [row["video_id"] for row in plan.planned] == ["alive"]
+
+
+def test_preflight_passes_unlisted_video(tmp_path):
+    """unlisted video はオーナーがコメント可能なため通過させる."""
+    yt, _ = _mock_youtube_with_status(
+        video_ids=["hidden"],
+        privacy_by_video={"hidden": "unlisted"},
+        comments_by_video={"hidden": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    plan = replier.run(dry_run=True)
+
+    assert not any(row["reason"] in ("video_not_found", "video_private") for row in plan.skipped)
+    assert [row["video_id"] for row in plan.planned] == ["hidden"]
+
+
+def test_preflight_applies_in_apply_mode(tmp_path):
+    """apply モードでも preflight が動き、private への insert を未然に防ぐ."""
+    yt, _ = _mock_youtube_with_status(
+        video_ids=["secret"],
+        privacy_by_video={"secret": "private"},
+        comments_by_video={"secret": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    plan = replier.run(dry_run=False)
+
+    assert any(row["reason"] == "video_private" for row in plan.skipped)
+    assert plan.replied == []
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_preflight_skips_status_check_for_history_recorded_video(tmp_path):
+    """history に返信実績がある video は status check 対象外（quota 節約）."""
+    existing = ReplyHistory(tmp_path / "comment_reply_history.json")
+    existing.mark_replied("old", {"video_id": "known"})
+    existing.save()
+
+    yt, status_list_mock = _mock_youtube_with_status(
+        video_ids=["known", "fresh"],
+        privacy_by_video={"known": "public", "fresh": "public"},
+        comments_by_video={
+            "known": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}],
+            "fresh": [{"comment_id": "c2", "text": "こんにちは！", "author": "B"}],
+        },
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    replier.run(dry_run=True)
+
+    # status preflight は履歴未記録の "fresh" のみを問い合わせる
+    assert status_list_mock.call_count == 1
+    requested_ids = status_list_mock.call_args.kwargs["id"].split(",")
+    assert requested_ids == ["fresh"]
+
+
+def test_preflight_chunks_video_ids_in_50s(tmp_path):
+    """videos.list は 50 件単位で chunk 化して呼ばれる."""
+    video_ids = [f"v{i}" for i in range(120)]
+    yt, status_list_mock = _mock_youtube_with_status(
+        video_ids=video_ids,
+        privacy_by_video={vid: "public" for vid in video_ids},
+        comments_by_video={},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    replier.run(dry_run=True)
+
+    # 120 件 → 50 + 50 + 20 の 3 チャンク
+    assert status_list_mock.call_count == 3
+    chunk_sizes = [len(call.kwargs["id"].split(",")) for call in status_list_mock.call_args_list]
+    assert chunk_sizes == [50, 50, 20]
+
+
+def test_fetch_video_status_returns_none_for_missing_video(tmp_path):
+    """fetch_video_status は API 応答に無い video を None で返す."""
+    from youtube_automation.utils.comments.replier import fetch_video_status
+
+    yt = MagicMock()
+    yt.videos.return_value.list.return_value.execute.return_value = {
+        "items": [{"id": "exists", "status": {"privacyStatus": "public"}}],
+    }
+    result = fetch_video_status(yt, ["exists", "missing"])
+
+    assert result["exists"] == {"privacyStatus": "public"}
+    assert result["missing"] is None
+
+
+def test_fetch_video_status_wraps_http_error(tmp_path):
+    """status 取得失敗は YouTubeAPIError に変換され、握りつぶされない."""
+    from youtube_automation.utils.comments.replier import fetch_video_status
+
+    err = _make_http_error(403, "Forbidden", "quotaExceeded")
+    yt = MagicMock()
+    yt.videos.return_value.list.return_value.execute.side_effect = err
+
+    with pytest.raises(YouTubeAPIError):
+        fetch_video_status(yt, ["v1"])
+
+
 def test_legacy_rule_generator_key_rejected_by_loader():
     """旧 rules[].generator は ConfigError で停止する."""
     from youtube_automation.utils.config.loader import _build_comments

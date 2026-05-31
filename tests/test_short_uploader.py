@@ -17,6 +17,7 @@ plan §171 / test-design.md §44-50 §86 §117-122 §146-147 を満たすケー�
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -262,6 +263,43 @@ class TestCalculateShortPublishAt:
         # offset が +09:00 (Asia/Tokyo)
         assert dt.utcoffset() == timedelta(hours=9)
 
+    def test_naive_datetime_emits_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: tracking の datetime が TZ-naive なら backfill 直前に warning を出す（ファイル名 + フィールド）."""
+        # Given: upload_time が naive
+        col = _setup_collection(tmp_path, has_publish_at=False)
+        tracking_path = col / "20-documentation" / "upload_tracking.json"
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        tracking["complete_collection"]["upload_time"] = "2099-01-02T10:00:00"
+        tracking_path.write_text(json.dumps(tracking), encoding="utf-8")
+
+        with _make_short_uploader(schedule_config={"schedule": {"timezone": "Asia/Tokyo"}}) as (uploader, _):
+            self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._calculate_short_publish_at(col)
+
+        # Then: warning にファイル名・フィールド名・naive 検知が含まれる
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("TZ-naive" in r.getMessage() for r in warnings)
+        joined = "\n".join(r.getMessage() for r in warnings)
+        assert "complete_collection.upload_time" in joined
+        assert "upload_tracking.json" in joined
+
+    def test_aware_datetime_emits_no_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: TZ-aware な datetime（#359 統一後の新規書き込み）では warning を出さない."""
+        # Given: publish_at は TZ-aware（_setup_collection のデフォルト）
+        col = _setup_collection(tmp_path, publish_at="2099-01-02T10:00:00+09:00")
+        with _make_short_uploader(schedule_config={"schedule": {"timezone": "Asia/Tokyo"}}) as (uploader, _):
+            self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._calculate_short_publish_at(col)
+
+        # Then: TZ-naive warning は出ない
+        assert not any("TZ-naive" in r.getMessage() for r in caplog.records)
+
     def test_returns_none_when_tracking_missing(self, tmp_path):
         """tracking 自体が無いと publish_at は None 扱い."""
         # Given: tracking 無し
@@ -398,6 +436,80 @@ class TestCheckUploadInterval:
 
         # Then: default 24h で 23h は不足 → False
         assert ok is False
+
+    def test_naive_uploaded_at_emits_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: workflow-state.json の uploaded_at が TZ-naive なら warning を出す（ファイル名 + フィールド）."""
+        # Given: naive な uploaded_at を持つ short upload 記録
+        live = tmp_path / "collections" / "live" / "20250101-live-prev"
+        live.mkdir(parents=True)
+        (live / "workflow-state.json").write_text(
+            json.dumps(
+                {
+                    "post_upload": {
+                        "shorts": [
+                            {
+                                "short_num": None,
+                                "video_id": "SHORT_PREV",
+                                "uploaded_at": "2099-01-09T08:00:00",
+                            }
+                        ]
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with _make_short_uploader(
+            schedule_config={"shorts": {"min_hours_between_shorts": 24}, "schedule": {"timezone": "Asia/Tokyo"}}
+        ) as (uploader, _):
+            uploader.channel_dir = tmp_path
+            self._freeze_now(monkeypatch, datetime(2099, 1, 10, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._check_upload_interval()
+
+        # Then: warning にファイル名・フィールド名が含まれる
+        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        joined = "\n".join(warnings)
+        assert "TZ-naive" in joined
+        assert "post_upload.shorts[].uploaded_at" in joined
+        assert "workflow-state.json" in joined
+
+    def test_aware_uploaded_at_emits_no_warning(self, tmp_path, monkeypatch, caplog):
+        """#532: TZ-aware な uploaded_at では warning を出さない."""
+        # Given: TZ-aware な uploaded_at
+        live = tmp_path / "collections" / "live" / "20250101-live-prev"
+        live.mkdir(parents=True)
+        (live / "workflow-state.json").write_text(
+            json.dumps(
+                {
+                    "post_upload": {
+                        "shorts": [
+                            {
+                                "short_num": None,
+                                "video_id": "SHORT_PREV",
+                                "uploaded_at": "2099-01-09T08:00:00+09:00",
+                            }
+                        ]
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with _make_short_uploader(
+            schedule_config={"shorts": {"min_hours_between_shorts": 24}, "schedule": {"timezone": "Asia/Tokyo"}}
+        ) as (uploader, _):
+            uploader.channel_dir = tmp_path
+            self._freeze_now(monkeypatch, datetime(2099, 1, 10, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
+
+            # When
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+                uploader._check_upload_interval()
+
+        # Then: TZ-naive warning は出ない
+        assert not any("TZ-naive" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
