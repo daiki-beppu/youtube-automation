@@ -14,6 +14,7 @@ import pytest
 from youtube_automation.scripts import generate_lyria_master
 from youtube_automation.scripts.generate_lyria_master import (
     _LYRIA_SEGMENT_SEC,
+    _generate_one_segment,
     _resolve_segment_count,
 )
 from youtube_automation.utils.exceptions import ValidationError
@@ -459,3 +460,38 @@ class TestCli:
         assert rc == 1
         err = capsys.readouterr().err
         assert "参照画像" in err
+
+
+class TestSaveInterruptRecovery:
+    """#481: WAV 保存 (ffmpeg) 中の Ctrl+C でも支払い済みオーディオを退避する。"""
+
+    def test_keyboard_interrupt_during_save_persists_paid_audio(self, tmp_path, monkeypatch):
+        # Given: generate_music は課金済み bytes を返すが、_save_audio_as_wav 中に Ctrl+C
+        audio = b"PAID_MP3_BYTES"
+        monkeypatch.setattr(generate_lyria_master.lyria_client, "generate_music", lambda *a, **k: audio)
+
+        def _boom(*_a, **_k):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(generate_lyria_master, "_save_audio_as_wav", _boom)
+
+        seg_path = tmp_path / "coll" / "02-Individual-music" / "01_x.wav"
+
+        # When / Then: 中断は伝播しつつ、支払い済み bytes は退避ファイルに残る
+        with pytest.raises(KeyboardInterrupt):
+            _generate_one_segment(
+                index=1,
+                seg_path=seg_path,
+                prompt="p",
+                model="m",
+                reference_image=None,
+                bpm=None,
+                intensity=None,
+                mode=None,
+                lyrics=None,
+                max_retries=0,
+            )
+
+        recovered = list((tmp_path / "tmp" / "lyria-recovered").glob("*.mp3"))
+        assert len(recovered) == 1
+        assert recovered[0].read_bytes() == audio
