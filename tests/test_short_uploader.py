@@ -118,6 +118,18 @@ def _make_short_uploader(
         yield uploader, mock_uploader
 
 
+def _freeze_short_uploader_now(monkeypatch, frozen: datetime) -> None:
+    """short_uploader モジュール内の datetime.now を固定する."""
+    from youtube_automation.agents import short_uploader as su_mod
+
+    class _Fake(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen if tz is None else frozen.astimezone(tz)
+
+    monkeypatch.setattr(su_mod, "datetime", _Fake)
+
+
 # ---------------------------------------------------------------------------
 # 1. TestInit
 # ---------------------------------------------------------------------------
@@ -175,15 +187,7 @@ class TestCalculateShortPublishAt:
     """`_calculate_short_publish_at`: CC publish_at + 1day + short_publish_time."""
 
     def _freeze_now(self, monkeypatch, frozen: datetime):
-        """short_uploader モジュール内の datetime.now を固定する."""
-        from youtube_automation.agents import short_uploader as su_mod
-
-        class _Fake(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return frozen if tz is None else frozen.astimezone(tz)
-
-        monkeypatch.setattr(su_mod, "datetime", _Fake)
+        _freeze_short_uploader_now(monkeypatch, frozen)
 
     def test_normal_path_cc_publish_plus_one_day_plus_short_publish_time(self, tmp_path, monkeypatch):
         """plan 要件 6.2: CC publish_at の翌日 + short_publish_time."""
@@ -279,14 +283,7 @@ class TestCheckUploadInterval:
     """`_check_upload_interval`: 24h 制約と境界."""
 
     def _freeze_now(self, monkeypatch, frozen: datetime):
-        from youtube_automation.agents import short_uploader as su_mod
-
-        class _Fake(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return frozen if tz is None else frozen.astimezone(tz)
-
-        monkeypatch.setattr(su_mod, "datetime", _Fake)
+        _freeze_short_uploader_now(monkeypatch, frozen)
 
     def test_no_previous_upload_returns_true(self, tmp_path, monkeypatch):
         """前回投稿なし → 投稿可."""
