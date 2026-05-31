@@ -12,6 +12,7 @@ Features:
 import json
 import logging
 import re
+import string
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,6 +21,7 @@ from typing import Dict, List
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
+from youtube_automation.utils.exceptions import ValidationError
 
 from .audio_formats import AUDIO_EXTS
 from .skill_config import load_skill_config
@@ -38,6 +40,42 @@ def _extract_pattern_key(filename: str) -> str | None:
     if not m:
         return None
     return m.group(1).lower()
+
+
+def _referenced_placeholders(template: str) -> set[str]:
+    """format テンプレートが参照するフィールド名の集合を返す（`{a.b}` / `{a[0]}` は `a` に正規化）."""
+    referenced: set[str] = set()
+    for _literal, field_name, _spec, _conv in string.Formatter().parse(template):
+        if field_name:
+            referenced.add(field_name.split(".")[0].split("[")[0])
+    return referenced
+
+
+def format_title_template(template: str, values: Dict[str, str], *, context: str) -> str:
+    """title テンプレートを整形する。未知プレースホルダは actionable な ValidationError にする.
+
+    `str.format()` をそのまま呼ぶと、テンプレートが提供キー以外のプレースホルダ
+    （例: `{adjective}`）を含むときに opaque な `KeyError` を送出し、upload 全体が
+    深部でクラッシュする（#574）。本ヘルパーは事前に未知プレースホルダを検出し、
+    「使用不可プレースホルダ名 + 許可キー一覧」を含む `ValidationError` に変換する。
+
+    Args:
+        template: format 文字列
+        values: 許可キー → 値の dict（このキー集合のみ許容）
+        context: エラーメッセージに添える文脈（どのテンプレートか）
+
+    Raises:
+        ValidationError: テンプレートが `values` に無いプレースホルダを含むとき。
+    """
+    allowed = set(values)
+    unknown = _referenced_placeholders(template) - allowed
+    if unknown:
+        raise ValidationError(
+            f"{context}: 使用できないプレースホルダ {sorted(unknown)} が含まれています。\n"
+            f"→ 使用可能なキー: {sorted(allowed)}\n"
+            f"→ テンプレート: {template}"
+        )
+    return template.format(**values)
 
 
 @dataclass(frozen=True)
@@ -198,7 +236,11 @@ def validate_scene_phrases(
             raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
         activities = lang_data.get("activities", best_for_line)
         scene = scene_phrases[lang]
-        title = title_tpl.format(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji)
+        title = format_title_template(
+            title_tpl,
+            {"scene_phrase": scene, "activities": activities, "scene_emoji": scene_emoji},
+            context=f"localizations.json: language '{lang}' の title_template",
+        )
         if len(title) > 100:
             violations.append(
                 SceneTitleViolation(
@@ -624,15 +666,19 @@ class BAHMetadataGenerator:
         if ws_scene_emoji:
             scene_emoji = ws_scene_emoji
 
-        title = self.config.content.title.template.format(
-            style=self.config.content.genre.style.title(),
-            theme=theme,
-            activity=activity,
-            activities=activities,
-            scene_phrase=scene_phrase,
-            scene_emoji=scene_emoji,
-            duration_display=duration_display,
-            duration_short=duration_short,
+        title = format_title_template(
+            self.config.content.title.template,
+            {
+                "style": self.config.content.genre.style.title(),
+                "theme": theme,
+                "activity": activity,
+                "activities": activities,
+                "scene_phrase": scene_phrase,
+                "scene_emoji": scene_emoji,
+                "duration_display": duration_display,
+                "duration_short": duration_short,
+            },
+            context="content.json: title.template",
         )
         # YouTube タイトル制限: 100 codepoint。
         # 過去事例: silent な title[:100] スライスでサロゲート文字接頭辞 +
@@ -727,7 +773,11 @@ class BAHMetadataGenerator:
             scene = scene_phrases[lang]
             title_tpl = lang_data["title_template"]
             activities = lang_data.get("activities", best_for_line)
-            loc_title = title_tpl.format(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji)
+            loc_title = format_title_template(
+                title_tpl,
+                {"scene_phrase": scene, "activities": activities, "scene_emoji": scene_emoji},
+                context=f"localizations.json: language '{lang}' の title_template",
+            )
 
             # --- 概要欄（ハイブリッド方式）---
             opening_poem = desc_data.get("opening_poem", "")
@@ -774,9 +824,16 @@ class BAHMetadataGenerator:
 
         return localizations
 
-    def generate_complete_collection_metadata(self) -> Dict:
+    def generate_complete_collection_metadata(self, title_override: str | None = None) -> Dict:
         """
         Complete Collection 用メタデータ生成
+
+        Args:
+            title_override: 最終タイトルが既に確定している場合に渡す。`descriptions.md` の
+                `## タイトル案` が最終タイトルを供給する経路では、本来捨てられる中間タイトル
+                生成（`_generate_title` = `title.template.format(...)`）をスキップする。
+                これにより `title.template` が未知プレースホルダを含んでいても upload 全体が
+                `KeyError`/`ValidationError` で巻き込まれない（#574）。
 
         Returns:
             Dict: YouTube アップロード用メタデータ
@@ -787,8 +844,10 @@ class BAHMetadataGenerator:
         crossfade = self._crossfade_sec
         total_duration = sum(track["duration"] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
 
-        # タイトル生成（2026リブランド）
-        title = self._generate_title(total_duration)
+        # タイトル生成（2026リブランド）。
+        # title_override がある（descriptions.md で最終タイトルが確定する）場合は
+        # 中間タイトル生成をスキップし、未知プレースホルダ由来のクラッシュを避ける。
+        title = title_override if title_override else self._generate_title(total_duration)
 
         # 説明文生成
         description_parts = []

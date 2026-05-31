@@ -1,4 +1,4 @@
-"""utils/streaming/archive_counter.py のユニットテスト。
+"""utils/streaming/monthly_archive.py のユニットテスト。
 
 要件 R11: 月間アーカイブ件数 (理論値 60 本/月) を YouTube Data API から取得する。
 
@@ -16,7 +16,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.streaming import archive_counter
+from youtube_automation.utils.streaming import monthly_archive
 
 
 def _make_service(pages: list[dict]):
@@ -37,7 +37,7 @@ def test_count_archives_single_page():
             {"items": [{"id": {"videoId": "v1"}}, {"id": {"videoId": "v2"}}, {"id": {"videoId": "v3"}}]},
         ]
     )
-    got = archive_counter.count_archives(service, channel_id="UC_X", year=2026, month=4)
+    got = monthly_archive.count_archives(service, channel_id="UC_X", year=2026, month=4)
     assert got == 3
 
 
@@ -55,7 +55,7 @@ def test_count_archives_paginates():
             {"items": [{"id": {"videoId": "v4"}}, {"id": {"videoId": "v5"}}]},
         ]
     )
-    got = archive_counter.count_archives(service, channel_id="UC_X", year=2026, month=4)
+    got = monthly_archive.count_archives(service, channel_id="UC_X", year=2026, month=4)
     assert got == 5
 
 
@@ -65,7 +65,7 @@ def test_count_archives_zero_when_no_items():
     Then 0 (境界値)。
     """
     service = _make_service([{"items": []}])
-    assert archive_counter.count_archives(service, channel_id="UC_X", year=2026, month=4) == 0
+    assert monthly_archive.count_archives(service, channel_id="UC_X", year=2026, month=4) == 0
 
 
 def test_count_archives_uses_published_after_and_before_for_target_month():
@@ -75,7 +75,7 @@ def test_count_archives_uses_published_after_and_before_for_target_month():
                         publishedBefore="2026-05-01T00:00:00Z") で呼ばれる。
     """
     service = _make_service([{"items": []}])
-    archive_counter.count_archives(service, channel_id="UC_X", year=2026, month=4)
+    monthly_archive.count_archives(service, channel_id="UC_X", year=2026, month=4)
 
     list_calls = service.search.return_value.list.call_args_list
     # 最後の有効な呼び出しを検査
@@ -92,7 +92,7 @@ def test_count_archives_uses_correct_year_boundary_for_december():
     Then publishedBefore="2027-01-01T00:00:00Z"。
     """
     service = _make_service([{"items": []}])
-    archive_counter.count_archives(service, channel_id="UC_X", year=2026, month=12)
+    monthly_archive.count_archives(service, channel_id="UC_X", year=2026, month=12)
 
     list_calls = service.search.return_value.list.call_args_list
     kwargs = list_calls[-1].kwargs
@@ -111,7 +111,7 @@ def test_count_archives_passes_page_token_on_subsequent_calls():
             {"items": [{"id": {"videoId": "v2"}}]},
         ]
     )
-    archive_counter.count_archives(service, channel_id="UC_X", year=2026, month=4)
+    monthly_archive.count_archives(service, channel_id="UC_X", year=2026, month=4)
     list_calls = service.search.return_value.list.call_args_list
     second_kwargs = list_calls[-1].kwargs
     assert second_kwargs.get("pageToken") == "TOK"
@@ -127,7 +127,7 @@ def test_count_archives_wraps_http_error_as_youtube_api_error():
         MagicMock(status=403), b"quotaExceeded"
     )
     with pytest.raises(YouTubeAPIError):
-        archive_counter.count_archives(service, channel_id="UC_X", year=2026, month=4)
+        monthly_archive.count_archives(service, channel_id="UC_X", year=2026, month=4)
 
 
 def test_count_archives_uses_for_mine_when_channel_id_none():
@@ -138,7 +138,7 @@ def test_count_archives_uses_for_mine_when_channel_id_none():
     回帰防止: ARCH-NEW-archive-counter-forMine-untested (family_tag=test-coverage-gap)。
     """
     service = _make_service([{"items": []}])
-    archive_counter.count_archives(service, channel_id=None, year=2026, month=4)
+    monthly_archive.count_archives(service, channel_id=None, year=2026, month=4)
 
     kwargs = service.search.return_value.list.call_args_list[-1].kwargs
     assert kwargs.get("forMine") is True
