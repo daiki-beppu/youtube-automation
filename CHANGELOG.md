@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(video-upload)`: アップロード preflight に公開タイトルの TTP 鋳型準拠チェックを追加した（#602）。`preflight_checks.check_title_template_compliance()` が「鋳型逸脱（` | ` で LHS/RHS に分割でき RHS が `N Hours of ...` 系に一致）」「巻数表記（`Vol.` / `Vol N` / `Part N` / 末尾ローマ数字 / `#N`）」「既存 live タイトルとの RHS 完全重複」「核語彙欠落（任意）」を機械検出し、`youtube_auto_uploader._preflight_check` で違反時にアップロードを block する。soulful-grooves で発生した `Funky Spirit Vol.2 | 3 Hours of Soulful Retro Funk Grooves`（コレクション内部名の公開タイトル流用）を巻数表記 + RHS 重複で停止できる。鋳型語彙・パターン・セパレータは `content.json::title.template_check` から導出し、`title.template` に ` | ` を含まないチャンネルは自動スキップ（既定値はフォールバック、ハードコードなし）。既存 live タイトルは `collections/live/*/20-documentation/descriptions.md` の `## タイトル案` から収集する
 ### Changed
 
 - `perf(scripts)`: `yt-generate-image` の attempt ループ（`--max-attempts N`）を `concurrent.futures.ThreadPoolExecutor` で並列化し、複数バリエーション生成の総実行時間を短縮した（#584）。出力パス（`-vN`）と参照画像のローテーション割り当てをループ前に全 attempt ぶん確定（`plan_output_paths` / `plan_reference_assignments`）して `resolve_unique_path` の直列依存を排除し、逐次実行と同一の採番・参照割り当てを保つ。失敗（`ConfigError`）は future の例外として回収して `sys.exit(1)` をループ外に集約（1 件でも失敗ならプロセスを落とす従来挙動を維持）。並列度は CLI `--max-workers`（未指定時はレート制限を考慮した控えめな固定値 3）で制御し、`--max-attempts 1`（単発）の挙動・出力は従来どおり。`cost_tracker.log_generation` は既存の `fcntl.flock` でスレッド間も直列化されるためコスト記録の取りこぼし・重複は起きない

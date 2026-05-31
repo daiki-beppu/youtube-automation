@@ -241,6 +241,7 @@ def _build_content(merged: dict, meta: ChannelMeta) -> Content:
         default_activity=default_activity,
         theme_scenes=dict(tl.get("theme_scenes", {})),
         theme_activities=dict(tl.get("theme_activities", {})),
+        template_check=dict(tl.get("template_check", {})),
     )
 
     return Content(genre=genre, tags=tags, descriptions=descriptions, title=title)
