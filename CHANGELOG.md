@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(agents)`: `short_uploader` の `_check_upload_interval` / `_calculate_short_publish_at` が `workflow-state.json` / `upload_tracking.json` から読んだ datetime を TZ-naive と判定して backfill する直前に、どのファイル・どのフィールドが TZ-naive かを `logger.warning` で記録するようにした（#532）。#359 で書き込み側は TZ-aware ISO 8601 に統一済みのため、ここを踏むのは既存 live/ 配下のレガシーデータのみ。将来 backfill 補正自体を撤去するタイミングの判断材料（warning ゼロ観測）になる。2 箇所の backfill ロジックは共通ヘルパー `_backfill_naive_datetime()` に集約した
+
 ## [5.5.6] - 2026-05-31
 
 ### Added
