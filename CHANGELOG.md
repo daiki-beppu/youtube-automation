@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `fix(metadata-generator)`: `title.template` / `localizations.json::title_template` に metadata_generator が提供しない未知プレースホルダ（例 `{adjective}`）が含まれていても、Complete Collection アップロード全体が `KeyError` でクラッシュしないようにした（#574）。(1) `descriptions.md` の `## タイトル案` が最終タイトルを供給する経路では `generate_complete_collection_metadata(title_override=...)` で本来捨てられる中間タイトル生成（`_generate_title`）をスキップし完走させる。(2) 中間タイトル生成や localizations タイトル整形では新ヘルパー `format_title_template()` を経由し、未知プレースホルダを opaque な `KeyError` ではなく「不正プレースホルダ名 + 許可キー一覧」を含む actionable な `ValidationError` に変換して fail-loud する。`youtube_auto_uploader._upload_complete_collection()` は `descriptions.md` を先に読み込み `title_override` として渡す
 - `fix(benchmark)`: ベンチマーク未取得・空・取得失敗時に空データ/デフォルト値（`[]` / `{}` / `avg_views=0`）のまま黙って完走する fallback を是正した（#619）。`load_benchmark_videos()` は JSON 未検出 / フィルタ後 0 件で `ConfigError`、`collect_channel()` はチャンネル欠落で `YouTubeAPIError`・API 失敗（`HttpError`）を `YouTubeAPIError.from_http_error` でドメイン例外化、`collect_all()` は欠落チャンネルを `if data:` で暗黙スキップせず明示検知して `YouTubeAPIError`、`ensure_benchmark_fresh()` は取得失敗・`benchmark.channels` 未設定で黙って `return` せずドメイン例外で通知する。いずれも原因と次アクション（`/benchmark` 再実行・設定確認）をメッセージに含め、下流（サムネ比較・分析）が無効データに基づいて成功扱いされる経路を塞ぐ
 ### Added
 
