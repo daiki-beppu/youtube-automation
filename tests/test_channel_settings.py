@@ -11,12 +11,46 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from youtube_automation.scripts import channel_settings_cli
 from youtube_automation.utils.channel_settings import (
+    KEYWORDS_MAX_LENGTH,
     build_update_body,
+    build_upload_status_flags,
     diff_settings,
     fetch_channel,
     parse_api_response,
 )
+from youtube_automation.utils.config.youtube import YoutubeApi
 from youtube_automation.utils.exceptions import YouTubeAPIError
+
+# ---------------------------------------------------------------------------
+# build_upload_status_flags (#605)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildUploadStatusFlags:
+    def test_defaults_preserve_current_behavior(self):
+        """未設定時のデフォルトは現行の振る舞い（synthetic=True / made_for_kids=False）。"""
+        api = YoutubeApi(category_id="10", privacy_status="public", language="ja")
+        flags = build_upload_status_flags(api)
+        assert flags == {
+            "selfDeclaredMadeForKids": False,
+            "containsSyntheticMedia": True,
+        }
+
+    def test_config_override(self):
+        """config で上書きした値が status フラグへ反映される。"""
+        api = YoutubeApi(
+            category_id="10",
+            privacy_status="public",
+            language="ja",
+            contains_synthetic_media=False,
+            self_declared_made_for_kids=True,
+        )
+        flags = build_upload_status_flags(api)
+        assert flags == {
+            "selfDeclaredMadeForKids": True,
+            "containsSyntheticMedia": False,
+        }
+
 
 # ---------------------------------------------------------------------------
 # build_update_body
@@ -72,6 +106,31 @@ class TestBuildUpdateBody:
     def test_localizations_without_supported_languages(self):
         body = build_update_body({}, {"supported_languages": []}, "UC1")
         assert "localizations" not in body
+
+    def test_keywords_at_limit_passes(self):
+        """#563: 500 文字ちょうどはバリデーションを通過する（境界値）。"""
+        # スペースを含まないタグは quote されないため api 形式 = タグそのもの。
+        keywords = ["a" * KEYWORDS_MAX_LENGTH]  # 単一タグで 500 文字ちょうど
+        api_keywords = "a" * KEYWORDS_MAX_LENGTH
+        body = build_update_body({"keywords": keywords}, None, "UC1")
+        assert body["brandingSettings"]["channel"]["keywords"] == api_keywords
+
+    def test_keywords_over_limit_raises(self):
+        """#563: 500 文字超過は push 前に YouTubeAPIError で止める。"""
+        keywords = ["a" * (KEYWORDS_MAX_LENGTH + 10)]  # 510 文字
+        with pytest.raises(YouTubeAPIError) as excinfo:
+            build_update_body({"keywords": keywords}, None, "UC1")
+        msg = str(excinfo.value)
+        assert "keywords exceeds 500 chars" in msg
+        assert "got 510" in msg
+        assert "over by 10" in msg
+
+    def test_keywords_over_limit_includes_shortening_hint(self):
+        """#563: エラーメッセージに長い順の短縮候補タグを含める。"""
+        keywords = ["short"] * 90 + ["this is a very long tag candidate"]
+        with pytest.raises(YouTubeAPIError) as excinfo:
+            build_update_body({"keywords": keywords}, None, "UC1")
+        assert "this is a very long tag candidate" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------
