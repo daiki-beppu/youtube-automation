@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,8 +16,9 @@ from youtube_automation.utils.channel_settings import (
     diff_settings,
     fetch_channel,
     parse_api_response,
+    verify_channel_id,
 )
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # build_update_body
@@ -178,6 +180,25 @@ class TestFetchChannel:
 
 
 # ---------------------------------------------------------------------------
+# verify_channel_id (#561)
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyChannelId:
+    def test_match_passes(self):
+        assert verify_channel_id("UCabc", "UCabc") is None
+
+    def test_mismatch_raises(self):
+        with pytest.raises(ConfigError, match="channel_id mismatch"):
+            verify_channel_id("UCmine", "UCother")
+
+    def test_unset_skips(self):
+        # 未設定（後方互換）: remote が何であれ通す
+        assert verify_channel_id("", "UCother") is None
+        assert verify_channel_id(None, "UCother") is None
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -309,6 +330,67 @@ class TestCLIPushDryRun:
         out = capsys.readouterr().out
         assert "no diff" in out
         youtube.channels().update.assert_not_called()
+
+
+def _fake_config(channel_id: str):
+    """channel_id 照合テスト用の軽量 config スタブ（_cmd_push が触る属性のみ）。"""
+    branding = SimpleNamespace(as_api_dict=lambda: {})
+    localizations = SimpleNamespace(exists=False, data={})
+    meta = SimpleNamespace(channel_id=channel_id, branding=branding)
+    return SimpleNamespace(meta=meta, localizations=localizations)
+
+
+class TestCLIPushChannelIdSafety:
+    """#561: channel_id mismatch 時に push を拒否する。"""
+
+    def test_mismatch_refuses_and_does_not_update(self, capsys):
+        youtube = MagicMock()
+        # remote の id は UCfixture
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
+        with (
+            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.load_config",
+                return_value=_fake_config("UCdifferent"),
+            ),
+        ):
+            rc = channel_settings_cli.main(["push", "--apply"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "channel_id mismatch" in err
+        youtube.channels().update.assert_not_called()
+
+    def test_match_proceeds(self, capsys):
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
+        with (
+            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.load_config",
+                return_value=_fake_config("UCfixture"),
+            ),
+        ):
+            rc = channel_settings_cli.main(["push", "--apply"])
+        # id 一致 → mismatch エラーで止まらず通常フローへ進む
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "channel_id mismatch" not in captured.out
+        assert "channel_id mismatch" not in captured.err
+
+    def test_unset_channel_id_warns_but_proceeds(self, capsys):
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
+        with (
+            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.load_config",
+                return_value=_fake_config(""),
+            ),
+        ):
+            rc = channel_settings_cli.main(["push"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "channel.channel_id が未設定" in out
 
 
 class TestCLIPull:

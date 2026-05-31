@@ -33,7 +33,7 @@ import logging
 import shlex
 from typing import Any
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -222,3 +222,32 @@ def fetch_channel(youtube) -> dict[str, Any]:
     if not items:
         raise YouTubeAPIError("authenticated user has no YouTube channel")
     return items[0]
+
+
+def verify_channel_id(expected_channel_id: str | None, remote_channel_id: str) -> None:
+    """ローカル config の channel_id と認証済みチャンネルの id が一致するか検証する (#561)。
+
+    `auth/token.json` が別チャンネルの OAuth トークンのまま push すると、意図しない
+    チャンネルの設定を上書きしてしまう。`config/channel/meta.json` の
+    `channel.channel_id` と `channels().list(mine=True).id` を照合し、不一致なら
+    取り違え事故として push を拒否する。
+
+    Args:
+        expected_channel_id: ローカル config の `channel.channel_id`。未設定（None /
+            空文字）ならチェックをスキップする（後方互換）。
+        remote_channel_id: 認証済みチャンネルの id（`channels().list` の結果）。
+
+    Raises:
+        ConfigError: channel_id が設定済みかつ remote と一致しない場合。
+    """
+    if not expected_channel_id:
+        return
+    if expected_channel_id != remote_channel_id:
+        raise ConfigError(
+            "channel_id mismatch: ローカル config と認証済みチャンネルが一致しません。\n"
+            f"  config/channel/meta.json (channel.channel_id): {expected_channel_id}\n"
+            f"  authenticated channel (channels().list mine=True): {remote_channel_id}\n"
+            "→ 別チャンネルの OAuth トークンで設定を上書きする事故を防ぐため push を中止しました。\n"
+            "  対処1: auth/token.json を削除して再認証し、対象チャンネルを選び直す（yt-channel-status）\n"
+            "  対処2: meta.json の channel.channel_id を正しい値に修正する"
+        )

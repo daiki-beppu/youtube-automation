@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(yt-channel-settings)`: `push` に channel_id mismatch 時の safety check を追加した（#561）。`config/channel/meta.json` の `channel.channel_id` が設定済みの場合、`channels().list(mine=True).id` と照合し、不一致なら別チャンネルの OAuth トークンで設定を上書きする取り違え事故として `push` を refuse する（`channel_settings.verify_channel_id()`）。`channel_id` 未設定のチャンネルは後方互換でスキップしつつ、初回 push 時に取得した id を `meta.json` へ追記するよう警告する。`ChannelMeta` に `channel_id` フィールドを追加（任意キー）
+
 ## [5.5.6] - 2026-05-31
 
 ### Added
