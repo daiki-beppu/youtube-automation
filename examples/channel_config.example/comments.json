@@ -12,13 +12,15 @@
         "keywords": ["こんにちは", "はじめまして"],
         "language": "ja",
         "priority": 10,
-        "provider": "codex"
+        "provider": "codex",
+        "scope": "top_level"
       },
       {
         "name": "thanks_en",
         "keywords": ["thank you", "thanks"],
         "language": "en",
-        "priority": 5
+        "priority": 5,
+        "scope": "any"
       }
     ],
     "generator": {

@@ -31,7 +31,7 @@ from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import UploadError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
-from youtube_automation.utils.schedule import get_schedule_timezone
+from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,36 @@ logger = logging.getLogger(__name__)
 ACTION_UPLOADED = "short_uploaded"
 ACTION_BLOCKED = "short_upload_blocked"
 ACTION_FAILED = "short_upload_failed"
+
+
+def _backfill_naive_datetime(dt: datetime, tz, *, source: Path, field: str, raw: str) -> datetime:
+    """TZ-naive な datetime を schedule timezone で backfill する（レガシーデータ救済）.
+
+    #359 で書き込み側は `datetime.now(tz).isoformat()` の TZ-aware ISO 8601 に統一済みのため、
+    ここを踏むのは既存 live/ 配下に永続化されたレガシーデータのみ。将来 backfill 補正を
+    撤去するタイミングを判断するシグナルとして、どのファイル・どのフィールドが TZ-naive
+    だったかを warning で記録する（#532）。
+
+    Args:
+        dt: 判定対象の datetime
+        tz: backfill に使う schedule timezone
+        source: 値の出所ファイルパス（ログ用）
+        field: TZ-naive だったフィールド名（ログ用）
+        raw: パース前の生文字列（ログ用）
+
+    Returns:
+        TZ-aware な datetime（元から aware ならそのまま返す）。
+    """
+    if dt.tzinfo is not None:
+        return dt
+    logger.warning(
+        "%s に TZ-naive な %s=%r が含まれます; schedule timezone %s で backfill します（レガシーデータ救済 / #532）",
+        source,
+        field,
+        raw,
+        tz,
+    )
+    return dt.replace(tzinfo=tz)
 
 
 class ShortUploader:
@@ -118,8 +148,9 @@ class ShortUploader:
                     dt = datetime.fromisoformat(uploaded_at)
                 except ValueError:
                     continue
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=tz)
+                dt = _backfill_naive_datetime(
+                    dt, tz, source=ws_path, field="post_upload.shorts[].uploaded_at", raw=uploaded_at
+                )
                 if latest_dt is None or dt > latest_dt:
                     latest_dt = dt
 
@@ -152,7 +183,11 @@ class ShortUploader:
             return None
 
         cc = tracking.get("complete_collection") or {}
-        base_str = cc.get("publish_at") or cc.get("upload_time")
+        base_str = cc.get("publish_at")
+        base_field = "complete_collection.publish_at"
+        if not base_str:
+            base_str = cc.get("upload_time")
+            base_field = "complete_collection.upload_time"
         if not base_str:
             return None
 
@@ -168,8 +203,7 @@ class ShortUploader:
             base_dt = datetime.fromisoformat(base_str)
         except ValueError:
             return None
-        if base_dt.tzinfo is None:
-            base_dt = base_dt.replace(tzinfo=tz)
+        base_dt = _backfill_naive_datetime(base_dt, tz, source=tracking_path, field=base_field, raw=base_str)
 
         publish_dt = base_dt.astimezone(tz) + timedelta(days=1)
         publish_dt = publish_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -256,9 +290,30 @@ class ShortUploader:
         # 6. サムネイル探索（plan 要件 6.5: .jpg → .png → None）
         thumbnail_path = self._find_short_thumbnail(collection_path)
 
-        # 7. 委譲 upload
+        # 7. 委譲 upload（resumable upload session URI を workflow-state に永続化, #466）。
+        #    CC 経路（#381 / collection_uploader._execute_complete_collection）と同思想で、
+        #    中断→再実行時に同一 session を再開し video_id 重複を防ぐ。tracking 媒体は
+        #    CC の upload_tracking.json ではなく workflow-state.json.post_upload.shorts[]。
+        ws_path = CollectionPaths(collection_path).workflow_state_path
+        resume_session_uri = self._read_short_resume_uri(ws_path, short_num)
+
+        def _on_session_uri_changed(uri: Optional[str]) -> None:
+            """upload 中の session URI 変化を該当 short entry に永続化する。"""
+            self._persist_short_resume_uri(ws_path, short_num, uri)
+
+        def _on_upload_complete() -> None:
+            """upload 成功通知。後続の最終記録と整合させるため URI を消す。"""
+            _on_session_uri_changed(None)
+
         try:
-            video_id = self.uploader.upload_video(str(video_path), metadata, thumbnail_path)
+            video_id = self.uploader.upload_video(
+                str(video_path),
+                metadata,
+                thumbnail_path,
+                resume_session_uri=resume_session_uri,
+                on_session_uri_changed=_on_session_uri_changed,
+                on_upload_complete=_on_upload_complete,
+            )
         except Exception as e:
             logger.error(f"❌ upload_video 失敗: {e}")
             return {"action": ACTION_FAILED, "details": {"error": str(e)}}
@@ -293,6 +348,79 @@ class ShortUploader:
         logger.warning(f"short-thumbnail.{{jpg,png}} が見つかりません — サムネ未設定で upload します: {assets}")
         return None
 
+    # ─── workflow-state I/O ──────────────────────────
+
+    def _load_workflow_state(self, ws_path: Path) -> Optional[dict]:
+        """workflow-state.json を読み込む。ファイル無 / パース失敗時は None（warning）。"""
+        if not ws_path.exists():
+            return None
+        try:
+            with open(ws_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"workflow-state.json 読み込み失敗: {e}")
+            return None
+
+    def _save_workflow_state(self, ws_path: Path, state: dict) -> None:
+        """workflow-state.json を書き戻す。失敗時は warning のみ（致命的にしない）。"""
+        try:
+            with open(ws_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except OSError as e:
+            logger.warning(f"workflow-state.json 書き込み失敗: {e}")
+
+    @staticmethod
+    def _find_short_entry(shorts: list, short_num: Optional[int]) -> Optional[dict]:
+        """`post_upload.shorts` から short_num 一致の entry を返す（無ければ None）。"""
+        for entry in shorts:
+            if isinstance(entry, dict) and entry.get("short_num") == short_num:
+                return entry
+        return None
+
+    def _read_short_resume_uri(self, ws_path: Path, short_num: Optional[int]) -> Optional[str]:
+        """該当 short entry に永続化済みの resumable upload session URI を読む (#466)。
+
+        ファイル無 / entry 無 / 未保存なら None（＝フレッシュ実行）。
+        """
+        state = self._load_workflow_state(ws_path)
+        if not state:
+            return None
+        shorts = (state.get("post_upload") or {}).get("shorts") or []
+        entry = self._find_short_entry(shorts, short_num)
+        return entry.get("resume_session_uri") if entry else None
+
+    def _persist_short_resume_uri(self, ws_path: Path, short_num: Optional[int], uri: Optional[str]) -> None:
+        """該当 short entry の `resume_session_uri` を upsert / 削除する (#466)。
+
+        並行更新に備え毎回 disk から再ロードしてから書き戻す（CC の
+        `_on_session_uri_changed` と同思想）。`uri=None` で削除。entry が未作成なら
+        short_num のみの entry を append して URI を載せる。ファイル無 → warning skip。
+        """
+        if not ws_path.exists():
+            logger.warning(f"workflow-state.json が無いため resume URI 永続化を skip: {ws_path}")
+            return
+        state = self._load_workflow_state(ws_path)
+        if state is None:
+            return
+
+        post_upload = state.setdefault("post_upload", {})
+        shorts = post_upload.get("shorts")
+        if not isinstance(shorts, list):
+            shorts = []
+            post_upload["shorts"] = shorts
+
+        entry = self._find_short_entry(shorts, short_num)
+        if entry is None:
+            entry = {"short_num": short_num}
+            shorts.append(entry)
+
+        if uri is None:
+            entry.pop("resume_session_uri", None)
+        else:
+            entry["resume_session_uri"] = uri
+
+        self._save_workflow_state(ws_path, state)
+
     # ─── workflow-state 更新 (plan アンチパターン #10) ─
 
     def _update_workflow_state(
@@ -314,11 +442,8 @@ class ShortUploader:
             logger.warning(f"workflow-state.json が無いため short upload 記録を skip: {ws_path}")
             return
 
-        try:
-            with open(ws_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"workflow-state.json 読み込み失敗: {e}")
+        state = self._load_workflow_state(ws_path)
+        if state is None:
             return
 
         post_upload = state.setdefault("post_upload", {})
@@ -330,7 +455,7 @@ class ShortUploader:
         entry = {
             "short_num": short_num,
             "video_id": video_id,
-            "uploaded_at": datetime.now(get_schedule_timezone(self.schedule_config)).isoformat(),
+            "uploaded_at": now_in_schedule_tz(self.schedule_config).isoformat(),
             "publish_at": publish_at,
         }
 
@@ -341,11 +466,7 @@ class ShortUploader:
         else:
             shorts.append(entry)
 
-        try:
-            with open(ws_path, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
-        except OSError as e:
-            logger.warning(f"workflow-state.json 書き込み失敗: {e}")
+        self._save_workflow_state(ws_path, state)
 
     # ─── ドライラン ──────────────────────────────────
 

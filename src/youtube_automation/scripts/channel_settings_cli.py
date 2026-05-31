@@ -31,6 +31,7 @@ from youtube_automation.utils.channel_settings import (
     diff_settings,
     fetch_channel,
     parse_api_response,
+    verify_channel_id,
 )
 from youtube_automation.utils.config import ChannelConfig, load_config
 from youtube_automation.utils.config import channel_dir as _channel_dir
@@ -81,6 +82,14 @@ def _cmd_push(args: argparse.Namespace) -> int:
     remote_channel, remote_loc = parse_api_response(remote_raw)
     channel_id = remote_raw["id"]
     print(f"📡 fetched remote channel settings (channelId={channel_id})")
+
+    # safety: 別チャンネルの OAuth トークンで設定を取り違えて上書きする事故を防ぐ (#561)。
+    verify_channel_id(config.meta.channel_id, channel_id)
+    if not config.meta.channel_id:
+        print(
+            "⚠️  config/channel/meta.json に channel.channel_id が未設定です。\n"
+            f'   取り違え防止のため channel.channel_id: "{channel_id}" の追記を推奨します。'
+        )
 
     lines = diff_settings(local_channel, local_loc, remote_channel, remote_loc)
     _print_diff(lines, direction="local → remote")
