@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(agents)`: 永続化用 timestamp の TZ-naive 混入を書き込み時点で検出する防御コードを追加した（#533）。`utils/schedule.py` に `now_in_schedule_tz(schedule_config)`（schedule.timezone の現在時刻を TZ-aware datetime として返し生成を一点集約）と `ensure_tz_aware(dt, *, context)`（TZ-naive なら `ValidationError` を送出する防御ヘルパ）を追加し、`short_uploader._update_workflow_state`（`workflow-state.json::uploaded_at`）と `collection_uploader._completed_tracking_record`（`upload_tracking.json::upload_time`）/ `_update_workflow_upload`（`workflow-state.json::updated_at`）の書き込み点を `now_in_schedule_tz()` 経由に統一した。#359 で書き込み側を TZ-aware に統一した後の再リグレッションを、読み手側 backfill で吸収される前に書き込み時点で検知できる
 ### Fixed
 
 - `fix(uploader)`: サムネ候補の優先順を `CollectionPaths.find_thumbnail()` に集約して統一した（#535）。従来 `find_thumbnail()`（`thumbnail.jpg > main.png > main.jpg`）と `_upload_complete_collection` のインライン候補（`thumbnail.jpg > thumbnail.png > main.jpg > main.png`）で順序が食い違っており、将来 `find_thumbnail()` へ統一する際に拾われる画像が変わるリスクがあった。実際にアップロードで使われていた後者の順を正とし、`find_thumbnail()` を `thumbnail.jpg > thumbnail.png > main.jpg > main.png`（`_THUMBNAIL_CANDIDATES`）に揃え、`_upload_complete_collection` は `find_thumbnail()` へ委譲。全候補組み合わせで統一前のアップロード経路と同一ファイルを指すことを回帰テストで担保（既存コレクションのサムネ選択は不変）

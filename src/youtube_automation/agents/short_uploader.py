@@ -31,7 +31,7 @@ from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import UploadError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
-from youtube_automation.utils.schedule import get_schedule_timezone
+from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +330,7 @@ class ShortUploader:
         entry = {
             "short_num": short_num,
             "video_id": video_id,
-            "uploaded_at": datetime.now(get_schedule_timezone(self.schedule_config)).isoformat(),
+            "uploaded_at": now_in_schedule_tz(self.schedule_config).isoformat(),
             "publish_at": publish_at,
         }
 
