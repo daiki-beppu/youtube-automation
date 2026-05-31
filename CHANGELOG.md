@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(image_provider)`: gemini CLI 経由のサブスク認証で画像生成する新 provider `gemini_cli` を追加した（#474）。Google AI Pro/Ultra サブスクで認証済みの `gemini` CLI（`@google/gemini-cli`）を subprocess で非対話起動（`gemini --yolo -m <model> -p <prompt>`）し、出力パスをプロンプトに埋め込んで画像を書き出させる。GCP 従量課金（ADC 経由の既存 `gemini` provider）を発生させずに枚数の多いサムネ生成のコストを抑えられる。`image_generation.provider: gemini_cli` + `image_generation.gemini_cli.{model,image_size,timeout_seconds}` で設定。CLI 未導入時は `ConfigError`、生成後は出力ファイルの存在と PNG 妥当性を検証し指数バックオフでリトライする。既存 ADC 経由 `gemini` provider はそのまま温存（非破壊）。skill デフォルトの provider は `gemini` のまま（切り替えはスコープ外）
 ### Changed
 
 - `fix(lyria)`: Lyria の Ctrl+C 中断で支払い済みオーディオ応答が失われる問題を修正した（#481）。Lyria は単一同期リクエストで billing が確定するため、`requests.post` の戻り後（課金確定後）に Ctrl+C を受けると支払い済み bytes を取りこぼしていた。`generate_music()` が response 受信後の `KeyboardInterrupt` を捕捉し、bytes を `<CHANNEL_DIR>/tmp/lyria-recovered/<sha1>.mp3`（内容ハッシュ命名・冪等）へ退避してから中断を再送出する。`requests.post` 処理中の中断は response 未受信のため救済不能として明示。呼び出し側 `generate_lyria_master.py` の WAV 保存（ffmpeg）中の中断も同じ退避経路（`persist_recovered_audio`）で救済する。退避ファイルは手動で WAV 化して `02-Individual-music/` に置けば再課金なしで再利用できる
