@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.6] - 2026-05-31
+
 ### Added
 
 - `feat(scripts)`: 公開済み動画の `status.containsSyntheticMedia` を遡及的に `True` へ一括是正する `yt-bulk-update-synthetic-media` を追加した（#606、#603 の遡及対応）。#603 是正前にアップロードされた公開動画は `False` のまま残るため、チャンネルの uploads playlist から全公開動画を列挙し、`videos().list(part="status")` で現状 `True` でないものを抽出して `videos().update(part="status")` で反映する。`videos.update(part="status")` は status リソース全体を置換するため、現 status をコピーして read-only キー（`uploadStatus` / `madeForKids` 等）を除去し `containsSyntheticMedia` だけ差し替える read-modify-write で `privacyStatus` / `publishAt` / `selfDeclaredMadeForKids` 等を保持する。デフォルト dry-run（read のみ）、`--apply` で実反映、`--include-private` で private も対象化。冪等（再実行で対象 0 件なら遡及完了）。手動 fallback 手順は `docs/investigations/2026-05-30-606-bulk-update-synthetic-media.md`
@@ -18,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(metadata_generator)`: 散在していた `workflow-state.json` のパス解決リテラル（8 箇所の `self.collection_path / "workflow-state.json"`）を `CollectionPaths(self.collection_path).workflow_state_path` 経由に統一した（#534）。ディレクトリ命名規約の単一ソース化を `utils/` 側にも広げた。挙動・公開シグネチャは不変
 - `fix(veo)`: `smooth_loop()` の ffmpeg 失敗（`CalledProcessError`）経路で tmp ファイル `_smooth.mp4` が残骸化する問題を修正した（#480）。ffmpeg 実行を `try/finally` で囲み `output.unlink(missing_ok=True)` で確実に削除する（成功時は `rename` 済みのため no-op）
 - `refactor(scripts)`: `metadata_audit` / `playlist_manager` に残っていたコレクションサブパスリテラル（`20-documentation` / `descriptions.md` / `workflow-state.json` / `upload_tracking.json`）を `CollectionPaths` のプロパティ（`docs_dir` / `descriptions_md_path` / `workflow_state_path` / `tracking_path`）経由に統一した（#536）。挙動は不変
+
+### Migration
+
+所要時間の目安: 5〜10 分（pin bump → `uv lock` → `yt-skills sync`）。公開済み動画の遡及是正（任意・後述）を含める場合は対象動画数に応じて +数分
+
+local fix 衝突注意:
+
+- 無し（今回のリリースで `.claude/skills/<name>/` 配下の挙動変更は無し。`metadata-audit/SKILL.md` は Cross References へ `yt-bulk-update-synthetic-media` の参照を 1 行追加したのみで、`yt-skills sync --force` で上書きされても下流の挙動に影響しない）
+
+サマリ:
+
+- 新規 CLI `yt-bulk-update-synthetic-media` を追加（#606）。#603 是正前にアップロードされた公開動画の `status.containsSyntheticMedia` を `True` へ遡及的に一括是正する。デフォルト dry-run、`--apply` で実反映、`--include-private` で private も対象化、冪等（対象 0 件で遡及完了）。手動 fallback は `docs/investigations/2026-05-30-606-bulk-update-synthetic-media.md`
+- `yt-skills sync`（`skills` asset）が下流に `.agents/skills -> ../.claude/skills` の相対 symlink を併設するようになった（#617）。sync 再実行で自動成立し、下流の Codex CLI が同期済みスキルを発見できるようになる。`--force` で張り直し、symlink 非対応環境は警告のみで継続
+- 動画アップロード時の `status.containsSyntheticMedia` を `False` → `True` に是正（#603）。AI 生成音楽（Lyria / Suno）主軸のため YouTube の AI 開示ポリシー上 `true` が正しい。今後のアップロードに自動適用され下流の手動対応は不要。既存の公開済み動画は上記 `yt-bulk-update-synthetic-media` で遡及是正する
+- `fix(veo)`: `smooth_loop()` の ffmpeg 失敗時に tmp ファイル `_smooth.mp4` が残骸化する問題を修正（#480）。`workflow-state.json` / コレクションサブパスのパス解決を `CollectionPaths` 経由へ集約（#534, #536、挙動不変）
 
 ## [5.5.5] - 2026-05-30
 
@@ -868,6 +885,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.6]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.6
 [5.5.5]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.5
 [5.5.4]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.4
 [5.5.3]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.3
