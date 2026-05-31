@@ -513,13 +513,28 @@ def test_playlists_dict_entry_is_shallow_copied():
     assert playlists.items["battle"] == raw_entry
 
 
-def test_playlists_invalid_shape_raises_config_error():
+@pytest.mark.parametrize(
+    "value,got_type",
+    [
+        (42, "int"),
+        ([1, 2], "list"),
+        (None, "NoneType"),
+        (3.14, "float"),
+        (True, "bool"),
+    ],
+)
+def test_playlists_invalid_per_key_shape_raises_config_error(value, got_type):
+    """playlists.<key> の値が string / object 以外（list / int / null 等）なら ConfigError.
+
+    #419: silent pass-through すると Playlists.items: dict[str, dict] 型注釈と
+    実態が乖離するため Fail Fast にする。エラーメッセージに got 型名を含める。
+    """
     from youtube_automation.utils.config.loader import _build_playlists
     from youtube_automation.utils.exceptions import ConfigError
 
-    merged = {"playlists": {"main": 42}}
+    merged = {"playlists": {"main": value}}
 
-    with pytest.raises(ConfigError, match="playlists.main"):
+    with pytest.raises(ConfigError, match=rf"playlists\.main .*got {got_type}"):
         _build_playlists(merged)
 
 
