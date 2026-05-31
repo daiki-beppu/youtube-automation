@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,10 @@ class Title:
     default_activity: str
     theme_scenes: dict
     theme_activities: dict
+    # アップロード preflight のタイトル鋳型準拠チェック設定 (#602)。
+    # `separator` / `rhs_pattern` / `volume_patterns` / `core_vocabulary` を任意指定。
+    # 未設定（空 dict）のチャンネルは `template` にセパレータが含まれなければ自動スキップ。
+    template_check: dict = field(default_factory=dict)
 
     def activity_for_theme(self, theme: str) -> str:
         """テーマ名からアクティビティキーワードを取得.

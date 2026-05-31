@@ -19,6 +19,7 @@ from youtube_automation.utils.image_provider.config import (
     ImageGenerationConfig,
     OpenAIConfig,
     parse_image_generation_config,
+    replace_model,
 )
 
 # ---------- parse_image_generation_config ----------
@@ -91,9 +92,61 @@ class TestParseImageGenerationConfig:
     def test_supported_providers_declares_codex(self):
         """Given provider 設定の許容値
         When SUPPORTED_PROVIDERS を読む
-        Then codex が gemini/openai と同じ provider 値として列挙される。
+        Then codex / gemini_cli が gemini/openai と同じ provider 値として列挙される。
         """
-        assert SUPPORTED_PROVIDERS == ("gemini", "openai", "codex")
+        assert SUPPORTED_PROVIDERS == ("gemini", "openai", "codex", "gemini_cli")
+
+    def test_parses_image_generation_namespace_for_gemini_cli(self):
+        """#474: provider=gemini_cli で GeminiCliConfig が組み立てられる。"""
+        # Given
+        skill_cfg = {
+            "image_generation": {
+                "provider": "gemini_cli",
+                "gemini_cli": {
+                    "model": "gemini-2.5-flash-image-preview",
+                    "image_size": "2K",
+                    "timeout_seconds": 120,
+                },
+            }
+        }
+
+        # When
+        cfg = parse_image_generation_config(skill_cfg)
+
+        # Then
+        assert cfg.provider == "gemini_cli"
+        assert cfg.gemini_cli is not None
+        assert cfg.gemini_cli.model == "gemini-2.5-flash-image-preview"
+        assert cfg.gemini_cli.image_size == "2K"
+        assert cfg.gemini_cli.timeout_seconds == 120
+        # 他 provider の sub-config は埋めない
+        assert cfg.gemini is None
+        assert cfg.openai is None
+
+    def test_gemini_cli_uses_defaults_when_subconfig_omitted(self):
+        """#474: gemini_cli sub-config 省略時は既定値で組み立てる。"""
+        # Given
+        skill_cfg = {"image_generation": {"provider": "gemini_cli"}}
+
+        # When
+        cfg = parse_image_generation_config(skill_cfg)
+
+        # Then
+        assert cfg.provider == "gemini_cli"
+        assert cfg.gemini_cli.model == "gemini-2.5-flash-image-preview"
+        assert cfg.gemini_cli.image_size == "2K"
+        assert cfg.gemini_cli.timeout_seconds == 300
+
+    def test_replace_model_overrides_gemini_cli_model(self):
+        """#474: replace_model が gemini_cli の active provider 側モデルを差し替える。"""
+        # Given
+        cfg = parse_image_generation_config({"image_generation": {"provider": "gemini_cli"}})
+
+        # When
+        replaced = replace_model(cfg, "gemini-3.0-flash-image-preview")
+
+        # Then
+        assert replaced.gemini_cli.model == "gemini-3.0-flash-image-preview"
 
     def test_legacy_gemini_image_namespace_emits_deprecation_warning(self):
         # Given: 旧 namespace

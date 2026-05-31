@@ -11,11 +11,13 @@ import pytest
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider import get_provider
 from youtube_automation.utils.image_provider.config import (
+    GeminiCliConfig,
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
 )
 from youtube_automation.utils.image_provider.gemini import GeminiImageProvider
+from youtube_automation.utils.image_provider.gemini_cli import GeminiCliImageProvider
 from youtube_automation.utils.image_provider.openai import OpenAIImageProvider
 
 
@@ -45,6 +47,13 @@ def _codex_config() -> ImageGenerationConfig:
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None)
 
 
+def _gemini_cli_config() -> ImageGenerationConfig:
+    return ImageGenerationConfig(
+        provider="gemini_cli",
+        gemini_cli=GeminiCliConfig(model="gemini-2.5-flash-image-preview", image_size="2K"),
+    )
+
+
 class TestGetProvider:
     def test_returns_gemini_provider_when_provider_is_gemini(self):
         # Given
@@ -67,6 +76,25 @@ class TestGetProvider:
         # Then
         assert isinstance(provider, OpenAIImageProvider)
         assert provider.name == "openai"
+
+    def test_returns_gemini_cli_provider_when_provider_is_gemini_cli(self):
+        # Given
+        cfg = _gemini_cli_config()
+
+        # When
+        provider = get_provider(cfg)
+
+        # Then
+        assert isinstance(provider, GeminiCliImageProvider)
+        assert provider.name == "gemini_cli"
+
+    def test_gemini_cli_without_subconfig_raises_config_error(self):
+        # Given: provider=gemini_cli だが sub-config が None
+        cfg = ImageGenerationConfig(provider="gemini_cli", gemini_cli=None)
+
+        # When / Then
+        with pytest.raises(ConfigError, match="gemini_cli"):
+            get_provider(cfg)
 
     def test_unknown_provider_raises_config_error(self):
         # Given: 強制的に provider 名を破壊（ImageGenerationConfig は frozen でも

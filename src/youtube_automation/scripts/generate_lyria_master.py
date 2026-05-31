@@ -160,7 +160,13 @@ def _generate_one_segment(
         if audio_bytes is None:
             continue
 
-        _save_audio_as_wav(audio_bytes, seg_path)
+        # WAV 保存 (ffmpeg) 中の Ctrl+C でも支払い済み bytes を失わない（#481）。
+        try:
+            _save_audio_as_wav(audio_bytes, seg_path)
+        except KeyboardInterrupt:
+            recovered = lyria_client.persist_recovered_audio(audio_bytes)
+            print(f"\n  [Recovered] {label} の支払い済みオーディオを退避しました → {recovered}")
+            raise
         size_kb = seg_path.stat().st_size / 1024
         print(f"  [{label}] 完了 ({size_kb:.0f} KB)")
         metadata: dict = {

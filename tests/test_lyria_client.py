@@ -274,6 +274,82 @@ class TestGenerateMusic:
         assert result == legacy_audio
 
 
+class TestInterruptRecovery:
+    """#481: response 受信後の Ctrl+C で支払い済みオーディオを失わない。"""
+
+    def test_post_interrupt_reraises_without_recovery(self, mock_token, tmp_path, monkeypatch):
+        # Given: requests.post 中（API 処理中）に Ctrl+C
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        from youtube_automation.utils import lyria_client
+
+        monkeypatch.setattr(lyria_client, "channel_dir", lambda: tmp_path)
+
+        with patch.object(lyria_client.requests, "post", side_effect=KeyboardInterrupt):
+            # When / Then: response 未受信のため救済せず KeyboardInterrupt を再送出
+            with pytest.raises(KeyboardInterrupt):
+                lyria_client.generate_music("p", "lyria-3-pro-preview")
+
+        # 退避ファイルは作られない
+        assert not (tmp_path / "tmp" / "lyria-recovered").exists()
+
+    def test_recovers_paid_audio_on_interrupt_after_response(self, mock_token, tmp_path, monkeypatch):
+        # Given: response 受信後（課金確定後）に Ctrl+C
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00paid-audio"
+        from youtube_automation.utils import lyria_client
+
+        monkeypatch.setattr(lyria_client, "channel_dir", lambda: tmp_path)
+
+        resp = MagicMock()
+        resp.ok = True
+        good_body = {
+            "outputs": [{"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}]
+        }
+        # 1 回目（本処理）の json() で中断、復旧時の再 json() は正常 body
+        resp.json.side_effect = [KeyboardInterrupt(), good_body]
+
+        with patch.object(lyria_client.requests, "post", return_value=resp):
+            # When / Then: 中断は最終的に伝播する
+            with pytest.raises(KeyboardInterrupt):
+                lyria_client.generate_music("p", "lyria-3-pro-preview")
+
+        # 支払い済み bytes が退避ファイルに保存されている
+        recovered = list((tmp_path / "tmp" / "lyria-recovered").glob("*.mp3"))
+        assert len(recovered) == 1
+        assert recovered[0].read_bytes() == audio
+
+    def test_persist_recovered_audio_writes_sha1_path_idempotently(self, tmp_path, monkeypatch):
+        import hashlib
+
+        from youtube_automation.utils import lyria_client
+
+        monkeypatch.setattr(lyria_client, "channel_dir", lambda: tmp_path)
+        audio = b"some-paid-bytes"
+
+        p1 = lyria_client.persist_recovered_audio(audio)
+        p2 = lyria_client.persist_recovered_audio(audio)
+
+        # 内容ハッシュ命名で冪等（同一応答は同一パス）
+        assert p1 == p2
+        assert p1.read_bytes() == audio
+        assert p1.name == hashlib.sha1(audio).hexdigest() + ".mp3"
+        assert p1.parent == tmp_path / "tmp" / "lyria-recovered"
+
+    def test_recover_skips_when_no_audio_in_response(self, tmp_path, monkeypatch, capsys):
+        # Given: 中断時に再抽出しても audio が無い（救済不能）
+        from youtube_automation.utils import lyria_client
+
+        monkeypatch.setattr(lyria_client, "channel_dir", lambda: tmp_path)
+        resp = MagicMock()
+        resp.json.return_value = {"outputs": [{"type": "text", "text": "no audio"}]}
+
+        lyria_client._recover_audio_on_interrupt(resp)
+
+        # 退避ファイルは作られず、その旨が表示される
+        assert not (tmp_path / "tmp" / "lyria-recovered").exists()
+        assert "退避可能なオーディオデータがありませんでした" in capsys.readouterr().out
+
+
 class TestExtractAudioBytes:
     def test_returns_audio_from_legacy_outputs(self):
         # Given: legacy outputs schema の body

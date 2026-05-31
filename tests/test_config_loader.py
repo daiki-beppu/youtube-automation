@@ -129,6 +129,31 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.pinned_comment.default_language == "en"
 
 
+def test_synthetic_media_flags_default(tmp_path, monkeypatch):
+    """#605: youtube.json 未設定時は現行の振る舞い（synthetic=True / made_for_kids=False）。"""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.contains_synthetic_media is True
+    assert config.youtube.api.self_declared_made_for_kids is False
+
+
+def test_synthetic_media_flags_override(tmp_path, monkeypatch):
+    """#605: youtube.json で AI 開示 / 子供向け申告を上書きできる。"""
+    sections = _minimal_sections()
+    sections["youtube.json"]["youtube"]["contains_synthetic_media"] = False
+    sections["youtube.json"]["youtube"]["self_declared_made_for_kids"] = True
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.contains_synthetic_media is False
+    assert config.youtube.api.self_declared_made_for_kids is True
+
+
 def test_load_pinned_comment_section(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["pinned-comment.json"] = {
@@ -513,13 +538,28 @@ def test_playlists_dict_entry_is_shallow_copied():
     assert playlists.items["battle"] == raw_entry
 
 
-def test_playlists_invalid_shape_raises_config_error():
+@pytest.mark.parametrize(
+    "value,got_type",
+    [
+        (42, "int"),
+        ([1, 2], "list"),
+        (None, "NoneType"),
+        (3.14, "float"),
+        (True, "bool"),
+    ],
+)
+def test_playlists_invalid_per_key_shape_raises_config_error(value, got_type):
+    """playlists.<key> の値が string / object 以外（list / int / null 等）なら ConfigError.
+
+    #419: silent pass-through すると Playlists.items: dict[str, dict] 型注釈と
+    実態が乖離するため Fail Fast にする。エラーメッセージに got 型名を含める。
+    """
     from youtube_automation.utils.config.loader import _build_playlists
     from youtube_automation.utils.exceptions import ConfigError
 
-    merged = {"playlists": {"main": 42}}
+    merged = {"playlists": {"main": value}}
 
-    with pytest.raises(ConfigError, match="playlists.main"):
+    with pytest.raises(ConfigError, match=rf"playlists\.main .*got {got_type}"):
         _build_playlists(merged)
 
 
@@ -896,6 +936,71 @@ def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypa
 
     assert config.comments.generator.provider == "codex"
     assert config.comments.rules[0].provider == "gemini"
+
+
+def test_comments_rule_scope_defaults_to_any(tmp_path, monkeypatch):
+    """#524: scope 未指定の rule は 'any' でロードされる（後方互換）."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [{"name": "g", "keywords": ["hi"]}],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.comments.rules[0].scope == "any"
+
+
+def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
+    """#524: scope を指定すると rule に反映される."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [
+                {"name": "top", "keywords": ["hi"], "scope": "top_level"},
+                {"name": "rep", "keywords": ["bye"], "scope": "reply"},
+            ],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.comments.rules[0].scope == "top_level"
+    assert config.comments.rules[1].scope == "reply"
+
+
+def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
+    """#524: comments.rules[i].scope が無効な値のとき ConfigError を送出する."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": [{"name": "bad", "keywords": ["hi"], "scope": "thread"}],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.rules\\[0\\].scope"):
+        load_config()
+
+
+def test_comments_dataclass_rejects_invalid_rule_scope():
+    """#524: Comments dataclass を直接構築した場合も rule scope を検証する."""
+    from youtube_automation.utils.config.comments import CommentRule, Comments
+
+    with pytest.raises(ConfigError, match="scope"):
+        Comments(
+            enabled=True,
+            rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")],
+        )
 
 
 def test_comments_dataclass_defaults_to_codex_without_loader():

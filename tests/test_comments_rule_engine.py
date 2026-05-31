@@ -122,3 +122,56 @@ def test_default_provider_is_used_when_rule_has_no_override():
     assert match is not None
     assert match.rule.name == "catch_all"
     assert match.effective_provider == "gemini"
+
+
+# ---------------------------------------------------------------------------
+# scope: top_level / reply / any (#524)
+# ---------------------------------------------------------------------------
+
+
+def test_scope_default_is_any_and_matches_both():
+    """scope 未指定はデフォルト 'any'。top-level / reply の両方に当たる（後方互換）。"""
+    engine = _engine(rules=[CommentRule(name="g", keywords=["hi"])])
+
+    assert engine.evaluate("hi there", is_reply=False) is not None
+    assert engine.evaluate("hi there", is_reply=True) is not None
+
+
+def test_scope_top_level_only_matches_top_level():
+    engine = _engine(rules=[CommentRule(name="g", keywords=["hi"], scope="top_level")])
+
+    assert engine.evaluate("hi there", is_reply=False) is not None
+    assert engine.evaluate("hi there", is_reply=True) is None
+
+
+def test_scope_reply_only_matches_reply():
+    engine = _engine(rules=[CommentRule(name="g", keywords=["hi"], scope="reply")])
+
+    assert engine.evaluate("hi there", is_reply=True) is not None
+    assert engine.evaluate("hi there", is_reply=False) is None
+
+
+def test_scope_falls_through_to_next_matching_rule():
+    """scope 不一致のルールはスキップし、後続の当たるルールが採用される。"""
+    rules = [
+        CommentRule(name="reply_only", keywords=["hi"], scope="reply", priority=10),
+        CommentRule(name="any_rule", keywords=["hi"], scope="any", priority=1),
+    ]
+    engine = _engine(rules=rules)
+
+    # top-level コメントでは reply_only はスキップされ any_rule が採用される
+    match = engine.evaluate("hi there", is_reply=False)
+    assert match is not None
+    assert match.rule.name == "any_rule"
+
+    # reply では priority 最上位の reply_only が採用される
+    match = engine.evaluate("hi there", is_reply=True)
+    assert match is not None
+    assert match.rule.name == "reply_only"
+
+
+def test_evaluate_is_reply_defaults_to_false():
+    """is_reply を省略すると top-level 扱い（既存呼び出しとの後方互換）。"""
+    engine = _engine(rules=[CommentRule(name="g", keywords=["hi"], scope="top_level")])
+
+    assert engine.evaluate("hi there") is not None

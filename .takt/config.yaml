@@ -11,3 +11,7 @@ base_branch: main
 #       provider: claude
 #       model: sonnet
 # rate limit が解消したら、その override ブロックを削除して codex 継承に戻す。
+persona_providers:
+  coder:
+    provider: claude
+    model: sonnet

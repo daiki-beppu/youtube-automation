@@ -66,6 +66,11 @@ def _make_preflight_config(supported_languages: list[str]) -> SimpleNamespace:
                 min_count=None,
                 for_collection=lambda _name: ["fallback"],
             ),
+            # ` | ` を使わない鋳型 → タイトル鋳型準拠チェックは自動スキップ (#602)
+            title=SimpleNamespace(
+                template="{style} {theme} for {activity}",
+                template_check={},
+            ),
         ),
         localizations=SimpleNamespace(supported_languages=supported_languages),
     )
@@ -156,6 +161,110 @@ class TestPreflightLocalizationLanguages:
 
 
 # ---------------------------------------------------------------------------
+# Issue #602: `_preflight_check` タイトル鋳型準拠ゲート
+# ---------------------------------------------------------------------------
+
+
+def _make_title_template_config(supported_languages: list[str]) -> SimpleNamespace:
+    cfg = _make_preflight_config(supported_languages)
+    # ` | ` 鋳型 + 核語彙を持つチャンネル（soulful-grooves 想定）に差し替え
+    cfg.content.title = SimpleNamespace(
+        template="{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
+        template_check={"core_vocabulary": ["Soul", "Funk"]},
+    )
+    return cfg
+
+
+def _write_title_collection(tmp_path: Path, title: str, *, status: str = "ready") -> Path:
+    col_dir = tmp_path / status / "20990101-foo-collection"
+    doc_dir = col_dir / "20-documentation"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "descriptions.md").write_text(
+        "\n".join(
+            [
+                "## タイトル案",
+                "```",
+                title,
+                "```",
+                "",
+                "## Complete Collection 概要欄",
+                "```",
+                "00:00 Opening Groove",
+                "10:00 Midnight Funk",
+                "20:00 Last Call Soul",
+                "```",
+                "",
+                "## タグ（YouTube タグ欄）",
+                "```",
+                "soul funk, retro groove, study music",
+                "```",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    scene_phrases = {lang: {"title": f"title-{lang}"} for lang in ["en", "ja", "de"]}
+    (col_dir / "workflow-state.json").write_text(
+        json.dumps({"scene_phrases": scene_phrases}),
+        encoding="utf-8",
+    )
+    return col_dir
+
+
+def _write_live_title(tmp_path: Path, slug: str, title: str) -> None:
+    doc_dir = tmp_path / "live" / slug / "20-documentation"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "descriptions.md").write_text(
+        f"## タイトル案\n```\n{title}\n```\n",
+        encoding="utf-8",
+    )
+
+
+class TestPreflightTitleTemplateCompliance:
+    """#602: 鋳型逸脱・巻数表記・RHS 重複を preflight で block する."""
+
+    def test_should_fail_on_volume_and_rhs_duplicate(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        _write_live_title(
+            tmp_path,
+            "20250101-vol1",
+            "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
+        )
+        col_dir = _write_title_collection(
+            tmp_path,
+            "Funky Spirit Vol.2 | 3 Hours of Soulful Retro Funk Grooves",
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with patch(
+            "youtube_automation.agents._preflight.load_config",
+            return_value=_make_title_template_config(["ja", "en", "de"]),
+        ):
+            with pytest.raises(RuntimeError, match="タイトル鋳型違反"):
+                uploader._preflight_check(col_dir)
+
+    def test_should_pass_on_compliant_title(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        _write_live_title(
+            tmp_path,
+            "20250101-vol1",
+            "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
+        )
+        col_dir = _write_title_collection(
+            tmp_path,
+            "Bright Funk & Soul Spirit | 3 Hours of Feel-Good Retro Grooves",
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with patch(
+            "youtube_automation.agents._preflight.load_config",
+            return_value=_make_title_template_config(["ja", "en", "de"]),
+        ):
+            uploader._preflight_check(col_dir)
+
+
+# ---------------------------------------------------------------------------
 # L3a: kwargs パススルー — upload_video → YouTubeUploadCore.upload_video
 # ---------------------------------------------------------------------------
 
@@ -215,6 +324,62 @@ class TestUploadVideoForwarding:
         # Then: super().upload_video(video_path, body, ...) の body[status] を検証
         body = mock_core_upload.call_args.args[1]
         assert body["status"]["containsSyntheticMedia"] is True
+
+    def test_should_default_self_declared_made_for_kids_false(self, tmp_path):
+        """#605: config 未設定時は selfDeclaredMadeForKids=False の現行挙動を維持する."""
+        # Given
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+            return_value="VID_KIDS",
+        ) as mock_core_upload:
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["selfDeclaredMadeForKids"] is False
+
+    def test_should_resolve_synthetic_media_flags_from_config(self, tmp_path):
+        """#605: status フラグを config（youtube.api）から解決する."""
+        # Given
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        fake_config = SimpleNamespace(
+            youtube=SimpleNamespace(
+                api=SimpleNamespace(
+                    contains_synthetic_media=False,
+                    self_declared_made_for_kids=True,
+                )
+            )
+        )
+
+        with (
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader.load_config",
+                return_value=fake_config,
+            ),
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+                return_value="VID_CONFIG",
+            ) as mock_core_upload,
+        ):
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then: config の値が status へ反映される
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["containsSyntheticMedia"] is False
+        assert body["status"]["selfDeclaredMadeForKids"] is True
 
     def test_should_default_resume_kwargs_to_none_when_omitted(self, tmp_path):
         """resume kwargs を渡さなければコアにも None 相当が渡る（後方互換）."""
