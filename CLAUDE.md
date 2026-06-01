@@ -103,6 +103,14 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 
 - パッケージ内コードは必ず `from youtube_automation.xxx import ...` の fully-qualified import を使う
 
+### 依存ポリシー: deprecated 表明済み依存の取り扱い
+
+- **`google-auth-httplib2`（PyPI 0.4.0 で deprecated 表明）**:
+  - `src/youtube_automation/` / `tests/` 配下に `google_auth_httplib2` の **直 import を新規追加しない**（現状 0 件、回帰テスト `tests/test_no_google_auth_httplib2_direct_import.py` で機械担保）
+  - 既存の transitive 依存は `googleapiclient.discovery.build(..., credentials=credentials)` 経由で残置する（上流 `google-api-python-client` が内部で `google_auth_httplib2.AuthorizedHttp` を要求しているため、即時撤去不可）
+  - 上流が non-httplib2 transport（`google.auth.transport.requests` など）を正式サポートした際の移行手順・撤去判断は `docs/migration/google-auth-httplib2.md` を参照
+  - `pyproject.toml::dependencies` の `"google-auth-httplib2"` 直接宣言の撤去は transport 切替完了後に別 issue で再検証する
+
 ### スクリプト配置
 
 - **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`）
