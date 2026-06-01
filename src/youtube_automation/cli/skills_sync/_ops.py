@@ -71,10 +71,17 @@ def _ensure_agents_skills_symlink(target_dir: Path, *, force: bool, dry_run: boo
     `.agents/skills` symlink を併設する。
 
     戻り値:
-        'linked'      : symlink を作成した (dry-run 時は作成予定)
-        'skipped'     : 既存があり --force なしのため触らなかった
-        'unsupported' : symlink 非対応環境で作成できなかった (警告のみ、sync は継続)
-        None          : 標準レイアウトでない target のため対象外 (`.agents` 規約が成立しない)
+        'linked'             : symlink を作成した (dry-run 時は作成予定)
+        'skipped'            : 既存があり --force なしのため触らなかった
+        'unsupported'        : symlink 非対応環境で作成できなかった (警告のみ、sync は継続)
+        'permission-denied'  : 権限エラーで symlink を作成できなかった (sync は失敗扱い)
+        None                 : 標準レイアウトでない target のため対象外 (`.agents` 規約が成立しない)
+
+    `PermissionError` は `OSError` のサブクラスだが、ユーザーが手動で復旧可能な
+    failure mode (チャンネルリポの所有者・umask・親ディレクトリ permission) のため
+    silent 化せず明示的なエラーとして表面化する。symlink 機能自体が無効な環境 (例:
+    Windows 非特権ユーザー / FS が symlink 非対応) とは扱いを分け、後者のみ
+    'unsupported' で警告に留める。
     """
     # `.agents` 規約は `<repo>/.claude/skills` レイアウト前提。--target で別パスを
     # 指定した場合は repo root を推定できないため、副作用を出さず対象外として返す。
@@ -88,17 +95,28 @@ def _ensure_agents_skills_symlink(target_dir: Path, *, force: bool, dry_run: boo
         if not force:
             return "skipped"
         if not dry_run:
-            if link.is_symlink() or link.is_file():
-                link.unlink()
-            else:
-                shutil.rmtree(link)
+            try:
+                if link.is_symlink() or link.is_file():
+                    link.unlink()
+                else:
+                    shutil.rmtree(link)
+            except PermissionError:
+                return "permission-denied"
 
     if dry_run:
         return "linked"
 
-    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link.parent.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        return "permission-denied"
+
     try:
         link.symlink_to(_AGENTS_SKILLS_LINK_TARGET)
+    except PermissionError:
+        # 権限エラーは「symlink 機能がない」ではなく「書ける権限がない」という
+        # ユーザーの環境問題なので、握りつぶさず明示的なエラーとして返す。
+        return "permission-denied"
     except OSError:
         # Windows の非特権ユーザー等、symlink を張れない環境では sync 全体を
         # 失敗させず警告に留める (呼び出し側が stderr に出す)。

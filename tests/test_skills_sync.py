@@ -424,6 +424,143 @@ def test_ensure_agents_skills_symlink_returns_none_for_non_standard_layout(tmp_p
     assert _ops._ensure_agents_skills_symlink(target, force=False, dry_run=False) is None
 
 
+# ---------- .agents/skills symlink: permission-denied ----------
+
+
+def test_ensure_agents_skills_symlink_returns_permission_denied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`PermissionError` は `OSError` と区別して `'permission-denied'` を返す。"""
+    from youtube_automation.cli.skills_sync import _ops
+
+    def raise_permission_error(self: Path, *a: object, **k: object) -> None:
+        raise PermissionError("Permission denied")
+
+    monkeypatch.setattr(Path, "symlink_to", raise_permission_error)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    target.mkdir(parents=True)
+
+    result = _ops._ensure_agents_skills_symlink(target, force=False, dry_run=False)
+    assert result == "permission-denied"
+
+
+def test_ensure_agents_skills_symlink_permission_error_on_parent_mkdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """親 `.agents/` 作成の `PermissionError` も `'permission-denied'` で表面化する。"""
+    from youtube_automation.cli.skills_sync import _ops
+
+    original_mkdir = Path.mkdir
+
+    def selective_mkdir(self: Path, *a: object, **k: object) -> None:
+        if self.name == ".agents":
+            raise PermissionError("Permission denied: cannot create .agents")
+        return original_mkdir(self, *a, **k)
+
+    monkeypatch.setattr(Path, "mkdir", selective_mkdir)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    # mkdir patch の前に target dir を作っておく (selective_mkdir が .agents だけを reject)
+    target.mkdir(parents=True)
+
+    result = _ops._ensure_agents_skills_symlink(target, force=False, dry_run=False)
+    assert result == "permission-denied"
+
+
+def test_cmd_sync_skills_permission_denied_sets_nonzero_rc(
+    fake_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """symlink 作成が `PermissionError` で失敗したら sync 全体の rc は非ゼロ。"""
+
+    def raise_permission_error(self: Path, *a: object, **k: object) -> None:
+        raise PermissionError("Permission denied")
+
+    monkeypatch.setattr(Path, "symlink_to", raise_permission_error)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # 終了コードは非ゼロ (silent な握りつぶしを禁じる)
+    assert rc != 0
+
+
+def test_cmd_sync_skills_permission_denied_emits_error_and_recovery_hint(
+    fake_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """エラーメッセージに手動復旧手順 (`ln -s ../.claude/skills .agents/skills`) を含む。"""
+
+    def raise_permission_error(self: Path, *a: object, **k: object) -> None:
+        raise PermissionError("Permission denied")
+
+    monkeypatch.setattr(Path, "symlink_to", raise_permission_error)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    args.func(args)
+
+    err = capsys.readouterr().err
+    # 明示的なエラーラベル
+    assert "[error]" in err
+    assert ".agents/skills" in err
+    # 手動復旧コマンドの案内
+    assert "ln -s ../.claude/skills" in err
+
+
+def test_cmd_sync_skills_permission_denied_still_distributes_skills(
+    fake_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """symlink 失敗時でも skills 本体は配布される (部分成功 + rc!=0)。"""
+
+    def raise_permission_error(self: Path, *a: object, **k: object) -> None:
+        raise PermissionError("Permission denied")
+
+    monkeypatch.setattr(Path, "symlink_to", raise_permission_error)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # rc は非ゼロだが、skills 本体は target に展開済み
+    assert rc != 0
+    assert (target / "channel-research" / "SKILL.md").exists()
+    assert (target / "channel-direction" / "SKILL.md").exists()
+
+
+def test_cmd_sync_skills_unsupported_keeps_rc_zero(
+    fake_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """汎用 `OSError` (symlink 非対応) は今まで通り rc=0 のままにする (退行検出)。"""
+
+    def raise_oserror(self: Path, *a: object, **k: object) -> None:
+        raise OSError("symlink not supported")
+
+    monkeypatch.setattr(Path, "symlink_to", raise_oserror)
+
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # symlink 非対応環境は警告のみで rc=0 (PermissionError とは扱いを分ける)
+    assert rc == 0
+
+
 # ---------- cmd_diff ----------
 
 
