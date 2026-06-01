@@ -41,11 +41,29 @@
 | フィールド | 内容 |
 |---|---|
 | `template` | `"{style} {theme} ... Music - {activity} BGM [{duration_display}]"` 形式 |
-| `theme_activities` | テーマ → アクティビティのマッピング |
+| `theme_scenes` | テーマ → アクティビティ + 英語シーンフレーズのマッピング（TTP 形式・推奨）。`{theme: {activities: "...", scene: "..."}}` 形式。`yt-populate-scene-phrases` の `--en` 自動補完に使われる |
+| `theme_activities` | テーマ → アクティビティのマッピング（レガシー形式）。`theme_scenes` 未設定のときのみ参照される |
+
+`theme_scenes` / `theme_activities` をどちらも空のまま `/channel-setup` を抜けると
+下流 `yt-populate-scene-phrases` が手動 `--en` 指定を要求する。channel-direction.md で
+テーマ群が確定しているなら空のまま終了しないこと（issue #567）。
+
+### `audio`（`config/channel/audio.json`）
+
+| フィールド | 内容 |
+|---|---|
+| `target_duration_min` | コレクションの最小目標尺（分）。channel-direction の「動画の長さ」決定を転記 |
+| `target_duration_max` | 最大目標尺（分）。固定尺戦略のチャンネルでは `target_duration_min` と同値にする |
+| `chapter_max` | チャプター数の上限（デフォルト 100） |
+
+固定尺戦略を取るチャンネルでも、`target_duration_min` を空のまま `/channel-setup` を
+抜けてはならない（issue #567）。
 
 ## skill-config で管理するセクション
 
-以下は **`config/channel/*.json` には置かない**。チャンネル固有の上書きがある場合のみ `config/skills/<skill>.yaml` を作成する（ない場合は skill default を使用）:
+以下は **`config/channel/*.json` には置かない**。各スキルの同梱デフォルト
+（`.claude/skills/<skill>/config.default.yaml`）と、チャンネル固有の上書き
+（`config/skills/<skill>.yaml`）を deep-merge した値で動く。
 
 | スキル | 設定ファイル |
 |---|---|
@@ -58,9 +76,34 @@
 | masterup（`audio.crossfade_duration` 等） | `config/skills/masterup.yaml` |
 | loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |
 
-**Suno の場合**: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` / `lyrics_guidelines.style_reference` / `lyrics_generation.provider` を上書き可能。
-英語歌詞のネイティブ感を寄せたいチャンネルでは、参考歌詞を `lyrics_guidelines.style_reference` に置き、歌詞本文のコピーではなく語り口・行長・韻の緩さだけを `/suno` に渡す。
-`lyrics_generation.provider: codex` は Codex CLI 経由の初稿生成を使う場合のみ指定する。
+### channel-direction.md の決定を必ず転記する skill-config（issue #567）
+
+下記は「チャンネル固有の上書きが必要」ではなく **方向性が決まっていれば必ず書く**
+セクション。空のまま `/channel-setup` を抜けてはならない。雛形は
+`references/config-template/skills/<skill>.yaml`。
+
+**Suno**（`music_engine: suno` のチャンネル）:
+
+| キー | channel-direction.md からの転記元 |
+|---|---|
+| `workspace_name` | Suno UI 上のワークスペース名（チャンネル短縮名 + ジャンルなど） |
+| `genre_line` | 「ジャンル & スタイル」決定の直訳（Suno Styles 欄にそのまま入る） |
+| `exclude_styles` | 「ジャンル & スタイル」で排除すると決めた要素（白音 / 雨音 / EDM 等） |
+
+`lyrics_guidelines.style_reference` / `lyrics_generation.provider` は任意上書き。
+
+**Thumbnail**:
+
+| キー | 転記元 |
+|---|---|
+| `image_generation.gemini.brand_background` | 「ビジュアルアイデンティティ」の背景色 |
+| `image_generation.gemini.reference_images.default` | TTP 対象の代表サムネ（`data/thumbnail_compare/benchmark/<channel>-<vid>.jpg`、`/benchmark` で download される） |
+| `image_generation.gemini.composition_rules.*` | 「ビジュアルアイデンティティ」「サムネイル方針」 |
+| `image_generation.gemini.diff_prompt_template` | コレクション側 `prompts/<theme>.md` への差分指示テンプレ |
+
+`reference_images.default` の TTP サムネは `/benchmark`（`yt-benchmark`）が
+`docs/benchmarks/*.md` 取得時に `data/thumbnail_compare/benchmark/` に自動 download する。
+**手動 download はしない**（issue #567）。
 
 ## オプションセクション
 

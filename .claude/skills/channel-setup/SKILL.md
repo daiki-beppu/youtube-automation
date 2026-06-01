@@ -43,6 +43,45 @@ Phase 1 で `/channel-new` が作成した最小 config を完全版に拡張。
 含めるべきセクション（必須・skill-config 管理・オプション）は **`references/config-generation-rules.md`** を参照。
 `benchmark.channels` は `/channel-new` で既に設定済み（`config/channel/analytics.json`）。
 
+**channel-direction.md からの転記（必須・空のまま終了しないこと、issue #567）**:
+
+| `channel-direction.md` の決定 | 書き込み先 |
+|---|---|
+| 動画の長さ（分）| `config/channel/audio.json::audio.target_duration_min` / `target_duration_max` |
+| テーマ → アクティビティ・シーンの対応表 | `config/channel/content.json::title.theme_scenes`（TTP 形式・推奨）または `title.theme_activities`（レガシー） |
+| 投稿頻度 | `config/schedule_config.json`（Step 5） |
+| 音楽エンジン | `config/channel/youtube.json::music_engine`（`suno` / `lyria`） |
+| ジャンル / スタイル / コンテキスト | `config/channel/content.json::genre.{primary,style,context}` |
+
+`title.theme_scenes` を空で残すと `yt-populate-scene-phrases` が `--en` 手動指定を要求する。
+チャンネル方向性が決まっているのに空で抜けるのは禁止（Fail Fast 原則違反）。
+
+### Step 3.5: config/skills/*.yaml への転記（音楽方向性・サムネ TTP）
+
+`docs/channel/channel-direction.md` の「ジャンル & スタイル」「ビジュアルアイデンティティ」決定は
+**必ず** `config/skills/<skill>.yaml` に転記する。空のまま残ると下流 skill が
+チャンネル方向性を AI に手書きさせる素地になる（issue #567 根本原因）。
+
+雛形は `references/config-template/skills/<skill>.yaml`。channel-direction.md の決定を
+プレースホルダ（`{{...}}`）に埋めてから `config/skills/` 配下にコピーする。
+
+| 対象 skill | 雛形 | 書き込む内容 |
+|---|---|---|
+| suno（`music_engine: suno` のとき）| `references/config-template/skills/suno.yaml` | `workspace_name` / `genre_line`（ジャンル＋スタイル決定の直訳）/ `exclude_styles` |
+| thumbnail | `references/config-template/skills/thumbnail.yaml` | `image_generation.gemini.brand_background` / `composition_rules.*` / `reference_images.default`（TTP サムネ）/ `diff_prompt_template` |
+| lyria（`music_engine: lyria` のとき）| `.claude/skills/lyria/config.default.yaml` を参照 | プロンプト系・尺・track 戦略 |
+
+**TTP 参照画像の自動 download**: `config/channel/analytics.json::benchmark.channels` が
+設定済みなら `uv run yt-benchmark` で `docs/benchmarks/*.md` と `data/thumbnail_compare/benchmark/`
+に各競合の代表サムネが download される。それを `image_generation.gemini.reference_images.default`
+に列挙する（`path_base: channel_dir` で channel_dir からの相対パス）。
+手動 download は **しない**（issue #567）。
+
+**fail-fast 動作**: `/thumbnail` `/suno` `/lyria` 等の下流 skill は、関連 config が空のまま
+呼ばれた場合「`/channel-setup` 未完了」を案内して停止する責務を持つ（CLAUDE.md
+Fail Fast 原則）。`channel-setup` 側で空欄を残さないことで、この案内が
+発火しない状態を担保する。
+
 ### Step 4: 残りディレクトリの作成
 
 正準ディレクトリ構造は **`references/directory-structure.md`** を参照。
@@ -51,6 +90,7 @@ Phase 1 で `/channel-new` が作成した最小 config を完全版に拡張。
 
 | ファイル | 生成方法 |
 |---------|---------|
+| `config/channel/audio.json` | `references/config-template/audio.json` をコピー。`target_duration_min` は channel-direction.md の「動画の長さ」を必ず転記する（空のまま終了しない、issue #567）|
 | `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整 |
 | `config/upload_settings.json` | `references/upload-settings-template.json` をコピー |
 | `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。`supported_languages` は `["ja", "en", "de"]` を必ず含める（広告単価が高い 3 言語、issue #272）。低 CPM 言語は原則追加しない。多言語展開しないチャンネルは省略可（`load_config().localizations.supported_languages` は `youtube.api.language` へフォールバック）。`config/localizations.json` が唯一の Canonical ソース |
