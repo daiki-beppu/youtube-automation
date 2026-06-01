@@ -76,6 +76,7 @@ yt-theme-compare = "youtube_automation.scripts.theme_compare:main"
 yt-thumbnail-compare = "youtube_automation.scripts.compare_thumbnails:main"
 yt-thumbnail-correlate = "youtube_automation.scripts.thumbnail_correlate:main"
 yt-video-analyze = "youtube_automation.scripts.video_analyze:main"
+yt-vote-log = "youtube_automation.scripts.vote_log:main"
 
 # Agent entry points
 yt-upload-auto = "youtube_automation.agents.youtube_auto_uploader:main"

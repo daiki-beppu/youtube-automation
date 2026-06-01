@@ -360,6 +360,43 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 | **activity** | リスナーのユースケース |
 | **mood** | 感情的トーン |
 
+### vote-log hook（#509 — `data/community/weekly-vote-log.json` 連携）
+
+`/community-draft --type weekly-feedback` で集計された **Sunday Vote** の結果を
+theme weight 計算に取り込み、視聴者の直近声をペルソナ × 差別化軸の組み合わせより
+優先順位高めに反映する hook（オプション、ログ未存在なら静かに無視）。
+
+```python
+from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.weekly_vote_log import (
+    compute_vote_log_weights,
+    load_weekly_vote_log,
+)
+
+log = load_weekly_vote_log(channel_dir=channel_dir(), missing_ok=True)
+result = compute_vote_log_weights(log, recent_weeks=4, decay=0.7)
+# result.forced_axis: 連続 2 週以上で 1 位だった軸 key (なければ None)
+# result.weights: 軸 key → float weight (decay^i の合算)
+```
+
+**theme weight への反映ルール**:
+
+1. **`result.forced_axis is not None` のとき** → その軸を **強制採用** (theme weight を最大化)。
+   差別化軸の選択肢でも `forced_axis` を含む組み合わせを必ず 1 案残す。連続 2 週 1 位は
+   「視聴者の関心が明確にロックオン済み」のシグナルなので、別軸の探索より追従を優先する
+2. **`result.weights` のキー** → 各軸の **重みづけ平均** (新しい週ほど高く) として候補の優先順位を上げる。
+   重みは `decay=0.7` (最新 1.0 / 1 週前 0.7 / 2 週前 0.49 / 3 週前 0.343) で減衰
+3. **ログ未存在 / 空** → 通常の `differentiation_axes` ロジックを変更なしで継続（後方互換）
+
+CLI からも同一ロジックを叩ける:
+
+```bash
+uv run yt-vote-log weights --recent 4 --decay 0.7
+# → {"weights": {...}, "forced_axis": "...", "forced_streak": N, "considered_weeks": M}
+```
+
+> **連動先**: ログ append は `/community-draft --type weekly-feedback` の Studio 投票結果手動入力タイミング（または `yt-vote-log append` 直叩き）で行う。`/collection-ideate` 側は **read-only**。
+
 ### 競合パターン分析ルール
 
 ベンチマークデータを分析し、以下を企画判断に使う:

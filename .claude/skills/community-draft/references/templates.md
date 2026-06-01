@@ -43,7 +43,10 @@ upstream デフォルトでは強制せず、ダウンストリーム側で `con
 - 例: 5 軸 → 4 択 × 5 週 1 周
 
 `vote_log_path`（`data/community/weekly-vote-log.json`）の正式スキーマと
-`/collection-ideate` への hook 実装は **follow-up #339** で扱う。
+`/collection-ideate` への hook 実装は **#509** で完了。スキーマは
+`youtube_automation.utils.schemas.weekly_vote_log.schema.json`、
+loader / append / hook は `youtube_automation.utils.weekly_vote_log` モジュール。
+CLI は `yt-vote-log {append, show, weights, validate}`。
 
 ## 投稿頻度の上限ガイド
 
