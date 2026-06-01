@@ -1,6 +1,6 @@
 ---
 name: automation-update
-description: Use when 下流チャンネルリポジトリで youtube-channels-automation を upstream 最新リリースに追従させたいとき。「追従」「アップグレード」「最新版に上げて」「v5.x.y に上げて」「automation-update」「automation を更新」「skills sync 含めて更新」など、`pyproject.toml` の pin bump → `uv lock` → `yt-skills sync` → 動作確認 → コミットまでを 1 コマンドで回したい場面で使用する。GitHub Release 本文と `CHANGELOG.md` から累積影響を要約し、local fix 衝突や破壊的操作の前で人間に確認を求める AI 主導 wizard。
+description: "Use when 下流チャンネルリポジトリで youtube-channels-automation を upstream 最新リリースに追従させたいとき。「追従」「アップグレード」「最新版に上げて」「v5.x.y に上げて」「automation-update」「automation を更新」「skills sync 含めて更新」など、`pyproject.toml` の pin bump → `uv lock` → `yt-skills sync` → 動作確認 → コミットまでを 1 コマンドで回したい場面で使用する。GitHub Release 本文と `CHANGELOG.md` から累積影響を要約し、local fix 衝突や破壊的操作の前で人間に確認を求める AI 主導 wizard。"
 ---
 
 ## Overview

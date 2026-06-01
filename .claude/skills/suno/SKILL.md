@@ -1,6 +1,6 @@
 ---
 name: suno
-description: Use when Suno UI に投入する音楽プロンプト (Style + Lyrics) を生成したいとき。SunoAI V5 向けのパターン YAML と suno-prompts.md を作成する（楽曲生成は人手で Suno UI、DL + マスター化は次工程 /masterup）。プロンプト作成・Style 文・Lyrics テンプレートなど Suno 手動生成の前段で使用すること。Lyria チャンネルでは /lyria を使う
+description: "Use when Suno UI に投入する音楽プロンプト (Style + Lyrics) を生成したいとき。SunoAI V5 向けのパターン YAML と suno-prompts.md を作成する（楽曲生成は人手で Suno UI、DL + マスター化は次工程 /masterup）。プロンプト作成・Style 文・Lyrics テンプレートなど Suno 手動生成の前段で使用すること。Lyria チャンネルでは /lyria を使う"
 ---
 
 ## Overview

@@ -1,6 +1,6 @@
 ---
 name: short
-description: Use when collection 型チャンネル（BGM テイスター）でショート動画を生成・投稿したいとき。CC 動画公開後に 9:16 ショートを 3 本前後生成し多言語ローカライズで投稿。「ショート作って」「shorts」「ショートテイスター」「BGM 切り抜き」「告知ショート」など、本編 CC → ショート誘導に関わる場面で必ず使用すること。release 型（JP+EN クリップ）チャンネルは `/short-release` を使う
+description: "Use when collection 型チャンネル（BGM テイスター）でショート動画を生成・投稿したいとき。CC 動画公開後に 9:16 ショートを 3 本前後生成し多言語ローカライズで投稿。「ショート作って」「shorts」「ショートテイスター」「BGM 切り抜き」「告知ショート」など、本編 CC → ショート誘導に関わる場面で必ず使用すること。release 型（JP+EN クリップ）チャンネルは `/short-release` を使う"
 ---
 
 ## Overview

@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: Use when GCP / OAuth まわりの API 設定を新規にセットアップしたい、または既存セットアップを再診断したいとき。「オンボーディング」「セットアップして」「API 設定して」「環境構築」「gcloud 設定」「OAuth 設定」「`/onboard`」など。AI が `yt-doctor` で状態を診断し、次に必要な 1 アクションだけを案内する wizard。新規チャンネル開設時はもちろん、別 PC への引っ越し、ADC 切れ、`client_secrets.json` の作り直しなど、API 設定だけを再整備したいときの単独入口としても使う。
+description: "Use when GCP / OAuth まわりの API 設定を新規にセットアップしたい、または既存セットアップを再診断したいとき。「オンボーディング」「セットアップして」「API 設定して」「環境構築」「gcloud 設定」「OAuth 設定」「`/onboard`」など。AI が `yt-doctor` で状態を診断し、次に必要な 1 アクションだけを案内する wizard。新規チャンネル開設時はもちろん、別 PC への引っ越し、ADC 切れ、`client_secrets.json` の作り直しなど、API 設定だけを再整備したいときの単独入口としても使う。"
 ---
 
 ## Overview

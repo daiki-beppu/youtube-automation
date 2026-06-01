@@ -1,6 +1,6 @@
 ---
 name: comments-reply
-description: Use when YouTube のコメントに自動返信したいとき。`config/channel/comments.json` のルールに沿って LLM 生成返信を dry-run でプレビューしてから apply で実反映する。二重返信は履歴ファイル (`comment_reply_history.json`) で防止。「コメント返信」「自動返信」「コメント対応」「視聴者返信」「リプライ」など、コメント対応の自動化に関わる場面で使用すること
+description: "Use when YouTube のコメントに自動返信したいとき。`config/channel/comments.json` のルールに沿って LLM 生成返信を dry-run でプレビューしてから apply で実反映する。二重返信は履歴ファイル (`comment_reply_history.json`) で防止。「コメント返信」「自動返信」「コメント対応」「視聴者返信」「リプライ」など、コメント対応の自動化に関わる場面で使用すること"
 ---
 
 ## Overview

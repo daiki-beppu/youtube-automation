@@ -1,6 +1,6 @@
 ---
 name: metadata-audit
-description: Use when ローカル descriptions.md と YouTube 上のメタデータが整合しているかを監査したいとき。「メタデータ監査」「説明欄ずれてない？」「タグ確認」「アップ済み動画の整合性チェック」「/metadata-audit」など、`collections/live/` 配下のドリフト検出に関わる場面で使用すること。修正は対象外（`/video-description` が責務）
+description: "Use when ローカル descriptions.md と YouTube 上のメタデータが整合しているかを監査したいとき。「メタデータ監査」「説明欄ずれてない？」「タグ確認」「アップ済み動画の整合性チェック」「/metadata-audit」など、`collections/live/` 配下のドリフト検出に関わる場面で使用すること。修正は対象外（`/video-description` が責務）"
 ---
 
 ## Overview

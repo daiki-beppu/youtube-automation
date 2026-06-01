@@ -1,6 +1,6 @@
 ---
 name: streaming
-description: Use when YouTube ライブ配信用の Vultr VPS を Terraform で操作したいとき。「ライブ配信」「24/7 配信」「streaming」「YouTube ライブ」「VPS 配信」「動画差し替え」「terraform streaming」「配信止まった」「死活監視」「帯域チェック」「アーカイブ確認」「terraform destroy」など、`infra/terraform/streaming/` モジュールに関わる初回構築・運用・トラブルシュート全般で使用すること
+description: "Use when YouTube ライブ配信用の Vultr VPS を Terraform で操作したいとき。「ライブ配信」「24/7 配信」「streaming」「YouTube ライブ」「VPS 配信」「動画差し替え」「terraform streaming」「配信止まった」「死活監視」「帯域チェック」「アーカイブ確認」「terraform destroy」など、`infra/terraform/streaming/` モジュールに関わる初回構築・運用・トラブルシュート全般で使用すること"
 ---
 
 ## Overview

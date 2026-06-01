@@ -1,6 +1,6 @@
 ---
 name: channel-direction
-description: Use when /channel-research の分析結果をもとに新チャンネルの方向性を決定したいとき。「方向性決めたい」「チャンネルの方針」「ポジショニング」「差別化」「ブレスト」「TTP 対象を決める」など、新チャンネルの戦略的方向性を対話で決定する場面で使用すること。/channel-research の後、/channel-setup の前に実行する
+description: "Use when /channel-research の分析結果をもとに新チャンネルの方向性を決定したいとき。「方向性決めたい」「チャンネルの方針」「ポジショニング」「差別化」「ブレスト」「TTP 対象を決める」など、新チャンネルの戦略的方向性を対話で決定する場面で使用すること。/channel-research の後、/channel-setup の前に実行する"
 ---
 
 ## Overview

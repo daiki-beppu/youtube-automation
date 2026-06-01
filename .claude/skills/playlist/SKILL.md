@@ -1,6 +1,6 @@
 ---
 name: playlist
-description: Use when プレイリストの作成・動画割り当て・状態確認をしたいとき。「プレイリスト作って」「プレイリスト整理」「動画をプレイリストに追加」「プレイリスト状況」「削除済み動画を整理」「/playlist」など、`config/channel/playlists.json` に基づくプレイリスト CRUD の場面で使用すること
+description: "Use when プレイリストの作成・動画割り当て・状態確認をしたいとき。「プレイリスト作って」「プレイリスト整理」「動画をプレイリストに追加」「プレイリスト状況」「削除済み動画を整理」「/playlist」など、`config/channel/playlists.json` に基づくプレイリスト CRUD の場面で使用すること"
 ---
 
 ## Overview

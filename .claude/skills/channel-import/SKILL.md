@@ -1,6 +1,6 @@
 ---
 name: channel-import
-description: Use when 既存の YouTube チャンネルを自動化システムに取り込みたいとき。「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」など、既に YouTube で運営中のチャンネルの設定ファイル生成に関わる場面で使用すること。新規チャンネル開設は /channel-new を使うこと
+description: "Use when 既存の YouTube チャンネルを自動化システムに取り込みたいとき。「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」など、既に YouTube で運営中のチャンネルの設定ファイル生成に関わる場面で使用すること。新規チャンネル開設は /channel-new を使うこと"
 ---
 
 ## Overview

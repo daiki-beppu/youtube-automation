@@ -1,6 +1,6 @@
 ---
 name: automation-release
-description: Use when youtube-automation リポジトリ本体の新規リリースを作成したいとき。`/automation-release` 1 コマンドで状態判定し、prepare（リリース PR 作成）または publish（tag + GitHub Release）に自動分岐する。「リリースして」「リリース作って」「新しいバージョン作って」「v5.6.0 出して」「/automation-release」で発動。グローバル `/release` は Node.js 向けで本リポジトリでは使わない。
+description: "Use when youtube-automation リポジトリ本体の新規リリースを作成したいとき。`/automation-release` 1 コマンドで状態判定し、prepare（リリース PR 作成）または publish（tag + GitHub Release）に自動分岐する。「リリースして」「リリース作って」「新しいバージョン作って」「v5.6.0 出して」「/automation-release」で発動。グローバル `/release` は Node.js 向けで本リポジトリでは使わない。"
 ---
 
 ## Overview
