@@ -329,6 +329,94 @@ def test_workflow_legacy_post_upload_silently_ignored(tmp_path, monkeypatch):
     assert config.shorts.publish_time == "08:00"
 
 
+def test_workflow_wf_next_approval_gates_default(tmp_path, monkeypatch):
+    """#508: `workflow.json` 未設定 or 空でも `approval_gates` は両方 `False`（全自動）.
+
+    既存の `workflow.json = {"workflow": {}}` 運用や、`workflow.json` 自体が
+    無いチャンネルでも、後方互換で従来通り全自動進行できることを保証する。
+    """
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.approval_gates.audio is False
+    assert config.workflow.wf_next.approval_gates.upload is False
+
+
+def test_workflow_wf_next_approval_gates_explicit(tmp_path, monkeypatch):
+    """#508: `workflow.wf_next.approval_gates.{audio,upload}` を明示できる."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "approval_gates": {"audio": True, "upload": True},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.approval_gates.audio is True
+    assert config.workflow.wf_next.approval_gates.upload is True
+
+
+def test_workflow_wf_next_approval_gates_partial(tmp_path, monkeypatch):
+    """#508: 片方のゲートだけ `true` も可。指定されないキーは default `False`."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "approval_gates": {"audio": True},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.approval_gates.audio is True
+    assert config.workflow.wf_next.approval_gates.upload is False
+
+
+def test_workflow_section_must_be_object(tmp_path, monkeypatch):
+    """#508: `workflow` セクションが object でないと ConfigError."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": "not-an-object"}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow セクションは object"):
+        load_config()
+
+
+def test_workflow_wf_next_must_be_object(tmp_path, monkeypatch):
+    """#508: `workflow.wf_next` が object でないと ConfigError."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_next": ["bad"]}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.wf_next は object"):
+        load_config()
+
+
+def test_workflow_approval_gates_must_be_object(tmp_path, monkeypatch):
+    """#508: `workflow.wf_next.approval_gates` が object でないと ConfigError."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {"wf_next": {"approval_gates": "bad"}},
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.wf_next.approval_gates は object"):
+        load_config()
+
+
 def test_comments_rule_name_required(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {

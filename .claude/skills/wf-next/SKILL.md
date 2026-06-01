@@ -28,6 +28,30 @@ description: Use when 既存コレクション（collections/planning/ 配下）
 - **新規チャンネル** → `/channel-new` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
 
+## 承認ゲート（config 駆動）
+
+`config/channel/workflow.json` の `workflow.wf_next.approval_gates` で、フェーズ進行前に承認を取るかをチャンネルごとに宣言できる。SKILL.md 本体を書き換える運用は不要（`yt-skills sync` の衝突を避けるためにも本ファイルは編集しない）。
+
+```json
+{
+  "workflow": {
+    "wf_next": {
+      "approval_gates": {
+        "audio": false,
+        "upload": false
+      }
+    }
+  }
+}
+```
+
+- `approval_gates.audio` (default `false`): `prepared` フェーズ 2-B（音源承認ゲート）。最終マスター候補を検出した時点で承認を取る
+- `approval_gates.upload` (default `false`): `mastered` フェーズ 3-B（アップロード承認ゲート）。`/video-upload` 実行直前に承認を取る
+- 既定値は両方 `false` で、`workflow.json` に何も書かれていない既存チャンネルは従来通り全自動進行（後方互換）
+- 値の解決は `youtube_automation.utils.config.load_config().workflow.wf_next.approval_gates.{audio,upload}` 経由（コード側で参照可能）
+
+ゲートが `true` のフェーズに到達したら、本 skill は AskUserQuestion で承認を取り、却下されたらフロー停止 + ガイダンスのみで終了する。
+
 ## Instructions
 
 ### 1. アクティブなコレクションの特定
@@ -65,19 +89,24 @@ description: Use when 既存コレクション（collections/planning/ 配下）
    - 検出できた場合:
      - 複数候補があればユーザーに採用ファイルを確認（worktree 内と main repo 側で同名ファイルが両方ある場合も含む）
      - 採用ファイルが worktree 外（main repo 側）にあるときは worktree 側 `01-master/` にコピーしてから処理（state 更新後の動画化が worktree 内で完結するように）
-     - `assets.master_audio` にファイル名のみ記録 → `phase: "mastered"` → 自動的に公開フローへ進む
+     - **承認ゲート（`approval_gates.audio = true` のとき）**: 採用ファイル名を提示して AskUserQuestion で「この音源で `mastered` に進めてよいか」を確認する。承認されたら下記の state 更新へ進む。却下されたら `assets.master_audio` を更新せず、ガイダンス「最終マスターを差し替えて `/wf-next` を再実行してください」を表示して停止
+     - `assets.master_audio` にファイル名のみ記録 → `phase: "mastered"` → 自動的に公開フローへ進む（`approval_gates.audio = false` のときは確認なし）
    - 検出できない場合: ガイダンス「最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
 
-#### `mastered` → 全自動公開フロー（承認なし）
+#### `mastered` → 公開フロー（アップロード承認ゲートあり）
 
-以下を全自動で一気通貫実行。各ステップ完了時に `workflow-state.json` を更新し、途中で中断しても同じ状態から再開できる。
+以下を一気通貫実行。各ステップ完了時に `workflow-state.json` を更新し、途中で中断しても同じ状態から再開できる。
 
 1. **並列 A**（2 Agent 同時起動）:
    - Agent 1: Skill `/videoup` — generate_videos.sh で動画生成
    - Agent 2: Skill `/video-description` — 概要欄自動生成
 2. 並列 A 完了後:
    - `assets.master_video`, `assets.description` を更新
-3. **順次**: Skill `/video-upload` — YouTube アップロード + live 移行
+3. **アップロード承認ゲート 3-B（`approval_gates.upload = true` のとき）**:
+   - 並列 A 完了直後、`/video-upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する
+   - 承認されたら次ステップへ進む。却下されたら `phase` を `mastered` のままにして停止し、ガイダンス「準備が整ったら `/wf-next` を再実行してください」を表示
+   - `approval_gates.upload = false` のときは確認なしでそのまま進む（従来の全自動挙動）
+4. **順次**: Skill `/video-upload` — YouTube アップロード + live 移行
    - `upload.video_id`, `upload.video_url` を記録
    - `stage: "live"`, `phase: "complete"` に更新
    - `collections/planning/` → `collections/live/` に移動
