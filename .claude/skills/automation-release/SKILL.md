@@ -99,16 +99,34 @@ awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md \
   | grep -q '^### Migration' || echo "WARNING: Unreleased に Migration セクションがありません"
 ```
 
-#### 1-5. commit
+#### 1-5. uv.lock の同期
+
+`pyproject.toml::version` を bump した後、`uv.lock::youtube-channels-automation.version` が古い値のまま残らないよう **必ず** `uv lock` を実行して lock も同 commit に含める。
 
 ```bash
-git add pyproject.toml CHANGELOG.md
+uv lock
+
+# 同期を確認: pyproject.toml と uv.lock の version が一致すること
+pyproject_ver=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/version = "(.+)"/\1/')
+lock_ver=$(grep -A1 'name = "youtube-channels-automation"' uv.lock | grep '^version' | head -1 | sed -E 's/version = "(.+)"/\1/')
+if [ "${pyproject_ver}" != "${lock_ver}" ]; then
+  echo "ERROR: pyproject.toml (${pyproject_ver}) と uv.lock (${lock_ver}) が一致しません"
+  exit 1
+fi
+```
+
+これを省くと、後続の `uv sync` を叩いた別 PR で `uv.lock` の 1 行差分（`version`）が機械的に発生し、無関係な PR に混入する（#515）。`uv` が未導入の環境では `nix develop --command uv lock` または `direnv exec . uv lock` で呼び出す。
+
+#### 1-6. commit
+
+```bash
+git add pyproject.toml uv.lock CHANGELOG.md
 git commit -m "chore(release): v${VER} リリース PR"
 ```
 
-commit メッセージは `commit-convention` スキルの規約に準拠（`chore(release):` プレフィックス + 日本語）。
+commit メッセージは `commit-convention` スキルの規約に準拠（`chore(release):` プレフィックス + 日本語）。`uv.lock` を必ず同 commit に含めること（1-5 のドリフト再発防止策）。
 
-#### 1-6. push + PR 作成
+#### 1-7. push + PR 作成
 
 ```bash
 git push -u origin "release/v${VER}"
@@ -224,6 +242,7 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - **main が prepare 中に進む**: 他者が並行で main にマージしてもリリース PR は固定 SHA から枝分かれしているので影響なし。後乗せ機能は次回リリースに自動で乗る。ただし PR mergeable conflict が出たら rebase が必要
 - **tag だけ先に push してしまった場合**: GitHub Release 作成（2-3）を再実行すれば idempotent（gh release create が既存 tag を拾う）
 - **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。下流の `/automation-update` 側が CHANGELOG.md fallback で抽出するため publish 時点では問題視しない
+- **`uv.lock` の version 乖離**: `pyproject.toml` だけ bump して `uv.lock` を同期し忘れると、別 PR で `uv sync` を叩いた瞬間に機械的な 1 行差分が無関係な PR に混入する（#515 の既往）。prepare Phase 1-5 で **必ず** `uv lock` を実行し、bump コミットに `uv.lock` も含めること。`uv` が未導入なら `nix develop --command uv lock` で囲む
 
 ## Rules
 
@@ -232,6 +251,7 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - リリース PR の commit メッセージは `chore(release): v<VER> リリース PR` 固定（`commit-convention` 規約準拠 + 検索容易性）
 - `release/v<VER>` ブランチ命名は固定（state detection と publish クリーンアップが依存）
 - prepare 1-4 で `Migration` セクション欠落を warning する（下流の `/automation-update` が `所要時間` / `local fix 衝突注意` を抽出する契約上の入力源）
+- prepare 1-5 で **必ず** `uv lock` を実行し、`uv.lock` の version を `pyproject.toml::version` と同期させる（#515 再発防止）。bump コミットに `uv.lock` を含めず main にマージするのは禁止
 - 状態判定の結果は `AskUserQuestion` でユーザー確認してから次に進む（誤判定時の脱出口）
 
 ## Cross References
