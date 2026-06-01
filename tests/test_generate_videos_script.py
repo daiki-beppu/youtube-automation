@@ -112,9 +112,12 @@ def _run_generate_videos(
     extra_env: dict[str, str] | None = None,
     collection: Path | None = None,
     master_filename: str = "master-mix.wav",
+    with_loop: bool = True,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     if collection is None:
         collection = _create_collection(tmp_path, master_filename=master_filename)
+    if not with_loop:
+        (collection / "10-assets" / "loop.mp4").unlink()
     bin_dir = _create_stub_bin(tmp_path)
     ffmpeg_log = tmp_path / "ffmpeg.log"
     env = os.environ.copy()
@@ -375,3 +378,107 @@ def test_master_mix_takes_precedence_over_master(tmp_path: Path) -> None:
     assert len(commands) == 1
     assert "01-master/master-mix.wav" in commands[0]
     assert "01-master/master.mp3" not in commands[0]
+
+
+# ─── Video Effects (#648) ────────────────────────────────
+
+
+def test_default_effect_none_uses_stream_copy_for_loop(tmp_path: Path) -> None:
+    """エフェクト未指定（デフォルト=none）ではループモードは stream copy のままで挙動が温存される。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+    )
+    assert result.returncode == 0, result.stderr
+    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    assert "-c:v copy" in final_cmd
+    assert "-filter_complex" not in final_cmd
+
+
+def test_particles_effect_switches_to_libx264_with_filter_complex(tmp_path: Path) -> None:
+    """particles 指定でループ素材を libx264 再エンコード + filtergraph に切り替わる。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={"VIDEOUP_EFFECT": "particles"},
+    )
+    assert result.returncode == 0, result.stderr
+    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    assert "-filter_complex" in final_cmd
+    assert "[vout]" in final_cmd
+    assert "-c:v libx264" in final_cmd
+    assert "-c:v copy" not in final_cmd
+    # subtle (default) は alpha=0.10
+    assert "0.10*255" in final_cmd
+
+
+def test_bokeh_effect_uses_gblur(tmp_path: Path) -> None:
+    """bokeh エフェクトでは gblur フィルタが使われる。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={"VIDEOUP_EFFECT": "bokeh", "VIDEOUP_EFFECT_INTENSITY": "medium"},
+    )
+    assert result.returncode == 0, result.stderr
+    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    assert "gblur" in final_cmd
+    # medium は alpha=0.20
+    assert "0.20*255" in final_cmd
+
+
+def test_gradient_effect_uses_gradients_source(tmp_path: Path) -> None:
+    """gradient エフェクトでは gradients ソースが filtergraph に含まれる。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={"VIDEOUP_EFFECT": "gradient", "VIDEOUP_EFFECT_INTENSITY": "strong"},
+    )
+    assert result.returncode == 0, result.stderr
+    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    assert "gradients=" in final_cmd
+    # strong は alpha=0.35
+    assert "0.35*255" in final_cmd
+
+
+def test_static_image_with_effect_uses_filter_complex(tmp_path: Path) -> None:
+    """静止画モード + エフェクトでも filter_complex 経路に乗る。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles"},
+        with_loop=False,
+    )
+    assert result.returncode == 0, result.stderr
+    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    assert "-filter_complex" in final_cmd
+    assert "[vout]" in final_cmd
+    # 静止画モード固有の scale+pad 前処理が含まれる
+    assert "scale=1920:1080:force_original_aspect_ratio=decrease" in final_cmd
+
+
+def test_invalid_effect_name_fails_loud(tmp_path: Path) -> None:
+    """未知のエフェクト名は fail-loud で停止する。"""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={"VIDEOUP_EFFECT": "sparkle"},
+    )
+    assert result.returncode != 0
+    assert "Unknown VIDEOUP_EFFECT" in result.stdout + result.stderr
+
+
+def test_invalid_intensity_fails_loud(tmp_path: Path) -> None:
+    """未知の intensity は fail-loud で停止する。"""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={"VIDEOUP_EFFECT": "particles", "VIDEOUP_EFFECT_INTENSITY": "extreme"},
+    )
+    assert result.returncode != 0
+    assert "Unknown VIDEOUP_EFFECT_INTENSITY" in result.stdout + result.stderr

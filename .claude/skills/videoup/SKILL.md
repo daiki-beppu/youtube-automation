@@ -74,6 +74,46 @@ $ARGUMENTS
 - master 尺 ≥ `target_video_duration_min × 60` のときは無視され従来動作になる (master 尺が支配)
 - 音声 loop seam の crossfade は本機能のスコープ外 (将来拡張)
 
+## 映像エフェクト (#648)
+
+ループ動画背景・静止画背景のどちらでも、画面に **光の粒子**・**ボケ**・**グラデーション流れ** などのエフェクトを重ねられる。動画編集ソフトの「画面を彩るレイヤー効果」を ffmpeg filtergraph だけで再現する MVP 機構。
+
+### エフェクト一覧
+
+| `VIDEOUP_EFFECT` | 効果 | 想定用途 |
+|---|---|---|
+| `none` (デフォルト) | エフェクトなし。ループは stream copy、静止画は従来 libx264 経路 | 既存挙動の温存。コスト・容量を最小化したいとき |
+| `particles` | 光の粒子（淡い白点が画面をゆっくり流れる） | 落ち着いた BGM・夜景・キラキラ系のサムネ |
+| `bokeh` | ボケ（柔らかな円形グラデーションがゆらぐ） | カフェ系・暖色系ジャズ・ロウソク系のサムネ |
+| `gradient` | グラデーション流れ（半透明のカラーグラデーションが上下にうごく） | ローファイヒップホップ・シティポップ・夜の街並み |
+
+強度は `VIDEOUP_EFFECT_INTENSITY` で `subtle` / `medium` / `strong` から選ぶ（デフォルト `subtle`）。BGM 視聴の邪魔をしないよう **subtle 推奨**。`strong` は短時間のテイスター動画やショート向け。
+
+### 使い方
+
+```bash
+# 例 1: ループ動画背景に「光の粒子（控えめ）」を重ねる
+VIDEOUP_EFFECT=particles VIDEOUP_EFFECT_INTENSITY=subtle \
+  bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh"
+
+# 例 2: 静止画背景に「ボケ（中程度）」を重ねる
+VIDEOUP_EFFECT=bokeh VIDEOUP_EFFECT_INTENSITY=medium \
+  bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
+  collections/planning/20260601-001-lofi-jazz-collection
+```
+
+### 挙動と注意点
+
+- **エフェクト有効時はループモードでも stream copy ではなく libx264 再エンコードに切り替わる**。ファイルサイズは数% 増えるが、CRF 22 / `LOOP_MAX_BITRATE` ガードで肥大化を抑える
+- 静止画モードもエフェクト有効時は 24fps で書き出すため、ファイルサイズが従来（1fps）より大きくなる。**長尺の場合は静止画 + エフェクトより、ループ動画 + エフェクトを推奨**
+- 不正な値（例: `VIDEOUP_EFFECT=sparkle`）は **fail-loud で停止**。ffmpeg が走り始める前にエラーとなる
+- 値検証は bash で完結しているため、`set -e` を使わずとも安全
+- エフェクトをチャンネルデフォルトにしたい場合は、当面はチャンネル側ラッパースクリプトや shell alias で `export VIDEOUP_EFFECT=...` を呼ぶ運用とする（skill-config 化は follow-up）
+
+### 動作確認
+
+実コレクションで生成した動画は YouTube Studio のプレビュー（モバイル・PC）と実機 YouTube 視聴で粒子・ボケ・グラデーションが**音楽の邪魔にならない強度で乗っているか**を必ず確認すること。BGM チャンネルのコア視聴体験を壊さないことが優先事項。
+
 ## 長時間処理の取り扱い
 
 `generate_videos.sh` は ffmpeg を走らせるため **1〜10 分程度**（コレクション尺次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
@@ -81,7 +121,13 @@ $ARGUMENTS
 spawn 例:
 
 ```bash
+# エフェクト無しの基本パターン
 bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
+  > /tmp/videoup-$(date +%s).log 2>&1
+
+# エフェクト付き（#648）
+VIDEOUP_EFFECT=particles VIDEOUP_EFFECT_INTENSITY=subtle \
+  bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
   > /tmp/videoup-$(date +%s).log 2>&1
 ```
 
