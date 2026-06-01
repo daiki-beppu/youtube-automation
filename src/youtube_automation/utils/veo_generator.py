@@ -6,10 +6,12 @@ API 呼び出し・音声除去・クロスフェード補正の関数群。
 
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 from youtube_automation.utils import cost_tracker
+from youtube_automation.utils import progress as progress_fmt
 from youtube_automation.utils import veo_operation_store as op_store
 from youtube_automation.utils.profile import section
 
@@ -23,6 +25,27 @@ DEFAULT_PROMPT = (
 )
 POLL_INTERVAL_SEC = 5
 MAX_POLL_SEC = 600  # 10分タイムアウト
+
+# Veo 3.1 の典型生成時間（推定 ETA 用のヒューリスティック）。
+# API は真の進捗を返さないため、過去観測から得た典型値で「目安」を出す。
+# 実観測（fast/standard とも 8 秒尺で 60〜120 秒台）の中央値寄りに置く。
+_VEO_TYPICAL_SEC_PER_DURATION = 12.0  # 1 秒尺あたりの推定生成時間
+_VEO_TYPICAL_MIN_SEC = 60.0  # 最低でもこの程度はかかる（推定下限）
+
+# 非 TTY 環境向けに、進捗を行ごと出力するための間隔（秒）。
+# `\r` アニメではなく N 秒ごとに 1 行ずつログを出して CI ログを壊さない。
+_NON_TTY_LOG_INTERVAL_SEC = 30
+
+
+def _estimate_total_veo_seconds(duration_seconds: int | None) -> float:
+    """Veo の典型総生成時間（秒）を推定する。
+
+    `duration_seconds` が None の場合は最低値を返す。
+    """
+    if not duration_seconds or duration_seconds <= 0:
+        return _VEO_TYPICAL_MIN_SEC
+    estimated = duration_seconds * _VEO_TYPICAL_SEC_PER_DURATION
+    return max(estimated, _VEO_TYPICAL_MIN_SEC)
 
 
 def _is_unrecoverable_operation_error(exc: Exception) -> bool:
@@ -156,37 +179,80 @@ def _submit_operation(
     return operation
 
 
-def _wait_for_operation(client, operation, output_path: Path):
-    """operation 完了まで polling し、完了 operation を返す。"""
-    print("  [Wait]   動画生成中...", end="", flush=True)
+def _wait_for_operation(client, operation, output_path: Path, *, duration_seconds: int | None = None):
+    """operation 完了まで polling し、完了 operation を返す。
+
+    Issue #641: ドット列の代わりに「スピナー + 経過時間 + 推定進捗率/ETA」を
+    1 行更新（`\\r`）で表示する。Veo API は `operation.done`（真偽値）しか
+    返さないため、進捗率・ETA は典型生成時間からの**推定値**として表示する。
+    非 TTY 環境（CI / log redirect）では `\\r` アニメを抑止し、定期的な行
+    ごとの出力にフォールバックする。
+    """
+    expected_total = _estimate_total_veo_seconds(duration_seconds)
+    tty = progress_fmt.is_tty(sys.stdout)
+    label = "Veo 動画生成中（推定）"
+
+    print(f"  {progress_fmt.format_step(1, 3, '生成中（Veo polling）')}")
     start = time.monotonic()
+    tick = 0
+    last_log_sec = -1  # 非 TTY 用、最後に行出力した秒
     with section("veo.poll_total", interval_sec=POLL_INTERVAL_SEC):
         try:
             while not operation.done:
                 elapsed = time.monotonic() - start
                 if elapsed > MAX_POLL_SEC:
-                    print(f"\n  [ERROR]  タイムアウト ({MAX_POLL_SEC}秒)")
+                    if tty:
+                        sys.stdout.write("\r" + " " * 80 + "\r")
+                        sys.stdout.flush()
+                    print(f"  [ERROR]  タイムアウト ({MAX_POLL_SEC}秒)")
                     return None
-                print(".", end="", flush=True)
+
+                line = progress_fmt.render_progress_line(
+                    label=label,
+                    elapsed=elapsed,
+                    expected_total=expected_total,
+                    tick=tick,
+                )
+                if tty:
+                    sys.stdout.write("\r  " + line + "   ")
+                    sys.stdout.flush()
+                else:
+                    # 非 TTY: N 秒ごとに 1 行出力（CI ログを壊さない）
+                    bucket = int(elapsed) // _NON_TTY_LOG_INTERVAL_SEC
+                    if bucket != last_log_sec:
+                        print(f"  {line}")
+                        last_log_sec = bucket
+
                 time.sleep(POLL_INTERVAL_SEC)
+                tick += 1
                 try:
                     with section("veo.operations_get"):
                         operation = client.operations.get(operation)
                 except KeyboardInterrupt:
                     raise
                 except Exception as exc:
+                    if tty:
+                        sys.stdout.write("\r" + " " * 80 + "\r")
+                        sys.stdout.flush()
                     _handle_operations_get_error(exc, output_path)
                     return None
         except KeyboardInterrupt:
+            if tty:
+                sys.stdout.write("\r" + " " * 80 + "\r")
+                sys.stdout.flush()
             _print_interrupt_messages(output_path)
             return None
     elapsed = time.monotonic() - start
-    print(f" 完了 ({elapsed:.0f}秒)")
+    if tty:
+        sys.stdout.write("\r" + " " * 80 + "\r")
+        sys.stdout.flush()
+    print(f"  [Wait]   動画生成完了 ({progress_fmt.format_elapsed(elapsed)})")
     return operation
 
 
 def _persist_generated_video(operation, output_path: Path) -> bool:
     """生成済み動画を output_path へ保存する。"""
+    print(f"  {progress_fmt.format_step(2, 3, '保存中（バイト列を MP4 へ書き出し）')}")
     if not operation.response or not operation.response.generated_videos:
         print("  [ERROR]  動画が生成されませんでした")
         op_store.clear(output_path)
@@ -200,6 +266,8 @@ def _persist_generated_video(operation, output_path: Path) -> bool:
         op_store.clear(output_path)
         return False
     output_path.write_bytes(video_bytes)
+    size_mb = output_path.stat().st_size / (1024 * 1024)
+    print(f"  [Save]   保存完了 → {output_path.name} ({size_mb:.1f} MB)")
     return True
 
 
@@ -215,6 +283,7 @@ def _finalize_generated_video(
     compression が有効なら libx264 再エンコードで音声除去も同時に行うため
     `strip_audio` の stream copy パスを skip し、ffmpeg 起動を 1 回に集約する。
     """
+    print(f"  {progress_fmt.format_step(3, 3, '後処理（圧縮 / 音声除去）')}")
     if compression and compression.get("enabled", True):
         compress_loop(
             output_path,
@@ -224,7 +293,7 @@ def _finalize_generated_video(
     else:
         strip_audio(output_path)
     size_mb = output_path.stat().st_size / (1024 * 1024)
-    print(f"  [Done]   保存完了 → {output_path} ({size_mb:.1f} MB)")
+    print(f"  [Done]   完成 → {output_path} ({size_mb:.1f} MB)")
 
     entry = cost_tracker.log_generation(
         "video",
@@ -280,7 +349,7 @@ def generate_loop_video(
         if operation is None:
             return False
 
-    operation = _wait_for_operation(client, operation, output_path)
+    operation = _wait_for_operation(client, operation, output_path, duration_seconds=duration_seconds)
     if operation is None:
         return False
 

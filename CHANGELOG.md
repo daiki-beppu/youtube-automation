@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(veo,videoup)`: 動画生成中の進捗表示を改善した（#641）。Veo ループ動画生成（`veo_generator._wait_for_operation`）はドット列のままだったポーリング表示を「スピナー + 経過時間 + 推定進捗率 / ETA」の 1 行更新表示に置き換え、Veo API が真の進捗を返さない制約下で典型生成時間ベースの推定値であることを `≈` prefix で明示する。生成フロー全体を `[Step 1/3] 生成中` → `[Step 2/3] 保存中` → `[Step 3/3] 後処理` の 3 ステップで明示し、`generate_videos.sh` 側も `[Step N/M]` のステップ行と既存スピナーに加え ETA 表示を追加した。進捗フォーマット（経過時間 / ETA / スピナー / 1 行レンダラー）は `utils/progress.py` の純粋関数として切り出し `tests/test_progress.py` で 39 ケースを担保。非 TTY 環境（CI / log redirect）では `\r` アニメを抑止し定期的な行ごとの出力にフォールバックする（Python 側は `progress.is_tty(sys.stdout)`、bash 側は `[[ -t 1 ]]` で判定）
+
 ### Changed
 
 - `refactor(thumbnail)`: imagegen 14 項目 Shared prompt schema の bridge 層を試験導入した（#654、PR #651 / #650 follow-up・差分レポート提案 5 / E-2）。`src/youtube_automation/utils/image_provider/prompt_schema.py` に 14 項目 `PromptSchema` dataclass（`use_case` / `asset_type` / `primary_request` / `input_images` / `scene` / `subject` / `style` / `composition` / `lighting` / `color` / `materials` / `text` / `constraints` / `avoid`）と既存 `image_generation.gemini.*` キーから 14 項目へ機械マッピングする `from_skill_config()` / imagegen 形式 `Label: value` を出力する `render()` を追加し、`image_provider.__init__` の `__all__` に `PromptSchema` / `prompt_schema` を export した。対応マッピング表は `.claude/skills/thumbnail/references/prompt-schema.md`、設計判断と段階移行パスは `docs/skill-design/ADR-001-thumbnail-prompt-schema.md` に明文化（試験導入のみ・実本番フロー未接続）。`composition.py` / `scripts/generate_image.py` / `diff_prompt_template` / TTP / Two-Phase / 視認性検証 / 固定キャラ / stock 退避 / 複数プロバイダー切替の挙動は完全に温存（既存 `tests/test_thumbnail_skill_assets.py` 4 件 + 新規 `tests/test_prompt_schema.py` 8 件 green で担保）。SKILL.md は「## プロンプト構築」節末尾に bridge への参照リンクを 1 行追記したのみで既存セクション順序・固定化テストの対象テキストには触れていない。次フェーズ（opt-in feature flag）は skill-config 管理見直し epic 発火後に別 issue として `takt:default` で再起票する
