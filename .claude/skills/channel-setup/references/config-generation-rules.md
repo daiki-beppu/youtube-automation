@@ -3,13 +3,25 @@
 `/channel-setup` と `/channel-import` から共通参照するルール集。
 テンプレートは同ディレクトリの `config-template.json`。
 
+## TTP（徹底的にパクる）路線時の優先順位
+
+`docs/channel/channel-direction.md` で「TTP 完全コピー路線」が選ばれている場合、各フィールド生成ルール（後述）は **競合スナップショットの転写を最優先** し、独自設計はあとから差分として乗せる。
+
+1. **`/channel-setup` Step 2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
+2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
+3. `brandingSettings.channel.keywords` は数・順序・スペース入りクォート形式（`"chill beats"` 等）まで踏襲する
+4. `localizations` で多言語化されている言語セットを `localization.supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
+5. TTP self-check（SKILL.md Step 2.3）に通してから提案する
+
+「独自路線」「ハイブリッド路線」を選んでいる場合は競合スナップショットを必ず参照しつつも、転写率と差別化の比率を方向性ドキュメントに合わせる。
+
 ## 必須セクション
 
 以下は **すべて `config/channel/*.json` に含める**:
 
 - `channel` — name, short, core_message, channel_id, youtube_handle, url
 - `content_model` — collection / release など
-- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版の対象言語、単一ソース宣言）。`supported_languages` は広告単価が高い 3 言語（`ja` / `en` / `de`）を必ず含め、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）
+- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版の対象言語、単一ソース宣言）。`supported_languages` は広告単価が高い 3 言語（`ja` / `en` / `de`）を必ず含め、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
 - `music_engine` — `"suno"` または `"lyria"`（チャンネルのデフォルト音楽エンジン）
 - `genre` — primary, style, context
 - `youtube` — デフォルトのアップロード設定
@@ -24,6 +36,8 @@
 ### `tags.base`
 ジャンルに適した YouTube 検索タグを **10 個程度**。競合の頻出タグを参考に。
 
+**TTP 路線**: 競合 `brandingSettings.channel.keywords` の語彙・件数・順序・クォート形式（`"my channel"`）をそのまま転写し、固有名詞だけを自チャンネル名に置換する。`keywords` 全体の文字数上限は 500 文字（`yt-channel-settings` の事前バリデーションも 500 文字基準 #563）なので、転写時に超過しないか必ず確認する。
+
 ### `tags.themes`
 **6-10 テーマ** のタグ群。各テーマ **3 語程度**。
 
@@ -35,6 +49,8 @@
 | `sub_opening` | opening を補足する 1-2 文 |
 | `perfect_for` | **4 項目**（例: Study & Focus, Relaxation, Creative Work, Sleep） |
 | `hashtags` | **5 個** 程度 |
+
+**TTP 路線**: チャンネル概要欄（`snippet.description` / `brandingSettings.channel.description`）の章立て・段落構造を `descriptions.opening` + `descriptions.sub_opening` + `descriptions.perfect_for` に転写する。welcome 行・絵文字・箇条書きセクションの並び順を変えないこと。「TTP できているか」は SKILL.md Step 2.3 の self-check で必ず検証する。
 
 ### `title`
 
