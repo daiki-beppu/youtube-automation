@@ -10,5 +10,40 @@
     "type": "collection",
     "languages": ["ja"]
   },
-  "music_engine": "suno"
+  "music_engine": "suno",
+  "overlays": {
+    "enabled": false,
+    "audio_visualizer": {
+      "enabled": true,
+      "mode": "bar",
+      "size": "1280x180",
+      "rate": "24",
+      "fscale": "log",
+      "colors": "white",
+      "position": "(W-w)/2:H-h-40",
+      "opacity": 0.85,
+      "glow_enabled": true,
+      "glow_sigma": 12.0,
+      "glow_opacity": 0.45
+    },
+    "subscribe_popup": {
+      "enabled": true,
+      "image": "subscribe-popup.png",
+      "start_sec": 5.0,
+      "duration_sec": 8.0,
+      "fade_sec": 0.6,
+      "position": "W-w-40:40",
+      "opacity": 1.0
+    },
+    "encoder": {
+      "codec": "libx264",
+      "preset": "medium",
+      "crf": 20,
+      "pix_fmt": "yuv420p",
+      "maxrate": "4M",
+      "bufsize": "8M",
+      "profile": "high",
+      "framerate": 24
+    }
+  }
 }
