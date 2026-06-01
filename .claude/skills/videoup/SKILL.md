@@ -38,7 +38,7 @@ $ARGUMENTS
 ### ステップ
 
 1. **対象コレクション確認**: `workflow-state.json` で状態確認
-2. **マスター音源**: `master-mix.{wav,m4a,aac,mp3,flac}` が既にあればスキップ。なければ `/masterup` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可）
+2. **マスター音源**: `master-mix.{wav,m4a,aac,mp3,flac}` または `master.{wav,m4a,aac,mp3,flac}` が既にあればスキップ。なければ `/masterup` または `/lyria` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可、`/lyria` / `/masterup` の自動生成出力は `master.{wav,mp3}` で配置される）
 3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
    `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/loop-video` を案内せず `10-assets/main.png` を静止背景として使用する。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
@@ -51,7 +51,7 @@ $ARGUMENTS
 スクリプトはコレクションのディレクトリ構造から以下を自動検出します:
 
 - **コレクション名**: ディレクトリ名から（`YYYYMMDD-xxx-theme-collection` → `Theme-Name`）
-- **マスター音声**: `master-mix.{wav,m4a,aac,mp3,flac}` を優先順に検出（m4a/aac は `-c:a copy` で再エンコード回避）、`*-Master.mp3` フォールバック
+- **マスター音声**: `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`yt-generate-master`）の自動生成出力（#507）
 - **サムネイル**: `10-assets/main.png` 優先、`thumbnail.jpg` フォールバック
 - **個別音楽**: `02-Individual-music/*.mp3`（アルファベット順）
 
