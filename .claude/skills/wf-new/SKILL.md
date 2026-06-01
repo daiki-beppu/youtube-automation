@@ -104,11 +104,17 @@ Phase 1 の成果物を `20-documentation/` に保存:
 2. プレビューディレクトリの自セッション分を削除
 3. **サムネイル確定**:
    - `single_step` モードまたは `image_generation.provider: codex` の場合: `/collection-ideate` のプレビュー画像がテキスト込みの完成サムネイルなので、`/thumbnail` は**不要**。
-     `main.png` をそのまま `thumbnail.jpg` にコピーする:
-     ```bash
-     cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg
-     ```
-   - それ以外のモード: `/thumbnail <theme>` を Agent で実行（テキストオーバーレイ生成）
+     ただし **QA は必ず通す**（#570、プレビュー = 最終 thumbnail だと品質チェックが一切走らない経路を塞ぐ）:
+     1. **必須 QA（最低限）**: Read ツールで `main.png` を等倍プレビューし、以下を目視確認する
+        - [ ] **手・指の解剖学**: キャラが手を出している場合、各手 5 本指・指の分離が明瞭・指の融合や本数異常・溶融が無い（特に楽器持ち・指を伸ばすポーズで Gemini が破綻しやすい）
+        - [ ] **テキスト破綻**: タイトル文字が読める・誤字脱字・grbage character・記号化が無い
+        - [ ] **署名 / 透かし / ロゴ**: 参照元の signature / autograph / watermark / brand mark が転写されていない（#569）
+     2. **NG だった場合**: `4-4` の diff_prompt_template に `${anatomy_clause}` を強調挿入して再生成、または codex プロバイダー（人体破綻に強い傾向）へ切り替えて再生成。`/collection-ideate` の Phase 4 から再実行する
+     3. **OK だった場合**のみ `main.png` を `thumbnail.jpg` にコピーする:
+        ```bash
+        cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg
+        ```
+   - それ以外のモード: `/thumbnail <theme>` を Agent で実行（テキストオーバーレイ生成。`/thumbnail` の品質チェック節で同等 QA が走る）
 4. **音楽素材生成**: Agent ツールで音楽エンジンに応じたスキルを実行:
    - Suno: `/suno <theme>` を Skill ツールで実行（プロンプト生成）
    - Lyria: `/lyria <theme>` を Skill ツールで実行（プロンプト設計のみ。Lyria 3 API 呼び出しは `/wf-next` で実行）
