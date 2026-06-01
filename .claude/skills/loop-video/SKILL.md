@@ -228,6 +228,39 @@ veo:
 `--smooth` 経路でも同じ crf/preset が適用されるため、`/loop-video` → `--smooth` のいずれの順でも
 最終的な `loop.mp4` ビットレートは設定値（既定 CRF 22 ≒ 3〜4 Mbps）に揃う。
 
+## 中断 (Ctrl+C) 時の挙動
+
+`yt-generate-loop-video` の Veo 生成中に Ctrl+C を送ったときの挙動は、運用上以下の通り厳密に決まっている。**「中断 = キャンセル = 無料」ではない**ことに注意。
+
+### 現状のコード挙動 (cancel API 未利用)
+
+| フェーズ | Ctrl+C の効き | API 側 operation | クレジット消費 | 再開可否 |
+|---|---|---|---|---|
+| `client.models.generate_videos(...)` 送信中（submit 中） | ローカルプロセスは即停止 | submit が成立していれば API 側で開始済み | submit 後ならフル課金 | **不可**（operation_name を持たない） |
+| polling 中（submit 済み、生成待ち） | ローカルプロセスは即停止 | **継続実行される**（cancel されない） | フル課金（中断しても止まらない） | **可**（`<CHANNEL_DIR>/tmp/veo-operations/` に保存された operation_name を次回実行で resume） |
+| polling 中の `operations.get` 一時障害 | 例外捕捉、state を保持 | API 側継続 | フル課金 | 可 |
+| polling 中の `operations.get` で失効（404） | state を削除 | （失効済み） | 課金済み bytes は取りこぼし | 不可 |
+
+ポイント:
+
+- **Veo API には `operations.cancel` 相当が現状未実装** (`client.operations.cancel` は未提供)。本スキルの実装 (`utils/veo_generator.py`) も `KeyboardInterrupt` を捕捉してメッセージ表示と state 保存だけを行い、cancel API を呼んでいない。**Ctrl+C はあくまでローカルプロセスを止めるだけで、API 側のジョブとクレジット消費は止められない**。
+- submit が成功した時点で課金は確定する想定で運用する。中断は「節約」にはならず、せいぜい「次回の二重課金を resume で防ぐ」効果しかない。
+- 中断 → 即再実行すれば、保存済み operation_name から resume して既課金分を回収できる（loop.mp4 を取り出せる）。**再課金は発生しない**。
+- 完全に捨てる場合でも、state ファイル (`<CHANNEL_DIR>/tmp/veo-operations/<output-hash>.json`) を手動削除しない限り、次回 `yt-generate-loop-video` 実行時に resume を試みる点に注意（不要なら削除）。
+
+### 運用ガイドライン
+
+- **submit 成功後の Ctrl+C は「無料化」ではなく「次回 resume の予約」と思え**。クレジット節約目的で中断してはいけない。
+- 真に止めたい（誤プロンプトでの submit など）場合でも、submit が通った後は API 側のジョブを止める手段が（現状コードからは）ない。submit 前に prompt を確認すること。
+- ループ動画化そのものを停止したいチャンネルは `config/skills/loop-video.yaml::enabled: false` で CLI ごと無効化する（`yt-generate-loop-video` が fail-loud で停止し、submit 自体が走らない）。
+- 将来 Veo API が `operations.cancel` を公開し、本スキルの実装が対応した場合は、Ctrl+C で API 側 operation も cancel して以降のクレジット消費を停止する挙動に変わる予定。**現状はその段階に到達していない**ため、上記の「中断してもクレジットは消費される」前提で運用する。
+
+### state ファイルの場所
+
+- パス: `<CHANNEL_DIR>/tmp/veo-operations/<output-hash>.json`
+- 中身: `{ "operation_name": "operations/...", "model": "veo-3.1-fast-generate-001", "output_path": "..." }`
+- 再開不要なら手動削除可（次回実行は新規 submit になる）
+
 ## 長時間処理の取り扱い
 
 `yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒** 程度（モデルとリージョン次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
