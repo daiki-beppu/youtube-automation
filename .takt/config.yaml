@@ -3,15 +3,23 @@
 draft_pr: false
 base_branch: main
 
-# coder の provider はグローバル設定の codex を継承する（通常はここに persona_providers を書かない）。
-# Codex の rate limit 等で一時的に coder を Claude へ逃がしたいときだけ、
-# global を触らず以下のような override をこのファイルに足す:
-#   persona_providers:
-#     coder:
-#       provider: claude
-#       model: sonnet
-# rate limit が解消したら、その override ブロックを削除して codex 継承に戻す。
+# 全 persona を Claude/opus に固定する（本リポジトリは品質側に振り、Codex への依存を切る）。
+# - planner / 各 reviewer はグローバル設定でもともと claude/opus
+# - coder はグローバル設定では codex 継承だが、本リポジトリでは Claude/opus に統一
+# rate limit や保守判断で Codex 継承へ戻したい場合は、`coder:` ブロックを削除すれば global の codex に戻る。
 persona_providers:
+  planner:
+    provider: claude
+    model: opus
   coder:
     provider: claude
-    model: sonnet
+    model: opus
+  architecture-reviewer:
+    provider: claude
+    model: opus
+  ai-antipattern-reviewer:
+    provider: claude
+    model: opus
+  supervisor:
+    provider: claude
+    model: opus
