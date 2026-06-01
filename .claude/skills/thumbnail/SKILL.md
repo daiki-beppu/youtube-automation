@@ -155,6 +155,8 @@ uv run yt-generate-image \
 
 プロンプト構築の原則（prompt_prefix / fixed_character / composition_rules の組み立て）は `references/prompting.md`、参照画像モード・プロンプトベースモードの具体的なプロンプトテンプレート例は `references/sample-prompts.md` を参照する。
 
+> 将来検討（issue #654）: imagegen の 14 項目 Shared prompt schema 形式と既存 skill-config の bridge ヘルパが `references/prompt-schema.md` および `youtube_automation.utils.image_provider.prompt_schema` に試験導入されている。実本番フローからは未接続。設計判断は `docs/skill-design/ADR-001-thumbnail-prompt-schema.md`。
+
 ## ワークフロー
 
 ### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）

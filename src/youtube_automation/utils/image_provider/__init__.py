@@ -5,11 +5,13 @@
 - ``load_image_generation_config()``: thumbnail skill-config から `ImageGenerationConfig` を構築
 - ``ImageGenerationRequest`` / ``ImageGenerationResult`` / ``ImageProvider``
 - ``RETRY_MAX`` / ``RETRY_BACKOFF``: 共通リトライ定数
+- ``PromptSchema`` / ``prompt_schema``: imagegen Shared prompt schema bridge (issue #654)
 """
 
 from __future__ import annotations
 
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider import prompt_schema
 from youtube_automation.utils.image_provider.base import (
     RETRY_BACKOFF,
     RETRY_MAX,
@@ -21,17 +23,20 @@ from youtube_automation.utils.image_provider.config import (
     ImageGenerationConfig,
     parse_image_generation_config,
 )
+from youtube_automation.utils.image_provider.prompt_schema import PromptSchema
 
 __all__ = [
     "ImageGenerationConfig",
     "ImageGenerationRequest",
     "ImageGenerationResult",
     "ImageProvider",
+    "PromptSchema",
     "RETRY_BACKOFF",
     "RETRY_MAX",
     "get_provider",
     "load_image_generation_config",
     "parse_image_generation_config",
+    "prompt_schema",
 ]
 
 
