@@ -100,7 +100,28 @@ uv run yt-upload-collection --plan [-c NAME]
 
 ### リファレンス
 
-アップロード前の詳細チェックリストは `references/posting-checklist.md` を参照。
+- アップロード前の詳細チェックリストは `references/posting-checklist.md` を参照
+- 予約投稿（YouTube `status.publishAt`）のセットアップは `references/scheduled-publish.md` を参照
+
+### 予約投稿（スケジュール公開）
+
+CC は `config/schedule_config.json` の `schedule` セクションに応じて即時公開と予約公開を切り替える。
+
+- **予約公開を有効化** — 以下のいずれかを `schedule` 内に設定する:
+  - `auto_schedule_enabled: true`（明示的に有効化）
+  - `cadence: ["tue", "thu", "sat"]` のような曜日リスト（暗黙オプトイン）
+  - `publish_time: "20:00"` のような時刻指定（暗黙オプトイン）
+- **即時公開のまま** — `auto_schedule_enabled: false` を明示すれば、他のキーが設定されていても即時公開を強制する
+
+予約公開の挙動確認は必ず `--plan` を実行する（実 API は叩かない）:
+
+```bash
+uv run yt-upload-collection --plan -c <NAME>
+# → "📅 公開予定: 2026-06-15T20:00:00+09:00" が出れば予約公開、
+#   "📅 公開設定: 即時公開 (public)" なら即時公開
+```
+
+詳細とトラブルシュート（"設定したのに即時公開された" の早期発見手順）は `references/scheduled-publish.md` を参照。
 
 ### API ステータス設定（自動適用）
 

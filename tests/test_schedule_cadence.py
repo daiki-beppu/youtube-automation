@@ -137,3 +137,48 @@ class TestCadenceScheduling:
         dt = datetime.fromisoformat(result)
         assert dt.date() == date(2026, 3, 28), f"Expected Sat 3/28, got {dt.date()} ({dt.strftime('%A')})"
         assert dt.isoweekday() == 6  # 土曜
+
+
+class TestSchedulingEnabledHeuristic:
+    """`_scheduling_enabled` — schedule_config.json から予約公開有効性を判定するロジック."""
+
+    def test_explicit_true_enables(self):
+        from youtube_automation.agents.collection_uploader import _scheduling_enabled
+
+        assert _scheduling_enabled({"auto_schedule_enabled": True}) is True
+
+    def test_explicit_false_disables_even_when_cadence_present(self):
+        """auto_schedule_enabled=false が明示されていればスケジュール無効（後方互換）."""
+        from youtube_automation.agents.collection_uploader import _scheduling_enabled
+
+        assert _scheduling_enabled({"auto_schedule_enabled": False, "cadence": ["tue", "thu", "sat"]}) is False
+
+    def test_cadence_alone_implies_enabled(self):
+        """cadence が明示されていれば auto_schedule_enabled 未設定でも有効扱い（#647）."""
+        from youtube_automation.agents.collection_uploader import _scheduling_enabled
+
+        assert _scheduling_enabled({"cadence": ["tue", "thu", "sat"]}) is True
+
+    def test_publish_time_alone_implies_enabled(self):
+        """publish_time が明示されていれば auto_schedule_enabled 未設定でも有効扱い（#647）."""
+        from youtube_automation.agents.collection_uploader import _scheduling_enabled
+
+        assert _scheduling_enabled({"publish_time": "20:00"}) is True
+
+    def test_empty_cadence_does_not_imply_enabled(self):
+        """空 cadence はオプトインシグナルにならない."""
+        from youtube_automation.agents.collection_uploader import _scheduling_enabled
+
+        assert _scheduling_enabled({"cadence": []}) is False
+
+    def test_day1_time_alone_does_not_imply_enabled(self):
+        """day1_time のみは過去テンプレで既定値が入っていることがあるためシグナルにしない."""
+        from youtube_automation.agents.collection_uploader import _scheduling_enabled
+
+        # 旧テンプレ互換（auto_schedule_enabled なしで day1_time のみ）はスケジュール無効
+        assert _scheduling_enabled({"day1_time": "20:00", "timezone": "Asia/Tokyo"}) is False
+
+    def test_empty_dict_disables(self):
+        from youtube_automation.agents.collection_uploader import _scheduling_enabled
+
+        assert _scheduling_enabled({}) is False

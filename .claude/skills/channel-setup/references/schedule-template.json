@@ -1,9 +1,9 @@
 {
   "schedule": {
-    "day1_time": "20:00",
-    "day2_time": "20:00",
     "timezone": "Asia/Tokyo",
-    "auto_schedule_enabled": true
+    "auto_schedule_enabled": true,
+    "publish_time": "20:00",
+    "cadence": ["tue", "thu", "sat"]
   },
   "upload_settings": {
     "privacy_status": "private",
