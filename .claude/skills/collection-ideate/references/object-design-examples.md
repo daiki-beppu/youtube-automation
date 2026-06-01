@@ -64,3 +64,57 @@ differentiation_axes:
 - **ストーリーは「誰が・どこで・なぜ」**を 1 文で描写
 - **ビジュアルは具体的に**（形状・色・質感の 3 要素を必ず指定）
 - **差し替えスロットは 2-3 個に絞る**（視覚的差別化のための単位）
+
+## composition_lock (#489) — TTP 維持のための構図ロック
+
+`composition_lock: true`（`config/skills/collection-ideate.yaml` のトップレベル、
+デフォルト `true`）が有効なとき、`differentiation_axes`（location / time_of_day /
+weather / activity / mood）は **企画コンセプトの内部メタデータ** として扱い、
+**サムネ構図には反映しない**。差別化は `objects.swappable` の slot 値だけで取る。
+
+`objects.fixed` は TTP 構図そのもの — 全コレクション共通の「揺るがない要素」を書く。
+
+### 例: DF365 (Mental Stamina Mode のような matte-black car + 飛行機 TTP)
+
+```yaml
+composition_lock: true   # トップレベル
+
+differentiation_axes:
+  - location
+  - time_of_day
+  - weather
+
+objects:
+  swappable:
+    - slot: car_model
+      description_template: "matte-black {body_style} car"
+      story_template: "{persona} が {scene} で乗る愛車"
+    - slot: aircraft_silhouette
+      description_template: "{aircraft_type} positioned at mid-distance background"
+  fixed:
+    - wet_runway
+    - matte_black_car
+    - aircraft_mid_distance
+    - blue_hour
+    - low_three_quarter_angle
+```
+
+このとき:
+
+- 企画 A "mountain airstrip" / 企画 B "urban tunnel exit" / 企画 C "desert airstrip"
+  と location 軸を変えても、**サムネ構図は wet_runway + blue_hour で固定** され、
+  TTP 参照画像のスタイルアンカーが効き続ける。
+- `differentiation_axes` の値は音楽プロンプト・概要欄・タイトルバリエーション
+  （内部メタデータ）に反映される。
+- `objects.swappable` の `car_model` / `aircraft_silhouette` を企画ごとに変えて
+  視覚的差別化を取る（sedan / coupe / 戦闘機 / ビジネスジェット ...）。
+
+`objects.fixed` のキーは `youtube_automation.utils.composition_lock.expand_fixed_objects()`
+で TTP プロンプト定型節へ自動展開される。既知キー（`wet_runway`,
+`matte_black_car`, `aircraft_mid_distance`, `blue_hour`, `low_three_quarter_angle`,
+`rain_window`, `turntable`, `campfire`, `character` ...）はビルトイン辞書を持ち、
+未知キーはキー名のアンダースコアをスペース化して passthrough する。
+
+生成後セルフチェック（`yt-thumbnail-check`）も同じ `objects.fixed` を読んで
+Gemini Vision に YES/NO 検査させる。詳細は `collection-ideate` SKILL.md の
+「4-4-check: 生成後セルフチェック」節を参照。

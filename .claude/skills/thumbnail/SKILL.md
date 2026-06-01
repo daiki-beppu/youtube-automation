@@ -290,6 +290,17 @@ main.png が存在しない場合のみ:
 
 ## 品質チェック
 
+生成直後の自動セルフチェック（#489）:
+
+```bash
+uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.jpg --json
+```
+
+`yt-thumbnail-check` は Gemini Vision で `collection-ideate.yaml` の `objects.fixed` と
+`self_check.no_logo_guard` から YES/NO チェックリストを組み立て、画像に対する合否を
+JSON で返す（終了コード 0=合格 / 1=不合格）。手作業チェックの前段スクリーニングとして、
+TTP 構図逸脱（wet_runway 不在・矩形ロゴ混入・テキスト burned-in 等）を機械的に検出する。
+
 Phase 1 生成後:
 - [ ] `image_generation.gemini.style` に記載されたスタイルが維持されているか
 - [ ] `composition_rules.environment` の制約を満たしているか
