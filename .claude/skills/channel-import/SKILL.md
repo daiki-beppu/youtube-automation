@@ -93,6 +93,15 @@ config 生成・認証完了後、以下を案内:
 4. **データ収集・分析**: `/analytics-collect` → `/analytics-analyze` で現状のパフォーマンスを把握
 5. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| OAuth 未認証/失効 | `auth.oauth_handler` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
+| YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota（既定 10,000 units・太平洋時間 0 時リセット）を待つか呼び出しを抑える |
+| API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud / YouTube のステータスを確認し、時間を置いて再実行 |
+| `gh` CLI 不在/未認証 | `command not found: gh` / `gh auth` エラー | `gh` を install し `gh auth login` を実行 |
+
 ## Cross References
 
 - `/channel-new` → 新規チャンネル開設はこちら

@@ -65,6 +65,13 @@ Agent 1 + Agent 2 の結果を統合し、以下の比較表を作成:
 open data/thumbnail_compare/
 ```
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| サムネ取得失敗 | `yt-thumbnail-compare` の画像 DL が HTTP エラー | YouTube / CDN のステータスを確認し時間を置いて再実行 |
+
 ## 関連ファイル
 
 - `yt-thumbnail-compare` (`youtube_automation.scripts.compare_thumbnails`) — サムネイル収集・縮小スクリプト

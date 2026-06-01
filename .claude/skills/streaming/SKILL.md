@@ -117,6 +117,16 @@ INSTANCE_IP=$(terraform -chdir=infra/terraform/streaming output -raw instance_ip
 ssh -i ~/.ssh/yt_stream_key root@$INSTANCE_IP "systemctl show youtube-stream | grep -E 'ActiveState|SubState|Result|RuntimeMaxUSec|RestartUSec'"
 ```
 
+## 障害時ガイダンス
+
+外部サービス起因の障害は本表で扱う。配信プロセス・SSH・通知の切り分けは §4 トラブルシュートを参照する。
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| 1Password CLI 未認証 | `op read` が認証エラー / `TF_VAR_vultr_api_key` が空 | `op signin` でセッションを再確立してから再実行 |
+| Vultr API 障害 / rate | `terraform apply` が Vultr API エラー / HTTP 429・503 | [Vultr ステータス](https://status.vultr.com) を確認し、時間を置いて再 apply（`terraform plan` で差分のみ適用） |
+| terraform apply 失敗 | provider エラーで apply 中断 | エラー行を確認。state は保持されるため原因解消後に再 apply。配信プロセス・SSH・通知の切り分けは §4 トラブルシュートを参照 |
+
 ## §5 片付け（破棄）
 
 ```bash
