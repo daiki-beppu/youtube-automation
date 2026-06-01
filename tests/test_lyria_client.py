@@ -206,24 +206,18 @@ class TestGenerateMusic:
             lyria_client.generate_music("p", "lyria-3-pro-preview", reference_image=missing)
 
     def test_returns_audio_bytes_from_new_schema_response(self, mock_token):
-        # Given: HTTP レスポンスが Gemini 標準の新 schema (candidates[*].content.parts[*].inline_data) のみ
+        # Given: HTTP レスポンスが公式新 schema (steps[*].content[*]) のみ
         os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
         audio = b"\xff\xfb\x90\x00new-schema-mp3"
         resp = MagicMock()
         resp.ok = True
         resp.json.return_value = {
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {
-                                "inline_data": {
-                                    "mime_type": "audio/mpeg",
-                                    "data": base64.b64encode(audio).decode(),
-                                }
-                            }
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
                 }
             ]
         }
@@ -238,7 +232,7 @@ class TestGenerateMusic:
         assert result == audio
 
     def test_prefers_legacy_when_both_schemas_in_http_response(self, mock_token):
-        # Given: HTTP レスポンスに legacy outputs と新 schema candidates が同居
+        # Given: HTTP レスポンスに legacy outputs と新 schema steps が同居
         os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
         legacy_audio = b"\xff\xfb\x90\x00legacy"
         new_audio = b"\xff\xfb\x90\x00new"
@@ -248,18 +242,12 @@ class TestGenerateMusic:
             "outputs": [
                 {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(legacy_audio).decode()},
             ],
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {
-                                "inline_data": {
-                                    "mime_type": "audio/mpeg",
-                                    "data": base64.b64encode(new_audio).decode(),
-                                }
-                            }
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(new_audio).decode()},
+                    ],
                 }
             ],
         }
@@ -369,82 +357,22 @@ class TestExtractAudioBytes:
         # Then: 原バイト列が返る
         assert result == audio
 
-    def test_returns_audio_from_new_schema_snake_case(self):
-        # Given: 新 schema (snake_case) の dry-run レスポンス body
+    def test_returns_audio_from_new_schema_steps(self):
+        # Given: 公式新 schema (steps[*].content[*]) の body
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         audio = b"\xff\xfb\x90\x00fake-mp3"
         body = {
-            "candidates": [
+            "status": "completed",
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {
-                                "inline_data": {
-                                    "mime_type": "audio/mpeg",
-                                    "data": base64.b64encode(audio).decode(),
-                                }
-                            }
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "text", "text": "lyrics"},
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
                 }
-            ]
-        }
-
-        # When: ヘルパーで抽出
-        result = _extract_audio_bytes(body)
-
-        # Then: 原バイト列が返る
-        assert result == audio
-
-    def test_returns_audio_from_new_schema_camel_case(self):
-        # Given: 新 schema (camelCase) の body
-        from youtube_automation.utils.lyria_client import _extract_audio_bytes
-
-        audio = b"\xff\xfb\x90\x00fake-mp3"
-        body = {
-            "candidates": [
-                {
-                    "content": {
-                        "parts": [
-                            {
-                                "inlineData": {
-                                    "mimeType": "audio/mpeg",
-                                    "data": base64.b64encode(audio).decode(),
-                                }
-                            }
-                        ]
-                    }
-                }
-            ]
-        }
-
-        # When: ヘルパーで抽出
-        result = _extract_audio_bytes(body)
-
-        # Then: 原バイト列が返る
-        assert result == audio
-
-    def test_returns_audio_when_mixed_snake_and_camel_case(self):
-        # Given: snake_case key (inline_data) と camelCase key (mimeType) が同 part 内で混在
-        from youtube_automation.utils.lyria_client import _extract_audio_bytes
-
-        audio = b"\xff\xfb\x90\x00fake-mp3"
-        body = {
-            "candidates": [
-                {
-                    "content": {
-                        "parts": [
-                            {
-                                "inline_data": {
-                                    "mimeType": "audio/mpeg",
-                                    "data": base64.b64encode(audio).decode(),
-                                }
-                            }
-                        ]
-                    }
-                }
-            ]
+            ],
         }
 
         # When: ヘルパーで抽出
@@ -454,7 +382,7 @@ class TestExtractAudioBytes:
         assert result == audio
 
     def test_prefers_legacy_when_both_schemas_present(self):
-        # Given: legacy outputs と 新 schema candidates が同時に存在する移行期 body
+        # Given: legacy outputs と 新 schema steps が同時に存在する移行期 body
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         legacy_audio = b"\xff\xfb\x90\x00legacy"
@@ -463,18 +391,12 @@ class TestExtractAudioBytes:
             "outputs": [
                 {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(legacy_audio).decode()},
             ],
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {
-                                "inline_data": {
-                                    "mime_type": "audio/mpeg",
-                                    "data": base64.b64encode(new_audio).decode(),
-                                }
-                            }
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(new_audio).decode()},
+                    ],
                 }
             ],
         }
@@ -485,20 +407,19 @@ class TestExtractAudioBytes:
         # Then: 既存挙動互換のため legacy が優先される
         assert result == legacy_audio
 
-    def test_skips_non_audio_parts_in_new_schema(self):
-        # Given: 新 schema で先頭 part が image, 2 番目が audio
+    def test_skips_non_audio_content_in_new_schema(self):
+        # Given: 新 schema で先頭 content が image, 2 番目が audio
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         audio = b"\xff\xfb\x90\x00fake-mp3"
         body = {
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(b"img").decode()}},
-                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}},
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "image", "mime_type": "image/png", "data": base64.b64encode(b"img").decode()},
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
                 }
             ]
         }
@@ -506,27 +427,27 @@ class TestExtractAudioBytes:
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
 
-        # Then: audio 系 mime_type の part が拾われる
+        # Then: type=audio の content が拾われる
         assert result == audio
 
-    def test_picks_audio_across_multiple_candidates(self):
-        # Given: 複数 candidates のうち 2 つ目に audio がある
+    def test_picks_audio_across_multiple_steps(self):
+        # Given: 複数 steps のうち 2 つ目に audio がある
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         audio = b"\xff\xfb\x90\x00fake-mp3"
-        image_part = {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(b"img").decode()}}
-        audio_part = {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}}
+        image_content = {"type": "image", "mime_type": "image/png", "data": base64.b64encode(b"img").decode()}
+        audio_content = {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}
         body = {
-            "candidates": [
-                {"content": {"parts": [image_part]}},
-                {"content": {"parts": [audio_part]}},
+            "steps": [
+                {"type": "thought", "content": [image_content]},
+                {"type": "model_output", "content": [audio_content]},
             ]
         }
 
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
 
-        # Then: 2 つ目の candidate から audio が拾われる
+        # Then: 2 つ目の step から audio が拾われる
         assert result == audio
 
     def test_skips_legacy_entry_with_non_audio_mime(self):
@@ -582,19 +503,18 @@ class TestExtractAudioBytes:
         assert result == audio
 
     def test_skips_new_schema_entry_with_missing_data(self):
-        # Given: 新 schema で inline_data.data が欠落、後続 part に正常 audio
+        # Given: 新 schema で content[*].data が欠落、後続 content に正常 audio
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         audio = b"\xff\xfb\x90\x00fake-mp3"
         body = {
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {"inline_data": {"mime_type": "audio/mpeg"}},
-                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}},
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "audio", "mime_type": "audio/mpeg"},
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
                 }
             ]
         }
@@ -603,6 +523,29 @@ class TestExtractAudioBytes:
         result = _extract_audio_bytes(body)
 
         # Then: data 欠落は skip し、次の正常 audio を返す
+        assert result == audio
+
+    def test_skips_new_schema_entry_with_missing_mime(self):
+        # Given: 新 schema で content[*].mime_type が欠落、後続 content に正常 audio
+        from youtube_automation.utils.lyria_client import _extract_audio_bytes
+
+        audio = b"\xff\xfb\x90\x00fake-mp3"
+        body = {
+            "steps": [
+                {
+                    "type": "model_output",
+                    "content": [
+                        {"type": "audio", "data": base64.b64encode(b"x").decode()},
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
+                }
+            ]
+        }
+
+        # When: ヘルパーで抽出
+        result = _extract_audio_bytes(body)
+
+        # Then: mime_type 欠落は skip し、後続の正常 audio を返す
         assert result == audio
 
     def test_returns_none_for_empty_body(self):
@@ -616,20 +559,19 @@ class TestExtractAudioBytes:
         assert result is None
 
     def test_returns_none_when_no_audio_in_either_schema(self):
-        # Given: legacy outputs に text のみ、新 schema candidates にも image のみ
+        # Given: legacy outputs に text のみ、新 schema steps にも image のみ
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         body = {
             "outputs": [
                 {"type": "text", "text": "no audio"},
             ],
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(b"img").decode()}},
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "image", "mime_type": "image/png", "data": base64.b64encode(b"img").decode()},
+                    ],
                 }
             ],
         }
@@ -640,11 +582,11 @@ class TestExtractAudioBytes:
         # Then: 両 schema いずれにも audio がないため None
         assert result is None
 
-    def test_returns_none_when_candidates_content_empty(self):
-        # Given: candidates[0].content が空 dict
+    def test_returns_none_when_step_content_missing(self):
+        # Given: steps[0] に content キーが無い
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
-        body = {"candidates": [{"content": {}}]}
+        body = {"steps": [{"type": "model_output"}]}
 
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
@@ -652,11 +594,11 @@ class TestExtractAudioBytes:
         # Then: None
         assert result is None
 
-    def test_returns_none_when_candidates_parts_empty(self):
-        # Given: candidates[0].content.parts が空 list
+    def test_returns_none_when_step_content_empty(self):
+        # Given: steps[0].content が空 list
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
-        body = {"candidates": [{"content": {"parts": []}}]}
+        body = {"steps": [{"type": "model_output", "content": []}]}
 
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
@@ -671,13 +613,12 @@ class TestExtractAudioBytes:
         audio = b"\xff\xfb\x90\x00fake-mp3"
         body = {
             "outputs": {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(b"x").decode()},
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}}
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
                 }
             ],
         }
@@ -688,11 +629,11 @@ class TestExtractAudioBytes:
         # Then: 不正型の outputs は型ガードで skip し、新 schema を拾う
         assert result == audio
 
-    def test_skips_when_candidates_is_not_list(self):
-        # Given: 新 schema candidates が dict（list 以外）
+    def test_skips_when_steps_is_not_list(self):
+        # Given: 新 schema steps が dict（list 以外）
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
-        body = {"candidates": {"content": {"parts": []}}}
+        body = {"steps": {"type": "model_output", "content": []}}
 
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
@@ -700,21 +641,20 @@ class TestExtractAudioBytes:
         # Then: 型ガードで skip → None
         assert result is None
 
-    def test_skips_when_candidate_is_not_dict(self):
-        # Given: candidates の要素が None / 文字列
+    def test_skips_when_step_is_not_dict(self):
+        # Given: steps の要素が None / 文字列
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         audio = b"\xff\xfb\x90\x00fake-mp3"
         body = {
-            "candidates": [
+            "steps": [
                 None,
                 "not-a-dict",
                 {
-                    "content": {
-                        "parts": [
-                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}}
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
                 },
             ]
         }
@@ -722,14 +662,14 @@ class TestExtractAudioBytes:
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
 
-        # Then: 不正な要素は skip し、有効な candidate から audio を返す
+        # Then: 不正な要素は skip し、有効な step から audio を返す
         assert result == audio
 
-    def test_skips_when_parts_is_not_list(self):
-        # Given: content.parts が list 以外
+    def test_skips_when_content_is_not_list(self):
+        # Given: step.content が list 以外
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
-        body = {"candidates": [{"content": {"parts": "not-a-list"}}]}
+        body = {"steps": [{"type": "model_output", "content": "not-a-list"}]}
 
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
@@ -737,21 +677,20 @@ class TestExtractAudioBytes:
         # Then: 型ガードで skip → None
         assert result is None
 
-    def test_skips_when_inline_data_is_not_dict(self):
-        # Given: inline_data が None / 文字列の part、後続に正常 audio
+    def test_skips_when_content_entry_is_not_dict(self):
+        # Given: content の要素が None / 文字列、後続に正常 audio
         from youtube_automation.utils.lyria_client import _extract_audio_bytes
 
         audio = b"\xff\xfb\x90\x00fake-mp3"
         body = {
-            "candidates": [
+            "steps": [
                 {
-                    "content": {
-                        "parts": [
-                            {"inline_data": None},
-                            {"inline_data": "not-a-dict"},
-                            {"inline_data": {"mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}},
-                        ]
-                    }
+                    "type": "model_output",
+                    "content": [
+                        None,
+                        "not-a-dict",
+                        {"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()},
+                    ],
                 }
             ]
         }
@@ -759,7 +698,7 @@ class TestExtractAudioBytes:
         # When: ヘルパーで抽出
         result = _extract_audio_bytes(body)
 
-        # Then: 不正な inline_data は skip し、正常 part から audio を返す
+        # Then: 不正な content 要素は skip し、正常 entry から audio を返す
         assert result == audio
 
     def test_skips_legacy_entry_that_is_not_dict(self):
