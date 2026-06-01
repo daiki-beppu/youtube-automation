@@ -10,43 +10,84 @@ Features:
 - スマートスケジュール公開（最終公開日+1日）
 - トラッキングによるリジューム対応
 - collections/ ディレクトリ自動管理（planning → live）
+
+責務分割（挙動不変・Issue #465）:
+- ``_collection_uploader_constants``                   : 共有定数
+- ``_tracking_io.TrackingIOMixin``                     : tracking / workflow-state JSON の I/O
+- ``_published_dates.PublishedDatesMixin``             : 公開日一覧取得 / publishAt 計算
+- ``_playlist_assignment.PlaylistAssignmentMixin``     : プレイリスト自動割り当て
+- ``_complete_collection_executor.CompleteCollectionExecutorMixin``  : CC 実行ループ
+本モジュールはクラス本体（初期化 / dispatcher / ドライラン / コレクション管理 / デーモン / CLI）を保持する。
 """
 
 import json
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import schedule  # noqa: E402
-from googleapiclient.errors import HttpError  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 
+from youtube_automation.agents._collection_uploader_constants import (  # noqa: E402
+    ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED,
+    ACTION_COMPLETE_COLLECTION_UPLOADED,
+    TRACKING_STATUS_COMPLETED,
+    WORKFLOW_PHASE_COMPLETE,
+    WORKFLOW_STAGE_LIVE,
+)
+from youtube_automation.agents._complete_collection_executor import (  # noqa: E402
+    CompleteCollectionExecutorMixin,
+)
+from youtube_automation.agents._playlist_assignment import (  # noqa: E402
+    PlaylistAssignmentMixin,
+)
+from youtube_automation.agents._published_dates import PublishedDatesMixin  # noqa: E402
+from youtube_automation.agents._tracking_io import TrackingIOMixin  # noqa: E402
 from youtube_automation.agents.youtube_auto_uploader import (  # noqa: E402
     UPLOAD_SOURCE_EXISTING,
     YouTubeAutoUploader,
 )
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
-from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
-from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
-from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
-ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED = "complete_collection_dedup_skipped"
-ACTION_COMPLETE_COLLECTION_UPLOADED = "complete_collection_uploaded"
-TRACKING_STATUS_COMPLETED = "completed"
-WORKFLOW_PHASE_COMPLETE = "complete"
-WORKFLOW_STAGE_LIVE = "live"
+# 後方互換 / 公開 API: 定数・主要シンボルは従来どおり本モジュールから import できるよう再エクスポートする。
+# 既存テスト（``patch("youtube_automation.agents.collection_uploader.PlaylistManager")`` 等）に対応するため、
+# PlaylistManager / load_config / YouTubeAutoUploader 等もこの位置で import している。
+__all__ = [
+    "CollectionUploader",
+    "PlaylistManager",
+    "YouTubeAutoUploader",
+    "UPLOAD_SOURCE_EXISTING",
+    "ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED",
+    "ACTION_COMPLETE_COLLECTION_UPLOADED",
+    "TRACKING_STATUS_COMPLETED",
+    "WORKFLOW_PHASE_COMPLETE",
+    "WORKFLOW_STAGE_LIVE",
+    "load_config",
+    "main",
+]
 
 
-class CollectionUploader:
+class CollectionUploader(
+    CompleteCollectionExecutorMixin,
+    PlaylistAssignmentMixin,
+    PublishedDatesMixin,
+    TrackingIOMixin,
+):
     """Collection Uploader — CC アップロード専用
 
     Complete Collection を YouTube にアップロードし、
     publishAt によるスケジュール公開を管理する。
+
+    責務別の挙動は mixin に分離されている（Issue #465）:
+    - tracking I/O           : ``TrackingIOMixin``
+    - 公開日 / publishAt 計算: ``PublishedDatesMixin``
+    - プレイリスト割り当て    : ``PlaylistAssignmentMixin``
+    - CC 実行ループ           : ``CompleteCollectionExecutorMixin``
     """
 
     def __init__(self, collections_root: str = None, config_path: str = None):
@@ -94,108 +135,6 @@ class CollectionUploader:
         if not self.youtube_service:
             self.youtube_service = get_youtube()
 
-    # ─── スケジュール公開 ─────────────────────────────
-
-    # 曜日名 → isoweekday() マッピング（月=1, 日=7）
-    _WEEKDAY_MAP = {
-        "mon": 1,
-        "tue": 2,
-        "wed": 3,
-        "thu": 4,
-        "fri": 5,
-        "sat": 6,
-        "sun": 7,
-    }
-
-    def _calculate_publish_at(self) -> str | None:
-        """CC のスケジュール公開日時を計算
-
-        auto_schedule_enabled が true の場合:
-        - cadence で指定された曜日（例: tue, thu, sat）に限定
-        - 当日の publish_time を過ぎていたら次の cadence 曜日から探索
-        - 同日に既存の公開/予約動画があればさらに次の cadence 曜日にスライド
-
-        auto_schedule_enabled が false の場合は None（即時公開）。
-
-        Returns:
-            ISO 8601 形式の公開日時文字列。即時公開時は None。
-        """
-        schedule_cfg = self.config.get("schedule", {})
-        if not schedule_cfg.get("auto_schedule_enabled", False):
-            return None
-
-        publish_time = schedule_cfg.get("publish_time", schedule_cfg.get("day1_time", "17:00"))
-        tz = get_schedule_timezone(self.config)
-        hour, minute = map(int, publish_time.split(":"))
-
-        # cadence 曜日を isoweekday に変換（未設定なら全曜日許可）
-        cadence = schedule_cfg.get("cadence", [])
-        allowed_weekdays = {self._WEEKDAY_MAP[d.lower()] for d in cadence} if cadence else set(range(1, 8))
-
-        now = datetime.now(tz)
-        publish_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-        # 既に今日の公開時刻を過ぎていたら翌日から開始
-        if publish_dt <= now:
-            publish_dt += timedelta(days=1)
-
-        # cadence 曜日かつ既存公開日と重複しない日を探す
-        existing_dates = self._get_published_dates()
-        max_slide = 30  # 無限ループ防止
-        for _ in range(max_slide):
-            if publish_dt.isoweekday() in allowed_weekdays and publish_dt.date() not in existing_dates:
-                break
-            publish_dt += timedelta(days=1)
-            if publish_dt.isoweekday() not in allowed_weekdays:
-                continue
-            logger.info(f"📅 公開日スライド → {publish_dt.date()} ({publish_dt.strftime('%a')})")
-
-        logger.info(f"📅 CC 公開予定: {publish_dt.isoformat()}")
-        return publish_dt.isoformat()
-
-    def _get_published_dates(self) -> set:
-        """YouTube API でチャンネルの公開済み/予約済み動画の公開日セットを取得
-
-        search().list() で動画IDを取得し、videos().list(part='status,snippet') で
-        公開予約日時（status.publishAt）と公開日時（snippet.publishedAt）の両方を収集する。
-        """
-        if not self.youtube_service:
-            self.initialize_youtube_service()
-
-        tz = get_schedule_timezone(self.config)
-        dates = set()
-
-        try:
-            # 動画IDを取得（part='id' でクォータ節約）
-            response = (
-                self.youtube_service.search()
-                .list(forMine=True, type="video", order="date", maxResults=50, part="id")
-                .execute()
-            )
-
-            video_ids = [item["id"]["videoId"] for item in response.get("items", [])]
-            if not video_ids:
-                return dates
-
-            # status.publishAt（公開予約）と snippet.publishedAt（公開済み）を取得
-            videos_response = (
-                self.youtube_service.videos().list(id=",".join(video_ids), part="status,snippet").execute()
-            )
-
-            for video in videos_response.get("items", []):
-                # 公開予約日時を優先、なければ公開日時を使用
-                publish_at = video.get("status", {}).get("publishAt")
-                if publish_at:
-                    dt = datetime.fromisoformat(publish_at.replace("Z", "+00:00"))
-                else:
-                    dt = datetime.fromisoformat(video["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                dates.add(dt.astimezone(tz).date())
-
-        except Exception as e:
-            logger.warning(f"⚠️  公開日一覧取得エラー: {e}")
-
-        return dates
-
     # ─── コレクション検索 ───────────────────────────
 
     def find_collections(self, stages: tuple[str, ...] = ("planning", "live")) -> list[Path]:
@@ -221,86 +160,6 @@ class CollectionUploader:
             logger.error("❌ 対象コレクションが見つかりません")
             return None
         return all_collections[0]
-
-    # ─── Tracking ────────────────────────────────
-
-    def _get_tracking_path(self, collection_path: Path) -> Path:
-        return CollectionPaths(collection_path).tracking_path
-
-    def _load_tracking(self, collection_path: Path) -> dict | None:
-        """tracking ファイル読み込み"""
-        tracking_file = self._get_tracking_path(collection_path)
-        if not tracking_file.exists():
-            return None
-
-        try:
-            with open(tracking_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
-
-    def _save_tracking(self, collection_path: Path, tracking: dict):
-        """tracking 保存"""
-        tracking_file = self._get_tracking_path(collection_path)
-        tracking_file.parent.mkdir(exist_ok=True)
-        try:
-            with open(tracking_file, "w", encoding="utf-8") as f:
-                json.dump(tracking, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            logger.warning(f"⚠️  追跡ファイル保存エラー: {e}")
-
-    def _completed_tracking_record(self, complete_video: dict, publish_at: str | None) -> dict:
-        record = {
-            "video_id": complete_video["video_id"],
-            "video_url": complete_video["video_url"],
-            "upload_time": now_in_schedule_tz(self.config).isoformat(),
-            "publish_at": publish_at,
-            "status": TRACKING_STATUS_COMPLETED,
-        }
-        if complete_video.get("upload_source"):
-            record["upload_source"] = complete_video["upload_source"]
-        return record
-
-    def _update_workflow_upload(self, collection_path: Path, complete_video: dict, publish_at: str | None) -> None:
-        ws_path = CollectionPaths(collection_path).workflow_state_path
-        if not ws_path.exists():
-            return
-
-        state = json.loads(ws_path.read_text(encoding="utf-8"))
-        upload = state.get("upload")
-        if not isinstance(upload, dict):
-            raise ValueError(f"workflow-state.json upload must be object: {ws_path}")
-
-        updated_upload = {
-            **upload,
-            "video_id": complete_video["video_id"],
-            "video_url": complete_video["video_url"],
-            "publish_at": publish_at,
-        }
-        updated_state = {
-            **state,
-            "upload": updated_upload,
-            "updated_at": now_in_schedule_tz(self.config).isoformat(),
-        }
-        if collection_path.parent.name == WORKFLOW_STAGE_LIVE:
-            updated_state = {
-                **updated_state,
-                "stage": WORKFLOW_STAGE_LIVE,
-                "phase": WORKFLOW_PHASE_COMPLETE,
-            }
-        ws_path.write_text(json.dumps(updated_state, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    def _initialize_tracking(self, collection_path: Path) -> dict:
-        """tracking を初期化"""
-        tracking = {
-            "schema_version": 3,
-            "collection_name": collection_path.name,
-            "status": "in_progress",
-            "complete_collection": {"status": "pending"},
-        }
-
-        self._save_tracking(collection_path, tracking)
-        return tracking
 
     # ─── コアオーケストレーション ────────────────────
 
@@ -341,123 +200,6 @@ class CollectionUploader:
         self._save_tracking(collection_path, tracking)
         logger.info("✅ 全ステップ完了")
         return {"action": "all_completed", "details": {}}
-
-    def _execute_complete_collection(self, collection_path: Path, tracking: dict, publish_at: str = None) -> dict:
-        """Complete Collection アップロード"""
-        logger.info("📅 Complete Collection アップロード開始")
-        logger.info(f"🎵 コレクション: {collection_path.name}")
-        if publish_at:
-            logger.info(f"📅 スケジュール公開: {publish_at}")
-
-        # tracking から resumable upload session URI を取り出す（無ければ None でフレッシュ実行）
-        cc = tracking.get("complete_collection", {})
-        resume_session_uri = cc.get("resume_session_uri")
-
-        def _on_session_uri_changed(uri: str | None) -> None:
-            """upload 中の URI 変化を tracking に永続化する。
-
-            並行更新（プレイリスト追加等が tracking を書く可能性）に備え、
-            毎回 disk から再ロードしてから書き戻す。
-            """
-            current = self._load_tracking(collection_path) or {}
-            cc_current = current.setdefault("complete_collection", {})
-            if uri is None:
-                cc_current.pop("resume_session_uri", None)
-            else:
-                cc_current["resume_session_uri"] = uri
-            self._save_tracking(collection_path, current)
-
-        def _on_upload_complete() -> None:
-            """upload 成功通知。後続の status="completed" 書き込みと整合させるため URI を消す。"""
-            _on_session_uri_changed(None)
-
-        try:
-            result = self.uploader.upload_collection(
-                str(collection_path),
-                publish_at=publish_at,
-                resume_session_uri=resume_session_uri,
-                on_session_uri_changed=_on_session_uri_changed,
-                on_upload_complete=_on_upload_complete,
-            )
-            complete_video = result.get("complete_video")
-
-            if complete_video and "video_id" in complete_video:
-                tracking = {
-                    **tracking,
-                    "complete_collection": self._completed_tracking_record(complete_video, publish_at),
-                    "status": TRACKING_STATUS_COMPLETED,
-                }
-
-                # live 移動
-                if self.config["collections_management"].get("auto_move_to_live", True):
-                    collection_path = self._move_collection_to_live(collection_path)
-
-                self._update_workflow_upload(collection_path, complete_video, publish_at)
-                self._save_tracking(collection_path, tracking)
-
-                if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING:
-                    logger.info("⏭️  Complete Collection は既存動画を流用")
-                else:
-                    logger.info("✅ Complete Collection アップロード完了")
-                logger.info(f"📹 {complete_video['video_url']}")
-
-                # プレイリスト自動追加
-                self._assign_to_playlists(complete_video["video_id"], collection_path)
-
-                action = (
-                    ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED
-                    if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING
-                    else ACTION_COMPLETE_COLLECTION_UPLOADED
-                )
-                return {"action": action, "details": {**tracking["complete_collection"]}}
-            else:
-                error_msg = (complete_video or {}).get("error", "Unknown error")
-                # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
-                # status 更新を載せるため、disk から再ロードしてから書き戻す。
-                current = self._load_tracking(collection_path) or tracking
-                cc_current = current.setdefault("complete_collection", {})
-                cc_current["status"] = "failed"
-                cc_current["error"] = error_msg
-                self._save_tracking(collection_path, current)
-                logger.error(f"❌ Complete Collection 失敗: {error_msg}")
-                return {"action": "complete_collection_failed", "details": {"error": error_msg}}
-
-        except Exception as e:
-            # 例外パスでも callback が書いた disk 状態を尊重するため再ロード
-            current = self._load_tracking(collection_path) or tracking
-            cc_current = current.setdefault("complete_collection", {})
-            cc_current["status"] = "failed"
-            cc_current["error"] = str(e)
-            self._save_tracking(collection_path, current)
-            logger.error(f"❌ Complete Collection エラー: {e}")
-            return {"action": "complete_collection_failed", "details": {"error": str(e)}}
-
-    # ─── プレイリスト連携 ─────────────────────────────
-
-    def _assign_to_playlists(self, video_id: str, collection_path: Path):
-        """アップロード後にプレイリストへ自動追加（失敗してもアップロードはブロックしない）"""
-        ws_path = CollectionPaths(collection_path).workflow_state_path
-        if not ws_path.exists():
-            return
-
-        with open(ws_path, "r", encoding="utf-8") as f:
-            ws = json.load(f)
-
-        theme = ws.get("theme", "")
-        if not theme:
-            return
-
-        config = load_config()
-        if not config.playlists.items:
-            return
-
-        try:
-            pm = PlaylistManager()
-            assigned = pm.assign_video(video_id, theme, collection_path=collection_path)
-            if assigned:
-                logger.info(f"📋 プレイリスト追加: {assigned}")
-        except (ConfigError, YouTubeAPIError, HttpError) as e:
-            logger.warning(f"⚠️  プレイリスト追加エラー（非致命的）: {e}")
 
     # ─── ステータス表示 ──────────────────────────────
 
