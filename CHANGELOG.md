@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(thumbnail)`: `.claude/skills/thumbnail/SKILL.md` を OpenAI codex 公式 imagegen SKILL.md の構造へ部分準拠させた（#650）。description 末尾に「Do not use when: SVG・ベクター画像の生成/編集、コード生成、YouTube サムネイル以外の汎用画像生成」相当の除外条件を追記して AI スキルルーターの誤起動を防ぎ、Overview 近辺に `Use case: product-mockup (YouTube thumbnail variant)` の 1 行で imagegen taxonomy との対応を明示。「プロバイダー切り替え」節に未設定時のデフォルト（`gemini`）と channel-config 優先順位を明文化。肥大化していた「プロンプト構築」節と散在していたプロンプト例を `.claude/skills/thumbnail/references/prompting.md` / `references/sample-prompts.md` へ逐語移植（改変なし・移動のみ・SKILL.md 側は参照リンクへ置換）。あわせて phase-1 差分レポートを `docs/skill-design/thumbnail-codex-imagegen-diff-report.md` に救出（byte-identical, 388 行/30873B）。挙動・出力命名・skill-config 機構・TTP / コレクション連携 / 複数プロバイダー切替本体は不変（`tests/test_thumbnail_skill_assets.py` 4 件 green で担保）
 - `refactor(agents)`: 600 行超で責務肥大していた `youtube_auto_uploader.py`（602 行）を責務別 mixin モジュールへ分割した（#465）。preflight 検証（`_preflight.py::PreflightMixin`）/ descriptions.md 解析（`_descriptions_md.py`）/ 重複検索（`_dedup_search.py`）/ Complete Collection 戦略（`_complete_collection_strategy.py`）/ 定数（`_uploader_constants.py`）に切り出し、`YouTubeAutoUploader` は各 mixin を合成する形に整理して本体を 356 行へ縮小した。機能・公開 API・挙動はすべて不変（既存 upload 系テスト 68 件 green で担保）。`_preflight_check` の移動に伴いテストの `load_config` パッチ対象を `_preflight` モジュールへ追従。`collection_uploader.py` の分割は follow-up
 ### Added
 
