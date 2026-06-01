@@ -49,7 +49,7 @@ def _make_mock_client(response_text: str = "Reply") -> MagicMock:
 class TestGeminiGenerator:
     def _make_gen(self, *, max_length: int = 280, requests_per_minute: int = 60, sleep_fn=None):
         return GeminiGenerator(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             max_length=max_length,
             requests_per_minute=requests_per_minute,
             sleep_fn=sleep_fn or (lambda _: None),
@@ -141,7 +141,7 @@ class TestGeminiGenerator:
     def test_rate_limit_sleeps_between_calls(self):
         sleep_calls: list[float] = []
         gen = GeminiGenerator(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             max_length=280,
             requests_per_minute=60,  # 1秒間隔
             sleep_fn=sleep_calls.append,
@@ -166,7 +166,7 @@ class TestGeminiGenerator:
     def test_no_rate_limit_when_requests_per_minute_zero(self):
         sleep_calls: list[float] = []
         gen = GeminiGenerator(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             max_length=280,
             requests_per_minute=0,
             sleep_fn=sleep_calls.append,

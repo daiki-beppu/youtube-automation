@@ -95,7 +95,7 @@ uv run yt-benchmark-collect -v                 # 詳細ログ
 | `min_views` | 10000 | ベンチマーク対象の視聴数しきい値 |
 | `freshness_days` | 3 | レポート更新間隔（日） |
 | `analyze_thumbnails` | true | Gemini によるサムネイル分析を実行するか |
-| `thumbnail_analysis.model` | gemini-2.5-flash | サムネイル分析モデル |
+| `thumbnail_analysis.model` | gemini-2.5-pro | サムネイル分析モデル |
 | `thumbnail_analysis.delay_sec` | 5 | API レート制限対策の待機秒数 |
 | `thumbnail_analysis.prompt` | 汎用プロンプト | ジャンル/世界観に合わせて上書き推奨 |
 

@@ -23,7 +23,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> [options]
 | `--en <text>` | 英語フレーズを明示指定。省略時は `content.json::title.theme_scenes[<theme>].scene` を longest-match で解決 |
 | `--overwrite` | 既に `scene_phrases` が存在する場合も上書きする |
 | `--dry-run` | 翻訳結果を表示するだけで `workflow-state.json` を更新しない |
-| `--model <name>` | Gemini モデル名（デフォルト: `gemini-2.5-flash`） |
+| `--model <name>` | Gemini モデル名（デフォルト: `gemini-2.5-pro`） |
 
 ## 振る舞い
 
@@ -38,7 +38,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> [options]
 
 ```bash
 $ uv run yt-populate-scene-phrases 20260322-rjn-city-collection
-INFO: Gemini 翻訳リクエスト: model=gemini-2.5-flash, langs=['ja', 'ko', 'es', ...]
+INFO: Gemini 翻訳リクエスト: model=gemini-2.5-pro, langs=['ja', 'ko', 'es', ...]
 ✅ 20260322-rjn-city-collection: scene_phrases に 16 言語を書き込みました
 ```
 

@@ -23,7 +23,7 @@ def _config(provider: str, *, model: str | None = None) -> GeneratorConfig:
 
 
 def test_create_gemini_generator():
-    generator = create_reply_generator(_config("gemini", model="gemini-2.5-flash"), sleep_fn=lambda _: None)
+    generator = create_reply_generator(_config("gemini", model="gemini-2.5-pro"), sleep_fn=lambda _: None)
 
     assert isinstance(generator, GeminiGenerator)
 
