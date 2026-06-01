@@ -46,6 +46,10 @@ _TARGET_DURATION_MIN_KEY = "target_duration_min"
 _SHUFFLE_KEY = "shuffle"
 _SHUFFLE_SEED_KEY = "shuffle_seed"
 
+# skill-config (`masterup.audio.<KEY>`) のキー名。CLI `--pin-first` / `--pin-first-count`
+# 未指定時のデフォルトとして参照される。
+_PIN_FIRST_COUNT_KEY = "pin_first_count"
+
 # 自動生成 seed の上限（ログ・再現用に 32-bit unsigned 範囲）。
 _AUTO_SEED_BOUND = 2**32
 
@@ -156,6 +160,51 @@ def _collect_audio_inputs(music_dir: Path) -> tuple[list[Path], str]:
     return files, ext
 
 
+def _apply_pin_first(
+    files: list[Path],
+    *,
+    pin_first: list[str] | None,
+    pin_first_count: int | None,
+) -> tuple[list[Path], list[Path]]:
+    """先頭固定を解決して (pinned, remaining) に分離する。
+
+    - `pin_first` / `pin_first_count` 両方未指定（または 0） → ([], files) を返す（互換）
+    - `pin_first` 指定 → 引数順に files から抽出して pinned に積む。未存在ファイルは
+      `ValidationError`（要件 10: fail-loud）
+    - `pin_first_count` 指定 → ソート済み先頭 N 件を pinned に積む。N が files 数を
+      超える場合は `ValidationError`
+    - 両方同時指定は呼び出し側で弾く前提（mutually exclusive）
+    """
+    if pin_first and pin_first_count:
+        # 呼び出し側で argparse / main() が弾く前提だが防御として明示エラー化
+        raise ValidationError("pin_first と pin_first_count は同時指定できません (mutually exclusive)")
+
+    if pin_first:
+        by_name = {p.name: p for p in files}
+        pinned: list[Path] = []
+        missing: list[str] = []
+        for name in pin_first:
+            target = by_name.get(name)
+            if target is None:
+                missing.append(name)
+            else:
+                pinned.append(target)
+        if missing:
+            available = ", ".join(p.name for p in files)
+            raise ValidationError(f"--pin-first で指定したファイルが見つかりません: {missing} (利用可能: {available})")
+        remaining = [p for p in files if p not in pinned]
+        return pinned, remaining
+
+    if pin_first_count and pin_first_count > 0:
+        if pin_first_count > len(files):
+            raise ValidationError(f"pin_first_count={pin_first_count} がトラック数 {len(files)} を超えています")
+        pinned = files[:pin_first_count]
+        remaining = files[pin_first_count:]
+        return pinned, remaining
+
+    return [], files
+
+
 def generate_master(
     collection_dir: Path,
     crossfade: float,
@@ -165,6 +214,8 @@ def generate_master(
     target_duration_min: int | None = None,
     shuffle: bool = False,
     shuffle_seed: int | None = None,
+    pin_first: list[str] | None = None,
+    pin_first_count: int | None = None,
     quiet: bool = False,
 ) -> Path:
     paths = CollectionPaths(collection_dir)
@@ -179,12 +230,24 @@ def generate_master(
     files, audio_ext = _collect_audio_inputs(music_dir)
     n = len(files)
 
+    # 先頭固定を解決 (要件 1-4, 10): pin された曲は順序固定、残りを shuffle 対象とする。
+    pinned, remaining = _apply_pin_first(
+        files,
+        pin_first=pin_first,
+        pin_first_count=pin_first_count,
+    )
+
     # ループ展開前にシャッフルする (要件 8: 同一シャッフル順を N 回繰り返す)。
     # 再現性ログは quiet モードでも常に stdout に出す (要件 4)。
+    # pin がある場合は pinned を順序固定したまま remaining のみ shuffle する。
     if shuffle:
         effective_seed = shuffle_seed if shuffle_seed is not None else random.SystemRandom().randrange(_AUTO_SEED_BOUND)
-        random.Random(effective_seed).shuffle(files)
+        random.Random(effective_seed).shuffle(remaining)
         print(f"[Shuffle] seed={effective_seed}")
+
+    files = pinned + remaining
+    if pinned:
+        print(f"[Pin] first {len(pinned)} track(s) fixed: {[p.name for p in pinned]}")
 
     single_loop_sec = _sum_track_duration(files) if target_duration_min is not None else 0.0
     effective_loops = _resolve_loop_count(loops, target_duration_min, single_loop_sec, crossfade)
@@ -313,6 +376,21 @@ def main() -> int:
         dest="shuffle_seed",
         help="シャッフルの再現性 seed (指定すると --shuffle を暗黙有効化)",
     )
+    pin_group = parser.add_mutually_exclusive_group()
+    pin_group.add_argument(
+        "--pin-first",
+        nargs="+",
+        metavar="FILE",
+        dest="pin_first",
+        help="先頭固定する MP3 ファイル名を順番指定 (--shuffle 併用可、引数順を保持)",
+    )
+    pin_group.add_argument(
+        "--pin-first-count",
+        type=int,
+        metavar="N",
+        dest="pin_first_count",
+        help="ソート済み先頭 N 件を固定 (連番ファイル名運用と整合、--shuffle 併用可)",
+    )
     args = parser.parse_args()
 
     try:
@@ -355,6 +433,31 @@ def main() -> int:
                     raise ValidationError(f"skill-config masterup.audio.{_SHUFFLE_SEED_KEY} は整数で指定してください")
                 shuffle_seed = skill_seed
 
+        # CLI > skill-config の優先順位で pin_first / pin_first_count を解決。
+        # CLI で --pin-first または --pin-first-count のいずれかが指定されていれば
+        # CLI 優先で skill-config の `audio.pin_first_count` は黙って無視する。
+        pin_first: list[str] | None = args.pin_first
+        pin_first_count: int | None = args.pin_first_count
+
+        if args.pin_first_count is not None and args.pin_first_count < 0:
+            raise ValidationError("--pin-first-count は 0 以上を指定してください")
+
+        if pin_first is None and pin_first_count is None:
+            skill_pin_count = audio.get(_PIN_FIRST_COUNT_KEY)
+            if skill_pin_count is not None:
+                # bool は int サブクラスのため明示的に除外する。
+                if isinstance(skill_pin_count, bool) or not isinstance(skill_pin_count, int):
+                    raise ValidationError(
+                        f"skill-config masterup.audio.{_PIN_FIRST_COUNT_KEY} は整数で指定してください"
+                    )
+                if skill_pin_count < 0:
+                    raise ValidationError(
+                        f"skill-config masterup.audio.{_PIN_FIRST_COUNT_KEY} は 0 以上を指定してください"
+                    )
+                # 0 は「固定なし」として扱う (互換: 未設定と等価)
+                if skill_pin_count > 0:
+                    pin_first_count = skill_pin_count
+
         generate_master(
             collection_dir,
             crossfade,
@@ -363,6 +466,8 @@ def main() -> int:
             target_duration_min=target_duration,
             shuffle=shuffle_enabled,
             shuffle_seed=shuffle_seed,
+            pin_first=pin_first,
+            pin_first_count=pin_first_count,
             quiet=args.quiet,
         )
     except ValidationError as e:
