@@ -1,6 +1,6 @@
 ---
 name: thumbnail
-description: Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + 画像生成プロバイダー（Gemini / OpenAI / codex）での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること
+description: Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + 画像生成プロバイダー（Gemini / OpenAI / codex）での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること。Do not use when: SVG・ベクター画像の生成/編集、コード生成、YouTube サムネイル以外の汎用画像生成（これらは本スキルの対象外）
 ---
 
 ## Overview
@@ -8,6 +8,8 @@ description: Use when コレクションのサムネイル画像が必要で、C
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。
 チャンネルごとにスタイル・キャラ・参照画像が異なり、すべて skill-config から動的に読み取る。
 画像生成プロバイダー（Gemini / OpenAI / codex）は `image_generation.provider` で切り替え可能。
+
+> imagegen taxonomy 対応: `Use case: product-mockup (YouTube thumbnail variant)`（imagegen の 19 スラグでは product-mockup に相当）。
 
 ## 前提
 
@@ -42,6 +44,8 @@ description: Use when コレクションのサムネイル画像が必要で、C
 | `codex` | `codex-image.sh` 経由で ChatGPT サブスク認証を使う（GCP 課金なし） | `codex login status` が `Logged in using ChatGPT` |
 
 OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
+
+`config/skills/thumbnail.yaml` の `image_generation.provider` が未設定の場合、デフォルトは `gemini`。channel-config 側で `image_generation.provider` が明示されている場合はそちらが優先される（既存の切り替え挙動は変更しない）。
 
 ## codex 経由の生成
 
@@ -149,42 +153,7 @@ uv run yt-generate-image \
 
 ## プロンプト構築
 
-### 1. prompt_prefix を取得
-
-`image_generation.gemini.prompt_prefix` をプロンプト冒頭に配置。
-
-### 2. fixed_character から活動を組み立て
-
-`image_generation.gemini.fixed_character` がある場合:
-- `outfit`: 服装描写
-- `instrument`: 楽器（テーマに応じて持ち替え可なら変更）
-- `face`: 顔の向き指示
-
-### 3. composition_rules から環境・制約を適用
-
-- `environment`: 許可される環境
-- `allowed_actions`: 使える活動
-- `ng_actions`: 禁止パターン
-- `brightness`: 明るさルール
-
-### 4. プロンプトテンプレート（参照画像モード）
-
-```
-{prompt_prefix}, {表情}.
-She/He/It wears {outfit}. {ポーズ・活動}. {環境描写}.
-{光と雰囲気}. {face}.
-No text, no words, no letters, no typography.
-```
-
-### 5. プロンプト末尾（プロンプトベースモード）
-
-`reference_images` がない場合、スタイル句を末尾に付加する。
-チャンネル `CLAUDE.md` にスタイル句指定があればそれを使用。なければデフォルト:
-
-```
-Hyper-detailed digital matte painting blending photorealism with subtle painterly
-illustration touches. Widescreen 16:9 aspect ratio.
-```
+プロンプト構築の原則（prompt_prefix / fixed_character / composition_rules の組み立て）は `references/prompting.md`、参照画像モード・プロンプトベースモードの具体的なプロンプトテンプレート例は `references/sample-prompts.md` を参照する。
 
 ## ワークフロー
 
@@ -299,7 +268,7 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 （`/collection-ideate` で本番品質のプレビューが生成され、選択後にコピーされている）
 
 main.png が存在しない場合のみ:
-1. テーマに合わせてプロンプトを構築（上記テンプレート）
+1. テーマに合わせてプロンプトを構築（`references/prompting.md` の原則と `references/sample-prompts.md` のテンプレートを参照）
 2. 参照画像モードなら `reference_images` から適切な画像を選択
 3. 生成: `yt-generate-image --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.jpg -y`
 4. `open` でプレビュー → ユーザー承認 → `cp main-v1.jpg main.png`
@@ -312,16 +281,7 @@ main.png が存在しない場合のみ:
 **`thumbnail_text.text_overlay_prompt` が定義されている場合（推奨）:**
 テンプレート内の `{title_line1}`, `{title_line2}`, `{channel_name}` をコレクションのタイトルとチャンネル名で置換して使用。
 
-**未定義の場合（フォールバック）:**
-```
-Add text to this image. Add two lines of text in a classic serif font.
-First line smaller: '<Title Line 1>' in light weight.
-Second line larger and bolder: '<Title Line 2>' directly below with
-almost no line spacing. Both lines in <color>.
-Below the title, add '<channel_name>' in very small spaced-out small
-caps, slightly more transparent. No decorations — only clean text.
-Do not change the background image in any way.
-```
+**未定義の場合（フォールバック）:** `references/sample-prompts.md` の「Two-Phase モードのテキストオーバーレイ・フォールバックプロンプト」を使用する。
 
 3. 生成: `yt-generate-image --reference 10-assets/main.png --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
