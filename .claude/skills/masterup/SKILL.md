@@ -183,17 +183,84 @@ yt-generate-master --pin-first-count 1 --shuffle               # ソート済み
 
 **先頭固定時の注意**: `--pin-first <files...>` は引数順を保持して先頭に固定する。`--pin-first-count N` は `02-Individual-music/` のソート済み先頭 N 件を固定する。両者は mutually exclusive（同時指定で argparse エラー）。`--shuffle` 併用時は pin された曲は順序固定のまま、残りのみシャッフルされる（要件: retention に強いフック曲を冒頭に置きつつ後半の類似イントロクラスタ化を回避）。`--target-duration` / `--loop` 併用時もループ展開の前段で先頭固定処理が適用される。`--pin-first` 指定ファイルが `02-Individual-music/` に存在しない場合は fail-loud で停止する。スキル設定 `audio.pin_first_count` を `1` 以上にしておけば、CLI フラグなしでもチャンネル単位のデフォルトとして自動適用される。
 
-### Step 5.5: 雨音レイヤー（オプション）
+### Step 5.5: ambient レイヤー整音（オプション）
 
-`branding/rain_layers/rain_*.wav` を持つチャンネルでは、マスター生成後に雨音をレイヤーする:
+`branding/<dirname>/<glob>` 配下に該当ファイルを持つチャンネルでは、マスター生成後に環境音 (雨音など) をレイヤーする:
 
 ```bash
 yt-finalize-master                       # CWD がコレクションディレクトリ
 yt-finalize-master <collection-path>     # 明示指定
 ```
 
-`branding/rain_layers/` ディレクトリが無い／`rain_*.wav` が 0 件のチャンネルでは何もせず exit 0（pass-through）。
-レイヤー音量・フェードイン・loudnorm target は skill-config の `rain_layer:` namespace で制御する。`master.mp3` は `master.tmp.mp3` 経由 atomic rename で in-place 上書きされる（pass2 失敗時は元 master が保護される）。
+既定では `branding/rain_layers/rain_*.wav` を探索（既存 v5.5.0 互換）。`branding/rain_layers/` ディレクトリが無い／`rain_*.wav` が 0 件のチャンネルでは何もせず exit 0（pass-through）。`master.mp3` は `master.tmp.mp3` 経由 atomic rename で in-place 上書きされる（pass2 失敗時は元 master が保護される）。
+
+#### skill-config 設定マトリクス (`audio.finalize.*`)
+
+`yt-finalize-master` の音響パイプラインは全項目を skill-config から注入できる（#512）。
+すべて任意キーで、未指定時は組み込みデフォルトが既存 v5.5.0 と同じ挙動を再現する。
+
+| キー | 既定 | 説明 |
+|---|---|---|
+| `audio.finalize.bitrate` | `audio.bitrate` を流用 (`"192k"`) | 出力ビットレート（ffmpeg `-b:a`） |
+| `audio.finalize.codec` | `"libmp3lame"` | 出力コーデック（ffmpeg `-c:a`） |
+| `audio.finalize.sample_rate` | (未指定) | 出力サンプリングレート（ffmpeg `-ar`）。未指定なら master 由来 |
+| `audio.finalize.ambient_layers.dirname` | `"rain_layers"` | `branding/<dirname>/` 探索ディレクトリ名 |
+| `audio.finalize.ambient_layers.glob` | `"rain_*.wav"` | `<dirname>/` 配下の対象 glob |
+| `audio.finalize.ambient_layers.volume_db` | `-19` | 全レイヤー共通の音量 dB |
+| `audio.finalize.ambient_layers.fadein_s` | `0.5` | 頭の不連続抑制 (`afade`) 秒数 |
+| `audio.finalize.ambient_layers.fadein_curve` | `"tri"` | `afade` の curve (`tri`/`exp`/`log`/`qsin`/`hsin`/`esin`/`cub`/`squ`/`par` …) |
+| `audio.finalize.ambient_layers.layers.<filename>` | (未指定) | per-file 上書き（`volume_db` / `fadein_s` / `fadein_curve`） |
+| `audio.finalize.loudnorm.enabled` | `true` | `false` で pass1/pass2 を skip し `amix` 単発で encode |
+| `audio.finalize.loudnorm.mode` | `"linear"` | `"linear"` のみサポート。`"dynamic"` 指定時は `NotImplementedError` |
+| `audio.finalize.loudnorm.I` | `-14` | integrated loudness 目標（LUFS） |
+| `audio.finalize.loudnorm.LRA` | `11` | loudness range 目標 |
+| `audio.finalize.loudnorm.TP` | `-1.5` | true peak 目標（dBTP） |
+| `audio.finalize.mix.duration` | `"first"` | ffmpeg `amix duration`（`first`/`shortest`/`longest`） |
+| `audio.finalize.mix.normalize` | `0` | ffmpeg `amix normalize`（`0`/`1`、`true`/`false` も可） |
+
+**Fail-loud ルール**:
+- `loudnorm.mode: dynamic` → `NotImplementedError`（two-pass linear 専用設計の明示）
+- `loudnorm.mode` がその他不正値 / `mix.duration` 不正値 / `mix.normalize` 範囲外 / `layers` が dict 以外 → `ConfigError`
+- `layer_overrides` 長と layer 数の不一致（内部契約） → `ValidationError`
+
+#### per-file 上書き設定例
+
+```yaml
+audio:
+  finalize:
+    ambient_layers:
+      volume_db: -19            # 全 layer 共通
+      fadein_s: 0.5
+      layers:
+        rain_001.wav:
+          volume_db: -22         # この 1 ファイルだけ -22dB で被せる
+        rain_002.wav:
+          fadein_s: 1.5          # フェードインだけ長くしたい
+          fadein_curve: "exp"    # 指数カーブで自然に立ち上げる
+    loudnorm:
+      enabled: true
+      I: -14
+      LRA: 11
+      TP: -1.5
+    mix:
+      duration: "first"          # master の長さで切る (環境音は aloop 展開済み)
+      normalize: 0               # amix の自動 0.5x スケーリングを無効化
+```
+
+#### `loudnorm.enabled: false`（1-pass モード）
+
+整音不要・amix 結果をそのまま出したい場合は `loudnorm.enabled: false` で `ffmpeg` の呼び出し回数を 1 回（amix → encode 直行）に短縮できる。pass1 の measure を行わないため処理時間も半分以下になる。
+
+```yaml
+audio:
+  finalize:
+    loudnorm:
+      enabled: false             # pass1/pass2 を skip
+```
+
+#### 旧 `rain_layer` namespace（DEPRECATED, #512）
+
+旧 v5.5.0 までの `rain_layer:` namespace は後方互換 alias として読み続けるが、利用するとプロセス起動時に `DeprecationWarning` が出る。新 `audio.finalize.*` namespace へ移行すること。新旧両方を同時に書いた場合は新が勝ち、旧は無視される（warning も出ない）。
 
 ### Step 5.6: 雨レイヤー後処理（config 駆動 / opt-in）
 

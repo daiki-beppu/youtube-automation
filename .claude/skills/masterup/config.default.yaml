@@ -1,6 +1,6 @@
 # masterup skill default config
 #
-# マスター音源生成 + Suno CDN ダウンロードの設定。
+# マスター音源生成 + Suno CDN ダウンロード + マスター整音の設定。
 # チャンネル側では config/skills/masterup.yaml に上書き値を置く。
 
 audio:
@@ -9,7 +9,8 @@ audio:
   # タイムスタンプ計算の両方がこの値を参照する。
   crossfade_duration: 1.0
 
-  # マスター音源のビットレート
+  # マスター音源のビットレート (yt-generate-master と yt-finalize-master で共有)。
+  # `audio.finalize.bitrate` が明示指定されていればそちらが yt-finalize-master の出力に勝つ。
   bitrate: "192k"
 
   # CLI フラグ (`--loop` / `--target-duration`) が両方未指定のときに
@@ -35,15 +36,52 @@ audio:
   # 既定 0 = 固定なし。
   pin_first_count: 0
 
+  # yt-finalize-master の整音パイプライン設定 (#512)。
+  # branding/<dirname>/<glob> に該当ファイルが 1 件以上ある場合のみ有効。
+  # 全項目に組み込みデフォルトがあり、未設定でも既存 v5.5.0 と同じ挙動になる。
+  # finalize:
+  #   # 出力エンコード (audio.bitrate / libmp3lame / ffmpeg 既定 sr を上書き)
+  #   bitrate: "192k"            # 出力ビットレート (未指定なら audio.bitrate を流用)
+  #   codec: "libmp3lame"        # ffmpeg -c:a に渡すコーデック
+  #   sample_rate: 44100         # ffmpeg -ar に渡すサンプリングレート (未指定で master 由来)
+  #
+  #   ambient_layers:
+  #     dirname: "rain_layers"   # branding/<dirname>/ 直下を探索
+  #     glob: "rain_*.wav"       # <dirname>/ 内の対象ファイル glob
+  #     volume_db: -19           # 全レイヤー共通の音量 dB
+  #     fadein_s: 0.5            # 頭の不連続抑制 (afade)
+  #     fadein_curve: "tri"      # afade の curve (tri/exp/log/qsin/hsin/esin/cub/squ/par 等)
+  #     layers:                  # per-file 上書き (ファイル名 → 部分上書き dict)
+  #       rain_001.wav:
+  #         volume_db: -22        # この 1 ファイルだけ音量を下げる
+  #       rain_002.wav:
+  #         fadein_s: 1.5
+  #         fadein_curve: "exp"
+  #
+  #   loudnorm:
+  #     enabled: true            # false で pass1/pass2 を skip し amix 単発で encode
+  #     mode: "linear"           # 'linear' (two-pass) のみサポート。'dynamic' は NotImplementedError
+  #     I: -14                   # integrated loudness 目標 (LUFS)
+  #     LRA: 11                  # loudness range 目標
+  #     TP: -1.5                 # true peak 目標 (dBTP)
+  #
+  #   mix:
+  #     duration: "first"        # ffmpeg amix duration (first/shortest/longest)
+  #     normalize: 0             # ffmpeg amix normalize (0=disabled, 1=enabled, true/false 可)
+
 # Suno CDN ダウンロード設定
 suno_download:
   cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"
 
-# 雨音レイヤー設定 (branding/rain_layers/rain_*.wav が存在するチャンネルでのみ有効)
+# 雨音レイヤー設定 (DEPRECATED, #512)
+# `audio.finalize.ambient_layers` へ移行してください。
+# 旧 `rain_layer` namespace は後方互換 alias として読み続けますが、
+# 利用するとプロセス起動時に DeprecationWarning が出ます。
+# 同時設定の場合は `audio.finalize.*` が優先され、`rain_layer` は無視されます。
 # rain_layer:
-#   volume_db: -19         # 各レイヤー音量 dB
-#   fadein_s: 0.5          # 頭の不連続抑制
-#   loudnorm:
+#   volume_db: -19         # → audio.finalize.ambient_layers.volume_db
+#   fadein_s: 0.5          # → audio.finalize.ambient_layers.fadein_s
+#   loudnorm:              # → audio.finalize.loudnorm
 #     I: -14
 #     LRA: 11
 #     TP: -1.5
