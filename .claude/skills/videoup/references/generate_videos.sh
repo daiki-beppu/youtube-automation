@@ -1,11 +1,19 @@
 #!/bin/bash
-# generate_videos.sh v12.1 — Master video generator
+# generate_videos.sh v12.2 — Master video generator
 # Static image + master audio → MP4 (macOS optimized)
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
+# v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
 #   cd <collection-dir> && bash <repo-root>/.claude/skills/videoup/references/generate_videos.sh
+#
+# Opt-in env var:
+#   VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN
+#     動画側ターゲット尺 (分)。設定時は音声入力にも -stream_loop -1 を適用し
+#     -t で動画長を強制する。チャンネル側で config/skills/videoup.yaml に
+#     audio.target_video_duration_min を置いても同等 (env が優先)。
+#     master 尺 ≥ target のときは従来動作 (master 尺が支配)。
 
 # ─── Collection Path Resolution ──────────────────────────
 COLLECTION_DIR="${1:-}"
@@ -151,7 +159,7 @@ video_bitrate_bps() {
 
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v12.1 — ${COLLECTION_NAME}"
+echo "  generate_videos.sh v12.2 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
@@ -163,7 +171,68 @@ echo "  Audio    : $(basename "$MASTER_AUDIO")"
 echo "  Output   : $(basename "$MASTER_OUTPUT")"
 
 duration="$(get_duration "$MASTER_AUDIO")"
-echo "  Duration : $(format_duration "$duration")"
+
+# ─── target_video_duration_min 解決 (#545) ──────────────
+# env > channel override (config/skills/videoup.yaml) > 未設定
+# 未設定なら従来動作 (音声尺 = 動画尺)。設定時は音声側にも -stream_loop -1 を
+# 適用し -t target_video_duration_sec で動画長を強制する。
+# master 尺 ≥ target のときは現状動作維持 (master 尺が支配)。
+read_skill_config_target_video_duration_min() {
+    # channel root を COLLECTION_DIR から最大 5 階層上まで探索
+    # （`config/skills/videoup.yaml` を持つディレクトリを channel root とみなす）
+    local dir="$COLLECTION_DIR"
+    local override=""
+    for _ in 1 2 3 4 5; do
+        if [[ -f "$dir/config/skills/videoup.yaml" ]]; then
+            override="$dir/config/skills/videoup.yaml"
+            break
+        fi
+        local parent
+        parent="$(dirname "$dir")"
+        if [[ "$parent" == "$dir" ]]; then
+            break
+        fi
+        dir="$parent"
+    done
+    if [[ -z "$override" || ! -f "$override" ]]; then
+        return 0
+    fi
+    # flat 抽出: audio: ブロック配下の `target_video_duration_min:` 行を拾う。
+    # コメント行は除外。値はクォート無し数値前提 (`60` / `120` / `90.0` 等)。
+    awk '
+        /^[[:space:]]*#/ { next }
+        /^audio:[[:space:]]*$/ { in_audio = 1; next }
+        /^[^[:space:]#]/ { in_audio = 0 }
+        in_audio && /target_video_duration_min:[[:space:]]*[0-9]+(\.[0-9]+)?/ {
+            sub(/.*target_video_duration_min:[[:space:]]*/, "")
+            sub(/[[:space:]]*(#.*)?$/, "")
+            print
+            exit
+        }
+    ' "$override"
+}
+
+TARGET_VIDEO_DURATION_MIN="${VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN:-}"
+if [[ -z "$TARGET_VIDEO_DURATION_MIN" ]]; then
+    TARGET_VIDEO_DURATION_MIN="$(read_skill_config_target_video_duration_min)"
+fi
+
+AUDIO_INPUT_OPTS=()
+video_duration="$duration"
+if [[ -n "$TARGET_VIDEO_DURATION_MIN" ]]; then
+    target_video_duration_sec="$(awk "BEGIN{printf \"%.2f\", $TARGET_VIDEO_DURATION_MIN * 60}")"
+    # duration が取得できない (空 / 数値でない) ケースは fail-safe で従来動作にフォールバック
+    master_duration_for_compare="${duration:-0}"
+    if awk "BEGIN{exit !($target_video_duration_sec > $master_duration_for_compare)}"; then
+        AUDIO_INPUT_OPTS=(-stream_loop -1)
+        video_duration="$target_video_duration_sec"
+        echo "  Target   : ${TARGET_VIDEO_DURATION_MIN} min ($(format_duration "$video_duration")) — audio loop enabled"
+    else
+        echo "  Target   : ${TARGET_VIDEO_DURATION_MIN} min ignored (master ≥ target; master 尺が支配)"
+    fi
+fi
+
+echo "  Duration : $(format_duration "$video_duration")"
 echo ""
 start=$SECONDS
 PROGRESS_FILE="$(mktemp)"
@@ -215,11 +284,13 @@ if [[ -n "$LOOP_VIDEO" ]]; then
     fi
 
     # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声は AUDIO_OUT_OPTS に従う
-    ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" -i "$MASTER_AUDIO" \
+    # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
+    ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
+        "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
         -map 0:v:0 -map 1:a:0 \
         -c:v copy \
         "${AUDIO_OUT_OPTS[@]}" \
-        -t "$duration" \
+        -t "$video_duration" \
         -movflags +faststart \
         -shortest \
         -loglevel error \
@@ -229,13 +300,15 @@ else
     # 静止画背景モード（従来）
     # I-frame を 5 分間隔（1fps なので 300 フレーム）に間引き、変化のないフレームを P-frame で
     # 圧縮することで master.mp4 を大幅に小型化する（#579）。keyint=1 全 I-frame 化は容量が膨らむため廃止。
-    ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" -i "$MASTER_AUDIO" \
+    # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
+    ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" \
+        "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
         -c:v libx264 -tune stillimage -preset medium -crf 28 -pix_fmt yuv420p \
         -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
         -g 300 \
         -r 1 \
         "${AUDIO_OUT_OPTS[@]}" \
-        -t "$duration" \
+        -t "$video_duration" \
         -movflags +faststart \
         -shortest \
         -loglevel error \
@@ -245,7 +318,7 @@ fi
 ffmpeg_pid=$!
 
 # ─── Progress Bar ─────────────────────────────────────────
-total_us=$(awk "BEGIN{printf \"%.0f\", $duration * 1000000}")
+total_us=$(awk "BEGIN{printf \"%.0f\", $video_duration * 1000000}")
 spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
 si=0
 BAR_WIDTH=30
@@ -290,6 +363,6 @@ echo "  Video generation complete!"
 echo ""
 echo "    File    : $(basename "$MASTER_OUTPUT")"
 echo "    Size    : ${size}"
-echo "    Duration: $(format_duration "$duration")"
+echo "    Duration: $(format_duration "$video_duration")"
 echo "    Time    : $((elapsed/60))m $((elapsed%60))s"
 echo ""

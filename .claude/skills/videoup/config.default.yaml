@@ -1,0 +1,22 @@
+# videoup skill default config
+#
+# `generate_videos.sh` の挙動を制御する設定。
+# チャンネル側では `config/skills/videoup.yaml` に上書き値を置く。
+
+audio:
+  # 動画長を音声尺と分離したいときの「動画側ターゲット尺 (分)」。
+  #
+  # 未設定 (既定): 従来動作。`master-mix.*` の尺がそのまま動画尺となる。
+  #
+  # 設定時: ffmpeg の音声入力にも `-stream_loop -1` を適用し、
+  # `-t <target_video_duration>` で動画長を強制する。
+  # 例えば `audio.target_duration_min: 30` の master を `target_video_duration_min: 120` で
+  # 動画化すると、4 ループ相当の 2h 動画が生成され、finalize 工程の encode 時間が短縮される。
+  #
+  # 制約:
+  # - master 尺 ≥ target_video_duration_min × 60 のときは従来動作 (master 尺が支配)。
+  # - 音声 loop seam の繋ぎ目処理 (crossfade) は本キーのスコープ外。
+  #
+  # 環境変数 `VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN` でも上書きできる
+  # (env > channel override > default の優先順位)。
+  # target_video_duration_min: 120
