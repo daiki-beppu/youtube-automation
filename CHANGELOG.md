@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(suno)`: Chrome 拡張 + ローカル HTTP サーバーで Suno UI への Style/Lyrics 連続投入を自動化した（#692）。`yt-generate-suno` が従来の `suno-prompts.md` に加え `suno-prompts.json`（`[{name, style, lyrics}]` の配列。md の Styles 行と同一部品から派生）を併出する。新 CLI `yt-suno-serve <collection-dir-or-json-path> [--port 7873] [--allow-origin chrome-extension://<id>]` が `http://localhost:<PORT>/prompts.json` で配信し、CORS は `chrome-extension://` オリジンのみ許可する（`youtube_automation.scripts.suno_serve`、`pyproject.toml::[project.scripts]` に登録）。`extensions/suno-helper/`（Manifest V3 / unpacked）を新規追加し、ポップアップから取得 → 連続実行で各パターンを Style/Lyrics 注入（React 互換のネイティブイベント発火）→ Generate 押下 → 生成完了検知 → 次へ、を順次実行する。reCAPTCHA / エラー検知時は自動停止して警告し手動継続できる。共有パス契約は `youtube_automation.scripts.suno_artifacts` に集約。新規テスト `tests/test_suno_serve.py`、`tests/test_generate_suno_prompts.py` に JSON 併出ケースを追加。Chrome 拡張は手動テスト（Suno 実環境）で確認する
+
 ### Changed
 
 ### Deprecated

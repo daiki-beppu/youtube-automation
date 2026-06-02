@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from youtube_automation.scripts.generate_suno_prompts import generate, main
+from youtube_automation.scripts.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.utils import skill_config
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
@@ -489,3 +489,194 @@ def test_aggregates_multiple_video_analysis_jsons(channel_dir, tmp_path):
     lo_fi_idx = output.find("lo-fi jazz")
     soft_piano_idx = output.find("soft piano")
     assert lo_fi_idx < soft_piano_idx
+
+
+# ---------------------------------------------------------------------------
+# issue #692: suno-prompts.json 併出（build_prompt_entries / main の JSON 出力）
+#
+# 契約: `build_prompt_entries(patterns_path) -> list[dict]` を md 出力と同じ
+# 部品から派生させ、`main()` が suno-prompts.md と同ディレクトリに
+# suno-prompts.json を併出する。JSON entry は `{name, style, lyrics}` の 3 キー固定。
+# ---------------------------------------------------------------------------
+
+
+def _write_vocal_patterns(dir_: Path, scenes: list[str]) -> Path:
+    """vocal モード + lyrics 付きの suno-patterns.yaml を作る（scene 数は可変）."""
+    path = dir_ / "patterns.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "title": "Vocal Collection",
+                "mode": "vocal",
+                "patterns": [
+                    {
+                        "name_jp": "歌もの",
+                        "name_en": "Vocal",
+                        "tempo": "mid",
+                        "scenes": scenes,
+                        "lyrics": "[Verse]\nla la la\n\n",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_build_prompt_entries_returns_name_style_lyrics_schema(channel_dir, tmp_path):
+    """Given 最小 patterns
+    When build_prompt_entries を呼ぶ
+    Then 各 entry が {name, style, lyrics} の 3 キー（全て str）のみを持つ。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert isinstance(entries, list)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert set(entry) == {"name", "style", "lyrics"}
+    assert all(isinstance(entry[key], str) for key in ("name", "style", "lyrics"))
+
+
+def test_build_prompt_entries_name_combines_jp_and_en(channel_dir, tmp_path):
+    """Given 単一 scene の pattern
+    When name を読む
+    Then `name_jp — name_en` 形式で Variation 接尾辞は付かない。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["name"] == "テスト — Test"
+
+
+def test_build_prompt_entries_instrumental_has_empty_lyrics(channel_dir, tmp_path):
+    """Given instrumental モード
+    When lyrics を読む
+    Then 空文字（キーは常に存在し、None ではない）。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["lyrics"] == ""
+
+
+def test_build_prompt_entries_style_contains_tempo_genre_and_scene(channel_dir, tmp_path):
+    """Given tempo + genre_line + scene
+    When style を読む
+    Then md の Styles 行（`<tempo>, <style>,`）と scene の双方を含む。
+    """
+    genre = "lo-fi jazz, soft piano"
+    _write_suno_override(channel_dir, genre_line=genre)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    style = entries[0]["style"]
+    assert f"slow, {genre}," in style
+    assert "a quiet scene description" in style
+
+
+def test_build_prompt_entries_style_excludes_exclude_styles(channel_dir, tmp_path):
+    """Given exclude_styles 設定あり
+    When style を読む
+    Then exclude_styles のワードは style に含まれない（注入は Style/Lyrics の 2 欄のみ）。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="heavy metal, EDM")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    style = entries[0]["style"]
+    assert "heavy metal" not in style
+    assert "EDM" not in style
+
+
+def test_build_prompt_entries_vocal_includes_rstripped_lyrics(channel_dir, tmp_path):
+    """Given vocal モード + 末尾改行付き lyrics
+    When lyrics を読む
+    Then rstrip された歌詞本文が入る。
+    """
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["lyrics"] == "[Verse]\nla la la"
+
+
+def test_build_prompt_entries_multiple_scenes_become_separate_variations(channel_dir, tmp_path):
+    """Given 2 scene を持つ pattern
+    When entries を読む
+    Then scene 単位で 2 entry に分かれ、name に ` (Variation N)` が付く。
+    """
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert [e["name"] for e in entries] == [
+        "歌もの — Vocal (Variation 1)",
+        "歌もの — Vocal (Variation 2)",
+    ]
+    # 各 variation は自分の scene を style に含む
+    assert "scene one" in entries[0]["style"]
+    assert "scene two" in entries[1]["style"]
+
+
+def test_json_style_line_shares_part_with_md_styles_line(channel_dir, tmp_path):
+    """Given 同一 patterns
+    When md の Styles 行と JSON entry の style を比較
+    Then 同じ `<tempo>, <style>,` 部品が両方に現れる（ドリフト防止）。
+    """
+    genre = "lo-fi jazz, soft piano"
+    _write_suno_override(channel_dir, genre_line=genre)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    expected_style_line = f"slow, {genre},"
+    assert expected_style_line in md.splitlines()
+    assert expected_style_line in entries[0]["style"]
+
+
+def test_main_writes_suno_prompts_json_alongside_md(channel_dir, tmp_path, monkeypatch):
+    """Given patterns ファイルパスを引数に main を実行
+    When 実行後の出力ディレクトリを見る
+    Then suno-prompts.md と suno-prompts.json が同ディレクトリに併出される。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    main()
+
+    md_path = patterns_path.parent / "suno-prompts.md"
+    json_path = patterns_path.parent / "suno-prompts.json"
+    assert md_path.exists(), "既存の md 出力は維持されること"
+    assert json_path.exists(), "suno-prompts.json が併出されること"
+
+
+def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, monkeypatch):
+    """Given main 実行後の suno-prompts.json
+    When json.loads する
+    Then {name, style, lyrics} を持つ entry の配列としてロードできる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    main()
+
+    data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert set(data[0]) == {"name", "style", "lyrics"}

@@ -425,9 +425,40 @@ uv run yt-generate-suno <collection-path>
 
 `config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` を生成する。設定変更時はスクリプト再実行のみで全プロンプトに反映される。
 
-**ボーカルモードの出力**: 各パターンに **Style 欄**（情景フレーズ + genre_line）+ **Lyrics 欄**（歌詞そのまま）の 2 ブロックが書き出される。Suno 側で Custom Mode に入って **Instrumental トグル OFF** にした状態で両方をコピペする。
+`suno-prompts.md` と同じ `20-documentation/` ディレクトリに、各パターンの `{ name, style, lyrics }` を配列化した **`suno-prompts.json`** も併出される。これは Step 2.5 の Chrome 拡張（`yt-suno-serve` 経由）が fetch する配信元で、`suno-prompts.md` の Style 行と同一内容から生成されるため両者はドリフトしない。
+
+**ボーカルモードの出力**: 各パターンに **Style 欄**（情景フレーズ + genre_line）+ **Lyrics 欄**（歌詞そのまま）の 2 ブロックが書き出される。Suno 側で Custom Mode に入って **Instrumental トグル OFF** にした状態で両方を投入する（Step 2.5 の自動投入、または fallback の手コピペ）。
 
 保存後、`workflow-state.json` の `music.generated = true` に更新する。
+
+### Step 2.5: Chrome 拡張 + yt-suno-serve で自動投入（推奨）
+
+`suno-prompts.json` を Chrome 拡張（`extensions/suno-helper/`）が読み取り、Suno Custom Mode の Style/Lyrics 両フィールドへ順次注入 → Generate 押下 → 生成完了検知 → 次パターン、を連続実行する。手コピペ（4 パターン × 3 回 ≒ 12 サイクル）を自動化する経路。
+
+> ヘッドレス／DevTools 経由ではなく **既ログイン状態の本物の Chrome セッション** 上で動かすため、reCAPTCHA を踏みにくく、DOM 操作は固定実装でトークン消費ゼロ、ネイティブイベント発火で React に即時反映される。
+
+**手順**:
+
+1. **拡張をロード**（初回のみ）: Chrome で `chrome://extensions` → デベロッパーモード ON → 「パッケージ化されていない拡張機能を読み込む」で `extensions/suno-helper/` を選択。詳細は `extensions/suno-helper/README.md`。
+2. **サーバー起動**: ターミナルで `suno-prompts.json` を localhost に配信する。`Ctrl-C` で停止できるフォアグラウンドプロセス。
+   ```bash
+   uv run yt-suno-serve collections/planning/<theme>
+   # → http://localhost:7873/prompts.json で配信（CORS は chrome-extension:// のみ許可）
+   ```
+   コレクションディレクトリの代わりに `suno-prompts.json` のパスを直接渡してもよい。ポートを変える場合は `--port <PORT>`。
+3. **Suno を開く**: Chrome で Suno の **Custom Mode** 画面を開く（ボーカルモードは **Instrumental トグル OFF**）。
+4. **取得 → 連続実行**: 拡張ポップアップでサーバー URL（既定 `http://localhost:7873`）を入れて **データ取得** → パターン一覧を確認 → **全パターンを連続実行**。
+5. **停止と継続**: reCAPTCHA / エラー検知時は拡張が自動停止しポップアップに警告を出す。手動で解決後、再度 **連続実行** で続行できる。
+
+### Step 2.5 fallback: 拡張が使えない／壊れたときの手コピペ
+
+拡張をロードできない、Suno の UI 変更で注入先セレクタが外れた（`content.js` 冒頭の `SELECTORS` 保守が必要）、その他自動投入が機能しない場合は、従来どおり **`suno-prompts.md` を見ながら手コピペ** に切り替える:
+
+1. `suno-prompts.md` を開く。
+2. Suno の Custom Mode に入り、ボーカルモードは **Instrumental トグル OFF**。
+3. パターンごとに **Style 欄** と **Lyrics 欄** を貼り付け、**Generate** を押す。これを全パターン分繰り返す。
+
+自動・手動どちらの経路でも投入内容は同一（`suno-prompts.md` と `suno-prompts.json` は同一の中間表現から生成）。
 
 ### Step 3: workflow-state.json の planning.music を更新
 
@@ -480,12 +511,12 @@ Suno での楽曲生成は人手で Suno UI 上で行うため、本スキル自
 ## Next Step
 
 ### インストゥルメンタル
-→ SunoAI Custom Mode（**Instrumental ON**）にプロンプトを手動投入して楽曲生成
+→ SunoAI Custom Mode（**Instrumental ON**）にプロンプトを投入して楽曲生成（Step 2.5 の拡張自動投入を推奨、不可時は手コピペ fallback）
 → ダウンロード対象のプレイリストを作成
 → `/masterup <playlist-url>` でダウンロード + マスター音源生成
 
 ### ボーカル（歌詞あり）
-→ SunoAI Custom Mode（**Instrumental OFF**）に Style + Lyrics を投入して楽曲生成
+→ SunoAI Custom Mode（**Instrumental OFF**）に Style + Lyrics を投入して楽曲生成（Step 2.5 の拡張自動投入を推奨、不可時は手コピペ fallback）
 → 歌唱の発音・ピッチが破綻していないか必ず試聴チェック
 → ダウンロード対象のプレイリストを作成
 → `/masterup <playlist-url>` でダウンロード + マスター音源生成
