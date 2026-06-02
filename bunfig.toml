@@ -1,0 +1,6 @@
+[install]
+saveTextLockfile = true
+
+[test]
+coverage = false
+coverageReporter = ["text", "lcov"]

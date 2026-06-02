@@ -3,7 +3,9 @@
 # 有効化: devShell（`nix develop` / direnv `use flake`）に入ると flake.nix の
 # shellHook が `lefthook install` を自動実行する。手動なら `lefthook install`。
 #
-# - pre-commit: 変更した Python ファイルに ruff の lint / format チェックをかける
+# - pre-commit:
+#   - Python: ruff の lint / format チェック
+#   - TypeScript: oxlint / oxfmt --check / tsc -b --noEmit (ADR 0001)
 # - pre-push:   CHANGELOG ゲート（CI の changelog ジョブをローカル再現）
 #
 # 個別スキップ: `LEFTHOOK=0 git push` で全 hook を無効化。
@@ -18,6 +20,15 @@ pre-commit:
     ruff-format:
       glob: "*.py"
       run: uv run ruff format --check {staged_files}
+    oxlint:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
+      run: bunx oxlint {staged_files}
+    oxfmt:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
+      run: bunx oxfmt --check {staged_files}
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: bun run typecheck
 
 pre-push:
   commands:

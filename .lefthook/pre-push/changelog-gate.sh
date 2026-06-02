@@ -43,6 +43,8 @@ GATED_PATHS=(
   ".claude/skills/"
   ".claude/CLAUDE.template.md"
   "pyproject.toml"
+  "packages/"
+  "package.json"
 )
 CHANGELOG_PATH="CHANGELOG.md"
 
