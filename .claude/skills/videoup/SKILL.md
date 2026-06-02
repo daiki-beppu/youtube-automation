@@ -61,6 +61,19 @@ $ARGUMENTS
 - ユーザーが DAW でミックスした `master-mix.{wav,m4a}` がある場合、`yt-generate-master` は不要
 - `set -e` は使用しない（明示的エラーハンドリング）
 
+### opt-in: 短尺 master の動画長指定再生 (#545)
+
+`audio.target_duration_min` を小さく (例: 30 分) 保ちつつ動画は長尺で出したい場合、`config.default.yaml::audio.target_video_duration_min` (分) を設定すると `generate_videos.sh` が音声入力にも `-stream_loop -1` を適用し `-t <target>` で動画長を強制する。下流チャンネルの finalize encode 時間 (loudnorm + 雨音重ね 等) を短縮できる。
+
+| 設定方法 | 例 | 優先 |
+|---|---|---|
+| 環境変数 | `VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN=120 bash .../generate_videos.sh ...` | 高 |
+| チャンネル override | `config/skills/videoup.yaml` に `audio: { target_video_duration_min: 120 }` | 中 |
+| 未設定 | (既定) | 従来動作 |
+
+- master 尺 ≥ `target_video_duration_min × 60` のときは無視され従来動作になる (master 尺が支配)
+- 音声 loop seam の crossfade は本機能のスコープ外 (将来拡張)
+
 ## 長時間処理の取り扱い
 
 `generate_videos.sh` は ffmpeg を走らせるため **1〜10 分程度**（コレクション尺次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
