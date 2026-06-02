@@ -1,17 +1,18 @@
-"""yt-suno-serve (suno_serve) の挙動テスト.
+"""yt-collection-serve (collection_serve) の挙動テスト.
 
-issue #692: コレクションディレクトリ or suno-prompts.json パスを引数に取り、
-`http://localhost:<PORT>/prompts.json` で JSON を提供するローカル HTTP サーバー。
-CORS は Chrome 拡張オリジン (`chrome-extension://...`) のみ許可する。
+issue #698: #692 の `yt-suno-serve` を `yt-collection-serve` に一般化し、
+エンドポイントをサブパス分離する。`/suno/prompts.json` は #692 と同じ
+配列 JSON を返す（契約不変・ルートのみ `/prompts.json` → `/suno/prompts.json`）。
+CORS は Chrome 拡張オリジン (`chrome-extension://...`) のみ許可し、全ルートで同一ポリシー。
 
 契約（draft が実装すべき public API）:
 - `resolve_prompts_path(path: Path) -> Path`
     dir → `<dir>/20-documentation/suno-prompts.json` / file → そのまま / 不在 → ConfigError。
 - `is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool`
-    allow_origin=None なら `chrome-extension://` scheme を許可。
-    allow_origin 指定時は完全一致のみ許可。
-- `create_server(json_path: Path, port: int, allow_origin: str | None) -> ThreadingHTTPServer`
-    `GET /prompts.json` で配列 JSON、`OPTIONS` で preflight を返すサーバーを生成する。
+    allow_origin=None なら `chrome-extension://` scheme を許可。指定時は完全一致のみ許可。
+- `create_server(port, allow_origin, *, prompts_path, collection_dir, distrokid) -> ThreadingHTTPServer`
+    `GET /suno/prompts.json` で配列 JSON、`OPTIONS` で preflight を返すサーバーを生成する。
+    distrokid は `Distrokid | None`（None / 無効時は `/distrokid/*` が 404）。
 - `main()`
     argparse CLI（positional path / `--port`（既定 7873）/ `--allow-origin`）。
 """
@@ -26,7 +27,7 @@ import urllib.request
 
 import pytest
 
-from youtube_automation.scripts.suno_serve import (
+from youtube_automation.scripts.collection_serve import (
     create_server,
     is_origin_allowed,
     main,
@@ -36,9 +37,12 @@ from youtube_automation.utils.exceptions import ConfigError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 
+# 外部 HTTP 契約: 拡張が fetch する suno サブパス（リテラルで pin する）
+_SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
+
 
 # ---------------------------------------------------------------------------
-# resolve_prompts_path: パス解決（dir / file / 不在）
+# resolve_prompts_path: パス解決（dir / file / 不在）— #692 契約不変
 # ---------------------------------------------------------------------------
 
 
@@ -85,7 +89,7 @@ def test_resolve_prompts_path_missing_path_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# is_origin_allowed: CORS 判定（scheme 検証 + --allow-origin 完全一致）
+# is_origin_allowed: CORS 判定（scheme 検証 + --allow-origin 完全一致）— 不変
 # ---------------------------------------------------------------------------
 
 
@@ -124,13 +128,20 @@ def serve(tmp_path):
     """空きポートでサーバーを起動し base URL を返すファクトリ.
 
     port=0 を渡して OS に空きポートを割り当てさせる（固定ポート衝突回避）。
+    distrokid 既定は None（suno-only 起動モード）。
     """
     started = []
 
     def _start(entries, allow_origin=None):
         json_path = tmp_path / "suno-prompts.json"
         json_path.write_text(json.dumps(entries), encoding="utf-8")
-        server = create_server(json_path, 0, allow_origin)
+        server = create_server(
+            0,
+            allow_origin,
+            prompts_path=json_path,
+            collection_dir=tmp_path,
+            distrokid=None,
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         started.append((server, thread))
@@ -144,29 +155,43 @@ def serve(tmp_path):
         thread.join(timeout=5)
 
 
-def test_get_prompts_json_returns_array_body(serve):
+def test_get_suno_prompts_json_returns_array_body(serve):
     """Given prompts データを公開するサーバー
-    When `GET /prompts.json`
-    Then 200 で元データと一致する配列 JSON を返す。
+    When `GET /suno/prompts.json`
+    Then 200 で元データと一致する配列 JSON を返す（#692 契約不変）。
     """
     entries = [{"name": "A — A", "style": "slow, jazz,\nscene", "lyrics": ""}]
     base = serve(entries)
 
-    with urllib.request.urlopen(f"{base}/prompts.json") as resp:
+    with urllib.request.urlopen(f"{base}{_SUNO_PROMPTS_ROUTE}") as resp:
         assert resp.status == 200
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
 
 
-def test_get_prompts_json_sets_cors_header_for_extension_origin(serve):
+def test_old_root_prompts_json_returns_404(serve):
+    """Given 旧ルート `/prompts.json`
+    When GET する
+    Then breaking rename により 404（サブパス分離済み）。
+    """
+    base = serve([])
+    req = urllib.request.Request(f"{base}/prompts.json")
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
+
+
+def test_get_suno_prompts_json_sets_cors_header_for_extension_origin(serve):
     """Given 拡張オリジンからの GET
     When Origin が chrome-extension://
     Then Access-Control-Allow-Origin がそのオリジンを返す。
     """
     base = serve([{"name": "A", "style": "s", "lyrics": ""}])
     req = urllib.request.Request(
-        f"{base}/prompts.json",
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
         headers={"Origin": _EXTENSION_ORIGIN},
     )
 
@@ -174,14 +199,14 @@ def test_get_prompts_json_sets_cors_header_for_extension_origin(serve):
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
-def test_get_prompts_json_omits_cors_header_for_web_origin(serve):
+def test_get_suno_prompts_json_omits_cors_header_for_web_origin(serve):
     """Given web オリジンからの GET
     When Origin が https://...
     Then Access-Control-Allow-Origin ヘッダを付けない（拡張のみ許可）。
     """
     base = serve([{"name": "A", "style": "s", "lyrics": ""}])
     req = urllib.request.Request(
-        f"{base}/prompts.json",
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
         headers={"Origin": "https://suno.com"},
     )
 
@@ -191,12 +216,12 @@ def test_get_prompts_json_omits_cors_header_for_web_origin(serve):
 
 def test_options_preflight_allows_extension_origin(serve):
     """Given 拡張オリジンからの preflight
-    When `OPTIONS /prompts.json`
+    When `OPTIONS /suno/prompts.json`
     Then 2xx + Access-Control-Allow-Origin を返す。
     """
     base = serve([])
     req = urllib.request.Request(
-        f"{base}/prompts.json",
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
         method="OPTIONS",
         headers={"Origin": _EXTENSION_ORIGIN},
     )
@@ -214,7 +239,7 @@ def test_allow_origin_exact_match_locks_to_single_extension(serve):
     locked = "chrome-extension://lockedextensionid"
     base = serve([], allow_origin=locked)
     req = urllib.request.Request(
-        f"{base}/prompts.json",
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
         headers={"Origin": "chrome-extension://someotherid"},
     )
 
@@ -243,7 +268,7 @@ def test_unknown_path_returns_404(serve):
 
 def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
     """--help は argparse の usage を表示して exit 0 する."""
-    monkeypatch.setattr(sys, "argv", ["yt-suno-serve", "--help"])
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", "--help"])
 
     with pytest.raises(SystemExit) as exc_info:
         main()

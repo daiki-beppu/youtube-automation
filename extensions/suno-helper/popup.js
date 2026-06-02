@@ -66,7 +66,7 @@ fetchBtn.addEventListener("click", async () => {
     entries = [];
     renderList();
     runBtn.disabled = true;
-    setStatus(`取得失敗: ${err.message}\nyt-suno-serve が起動しているか確認してください。`, true);
+    setStatus(`取得失敗: ${err.message}\nyt-collection-serve が起動しているか確認してください。`, true);
   }
 });
 

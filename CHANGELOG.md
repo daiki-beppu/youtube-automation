@@ -9,17 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `feat(suno)`: Chrome 拡張 + ローカル HTTP サーバーで Suno UI への Style/Lyrics 連続投入を自動化した（#692）。`yt-generate-suno` が従来の `suno-prompts.md` に加え `suno-prompts.json`（`[{name, style, lyrics}]` の配列。md の Styles 行と同一部品から派生）を併出する。新 CLI `yt-suno-serve <collection-dir-or-json-path> [--port 7873] [--allow-origin chrome-extension://<id>]` が `http://localhost:<PORT>/prompts.json` で配信し、CORS は `chrome-extension://` オリジンのみ許可する（`youtube_automation.scripts.suno_serve`、`pyproject.toml::[project.scripts]` に登録）。`extensions/suno-helper/`（Manifest V3 / unpacked）を新規追加し、ポップアップから取得 → 連続実行で各パターンを Style/Lyrics 注入（React 互換のネイティブイベント発火）→ Generate 押下 → 生成完了検知 → 次へ、を順次実行する。reCAPTCHA / エラー検知時は自動停止して警告し手動継続できる。共有パス契約は `youtube_automation.scripts.suno_artifacts` に集約。新規テスト `tests/test_suno_serve.py`、`tests/test_generate_suno_prompts.py` に JSON 併出ケースを追加。Chrome 拡張は手動テスト（Suno 実環境）で確認する
+- `feat(suno)`: Chrome 拡張 + ローカル HTTP サーバーで Suno UI への Style/Lyrics 連続投入を自動化した（#692）。`yt-generate-suno` が従来の `suno-prompts.md` に加え `suno-prompts.json`（`[{name, style, lyrics}]` の配列。md の Styles 行と同一部品から派生）を併出する。配信は #698 で一般化した `yt-collection-serve <collection-dir-or-json-path> [--port 7873] [--allow-origin chrome-extension://<id>]` が `http://localhost:<PORT>/suno/prompts.json` で行い、CORS は `chrome-extension://` オリジンのみ許可する。`extensions/suno-helper/`（Manifest V3 / unpacked）を新規追加し、ポップアップから取得 → 連続実行で各パターンを Style/Lyrics 注入（React 互換のネイティブイベント発火）→ Generate 押下 → 生成完了検知 → 次へ、を順次実行する。reCAPTCHA / エラー検知時は自動停止して警告し手動継続できる。共有パス契約は `youtube_automation.scripts.suno_artifacts` に集約。新規テスト `tests/test_collection_serve.py`、`tests/test_generate_suno_prompts.py` に JSON 併出ケースを追加。Chrome 拡張は手動テスト（Suno 実環境）で確認する
+
+- `feat(serve,config)`: `config/channel/distrokid.json` を新規責務として追加し、`yt-collection-serve` に DistroKid 配信エンドポイントを追加した（#698）。`distrokid` セクションは `enabled: bool`（既定 `false`・opt-in）+ `profile: {artist_name, language, main_genre, songwriter, apple_music_credit, track_type}` を宣言でき、`load_config().distrokid.enabled / profile.*` でアクセスする（`youtube_automation.utils.config.distrokid`、未配置/`enabled=false` は profile 検証を skip、`enabled=true` 時のみ profile 必須 6 フィールドを Fail Fast 検証）。`yt-collection-serve` に `GET /distrokid/release.json`（`distrokid.profile` 静的データと `collections/planning/<theme>/` 動的データ＝アルバム名 / トラック / ジャケット / リリース日のマージ）と `GET /distrokid/assets/<path>`（曲・ジャケットの binary 配信、トラバーサルガード付き）を追加。`distrokid` 未配置/`enabled=false` のチャンネルでは `/distrokid/*` が 404 を返し、`/suno/prompts.json` は引き続き応答する。純データロジックは `youtube_automation.scripts.distrokid_release`（`build_release_payload` / `resolve_asset_path` / `DISTROKID_RELEASE_ROUTE` / `DISTROKID_ASSETS_PREFIX`）に分離。`examples/channel_config.example/distrokid.json` を追加。新規テスト `tests/test_collection_serve.py` / `tests/test_distrokid_release_endpoint.py`、`tests/test_config_loader.py` に distrokid セクションのケースを追加
 
 ### Changed
+
+- `refactor(serve)!`: **破壊的変更** — `yt-suno-serve` CLI を `yt-collection-serve` に rename し、エンドポイントをサブパス分離した（#698）。配信ルートは `/prompts.json` → `/suno/prompts.json` に変更（#692 の JSON 契約 `[{name, style, lyrics}]` 自体は不変）。サーバー実装は `youtube_automation.scripts.suno_serve` → `youtube_automation.scripts.collection_serve` へ移動し、`pyproject.toml::[project.scripts]` の `yt-suno-serve` を**削除**して `yt-collection-serve` を追加（deprecated alias は残さない）。`extensions/suno-helper/`（素 JS）の fetch URL を `/suno/prompts.json` に追従、`.claude/skills/suno/SKILL.md` Step 2.5 の起動コマンドを `yt-collection-serve` に更新
 
 ### Deprecated
 
 ### Removed
 
+- `refactor(serve)!`: `yt-suno-serve` CLI と `youtube_automation.scripts.suno_serve` モジュールを削除した（#698、後継は `yt-collection-serve` / `youtube_automation.scripts.collection_serve`）
+
 ### Fixed
 
 ### Migration
+
+- `#698`: `yt-suno-serve` を実行しているスクリプト・運用手順は `yt-collection-serve` に置き換える。配信 URL は `http://localhost:<PORT>/prompts.json` → `http://localhost:<PORT>/suno/prompts.json` に変わる（suno-helper 拡張は本リリースで追従済み）
 
 ### Security
 

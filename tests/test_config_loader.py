@@ -187,6 +187,116 @@ def test_pinned_comment_templates_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
+def _full_distrokid_profile() -> dict:
+    """distrokid.profile の必須 6 フィールド（#698）."""
+    return {
+        "artist_name": "City Nights",
+        "language": "English",
+        "main_genre": "Electronic",
+        "songwriter": "Jane Doe",
+        "apple_music_credit": "Jane Doe",
+        "track_type": "Instrumental",
+    }
+
+
+def test_distrokid_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
+    """#698: distrokid.json を置かない場合、enabled=False（オプトイン）で profile は空文字 default."""
+    ch = _setup_channel(tmp_path, _minimal_sections())  # distrokid.json なし
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist_name == ""
+    assert config.distrokid.profile.language == ""
+    assert config.distrokid.profile.main_genre == ""
+    assert config.distrokid.profile.songwriter == ""
+    assert config.distrokid.profile.apple_music_credit == ""
+    assert config.distrokid.profile.track_type == ""
+
+
+def test_distrokid_section_empty_uses_defaults(tmp_path, monkeypatch):
+    """#698: `distrokid: {}` のみのとき enabled=False の default。"""
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {"distrokid": {}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist_name == ""
+
+
+def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
+    """#698: enabled=true + 全 profile フィールドが dataclass まで届く。"""
+    from youtube_automation.utils.config import Distrokid
+
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": _full_distrokid_profile()}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert isinstance(config.distrokid, Distrokid)
+    assert config.distrokid.enabled is True
+    assert config.distrokid.profile.artist_name == "City Nights"
+    assert config.distrokid.profile.language == "English"
+    assert config.distrokid.profile.main_genre == "Electronic"
+    assert config.distrokid.profile.songwriter == "Jane Doe"
+    assert config.distrokid.profile.apple_music_credit == "Jane Doe"
+    assert config.distrokid.profile.track_type == "Instrumental"
+
+
+def test_distrokid_enabled_without_profile_raises(tmp_path, monkeypatch):
+    """#698: enabled=true で profile セクション欠落は ConfigError（条件付き必須）。"""
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {"distrokid": {"enabled": True}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="distrokid"):
+        load_config()
+
+
+def test_distrokid_enabled_partial_profile_raises(tmp_path, monkeypatch):
+    """#698: enabled=true で profile フィールドが 1 つでも欠けると ConfigError。"""
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    del profile["songwriter"]
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="songwriter"):
+        load_config()
+
+
+def test_distrokid_disabled_with_incomplete_profile_loads(tmp_path, monkeypatch):
+    """#698: enabled=false なら profile が不完全でも条件付き検証は走らず load 成功。"""
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {"distrokid": {"enabled": False, "profile": {"artist_name": "x"}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist_name == "x"
+
+
+def test_distrokid_section_must_be_object(tmp_path, monkeypatch):
+    """#698: distrokid セクションが object でないと ConfigError。"""
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {"distrokid": ["not", "an", "object"]}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="distrokid"):
+        load_config()
+
+
 def test_load_all_sections(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["analytics.json"] = {

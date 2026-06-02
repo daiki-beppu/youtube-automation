@@ -7,7 +7,7 @@ issue #692 受け入れ基準: 「`.claude/skills/suno/SKILL.md` に新フロー
 全テストが pass してしまうため、ドキュメント契約をこのテストで機械的に担保し再発を防ぐ。
 
 検証する契約:
-1. Chrome 拡張 + `yt-suno-serve` の自動投入フロー（Step 2.5）が記載されている。
+1. Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 2.5）が記載されている。
 2. 拡張が使えない／壊れたとき向けの手コピペ fallback 節が記載されている。
 3. 自動投入が読む配信元 `suno-prompts.json` への言及がある。
 """
@@ -37,21 +37,27 @@ def test_skill_md_exists() -> None:
 def test_skill_md_documents_auto_inject_flow() -> None:
     """Given suno SKILL.md
     When 本文を読む
-    Then Chrome 拡張 + `yt-suno-serve` の自動投入フロー（Step 2.5）が記載されている。
+    Then Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 2.5）が記載されている。
+
+    #698: CLI を `yt-suno-serve` → `yt-collection-serve` に rename したため、
+    起動コマンド契約（machine-coupled）を新名に追従する。旧名が残っていないことも検証する。
     """
     text = _read()
-    for token in ("Step 2.5", "yt-suno-serve", "suno-helper", "連続実行"):
+    for token in ("Step 2.5", "yt-collection-serve", "suno-helper", "連続実行"):
         assert token in text, f"SKILL.md に新フローの記載がない（`{token}` 不在）"
+    assert "yt-suno-serve" not in text, "SKILL.md に旧 CLI 名 `yt-suno-serve` が残っている（#698 で廃止）"
 
 
 def test_skill_md_documents_serve_url_contract() -> None:
     """Given suno SKILL.md
     When 自動投入フローを読む
-    Then 拡張が fetch する `suno-prompts.json` 配信元の言及がある。
+    Then 拡張が fetch する `suno-prompts.json` 配信元と新サブパス `/suno/prompts.json` の言及がある。
+
+    #698: エンドポイントを `/prompts.json` → `/suno/prompts.json` にサブパス分離。
     """
     text = _read()
     assert "suno-prompts.json" in text, "SKILL.md に配信元 `suno-prompts.json` の言及がない"
-    assert "/prompts.json" in text, "SKILL.md に配信エンドポイント `/prompts.json` の言及がない"
+    assert "/suno/prompts.json" in text, "SKILL.md に新配信エンドポイント `/suno/prompts.json` の言及がない（#698）"
 
 
 def test_skill_md_documents_manual_fallback() -> None:
