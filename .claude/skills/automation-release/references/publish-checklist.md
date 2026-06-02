@@ -49,6 +49,21 @@ grep -q "^## \[${VER}\]" CHANGELOG.md
 
 無ければ prepare が不完全。ユーザーに通知して abort。
 
+### 6. uv.lock と pyproject.toml の version が一致
+
+prepare Phase 1-5 で `uv lock` 同期済みのはずだが、念のため main HEAD で乖離が無いことを確認する（#515 再発防止）。
+
+```bash
+pyproject_ver=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/version = "(.+)"/\1/')
+lock_ver=$(grep -A1 'name = "youtube-channels-automation"' uv.lock | grep '^version' | head -1 | sed -E 's/version = "(.+)"/\1/')
+if [ "${pyproject_ver}" != "${lock_ver}" ]; then
+  echo "ERROR: pyproject.toml (${pyproject_ver}) と uv.lock (${lock_ver}) が一致しません。prepare をやり直すか、`uv lock` を手で当てる hotfix PR を入れてください"
+  exit 1
+fi
+```
+
+不一致だった場合は publish を続行せず、`uv lock` を当てた hotfix PR を先に main にマージしてから再度 publish を走らせる。
+
 ---
 
 ## エッジケース
