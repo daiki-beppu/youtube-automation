@@ -144,14 +144,33 @@ def _sync_dir_asset(
 
     # skills 配布時は Codex CLI の探索パス `.agents/skills` も併設する。
     # 標準レイアウト (`.claude/skills`) でないときは対象外 (None) でスキップ。
+    rc = 0
     if args.asset == "skills":
         mirror = _ensure_agents_skills_symlink(target_dir, force=args.force, dry_run=args.dry_run)
         prefix = "[dry-run] " if args.dry_run else ""
         if mirror == "unsupported":
+            # symlink 機能自体がない環境 (Windows 非特権ユーザー等)。警告のみで継続。
             print(
                 "  [warn] .agents/skills の symlink を作成できませんでした (symlink 非対応環境)",
                 file=sys.stderr,
             )
+        elif mirror == "permission-denied":
+            # 権限エラーは silent 化せず非ゼロ rc で明示的に失敗させる。
+            # ユーザーが手動で復旧できる情報 (link コマンド) を案内する。
+            link_path = target_dir.parent.parent / ".agents" / "skills"
+            print(
+                "  [error] .agents/skills の symlink 作成が権限エラーで失敗しました\n"
+                f"          link 先: {link_path}\n"
+                "          Codex CLI のスキル探索パス (.agents/skills) が無いため、\n"
+                "          このまま放置すると Codex から同期済みスキルが見えません。\n"
+                "          手動で復旧する場合は以下を実行してください:\n"
+                f"            mkdir -p {link_path.parent}\n"
+                f"            ln -s ../.claude/skills {link_path}\n"
+                "          または sudo / 適切な権限で `yt-skills sync --asset skills --force` を再実行してください。",
+                file=sys.stderr,
+            )
+            counts["error"] = counts.get("error", 0) + 1
+            rc = 1
         elif mirror is not None:
             print(f"  {prefix}{mirror:>8}: .agents/skills -> ../.claude/skills")
             counts[mirror] = counts.get(mirror, 0) + 1
@@ -162,4 +181,4 @@ def _sync_dir_asset(
         print("  (skipped を上書きするには --force を指定してください)")
     if args.prune and counts.get("would-prune"):
         print("  (実削除には --yes を指定してください)")
-    return 0
+    return rc
