@@ -1,0 +1,13 @@
+{
+  "distrokid": {
+    "enabled": false,
+    "profile": {
+      "artist_name": "City Nights",
+      "language": "English",
+      "main_genre": "Electronic",
+      "songwriter": "Jane Doe",
+      "apple_music_credit": "Jane Doe",
+      "track_type": "Instrumental"
+    }
+  }
+}

@@ -25,6 +25,11 @@ from youtube_automation.utils.config.comments import (
 )
 from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
+from youtube_automation.utils.config.distrokid import (
+    REQUIRED_PROFILE_FIELDS,
+    Distrokid,
+    DistrokidProfile,
+)
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import Branding, ChannelMeta
 from youtube_automation.utils.config.pinned_comment import PinnedComment
@@ -187,6 +192,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
     localizations = _load_localizations(channel_dir_path, youtube.api.language)
     comments = _build_comments(merged)
     pinned_comment = _build_pinned_comment(merged)
+    distrokid = _build_distrokid(merged)
 
     _validate_cross_file(youtube, content, localizations)
 
@@ -202,6 +208,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
         localizations=localizations,
         comments=comments,
         pinned_comment=pinned_comment,
+        distrokid=distrokid,
     )
 
 
@@ -547,6 +554,43 @@ def _build_pinned_comment(merged: dict) -> PinnedComment:
         default_language=str(pc.get("default_language", "en")),
         templates=templates,
     )
+
+
+def _build_distrokid(merged: dict) -> Distrokid:
+    """`distrokid` セクション（optional・opt-in）.
+
+    未配置のチャンネルは `Distrokid(enabled=False)` でロードされ、`/distrokid/*`
+    エンドポイントは 404 になる。`enabled=True` のときのみ profile の必須 6 フィールドを
+    条件付き検証する（条件付き必須のため `_REQUIRED_KEYS_BY_SECTION` の無条件検証では
+    宣言できず、ここで Fail Fast する）。
+    """
+    raw = merged.get("distrokid")
+    if raw is None:
+        return Distrokid()
+    if not isinstance(raw, dict):
+        raise ConfigError(f"distrokid セクションは object でなければなりません（got {type(raw).__name__}）")
+
+    enabled = bool(raw.get("enabled", False))
+    profile_raw = raw.get("profile") or {}
+    if not isinstance(profile_raw, dict):
+        raise ConfigError(f"distrokid.profile は object でなければなりません（got {type(profile_raw).__name__}）")
+
+    if enabled:
+        missing = [f for f in REQUIRED_PROFILE_FIELDS if not profile_raw.get(f)]
+        if missing:
+            raise ConfigError(
+                f"distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: {', '.join(missing)}"
+            )
+
+    profile = DistrokidProfile(
+        artist_name=str(profile_raw.get("artist_name", "")),
+        language=str(profile_raw.get("language", "")),
+        main_genre=str(profile_raw.get("main_genre", "")),
+        songwriter=str(profile_raw.get("songwriter", "")),
+        apple_music_credit=str(profile_raw.get("apple_music_credit", "")),
+        track_type=str(profile_raw.get("track_type", "")),
+    )
+    return Distrokid(enabled=enabled, profile=profile)
 
 
 def _load_localizations(channel_dir_path: Path, fallback_language: str) -> Localizations:

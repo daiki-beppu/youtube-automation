@@ -2,7 +2,7 @@
 // popup.html（<script>）と content_scripts（manifest）の双方が最初に読み込む。
 globalThis.SUNO_HELPER = {
   STORAGE_KEY: "sunoServerUrl",
-  PROMPTS_ROUTE: "/prompts.json",
+  PROMPTS_ROUTE: "/suno/prompts.json",
   DEFAULT_URL: "http://localhost:7873",
   MSG: {
     RUN: "SUNO_RUN",

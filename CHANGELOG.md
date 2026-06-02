@@ -13,17 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `chore(ts-rewrite)`: TS 移行 epic (#727) のための品質ガードレール tooling を `feat/ts-rewrite` branch (umbrella PR #791) に install した。Ultracite preset の Oxlint (lint) + Oxfmt (format) backend、TypeScript 6.0.3 (`tsc -b --noEmit`)、bun:test、knip 6.15.0、`bun pm audit` を採用（Vitest と Biome は不採用、ADR `docs/adr/0001-ai-first-ts-rewrite.md` / 設計議論は #727 参照）。`lefthook.yml` に pre-commit `oxlint` / `oxfmt --check` / `typecheck` を Python (ruff) と並列追加、`.github/workflows/ci.yml` に `ts-{lint,format-check,typecheck,test,knip,audit}` 6 ジョブを並列追加（Python ジョブは併存、cutover #790 で削除）、`flake.nix` devShell に bun 追加。新規 config: `oxlint.config.ts` / `oxfmt.config.ts` / `tsconfig.json` (strict + noUncheckedIndexedAccess + verbatimModuleSyntax) / `knip.json` / `bunfig.toml`。`.lefthook/pre-push/changelog-gate.sh::GATED_PATHS` に `packages/` と `package.json` を追加。bootstrap 用 `smoke.test.ts` 1 件と `packages/.gitkeep` (S5 で削除予定)。本コミットは #727 子 issue #731 (S5 workspace skeleton) と #733 (S7 CI/lefthook bun 化) の acceptance criteria を大半前倒し充足する。extensions/* (Chrome 拡張) は別 stack (#697 の WXT/Vite/Vitest) で整備するためスコープ外
 
-- `feat(suno)`: Chrome 拡張 + ローカル HTTP サーバーで Suno UI への Style/Lyrics 連続投入を自動化した（#692）。`yt-generate-suno` が従来の `suno-prompts.md` に加え `suno-prompts.json`（`[{name, style, lyrics}]` の配列。md の Styles 行と同一部品から派生）を併出する。新 CLI `yt-suno-serve <collection-dir-or-json-path> [--port 7873] [--allow-origin chrome-extension://<id>]` が `http://localhost:<PORT>/prompts.json` で配信し、CORS は `chrome-extension://` オリジンのみ許可する（`youtube_automation.scripts.suno_serve`、`pyproject.toml::[project.scripts]` に登録）。`extensions/suno-helper/`（Manifest V3 / unpacked）を新規追加し、ポップアップから取得 → 連続実行で各パターンを Style/Lyrics 注入（React 互換のネイティブイベント発火）→ Generate 押下 → 生成完了検知 → 次へ、を順次実行する。reCAPTCHA / エラー検知時は自動停止して警告し手動継続できる。共有パス契約は `youtube_automation.scripts.suno_artifacts` に集約。新規テスト `tests/test_suno_serve.py`、`tests/test_generate_suno_prompts.py` に JSON 併出ケースを追加。Chrome 拡張は手動テスト（Suno 実環境）で確認する
+- `feat(suno)`: Chrome 拡張 + ローカル HTTP サーバーで Suno UI への Style/Lyrics 連続投入を自動化した（#692）。`yt-generate-suno` が従来の `suno-prompts.md` に加え `suno-prompts.json`（`[{name, style, lyrics}]` の配列。md の Styles 行と同一部品から派生）を併出する。配信は #698 で一般化した `yt-collection-serve <collection-dir-or-json-path> [--port 7873] [--allow-origin chrome-extension://<id>]` が `http://localhost:<PORT>/suno/prompts.json` で行い、CORS は `chrome-extension://` オリジンのみ許可する。`extensions/suno-helper/`（Manifest V3 / unpacked）を新規追加し、ポップアップから取得 → 連続実行で各パターンを Style/Lyrics 注入（React 互換のネイティブイベント発火）→ Generate 押下 → 生成完了検知 → 次へ、を順次実行する。reCAPTCHA / エラー検知時は自動停止して警告し手動継続できる。共有パス契約は `youtube_automation.scripts.suno_artifacts` に集約。新規テスト `tests/test_collection_serve.py`、`tests/test_generate_suno_prompts.py` に JSON 併出ケースを追加。Chrome 拡張は手動テスト（Suno 実環境）で確認する
+
+- `feat(serve,config)`: `config/channel/distrokid.json` を新規責務として追加し、`yt-collection-serve` に DistroKid 配信エンドポイントを追加した（#698）。`distrokid` セクションは `enabled: bool`（既定 `false`・opt-in）+ `profile: {artist_name, language, main_genre, songwriter, apple_music_credit, track_type}` を宣言でき、`load_config().distrokid.enabled / profile.*` でアクセスする（`youtube_automation.utils.config.distrokid`、未配置/`enabled=false` は profile 検証を skip、`enabled=true` 時のみ profile 必須 6 フィールドを Fail Fast 検証）。`yt-collection-serve` に `GET /distrokid/release.json`（`distrokid.profile` 静的データと `collections/planning/<theme>/` 動的データ＝アルバム名 / トラック / ジャケット / リリース日のマージ）と `GET /distrokid/assets/<path>`（曲・ジャケットの binary 配信、トラバーサルガード付き）を追加。`distrokid` 未配置/`enabled=false` のチャンネルでは `/distrokid/*` が 404 を返し、`/suno/prompts.json` は引き続き応答する。純データロジックは `youtube_automation.scripts.distrokid_release`（`build_release_payload` / `resolve_asset_path` / `DISTROKID_RELEASE_ROUTE` / `DISTROKID_ASSETS_PREFIX`）に分離。`examples/channel_config.example/distrokid.json` を追加。新規テスト `tests/test_collection_serve.py` / `tests/test_distrokid_release_endpoint.py`、`tests/test_config_loader.py` に distrokid セクションのケースを追加
+
+- `docs(adr)`: ADR 0002 で service-first architecture を確定した（#727）。`packages/core/<feature>/schema.ts` に zod schema を置き型は `z.infer` で導出、`packages/core/<feature>/service.ts` が単一エントリ、`packages/cli` / `packages/mcp` は service だけを呼ぶ thin wrapper で重い依存 (googleapis / sharp 等) の直 import は oxlint の `no-restricted-imports` で mechanical に enforce する。canonical template 3 ファイル雛形を ADR 本文に inline。post-#727 別 epic として #796 (subscription) / #797 (queue) / #798 (multi-tenancy) を起票
 
 ### Changed
+
+- `refactor(serve)!`: **破壊的変更** — `yt-suno-serve` CLI を `yt-collection-serve` に rename し、エンドポイントをサブパス分離した（#698）。配信ルートは `/prompts.json` → `/suno/prompts.json` に変更（#692 の JSON 契約 `[{name, style, lyrics}]` 自体は不変）。サーバー実装は `youtube_automation.scripts.suno_serve` → `youtube_automation.scripts.collection_serve` へ移動し、`pyproject.toml::[project.scripts]` の `yt-suno-serve` を**削除**して `yt-collection-serve` を追加（deprecated alias は残さない）。`extensions/suno-helper/`（素 JS）の fetch URL を `/suno/prompts.json` に追従、`.claude/skills/suno/SKILL.md` Step 2.5 の起動コマンドを `yt-collection-serve` に更新
 
 ### Deprecated
 
 ### Removed
 
+- `refactor(serve)!`: `yt-suno-serve` CLI と `youtube_automation.scripts.suno_serve` モジュールを削除した（#698、後継は `yt-collection-serve` / `youtube_automation.scripts.collection_serve`）
+
 ### Fixed
 
 ### Migration
+
+- `#698`: `yt-suno-serve` を実行しているスクリプト・運用手順は `yt-collection-serve` に置き換える。配信 URL は `http://localhost:<PORT>/prompts.json` → `http://localhost:<PORT>/suno/prompts.json` に変わる（suno-helper 拡張は本リリースで追従済み）
 
 ### Security
 
