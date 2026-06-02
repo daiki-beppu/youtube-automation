@@ -5,6 +5,10 @@
   "description": "Pure domain logic for the youtube-channels-automation TS rewrite (skeleton).",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./skills-sync": "./skills-sync/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
   }
 }

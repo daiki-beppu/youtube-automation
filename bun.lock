@@ -29,6 +29,9 @@
     "packages/core": {
       "name": "@youtube-automation/core",
       "version": "0.1.0-alpha.0",
+      "dependencies": {
+        "zod": "^4.1.13",
+      },
     },
   },
   "packages": {
