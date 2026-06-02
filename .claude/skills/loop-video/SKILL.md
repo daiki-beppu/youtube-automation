@@ -303,6 +303,15 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 完了通知が届いたらログ末尾から結果サマリー（`10-assets/loop.mp4` のパス）をユーザーへ返す。`--smooth` 再実行時も同じパターンで起動する。IP ガードレールでブロックされた場合のエラーメッセージはログから抜き出して報告する。
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| GCP ADC 未取得/失効 | `ConfigError` / ADC 認証エラー | `gcloud auth application-default login`（必要なら `set-quota-project`）を再実行 |
+| Vertex AI rate | HTTP 429 | 時間を置いて再実行。並列実行を避け順次処理する |
+| API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud（Vertex AI）のステータスを確認し、時間を置いて再実行 |
+| 生成の途中失敗（課金済み） | プロセス中断・IP ガードレールでブロック | コストは発生済み。`10-assets/loop.mp4` の生成有無を確認し、未生成ならコマンドを再実行 |
+
 ## Next Step
 
 ループ動画生成後:

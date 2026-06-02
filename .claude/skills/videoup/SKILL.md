@@ -224,6 +224,14 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 をユーザーに選んでもらう。黙って静止画で生成すると今回のような FB（期待と実装の乖離）が再発する。
 
+## 障害時ガイダンス
+
+動画生成は `generate_videos.sh`（ffmpeg）でローカル実行され、外部サービスには依存しない。
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| ffmpeg 不在 | `command not found: ffmpeg`（`generate_videos.sh` の `command -v` チェックで停止） | `brew install ffmpeg` 等で install してから再実行 |
+
 ## Next Step
 
 動画生成後:

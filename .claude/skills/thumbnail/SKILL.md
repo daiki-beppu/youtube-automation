@@ -462,6 +462,15 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 完了通知が届いたらログ末尾から結果サマリー（生成された `thumbnail-vN.jpg` のパス、attempt 回数、内部リトライ有無）をユーザーへ返す。プロバイダーが瞬発エラーを返した場合はそのエラー行を抜き出して報告する。
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| GCP ADC 未取得/失効 | `ConfigError` / ADC 認証エラー | `gcloud auth application-default login`（必要なら `set-quota-project`）を再実行 |
+| Vertex AI rate | HTTP 429 | 時間を置いて再実行。並列実行を避け順次処理する |
+| API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud（Vertex AI）のステータスを確認し、時間を置いて再実行 |
+| 画像 provider 障害 | 片方の provider のエラー | `image_generation.provider` を `gemini` ↔ `openai` で切り替える |
+
 ## Next Step
 
 サムネイル確定後:

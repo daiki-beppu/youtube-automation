@@ -167,6 +167,15 @@ Phase 1 の成果物を `20-documentation/` に保存:
 
 **重要**: `/wf-next` への自動接続はしない。ユーザーが手動で `/wf-next` を呼ぶ。
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| GCP ADC 未取得/失効 | `ConfigError` / ADC 認証エラー | `gcloud auth application-default login`（必要なら `set-quota-project`）を再実行 |
+| Vertex AI rate | HTTP 429 | 時間を置いて再実行。並列実行を避け順次処理する |
+| API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud（Vertex AI）のステータスを確認し、時間を置いて再実行 |
+| 委譲先 skill の失敗 | 子 skill がエラー終了 | 各子 skill の「障害時ガイダンス」を参照して個別に対処 |
+
 ## Cross References
 
 - 企画生成: `/collection-ideate` スキル

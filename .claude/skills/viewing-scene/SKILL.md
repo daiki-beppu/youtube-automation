@@ -61,6 +61,13 @@ Phase 1 の結果 + `persona-definition.md` を統合し:
 AskUserQuestion でメインシーンと動画尺の方針を確認。
 `docs/plans/viewing-scene-matrix.md` を生成。
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+
 ## 関連ファイル
 
 - `docs/channel/personas/persona-definition.md` — ペルソナ定義（入力）

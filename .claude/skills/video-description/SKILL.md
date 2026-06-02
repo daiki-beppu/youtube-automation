@@ -144,6 +144,14 @@ skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き
 
 保存後、`workflow-state.json` の `description.generated = true` に更新する。
 
+## 障害時ガイダンス
+
+概要欄はエージェント生成（テキスト）で、外部サービスを呼ばない。
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| 入力データ/設定の不在 | 参照先のローカルファイルが見つからない | 該当ファイルを用意するか前段スキルを先に実行（外部サービスに依存しないため API 障害・quota の影響は受けない） |
+
 ## Next Step
 
 概要欄生成後:

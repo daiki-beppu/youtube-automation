@@ -92,6 +92,15 @@ $ARGUMENTS
 個別コレクションの振り返りメモが必要な場合は、`20-documentation/` に任意で
 追記してよい（`/collection-ideate` の入力にはならない）。
 
+## 障害時ガイダンス
+
+分析は `data/` の収集済みスナップショットを読むため通常は外部 API を呼ばない。再収集が必要なときのみ以下が該当する。
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| OAuth 未認証/失効 | `auth.oauth_handler` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
+
 ## Next Step
 
 分析完了後:

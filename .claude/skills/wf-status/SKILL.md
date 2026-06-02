@@ -85,6 +85,14 @@ phase 値と日本語ラベル:
 - `workflow-state.json` が存在しないコレクションは「未トラッキング」として表示する
 - スキーマ詳細は `.claude/references/workflow/schema.md` を参照
 
+## 障害時ガイダンス
+
+進捗表示は `collections/planning/` の JSON を読むだけで外部サービスを呼ばない。
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| workflow-state.json 不在/破損 | 対象ディレクトリに状態ファイルが無い | `/wf-new` で初期化するかパスを確認（外部サービスに依存しないため API 障害・quota の影響は受けない） |
+
 ## Cross References
 
 - 新規開始: `/wf-new`

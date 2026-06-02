@@ -69,6 +69,13 @@ options:
 ディレクトリが存在しなければ `mkdir -p docs/channel/personas` で作成してから書き出す。
 選択結果に基づき、タイトル・タグ・概要欄への影響もまとめる。
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+
 ## 関連ファイル
 
 - `docs/plans/viewer-voice-analysis.md` — コメント分析結果（入力）

@@ -71,6 +71,14 @@ AskUserQuestion で新タイトルフォーマットを確認。
 `docs/plans/alignment-audit.md` を生成。
 必要に応じて `config/channel/content.json` のタイトルテンプレートを更新。
 
+## 障害時ガイダンス
+
+整合性監査はローカルの成果物を読むだけで、外部サービスを呼ばない。
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| 入力データ/設定の不在 | 参照先のローカルファイルが見つからない | 該当ファイルを用意するか前段スキルを先に実行（外部サービスに依存しないため API 障害・quota の影響は受けない） |
+
 ## 関連ファイル
 
 - `config/channel/content.json` — `title.template`, `title.theme_activities`
