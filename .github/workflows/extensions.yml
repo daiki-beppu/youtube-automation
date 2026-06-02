@@ -1,0 +1,66 @@
+name: Extensions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - ".github/workflows/extensions.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - ".github/workflows/extensions.yml"
+
+defaults:
+  run:
+    working-directory: extensions/suno-helper
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: extensions/suno-helper/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Format check
+        run: pnpm format:check
+      - name: Type check
+        run: pnpm compile
+      - name: Unit tests (Vitest)
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+      - name: Verify generated manifest permissions (least-privilege)
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const manifest = JSON.parse(
+              readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
+            );
+            const expected = ["storage", "activeTab"];
+            const actual = manifest.permissions ?? [];
+            const same =
+              actual.length === expected.length &&
+              expected.every((p) => actual.includes(p));
+            if (!same) {
+              console.error("生成 manifest の permissions が最小権限と不一致:", actual);
+              process.exit(1);
+            }
+            if (actual.includes("tabs")) {
+              console.error("生成 manifest に過剰権限 tabs が混入:", actual);
+              process.exit(1);
+            }
+          '
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: E2E tests (Playwright)
+        run: pnpm test:e2e

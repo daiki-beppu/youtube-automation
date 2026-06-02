@@ -1,0 +1,47 @@
+# extensions/ — Chrome 拡張開発基盤
+
+このリポジトリの Chrome 拡張は **WXT + React + TypeScript + Tailwind CSS** スタックで開発する。各拡張は `extensions/<name>/` 配下に WXT のディレクトリ規約（`entrypoints/`）で配置し、複数拡張から再利用する共通コードは `extensions/shared/` に集約する。
+
+## 構成
+
+```
+extensions/
+  shared/                 # 複数拡張で再利用する共通コード（relative import）
+    constants.ts          # storage key / 配信ルート / phase 値（サーバー契約 SSOT。メッセージ種別は各拡張の lib/messaging.ts）
+    origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
+    api.ts                # yt-collection-serve client + PromptEntry 型
+    dom.ts                # Suno UI 注入の純関数群（注入 / 完了検知 / reCAPTCHA 検知）
+  suno-helper/            # Suno Custom Mode 自動投入拡張（WXT プロジェクト）
+    wxt.config.ts         # manifest 自動生成（最小権限は lib/manifest.ts が SSOT）
+    entrypoints/          # background / content / popup
+    components/           # popup の React UI
+    lib/                  # messaging / storage / manifest schema
+    tests/                # Vitest unit + Playwright e2e
+```
+
+`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。各拡張は自己完結した `package.json` を持ち、`extensions/<name>/` 単体で `pnpm install && pnpm build` できる。
+
+## 開発フロー（suno-helper を例に）
+
+すべて `extensions/suno-helper/` で実行する（`pnpm -C extensions/suno-helper <script>` でも可）。
+
+| 目的 | コマンド |
+|---|---|
+| 依存インストール | `pnpm install` |
+| 開発（HMR） | `pnpm dev` |
+| 本番ビルド | `pnpm build`（`.output/chrome-mv3/` に MV3 拡張を生成） |
+| 型チェック | `pnpm compile` |
+| unit テスト（Vitest） | `pnpm test` |
+| e2e テスト（Playwright） | `pnpm test:e2e`（初回は `pnpm exec playwright install chromium`） |
+| lint / format | `pnpm lint` / `pnpm format:check` |
+| 配布 zip | `pnpm zip` |
+
+## unpacked ロード手順
+
+1. `pnpm install && pnpm build` を実行する。
+2. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON。
+3. **パッケージ化されていない拡張機能を読み込む** → `extensions/suno-helper/.output/chrome-mv3/` を選択。
+
+## release 添付方針
+
+ビルド成果物（`.output/` / `dist/` / `node_modules/`）は **commit しない**（`.gitignore` 済み）。配布は GitHub Release への zip 添付で行う。tag push 時に `.github/workflows/release-extensions.yml` が `pnpm zip` を実行し、生成 zip を Release に添付する。Chrome Web Store への公開はスコープ外（unpacked + Release zip 配布に留める）。
