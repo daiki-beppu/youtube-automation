@@ -44,7 +44,10 @@ from youtube_automation.agents._complete_collection_executor import (  # noqa: E
 from youtube_automation.agents._playlist_assignment import (  # noqa: E402
     PlaylistAssignmentMixin,
 )
-from youtube_automation.agents._published_dates import PublishedDatesMixin  # noqa: E402
+from youtube_automation.agents._published_dates import (  # noqa: E402
+    PublishedDatesMixin,
+    _scheduling_enabled,
+)
 from youtube_automation.agents._tracking_io import TrackingIOMixin  # noqa: E402
 from youtube_automation.agents.youtube_auto_uploader import (  # noqa: E402
     UPLOAD_SOURCE_EXISTING,
@@ -69,6 +72,7 @@ __all__ = [
     "WORKFLOW_STAGE_LIVE",
     "load_config",
     "main",
+    "_scheduling_enabled",
 ]
 
 
