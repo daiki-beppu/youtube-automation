@@ -117,6 +117,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
    - それ以外のモード: `/thumbnail <theme>` を Agent で実行（テキストオーバーレイ生成。`/thumbnail` の品質チェック節で同等 QA が走る）
 4. **音楽素材生成**: Agent ツールで音楽エンジンに応じたスキルを実行:
    - Suno: `/suno <theme>` を Skill ツールで実行（プロンプト生成）
+     - **`/suno` 呼び出し前提条件チェック**（#571）: `config/skills/suno.yaml::genre_line` を読み、空のときは `config/channel/analytics.json::benchmark.channels[].slug` 全件について `data/video_analysis/<slug>/*.json` の存在を確認する。**両方とも未充足**（`genre_line` 空 AND 全 slug で分析結果不在）であれば `/suno` を起動せず、`uv run yt-video-analyze --source benchmark --channel <slug> --top 5` を先行実行するようユーザーに案内して Phase 2c を一旦停止する（`data/benchmark_*.json` が無ければさらにその前段で `/benchmark` を案内）。AI が `genre_line` を手書きで埋めて続行することは禁止
    - Lyria: `/lyria <theme>` を Skill ツールで実行（プロンプト設計のみ。Lyria 3 API 呼び出しは `/wf-next` で実行）
 5. `workflow-state.json` を更新:
    - `assets.music_prompts`: `true`
