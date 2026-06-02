@@ -51,6 +51,123 @@ _FIELD_MAP: dict[str, str] = {
 KEYWORDS_MAX_LENGTH = 500
 
 
+# ---------------------------------------------------------------------------
+# Locale code normalization (#562)
+# ---------------------------------------------------------------------------
+#
+# YouTube Data API は `localizations` のキーと `brandingSettings.channel.defaultLanguage`
+# に **アンダースコア区切りの BCP-47**（例: `ja_JP`）を内部正規形として使う。
+#
+# 入力側（ローカル config）はユーザーが下記いずれの形式で書いてもよい:
+#   - 短縮形 `ja` / `en` / `de` （`config-generation-rules.md` 推奨形式）
+#   - BCP-47 ハイフン `ja-JP` / `en-US`
+#   - YouTube 内部形 `ja_JP` / `en_US`
+#
+# 部分失敗の原因（issue #562）:
+#   ローカル `["ja", "en", "de"]` をそのまま投げると、YouTube 側は
+#   `brandingSettings.defaultLanguage` と一致するもの（例: `en`）だけを受理して
+#   `en_US` に正規化し、それ以外の `ja` / `de` を silent skip する。
+#
+# 解決方針:
+#   - 送信時（build_update_body）は短縮 / ハイフン / アンダースコアのいずれを受け取っても
+#     API 形式 `xx_YY` に正規化して送る
+#   - 受信時（parse_api_response）はローカル persistence 用に短縮形 `xx` へ戻す
+#     （`config-generation-rules.md` の推奨形式を維持し、pull 後にファイルが
+#      `ja_JP` に書き換わって diff レビューで noisy になるのを避ける）
+#   - 差分比較（diff_settings）は両側を同一形式に正規化してから比較する
+#     → これにより local `ja` ↔ remote `ja_JP` の永続 diff が消える
+#
+# マッピングは「短縮 → 内部形」だけを定義し、内部形 → 短縮は逆引きで生成する。
+# 同一 short が複数の region に分かれる言語（`pt` / `zh` 系）は明示的に列挙する。
+
+_LOCALE_SHORT_TO_API: dict[str, str] = {
+    "ja": "ja_JP",
+    "en": "en_US",
+    "de": "de_DE",
+    "fr": "fr_FR",
+    "es": "es_ES",
+    "es-419": "es_419",
+    "it": "it_IT",
+    "ko": "ko_KR",
+    "ru": "ru_RU",
+    "nl": "nl_NL",
+    "pl": "pl_PL",
+    "tr": "tr_TR",
+    "id": "id_ID",
+    "th": "th_TH",
+    "vi": "vi_VN",
+    "hi": "hi_IN",
+    "ar": "ar_SA",
+    "pt": "pt_PT",
+    "pt-BR": "pt_BR",
+    "zh": "zh_CN",
+    "zh-CN": "zh_CN",
+    "zh-TW": "zh_TW",
+    "zh-HK": "zh_HK",
+}
+
+# 逆引きは「最も短い region 由来の short」を優先（`pt_PT` → `pt`, `zh_CN` → `zh`）。
+_LOCALE_API_TO_SHORT: dict[str, str] = {api: short for short, api in _LOCALE_SHORT_TO_API.items() if "-" not in short}
+
+
+def _canonical_input(code: str) -> str:
+    """ユーザー入力を `xx[-YY]` のハイフン形に正規化する内部ヘルパ。"""
+    return code.replace("_", "-")
+
+
+def normalize_locale_to_api(code: str) -> str:
+    """ロケールコードを YouTube API 内部形式 `xx_YY` に正規化する。
+
+    受理する形式:
+        - 短縮 BCP-47: `ja` / `en` / `de`（マッピング表で region を補完）
+        - BCP-47 ハイフン: `ja-JP` / `en-US`（`_` に置換するだけ）
+        - YouTube 内部形: `ja_JP` / `en_US`（そのまま）
+
+    未知のコードはハイフンをアンダースコアに変換するだけのベストエフォートで返す
+    （unknown locale を強制的に reject すると YouTube が将来追加した言語で詰まるため）。
+
+    Args:
+        code: 任意形式のロケールコード（None / 空文字は呼び出し側でガードすること）
+
+    Returns:
+        YouTube API 送信用の `xx_YY` 形式文字列
+    """
+    if not code:
+        return code
+    canonical = _canonical_input(code)
+    # 短縮 → 内部形（短縮そのものか、`xx-YY` を `xx` 扱いで lookup）
+    if canonical in _LOCALE_SHORT_TO_API:
+        return _LOCALE_SHORT_TO_API[canonical]
+    # `xx-YY` 形式は `_` 置換した内部形が YouTube の受理する形（issue 発生事例参照）
+    if "-" in canonical:
+        return canonical.replace("-", "_")
+    # 既に `xx_YY` 形式（input が `xx_YY` だった場合は canonical で `xx-YY` 化済み）
+    return code
+
+
+def normalize_locale_to_short(code: str) -> str:
+    """ロケールコードを短縮形 `xx`（または region 必須なら `xx-YY`）に正規化する。
+
+    `parse_api_response` で YouTube から返ってきた `xx_YY` をローカル persistence 用に
+    縮める。マッピング表に無いコードはハイフン形にしてそのまま返す（破壊しない）。
+
+    Args:
+        code: 任意形式のロケールコード
+
+    Returns:
+        ローカル config 用の短縮形（`ja_JP` → `ja`, `pt_BR` → `pt-BR`）
+    """
+    if not code:
+        return code
+    canonical = _canonical_input(code).replace("-", "_")
+    if canonical in _LOCALE_API_TO_SHORT:
+        return _LOCALE_API_TO_SHORT[canonical]
+    # マッピング外: 元の表記がアンダースコアならハイフンに揃え、そうでなければそのまま
+    if "_" in code:
+        return code.replace("_", "-")
+    return code
+
+
 def build_upload_status_flags(youtube_api: Any) -> dict[str, bool]:
     """動画アップロード時の `status` 用 AI 開示・子供向け申告フラグを解決する。
 
@@ -136,6 +253,11 @@ def build_update_body(
             keywords_list = list(value)
             value = _keywords_to_api(keywords_list)
             _validate_keywords_length(value, keywords_list)
+        elif local_key == "default_language" and value:
+            # YouTube は localizations 側と整合する `xx_YY` 形式を内部正規形として扱う
+            # (#562)。ハイフン形 `ja-JP` も accept されるが pull 後に永続 diff が出るため
+            # 統一して `_` 形式で送る。
+            value = normalize_locale_to_api(value)
         branding[api_key] = value
     if branding:
         body["brandingSettings"] = {"channel": branding}
@@ -150,11 +272,15 @@ def build_update_body(
             description = entry.get("description")
             if title is None and description is None:
                 continue
-            loc_body[lang] = {}
+            # 入力 `ja` / `ja-JP` / `ja_JP` をすべて `ja_JP` に正規化して送信する (#562)。
+            # 正規化しないと、ローカル `["ja", "en", "de"]` を送ると defaultLanguage と
+            # 一致する `en` だけが受理されて `ja` / `de` が silent skip される。
+            api_lang = normalize_locale_to_api(lang)
+            loc_body[api_lang] = {}
             if title is not None:
-                loc_body[lang]["title"] = title
+                loc_body[api_lang]["title"] = title
             if description is not None:
-                loc_body[lang]["description"] = description
+                loc_body[api_lang]["description"] = description
         if loc_body:
             body["localizations"] = loc_body
 
@@ -178,6 +304,10 @@ def parse_api_response(resp: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
         value = branding[api_key]
         if local_key == "keywords":
             value = _keywords_from_api(value)
+        elif local_key == "default_language" and value:
+            # YouTube から `ja_JP` で返ってきても、ローカル persistence は短縮形 `ja` で
+            # 維持する (#562 / config-generation-rules.md は `["ja", "en", "de"]` 推奨)。
+            value = normalize_locale_to_short(value)
         youtube_channel[local_key] = value
 
     status = resp.get("status") or {}
@@ -187,10 +317,17 @@ def parse_api_response(resp: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
     raw_loc = resp.get("localizations") or {}
     localizations: dict[str, Any] = {}
     if raw_loc:
-        langs = sorted(raw_loc.keys())
+        # 同様に `ja_JP` → `ja` へ縮める。push で `_` 形式に正規化しているため、
+        # 縮めて persist しても次の diff は 0 になる（diff_settings 側も同じ
+        # normalizer を通す）。重複キーを避けるため short → entry の dict にマージする。
+        normalized: dict[str, Any] = {}
+        for lang, entry in raw_loc.items():
+            short = normalize_locale_to_short(lang)
+            normalized[short] = entry or {}
+        langs = sorted(normalized.keys())
         localizations["supported_languages"] = langs
         for lang in langs:
-            entry = raw_loc[lang] or {}
+            entry = normalized[lang]
             localizations[lang] = {
                 "title": entry.get("title", ""),
                 "description": entry.get("description", ""),
@@ -216,8 +353,14 @@ def diff_settings(
             continue
         l_val = local_channel.get(local_key)
         r_val = remote_channel.get(local_key)
-        if l_val == r_val:
-            continue
+        if local_key == "default_language":
+            # 表記揺れ（`ja` / `ja-JP` / `ja_JP`）を吸収してから比較する (#562)。
+            # 例: local `ja` ↔ remote `ja_JP` は実質同一なので diff にしない。
+            if normalize_locale_to_short(l_val or "") == normalize_locale_to_short(r_val or ""):
+                continue
+        else:
+            if l_val == r_val:
+                continue
         lines.append(f"  {local_key}:")
         lines.append(f"    - (remote) {_fmt(r_val)}")
         lines.append(f"    + (local)  {_fmt(l_val)}")
@@ -230,12 +373,14 @@ def diff_settings(
             lines.append(f"    - (remote) {_fmt(r_val)}")
             lines.append(f"    + (local)  {_fmt(l_val)}")
 
-    l_langs = set(local_localizations.get("supported_languages", []))
-    r_langs = set(remote_localizations.get("supported_languages", []))
-    all_langs = sorted(l_langs | r_langs)
+    # localizations のキー揺れ（`ja` ↔ `ja_JP` ↔ `ja-JP`）も吸収する (#562)。
+    # 両側を短縮形に寄せた dict を作って同じキーで突き合わせる。
+    l_loc_norm = _normalize_localizations_for_diff(local_localizations)
+    r_loc_norm = _normalize_localizations_for_diff(remote_localizations)
+    all_langs = sorted(set(l_loc_norm.keys()) | set(r_loc_norm.keys()))
     for lang in all_langs:
-        l_entry = local_localizations.get(lang) or {}
-        r_entry = remote_localizations.get(lang) or {}
+        l_entry = l_loc_norm.get(lang) or {}
+        r_entry = r_loc_norm.get(lang) or {}
         for field in ("title", "description"):
             l_val = l_entry.get(field)
             r_val = r_entry.get(field)
@@ -246,6 +391,28 @@ def diff_settings(
             lines.append(f"    + (local)  {_fmt(l_val)}")
 
     return lines
+
+
+def _normalize_localizations_for_diff(loc: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """diff 比較用に localizations dict をキー正規化する (#562)。
+
+    `supported_languages` を除く各 lang エントリを `{short: entry}` 形式に寄せる。
+    """
+    out: dict[str, dict[str, Any]] = {}
+    supported = loc.get("supported_languages") or []
+    for lang in supported:
+        entry = loc.get(lang)
+        if isinstance(entry, dict):
+            out[normalize_locale_to_short(lang)] = entry
+    # supported_languages 未宣言だが lang エントリだけある（pull 後など）も拾う
+    for key, value in loc.items():
+        if key == "supported_languages":
+            continue
+        if not isinstance(value, dict):
+            continue
+        short = normalize_locale_to_short(key)
+        out.setdefault(short, value)
+    return out
 
 
 def _fmt(value: Any) -> str:

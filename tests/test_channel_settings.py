@@ -17,6 +17,8 @@ from youtube_automation.utils.channel_settings import (
     build_upload_status_flags,
     diff_settings,
     fetch_channel,
+    normalize_locale_to_api,
+    normalize_locale_to_short,
     parse_api_response,
     verify_channel_id,
 )
@@ -78,11 +80,13 @@ class TestBuildUpdateBody:
         assert body["id"] == "UCabc"
         assert body["brandingSettings"]["channel"]["description"] == "desc"
         assert body["brandingSettings"]["channel"]["country"] == "JP"
-        assert body["brandingSettings"]["channel"]["defaultLanguage"] == "ja"
+        # #562: 短縮 BCP-47 (`ja`) を YouTube 内部形 `ja_JP` に正規化して送る。
+        assert body["brandingSettings"]["channel"]["defaultLanguage"] == "ja_JP"
         assert body["brandingSettings"]["channel"]["unsubscribedTrailer"] == "VID"
         assert body["status"]["selfDeclaredMadeForKids"] is False
-        assert body["localizations"]["ja"]["title"] == "タイトル"
-        assert body["localizations"]["en"]["description"] == "Desc"
+        # #562: localizations のキーも `ja` / `en` → `ja_JP` / `en_US` に正規化する。
+        assert body["localizations"]["ja_JP"]["title"] == "タイトル"
+        assert body["localizations"]["en_US"]["description"] == "Desc"
 
     def test_keywords_with_space_are_quoted(self):
         body = build_update_body({"keywords": ["lo fi", "bgm"]}, None, "UC1")
@@ -136,6 +140,112 @@ class TestBuildUpdateBody:
 
 
 # ---------------------------------------------------------------------------
+# Locale normalization (#562)
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeLocaleToApi:
+    """#562: 任意形式 → YouTube 内部形 `xx_YY` への正規化。"""
+
+    @pytest.mark.parametrize(
+        ("input_code", "expected"),
+        [
+            ("ja", "ja_JP"),
+            ("ja-JP", "ja_JP"),
+            ("ja_JP", "ja_JP"),
+            ("en", "en_US"),
+            ("en-US", "en_US"),
+            ("en_US", "en_US"),
+            ("de", "de_DE"),
+            ("fr", "fr_FR"),
+            ("pt", "pt_PT"),
+            ("pt-BR", "pt_BR"),
+            ("pt_BR", "pt_BR"),
+            ("zh", "zh_CN"),
+            ("zh-TW", "zh_TW"),
+        ],
+    )
+    def test_known_codes(self, input_code, expected):
+        assert normalize_locale_to_api(input_code) == expected
+
+    def test_unknown_with_region_passes_through_with_underscore(self):
+        # マッピング表外の言語でも `xx-YY` → `xx_YY` の best-effort 変換は通す
+        assert normalize_locale_to_api("xx-ZZ") == "xx_ZZ"
+        assert normalize_locale_to_api("xx_ZZ") == "xx_ZZ"
+
+    def test_empty_returns_empty(self):
+        assert normalize_locale_to_api("") == ""
+
+
+class TestNormalizeLocaleToShort:
+    """#562: YouTube 内部形 `xx_YY` → 短縮 / BCP-47 ハイフン形への正規化。"""
+
+    @pytest.mark.parametrize(
+        ("input_code", "expected"),
+        [
+            ("ja_JP", "ja"),
+            ("ja-JP", "ja"),
+            ("ja", "ja"),
+            ("en_US", "en"),
+            ("en-US", "en"),
+            ("en", "en"),
+            ("de_DE", "de"),
+            # region 必須言語は `xx-YY` を保持
+            ("pt_BR", "pt-BR"),
+            ("pt-BR", "pt-BR"),
+            ("zh_TW", "zh-TW"),
+            ("zh_HK", "zh-HK"),
+        ],
+    )
+    def test_known_codes(self, input_code, expected):
+        assert normalize_locale_to_short(input_code) == expected
+
+    def test_round_trip(self):
+        # short → api → short が冪等であること（pull 後に再 push しても diff が出ない）
+        for short in ("ja", "en", "de", "fr", "pt-BR", "zh-TW"):
+            assert normalize_locale_to_short(normalize_locale_to_api(short)) == short
+
+
+class TestBuildUpdateBodyLocaleNormalization:
+    """#562: build_update_body 側の正規化を build_update_body の通常テストとは別に検証。"""
+
+    def test_short_locale_normalized_to_api_form(self):
+        local = {"default_language": "ja"}
+        localizations = {
+            "supported_languages": ["ja", "en", "de"],
+            "ja": {"title": "T-ja", "description": "D-ja"},
+            "en": {"title": "T-en", "description": "D-en"},
+            "de": {"title": "T-de", "description": "D-de"},
+        }
+        body = build_update_body(local, localizations, "UC1")
+        assert body["brandingSettings"]["channel"]["defaultLanguage"] == "ja_JP"
+        assert set(body["localizations"].keys()) == {"ja_JP", "en_US", "de_DE"}
+        assert body["localizations"]["de_DE"] == {"title": "T-de", "description": "D-de"}
+
+    def test_hyphen_locale_normalized_to_api_form(self):
+        local = {"default_language": "ja-JP"}
+        localizations = {
+            "supported_languages": ["ja-JP", "en-US"],
+            "ja-JP": {"title": "T-ja", "description": "D-ja"},
+            "en-US": {"title": "T-en", "description": "D-en"},
+        }
+        body = build_update_body(local, localizations, "UC1")
+        assert body["brandingSettings"]["channel"]["defaultLanguage"] == "ja_JP"
+        assert set(body["localizations"].keys()) == {"ja_JP", "en_US"}
+
+    def test_underscore_locale_passes_through_unchanged(self):
+        local = {"default_language": "ja_JP"}
+        localizations = {
+            "supported_languages": ["ja_JP", "en_US"],
+            "ja_JP": {"title": "T-ja", "description": "D-ja"},
+            "en_US": {"title": "T-en", "description": "D-en"},
+        }
+        body = build_update_body(local, localizations, "UC1")
+        assert body["brandingSettings"]["channel"]["defaultLanguage"] == "ja_JP"
+        assert set(body["localizations"].keys()) == {"ja_JP", "en_US"}
+
+
+# ---------------------------------------------------------------------------
 # parse_api_response
 # ---------------------------------------------------------------------------
 
@@ -168,6 +278,22 @@ class TestParseApiResponse:
         assert channel["made_for_kids"] is True
         assert loc["supported_languages"] == ["en", "ja"]
         assert loc["ja"] == {"title": "タ", "description": "説"}
+
+    def test_underscore_form_normalized_to_short(self):
+        """#562: YouTube が `ja_JP` を返してもローカル persistence は短縮形 `ja`。"""
+        resp = {
+            "brandingSettings": {"channel": {"defaultLanguage": "ja_JP"}},
+            "localizations": {
+                "ja_JP": {"title": "タ", "description": "説"},
+                "en_US": {"title": "T", "description": "D"},
+                "pt_BR": {"title": "Tp", "description": "Dp"},
+            },
+        }
+        channel, loc = parse_api_response(resp)
+        assert channel["default_language"] == "ja"
+        assert loc["supported_languages"] == ["en", "ja", "pt-BR"]
+        assert loc["ja"] == {"title": "タ", "description": "説"}
+        assert loc["pt-BR"] == {"title": "Tp", "description": "Dp"}
 
     def test_empty_response(self):
         channel, loc = parse_api_response({})
@@ -211,6 +337,27 @@ class TestDiffSettings:
         joined = "\n".join(lines)
         assert "country" in joined
         assert "<unset>" in joined
+
+    def test_locale_form_diff_absorbed(self):
+        """#562: local `ja` ↔ remote `ja_JP` は実質同一なので diff にしない。"""
+        local_ch = {"default_language": "ja"}
+        remote_ch = {"default_language": "ja_JP"}
+        assert diff_settings(local_ch, {}, remote_ch, {}) == []
+
+    def test_locale_form_diff_absorbed_localizations(self):
+        """#562: localizations のキー揺れも吸収する。"""
+        local_loc = {
+            "supported_languages": ["ja", "en"],
+            "ja": {"title": "T", "description": "D"},
+            "en": {"title": "Te", "description": "De"},
+        }
+        remote_loc = {
+            "supported_languages": ["ja_JP", "en_US"],
+            "ja_JP": {"title": "T", "description": "D"},
+            "en_US": {"title": "Te", "description": "De"},
+        }
+        # 内容が同じならキー形式違いだけで diff にしない
+        assert diff_settings({}, local_loc, {}, remote_loc) == []
 
 
 # ---------------------------------------------------------------------------
