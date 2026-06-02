@@ -30,7 +30,7 @@ from youtube_automation.utils.config.meta import Branding, ChannelMeta
 from youtube_automation.utils.config.pinned_comment import PinnedComment
 from youtube_automation.utils.config.playlists import Playlists
 from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
-from youtube_automation.utils.config.workflow import Workflow
+from youtube_automation.utils.config.workflow import ApprovalGates, WfNext, Workflow
 from youtube_automation.utils.config.youtube import ContentModel, YoutubeApi, YoutubeSection
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -305,10 +305,31 @@ def _build_playlists(merged: dict) -> Playlists:
 
 
 def _build_workflow(merged: dict) -> Workflow:
-    # v5 では空 dataclass。旧 top-level `post_upload` / `short` キーが残っていても
-    # silently ignore する（`_REQUIRED_KEYS_BY_SECTION` に workflow.json キーを
-    # 登録していないため）。Shorts スケジュール公開時刻は `shorts.publish_time` に移動。
-    return Workflow()
+    # 旧 top-level `post_upload` / `short` キーが残っていても silently ignore する
+    # （`_REQUIRED_KEYS_BY_SECTION` に workflow.json キーを登録していないため）。
+    # Shorts スケジュール公開時刻は `shorts.publish_time` に移動。
+    wf = merged.get("workflow") or {}
+    if not isinstance(wf, dict):
+        raise ConfigError(f"workflow セクションは object でなければなりません（got {type(wf).__name__}）")
+
+    wf_next_raw = wf.get("wf_next") or {}
+    if not isinstance(wf_next_raw, dict):
+        raise ConfigError(f"workflow.wf_next は object でなければなりません（got {type(wf_next_raw).__name__}）")
+
+    gates_raw = wf_next_raw.get("approval_gates") or {}
+    if not isinstance(gates_raw, dict):
+        raise ConfigError(
+            f"workflow.wf_next.approval_gates は object でなければなりません（got {type(gates_raw).__name__}）"
+        )
+
+    return Workflow(
+        wf_next=WfNext(
+            approval_gates=ApprovalGates(
+                audio=bool(gates_raw.get("audio", False)),
+                upload=bool(gates_raw.get("upload", False)),
+            ),
+        ),
+    )
 
 
 def _build_shorts(merged: dict) -> Shorts:

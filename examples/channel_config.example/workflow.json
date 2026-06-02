@@ -1,3 +1,10 @@
 {
-  "workflow": {}
+  "workflow": {
+    "wf_next": {
+      "approval_gates": {
+        "audio": false,
+        "upload": false
+      }
+    }
+  }
 }
