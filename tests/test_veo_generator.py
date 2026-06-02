@@ -619,6 +619,49 @@ class TestGenerateLoopVideoKeyboardInterrupt:
         assert state is not None
         assert state["operation_name"] == "projects/veo/interrupt-op"
 
+    def test_displays_spinner_and_estimated_progress_during_polling(
+        self, channel_tmp: Path, output_mp4: Path, monkeypatch, capsys
+    ) -> None:
+        """Issue #641: ポーリング中の表示にステップと推定 ETA が含まれる。
+
+        非 TTY 環境（capsys 経由）では \\r アニメではなく行ごとの出力に
+        フォールバックする経路を踏むため、stdout に `Veo 動画生成中（推定）`
+        を含む 1 行が少なくとも 1 度は出力される。
+        """
+        mock_types = _patch_genai_types(monkeypatch)
+        client = MagicMock()
+        # 1 回 polling して done になる operation
+        submitted_op = MagicMock()
+        submitted_op.name = "projects/veo/progress-op"
+        submitted_op.done = False
+        client.models.generate_videos.return_value = submitted_op
+
+        done_op = _make_done_operation("projects/veo/progress-op")
+        client.operations.get.return_value = done_op
+        mock_types.GenerateVideosOperation.return_value = MagicMock(name="projects/veo/progress-op", done=False)
+
+        with patch.multiple(
+            "youtube_automation.utils.veo_generator",
+            strip_audio=MagicMock(),
+            cost_tracker=MagicMock(),
+        ):
+            with patch("time.sleep"):
+                veo_generator.generate_loop_video(
+                    client,
+                    output_mp4.parent / "main.png",
+                    output_mp4,
+                    model="veo-3.1-fast",
+                    prompt="test prompt",
+                )
+
+        out = capsys.readouterr().out
+        # ステップ表示が含まれる
+        assert "[Step 1/3]" in out
+        assert "[Step 2/3]" in out
+        assert "[Step 3/3]" in out
+        # 動画生成完了メッセージが新フォーマット（progress.format_elapsed）で出る
+        assert "動画生成完了" in out
+
     def test_prints_interrupt_resume_state_messages(
         self, channel_tmp: Path, output_mp4: Path, monkeypatch, capsys
     ) -> None:

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(veo,videoup)`: 動画生成中の進捗表示を改善した（#641）。Veo ループ動画生成（`veo_generator._wait_for_operation`）はドット列のままだったポーリング表示を「スピナー + 経過時間 + 推定進捗率 / ETA」の 1 行更新表示に置き換え、Veo API が真の進捗を返さない制約下で典型生成時間ベースの推定値であることを `≈` prefix で明示する。生成フロー全体を `[Step 1/3] 生成中` → `[Step 2/3] 保存中` → `[Step 3/3] 後処理` の 3 ステップで明示し、`generate_videos.sh` 側も `[Step N/M]` のステップ行と既存スピナーに加え ETA 表示を追加した。進捗フォーマット（経過時間 / ETA / スピナー / 1 行レンダラー）は `utils/progress.py` の純粋関数として切り出し `tests/test_progress.py` で 39 ケースを担保。非 TTY 環境（CI / log redirect）では `\r` アニメを抑止し定期的な行ごとの出力にフォールバックする（Python 側は `progress.is_tty(sys.stdout)`、bash 側は `[[ -t 1 ]]` で判定）
+
 ### Changed
 
 - `fix(channel-setup)`: `/channel-direction` で確定した方向性が `config/skills/*.yaml` / `config/channel/*.json` に転記されず下流 skill が空 config で破綻する根本原因を是正した（#567）。`channel-setup/SKILL.md` に **Step 3.5「config/skills/*.yaml への転記」** と Step 3 の必須転記表を追加し、`audio.target_duration_min` / `title.theme_scenes` / Suno `genre_line` ・ `exclude_styles` / Thumbnail `reference_images.default` ・ `brand_background` ・ `composition_rules.*` を空のまま終了しない手順を明文化。雛形として `references/config-template/audio.json` と `references/config-template/skills/{suno,thumbnail}.yaml` を新設し、`config-generation-rules.md` に「channel-direction.md の決定を必ず転記する skill-config」節と `audio` セクションの記載を追加。TTP 参照画像は `/benchmark` が `data/thumbnail_compare/benchmark/` に download した競合サムネを参照することで手動 download を解消する導線も明記。`channel-direction/SKILL.md` には引き継ぎ項目表と方向性ドキュメント雛形に「音楽設定」「TTP 対象サムネ」「ブランド背景色」を追加し、上流の決定漏れを setup 前に発見できるようにした。あわせて `.claude/CLAUDE.template.md` の upstream 名表記を pypi パッケージ名 `youtube-channels-automation` と GitHub リポジトリ名 `daiki-beppu/youtube-automation` で区別して統一（CLI 配布名と PR 提出先の食い違いを解消）

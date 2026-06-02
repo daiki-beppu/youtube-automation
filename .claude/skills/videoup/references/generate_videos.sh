@@ -157,6 +157,15 @@ video_bitrate_bps() {
     bitrate_to_bps "$bitrate"
 }
 
+# ─── TTY 判定 (Issue #641) ───────────────────────────────
+# 非 TTY 環境（CI / log redirect）では \r アニメを抑止し、行ごとの出力に
+# フォールバックする。-t 1 は stdout が TTY のときだけ true を返す。
+if [[ -t 1 ]]; then
+    IS_TTY=1
+else
+    IS_TTY=0
+fi
+
 # ─── Main ────────────────────────────────────────────────
 echo ""
 echo "  generate_videos.sh v12.2 — ${COLLECTION_NAME}"
@@ -238,6 +247,16 @@ start=$SECONDS
 PROGRESS_FILE="$(mktemp)"
 trap 'rm -f "$PROGRESS_FILE"' EXIT
 
+# ─── Step 表示 (Issue #641) ──────────────────────────────
+# Veo / ffmpeg 双方で「生成中 → 保存 → 後処理」のステップ感を共通化する。
+# ffmpeg 経路は (1) 入力正規化 (loop モードのみ) → (2) マスター動画生成
+# の 2 ステップ構成。静止画モードは (1) を skip。
+if [[ -n "$LOOP_VIDEO" ]]; then
+    FF_TOTAL_STEPS=2
+else
+    FF_TOTAL_STEPS=1
+fi
+
 # ─── FFmpeg (background) ─────────────────────────────────
 if [[ -n "$LOOP_VIDEO" ]]; then
     # ループ動画背景モード: loop.mp4 を無限ループで背景に使用
@@ -265,7 +284,7 @@ if [[ -n "$LOOP_VIDEO" ]]; then
             normalized_bitrate_bps="$(video_bitrate_bps "$LOOP_SOURCE")"
         fi
         if [[ ! -f "$LOOP_SOURCE" || "$LOOP_VIDEO" -nt "$LOOP_SOURCE" || ( -n "$normalized_bitrate_bps" && "$normalized_bitrate_bps" -gt "$max_bitrate_bps" ) ]]; then
-            echo "  Normalizing loop source (1 回だけ実行) → loop_normalized.mp4"
+            echo "  [Step 1/${FF_TOTAL_STEPS}] Normalizing loop source (1 回だけ実行) → loop_normalized.mp4"
             if [[ -n "$loop_bitrate_bps" && "$loop_bitrate_bps" -gt "$max_bitrate_bps" ]]; then
                 echo "  Loop bitrate exceeds ${LOOP_MAX_BITRATE}; re-encoding with maxrate guard"
             fi
@@ -283,6 +302,7 @@ if [[ -n "$LOOP_VIDEO" ]]; then
         fi
     fi
 
+    echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
     # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声は AUDIO_OUT_OPTS に従う
     # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
     ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
@@ -297,6 +317,7 @@ if [[ -n "$LOOP_VIDEO" ]]; then
         -progress "$PROGRESS_FILE" \
         "$MASTER_OUTPUT" &
 else
+    echo "  [Step 1/1] Generating master video (still image)"
     # 静止画背景モード（従来）
     # I-frame を 5 分間隔（1fps なので 300 フレーム）に間引き、変化のないフレームを P-frame で
     # 圧縮することで master.mp4 を大幅に小型化する（#579）。keyint=1 全 I-frame 化は容量が膨らむため廃止。
@@ -322,6 +343,7 @@ total_us=$(awk "BEGIN{printf \"%.0f\", $video_duration * 1000000}")
 spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
 si=0
 BAR_WIDTH=30
+last_logged_pct=-1  # 非 TTY 用、最後に行出力した進捗率
 
 while kill -0 "$ffmpeg_pid" 2>/dev/null; do
     out_time_us=$(grep -o 'out_time_us=[0-9]*' "$PROGRESS_FILE" 2>/dev/null | tail -1 | cut -d= -f2)
@@ -331,12 +353,28 @@ while kill -0 "$ffmpeg_pid" 2>/dev/null; do
     if [[ -n "$out_time_us" && "$total_us" -gt 0 ]]; then
         pct=$((out_time_us * 100 / total_us))
         [[ $pct -gt 100 ]] && pct=100
-        filled=$((pct * BAR_WIDTH / 100))
-        empty=$((BAR_WIDTH - filled))
-        bar="$(printf '%0.s█' $(seq 1 $filled 2>/dev/null))$(printf '%0.s░' $(seq 1 $empty 2>/dev/null))"
-        printf "\r  %s Generating... %s %3d%% (%s)  " "${spinner[$si]}" "$bar" "$pct" "$elapsed_fmt"
+        eta_sec=0
+        if [[ $pct -gt 0 ]]; then
+            eta_sec=$(( elapsed_now * (100 - pct) / pct ))
+        fi
+        eta_fmt="$(printf "%dm%02ds" $((eta_sec/60)) $((eta_sec%60)))"
+        if [[ $IS_TTY -eq 1 ]]; then
+            filled=$((pct * BAR_WIDTH / 100))
+            empty=$((BAR_WIDTH - filled))
+            bar="$(printf '%0.s█' $(seq 1 $filled 2>/dev/null))$(printf '%0.s░' $(seq 1 $empty 2>/dev/null))"
+            printf "\r  %s Generating... %s %3d%% (%s, ETA %s)  " "${spinner[$si]}" "$bar" "$pct" "$elapsed_fmt" "$eta_fmt"
+        else
+            # 非 TTY: 10% 刻みで 1 行ずつログ出力
+            bucket=$(( pct / 10 ))
+            if [[ $bucket -ne $last_logged_pct ]]; then
+                printf "  Generating... %3d%% (%s, ETA %s)\n" "$pct" "$elapsed_fmt" "$eta_fmt"
+                last_logged_pct=$bucket
+            fi
+        fi
     else
-        printf "\r  %s Generating... (%s)  " "${spinner[$si]}" "$elapsed_fmt"
+        if [[ $IS_TTY -eq 1 ]]; then
+            printf "\r  %s Generating... (%s)  " "${spinner[$si]}" "$elapsed_fmt"
+        fi
     fi
 
     si=$(( (si + 1) % ${#spinner[@]} ))
@@ -348,8 +386,12 @@ exit_code=$?
 elapsed=$((SECONDS - start))
 
 # Final bar
-printf "\r  ✓ Generated    %s 100%% (%dm%02ds)    \n" \
-    "$(printf '%0.s█' $(seq 1 $BAR_WIDTH))" $((elapsed/60)) $((elapsed%60))
+if [[ $IS_TTY -eq 1 ]]; then
+    printf "\r  ✓ Generated    %s 100%% (%dm%02ds)    \n" \
+        "$(printf '%0.s█' $(seq 1 $BAR_WIDTH))" $((elapsed/60)) $((elapsed%60))
+else
+    printf "  ✓ Generated 100%% (%dm%02ds)\n" $((elapsed/60)) $((elapsed%60))
+fi
 
 if [[ $exit_code -ne 0 ]]; then
     echo "  ERROR: FFmpeg failed with exit code $exit_code"
