@@ -10,19 +10,56 @@ community_draft:
   length_target_chars: 200
 
   templates:
-    # ---------------- 既存 type（MVP では薄い記述、フル仕様化は follow-up） ----------------
+    # ---------------- 既存 type（#509 で upstream フル仕様化） ----------------
 
     behind_the_scenes:
       enabled: true
-      # 構造・例文は config/channel/community-draft.json で定義する。
-      # 既存ダウンストリーム実装は rjn を参照: examples/community-draft-rjn/ (将来追加)
+      # 一人称 4 文構造。各 sentence は本 skill が公式提供する変数で render される。
+      # 詳細は SKILL.md の「`behind-the-scenes` の構造」を参照。
+      structure:
+        - "scene_hook"          # 1 文: 制作中の情景 (uses {scene_phrase})
+        - "mood_anchor"         # 2 文: そのときの mood (uses {personal_mood})
+        - "signature_element"   # 3 文: drink_signature / animal_object 言及
+        - "listening_invitation" # 4 文: music_style + 聴き方の誘導
+      # 解決されない変数は placeholder のまま draft 出力し warning を吐く。
+      # render 変数の解決優先順: workflow-state.json::planning.*
+      #   → config/channel/community-draft.json::shared_variables
+      #   → config/channel/content.json::genre
+      variables:
+        - "scene_phrase"
+        - "personal_mood"
+        - "drink_signature"
+        - "animal_object"
+        - "music_style"
+      # 表記ルール (時刻 24h / 運用メモ AM/PM) は day_of_reminder と共通
+      append_footer:
+        notification_cta: true
+        gratitude: true
+        signature: true
 
     next_teaser:
       enabled: true
+      # 次に公開予定のコレクションを workflow-state.json から探索する。
+      # 探索ルール: collections/planning/*/workflow-state.json から
+      #   planning.publish_target_at を持つもののうち、今より後で最小のものを採用。
+      lookup_strategy: "next_planning_workflow_state"
+      structure:
+        - "continuity_bridge"    # 1 文: 直近公開コレクションへの感謝・余韻
+        - "next_hook"            # 1 文: 次コレクションの scene_phrase を匂わせる
+        - "invite_to_vote"       # 1 文 (optional): weekly_feedback アクティブ時の CTA
+      # publish.scheduled_at が未確定なら時刻表記は出さず "Coming soon" 系で曖昧化
+      respect_unscheduled_collection: true
+      variables:
+        - "scene_phrase"         # 次コレクションの scene_phrase
+        - "music_style"
 
     poll:
       enabled: false
-      _status: "DEPRECATED: weekly_feedback を使うこと（後方互換のため残置）"
+      # DEPRECATED (#509). weekly_feedback に正式 retire 済み。
+      # 利用検知時に utils.weekly_vote_log.warn_poll_deprecated() が warning を吐く。
+      _status: "DEPRECATED (#509): --type weekly-feedback に移行してください"
+      _deprecated_since: "5.6.0"
+      _replacement: "weekly_feedback"
 
     # ---------------- 新規 type（issue #309 で追加） ----------------
 
@@ -71,7 +108,9 @@ community_draft:
         present_count: "auto"
         # 1 周にかかる週数。"auto" の場合 axis_count を採用（rjn は 5 週 1 周）。
         cycle_weeks: "auto"
-      # 投票履歴ログ（vote-log hook の follow-up issue で正式化予定）
+      # 投票履歴ログ（#509 で schema 正式化）。
+      # 書き込みは `yt-vote-log append` か `utils.weekly_vote_log.append_weekly_vote_entry()` 経由。
+      # JSON Schema は `youtube_automation.utils.schemas.weekly_vote_log.schema.json`。
       vote_log_path: "data/community/weekly-vote-log.json"
       # 本文セクション順
       structure:
