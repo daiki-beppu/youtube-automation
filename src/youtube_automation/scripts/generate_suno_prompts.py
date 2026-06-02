@@ -4,10 +4,17 @@
 import argparse
 import json
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
+from youtube_automation.scripts.suno_artifacts import (
+    DOCUMENTATION_DIRNAME,
+    SUNO_PATTERNS_FILENAME,
+    SUNO_PROMPTS_JSON_FILENAME,
+    SUNO_PROMPTS_MD_FILENAME,
+)
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_skill_config
@@ -52,7 +59,37 @@ def _collect_video_analysis_presets() -> tuple[str, str]:
     return top_genre, ", ".join(exclude_seen)
 
 
-def generate(patterns_path: Path) -> str:
+def _style_line(tempo: str | None, effective_style: str) -> str:
+    """Styles 欄の 1 行目（`<tempo>, <style>,`）を組み立てる共有部品.
+
+    md 出力と JSON 出力で同一の文字列を使うことでドリフトを防ぐ。
+    """
+    parts = [tempo] if tempo else []
+    parts.append(effective_style)
+    return ", ".join(parts) + ","
+
+
+@dataclass
+class _ResolvedPattern:
+    name_jp: str
+    name_en: str
+    style_label: str
+    style_line: str
+    scenes: list[str]
+    lyrics: str  # rstrip 済み。歌詞が無ければ ""
+
+
+@dataclass
+class _ResolvedPrompts:
+    title: str
+    is_vocal: bool
+    style_influence: int
+    exclude_styles: str
+    patterns: list[_ResolvedPattern]
+
+
+def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
+    """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
     fb_genre, fb_exclude = _collect_video_analysis_presets()
 
@@ -78,31 +115,9 @@ def generate(patterns_path: Path) -> str:
     mode = data.get("mode", "vocal" if auto_vocal else "instrumental")
     is_vocal = mode == "vocal"
 
-    lines = [
-        f"# Suno Prompts — {title}",
-        "",
-        "## SunoAI 推奨設定",
-        "",
-        "| パラメータ | 値 |",
-        "|-----------|-----|",
-        "| Mode | Custom |",
-        "| Weirdness | 20% |",
-        f"| Style Influence | {style_influence}% |",
-        f"| Instrumental | {'OFF（ボーカルモード）' if is_vocal else 'ON（インストモード）'} |",
-        f"| Lyrics | {'各パターンの Lyrics 欄を投入' if is_vocal else '(空)'} |",
-        "",
-        "---",
-    ]
-
-    labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-    for i, pattern in enumerate(patterns):
-        label = labels[i] if i < len(labels) else str(i + 1)
-        name_jp = pattern["name_jp"]
-        name_en = pattern["name_en"]
+    resolved: list[_ResolvedPattern] = []
+    for pattern in patterns:
         tempo = pattern.get("tempo")
-        scenes = pattern["scenes"]
-        lyrics = pattern.get("lyrics")
         style_key = pattern.get("style")
 
         # Per-pattern style variant override
@@ -114,40 +129,106 @@ def generate(patterns_path: Path) -> str:
             effective_style = base_style
             style_label = ""
 
-        lines.append("")
-        lines.append(f"## Pattern {label}: {name_jp} — {name_en}{style_label}")
+        raw_lyrics = pattern.get("lyrics")
+        resolved.append(
+            _ResolvedPattern(
+                name_jp=pattern["name_jp"],
+                name_en=pattern["name_en"],
+                style_label=style_label,
+                style_line=_style_line(tempo, effective_style),
+                scenes=pattern["scenes"],
+                lyrics=raw_lyrics.rstrip() if raw_lyrics else "",
+            )
+        )
 
-        for j, scene in enumerate(scenes, 1):
+    return _ResolvedPrompts(
+        title=title,
+        is_vocal=is_vocal,
+        style_influence=style_influence,
+        exclude_styles=exclude_styles,
+        patterns=resolved,
+    )
+
+
+def generate(patterns_path: Path) -> str:
+    resolved = _resolve_prompts(patterns_path)
+
+    lines = [
+        f"# Suno Prompts — {resolved.title}",
+        "",
+        "## SunoAI 推奨設定",
+        "",
+        "| パラメータ | 値 |",
+        "|-----------|-----|",
+        "| Mode | Custom |",
+        "| Weirdness | 20% |",
+        f"| Style Influence | {resolved.style_influence}% |",
+        f"| Instrumental | {'OFF（ボーカルモード）' if resolved.is_vocal else 'ON（インストモード）'} |",
+        f"| Lyrics | {'各パターンの Lyrics 欄を投入' if resolved.is_vocal else '(空)'} |",
+        "",
+        "---",
+    ]
+
+    labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    for i, pattern in enumerate(resolved.patterns):
+        label = labels[i] if i < len(labels) else str(i + 1)
+
+        lines.append("")
+        lines.append(f"## Pattern {label}: {pattern.name_jp} — {pattern.name_en}{pattern.style_label}")
+
+        for j, scene in enumerate(pattern.scenes, 1):
             lines.append("")
             lines.append(f"### Variation {j}")
             lines.append("**Styles:**")
             lines.append("```")
-            parts = []
-            if tempo:
-                parts.append(tempo)
-            parts.append(effective_style)
-            lines.append(", ".join(parts) + ",")
+            lines.append(pattern.style_line)
             lines.append(scene)
             lines.append("```")
 
-            if exclude_styles:
+            if resolved.exclude_styles:
                 lines.append("")
                 lines.append("**Exclude Styles:**")
                 lines.append("```")
-                lines.append(exclude_styles)
+                lines.append(resolved.exclude_styles)
                 lines.append("```")
 
-            if is_vocal and lyrics:
+            if resolved.is_vocal and pattern.lyrics:
                 lines.append("")
                 lines.append("**Lyrics:**")
                 lines.append("```")
-                lines.append(lyrics.rstrip())
+                lines.append(pattern.lyrics)
                 lines.append("```")
 
         lines.append("")
         lines.append("---")
 
     return "\n".join(lines) + "\n"
+
+
+def build_prompt_entries(patterns_path: Path) -> list[dict]:
+    """拡張へ配信する `[{name, style, lyrics}]` を md と同じ部品から派生させる.
+
+    scene 単位で 1 entry に分割し、複数 scene を持つ pattern には
+    name に ` (Variation N)` を付与する。style は md の Styles ブロック
+    （`<tempo>, <style>,` 行 + scene 行）と同一文字列を改行で結合する。
+    """
+    resolved = _resolve_prompts(patterns_path)
+
+    entries: list[dict] = []
+    for pattern in resolved.patterns:
+        base_name = f"{pattern.name_jp} — {pattern.name_en}"
+        multi = len(pattern.scenes) > 1
+        for j, scene in enumerate(pattern.scenes, 1):
+            name = f"{base_name} (Variation {j})" if multi else base_name
+            entries.append(
+                {
+                    "name": name,
+                    "style": f"{pattern.style_line}\n{scene}",
+                    "lyrics": pattern.lyrics if resolved.is_vocal else "",
+                }
+            )
+    return entries
 
 
 def main():
@@ -163,15 +244,19 @@ def main():
     args = parser.parse_args()
 
     path = args.path or Path.cwd()
-    patterns_path = path if path.is_file() else path / "20-documentation" / "suno-patterns.yaml"
+    patterns_path = path if path.is_file() else path / DOCUMENTATION_DIRNAME / SUNO_PATTERNS_FILENAME
 
     if not patterns_path.exists():
         parser.error(f"{patterns_path} not found")
 
-    output_path = patterns_path.parent / "suno-prompts.md"
-    content = generate(patterns_path)
-    output_path.write_text(content)
-    print(f"Generated: {output_path}")
+    md_path = patterns_path.parent / SUNO_PROMPTS_MD_FILENAME
+    md_path.write_text(generate(patterns_path))
+    print(f"Generated: {md_path}")
+
+    json_path = patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME
+    entries = build_prompt_entries(patterns_path)
+    json_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Generated: {json_path}")
 
 
 if __name__ == "__main__":

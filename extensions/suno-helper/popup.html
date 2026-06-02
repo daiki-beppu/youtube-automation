@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>Suno Helper</h1>
+
+    <label class="field">
+      <span>サーバー URL</span>
+      <input id="server-url" type="text" placeholder="http://localhost:7873" />
+    </label>
+
+    <div class="row">
+      <button id="fetch-btn" type="button">データ取得</button>
+      <button id="run-btn" type="button" disabled>全パターンを連続実行</button>
+      <button id="stop-btn" type="button" disabled>停止</button>
+    </div>
+
+    <p id="status" class="status"></p>
+
+    <ol id="pattern-list" class="pattern-list"></ol>
+
+    <script src="constants.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
