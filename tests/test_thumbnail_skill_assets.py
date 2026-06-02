@@ -86,6 +86,12 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "variation_clause: |" in config
     assert "style_lock_clause: |" in config
     assert "text_strip_clause: |" in config
+    # #569: TTP 参照画像の署名・透かし・ロゴが焼き込まれる IP / 版権リスク防止
+    assert "ip_safety_clause: |" in config
+    assert "signature" in config
+    assert "watermark" in config
+    assert "logo" in config
+    assert "brand mark" in config
     assert "enabled: true" in config
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config

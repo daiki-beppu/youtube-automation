@@ -113,6 +113,7 @@ Phase 1-1〜1-3 の入力を統合し:
 - `config/skills/thumbnail.yaml` の `image_generation.gemini.prompt_prefix` + `composition_rules` を完全適用
 - 英語 1 段落、誇張表現禁止、16:9 構図、テキスト除外
 - **キャラ + 手が写る構図では `image_generation.gemini.single_step.anatomy_clause` の内容（hands anatomically correct, five fingers each, no fused/extra/melted fingers）をプロンプトに含める**（#570、Gemini の指破綻を抑止）
+- **IP / 版権セーフティ (#569)**: 参照画像が TTP のベンチマーク（競合サムネ）である以上、原作者のサイン・署名・透かし・ロゴが転写される事故を抑止するため、各企画プロンプトの末尾に標準除外 clause を必ず含める: `no signature, no autograph, no watermark, no logo, no brand mark, clean corners`（`image_generation.gemini.single_step.ip_safety_clause` を参照）。プロンプト本文の比較材料に含まれるため、テキスト案提示の段階で抜けに気付けるようにしておく
 - **本番品質で生成する**（選択された企画のプロンプトをそのまま `yt-generate-image` に渡すため、再生成によるばらつきを避ける）
 
 各企画について、テーマ・タイトル・オブジェクト定義・サムネプロンプト全文をユーザーに提示する。プロンプト本文も比較材料に含めることで、視覚出力を見る前にユーザーが意図を把握できる。
@@ -180,6 +181,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
   - **背景色**: `image_generation.gemini.brand_background` を使用（定義がある場合）。全コレクション統一
   - **差別化はオブジェクトで行う**: `ideate.objects.swappable` で定義されたスロットを企画ごとに変える
   - **キャラ + 手が写る構図では `${anatomy_clause}` を全企画プロンプトに展開する**（#570）。`single_step` プレビューが `/wf-new` Phase 2c でそのまま最終 thumbnail に流用されるため、ここで anatomy 強調 clause が当たっていないと、Gemini の手・指破綻（指の融合・本数異常・溶融）が公開サムネに混入する経路ができる
+  - **IP / 版権セーフティ clause を常時付与 (#569)**: ベンチマーク TTP 由来の署名・サイン・透かし・ロゴが焼き込まれないよう、`single_step.ip_safety_clause`（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を全企画プロンプトに含める。`diff_prompt_template` 自体に組み込んでおけば 4-1 で生成するテキスト案にも自動で含まれる
   - 具体的な差分プロンプトの書き方は `references/object-design-examples.md` を参照
 
 - **それ以外の場合**: 4-1 で生成済みの本番品質プロンプトをそのまま流用

@@ -67,6 +67,14 @@ image_generation:
         separated, no fused fingers, no extra fingers, no melted or distorted
         fingers, natural proportions. Body proportions must be realistic with
         no distorted limbs, joints, or facial features.
+      # IP / 版権セーフティ clause (#569)。参照元の署名・サイン・透かし・ロゴ等の
+      # 識別マークが TTP 経由で焼き込まれる事故を抑止するため、TTP / single_step
+      # / diff プロンプト構築時には常時末尾に挿入することを推奨する。
+      # 空文字で無効化可だが、ベンチマーク模倣を行う以上は維持を強く推奨。
+      ip_safety_clause: |
+        Do not reproduce any signature, autograph, handwritten name, watermark,
+        logo, brand mark, channel badge, copyright notice, or identifying mark
+        from the reference image. Keep all corners clean and free of such marks.
 
     # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
     style: ""

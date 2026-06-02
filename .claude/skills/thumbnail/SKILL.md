@@ -165,6 +165,8 @@ uv run yt-generate-image \
 
 **重要**: 参照画像と同じ要素（レイアウト、固定オブジェクト、テキスト配置）はプロンプトに含めない。差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。コピーではなくバリエーションを作るのがゴール。
 
+**IP / 版権セーフティ (#569)**: TTP は参照画像のレイアウト・テクスチャ・オブジェクト配置を強く転写するため、ベンチマーク側に焼き込まれた**署名（サイン）・透かし・ロゴ・チャンネルバッジ・著作権表記等の識別マークがそのまま再現される事故が起きやすい**。プロンプト構築時は必ず標準除外 clause `no signature, no autograph, no watermark, no logo, no brand mark, clean corners` を含めること（config: `image_generation.gemini.single_step.ip_safety_clause`）。**参照元の識別マークはコピーしない — 版権 / IP リスクを生むため**、たとえ参照画像のスタイルガイドとして優秀でもサインや筆記体の署名は転写対象から外す。
+
 #### プリフライト
 
 `generation_mode: "single_step"` で `--reference` を指定せずに `yt-generate-image` を起動するとエラー中断する。次の対処が必要:
@@ -191,7 +193,7 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
    - `{background}`: カラーテーマの背景色（未指定時は `image_generation.gemini.brand_background` を使用）
    - `{candle}`, `{cocktail_description}` などオブジェクト系プレースホルダ: `ideate.objects` や `color_themes` 配下の値
    - `{title_line1}`, `{title_line2}`: コレクションタイトル
-3. 共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause` / `text_strip_clause` / `anatomy_clause`）をチャンネル側 `diff_prompt_template` で必要に応じて挿入。**キャラ + 手が写る構図では `${anatomy_clause}` を必ず展開する**（#570、Gemini は楽器持ち・指を伸ばすポーズで指の融合・本数異常を起こしやすい）
+3. 共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause` / `text_strip_clause` / `anatomy_clause` / `ip_safety_clause`）をチャンネル側 `diff_prompt_template` で必要に応じて挿入。**キャラ + 手が写る構図では `${anatomy_clause}` を必ず展開する**（#570、Gemini は楽器持ち・指を伸ばすポーズで指の融合・本数異常を起こしやすい）。**`ip_safety_clause` (#569) は TTP モードで常時挿入必須** — チャンネル側で `diff_prompt_template` を組み立てる際に `${ip_safety_clause}` を必ず展開し、参照元の署名・透かし・ロゴが焼き込まれないようにする。空文字に上書きしての無効化は版権 / IP リスクを生むため非推奨
 
 #### 生成コマンド
 
@@ -257,6 +259,7 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
   ```
 - [ ] `image_generation.gemini.generation_mode` が `generation_mode: "single_step"` になっている。`two_phase` / `diff_from_reference` を使うなら理由を明示する
 - [ ] `diff_prompt_template` に参照と重複する要素（レイアウト・固定オブジェクト・テキスト配置・既知の色味）を書いていない。差分のみを記述する
+- [ ] `diff_prompt_template` に `${ip_safety_clause}` 相当の除外句（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を含めている (#569)。参照元ベンチマークサムネに署名・サイン・透かし・チャンネルロゴ等の識別マークがある場合は特に必須
 - [ ] stock 合成（#364）の扱いを確認し、`image_generation.gemini.reference_images.stock.enabled` が意図どおりになっている
 - [ ] サムネ承認**前**に `/thumbnail-compare` を実行し、320px 縮小時の文字可読性・コントラスト・主役認識を検証する段取りになっている
 
