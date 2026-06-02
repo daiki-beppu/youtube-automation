@@ -1,6 +1,6 @@
 ---
 name: channel-setup
-description: Use when /channel-direction で方向性が確定し、チャンネルのテクニカルセットアップを行いたいとき、または運用中チャンネルの YouTube 側設定（branding / status / localizations）をローカル config と同期したいとき。「セットアップ」「設定ファイル生成」「config 作成」「チャンネル構築」など新規セットアップ、および「設定反映」「チャンネル設定更新」「branding push」「ローカライゼーション同期」「meta.json を YouTube に反映」など既存チャンネルの設定 push に関わる場面で使用すること。新規セットアップは /channel-direction の後に実行する
+description: "Use when /channel-direction で方向性が確定し、チャンネルのテクニカルセットアップを行いたいとき、または運用中チャンネルの YouTube 側設定（branding / status / localizations）をローカル config と同期したいとき。「セットアップ」「設定ファイル生成」「config 作成」「チャンネル構築」など新規セットアップ、および「設定反映」「チャンネル設定更新」「branding push」「ローカライゼーション同期」「meta.json を YouTube に反映」など既存チャンネルの設定 push に関わる場面で使用すること。新規セットアップは /channel-direction の後に実行する"
 ---
 
 ## Overview

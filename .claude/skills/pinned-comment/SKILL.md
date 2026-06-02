@@ -1,6 +1,6 @@
 ---
 name: pinned-comment
-description: Use when 新規アップロード動画にチャンネルオーナーの固定コメントを自動投稿したいとき。`config/channel/pinned-comment.json` のテンプレを使い dry-run でプレビューしてから apply で投稿する。ピン留めは YouTube Data API 非対応のため Studio UI で手動。「固定コメント」「ピンコメント」「オーナーコメント」「リピーター動線」など視聴者との接点を増やす運用に関わる場面で使用すること
+description: "Use when 新規アップロード動画にチャンネルオーナーの固定コメントを自動投稿したいとき。`config/channel/pinned-comment.json` のテンプレを使い dry-run でプレビューしてから apply で投稿する。ピン留めは YouTube Data API 非対応のため Studio UI で手動。「固定コメント」「ピンコメント」「オーナーコメント」「リピーター動線」など視聴者との接点を増やす運用に関わる場面で使用すること"
 ---
 
 ## Overview

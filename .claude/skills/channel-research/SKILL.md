@@ -1,6 +1,6 @@
 ---
 name: channel-research
-description: Use when /channel-new で収集したベンチマークデータを徹底分析したいとき。「競合分析」「ベンチマーク分析」「チャンネルリサーチ」「競合を調べて」「TTP 対象抽出」など、新チャンネル開設時の競合チャンネル分析に関わる場面で使用すること。/channel-new の後、/channel-direction の前に実行する
+description: "Use when /channel-new で収集したベンチマークデータを徹底分析したいとき。「競合分析」「ベンチマーク分析」「チャンネルリサーチ」「競合を調べて」「TTP 対象抽出」など、新チャンネル開設時の競合チャンネル分析に関わる場面で使用すること。/channel-new の後、/channel-direction の前に実行する"
 ---
 
 ## Overview

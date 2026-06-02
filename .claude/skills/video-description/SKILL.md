@@ -1,6 +1,6 @@
 ---
 name: video-description
-description: Use when コレクションのYouTube概要欄を自動生成する必要があるとき。Complete Collection 形式に対応（情景フック＋タイムスタンプ＋Perfect for）。概要欄、タイトル作成、SEO最適化、メタデータ生成、動画の説明文など、YouTube投稿用テキストが必要な場面で必ず使用すること
+description: "Use when コレクションのYouTube概要欄を自動生成する必要があるとき。Complete Collection 形式に対応（情景フック＋タイムスタンプ＋Perfect for）。概要欄、タイトル作成、SEO最適化、メタデータ生成、動画の説明文など、YouTube投稿用テキストが必要な場面で必ず使用すること"
 ---
 
 ## Overview

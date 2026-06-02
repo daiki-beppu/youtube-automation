@@ -1,6 +1,6 @@
 ---
 name: discover-competitors
-description: Use when 新規チャンネルの競合候補を YouTube Data API で自動発掘したいとき、複数のニッチ仮説を並行検証したいとき。「競合候補」「競合発掘」「ニッチ検証」「ライバル探し」「discover-competitors」など、ニッチキーワードから競合候補リストを自動生成する場面で使用すること。/channel-new Step 5 の前段としても、独立した並行検証ツールとしても使える
+description: "Use when 新規チャンネルの競合候補を YouTube Data API で自動発掘したいとき、複数のニッチ仮説を並行検証したいとき。「競合候補」「競合発掘」「ニッチ検証」「ライバル探し」「discover-competitors」など、ニッチキーワードから競合候補リストを自動生成する場面で使用すること。/channel-new Step 5 の前段としても、独立した並行検証ツールとしても使える"
 ---
 
 ## Overview

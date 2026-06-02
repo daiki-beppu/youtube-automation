@@ -11,6 +11,8 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 Codex CLI は `$REPO_ROOT/.agents/skills` を skill 探索パスとして読み込むため、symlink 経由で `.claude/skills/` 配下の SKILL.md をそのまま利用できる。スキルを編集するときは **必ず `.claude/skills/` 側を直接編集する**（symlink を貼り替えない）。
 
+新規 skill の `SKILL.md` を作成・編集する際は、frontmatter の `description:` を **必ず double-quoted string**（`description: "Use when 〜"`）で書く。値内の `: `（コロン+スペース）が strict YAML パーサ（PyYAML `safe_load` 等）でマッピング区切りと誤解釈されパースが破綻するため。
+
 ## プロジェクト概要
 
 YouTube チャンネル運営を自動化するツールキット。`youtube-channels-automation` パッケージとして配布し、各チャンネルリポジトリへ git+https または submodule 経由で導入される。Analytics 収集、AI コンテンツ生成（Lyria / Veo / Gemini / Suno）、動画アップロード、メタデータ生成、ベンチマーク分析を統合提供する。

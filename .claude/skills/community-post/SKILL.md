@@ -1,6 +1,6 @@
 ---
 name: community-post
-description: Use when YouTube コミュニティ投稿用テキストを生成し、クリップボードコピーと YouTube Studio 起動まで行いたいとき。固定テンプレ運用（動画 1 本 = 投稿 1 本）の Flow365 TTP。「コミュニティ投稿」「community post」「投稿準備」「Studio で投稿」「コミュニティタブ」など、動画公開と前後する投稿準備に関わる場面で使用すること。`/video-upload` の最終ステップから自動で呼ばれる。
+description: "Use when YouTube コミュニティ投稿用テキストを生成し、クリップボードコピーと YouTube Studio 起動まで行いたいとき。固定テンプレ運用（動画 1 本 = 投稿 1 本）の Flow365 TTP。「コミュニティ投稿」「community post」「投稿準備」「Studio で投稿」「コミュニティタブ」など、動画公開と前後する投稿準備に関わる場面で使用すること。`/video-upload` の最終ステップから自動で呼ばれる。"
 ---
 
 ## Overview

@@ -1,6 +1,6 @@
 ---
 name: postmortem
-description: Use when 公開済み動画が「思ったより伸びなかった」原因を仮説 → 検証で切り分けたいとき。「伸びなかった」「振り返り」「postmortem」「why flopped」「原因分析」「仮説検証」「flop 分析」「伸び悩み」など、単一動画の事後原因切り分けに関わる場面で使用すること。`/analytics-analyze`（チャンネル横断の戦略）や `/alignment-check`（事前整合性監査）とは責務が異なる。実際の検証は `/thumbnail-compare` `/alignment-check` `/viewer-voice` `/video-analyze` 等の既存スキルへバトンする
+description: "Use when 公開済み動画が「思ったより伸びなかった」原因を仮説 → 検証で切り分けたいとき。「伸びなかった」「振り返り」「postmortem」「why flopped」「原因分析」「仮説検証」「flop 分析」「伸び悩み」など、単一動画の事後原因切り分けに関わる場面で使用すること。`/analytics-analyze`（チャンネル横断の戦略）や `/alignment-check`（事前整合性監査）とは責務が異なる。実際の検証は `/thumbnail-compare` `/alignment-check` `/viewer-voice` `/video-analyze` 等の既存スキルへバトンする"
 ---
 
 ## Overview
