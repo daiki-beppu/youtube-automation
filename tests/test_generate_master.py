@@ -873,6 +873,423 @@ class TestCliSkillConfigShuffle:
         assert captured["kwargs"]["shuffle_seed"] is None
 
 
+class TestGenerateMasterPinFirst:
+    """generate_master() の pin_first / pin_first_count kwargs を検証する。"""
+
+    def test_pin_first_count_keeps_first_n_fixed(self, tmp_path, monkeypatch, capsys):
+        # Given: pin_first_count=1, shuffle=True, seed=42 — 先頭 1 件固定、残り 4 件は shuffle
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=5)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        # 期待: names[0] が pinned、names[1:] のみ Random(42) で shuffle
+        pinned = [names[0]]
+        remaining = names[1:].copy()
+        real_random.Random(42).shuffle(remaining)
+        # 安全確認: 4 件 + seed 42 で sorted と異なる順序になることを保証
+        assert remaining != names[1:]
+        expected = pinned + remaining
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                shuffle=True,
+                shuffle_seed=42,
+                pin_first_count=1,
+                quiet=True,
+            )
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        assert [Path(p).name for p in inputs] == expected
+        # Pin ログが stdout に出る
+        out = capsys.readouterr().out
+        assert "[Pin] first 1 track" in out
+
+    def test_pin_first_files_preserve_argument_order(self, tmp_path, monkeypatch):
+        # Given: pin_first=[names[2], names[0]] — 指定順を保持して先頭に並ぶ
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=4)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                pin_first=[names[2], names[0]],
+                quiet=True,
+            )
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        # 先頭は [names[2], names[0]]、残りは sorted 順 [names[1], names[3]]
+        assert [Path(p).name for p in inputs[:2]] == [names[2], names[0]]
+        assert [Path(p).name for p in inputs[2:]] == [names[1], names[3]]
+
+    def test_pin_first_with_shuffle_only_shuffles_remaining(self, tmp_path, monkeypatch):
+        # Given: pin_first=[names[0]] + shuffle=True, seed=123 — 残りだけ shuffle
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=5)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        pinned = [names[0]]
+        remaining = names[1:].copy()
+        real_random.Random(123).shuffle(remaining)
+        expected = pinned + remaining
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                pin_first=pinned,
+                shuffle=True,
+                shuffle_seed=123,
+                quiet=True,
+            )
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        assert [Path(p).name for p in inputs] == expected
+
+    def test_pin_first_missing_file_raises_validation_error(self, tmp_path, monkeypatch):
+        # Given: pin_first=["non-existent.mp3"] — 未存在ファイルは fail-loud
+        collection, _ = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with pytest.raises(ValidationError, match="--pin-first で指定したファイルが見つかりません"):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                pin_first=["non-existent.mp3"],
+                quiet=True,
+            )
+
+    def test_pin_first_count_exceeds_track_count_raises(self, tmp_path, monkeypatch):
+        # Given: pin_first_count=10 で files=3 — 超過は ValidationError
+        collection, _ = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with pytest.raises(ValidationError, match="トラック数"):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                pin_first_count=10,
+                quiet=True,
+            )
+
+    def test_pin_and_pin_count_both_specified_raises(self, tmp_path, monkeypatch):
+        # Given: pin_first + pin_first_count 両方指定 — 防御的に ValidationError
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with pytest.raises(ValidationError, match="mutually exclusive"):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                pin_first=[names[0]],
+                pin_first_count=1,
+                quiet=True,
+            )
+
+    def test_pin_first_count_zero_is_noop(self, tmp_path, monkeypatch, capsys):
+        # Given: pin_first_count=0 — 互換挙動 (固定なし、Pin ログも出ない)
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=4)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                pin_first_count=0,
+                quiet=True,
+            )
+
+        inputs = _input_files_in_cmd(captured["cmd"])
+        # sorted 順のまま
+        assert [Path(p).name for p in inputs] == names
+        assert "[Pin]" not in capsys.readouterr().out
+
+    def test_pin_first_with_loop_expansion(self, tmp_path, monkeypatch):
+        # Given: pin_first_count=1 + loops=3 — pinned + remaining を 3 回繰り返す
+        # (要件 7: ループ展開の前段で先頭固定を適用)
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                pin_first_count=1,
+                loops=3,
+                quiet=True,
+            )
+
+        # 3 files * 3 loops = 9 inputs
+        assert captured["cmd"].count("-i") == 9
+        inputs = _input_files_in_cmd(captured["cmd"])
+        # 各ループの先頭が names[0] (pinned)
+        assert [Path(p).name for p in inputs[:3]] == names
+        assert [Path(p).name for p in inputs[3:6]] == names
+        assert [Path(p).name for p in inputs[6:9]] == names
+
+
+class TestCliPinFirst:
+    """CLI 引数 (--pin-first / --pin-first-count) が generate_master() に渡る kwargs を検証する。"""
+
+    def _patch_main_dependencies(self, monkeypatch, skill_config: dict | None = None) -> dict:
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_skill_config",
+            lambda _: skill_config or {},
+        )
+
+        captured: dict = {}
+
+        def fake_generate_master(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return Path("/tmp/fake-master.mp3")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.generate_master",
+            fake_generate_master,
+        )
+        return captured
+
+    def test_no_flags_disables_pin(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first"] is None
+        assert captured["kwargs"]["pin_first_count"] is None
+
+    def test_cli_pin_first_files(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--pin-first", "00-hook.mp3", "01-anthem.mp3"],
+        )
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first"] == ["00-hook.mp3", "01-anthem.mp3"]
+        assert captured["kwargs"]["pin_first_count"] is None
+
+    def test_cli_pin_first_count(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--pin-first-count", "1"],
+        )
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first"] is None
+        assert captured["kwargs"]["pin_first_count"] == 1
+
+    def test_cli_pin_first_and_pin_count_mutually_exclusive(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", "--pin-first", "a.mp3", "--pin-first-count", "1"],
+        )
+
+        with pytest.raises(SystemExit) as exc:
+            generate_master.main()
+
+        assert exc.value.code == 2
+        err = capsys.readouterr().err
+        assert "not allowed with argument" in err
+
+    def test_cli_pin_first_count_negative_raises(self, monkeypatch, capsys, tmp_path):
+        self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--pin-first-count", "-1"],
+        )
+
+        rc = generate_master.main()
+
+        assert rc == 1
+        assert "--pin-first-count は 0 以上" in capsys.readouterr().err
+
+    def test_cli_pin_first_with_shuffle(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--pin-first-count", "1", "--shuffle"],
+        )
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first_count"] == 1
+        assert captured["kwargs"]["shuffle"] is True
+
+
+class TestCliSkillConfigPinFirst:
+    """skill-config の audio.pin_first_count を CLI 未指定時のデフォルトとして解決する。"""
+
+    def _patch_main_dependencies(self, monkeypatch, skill_config: dict) -> dict:
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_skill_config",
+            lambda _: skill_config,
+        )
+
+        captured: dict = {}
+
+        def fake_generate_master(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return Path("/tmp/fake-master.mp3")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.generate_master",
+            fake_generate_master,
+        )
+        return captured
+
+    def test_skill_config_pin_first_count_used_when_cli_unspecified(self, monkeypatch, tmp_path):
+        # Given: audio.pin_first_count=1、CLI フラグ未指定
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"pin_first_count": 1}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first"] is None
+        assert captured["kwargs"]["pin_first_count"] == 1
+
+    def test_skill_config_pin_first_count_zero_is_noop(self, monkeypatch, tmp_path):
+        # Given: audio.pin_first_count=0 — 既定値 (固定なし) として透過
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"pin_first_count": 0}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first"] is None
+        assert captured["kwargs"]["pin_first_count"] is None
+
+    def test_cli_pin_first_count_overrides_skill_config(self, monkeypatch, tmp_path):
+        # Given: CLI 値 2 が skill-config の 1 を上書き
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"pin_first_count": 1}},
+        )
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--pin-first-count", "2"],
+        )
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first_count"] == 2
+
+    def test_cli_pin_first_ignores_skill_config_count(self, monkeypatch, tmp_path):
+        # Given: --pin-first 指定時は skill-config の pin_first_count を黙って無視
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"pin_first_count": 3}},
+        )
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--pin-first", "00-hook.mp3"],
+        )
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first"] == ["00-hook.mp3"]
+        assert captured["kwargs"]["pin_first_count"] is None
+
+    def test_skill_config_pin_first_count_negative_raises(self, monkeypatch, capsys, tmp_path):
+        # Given: skill-config 値が負 — CLI と同じ境界条件で弾く
+        self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"pin_first_count": -1}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        rc = generate_master.main()
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "skill-config" in err
+        assert "pin_first_count" in err
+
+    def test_skill_config_pin_first_count_bool_raises(self, monkeypatch, capsys, tmp_path):
+        # Given: pin_first_count が True (bool は int サブクラスなので isinstance で素通り)
+        self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"pin_first_count": True}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        rc = generate_master.main()
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "skill-config" in err
+        assert "pin_first_count" in err
+
+    def test_no_skill_config_preserves_default_behavior(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"crossfade_duration": 1.0, "bitrate": "192k"}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["pin_first"] is None
+        assert captured["kwargs"]["pin_first_count"] is None
+
+
 class TestCollectAudioInputs:
     """_collect_audio_inputs() の MP3 / WAV / 混在判定。"""
 

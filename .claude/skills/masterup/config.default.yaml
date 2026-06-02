@@ -28,6 +28,13 @@ audio:
   # 単独設定 (`shuffle: true` を伴わない) では shuffle を有効化しない。
   # shuffle_seed: 42
 
+  # CLI フラグ (`--pin-first` / `--pin-first-count`) のいずれも未指定のときに
+  # `yt-generate-master --pin-first-count N` 相当のデフォルトとして採用される。
+  # ソート済み先頭 N 件を順序固定し、`audio.shuffle: true` と併用すると残りだけ
+  # シャッフルされる。Suno で retention に強い 1 曲を冒頭に置きたい運用向け。
+  # 既定 0 = 固定なし。
+  pin_first_count: 0
+
 # Suno CDN ダウンロード設定
 suno_download:
   cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"
