@@ -107,13 +107,5 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run knip
 
-  ts-audit:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.13
-      - run: bun install --frozen-lockfile
-      - run: bun pm scan
+# ts-audit (vulnerability scan) は scanner provider (socket.dev 等) の設定とセットで
+# 後日別 issue で再導入する。bun pm scan は外部 scanner 必須でゼロ config で動かない
