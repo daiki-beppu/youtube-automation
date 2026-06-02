@@ -15,6 +15,28 @@ from youtube_automation.utils.schedule import get_schedule_timezone
 logger = logging.getLogger(__name__)
 
 
+def _scheduling_enabled(schedule_cfg: dict) -> bool:
+    """``schedule_config.json`` の ``schedule`` セクションからスケジュール公開有効性を判定する。
+
+    優先順位（#647 ユーザーが「予約投稿の設定をしたつもりが即時公開された」FB 対応）:
+
+    1. ``auto_schedule_enabled`` が明示的に ``true`` → 有効。
+    2. ``auto_schedule_enabled`` が明示的に ``false`` → 無効（即時公開を強制）。
+    3. キー未設定で ``cadence`` (非空) または ``publish_time`` が明示設定 → 暗黙オプトイン: 有効。
+    4. 上記いずれにも該当しなければ無効（即時公開）。
+
+    ``day1_time`` は旧テンプレ互換のため ``publish_time`` が無いときのフォールバックとして使うが、
+    「明示的なスケジュール設定」のシグナルとしては扱わない（過去テンプレで既定値が
+    入っていることがあるため）。
+    """
+    if "auto_schedule_enabled" in schedule_cfg:
+        return bool(schedule_cfg["auto_schedule_enabled"])
+
+    has_cadence = bool(schedule_cfg.get("cadence"))
+    has_publish_time = "publish_time" in schedule_cfg and bool(schedule_cfg.get("publish_time"))
+    return has_cadence or has_publish_time
+
+
 class PublishedDatesMixin:
     """公開済み/予約済み動画の取得とスケジュール公開日時計算を提供する mixin。"""
 
@@ -32,18 +54,27 @@ class PublishedDatesMixin:
     def _calculate_publish_at(self) -> str | None:
         """CC のスケジュール公開日時を計算
 
-        auto_schedule_enabled が true の場合:
+        スケジュール公開（YouTube ``status.publishAt``）を有効化する条件:
+
+        - ``schedule.auto_schedule_enabled`` が ``true`` に明示設定されている
+        - もしくは ``schedule.cadence`` / ``schedule.publish_time`` のいずれかが
+          明示設定されている（暗黙オプトイン: #647）。
+          ``auto_schedule_enabled`` が明示的に ``false`` の場合のみ無効化される。
+
+        スケジュール公開が有効な場合:
+
         - cadence で指定された曜日（例: tue, thu, sat）に限定
         - 当日の publish_time を過ぎていたら次の cadence 曜日から探索
         - 同日に既存の公開/予約動画があればさらに次の cadence 曜日にスライド
 
-        auto_schedule_enabled が false の場合は None（即時公開）。
+        スケジュール公開が無効な場合は None（即時公開）。
 
         Returns:
             ISO 8601 形式の公開日時文字列。即時公開時は None。
         """
         schedule_cfg = self.config.get("schedule", {})
-        if not schedule_cfg.get("auto_schedule_enabled", False):
+        if not _scheduling_enabled(schedule_cfg):
+            logger.info("📅 公開設定: 即時公開（schedule_config.json で auto_schedule_enabled 未設定）")
             return None
 
         publish_time = schedule_cfg.get("publish_time", schedule_cfg.get("day1_time", "17:00"))

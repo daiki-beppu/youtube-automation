@@ -755,3 +755,122 @@ class TestUploadCompleteCollectionDedup:
         mock_upload_video.assert_called_once()
         assert result["video_id"] == "VID_AFTER_FAILOPEN"
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Issue #647: scheduled publish (status.publishAt) regression
+# ---------------------------------------------------------------------------
+
+
+class TestUploadVideoScheduledPublish:
+    """`upload_video` が publish_at を渡された時に正しく status.publishAt を構築する.
+
+    バグレポート（#647）: 予約投稿の設定をしても即時公開された FB の再発防止。
+    """
+
+    def test_should_set_publish_at_and_force_private_when_publish_at_provided(self, tmp_path):
+        """publish_at 指定時は status.publishAt と privacyStatus=private を必ず設定する."""
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        metadata = _make_metadata()
+        metadata["privacy_status"] = "public"  # ユーザーが間違って public を入れていても
+        metadata["publish_at"] = "2099-01-01T20:00:00+09:00"
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+            return_value="VID_SCHEDULED",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        # publishAt は API 仕様上 privacyStatus=private が必須
+        assert body["status"]["privacyStatus"] == "private"
+        # publishAt は UTC（Z 終端）に正規化される
+        assert body["status"]["publishAt"] == "2099-01-01T11:00:00Z"
+
+    def test_should_normalize_publish_at_to_utc(self, tmp_path):
+        """+09:00 のような timezone offset 付き値は UTC (Z) に正規化される."""
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        metadata = _make_metadata()
+        metadata["publish_at"] = "2099-06-15T20:00:00+09:00"
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+            return_value="VID_NORMALIZED",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["publishAt"] == "2099-06-15T11:00:00Z"
+
+    def test_should_passthrough_already_utc_publish_at(self, tmp_path):
+        """既に UTC (Z) の publish_at はそのまま透過する."""
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        metadata = _make_metadata()
+        metadata["publish_at"] = "2099-06-15T11:00:00Z"
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+            return_value="VID_UTC",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["publishAt"] == "2099-06-15T11:00:00Z"
+
+    def test_should_omit_publish_at_when_metadata_does_not_have_it(self, tmp_path):
+        """publish_at が無いメタデータでは status.publishAt は付与されない（即時公開経路）."""
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.agents.youtube_auto_uploader.YouTubeUploadCore.upload_video",
+            return_value="VID_IMMEDIATE",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), _make_metadata())
+
+        body = mock_core_upload.call_args.args[1]
+        assert "publishAt" not in body["status"]
+
+
+class TestNormalizePublishAt:
+    """`_normalize_publish_at` の単体テスト."""
+
+    def test_jst_offset_is_converted_to_utc_z(self):
+        from youtube_automation.agents.youtube_auto_uploader import _normalize_publish_at
+
+        assert _normalize_publish_at("2099-06-15T20:00:00+09:00") == "2099-06-15T11:00:00Z"
+
+    def test_utc_z_passthrough(self):
+        from youtube_automation.agents.youtube_auto_uploader import _normalize_publish_at
+
+        assert _normalize_publish_at("2099-06-15T11:00:00Z") == "2099-06-15T11:00:00Z"
+
+    def test_invalid_string_returns_as_is(self):
+        from youtube_automation.agents.youtube_auto_uploader import _normalize_publish_at
+
+        # パース不能ならそのまま返す（呼び出し側に責務を任せる）
+        assert _normalize_publish_at("not-an-iso-date") == "not-an-iso-date"
+
+    def test_naive_iso_returns_as_is(self):
+        from youtube_automation.agents.youtube_auto_uploader import _normalize_publish_at
+
+        # naive datetime は TZ 不明 → そのまま返す
+        assert _normalize_publish_at("2099-06-15T11:00:00") == "2099-06-15T11:00:00"

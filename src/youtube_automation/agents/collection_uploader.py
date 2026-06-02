@@ -232,6 +232,7 @@ class CollectionUploader(
     def show_plan(self, collection_path: Path):
         """ドライラン — スケジュール計算のみ表示"""
         publish_at = self._calculate_publish_at()
+        schedule_cfg = self.config.get("schedule", {})
 
         print(f"📋 アップロード計画: {collection_path.name}")
         print()
@@ -243,6 +244,15 @@ class CollectionUploader(
             print(f"  📅 公開予定: {publish_at}")
         else:
             print("  📅 公開設定: 即時公開 (public)")
+            # #647: ユーザーが予約投稿の設定をしたつもりで即時公開された FB を受けて、
+            # cadence / publish_time / day1_time が明示設定されているのにスケジュールが
+            # 無効化されているケースを早期に発見できるよう案内する。
+            looks_like_schedule_intent = any(schedule_cfg.get(k) for k in ("cadence", "publish_time", "day1_time"))
+            if looks_like_schedule_intent and schedule_cfg.get("auto_schedule_enabled") is False:
+                print(
+                    "  ⚠️  schedule.auto_schedule_enabled が false に設定されています。"
+                    "予約投稿したい場合は true に変更してください"
+                )
         print()
         # 実測クォータ: 約84ユニット/アップロード
         # CC アップロード (84) + 公開日一覧 search (100) + dedup 直前 search (100)

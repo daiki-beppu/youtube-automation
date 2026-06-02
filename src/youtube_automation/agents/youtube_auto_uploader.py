@@ -21,11 +21,39 @@ Features:
 
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_publish_at(value: str) -> str:
+    """`status.publishAt` を YouTube Data API が受け付ける ISO 8601 文字列に正規化する.
+
+    入力例:
+
+    - `"2026-06-15T20:00:00+09:00"` → `"2026-06-15T11:00:00Z"`（UTC 化）
+    - `"2026-06-15T11:00:00Z"` → そのまま
+    - `"2026-06-15T11:00:00"`（naive） → そのまま（ローカル TZ 仮定）
+
+    Args:
+        value: ISO 8601 形式の文字列。
+
+    Returns:
+        UTC（Z 終端）に正規化された ISO 8601 文字列。パース失敗時は入力をそのまま返す。
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if dt.tzinfo is None:
+        # naive datetime は API 側でローカルとして解釈される可能性がある。
+        # ここでは入力を尊重しそのまま返す（呼び出し側で TZ aware にする責務）。
+        return value
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 from youtube_automation.agents._complete_collection_strategy import CompleteCollectionMixin  # noqa: E402
@@ -130,10 +158,20 @@ class YouTubeAutoUploader(
         }
 
         # スケジュール公開: publishAt 指定時は private 必須
+        # YouTube Data API は ISO 8601 形式を要求する。`+09:00` のような
+        # timezone offset 付き値も受け付けるが、明示的に Z 終端の UTC へ
+        # 変換しておくと不要な失敗を避けられる（#647 予約投稿不発の再発防止）。
         if metadata.get("publish_at"):
+            normalized = _normalize_publish_at(metadata["publish_at"])
             status_body["privacyStatus"] = "private"
-            status_body["publishAt"] = metadata["publish_at"]
-            logger.info(f"スケジュール公開: {metadata['publish_at']}")
+            status_body["publishAt"] = normalized
+            logger.info(f"スケジュール公開（private + publishAt={normalized}）")
+        else:
+            # publishAt 未指定でユーザーが privacy_status="public" を明示している場合、
+            # その動画は即時公開される。スケジュール公開を期待していたユーザー向けの
+            # 早期可視化として INFO ログを残す（#647）。
+            if status_body.get("privacyStatus") == "public":
+                logger.info("即時公開: status.privacyStatus=public でアップロードします")
 
         body = {
             "snippet": {
