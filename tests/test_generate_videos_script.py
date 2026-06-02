@@ -15,13 +15,17 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
-def _create_collection(tmp_path: Path) -> Path:
+def _create_collection(
+    tmp_path: Path,
+    *,
+    master_filename: str = "master-mix.wav",
+) -> Path:
     collection = tmp_path / "001-test-ambient-collection"
     master_dir = collection / "01-master"
     assets_dir = collection / "10-assets"
     master_dir.mkdir(parents=True)
     assets_dir.mkdir(parents=True)
-    (master_dir / "master-mix.wav").write_bytes(b"fake-audio")
+    (master_dir / master_filename).write_bytes(b"fake-audio")
     (assets_dir / "main.jpg").write_bytes(b"fake-image")
     (assets_dir / "loop.mp4").write_bytes(b"fake-video")
     return collection
@@ -107,9 +111,10 @@ def _run_generate_videos(
     stream_bitrate_output: str = "",
     extra_env: dict[str, str] | None = None,
     collection: Path | None = None,
+    master_filename: str = "master-mix.wav",
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     if collection is None:
-        collection = _create_collection(tmp_path)
+        collection = _create_collection(tmp_path, master_filename=master_filename)
     bin_dir = _create_stub_bin(tmp_path)
     ffmpeg_log = tmp_path / "ffmpeg.log"
     env = os.environ.copy()
@@ -309,3 +314,64 @@ def test_target_video_duration_env_overrides_channel_override(tmp_path: Path) ->
     master_cmd = _master_ffmpeg_command(ffmpeg_log)
     # env が優先 (30 min = 1800 秒)
     assert " -t 1800.00 " in f" {master_cmd} "
+
+
+# ─── master.{wav,mp3} detection (#507) ────────────────────
+
+
+def test_detects_lyria_master_wav(tmp_path: Path) -> None:
+    """#507: `/lyria` (yt-generate-master) 出力の `master.wav` を検出できる."""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        master_filename="master.wav",
+    )
+
+    assert result.returncode == 0, result.stderr
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    assert len(commands) == 1
+    assert "01-master/master.wav" in commands[0]
+
+
+def test_detects_masterup_master_mp3(tmp_path: Path) -> None:
+    """#507: `/masterup` (yt-generate-master) 出力の `master.mp3` を検出できる."""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        master_filename="master.mp3",
+    )
+
+    assert result.returncode == 0, result.stderr
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    assert len(commands) == 1
+    assert "01-master/master.mp3" in commands[0]
+
+
+def test_master_mix_takes_precedence_over_master(tmp_path: Path) -> None:
+    """#507: 両方存在する場合は `master-mix.*` (DAW バウンス) を優先する."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    # `master.mp3` も追加で配置 → `master-mix.wav` が優先されることを検証
+    (collection / "01-master" / "master.mp3").write_bytes(b"fake-audio-mp3")
+
+    bin_dir = _create_stub_bin(tmp_path)
+    ffmpeg_log = tmp_path / "ffmpeg.log"
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["FFPROBE_STREAM_OUTPUT"] = "1920,1080,yuv420p,24/1"
+    env["FFPROBE_STREAM_BITRATE_OUTPUT"] = "5000000"
+    env["FFMPEG_LOG"] = str(ffmpeg_log)
+    result = subprocess.run(
+        ["bash", str(_SCRIPT_PATH), str(collection)],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=_REPO_ROOT,
+    )
+
+    assert result.returncode == 0, result.stderr
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    assert len(commands) == 1
+    assert "01-master/master-mix.wav" in commands[0]
+    assert "01-master/master.mp3" not in commands[0]

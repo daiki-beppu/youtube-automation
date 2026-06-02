@@ -3,6 +3,7 @@
 # Static image + master audio → MP4 (macOS optimized)
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 # v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
+# v12.3: master-mix.* に加えて lyria/masterup 出力の master.* も検出 (#507)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -51,14 +52,19 @@ for candidate in "${ASSETS_DIR}/main.jpg" "${ASSETS_DIR}/main.png" "${ASSETS_DIR
     fi
 done
 
-# DAW バウンスの実運用ケースに対応: wav 優先、なければ m4a / aac / mp3 / flac
+# 検出順:
+#   1. `master-mix.{wav,m4a,aac,mp3,flac}` — DAW バウンス・手動配置 (優先)
+#   2. `master.{wav,m4a,aac,mp3,flac}` — `/lyria` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
+# 拡張子は wav 優先、なければ m4a / aac / mp3 / flac の順
 MASTER_AUDIO=""
-for ext in wav m4a aac mp3 flac; do
-    candidate="${MASTER_DIR}/master-mix.${ext}"
-    if [[ -f "$candidate" ]]; then
-        MASTER_AUDIO="$candidate"
-        break
-    fi
+for basename in master-mix master; do
+    for ext in wav m4a aac mp3 flac; do
+        candidate="${MASTER_DIR}/${basename}.${ext}"
+        if [[ -f "$candidate" ]]; then
+            MASTER_AUDIO="$candidate"
+            break 2
+        fi
+    done
 done
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
@@ -98,7 +104,7 @@ if [[ -z "$THUMBNAIL" ]]; then
     echo "ERROR: No thumbnail found in ${ASSETS_DIR}/ (main.jpg/png or thumbnail.jpg/png)"; exit 1
 fi
 if [[ -z "$MASTER_AUDIO" ]]; then
-    echo "ERROR: master-mix.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1
+    echo "ERROR: master-mix.{wav,m4a,aac,mp3,flac} または master.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1
 fi
 if ! ffprobe -v error "$MASTER_AUDIO" &>/dev/null; then
     echo "ERROR: Corrupted file: $MASTER_AUDIO"; exit 1
