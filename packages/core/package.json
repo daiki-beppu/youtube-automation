@@ -1,0 +1,10 @@
+{
+  "name": "@youtube-automation/core",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "Pure domain logic for the youtube-channels-automation TS rewrite (skeleton).",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
