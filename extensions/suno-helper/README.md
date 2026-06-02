@@ -24,8 +24,8 @@
 
 1. ターミナルでサーバーを起動:
    ```bash
-   uv run yt-suno-serve collections/planning/<theme>
-   # → http://localhost:7873/prompts.json で配信
+   uv run yt-collection-serve collections/planning/<theme>
+   # → http://localhost:7873/suno/prompts.json で配信
    ```
 2. Chrome で Suno の **Custom Mode** 画面を開く。
 3. 拡張アイコンからポップアップを開き、**サーバー URL**（既定 `http://localhost:7873`）を入れて **データ取得**。
@@ -35,7 +35,7 @@
 
 ## CORS
 
-サーバー（`yt-suno-serve`）は CORS を `chrome-extension://` オリジンのみ許可する。`--allow-origin chrome-extension://<id>` で特定拡張 ID に固定もできる。
+サーバー（`yt-collection-serve`）は CORS を `chrome-extension://` オリジンのみ許可する。`--allow-origin chrome-extension://<id>` で特定拡張 ID に固定もできる。
 
 ## DOM セレクタの保守
 

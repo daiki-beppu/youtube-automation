@@ -8,6 +8,7 @@ from youtube_automation.utils.config.analytics import Analytics
 from youtube_automation.utils.config.audio import Audio
 from youtube_automation.utils.config.comments import Comments
 from youtube_automation.utils.config.content import Content
+from youtube_automation.utils.config.distrokid import Distrokid
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import ChannelMeta
 from youtube_automation.utils.config.pinned_comment import PinnedComment
@@ -32,3 +33,4 @@ class ChannelConfig:
     localizations: Localizations
     comments: Comments
     pinned_comment: PinnedComment
+    distrokid: Distrokid
