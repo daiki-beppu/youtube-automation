@@ -31,7 +31,15 @@ from youtube_automation.utils.config.pinned_comment import PinnedComment
 from youtube_automation.utils.config.playlists import Playlists
 from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
 from youtube_automation.utils.config.workflow import ApprovalGates, WfNext, Workflow
-from youtube_automation.utils.config.youtube import ContentModel, YoutubeApi, YoutubeSection
+from youtube_automation.utils.config.youtube import (
+    ContentModel,
+    OverlayAudioVisualizer,
+    OverlayEncoder,
+    Overlays,
+    OverlaySubscribePopup,
+    YoutubeApi,
+    YoutubeSection,
+)
 from youtube_automation.utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
@@ -270,7 +278,79 @@ def _build_youtube(merged: dict) -> YoutubeSection:
     if music_engine not in ("suno", "lyria"):
         logger.warning("music_engine='%s' は未知の値です（既知: 'suno' / 'lyria'）", music_engine)
 
-    return YoutubeSection(api=api, music_engine=music_engine, content_model=content_model)
+    overlays = _build_overlays(merged.get("overlays"))
+
+    return YoutubeSection(
+        api=api,
+        music_engine=music_engine,
+        content_model=content_model,
+        overlays=overlays,
+    )
+
+
+def _build_overlays(raw: object) -> Overlays:
+    """`overlays` セクション（optional, #511）の dataclass 組み立て.
+
+    未設定（`None` / 空 dict）のときは `Overlays(enabled=False)` を返し、
+    `generate_videos.sh` 既存 stream copy 経路を完全に維持する。
+    """
+    if raw is None:
+        return Overlays()
+    if not isinstance(raw, dict):
+        raise ConfigError(f"overlays セクションは object でなければなりません（got {type(raw).__name__}）")
+
+    av_raw = raw.get("audio_visualizer") or {}
+    if not isinstance(av_raw, dict):
+        raise ConfigError(f"overlays.audio_visualizer は object でなければなりません（got {type(av_raw).__name__}）")
+    audio_visualizer = OverlayAudioVisualizer(
+        enabled=bool(av_raw.get("enabled", False)),
+        mode=str(av_raw.get("mode", "bar")),
+        size=str(av_raw.get("size", "1280x180")),
+        rate=str(av_raw.get("rate", "24")),
+        fscale=str(av_raw.get("fscale", "log")),
+        win_size=int(av_raw.get("win_size", 2048)),
+        win_func=str(av_raw.get("win_func", "hann")),
+        colors=str(av_raw.get("colors", "white")),
+        position=str(av_raw.get("position", "(W-w)/2:H-h-40")),
+        opacity=float(av_raw.get("opacity", 0.85)),
+        glow_enabled=bool(av_raw.get("glow_enabled", True)),
+        glow_sigma=float(av_raw.get("glow_sigma", 12.0)),
+        glow_opacity=float(av_raw.get("glow_opacity", 0.45)),
+    )
+
+    sp_raw = raw.get("subscribe_popup") or {}
+    if not isinstance(sp_raw, dict):
+        raise ConfigError(f"overlays.subscribe_popup は object でなければなりません（got {type(sp_raw).__name__}）")
+    subscribe_popup = OverlaySubscribePopup(
+        enabled=bool(sp_raw.get("enabled", False)),
+        image=str(sp_raw.get("image", "subscribe-popup.png")),
+        start_sec=float(sp_raw.get("start_sec", 5.0)),
+        duration_sec=float(sp_raw.get("duration_sec", 8.0)),
+        fade_sec=float(sp_raw.get("fade_sec", 0.6)),
+        position=str(sp_raw.get("position", "W-w-40:40")),
+        opacity=float(sp_raw.get("opacity", 1.0)),
+    )
+
+    enc_raw = raw.get("encoder") or {}
+    if not isinstance(enc_raw, dict):
+        raise ConfigError(f"overlays.encoder は object でなければなりません（got {type(enc_raw).__name__}）")
+    encoder = OverlayEncoder(
+        codec=str(enc_raw.get("codec", "libx264")),
+        preset=str(enc_raw.get("preset", "medium")),
+        crf=int(enc_raw.get("crf", 20)),
+        pix_fmt=str(enc_raw.get("pix_fmt", "yuv420p")),
+        maxrate=str(enc_raw.get("maxrate", "4M")),
+        bufsize=str(enc_raw.get("bufsize", "8M")),
+        profile=str(enc_raw.get("profile", "high")),
+        framerate=int(enc_raw.get("framerate", 24)),
+    )
+
+    return Overlays(
+        enabled=bool(raw.get("enabled", False)),
+        audio_visualizer=audio_visualizer,
+        subscribe_popup=subscribe_popup,
+        encoder=encoder,
+    )
 
 
 def _build_analytics(merged: dict) -> Analytics:

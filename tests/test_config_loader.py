@@ -1169,3 +1169,130 @@ def test_comments_legacy_rule_generator_key_raises(tmp_path, monkeypatch):
 
     with pytest.raises(ConfigError, match="comments.rules\\[0\\].generator"):
         load_config()
+
+
+# ----- overlays (#511) -----------------------------------------------------
+
+
+def test_overlays_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
+    """#511: youtube.json に `overlays` キーが無いとき、既定で `enabled=False` 相当として返る."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.overlays.enabled is False
+    # ネスト dataclass も既定値で組み立てられている（generate_videos.sh は enabled=false で
+    # 完全に無視するためフィールド値は使われないが、属性アクセスは安全であること）
+    assert config.youtube.overlays.audio_visualizer.enabled is False
+    assert config.youtube.overlays.subscribe_popup.enabled is False
+    assert config.youtube.overlays.encoder.codec == "libx264"
+    assert config.youtube.overlays.encoder.framerate == 24
+
+
+def test_overlays_section_full_override(tmp_path, monkeypatch):
+    """#511: `overlays.enabled: true` + 全フィールド指定で値が dataclass まで届く."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {
+        "enabled": True,
+        "audio_visualizer": {
+            "enabled": True,
+            "mode": "bar",
+            "size": "1920x240",
+            "rate": "30",
+            "fscale": "log",
+            "win_size": 4096,
+            "win_func": "hann",
+            "colors": "0xff66ccff",
+            "position": "(W-w)/2:H-h-80",
+            "opacity": 0.9,
+            "glow_enabled": True,
+            "glow_sigma": 14.0,
+            "glow_opacity": 0.5,
+        },
+        "subscribe_popup": {
+            "enabled": True,
+            "image": "popup.png",
+            "start_sec": 8.5,
+            "duration_sec": 10.0,
+            "fade_sec": 0.8,
+            "position": "W-w-32:32",
+            "opacity": 0.95,
+        },
+        "encoder": {
+            "codec": "libx264",
+            "preset": "slow",
+            "crf": 18,
+            "pix_fmt": "yuv420p",
+            "maxrate": "6M",
+            "bufsize": "12M",
+            "profile": "high",
+            "framerate": 30,
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    ov = config.youtube.overlays
+    assert ov.enabled is True
+
+    assert ov.audio_visualizer.enabled is True
+    assert ov.audio_visualizer.size == "1920x240"
+    assert ov.audio_visualizer.rate == "30"
+    assert ov.audio_visualizer.win_size == 4096
+    assert ov.audio_visualizer.colors == "0xff66ccff"
+    assert ov.audio_visualizer.position == "(W-w)/2:H-h-80"
+    assert ov.audio_visualizer.glow_sigma == 14.0
+    assert ov.audio_visualizer.glow_opacity == 0.5
+
+    assert ov.subscribe_popup.enabled is True
+    assert ov.subscribe_popup.image == "popup.png"
+    assert ov.subscribe_popup.start_sec == 8.5
+    assert ov.subscribe_popup.duration_sec == 10.0
+    assert ov.subscribe_popup.fade_sec == 0.8
+    assert ov.subscribe_popup.position == "W-w-32:32"
+    assert ov.subscribe_popup.opacity == 0.95
+
+    assert ov.encoder.preset == "slow"
+    assert ov.encoder.crf == 18
+    assert ov.encoder.maxrate == "6M"
+    assert ov.encoder.bufsize == "12M"
+    assert ov.encoder.framerate == 30
+
+
+def test_overlays_empty_object_uses_defaults(tmp_path, monkeypatch):
+    """#511: `overlays: {}` は `enabled=False` の既定相当として扱う（後方互換）."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.overlays.enabled is False
+    assert config.youtube.overlays.audio_visualizer.enabled is False
+    assert config.youtube.overlays.subscribe_popup.enabled is False
+
+
+def test_overlays_section_non_object_raises(tmp_path, monkeypatch):
+    """#511: `overlays` が object でないときは ConfigError."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = ["enabled", "true"]
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="overlays セクションは object"):
+        load_config()
+
+
+def test_overlays_audio_visualizer_non_object_raises(tmp_path, monkeypatch):
+    """#511: `overlays.audio_visualizer` が object でないときは ConfigError."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": "bar"}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="overlays.audio_visualizer"):
+        load_config()

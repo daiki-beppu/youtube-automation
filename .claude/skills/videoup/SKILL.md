@@ -114,6 +114,61 @@ VIDEOUP_EFFECT=bokeh VIDEOUP_EFFECT_INTENSITY=medium \
 
 実コレクションで生成した動画は YouTube Studio のプレビュー（モバイル・PC）と実機 YouTube 視聴で粒子・ボケ・グラデーションが**音楽の邪魔にならない強度で乗っているか**を必ず確認すること。BGM チャンネルのコア視聴体験を壊さないことが優先事項。
 
+## Overlays（#511, v13）
+
+`config/channel/youtube.json::overlays` で audio visualizer + subscribe popup の合成を有効化できる。`overlays.enabled: true` のときだけ `generate_videos.sh` は **x264 再エンコード経路** に分岐し、`filter_complex` で背景の上に visualizer / popup を重ねる。`overlays.enabled: false`（既定）または `overlays` キー欠落時は従来の **stream copy / 静止画 1fps 経路**を 100% 維持する（後方互換）。
+
+### 設定例（youtube.json）
+
+```json
+{
+  "overlays": {
+    "enabled": true,
+    "audio_visualizer": {
+      "enabled": true,
+      "mode": "bar",
+      "size": "1280x180",
+      "rate": "24",
+      "fscale": "log",
+      "colors": "white",
+      "position": "(W-w)/2:H-h-40",
+      "opacity": 0.85,
+      "glow_enabled": true,
+      "glow_sigma": 12.0,
+      "glow_opacity": 0.45
+    },
+    "subscribe_popup": {
+      "enabled": true,
+      "image": "subscribe-popup.png",
+      "start_sec": 5.0,
+      "duration_sec": 8.0,
+      "fade_sec": 0.6,
+      "position": "W-w-40:40"
+    },
+    "encoder": {
+      "preset": "medium",
+      "crf": 20,
+      "maxrate": "4M",
+      "bufsize": "8M",
+      "framerate": 24
+    }
+  }
+}
+```
+
+### 自動検出と前提
+
+- **jq 必須**: `jq` が PATH に無いときは overlays は自動 disable され既存経路で動く。
+- **設定ファイル探索順**: `OVERLAYS_CONFIG` 環境変数 → `CHANNEL_DIR/config/channel/youtube.json` → コレクションディレクトリの祖先探索。
+- **popup 画像探索順**: 絶対パス → `10-assets/<image>` → `<collection-dir>/<image>`。見つからない場合は popup のみスキップして visualizer は実行する。
+- **再エンコード固定**: overlays 経路は `-c:v copy` 不可。`encoder.crf` / `maxrate` / `bufsize` で品質とサイズを制御する（DeepFocus365 で 70 分マスター = 約 1.0 GB / 2 Mbps 実績）。
+
+### 動作実証メモ
+
+- DeepFocus365 で実装済み: 70 分マスター動画を約 2 分弱で生成、visualizer + popup ともに正常合成（#511 背景）。
+- visualizer は `showfreqs=mode=bar` + `gblur` の 2 パス glow で淡い発光を演出。`glow_enabled: false` で 1 パスに減らせる。
+- popup は `fade=in` / `enable='between(t,start,end)'` / `fade=out` を組み合わせて時間窓制御している。
+
 ## 長時間処理の取り扱い
 
 `generate_videos.sh` は ffmpeg を走らせるため **1〜10 分程度**（コレクション尺次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。

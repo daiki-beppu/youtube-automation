@@ -1,10 +1,17 @@
 #!/bin/bash
-# generate_videos.sh v12.2 — Master video generator
+# generate_videos.sh v13 — Master video generator
 # Static image + master audio → MP4 (macOS optimized)
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 # v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
 # v12.3: master-mix.* に加えて lyria/masterup 出力の master.* も検出 (#507)
 # v12.4: 映像エフェクト (光の粒子 / ボケ / グラデーション流れ) のオプション追加 (#648)
+# v13:   config-driven overlay 合成 (audio_visualizer + subscribe_popup, #511)
+#        - `overlays.enabled: true` のときのみ x264 再エンコード経路で
+#          `filter_complex` を構築し visualizer + popup を合成
+#        - jq 無し / `overlays.enabled: false` / `overlays` 欠落時は
+#          既存 stream copy 経路 (v12.1) を完全に維持する
+#        - COLLECTION_NAME 抽出 regex を `^[0-9]+-[a-z]+-` →
+#          `^[0-9]+-[a-z0-9]+-` に修正 (数字を含む slug を許容)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -28,6 +35,11 @@
 #
 # エフェクト有効時、ループ動画背景モードは stream copy ではなく libx264 再エンコードに切り替わる。
 # 詳細は .claude/skills/videoup/SKILL.md を参照。
+#
+# Env (#511):
+#   OVERLAYS_CONFIG  config/channel/youtube.json への絶対パス (省略時は
+#                    CHANNEL_DIR or COLLECTION_DIR から自動探索)
+#   CHANNEL_DIR      チャンネルリポジトリのルート (Python loader と同じ規約)
 
 # ─── Collection Path Resolution ──────────────────────────
 COLLECTION_DIR="${1:-}"
@@ -46,9 +58,12 @@ MASTER_DIR="${COLLECTION_DIR}/01-master"
 ASSETS_DIR="${COLLECTION_DIR}/10-assets"
 
 # ─── Auto-detect Collection Name ─────────────────────────
+# 旧: `^[0-9]+-[a-z]+-` だと `20260101-r2d2-foo` のような数字混じり slug が
+# 後ろの `-collection` 除去だけで残ってしまうため、`[a-z0-9]+` に緩めて
+# 「日付-スラッグ-」プレフィックスを正しく剥がす (#511)。
 dir_basename="$(basename "$COLLECTION_DIR")"
 COLLECTION_NAME="$(echo "$dir_basename" \
-    | sed -E 's/^[0-9]+-[a-z]+-//; s/-collection$//' \
+    | sed -E 's/^[0-9]+-[a-z0-9]+-//; s/-collection$//' \
     | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}' OFS='-')"
 
 # ─── Auto-detect Assets ─────────────────────────────────
@@ -184,6 +199,59 @@ if [[ -n "$MASTER_AUDIO" ]]; then
     esac
 fi
 
+# ─── Overlays config (#511) ─────────────────────────────
+# overlays.enabled = true かつ jq があるときだけ filter_complex 経路に分岐。
+# どれか 1 つでも欠ければ既存 stream copy 経路へフォールバックする。
+OVERLAYS_ENABLED=0
+OVERLAYS_CONFIG_PATH=""
+
+resolve_overlays_config() {
+    if [[ -n "${OVERLAYS_CONFIG:-}" && -f "$OVERLAYS_CONFIG" ]]; then
+        echo "$OVERLAYS_CONFIG"
+        return
+    fi
+    local candidates=()
+    if [[ -n "${CHANNEL_DIR:-}" ]]; then
+        candidates+=("${CHANNEL_DIR}/config/channel/youtube.json")
+    fi
+    # COLLECTION_DIR から祖先を辿って config/channel/youtube.json を探す
+    local dir="$COLLECTION_DIR"
+    while [[ "$dir" != "/" && -n "$dir" ]]; do
+        candidates+=("${dir}/config/channel/youtube.json")
+        dir="$(dirname "$dir")"
+    done
+    for c in "${candidates[@]}"; do
+        if [[ -f "$c" ]]; then
+            echo "$c"
+            return
+        fi
+    done
+}
+
+if command -v jq &>/dev/null; then
+    OVERLAYS_CONFIG_PATH="$(resolve_overlays_config)"
+    if [[ -n "$OVERLAYS_CONFIG_PATH" ]]; then
+        ov_enabled="$(jq -r '(.overlays.enabled // false) | tostring' "$OVERLAYS_CONFIG_PATH" 2>/dev/null)"
+        if [[ "$ov_enabled" == "true" ]]; then
+            OVERLAYS_ENABLED=1
+        fi
+    fi
+fi
+
+ov_get() {
+    # $1: jq path expression (without leading dot)
+    # $2: fallback value
+    local expr="$1"
+    local fallback="$2"
+    local v
+    v="$(jq -r "(${expr}) // empty" "$OVERLAYS_CONFIG_PATH" 2>/dev/null)"
+    if [[ -z "$v" || "$v" == "null" ]]; then
+        echo "$fallback"
+    else
+        echo "$v"
+    fi
+}
+
 # ─── Prerequisites ───────────────────────────────────────
 if ! command -v ffmpeg &>/dev/null; then
     echo "ERROR: ffmpeg not found"; exit 1
@@ -262,7 +330,7 @@ fi
 
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v12.2 — ${COLLECTION_NAME}"
+echo "  generate_videos.sh v13 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
@@ -274,6 +342,9 @@ echo "  Audio    : $(basename "$MASTER_AUDIO")"
 echo "  Output   : $(basename "$MASTER_OUTPUT")"
 if [[ "$EFFECT" != "none" ]]; then
     echo "  Effect   : $EFFECT (intensity=$EFFECT_INTENSITY, alpha=$EFFECT_ALPHA)"
+fi
+if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
+    echo "  Overlays : enabled ($(basename "$OVERLAYS_CONFIG_PATH"))"
 fi
 
 duration="$(get_duration "$MASTER_AUDIO")"
@@ -355,7 +426,116 @@ else
 fi
 
 # ─── FFmpeg (background) ─────────────────────────────────
-if [[ -n "$LOOP_VIDEO" ]]; then
+if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
+    # Overlay 経路 (#511): visualizer + subscribe popup を合成する。
+    # この経路では `-c:v copy` は不可能 (filter_complex を通すため) なので
+    # encoder セクションのパラメータで x264 再エンコードする。
+    av_enabled="$(ov_get '.overlays.audio_visualizer.enabled' 'false')"
+    sp_enabled="$(ov_get '.overlays.subscribe_popup.enabled' 'false')"
+
+    av_mode="$(ov_get '.overlays.audio_visualizer.mode' 'bar')"
+    av_size="$(ov_get '.overlays.audio_visualizer.size' '1280x180')"
+    av_rate="$(ov_get '.overlays.audio_visualizer.rate' '24')"
+    av_fscale="$(ov_get '.overlays.audio_visualizer.fscale' 'log')"
+    av_win_size="$(ov_get '.overlays.audio_visualizer.win_size' '2048')"
+    av_win_func="$(ov_get '.overlays.audio_visualizer.win_func' 'hann')"
+    av_colors="$(ov_get '.overlays.audio_visualizer.colors' 'white')"
+    av_position="$(ov_get '.overlays.audio_visualizer.position' '(W-w)/2:H-h-40')"
+    av_opacity="$(ov_get '.overlays.audio_visualizer.opacity' '0.85')"
+    av_glow_enabled="$(ov_get '.overlays.audio_visualizer.glow_enabled' 'true')"
+    av_glow_sigma="$(ov_get '.overlays.audio_visualizer.glow_sigma' '12')"
+    av_glow_opacity="$(ov_get '.overlays.audio_visualizer.glow_opacity' '0.45')"
+
+    sp_image="$(ov_get '.overlays.subscribe_popup.image' 'subscribe-popup.png')"
+    sp_start="$(ov_get '.overlays.subscribe_popup.start_sec' '5')"
+    sp_duration="$(ov_get '.overlays.subscribe_popup.duration_sec' '8')"
+    sp_fade="$(ov_get '.overlays.subscribe_popup.fade_sec' '0.6')"
+    sp_position="$(ov_get '.overlays.subscribe_popup.position' 'W-w-40:40')"
+
+    enc_codec="$(ov_get '.overlays.encoder.codec' 'libx264')"
+    enc_preset="$(ov_get '.overlays.encoder.preset' 'medium')"
+    enc_crf="$(ov_get '.overlays.encoder.crf' '20')"
+    enc_pix_fmt="$(ov_get '.overlays.encoder.pix_fmt' 'yuv420p')"
+    enc_maxrate="$(ov_get '.overlays.encoder.maxrate' '4M')"
+    enc_bufsize="$(ov_get '.overlays.encoder.bufsize' '8M')"
+    enc_profile="$(ov_get '.overlays.encoder.profile' 'high')"
+    enc_framerate="$(ov_get '.overlays.encoder.framerate' '24')"
+
+    # 入力配列: [0]=背景 (loop or thumbnail), [1]=master audio, [2]=popup PNG (任意)
+    INPUTS=()
+    if [[ -n "$LOOP_VIDEO" ]]; then
+        INPUTS+=(-stream_loop -1 -i "$LOOP_VIDEO")
+    else
+        INPUTS+=(-framerate "$enc_framerate" -loop 1 -i "$THUMBNAIL")
+    fi
+    INPUTS+=(-i "$MASTER_AUDIO")
+
+    sp_input_idx=""
+    if [[ "$sp_enabled" == "true" ]]; then
+        sp_path=""
+        if [[ "$sp_image" = /* ]]; then
+            sp_path="$sp_image"
+        elif [[ -f "${ASSETS_DIR}/${sp_image}" ]]; then
+            sp_path="${ASSETS_DIR}/${sp_image}"
+        elif [[ -f "${COLLECTION_DIR}/${sp_image}" ]]; then
+            sp_path="${COLLECTION_DIR}/${sp_image}"
+        fi
+        if [[ -z "$sp_path" || ! -f "$sp_path" ]]; then
+            echo "  WARN: subscribe popup image not found: ${sp_image} (overlay 経路だが popup はスキップ)"
+            sp_enabled="false"
+        else
+            INPUTS+=(-loop 1 -i "$sp_path")
+            sp_input_idx=2
+        fi
+    fi
+
+    # filter_complex 構築
+    # 背景は事前に scale + pad で 1920x1080 / yuv420p に揃える
+    FILTER="[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p,fps=${enc_framerate}[bg];"
+    CURRENT_LABEL="bg"
+
+    if [[ "$av_enabled" == "true" ]]; then
+        # showfreqs ベースの bar visualizer (透過 RGBA) を生成
+        FILTER+="[1:a]asplit=2[avis_in][a_out];"
+        FILTER+="[avis_in]showfreqs=mode=${av_mode}:s=${av_size}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},format=rgba,colorchannelmixer=aa=${av_opacity}[avis];"
+        if [[ "$av_glow_enabled" == "true" ]]; then
+            FILTER+="[avis]split=2[avis_core][avis_glow_src];"
+            FILTER+="[avis_glow_src]gblur=sigma=${av_glow_sigma},colorchannelmixer=aa=${av_glow_opacity}[avis_glow];"
+            FILTER+="[${CURRENT_LABEL}][avis_glow]overlay=${av_position}:format=auto[bg_glow];"
+            FILTER+="[bg_glow][avis_core]overlay=${av_position}:format=auto[bg_av];"
+        else
+            FILTER+="[${CURRENT_LABEL}][avis]overlay=${av_position}:format=auto[bg_av];"
+        fi
+        CURRENT_LABEL="bg_av"
+        AUDIO_LABEL="a_out"
+    else
+        AUDIO_LABEL="1:a"
+    fi
+
+    if [[ "$sp_enabled" == "true" ]]; then
+        sp_end="$(awk "BEGIN{printf \"%.3f\", ${sp_start} + ${sp_duration}}")"
+        sp_fade_out_start="$(awk "BEGIN{printf \"%.3f\", ${sp_end} - ${sp_fade}}")"
+        FILTER+="[${sp_input_idx}:v]format=rgba,fade=t=in:st=${sp_start}:d=${sp_fade}:alpha=1,fade=t=out:st=${sp_fade_out_start}:d=${sp_fade}:alpha=1[popup];"
+        FILTER+="[${CURRENT_LABEL}][popup]overlay=${sp_position}:enable='between(t,${sp_start},${sp_end})':format=auto[vout];"
+        CURRENT_LABEL="vout"
+    fi
+
+    # 末尾ラベル統一: 最終 video ラベルが CURRENT_LABEL
+    ffmpeg -y "${INPUTS[@]}" \
+        -filter_complex "$FILTER" \
+        -map "[${CURRENT_LABEL}]" -map "[${AUDIO_LABEL}]" \
+        -c:v "$enc_codec" -preset "$enc_preset" -crf "$enc_crf" \
+        -maxrate "$enc_maxrate" -bufsize "$enc_bufsize" \
+        -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt" \
+        -r "$enc_framerate" \
+        "${AUDIO_OUT_OPTS[@]}" \
+        -t "$duration" \
+        -movflags +faststart \
+        -shortest \
+        -loglevel error \
+        -progress "$PROGRESS_FILE" \
+        "$MASTER_OUTPUT" &
+elif [[ -n "$LOOP_VIDEO" ]]; then
     # ループ動画背景モード: loop.mp4 を無限ループで背景に使用
     # 戦略: ソースを 1 度だけ yuv420p / 1920x1080 に正規化キャッシュし、
     # 以降のマスター動画生成は -c:v copy で stream copy する（音声のみエンコード）

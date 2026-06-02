@@ -296,14 +296,16 @@ def test_skill_reference_script_passes_bash_syntax_check(path: Path) -> None:
 # ---------- スクリプト本体の同一性 (内容が壊れていないこと) ----------
 
 
-def test_generate_videos_keeps_v12_header() -> None:
+def test_generate_videos_keeps_version_header() -> None:
     """Given Issue #140 の整理後の ``generate_videos.sh``
     When ファイル先頭を読む
-    Then v12 を示すヘッダコメントが残っている (内容欠損なし)。
+    Then 現行版 (v12 系または v13 系 / #511) を示すヘッダコメントが残っている (内容欠損なし)。
     """
+    import re
+
     text = _read(_NEW_GENERATE_VIDEOS)
-    assert "generate_videos.sh v12" in text, (
-        "ヘッダ `# generate_videos.sh v12.x` が消えている。"
+    assert re.search(r"generate_videos\.sh v1[2-9]", text), (
+        "ヘッダ `# generate_videos.sh v12.x` または `v13.x` が消えている。"
         " ファイル本体が破損または別ファイルに置き換わっている可能性がある"
     )
 
