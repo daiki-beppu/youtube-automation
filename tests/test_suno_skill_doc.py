@@ -57,9 +57,7 @@ def test_skill_md_documents_serve_url_contract() -> None:
     """
     text = _read()
     assert "suno-prompts.json" in text, "SKILL.md に配信元 `suno-prompts.json` の言及がない"
-    assert "/suno/prompts.json" in text, (
-        "SKILL.md に新配信エンドポイント `/suno/prompts.json` の言及がない（#698）"
-    )
+    assert "/suno/prompts.json" in text, "SKILL.md に新配信エンドポイント `/suno/prompts.json` の言及がない（#698）"
 
 
 def test_skill_md_documents_manual_fallback() -> None:

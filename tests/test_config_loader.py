@@ -233,9 +233,7 @@ def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
     from youtube_automation.utils.config import Distrokid
 
     sections = _minimal_sections()
-    sections["distrokid.json"] = {
-        "distrokid": {"enabled": True, "profile": _full_distrokid_profile()}
-    }
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": _full_distrokid_profile()}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
@@ -278,9 +276,7 @@ def test_distrokid_enabled_partial_profile_raises(tmp_path, monkeypatch):
 def test_distrokid_disabled_with_incomplete_profile_loads(tmp_path, monkeypatch):
     """#698: enabled=false なら profile が不完全でも条件付き検証は走らず load 成功。"""
     sections = _minimal_sections()
-    sections["distrokid.json"] = {
-        "distrokid": {"enabled": False, "profile": {"artist_name": "x"}}
-    }
+    sections["distrokid.json"] = {"distrokid": {"enabled": False, "profile": {"artist_name": "x"}}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
