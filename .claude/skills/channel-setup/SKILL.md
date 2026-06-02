@@ -29,11 +29,63 @@ description: Use when /channel-direction で方向性が確定し、チャンネ
 
 ### Step 2: 設定内容の提案と承認
 
-`channel-research.md` の分析データも参照しながら、方向性に基づいて config 内容を Claude が生成し提案する。
-生成ルールは **`references/config-generation-rules.md`** を参照（tags / descriptions / title / suno の書き方）。
+#### Step 2.1: 競合 TTP 面のスナップショット取得（必須）
+
+`config/channel/analytics.json::benchmark.channels[0]` が指定されている場合、**Step 2.2 の config 案作成前に必ず**競合チャンネルの TTP 対象面を取得し、生の YouTube レスポンスをそのまま AI のコンテキストに載せる:
+
+```bash
+uv run python3 -c "
+from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+from youtube_automation.utils.config import load_config
+import json
+
+cfg = load_config()
+ttp_target = cfg.analytics.benchmark.channels[0]['id']
+youtube = YouTubeOAuthHandler().get_youtube_service()
+resp = youtube.channels().list(
+    part='snippet,brandingSettings,localizations',
+    id=ttp_target,
+).execute()
+print(json.dumps(resp['items'][0], indent=2, ensure_ascii=False))
+"
+```
+
+取得対象（=「TTP 対象面」チェックリスト、漏らさず全項目を AI のコンテキストに載せる）:
+
+- [ ] `snippet.description` — チャンネル概要欄 base
+- [ ] `brandingSettings.channel.description` — branding 説明文（`snippet.description` とほぼ同内容のことが多いが、片方だけ更新される運用もあるので両方取る）
+- [ ] `brandingSettings.channel.keywords` — タグセット（数・順序・スペース入りクォート形式 `"my channel"` まで含めて転写）
+- [ ] `brandingSettings.channel.country` / `snippet.country`
+- [ ] `brandingSettings.channel.defaultLanguage` / `snippet.defaultLanguage`
+- [ ] `localizations` 全エントリ（言語別 title / description）
+- [ ] 投稿時刻・投稿頻度（`/channel-research` で既に取得済みなら `docs/channel/channel-research.md` を参照）
+- [ ] サムネテンプレ・タイトルテンプレ（既存の `/channel-research` 成果物 + 競合 uploads playlist のサンプル）
+
+**「TTP 完全コピー路線」をユーザーが選択している場合の運用ルール**:
+
+- `brandingSettings.channel.description` の章立て構造（welcome 行 + 数段の段落 + 箇条書きセクションなど）と段落順をそのまま転写する
+- `keywords` の構成・順序・クォート形式を踏襲し、固有名詞だけを自チャンネル名に置換する
+- `localizations` で多言語化されているなら、自分も同じ言語セットを採用候補にする。多言語化していなければ `youtube.json::content_model` の `localization.supported_languages` も同様に絞る選択肢を提示する
+- 独自設計の文言は **転写後の差分** として後出しで提案する（先に独自文言を書いてしまうのは TTP 違反）
+
+取得した競合スナップショットは `docs/channel/competitor-branding-snapshot.json` などに保存しておくと、後段の `/channel-setup` 再実行や `/video-description` での再参照が楽になる（必須ではない）。
+
+#### Step 2.2: config 案の生成と承認
+
+`channel-research.md` の分析データと **Step 2.1 で取得した競合スナップショット** を参照しながら、方向性に基づいて config 内容を Claude が生成し提案する。
+生成ルールは **`references/config-generation-rules.md`** を参照（tags / descriptions / title / suno の書き方、および TTP 路線時の競合転写ルール）。
 雛形は `references/config-template/*.json`（責務別 4 ファイル: meta / content / youtube / analytics）。
 
-提案をユーザーに見せ、承認 or 修正指示を受ける。
+#### Step 2.3: TTP self-check（ユーザー承認前）
+
+「TTP できているか」を Claude が自己レビューし、ユーザー承認前に以下を提示する:
+
+- [ ] `descriptions.opening` / `descriptions.sub_opening` の段落構造が競合の `brandingSettings.channel.description` と対応しているか
+- [ ] `tags.base` の語彙・件数・クォート形式が `brandingSettings.channel.keywords` と整合しているか
+- [ ] `localization.supported_languages` が競合 `localizations` のエントリ言語と整合しているか（TTP 路線なら同じ、独自路線なら明示的に diff を説明）
+- [ ] 独自要素を入れている場合、どこを転写しどこを差別化したか 1 行ずつ説明できるか
+
+self-check が pass したら提案をユーザーに見せ、承認 or 修正指示を受ける。
 
 ### Step 3: config/channel/*.json の完成
 
