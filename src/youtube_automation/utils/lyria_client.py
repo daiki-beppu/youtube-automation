@@ -115,74 +115,57 @@ def _access_token() -> str:
     return credentials.token
 
 
-def _legacy_audio_data(outputs: object) -> str | None:
-    """legacy `outputs` 配列から base64 エンコード済み audio data 文字列を抽出。
+def _audio_data_from_entries(entries: object) -> str | None:
+    """`{"type": "audio", "mime_type": ..., "data": ...}` 形式の配列から audio data を抽出。
 
-    型不正・キー欠落・非 audio mime は skip して次へ進む（例外を投げない）。
+    legacy `outputs[*]` と新 schema `steps[*].content[*]` は audio 要素の形状が同一のため、
+    両経路でこのヘルパーを共有する。型不正・キー欠落・非 audio mime は skip して次へ進む
+    （例外を投げない）。
     """
-    if not isinstance(outputs, list):
+    if not isinstance(entries, list):
         return None
-    for out in outputs:
-        if not isinstance(out, dict) or out.get("type") != "audio":
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("type") != "audio":
             continue
-        mime = out.get("mime_type", "")
+        mime = entry.get("mime_type", "")
         if not isinstance(mime, str) or not mime.startswith("audio/"):
             continue
-        data = out.get("data")
+        data = entry.get("data")
         if isinstance(data, str):
             return data
     return None
 
 
-def _audio_data_from_part(part: object) -> str | None:
-    """新 schema `parts[*]` の 1 要素から base64 エンコード済み audio data 文字列を抽出。
+def _new_schema_audio_data(steps: object) -> str | None:
+    """新 schema `steps[*].content[*]` から base64 エンコード済み audio data 文字列を抽出。
 
-    `inline_data` / `inlineData` および `mime_type` / `mimeType` の両表記を defensive に受ける。
+    May 2026 breaking change で flat な `outputs` 配列が `steps` 配列へ置き換わる。各 step は
+    `content` 配列を持ち、その要素形状は legacy `outputs` と同一（`type` / `mime_type` / `data`）。
+    公式仕様: https://ai.google.dev/gemini-api/docs/interactions-breaking-changes-may-2026
+    型不正・キー欠落は skip して次へ進む（例外を投げない）。
     """
-    if not isinstance(part, dict):
+    if not isinstance(steps, list):
         return None
-    inline = part.get("inline_data")
-    if not isinstance(inline, dict):
-        inline = part.get("inlineData")
-    if not isinstance(inline, dict):
-        return None
-    mime = inline.get("mime_type") or inline.get("mimeType") or ""
-    if not isinstance(mime, str) or not mime.startswith("audio/"):
-        return None
-    data = inline.get("data")
-    return data if isinstance(data, str) else None
-
-
-def _new_schema_audio_data(candidates: object) -> str | None:
-    """新 schema `candidates[*].content.parts[*].inline_data` から audio data 文字列を抽出。"""
-    if not isinstance(candidates, list):
-        return None
-    for candidate in candidates:
-        if not isinstance(candidate, dict):
+    for step in steps:
+        if not isinstance(step, dict):
             continue
-        content = candidate.get("content")
-        if not isinstance(content, dict):
-            continue
-        parts = content.get("parts")
-        if not isinstance(parts, list):
-            continue
-        for part in parts:
-            data = _audio_data_from_part(part)
-            if data is not None:
-                return data
+        data = _audio_data_from_entries(step.get("content"))
+        if data is not None:
+            return data
     return None
 
 
 def _extract_audio_bytes(body: dict) -> bytes | None:
-    """Lyria レスポンスから audio bytes を抽出。legacy `outputs` と新 schema の両対応。
+    """Lyria レスポンスから audio bytes を抽出。legacy `outputs` と新 schema `steps` の両対応。
 
     走査順序は legacy → 新 schema 固定。両 schema に audio が同居する移行期レスポンスでは
     legacy を優先して既存挙動互換を保つ。型不正・キー欠落・非 audio mime は skip し、
     両 schema いずれにも audio が見つからなければ None。
     """
-    encoded = _legacy_audio_data(body.get("outputs"))
+    # legacy `outputs` は audio 要素の flat list なので共通ヘルパーで直接抽出する。
+    encoded = _audio_data_from_entries(body.get("outputs"))
     if encoded is None:
-        encoded = _new_schema_audio_data(body.get("candidates"))
+        encoded = _new_schema_audio_data(body.get("steps"))
     return base64.b64decode(encoded) if encoded is not None else None
 
 
