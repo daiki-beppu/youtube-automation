@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(short-upload)`: `ShortUploader.upload_short` に resumable upload session URI 永続化を適用し、Shorts 投稿の中断→再実行時の video_id 重複（二重 publish）の余地を解消した（#466、CC 経路 #381 と同等）。これまで `upload_video` を `resume_session_uri=None` のまま呼んでいたが、`workflow-state.json` の `post_upload.shorts[].resume_session_uri` に session URI を読み書きするクロージャ（`on_session_uri_changed` / `on_upload_complete`）を配線。開始前に保存済み URI を読んで再開し、成功時はクリア、中断時は残して次回再開する。tracking 媒体は CC の `upload_tracking.json` ではなく Shorts 専用の `workflow-state.json`（既存 entry には key を増やさず書込み時のみ append する schema 互換）。再開不要な単発投稿は従来どおり `resume_session_uri=None` で挙動不変
 - `fix(uploader)`: サムネ候補の優先順を `CollectionPaths.find_thumbnail()` に集約して統一した（#535）。従来 `find_thumbnail()`（`thumbnail.jpg > main.png > main.jpg`）と `_upload_complete_collection` のインライン候補（`thumbnail.jpg > thumbnail.png > main.jpg > main.png`）で順序が食い違っており、将来 `find_thumbnail()` へ統一する際に拾われる画像が変わるリスクがあった。実際にアップロードで使われていた後者の順を正とし、`find_thumbnail()` を `thumbnail.jpg > thumbnail.png > main.jpg > main.png`（`_THUMBNAIL_CANDIDATES`）に揃え、`_upload_complete_collection` は `find_thumbnail()` へ委譲。全候補組み合わせで統一前のアップロード経路と同一ファイルを指すことを回帰テストで担保（既存コレクションのサムネ選択は不変）
 
+### Deprecated
+
+- `docs(deps)`: `google-auth-httplib2`（PyPI 0.4.0 / 2026-05-07 で deprecated 表明）を依存ポリシーとして明文化した（#475、#408 follow-up・監査 R-04）。CLAUDE.md「依存ポリシー: deprecated 表明済み依存の取り扱い」節で `src/youtube_automation/` への直 import 新規追加を禁止し（現状 0 件）、回帰テスト `tests/test_no_google_auth_httplib2_direct_import.py` で `ast` ベースに機械担保する。既存の transitive 依存は `googleapiclient.discovery.build(..., credentials=...)` 経由で残置し、上流が non-httplib2 transport をサポートした際の移行手順は `docs/migration/google-auth-httplib2.md` を参照。`pyproject.toml::dependencies` の直接宣言撤去は transport 切替完了後に別 issue で再検証（外部依存待ち）。リリース時は `/automation-release` が `[Unreleased]` を整える流れで本節をそのまま `Deprecated` として転記する
+
 ## [5.5.6] - 2026-05-31
 
 ### Added
