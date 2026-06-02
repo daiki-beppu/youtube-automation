@@ -10,6 +10,7 @@ export default defineConfig({
     "extensions/**",
     "examples/**",
     "docs/**",
+    "poc/**",
     ".worktrees/**",
     ".claude/worktrees/**",
     "_skills/**",

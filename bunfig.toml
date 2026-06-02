@@ -4,3 +4,6 @@ saveTextLockfile = true
 [test]
 coverage = false
 coverageReporter = ["text", "lcov"]
+# poc/** は独立した bun workspace (poc/ts-rewrite/) で動く撤退判定用 PoC。
+# root の `bun test` discovery からは除外し、各 PoC ディレクトリ内で `bun test` を走らせる。
+pathIgnorePatterns = ["poc/**"]

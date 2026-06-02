@@ -18,7 +18,8 @@
     "tests/**",
     "extensions/**",
     "examples/**",
-    "docs/**"
+    "docs/**",
+    "poc/**"
   ],
   "ignoreBinaries": ["lefthook", "uv", "nix", "gh"]
 }

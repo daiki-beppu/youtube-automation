@@ -17,6 +17,7 @@ export default defineConfig({
     "auth/**",
     "config/**",
     "launchd/**",
+    "poc/**",
     "**/*.md",
     ".worktrees/**",
     ".claude/**",
