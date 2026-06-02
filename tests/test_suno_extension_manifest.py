@@ -52,8 +52,7 @@ def test_manifest_permissions_are_least_privilege() -> None:
     """
     permissions = set(_load()["permissions"])
     assert permissions == EXPECTED_PERMISSIONS, (
-        f"permissions が最小権限と一致しない: {sorted(permissions)} "
-        f"(期待: {sorted(EXPECTED_PERMISSIONS)})"
+        f"permissions が最小権限と一致しない: {sorted(permissions)} (期待: {sorted(EXPECTED_PERMISSIONS)})"
     )
 
 
