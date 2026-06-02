@@ -30,7 +30,7 @@ from youtube_automation.utils.exceptions import AutomationError, ConfigError, Va
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 SOURCE_LANG = "en"
 _RETRY_MAX = 3
 _RETRY_BACKOFF_SEC = (5, 15)

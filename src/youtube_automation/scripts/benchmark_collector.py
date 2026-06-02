@@ -564,7 +564,7 @@ class BenchmarkThumbnailAnalyzer:
     def __init__(self, benchmarks_dir: Path):
         self.benchmarks_dir = benchmarks_dir
         cfg = load_skill_config("benchmark").get("thumbnail_analysis", {})
-        self.model = cfg.get("model", "gemini-2.5-flash")
+        self.model = cfg.get("model", "gemini-2.5-pro")
         self.delay_sec = float(cfg.get("delay_sec", 5))
         self.prompt = cfg.get("prompt", "").strip()
 

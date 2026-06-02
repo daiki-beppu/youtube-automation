@@ -127,7 +127,7 @@ def _make_config(**overrides) -> Comments:
         ],
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="skip",
@@ -564,7 +564,7 @@ def _make_gemini_config(**overrides) -> Comments:
         skip_held_for_review=True,
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="skip",
@@ -634,7 +634,7 @@ def test_llm_retry_on_error_then_plans_reply(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="retry",
@@ -666,7 +666,7 @@ def test_llm_skip_on_error_when_fallback_is_skip(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             channel_persona="persona",
             max_length=280,
             fallback_on_error="skip",
@@ -693,7 +693,7 @@ def test_llm_retry_failure_is_skipped(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             channel_persona="persona",
             max_length=280,
             fallback_on_error="retry",

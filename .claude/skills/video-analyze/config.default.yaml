@@ -4,7 +4,7 @@
 # チャンネル側では config/skills/video-analyze.yaml に上書き値を置く。
 
 # Gemini モデル名 (動画入力対応モデルを指定)
-model: gemini-2.5-flash
+model: gemini-2.5-pro
 
 # API レート制限対策の動画間ウェイト (秒)
 delay_sec: 10

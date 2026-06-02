@@ -86,7 +86,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         client = _make_client(json.dumps(_VALID_PAYLOAD))
         analyzer = VideoAnalyzer(
             client=client,
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
@@ -108,7 +108,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         assert result["slug"] == target.slug
         assert result["url"] == target.url
         assert result["title"] == target.title
-        assert result["model"] == "gemini-2.5-flash"
+        assert result["model"] == "gemini-2.5-pro"
         # analyzed_at は ISO 文字列で保存される
         assert isinstance(result["analyzed_at"], str) and result["analyzed_at"]
 
@@ -121,7 +121,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         client = _make_client(fenced)
         analyzer = VideoAnalyzer(
             client=client,
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
@@ -139,7 +139,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         client = _make_client(fenced)
         analyzer = VideoAnalyzer(
             client=client,
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
@@ -154,7 +154,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         client = _make_client("this is not json at all")
         analyzer = VideoAnalyzer(
             client=client,
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
@@ -169,7 +169,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         client = _make_client(json.dumps(_VALID_PAYLOAD))
         analyzer = VideoAnalyzer(
             client=client,
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze the video",
             delay_sec=0,
             data_dir=tmp_path,
@@ -190,7 +190,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         client = _make_client(json.dumps(_VALID_PAYLOAD))
         analyzer = VideoAnalyzer(
             client=client,
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze",
             delay_sec=7,
             data_dir=tmp_path,
@@ -209,7 +209,7 @@ class TestVideoAnalyzerSaveJson:
         # Given: data_dir に紐づく analyzer
         analyzer = VideoAnalyzer(
             client=MagicMock(),
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
@@ -234,7 +234,7 @@ class TestVideoAnalyzerSaveJson:
         nested = tmp_path / "does" / "not" / "exist"
         analyzer = VideoAnalyzer(
             client=MagicMock(),
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             prompt="analyze",
             delay_sec=0,
             data_dir=nested,
@@ -258,7 +258,7 @@ class TestVideoAnalysisReport:
                 "url": "https://www.youtube.com/watch?v=VID01",
                 "title": "Celtic Forest",
                 "analyzed_at": "2026-04-29T10:00:00",
-                "model": "gemini-2.5-flash",
+                "model": "gemini-2.5-pro",
                 **_VALID_PAYLOAD,
             },
             {
@@ -267,7 +267,7 @@ class TestVideoAnalysisReport:
                 "url": "https://www.youtube.com/watch?v=VID02",
                 "title": "Celtic Lake",
                 "analyzed_at": "2026-04-29T10:01:00",
-                "model": "gemini-2.5-flash",
+                "model": "gemini-2.5-pro",
                 "hook_structure": {"intro_sec": 8},
                 "bgm_arc": {"intro": "0-10s"},
                 "scene_timeline": [],
@@ -305,7 +305,7 @@ class TestVideoAnalysisReport:
                 "url": "https://www.youtube.com/watch?v=VID01",
                 "title": "Celtic Forest",
                 "analyzed_at": "2026-04-29T10:00:00",
-                "model": "gemini-2.5-flash",
+                "model": "gemini-2.5-pro",
                 **_VALID_PAYLOAD,
                 "suno_preset": {
                     "genre_line": "celtic folk, soft strings, airy flute",

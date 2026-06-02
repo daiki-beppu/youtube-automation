@@ -223,7 +223,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
             ],
             "generator": {
                 "provider": "gemini",
-                "model": "gemini-2.5-flash",
+                "model": "gemini-2.5-pro",
                 "fallback_on_error": "retry",
             },
             "ng_words": ["spam"],
@@ -758,7 +758,7 @@ def test_comments_generator_gemini_loads_correctly(tmp_path, monkeypatch):
     sections["comments.json"] = _comments_with_generator(
         {
             "provider": "gemini",
-            "model": "gemini-2.5-flash",
+            "model": "gemini-2.5-pro",
             "channel_persona": "Warm lo-fi jazz host",
             "max_length": 300,
             "fallback_on_error": "skip",
@@ -773,7 +773,7 @@ def test_comments_generator_gemini_loads_correctly(tmp_path, monkeypatch):
     gen = config.comments.generator
     assert gen is not None
     assert gen.provider == "gemini"
-    assert gen.model == "gemini-2.5-flash"
+    assert gen.model == "gemini-2.5-pro"
     assert gen.channel_persona == "Warm lo-fi jazz host"
     assert gen.max_length == 300
     assert gen.fallback_on_error == "skip"
@@ -869,7 +869,7 @@ def test_comments_generator_invalid_fallback_raises(tmp_path, monkeypatch):
     sections["comments.json"] = _comments_with_generator(
         {
             "provider": "gemini",
-            "model": "gemini-2.5-flash",
+            "model": "gemini-2.5-pro",
             "fallback_on_error": "template",
         }
     )
