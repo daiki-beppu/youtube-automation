@@ -4,7 +4,8 @@
   "private": true,
   "description": "yt-* command line entry points for the youtube-channels-automation TS rewrite (skeleton).",
   "bin": {
-    "yt": "./bin/yt.ts"
+    "yt": "./bin/yt.ts",
+    "yt-skills": "./bin/yt-skills.ts"
   },
   "type": "module",
   "dependencies": {

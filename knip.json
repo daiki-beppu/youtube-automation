@@ -7,8 +7,8 @@
       "ignoreDependencies": ["takt"]
     },
     "packages/*": {
-      "entry": ["src/index.ts", "src/cli/*.ts", "bin/*.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"]
+      "entry": ["src/index.ts", "src/cli/*.ts", "bin/*.ts", "*/index.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "*/*.ts"]
     }
   },
   "ignore": [
