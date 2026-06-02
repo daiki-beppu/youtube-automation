@@ -35,6 +35,14 @@ build/
 .coverage
 .worktrees/
 
+# Node / extensions (WXT)
+node_modules/
+extensions/*/dist/
+extensions/*/.wxt/
+extensions/*/.output/
+extensions/*/test-results/
+extensions/*/playwright-report/
+
 # Terraform
 terraform.tfvars
 *.tfstate

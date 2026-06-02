@@ -439,7 +439,7 @@ uv run yt-generate-suno <collection-path>
 
 **手順**:
 
-1. **拡張をロード**（初回のみ）: Chrome で `chrome://extensions` → デベロッパーモード ON → 「パッケージ化されていない拡張機能を読み込む」で `extensions/suno-helper/` を選択。詳細は `extensions/suno-helper/README.md`。
+1. **拡張をビルドしてロード**（初回のみ）: `extensions/suno-helper/` で `pnpm install && pnpm build` を実行 → Chrome で `chrome://extensions` → デベロッパーモード ON → 「パッケージ化されていない拡張機能を読み込む」で `extensions/suno-helper/.output/chrome-mv3/` を選択。詳細は `extensions/README.md`。
 2. **サーバー起動**: ターミナルで `suno-prompts.json` を localhost に配信する。`Ctrl-C` で停止できるフォアグラウンドプロセス。
    ```bash
    uv run yt-collection-serve collections/planning/<theme>
@@ -452,7 +452,7 @@ uv run yt-generate-suno <collection-path>
 
 ### Step 2.5 fallback: 拡張が使えない／壊れたときの手コピペ
 
-拡張をロードできない、Suno の UI 変更で注入先セレクタが外れた（`content.js` 冒頭の `SELECTORS` 保守が必要）、その他自動投入が機能しない場合は、従来どおり **`suno-prompts.md` を見ながら手コピペ** に切り替える:
+拡張をロードできない、Suno の UI 変更で注入先セレクタが外れた（`extensions/shared/dom.ts` の `SELECTORS` 保守が必要）、その他自動投入が機能しない場合は、従来どおり **`suno-prompts.md` を見ながら手コピペ** に切り替える:
 
 1. `suno-prompts.md` を開く。
 2. Suno の Custom Mode に入り、ボーカルモードは **Instrumental トグル OFF**。

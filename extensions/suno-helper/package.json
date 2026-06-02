@@ -1,0 +1,50 @@
+{
+  "name": "suno-helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "/suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張 (WXT + React + TS)。",
+  "scripts": {
+    "postinstall": "wxt prepare",
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "wxt prepare && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "cd .. && eslint -c suno-helper/eslint.config.js suno-helper shared",
+    "format:check": "prettier --check . ../shared"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@webext-core/messaging": "3.0.2",
+    "@wxt-dev/storage": "1.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.4",
+    "@playwright/test": "1.60.0",
+    "@types/chrome": "0.1.42",
+    "@types/react": "18.3.30",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "6.0.2",
+    "@wxt-dev/module-react": "1.2.2",
+    "autoprefixer": "10.5.0",
+    "eslint": "9.39.4",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "jsdom": "26.1.0",
+    "postcss": "8.5.15",
+    "prettier": "3.6.2",
+    "tailwindcss": "3.4.19",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.60.1",
+    "vitest": "4.1.8",
+    "wxt": "0.20.26"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

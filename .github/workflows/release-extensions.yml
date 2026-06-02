@@ -1,0 +1,37 @@
+name: Release Extensions
+
+# tag push 時に拡張をビルドして zip を生成し、GitHub Release に添付する。
+# tag 命名は拡張バージョン用の `ext-v*`（Python 本体の release タグと分離する）。
+on:
+  push:
+    tags:
+      - "ext-v*"
+
+defaults:
+  run:
+    working-directory: extensions/suno-helper
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: extensions/suno-helper/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build and zip
+        run: pnpm zip
+      - name: Attach zip to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: extensions/suno-helper/.output/*.zip
