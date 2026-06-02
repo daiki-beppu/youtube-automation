@@ -3,7 +3,20 @@
 # コレクション企画生成の設定。
 # チャンネル側で config/skills/collection-ideate.yaml に上書き。
 
+# 構図ロック (#489)
+# true (デフォルト) のとき:
+#   - differentiation_axes は「企画コンセプトの内部メタデータ」として扱い、
+#     音楽プロンプト・概要欄訴求・タイトルバリエーションへ反映する。
+#   - サムネ構図は TTP 参照画像 + objects.fixed で固定する。
+#     differentiation_axes の値はサムネ生成プロンプトへ書き出さない。
+#   - サムネ差別化は objects.swappable の slot 値のみで取る。
+# false にすると従来どおり differentiation_axes をサムネ構図にも反映する
+# (TTP のスタイルアンカーが効きにくくなるので非推奨)。
+composition_lock: true
+
 # 差別化軸 (企画候補生成時の軸)
+# composition_lock=true のときはサムネ構図には反映されず、企画コンセプト
+# (音楽 / 概要欄 / タイトル) の内部メタデータとしてのみ使われる。
 differentiation_axes:
   - location
   - time_of_day
@@ -51,3 +64,23 @@ originality:
   max_similarity: 0.5
   # 企画ごとに競合パターン参照元を必ず記録するか
   require_pattern_reference: true
+
+# 生成後セルフチェック (#489)
+# yt-thumbnail-check が読み取り、Gemini Vision で objects.fixed の構図条件と
+# no_logo_guard.detect_text を検証する。Phase 4-4 の生成直後 / Phase 4-5 提示
+# 前に自動実行する想定 (失敗時は再生成 or 警告表示)。
+self_check:
+  enabled: true
+  # objects.fixed が定義されているとき、各要素を Gemini への verification
+  # checklist に展開する。空 list だと checklist は no_logo_guard のみになる。
+  verify_fixed_objects: true
+  # 画像内のテキスト・ロゴ・透かしを検出して warn する。
+  # (e.g. ジェット機の G700 ロゴ、ナンバープレートの数字、フォントテキスト等)
+  no_logo_guard:
+    detect_text: true
+    detect_logo: true
+    detect_watermark: true
+  # 不合格時の再生成最大回数。0 にすると warn 表示のみで再生成しない。
+  max_regeneration_attempts: 0
+  # Gemini モデル (vision/text)。未指定なら video-analyze と同じデフォルトを使う。
+  model: "gemini-2.5-flash"

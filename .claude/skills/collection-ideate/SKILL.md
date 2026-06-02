@@ -242,6 +242,29 @@ fi
 - `-y` 指定時、同名ファイルが既存なら自動で `-v2`, `-v3` ... と採番（追加の安全策）
 - stock 合成を止めたい場合は `config/skills/collection-ideate.yaml` の `preview.stock_refs: false`、または thumbnail 側の `image_generation.gemini.reference_images.stock.enabled: false` を上書き
 
+**4-4-check: 生成後セルフチェック (#489, 任意)**
+
+`config/skills/collection-ideate.yaml` の `self_check.enabled: true`（デフォルト）の場合、
+4-5 のユーザー提示の **前** に `yt-thumbnail-check` を実行する。これは Gemini Vision で
+`objects.fixed`（wet_runway / matte_black_car / aircraft_mid_distance 等）と
+`no_logo_guard`（テキスト・ロゴ・透かし混入）を JSON 形式の YES/NO チェックリストで
+検査するセルフチェック CLI。
+
+```bash
+uv run yt-thumbnail-check \
+  collections/planning/_plan-previews/<dir>/plan-*.png \
+  --json
+```
+
+- 終了コード 0 で全画像合格、1 で 1 件以上が不合格。
+- 不合格時は `self_check.max_regeneration_attempts` が 1 以上なら 4-4 の生成を該当
+  企画だけ再実行、0 なら警告表示のみで 4-5 に進む（ユーザー承認時に保存）。
+- `--print-prompt` で実際に Gemini に渡すチェック prompt を確認できる（呼び出しなし）。
+- 検査対象を絞りたい場合は `--check 'Does the aircraft sit off-center?'` のように追加可能。
+
+`self_check.enabled: false` または `objects.fixed` 未定義のチャンネルでは
+チェックリストが no_logo_guard のみになる（または完全 skip）。
+
 **4-5: 全枚を比較提示 → ユーザー選択**
 
 1. `open` で全枚を同時にプレビューアプリで開く（`candidate_count=3` の例。違う値の場合はブレース展開を調整）:
@@ -396,6 +419,32 @@ uv run yt-vote-log weights --recent 4 --decay 0.7
 ```
 
 > **連動先**: ログ append は `/community-draft --type weekly-feedback` の Studio 投票結果手動入力タイミング（または `yt-vote-log append` 直叩き）で行う。`/collection-ideate` 側は **read-only**。
+
+#### composition_lock (#489)
+
+`composition_lock`（デフォルト `true`、トップレベル）が有効なとき、`differentiation_axes` は
+**企画コンセプトの内部メタデータ**（音楽プロンプト・概要欄訴求・タイトルバリエーション）
+として扱い、**サムネ構図には反映しない**。サムネは TTP 参照画像 +
+`objects.fixed` で固定され、差別化は `objects.swappable` の slot 値のみで取る。
+
+これは過去事例（DF365 / 2026-05-20）で「`location` を企画ごとに `mountain airstrip`
+/ `urban tunnel exit` / `desert airstrip` と変えたところ、参照画像 (Mental Stamina
+Mode) の wet airport runway + blue-hour テンプレから外れて参照画像のスタイル
+アンカーが効かなくなった」問題への対処。
+
+具体的な扱い:
+
+- Phase 4-4 のサムネプロンプト構築では、差別化軸の **値** は `objects.swappable` の
+  slot に取り込まれている範囲（候補ごとに変える色・小物・キャラ表情など）でのみ
+  サムネに反映される。
+- 差別化軸の値そのもの（`mountain airstrip` 等）をサムネプロンプト本文に書き出すと、
+  TTP 参照画像のスタイルアンカーが効かなくなる。`youtube_automation.utils.composition_lock.axes_in_thumbnail_prompt()`
+  を使えば検証可能（ヒットしたら警告して書き直す）。
+- 音楽プロンプト・概要欄・タイトルでは引き続き差別化軸を字義通り使ってよい
+  （視聴シーン訴求の幅を出すための内部メタデータ）。
+
+`composition_lock: false` に切り替えると従来挙動（差別化軸をサムネ構図にも反映）に
+戻る。TTP を捨てて毎回ゼロから構図設計する派生チャンネルでのみ false 推奨。
 
 ### 競合パターン分析ルール
 
