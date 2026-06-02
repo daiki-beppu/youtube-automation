@@ -1,6 +1,6 @@
 # CLAUDE.md — BGM チャンネル運営方針 (v2.0)
 
-このファイルは Claude Code (claude.ai/code) が **このチャンネルリポジトリで作業するときの行動規範**である。`youtube-channels-automation` リポジトリで一元管理され、`yt-skills sync --asset claude-md` で配布される。
+このファイルは Claude Code (claude.ai/code) が **このチャンネルリポジトリで作業するときの行動規範**である。upstream リポジトリ `daiki-beppu/youtube-automation`（pypi 配布名は `youtube-channels-automation`）で一元管理され、`yt-skills sync --asset claude-md` で配布される。
 
 ## このファイルの位置づけ
 
@@ -18,7 +18,7 @@
 | 「過去の振り返り・実験結果」 | `.claude/CLAUDE.local.md`（個別） |
 | 「外部サービス契約・API 鍵の場所メモ」 | `.claude/CLAUDE.local.md`（個別） |
 
-> 共通骨格を変更したい場合は upstream `youtube-channels-automation` の `.claude/CLAUDE.template.md` に PR を出す。個別メモは各チャンネルリポで自由に編集してよい。
+> 共通骨格を変更したい場合は upstream `daiki-beppu/youtube-automation` の `.claude/CLAUDE.template.md` に PR を出す。個別メモは各チャンネルリポで自由に編集してよい。
 
 ---
 
@@ -202,7 +202,7 @@ ffmpeg / Veo / Lyria / 画像生成 API を呼ぶスキル（`/videoup` / `/mast
 
 ### スキル更新
 
-- スキル本体は upstream `youtube-channels-automation` の `.claude/skills/` に PR を出す
+- スキル本体は upstream `daiki-beppu/youtube-automation` の `.claude/skills/` に PR を出す
 - ローカルで書き換えても次回 `yt-skills sync` で上書きされる
 
 ### 認証
@@ -216,7 +216,7 @@ ffmpeg / Veo / Lyria / 画像生成 API を呼ぶスキル（`/videoup` / `/mast
 
 | 変更したい内容 | 手順 |
 |---|---|
-| BGM 系全般に効く原則・コマンドを追加 | upstream `youtube-channels-automation/.claude/CLAUDE.template.md` に PR |
+| BGM 系全般に効く原則・コマンドを追加 | upstream `daiki-beppu/youtube-automation` の `.claude/CLAUDE.template.md` に PR |
 | このチャンネル固有のメモを追加 | このリポの `.claude/CLAUDE.local.md` を編集 |
 | upstream の最新版を取り込む | `uv run yt-skills sync --asset claude-md --force` |
 | 同梱版との差分を見たい | `uv run yt-skills diff --asset claude-md` |

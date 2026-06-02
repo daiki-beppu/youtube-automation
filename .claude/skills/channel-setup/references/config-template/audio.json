@@ -1,0 +1,7 @@
+{
+  "audio": {
+    "target_duration_min": "{{TARGET_DURATION_MIN}}",
+    "target_duration_max": "{{TARGET_DURATION_MAX}}",
+    "chapter_max": 100
+  }
+}

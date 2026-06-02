@@ -22,6 +22,7 @@
   "title": {
     "template": "{style} {theme} Music - {activity} BGM [{duration_display}]",
     "default_activity": "Study",
+    "theme_scenes": {},
     "theme_activities": {}
   }
 }
