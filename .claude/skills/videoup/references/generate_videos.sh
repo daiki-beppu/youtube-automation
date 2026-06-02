@@ -4,17 +4,30 @@
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 # v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
 # v12.3: master-mix.* に加えて lyria/masterup 出力の master.* も検出 (#507)
+# v12.4: 映像エフェクト (光の粒子 / ボケ / グラデーション流れ) のオプション追加 (#648)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
 #   cd <collection-dir> && bash <repo-root>/.claude/skills/videoup/references/generate_videos.sh
 #
-# Opt-in env var:
+# Opt-in env vars (#545):
 #   VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN
 #     動画側ターゲット尺 (分)。設定時は音声入力にも -stream_loop -1 を適用し
 #     -t で動画長を強制する。チャンネル側で config/skills/videoup.yaml に
 #     audio.target_video_duration_min を置いても同等 (env が優先)。
 #     master 尺 ≥ target のときは従来動作 (master 尺が支配)。
+#
+# Environment variables (#648):
+#   VIDEOUP_EFFECT            none | particles | bokeh | gradient   (default: none)
+#       none      : エフェクトなし（ループ動画は stream copy、静止画は従来の libx264 経路）
+#       particles : 光の粒子（淡い白点が画面をゆっくり流れる）
+#       bokeh     : ボケ（柔らかな円形グラデーションがゆらぐ）
+#       gradient  : グラデーション流れ（半透明のカラーグラデーションが上下にうごく）
+#   VIDEOUP_EFFECT_INTENSITY  subtle | medium | strong               (default: subtle)
+#       透明度・密度をコントロール。基本は subtle 推奨（BGM 視聴の邪魔をしない）
+#
+# エフェクト有効時、ループ動画背景モードは stream copy ではなく libx264 再エンコードに切り替わる。
+# 詳細は .claude/skills/videoup/SKILL.md を参照。
 
 # ─── Collection Path Resolution ──────────────────────────
 COLLECTION_DIR="${1:-}"
@@ -75,6 +88,81 @@ LOOP_TARGET_FRAME_RATE="24/1"
 LOOP_OUTPUT_FRAME_RATE="24"
 LOOP_MAX_BITRATE="6000k"
 LOOP_BUFSIZE="12000k"
+
+# ─── Video Effects (#648) ────────────────────────────────
+# VIDEOUP_EFFECT / VIDEOUP_EFFECT_INTENSITY を読み取り、ffmpeg filtergraph を構築する
+EFFECT="${VIDEOUP_EFFECT:-none}"
+EFFECT_INTENSITY="${VIDEOUP_EFFECT_INTENSITY:-subtle}"
+
+# 値検証
+case "$EFFECT" in
+    none|particles|bokeh|gradient) ;;
+    *)
+        echo "ERROR: Unknown VIDEOUP_EFFECT='$EFFECT' (allowed: none, particles, bokeh, gradient)"
+        exit 1
+        ;;
+esac
+case "$EFFECT_INTENSITY" in
+    subtle|medium|strong) ;;
+    *)
+        echo "ERROR: Unknown VIDEOUP_EFFECT_INTENSITY='$EFFECT_INTENSITY' (allowed: subtle, medium, strong)"
+        exit 1
+        ;;
+esac
+
+# intensity → 透明度 (低いほど目立たない)
+# particles: 粒の密度・明度に効く / bokeh: 円のコントラストに効く / gradient: alpha に効く
+case "$EFFECT_INTENSITY" in
+    subtle) EFFECT_ALPHA="0.10" ;;
+    medium) EFFECT_ALPHA="0.20" ;;
+    strong) EFFECT_ALPHA="0.35" ;;
+esac
+
+# 1920x1080 / 24fps を前提とした filtergraph を組み立てる
+# 第 1 引数 = 入力ビデオストリームのラベル（例: "0:v" や "scaled"）
+# 出力は [vout] 固定
+build_effect_filter() {
+    local input_label="$1"
+    case "$EFFECT" in
+        none)
+            echo ""
+            ;;
+        particles)
+            # 光の粒子: ランダムドットを生成 → 上下に slow scroll → 元映像へオーバーレイ
+            echo "[${input_label}]format=yuv420p,setsar=1[bg];\
+color=c=black:s=1920x2160:r=24:d=1,format=yuv420p,\
+noise=alls=80:allf=t+u,\
+geq=lum='if(gt(lum(X,Y),230),255,0)':a='if(gt(lum(X,Y),230),${EFFECT_ALPHA}*255,0)',\
+loop=loop=-1:size=1:start=0,\
+crop=1920:1080:0:'mod(t*30,1080)'[fx];\
+[bg][fx]overlay=0:0:format=auto,format=yuv420p[vout]"
+            ;;
+        bokeh)
+            # ボケ: 色付きドットを巨大スケール + gblur で円形ぼかし → ゆっくり揺れる動き
+            # noise alls は 0-100 範囲制約があるため上限内に収める
+            echo "[${input_label}]format=yuv420p,setsar=1[bg];\
+color=c=0xffe8b0:s=240x135:r=24:d=1,format=yuv420p,\
+noise=alls=100:allf=t+u,\
+geq=lum='if(gt(lum(X,Y),240),255,0)':a='if(gt(lum(X,Y),240),${EFFECT_ALPHA}*255,0)',\
+loop=loop=-1:size=1:start=0,\
+scale=1920:1080:flags=lanczos,\
+gblur=sigma=18[fx];\
+[bg][fx]overlay='40*sin(t/3)':'30*cos(t/4)':format=auto,format=yuv420p[vout]"
+            ;;
+        gradient)
+            # グラデーション流れ: カラーグラデーションを上下にゆっくり流す
+            echo "[${input_label}]format=yuv420p,setsar=1[bg];\
+gradients=s=1920x2160:c0=0x1a3a8a:c1=0xff8a3a:r=24:duration=120:type=linear,\
+crop=1920:1080:0:'mod(t*15,1080)',\
+format=yuva420p,\
+geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${EFFECT_ALPHA}*255'[fx];\
+[bg][fx]overlay=0:0:format=auto,format=yuv420p[vout]"
+            ;;
+    esac
+}
+
+EFFECT_FILTER_LOOP="$(build_effect_filter "0:v")"
+EFFECT_FILTER_STATIC="scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[scaled];$(build_effect_filter "scaled")"
 
 # ─── Audio encoder 自動選択 (macOS は AudioToolbox 優先) ─
 if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
@@ -184,6 +272,9 @@ else
 fi
 echo "  Audio    : $(basename "$MASTER_AUDIO")"
 echo "  Output   : $(basename "$MASTER_OUTPUT")"
+if [[ "$EFFECT" != "none" ]]; then
+    echo "  Effect   : $EFFECT (intensity=$EFFECT_INTENSITY, alpha=$EFFECT_ALPHA)"
+fi
 
 duration="$(get_duration "$MASTER_AUDIO")"
 
@@ -308,39 +399,77 @@ if [[ -n "$LOOP_VIDEO" ]]; then
         fi
     fi
 
-    echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
-    # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声は AUDIO_OUT_OPTS に従う
-    # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
-    ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
-        "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
-        -map 0:v:0 -map 1:a:0 \
-        -c:v copy \
-        "${AUDIO_OUT_OPTS[@]}" \
-        -t "$video_duration" \
-        -movflags +faststart \
-        -shortest \
-        -loglevel error \
-        -progress "$PROGRESS_FILE" \
-        "$MASTER_OUTPUT" &
+    if [[ "$EFFECT" == "none" ]]; then
+        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
+        # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声は AUDIO_OUT_OPTS に従う
+        # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
+        ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
+            "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
+            -map 0:v:0 -map 1:a:0 \
+            -c:v copy \
+            "${AUDIO_OUT_OPTS[@]}" \
+            -t "$video_duration" \
+            -movflags +faststart \
+            -shortest \
+            -loglevel error \
+            -progress "$PROGRESS_FILE" \
+            "$MASTER_OUTPUT" &
+    else
+        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (loop + ${EFFECT} effect)"
+        # エフェクト有効: ループ素材を libx264 で再エンコードしながら filtergraph をオーバーレイ (#648)
+        # 容量増を抑えるため CRF 22 / preset medium / maxrate ガードを共通定数と揃える
+        ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
+            "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
+            -filter_complex "$EFFECT_FILTER_LOOP" \
+            -map "[vout]" -map 1:a:0 \
+            -c:v libx264 -preset medium -crf 22 -maxrate "$LOOP_MAX_BITRATE" -bufsize "$LOOP_BUFSIZE" -pix_fmt yuv420p \
+            -r "$LOOP_OUTPUT_FRAME_RATE" \
+            "${AUDIO_OUT_OPTS[@]}" \
+            -t "$video_duration" \
+            -movflags +faststart \
+            -shortest \
+            -loglevel error \
+            -progress "$PROGRESS_FILE" \
+            "$MASTER_OUTPUT" &
+    fi
 else
-    echo "  [Step 1/1] Generating master video (still image)"
-    # 静止画背景モード（従来）
-    # I-frame を 5 分間隔（1fps なので 300 フレーム）に間引き、変化のないフレームを P-frame で
-    # 圧縮することで master.mp4 を大幅に小型化する（#579）。keyint=1 全 I-frame 化は容量が膨らむため廃止。
-    # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
-    ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" \
-        "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
-        -c:v libx264 -tune stillimage -preset medium -crf 28 -pix_fmt yuv420p \
-        -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
-        -g 300 \
-        -r 1 \
-        "${AUDIO_OUT_OPTS[@]}" \
-        -t "$video_duration" \
-        -movflags +faststart \
-        -shortest \
-        -loglevel error \
-        -progress "$PROGRESS_FILE" \
-        "$MASTER_OUTPUT" &
+    if [[ "$EFFECT" == "none" ]]; then
+        echo "  [Step 1/1] Generating master video (still image)"
+        # 静止画背景モード（従来）
+        # I-frame を 5 分間隔（1fps なので 300 フレーム）に間引き、変化のないフレームを P-frame で
+        # 圧縮することで master.mp4 を大幅に小型化する（#579）。keyint=1 全 I-frame 化は容量が膨らむため廃止。
+        # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
+        ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" \
+            "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
+            -c:v libx264 -tune stillimage -preset medium -crf 28 -pix_fmt yuv420p \
+            -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
+            -g 300 \
+            -r 1 \
+            "${AUDIO_OUT_OPTS[@]}" \
+            -t "$video_duration" \
+            -movflags +faststart \
+            -shortest \
+            -loglevel error \
+            -progress "$PROGRESS_FILE" \
+            "$MASTER_OUTPUT" &
+    else
+        echo "  [Step 1/1] Generating master video (still image + ${EFFECT} effect)"
+        # エフェクト有効: 静止画背景を 24fps で再エンコードしながら filtergraph をオーバーレイ (#648)
+        # 静止画モードは映像が動かないため、エフェクトを目立たせるには 24fps で書き出す必要がある
+        ffmpeg -y -framerate 24 -loop 1 -i "$THUMBNAIL" \
+            "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
+            -filter_complex "$EFFECT_FILTER_STATIC" \
+            -map "[vout]" -map 1:a:0 \
+            -c:v libx264 -preset medium -crf 24 -pix_fmt yuv420p \
+            -r 24 \
+            "${AUDIO_OUT_OPTS[@]}" \
+            -t "$video_duration" \
+            -movflags +faststart \
+            -shortest \
+            -loglevel error \
+            -progress "$PROGRESS_FILE" \
+            "$MASTER_OUTPUT" &
+    fi
 fi
 ffmpeg_pid=$!
 
