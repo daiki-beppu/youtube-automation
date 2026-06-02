@@ -59,6 +59,14 @@ image_generation:
       text_strip_clause: |
         Do not include any text, captions, watermarks, logos, or typography
         from the reference unless explicitly described in the diff prompt.
+      # anatomy_clause (#570): キャラ + 手が写る構図で diff_prompt_template に
+      # ${anatomy_clause} として展開する。Gemini は楽器持ち・指を伸ばす/握るポーズで
+      # 指の融合・本数異常・溶融を起こしやすい。空文字に上書きで無効化可。
+      anatomy_clause: |
+        Hands must be anatomically correct: five fingers on each hand, clearly
+        separated, no fused fingers, no extra fingers, no melted or distorted
+        fingers, natural proportions. Body proportions must be realistic with
+        no distorted limbs, joints, or facial features.
 
     # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
     style: ""

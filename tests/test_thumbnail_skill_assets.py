@@ -90,3 +90,26 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config
     assert 'diff_prompt_template: ""' in config
+
+
+def test_thumbnail_default_config_provides_anatomy_clause() -> None:
+    """#570: キャラ + 手構図向け anatomy-correctness clause が default config に同梱されている。"""
+    config = _read_thumbnail_default_config()
+
+    assert "anatomy_clause: |" in config
+    # 解剖学品質ゲート core terms (issue #570 の修正要件 2)
+    assert "five fingers" in config
+    assert "fused" in config
+    assert "extra" in config
+    assert "melted" in config
+
+
+def test_thumbnail_skill_quality_check_covers_hand_anatomy() -> None:
+    """#570: 品質チェックに手・指の解剖学項目が含まれている。"""
+    skill = _read_thumbnail_skill()
+    quality_block = _slice_between(skill, "## 品質チェック", "## 視認性検証と整合性監査の役割分担")
+
+    # issue #570 の修正要件 1: 手・指の解剖学チェック項目
+    assert "解剖学" in quality_block
+    assert "5 本指" in quality_block or "五本指" in quality_block
+    assert "楽器" in quality_block

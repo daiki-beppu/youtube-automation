@@ -191,7 +191,7 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
    - `{background}`: カラーテーマの背景色（未指定時は `image_generation.gemini.brand_background` を使用）
    - `{candle}`, `{cocktail_description}` などオブジェクト系プレースホルダ: `ideate.objects` や `color_themes` 配下の値
    - `{title_line1}`, `{title_line2}`: コレクションタイトル
-3. 共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause` / `text_strip_clause`）をチャンネル側 `diff_prompt_template` で必要に応じて挿入
+3. 共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause` / `text_strip_clause` / `anatomy_clause`）をチャンネル側 `diff_prompt_template` で必要に応じて挿入。**キャラ + 手が写る構図では `${anatomy_clause}` を必ず展開する**（#570、Gemini は楽器持ち・指を伸ばすポーズで指の融合・本数異常を起こしやすい）
 
 #### 生成コマンド
 
@@ -297,11 +297,14 @@ Phase 1 生成後:
 - [ ] キャラの顔が見えているか（`fixed_character.face` の指示通り）
 - [ ] キャラサイズが `composition_rules.character_size` を満たしているか
 - [ ] テキストが入っていないか
+- [ ] **解剖学チェック（手・指）**: キャラが写っている場合、手・指が解剖学的に正しいか（各手 5 本指・指の分離が明瞭・指の融合や本数異常・溶融が無い・プロポーションが破綻していない）。**特に楽器持ちキャラ・指を伸ばす/握るポーズでは Gemini が破綻しやすい**ため必ず Read ツールで等倍プレビューを開いて目視確認する。NG なら `anatomy_clause` を強調 / 再生成 / プロバイダー切り替え（codex は人体破綻に強い傾向）で対応する（#570）
 
 Phase 2 生成後:
 - [ ] 背景が変わっていないか
 - [ ] タイトルテキストが `composition_rules.text_lines` の制約内か
 - [ ] `thumbnail_text.channel_name` が表示されているか
+
+> **Note (#570)**: キャラ + 手が写る構図では、`image_generation.gemini.single_step.anatomy_clause` をプロンプト末尾に `${anatomy_clause}` として展開しておくと、Gemini の手・指破綻（指の融合・本数異常・溶融）の発生率を下げられる。`/collection-ideate` の single_step プレビューを最終 thumbnail に流用する場合（`/wf-new` Phase 2c）も、承認前に最低限の QA（手・指 / 文字 / 署名）を必ず通すこと。
 
 ## 視認性検証と整合性監査の役割分担
 
