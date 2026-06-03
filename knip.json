@@ -21,5 +21,13 @@
     "docs/**",
     "poc/**"
   ],
-  "ignoreBinaries": ["lefthook", "uv", "nix", "gh"]
+  "ignoreBinaries": [
+    "lefthook",
+    "uv",
+    "nix",
+    "gh",
+    "compile",
+    "build",
+    "playwright"
+  ]
 }
