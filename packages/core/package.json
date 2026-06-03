@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./config": "./src/config/index.ts",
     "./skills-sync": "./skills-sync/index.ts"
   },
   "dependencies": {
