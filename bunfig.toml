@@ -5,5 +5,7 @@ saveTextLockfile = true
 coverage = false
 coverageReporter = ["text", "lcov"]
 # poc/** は独立した bun workspace (poc/ts-rewrite/) で動く撤退判定用 PoC。
-# root の `bun test` discovery からは除外し、各 PoC ディレクトリ内で `bun test` を走らせる。
-pathIgnorePatterns = ["poc/**"]
+# extensions/** は Chrome 拡張で WXT + Vitest + Playwright スタック (#697 / #699)、
+# bun:test とは別系統。root の `bun test` discovery からは両方除外し、各ディレクトリ内で
+# 適切な test runner を走らせる。
+pathIgnorePatterns = ["poc/**", "extensions/**"]
