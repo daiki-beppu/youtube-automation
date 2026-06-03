@@ -11,14 +11,15 @@
 //   - CLIP_ROW_SELECTOR: string
 //   - isClipGenerating(row: HTMLElement): boolean
 //   - getInFlightClipCount(): number
-//   - waitForQueueSlot(maxClips: number, options: { isAborted; pollIntervalMs; timeoutMs }): Promise<void>
+//   - waitForQueueSlot(maxClips: number, options: { isAborted; pollIntervalMs; timeoutMs; queueErrorWaitMs }): Promise<void>
+//     #847 で queueErrorWaitMs（toast 消失後の安全マージン）を必須オプションに追加。
 //
 // jsdom はレイアウトを行わず getBoundingClientRect が常に 0×0 を返すため、strict 可視判定
 // 対象の row には markBbox (_helpers.ts) で bbox を擬似的に与える (dom.test.ts と同方針)。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CLIP_ROW_SELECTOR, getInFlightClipCount, isClipGenerating, waitForQueueSlot } from "../../shared/dom";
-import { markBbox } from "./_helpers";
+import { addQueueErrorDialog, markBbox } from "./_helpers";
 
 /**
  * clip-row を body に挿入する。
@@ -53,7 +54,8 @@ function completeClip(row: HTMLElement): void {
   row.querySelector("svg.animate-spin")?.remove();
 }
 
-const FAST_OPTIONS = { pollIntervalMs: 10, timeoutMs: 1000 } as const;
+// queueErrorWaitMs は poll (10ms) と明確に分離して buffer 待機の途中経過を pin できるよう 200ms。
+const FAST_OPTIONS = { pollIntervalMs: 10, timeoutMs: 1000, queueErrorWaitMs: 200 } as const;
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -176,5 +178,108 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
     const expectation = expect(pending).rejects.toThrow();
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50);
     await expectation;
+  });
+});
+
+describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
+  // race condition (Create→clip-row DOM 反映ラグ) で Suno が 21 件目を reject すると
+  // 「Generation in progress」toast が出る。slot が空いていても toast 中は投入を止め、
+  // toast 消失後に queueErrorWaitMs の安全マージンを待ってから再開する。
+  // toast が一度も出ない経路（既存 4 ケース）は挙動不変であること（回帰）も上記で担保済み。
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given toast 可視中 When 空きスロットがあっても Then resolve せず待機を継続する", async () => {
+    addClipRow({ generating: true }); // in-flight 1 < 20（スロットは空いている）
+    const toast = addQueueErrorDialog(); // だが queue 上限 toast が出ている
+
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 5);
+    expect(settled).toBe(false); // toast 中はスロットが空いていても投入しない
+
+    // 後始末: toast を消し buffer を経過させて未解決 promise を残さない。
+    toast.remove();
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.queueErrorWaitMs + FAST_OPTIONS.pollIntervalMs * 2);
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given toast 消失 When queueErrorWaitMs buffer 経過 Then 投入を再開 (resolve) する", async () => {
+    addClipRow({ generating: true }); // slot は空き
+    const toast = addQueueErrorDialog();
+
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 5); // toast 監視中
+    toast.remove();
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs); // 消失検知 → buffer 開始
+
+    // buffer の途中まで（残り 2 poll 分を残す）では再開しない = 安全マージンが効いている。
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.queueErrorWaitMs - FAST_OPTIONS.pollIntervalMs * 2);
+    expect(settled).toBe(false);
+
+    // buffer 完了で resolve。
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.queueErrorWaitMs);
+    await expect(pending).resolves.toBeUndefined();
+    expect(settled).toBe(true);
+  });
+
+  it("Given toast が一度も出ない When 空きスロットあり Then 即 resolve する (toast 無し経路は挙動不変)", async () => {
+    addClipRow({ generating: true }); // in-flight 1 < 20、toast なし
+
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given toast 可視中でも isAborted=true When 待機する Then 即 resolve する (中断優先)", async () => {
+    addClipRow({ generating: true });
+    addQueueErrorDialog();
+
+    const pending = waitForQueueSlot(20, { isAborted: () => true, ...FAST_OPTIONS });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given buffer 待機中に停止 (isAborted=true) When 満了前 Then abortableSleep の poll 粒度内で即 resolve する (#847 停止反応性)", async () => {
+    // 本番 queueErrorWaitMs=30000ms。buffer 待機を中断不可の sleep にすると停止が最大 30 秒遅延し、
+    // 受け入れ条件「停止後 3 秒以内」を満たさない。abortableSleep の poll(250ms)で中断検知されることを、
+    // poll 粒度より十分長い buffer(1000ms)を与え、満了前の停止で resolve することで確認する。
+    const SLOW_BUFFER = { pollIntervalMs: 10, timeoutMs: 5000, queueErrorWaitMs: 1000 } as const;
+    addClipRow({ generating: true }); // slot は空き（待機要因は buffer のみ）
+    const toast = addQueueErrorDialog();
+
+    let aborted = false;
+    const pending = waitForQueueSlot(20, { isAborted: () => aborted, ...SLOW_BUFFER });
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(SLOW_BUFFER.pollIntervalMs * 5); // toast 監視中
+    toast.remove();
+    await vi.advanceTimersByTimeAsync(SLOW_BUFFER.pollIntervalMs); // 消失検知 → buffer 開始
+    expect(settled).toBe(false); // buffer 満了(1000ms)前なのでまだ未解決
+
+    // buffer 満了を待たず停止。abortableSleep の poll(250ms)以内で検知され resolve する。
+    aborted = true;
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(pending).resolves.toBeUndefined();
+    expect(settled).toBe(true);
   });
 });

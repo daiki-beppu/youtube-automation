@@ -14,10 +14,18 @@
 // production の strict isVisible は bbox 非ゼロ + 親 walk で `display:none`/`visibility:hidden`/
 // `opacity:0` を排除する前提。display/visibility/opacity はインライン style で表現する
 // (jsdom の getComputedStyle はインライン style を反映する)。
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { detectRecaptcha, resolveFields, resolveGenerateButton, setNativeValue } from "../../shared/dom";
-import { addCaptchaIframe, markBbox } from "./_helpers";
+import {
+  abortableSleep,
+  detectRecaptcha,
+  isQueueLimitErrorVisible,
+  QUEUE_LIMIT_ERROR_SELECTOR,
+  resolveFields,
+  resolveGenerateButton,
+  setNativeValue,
+} from "../../shared/dom";
+import { addCaptchaIframe, addQueueErrorDialog, markBbox } from "./_helpers";
 
 const VISIBLE_RECT = {
   x: 0,
@@ -467,5 +475,169 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
   it("Given challenge 類似 iframe 無し When 検知する Then false", () => {
     addCaptchaIframe({ src: "https://suno.com/embed" });
     expect(detectRecaptcha()).toBe(false);
+  });
+});
+
+describe("isQueueLimitErrorVisible: queue 上限エラー toast の検知 (#847)", () => {
+  // 契約 (draft が実装する public API, shared/dom.ts):
+  //   - QUEUE_LIMIT_ERROR_SELECTOR: string = '[role="dialog"]'
+  //   - isQueueLimitErrorVisible(): boolean
+  //     = 可視な `[role="dialog"]` のうち英語見出し "generation in progress" を
+  //       case-insensitive substring match で含むものがあれば true。
+  //     detectRecaptcha (#810) と同じ strict isVisible で非表示 toast 残骸を弾く。
+
+  it('Given QUEUE_LIMIT_ERROR_SELECTOR When 読む Then [role="dialog"] である', () => {
+    expect(QUEUE_LIMIT_ERROR_SELECTOR).toBe('[role="dialog"]');
+  });
+
+  describe("可視な該当 toast は true", () => {
+    it("Given 可視 dialog に 'Generation in progress' When 検知する Then true", () => {
+      addQueueErrorDialog();
+      expect(isQueueLimitErrorVisible()).toBe(true);
+    });
+
+    it("Given 大文字の 'GENERATION IN PROGRESS' When 検知する Then true (case-insensitive)", () => {
+      addQueueErrorDialog({ text: "GENERATION IN PROGRESS" });
+      expect(isQueueLimitErrorVisible()).toBe(true);
+    });
+
+    it("Given 英語見出し + 日本語並列テキスト混在 When 検知する Then true (多言語耐性)", () => {
+      // order.md 実 DOM: 英語 H3 + 日本語 SPAN が並ぶ。英語 substring match で多言語に耐える。
+      addQueueErrorDialog({
+        text: "Generation in progress",
+        japanese: "他の曲の生成が完了するまでお待ちいただき、その後もう一度お試しください。",
+      });
+      expect(isQueueLimitErrorVisible()).toBe(true);
+    });
+
+    it("Given ノイズ dialog と該当・可視 dialog が併存 When 検知する Then true (1 個でもあれば検知)", () => {
+      addQueueErrorDialog({ text: "Saved to library", japanese: "ライブラリに保存しました" });
+      addQueueErrorDialog();
+      expect(isQueueLimitErrorVisible()).toBe(true);
+    });
+  });
+
+  describe("非該当・非可視は false", () => {
+    it("Given dialog が無い When 検知する Then false", () => {
+      expect(isQueueLimitErrorVisible()).toBe(false);
+    });
+
+    it("Given 該当テキストを含まない dialog When 検知する Then false (他種 toast を誤検知しない)", () => {
+      addQueueErrorDialog({ text: "Saved to library", japanese: "ライブラリに保存しました" });
+      expect(isQueueLimitErrorVisible()).toBe(false);
+    });
+
+    it("Given 該当テキストだが display:none + bbox0 の dialog When 検知する Then false (strict isVisible)", () => {
+      addQueueErrorDialog({ visible: false });
+      expect(isQueueLimitErrorVisible()).toBe(false);
+    });
+
+    it("Given 該当テキストだが visibility:hidden の dialog When 検知する Then false", () => {
+      const dialog = addQueueErrorDialog();
+      dialog.style.visibility = "hidden";
+      expect(isQueueLimitErrorVisible()).toBe(false);
+    });
+
+    it("Given 該当テキストだが opacity:0 の dialog When 検知する Then false", () => {
+      const dialog = addQueueErrorDialog();
+      dialog.style.opacity = "0";
+      expect(isQueueLimitErrorVisible()).toBe(false);
+    });
+
+    it("Given 親が display:none の該当 dialog When 検知する Then false (親 walk で除外)", () => {
+      const wrapper = document.createElement("div");
+      wrapper.style.display = "none";
+      document.body.appendChild(wrapper);
+      const dialog = addQueueErrorDialog(); // bbox は非 0。除外理由は親の display:none のみに限定する。
+      wrapper.appendChild(dialog); // body 直下から display:none の wrapper 配下へ移す
+
+      expect(isQueueLimitErrorVisible()).toBe(false);
+    });
+
+    it("Given 非該当の可視 dialog と 該当の非可視 dialog が併存 When 検知する Then false", () => {
+      addQueueErrorDialog({ text: "Saved", japanese: "保存" }); // 可視だが非該当
+      addQueueErrorDialog({ visible: false }); // 該当だが非可視
+      expect(isQueueLimitErrorVisible()).toBe(false);
+    });
+  });
+});
+
+describe("abortableSleep: 中断可能な待機 (#847)", () => {
+  // 契約 (draft が実装する public API, shared/dom.ts):
+  //   - abortableSleep(ms: number, isAborted: () => boolean): Promise<void>
+  //     = ms 経過 または isAborted() が true になった時点（内部 poll で検知）の早い方で resolve。
+  //       sleep と同じく throw / reject しない。
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given 中断されない When ms 経過 Then resolve する", async () => {
+    const pending = abortableSleep(100, () => false);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(settled).toBe(true);
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given 中断されない When ms 未経過 Then まだ resolve しない (sleep 同様 ms をフル待機)", async () => {
+    const pending = abortableSleep(100, () => false);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(settled).toBe(false); // 半分では resolve しない
+
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given 待機中に中断フラグが立つ When 次の poll Then ms 経過前に resolve する (#847 停止反応性)", async () => {
+    // 受け入れ条件「停止押下後 3 秒以内にフロー停止」を満たすため、長い待機 (ここでは 100s) の
+    // 途中で中断フラグが立ったら ms を待たず resolve する。粒度は 3 秒以内停止に十分小さい前提で、
+    // 中断後 1 秒以内の resolve を contract として pin する（内部 poll の正確値には依存しない）。
+    let aborted = false;
+    const pending = abortableSleep(100_000, () => aborted);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(settled).toBe(false); // まだ中断されていない（フル待機中）
+
+    aborted = true;
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(settled).toBe(true); // 100s を待たず中断検知で resolve
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given 開始時点で既に中断 When 待機する Then ms を待たず即 resolve する", async () => {
+    const pending = abortableSleep(100_000, () => true);
+
+    await vi.advanceTimersByTimeAsync(0); // microtask flush のみ
+
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given どのケースでも When 待機する Then reject しない (throw しない契約)", async () => {
+    const normal = abortableSleep(10, () => false);
+    const aborted = abortableSleep(100_000, () => true);
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    await expect(normal).resolves.toBeUndefined();
+    await expect(aborted).resolves.toBeUndefined();
   });
 });
