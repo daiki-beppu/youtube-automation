@@ -12,6 +12,8 @@ import {
 /** `/suno/prompts.json` が返す 1 パターンのスキーマ (#692 サーバー契約)。 */
 export interface PromptEntry {
   name: string;
+  // Suno の Song Title 欄に流す値 (#844)。optional・後方互換: 無ければ呼び出し側が name で代替する。
+  title?: string;
   style: string;
   lyrics: string;
 }
