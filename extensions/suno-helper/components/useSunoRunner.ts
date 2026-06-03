@@ -13,6 +13,7 @@ import {
 import { PHASE } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { serverUrlItem } from "../lib/storage";
+import { formatRunError, formatStopError } from "./runner-errors";
 
 export type ItemState = "idle" | "active" | "done";
 
@@ -149,7 +150,7 @@ export function useSunoRunner(): RunnerState {
       report("連続実行を開始しました。");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      report(`開始失敗: ${message}\nSuno の Custom Mode 画面を開いた状態で実行してください。`, true);
+      report(formatRunError(message), true);
     }
   }, [entries, report]);
 
@@ -159,7 +160,7 @@ export function useSunoRunner(): RunnerState {
       await sendMessage("stop", undefined, tabId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      report(`停止リクエスト失敗: ${message}`, true);
+      report(formatStopError(message), true);
     }
   }, [report]);
 
