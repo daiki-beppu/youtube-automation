@@ -2,7 +2,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { browser } from "wxt/browser";
 
-import { fetchPrompts, type PromptEntry } from "../../shared/api";
+import {
+  type CollectionSummary,
+  fetchCollectionPrompts,
+  fetchCollections,
+  fetchPrompts,
+  pickInitialCollectionId,
+  type PromptEntry,
+} from "../../shared/api";
 import { PHASE } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { serverUrlItem } from "../lib/storage";
@@ -12,6 +19,9 @@ export type ItemState = "idle" | "active" | "done";
 interface RunnerState {
   url: string;
   setUrl: (url: string) => void;
+  collections: CollectionSummary[];
+  selectedCollectionId: string;
+  selectCollection: (id: string) => void;
   entries: PromptEntry[];
   itemStates: ItemState[];
   status: string;
@@ -33,6 +43,8 @@ async function activeTabId(): Promise<number> {
 
 export function useSunoRunner(): RunnerState {
   const [url, setUrl] = useState("");
+  const [collections, setCollections] = useState<CollectionSummary[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
@@ -44,9 +56,27 @@ export function useSunoRunner(): RunnerState {
     setIsError(error);
   }, []);
 
-  useEffect(() => {
-    void serverUrlItem.getValue().then(setUrl);
+  const loadCollections = useCallback(async (baseUrl: string) => {
+    try {
+      const list = await fetchCollections(baseUrl);
+      setCollections(list);
+      setSelectedCollectionId(pickInitialCollectionId(list) ?? "");
+    } catch {
+      // 単一ファイル mode サーバーは `/collections` が 404。ドロップダウンを出さず単一 mode へ fallback。
+      setCollections([]);
+      setSelectedCollectionId("");
+    }
   }, []);
+
+  useEffect(() => {
+    void serverUrlItem.getValue().then((stored) => {
+      setUrl(stored);
+      const trimmed = stored.trim();
+      if (trimmed) {
+        void loadCollections(trimmed);
+      }
+    });
+  }, [loadCollections]);
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
@@ -57,6 +87,9 @@ export function useSunoRunner(): RunnerState {
             prev.map((_, i) => (i === index ? "active" : prev[i] === "active" ? "idle" : prev[i])),
           );
           report(`[${(index ?? 0) + 1}/${total}] 注入中: ${entries[index ?? 0]?.name ?? ""}`);
+          break;
+        case PHASE.WAITING_SLOT:
+          report(`[${(index ?? 0) + 1}/${total}] 生成キューの空き待ち…`);
           break;
         case PHASE.GENERATING:
           report(`[${(index ?? 0) + 1}/${total}] 生成待ち…`);
@@ -90,7 +123,10 @@ export function useSunoRunner(): RunnerState {
     await serverUrlItem.setValue(trimmed);
     report("取得中…");
     try {
-      const data = await fetchPrompts(trimmed);
+      // collection を選択している場合は dir mode の個別配信、未選択なら単一ファイル mode へ fallback。
+      const data = selectedCollectionId
+        ? await fetchCollectionPrompts(trimmed, selectedCollectionId)
+        : await fetchPrompts(trimmed);
       setEntries(data);
       setItemStates(data.map(() => "idle"));
       report(`${data.length} パターンを取得しました。`);
@@ -100,7 +136,7 @@ export function useSunoRunner(): RunnerState {
       setItemStates([]);
       report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
     }
-  }, [url, report]);
+  }, [url, selectedCollectionId, report]);
 
   const run = useCallback(async () => {
     if (entries.length === 0) {
@@ -130,6 +166,9 @@ export function useSunoRunner(): RunnerState {
   return {
     url,
     setUrl,
+    collections,
+    selectedCollectionId,
+    selectCollection: setSelectedCollectionId,
     entries,
     itemStates,
     status,

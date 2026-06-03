@@ -26,15 +26,19 @@ from youtube_automation.scripts.distrokid_release import (
     resolve_asset_path,
 )
 from youtube_automation.scripts.suno_artifacts import (
+    COLLECTIONS_ROUTE,
     DOCUMENTATION_DIRNAME,
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_ROUTE,
 )
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import Distrokid, load_config
 from youtube_automation.utils.exceptions import ConfigError
 
 DEFAULT_PORT = 7873
 _EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
+# `collections/planning/` 配下で 1 コレクションを示すディレクトリ接尾辞。
+_COLLECTION_DIR_SUFFIX = "-collection"
 
 
 def resolve_prompts_path(path: Path) -> Path:
@@ -54,6 +58,56 @@ def resolve_prompts_path(path: Path) -> Path:
     raise ConfigError(f"path does not exist: {path}")
 
 
+def find_collection_dirs(root: Path) -> list[Path]:
+    """`root` 直下の `*-collection` ディレクトリのみを名前昇順で返す（#816 dir mode）.
+
+    `collections/planning/` 配下には `01-master` 等の非コレクションや雑多なファイルが
+    混在しうるため、接尾辞 `-collection` を持つディレクトリだけをホワイトリスト採用する。
+    `root` が存在しない / ディレクトリでない場合は空リスト。
+    """
+    if not root.is_dir():
+        return []
+    dirs = (p for p in root.iterdir() if p.is_dir() and p.name.endswith(_COLLECTION_DIR_SUFFIX))
+    return sorted(dirs, key=lambda p: p.name)
+
+
+def build_collections_index(root: Path) -> list[dict]:
+    """各 collection を `{id, name, has_prompts, pattern_count}` に写像する（#816 dir mode）.
+
+    - id   = ディレクトリ名（拡張から個別 fetch する際のホワイトリスト key）
+    - name = `CollectionPaths.collection_name`（日付＋チャンネル接頭辞を除去した表示名）
+    - has_prompts   = `<dir>/20-documentation/suno-prompts.json` の存在
+    - pattern_count = json があれば entries 数、無ければ None
+    """
+    index: list[dict] = []
+    for coll in find_collection_dirs(root):
+        prompts_path = coll / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+        has_prompts = prompts_path.is_file()
+        pattern_count = len(json.loads(prompts_path.read_text(encoding="utf-8"))) if has_prompts else None
+        index.append(
+            {
+                "id": coll.name,
+                "name": CollectionPaths(coll).collection_name,
+                "has_prompts": has_prompts,
+                "pattern_count": pattern_count,
+            }
+        )
+    return index
+
+
+def resolve_collection_prompts_path(root: Path, cid: str) -> Path | None:
+    """`cid` が既知の collection dir 名のとき docs json パスを返す（#816 dir mode）.
+
+    未知 id / パストラバーサル文字列は `find_collection_dirs` のホワイトリストに
+    一致せず None を返す（fail-loud でなく 404 化できる形）。json の実在判定は
+    呼び出し側に委ねる（has_prompts=False の collection も dir 自体は既知）。
+    """
+    known = {coll.name for coll in find_collection_dirs(root)}
+    if cid not in known:
+        return None
+    return root / cid / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+
+
 def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     """CORS 判定.
 
@@ -71,14 +125,20 @@ def create_server(
     port: int,
     allow_origin: str | None,
     *,
-    prompts_path: Path,
-    collection_dir: Path,
+    prompts_path: Path | None,
+    collection_dir: Path | None,
     distrokid: Distrokid | None,
+    collections_root: Path | None = None,
 ) -> ThreadingHTTPServer:
     """サブパス分離した GET / CORS preflight を返すサーバーを生成する.
 
+    `collections_root` 指定時は **dir mode**（`/collections` 系を配信し
+    単一ファイル mode の `/suno/prompts.json` は配信しない）。既定 None は
+    単一ファイル mode（`/suno/prompts.json` + `/distrokid/*`）。
+
     distrokid が None または `enabled == False` のとき `/distrokid/*` は 404。
     """
+    dir_mode = collections_root is not None
     distrokid_enabled = distrokid is not None and distrokid.enabled
 
     class _Handler(BaseHTTPRequestHandler):
@@ -109,6 +169,9 @@ def create_server(
             self.end_headers()
 
         def do_GET(self) -> None:  # noqa: N802
+            if dir_mode:
+                self._serve_dir_mode()
+                return
             if self.path == SUNO_PROMPTS_ROUTE:
                 self._send_bytes(prompts_path.read_bytes(), "application/json; charset=utf-8")
                 return
@@ -117,6 +180,22 @@ def create_server(
                 return
             if self.path.startswith(DISTROKID_ASSETS_PREFIX):
                 self._serve_distrokid_asset()
+                return
+            self.send_error(404, "Not Found")
+
+        def _serve_dir_mode(self) -> None:
+            if self.path == COLLECTIONS_ROUTE:
+                body = json.dumps(build_collections_index(collections_root)).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+            prefix = f"{COLLECTIONS_ROUTE}/"
+            if self.path.startswith(prefix) and self.path.endswith(SUNO_PROMPTS_ROUTE):
+                cid = self.path[len(prefix) : -len(SUNO_PROMPTS_ROUTE)]
+                resolved = resolve_collection_prompts_path(collections_root, cid)
+                if resolved is None or not resolved.is_file():
+                    self.send_error(404, "Not Found")
+                    return
+                self._send_bytes(resolved.read_bytes(), "application/json; charset=utf-8")
                 return
             self.send_error(404, "Not Found")
 
@@ -171,22 +250,38 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    prompts_path = resolve_prompts_path(args.path)
-    # collection dir: dir 引数はそのまま、json ファイル引数なら <collection>/20-documentation/x.json から 2 階層上。
-    collection_dir = args.path if args.path.is_dir() else args.path.parent.parent
-    distrokid = load_config().distrokid
+    # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
+    collection_dirs = find_collection_dirs(args.path)
+    if collection_dirs:
+        server = create_server(
+            args.port,
+            args.allow_origin,
+            prompts_path=None,
+            collection_dir=None,
+            distrokid=None,
+            collections_root=args.path,
+        )
+        port = server.server_address[1]
+        print(
+            f"Serving {len(collection_dirs)} collections from {args.path} at http://localhost:{port}{COLLECTIONS_ROUTE}"
+        )
+    else:
+        prompts_path = resolve_prompts_path(args.path)
+        # collection dir: dir 引数はそのまま、json ファイル引数なら <collection>/20-documentation/x.json から 2 階層上。
+        collection_dir = args.path if args.path.is_dir() else args.path.parent.parent
+        distrokid = load_config().distrokid
 
-    server = create_server(
-        args.port,
-        args.allow_origin,
-        prompts_path=prompts_path,
-        collection_dir=collection_dir,
-        distrokid=distrokid,
-    )
-    port = server.server_address[1]
-    print(f"Serving {collection_dir} at http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
-    if distrokid.enabled:
-        print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
+        server = create_server(
+            args.port,
+            args.allow_origin,
+            prompts_path=prompts_path,
+            collection_dir=collection_dir,
+            distrokid=distrokid,
+        )
+        port = server.server_address[1]
+        print(f"Serving {collection_dir} at http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        if distrokid.enabled:
+            print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
     print("Press Ctrl-C to stop.")
     try:
         server.serve_forever()

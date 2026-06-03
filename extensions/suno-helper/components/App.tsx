@@ -3,8 +3,22 @@ import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 export function App() {
-  const { url, setUrl, entries, itemStates, status, isError, canRun, isRunning, fetchData, run, stop } =
-    useSunoRunner();
+  const {
+    url,
+    setUrl,
+    collections,
+    selectedCollectionId,
+    selectCollection,
+    entries,
+    itemStates,
+    status,
+    isError,
+    canRun,
+    isRunning,
+    fetchData,
+    run,
+    stop,
+  } = useSunoRunner();
 
   return (
     <div className="flex flex-col gap-3 p-3 text-gray-900">
@@ -20,6 +34,23 @@ export function App() {
           className="rounded border border-gray-300 px-2 py-1"
         />
       </label>
+
+      {collections.length > 0 && (
+        <label className="flex flex-col gap-1 text-sm">
+          コレクション
+          <select
+            value={selectedCollectionId}
+            onChange={(e) => selectCollection(e.target.value)}
+            className="rounded border border-gray-300 px-2 py-1"
+          >
+            {collections.map((c) => (
+              <option key={c.id} value={c.id} disabled={!c.has_prompts}>
+                {c.has_prompts ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className="flex gap-2">
         <button

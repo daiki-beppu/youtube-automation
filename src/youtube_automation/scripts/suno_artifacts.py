@@ -14,3 +14,8 @@ SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
 # yt-collection-serve の suno サブパス（#698 で `/prompts.json` から分離）。
 # suno-helper 拡張の fetch URL（extensions/shared/constants.ts の PROMPTS_ROUTE）と対の契約。
 SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
+
+# yt-collection-serve の dir mode 列挙サブパス（#816）。
+# suno-helper 拡張の fetch URL（extensions/shared/constants.ts の COLLECTIONS_ROUTE）と対の契約。
+# 個別 collection の prompts は `f"{COLLECTIONS_ROUTE}/{id}{SUNO_PROMPTS_ROUTE}"` で配信する。
+COLLECTIONS_ROUTE = "/collections"

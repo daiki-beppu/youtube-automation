@@ -14,6 +14,11 @@ const SELECTORS = {
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
 } as const;
 
+/** Suno 生成キューの 1 clip 行を示す安定識別子（#816、実 DOM 検証: 1 タブで 16 件確認）。 */
+export const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
+/** clip-row が「生成中」を示すスピナー（#816、完了 row には現れず duration テキストになる）。 */
+const CLIP_SPINNER_SELECTOR = "svg.animate-spin";
+
 /** 1 曲の生成完了待ち上限 (ms)。 */
 export const GENERATE_TIMEOUT_MS = 180000;
 /** 生成完了 poll 間隔 (ms)。 */
@@ -143,4 +148,51 @@ export async function waitForGeneration(
     await sleep(options.pollIntervalMs);
   }
   throw new Error("生成完了の検知がタイムアウトしました。");
+}
+
+export interface WaitForQueueSlotOptions {
+  /** 中断フラグ。true を返した時点で待機を打ち切り resolve する（throw しない）。 */
+  isAborted: () => boolean;
+  pollIntervalMs: number;
+  timeoutMs: number;
+}
+
+/**
+ * 1 行の clip が「生成中」か判定する（#816）。
+ * strict isVisible() で row 自体を filter したうえで `svg.animate-spin` を含むか見る。
+ * 非可視 row（display:none / bbox 0 / 親 walk で隠れ）は生成中とみなさない。
+ */
+export function isClipGenerating(row: HTMLElement): boolean {
+  return isVisible(row) && row.querySelector(CLIP_SPINNER_SELECTOR) !== null;
+}
+
+/** 可視な clip-row のうち生成中（in-flight）な clip 数を数える（#816）。 */
+export function getInFlightClipCount(): number {
+  const rows = document.querySelectorAll<HTMLElement>(CLIP_ROW_SELECTOR);
+  return Array.from(rows).filter(isClipGenerating).length;
+}
+
+/**
+ * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816）。
+ *   - in-flight < maxClips になったら resolve（投入再開）
+ *   - isAborted() が true なら上限超でも即 resolve（throw しない）
+ *   - deadline 超過で timeout throw
+ * Suno は同時 10 リクエスト = 20 clip までしか積めず、超過すると後続が silent fail するため、
+ * 各リクエスト投入前にこの関数で空きスロットを待つ。
+ */
+export async function waitForQueueSlot(
+  maxClips: number,
+  options: WaitForQueueSlotOptions,
+): Promise<void> {
+  const deadline = Date.now() + options.timeoutMs;
+  while (Date.now() < deadline) {
+    if (options.isAborted()) {
+      return;
+    }
+    if (getInFlightClipCount() < maxClips) {
+      return;
+    }
+    await sleep(options.pollIntervalMs);
+  }
+  throw new Error("生成キューの空きスロット待ちがタイムアウトしました。");
 }
