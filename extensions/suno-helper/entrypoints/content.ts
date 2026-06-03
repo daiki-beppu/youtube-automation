@@ -25,7 +25,7 @@ export default defineContentScript({
     let aborted = false;
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
-      const { style, lyrics } = resolveFields();
+      const { style, lyrics, title } = resolveFields();
       setNativeValue(style, entry.style);
       if (lyrics) {
         // 空文字でも上書きする。instrumental パターン (entry.lyrics === "") のとき前パターンの歌詞を残さない。
@@ -33,6 +33,13 @@ export default defineContentScript({
       } else if (entry.lyrics) {
         // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
         throw new Error("Lyrics 欄が見つかりません。Instrumental OFF（Custom Mode）になっているか確認してください。");
+      }
+      if (title) {
+        // Song Title は entry.title 優先、無ければ entry.name で代替する (#844)。
+        setNativeValue(title, entry.title ?? entry.name);
+      } else {
+        // title 欄不在は Suno 側 UI 改装の可能性。style/lyrics と違い fail-soft（警告のみで続行）。
+        console.warn("Song Title 欄が見つかりませんでした。タイトル注入を skip して続行します。");
       }
       await sleep(SETTLE_MS);
 

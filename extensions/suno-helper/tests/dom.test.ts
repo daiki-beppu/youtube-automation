@@ -68,6 +68,16 @@ function addButton(label: string, visible = true): HTMLButtonElement {
   return btn;
 }
 
+// Song Title 欄は <input>（style/lyrics の <textarea> とは別要素）。#844 で追加。
+function addInput(opts: { placeholder?: string; visible?: boolean } = {}): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  if (opts.placeholder !== undefined) input.placeholder = opts.placeholder;
+  document.body.appendChild(input);
+  setRect(input, opts.visible === false ? ZERO_RECT : VISIBLE_RECT);
+  return input;
+}
+
 beforeEach(() => {
   document.body.innerHTML = "";
 });
@@ -216,6 +226,93 @@ describe("resolveFields: data-testid ベースの Style / Lyrics 解決 (#807)",
 
     expect(fields.style).toBe(style);
     expect(fields.lyrics).toBeNull();
+  });
+});
+
+describe("resolveFields: Song Title 欄の解決 (#844, fail-soft)", () => {
+  it("Given placeholder 'Song Title (Optional)' の visible input When 解決する Then title に解決する", () => {
+    // style/lyrics の解決を成立させるための最小構成（title 解決の前提）。
+    addTextarea({ testId: "lyrics-textarea" });
+    addTextarea({ placeholder: "Style description" });
+    const title = addInput({ placeholder: "Song Title (Optional)" });
+
+    const fields = resolveFields();
+
+    expect(fields.title).toBe(title);
+  });
+
+  it.each(["Song Title (Optional)", "song title", "SONG TITLE", "Enter Song Title here"])(
+    "Given placeholder '%s' When 解決する Then 弱い case-insensitive substring match で title に解決する",
+    (placeholder) => {
+      // (Optional) を含めない弱マッチ + i フラグ（order.md: Suno の表記変更耐性）。
+      addTextarea({ testId: "lyrics-textarea" });
+      addTextarea({ placeholder: "Style description" });
+      const title = addInput({ placeholder });
+
+      const fields = resolveFields();
+
+      expect(fields.title).toBe(title);
+    },
+  );
+
+  it("Given title input が無い When 解決する Then title は undefined で throw しない (fail-soft)", () => {
+    // style/lyrics の fail-loud とは非対称: title 不在は throw せず undefined を返す。
+    addTextarea({ testId: "lyrics-textarea" });
+    addTextarea({ placeholder: "Style description" });
+
+    const fields = resolveFields();
+
+    expect(fields.title).toBeUndefined();
+  });
+
+  it("Given bbox 0 の title input When 解決する Then strict isVisible が除外し undefined", () => {
+    addTextarea({ testId: "lyrics-textarea" });
+    addTextarea({ placeholder: "Style description" });
+    addInput({ placeholder: "Song Title (Optional)", visible: false });
+
+    const fields = resolveFields();
+
+    expect(fields.title).toBeUndefined();
+  });
+
+  it("Given visibility:hidden の title input When 解決する Then strict isVisible が除外し undefined", () => {
+    addTextarea({ testId: "lyrics-textarea" });
+    addTextarea({ placeholder: "Style description" });
+    const hiddenTitle = addInput({ placeholder: "Song Title (Optional)" });
+    hiddenTitle.style.visibility = "hidden";
+
+    const fields = resolveFields();
+
+    expect(fields.title).toBeUndefined();
+  });
+
+  it("Given placeholder が title 非該当の input のみ When 解決する Then title は undefined", () => {
+    addTextarea({ testId: "lyrics-textarea" });
+    addTextarea({ placeholder: "Style description" });
+    addInput({ placeholder: "Search" });
+
+    const fields = resolveFields();
+
+    expect(fields.title).toBeUndefined();
+  });
+
+  it("Given title input が存在 When 解決する Then style/lyrics の解決は影響を受けない (input は textarea クエリに混ざらない)", () => {
+    // title は <input>、style/lyrics は <textarea>。別クエリのため title 追加で既存解決が壊れないことを担保。
+    const lyrics = addTextarea({ testId: "lyrics-textarea" });
+    const style = addTextarea({ placeholder: "Style description" });
+    addInput({ placeholder: "Song Title (Optional)" });
+
+    const fields = resolveFields();
+
+    expect(fields.lyrics).toBe(lyrics);
+    expect(fields.style).toBe(style);
+  });
+
+  it("Given lyrics-textarea しか可視でない + title input あり When 解決する Then style 解決不能で throw する (title の fail-soft は style の fail-loud を弱めない)", () => {
+    addTextarea({ testId: "lyrics-textarea" });
+    addInput({ placeholder: "Song Title (Optional)" });
+
+    expect(() => resolveFields()).toThrow();
   });
 });
 

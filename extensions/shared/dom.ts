@@ -9,6 +9,9 @@ import { isVisible } from "./visibility";
 const SELECTORS = {
   textareas: "textarea",
   lyrics: '[data-testid="lyrics-textarea"]',
+  // Song Title 欄は testid/aria/label を持たず placeholder のみ安定 (#844 実 DOM 検証)。
+  // 表記変更 ((Optional) の有無等) に耐えるよう "Song Title" の弱い case-insensitive substring match。
+  title: 'input[placeholder*="Song Title" i]',
   generateLabel: /^(create|generate|生成)$/i,
   recaptcha:
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
@@ -29,6 +32,8 @@ export const SETTLE_MS = 1500;
 export interface ResolvedFields {
   style: HTMLTextAreaElement;
   lyrics: HTMLTextAreaElement | null;
+  // Song Title 欄 (#844)。不在は throw せず undefined（fail-soft: style/lyrics の fail-loud とは非対称）。
+  title?: HTMLInputElement;
 }
 
 export interface WaitForGenerationOptions {
@@ -80,6 +85,7 @@ export function detectRecaptcha(): boolean {
  *   - Lyrics: `data-testid="lyrics-textarea"` を最優先で識別（UI 言語非依存）。無ければ null。
  *   - Style:  Lyrics 以外の strict visible textarea（この述語が Style==Lyrics の silent 上書きを構造的に禁ずる）。
  *   - Style が解決できない場合は throw（silent スキップを禁ずる）。
+ *   - Title:  placeholder substring match の strict visible input（#844）。不在は undefined（fail-soft）。
  */
 export function resolveFields(): ResolvedFields {
   const areas = Array.from(
@@ -100,7 +106,12 @@ export function resolveFields(): ResolvedFields {
     );
   }
 
-  return { style, lyrics };
+  // Title は style/lyrics と別クエリ（<input>）。不在でも throw しない fail-soft で undefined を返す。
+  const title = Array.from(
+    document.querySelectorAll<HTMLInputElement>(SELECTORS.title),
+  ).find(isVisible);
+
+  return { style, lyrics, title };
 }
 
 /** Generate ボタンを解決する。可視ボタンに該当ラベルが無ければ throw。 */
