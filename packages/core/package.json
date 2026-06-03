@@ -7,11 +7,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./config": "./src/config/index.ts",
+    "./image": "./src/image/index.ts",
     "./metadata": "./src/metadata.ts",
     "./paths": "./src/paths.ts",
     "./skills-sync": "./skills-sync/index.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.7.0",
+    "openai": "^6.41.0",
     "zod": "^4.1.13"
   }
 }
