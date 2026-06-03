@@ -1,0 +1,35 @@
+<!doctype html>
+<!--
+  distrokid.com/new を模した最小モックフォーム。
+  実 DistroKid はログイン必須の第三者サイトで現地調査不能のため、
+  injector のセレクタ契約（name 属性ベース）と一致する属性を持つ要素を並べる。
+  実 DOM 確定後はセレクタマップと合わせて更新する（README の保守手順参照）。
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DistroKid New Release (mock)</title>
+  </head>
+  <body>
+    <form id="release-form">
+      <input name="artist_name" type="text" />
+      <input name="language" type="text" />
+      <input name="main_genre" type="text" />
+      <input name="songwriter" type="text" />
+      <input name="apple_music_credit" type="text" />
+      <input name="track_type" type="text" />
+      <input name="album_title" type="text" />
+      <input name="release_date" type="text" />
+      <input name="song_file" type="file" />
+      <input name="cover_file" type="file" />
+      <button id="continue" type="button">続ける</button>
+    </form>
+    <script>
+      // 「続ける」が拡張から押されていないことを e2e で検証するためのフラグ。
+      window.__continueClicked = false;
+      document.getElementById("continue").addEventListener("click", () => {
+        window.__continueClicked = true;
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,46 @@
+name: Extensions
+
+# Chrome 拡張（WXT）の build / typecheck / unit test / e2e。
+# extensions/ 配下の変更時のみ実行する（Python / TS monorepo CI とは独立）。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - ".github/workflows/extensions.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - ".github/workflows/extensions.yml"
+
+jobs:
+  distrokid-helper:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extensions/distrokid-helper
+    steps:
+      - uses: actions/checkout@v4
+      # ルート package.json は packageManager: bun を宣言するため pnpm バージョンを
+      # 解決できない。pnpm-lock.yaml の lockfileVersion 9.0 に合わせ 9 を明示する。
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: extensions/distrokid-helper/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm compile
+      - name: Build
+        run: pnpm build
+      - name: Unit tests (Vitest)
+        run: pnpm test
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: E2E (Playwright)
+        run: pnpm test:e2e
