@@ -32,7 +32,12 @@ from youtube_automation.scripts.distrokid_release import (
     build_release_payload,
     resolve_asset_path,
 )
-from youtube_automation.utils.config.distrokid import Distrokid, DistrokidProfile
+from youtube_automation.utils.config.distrokid import (
+    AiDisclosure,
+    Distrokid,
+    DistrokidProfile,
+    SongwriterName,
+)
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
@@ -42,13 +47,13 @@ _PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-png-bytes"
 
 
 def _profile() -> DistrokidProfile:
+    """#813 新 schema の profile（nested songwriter + ai_disclosure）."""
     return DistrokidProfile(
-        artist_name="City Nights",
-        language="English",
+        language="ja",
         main_genre="Electronic",
-        songwriter="Jane Doe",
-        apple_music_credit="Jane Doe",
-        track_type="Instrumental",
+        sub_genre="House",
+        songwriter=SongwriterName(first="Jane", last="Doe"),
+        ai_disclosure=AiDisclosure(),
     )
 
 
@@ -91,13 +96,20 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
 
     payload = build_release_payload(collection, distrokid)
 
+    # build_release_payload は asdict(profile) で nested dataclass を再帰的に dict 化する。
     assert payload["profile"] == {
-        "artist_name": "City Nights",
-        "language": "English",
+        "language": "ja",
         "main_genre": "Electronic",
-        "songwriter": "Jane Doe",
-        "apple_music_credit": "Jane Doe",
-        "track_type": "Instrumental",
+        "sub_genre": "House",
+        "songwriter": {"first": "Jane", "last": "Doe", "middle": None},
+        "ai_disclosure": {
+            "enabled": True,
+            "lyrics": True,
+            "composition": True,
+            "full_audio": True,
+            "partial_audio": False,
+            "apply_to_all": True,
+        },
     }
     release = payload["release"]
     assert release["album_title"] == "city-nights"

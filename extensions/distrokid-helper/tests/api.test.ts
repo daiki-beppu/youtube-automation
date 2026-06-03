@@ -22,12 +22,18 @@ import type { ReleasePayload } from "../lib/types";
 
 const SAMPLE_PAYLOAD: ReleasePayload = {
   profile: {
-    artist_name: "City Nights",
-    language: "English",
+    language: "en",
     main_genre: "Electronic",
-    songwriter: "Jane Doe",
-    apple_music_credit: "Jane Doe",
-    track_type: "Instrumental",
+    sub_genre: "House",
+    songwriter: { first: "Jane", last: "Doe", middle: null },
+    ai_disclosure: {
+      enabled: true,
+      lyrics: true,
+      composition: true,
+      full_audio: true,
+      partial_audio: false,
+      apply_to_all: true,
+    },
   },
   release: {
     album_title: "Summer Vibes",

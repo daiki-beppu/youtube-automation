@@ -2,6 +2,8 @@
 // 旧 `content.js` の振る舞いを 1:1 で保持しつつ純関数化する。
 // Suno の DOM は変わりうるため、セレクタはこの 1 箇所に集約する（壊れたら README 参照で更新）。
 
+import { isVisible } from "./visibility";
+
 // Suno の DOM セレクタ SSOT。#807 で判明したとおり placeholder は UI ロケールで変わるため、
 // Lyrics は言語非依存の data-testid で識別する（Style は「Lyrics でない可視 textarea」）。
 const SELECTORS = {
@@ -35,30 +37,6 @@ export interface WaitForGenerationOptions {
 /** 指定 ms 待機する。注入フローと生成完了待ちの共通 timing util。 */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * strict 可視判定。`offsetParent !== null` だけでは Simple Mode の隠し textarea を拾うため、
- * bbox 0 を除外し、自身〜祖先を walk して display:none / visibility:hidden / opacity:0 を排除する。
- */
-function isVisible(el: HTMLElement): boolean {
-  const rect = el.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) {
-    return false;
-  }
-  let node: Element | null = el;
-  while (node) {
-    const style = getComputedStyle(node);
-    if (
-      style.display === "none" ||
-      style.visibility === "hidden" ||
-      style.opacity === "0"
-    ) {
-      return false;
-    }
-    node = node.parentElement;
-  }
-  return true;
 }
 
 /** React 互換のネイティブ値セット + input/change イベント発火。 */

@@ -80,20 +80,18 @@ export function App() {
       // fetch はページ origin で CORS 評価され遮断されるため（asset-transfer.ts 参照）。
       const tabId = await activeTabId();
       const { release } = payload;
-      const trackAsset =
-        release.tracks.length > 0
-          ? await fetchAsset(
-              serverUrl,
-              release.tracks[0].asset_path,
-              release.tracks[0].filename,
-            )
-          : null;
+      // 全 track の asset を index 順に取得する（#813: 先頭のみ撤廃）。
+      const trackAssets = await Promise.all(
+        release.tracks.map((track) =>
+          fetchAsset(serverUrl, track.asset_path, track.filename),
+        ),
+      );
       const coverAsset =
         release.cover !== null
           ? await fetchAsset(serverUrl, release.cover.asset_path, release.cover.filename)
           : null;
       setMessage("注入を開始します");
-      await sendMessage("inject", { payload, trackAsset, coverAsset }, tabId);
+      await sendMessage("inject", { payload, trackAssets, coverAsset }, tabId);
     } catch (error) {
       setPhase(PHASES.ERROR);
       setMessage(error instanceof Error ? error.message : String(error));

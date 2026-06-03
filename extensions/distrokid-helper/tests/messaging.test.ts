@@ -9,6 +9,16 @@
 
 import { describe, it, expect } from "vitest";
 import { PHASES, sendMessage, onMessage } from "../lib/messaging";
+import type { InjectRequest } from "../lib/messaging";
+import type { SerializedAsset } from "../lib/asset-transfer";
+
+// #813 fallback-overuse 回帰防止（コンパイル時契約）:
+// fetchAsset は取得失敗時に throw する（null を返さない）ため、trackAssets の要素は
+// 常に SerializedAsset で欠落しない。`(SerializedAsset | null)[]` へ退行させると
+// 下の代入が型エラーになり `pnpm compile`（tsc --noEmit）で検出される。
+type TrackAssetElement = InjectRequest["trackAssets"][number];
+const _trackAssetIsNonNull: SerializedAsset = {} as TrackAssetElement;
+void _trackAssetIsNonNull;
 
 describe("PHASES（PROGRESS フェーズ契約）", () => {
   it("注入フローのフェーズを過不足なく定義する", () => {

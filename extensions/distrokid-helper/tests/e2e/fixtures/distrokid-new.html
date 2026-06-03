@@ -1,34 +1,132 @@
 <!doctype html>
 <!--
-  distrokid.com/new を模した最小モックフォーム。
-  実 DistroKid はログイン必須の第三者サイトで現地調査不能のため、
-  injector のセレクタ契約（name 属性ベース）と一致する属性を持つ要素を並べる。
-  実 DOM 確定後はセレクタマップと合わせて更新する（README の保守手順参照）。
+  distrokid.com/new（アルバムモード howmanysongs=2）を実 DOM 検証に基づいてミラーしたモック（#813）。
+  PR #803 の想像 DOM（name="artist_name" 等のフラット入力）を撤廃し、order.md の
+  「実 DOM 検証の証跡」に一致する id / name / 構造を持つ要素を並べる:
+
+    - #artistName は type=hidden（/new に可視入力欄なし → 注入対象外、visibility で排除）
+    - #language / #genrePrimary / #genreSecondary は SELECT
+    - 曲タイトルは [name="title_<uuid>"]（DOM order で track を解決）
+    - songwriter は track 別 3 分割: songwriter_real_name_{first,middle,last}<N>（N=1-based）
+    - 曲アップロードは #js-track-upload-<N>（name="file"、1-indexed pre-mount）
+    - #albumTitleInput はアルバム時のみ存在（シングルモードでは無い）
+    - リリース日は #release-date-dp（name="releaseDate"、type=date）
+    - ジャケットは #artwork（name="artwork"、hidden file input）
+    - previouslyReleased は value="0"（いいえ）を checked（新規リリース前提）
+    - AI 開示 radio「はい」を選ぶと #ai-modal が DOM に挿入される（MutationObserver で待機）
+      モーダル内: ai_lyrics_/ai_music_ checkbox、name 無しの 3・4 番目、#ai-apply-all-1、保存ボタン
+
+  実 DOM 確定後はセレクタマップ（lib/distrokid-injector.ts）と合わせて更新する。
 -->
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <title>DistroKid New Release (mock)</title>
+    <title>DistroKid New Release album mock</title>
   </head>
   <body>
     <form id="release-form">
-      <input name="artist_name" type="text" />
-      <input name="language" type="text" />
-      <input name="main_genre" type="text" />
-      <input name="songwriter" type="text" />
-      <input name="apple_music_credit" type="text" />
-      <input name="track_type" type="text" />
-      <input name="album_title" type="text" />
-      <input name="release_date" type="text" />
-      <input name="song_file" type="file" />
-      <input name="cover_file" type="file" />
+      <!-- アカウント設定で事前登録される暗黙値。/new には hidden のみ（注入対象外）。 -->
+      <input id="artistName" name="artistName" type="hidden" value="City Nights" />
+
+      <select id="language" name="language">
+        <option value="">--</option>
+        <option value="ja">Japanese</option>
+        <option value="en">English</option>
+      </select>
+
+      <select id="genrePrimary" name="genre1">
+        <option value="">--</option>
+        <option value="Electronic">Electronic</option>
+        <option value="Pop">Pop</option>
+      </select>
+
+      <select id="genreSecondary" name="genre2">
+        <option value="">--</option>
+        <option value="House">House</option>
+      </select>
+
+      <!-- アルバム時のみ存在。シングルモードのモックでは削除する。 -->
+      <input id="albumTitleInput" name="albumtitle" type="text" />
+
+      <input id="release-date-dp" name="releaseDate" type="date" />
+
+      <!-- ジャケット（hidden file input） -->
+      <input id="artwork" name="artwork" type="file" />
+
+      <!-- Track 1 -->
+      <fieldset data-track="1">
+        <input name="title_uuid-track-1" type="text" />
+        <input name="songwriter_real_name_first1" type="text" />
+        <input name="songwriter_real_name_middle1" type="text" />
+        <input name="songwriter_real_name_last1" type="text" />
+        <input id="js-track-upload-1" name="file" type="file" />
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-1" value="0" checked />
+          いいえ</label
+        >
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-1" value="1" />
+          はい</label
+        >
+      </fieldset>
+
+      <!-- Track 2 -->
+      <fieldset data-track="2">
+        <input name="title_uuid-track-2" type="text" />
+        <input name="songwriter_real_name_first2" type="text" />
+        <input name="songwriter_real_name_middle2" type="text" />
+        <input name="songwriter_real_name_last2" type="text" />
+        <input id="js-track-upload-2" name="file" type="file" />
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-2" value="0" checked />
+          いいえ</label
+        >
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-2" value="1" />
+          はい</label
+        >
+      </fieldset>
+
+      <!-- AI 開示 radio。「はい」選択で #ai-modal が挿入される。 -->
+      <fieldset id="ai-disclosure-question">
+        <legend>
+          この楽曲には AI によって生成された音楽、ボーカル、歌詞が含まれていますか?
+        </legend>
+        <label
+          ><input type="radio" name="aiGenerated" value="yes" id="ai-yes" /> はい</label
+        >
+        <label
+          ><input type="radio" name="aiGenerated" value="no" checked /> いいえ</label
+        >
+      </fieldset>
+
       <button id="continue" type="button">続ける</button>
     </form>
+
     <script>
       // 「続ける」が拡張から押されていないことを e2e で検証するためのフラグ。
       window.__continueClicked = false;
       document.getElementById("continue").addEventListener("click", () => {
         window.__continueClicked = true;
+      });
+
+      // 「はい」radio 選択で AI 開示モーダルを非同期に挿入する（実 UI の展開を模す）。
+      // injector は MutationObserver で #ai-modal の出現を待つ前提。
+      document.getElementById("ai-yes").addEventListener("change", (e) => {
+        if (!e.target.checked || document.getElementById("ai-modal")) return;
+        const modal = document.createElement("div");
+        modal.id = "ai-modal";
+        modal.setAttribute("role", "dialog");
+        modal.innerHTML = [
+          '<label><input type="checkbox" name="ai_lyrics_1" /> 歌詞</label>',
+          '<label><input type="checkbox" name="ai_music_1" /> 作曲</label>',
+          "<label><input type=\"checkbox\" /> 音声すべて</label>",
+          "<label><input type=\"checkbox\" /> 音声の一部</label>",
+          '<label><input type="checkbox" id="ai-apply-all-1" /> Apply these selections to all songs on this release</label>',
+          '<button type="button" id="ai-save">保存する</button>',
+        ].join("");
+        // 実 UI の展開遅延を模すため次マイクロ/マクロタスクで挿入する。
+        setTimeout(() => document.body.appendChild(modal), 0);
       });
     </script>
   </body>
