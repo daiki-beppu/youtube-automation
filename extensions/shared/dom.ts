@@ -32,8 +32,8 @@ const QUEUE_LIMIT_ERROR_TEXT = "generation in progress";
 
 /** 1 曲の生成完了待ち上限 (ms)。 */
 export const GENERATE_TIMEOUT_MS = 180000;
-/** 生成完了 poll 間隔 (ms)。 */
-export const POLL_INTERVAL_MS = 1000;
+/** 生成完了 poll 間隔 (ms)。短くすると停止反応性と Generate ボタン再 enable 検知が早まる。 */
+export const POLL_INTERVAL_MS = 500;
 /** 注入後・クリック後の安定化待ち (ms)。 */
 export const SETTLE_MS = 1500;
 

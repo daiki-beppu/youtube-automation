@@ -111,10 +111,11 @@ describe("waitForGeneration: 中断", () => {
   });
 });
 
-describe("shared/dom: タイミング定数 (旧 content.js:18-20 を保持)", () => {
-  it("Given 公開定数 When 値を読む Then 旧実装の既定値と一致する", () => {
+describe("shared/dom: タイミング定数", () => {
+  it("Given 公開定数 When 値を読む Then 規定値と一致する", () => {
     expect(GENERATE_TIMEOUT_MS).toBe(180000);
-    expect(POLL_INTERVAL_MS).toBe(1000);
+    // POLL_INTERVAL_MS は 1000→500 に短縮（停止反応性 + Generate 再 enable 検知向上）。
+    expect(POLL_INTERVAL_MS).toBe(500);
     expect(SETTLE_MS).toBe(1500);
   });
 });
