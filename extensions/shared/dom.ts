@@ -2,10 +2,11 @@
 // 旧 `content.js` の振る舞いを 1:1 で保持しつつ純関数化する。
 // Suno の DOM は変わりうるため、セレクタはこの 1 箇所に集約する（壊れたら README 参照で更新）。
 
+// Suno の DOM セレクタ SSOT。#807 で判明したとおり placeholder は UI ロケールで変わるため、
+// Lyrics は言語非依存の data-testid で識別する（Style は「Lyrics でない可視 textarea」）。
 const SELECTORS = {
   textareas: "textarea",
-  stylePlaceholder: /style|genre|描述|スタイル/i,
-  lyricsPlaceholder: /lyric|歌詞|歌词/i,
+  lyrics: '[data-testid="lyrics-textarea"]',
   generateLabel: /^(create|generate|生成)$/i,
   recaptcha:
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
@@ -36,8 +37,28 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * strict 可視判定。`offsetParent !== null` だけでは Simple Mode の隠し textarea を拾うため、
+ * bbox 0 を除外し、自身〜祖先を walk して display:none / visibility:hidden / opacity:0 を排除する。
+ */
 function isVisible(el: HTMLElement): boolean {
-  return el.offsetParent !== null;
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) {
+    return false;
+  }
+  let node: Element | null = el;
+  while (node) {
+    const style = getComputedStyle(node);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.opacity === "0"
+    ) {
+      return false;
+    }
+    node = node.parentElement;
+  }
+  return true;
 }
 
 /** React 互換のネイティブ値セット + input/change イベント発火。 */
@@ -63,7 +84,12 @@ export function detectRecaptcha(): boolean {
   return document.querySelector(SELECTORS.recaptcha) !== null;
 }
 
-/** Style / Lyrics の textarea を解決する。可視 textarea が無ければ throw（fail-loud）。 */
+/**
+ * Style / Lyrics の textarea を解決する（#807）。
+ *   - Lyrics: `data-testid="lyrics-textarea"` を最優先で識別（UI 言語非依存）。無ければ null。
+ *   - Style:  Lyrics 以外の strict visible textarea（この述語が Style==Lyrics の silent 上書きを構造的に禁ずる）。
+ *   - Style が解決できない場合は throw（silent スキップを禁ずる）。
+ */
 export function resolveFields(): ResolvedFields {
   const areas = Array.from(
     document.querySelectorAll<HTMLTextAreaElement>(SELECTORS.textareas),
@@ -74,15 +100,14 @@ export function resolveFields(): ResolvedFields {
     );
   }
 
-  const byPlaceholder = (re: RegExp): HTMLTextAreaElement | undefined =>
-    areas.find((el) =>
-      re.test(el.placeholder || el.getAttribute("aria-label") || ""),
+  const lyrics = areas.find((el) => el.matches(SELECTORS.lyrics)) ?? null;
+  // Style は「Lyrics でない可視 textarea」。この述語が silent な上書き（Style==Lyrics）を構造的に禁ずる。
+  const style = areas.find((el) => el !== lyrics);
+  if (!style) {
+    throw new Error(
+      "Style 欄が見つかりません。Lyrics 以外の可視 textarea を検出できませんでした。",
     );
-
-  const style = byPlaceholder(SELECTORS.stylePlaceholder) ?? areas[0];
-  const lyrics =
-    byPlaceholder(SELECTORS.lyricsPlaceholder) ??
-    (areas.length > 1 ? areas[1] : null);
+  }
 
   return { style, lyrics };
 }
