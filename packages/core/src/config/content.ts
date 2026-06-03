@@ -151,7 +151,7 @@ export const tagsForCollection = (
 
 // Python `str.title()` 相当: 連続する英字ランの先頭を大文字・残りを小文字化する。
 // 例 "8-bit" → "8-Bit"（数字直後の英字も語頭として扱われる）。
-const titleCase = (s: string): string =>
+export const titleCase = (s: string): string =>
   s.replaceAll(
     /[A-Za-z]+/gu,
     (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
