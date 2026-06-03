@@ -21,10 +21,12 @@ export type Phase = (typeof PHASES)[keyof typeof PHASES];
 // popup -> content の注入指示。
 // asset（曲 / ジャケット）は popup 側で fetch 済みのものを直列化して渡す
 // （content からの fetch は CORS で遮断されるため。asset-transfer.ts 参照）。
-// 注入対象が無い場合（トラック 0 件 / cover なし）は null。
+// trackAssets は payload.release.tracks と同順・同数（全 track を index 順に注入する。#813）。
+// fetchAsset は取得失敗時に throw する（null を返さない）ため track 要素に欠落は生じない。
+// cover は config 上 optional なため不在時のみ coverAsset が null。
 export interface InjectRequest {
   payload: ReleasePayload;
-  trackAsset: SerializedAsset | null;
+  trackAssets: SerializedAsset[];
   coverAsset: SerializedAsset | null;
 }
 

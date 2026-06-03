@@ -4,7 +4,9 @@
 `yt-collection-serve` の `/distrokid/release.json` エンドポイントが静的プロファイルとして
 参照する。`enabled == false`（既定）のチャンネルでは `/distrokid/*` 系が 404 を返す。
 
-`profile` のフィールドは distrokid.com/new のリリース登録フォーム項目に対応する。
+`profile` のフィールドは distrokid.com/new のリリース登録フォーム項目（実 DOM 検証済み・#813）
+に対応する。PR #803 の想像 schema（フラット 6 文字列）を撤廃し、songwriter は氏名 3 分割の
+nested 構造に、AI 開示は `ai_disclosure` に再設計した。
 """
 
 from __future__ import annotations
@@ -13,34 +15,66 @@ from dataclasses import dataclass, field
 
 # distrokid.enabled == True のとき profile に必須となるフィールド（条件付き必須）。
 # loader の条件付きバリデーションと dataclass フィールドの SSOT。
+# songwriter / ai_disclosure は任意（distrokid.com/new で省略可能）。
 REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
-    "artist_name",
     "language",
     "main_genre",
-    "songwriter",
-    "apple_music_credit",
-    "track_type",
 )
+
+
+@dataclass(frozen=True)
+class SongwriterName:
+    """作曲者の本名（distrokid.com/new は first/middle/last の 3 欄に分割）.
+
+    - `first`: 名（songwriter_real_name_first<N>）
+    - `last`: 姓（songwriter_real_name_last<N>）
+    - `middle`: ミドルネーム（songwriter_real_name_middle<N>、任意）
+    """
+
+    first: str
+    last: str
+    middle: str | None = None
+
+
+@dataclass(frozen=True)
+class AiDisclosure:
+    """AI 開示モーダル（Suno 楽曲は通過必須）の各チェック状態.
+
+    distrokid.com/new の「この楽曲には AI によって生成された…」radio で「はい」を選ぶと
+    展開するモーダルの checkbox 群に対応する。
+
+    - `enabled`: 「はい」radio を選択しモーダルを開くか
+    - `lyrics`: 歌詞 AI（ai_lyrics_）
+    - `composition`: 作曲 AI（ai_music_）
+    - `full_audio`: 音声すべて AI
+    - `partial_audio`: 音声の一部 AI（人間 + AI）
+    - `apply_to_all`: 当リリースの全曲へ一括適用
+    """
+
+    enabled: bool = True
+    lyrics: bool = True
+    composition: bool = True
+    full_audio: bool = True
+    partial_audio: bool = False
+    apply_to_all: bool = True
 
 
 @dataclass(frozen=True)
 class DistrokidProfile:
     """`distrokid.profile` セクション（distrokid.com/new フォーム項目に対応）.
 
-    - `artist_name`: アーティスト名
-    - `language`: メタデータ言語
-    - `main_genre`: メインジャンル
-    - `songwriter`: 作曲者の本名
-    - `apple_music_credit`: Apple Music 表示クレジット
-    - `track_type`: トラック種別（例: Instrumental）
+    - `language`: メタデータ言語（language SELECT の value）
+    - `main_genre`: メインジャンル（genrePrimary SELECT の value）
+    - `sub_genre`: サブジャンル（genreSecondary SELECT の value、任意）
+    - `songwriter`: 作曲者の本名（任意、省略時はトラック側で手入力）
+    - `ai_disclosure`: AI 開示モーダルの設定（既定は全 AI 開示）
     """
 
-    artist_name: str = ""
     language: str = ""
     main_genre: str = ""
-    songwriter: str = ""
-    apple_music_credit: str = ""
-    track_type: str = ""
+    sub_genre: str | None = None
+    songwriter: SongwriterName | None = None
+    ai_disclosure: AiDisclosure = field(default_factory=AiDisclosure)
 
 
 @dataclass(frozen=True)

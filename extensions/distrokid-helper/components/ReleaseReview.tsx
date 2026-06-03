@@ -11,8 +11,8 @@ export function ReleaseReview({ payload }: ReleaseReviewProps) {
     <div className="flex flex-col gap-2 rounded border border-gray-200 p-3 text-sm">
       <div className="font-semibold text-gray-800">{release.album_title}</div>
       <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-gray-600">
-        <dt>アーティスト</dt>
-        <dd className="text-gray-900">{profile.artist_name}</dd>
+        <dt>言語</dt>
+        <dd className="text-gray-900">{profile.language}</dd>
         <dt>ジャンル</dt>
         <dd className="text-gray-900">{profile.main_genre}</dd>
         <dt>リリース日</dt>

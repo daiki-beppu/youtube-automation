@@ -188,35 +188,74 @@ def test_pinned_comment_templates_must_be_object(tmp_path, monkeypatch):
 
 
 def _full_distrokid_profile() -> dict:
-    """distrokid.profile の必須 6 フィールド（#698）."""
+    """#813 新 schema の distrokid.profile（実 DOM 検証に基づく再設計）.
+
+    旧フラット 6 文字列（artist_name / apple_music_credit / track_type など）を撤廃し、
+    songwriter を nested の {first,last,middle?} に、AI 開示を ai_disclosure に再設計した形。
+    必須は language / main_genre のみ。sub_genre / songwriter / ai_disclosure は任意。
+    """
     return {
-        "artist_name": "City Nights",
-        "language": "English",
+        "language": "ja",
         "main_genre": "Electronic",
-        "songwriter": "Jane Doe",
-        "apple_music_credit": "Jane Doe",
-        "track_type": "Instrumental",
+        "sub_genre": "House",
+        "songwriter": {"first": "Jane", "middle": "Q", "last": "Doe"},
+        "ai_disclosure": {
+            "enabled": True,
+            "lyrics": True,
+            "composition": True,
+            "full_audio": True,
+            "partial_audio": False,
+            "apply_to_all": True,
+        },
     }
 
 
 def test_distrokid_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
-    """#698: distrokid.json を置かない場合、enabled=False（オプトイン）で profile は空文字 default."""
+    """#813: distrokid.json を置かない場合、enabled=False（オプトイン）で profile は default。"""
     ch = _setup_channel(tmp_path, _minimal_sections())  # distrokid.json なし
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     config = load_config()
 
     assert config.distrokid.enabled is False
-    assert config.distrokid.profile.artist_name == ""
     assert config.distrokid.profile.language == ""
     assert config.distrokid.profile.main_genre == ""
-    assert config.distrokid.profile.songwriter == ""
-    assert config.distrokid.profile.apple_music_credit == ""
-    assert config.distrokid.profile.track_type == ""
+    assert config.distrokid.profile.sub_genre is None
+    assert config.distrokid.profile.songwriter is None
+
+
+def test_distrokid_profile_drops_legacy_flat_fields(tmp_path, monkeypatch):
+    """#813: 旧フラットフィールドは schema から撤廃済み（属性として存在しない）。"""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    profile = load_config().distrokid.profile
+
+    assert not hasattr(profile, "artist_name")
+    assert not hasattr(profile, "apple_music_credit")
+    assert not hasattr(profile, "track_type")
+
+
+def test_distrokid_profile_default_ai_disclosure(tmp_path, monkeypatch):
+    """#813: ai_disclosure 省略時は「はい + 歌詞/作曲/全音声 AI、部分は False、全曲適用」が default。"""
+    from youtube_automation.utils.config.distrokid import AiDisclosure
+
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    ai = load_config().distrokid.profile.ai_disclosure
+
+    assert isinstance(ai, AiDisclosure)
+    assert ai.enabled is True
+    assert ai.lyrics is True
+    assert ai.composition is True
+    assert ai.full_audio is True
+    assert ai.partial_audio is False
+    assert ai.apply_to_all is True
 
 
 def test_distrokid_section_empty_uses_defaults(tmp_path, monkeypatch):
-    """#698: `distrokid: {}` のみのとき enabled=False の default。"""
+    """#813: `distrokid: {}` のみのとき enabled=False の default。"""
     sections = _minimal_sections()
     sections["distrokid.json"] = {"distrokid": {}}
     ch = _setup_channel(tmp_path, sections)
@@ -225,12 +264,13 @@ def test_distrokid_section_empty_uses_defaults(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.distrokid.enabled is False
-    assert config.distrokid.profile.artist_name == ""
+    assert config.distrokid.profile.language == ""
 
 
 def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
-    """#698: enabled=true + 全 profile フィールドが dataclass まで届く。"""
+    """#813: enabled=true + 新 schema の全 profile フィールドが nested dataclass まで届く。"""
     from youtube_automation.utils.config import Distrokid
+    from youtube_automation.utils.config.distrokid import AiDisclosure, SongwriterName
 
     sections = _minimal_sections()
     sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": _full_distrokid_profile()}}
@@ -238,19 +278,59 @@ def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     config = load_config()
+    profile = config.distrokid.profile
 
     assert isinstance(config.distrokid, Distrokid)
     assert config.distrokid.enabled is True
-    assert config.distrokid.profile.artist_name == "City Nights"
-    assert config.distrokid.profile.language == "English"
-    assert config.distrokid.profile.main_genre == "Electronic"
-    assert config.distrokid.profile.songwriter == "Jane Doe"
-    assert config.distrokid.profile.apple_music_credit == "Jane Doe"
-    assert config.distrokid.profile.track_type == "Instrumental"
+    assert profile.language == "ja"
+    assert profile.main_genre == "Electronic"
+    assert profile.sub_genre == "House"
+    assert profile.songwriter == SongwriterName(first="Jane", middle="Q", last="Doe")
+    assert profile.ai_disclosure == AiDisclosure(
+        enabled=True,
+        lyrics=True,
+        composition=True,
+        full_audio=True,
+        partial_audio=False,
+        apply_to_all=True,
+    )
+
+
+def test_distrokid_songwriter_without_middle(tmp_path, monkeypatch):
+    """#813: songwriter.middle 省略時は None（任意フィールド）。"""
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["songwriter"] = {"first": "Jane", "last": "Doe"}
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    songwriter = load_config().distrokid.profile.songwriter
+
+    assert songwriter.first == "Jane"
+    assert songwriter.last == "Doe"
+    assert songwriter.middle is None
+
+
+def test_distrokid_enabled_minimal_required_only(tmp_path, monkeypatch):
+    """#813: enabled=true は language / main_genre のみで成立（songwriter/ai_disclosure は任意）。"""
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {
+        "distrokid": {"enabled": True, "profile": {"language": "ja", "main_genre": "Electronic"}}
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    profile = load_config().distrokid.profile
+
+    assert profile.language == "ja"
+    assert profile.main_genre == "Electronic"
+    assert profile.songwriter is None
+    assert profile.sub_genre is None
 
 
 def test_distrokid_enabled_without_profile_raises(tmp_path, monkeypatch):
-    """#698: enabled=true で profile セクション欠落は ConfigError（条件付き必須）。"""
+    """#813: enabled=true で profile セクション欠落は ConfigError（条件付き必須）。"""
     sections = _minimal_sections()
     sections["distrokid.json"] = {"distrokid": {"enabled": True}}
     ch = _setup_channel(tmp_path, sections)
@@ -260,34 +340,47 @@ def test_distrokid_enabled_without_profile_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_distrokid_enabled_partial_profile_raises(tmp_path, monkeypatch):
-    """#698: enabled=true で profile フィールドが 1 つでも欠けると ConfigError。"""
+def test_distrokid_enabled_missing_language_raises(tmp_path, monkeypatch):
+    """#813: enabled=true で language 欠落は ConfigError。"""
     sections = _minimal_sections()
     profile = _full_distrokid_profile()
-    del profile["songwriter"]
+    del profile["language"]
     sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="songwriter"):
+    with pytest.raises(ConfigError, match="language"):
+        load_config()
+
+
+def test_distrokid_enabled_missing_main_genre_raises(tmp_path, monkeypatch):
+    """#813: enabled=true で main_genre 欠落は ConfigError。"""
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    del profile["main_genre"]
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="main_genre"):
         load_config()
 
 
 def test_distrokid_disabled_with_incomplete_profile_loads(tmp_path, monkeypatch):
-    """#698: enabled=false なら profile が不完全でも条件付き検証は走らず load 成功。"""
+    """#813: enabled=false なら profile が不完全でも条件付き検証は走らず load 成功。"""
     sections = _minimal_sections()
-    sections["distrokid.json"] = {"distrokid": {"enabled": False, "profile": {"artist_name": "x"}}}
+    sections["distrokid.json"] = {"distrokid": {"enabled": False, "profile": {"language": "ja"}}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     config = load_config()
 
     assert config.distrokid.enabled is False
-    assert config.distrokid.profile.artist_name == "x"
+    assert config.distrokid.profile.language == "ja"
 
 
 def test_distrokid_section_must_be_object(tmp_path, monkeypatch):
-    """#698: distrokid セクションが object でないと ConfigError。"""
+    """#813: distrokid セクションが object でないと ConfigError。"""
     sections = _minimal_sections()
     sections["distrokid.json"] = {"distrokid": ["not", "an", "object"]}
     ch = _setup_channel(tmp_path, sections)

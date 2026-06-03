@@ -27,8 +27,10 @@ from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
 from youtube_automation.utils.config.distrokid import (
     REQUIRED_PROFILE_FIELDS,
+    AiDisclosure,
     Distrokid,
     DistrokidProfile,
+    SongwriterName,
 )
 from youtube_automation.utils.config.localizations import Localizations
 from youtube_automation.utils.config.meta import Branding, ChannelMeta
@@ -560,9 +562,9 @@ def _build_distrokid(merged: dict) -> Distrokid:
     """`distrokid` セクション（optional・opt-in）.
 
     未配置のチャンネルは `Distrokid(enabled=False)` でロードされ、`/distrokid/*`
-    エンドポイントは 404 になる。`enabled=True` のときのみ profile の必須 6 フィールドを
-    条件付き検証する（条件付き必須のため `_REQUIRED_KEYS_BY_SECTION` の無条件検証では
-    宣言できず、ここで Fail Fast する）。
+    エンドポイントは 404 になる。`enabled=True` のときのみ profile の必須フィールド
+    （`REQUIRED_PROFILE_FIELDS`）を条件付き検証する（条件付き必須のため
+    `_REQUIRED_KEYS_BY_SECTION` の無条件検証では宣言できず、ここで Fail Fast する）。
     """
     raw = merged.get("distrokid")
     if raw is None:
@@ -582,15 +584,47 @@ def _build_distrokid(merged: dict) -> Distrokid:
                 f"distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: {', '.join(missing)}"
             )
 
-    profile = DistrokidProfile(
-        artist_name=str(profile_raw.get("artist_name", "")),
+    profile = _build_distrokid_profile(profile_raw)
+    return Distrokid(enabled=enabled, profile=profile)
+
+
+def _build_distrokid_profile(profile_raw: dict) -> DistrokidProfile:
+    sub_genre = profile_raw.get("sub_genre")
+    return DistrokidProfile(
         language=str(profile_raw.get("language", "")),
         main_genre=str(profile_raw.get("main_genre", "")),
-        songwriter=str(profile_raw.get("songwriter", "")),
-        apple_music_credit=str(profile_raw.get("apple_music_credit", "")),
-        track_type=str(profile_raw.get("track_type", "")),
+        sub_genre=str(sub_genre) if sub_genre is not None else None,
+        songwriter=_build_songwriter(profile_raw.get("songwriter")),
+        ai_disclosure=_build_ai_disclosure(profile_raw.get("ai_disclosure")),
     )
-    return Distrokid(enabled=enabled, profile=profile)
+
+
+def _build_songwriter(raw: object) -> SongwriterName | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError(f"distrokid.profile.songwriter は object でなければなりません（got {type(raw).__name__}）")
+    middle = raw.get("middle")
+    return SongwriterName(
+        first=str(raw.get("first", "")),
+        last=str(raw.get("last", "")),
+        middle=str(middle) if middle is not None else None,
+    )
+
+
+def _build_ai_disclosure(raw: object) -> AiDisclosure:
+    if raw is None:
+        return AiDisclosure()
+    if not isinstance(raw, dict):
+        raise ConfigError(f"distrokid.profile.ai_disclosure は object でなければなりません（got {type(raw).__name__}）")
+    return AiDisclosure(
+        enabled=bool(raw.get("enabled", True)),
+        lyrics=bool(raw.get("lyrics", True)),
+        composition=bool(raw.get("composition", True)),
+        full_audio=bool(raw.get("full_audio", True)),
+        partial_audio=bool(raw.get("partial_audio", False)),
+        apply_to_all=bool(raw.get("apply_to_all", True)),
+    )
 
 
 def _load_localizations(channel_dir_path: Path, fallback_language: str) -> Localizations:
