@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   type CollectionSummary,
+  type PromptEntry,
   fetchCollections,
   fetchCollectionPrompts,
   fetchPrompts,
@@ -58,6 +59,39 @@ describe("shared/api fetchPrompts: 正常系", () => {
       style: expect.any(String),
       lyrics: expect.any(String),
     });
+  });
+});
+
+describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", () => {
+  it("Given title 付き entry When fetch する Then title を保持して返す", async () => {
+    const entries = [{ name: "夜更けのカフェ", title: "Midnight Cafe", style: "lofi, jazzy", lyrics: "la la la" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchPrompts(BASE_URL);
+
+    expect(result[0].title).toBe("Midnight Cafe");
+  });
+
+  it("Given title 無し entry When fetch する Then title は undefined（optional なので throw しない）", async () => {
+    const entries = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchPrompts(BASE_URL);
+
+    expect(result[0].title).toBeUndefined();
+  });
+
+  it("Given title あり/なし混在の配列 When fetch する Then 双方が PromptEntry[] として通る", async () => {
+    // 後方互換: 既存の title 無し entry と新 title 付き entry が同一配列に共存できる。
+    const withTitle: PromptEntry = { name: "p1", title: "Custom One", style: "ambient", lyrics: "" };
+    const withoutTitle: PromptEntry = { name: "p2", style: "cinematic", lyrics: "" };
+    mockFetch(() => ({ ok: true, status: 200, json: async () => [withTitle, withoutTitle] }));
+
+    const result = await fetchPrompts(BASE_URL);
+
+    expect(result).toEqual([withTitle, withoutTitle]);
+    expect(result[0].title).toBe("Custom One");
+    expect(result[1].title).toBeUndefined();
   });
 });
 
