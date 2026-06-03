@@ -12,5 +12,5 @@ SUNO_PROMPTS_MD_FILENAME = "suno-prompts.md"
 SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
 
 # yt-collection-serve の suno サブパス（#698 で `/prompts.json` から分離）。
-# suno-helper 拡張の fetch URL（extensions/suno-helper/constants.js）と対の契約。
+# suno-helper 拡張の fetch URL（extensions/shared/constants.ts の PROMPTS_ROUTE）と対の契約。
 SUNO_PROMPTS_ROUTE = "/suno/prompts.json"

@@ -1,0 +1,11 @@
+{
+  // WXT が .wxt/tsconfig.json を生成する (auto-imports / globals の型を含む)。
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [".wxt/wxt.d.ts", "**/*.ts", "**/*.tsx", "../shared/**/*.ts"],
+  "exclude": ["node_modules", ".output", "dist"]
+}

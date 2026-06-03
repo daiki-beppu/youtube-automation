@@ -48,6 +48,34 @@ def test_skill_md_documents_auto_inject_flow() -> None:
     assert "yt-suno-serve" not in text, "SKILL.md に旧 CLI 名 `yt-suno-serve` が残っている（#698 で廃止）"
 
 
+def test_skill_md_documents_wxt_unpacked_load_flow() -> None:
+    """Given suno SKILL.md
+    When 拡張ロード手順を読む
+    Then WXT 化後の build → `.output/chrome-mv3/` unpacked ロード手順が記載されている。
+
+    #697: 素 JS(手書き manifest.json) → WXT 化で manifest は `wxt.config.ts` から
+    `.output/chrome-mv3/` に生成されるようになった。旧手順「`extensions/suno-helper/` を
+    直接ロード」は同ディレクトリに manifest.json が無く破綻するため、`pnpm build` →
+    `.output/chrome-mv3/` を選択する新フローを機械的に担保し再発を防ぐ（family: spec-noncompliance）。
+    """
+    text = _read()
+    for token in ("pnpm build", ".output/chrome-mv3"):
+        assert token in text, f"SKILL.md に WXT ロード手順の記載がない（`{token}` 不在）"
+
+
+def test_skill_md_has_no_dangling_content_js_reference() -> None:
+    """Given suno SKILL.md
+    When 注入セレクタの保守先記述を読む
+    Then 削除済み `content.js` ではなく現 SSOT `extensions/shared/dom.ts` を参照している。
+
+    #697: content.js は削除され注入ロジックは `extensions/shared/dom.ts` に集約された。
+    `content.js` の SELECTORS 参照は dangling reference になるため残存を禁止する。
+    """
+    text = _read()
+    assert "content.js" not in text, "SKILL.md に削除済み `content.js` への参照が残っている（#697）"
+    assert "shared/dom.ts" in text, "SKILL.md が注入セレクタ SSOT `shared/dom.ts` を参照していない"
+
+
 def test_skill_md_documents_serve_url_contract() -> None:
     """Given suno SKILL.md
     When 自動投入フローを読む
