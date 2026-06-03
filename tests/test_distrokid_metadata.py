@@ -19,11 +19,11 @@
 from __future__ import annotations
 
 import pytest
+
 from youtube_automation.utils.distrokid_metadata import (
     parse_album_metadata,
     parse_track_table,
 )
-
 from youtube_automation.utils.exceptions import ConfigError
 
 # 下流 disc1-coding-focus-vol1/metadata.md のトラック表に対応する代表サンプル。
