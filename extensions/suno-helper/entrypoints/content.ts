@@ -23,12 +23,12 @@ export default defineContentScript({
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       const { style, lyrics } = resolveFields();
       setNativeValue(style, entry.style);
-      if (entry.lyrics) {
-        // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
-        if (!lyrics) {
-          throw new Error("Lyrics 欄が見つかりません。Instrumental OFF（Custom Mode）になっているか確認してください。");
-        }
+      if (lyrics) {
+        // 空文字でも上書きする。instrumental パターン (entry.lyrics === "") のとき前パターンの歌詞を残さない。
         setNativeValue(lyrics, entry.lyrics);
+      } else if (entry.lyrics) {
+        // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
+        throw new Error("Lyrics 欄が見つかりません。Instrumental OFF（Custom Mode）になっているか確認してください。");
       }
       await sleep(SETTLE_MS);
 
