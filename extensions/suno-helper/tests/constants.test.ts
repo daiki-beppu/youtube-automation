@@ -9,9 +9,11 @@ import {
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
   DEFAULT_URL,
+  INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
   PHASE,
   PROMPTS_ROUTE,
+  QUEUE_ERROR_WAIT_MS,
   STORAGE_KEY,
 } from "../../shared/constants";
 
@@ -66,5 +68,15 @@ describe("shared/constants: Suno queue 上限 (#816)", () => {
 
   it("Given 上限定数 When 積で最大 clip を求める Then 20 clip になる", () => {
     expect(MAX_INFLIGHT_REQUESTS * CLIPS_PER_REQUEST).toBe(20);
+  });
+});
+
+describe("shared/constants: queue 上限エラー回復タイミング (#847)", () => {
+  it("Given INTER_CREATE_DELAY_MS When 読む Then 投入間 1 秒の待機である (Create→DOM 反映ラグ吸収)", () => {
+    expect(INTER_CREATE_DELAY_MS).toBe(1000);
+  });
+
+  it("Given QUEUE_ERROR_WAIT_MS When 読む Then toast 消失後 30 秒の安全マージンである", () => {
+    expect(QUEUE_ERROR_WAIT_MS).toBe(30000);
   });
 });

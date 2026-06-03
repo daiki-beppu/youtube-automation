@@ -22,6 +22,14 @@ export const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
 /** clip-row が「生成中」を示すスピナー（#816、完了 row には現れず duration テキストになる）。 */
 const CLIP_SPINNER_SELECTOR = "svg.animate-spin";
 
+/**
+ * queue 上限エラー toast の安定識別子（#847、実 DOM 検証）。testid/aria-label を持たないため
+ * `[role="dialog"]` + 英語見出しテキストの substring match で識別する（多言語耐性）。
+ */
+export const QUEUE_LIMIT_ERROR_SELECTOR = '[role="dialog"]';
+/** queue 上限エラー toast の英語見出し（case-insensitive substring match。日本語並列テキストには依存しない）。 */
+const QUEUE_LIMIT_ERROR_TEXT = "generation in progress";
+
 /** 1 曲の生成完了待ち上限 (ms)。 */
 export const GENERATE_TIMEOUT_MS = 180000;
 /** 生成完了 poll 間隔 (ms)。 */
@@ -47,6 +55,35 @@ export interface WaitForGenerationOptions {
 /** 指定 ms 待機する。注入フローと生成完了待ちの共通 timing util。 */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** abortableSleep の中断検知 poll 間隔 (ms)。停止押下から resolve までの粒度（受け入れ条件: 3 秒以内停止に十分小さい）。 */
+const ABORTABLE_SLEEP_POLL_MS = 250;
+
+/**
+ * 中断可能な sleep (#847)。`ms` 経過 または `isAborted()` が true になった時点（内部 poll で検知）の
+ * 早い方で resolve する。`sleep` と同じく throw / reject しない。連続実行フローの固定待機を本関数に
+ * 置き換えることで、長い待機の途中でも停止押下に素早く反応できる。
+ */
+export function abortableSleep(
+  ms: number,
+  isAborted: () => boolean,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + ms;
+    const tick = (): void => {
+      if (isAborted() || Date.now() >= deadline) {
+        resolve();
+        return;
+      }
+      // 残り時間と poll 間隔の短い方を待つ（最終 tick が deadline をオーバーランしないように）。
+      setTimeout(
+        tick,
+        Math.min(ABORTABLE_SLEEP_POLL_MS, deadline - Date.now()),
+      );
+    };
+    tick();
+  });
 }
 
 /** React 互換のネイティブ値セット + input/change イベント発火。 */
@@ -78,6 +115,24 @@ export function detectRecaptcha(): boolean {
     SELECTORS.recaptcha,
   );
   return Array.from(iframes).some((f) => isVisible(f));
+}
+
+/**
+ * queue 上限エラー toast が表示中かを検知する（#847）。
+ * 可視な `[role="dialog"]` のうち英語見出し "generation in progress" を case-insensitive
+ * substring match で含むものがあれば true。detectRecaptcha (#810) と同じ strict isVisible で
+ * 非表示の toast 残骸を弾く。Create→clip-row 反映ラグで Suno が投入を reject した時に出る toast を
+ * 検知し、空きスロットがあっても投入を止めるために使う。
+ */
+export function isQueueLimitErrorVisible(): boolean {
+  const dialogs = document.querySelectorAll<HTMLElement>(
+    QUEUE_LIMIT_ERROR_SELECTOR,
+  );
+  return Array.from(dialogs).some(
+    (el) =>
+      isVisible(el) &&
+      (el.textContent ?? "").toLowerCase().includes(QUEUE_LIMIT_ERROR_TEXT),
+  );
 }
 
 /**
@@ -166,6 +221,8 @@ export interface WaitForQueueSlotOptions {
   isAborted: () => boolean;
   pollIntervalMs: number;
   timeoutMs: number;
+  /** queue 上限エラー toast 消失後に投入再開まで待つ安全マージン (ms、#847)。 */
+  queueErrorWaitMs: number;
 }
 
 /**
@@ -184,21 +241,38 @@ export function getInFlightClipCount(): number {
 }
 
 /**
- * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816）。
+ * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816, #847）。
+ *   - isAborted() が true なら（toast 中・上限超でも）最優先で即 resolve（throw しない）
+ *   - queue 上限エラー toast 表示中は、空きスロットがあっても投入せず待機を継続する（#847）
+ *   - toast が消えたら `queueErrorWaitMs` の安全マージンを待ってから判定を再開する（#847）
  *   - in-flight < maxClips になったら resolve（投入再開）
- *   - isAborted() が true なら上限超でも即 resolve（throw しない）
  *   - deadline 超過で timeout throw
  * Suno は同時 10 リクエスト = 20 clip までしか積めず、超過すると後続が silent fail するため、
- * 各リクエスト投入前にこの関数で空きスロットを待つ。
+ * 各リクエスト投入前にこの関数で空きスロットを待つ。Create→clip-row 反映ラグで Suno が投入を
+ * reject すると toast が出るため、toast 検知中は投入を止め、消失後に buffer を取ってから再開する。
  */
 export async function waitForQueueSlot(
   maxClips: number,
   options: WaitForQueueSlotOptions,
 ): Promise<void> {
   const deadline = Date.now() + options.timeoutMs;
+  let sawQueueError = false;
   while (Date.now() < deadline) {
     if (options.isAborted()) {
       return;
+    }
+    if (isQueueLimitErrorVisible()) {
+      // toast 中はスロットが空いていても投入しない。消失を待つ。
+      sawQueueError = true;
+      await sleep(options.pollIntervalMs);
+      continue;
+    }
+    if (sawQueueError) {
+      // toast が消えた直後は反映ラグが残るため、安全マージンを取ってから判定を再開する。
+      // buffer 待機中の停止押下にも 3 秒以内で反応できるよう中断可能な abortableSleep を使う（#847）。
+      sawQueueError = false;
+      await abortableSleep(options.queueErrorWaitMs, options.isAborted);
+      continue;
     }
     if (getInFlightClipCount() < maxClips) {
       return;

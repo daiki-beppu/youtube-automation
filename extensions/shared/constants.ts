@@ -24,6 +24,12 @@ export const MAX_INFLIGHT_REQUESTS = 10;
 /** 1 Create クリックで出現する clip 数 (#816、実 DOM 検証: variation A/B = 2 clip)。 */
 export const CLIPS_PER_REQUEST = 2;
 
+/** Create 投入間の待機 (#847)。Create→clip-row DOM 反映ラグによる過剰投入 (race condition) を吸収する。 */
+export const INTER_CREATE_DELAY_MS = 1000;
+
+/** queue 上限エラー toast 消失後の安全マージン待機 (#847)。toast が消えても直ちに再開せず buffer を取る。 */
+export const QUEUE_ERROR_WAIT_MS = 30000;
+
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL = "http://localhost:7873";
 

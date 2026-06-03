@@ -1,8 +1,16 @@
 // Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import type { PromptEntry } from "../../shared/api";
-import { CLIPS_PER_REQUEST, MAX_INFLIGHT_REQUESTS, PHASE, SUNO_MATCHES } from "../../shared/constants";
 import {
+  CLIPS_PER_REQUEST,
+  INTER_CREATE_DELAY_MS,
+  MAX_INFLIGHT_REQUESTS,
+  PHASE,
+  QUEUE_ERROR_WAIT_MS,
+  SUNO_MATCHES,
+} from "../../shared/constants";
+import {
+  abortableSleep,
   GENERATE_TIMEOUT_MS,
   POLL_INTERVAL_MS,
   SETTLE_MS,
@@ -10,7 +18,6 @@ import {
   resolveFields,
   resolveGenerateButton,
   setNativeValue,
-  sleep,
   waitForGeneration,
   waitForQueueSlot,
 } from "../../shared/dom";
@@ -41,7 +48,7 @@ export default defineContentScript({
         // title 欄不在は Suno 側 UI 改装の可能性。style/lyrics と違い fail-soft（警告のみで続行）。
         console.warn("Song Title 欄が見つかりませんでした。タイトル注入を skip して続行します。");
       }
-      await sleep(SETTLE_MS);
+      await abortableSleep(SETTLE_MS, () => aborted);
 
       if (detectRecaptcha()) {
         throw new Error("reCAPTCHA を検知しました。手動で解決してから再開してください。");
@@ -73,6 +80,7 @@ export default defineContentScript({
             isAborted: () => aborted,
             pollIntervalMs: POLL_INTERVAL_MS,
             timeoutMs: GENERATE_TIMEOUT_MS,
+            queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
           });
           if (aborted) {
             void sendMessage("progress", { phase: PHASE.STOPPED, index: i, total });
@@ -85,6 +93,8 @@ export default defineContentScript({
             return;
           }
           void sendMessage("progress", { phase: PHASE.DONE, index: i, total });
+          // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
+          await abortableSleep(INTER_CREATE_DELAY_MS, () => aborted);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           void sendMessage("progress", { phase: PHASE.ERROR, index: i, total, message });

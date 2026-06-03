@@ -48,3 +48,37 @@ export function addCaptchaIframe(opts: {
   markBbox(f, opts.width ?? 300, opts.height ?? 150);
   return f;
 }
+
+/**
+ * Suno の queue 上限エラー toast (#847) を模した `[role="dialog"]` を body に挿入する。
+ * order.md 実 DOM 検証の構造 (H2.sr-only + P.sr-only + H3 可視見出し + SPAN 補足) を写像する。
+ * `text` を変えれば非該当 dialog（他種 toast）も作れる。`dom.test.ts` (isQueueLimitErrorVisible) と
+ * `queue.test.ts` (waitForQueueSlot の toast 検知) の双方が同一構造を必要とするため、ここに 1 箇所
+ * だけ定義して両者から import する (DRY)。
+ *   - visible=false: display:none + bbox 0×0（strict isVisible で除外される toast を作る）
+ */
+export function addQueueErrorDialog(opts: { text?: string; japanese?: string; visible?: boolean } = {}): HTMLElement {
+  const dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+
+  const srH2 = document.createElement("h2");
+  srH2.className = "sr-only";
+  const srP = document.createElement("p");
+  srP.className = "sr-only";
+  const h3 = document.createElement("h3");
+  h3.className = "text-base font-medium";
+  h3.textContent = opts.text ?? "Generation in progress";
+  const span = document.createElement("span");
+  span.className = "text-sm opacity-70";
+  span.textContent = opts.japanese ?? "他の曲の生成が完了するまでお待ちいただき、その後もう一度お試しください。";
+  dialog.append(srH2, srP, h3, span);
+
+  document.body.appendChild(dialog);
+  if (opts.visible === false) {
+    dialog.style.display = "none";
+    markBbox(dialog, 0, 0);
+  } else {
+    markBbox(dialog, 360, 120);
+  }
+  return dialog;
+}
