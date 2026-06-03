@@ -129,6 +129,7 @@ def create_server(
     collection_dir: Path | None,
     distrokid: Distrokid | None,
     collections_root: Path | None = None,
+    distrokid_source: str | None = None,
 ) -> ThreadingHTTPServer:
     """サブパス分離した GET / CORS preflight を返すサーバーを生成する.
 
@@ -203,7 +204,7 @@ def create_server(
             if not distrokid_enabled:
                 self.send_error(404, "Not Found")
                 return
-            payload = build_release_payload(collection_dir, distrokid)
+            payload = build_release_payload(collection_dir, distrokid, distrokid_source=distrokid_source)
             body = json.dumps(payload).encode("utf-8")
             self._send_bytes(body, "application/json; charset=utf-8")
 
@@ -248,6 +249,14 @@ def main() -> None:
         default=None,
         help="lock CORS to a single chrome-extension://<id> origin (default: allow any chrome-extension scheme)",
     )
+    parser.add_argument(
+        "--distrokid-source",
+        default=None,
+        help=(
+            "submit a 30-distrokid disc dir as one album, e.g. "
+            "'30-distrokid/disc1-coding-focus-vol1' (default: 02-Individual-music/)"
+        ),
+    )
     args = parser.parse_args()
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
@@ -277,6 +286,7 @@ def main() -> None:
             prompts_path=prompts_path,
             collection_dir=collection_dir,
             distrokid=distrokid,
+            distrokid_source=args.distrokid_source,
         )
         port = server.server_address[1]
         print(f"Serving {collection_dir} at http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
