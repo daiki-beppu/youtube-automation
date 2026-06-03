@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno)`: Suno Custom Mode の Style/Lyrics 識別を data-testid ベースに変更し、日本語 UI 破損を修正した（#807）。実 DOM（`suno.com/create`・日本語 UI）検証で、`SELECTORS.stylePlaceholder` の placeholder 正規表現が日本語ロケールの Style 欄（ジャンル語彙の例）にヒットせず、fallback の `areas[0]=Lyrics` を Style に返して Lyrics 欄を上書きする致命バグが判明していた。`extensions/shared/dom.ts` で Lyrics を `data-testid="lyrics-textarea"`（UI 言語非依存）で最優先識別し、Style は「Lyrics 以外の strict visible textarea」として解決、Style 解決不能または Style==Lyrics の衝突時は throw（silent な上書きを禁ずる）。`isVisible` を `offsetParent !== null` から bbox 0 除外 + 親要素 walk（display:none / visibility:hidden / opacity:0 排除）の strict 版に強化し、Simple Mode の隠し textarea を拾わないようにした。Vitest unit テスト（`tests/dom.test.ts`）と Playwright e2e mock（`data-testid="lyrics-textarea"` を含む）で担保する
+
 ### Migration
 
 - `#698`: `yt-suno-serve` を実行しているスクリプト・運用手順は `yt-collection-serve` に置き換える。配信 URL は `http://localhost:<PORT>/prompts.json` → `http://localhost:<PORT>/suno/prompts.json` に変わる（suno-helper 拡張は本リリースで追従済み）

@@ -18,8 +18,9 @@ import { expect, test } from "@playwright/test";
 const MOCK_SUNO_HTML = `<!doctype html>
 <html>
   <body>
-    <textarea id="style" placeholder="Style description"></textarea>
-    <textarea id="lyrics" placeholder="Lyrics"></textarea>
+    <!-- 実 Suno (日本語 UI) を模す: style placeholder はジャンル語彙、lyrics は data-testid で識別する (#807)。 -->
+    <textarea id="style" placeholder="地下の罠, コントラルト, リズミカルなベース"></textarea>
+    <textarea id="lyrics" data-testid="lyrics-textarea" placeholder="What do you want your lyrics to be about?"></textarea>
     <button id="generate">Create</button>
     <div id="captured-style">-</div>
     <div id="captured-lyrics">-</div>
@@ -56,9 +57,12 @@ test("Suno mock へ Style/Lyrics を注入し Generate を押下できる", asyn
       el.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
+    // 本番 resolveFields と同じ識別ロジックを再現: lyrics は data-testid 最優先、style は残り。
+    const lyrics = document.querySelector('[data-testid="lyrics-textarea"]') as HTMLTextAreaElement;
     const areas = Array.from(document.querySelectorAll("textarea"));
-    setNativeValue(areas[0] as HTMLTextAreaElement, "lofi, jazzy, rainy night");
-    setNativeValue(areas[1] as HTMLTextAreaElement, "la la la");
+    const style = areas.find((el) => el !== lyrics) as HTMLTextAreaElement;
+    setNativeValue(style, "lofi, jazzy, rainy night");
+    setNativeValue(lyrics, "la la la");
     (document.querySelector("button") as HTMLButtonElement).click();
   });
 
