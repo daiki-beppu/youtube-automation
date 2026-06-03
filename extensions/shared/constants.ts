@@ -9,6 +9,21 @@ export const STORAGE_KEY = "sunoServerUrl";
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
 
+/** yt-collection-serve dir mode の collection 列挙サブパス (#816)。
+ * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
+export const COLLECTIONS_ROUTE = "/collections";
+
+/** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
+export function collectionPromptsRoute(id: string): string {
+  return `${COLLECTIONS_ROUTE}/${id}${PROMPTS_ROUTE}`;
+}
+
+/** Suno 同時生成キューの上限リクエスト数 (#816、実 DOM 検証: 同時 10 リクエスト)。 */
+export const MAX_INFLIGHT_REQUESTS = 10;
+
+/** 1 Create クリックで出現する clip 数 (#816、実 DOM 検証: variation A/B = 2 clip)。 */
+export const CLIPS_PER_REQUEST = 2;
+
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL = "http://localhost:7873";
 
@@ -28,6 +43,7 @@ export const SERVER_HOST_PERMISSIONS = [
 export const PHASE = {
   INJECTING: "injecting",
   GENERATING: "generating",
+  WAITING_SLOT: "waiting-slot",
   DONE: "done",
   FINISHED: "finished",
   STOPPED: "stopped",

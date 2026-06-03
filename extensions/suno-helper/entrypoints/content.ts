@@ -1,7 +1,7 @@
 // Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import type { PromptEntry } from "../../shared/api";
-import { PHASE, SUNO_MATCHES } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, MAX_INFLIGHT_REQUESTS, PHASE, SUNO_MATCHES } from "../../shared/constants";
 import {
   GENERATE_TIMEOUT_MS,
   POLL_INTERVAL_MS,
@@ -12,8 +12,12 @@ import {
   setNativeValue,
   sleep,
   waitForGeneration,
+  waitForQueueSlot,
 } from "../../shared/dom";
 import { onMessage, sendMessage } from "../lib/messaging";
+
+/** Suno 同時生成キューに積める clip 数の上限（10 リクエスト × 2 clip = 20）。 */
+const MAX_GENERATING_CLIPS = MAX_INFLIGHT_REQUESTS * CLIPS_PER_REQUEST;
 
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
@@ -56,6 +60,17 @@ export default defineContentScript({
           return;
         }
         try {
+          // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
+          void sendMessage("progress", { phase: PHASE.WAITING_SLOT, index: i, total });
+          await waitForQueueSlot(MAX_GENERATING_CLIPS, {
+            isAborted: () => aborted,
+            pollIntervalMs: POLL_INTERVAL_MS,
+            timeoutMs: GENERATE_TIMEOUT_MS,
+          });
+          if (aborted) {
+            void sendMessage("progress", { phase: PHASE.STOPPED, index: i, total });
+            return;
+          }
           void sendMessage("progress", { phase: PHASE.INJECTING, index: i, total });
           await injectAndGenerate(entries[i], i, total);
           if (aborted) {

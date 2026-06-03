@@ -24,13 +24,17 @@ import sys
 import threading
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
+    build_collections_index,
     create_server,
+    find_collection_dirs,
     is_origin_allowed,
     main,
+    resolve_collection_prompts_path,
     resolve_prompts_path,
 )
 from youtube_automation.utils.exceptions import ConfigError
@@ -39,6 +43,15 @@ _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 
 # 外部 HTTP 契約: 拡張が fetch する suno サブパス（リテラルで pin する）
 _SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
+
+# 外部 HTTP 契約（#816 dir mode）: 拡張が fetch する collection サブパス。
+# SSOT: extensions/shared/constants.ts COLLECTIONS_ROUTE / collectionPromptsRoute(id)。
+_COLLECTIONS_ROUTE = "/collections"
+
+
+def _collection_prompts_route(cid: str) -> str:
+    """`GET /collections/<id>/suno/prompts.json` ルートを組み立てる（拡張側 collectionPromptsRoute と対）。"""
+    return f"{_COLLECTIONS_ROUTE}/{cid}/suno/prompts.json"
 
 
 # ---------------------------------------------------------------------------
@@ -275,3 +288,290 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
 
     assert exc_info.value.code == 0
     assert "usage" in capsys.readouterr().out.lower()
+
+
+# ---------------------------------------------------------------------------
+# dir mode（#816）: `collections/planning/` 配下の collection 列挙 + 個別配信
+#
+# 契約（draft が実装すべき public API）:
+# - `find_collection_dirs(root: Path) -> list[Path]`
+#       root 直下の `*-collection` ディレクトリのみを名前昇順で返す。
+# - `build_collections_index(root: Path) -> list[dict]`
+#       各 collection を `{id, name, has_prompts, pattern_count}` に写像する。
+#       id=ディレクトリ名 / name=CollectionPaths.collection_name /
+#       has_prompts=docs json の存在 / pattern_count=entries 数 or None。
+# - `resolve_collection_prompts_path(root: Path, cid: str) -> Path | None`
+#       cid が既知の collection dir 名のとき docs json パスを返す。
+#       未知 id / トラバーサル文字列は None（fail-loud せずホワイトリスト弾き）。
+# - `create_server(..., collections_root: Path | None=None)`
+#       collections_root 指定時は dir mode（`/collections` 系を配信し
+#       `/suno/prompts.json` は配信しない）。既定 None は単一ファイル mode。
+# ---------------------------------------------------------------------------
+
+
+def _make_collection(planning: Path, dir_name: str, entries=None) -> Path:
+    """planning dir 配下に `<dir_name>/20-documentation/suno-prompts.json` を作る。
+
+    `entries` が None のとき json を置かない（has_prompts=False のケース）。
+    """
+    coll = planning / dir_name
+    docs = coll / "20-documentation"
+    docs.mkdir(parents=True)
+    if entries is not None:
+        (docs / "suno-prompts.json").write_text(json.dumps(entries), encoding="utf-8")
+    return coll
+
+
+# --- 純関数: 列挙・index 構築・id 解決 -------------------------------------
+
+
+def test_find_collection_dirs_returns_only_collection_dirs_sorted(tmp_path):
+    """Given `*-collection` dir・無関係 dir・ファイルが混在する planning dir
+    When find_collection_dirs を呼ぶ
+    Then `*-collection` ディレクトリのみを名前昇順で返す。
+    """
+    _make_collection(tmp_path, "20260602-clm-bbb-collection", entries=[])
+    _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+    (tmp_path / "01-master").mkdir()  # collection 接尾辞でない dir は除外
+    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")  # ファイルは除外
+
+    found = find_collection_dirs(tmp_path)
+
+    assert [p.name for p in found] == [
+        "20260601-clm-aaa-collection",
+        "20260602-clm-bbb-collection",
+    ]
+
+
+def test_build_collections_index_reports_has_prompts_and_pattern_count(tmp_path):
+    """Given prompts 有り(2件) と prompts 無しの collection
+    When build_collections_index を呼ぶ
+    Then has_prompts と pattern_count を正しく写像する（無しは pattern_count=None）。
+    """
+    _make_collection(
+        tmp_path,
+        "20260601-clm-with-prompts-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}, {"name": "B", "style": "s", "lyrics": ""}],
+    )
+    _make_collection(tmp_path, "20260602-clm-no-prompts-collection", entries=None)
+
+    index = {row["id"]: row for row in build_collections_index(tmp_path)}
+
+    with_prompts = index["20260601-clm-with-prompts-collection"]
+    assert with_prompts["has_prompts"] is True
+    assert with_prompts["pattern_count"] == 2
+
+    no_prompts = index["20260602-clm-no-prompts-collection"]
+    assert no_prompts["has_prompts"] is False
+    assert no_prompts["pattern_count"] is None
+
+
+def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
+    """Given `<date>-<channel>-<theme>-collection` 形式の dir
+    When build_collections_index を呼ぶ
+    Then id=dir 名そのまま / name=CollectionPaths.collection_name（日付＋チャンネル接頭辞除去）。
+    """
+    _make_collection(tmp_path, "20260601-clm-midnight-mood-collection", entries=[])
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["id"] == "20260601-clm-midnight-mood-collection"
+    assert row["name"] == "midnight-mood-collection"
+
+
+def test_resolve_collection_prompts_path_valid_id_returns_docs_json(tmp_path):
+    """Given 既知の collection id
+    When resolve_collection_prompts_path を呼ぶ
+    Then `<dir>/20-documentation/suno-prompts.json` を返す。
+    """
+    coll = _make_collection(
+        tmp_path, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}]
+    )
+
+    resolved = resolve_collection_prompts_path(tmp_path, "20260601-clm-aaa-collection")
+
+    assert resolved == coll / "20-documentation" / "suno-prompts.json"
+
+
+def test_resolve_collection_prompts_path_unknown_id_returns_none(tmp_path):
+    """Given 存在しない collection id
+    When resolve_collection_prompts_path を呼ぶ
+    Then None を返す（ホワイトリスト外）。
+    """
+    _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+
+    assert resolve_collection_prompts_path(tmp_path, "does-not-exist") is None
+
+
+@pytest.mark.parametrize(
+    "malicious",
+    ["../secrets", "../../etc/passwd", "20260601-clm-aaa-collection/../..", "..%2F.."],
+)
+def test_resolve_collection_prompts_path_traversal_returns_none(tmp_path, malicious):
+    """Given パストラバーサルを狙う id 文字列
+    When resolve_collection_prompts_path を呼ぶ
+    Then ホワイトリスト不一致で None を返す（fail-loud でなく 404 化できる形）。
+    """
+    _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+
+    assert resolve_collection_prompts_path(tmp_path, malicious) is None
+
+
+# --- HTTP 統合: dir mode サーバー ------------------------------------------
+
+
+@pytest.fixture
+def serve_dir(tmp_path):
+    """planning dir を dir mode で配信し base URL を返すファクトリ.
+
+    collections_root=planning を渡し、単一 mode 用の prompts_path/collection_dir は
+    None（dir mode では一意に定まらないため）。distrokid も None。
+    """
+    started = []
+
+    def _start(planning: Path, allow_origin=None):
+        server = create_server(
+            0,
+            allow_origin,
+            prompts_path=None,
+            collection_dir=None,
+            distrokid=None,
+            collections_root=planning,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        started.append((server, thread))
+        port = server.server_address[1]
+        return f"http://localhost:{port}"
+
+    yield _start
+
+    for server, thread in started:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
+    """Given prompts 有り/無しの collection を持つ planning dir
+    When `GET /collections`
+    Then `[{id, name, has_prompts, pattern_count}]` を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    _make_collection(planning, "20260602-clm-bbb-collection", entries=None)
+    base = serve_dir(planning)
+
+    with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    by_id = {row["id"]: row for row in body}
+    assert by_id["20260601-clm-aaa-collection"] == {
+        "id": "20260601-clm-aaa-collection",
+        "name": "aaa-collection",
+        "has_prompts": True,
+        "pattern_count": 1,
+    }
+    assert by_id["20260602-clm-bbb-collection"]["has_prompts"] is False
+    assert by_id["20260602-clm-bbb-collection"]["pattern_count"] is None
+
+
+def test_get_collection_prompts_returns_entries(serve_dir, tmp_path):
+    """Given 該当 collection に prompts json
+    When `GET /collections/<id>/suno/prompts.json`
+    Then 200 で元データと一致する配列 JSON を返す。
+    """
+    planning = tmp_path / "planning"
+    entries = [{"name": "A — A", "style": "slow, jazz", "lyrics": ""}]
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=entries)
+    base = serve_dir(planning)
+
+    url = f"{base}{_collection_prompts_route('20260601-clm-aaa-collection')}"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body == entries
+
+
+def test_get_collection_prompts_unknown_id_returns_404(serve_dir, tmp_path):
+    """Given 存在しない collection id
+    When `GET /collections/<id>/suno/prompts.json`
+    Then 404 を返す（ホワイトリスト弾き）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(planning)
+
+    req = urllib.request.Request(f"{base}{_collection_prompts_route('nope-collection')}")
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
+
+
+def test_get_collection_prompts_without_prompts_returns_404(serve_dir, tmp_path):
+    """Given prompts json を持たない collection（has_prompts=False）
+    When `GET /collections/<id>/suno/prompts.json`
+    Then 404 を返す（受け入れ条件: has_prompts true のみ実行可能）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-empty-collection", entries=None)
+    base = serve_dir(planning)
+
+    req = urllib.request.Request(f"{base}{_collection_prompts_route('20260601-clm-empty-collection')}")
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
+
+
+def test_dir_mode_does_not_serve_single_suno_prompts_route(serve_dir, tmp_path):
+    """Given dir mode サーバー
+    When `GET /suno/prompts.json`（単一 mode のルート）
+    Then 404 を返す（単一 mode のルートは dir mode で生きない）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(planning)
+
+    req = urllib.request.Request(f"{base}{_SUNO_PROMPTS_ROUTE}")
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
+
+
+def test_dir_mode_collections_sets_cors_header_for_extension_origin(serve_dir, tmp_path):
+    """Given 拡張オリジンからの `GET /collections`
+    When Origin が chrome-extension://
+    Then Access-Control-Allow-Origin がそのオリジンを返す（単一 mode と同一 CORS ポリシー）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(planning)
+
+    req = urllib.request.Request(
+        f"{base}{_COLLECTIONS_ROUTE}",
+        headers={"Origin": _EXTENSION_ORIGIN},
+    )
+    with urllib.request.urlopen(req) as resp:
+        assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+
+
+def test_single_mode_collections_route_returns_404(serve):
+    """Given 単一ファイル mode サーバー（collections_root 未指定）
+    When `GET /collections`
+    Then 404 を返す。popup はこの 404 を fallback トリガーに使う（dir mode 専用ルート）。
+    """
+    base = serve([{"name": "A", "style": "s", "lyrics": ""}])
+
+    req = urllib.request.Request(f"{base}{_COLLECTIONS_ROUTE}")
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
