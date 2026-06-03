@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(suno-helper)`: popup の「開始失敗」「停止リクエスト失敗」エラーで Chrome の `Could not establish connection. Receiving end does not exist.`（拡張リロード後に Suno タブが古い content script のままで残っているときに出る）を検知し、対処法「Suno タブをハードリロード (⌘+Shift+R / Ctrl+Shift+R)」を案内に追記するようにした。従来は汎用の「Custom Mode 画面を開いた状態で実行してください」のみで、実際の原因と異なる対処を案内していた。検知は case-insensitive substring match、整形は `components/runner-errors.ts` の純関数 (`isContentScriptMissingError` / `formatRunError` / `formatStopError`) に分離して `wxt/browser` 非依存とし、Vitest（`tests/content-script-missing-hint.test.ts`）で 11 ケース担保する
+
 ### Added
 
 - `feat(distrokid)`: `yt-collection-serve` に `--distrokid-source` を追加し、30-distrokid 構造（disc 単位提出 + `cover_art_3000.jpg` + `metadata.md`）に対応した（#819）。`yt-collection-serve <collection> --distrokid-source 30-distrokid/disc1-coding-focus-vol1` 指定時、`/distrokid/release.json` の payload を `<collection>/<source>/` を 1 アルバムとして組み立てる: `tracks` は `<source>/*.mp3` をファイル名ソート順で、`track[].title` は `<source>/metadata.md` のトラック表から（未マッチ行は filename stem へ救済）、`cover` は `<collection>/30-distrokid/cover_art_3000.jpg` 優先（無ければ既存サムネイルへフォールバック）、`album_title` は metadata.md のアルバム情報枠（空なら disc dirname を kebab→Title 化）、`profile.language` は metadata.md の言語があれば override（無ければ profile 値）で解決する。release.json の schema（#815 で確定した拡張側契約）は不変で、サーバ側の payload 値だけが変わる。新規パーサ `youtube_automation.utils.distrokid_metadata`（`parse_album_metadata` / `parse_track_table`、HTML コメント枠 `<!-- ... -->` と空セルは None、ファイル名のバッククォート除去、md 不在は `ConfigError` で fail-loud）に切り出し、payload 組立は `distrokid_release.py::build_release_payload(..., distrokid_source=...)` に集約。指定 source の不在・metadata.md 欠落・コレクション外への `..` トラバーサルは `ConfigError`（明示指定は 30-distrokid 構造前提で degrade しない）。`distrokid_source` 未指定/`None` は従来の `02-Individual-music/` 経路で不変（後方互換）。`distrokid_source` は CLI → `create_server` → `_serve_distrokid_release` → `build_release_payload` まで keyword で伝搬する。新規テスト `tests/test_distrokid_metadata.py`（パーサ unit）/ `tests/test_distrokid_disc_source.py`（disc-source payload + エンドポイント結合）で担保する
