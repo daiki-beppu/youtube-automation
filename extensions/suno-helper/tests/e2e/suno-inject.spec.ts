@@ -15,6 +15,12 @@
 // `shared/dom.ts` を直接 import する unit テスト (`tests/dom.test.ts`) が担う。
 import { expect, test } from "@playwright/test";
 
+// recaptcha/hcaptcha 検知 selector。Playwright は shared/dom.ts を import できないため再掲する
+// (既存の setNativeValue 同様 inline 再現)。本番 SELECTORS.recaptcha と一致させること。
+const RECAPTCHA_SELECTOR = 'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]';
+
+// Suno は hCaptcha challenge UI をプリロード iframe として常駐させる (#810)。
+// display:none / visibility:hidden の 2 種を含め、可視判定で弾かれることを担保する。
 const MOCK_SUNO_HTML = `<!doctype html>
 <html>
   <body>
@@ -22,6 +28,8 @@ const MOCK_SUNO_HTML = `<!doctype html>
     <textarea id="style" placeholder="地下の罠, コントラルト, リズミカルなベース"></textarea>
     <textarea id="lyrics" data-testid="lyrics-textarea" placeholder="What do you want your lyrics to be about?"></textarea>
     <button id="generate">Create</button>
+    <iframe id="hcaptcha-none" src="https://hcaptcha-assets-prod.suno.com/captcha/v1/0" style="display:none;width:0;height:0;border:0"></iframe>
+    <iframe id="hcaptcha-hidden" src="https://hcaptcha-assets-prod.suno.com/captcha/v1/4" title="hCaptchaチャレンジ" style="visibility:hidden;width:300px;height:150px;border:0"></iframe>
     <div id="captured-style">-</div>
     <div id="captured-lyrics">-</div>
     <div id="input-events">0</div>
@@ -72,4 +80,35 @@ test("Suno mock へ Style/Lyrics を注入し Generate を押下できる", asyn
   await expect(page.locator("#input-events")).toHaveText("2");
   // Generate 押下が成立
   await expect(page.locator("#clicked")).toHaveText("yes");
+});
+
+test("常駐 hCaptcha プリロード iframe は可視判定で除外され誤検知しない (#810)", async ({ page }) => {
+  await page.setContent(MOCK_SUNO_HTML);
+
+  // 実ブラウザでは layout が走るため、strict 可視判定 (detectRecaptcha と同手法) を inline 再現する。
+  // selector には 2 個マッチするが、いずれも非表示なので可視数は 0 = 中断されない。
+  const counts = await page.evaluate((selector) => {
+    const isVisible = (el: HTMLElement): boolean => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+      let node: HTMLElement | null = el;
+      while (node) {
+        const style = getComputedStyle(node);
+        if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+          return false;
+        }
+        node = node.parentElement;
+      }
+      return true;
+    };
+    const matched = Array.from(document.querySelectorAll<HTMLIFrameElement>(selector));
+    return {
+      matched: matched.length,
+      visible: matched.filter(isVisible).length,
+    };
+  }, RECAPTCHA_SELECTOR);
+
+  // order.md 期待値: recaptcha-like iframes: 2 / visible: 0 (challenge 未表示時)
+  expect(counts.matched).toBe(2);
+  expect(counts.visible).toBe(0);
 });
