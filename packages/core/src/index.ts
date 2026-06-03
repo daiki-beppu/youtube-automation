@@ -13,3 +13,4 @@ export {
   YouTubeAPIError,
   type YouTubeAPIErrorOptions,
 } from "./errors.ts";
+export { resolveSecret, SECRET_REFS } from "./secrets.ts";
