@@ -1,0 +1,50 @@
+// jsdom 用テストヘルパ。
+//
+// jsdom はレイアウトを行わず `getBoundingClientRect` が常に 0×0 を返すため、strict 可視判定
+// (`detectRecaptcha`, #810) を検証するには bbox を擬似的に与える必要がある。`markBbox` /
+// `addCaptchaIframe` は dom.test.ts と wait-for-generation.test.ts の双方が同一ロジックで
+// 必要とするため、ここに 1 箇所だけ定義して両者から import する (DRY)。
+
+/** strict 可視判定用に getBoundingClientRect を擬似的に与える (jsdom は常に 0×0 を返すため)。 */
+export function markBbox(el: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(el, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      width,
+      height,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+/**
+ * recaptcha/hcaptcha 類似 iframe を body に挿入する。
+ * `width`/`height` は strict 可視判定が見る bbox、`display`/`visibility`/`opacity` は親 walk が見る
+ * インライン style。order.md の実 DOM 表 (iframe[0] display:none/0×0, iframe[4] visibility:hidden/300×150)
+ * を写像できるよう、bbox と style を独立に指定できる。
+ */
+export function addCaptchaIframe(opts: {
+  src?: string;
+  title?: string;
+  display?: string;
+  visibility?: string;
+  opacity?: string;
+  width?: number;
+  height?: number;
+}): HTMLIFrameElement {
+  const f = document.createElement("iframe");
+  if (opts.src !== undefined) f.src = opts.src;
+  if (opts.title !== undefined) f.title = opts.title;
+  if (opts.display !== undefined) f.style.display = opts.display;
+  if (opts.visibility !== undefined) f.style.visibility = opts.visibility;
+  if (opts.opacity !== undefined) f.style.opacity = opts.opacity;
+  document.body.appendChild(f);
+  markBbox(f, opts.width ?? 300, opts.height ?? 150);
+  return f;
+}

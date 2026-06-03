@@ -79,9 +79,17 @@ export function setNativeValue(
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/** recaptcha / hcaptcha iframe の存在を検知する。 */
+/**
+ * 可視な recaptcha / hcaptcha challenge iframe を検知する（#810）。
+ * Suno は hCaptcha challenge を非表示プリロード iframe として常駐させるため、
+ * querySelector の hit だけでは常に true になってしまう。strict 可視判定で
+ * 実 challenge UI が表示された時のみ true を返す。
+ */
 export function detectRecaptcha(): boolean {
-  return document.querySelector(SELECTORS.recaptcha) !== null;
+  const iframes = document.querySelectorAll<HTMLIFrameElement>(
+    SELECTORS.recaptcha,
+  );
+  return Array.from(iframes).some((f) => isVisible(f));
 }
 
 /**

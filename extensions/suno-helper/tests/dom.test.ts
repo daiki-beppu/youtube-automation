@@ -1,19 +1,23 @@
 // @vitest-environment jsdom
 //
 // content script の Suno UI 注入ロジックを純関数化した `shared/dom.ts` の回帰テスト。
-// 旧 `content.js` の振る舞いを保持しつつ、#807 で判明した日本語 UI 破損を修正した仕様を担保する:
+// 旧 `content.js` の振る舞いを保持しつつ、#807 で判明した日本語 UI 破損および #810 で判明した
+// hCaptcha プリロード iframe 誤検知を修正した仕様を担保する:
 //   - setNativeValue: prototype の native setter + input/change の bubbling 発火 (React 互換)
 //   - resolveFields: lyrics は `data-testid="lyrics-textarea"` で最優先識別 (UI 言語非依存)、
 //                    style は lyrics 以外の strict visible textarea、解決不能なら throw (fail-loud)
 //   - resolveGenerateButton: 可視 button をラベル正規表現で判別、不在で throw
-//   - detectRecaptcha: recaptcha/hcaptcha iframe の存在検知
+//   - detectRecaptcha: 可視な recaptcha/hcaptcha iframe のみ検知 (#810、#807 と同じ strict isVisible を共有)
 //
-// jsdom はレイアウトを行わず `getBoundingClientRect()` が常に全 0 を返すため、可視判定の
-// 対象要素は `setRect` で bbox を擬似的に与える (production の strict isVisible は
-// `getBoundingClientRect` の width/height と親要素の display/visibility/opacity を見る前提)。
+// jsdom はレイアウトを行わず `getBoundingClientRect()` が常に 0×0 を返すため、可視判定の対象要素は
+// `setRect` (textarea/button) または `markBbox` (iframe, _helpers.ts) で bbox を擬似的に与える。
+// production の strict isVisible は bbox 非ゼロ + 親 walk で `display:none`/`visibility:hidden`/
+// `opacity:0` を排除する前提。display/visibility/opacity はインライン style で表現する
+// (jsdom の getComputedStyle はインライン style を反映する)。
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { detectRecaptcha, resolveFields, resolveGenerateButton, setNativeValue } from "../../shared/dom";
+import { addCaptchaIframe, markBbox } from "./_helpers";
 
 const VISIBLE_RECT = {
   x: 0,
@@ -238,24 +242,133 @@ describe("resolveGenerateButton: Generate ボタンの解決", () => {
   });
 });
 
-describe("detectRecaptcha: チャレンジ検知", () => {
-  it("Given recaptcha iframe (src) When 検知する Then true", () => {
-    document.body.innerHTML = '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>';
-    expect(detectRecaptcha()).toBe(true);
+describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
+  describe("可視な challenge iframe は true", () => {
+    it("Given 可視 recaptcha iframe (src) When 検知する Then true", () => {
+      addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given 可視 recaptcha iframe (title) When 検知する Then true", () => {
+      addCaptchaIframe({ title: "reCAPTCHA challenge" });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given 可視 hcaptcha iframe (src) When 検知する Then true", () => {
+      addCaptchaIframe({ src: "https://newassets.hcaptcha.com/captcha/v1" });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given 可視 hcaptcha iframe (title=hCaptchaチャレンジ) When 検知する Then true (実 challenge 表示時)", () => {
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
+        title: "hCaptchaチャレンジ",
+      });
+      expect(detectRecaptcha()).toBe(true);
+    });
   });
 
-  it("Given recaptcha iframe (title) When 検知する Then true", () => {
-    document.body.innerHTML = '<iframe title="reCAPTCHA challenge"></iframe>';
-    expect(detectRecaptcha()).toBe(true);
+  describe("非表示のプリロード hCaptcha iframe は false (誤検知防止)", () => {
+    it("Given display:none かつ 0×0 の hCaptcha iframe (実 DOM iframe[0]) When 検知する Then false", () => {
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
+        display: "none",
+        width: 0,
+        height: 0,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given visibility:hidden だが 300×150 の hCaptcha iframe (実 DOM iframe[4]) When 検知する Then false", () => {
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
+        title: "hCaptchaチャレンジ",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given opacity:0 の hCaptcha iframe When 検知する Then false", () => {
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
+        opacity: "0",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given bbox が 0×0 の hCaptcha iframe (style は可視) When 検知する Then false", () => {
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
+        width: 0,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
   });
 
-  it("Given hcaptcha iframe When 検知する Then true", () => {
-    document.body.innerHTML = '<iframe src="https://newassets.hcaptcha.com/captcha/v1"></iframe>';
-    expect(detectRecaptcha()).toBe(true);
+  describe("親要素の非表示も親 walk で排除する", () => {
+    it("Given 親 div が display:none の hCaptcha iframe When 検知する Then false", () => {
+      const parent = document.createElement("div");
+      parent.style.display = "none";
+      document.body.appendChild(parent);
+      const f = document.createElement("iframe");
+      f.src = "https://hcaptcha-assets-prod.suno.com/captcha/v1/x";
+      parent.appendChild(f);
+      markBbox(f, 300, 150);
+
+      expect(detectRecaptcha()).toBe(false);
+    });
   });
 
-  it("Given チャレンジ無し When 検知する Then false", () => {
-    document.body.innerHTML = '<iframe src="https://suno.com/embed"></iframe>';
+  describe("order.md 実 DOM シナリオの回帰ガード", () => {
+    it("Given 非表示プリロード iframe 2 個 (display:none + visibility:hidden) のみ When 検知する Then false (challenge 未表示時)", () => {
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/0",
+        display: "none",
+        width: 0,
+        height: 0,
+      });
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/4",
+        title: "hCaptchaチャレンジ",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given 非表示プリロード 2 個 + 可視 challenge 1 個 When 検知する Then true (実 challenge 表示時のみ検知)", () => {
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/0",
+        display: "none",
+        width: 0,
+        height: 0,
+      });
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/4",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/visible",
+        title: "hCaptchaチャレンジ",
+        width: 300,
+        height: 150,
+      });
+
+      expect(detectRecaptcha()).toBe(true);
+    });
+  });
+
+  it("Given challenge 類似 iframe 無し When 検知する Then false", () => {
+    addCaptchaIframe({ src: "https://suno.com/embed" });
     expect(detectRecaptcha()).toBe(false);
   });
 });

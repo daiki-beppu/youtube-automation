@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(suno)`: Suno Custom Mode の Style/Lyrics 識別を data-testid ベースに変更し、日本語 UI 破損を修正した（#807）。実 DOM（`suno.com/create`・日本語 UI）検証で、`SELECTORS.stylePlaceholder` の placeholder 正規表現が日本語ロケールの Style 欄（ジャンル語彙の例）にヒットせず、fallback の `areas[0]=Lyrics` を Style に返して Lyrics 欄を上書きする致命バグが判明していた。`extensions/shared/dom.ts` で Lyrics を `data-testid="lyrics-textarea"`（UI 言語非依存）で最優先識別し、Style は「Lyrics 以外の strict visible textarea」として解決、Style 解決不能または Style==Lyrics の衝突時は throw（silent な上書きを禁ずる）。`isVisible` を `offsetParent !== null` から bbox 0 除外 + 親要素 walk（display:none / visibility:hidden / opacity:0 排除）の strict 版に強化し、Simple Mode の隠し textarea を拾わないようにした。Vitest unit テスト（`tests/dom.test.ts`）と Playwright e2e mock（`data-testid="lyrics-textarea"` を含む）で担保する
+- `fix(suno)`: hCaptcha プリロード iframe の誤検知で連続実行が Create 直後に中断する問題を修正した（#810）。Suno は hCaptcha challenge UI を非表示プリロード iframe（`display:none` / `visibility:hidden`）として常駐させるため、`extensions/shared/dom.ts::detectRecaptcha` が `querySelector` の hit だけで判定すると常に true になり、`waitForGeneration` の poll が最初の Create 押下直後に「reCAPTCHA を検知しました」で必ず中断していた。判定を #807 で strict 化済みの `isVisible`（bbox 非ゼロ + 親 walk で `display:none`/`visibility:hidden`/`opacity:0` を排除）に統一し、実 challenge UI が表示された時のみ検知する。selector は不変（hCaptcha は `src*="hcaptcha"` で既にカバー済み）。回帰ガードとして `extensions/suno-helper/tests/dom.test.ts` に非表示プリロード iframe で false / 可視 challenge で true を検証する Vitest を追加し、Playwright e2e（`tests/e2e/suno-inject.spec.ts`）の Suno mock に常駐 hCaptcha iframe を含めた
 
 ### Migration
 
