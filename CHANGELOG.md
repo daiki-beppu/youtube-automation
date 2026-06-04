@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno-helper)`: popup 起動時に `/collections` レスポンスの `name` field 値（server 側で末尾 `-collection` が剥がされておらず例えば `dawn-cloud-fold-collection` 形式で返ってくる）をそのまま theme として `extractPlaylistName(id, theme)` に渡していたため、id 末尾 `-<theme>` 照合が常に失敗して fail-loud で throw → useMemo で React component が crash し popup が起動しないバグを修正した。`components/useSunoRunner.ts` の derivedPlaylistName 計算で `selected.name.replace(/-collection$/, "")` を挟んで theme から末尾 `-collection` を剥がしてから渡す。`extractPlaylistName` 側の契約 (theme は接尾辞なしの slug) は維持しスペックを通す位置だけ修正。サーバ側 (`utils.collection_paths.CollectionPaths.collection_name`) が将来 suffix を剥がして返すよう修正されても剥がし処理は冪等で無害
 - `fix(suno-helper)`: popup の「開始失敗」「停止リクエスト失敗」エラーで Chrome の `Could not establish connection. Receiving end does not exist.`（拡張リロード後に Suno タブが古い content script のままで残っているときに出る）を検知し、対処法「Suno タブをハードリロード (⌘+Shift+R / Ctrl+Shift+R)」を案内に追記するようにした。従来は汎用の「Custom Mode 画面を開いた状態で実行してください」のみで、実際の原因と異なる対処を案内していた。検知は case-insensitive substring match、整形は `components/runner-errors.ts` の純関数 (`isContentScriptMissingError` / `formatRunError` / `formatStopError`) に分離して `wxt/browser` 非依存とし、Vitest（`tests/content-script-missing-hint.test.ts`）で 11 ケース担保する
 
 ### Changed
