@@ -240,6 +240,40 @@ export function getInFlightClipCount(): number {
   return Array.from(rows).filter(isClipGenerating).length;
 }
 
+export interface WaitForInFlightIncreaseOptions {
+  /** 中断フラグ。true を返した時点で未達でも resolve true する（停止優先）。 */
+  isAborted: () => boolean;
+  pollIntervalMs: number;
+  timeoutMs: number;
+}
+
+/**
+ * inject 後に in-flight clip 数が `beforeCount + delta` 以上へ増えるまで poll で待機する（#864 root cause 3）。
+ *   - isAborted() が true なら未達でも最優先で即 resolve `true`（停止優先。waitForQueueSlot と同じ中断優先）
+ *   - getInFlightClipCount() >= beforeCount + delta になったら resolve `true`（受理確認）
+ *   - deadline 超過で resolve `false`（throw しない。retry 判断は caller=injectWithVerification 側に委ねる）
+ * waitForQueueSlot と異なり throw せず boolean を返す。Create→clip-row 反映ラグで Suno が inject を
+ * silent drop しても Generate ボタンは再 enabled になるため、実際に clip が受理されたかを増分で検証する。
+ */
+export async function waitForInFlightIncrease(
+  beforeCount: number,
+  delta: number,
+  options: WaitForInFlightIncreaseOptions,
+): Promise<boolean> {
+  const target = beforeCount + delta;
+  const deadline = Date.now() + options.timeoutMs;
+  while (Date.now() < deadline) {
+    if (options.isAborted()) {
+      return true;
+    }
+    if (getInFlightClipCount() >= target) {
+      return true;
+    }
+    await sleep(options.pollIntervalMs);
+  }
+  return false;
+}
+
 /**
  * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816, #847）。
  *   - isAborted() が true なら（toast 中・上限超でも）最優先で即 resolve（throw しない）

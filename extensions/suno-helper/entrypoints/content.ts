@@ -3,25 +3,31 @@
 import type { PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
+  INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
+  MAX_INJECT_RETRY,
   PHASE,
   type ProgressPayload,
   QUEUE_ERROR_WAIT_MS,
+  QUEUE_SLOT_WAIT_TIMEOUT_MS,
   type SnapshotPayload,
   SUNO_MATCHES,
 } from "../../shared/constants";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
+import { injectWithVerification } from "../lib/inject-retry";
 import {
   abortableSleep,
   GENERATE_TIMEOUT_MS,
   POLL_INTERVAL_MS,
   SETTLE_MS,
   detectRecaptcha,
+  getInFlightClipCount,
   resolveFields,
   resolveGenerateButton,
   setNativeValue,
   waitForGeneration,
+  waitForInFlightIncrease,
   waitForQueueSlot,
 } from "../../shared/dom";
 import {
@@ -131,7 +137,8 @@ export default defineContentScript({
           await waitForQueueSlot(MAX_GENERATING_CLIPS, {
             isAborted: () => aborted,
             pollIntervalMs: POLL_INTERVAL_MS,
-            timeoutMs: GENERATE_TIMEOUT_MS,
+            // queue 空き待ちは single clip 完了待ち (GENERATE_TIMEOUT_MS) とは別系統の 5 分 (#864 root cause 1)。
+            timeoutMs: QUEUE_SLOT_WAIT_TIMEOUT_MS,
             queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
           });
           if (aborted) {
@@ -139,7 +146,18 @@ export default defineContentScript({
             return;
           }
           emitProgress({ phase: PHASE.INJECTING, index: i, total });
-          await injectAndGenerate(entries[i], i, total);
+          // inject 後に in-flight が CLIPS_PER_REQUEST 増えたか検証し、silent drop なら同じ entry を retry する (#864 root cause 3)。
+          await injectWithVerification({
+            inject: () => injectAndGenerate(entries[i], i, total),
+            getInFlightClipCount,
+            waitForInFlightIncrease,
+            isAborted: () => aborted,
+            clipsPerRequest: CLIPS_PER_REQUEST,
+            maxRetry: MAX_INJECT_RETRY,
+            ackTimeoutMs: INJECT_ACK_TIMEOUT_MS,
+            pollIntervalMs: POLL_INTERVAL_MS,
+            describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
+          });
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, index: i, total });
             return;
