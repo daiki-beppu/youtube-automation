@@ -58,11 +58,13 @@ export function useSunoRunner(): RunnerState {
   const [restoredPlaylistName, setRestoredPlaylistName] = useState<string | undefined>(undefined);
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
-  // collection id は server 契約上 `<date>-<channel>-<theme>-collection` 形式なので fail-loud のまま信頼する。
-  const derivedPlaylistName = useMemo(
-    () => (selectedCollectionId ? extractPlaylistName(selectedCollectionId) : undefined),
-    [selectedCollectionId],
-  );
+  // collection id は server 契約上 `<date>-<channel>-<theme>-collection` 形式。channel が
+  // 複数 word (例: `soulful-grooves`) を含む場合があり id 単体では境界判定不能なため、
+  // `/collections` の `name` field (theme) を渡して逆向きに境界を確定する。
+  const derivedPlaylistName = useMemo(() => {
+    const selected = collections.find((c) => c.id === selectedCollectionId);
+    return selected ? extractPlaylistName(selected.id, selected.name) : undefined;
+  }, [collections, selectedCollectionId]);
   const playlistName = derivedPlaylistName ?? restoredPlaylistName;
 
   const report = useCallback((text: string, error = false) => {

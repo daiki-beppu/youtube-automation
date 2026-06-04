@@ -91,20 +91,44 @@ export function pickInitialCollectionId(
 const COLLECTION_SUFFIX = "-collection";
 
 /**
- * collection id から Suno playlist 名 `<channel>-<theme>` を導出する純パーサ (#854)。
+ * collection id から Suno playlist 名 `<channel> | <theme>` を導出する純パーサ。
+ * theme は `/collections` レスポンスの `name` field (= channel 部分を除いたテーマ slug) を渡す。
+ * 引数 2 つを取る理由: channel 部分自体がハイフン区切り (例: `soulful-grooves`) になる
+ * チャンネルがあり、id だけからは channel と theme の境界を機械的に判定できないため、
+ * server 側で抽出済みの theme を逆向きに使って境界を確定する。
  *   1. 末尾 `-collection` を剥がす（無ければそのまま）
- *   2. `-` で分割し、先頭が 8 桁日付 (^\d{8}$) かつ parts >= 3 を検証
- *   3. 検証 NG は throw（fail-loud。silent に空文字や undefined を返さない）
- *   4. OK なら日付を除いた `parts.slice(1).join("-")` を返す
- * 例: `20260601-rjn-dawn-cloud-fold-collection` -> `rjn-dawn-cloud-fold`。
+ *   2. 末尾が `-<theme>` で終わることを検証（不整合は fail-loud）
+ *   3. theme を剥がした残りを `-` で分割し、先頭が 8 桁日付 (^\d{8}$) かつ parts >= 2 を検証
+ *   4. 検証 NG は throw（fail-loud。silent に空文字や undefined を返さない）
+ *   5. OK なら日付を除いた `parts.slice(1).join("-")` を channel として `<channel> | <theme>` を返す
+ * 例:
+ *   - `("20260601-rjn-dawn-cloud-fold-collection", "dawn-cloud-fold")` -> `"rjn | dawn-cloud-fold"`
+ *   - `("20260520-soulful-grooves-midnight-mood-collection", "midnight-mood")` -> `"soulful-grooves | midnight-mood"`
  */
-export function extractPlaylistName(collectionId: string): string {
+export function extractPlaylistName(
+  collectionId: string,
+  theme: string,
+): string {
+  if (!theme) {
+    throw new Error(`theme が空: id=${collectionId}`);
+  }
   const stripped = collectionId.endsWith(COLLECTION_SUFFIX)
     ? collectionId.slice(0, -COLLECTION_SUFFIX.length)
     : collectionId;
-  const parts = stripped.split("-");
-  if (parts.length < 3 || !/^\d{8}$/.test(parts[0])) {
+  const themeSuffix = `-${theme}`;
+  if (!stripped.endsWith(themeSuffix)) {
+    throw new Error(
+      `theme と collection id が不整合: id=${collectionId} theme=${theme}`,
+    );
+  }
+  const datePlusChannel = stripped.slice(0, -themeSuffix.length);
+  const parts = datePlusChannel.split("-");
+  if (parts.length < 2 || !/^\d{8}$/.test(parts[0])) {
     throw new Error(`不正な collection id 形式: ${collectionId}`);
   }
-  return parts.slice(1).join("-");
+  const channel = parts.slice(1).join("-");
+  if (!channel) {
+    throw new Error(`channel 部分が空: id=${collectionId}`);
+  }
+  return `${channel} | ${theme}`;
 }
