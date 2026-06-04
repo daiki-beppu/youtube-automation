@@ -29,7 +29,7 @@ import {
   fillPlaylistNameAndCreate,
   multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
-  selectRecentCompletedClips,
+  selectRecentClips,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
 import { onMessage, sendMessage } from "../lib/messaging";
@@ -95,8 +95,10 @@ export default defineContentScript({
      */
     async function addClipsToPlaylist(entryCount: number, playlistName: string): Promise<void> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: entryCount, message: playlistName });
-      // 直近生成の完了 clip（entry 数 × 2 clip）を multi-select する。
-      const rows = selectRecentCompletedClips(entryCount * CLIPS_PER_REQUEST);
+      // 直近 entry 数 × 2 clip を multi-select する。生成完了マーク（data-clip-status="complete"）の
+      // 反映ラグで 0 件選択になることを防ぐため、生成中の clip も含めて拾う（未完成分は Suno 側で
+      // playlist 追加後に生成完了時点で自動反映される）。
+      const rows = selectRecentClips(entryCount * CLIPS_PER_REQUEST);
       await multiSelectClips(rows);
       await abortableSleep(SETTLE_MS, () => aborted);
 

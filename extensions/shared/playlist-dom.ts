@@ -5,9 +5,15 @@
 import { setNativeValue, sleep } from "./dom";
 import { isVisible } from "./visibility";
 
-/** 生成完了済み clip-row（multi-select 対象）。`data-clip-status="complete"` で完了を識別 (#854)。 */
-export const CLIP_ROW_COMPLETED_SELECTOR =
-  '[data-testid="clip-row"][data-clip-status="complete"]';
+/**
+ * clip-row（multi-select 対象）。生成中（streaming 等）も含めて拾う (#NEW)。
+ *
+ * Suno の挙動: multi-select は生成中の clip でも可能で、playlist 追加時に未完成な分は
+ * 生成完了後に自動で playlist へ反映される。`data-clip-status="complete"` で絞ると、
+ * 全 entries を generate キューに乗せた直後で「Suno が生成完了マークを付ける前」に
+ * `addClipsToPlaylist` フェーズへ進んだ場合に 0 件選択となるため、status は問わない。
+ */
+export const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
 /** 未選択の clip 選択ボタン。click すると aria-label が "Deselect clip" に切り替わる（= 冪等）。 */
 export const SELECT_CLIP_BUTTON_SELECTOR =
   '.multi-select-button > button[aria-label="Select clip"]';
@@ -51,13 +57,13 @@ function findPlaylistDialog(): HTMLElement | null {
 }
 
 /**
- * 完了済み clip-row を DOM 順（= 直近生成が先頭）で先頭から count 件取得する (#854)。
+ * clip-row を DOM 順（= 直近生成が先頭）で先頭から count 件取得する (#NEW)。
+ * 生成中（streaming / queued 等）も含めて拾う — playlist 追加は未完了 clip でも可能で、
+ * 生成完了後に自動で playlist へ反映されるため、status フィルタは設けない。
  * strict isVisible() で非可視 row を除外する（非マウント / display:none の残骸を弾く）。
  */
-export function selectRecentCompletedClips(count: number): HTMLElement[] {
-  return Array.from(
-    document.querySelectorAll<HTMLElement>(CLIP_ROW_COMPLETED_SELECTOR),
-  )
+export function selectRecentClips(count: number): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(CLIP_ROW_SELECTOR))
     .filter(isVisible)
     .slice(0, count);
 }
@@ -131,47 +137,35 @@ export async function fillPlaylistNameAndCreate(
 }
 
 /**
- * dialog 内の playlist 一覧から name と完全一致する row の clickable wrapper を全て返す (#NEW)。
+ * dialog 内 playlist row の label（playlist 名 text を持つ末端 `<div>`）を識別する CSS セレクタ。
  *
- * Suno の dialog DOM 構造（実機確認）:
- *   <div role="dialog">
- *     ...
- *     <{button|role=button}>      ← 親方向 walk でこれを掴む
- *       <img />
- *       <div class="ml-4 font-sans">{playlist 名}</div>  ← own text のみ持つ leaf
- *     </{button|role=button}>
- *     ...
+ * 実機 Suno dialog row 構造:
+ *   <div>                                  ← row wrapper (React onClick handler、role/aria 不可視)
+ *     <img />
+ *     <div class="ml-4 font-sans">{name}</div>  ← この div を狙う
  *   </div>
  *
+ * playlist 名は attribute (aria-label / data-*) ではなく **text content のみ** で識別される。
+ * `ml-4 font-sans` は Tailwind utility だが現状で最も安定したシグナル（壊れたら #859 のように
+ * 再 snippet 取得して定数を直す）。click は label に直接行い、bubbling で row wrapper の React
+ * onClick handler に届く想定。
+ */
+export const PLAYLIST_ROW_LABEL_SELECTOR = "div.ml-4.font-sans";
+
+/**
+ * dialog 内の playlist 一覧から name と完全一致する label を DOM 順で全て返す (#NEW)。
+ *
  * - text は **完全一致**（前方一致だと "DF | X" と "DF | X2" を取り違える）。
- * - children が 0 = 末端 div の textContent.trim() を判定。
- * - そこから親方向に button / role="button" の clickable wrapper を探す。
- * - 同名 row が複数ある場合（Suno は Create Playlist で重複作成を許容するため、
- *   既存 + 直前 fillPlaylistNameAndCreate で作った直近の 2 つ以上が並ぶことがある）、
- *   呼び出し側が DOM 順で最後 = 最新を選ぶことを想定して配列を返す。
+ * - 同名 row 複数時は呼び出し側が DOM 順で最後 = 最新を選ぶ想定で配列で返す
+ *   （Suno は Create Playlist で重複作成を許容するため、テスト残骸の古い同名 row が並ぶことがある）。
  */
 function findPlaylistRowsByName(
   dialog: HTMLElement,
   name: string,
 ): HTMLElement[] {
-  const labels = Array.from(dialog.querySelectorAll<HTMLElement>("div")).filter(
-    (el) => el.children.length === 0 && (el.textContent ?? "").trim() === name,
-  );
-  const wrappers: HTMLElement[] = [];
-  for (const label of labels) {
-    let target: HTMLElement | null = label;
-    while (target && target !== dialog) {
-      if (
-        target.tagName === "BUTTON" ||
-        target.getAttribute("role") === "button"
-      ) {
-        wrappers.push(target);
-        break;
-      }
-      target = target.parentElement;
-    }
-  }
-  return wrappers;
+  return Array.from(
+    dialog.querySelectorAll<HTMLElement>(PLAYLIST_ROW_LABEL_SELECTOR),
+  ).filter((el) => (el.textContent ?? "").trim() === name);
 }
 
 /**
