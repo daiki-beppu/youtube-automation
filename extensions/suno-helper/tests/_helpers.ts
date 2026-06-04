@@ -5,6 +5,21 @@
 // `addCaptchaIframe` は dom.test.ts と wait-for-generation.test.ts の双方が同一ロジックで
 // 必要とするため、ここに 1 箇所だけ定義して両者から import する (DRY)。
 
+import type { PromptEntry } from "../../shared/api";
+
+/**
+ * テスト用の PromptEntry 配列を生成する (#852)。name は `pattern-1..N`。
+ * snapshot 系テスト (query-progress / phase-to-status / use-suno-runner-restore) が
+ * 同一の entries 形を必要とするため、ここに 1 箇所だけ定義して各テストから import する (DRY)。
+ */
+export function makePromptEntries(count: number): PromptEntry[] {
+  return Array.from({ length: count }, (_, i) => ({
+    name: `pattern-${i + 1}`,
+    style: `style ${i + 1}`,
+    lyrics: `lyrics ${i + 1}`,
+  }));
+}
+
 /** strict 可視判定用に getBoundingClientRect を擬似的に与える (jsdom は常に 0×0 を返すため)。 */
 export function markBbox(el: HTMLElement, width: number, height: number): void {
   Object.defineProperty(el, "getBoundingClientRect", {

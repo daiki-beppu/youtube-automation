@@ -2,6 +2,7 @@
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
 // SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
+import type { PromptEntry } from "./api";
 
 /** chrome.storage.local に保存するサーバー URL の key。 */
 export const STORAGE_KEY = "sunoServerUrl";
@@ -64,4 +65,16 @@ export interface ProgressPayload {
   total: number;
   index?: number;
   message?: string;
+}
+
+/** popup の各パターン行の表示状態。 */
+export type ItemState = "idle" | "active" | "done";
+
+/** content script が SSOT として保持する進捗スナップショット (#852)。
+ * popup を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
+export interface SnapshotPayload {
+  entries: PromptEntry[];
+  itemStates: ItemState[];
+  isRunning: boolean;
+  progress: ProgressPayload;
 }

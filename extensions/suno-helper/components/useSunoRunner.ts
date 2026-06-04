@@ -10,12 +10,11 @@ import {
   pickInitialCollectionId,
   type PromptEntry,
 } from "../../shared/api";
-import { PHASE } from "../../shared/constants";
+import { type ItemState, PHASE } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
-import { formatRunError, formatStopError } from "./runner-errors";
-
-export type ItemState = "idle" | "active" | "done";
+import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
 
 interface RunnerState {
   url: string;
@@ -81,39 +80,40 @@ export function useSunoRunner(): RunnerState {
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
-      const { phase, index, total, message } = data;
-      switch (phase) {
-        case PHASE.INJECTING:
-          setItemStates((prev) =>
-            prev.map((_, i) => (i === index ? "active" : prev[i] === "active" ? "idle" : prev[i])),
-          );
-          report(`[${(index ?? 0) + 1}/${total}] 注入中: ${entries[index ?? 0]?.name ?? ""}`);
-          break;
-        case PHASE.WAITING_SLOT:
-          report(`[${(index ?? 0) + 1}/${total}] 生成キューの空き待ち…`);
-          break;
-        case PHASE.GENERATING:
-          report(`[${(index ?? 0) + 1}/${total}] 生成待ち…`);
-          break;
-        case PHASE.DONE:
-          setItemStates((prev) => prev.map((s, i) => (i === index ? "done" : s)));
-          break;
-        case PHASE.FINISHED:
-          report(`完了: ${total} パターンを実行しました。`);
-          setIsRunning(false);
-          break;
-        case PHASE.STOPPED:
-          report("停止しました。手動で続行できます。", true);
-          setIsRunning(false);
-          break;
-        case PHASE.ERROR:
-          report(`中断: ${message ?? ""}`, true);
-          setIsRunning(false);
-          break;
+      setItemStates((prev) => nextItemStates(prev, data.phase, data.index));
+      // DONE は当該 item を done 化するだけで status 文字列は更新しない（旧 popup.js の live 挙動を維持）。
+      // restore 経路は phaseToStatus(DONE) で「完了」を表示するため SSOT 側に DONE case は残す。
+      if (data.phase !== PHASE.DONE) {
+        const { text, error } = phaseToStatus(data, entries);
+        report(text, Boolean(error));
+      }
+      if (isTerminalPhase(data.phase)) {
+        setIsRunning(false);
       }
     });
     return () => unwatch();
   }, [entries, report]);
+
+  // popup 再 open 時、content が保持する snapshot から進捗を即時復元する (#852)。
+  // Suno タブでない / content 未注入は queryProgress が失敗 → 復元せず従来表示へ silent fallback。
+  useEffect(() => {
+    void (async () => {
+      try {
+        const tabId = await activeTabId();
+        const snapshot = await sendMessage("queryProgress", undefined, tabId);
+        const restored = buildRestoreState(snapshot);
+        if (!restored) {
+          return;
+        }
+        setEntries(restored.entries);
+        setItemStates(restored.itemStates);
+        setIsRunning(restored.isRunning);
+        report(restored.status, restored.isError);
+      } catch {
+        // Suno タブでない / content 未注入では queryProgress が到達しない。復元を諦め従来表示を維持する。
+      }
+    })();
+  }, [report]);
 
   const fetchData = useCallback(async () => {
     const trimmed = url.trim();
