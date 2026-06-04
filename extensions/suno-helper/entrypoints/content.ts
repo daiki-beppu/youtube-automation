@@ -25,6 +25,7 @@ import {
   waitForQueueSlot,
 } from "../../shared/dom";
 import {
+  clickPlaylistRowByName,
   fillPlaylistNameAndCreate,
   multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
@@ -103,6 +104,11 @@ export default defineContentScript({
       await abortableSleep(SETTLE_MS, () => aborted);
 
       await fillPlaylistNameAndCreate(dialog, playlistName);
+      // Suno の Cmd+P dialog 仕様: Create Playlist は空 playlist を作るだけで、
+      // 選択中 clip は追加されない。dialog 内 list に出現した新規 row を改めて click して
+      // clip を紐付ける（同名 row が複数並ぶ場合は DOM 順で最後 = 直前作成分を選ぶ）。
+      await abortableSleep(SETTLE_MS, () => aborted);
+      await clickPlaylistRowByName(dialog, playlistName);
       await waitForPlaylistDialogClose({
         isAborted: () => aborted,
         pollIntervalMs: POLL_INTERVAL_MS,

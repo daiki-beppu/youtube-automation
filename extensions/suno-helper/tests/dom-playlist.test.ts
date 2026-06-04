@@ -27,6 +27,7 @@ import {
   CLIP_ROW_COMPLETED_SELECTOR,
   PLAYLIST_NAME_INPUT_SELECTOR,
   SELECT_CLIP_BUTTON_SELECTOR,
+  clickPlaylistRowByName,
   fillPlaylistNameAndCreate,
   multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
@@ -363,5 +364,159 @@ describe("waitForPlaylistDialogClose: dialog 消滅まで待機", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * 既存 dialog に playlist row（実機 DOM: `<button|role=button> <img/> <div class="ml-4 font-sans">{name}</div> </>`）
+ * を追加する。append=true で「Create Playlist click 直後に list へ新規 row が現れた」状態を再現する。
+ */
+function appendPlaylistRow(
+  dialog: HTMLElement,
+  name: string,
+  opts: { useRoleButton?: boolean } = {},
+): HTMLButtonElement | HTMLDivElement {
+  const wrapper = opts.useRoleButton ? document.createElement("div") : document.createElement("button");
+  if (opts.useRoleButton) {
+    wrapper.setAttribute("role", "button");
+  }
+  const img = document.createElement("img");
+  const label = document.createElement("div");
+  label.className = "ml-4 font-sans";
+  label.textContent = name;
+  wrapper.append(img, label);
+  dialog.appendChild(wrapper);
+  return wrapper;
+}
+
+describe("clickPlaylistRowByName: dialog 内 list の新規 row を click して clip を追加", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given 同名 row が dialog 内に 1 件 When click Then その button wrapper を click する", async () => {
+    const dialog = addPlaylistDialog();
+    appendPlaylistRow(dialog, "Liked Songs");
+    const target = appendPlaylistRow(dialog, "rjn | dawn-cloud-fold");
+    const onClick = vi.fn();
+    target.addEventListener("click", onClick);
+
+    const pending = clickPlaylistRowByName(dialog, "rjn | dawn-cloud-fold");
+    await vi.advanceTimersByTimeAsync(0);
+    await pending;
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given 同名 row が複数並ぶ When click Then DOM 順で最後（= 最新作成）を click する", async () => {
+    // Suno は Create Playlist で同名 playlist の重複作成を許容するため、再実行時に古い + 新規の 2 row が並ぶ。
+    const dialog = addPlaylistDialog();
+    const old = appendPlaylistRow(dialog, "rjn | dawn-cloud-fold");
+    const fresh = appendPlaylistRow(dialog, "rjn | dawn-cloud-fold");
+    const oldClick = vi.fn();
+    const freshClick = vi.fn();
+    old.addEventListener("click", oldClick);
+    fresh.addEventListener("click", freshClick);
+
+    const pending = clickPlaylistRowByName(dialog, "rjn | dawn-cloud-fold");
+    await vi.advanceTimersByTimeAsync(0);
+    await pending;
+
+    expect(oldClick).not.toHaveBeenCalled();
+    expect(freshClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given 前方一致だけする近似名 row When click Then 触らず完全一致のみ click する", async () => {
+    // 例: "DF | X" と "DF | X2" の取り違え防止。
+    const dialog = addPlaylistDialog();
+    const longer = appendPlaylistRow(dialog, "DF | X2");
+    const target = appendPlaylistRow(dialog, "DF | X");
+    const longerClick = vi.fn();
+    const targetClick = vi.fn();
+    longer.addEventListener("click", longerClick);
+    target.addEventListener("click", targetClick);
+
+    const pending = clickPlaylistRowByName(dialog, "DF | X");
+    await vi.advanceTimersByTimeAsync(0);
+    await pending;
+
+    expect(longerClick).not.toHaveBeenCalled();
+    expect(targetClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given row 不在 → 途中で出現 When click Then poll で待って出現後に click する", async () => {
+    const dialog = addPlaylistDialog();
+
+    const pending = clickPlaylistRowByName(dialog, "appears-later");
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+    expect(settled).toBe(false);
+
+    const target = appendPlaylistRow(dialog, "appears-later");
+    const onClick = vi.fn();
+    target.addEventListener("click", onClick);
+    await vi.advanceTimersByTimeAsync(200);
+    await pending;
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given row が timeout まで出現しない When click Then throw する（silent skip しない）", async () => {
+    const dialog = addPlaylistDialog();
+
+    const pending = clickPlaylistRowByName(dialog, "never-shows");
+    const expectation = expect(pending).rejects.toThrow(/never-shows/);
+    // timeout 5s + 余裕
+    await vi.advanceTimersByTimeAsync(6000);
+    await expectation;
+  });
+
+  it("Given dialog 外に同名 row が在る When click Then dialog scope のみ判定し外側は無視する", async () => {
+    const dialog = addPlaylistDialog();
+    appendPlaylistRow(dialog, "Liked Songs");
+
+    // dialog 外の偽 row（同名）
+    const outside = document.createElement("button");
+    const outsideLabel = document.createElement("div");
+    outsideLabel.className = "ml-4 font-sans";
+    outsideLabel.textContent = "rjn | dawn-cloud-fold";
+    outside.appendChild(outsideLabel);
+    document.body.appendChild(outside);
+    const outsideClick = vi.fn();
+    outside.addEventListener("click", outsideClick);
+
+    const target = appendPlaylistRow(dialog, "rjn | dawn-cloud-fold");
+    const targetClick = vi.fn();
+    target.addEventListener("click", targetClick);
+
+    const pending = clickPlaylistRowByName(dialog, "rjn | dawn-cloud-fold");
+    await vi.advanceTimersByTimeAsync(0);
+    await pending;
+
+    expect(outsideClick).not.toHaveBeenCalled();
+    expect(targetClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given 親 wrapper が role=button (div) の row When click Then その wrapper を click する", async () => {
+    const dialog = addPlaylistDialog();
+    const target = appendPlaylistRow(dialog, "role-button-row", {
+      useRoleButton: true,
+    });
+    const onClick = vi.fn();
+    target.addEventListener("click", onClick);
+
+    const pending = clickPlaylistRowByName(dialog, "role-button-row");
+    await vi.advanceTimersByTimeAsync(0);
+    await pending;
+
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

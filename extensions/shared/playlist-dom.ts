@@ -22,6 +22,9 @@ const CREATE_PLAYLIST_BUTTON_TEXT = "create playlist";
 /** Cmd+P 発火後に dialog 出現を待つ poll 間隔と上限 (ms)。 */
 const DIALOG_OPEN_POLL_MS = 100;
 const DIALOG_OPEN_TIMEOUT_MS = 5000;
+/** Create Playlist click 後に新規 playlist row が dialog 内 list に現れるのを待つ poll 間隔と上限 (ms)。 */
+const PLAYLIST_ROW_APPEAR_POLL_MS = 100;
+const PLAYLIST_ROW_APPEAR_TIMEOUT_MS = 5000;
 
 /**
  * 可視な Add to Playlist dialog を 1 つ探す（OneTrust cookie consent dialog 除外フィルタ込み）。
@@ -125,6 +128,83 @@ export async function fillPlaylistNameAndCreate(
     throw new Error("Create Playlist ボタンが dialog 内に見つかりません。");
   }
   create.click();
+}
+
+/**
+ * dialog 内の playlist 一覧から name と完全一致する row の clickable wrapper を全て返す (#NEW)。
+ *
+ * Suno の dialog DOM 構造（実機確認）:
+ *   <div role="dialog">
+ *     ...
+ *     <{button|role=button}>      ← 親方向 walk でこれを掴む
+ *       <img />
+ *       <div class="ml-4 font-sans">{playlist 名}</div>  ← own text のみ持つ leaf
+ *     </{button|role=button}>
+ *     ...
+ *   </div>
+ *
+ * - text は **完全一致**（前方一致だと "DF | X" と "DF | X2" を取り違える）。
+ * - children が 0 = 末端 div の textContent.trim() を判定。
+ * - そこから親方向に button / role="button" の clickable wrapper を探す。
+ * - 同名 row が複数ある場合（Suno は Create Playlist で重複作成を許容するため、
+ *   既存 + 直前 fillPlaylistNameAndCreate で作った直近の 2 つ以上が並ぶことがある）、
+ *   呼び出し側が DOM 順で最後 = 最新を選ぶことを想定して配列を返す。
+ */
+function findPlaylistRowsByName(
+  dialog: HTMLElement,
+  name: string,
+): HTMLElement[] {
+  const labels = Array.from(dialog.querySelectorAll<HTMLElement>("div")).filter(
+    (el) => el.children.length === 0 && (el.textContent ?? "").trim() === name,
+  );
+  const wrappers: HTMLElement[] = [];
+  for (const label of labels) {
+    let target: HTMLElement | null = label;
+    while (target && target !== dialog) {
+      if (
+        target.tagName === "BUTTON" ||
+        target.getAttribute("role") === "button"
+      ) {
+        wrappers.push(target);
+        break;
+      }
+      target = target.parentElement;
+    }
+  }
+  return wrappers;
+}
+
+/**
+ * Create Playlist click 直後、dialog 内 list に新規 playlist row が現れるのを poll で待ち、
+ * その row を click して選択中 clip を新規 playlist に追加する (#NEW)。
+ *
+ * Suno の Cmd+P dialog 仕様: 「Create Playlist」ボタンは新規 playlist を **空で作成するのみ**で、
+ * 選択中 clip は追加されない。clip を入れるには、作成直後に dialog 内 list に表示される
+ * 該当 playlist row を改めて click する必要がある。
+ *
+ * 同名 playlist が複数並ぶ場合（Suno は重複名を許容）、DOM 順で **最後の row**（= 直前に作成した最新）
+ * を click する。これにより、前回テスト等で残っていた古い同名 playlist には触らない。
+ *
+ * 期限内に row が出現しなければ throw（silent skip しない）。
+ */
+export async function clickPlaylistRowByName(
+  dialog: HTMLElement,
+  name: string,
+): Promise<void> {
+  const deadline = Date.now() + PLAYLIST_ROW_APPEAR_TIMEOUT_MS;
+  for (;;) {
+    const rows = findPlaylistRowsByName(dialog, name);
+    if (rows.length > 0) {
+      rows[rows.length - 1].click();
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Playlist "${name}" 行が dialog 内 list に出現しませんでした。Suno の UI 変更の可能性があります。`,
+      );
+    }
+    await sleep(PLAYLIST_ROW_APPEAR_POLL_MS);
+  }
 }
 
 export interface WaitForPlaylistDialogCloseOptions {
