@@ -1,5 +1,5 @@
 import type { PromptEntry } from "../../shared/api";
-import type { ItemState } from "./useSunoRunner";
+import type { ItemState } from "../../shared/constants";
 
 interface PatternListProps {
   entries: PromptEntry[];

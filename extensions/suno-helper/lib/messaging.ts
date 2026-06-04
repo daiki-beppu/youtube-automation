@@ -3,7 +3,7 @@
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
 import type { PromptEntry } from "../../shared/api";
-import type { ProgressPayload } from "../../shared/constants";
+import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 
 interface ProtocolMap {
   /** popup → content: 連続実行を開始する。 */
@@ -12,6 +12,8 @@ interface ProtocolMap {
   stop(): { ok: true };
   /** content → popup: 進捗を通知する。 */
   progress(payload: ProgressPayload): void;
+  /** popup → content: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */
+  queryProgress(): SnapshotPayload | null;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();

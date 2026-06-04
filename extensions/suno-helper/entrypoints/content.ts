@@ -6,9 +6,12 @@ import {
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
   PHASE,
+  type ProgressPayload,
   QUEUE_ERROR_WAIT_MS,
+  type SnapshotPayload,
   SUNO_MATCHES,
 } from "../../shared/constants";
+import { applyProgress, initSnapshot } from "../lib/snapshot";
 import {
   abortableSleep,
   GENERATE_TIMEOUT_MS,
@@ -30,6 +33,18 @@ export default defineContentScript({
   matches: [...SUNO_MATCHES],
   main() {
     let aborted = false;
+    // popup を閉じても進捗を維持・復元するための SSOT (#852)。run 開始で initSnapshot、
+    // 以降は emitProgress が sendMessage より前に同期更新する（queryProgress と race しないため）。
+    let currentSnapshot: SnapshotPayload | null = null;
+
+    function emitProgress(payload: ProgressPayload): void {
+      if (!currentSnapshot) {
+        // run ハンドラで initSnapshot 済みのため到達しない。万一来たら不変条件違反として fail-loud。
+        throw new Error("progress emit before run initialization");
+      }
+      currentSnapshot = applyProgress(currentSnapshot, payload);
+      void sendMessage("progress", payload);
+    }
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       const { style, lyrics, title } = resolveFields();
@@ -57,7 +72,7 @@ export default defineContentScript({
       const button = resolveGenerateButton();
       button.click();
       // Generate 押下後は最大 GENERATE_TIMEOUT_MS の生成完了待ちに入る。注入中と区別して表示する。
-      void sendMessage("progress", { phase: PHASE.GENERATING, index, total });
+      emitProgress({ phase: PHASE.GENERATING, index, total });
       await waitForGeneration(button, {
         isAborted: () => aborted,
         timeoutMs: GENERATE_TIMEOUT_MS,
@@ -70,12 +85,12 @@ export default defineContentScript({
       const total = entries.length;
       for (let i = 0; i < total; i++) {
         if (aborted) {
-          void sendMessage("progress", { phase: PHASE.STOPPED, index: i, total });
+          emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
         }
         try {
           // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
-          void sendMessage("progress", { phase: PHASE.WAITING_SLOT, index: i, total });
+          emitProgress({ phase: PHASE.WAITING_SLOT, index: i, total });
           await waitForQueueSlot(MAX_GENERATING_CLIPS, {
             isAborted: () => aborted,
             pollIntervalMs: POLL_INTERVAL_MS,
@@ -83,29 +98,30 @@ export default defineContentScript({
             queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
           });
           if (aborted) {
-            void sendMessage("progress", { phase: PHASE.STOPPED, index: i, total });
+            emitProgress({ phase: PHASE.STOPPED, index: i, total });
             return;
           }
-          void sendMessage("progress", { phase: PHASE.INJECTING, index: i, total });
+          emitProgress({ phase: PHASE.INJECTING, index: i, total });
           await injectAndGenerate(entries[i], i, total);
           if (aborted) {
-            void sendMessage("progress", { phase: PHASE.STOPPED, index: i, total });
+            emitProgress({ phase: PHASE.STOPPED, index: i, total });
             return;
           }
-          void sendMessage("progress", { phase: PHASE.DONE, index: i, total });
+          emitProgress({ phase: PHASE.DONE, index: i, total });
           // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
           await abortableSleep(INTER_CREATE_DELAY_MS, () => aborted);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          void sendMessage("progress", { phase: PHASE.ERROR, index: i, total, message });
+          emitProgress({ phase: PHASE.ERROR, index: i, total, message });
           return;
         }
       }
-      void sendMessage("progress", { phase: PHASE.FINISHED, total });
+      emitProgress({ phase: PHASE.FINISHED, total });
     }
 
     onMessage("run", ({ data }) => {
       aborted = false;
+      currentSnapshot = initSnapshot(data);
       void runAll(data);
       return { ok: true } as const;
     });
@@ -114,5 +130,8 @@ export default defineContentScript({
       aborted = true;
       return { ok: true } as const;
     });
+
+    // popup 再 open 時の進捗復元 (#852)。run 未実行は null（buildRestoreState が従来表示へフォールバック）。
+    onMessage("queryProgress", () => currentSnapshot);
   },
 });
