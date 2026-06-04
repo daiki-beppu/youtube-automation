@@ -61,9 +61,16 @@ export function useSunoRunner(): RunnerState {
   // collection id は server 契約上 `<date>-<channel>-<theme>-collection` 形式。channel が
   // 複数 word (例: `soulful-grooves`) を含む場合があり id 単体では境界判定不能なため、
   // `/collections` の `name` field (theme) を渡して逆向きに境界を確定する。
+  // 既知の server 仕様: `name` は現在 dir 名 parts[2] をそのまま返すため末尾 `-collection`
+  // を含む。extractPlaylistName 側の `endsWith("-" + theme)` 照合を通すため、ここで剥がす
+  // (server 側の修正は別 issue、剥がし処理は冪等なので将来 server 修正後も無害)。
   const derivedPlaylistName = useMemo(() => {
     const selected = collections.find((c) => c.id === selectedCollectionId);
-    return selected ? extractPlaylistName(selected.id, selected.name) : undefined;
+    if (!selected) {
+      return undefined;
+    }
+    const theme = selected.name.replace(/-collection$/, "");
+    return extractPlaylistName(selected.id, theme);
   }, [collections, selectedCollectionId]);
   const playlistName = derivedPlaylistName ?? restoredPlaylistName;
 
