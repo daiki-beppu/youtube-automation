@@ -54,9 +54,7 @@ describe("injectWithVerification: inject 受理検証 + retry (#864)", () => {
     const waitForInFlightIncrease = vi.fn().mockResolvedValue(true);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await expect(
-      injectWithVerification(makeOptions({ inject, waitForInFlightIncrease })),
-    ).resolves.toBeUndefined();
+    await expect(injectWithVerification(makeOptions({ inject, waitForInFlightIncrease }))).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledTimes(1);
     expect(waitForInFlightIncrease).toHaveBeenCalledTimes(1);
@@ -95,9 +93,7 @@ describe("injectWithVerification: inject 受理検証 + retry (#864)", () => {
       .mockResolvedValueOnce(true); // 2 回目: 受理
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await expect(
-      injectWithVerification(makeOptions({ inject, waitForInFlightIncrease })),
-    ).resolves.toBeUndefined();
+    await expect(injectWithVerification(makeOptions({ inject, waitForInFlightIncrease }))).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledTimes(2);
     expect(waitForInFlightIncrease).toHaveBeenCalledTimes(2);
@@ -126,10 +122,7 @@ describe("injectWithVerification: inject 受理検証 + retry (#864)", () => {
     // 予告せず throw が終端を伝えるため、論理破綻ログ `retry (3/2)` を出さない。
     expect(warn).toHaveBeenCalledTimes(2);
     const warnMessages = warn.mock.calls.map((call) => String(call[0]));
-    expect(warnMessages).toEqual([
-      expect.stringContaining("retry (1/2)"),
-      expect.stringContaining("retry (2/2)"),
-    ]);
+    expect(warnMessages).toEqual([expect.stringContaining("retry (1/2)"), expect.stringContaining("retry (2/2)")]);
     expect(warnMessages.some((message) => message.includes("retry (3/2)"))).toBe(false);
     warn.mockRestore();
   });
@@ -143,9 +136,7 @@ describe("injectWithVerification: inject 受理検証 + retry (#864)", () => {
     const waitForInFlightIncrease = vi.fn().mockResolvedValue(false);
 
     await expect(
-      injectWithVerification(
-        makeOptions({ inject, waitForInFlightIncrease, isAborted: () => aborted }),
-      ),
+      injectWithVerification(makeOptions({ inject, waitForInFlightIncrease, isAborted: () => aborted })),
     ).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledTimes(1);

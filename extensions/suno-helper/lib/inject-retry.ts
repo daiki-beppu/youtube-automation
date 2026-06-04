@@ -37,9 +37,7 @@ export interface InjectWithVerificationOptions {
  *   - 受理 (true) で return / 未受理 (false) で同じ entry を最大 maxRetry 回 retry
  *   - 全 attempt で未受理なら throw（fail-loud。describeEntry をメッセージに含め ERROR phase へ落とす）
  */
-export async function injectWithVerification(
-  options: InjectWithVerificationOptions,
-): Promise<void> {
+export async function injectWithVerification(options: InjectWithVerificationOptions): Promise<void> {
   for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
     const before = options.getInFlightClipCount();
     await options.inject();
@@ -62,7 +60,5 @@ export async function injectWithVerification(
       );
     }
   }
-  throw new Error(
-    `${options.describeEntry()} の inject が ${options.maxRetry + 1} 回 silent drop されました`,
-  );
+  throw new Error(`${options.describeEntry()} の inject が ${options.maxRetry + 1} 回 silent drop されました`);
 }
