@@ -18,7 +18,13 @@
 // 対象の row には markBbox (_helpers.ts) で bbox を擬似的に与える (dom.test.ts と同方針)。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CLIP_ROW_SELECTOR, getInFlightClipCount, isClipGenerating, waitForQueueSlot } from "../../shared/dom";
+import {
+  CLIP_ROW_SELECTOR,
+  getInFlightClipCount,
+  isClipGenerating,
+  waitForInFlightIncrease,
+  waitForQueueSlot,
+} from "../../shared/dom";
 import { addQueueErrorDialog, markBbox } from "./_helpers";
 
 /**
@@ -281,5 +287,107 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
     await vi.advanceTimersByTimeAsync(250);
     await expect(pending).resolves.toBeUndefined();
     expect(settled).toBe(true);
+  });
+});
+
+// inject 後に「実際に CLIPS_PER_REQUEST 個 clip が受理されたか」を in-flight 増分で検証する (#864 root cause 3)。
+// 契約 (draft が実装すべき public API、shared/dom.ts):
+//   - waitForInFlightIncrease(beforeCount: number, delta: number,
+//       options: { isAborted: () => boolean; pollIntervalMs: number; timeoutMs: number }): Promise<boolean>
+//     - getInFlightClipCount() >= beforeCount + delta になったら resolve true（受理確認）
+//     - timeout で resolve false（throw しない。retry 判断は caller=injectWithVerification 側）
+//     - isAborted() が true なら未達でも即 resolve true（停止優先。waitForQueueSlot と同じ中断優先）
+//     - 絶対値 beforeCount + delta 比較（相対追跡しない。order.md 契約どおり）
+// waitForQueueSlot と異なり throw せず boolean を返す点が本質的な差分。
+describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)", () => {
+  const FAST = { pollIntervalMs: 10, timeoutMs: 1000 } as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given 既に beforeCount+delta 以上 (before=0, delta=2, in-flight=2) When 待機 Then 即 resolve true", async () => {
+    addClipRow({ generating: true });
+    addClipRow({ generating: true }); // in-flight 2 >= 0 + 2
+
+    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(pending).resolves.toBe(true);
+  });
+
+  it("Given 投入直後はまだ反映されない→後から delta 分 clip-row 出現 When poll Then resolve true", async () => {
+    // inject 直後は clip-row DOM 反映ラグで 0 件。poll 中に 2 件出現したら受理確認。
+    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
+    let settled: boolean | undefined;
+    void pending.then((v) => {
+      settled = v;
+    });
+
+    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs * 3);
+    expect(settled).toBeUndefined(); // 0 件のうちは未達
+
+    addClipRow({ generating: true });
+    addClipRow({ generating: true });
+    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
+
+    await expect(pending).resolves.toBe(true);
+  });
+
+  it("Given delta=2 を 1 件ずつ満たす When 各 poll で再評価 Then 全 delta 到達後にのみ resolve true", async () => {
+    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
+    let settled: boolean | undefined;
+    void pending.then((v) => {
+      settled = v;
+    });
+
+    addClipRow({ generating: true }); // in-flight 1 < 2
+    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
+    expect(settled).toBeUndefined(); // 1 件では未達（部分受理では通さない）
+
+    addClipRow({ generating: true }); // in-flight 2 >= 2
+    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
+    await expect(pending).resolves.toBe(true);
+  });
+
+  it("Given 既存 in-flight 4 / before=4 / delta=2 When 6 まで増える Then resolve true (絶対値 before+delta 比較)", async () => {
+    // before を明示的に渡し、絶対値 before+delta で判定する契約を pin する。
+    Array.from({ length: 4 }, () => addClipRow({ generating: true }));
+    expect(getInFlightClipCount()).toBe(4);
+
+    const pending = waitForInFlightIncrease(4, 2, { isAborted: () => false, ...FAST });
+    let settled: boolean | undefined;
+    void pending.then((v) => {
+      settled = v;
+    });
+
+    addClipRow({ generating: true }); // 5 < 6
+    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
+    expect(settled).toBeUndefined();
+
+    addClipRow({ generating: true }); // 6 >= 6
+    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
+    await expect(pending).resolves.toBe(true);
+  });
+
+  it("Given 増分が達しないまま deadline 超過 When 待機 Then resolve false (throw しない)", async () => {
+    // silent drop を表現。waitForQueueSlot と違い throw せず false を返し、retry 判断は caller に委ねる。
+    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
+
+    await vi.advanceTimersByTimeAsync(FAST.timeoutMs + FAST.pollIntervalMs + 50);
+
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it("Given isAborted=true When 増分未達でも待機 Then 即 resolve true (停止優先)", async () => {
+    // clip-row は 1 件も無い（未達）が、停止押下中は受理判定より中断を優先して true で抜ける。
+    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => true, ...FAST });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(pending).resolves.toBe(true);
   });
 });

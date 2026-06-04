@@ -25,11 +25,23 @@ export const MAX_INFLIGHT_REQUESTS = 10;
 /** 1 Create クリックで出現する clip 数 (#816、実 DOM 検証: variation A/B = 2 clip)。 */
 export const CLIPS_PER_REQUEST = 2;
 
-/** Create 投入間の待機 (#847)。Create→clip-row DOM 反映ラグによる過剰投入 (race condition) を吸収する。 */
-export const INTER_CREATE_DELAY_MS = 1000;
+/** Create 投入間の待機 (#847, #864 で 1s→3s)。Create→clip-row DOM 反映ラグによる過剰投入 (race condition) を吸収する。
+ * 1 秒では反映ラグの間に次 inject が走り silent drop されるため 3 秒へ延長 (#864 root cause 2)。 */
+export const INTER_CREATE_DELAY_MS = 3000;
 
 /** queue 上限エラー toast 消失後の安全マージン待機 (#847)。toast が消えても直ちに再開せず buffer を取る。 */
 export const QUEUE_ERROR_WAIT_MS = 30000;
+
+/** queue 空きスロット待ち専用の timeout (#864 root cause 1)。single clip 完了待ち GENERATE_TIMEOUT_MS=3分 の
+ * 流用は、20 clip 積んだ最初の空き待ちで焼き切れる。queue 空き待ちは別系統の 5 分として独立させる。 */
+export const QUEUE_SLOT_WAIT_TIMEOUT_MS = 300000;
+
+/** inject 後に in-flight が CLIPS_PER_REQUEST 増えるまで poll wait する上限 (#864 root cause 3)。 */
+export const INJECT_ACK_TIMEOUT_MS = 30000;
+
+/** inject が ack されなかったときに同じ entry を再投入する最大 retry 回数 (#864 root cause 3)。
+ * これを超えても in-flight が増えなければ fail-loud で ERROR phase に落とす。 */
+export const MAX_INJECT_RETRY = 2;
 
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL = "http://localhost:7873";
