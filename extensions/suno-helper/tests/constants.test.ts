@@ -33,16 +33,21 @@ describe("shared/constants: サーバー互換の契約値", () => {
 });
 
 describe("shared/constants: 進捗フェーズ (PHASE)", () => {
-  it("Given PHASE When 全フェーズを読む Then 既存値に加え waiting-slot を保持する (#816)", () => {
+  it("Given PHASE When 全フェーズを読む Then 既存値に加え waiting-slot / adding-to-playlist を保持する (#816, #854)", () => {
     expect(PHASE).toEqual({
       INJECTING: "injecting",
       GENERATING: "generating",
       WAITING_SLOT: "waiting-slot",
       DONE: "done",
+      ADDING_TO_PLAYLIST: "adding-to-playlist",
       FINISHED: "finished",
       STOPPED: "stopped",
       ERROR: "error",
     });
+  });
+
+  it("Given PHASE When ADDING_TO_PLAYLIST を読む Then clip 一括 playlist 追加 phase の値である (#854)", () => {
+    expect(PHASE.ADDING_TO_PLAYLIST).toBe("adding-to-playlist");
   });
 });
 

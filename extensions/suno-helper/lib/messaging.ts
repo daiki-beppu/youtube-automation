@@ -5,9 +5,15 @@ import { defineExtensionMessaging } from "@webext-core/messaging";
 import type { PromptEntry } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 
+/**
+ * run メッセージの payload (#854)。collection mode は playlistName を伴う `{entries, playlistName}`、
+ * 単一ファイル mode（旧形式）は `PromptEntry[]` をそのまま渡し content 側で wrap する（後方互換拡張）。
+ */
+export type RunPayload = PromptEntry[] | { entries: PromptEntry[]; playlistName?: string };
+
 interface ProtocolMap {
   /** popup → content: 連続実行を開始する。 */
-  run(entries: PromptEntry[]): { ok: true };
+  run(payload: RunPayload): { ok: true };
   /** popup → content: 連続実行を中断する。 */
   stop(): { ok: true };
   /** content → popup: 進捗を通知する。 */
