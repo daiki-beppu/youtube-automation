@@ -24,6 +24,13 @@ import {
   waitForGeneration,
   waitForQueueSlot,
 } from "../../shared/dom";
+import {
+  fillPlaylistNameAndCreate,
+  multiSelectClips,
+  openAddToPlaylistDialogViaCmdP,
+  selectRecentCompletedClips,
+  waitForPlaylistDialogClose,
+} from "../../shared/playlist-dom";
 import { onMessage, sendMessage } from "../lib/messaging";
 
 /** Suno 同時生成キューに積める clip 数の上限（10 リクエスト × 2 clip = 20）。 */
@@ -81,7 +88,29 @@ export default defineContentScript({
       });
     }
 
-    async function runAll(entries: PromptEntry[]): Promise<void> {
+    /**
+     * 全 clip を multi-select → Cmd+P で Add to Playlist dialog → 名前注入 → Create Playlist の一連を実行する (#854)。
+     * 各ステップ間に abortableSleep を挟み、停止押下に素早く反応する。
+     */
+    async function addClipsToPlaylist(entryCount: number, playlistName: string): Promise<void> {
+      emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: entryCount, message: playlistName });
+      // 直近生成の完了 clip（entry 数 × 2 clip）を multi-select する。
+      const rows = selectRecentCompletedClips(entryCount * CLIPS_PER_REQUEST);
+      await multiSelectClips(rows);
+      await abortableSleep(SETTLE_MS, () => aborted);
+
+      const dialog = await openAddToPlaylistDialogViaCmdP();
+      await abortableSleep(SETTLE_MS, () => aborted);
+
+      await fillPlaylistNameAndCreate(dialog, playlistName);
+      await waitForPlaylistDialogClose({
+        isAborted: () => aborted,
+        pollIntervalMs: POLL_INTERVAL_MS,
+        timeoutMs: GENERATE_TIMEOUT_MS,
+      });
+    }
+
+    async function runAll(entries: PromptEntry[], playlistName?: string): Promise<void> {
       const total = entries.length;
       for (let i = 0; i < total; i++) {
         if (aborted) {
@@ -116,13 +145,33 @@ export default defineContentScript({
           return;
         }
       }
+      // collection mode のみ: 全 entry 生成後、FINISHED 直前に clip 一括 playlist 追加を実行する (#854)。
+      if (playlistName) {
+        if (aborted) {
+          emitProgress({ phase: PHASE.STOPPED, total });
+          return;
+        }
+        try {
+          await addClipsToPlaylist(total, playlistName);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          emitProgress({ phase: PHASE.ERROR, total, message });
+          return;
+        }
+        if (aborted) {
+          emitProgress({ phase: PHASE.STOPPED, total });
+          return;
+        }
+      }
       emitProgress({ phase: PHASE.FINISHED, total });
     }
 
     onMessage("run", ({ data }) => {
       aborted = false;
-      currentSnapshot = initSnapshot(data);
-      void runAll(data);
+      // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。
+      const { entries, playlistName } = Array.isArray(data) ? { entries: data, playlistName: undefined } : data;
+      currentSnapshot = initSnapshot(entries, playlistName);
+      void runAll(entries, playlistName);
       return { ok: true } as const;
     });
 

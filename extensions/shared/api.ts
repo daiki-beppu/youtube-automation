@@ -86,3 +86,25 @@ export function pickInitialCollectionId(
 ): string | null {
   return collections.find((c) => c.has_prompts)?.id ?? null;
 }
+
+/** collection id 末尾の接尾辞。剥がしてから日付・channel・theme を解釈する。 */
+const COLLECTION_SUFFIX = "-collection";
+
+/**
+ * collection id から Suno playlist 名 `<channel>-<theme>` を導出する純パーサ (#854)。
+ *   1. 末尾 `-collection` を剥がす（無ければそのまま）
+ *   2. `-` で分割し、先頭が 8 桁日付 (^\d{8}$) かつ parts >= 3 を検証
+ *   3. 検証 NG は throw（fail-loud。silent に空文字や undefined を返さない）
+ *   4. OK なら日付を除いた `parts.slice(1).join("-")` を返す
+ * 例: `20260601-rjn-dawn-cloud-fold-collection` -> `rjn-dawn-cloud-fold`。
+ */
+export function extractPlaylistName(collectionId: string): string {
+  const stripped = collectionId.endsWith(COLLECTION_SUFFIX)
+    ? collectionId.slice(0, -COLLECTION_SUFFIX.length)
+    : collectionId;
+  const parts = stripped.split("-");
+  if (parts.length < 3 || !/^\d{8}$/.test(parts[0])) {
+    throw new Error(`不正な collection id 形式: ${collectionId}`);
+  }
+  return parts.slice(1).join("-");
+}

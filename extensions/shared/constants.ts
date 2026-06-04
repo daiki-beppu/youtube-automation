@@ -52,6 +52,8 @@ export const PHASE = {
   GENERATING: "generating",
   WAITING_SLOT: "waiting-slot",
   DONE: "done",
+  // 全 entry の生成 DONE 後、FINISHED 直前に挟む clip 一括 playlist 追加 phase (#854)。非終了 phase。
+  ADDING_TO_PLAYLIST: "adding-to-playlist",
   FINISHED: "finished",
   STOPPED: "stopped",
   ERROR: "error",
@@ -77,4 +79,7 @@ export interface SnapshotPayload {
   itemStates: ItemState[];
   isRunning: boolean;
   progress: ProgressPayload;
+  // collection mode のときの playlist 名 (#854)。再 open 復元時の display 用。
+  // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため undefined。
+  playlistName?: string;
 }

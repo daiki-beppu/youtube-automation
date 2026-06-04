@@ -12,6 +12,8 @@ export interface RestoreState {
   isRunning: boolean;
   status: string;
   isError: boolean;
+  // collection mode の playlist 名 (#854)。再 open 時の display only 表示に使う。
+  playlistName?: string;
 }
 
 /**
@@ -34,6 +36,9 @@ export function phaseToStatus(
       return { text: `[${n}/${total}] 生成待ち…` };
     case PHASE.DONE:
       return { text: `[${n}/${total}] 完了` };
+    case PHASE.ADDING_TO_PLAYLIST:
+      // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
+      return { text: `Playlist '${message ?? ""}' へ追加中…` };
     case PHASE.FINISHED:
       return { text: `完了: ${total} パターンを実行しました。` };
     case PHASE.STOPPED:
@@ -63,6 +68,7 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     isRunning: snap.isRunning,
     status: text,
     isError: Boolean(error),
+    playlistName: snap.playlistName,
   };
 }
 

@@ -15,6 +15,7 @@ export function App() {
     isError,
     canRun,
     isRunning,
+    playlistName,
     fetchData,
     run,
     stop,
@@ -50,6 +51,12 @@ export function App() {
             ))}
           </select>
         </label>
+      )}
+
+      {playlistName && (
+        <p className="text-xs text-gray-600">
+          Playlist: <span className="font-medium">{playlistName}</span>
+        </p>
       )}
 
       <div className="flex gap-2">

@@ -1,9 +1,10 @@
 // popup の状態管理フック。旧 popup.js の挙動 (取得 / 連続実行 / 停止 / 進捗・エラー表示) を保持する。
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
+  extractPlaylistName,
   fetchCollectionPrompts,
   fetchCollections,
   fetchPrompts,
@@ -28,6 +29,8 @@ interface RunnerState {
   isError: boolean;
   canRun: boolean;
   isRunning: boolean;
+  // collection 選択時の playlist 名 (#854)。display only（単一ファイル mode は undefined）。
+  playlistName: string | undefined;
   fetchData: () => Promise<void>;
   run: () => Promise<void>;
   stop: () => Promise<void>;
@@ -50,6 +53,17 @@ export function useSunoRunner(): RunnerState {
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  // popup 再 open 時に content snapshot から復元する playlist 名 (#854)。
+  // 選択由来 (derivedPlaylistName) が無い実行中復元ケースで display only に使う。
+  const [restoredPlaylistName, setRestoredPlaylistName] = useState<string | undefined>(undefined);
+
+  // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
+  // collection id は server 契約上 `<date>-<channel>-<theme>-collection` 形式なので fail-loud のまま信頼する。
+  const derivedPlaylistName = useMemo(
+    () => (selectedCollectionId ? extractPlaylistName(selectedCollectionId) : undefined),
+    [selectedCollectionId],
+  );
+  const playlistName = derivedPlaylistName ?? restoredPlaylistName;
 
   const report = useCallback((text: string, error = false) => {
     setStatus(text);
@@ -108,6 +122,7 @@ export function useSunoRunner(): RunnerState {
         setEntries(restored.entries);
         setItemStates(restored.itemStates);
         setIsRunning(restored.isRunning);
+        setRestoredPlaylistName(restored.playlistName);
         report(restored.status, restored.isError);
       } catch {
         // Suno タブでない / content 未注入では queryProgress が到達しない。復元を諦め従来表示を維持する。
@@ -145,14 +160,15 @@ export function useSunoRunner(): RunnerState {
     }
     try {
       const tabId = await activeTabId();
-      await sendMessage("run", entries, tabId);
+      // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
+      await sendMessage("run", { entries, playlistName: derivedPlaylistName }, tabId);
       setIsRunning(true);
       report("連続実行を開始しました。");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [entries, report]);
+  }, [entries, derivedPlaylistName, report]);
 
   const stop = useCallback(async () => {
     try {
@@ -176,6 +192,7 @@ export function useSunoRunner(): RunnerState {
     isError,
     canRun: entries.length > 0 && !isRunning,
     isRunning,
+    playlistName,
     fetchData,
     run,
     stop,

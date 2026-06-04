@@ -67,6 +67,16 @@ describe("phaseToStatus: 終了 phase の文言と error フラグ", () => {
   });
 });
 
+describe("phaseToStatus: ADDING_TO_PLAYLIST の進捗文言 (#854)", () => {
+  it("Given ADDING_TO_PLAYLIST (message=playlist 名) When phaseToStatus Then playlist 名入りの追加中文言・error は falsy", () => {
+    // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
+    const result = statusOf({ phase: PHASE.ADDING_TO_PLAYLIST, total: 3, message: "rjn-dawn-cloud-fold" });
+
+    expect(result.text).toBe("Playlist 'rjn-dawn-cloud-fold' へ追加中…");
+    expect(result.error).toBeFalsy();
+  });
+});
+
 describe("phaseToStatus: INJECTING の entry 名解決", () => {
   it("Given entries を持つ snap When INJECTING index=2 Then 対応する entry 名を文言に含める", () => {
     const result = statusOf({ phase: PHASE.INJECTING, index: 2, total: 3 });
