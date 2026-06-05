@@ -637,8 +637,7 @@ def _build_ai_disclosure(raw: object) -> AiDisclosure:
     # 指定されたら設定ミス（modal にも該当 radio が出ない）として fail-loud。
     if partial is not None and recording_scope != "partial":
         raise ConfigError(
-            "distrokid.profile.ai_disclosure.partial_audio_type は "
-            "recording_scope='partial' のときのみ指定できます"
+            "distrokid.profile.ai_disclosure.partial_audio_type は recording_scope='partial' のときのみ指定できます"
         )
     return AiDisclosure(
         enabled=bool(raw.get("enabled", True)),
