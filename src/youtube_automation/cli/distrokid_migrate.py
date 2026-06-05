@@ -33,13 +33,11 @@ from youtube_automation.utils.exceptions import ConfigError
 _DISTROKID_RELPATH = ("config", "channel", "distrokid.json")
 
 # ai_disclosure 省略時に付与する default（utils.config.distrokid.AiDisclosure と一致させる）。
-_DEFAULT_AI_DISCLOSURE: dict[str, bool] = {
+_DEFAULT_AI_DISCLOSURE: dict[str, object] = {
     "enabled": True,
     "lyrics": True,
     "composition": True,
-    "full_audio": True,
-    "partial_audio": False,
-    "apply_to_all": True,
+    "partial_audio_type": None,
 }
 
 

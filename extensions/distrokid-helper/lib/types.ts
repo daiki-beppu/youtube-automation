@@ -16,14 +16,17 @@ export interface SongwriterName {
   middle: string | null;
 }
 
-// AI 開示モーダル（Suno 楽曲は通過必須）の各チェック状態。
+// AI 開示（distrokid.com/new の各 track ごとの AI 使用開示）。
+// 実 DOM 検証（#866）で判明: 「はい/いいえ」radio は ai_gate_<uuid>、歌詞/作曲は
+// ai_lyrics_<uuid> / ai_music_<uuid> checkbox、部分的 AI 音声は
+// ai_partial_audio_type_<uuid> radio (value="vocals" | "instruments")。
+// apply_to_all 相当の UI は実 DOM に存在しないため、全 track へ一括適用で代替する。
 export interface AiDisclosure {
   enabled: boolean;
   lyrics: boolean;
   composition: boolean;
-  full_audio: boolean;
-  partial_audio: boolean;
-  apply_to_all: boolean;
+  // 部分的 AI 音声の種別。100% AI 楽曲 (Suno 等) は null (追加開示なし)。
+  partial_audio_type: "vocals" | "instruments" | null;
 }
 
 // `distrokid.profile` セクション（distrokid.com/new フォーム項目に対応する静的プロファイル）。

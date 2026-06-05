@@ -1,8 +1,7 @@
 <!doctype html>
 <!--
-  distrokid.com/new（アルバムモード howmanysongs=2）を実 DOM 検証に基づいてミラーしたモック（#813）。
-  PR #803 の想像 DOM（name="artist_name" 等のフラット入力）を撤廃し、order.md の
-  「実 DOM 検証の証跡」に一致する id / name / 構造を持つ要素を並べる:
+  distrokid.com/new（アルバムモード howmanysongs=2）を実機 DOM に基づいてミラーしたモック
+  （#866 で AI 開示部分を実 DOM 準拠に再構築）。
 
     - #artistName は type=hidden（/new に可視入力欄なし → 注入対象外、visibility で排除）
     - #language / #genrePrimary / #genreSecondary は SELECT
@@ -13,10 +12,10 @@
     - リリース日は #release-date-dp（name="releaseDate"、type=date）
     - ジャケットは #artwork（name="artwork"、hidden file input）
     - previouslyReleased は value="0"（いいえ）を checked（新規リリース前提）
-    - AI 開示 radio「はい」を選ぶと #ai-modal が DOM に挿入される（MutationObserver で待機）
-      モーダル内: ai_lyrics_/ai_music_ checkbox、name 無しの 3・4 番目、#ai-apply-all-1、保存ボタン
-
-  実 DOM 確定後はセレクタマップ（lib/distrokid-injector.ts）と合わせて更新する。
+    - AI 開示は track 単位の ai_gate radio + ai_lyrics / ai_music checkbox + ai_partial_audio_type radio。
+      title / ai_gate / ai_lyrics / ai_music / ai_partial_audio_type はすべて同じ UUID を共有する。
+      初期は「いいえ」が checked、歌詞/作曲 checkbox と partial_audio_type radio は display:none の親で隠れる。
+      「はい」を click すると親の display:none が外れる（実 UI の挙動を模す）。
 -->
 <html lang="ja">
   <head>
@@ -68,6 +67,42 @@
           ><input type="radio" name="previouslyReleased_uuid-track-1" value="1" />
           はい</label
         >
+        <!-- AI 開示 (実 DOM 準拠) -->
+        <div class="ai-credits-gate-row">
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-1" value="0" checked />
+            いいえ</label
+          >
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-1" value="1" /> はい</label
+          >
+        </div>
+        <div class="ai-credits-options" data-track-options="1" style="display: none">
+          <label><input type="checkbox" name="ai_lyrics_uuid-track-1" /> 歌詞</label>
+          <label><input type="checkbox" name="ai_music_uuid-track-1" /> 作曲</label>
+          <div
+            id="ai-partial-audio-type-1"
+            class="ai-credits-partial-type"
+            style="display: none"
+          >
+            <label
+              ><input
+                type="radio"
+                name="ai_partial_audio_type_uuid-track-1"
+                value="vocals"
+              />
+              ボーカル</label
+            >
+            <label
+              ><input
+                type="radio"
+                name="ai_partial_audio_type_uuid-track-1"
+                value="instruments"
+              />
+              楽器</label
+            >
+          </div>
+        </div>
       </fieldset>
 
       <!-- Track 2 -->
@@ -85,19 +120,42 @@
           ><input type="radio" name="previouslyReleased_uuid-track-2" value="1" />
           はい</label
         >
-      </fieldset>
-
-      <!-- AI 開示 radio。「はい」選択で #ai-modal が挿入される。 -->
-      <fieldset id="ai-disclosure-question">
-        <legend>
-          この楽曲には AI によって生成された音楽、ボーカル、歌詞が含まれていますか?
-        </legend>
-        <label
-          ><input type="radio" name="aiGenerated" value="yes" id="ai-yes" /> はい</label
-        >
-        <label
-          ><input type="radio" name="aiGenerated" value="no" checked /> いいえ</label
-        >
+        <!-- AI 開示 (実 DOM 準拠) -->
+        <div class="ai-credits-gate-row">
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-2" value="0" checked />
+            いいえ</label
+          >
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-2" value="1" /> はい</label
+          >
+        </div>
+        <div class="ai-credits-options" data-track-options="2" style="display: none">
+          <label><input type="checkbox" name="ai_lyrics_uuid-track-2" /> 歌詞</label>
+          <label><input type="checkbox" name="ai_music_uuid-track-2" /> 作曲</label>
+          <div
+            id="ai-partial-audio-type-2"
+            class="ai-credits-partial-type"
+            style="display: none"
+          >
+            <label
+              ><input
+                type="radio"
+                name="ai_partial_audio_type_uuid-track-2"
+                value="vocals"
+              />
+              ボーカル</label
+            >
+            <label
+              ><input
+                type="radio"
+                name="ai_partial_audio_type_uuid-track-2"
+                value="instruments"
+              />
+              楽器</label
+            >
+          </div>
+        </div>
       </fieldset>
 
       <button id="continue" type="button">続ける</button>
@@ -110,24 +168,17 @@
         window.__continueClicked = true;
       });
 
-      // 「はい」radio 選択で AI 開示モーダルを非同期に挿入する（実 UI の展開を模す）。
-      // injector は MutationObserver で #ai-modal の出現を待つ前提。
-      document.getElementById("ai-yes").addEventListener("change", (e) => {
-        if (!e.target.checked || document.getElementById("ai-modal")) return;
-        const modal = document.createElement("div");
-        modal.id = "ai-modal";
-        modal.setAttribute("role", "dialog");
-        modal.innerHTML = [
-          '<label><input type="checkbox" name="ai_lyrics_1" /> 歌詞</label>',
-          '<label><input type="checkbox" name="ai_music_1" /> 作曲</label>',
-          "<label><input type=\"checkbox\" /> 音声すべて</label>",
-          "<label><input type=\"checkbox\" /> 音声の一部</label>",
-          '<label><input type="checkbox" id="ai-apply-all-1" /> Apply these selections to all songs on this release</label>',
-          '<button type="button" id="ai-save">保存する</button>',
-        ].join("");
-        // 実 UI の展開遅延を模すため次マイクロ/マクロタスクで挿入する。
-        setTimeout(() => document.body.appendChild(modal), 0);
-      });
+      // ai_gate「はい」radio 選択時に options 親の display:none を外す（実 UI の展開挙動を模す）。
+      document
+        .querySelectorAll('input[type="radio"][name^="ai_gate_"][value="1"]')
+        .forEach((radio) => {
+          radio.addEventListener("change", (e) => {
+            if (!e.target.checked) return;
+            const track = e.target.closest("fieldset");
+            const options = track.querySelector(".ai-credits-options");
+            if (options) options.style.display = "";
+          });
+        });
     </script>
   </body>
 </html>

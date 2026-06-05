@@ -38,25 +38,27 @@ class SongwriterName:
 
 @dataclass(frozen=True)
 class AiDisclosure:
-    """AI 開示モーダル（Suno 楽曲は通過必須）の各チェック状態.
+    """AI 開示（distrokid.com/new の各 track ごとの AI 使用開示）.
 
-    distrokid.com/new の「この楽曲には AI によって生成された…」radio で「はい」を選ぶと
-    展開するモーダルの checkbox 群に対応する。
+    実 DOM 検証（#866）で判明した構造:
+    - 「はい/いいえ」は track ごとの `ai_gate_<uuid>` radio
+    - 「歌詞 AI」「作曲 AI」は track ごとの `ai_lyrics_<uuid>` / `ai_music_<uuid>` checkbox
+    - 「部分的に AI を使った音声」の種別は `ai_partial_audio_type_<uuid>` radio
+      （value="vocals" / "instruments" の 2 値のみ。100% AI 楽曲では何も選ばない）
+    - 「音声すべて AI」「apply_to_all」相当の UI は実 DOM に存在せず、本リポは
+      全 track へ同じ設定を一括適用することで apply_to_all を代替する
 
-    - `enabled`: 「はい」radio を選択しモーダルを開くか
-    - `lyrics`: 歌詞 AI（ai_lyrics_）
-    - `composition`: 作曲 AI（ai_music_）
-    - `full_audio`: 音声すべて AI
-    - `partial_audio`: 音声の一部 AI（人間 + AI）
-    - `apply_to_all`: 当リリースの全曲へ一括適用
+    - `enabled`: 「はい (AI 使用)」radio を選択するか
+    - `lyrics`: 歌詞 AI checkbox を check するか
+    - `composition`: 作曲 AI checkbox を check するか
+    - `partial_audio_type`: 部分的 AI 音声の種別（`"vocals"` | `"instruments"`）。
+      Suno 等の 100% AI 楽曲は `None`（追加開示なし）
     """
 
     enabled: bool = True
     lyrics: bool = True
     composition: bool = True
-    full_audio: bool = True
-    partial_audio: bool = False
-    apply_to_all: bool = True
+    partial_audio_type: str | None = None
 
 
 @dataclass(frozen=True)

@@ -42,5 +42,8 @@ export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): 
     itemStates: nextItemStates(snap.itemStates, payload.phase, payload.index),
     progress: payload,
     isRunning: isTerminalPhase(payload.phase) ? false : snap.isRunning,
+    // ERROR phase でのみ失敗 index を確定する（chrome.storage の resume state と二重化, #872）。
+    // 非 ERROR phase では既存値を保つ。ERROR が index 無し（playlist phase 等）なら undefined のまま。
+    failedIndex: payload.phase === PHASE.ERROR ? payload.index : snap.failedIndex,
   };
 }

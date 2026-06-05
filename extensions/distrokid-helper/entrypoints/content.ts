@@ -96,9 +96,9 @@ async function runInjection(
     injectCover(document, decodeAsset(coverAsset));
   }
 
-  if (!isStopped() && profile.ai_disclosure.enabled) {
-    report(PHASES.INJECTING, "AI 開示モーダルを注入中");
-    await injectAiDisclosure(document, profile.ai_disclosure);
+  if (!isStopped()) {
+    report(PHASES.INJECTING, "AI 開示を注入中");
+    injectAiDisclosure(document, profile.ai_disclosure);
   }
 
   if (isStopped()) {

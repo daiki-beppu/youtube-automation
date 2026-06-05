@@ -203,9 +203,7 @@ def _full_distrokid_profile() -> dict:
             "enabled": True,
             "lyrics": True,
             "composition": True,
-            "full_audio": True,
-            "partial_audio": False,
-            "apply_to_all": True,
+            "partial_audio_type": None,
         },
     }
 
@@ -237,7 +235,7 @@ def test_distrokid_profile_drops_legacy_flat_fields(tmp_path, monkeypatch):
 
 
 def test_distrokid_profile_default_ai_disclosure(tmp_path, monkeypatch):
-    """#813: ai_disclosure 省略時は「はい + 歌詞/作曲/全音声 AI、部分は False、全曲適用」が default。"""
+    """#866: ai_disclosure 省略時の default は「はい + 歌詞/作曲 AI、partial_audio_type=None」（100% AI 楽曲想定）。"""
     from youtube_automation.utils.config.distrokid import AiDisclosure
 
     ch = _setup_channel(tmp_path, _minimal_sections())
@@ -249,9 +247,7 @@ def test_distrokid_profile_default_ai_disclosure(tmp_path, monkeypatch):
     assert ai.enabled is True
     assert ai.lyrics is True
     assert ai.composition is True
-    assert ai.full_audio is True
-    assert ai.partial_audio is False
-    assert ai.apply_to_all is True
+    assert ai.partial_audio_type is None
 
 
 def test_distrokid_section_empty_uses_defaults(tmp_path, monkeypatch):
@@ -290,9 +286,7 @@ def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
         enabled=True,
         lyrics=True,
         composition=True,
-        full_audio=True,
-        partial_audio=False,
-        apply_to_all=True,
+        partial_audio_type=None,
     )
 
 

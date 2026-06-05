@@ -87,3 +87,25 @@ describe("buildRestoreState: 終了済み snapshot の復元", () => {
     expect(restored?.isError).toBe(true);
   });
 });
+
+// #872 要件3: snapshot.failedIndex を popup の進捗復元と二重化する。buildRestoreState が
+// failedIndex を surface し、restore effect が再開バナーの冗長ソースとして消費する経路を担保する
+// （write-only な dead field への退行防止）。
+describe("buildRestoreState: failedIndex の surface (#872 要件3 二重化)", () => {
+  it("Given ERROR snapshot (index=1) When buildRestoreState Then failedIndex=1 を surface する", () => {
+    const snap = applyProgress(initSnapshot(makePromptEntries(3)), {
+      phase: PHASE.ERROR,
+      index: 1,
+      total: 3,
+      message: "stop",
+    });
+
+    expect(buildRestoreState(snap)?.failedIndex).toBe(1);
+  });
+
+  it("Given 非 ERROR snapshot When buildRestoreState Then failedIndex は undefined（確定前は surface しない）", () => {
+    const snap = applyProgress(initSnapshot(makePromptEntries(3)), { phase: PHASE.INJECTING, index: 0, total: 3 });
+
+    expect(buildRestoreState(snap)?.failedIndex).toBeUndefined();
+  });
+});
