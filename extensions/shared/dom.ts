@@ -17,10 +17,15 @@ const SELECTORS = {
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
 } as const;
 
-/** Suno 生成キューの 1 clip 行を示す安定識別子（#816、実 DOM 検証: 1 タブで 16 件確認）。 */
-export const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
-/** clip-row が「生成中」を示すスピナー（#816、完了 row には現れず duration テキストになる）。 */
-const CLIP_SPINNER_SELECTOR = "svg.animate-spin";
+/**
+ * clip カードの in-flight マーカー（#866、実機検証で確定）。Suno が `data-testid="clip-row"` と
+ * `svg.animate-spin` を撤去したため、音源が揃わない限り押せない Remix btn の `disabled` を軸にする。
+ * UI 装飾（spinner/testid）と違い「音源未完成なら Remix 不可」という Suno のドメインルール由来で変更されにくい。
+ */
+export const REMIX_BTN_SELECTOR = 'button[aria-label="Remix clip"]';
+/** clip card root を構造的に解決するための同伴ボタン（#866）。Remix btn と合わせ 3 種が各 1 つ揃う祖先が card。 */
+const SELECT_CLIP_BTN_SELECTOR = 'button[aria-label="Select clip"]';
+const EDIT_TITLE_BTN_SELECTOR = 'button[aria-label="Edit title"]';
 
 /**
  * queue 上限エラー toast の安定識別子（#847、実 DOM 検証）。testid/aria-label を持たないため
@@ -121,7 +126,7 @@ export function detectRecaptcha(): boolean {
  * queue 上限エラー toast が表示中かを検知する（#847）。
  * 可視な `[role="dialog"]` のうち英語見出し "generation in progress" を case-insensitive
  * substring match で含むものがあれば true。detectRecaptcha (#810) と同じ strict isVisible で
- * 非表示の toast 残骸を弾く。Create→clip-row 反映ラグで Suno が投入を reject した時に出る toast を
+ * 非表示の toast 残骸を弾く。Create→clip card DOM 反映ラグで Suno が投入を reject した時に出る toast を
  * 検知し、空きスロットがあっても投入を止めるために使う。
  */
 export function isQueueLimitErrorVisible(): boolean {
@@ -226,18 +231,70 @@ export interface WaitForQueueSlotOptions {
 }
 
 /**
- * 1 行の clip が「生成中」か判定する（#816）。
- * strict isVisible() で row 自体を filter したうえで `svg.animate-spin` を含むか見る。
- * 非可視 row（display:none / bbox 0 / 親 walk で隠れ）は生成中とみなさない。
+ * Remix btn（anchor）から clip card root を構造的に解決する（#866）。
+ * 親方向へ walk し、「Select clip / Remix clip / Edit title を各 1 つずつ含む最寄り祖先」を返す。
+ * Emotion class hash（`.e1yitp9f1` 等）には依存しない。複数 card を内包する container は各ボタンが
+ * 2 つ以上になるため exactly-one 判定で除外され、各 card 境界で確定する。
+ * 3 ボタンが揃う祖先が無ければ throw（fail-loud, req 8: silent に親 root を返さない）。
  */
-export function isClipGenerating(row: HTMLElement): boolean {
-  return isVisible(row) && row.querySelector(CLIP_SPINNER_SELECTOR) !== null;
+export function findCardRoot(anchor: HTMLElement): HTMLElement {
+  let el: HTMLElement | null = anchor;
+  while (el) {
+    if (
+      el.querySelectorAll(SELECT_CLIP_BTN_SELECTOR).length === 1 &&
+      el.querySelectorAll(REMIX_BTN_SELECTOR).length === 1 &&
+      el.querySelectorAll(EDIT_TITLE_BTN_SELECTOR).length === 1
+    ) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  throw new Error(
+    "clip card root を解決できません。Select/Remix/Edit が各 1 つ揃う祖先が見つかりませんでした（Suno の DOM 変更の可能性）。",
+  );
 }
 
-/** 可視な clip-row のうち生成中（in-flight）な clip 数を数える（#816）。 */
+/**
+ * 1 つの clip card が「生成中」か判定する（#866）。
+ * card 内 Remix btn が `disabled`（または `aria-disabled="true"`）なら生成中。音源が揃って初めて
+ * Remix が押せるようになる Suno のドメインルールを利用する。strict isVisible() で card 自体も filter し、
+ * 非可視 card（display:none / bbox 0 / 親 walk で隠れ）は生成中とみなさない。
+ * Remix btn が card 内に無い場合は throw（fail-loud, req 8: silent に false を返さない）。
+ */
+export function isClipGenerating(card: HTMLElement): boolean {
+  const remix = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
+  if (!remix) {
+    throw new Error(
+      "clip card 内に Remix btn がありません。card root の解決が誤っているか Suno の DOM 変更の可能性があります。",
+    );
+  }
+  return (
+    isVisible(card) &&
+    (remix.disabled || remix.getAttribute("aria-disabled") === "true")
+  );
+}
+
+/**
+ * 生成中（in-flight）な clip 数を数える（#866）。
+ * 全 Remix btn から findCardRoot で card root を解決して重複排除し、`isClipGenerating(card)`
+ * （内部で `isVisible(card)` も判定）が true な distinct card 数を返す。
+ * Remix btn が 0 件 = DOM 構造が壊れている → silent に 0 を返さず throw（fail-loud, req 8）。
+ * silent 0 を返すと「常に空き」と誤判定し queue 上限まで過剰投入してしまうのが本 issue のバグ本体。
+ */
 export function getInFlightClipCount(): number {
-  const rows = document.querySelectorAll<HTMLElement>(CLIP_ROW_SELECTOR);
-  return Array.from(rows).filter(isClipGenerating).length;
+  const anchors = document.querySelectorAll<HTMLButtonElement>(
+    REMIX_BTN_SELECTOR,
+  );
+  if (anchors.length === 0) {
+    throw new Error(
+      "Remix btn が 1 件も見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
+    );
+  }
+  const cards = new Set<HTMLElement>();
+  for (const anchor of anchors) {
+    cards.add(findCardRoot(anchor));
+  }
+  return Array.from(cards).filter(isClipGenerating).length;
 }
 
 export interface WaitForInFlightIncreaseOptions {
@@ -252,7 +309,7 @@ export interface WaitForInFlightIncreaseOptions {
  *   - isAborted() が true なら未達でも最優先で即 resolve `true`（停止優先。waitForQueueSlot と同じ中断優先）
  *   - getInFlightClipCount() >= beforeCount + delta になったら resolve `true`（受理確認）
  *   - deadline 超過で resolve `false`（throw しない。retry 判断は caller=injectWithVerification 側に委ねる）
- * waitForQueueSlot と異なり throw せず boolean を返す。Create→clip-row 反映ラグで Suno が inject を
+ * waitForQueueSlot と異なり throw せず boolean を返す。Create→clip card DOM 反映ラグで Suno が inject を
  * silent drop しても Generate ボタンは再 enabled になるため、実際に clip が受理されたかを増分で検証する。
  */
 export async function waitForInFlightIncrease(
@@ -282,7 +339,7 @@ export async function waitForInFlightIncrease(
  *   - in-flight < maxClips になったら resolve（投入再開）
  *   - deadline 超過で timeout throw
  * Suno は同時 10 リクエスト = 20 clip までしか積めず、超過すると後続が silent fail するため、
- * 各リクエスト投入前にこの関数で空きスロットを待つ。Create→clip-row 反映ラグで Suno が投入を
+ * 各リクエスト投入前にこの関数で空きスロットを待つ。Create→clip card DOM 反映ラグで Suno が投入を
  * reject すると toast が出るため、toast 検知中は投入を止め、消失後に buffer を取ってから再開する。
  */
 export async function waitForQueueSlot(
