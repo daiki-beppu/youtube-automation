@@ -282,9 +282,8 @@ export function isClipGenerating(card: HTMLElement): boolean {
  * silent 0 を返すと「常に空き」と誤判定し queue 上限まで過剰投入してしまうのが本 issue のバグ本体。
  */
 export function getInFlightClipCount(): number {
-  const anchors = document.querySelectorAll<HTMLButtonElement>(
-    REMIX_BTN_SELECTOR,
-  );
+  const anchors =
+    document.querySelectorAll<HTMLButtonElement>(REMIX_BTN_SELECTOR);
   if (anchors.length === 0) {
     throw new Error(
       "Remix btn が 1 件も見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",

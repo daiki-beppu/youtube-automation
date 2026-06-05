@@ -34,12 +34,7 @@ import {
   waitForInFlightIncrease,
   waitForQueueSlot,
 } from "../../shared/dom";
-import {
-  addClipCard,
-  addQueueErrorDialog,
-  buildClipCard,
-  completeClipCard,
-} from "./_helpers";
+import { addClipCard, addQueueErrorDialog, buildClipCard, completeClipCard } from "./_helpers";
 
 /** card 内の Remix btn (findCardRoot の anchor) を取り出す。 */
 function remixBtnOf(card: HTMLElement): HTMLButtonElement {

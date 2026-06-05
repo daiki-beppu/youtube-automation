@@ -65,10 +65,7 @@ export function addCaptchaIframe(opts: {
 }
 
 /** aria-label 付き <button> を生成する。findCardRoot の構造判定 (Select/Remix/Edit) に使う。 */
-function makeAriaButton(
-  label: string,
-  opts: { disabled?: boolean; ariaDisabled?: boolean } = {},
-): HTMLButtonElement {
+function makeAriaButton(label: string, opts: { disabled?: boolean; ariaDisabled?: boolean } = {}): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.setAttribute("aria-label", label);
   if (opts.disabled) btn.disabled = true;
