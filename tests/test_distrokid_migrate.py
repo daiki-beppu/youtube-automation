@@ -157,8 +157,11 @@ def test_migrate_apply_converts_to_new_schema(tmp_path):
     assert profile["ai_disclosure"] == {
         "enabled": True,
         "lyrics": True,
-        "composition": True,
+        "music": True,
+        "recording_scope": "full",
         "partial_audio_type": None,
+        "artist_persona": True,
+        "apply_to_all": True,
     }
 
 
@@ -288,8 +291,11 @@ def test_migrate_already_new_schema_is_noop(tmp_path):
                 "ai_disclosure": {
                     "enabled": True,
                     "lyrics": True,
-                    "composition": True,
+                    "music": True,
+                    "recording_scope": "full",
                     "partial_audio_type": None,
+                    "artist_persona": True,
+                    "apply_to_all": True,
                 },
             },
         }
@@ -301,7 +307,82 @@ def test_migrate_already_new_schema_is_noop(tmp_path):
     assert rc == 0
     profile = _read_json(path)["distrokid"]["profile"]
     assert profile["songwriter"] == {"first": "Jane", "last": "Doe"}
+    assert profile["ai_disclosure"]["music"] is True
+    assert "composition" not in profile["ai_disclosure"]
     assert "artist_name" not in profile
+
+
+def test_migrate_old_ai_disclosure_composition_renamed_to_music(tmp_path):
+    """#877: 旧 ai_disclosure の composition は music にリネームされ、新フィールドが補完される。"""
+    old = _old_distrokid()
+    old["distrokid"]["profile"]["ai_disclosure"] = {
+        "enabled": True,
+        "lyrics": False,
+        "composition": False,
+        "partial_audio_type": None,
+    }
+    path = _write_distrokid(tmp_path, old)
+
+    rc = main(["--target", str(tmp_path), "--apply", "--no-backup"])
+
+    assert rc == 0
+    ai = _read_json(path)["distrokid"]["profile"]["ai_disclosure"]
+    assert "composition" not in ai
+    assert ai["lyrics"] is False
+    assert ai["music"] is False
+    assert ai["recording_scope"] == "full"
+    assert ai["artist_persona"] is True
+    assert ai["apply_to_all"] is True
+
+
+def test_migrate_old_partial_audio_type_derives_partial_scope(tmp_path):
+    """#877: 旧 schema は recording_scope を持たず partial_audio_type のみで partial を表現した。
+
+    recording_scope 未指定 + partial_audio_type 非 null のとき recording_scope="partial" を導出し、
+    loader のクロスバリデーション（partial 非 null は recording_scope='partial' 必須）に整合させる。
+    """
+    old = _old_distrokid()
+    old["distrokid"]["profile"]["ai_disclosure"] = {
+        "enabled": True,
+        "lyrics": True,
+        "composition": True,
+        "partial_audio_type": "vocals",
+    }
+    path = _write_distrokid(tmp_path, old)
+
+    rc = main(["--target", str(tmp_path), "--apply", "--no-backup"])
+
+    assert rc == 0
+    ai = _read_json(path)["distrokid"]["profile"]["ai_disclosure"]
+    assert ai["recording_scope"] == "partial"
+    assert ai["partial_audio_type"] == "vocals"
+
+
+def test_migrate_partial_audio_type_result_loads_with_new_loader(tmp_path, monkeypatch):
+    """#877: partial_audio_type 非 null の旧 schema を変換した結果が新 loader で読めること。
+
+    recording_scope を導出しないと loader のクロスバリデーションで ConfigError になる回帰を防ぐ。
+    """
+    _setup_minimal_channel(tmp_path)
+    old = _old_distrokid(songwriter="Jane Doe")
+    old["distrokid"]["profile"]["ai_disclosure"] = {
+        "enabled": True,
+        "lyrics": True,
+        "composition": False,
+        "partial_audio_type": "instruments",
+    }
+    _write_distrokid(tmp_path, old)
+
+    assert main(["--target", str(tmp_path), "--apply", "--no-backup"]) == 0
+
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+    reset_config()
+    config = load_config()
+
+    ai = config.distrokid.profile.ai_disclosure
+    assert ai.recording_scope == "partial"
+    assert ai.partial_audio_type == "instruments"
+    assert ai.music is False
 
 
 # ----------------------- 異常系 -----------------------

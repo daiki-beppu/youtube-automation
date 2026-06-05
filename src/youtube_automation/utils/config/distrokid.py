@@ -38,27 +38,33 @@ class SongwriterName:
 
 @dataclass(frozen=True)
 class AiDisclosure:
-    """AI 開示（distrokid.com/new の各 track ごとの AI 使用開示）.
+    """AI 開示（distrokid.com/new の AI 使用開示）.
 
-    実 DOM 検証（#866）で判明した構造:
-    - 「はい/いいえ」は track ごとの `ai_gate_<uuid>` radio
-    - 「歌詞 AI」「作曲 AI」は track ごとの `ai_lyrics_<uuid>` / `ai_music_<uuid>` checkbox
-    - 「部分的に AI を使った音声」の種別は `ai_partial_audio_type_<uuid>` radio
-      （value="vocals" / "instruments" の 2 値のみ。100% AI 楽曲では何も選ばない）
-    - 「音声すべて AI」「apply_to_all」相当の UI は実 DOM に存在せず、本リポは
-      全 track へ同じ設定を一括適用することで apply_to_all を代替する
+    実 DOM 再検証（#877）で判明した構造: AI 開示は inline 展開ではなく SweetAlert2 ベースの
+    modal（`.ai-credits-swal-modal`）で開く。「はい/いいえ」の `ai_gate_<uuid>` radio で「はい」を
+    選ぶと modal が mount し、modal 内で以下を設定して「保存」する。modal の
+    「Apply these selections to all songs on this release」checkbox を入れると全 track に伝播する。
 
-    - `enabled`: 「はい (AI 使用)」radio を選択するか
-    - `lyrics`: 歌詞 AI checkbox を check するか
-    - `composition`: 作曲 AI checkbox を check するか
-    - `partial_audio_type`: 部分的 AI 音声の種別（`"vocals"` | `"instruments"`）。
-      Suno 等の 100% AI 楽曲は `None`（追加開示なし）
+    - `enabled`: 「はい (AI 使用)」radio を選択して modal を開くか
+    - `lyrics`: 歌詞 AI checkbox（`ai_lyrics_<uuid>` / `.distroAiLyrics`）を check するか
+    - `music`: 作曲 AI checkbox（`ai_music_<uuid>` / `.distroAiMusic`）を check するか
+    - `recording_scope`: 録音物の AI 範囲（`.distroAiRecordingScope`）。
+      `"full"`（音声すべて）| `"partial"`（音声の一部）
+    - `partial_audio_type`: `recording_scope="partial"` 時の種別
+      （`"vocals"` | `"instruments"`）。`"full"` の場合は `None`
+    - `artist_persona`: アーティストが AI ペルソナか（`.distroAiArtistPersona`）。
+      `True` = AI ペルソナ（value=1）/ `False` = 人間アーティスト（value=0）。
+      Suno 等の生成チャンネルは `True` が運用上の正解
+    - `apply_to_all`: modal の Apply-to-all checkbox を入れて全 track に伝播するか
     """
 
     enabled: bool = True
     lyrics: bool = True
-    composition: bool = True
+    music: bool = True
+    recording_scope: str = "full"
     partial_audio_type: str | None = None
+    artist_persona: bool = True
+    apply_to_all: bool = True
 
 
 @dataclass(frozen=True)

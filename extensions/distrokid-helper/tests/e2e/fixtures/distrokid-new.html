@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
   distrokid.com/new（アルバムモード howmanysongs=2）を実機 DOM に基づいてミラーしたモック
-  （#866 で AI 開示部分を実 DOM 準拠に再構築）。
+  （#877 で AI 開示部分を SweetAlert2 modal フローに再構築）。
 
     - #artistName は type=hidden（/new に可視入力欄なし → 注入対象外、visibility で排除）
     - #language / #genrePrimary / #genreSecondary は SELECT
@@ -12,10 +12,12 @@
     - リリース日は #release-date-dp（name="releaseDate"、type=date）
     - ジャケットは #artwork（name="artwork"、hidden file input）
     - previouslyReleased は value="0"（いいえ）を checked（新規リリース前提）
-    - AI 開示は track 単位の ai_gate radio + ai_lyrics / ai_music checkbox + ai_partial_audio_type radio。
-      title / ai_gate / ai_lyrics / ai_music / ai_partial_audio_type はすべて同じ UUID を共有する。
-      初期は「いいえ」が checked、歌詞/作曲 checkbox と partial_audio_type radio は display:none の親で隠れる。
-      「はい」を click すると親の display:none が外れる（実 UI の挙動を模す）。
+    - AI 開示は track 単位の ai_gate radio（初期「いいえ」checked）。「はい」を click すると
+      SweetAlert2 ベースの modal (.ai-credits-swal-modal) が body に mount する（実 UI の挙動を模す）。
+      modal 内に歌詞 / 作曲 checkbox・録音範囲 radio (.distroAiRecordingScope)・partial 種別 radio・
+      アーティスト種別 radio (.distroAiArtistPersona)・apply-all (#ai-apply-all-1)・保存/キャンセル button を持つ。
+      「保存」で modal を unmount し、apply-all が入っていれば全 track の ai_gate「はい」を checked にする
+      （DistroKid 側の伝播を模す）。
 -->
 <html lang="ja">
   <head>
@@ -67,7 +69,7 @@
           ><input type="radio" name="previouslyReleased_uuid-track-1" value="1" />
           はい</label
         >
-        <!-- AI 開示 (実 DOM 準拠) -->
+        <!-- AI 開示 gate (「はい」で swal2 modal が mount する #877) -->
         <div class="ai-credits-gate-row">
           <label
             ><input type="radio" name="ai_gate_uuid-track-1" value="0" checked />
@@ -76,32 +78,6 @@
           <label
             ><input type="radio" name="ai_gate_uuid-track-1" value="1" /> はい</label
           >
-        </div>
-        <div class="ai-credits-options" data-track-options="1" style="display: none">
-          <label><input type="checkbox" name="ai_lyrics_uuid-track-1" /> 歌詞</label>
-          <label><input type="checkbox" name="ai_music_uuid-track-1" /> 作曲</label>
-          <div
-            id="ai-partial-audio-type-1"
-            class="ai-credits-partial-type"
-            style="display: none"
-          >
-            <label
-              ><input
-                type="radio"
-                name="ai_partial_audio_type_uuid-track-1"
-                value="vocals"
-              />
-              ボーカル</label
-            >
-            <label
-              ><input
-                type="radio"
-                name="ai_partial_audio_type_uuid-track-1"
-                value="instruments"
-              />
-              楽器</label
-            >
-          </div>
         </div>
       </fieldset>
 
@@ -120,7 +96,7 @@
           ><input type="radio" name="previouslyReleased_uuid-track-2" value="1" />
           はい</label
         >
-        <!-- AI 開示 (実 DOM 準拠) -->
+        <!-- AI 開示 gate (「はい」で swal2 modal が mount する #877) -->
         <div class="ai-credits-gate-row">
           <label
             ><input type="radio" name="ai_gate_uuid-track-2" value="0" checked />
@@ -129,32 +105,6 @@
           <label
             ><input type="radio" name="ai_gate_uuid-track-2" value="1" /> はい</label
           >
-        </div>
-        <div class="ai-credits-options" data-track-options="2" style="display: none">
-          <label><input type="checkbox" name="ai_lyrics_uuid-track-2" /> 歌詞</label>
-          <label><input type="checkbox" name="ai_music_uuid-track-2" /> 作曲</label>
-          <div
-            id="ai-partial-audio-type-2"
-            class="ai-credits-partial-type"
-            style="display: none"
-          >
-            <label
-              ><input
-                type="radio"
-                name="ai_partial_audio_type_uuid-track-2"
-                value="vocals"
-              />
-              ボーカル</label
-            >
-            <label
-              ><input
-                type="radio"
-                name="ai_partial_audio_type_uuid-track-2"
-                value="instruments"
-              />
-              楽器</label
-            >
-          </div>
         </div>
       </fieldset>
 
@@ -168,15 +118,79 @@
         window.__continueClicked = true;
       });
 
-      // ai_gate「はい」radio 選択時に options 親の display:none を外す（実 UI の展開挙動を模す）。
+      // ai_gate「はい」click 時に SweetAlert2 modal を mount する（実 UI の展開挙動を模す）。
+      // modal は 1 つだけ（既に開いていれば再 mount しない）。uuid は開いた track のもの。
+      function buildAiModal(uuid) {
+        const modal = document.createElement("div");
+        modal.className = "ai-credits-swal-modal";
+        modal.setAttribute("role", "dialog");
+        modal.innerHTML = [
+          '<div class="swal2-content"><div class="ai-credits-swal-html">',
+          '<div class="ai-credits-swal-shell">',
+          '<div id="ai-details-1" class="ai-credits-details">',
+          '<label><input type="checkbox" class="distroAiLyrics" name="ai_lyrics_' +
+            uuid +
+            '" /> 歌詞</label>',
+          '<label><input type="checkbox" class="distroAiMusic" name="ai_music_' +
+            uuid +
+            '" /> 作曲</label>',
+          '<label><input type="radio" class="distroAiRecordingScope" name="ai_recording_scope_' +
+            uuid +
+            '" value="full" /> 音声すべて</label>',
+          '<label><input type="radio" class="distroAiRecordingScope" name="ai_recording_scope_' +
+            uuid +
+            '" value="partial" /> 音声の一部</label>',
+          '<label><input type="radio" class="distroAiPartialAudioType" name="ai_partial_audio_type_' +
+            uuid +
+            '" value="vocals" /> ボーカル</label>',
+          '<label><input type="radio" class="distroAiPartialAudioType" name="ai_partial_audio_type_' +
+            uuid +
+            '" value="instruments" /> 楽器</label>',
+          '<div id="ai-artist-questions-1">',
+          '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
+            uuid +
+            '_0" value="0" /> 人間</label>',
+          '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
+            uuid +
+            '_0" value="1" /> AIペルソナ</label>',
+          "</div>",
+          '<label><input type="checkbox" id="ai-apply-all-1" /> すべての曲に適用</label>',
+          "</div></div></div></div>",
+          '<div class="swal2-actions">',
+          '<button type="button" class="swal2-cancel ai-modal-btn-cancel">キャンセル</button>',
+          '<button type="button" class="swal2-confirm ai-modal-btn-save">保存する</button>',
+          "</div>",
+        ].join("");
+        // 保存: modal を閉じ、apply-all なら全 track の ai_gate「はい」を checked にする。
+        modal
+          .querySelector(".ai-modal-btn-save")
+          .addEventListener("click", () => {
+            const applyAll = modal.querySelector("#ai-apply-all-1").checked;
+            if (applyAll) {
+              document
+                .querySelectorAll(
+                  'input[type="radio"][name^="ai_gate_"][value="1"]',
+                )
+                .forEach((yes) => {
+                  yes.checked = true;
+                });
+            }
+            modal.remove();
+          });
+        modal
+          .querySelector(".ai-modal-btn-cancel")
+          .addEventListener("click", () => modal.remove());
+        return modal;
+      }
+
       document
         .querySelectorAll('input[type="radio"][name^="ai_gate_"][value="1"]')
         .forEach((radio) => {
-          radio.addEventListener("change", (e) => {
-            if (!e.target.checked) return;
-            const track = e.target.closest("fieldset");
-            const options = track.querySelector(".ai-credits-options");
-            if (options) options.style.display = "";
+          radio.addEventListener("click", (e) => {
+            if (document.querySelector(".ai-credits-swal-modal")) return;
+            const name = e.target.getAttribute("name"); // ai_gate_<uuid>
+            const uuid = name.slice("ai_gate_".length);
+            document.body.appendChild(buildAiModal(uuid));
           });
         });
     </script>

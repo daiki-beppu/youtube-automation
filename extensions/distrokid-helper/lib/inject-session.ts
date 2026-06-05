@@ -23,8 +23,8 @@ export interface Injector {
   injectTrackFile(trackIndex: number, file: File): void;
   // ジャケット。
   injectCover(file: File): void;
-  // 全 track の AI 開示。
-  injectAiDisclosure(payload: ReleasePayload): void;
+  // AI 開示 modal フロー（mount/unmount を待つため async）。
+  injectAiDisclosure(payload: ReleasePayload): Promise<void>;
 }
 
 export class InjectSession {
@@ -59,10 +59,10 @@ export class InjectSession {
     this.injector.injectCover(decodeAsset(asset));
   }
 
-  finish(): void {
+  async finish(): Promise<void> {
     const payload = this.requirePayload();
     this.report(PHASES.INJECTING, "AI 開示を注入中");
-    this.injector.injectAiDisclosure(payload);
+    await this.injector.injectAiDisclosure(payload);
     this.payload = null;
     this.report(PHASES.DONE, "注入が完了しました。内容を確認して手動で続行してください");
   }

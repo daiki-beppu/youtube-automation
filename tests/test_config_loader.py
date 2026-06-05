@@ -202,8 +202,11 @@ def _full_distrokid_profile() -> dict:
         "ai_disclosure": {
             "enabled": True,
             "lyrics": True,
-            "composition": True,
+            "music": True,
+            "recording_scope": "full",
             "partial_audio_type": None,
+            "artist_persona": True,
+            "apply_to_all": True,
         },
     }
 
@@ -235,7 +238,7 @@ def test_distrokid_profile_drops_legacy_flat_fields(tmp_path, monkeypatch):
 
 
 def test_distrokid_profile_default_ai_disclosure(tmp_path, monkeypatch):
-    """#866: ai_disclosure 省略時の default は「はい + 歌詞/作曲 AI、partial_audio_type=None」（100% AI 楽曲想定）。"""
+    """#877: ai_disclosure 省略時の default（はい + 歌詞/作曲 AI、full 録音、AI ペルソナ、apply-all）。"""
     from youtube_automation.utils.config.distrokid import AiDisclosure
 
     ch = _setup_channel(tmp_path, _minimal_sections())
@@ -246,8 +249,11 @@ def test_distrokid_profile_default_ai_disclosure(tmp_path, monkeypatch):
     assert isinstance(ai, AiDisclosure)
     assert ai.enabled is True
     assert ai.lyrics is True
-    assert ai.composition is True
+    assert ai.music is True
+    assert ai.recording_scope == "full"
     assert ai.partial_audio_type is None
+    assert ai.artist_persona is True
+    assert ai.apply_to_all is True
 
 
 def test_distrokid_section_empty_uses_defaults(tmp_path, monkeypatch):
@@ -285,8 +291,11 @@ def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
     assert profile.ai_disclosure == AiDisclosure(
         enabled=True,
         lyrics=True,
-        composition=True,
+        music=True,
+        recording_scope="full",
         partial_audio_type=None,
+        artist_persona=True,
+        apply_to_all=True,
     )
 
 
@@ -371,6 +380,66 @@ def test_distrokid_disabled_with_incomplete_profile_loads(tmp_path, monkeypatch)
 
     assert config.distrokid.enabled is False
     assert config.distrokid.profile.language == "ja"
+
+
+def test_distrokid_ai_disclosure_partial_recording_scope(tmp_path, monkeypatch):
+    """#877: recording_scope='partial' + partial_audio_type='vocals' が dataclass まで届く。"""
+    from youtube_automation.utils.config.distrokid import AiDisclosure
+
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["ai_disclosure"]["recording_scope"] = "partial"
+    profile["ai_disclosure"]["partial_audio_type"] = "vocals"
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    ai = load_config().distrokid.profile.ai_disclosure
+
+    assert isinstance(ai, AiDisclosure)
+    assert ai.recording_scope == "partial"
+    assert ai.partial_audio_type == "vocals"
+
+
+def test_distrokid_ai_disclosure_invalid_recording_scope_raises(tmp_path, monkeypatch):
+    """#877: recording_scope が 'full'/'partial' 以外なら ConfigError。"""
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["ai_disclosure"]["recording_scope"] = "all"
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="recording_scope"):
+        load_config()
+
+
+def test_distrokid_ai_disclosure_invalid_partial_audio_type_raises(tmp_path, monkeypatch):
+    """#877: partial_audio_type が 'vocals'/'instruments'/null 以外なら ConfigError。"""
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["ai_disclosure"]["recording_scope"] = "partial"
+    profile["ai_disclosure"]["partial_audio_type"] = "drums"
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="partial_audio_type"):
+        load_config()
+
+
+def test_distrokid_ai_disclosure_partial_type_requires_partial_scope(tmp_path, monkeypatch):
+    """#877: partial_audio_type は recording_scope='partial' 以外で指定すると ConfigError（クロスバリデーション）。"""
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["ai_disclosure"]["recording_scope"] = "full"
+    profile["ai_disclosure"]["partial_audio_type"] = "vocals"
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="partial_audio_type"):
+        load_config()
 
 
 def test_distrokid_section_must_be_object(tmp_path, monkeypatch):

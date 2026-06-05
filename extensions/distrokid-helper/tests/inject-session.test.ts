@@ -19,8 +19,11 @@ function makePayload(trackCount: number): ReleasePayload {
       ai_disclosure: {
         enabled: true,
         lyrics: false,
-        composition: true,
+        music: true,
+        recording_scope: "full",
         partial_audio_type: null,
+        artist_persona: true,
+        apply_to_all: true,
       },
     },
     release: {
@@ -53,7 +56,9 @@ function makeInjector(): { injector: Injector; calls: InjectorCall[] } {
     injectTrackFile: (trackIndex, file) =>
       calls.push({ kind: "trackFile", trackIndex, fileName: file.name }),
     injectCover: (file) => calls.push({ kind: "cover", fileName: file.name }),
-    injectAiDisclosure: () => calls.push({ kind: "ai" }),
+    injectAiDisclosure: async () => {
+      calls.push({ kind: "ai" });
+    },
   };
   return { injector, calls };
 }
@@ -90,11 +95,11 @@ describe("InjectSession", () => {
     expect(calls).toEqual([]);
   });
 
-  it("injectStart 先行なしの cover / finish も throw する", () => {
+  it("injectStart 先行なしの cover / finish も throw する", async () => {
     // Given: 開始していないセッション
-    // When / Then
+    // When / Then（finish は async のため rejects で検証）
     expect(() => session.cover(makeAsset("main.png"))).toThrow(/injectStart/);
-    expect(() => session.finish()).toThrow(/injectStart/);
+    await expect(session.finish()).rejects.toThrow(/injectStart/);
   });
 
   it("track は範囲内なら 0-indexed で曲ファイルを注入する", () => {
@@ -136,12 +141,12 @@ describe("InjectSession", () => {
     expect(calls).toContainEqual({ kind: "cover", fileName: "main.png" });
   });
 
-  it("finish は AI 開示を注入し DONE を報告してセッションを終了する", () => {
+  it("finish は AI 開示を注入し DONE を報告してセッションを終了する", async () => {
     // Given: 開始済みセッション
     session.start(makePayload(1));
 
-    // When: 完了する
-    session.finish();
+    // When: 完了する（AI 開示は modal フローのため async）
+    await session.finish();
 
     // Then: AI 開示注入 + DONE 報告
     expect(calls.at(-1)).toEqual({ kind: "ai" });
