@@ -102,9 +102,10 @@ export default defineContentScript({
      */
     async function addClipsToPlaylist(entryCount: number, playlistName: string): Promise<void> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: entryCount, message: playlistName });
-      // 直近 entry 数 × 2 clip を multi-select する。生成完了マーク（data-clip-status="complete"）の
-      // 反映ラグで 0 件選択になることを防ぐため、生成中の clip も含めて拾う（未完成分は Suno 側で
+      // 直近 entry 数 × 2 clip を multi-select する。selectRecentClips は生成中 / 完了を区別せず
+      // scroller 配下の multi-select ボタンから per-clip row を導出して拾う（未完成分は Suno 側で
       // playlist 追加後に生成完了時点で自動反映される）。
+      // clip row が 1 件も無ければ selectRecentClips が fail-loud throw する（#881）。
       const rows = selectRecentClips(entryCount * CLIPS_PER_REQUEST);
       await multiSelectClips(rows);
       await abortableSleep(SETTLE_MS, () => aborted);

@@ -6,20 +6,20 @@ import { setNativeValue, sleep } from "./dom";
 import { isVisible } from "./visibility";
 
 /**
- * clip-row（multi-select 対象）。生成中（streaming 等）も含めて拾う (#NEW)。
+ * clip list のスクロールコンテナ (#881)。配下に（Emotion の中間ラッパ div を挟んで）
+ * per-clip 要素が並び、各 clip が `.multi-select-button` を 1 つ内包する。
  *
- * Suno の挙動: multi-select は生成中の clip でも可能で、playlist 追加時に未完成な分は
- * 生成完了後に自動で playlist へ反映される。`data-clip-status="complete"` で絞ると、
- * 全 entries を generate キューに乗せた直後で「Suno が生成完了マークを付ける前」に
- * `addClipsToPlaylist` フェーズへ進んだ場合に 0 件選択となるため、status は問わない。
+ * Suno は `data-testid="clip-row"` を完全廃止したため、attribute 識別を捨て、
+ * 安定して残っているこのコンテナ class + 配下の `.multi-select-button` 構造で row を判定する
+ * （Emotion の hash 揺れする class には依存しない）。壊れたら order.md / README を参照して更新する。
  */
-export const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
+export const CLIP_LIST_SCROLLER_SELECTOR = ".clip-browser-list-scroller";
+/** 各 clip が 1 つ内包する multi-select ボタンのラッパ。clip row の構造シグナル兼 row 導出の基点 (#881)。 */
+const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
 /** 未選択の clip 選択ボタン。click すると aria-label が "Deselect clip" に切り替わる（= 冪等）。 */
-export const SELECT_CLIP_BUTTON_SELECTOR =
-  '.multi-select-button > button[aria-label="Select clip"]';
+export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
 /** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
-export const DESELECT_CLIP_BUTTON_SELECTOR =
-  '.multi-select-button > button[aria-label="Deselect clip"]';
+export const DESELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Deselect clip"]`;
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
 export const PLAYLIST_NAME_INPUT_SELECTOR =
   'input[placeholder="Playlist Name"]';
@@ -62,16 +62,57 @@ function findPlaylistDialog(): HTMLElement | null {
   );
 }
 
+/** clip row が DOM 上に存在しないことが確定したときの fail-loud メッセージ (#881)。 */
+const CLIP_ROW_NOT_FOUND_MESSAGE =
+  "clip row が見つかりません。Suno の UI 変更の可能性があります。";
+
 /**
- * clip-row を DOM 順（= 直近生成が先頭）で先頭から count 件取得する (#NEW)。
- * 生成中（streaming / queued 等）も含めて拾う — playlist 追加は未完了 clip でも可能で、
- * 生成完了後に自動で playlist へ反映されるため、status フィルタは設けない。
- * strict isVisible() で非可視 row を除外する（非マウント / display:none の残骸を弾く）。
+ * clip row を DOM 順（= 直近生成が先頭）で先頭から count 件取得する (#881)。
+ *
+ * row は **multi-select ボタンを基点に per-clip 粒度で導出する**。
+ * `.clip-browser-list-scroller` 配下の Select/Deselect ボタンを全件取得し、各ボタンの
+ * `closest('.multi-select-button')?.parentElement`（= その clip の row 要素）を DOM 順で
+ * 重複排除しながら収集する。生成中 / 完了は区別しない（playlist 追加は未完了 clip でも可能で、
+ * 生成完了後に自動反映されるため status は問わない）。strict isVisible() で非可視 row を除外する。
+ *
+ * `:scope > div`（scroller 直下 div を row とする素朴な実装）は採らない: 実機の
+ * `scroller > 中間ラッパ div > per-clip div ...`（order.md L26）構造下では中間ラッパ 1 件に
+ * 潰れ、全 clip が 1 row に collapse して `multiSelectClips` が先頭 1 ボタンしか click できない。
+ * ボタン基点の祖先導出はネスト深度・Emotion hash 非依存で per-clip 粒度を保証する。
+ *
+ * fail-loud (#881): コンテナ不在、または row 0 件のいずれでも即 throw する。
+ * 空配列を返すと後段 `multiSelectClips([])` が `0 >= 0` で silent resolve し、
+ * 真因（clip row selector の廃止）が Add to Playlist dialog timeout という代理症状でしか
+ * 顕在化しなくなるため、検出境界で UI 変更を fail-loud にする。
  */
 export function selectRecentClips(count: number): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(CLIP_ROW_SELECTOR))
-    .filter(isVisible)
-    .slice(0, count);
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  const buttons = scroller.querySelectorAll<HTMLElement>(
+    `${SELECT_CLIP_BUTTON_SELECTOR}, ${DESELECT_CLIP_BUTTON_SELECTOR}`,
+  );
+  const seen = new Set<HTMLElement>();
+  const rows: HTMLElement[] = [];
+  for (const button of buttons) {
+    const row = button.closest(MULTI_SELECT_BUTTON_SELECTOR)?.parentElement;
+    if (!row || seen.has(row)) {
+      continue;
+    }
+    seen.add(row);
+    if (isVisible(row)) {
+      rows.push(row);
+    }
+  }
+
+  if (rows.length === 0) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+  return rows.slice(0, count);
 }
 
 /**
@@ -84,11 +125,18 @@ export function selectRecentClips(count: number): HTMLElement[] {
  * を許し、0 件選択でも void resolve していた。これが後段の Add to Playlist dialog 検出
  * timeout という代理症状で初めて顕在化していたため、選択側で fail-loud にする。
  *
+ * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は selectRecentClips が
+ *   先に fail-loud throw する前提。万一 0 件で到達したら `0 >= 0` で silent resolve させない）(#881)。
  * - 既に選択済み（Deselect clip 在）の row は idempotent に skip（click しない）。
  * - Select clip ボタンが無く、かつ未選択（Deselect も無い）row は UI 変更とみなし即 throw。
  * - 全 click 後、対象 row が deadline 内に Deselect clip へ遷移しなければ throw。
  */
 export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
+  if (rows.length === 0) {
+    throw new Error(
+      "multiSelectClips に空の rows が渡されました（内部不変条件違反）。",
+    );
+  }
   for (const row of rows) {
     if (row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR)) {
       continue;
