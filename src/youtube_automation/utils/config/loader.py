@@ -612,18 +612,25 @@ def _build_songwriter(raw: object) -> SongwriterName | None:
     )
 
 
+_VALID_PARTIAL_AUDIO_TYPES = (None, "vocals", "instruments")
+
+
 def _build_ai_disclosure(raw: object) -> AiDisclosure:
     if raw is None:
         return AiDisclosure()
     if not isinstance(raw, dict):
         raise ConfigError(f"distrokid.profile.ai_disclosure は object でなければなりません（got {type(raw).__name__}）")
+    partial = raw.get("partial_audio_type")
+    if partial not in _VALID_PARTIAL_AUDIO_TYPES:
+        raise ConfigError(
+            "distrokid.profile.ai_disclosure.partial_audio_type は "
+            f"'vocals' / 'instruments' / null のいずれか（got {partial!r}）"
+        )
     return AiDisclosure(
         enabled=bool(raw.get("enabled", True)),
         lyrics=bool(raw.get("lyrics", True)),
         composition=bool(raw.get("composition", True)),
-        full_audio=bool(raw.get("full_audio", True)),
-        partial_audio=bool(raw.get("partial_audio", False)),
-        apply_to_all=bool(raw.get("apply_to_all", True)),
+        partial_audio_type=partial,
     )
 
 

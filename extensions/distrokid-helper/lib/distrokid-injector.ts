@@ -1,12 +1,18 @@
-// distrokid.com/new フォームへの注入ロジック（#813 で実 DOM 検証に基づき刷新）。
+// distrokid.com/new フォームへの注入ロジック（#866 で実機 DOM 再検証）。
 //
-// セレクタは PR #803 の想像 name 属性ベースを撤廃し、実 DOM の id ベースへ刷新した
-// （order.md「実 DOM 検証の証跡」参照）。track 系は index / uuid から生成する。
+// 静的プロファイル / album / release date / 曲 / songwriter / cover は #813 の id ベース
+// セレクタを継続。AI 開示は #866 で fixture-driven な想像 selector（#ai-yes / #ai-modal /
+// [name^="ai_lyrics_"] / apply-all checkbox / save button）が実 DOM と完全に乖離していたこと
+// が判明したため、実 DOM 準拠の uuid-driven 関数群に置換した:
+//   - 「はい/いいえ」: [name="ai_gate_<uuid>"][value="0"|"1"] radio
+//   - 歌詞 / 作曲: [name="ai_lyrics_<uuid>"] / [name="ai_music_<uuid>"] checkbox（display:none で隠れる）
+//   - 部分的 AI 音声: [name="ai_partial_audio_type_<uuid>"][value="vocals"|"instruments"] radio
+//   - apply_to_all checkbox は実 DOM に存在しない → 全 track をループで個別注入することで代替
 //
 // テキスト / SELECT 注入は React 互換のネイティブ value setter + bubbling イベントで行う
 // （React の制御要素は value を直接書き換えても onChange が走らないため、prototype の
-//  native setter で React の value tracker を欺く）。ファイル注入（DataTransfer 経由）と
-// AI 開示モーダルの展開待ち（MutationObserver）は jsdom 非対応のため Playwright が担保する。
+//  native setter で React の value tracker を欺く）。ファイル注入（DataTransfer 経由）は
+// jsdom 非対応のため Playwright が担保する。
 //
 // 隠し要素（type=hidden の #artistName 等）はテキスト/SELECT 解決時に isVisible で排除する。
 // 注入先が見つからない場合は silent skip せず FieldNotFoundError で fail-loud。
@@ -46,14 +52,20 @@ export const TRACK_FIELD_SELECTORS = {
   }),
 } as const;
 
-// AI 開示フローの契約セレクタ（実 DOM 検証サマリ + tests/e2e fixture に基づく）。
+// AI 開示の uuid-driven セレクタ群（実 DOM 検証 #866 に基づく）。
+// 全 track の uuid は resolveTrackUuids() で title_<uuid> input から DOM order に解決する。
 export const AI_DISCLOSURE_SELECTORS = {
-  yesRadio: "#ai-yes",
-  modal: "#ai-modal",
-  lyrics: '[name^="ai_lyrics_"]',
-  music: '[name^="ai_music_"]',
-  applyAll: '[id^="ai-apply-all-"]',
-  saveButton: "#ai-save",
+  // 「はい / いいえ」radio。デフォルトは「いいえ (value=0)」が checked。
+  gateByUuid: (uuid: string) => ({
+    no: `[name="ai_gate_${uuid}"][value="0"]`,
+    yes: `[name="ai_gate_${uuid}"][value="1"]`,
+  }),
+  // 「はい」選択時に展開される歌詞 / 作曲 checkbox（initial は display:none の親に隠れている）。
+  lyricsByUuid: (uuid: string) => `[name="ai_lyrics_${uuid}"]`,
+  compositionByUuid: (uuid: string) => `[name="ai_music_${uuid}"]`,
+  // 部分的 AI 音声の種別 radio。100% AI 楽曲では選ばない（partial_audio_type=null）。
+  partialAudioTypeByUuid: (uuid: string, type: "vocals" | "instruments") =>
+    `[name="ai_partial_audio_type_${uuid}"][value="${type}"]`,
 } as const;
 
 // 新規リリース前提の assert 対象（previouslyReleased「いいえ(value=0)」）。
@@ -62,9 +74,6 @@ export const NEW_RELEASE_RADIO_SELECTOR = '[name^="previouslyReleased_"][value="
 // track タイトル input の name 接頭辞（DOM order で uuid を列挙する基点）。
 const TITLE_NAME_PREFIX = "title_";
 const TITLE_NAME_SELECTOR = `[name^="${TITLE_NAME_PREFIX}"]`;
-
-// AI モーダルの展開待ち上限 (ms)。MutationObserver が拾えなければ timeout で fail-loud。
-export const AI_MODAL_TIMEOUT_MS = 5000;
 
 // 注入先フィールドが見つからないことを表す専用エラー。
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
@@ -213,36 +222,15 @@ export function assertNewRelease(root: ParentNode): void {
   }
 }
 
-// MutationObserver で要素の出現を待つ（polling ではなく変更通知で検知）。
-function waitForElement(
-  root: ParentNode,
-  selector: string,
-  timeoutMs: number,
-): Promise<HTMLElement> {
-  const existing = root.querySelector<HTMLElement>(selector);
-  if (existing !== null) {
-    return Promise.resolve(existing);
+// radio / checkbox を目標状態へ合わせる。click で React 互換に checked 切替 + change を発火する。
+// 既に目標状態なら no-op（重複 click を避ける）。
+function setChecked(el: HTMLInputElement, checked: boolean): void {
+  if (el.checked !== checked) {
+    el.click();
   }
-  // Document はそのまま、Element はその要素を subtree 監視する（content では document を渡す）。
-  const observeTarget: Node = root instanceof Document ? root : (root as Element);
-  return new Promise((resolve, reject) => {
-    const observer = new MutationObserver(() => {
-      const found = root.querySelector<HTMLElement>(selector);
-      if (found !== null) {
-        observer.disconnect();
-        clearTimeout(timer);
-        resolve(found);
-      }
-    });
-    const timer = setTimeout(() => {
-      observer.disconnect();
-      reject(new FieldNotFoundError(selector));
-    }, timeoutMs);
-    observer.observe(observeTarget, { childList: true, subtree: true });
-  });
 }
 
-function requireCheckbox(root: ParentNode, selector: string): HTMLInputElement {
+function requireInput(root: ParentNode, selector: string): HTMLInputElement {
   const el = root.querySelector<HTMLInputElement>(selector);
   if (el === null) {
     throw new FieldNotFoundError(selector);
@@ -250,50 +238,39 @@ function requireCheckbox(root: ParentNode, selector: string): HTMLInputElement {
   return el;
 }
 
-// checkbox を目標状態へ合わせる。click で React 互換に checked 切替 + change を発火する。
-function setCheckbox(el: HTMLInputElement, checked: boolean): void {
-  if (el.checked !== checked) {
-    el.click();
-  }
-}
-
-// AI 開示フロー: 「はい」radio → モーダル待機 → checkbox 注入 → 「保存する」commit。
-// enabled=false なら何もしない（Suno 以外の人手素材チャンネル等）。
-export async function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): Promise<void> {
+// 1 track 分の AI 開示を注入する（全 track 共通の ai 設定を適用）。
+//
+// 実 DOM では「はい」radio click 時点で歌詞 / 作曲 / partial_audio_type の親 div の
+// display:none が外れる仕掛けだが、checkbox / radio 自体は最初から DOM 内にあるため、
+// MutationObserver で展開待ちする必要はない（hidden な checkbox に対する el.click() も
+// React 制御コンポーネントには届く）。
+function injectAiDisclosureForTrack(root: ParentNode, uuid: string, ai: AiDisclosure): void {
+  const gate = AI_DISCLOSURE_SELECTORS.gateByUuid(uuid);
+  setChecked(requireInput(root, ai.enabled ? gate.yes : gate.no), true);
   if (!ai.enabled) {
     return;
   }
-  // 「はい」を選択するとモーダルが展開する（送信系ではない）。
-  const yesRadio = root.querySelector<HTMLInputElement>(AI_DISCLOSURE_SELECTORS.yesRadio);
-  if (yesRadio === null) {
-    throw new FieldNotFoundError(AI_DISCLOSURE_SELECTORS.yesRadio);
+  setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.lyricsByUuid(uuid)), ai.lyrics);
+  setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.compositionByUuid(uuid)), ai.composition);
+  if (ai.partial_audio_type !== null) {
+    setChecked(
+      requireInput(
+        root,
+        AI_DISCLOSURE_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type),
+      ),
+      true,
+    );
   }
-  yesRadio.click();
+}
 
-  const modal = await waitForElement(root, AI_DISCLOSURE_SELECTORS.modal, AI_MODAL_TIMEOUT_MS);
-
-  setCheckbox(requireCheckbox(modal, AI_DISCLOSURE_SELECTORS.lyrics), ai.lyrics);
-  setCheckbox(requireCheckbox(modal, AI_DISCLOSURE_SELECTORS.music), ai.composition);
-
-  // 「音声すべて / 音声の一部」は name 属性なし → モーダル内 checkbox の DOM order で識別する
-  // （order: [歌詞, 作曲, 音声すべて, 音声の一部, apply_all] の 3・4 番目）。
-  const checkboxes = Array.from(
-    modal.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
-  );
-  const fullAudio = checkboxes[2];
-  const partialAudio = checkboxes[3];
-  if (fullAudio === undefined || partialAudio === undefined) {
-    throw new FieldNotFoundError(`${AI_DISCLOSURE_SELECTORS.modal} の音声 AI checkbox`);
+// AI 開示注入: 全 track の uuid を DOM order で解決し、各 track に同じ ai 設定を適用する。
+// enabled=false でも各 track の「いいえ」radio を明示的に確定させる（人手 default に頼らない）。
+export function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): void {
+  const uuids = resolveTrackUuids(root);
+  if (uuids.length === 0) {
+    throw new FieldNotFoundError(TITLE_NAME_SELECTOR);
   }
-  setCheckbox(fullAudio, ai.full_audio);
-  setCheckbox(partialAudio, ai.partial_audio);
-
-  setCheckbox(requireCheckbox(modal, AI_DISCLOSURE_SELECTORS.applyAll), ai.apply_to_all);
-
-  // モーダル内 commit（wizard 進行ではないので規約 OK）。
-  const save = modal.querySelector<HTMLButtonElement>(AI_DISCLOSURE_SELECTORS.saveButton);
-  if (save === null) {
-    throw new FieldNotFoundError(AI_DISCLOSURE_SELECTORS.saveButton);
+  for (const uuid of uuids) {
+    injectAiDisclosureForTrack(root, uuid, ai);
   }
-  save.click();
 }

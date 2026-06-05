@@ -124,24 +124,22 @@ test("id ベースの実 DOM 構造に一致し、SELECT/file 注入が成立す
   expect(continueClicked).toBe(false);
 });
 
-test("AI 開示「はい」でモーダルが挿入され、checkbox/保存ボタンが揃う", async ({
+test("AI 開示は track 単位の ai_gate radio + ai_lyrics/ai_music checkbox + partial_audio_type radio で構成される (#866)", async ({
   page,
 }) => {
   // Given
   await page.goto(fixtureUrl);
-  await expect(page.locator("#ai-modal")).toHaveCount(0);
 
-  // When: AI 開示 radio「はい」を選択する（送信系ではない）
-  await page.locator("#ai-yes").check();
+  // Then: 各 track に ai_gate radio (yes/no) と ai_lyrics/ai_music checkbox + partial_audio_type radio が揃う
+  await expect(page.locator('[name="ai_gate_uuid-track-1"]')).toHaveCount(2); // yes/no
+  await expect(page.locator('[name="ai_gate_uuid-track-2"]')).toHaveCount(2);
+  await expect(page.locator('[name="ai_lyrics_uuid-track-1"]')).toHaveCount(1);
+  await expect(page.locator('[name="ai_music_uuid-track-1"]')).toHaveCount(1);
+  await expect(page.locator('[name="ai_partial_audio_type_uuid-track-1"]')).toHaveCount(2); // vocals/instruments
 
-  // Then: モーダルが非同期挿入される（MutationObserver で待機可能なことを担保）
-  await expect(page.locator("#ai-modal")).toHaveCount(1);
+  // When: 「はい」radio を選択する (送信系ではない)
+  await page.locator('[name="ai_gate_uuid-track-1"][value="1"]').check();
 
-  // Then: モーダル内に AI 開示 checkbox 群と「保存する」ボタンが揃う
-  await expect(page.locator('#ai-modal [name^="ai_lyrics_"]')).toHaveCount(1);
-  await expect(page.locator('#ai-modal [name^="ai_music_"]')).toHaveCount(1);
-  await expect(page.locator("#ai-apply-all-1")).toHaveCount(1);
-  await expect(page.locator("#ai-save")).toHaveText("保存する");
-  // 「音声すべて / 音声の一部」は name 属性なし → モーダル内 checkbox は計 5 個。
-  await expect(page.locator('#ai-modal input[type="checkbox"]')).toHaveCount(5);
+  // Then: options 親の display:none が外れる (実 UI の展開挙動を fixture が模す)
+  await expect(page.locator('[data-track-options="1"]')).toBeVisible();
 });

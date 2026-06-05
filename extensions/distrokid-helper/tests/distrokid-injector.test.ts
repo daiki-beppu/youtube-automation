@@ -13,7 +13,7 @@
 // File 注入（DataTransfer）と MutationObserver による実展開待ちのうち、DOM 非同期挿入のみ
 // jsdom で再現できる。実 file input への DataTransfer セットは Playwright（tests/e2e）が担う。
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   setNativeValue,
   injectProfile,
@@ -29,7 +29,7 @@ import {
   RELEASE_DATE_SELECTOR,
   FILE_SELECTORS,
   TRACK_FIELD_SELECTORS,
-  AI_MODAL_TIMEOUT_MS,
+  AI_DISCLOSURE_SELECTORS,
   FieldNotFoundError,
 } from "../lib/distrokid-injector";
 import type {
@@ -111,31 +111,59 @@ function makeCheckbox(
   return cb;
 }
 
-// 実 DOM 検証サマリの AI 開示モーダル（#ai-modal）をミラーする。
-// checkbox の DOM order は [歌詞, 作曲, 音声すべて, 音声の一部, apply-all] の 5 個
-// （「音声すべて/音声の一部」は name 属性なし → injector は order[2]/[3] で識別する）。
-function buildAiModal(parent: ParentNode): {
-  modal: HTMLDivElement;
+function makeRadio(
+  parent: ParentNode,
+  attrs: { name: string; value: string },
+): HTMLInputElement {
+  const r = document.createElement("input");
+  r.type = "radio";
+  r.name = attrs.name;
+  r.setAttribute("value", attrs.value);
+  (parent as Node).appendChild(r);
+  return r;
+}
+
+// 実 DOM 検証（#866）に基づく track 単位の AI 開示構造を mount する。
+// title input (uuid 解決基点) + ai_gate radio + ai_lyrics/ai_music checkbox +
+// ai_partial_audio_type radio（vocals/instruments）を fieldset に並べる。
+function mountAiCreditsForTrack(uuid: string): {
+  fieldset: HTMLFieldSetElement;
+  title: HTMLInputElement;
+  gateNo: HTMLInputElement;
+  gateYes: HTMLInputElement;
   lyrics: HTMLInputElement;
-  music: HTMLInputElement;
-  fullAudio: HTMLInputElement;
-  partialAudio: HTMLInputElement;
-  applyAll: HTMLInputElement;
-  save: HTMLButtonElement;
+  composition: HTMLInputElement;
+  partialVocals: HTMLInputElement;
+  partialInstruments: HTMLInputElement;
 } {
-  const modal = document.createElement("div");
-  modal.id = "ai-modal";
-  const lyrics = makeCheckbox(modal, { name: "ai_lyrics_1" });
-  const music = makeCheckbox(modal, { name: "ai_music_1" });
-  const fullAudio = makeCheckbox(modal, {});
-  const partialAudio = makeCheckbox(modal, {});
-  const applyAll = makeCheckbox(modal, { id: "ai-apply-all-1" });
-  const save = document.createElement("button");
-  save.id = "ai-save";
-  save.textContent = "保存する";
-  modal.appendChild(save);
-  (parent as Node).appendChild(modal);
-  return { modal, lyrics, music, fullAudio, partialAudio, applyAll, save };
+  const fieldset = document.createElement("fieldset");
+  const title = document.createElement("input");
+  title.name = `title_${uuid}`;
+  fieldset.appendChild(title);
+  const gateNo = makeRadio(fieldset, { name: `ai_gate_${uuid}`, value: "0" });
+  gateNo.checked = true;
+  const gateYes = makeRadio(fieldset, { name: `ai_gate_${uuid}`, value: "1" });
+  const lyrics = makeCheckbox(fieldset, { name: `ai_lyrics_${uuid}` });
+  const composition = makeCheckbox(fieldset, { name: `ai_music_${uuid}` });
+  const partialVocals = makeRadio(fieldset, {
+    name: `ai_partial_audio_type_${uuid}`,
+    value: "vocals",
+  });
+  const partialInstruments = makeRadio(fieldset, {
+    name: `ai_partial_audio_type_${uuid}`,
+    value: "instruments",
+  });
+  document.body.appendChild(fieldset);
+  return {
+    fieldset,
+    title,
+    gateNo,
+    gateYes,
+    lyrics,
+    composition,
+    partialVocals,
+    partialInstruments,
+  };
 }
 
 beforeEach(() => {
@@ -149,9 +177,7 @@ const SAMPLE_AI: AiDisclosure = {
   enabled: true,
   lyrics: true,
   composition: true,
-  full_audio: true,
-  partial_audio: false,
-  apply_to_all: true,
+  partial_audio_type: null,
 };
 const SAMPLE_PROFILE: DistrokidProfile = {
   language: "ja",
@@ -166,8 +192,11 @@ describe("新 schema 型契約（lib/types）", () => {
     // Then: 旧フラットフィールドは型から撤廃され、nested 構造になっている
     expect(SAMPLE_PROFILE.songwriter?.first).toBe("Jane");
     expect(SAMPLE_PROFILE.songwriter?.middle).toBeNull();
-    expect(SAMPLE_PROFILE.ai_disclosure.partial_audio).toBe(false);
+    expect(SAMPLE_PROFILE.ai_disclosure.partial_audio_type).toBeNull();
     expect("artist_name" in SAMPLE_PROFILE).toBe(false);
+    // #866 で実 DOM に存在しないフィールドは型から撤廃
+    expect("full_audio" in SAMPLE_PROFILE.ai_disclosure).toBe(false);
+    expect("apply_to_all" in SAMPLE_PROFILE.ai_disclosure).toBe(false);
   });
 });
 
@@ -455,142 +484,168 @@ describe("assertNewRelease（新規リリース前提の assert）", () => {
   });
 });
 
-describe("injectAiDisclosure（はい→モーダル待機→checkbox→保存）", () => {
-  it("enabled=false は何もしない（要素不在でも throw しない）", async () => {
-    await expect(
-      injectAiDisclosure(document, { ...SAMPLE_AI, enabled: false }),
-    ).resolves.toBeUndefined();
+describe("AI_DISCLOSURE_SELECTORS（uuid-driven 関数群・実 DOM 準拠 #866）", () => {
+  it("gateByUuid は ai_gate_<uuid> の yes / no radio selector を返す", () => {
+    expect(AI_DISCLOSURE_SELECTORS.gateByUuid("abc")).toEqual({
+      no: '[name="ai_gate_abc"][value="0"]',
+      yes: '[name="ai_gate_abc"][value="1"]',
+    });
   });
 
-  it("はい radio が無ければ FieldNotFoundError", async () => {
-    const err = await injectAiDisclosure(document, { ...SAMPLE_AI }).catch(
-      (e) => e,
+  it("lyricsByUuid / compositionByUuid は ai_lyrics_<uuid> / ai_music_<uuid> selector", () => {
+    expect(AI_DISCLOSURE_SELECTORS.lyricsByUuid("abc")).toBe('[name="ai_lyrics_abc"]');
+    expect(AI_DISCLOSURE_SELECTORS.compositionByUuid("abc")).toBe('[name="ai_music_abc"]');
+  });
+
+  it("partialAudioTypeByUuid は vocals / instruments radio selector", () => {
+    expect(AI_DISCLOSURE_SELECTORS.partialAudioTypeByUuid("abc", "vocals")).toBe(
+      '[name="ai_partial_audio_type_abc"][value="vocals"]',
     );
-    expect(err).toBeInstanceOf(FieldNotFoundError);
+    expect(AI_DISCLOSURE_SELECTORS.partialAudioTypeByUuid("abc", "instruments")).toBe(
+      '[name="ai_partial_audio_type_abc"][value="instruments"]',
+    );
+  });
+});
+
+describe("injectAiDisclosure（全 track へ ai 設定を一括適用・sync）", () => {
+  it("title input (track) が無ければ FieldNotFoundError（uuid 解決不可）", () => {
+    expect(() => injectAiDisclosure(document, SAMPLE_AI)).toThrow(FieldNotFoundError);
   });
 
-  it("はい click → config 通りに checkbox 設定 → 保存 click（モーダル既存）", async () => {
-    // Given: はい radio とモーダルが既に存在し、全 checkbox は unchecked
-    const yes = mountInput({ id: "ai-yes", type: "radio" });
-    let yesClicks = 0;
-    yes.addEventListener("click", () => {
-      yesClicks += 1;
-    });
-    const refs = buildAiModal(document.body);
-    let saveClicks = 0;
-    refs.save.addEventListener("click", () => {
-      saveClicks += 1;
-    });
+  it("enabled=true で全 track の「はい」radio が click され lyrics/composition が確定する", () => {
+    // Given: 2 track のモック (どちらも初期は「いいえ」 checked)
+    const t1 = mountAiCreditsForTrack("uuid-a");
+    const t2 = mountAiCreditsForTrack("uuid-b");
 
     // When
-    await injectAiDisclosure(document, {
+    injectAiDisclosure(document, {
       enabled: true,
       lyrics: true,
       composition: true,
-      full_audio: true,
-      partial_audio: false,
-      apply_to_all: true,
+      partial_audio_type: null,
     });
 
-    // Then: はいが押され、config に従い checkbox が設定され、保存が押される
-    expect(yesClicks).toBe(1);
-    expect(refs.lyrics.checked).toBe(true);
-    expect(refs.music.checked).toBe(true);
-    // 「音声すべて/音声の一部」は DOM order[2]/[3] で識別される（finding 2 の前提を固定）
-    expect(refs.fullAudio.checked).toBe(true);
-    expect(refs.partialAudio.checked).toBe(false);
-    expect(refs.applyAll.checked).toBe(true);
-    expect(saveClicks).toBe(1);
+    // Then: 全 track で yes radio が確定、lyrics/composition も checked
+    expect(t1.gateYes.checked).toBe(true);
+    expect(t2.gateYes.checked).toBe(true);
+    expect(t1.lyrics.checked).toBe(true);
+    expect(t1.composition.checked).toBe(true);
+    expect(t2.lyrics.checked).toBe(true);
+    expect(t2.composition.checked).toBe(true);
+    // partial_audio_type=null なので partial 系 radio には触れない
+    expect(t1.partialVocals.checked).toBe(false);
+    expect(t1.partialInstruments.checked).toBe(false);
   });
 
-  it("setCheckbox: 既に目標状態なら click せず、不一致なら click する", async () => {
-    // Given: lyrics は既に checked（config も true）、partialAudio は checked（config は false）
-    mountInput({ id: "ai-yes", type: "radio" });
-    const refs = buildAiModal(document.body);
-    refs.lyrics.checked = true;
-    refs.partialAudio.checked = true;
+  it("partial_audio_type='vocals' で対応 radio が click される（全 track）", () => {
+    const t1 = mountAiCreditsForTrack("uuid-a");
+    const t2 = mountAiCreditsForTrack("uuid-b");
+
+    injectAiDisclosure(document, {
+      enabled: true,
+      lyrics: true,
+      composition: true,
+      partial_audio_type: "vocals",
+    });
+
+    expect(t1.partialVocals.checked).toBe(true);
+    expect(t1.partialInstruments.checked).toBe(false);
+    expect(t2.partialVocals.checked).toBe(true);
+  });
+
+  it("partial_audio_type='instruments' でも同様に対応 radio が click される", () => {
+    const t1 = mountAiCreditsForTrack("uuid-a");
+
+    injectAiDisclosure(document, { ...SAMPLE_AI, partial_audio_type: "instruments" });
+
+    expect(t1.partialInstruments.checked).toBe(true);
+    expect(t1.partialVocals.checked).toBe(false);
+  });
+
+  it("enabled=false でも全 track の「いいえ」radio を明示確定する（人手 default に頼らない）", () => {
+    // Given: 初期は yes が checked（過去操作の影響を仮想）
+    const t1 = mountAiCreditsForTrack("uuid-a");
+    t1.gateNo.checked = false;
+    t1.gateYes.checked = true;
+    let noClicks = 0;
+    t1.gateNo.addEventListener("click", () => {
+      noClicks += 1;
+    });
+
+    // When
+    injectAiDisclosure(document, { ...SAMPLE_AI, enabled: false });
+
+    // Then: 「いいえ」が click で確定、lyrics/composition は触れない
+    expect(noClicks).toBe(1);
+    expect(t1.gateNo.checked).toBe(true);
+    expect(t1.lyrics.checked).toBe(false);
+    expect(t1.composition.checked).toBe(false);
+  });
+
+  it("ai_gate radio が無ければ FieldNotFoundError", () => {
+    // Given: title だけあって ai_gate radio が無い
+    const title = document.createElement("input");
+    title.name = "title_uuid-a";
+    document.body.appendChild(title);
+
+    expect(() => injectAiDisclosure(document, SAMPLE_AI)).toThrow(FieldNotFoundError);
+  });
+
+  it("ai_lyrics checkbox が無ければ FieldNotFoundError", () => {
+    // Given: title + ai_gate はあるが ai_lyrics 不在
+    const title = document.createElement("input");
+    title.name = "title_uuid-a";
+    document.body.appendChild(title);
+    const gateYes = makeRadio(document.body, { name: "ai_gate_uuid-a", value: "1" });
+    const gateNo = makeRadio(document.body, { name: "ai_gate_uuid-a", value: "0" });
+    gateNo.checked = true;
+
+    expect(() => injectAiDisclosure(document, SAMPLE_AI)).toThrow(FieldNotFoundError);
+    expect(gateYes.checked).toBe(true); // 順序: gate を先に確定してから lyrics で fail-loud
+  });
+
+  it("partial_audio_type が non-null で対応 radio 不在なら FieldNotFoundError", () => {
+    // Given: lyrics/composition checkbox はあるが partial_audio_type radio が無い
+    const title = document.createElement("input");
+    title.name = "title_uuid-a";
+    document.body.appendChild(title);
+    makeRadio(document.body, { name: "ai_gate_uuid-a", value: "1" });
+    const gateNo = makeRadio(document.body, { name: "ai_gate_uuid-a", value: "0" });
+    gateNo.checked = true;
+    makeCheckbox(document.body, { name: "ai_lyrics_uuid-a" });
+    makeCheckbox(document.body, { name: "ai_music_uuid-a" });
+
+    expect(() =>
+      injectAiDisclosure(document, { ...SAMPLE_AI, partial_audio_type: "vocals" }),
+    ).toThrow(FieldNotFoundError);
+  });
+
+  it("setChecked: 既に目標状態なら click せず、不一致のみ click する", () => {
+    // Given: lyrics は既に checked（config も true）、composition は false（config は true）
+    const t1 = mountAiCreditsForTrack("uuid-a");
+    t1.lyrics.checked = true;
     let lyricsClicks = 0;
-    let partialClicks = 0;
-    refs.lyrics.addEventListener("click", () => {
+    let compositionClicks = 0;
+    t1.lyrics.addEventListener("click", () => {
       lyricsClicks += 1;
     });
-    refs.partialAudio.addEventListener("click", () => {
-      partialClicks += 1;
+    t1.composition.addEventListener("click", () => {
+      compositionClicks += 1;
     });
 
     // When
-    await injectAiDisclosure(document, {
+    injectAiDisclosure(document, {
       enabled: true,
       lyrics: true,
       composition: true,
-      full_audio: true,
-      partial_audio: false,
-      apply_to_all: true,
+      partial_audio_type: null,
     });
 
     // Then: 一致は無操作、不一致のみ click で切替
     expect(lyricsClicks).toBe(0);
-    expect(refs.lyrics.checked).toBe(true);
-    expect(partialClicks).toBe(1);
-    expect(refs.partialAudio.checked).toBe(false);
-  });
-
-  it("はい click 後にモーダルが非同期挿入されても MutationObserver で待機して注入する", async () => {
-    // Given: はい click でモーダルを microtask 挿入（同期挿入だと observer 経路を通らないため）
-    const yes = mountInput({ id: "ai-yes", type: "radio" });
-    let refs: ReturnType<typeof buildAiModal> | null = null;
-    yes.addEventListener("click", () => {
-      Promise.resolve().then(() => {
-        refs = buildAiModal(document.body);
-      });
-    });
-
-    // When
-    await injectAiDisclosure(document, { ...SAMPLE_AI });
-
-    // Then: 後挿入されたモーダルにも checkbox が注入される
-    expect(refs).not.toBeNull();
-    expect(refs!.applyAll.checked).toBe(true);
-    expect(refs!.lyrics.checked).toBe(true);
-  });
-
-  it("モーダルが現れなければ timeout で FieldNotFoundError（fail-loud）", async () => {
-    // Given: はいはあるがモーダルは出ない
-    mountInput({ id: "ai-yes", type: "radio" });
-    vi.useFakeTimers();
-
-    // When: timeout まで進める
-    const pending = injectAiDisclosure(document, { ...SAMPLE_AI }).catch(
-      (e) => e,
-    );
-    await vi.advanceTimersByTimeAsync(AI_MODAL_TIMEOUT_MS + 10);
-    const err = await pending;
-
-    // Then
-    expect(err).toBeInstanceOf(FieldNotFoundError);
-    vi.useRealTimers();
-  });
-
-  it("音声 AI checkbox（DOM order 3・4 番目）が無ければ FieldNotFoundError", async () => {
-    // Given: checkbox が 3 個しか無い（fullAudio/partialAudio が欠落）モーダル
-    mountInput({ id: "ai-yes", type: "radio" });
-    const modal = document.createElement("div");
-    modal.id = "ai-modal";
-    makeCheckbox(modal, { name: "ai_lyrics_1" });
-    makeCheckbox(modal, { name: "ai_music_1" });
-    makeCheckbox(modal, { id: "ai-apply-all-1" });
-    const save = document.createElement("button");
-    save.id = "ai-save";
-    modal.appendChild(save);
-    document.body.appendChild(modal);
-
-    // When
-    const err = await injectAiDisclosure(document, { ...SAMPLE_AI }).catch(
-      (e) => e,
-    );
-
-    // Then
-    expect(err).toBeInstanceOf(FieldNotFoundError);
+    expect(t1.lyrics.checked).toBe(true);
+    expect(compositionClicks).toBe(1);
+    expect(t1.composition.checked).toBe(true);
   });
 });
 

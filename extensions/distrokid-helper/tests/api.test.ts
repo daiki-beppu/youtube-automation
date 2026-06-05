@@ -30,9 +30,7 @@ const SAMPLE_PAYLOAD: ReleasePayload = {
       enabled: true,
       lyrics: true,
       composition: true,
-      full_audio: true,
-      partial_audio: false,
-      apply_to_all: true,
+      partial_audio_type: null,
     },
   },
   release: {

@@ -158,9 +158,7 @@ def test_migrate_apply_converts_to_new_schema(tmp_path):
         "enabled": True,
         "lyrics": True,
         "composition": True,
-        "full_audio": True,
-        "partial_audio": False,
-        "apply_to_all": True,
+        "partial_audio_type": None,
     }
 
 
@@ -291,9 +289,7 @@ def test_migrate_already_new_schema_is_noop(tmp_path):
                     "enabled": True,
                     "lyrics": True,
                     "composition": True,
-                    "full_audio": True,
-                    "partial_audio": False,
-                    "apply_to_all": True,
+                    "partial_audio_type": None,
                 },
             },
         }

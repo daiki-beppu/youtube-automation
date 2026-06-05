@@ -106,9 +106,7 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
             "enabled": True,
             "lyrics": True,
             "composition": True,
-            "full_audio": True,
-            "partial_audio": False,
-            "apply_to_all": True,
+            "partial_audio_type": None,
         },
     }
     release = payload["release"]
