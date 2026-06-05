@@ -1,63 +1,46 @@
 // @vitest-environment jsdom
 //
-// Suno 生成キュー監視 (#816) の回帰テスト。実 DOM 検証 (order.md) で確定した仕様を担保する:
-//   - clip-row は `[data-testid="clip-row"]` で識別 (1 タブで 16 件確認)
-//   - 生成中判定 = row 内に `svg.animate-spin` を含む。strict isVisible() で row 自体も filter
-//   - 完了判定 = duration テキストあり / spinner なし → 生成中ではない
-//   - getInFlightClipCount() = 全 visible clip-row のうち生成中の数
+// Suno 生成キュー監視 (#816 → #866 で再実装) の回帰テスト。
+// Suno が `data-testid="clip-row"` と `svg.animate-spin` を撤去したため、実機検証 (order.md) で
+// 「生成中→完了」を 100% 追跡できると確定した `button[aria-label="Remix clip"]` の disabled を軸に
+// in-flight 検知を再構築する。音源が揃わない限り Remix できないという Suno のドメインルール由来の
+// 状態であり、UI 装飾 (spinner/testid) より変更されにくい。
+//
+//   - clip カードは「Select clip / Remix clip / Edit title を各 1 つずつ含む最寄り祖先」で識別
+//     (findCardRoot による構造的解決。Emotion class hash には依存しない)
+//   - 生成中判定 = card 内 Remix btn が disabled (または aria-disabled="true")。strict isVisible() で
+//     card 自体も filter
+//   - 完了判定 = Remix btn enabled → 生成中ではない
+//   - getInFlightClipCount() = 全 Remix btn からカードルートを解決し in-flight な distinct card 数
+//   - fail-loud (req 8): Remix btn が 0 件 = DOM 構造が壊れている → silent に 0 を返さず throw
 //   - waitForQueueSlot(maxClips, opts) = in-flight < maxClips になるまで poll
 //
 // 契約 (draft が実装すべき public API、shared/dom.ts):
-//   - CLIP_ROW_SELECTOR: string
-//   - isClipGenerating(row: HTMLElement): boolean
-//   - getInFlightClipCount(): number
+//   - REMIX_BTN_SELECTOR: string
+//   - findCardRoot(anchor: HTMLElement): HTMLElement
+//   - isClipGenerating(card: HTMLElement): boolean
+//   - getInFlightClipCount(): number   // Remix btn 0 件で throw
 //   - waitForQueueSlot(maxClips: number, options: { isAborted; pollIntervalMs; timeoutMs; queueErrorWaitMs }): Promise<void>
-//     #847 で queueErrorWaitMs（toast 消失後の安全マージン）を必須オプションに追加。
 //
 // jsdom はレイアウトを行わず getBoundingClientRect が常に 0×0 を返すため、strict 可視判定
-// 対象の row には markBbox (_helpers.ts) で bbox を擬似的に与える (dom.test.ts と同方針)。
+// 対象の card には markBbox (_helpers.ts) で bbox を擬似的に与える (dom.test.ts と同方針)。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  CLIP_ROW_SELECTOR,
+  REMIX_BTN_SELECTOR,
+  findCardRoot,
   getInFlightClipCount,
   isClipGenerating,
   waitForInFlightIncrease,
   waitForQueueSlot,
 } from "../../shared/dom";
-import { addQueueErrorDialog, markBbox } from "./_helpers";
+import { addClipCard, addQueueErrorDialog, buildClipCard, completeClipCard } from "./_helpers";
 
-/**
- * clip-row を body に挿入する。
- *   - generating=true: row 内に `svg.animate-spin` を置く (生成中)
- *   - generating=false: duration テキストのみ (完了)
- *   - visible=false: display:none + bbox 0×0 (strict isVisible で除外される行)
- */
-function addClipRow(opts: { generating?: boolean; visible?: boolean } = {}): HTMLElement {
-  const row = document.createElement("div");
-  row.setAttribute("data-testid", "clip-row");
-  if (opts.generating) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "animate-spin");
-    row.appendChild(svg);
-  } else {
-    const duration = document.createElement("span");
-    duration.textContent = "2:02";
-    row.appendChild(duration);
-  }
-  document.body.appendChild(row);
-  if (opts.visible === false) {
-    row.style.display = "none";
-    markBbox(row, 0, 0);
-  } else {
-    markBbox(row, 200, 60);
-  }
-  return row;
-}
-
-/** generating な row から spinner を取り除き「完了」状態にする (poll 中に slot が空く状況を作る)。 */
-function completeClip(row: HTMLElement): void {
-  row.querySelector("svg.animate-spin")?.remove();
+/** card 内の Remix btn (findCardRoot の anchor) を取り出す。 */
+function remixBtnOf(card: HTMLElement): HTMLButtonElement {
+  const btn = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
+  if (!btn) throw new Error("test fixture 不整合: card に Remix btn がありません。");
+  return btn;
 }
 
 // queueErrorWaitMs は poll (10ms) と明確に分離して buffer 待機の途中経過を pin できるよう 200ms。
@@ -67,64 +50,100 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("CLIP_ROW_SELECTOR: 実 DOM 検証で確定した安定識別子", () => {
-  it('Given 定数 When 読む Then `[data-testid="clip-row"]` である', () => {
-    expect(CLIP_ROW_SELECTOR).toBe('[data-testid="clip-row"]');
+describe("REMIX_BTN_SELECTOR: 実 DOM 検証で確定した in-flight マーカー", () => {
+  it('Given 定数 When 読む Then `button[aria-label="Remix clip"]` である', () => {
+    expect(REMIX_BTN_SELECTOR).toBe('button[aria-label="Remix clip"]');
   });
 });
 
-describe("isClipGenerating: 1 行の生成中判定", () => {
-  it("Given 可視 row 内に svg.animate-spin When 判定する Then true", () => {
-    const row = addClipRow({ generating: true });
-    expect(isClipGenerating(row)).toBe(true);
+describe("findCardRoot: Remix btn から clip card root を構造的に解決する", () => {
+  it("Given Select/Remix/Edit を各 1 つ持つ card の Remix btn When 解決する Then その card root を返す", () => {
+    const card = addClipCard({ generating: true });
+    expect(findCardRoot(remixBtnOf(card))).toBe(card);
   });
 
-  it("Given 可視 row だが spinner 無し (duration のみ) When 判定する Then false (完了)", () => {
-    const row = addClipRow({ generating: false });
-    expect(isClipGenerating(row)).toBe(false);
+  it("Given 複数 card を内包する container When 各 Remix btn から解決する Then 上位 container ではなく最寄りの card を返す", () => {
+    // 上位 container は Select/Remix/Edit を 2 つずつ持つ。exactly-one 判定が container で止まらず
+    // 各カード境界 (各ボタン 1 個ずつ) で確定することを担保する。
+    const container = document.createElement("div");
+    const card1 = buildClipCard({ generating: true });
+    const card2 = buildClipCard({ generating: false });
+    container.append(card1, card2);
+    document.body.appendChild(container);
+
+    expect(findCardRoot(remixBtnOf(card1))).toBe(card1);
+    expect(findCardRoot(remixBtnOf(card2))).toBe(card2);
   });
 
-  it("Given spinner はあるが row が非可視 (display:none/bbox0) When 判定する Then false (strict isVisible で除外)", () => {
-    const row = addClipRow({ generating: true, visible: false });
-    expect(isClipGenerating(row)).toBe(false);
+  it("Given anchor から祖先を辿っても 3 ボタンが揃う card root が無い When 解決する Then throw する (fail-loud)", () => {
+    // Select/Edit を伴わない孤立した Remix btn。構造解決できないので silent に返さず throw。
+    const lone = document.createElement("button");
+    lone.setAttribute("aria-label", "Remix clip");
+    document.body.appendChild(lone);
+
+    expect(() => findCardRoot(lone)).toThrow();
+  });
+});
+
+describe("isClipGenerating: 1 card の生成中判定 (Remix btn disabled)", () => {
+  it("Given 可視 card の Remix btn が disabled When 判定する Then true (生成中)", () => {
+    const card = addClipCard({ generating: true });
+    expect(isClipGenerating(card)).toBe(true);
   });
 
-  it("Given 親が display:none の row When 判定する Then false (親 walk で除外)", () => {
+  it("Given 可視 card の Remix btn が aria-disabled=true When 判定する Then true (生成中)", () => {
+    const card = addClipCard({ generating: true, generatingVia: "aria-disabled" });
+    expect(isClipGenerating(card)).toBe(true);
+  });
+
+  it("Given 可視 card の Remix btn が enabled When 判定する Then false (完了)", () => {
+    const card = addClipCard({ generating: false });
+    expect(isClipGenerating(card)).toBe(false);
+  });
+
+  it("Given Remix btn は disabled だが card が非可視 (display:none/bbox0) When 判定する Then false (strict isVisible で除外)", () => {
+    const card = addClipCard({ generating: true, visible: false });
+    expect(isClipGenerating(card)).toBe(false);
+  });
+
+  it("Given 親が display:none の card When 判定する Then false (親 walk で除外)", () => {
     const wrapper = document.createElement("div");
     wrapper.style.display = "none";
     document.body.appendChild(wrapper);
-    const row = document.createElement("div");
-    row.setAttribute("data-testid", "clip-row");
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "animate-spin");
-    row.appendChild(svg);
-    wrapper.appendChild(row);
-    markBbox(row, 200, 60); // bbox は非 0。除外理由は親の display:none のみに限定する。
+    const card = buildClipCard({ generating: true }); // bbox は非 0。除外理由は親の display:none のみに限定。
+    wrapper.appendChild(card);
 
-    expect(isClipGenerating(row)).toBe(false);
+    expect(isClipGenerating(card)).toBe(false);
+  });
+
+  it("Given card 内に Remix btn が無い When 判定する Then throw する (fail-loud, req 8)", () => {
+    const card = document.createElement("div");
+    document.body.appendChild(card);
+    expect(() => isClipGenerating(card)).toThrow();
   });
 });
 
-describe("getInFlightClipCount: 可視 clip-row のうち生成中の数", () => {
+describe("getInFlightClipCount: in-flight な distinct card 数", () => {
   it("Given 生成中 3 / 完了 1 / 非可視生成中 1 When 数える Then 可視生成中の 3 を返す", () => {
-    addClipRow({ generating: true });
-    addClipRow({ generating: true });
-    addClipRow({ generating: true });
-    addClipRow({ generating: false });
-    addClipRow({ generating: true, visible: false });
+    addClipCard({ generating: true });
+    addClipCard({ generating: true });
+    addClipCard({ generating: true });
+    addClipCard({ generating: false });
+    addClipCard({ generating: true, visible: false });
 
     expect(getInFlightClipCount()).toBe(3);
   });
 
-  it("Given clip-row が 1 件も無い When 数える Then 0 を返す", () => {
+  it("Given 全て完了 card (Remix enabled) When 数える Then 0 を返す (Remix btn は存在するので throw しない)", () => {
+    addClipCard({ generating: false });
+    addClipCard({ generating: false });
+
     expect(getInFlightClipCount()).toBe(0);
   });
 
-  it("Given 全て完了 row When 数える Then 0 を返す", () => {
-    addClipRow({ generating: false });
-    addClipRow({ generating: false });
-
-    expect(getInFlightClipCount()).toBe(0);
+  it("Given Remix btn が 1 件も無い When 数える Then throw する (fail-loud, req 8: silent 0 を返さない)", () => {
+    // これが本 issue のバグ本体: selector 0 hit を silent に 0 と返すと上限まで過剰投入する。
+    expect(() => getInFlightClipCount()).toThrow();
   });
 });
 
@@ -138,7 +157,7 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   });
 
   it("Given in-flight が既に上限未満 When 待機する Then 即 resolve する", async () => {
-    addClipRow({ generating: true }); // in-flight 1 < 20
+    addClipCard({ generating: true }); // in-flight 1 < 20
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
     await vi.advanceTimersByTimeAsync(0);
 
@@ -146,8 +165,8 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   });
 
   it("Given in-flight が上限ちょうど When 1 clip 完了で空く Then 投入を再開 (resolve) する", async () => {
-    // 20 clip 生成中 = 10 リクエスト in-flight = 上限。11 件目はここで待たされる。
-    const rows = Array.from({ length: 20 }, () => addClipRow({ generating: true }));
+    // 20 card 生成中 = 10 リクエスト in-flight = 上限。11 件目はここで待たされる。
+    const cards = Array.from({ length: 20 }, () => addClipCard({ generating: true }));
     expect(getInFlightClipCount()).toBe(20);
 
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
@@ -160,8 +179,8 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 3);
     expect(settled).toBe(false);
 
-    // 1 clip 完了 → in-flight 19 < 20 → 次の poll で resolve。
-    completeClip(rows[0]);
+    // 1 clip 完了 (Remix btn enabled) → in-flight 19 < 20 → 次の poll で resolve。
+    completeClipCard(cards[0]);
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs);
 
     await expect(pending).resolves.toBeUndefined();
@@ -169,7 +188,7 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   });
 
   it("Given isAborted が true When 待機する Then 上限超でも即 resolve する (throw しない)", async () => {
-    Array.from({ length: 20 }, () => addClipRow({ generating: true }));
+    Array.from({ length: 20 }, () => addClipCard({ generating: true }));
 
     const pending = waitForQueueSlot(20, { isAborted: () => true, ...FAST_OPTIONS });
     await vi.advanceTimersByTimeAsync(0);
@@ -178,7 +197,7 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   });
 
   it("Given 上限のまま空かない When deadline 超過 Then timeout throw する", async () => {
-    Array.from({ length: 20 }, () => addClipRow({ generating: true }));
+    Array.from({ length: 20 }, () => addClipCard({ generating: true }));
 
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
     const expectation = expect(pending).rejects.toThrow();
@@ -188,10 +207,9 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
 });
 
 describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
-  // race condition (Create→clip-row DOM 反映ラグ) で Suno が 21 件目を reject すると
-  // 「Generation in progress」toast が出る。slot が空いていても toast 中は投入を止め、
-  // toast 消失後に queueErrorWaitMs の安全マージンを待ってから再開する。
-  // toast が一度も出ない経路（既存 4 ケース）は挙動不変であること（回帰）も上記で担保済み。
+  // race condition (Create→DOM 反映ラグ) で Suno が 21 件目を reject すると「Generation in progress」
+  // toast が出る。slot が空いていても toast 中は投入を止め、消失後に queueErrorWaitMs の安全マージンを
+  // 待ってから再開する。toast が一度も出ない経路（既存 4 ケース）は挙動不変であること（回帰）も担保済み。
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -201,7 +219,7 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
   });
 
   it("Given toast 可視中 When 空きスロットがあっても Then resolve せず待機を継続する", async () => {
-    addClipRow({ generating: true }); // in-flight 1 < 20（スロットは空いている）
+    addClipCard({ generating: true }); // in-flight 1 < 20（スロットは空いている）
     const toast = addQueueErrorDialog(); // だが queue 上限 toast が出ている
 
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
@@ -220,7 +238,7 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
   });
 
   it("Given toast 消失 When queueErrorWaitMs buffer 経過 Then 投入を再開 (resolve) する", async () => {
-    addClipRow({ generating: true }); // slot は空き
+    addClipCard({ generating: true }); // slot は空き
     const toast = addQueueErrorDialog();
 
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
@@ -244,7 +262,7 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
   });
 
   it("Given toast が一度も出ない When 空きスロットあり Then 即 resolve する (toast 無し経路は挙動不変)", async () => {
-    addClipRow({ generating: true }); // in-flight 1 < 20、toast なし
+    addClipCard({ generating: true }); // in-flight 1 < 20、toast なし
 
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
     await vi.advanceTimersByTimeAsync(0);
@@ -253,7 +271,7 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
   });
 
   it("Given toast 可視中でも isAborted=true When 待機する Then 即 resolve する (中断優先)", async () => {
-    addClipRow({ generating: true });
+    addClipCard({ generating: true });
     addQueueErrorDialog();
 
     const pending = waitForQueueSlot(20, { isAborted: () => true, ...FAST_OPTIONS });
@@ -267,7 +285,7 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
     // 受け入れ条件「停止後 3 秒以内」を満たさない。abortableSleep の poll(250ms)で中断検知されることを、
     // poll 粒度より十分長い buffer(1000ms)を与え、満了前の停止で resolve することで確認する。
     const SLOW_BUFFER = { pollIntervalMs: 10, timeoutMs: 5000, queueErrorWaitMs: 1000 } as const;
-    addClipRow({ generating: true }); // slot は空き（待機要因は buffer のみ）
+    addClipCard({ generating: true }); // slot は空き（待機要因は buffer のみ）
     const toast = addQueueErrorDialog();
 
     let aborted = false;
@@ -299,6 +317,10 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
 //     - isAborted() が true なら未達でも即 resolve true（停止優先。waitForQueueSlot と同じ中断優先）
 //     - 絶対値 beforeCount + delta 比較（相対追跡しない。order.md 契約どおり）
 // waitForQueueSlot と異なり throw せず boolean を返す点が本質的な差分。
+//
+// #866 注: getInFlightClipCount() は Remix btn 0 件で throw するため、「in-flight 0 から増える」
+// シナリオは完了 card（Remix btn enabled = in-flight には数えない）を seed して表現する。
+// 実機でも library には過去の完了 clip が常駐するため、これが現実的な前提。
 describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)", () => {
   const FAST = { pollIntervalMs: 10, timeoutMs: 1000 } as const;
 
@@ -311,8 +333,8 @@ describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)",
   });
 
   it("Given 既に beforeCount+delta 以上 (before=0, delta=2, in-flight=2) When 待機 Then 即 resolve true", async () => {
-    addClipRow({ generating: true });
-    addClipRow({ generating: true }); // in-flight 2 >= 0 + 2
+    addClipCard({ generating: true });
+    addClipCard({ generating: true }); // in-flight 2 >= 0 + 2
 
     const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
     await vi.advanceTimersByTimeAsync(0);
@@ -320,8 +342,10 @@ describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)",
     await expect(pending).resolves.toBe(true);
   });
 
-  it("Given 投入直後はまだ反映されない→後から delta 分 clip-row 出現 When poll Then resolve true", async () => {
-    // inject 直後は clip-row DOM 反映ラグで 0 件。poll 中に 2 件出現したら受理確認。
+  it("Given 投入直後はまだ反映されない→後から delta 分 card が生成中になる When poll Then resolve true", async () => {
+    // inject 直後は DOM 反映ラグで in-flight 0（完了 card のみ）。poll 中に 2 card が生成中になったら受理確認。
+    addClipCard({ generating: false }); // 過去の完了 clip（Remix btn 存在 → throw しない、in-flight には数えない）
+
     const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
     let settled: boolean | undefined;
     void pending.then((v) => {
@@ -329,34 +353,36 @@ describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)",
     });
 
     await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs * 3);
-    expect(settled).toBeUndefined(); // 0 件のうちは未達
+    expect(settled).toBeUndefined(); // in-flight 0 のうちは未達
 
-    addClipRow({ generating: true });
-    addClipRow({ generating: true });
+    addClipCard({ generating: true });
+    addClipCard({ generating: true });
     await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
 
     await expect(pending).resolves.toBe(true);
   });
 
   it("Given delta=2 を 1 件ずつ満たす When 各 poll で再評価 Then 全 delta 到達後にのみ resolve true", async () => {
+    addClipCard({ generating: false }); // in-flight 0 の起点（完了 card を seed）
+
     const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
     let settled: boolean | undefined;
     void pending.then((v) => {
       settled = v;
     });
 
-    addClipRow({ generating: true }); // in-flight 1 < 2
+    addClipCard({ generating: true }); // in-flight 1 < 2
     await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
     expect(settled).toBeUndefined(); // 1 件では未達（部分受理では通さない）
 
-    addClipRow({ generating: true }); // in-flight 2 >= 2
+    addClipCard({ generating: true }); // in-flight 2 >= 2
     await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
     await expect(pending).resolves.toBe(true);
   });
 
   it("Given 既存 in-flight 4 / before=4 / delta=2 When 6 まで増える Then resolve true (絶対値 before+delta 比較)", async () => {
     // before を明示的に渡し、絶対値 before+delta で判定する契約を pin する。
-    Array.from({ length: 4 }, () => addClipRow({ generating: true }));
+    Array.from({ length: 4 }, () => addClipCard({ generating: true }));
     expect(getInFlightClipCount()).toBe(4);
 
     const pending = waitForInFlightIncrease(4, 2, { isAborted: () => false, ...FAST });
@@ -365,17 +391,20 @@ describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)",
       settled = v;
     });
 
-    addClipRow({ generating: true }); // 5 < 6
+    addClipCard({ generating: true }); // 5 < 6
     await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
     expect(settled).toBeUndefined();
 
-    addClipRow({ generating: true }); // 6 >= 6
+    addClipCard({ generating: true }); // 6 >= 6
     await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
     await expect(pending).resolves.toBe(true);
   });
 
   it("Given 増分が達しないまま deadline 超過 When 待機 Then resolve false (throw しない)", async () => {
     // silent drop を表現。waitForQueueSlot と違い throw せず false を返し、retry 判断は caller に委ねる。
+    // 完了 card を seed し getInFlightClipCount() の throw を避けつつ in-flight は 0 のまま据え置く。
+    addClipCard({ generating: false });
+
     const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
 
     await vi.advanceTimersByTimeAsync(FAST.timeoutMs + FAST.pollIntervalMs + 50);
@@ -384,7 +413,8 @@ describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)",
   });
 
   it("Given isAborted=true When 増分未達でも待機 Then 即 resolve true (停止優先)", async () => {
-    // clip-row は 1 件も無い（未達）が、停止押下中は受理判定より中断を優先して true で抜ける。
+    // card は 1 件も無い（未達）が、停止押下中は受理判定より中断を優先して true で抜ける
+    // （isAborted を先に評価するため getInFlightClipCount() の throw 経路にも入らない）。
     const pending = waitForInFlightIncrease(0, 2, { isAborted: () => true, ...FAST });
     await vi.advanceTimersByTimeAsync(0);
 

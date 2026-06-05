@@ -64,6 +64,78 @@ export function addCaptchaIframe(opts: {
   return f;
 }
 
+/** aria-label 付き <button> を生成する。findCardRoot の構造判定 (Select/Remix/Edit) に使う。 */
+function makeAriaButton(label: string, opts: { disabled?: boolean; ariaDisabled?: boolean } = {}): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.setAttribute("aria-label", label);
+  if (opts.disabled) btn.disabled = true;
+  if (opts.ariaDisabled) btn.setAttribute("aria-disabled", "true");
+  return btn;
+}
+
+/**
+ * Suno の clip カード (#866) を模した DOM を生成する（body には append しない detached 要素）。
+ * order.md 実機検証で確定した「Select clip / Remix clip / Edit title を各 1 つずつ含む card root」を
+ * 写像する。findCardRoot のネスト構造テスト（複数カードを 1 つの container に入れる）では本関数で
+ * detached card を組んでから任意の親へ append する。
+ *   - generating=true: Remix btn を disabled にする（= 生成中。音源未完成で Remix 不可）
+ *   - generating=false: Remix btn enabled（= 完了。Remix 可能）
+ *   - generatingVia="aria-disabled": disabled 属性ではなく aria-disabled="true" で生成中を表す
+ *   - visible=false: display:none + bbox 0×0（strict isVisible で除外される card）
+ */
+export function buildClipCard(
+  opts: {
+    generating?: boolean;
+    visible?: boolean;
+    generatingVia?: "disabled" | "aria-disabled";
+  } = {},
+): HTMLElement {
+  const via = opts.generatingVia ?? "disabled";
+  const card = document.createElement("div");
+  card.append(
+    makeAriaButton("Select clip"),
+    makeAriaButton("Remix clip", {
+      disabled: opts.generating === true && via === "disabled",
+      ariaDisabled: opts.generating === true && via === "aria-disabled",
+    }),
+    makeAriaButton("Edit title"),
+  );
+  const title = document.createElement("span");
+  title.textContent = opts.generating ? "Untitled" : "Orchestral Test Verification";
+  card.appendChild(title);
+
+  if (opts.visible === false) {
+    card.style.display = "none";
+    markBbox(card, 0, 0);
+  } else {
+    markBbox(card, 240, 80);
+  }
+  return card;
+}
+
+/** buildClipCard で作った clip カードを body に挿入して返す（単純な単一カード用）。 */
+export function addClipCard(
+  opts: {
+    generating?: boolean;
+    visible?: boolean;
+    generatingVia?: "disabled" | "aria-disabled";
+  } = {},
+): HTMLElement {
+  const card = buildClipCard(opts);
+  document.body.appendChild(card);
+  return card;
+}
+
+/** generating な card の Remix btn を enabled に戻し「完了」状態にする（poll 中に slot が空く状況を作る）。 */
+export function completeClipCard(card: HTMLElement): void {
+  const remix = card.querySelector<HTMLButtonElement>('button[aria-label="Remix clip"]');
+  if (!remix) {
+    throw new Error("test fixture 不整合: card 内に Remix btn がありません。");
+  }
+  remix.disabled = false;
+  remix.removeAttribute("aria-disabled");
+}
+
 /**
  * Suno の queue 上限エラー toast (#847) を模した `[role="dialog"]` を body に挿入する。
  * order.md 実 DOM 検証の構造 (H2.sr-only + P.sr-only + H3 可視見出し + SPAN 補足) を写像する。

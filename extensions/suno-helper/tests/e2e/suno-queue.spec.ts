@@ -1,15 +1,17 @@
-// 要件 (#816): Suno 生成キュー監視と collection 選択 UI の E2E スモーク (実 Suno 非依存)。
+// 要件 (#816 → #866 で再実装): Suno 生成キュー監視と collection 選択 UI の E2E スモーク (実 Suno 非依存)。
 //
 // content script は manifest の matches (`https://suno.com/*`) でしか注入されず、Playwright の
 // page.evaluate に渡す関数はシリアライズされブラウザ文脈で実行されるため本番 `shared/dom.ts` を
 // 直接 import できない (既存 suno-inject.spec.ts と同じ制約)。よってここでは
-// isClipGenerating / getInFlightClipCount / waitForQueueSlot と同手法を inline 再現し、
+// findCardRoot / isClipGenerating / getInFlightClipCount / waitForQueueSlot と同手法を inline 再現し、
 // 「11 件目は queue 待ちで停止 → 1 完了で投入される」が実ブラウザの layout 上で成立することを示す。
+// #866: Suno が clip-row testid と svg.animate-spin を撤去したため、in-flight マーカーを
+// `button[aria-label="Remix clip"]` の disabled に切り替えた新 DOM 構造で検証する。
 // 本番関数自体の回帰は jsdom 上で `shared/dom.ts` を import する unit (`tests/queue.test.ts`) が担う。
 import { expect, test } from "@playwright/test";
 
-// clip-row を 20 行 (= 10 リクエスト in-flight = 上限) 並べた Suno 生成キューの mock。
-// 各 row は生成中を表す svg.animate-spin を持つ。
+// clip card を 20 枚 (= 10 リクエスト in-flight = 上限) 並べた Suno 生成キューの mock。
+// 各 card は Select clip / Remix clip / Edit title を 1 つずつ持ち、生成中は Remix btn を disabled にする。
 const MOCK_QUEUE_HTML = `<!doctype html>
 <html>
   <body>
@@ -17,8 +19,11 @@ const MOCK_QUEUE_HTML = `<!doctype html>
       ${Array.from({ length: 20 })
         .map(
           (_, i) =>
-            `<div data-testid="clip-row" id="clip-${i}" style="width:200px;height:60px">` +
-            `<svg class="animate-spin" width="16" height="16"></svg></div>`,
+            `<div class="clip-card" id="clip-${i}" style="width:200px;height:60px">` +
+            `<button aria-label="Select clip"></button>` +
+            `<button aria-label="Remix clip" disabled></button>` +
+            `<button aria-label="Edit title"></button>` +
+            `</div>`,
         )
         .join("\n")}
     </div>
@@ -29,7 +34,10 @@ test("11 件目は in-flight 上限 (20 clip) で待機し、1 clip 完了で投
   await page.setContent(MOCK_QUEUE_HTML);
 
   const result = await page.evaluate(async () => {
-    // 本番 shared/dom.ts と同じ strict 可視判定 / 生成中判定 / queue 待機を inline 再現する。
+    // 本番 shared/dom.ts と同じ strict 可視判定 / card root 解決 / 生成中判定 / queue 待機を inline 再現する。
+    const REMIX_BTN_SELECTOR = 'button[aria-label="Remix clip"]';
+    const SELECT_CLIP_SELECTOR = 'button[aria-label="Select clip"]';
+    const EDIT_TITLE_SELECTOR = 'button[aria-label="Edit title"]';
     const isVisible = (el: HTMLElement): boolean => {
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return false;
@@ -43,10 +51,34 @@ test("11 件目は in-flight 上限 (20 clip) で待機し、1 clip 完了で投
       }
       return true;
     };
-    const isClipGenerating = (row: HTMLElement): boolean =>
-      isVisible(row) && row.querySelector("svg.animate-spin") !== null;
-    const getInFlightClipCount = (): number =>
-      Array.from(document.querySelectorAll<HTMLElement>('[data-testid="clip-row"]')).filter(isClipGenerating).length;
+    // 親方向に walk して Select/Remix/Edit を各 1 つずつ含む最寄り祖先 (card root) を返す。
+    const findCardRoot = (anchor: HTMLElement): HTMLElement => {
+      let node: HTMLElement | null = anchor;
+      while (node) {
+        if (
+          node.querySelectorAll(SELECT_CLIP_SELECTOR).length === 1 &&
+          node.querySelectorAll(REMIX_BTN_SELECTOR).length === 1 &&
+          node.querySelectorAll(EDIT_TITLE_SELECTOR).length === 1
+        ) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      throw new Error("clip card root を解決できません。");
+    };
+    const isClipGenerating = (card: HTMLElement): boolean => {
+      if (!isVisible(card)) return false;
+      const remix = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
+      if (!remix) throw new Error("card 内に Remix btn が見つかりません。");
+      return remix.disabled || remix.getAttribute("aria-disabled") === "true";
+    };
+    const getInFlightClipCount = (): number => {
+      const anchors = Array.from(document.querySelectorAll<HTMLButtonElement>(REMIX_BTN_SELECTOR));
+      if (anchors.length === 0) throw new Error("Remix btn が 0 件です。");
+      const cards = new Set<HTMLElement>();
+      for (const a of anchors) cards.add(findCardRoot(a));
+      return Array.from(cards).filter(isClipGenerating).length;
+    };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const waitForQueueSlot = async (maxClips: number): Promise<void> => {
       const deadline = Date.now() + 5000;
@@ -68,8 +100,8 @@ test("11 件目は in-flight 上限 (20 clip) で待機し、1 clip 完了で投
     await sleep(80);
     const blockedWhileFull = !resolved;
 
-    // 1 clip 完了 (spinner 除去) → in-flight 19 < 20 → 投入再開。
-    document.querySelector('[data-testid="clip-row"] svg.animate-spin')?.remove();
+    // 1 clip 完了 (Remix btn enabled) → in-flight 19 < 20 → 投入再開。
+    document.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR)?.removeAttribute("disabled");
     await pending;
 
     return { before, blockedWhileFull, resolvedAfterFree: resolved, after: getInFlightClipCount() };
@@ -138,7 +170,11 @@ const MOCK_TOAST_HTML = `<!doctype html>
 <html>
   <body>
     <div id="grid">
-      <div data-testid="clip-row" id="clip-0" style="width:200px;height:60px"><span>2:02</span></div>
+      <div class="clip-card" id="clip-0" style="width:200px;height:60px">
+        <button aria-label="Select clip"></button>
+        <button aria-label="Remix clip"></button>
+        <button aria-label="Edit title"></button>
+      </div>
     </div>
     <div id="toast" role="dialog" style="width:360px;height:120px">
       <h3>Generation in progress</h3>
@@ -151,7 +187,10 @@ test("queue 上限 toast 検知中は空きスロットでも待機し、toast �
   await page.setContent(MOCK_TOAST_HTML);
 
   const result = await page.evaluate(async () => {
-    // 本番 shared/dom.ts と同じ strict 可視判定 / toast 検知 / queue 待機を inline 再現する。
+    // 本番 shared/dom.ts と同じ strict 可視判定 / card root 解決 / toast 検知 / queue 待機を inline 再現する。
+    const REMIX_BTN_SELECTOR = 'button[aria-label="Remix clip"]';
+    const SELECT_CLIP_SELECTOR = 'button[aria-label="Select clip"]';
+    const EDIT_TITLE_SELECTOR = 'button[aria-label="Edit title"]';
     const isVisible = (el: HTMLElement): boolean => {
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return false;
@@ -165,10 +204,33 @@ test("queue 上限 toast 検知中は空きスロットでも待機し、toast �
       }
       return true;
     };
-    const isClipGenerating = (row: HTMLElement): boolean =>
-      isVisible(row) && row.querySelector("svg.animate-spin") !== null;
-    const getInFlightClipCount = (): number =>
-      Array.from(document.querySelectorAll<HTMLElement>('[data-testid="clip-row"]')).filter(isClipGenerating).length;
+    const findCardRoot = (anchor: HTMLElement): HTMLElement => {
+      let node: HTMLElement | null = anchor;
+      while (node) {
+        if (
+          node.querySelectorAll(SELECT_CLIP_SELECTOR).length === 1 &&
+          node.querySelectorAll(REMIX_BTN_SELECTOR).length === 1 &&
+          node.querySelectorAll(EDIT_TITLE_SELECTOR).length === 1
+        ) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      throw new Error("clip card root を解決できません。");
+    };
+    const isClipGenerating = (card: HTMLElement): boolean => {
+      if (!isVisible(card)) return false;
+      const remix = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
+      if (!remix) throw new Error("card 内に Remix btn が見つかりません。");
+      return remix.disabled || remix.getAttribute("aria-disabled") === "true";
+    };
+    const getInFlightClipCount = (): number => {
+      const anchors = Array.from(document.querySelectorAll<HTMLButtonElement>(REMIX_BTN_SELECTOR));
+      if (anchors.length === 0) throw new Error("Remix btn が 0 件です。");
+      const cards = new Set<HTMLElement>();
+      for (const a of anchors) cards.add(findCardRoot(a));
+      return Array.from(cards).filter(isClipGenerating).length;
+    };
     const isQueueLimitErrorVisible = (): boolean =>
       Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).some(
         (el) => isVisible(el) && (el.textContent ?? "").toLowerCase().includes("generation in progress"),
