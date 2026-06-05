@@ -17,6 +17,9 @@ export const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
 /** 未選択の clip 選択ボタン。click すると aria-label が "Deselect clip" に切り替わる（= 冪等）。 */
 export const SELECT_CLIP_BUTTON_SELECTOR =
   '.multi-select-button > button[aria-label="Select clip"]';
+/** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
+export const DESELECT_CLIP_BUTTON_SELECTOR =
+  '.multi-select-button > button[aria-label="Deselect clip"]';
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
 export const PLAYLIST_NAME_INPUT_SELECTOR =
   'input[placeholder="Playlist Name"]';
@@ -31,6 +34,9 @@ const DIALOG_OPEN_TIMEOUT_MS = 5000;
 /** Create Playlist click 後に新規 playlist row が dialog 内 list に現れるのを待つ poll 間隔と上限 (ms)。 */
 const PLAYLIST_ROW_APPEAR_POLL_MS = 100;
 const PLAYLIST_ROW_APPEAR_TIMEOUT_MS = 5000;
+/** multi-select click 後、対象 row が selected 状態（aria-label="Deselect clip"）へ遷移したかを verify する poll 間隔と上限 (ms)。 */
+const CLIP_SELECT_VERIFY_POLL_MS = 50;
+const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 
 /**
  * 可視な Add to Playlist dialog を 1 つ探す（OneTrust cookie consent dialog 除外フィルタ込み）。
@@ -69,12 +75,49 @@ export function selectRecentClips(count: number): HTMLElement[] {
 }
 
 /**
- * 各 clip-row の未選択 Select clip ボタンを click して multi-select する (#854)。
- * 既に選択済み（aria-label="Deselect clip"）の row はセレクタにマッチせず click しない（冪等）。
+ * 各 clip-row の未選択 Select clip ボタンを click し、対象 row 全てが selected 状態
+ * （aria-label="Deselect clip"）へ遷移したことを poll で verify する (#854, #878)。
+ *
+ * silent fail 撤廃 (#878): 旧実装は `querySelector(...)?.click()` で
+ *   - Select clip ボタン不在 → silent skip
+ *   - click が Suno handler に届かず未選択のまま → 検知なし
+ * を許し、0 件選択でも void resolve していた。これが後段の Add to Playlist dialog 検出
+ * timeout という代理症状で初めて顕在化していたため、選択側で fail-loud にする。
+ *
+ * - 既に選択済み（Deselect clip 在）の row は idempotent に skip（click しない）。
+ * - Select clip ボタンが無く、かつ未選択（Deselect も無い）row は UI 変更とみなし即 throw。
+ * - 全 click 後、対象 row が deadline 内に Deselect clip へ遷移しなければ throw。
  */
 export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
   for (const row of rows) {
-    row.querySelector<HTMLButtonElement>(SELECT_CLIP_BUTTON_SELECTOR)?.click();
+    if (row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR)) {
+      continue;
+    }
+    const button = row.querySelector<HTMLButtonElement>(
+      SELECT_CLIP_BUTTON_SELECTOR,
+    );
+    if (!button) {
+      throw new Error(
+        "Select clip button が見つかりません。Suno の UI 変更の可能性があります。",
+      );
+    }
+    button.click();
+  }
+
+  const deadline = Date.now() + CLIP_SELECT_VERIFY_TIMEOUT_MS;
+  for (;;) {
+    const selected = rows.filter((row) =>
+      row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR),
+    ).length;
+    if (selected >= rows.length) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`,
+      );
+    }
+    await sleep(CLIP_SELECT_VERIFY_POLL_MS);
   }
 }
 
@@ -102,7 +145,7 @@ export async function openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement> {
     }
     if (Date.now() >= deadline) {
       throw new Error(
-        "Add to Playlist dialog を検出できませんでした。Suno の UI 変更の可能性があります。",
+        "Add to Playlist dialog を検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。",
       );
     }
     await sleep(DIALOG_OPEN_POLL_MS);
