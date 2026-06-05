@@ -4,12 +4,17 @@ import { defineExtensionMessaging } from "@webext-core/messaging";
 
 import type { PromptEntry } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
+import type { RunRange } from "./resume-state";
 
 /**
- * run メッセージの payload (#854)。collection mode は playlistName を伴う `{entries, playlistName}`、
+ * run メッセージの payload (#854, #872)。collection mode は playlistName を伴う `{entries, playlistName}`、
  * 単一ファイル mode（旧形式）は `PromptEntry[]` をそのまま渡し content 側で wrap する（後方互換拡張）。
+ *   - range: 0-based inclusive な実行範囲 (#872)。未指定は全 entry 実行（従来通り）。
+ *   - collectionId: ERROR 停止時に resume state を紐付ける collection 識別子 (#872)。単一ファイル mode は省略。
  */
-export type RunPayload = PromptEntry[] | { entries: PromptEntry[]; playlistName?: string };
+export type RunPayload =
+  | PromptEntry[]
+  | { entries: PromptEntry[]; playlistName?: string; range?: RunRange; collectionId?: string };
 
 interface ProtocolMap {
   /** popup → content: 連続実行を開始する。 */

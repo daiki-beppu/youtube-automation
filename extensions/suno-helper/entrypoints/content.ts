@@ -15,6 +15,7 @@ import {
   SUNO_MATCHES,
 } from "../../shared/constants";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
+import { clearResumeStateForCollection, type RunRange, writeResumeState } from "../lib/resume-state";
 import { injectWithVerification } from "../lib/inject-retry";
 import {
   abortableSleep,
@@ -124,9 +125,22 @@ export default defineContentScript({
       });
     }
 
-    async function runAll(entries: PromptEntry[], playlistName?: string): Promise<void> {
+    interface RunOptions {
+      // 0-based inclusive な実行範囲 (#872)。未指定は全 entry。判断A: range 指定でも entries 全体と
+      // 絶対 index を保ち、range 内の entry だけを処理する（slice 再採番による index ズレを起こさない）。
+      range?: RunRange;
+      // ERROR 停止時に resume state を紐付ける collection 識別子 (#872)。単一ファイル mode は undefined。
+      collectionId?: string;
+      // collection mode のときの playlist 名 (#854)。全 entry 完了後の clip 一括追加に使う。
+      playlistName?: string;
+    }
+
+    async function runAll(entries: PromptEntry[], options: RunOptions): Promise<void> {
+      const { range, collectionId, playlistName } = options;
       const total = entries.length;
-      for (let i = 0; i < total; i++) {
+      const startIndex = range ? range.start : 0;
+      const endIndex = range ? range.end : total - 1;
+      for (let i = startIndex; i <= endIndex; i++) {
         if (aborted) {
           emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
@@ -168,6 +182,11 @@ export default defineContentScript({
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, index: i, total, message });
+          // 失敗 index を永続化し、次回 popup 起動時の再開バナーで提示する (#872 要件3)。
+          // collection 識別子が無い単一ファイル mode は再開対象を特定できないため永続化しない。
+          if (collectionId) {
+            void writeResumeState({ collectionId, failedIndex: i, total, timestamp: Date.now() });
+          }
           return;
         }
       }
@@ -189,15 +208,21 @@ export default defineContentScript({
           return;
         }
       }
+      // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
+      if (collectionId) {
+        void clearResumeStateForCollection(collectionId);
+      }
       emitProgress({ phase: PHASE.FINISHED, total });
     }
 
     onMessage("run", ({ data }) => {
       aborted = false;
-      // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。
-      const { entries, playlistName } = Array.isArray(data) ? { entries: data, playlistName: undefined } : data;
+      // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。range / collectionId は無し。
+      const { entries, playlistName, range, collectionId } = Array.isArray(data)
+        ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined }
+        : data;
       currentSnapshot = initSnapshot(entries, playlistName);
-      void runAll(entries, playlistName);
+      void runAll(entries, { range, collectionId, playlistName });
       return { ok: true } as const;
     });
 

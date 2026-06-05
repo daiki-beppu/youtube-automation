@@ -13,9 +13,21 @@ import {
 } from "../../shared/api";
 import { type ItemState, PHASE } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
+import {
+  readResumeState,
+  type ResumeBanner,
+  type ResumeState,
+  resolveRunRange,
+  resumeBannerRange,
+  type RunRange,
+  shouldShowResumeBanner,
+} from "../lib/resume-state";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
+
+/** 実行範囲モード (#872)。all=全パターン / range=範囲指定。 */
+export type RangeMode = "all" | "range";
 
 interface RunnerState {
   url: string;
@@ -31,6 +43,17 @@ interface RunnerState {
   isRunning: boolean;
   // collection 選択時の playlist 名 (#854)。display only（単一ファイル mode は undefined）。
   playlistName: string | undefined;
+  // 実行範囲 UI の状態 (#872)。range モード時のみ start/end を使う。
+  rangeMode: RangeMode;
+  setRangeMode: (mode: RangeMode) => void;
+  rangeStart: string;
+  setRangeStart: (value: string) => void;
+  rangeEnd: string;
+  setRangeEnd: (value: string) => void;
+  // 再開バナー (#872)。chrome.storage / content snapshot いずれか有効なソース、無ければ null。
+  resumeBanner: ResumeBanner | null;
+  acceptResume: () => void;
+  dismissResume: () => void;
   fetchData: () => Promise<void>;
   run: () => Promise<void>;
   stop: () => Promise<void>;
@@ -56,6 +79,20 @@ export function useSunoRunner(): RunnerState {
   // popup 再 open 時に content snapshot から復元する playlist 名 (#854)。
   // 選択由来 (derivedPlaylistName) が無い実行中復元ケースで display only に使う。
   const [restoredPlaylistName, setRestoredPlaylistName] = useState<string | undefined>(undefined);
+  // content snapshot 由来の失敗 index (#872 要件3)。chrome.storage の resume state が失われても、
+  // 現在タブの live snapshot が ERROR phase で保持する failedIndex を再開バナーの冗長ソースにする。
+  const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
+  // 実行範囲 UI の状態 (#872)。rangeStart/rangeEnd は入力欄の生文字列（1-based 表示）。
+  const [rangeMode, setRangeMode] = useState<RangeMode>("all");
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
+  const [persistedResume, setPersistedResume] = useState<ResumeState | null>(null);
+  // resume state を読んだ popup 起動時刻 (#872)。stale 判定の基準 now をここで一度だけ確定し、
+  // render 中の Date.now()（非純粋）を避ける。
+  const [resumeCheckedAt, setResumeCheckedAt] = useState<number | null>(null);
+  // 一度承認/却下したバナーは再表示しない（同一 popup セッション内）。
+  const [resumeDismissed, setResumeDismissed] = useState(false);
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
   // collection id は server 契約上 `<date>-<channel>-<theme>-collection` 形式。channel が
@@ -74,9 +111,58 @@ export function useSunoRunner(): RunnerState {
   }, [collections, selectedCollectionId]);
   const playlistName = derivedPlaylistName ?? restoredPlaylistName;
 
+  // 再開バナーのソース (#872)。chrome.storage と content snapshot を二重化し、いずれかが
+  // 生きていれば再開導線を出す（要件3 の二重化を実消費する）。一度承認/却下したら resumeDismissed で隠す。
+  const resumeBanner = useMemo<ResumeBanner | null>(() => {
+    if (resumeDismissed) {
+      return null;
+    }
+    // 1) 永続化 (chrome.storage) 由来 (要件4)。選択中 collection 一致 + 24h 以内のときのみ。
+    //    基準 now は読み込み時刻 (resumeCheckedAt) を使う（render 中の Date.now() を避ける）。
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return { failedIndex: persistedResume.failedIndex, total: persistedResume.total };
+    }
+    // 2) content snapshot 由来 (要件3 二重化)。chrome.storage 書込が失われても、現在タブの
+    //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。snapshot は
+    //    当該タブのセッションそのものなので collection 一致 / stale 判定は不要。
+    if (restoredFailedIndex !== undefined && entries.length > 0) {
+      return { failedIndex: restoredFailedIndex, total: entries.length };
+    }
+    return null;
+  }, [persistedResume, selectedCollectionId, resumeDismissed, resumeCheckedAt, restoredFailedIndex, entries.length]);
+
   const report = useCallback((text: string, error = false) => {
     setStatus(text);
     setIsError(error);
+  }, []);
+
+  // popup 起動時に前回の ERROR 停止 state を読む (#872 要件4)。表示可否は resumeBanner 側で判定する。
+  // 基準 now は読み込み完了時に確定する（render 中の Date.now() を避けるため effect 内で取得）。
+  useEffect(() => {
+    void readResumeState().then((state) => {
+      setPersistedResume(state);
+      setResumeCheckedAt(Date.now());
+    });
+  }, []);
+
+  // バナー承認: range UI に「失敗 entry..末尾」を 1-based で prefill し、範囲指定モードへ切替える (#872)。
+  const acceptResume = useCallback(() => {
+    if (!resumeBanner) {
+      return;
+    }
+    const prefilled = resumeBannerRange(resumeBanner);
+    setRangeMode("range");
+    setRangeStart(String(prefilled.start));
+    setRangeEnd(String(prefilled.end));
+    setResumeDismissed(true);
+  }, [resumeBanner]);
+
+  const dismissResume = useCallback(() => {
+    setResumeDismissed(true);
   }, []);
 
   const loadCollections = useCallback(async (baseUrl: string) => {
@@ -132,6 +218,8 @@ export function useSunoRunner(): RunnerState {
         setItemStates(restored.itemStates);
         setIsRunning(restored.isRunning);
         setRestoredPlaylistName(restored.playlistName);
+        // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
+        setRestoredFailedIndex(restored.failedIndex);
         report(restored.status, restored.isError);
       } catch {
         // Suno タブでない / content 未注入では queryProgress が到達しない。復元を諦め従来表示を維持する。
@@ -167,17 +255,36 @@ export function useSunoRunner(): RunnerState {
     if (entries.length === 0) {
       return;
     }
+    // 範囲指定モードは 1-based 入力を 0-based inclusive range へ解決する (#872)。
+    // 不正入力は resolveRunRange が throw → ここで捕捉し fail-loud で UI に出す（content へ送らない）。
+    let range: RunRange | undefined;
+    if (rangeMode === "range") {
+      try {
+        const start = Number(rangeStart);
+        const end = rangeEnd.trim() === "" ? undefined : Number(rangeEnd);
+        range = resolveRunRange(start, end, entries.length);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        report(message, true);
+        return;
+      }
+    }
     try {
       const tabId = await activeTabId();
       // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
-      await sendMessage("run", { entries, playlistName: derivedPlaylistName }, tabId);
+      // collectionId は ERROR 停止時の resume 紐付けに使う。単一ファイル mode（空文字）は undefined で送る (#872)。
+      await sendMessage(
+        "run",
+        { entries, playlistName: derivedPlaylistName, range, collectionId: selectedCollectionId || undefined },
+        tabId,
+      );
       setIsRunning(true);
       report("連続実行を開始しました。");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [entries, derivedPlaylistName, report]);
+  }, [entries, rangeMode, rangeStart, rangeEnd, derivedPlaylistName, selectedCollectionId, report]);
 
   const stop = useCallback(async () => {
     try {
@@ -202,6 +309,15 @@ export function useSunoRunner(): RunnerState {
     canRun: entries.length > 0 && !isRunning,
     isRunning,
     playlistName,
+    rangeMode,
+    setRangeMode,
+    rangeStart,
+    setRangeStart,
+    rangeEnd,
+    setRangeEnd,
+    resumeBanner,
+    acceptResume,
+    dismissResume,
     fetchData,
     run,
     stop,

@@ -7,6 +7,10 @@ import type { PromptEntry } from "./api";
 /** chrome.storage.local に保存するサーバー URL の key。 */
 export const STORAGE_KEY = "sunoServerUrl";
 
+/** ERROR 停止時の途中再開 state を保存する chrome.storage.local の key (#872)。
+ * popup と content が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
+export const RESUME_STATE_KEY = "sunoResumeState";
+
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
 
@@ -94,4 +98,7 @@ export interface SnapshotPayload {
   // collection mode のときの playlist 名 (#854)。再 open 復元時の display 用。
   // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため undefined。
   playlistName?: string;
+  // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
+  // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。
+  failedIndex?: number;
 }
