@@ -386,10 +386,11 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
       expect(detectRecaptcha()).toBe(false);
     });
 
-    it("Given visibility:hidden だが 300×150 の hCaptcha iframe (実 DOM iframe[4]) When 検知する Then false", () => {
+    it("Given visibility:hidden + title 無しの hCaptcha プリロード iframe (300×150) When 検知する Then false (誤検知防止の核心)", () => {
+      // #875: title が空のプリロード iframe は active challenge ではない。従来 strict isVisible で false。
+      // title が non-empty になった瞬間だけ active 判定する遷移は別 describe (title 判定の 4 組合せ) で検証。
       addCaptchaIframe({
         src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
-        title: "hCaptchaチャレンジ",
         visibility: "hidden",
         width: 300,
         height: 150,
@@ -432,7 +433,9 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
   });
 
   describe("order.md 実 DOM シナリオの回帰ガード", () => {
-    it("Given 非表示プリロード iframe 2 個 (display:none + visibility:hidden) のみ When 検知する Then false (challenge 未表示時)", () => {
+    it("Given 非表示プリロード iframe 2 個 (display:none + visibility:hidden, title 無し) のみ When 検知する Then false (challenge 未表示時)", () => {
+      // #875: title 無しのプリロード iframe は active challenge ではない。title が non-empty に
+      // なった瞬間の active 判定 (visibility:hidden 許容) は「title 判定の 4 組合せ」describe で担保する。
       addCaptchaIframe({
         src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/0",
         display: "none",
@@ -441,7 +444,6 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
       });
       addCaptchaIframe({
         src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/4",
-        title: "hCaptchaチャレンジ",
         visibility: "hidden",
         width: 300,
         height: 150,
@@ -471,6 +473,49 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
       });
 
       expect(detectRecaptcha()).toBe(true);
+    });
+  });
+
+  describe("title 判定による active challenge 検知の 4 組合せ (#875)", () => {
+    // #875: hCaptcha iframe の title が non-empty になった瞬間を active challenge とみなし、
+    // visibility:hidden の中間状態でも捕捉する。title 空のときのみ従来 strict isVisible へ fallback。
+    // 真因: silent drop タイミングで title が "" → "hCaptchaチャレンジ" に変化するが visibility:hidden は
+    // 維持されるため、従来 strict isVisible では false で素通りしていた。
+    const HCAPTCHA_SRC = "https://hcaptcha-assets-prod.suno.com/captcha/v1/x";
+
+    it("Given title 空 × visible When 検知する Then true (従来 strict isVisible 経路)", () => {
+      addCaptchaIframe({ src: HCAPTCHA_SRC, width: 300, height: 150 });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given title 空 × visibility:hidden When 検知する Then false (プリロード誤検知防止)", () => {
+      addCaptchaIframe({ src: HCAPTCHA_SRC, visibility: "hidden", width: 300, height: 150 });
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given title 非空 × visible When 検知する Then true (active challenge)", () => {
+      addCaptchaIframe({ src: HCAPTCHA_SRC, title: "hCaptchaチャレンジ", width: 300, height: 150 });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given title 非空 × visibility:hidden When 検知する Then true (#875 隠れ challenge を捕捉)", () => {
+      // 本 issue の核心ケース: title="hCaptchaチャレンジ" だが visibility:hidden の中間状態。
+      // 従来 false で silent drop に流れていたのを true で ack timeout 前に捕捉して即停止する。
+      addCaptchaIframe({
+        src: HCAPTCHA_SRC,
+        title: "hCaptchaチャレンジ",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given title 非空 だが bbox 0×0 When 検知する Then false (bbox 判定を title より優先)", () => {
+      // bbox 0 チェックを title 判定より前に置く。0×0 のプリロード iframe が title を持っていても
+      // 誤検知しない（既存 bbox 0×0 ケースと整合）。
+      addCaptchaIframe({ src: HCAPTCHA_SRC, title: "hCaptchaチャレンジ", width: 0, height: 0 });
+      expect(detectRecaptcha()).toBe(false);
     });
   });
 

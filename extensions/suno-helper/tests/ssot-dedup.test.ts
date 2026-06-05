@@ -24,7 +24,9 @@ describe("ssot-drift: popup の placeholder は DEFAULT_URL を参照する", ()
   });
 
   it("Given App.tsx When placeholder を読む Then 定数 DEFAULT_URL を参照する", () => {
-    expect(appSource).toMatch(/import \{ DEFAULT_URL \} from "\.\.\/\.\.\/shared\/constants"/);
+    // #875 で同 import に SPEED_PRESETS / SpeedPresetId が同居するため、named import の並びに
+    // 依存せず「DEFAULT_URL が shared/constants から来ている」ことだけを担保する（ガードの intent を保持）。
+    expect(appSource).toMatch(/import \{[^}]*\bDEFAULT_URL\b[^}]*\} from "\.\.\/\.\.\/shared\/constants"/);
     expect(appSource).toMatch(/placeholder=\{DEFAULT_URL\}/);
   });
 });

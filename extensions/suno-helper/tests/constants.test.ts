@@ -18,6 +18,8 @@ import {
   PROMPTS_ROUTE,
   QUEUE_ERROR_WAIT_MS,
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
+  SPEED_PRESET_STORAGE_KEY,
+  SPEED_PRESETS,
   STORAGE_KEY,
 } from "../../shared/constants";
 
@@ -117,5 +119,77 @@ describe("shared/constants: inject 検証 + queue 待機 timeout 独立化 (#864
   it("Given MAX_INJECT_RETRY When 読む Then silent drop 時の最大 retry 回数 2 である", () => {
     // #864 root cause 3: ack されなければ同じ entry を最大 2 回 retry、それでも増えなければ fail-loud。
     expect(MAX_INJECT_RETRY).toBe(2);
+  });
+});
+
+describe("shared/constants: 速度プリセット (#875)", () => {
+  // 契約 (draft が実装する public API, shared/constants.ts):
+  //   - SPEED_PRESET_STORAGE_KEY: string = "sunoSpeedPreset"
+  //   - SPEED_PRESETS: Record<"fast"|"balanced"|"safe", SpeedPreset>
+  //     SpeedPreset = { interCreateDelayMs; jitterMs; maxInflightRequests;
+  //                     maxInjectRetry; injectAckTimeoutMs; label; riskNote }
+  // 値の SSOT は order.md L23-27 の表。Fast は現状定数を残置し参照する（現状と同等を担保）。
+
+  it("Given SPEED_PRESET_STORAGE_KEY When 読む Then chrome.storage.local の preset key である", () => {
+    expect(SPEED_PRESET_STORAGE_KEY).toBe("sunoSpeedPreset");
+  });
+
+  it("Given SPEED_PRESETS When key を読む Then fast / balanced / safe の 3 preset を持つ", () => {
+    expect(Object.keys(SPEED_PRESETS).sort()).toEqual(["balanced", "fast", "safe"]);
+  });
+
+  it("Given fast preset When 数値を読む Then 現状定数と一致する（現状と同等, jitter なし）", () => {
+    // 受け入れ基準「Fast 選択時の所要時間が現状と同等」。既存定数を Fast から参照する設計を pin し、
+    // 残置定数と preset 値の drift を回帰ガードする。
+    expect(SPEED_PRESETS.fast.interCreateDelayMs).toBe(INTER_CREATE_DELAY_MS);
+    expect(SPEED_PRESETS.fast.jitterMs).toBe(0);
+    expect(SPEED_PRESETS.fast.maxInflightRequests).toBe(MAX_INFLIGHT_REQUESTS);
+    expect(SPEED_PRESETS.fast.maxInjectRetry).toBe(MAX_INJECT_RETRY);
+    expect(SPEED_PRESETS.fast.injectAckTimeoutMs).toBe(INJECT_ACK_TIMEOUT_MS);
+  });
+
+  it("Given balanced preset When 数値を読む Then 10s / ±3s / inflight 5 / retry 1 / ack 45s", () => {
+    expect(SPEED_PRESETS.balanced).toMatchObject({
+      interCreateDelayMs: 10000,
+      jitterMs: 3000,
+      maxInflightRequests: 5,
+      maxInjectRetry: 1,
+      injectAckTimeoutMs: 45000,
+    });
+  });
+
+  it("Given safe preset When 数値を読む Then 20s / ±5s / inflight 3 / retry 0 / ack 60s", () => {
+    expect(SPEED_PRESETS.safe).toMatchObject({
+      interCreateDelayMs: 20000,
+      jitterMs: 5000,
+      maxInflightRequests: 3,
+      maxInjectRetry: 0,
+      injectAckTimeoutMs: 60000,
+    });
+  });
+
+  it.each(["fast", "balanced", "safe"] as const)(
+    "Given %s preset When label / riskNote を読む Then 非空文字列を持つ（UI 表示用, 要件6）",
+    (id) => {
+      // label/riskNote が write-only な空フィールドへ退行しないことを担保（文言そのものは pin しない）。
+      expect(typeof SPEED_PRESETS[id].label).toBe("string");
+      expect(SPEED_PRESETS[id].label.length).toBeGreaterThan(0);
+      expect(typeof SPEED_PRESETS[id].riskNote).toBe("string");
+      expect(SPEED_PRESETS[id].riskNote.length).toBeGreaterThan(0);
+    },
+  );
+
+  it("Given balanced preset When jitter 適用域を求める Then 7000〜13000ms（受け入れ基準 7-13s）", () => {
+    // applyJitter の min/max は preset-state.test.ts で検証。ここでは preset 値が
+    // 受け入れ基準の範囲を表現できることだけを確認する。
+    const { interCreateDelayMs: base, jitterMs } = SPEED_PRESETS.balanced;
+    expect(base - jitterMs).toBe(7000);
+    expect(base + jitterMs).toBe(13000);
+  });
+
+  it("Given safe preset When jitter 適用域を求める Then 15000〜25000ms（受け入れ基準 15-25s）", () => {
+    const { interCreateDelayMs: base, jitterMs } = SPEED_PRESETS.safe;
+    expect(base - jitterMs).toBe(15000);
+    expect(base + jitterMs).toBe(25000);
   });
 });

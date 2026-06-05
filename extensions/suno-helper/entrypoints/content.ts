@@ -3,10 +3,6 @@
 import type { PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
-  INJECT_ACK_TIMEOUT_MS,
-  INTER_CREATE_DELAY_MS,
-  MAX_INFLIGHT_REQUESTS,
-  MAX_INJECT_RETRY,
   PHASE,
   type ProgressPayload,
   QUEUE_ERROR_WAIT_MS,
@@ -15,6 +11,7 @@ import {
   SUNO_MATCHES,
 } from "../../shared/constants";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
+import { applyJitter, readSpeedPresetId, resolveSpeedPreset } from "../lib/preset-state";
 import { clearResumeStateForCollection, type RunRange, writeResumeState } from "../lib/resume-state";
 import { injectWithVerification } from "../lib/inject-retry";
 import {
@@ -42,9 +39,6 @@ import {
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
 import { onMessage, sendMessage } from "../lib/messaging";
-
-/** Suno 同時生成キューに積める clip 数の上限（10 リクエスト × 2 clip = 20）。 */
-const MAX_GENERATING_CLIPS = MAX_INFLIGHT_REQUESTS * CLIPS_PER_REQUEST;
 
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
@@ -148,6 +142,11 @@ export default defineContentScript({
 
     async function runAll(entries: PromptEntry[], options: RunOptions): Promise<void> {
       const { range, collectionId, playlistName } = options;
+      // 速度プリセット (#875) を run 開始時に確定する。以降のペーシング（間隔/並列数/retry/ack）は
+      // 既存定数の代わりにこの preset 値を使う。未選択でも storage fallback で Balanced になる。
+      const preset = resolveSpeedPreset(await readSpeedPresetId());
+      // Suno 同時生成キューに積める clip 数の上限（preset の並列リクエスト数 × 2 clip）。
+      const maxGeneratingClips = preset.maxInflightRequests * CLIPS_PER_REQUEST;
       const total = entries.length;
       const startIndex = range ? range.start : 0;
       const endIndex = range ? range.end : total - 1;
@@ -169,7 +168,7 @@ export default defineContentScript({
         try {
           // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
           emitProgress({ phase: PHASE.WAITING_SLOT, index: i, total });
-          await waitForQueueSlot(MAX_GENERATING_CLIPS, {
+          await waitForQueueSlot(maxGeneratingClips, {
             isAborted: () => aborted,
             pollIntervalMs: POLL_INTERVAL_MS,
             // queue 空き待ちは single clip 完了待ち (GENERATE_TIMEOUT_MS) とは別系統の 5 分 (#864 root cause 1)。
@@ -189,8 +188,8 @@ export default defineContentScript({
             waitForInFlightIncrease,
             isAborted: () => aborted,
             clipsPerRequest: CLIPS_PER_REQUEST,
-            maxRetry: MAX_INJECT_RETRY,
-            ackTimeoutMs: INJECT_ACK_TIMEOUT_MS,
+            maxRetry: preset.maxInjectRetry,
+            ackTimeoutMs: preset.injectAckTimeoutMs,
             pollIntervalMs: POLL_INTERVAL_MS,
             describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
           });
@@ -201,7 +200,8 @@ export default defineContentScript({
           }
           emitProgress({ phase: PHASE.DONE, index: i, total });
           // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
-          await abortableSleep(INTER_CREATE_DELAY_MS, () => aborted);
+          // preset の基準間隔に ±jitter を加えて bot 判定の固定間隔シグナルを消す (#875)。毎回 fresh 算出する。
+          await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, index: i, total, message });
