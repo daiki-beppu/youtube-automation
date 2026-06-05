@@ -612,6 +612,7 @@ def _build_songwriter(raw: object) -> SongwriterName | None:
     )
 
 
+_VALID_RECORDING_SCOPES = ("full", "partial")
 _VALID_PARTIAL_AUDIO_TYPES = (None, "vocals", "instruments")
 
 
@@ -620,17 +621,32 @@ def _build_ai_disclosure(raw: object) -> AiDisclosure:
         return AiDisclosure()
     if not isinstance(raw, dict):
         raise ConfigError(f"distrokid.profile.ai_disclosure は object でなければなりません（got {type(raw).__name__}）")
+    recording_scope = raw.get("recording_scope", "full")
+    if recording_scope not in _VALID_RECORDING_SCOPES:
+        raise ConfigError(
+            "distrokid.profile.ai_disclosure.recording_scope は "
+            f"'full' / 'partial' のいずれか（got {recording_scope!r}）"
+        )
     partial = raw.get("partial_audio_type")
     if partial not in _VALID_PARTIAL_AUDIO_TYPES:
         raise ConfigError(
             "distrokid.profile.ai_disclosure.partial_audio_type は "
             f"'vocals' / 'instruments' / null のいずれか（got {partial!r}）"
         )
+    # partial_audio_type は partial 録音の種別なので、recording_scope='partial' 以外で
+    # 指定されたら設定ミス（modal にも該当 radio が出ない）として fail-loud。
+    if partial is not None and recording_scope != "partial":
+        raise ConfigError(
+            "distrokid.profile.ai_disclosure.partial_audio_type は recording_scope='partial' のときのみ指定できます"
+        )
     return AiDisclosure(
         enabled=bool(raw.get("enabled", True)),
         lyrics=bool(raw.get("lyrics", True)),
-        composition=bool(raw.get("composition", True)),
+        music=bool(raw.get("music", True)),
+        recording_scope=recording_scope,
         partial_audio_type=partial,
+        artist_persona=bool(raw.get("artist_persona", True)),
+        apply_to_all=bool(raw.get("apply_to_all", True)),
     )
 
 

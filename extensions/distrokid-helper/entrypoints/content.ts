@@ -56,8 +56,8 @@ const documentInjector: Injector = {
   injectCover(file: File): void {
     injectCover(document, file);
   },
-  injectAiDisclosure(payload: ReleasePayload): void {
-    injectAiDisclosure(document, payload.profile.ai_disclosure);
+  async injectAiDisclosure(payload: ReleasePayload): Promise<void> {
+    await injectAiDisclosure(document, payload.profile.ai_disclosure);
   },
 };
 

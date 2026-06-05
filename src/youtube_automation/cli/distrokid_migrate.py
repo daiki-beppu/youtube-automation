@@ -36,9 +36,33 @@ _DISTROKID_RELPATH = ("config", "channel", "distrokid.json")
 _DEFAULT_AI_DISCLOSURE: dict[str, object] = {
     "enabled": True,
     "lyrics": True,
-    "composition": True,
+    "music": True,
+    "recording_scope": "full",
     "partial_audio_type": None,
+    "artist_persona": True,
+    "apply_to_all": True,
 }
+
+
+def _convert_ai_disclosure(raw: object) -> dict:
+    """旧 ai_disclosure（`composition` field のみ）を新 schema へ正規化する（#877）.
+
+    - dict でなければ default を付与
+    - 旧 `composition` → 新 `music` にリネーム（`music` 明示時は `music` を優先）
+    - recording_scope / artist_persona / apply_to_all など新フィールドは default で補完
+    - 旧 schema は `recording_scope` を持たず `partial_audio_type` のみで partial を表現して
+      いたため、`recording_scope` 未指定かつ `partial_audio_type` 非 null のときは
+      `recording_scope="partial"` を導出する（loader のクロスバリデーションで読める形にする）
+    """
+    merged: dict = dict(_DEFAULT_AI_DISCLOSURE)
+    if isinstance(raw, dict):
+        merged.update(raw)
+        if "music" not in raw and "composition" in raw:
+            merged["music"] = raw["composition"]
+        if "recording_scope" not in raw and raw.get("partial_audio_type") is not None:
+            merged["recording_scope"] = "partial"
+    merged.pop("composition", None)
+    return merged
 
 
 def _resolve_target_dir(target: str | None) -> Path:
@@ -110,8 +134,7 @@ def _convert_profile(old_profile: dict) -> dict:
     if songwriter is not None:
         new_profile["songwriter"] = songwriter
 
-    ai_disclosure = old_profile.get("ai_disclosure")
-    new_profile["ai_disclosure"] = ai_disclosure if isinstance(ai_disclosure, dict) else dict(_DEFAULT_AI_DISCLOSURE)
+    new_profile["ai_disclosure"] = _convert_ai_disclosure(old_profile.get("ai_disclosure"))
     return new_profile
 
 

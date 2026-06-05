@@ -16,17 +16,23 @@ export interface SongwriterName {
   middle: string | null;
 }
 
-// AI 開示（distrokid.com/new の各 track ごとの AI 使用開示）。
-// 実 DOM 検証（#866）で判明: 「はい/いいえ」radio は ai_gate_<uuid>、歌詞/作曲は
-// ai_lyrics_<uuid> / ai_music_<uuid> checkbox、部分的 AI 音声は
-// ai_partial_audio_type_<uuid> radio (value="vocals" | "instruments")。
-// apply_to_all 相当の UI は実 DOM に存在しないため、全 track へ一括適用で代替する。
+// AI 開示（distrokid.com/new の AI 使用開示）。
+// 実 DOM 再検証（#877）で判明: AI 開示は inline ではなく SweetAlert2 modal
+// (.ai-credits-swal-modal) で開く。ai_gate_<uuid> radio で「はい」を選ぶと modal が mount し、
+// modal 内で歌詞 / 作曲 / 録音範囲 / アーティスト種別 / apply-all を設定して保存する。
+// Python の utils.config.distrokid.AiDisclosure と 1:1。
 export interface AiDisclosure {
   enabled: boolean;
   lyrics: boolean;
-  composition: boolean;
-  // 部分的 AI 音声の種別。100% AI 楽曲 (Suno 等) は null (追加開示なし)。
+  music: boolean;
+  // 録音物の AI 範囲。"full"=音声すべて / "partial"=音声の一部。
+  recording_scope: "full" | "partial";
+  // recording_scope="partial" 時の種別。"full" のときは null。
   partial_audio_type: "vocals" | "instruments" | null;
+  // true = AI ペルソナ (value=1) / false = 人間アーティスト (value=0)。
+  artist_persona: boolean;
+  // modal の Apply-to-all checkbox を入れて全 track へ伝播するか。
+  apply_to_all: boolean;
 }
 
 // `distrokid.profile` セクション（distrokid.com/new フォーム項目に対応する静的プロファイル）。

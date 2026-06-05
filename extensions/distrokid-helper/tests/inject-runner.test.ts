@@ -20,8 +20,11 @@ function makePayload(trackCount: number, withCover: boolean): ReleasePayload {
       ai_disclosure: {
         enabled: true,
         lyrics: false,
-        composition: true,
+        music: true,
+        recording_scope: "full",
         partial_audio_type: null,
+        artist_persona: true,
+        apply_to_all: true,
       },
     },
     release: {

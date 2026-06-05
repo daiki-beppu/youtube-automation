@@ -1,13 +1,13 @@
-// distrokid.com/new フォームへの注入ロジック（#866 で実機 DOM 再検証）。
+// distrokid.com/new フォームへの注入ロジック（#877 で実機 DOM 再検証）。
 //
 // 静的プロファイル / album / release date / 曲 / songwriter / cover は #813 の id ベース
-// セレクタを継続。AI 開示は #866 で fixture-driven な想像 selector（#ai-yes / #ai-modal /
-// [name^="ai_lyrics_"] / apply-all checkbox / save button）が実 DOM と完全に乖離していたこと
-// が判明したため、実 DOM 準拠の uuid-driven 関数群に置換した:
-//   - 「はい/いいえ」: [name="ai_gate_<uuid>"][value="0"|"1"] radio
-//   - 歌詞 / 作曲: [name="ai_lyrics_<uuid>"] / [name="ai_music_<uuid>"] checkbox（display:none で隠れる）
-//   - 部分的 AI 音声: [name="ai_partial_audio_type_<uuid>"][value="vocals"|"instruments"] radio
-//   - apply_to_all checkbox は実 DOM に存在しない → 全 track をループで個別注入することで代替
+// セレクタを継続。AI 開示は #877 で「inline 展開ではなく SweetAlert2 modal で開く」ことが
+// 判明したため、track ごとの inline 注入を破棄し modal フローへ刷新した:
+//   - 「はい/いいえ」: [name="ai_gate_<uuid>"][value="0"|"1"] radio（「はい」で modal が mount）
+//   - modal (.ai-credits-swal-modal) を MutationObserver で待ち、内部で歌詞 / 作曲 /
+//     録音範囲 (.distroAiRecordingScope) / partial 種別 / アーティスト種別
+//     (.distroAiArtistPersona) / apply-all (#ai-apply-all-1) を設定して保存ボタンを click
+//   - apply-all により 25 track 全部へ DistroKid 側が伝播するため、modal は 1st track 分 1 回だけ開く
 //
 // テキスト / SELECT 注入は React 互換のネイティブ value setter + bubbling イベントで行う
 // （React の制御要素は value を直接書き換えても onChange が走らないため、prototype の
@@ -52,21 +52,42 @@ export const TRACK_FIELD_SELECTORS = {
   }),
 } as const;
 
-// AI 開示の uuid-driven セレクタ群（実 DOM 検証 #866 に基づく）。
+// AI 開示の gate radio（modal を開く / disabled 時に「いいえ」を確定する）。
 // 全 track の uuid は resolveTrackUuids() で title_<uuid> input から DOM order に解決する。
 export const AI_DISCLOSURE_SELECTORS = {
   // 「はい / いいえ」radio。デフォルトは「いいえ (value=0)」が checked。
+  // 「はい (value=1)」を click すると SweetAlert2 modal が mount する（#877）。
   gateByUuid: (uuid: string) => ({
     no: `[name="ai_gate_${uuid}"][value="0"]`,
     yes: `[name="ai_gate_${uuid}"][value="1"]`,
   }),
-  // 「はい」選択時に展開される歌詞 / 作曲 checkbox（initial は display:none の親に隠れている）。
+} as const;
+
+// AI 開示 modal（SweetAlert2 ベース）内のセレクタ群（実 DOM 再検証 #877 に基づく）。
+// modal は 1st track の gate「はい」で 1 回だけ開き、apply-all checkbox で全 track へ伝播する。
+export const AI_MODAL_SELECTORS = {
+  // modal ルート（role="dialog"）。mount/unmount を MutationObserver で待つ基点。
+  modal: ".ai-credits-swal-modal",
+  // 歌詞 / 作曲 AI checkbox（uuid は modal を開いた 1st track のもの）。
   lyricsByUuid: (uuid: string) => `[name="ai_lyrics_${uuid}"]`,
-  compositionByUuid: (uuid: string) => `[name="ai_music_${uuid}"]`,
-  // 部分的 AI 音声の種別 radio。100% AI 楽曲では選ばない（partial_audio_type=null）。
+  musicByUuid: (uuid: string) => `[name="ai_music_${uuid}"]`,
+  // 録音物の AI 範囲 radio（"full"=音声すべて / "partial"=音声の一部）。
+  recordingScope: (scope: "full" | "partial") =>
+    `.distroAiRecordingScope[value="${scope}"]`,
+  // partial 録音時の種別 radio（partial 選択時のみ visible）。
   partialAudioTypeByUuid: (uuid: string, type: "vocals" | "instruments") =>
     `[name="ai_partial_audio_type_${uuid}"][value="${type}"]`,
+  // アーティスト種別 radio（value="0"=人間 / "1"=AI ペルソナ）。
+  artistPersonaByUuid: (uuid: string, value: "0" | "1") =>
+    `[name="ai_artist_persona_${uuid}_0"][value="${value}"]`,
+  // 「Apply these selections to all songs on this release」checkbox。
+  applyAll: "#ai-apply-all-1",
+  // 「保存する」ボタン（送信系ではない・modal を閉じるだけ）。
+  saveButton: "button.swal2-confirm.ai-modal-btn-save",
 } as const;
+
+// AI 開示 modal の mount/unmount 待ち上限（ms）。超過したら fail-loud（silent skip しない）。
+export const AI_MODAL_WAIT_TIMEOUT_MS = 10_000;
 
 // 新規リリース前提の assert 対象（previouslyReleased「いいえ(value=0)」）。
 export const NEW_RELEASE_RADIO_SELECTOR = '[name^="previouslyReleased_"][value="0"]';
@@ -81,6 +102,15 @@ export class FieldNotFoundError extends Error {
   constructor(selector: string) {
     super(`注入先フィールドが見つかりません: ${selector}`);
     this.name = "FieldNotFoundError";
+  }
+}
+
+// AI 開示 modal の mount/unmount が制限時間内に観測できなかったことを表す専用エラー。
+// silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
+export class ModalTimeoutError extends Error {
+  constructor(selector: string) {
+    super(`AI 開示 modal の状態変化を待てませんでした: ${selector}`);
+    this.name = "ModalTimeoutError";
   }
 }
 
@@ -231,46 +261,127 @@ function setChecked(el: HTMLInputElement, checked: boolean): void {
 }
 
 function requireInput(root: ParentNode, selector: string): HTMLInputElement {
-  const el = root.querySelector<HTMLInputElement>(selector);
+  return requireElement<HTMLInputElement>(root, selector);
+}
+
+// セレクタに一致する要素を要求する。未検出なら fail-loud。
+function requireElement<T extends Element>(root: ParentNode, selector: string): T {
+  const el = root.querySelector<T>(selector);
   if (el === null) {
     throw new FieldNotFoundError(selector);
   }
   return el;
 }
 
-// 1 track 分の AI 開示を注入する（全 track 共通の ai 設定を適用）。
-//
-// 実 DOM では「はい」radio click 時点で歌詞 / 作曲 / partial_audio_type の親 div の
-// display:none が外れる仕掛けだが、checkbox / radio 自体は最初から DOM 内にあるため、
-// MutationObserver で展開待ちする必要はない（hidden な checkbox に対する el.click() も
-// React 制御コンポーネントには届く）。
-function injectAiDisclosureForTrack(root: ParentNode, uuid: string, ai: AiDisclosure): void {
-  const gate = AI_DISCLOSURE_SELECTORS.gateByUuid(uuid);
-  setChecked(requireInput(root, ai.enabled ? gate.yes : gate.no), true);
-  if (!ai.enabled) {
-    return;
+// root の所属 Document を解決する（MutationObserver の observe 対象を決めるため）。
+function ownerDocumentOf(root: ParentNode): Document {
+  if (root instanceof Document) {
+    return root;
   }
-  setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.lyricsByUuid(uuid)), ai.lyrics);
-  setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.compositionByUuid(uuid)), ai.composition);
-  if (ai.partial_audio_type !== null) {
+  const doc = (root as Element | DocumentFragment).ownerDocument;
+  if (doc === null) {
+    throw new Error("root の Document を解決できません");
+  }
+  return doc;
+}
+
+// selector に一致する要素の出現を待つ（既に在れば即解決）。制限時間超過で ModalTimeoutError。
+export function waitForElement(
+  root: ParentNode,
+  selector: string,
+  timeoutMs: number,
+): Promise<HTMLElement> {
+  const existing = root.querySelector<HTMLElement>(selector);
+  if (existing !== null) {
+    return Promise.resolve(existing);
+  }
+  const observeRoot = ownerDocumentOf(root).body ?? ownerDocumentOf(root);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new ModalTimeoutError(selector));
+    }, timeoutMs);
+    const observer = new MutationObserver(() => {
+      const found = root.querySelector<HTMLElement>(selector);
+      if (found !== null) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve(found);
+      }
+    });
+    observer.observe(observeRoot, { childList: true, subtree: true });
+  });
+}
+
+// 要素が DOM から除去されるのを待つ（既に外れていれば即解決）。制限時間超過で ModalTimeoutError。
+export function waitForRemoval(el: Element, timeoutMs: number): Promise<void> {
+  if (!el.isConnected) {
+    return Promise.resolve();
+  }
+  const observeRoot = el.ownerDocument.body ?? el.ownerDocument;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new ModalTimeoutError(AI_MODAL_SELECTORS.modal));
+    }, timeoutMs);
+    const observer = new MutationObserver(() => {
+      if (!el.isConnected) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve();
+      }
+    });
+    observer.observe(observeRoot, { childList: true, subtree: true });
+  });
+}
+
+// modal 内で AI 開示の各設定を反映する（uuid は modal を開いた 1st track のもの）。
+// partial_audio_type は recording_scope='partial' かつ非 null のときのみ設定する
+// （undefined を null 同等扱いする loose equality `!= null` で FieldNotFoundError を防ぐ #877）。
+function applyModalSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): void {
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid)), ai.lyrics);
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.musicByUuid(uuid)), ai.music);
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.recordingScope(ai.recording_scope)), true);
+  if (ai.recording_scope === "partial" && ai.partial_audio_type != null) {
     setChecked(
       requireInput(
-        root,
-        AI_DISCLOSURE_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type),
+        modal,
+        AI_MODAL_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type),
       ),
       true,
     );
   }
+  setChecked(
+    requireInput(modal, AI_MODAL_SELECTORS.artistPersonaByUuid(uuid, ai.artist_persona ? "1" : "0")),
+    true,
+  );
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.applyAll), ai.apply_to_all);
 }
 
-// AI 開示注入: 全 track の uuid を DOM order で解決し、各 track に同じ ai 設定を適用する。
-// enabled=false でも各 track の「いいえ」radio を明示的に確定させる（人手 default に頼らない）。
-export function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): void {
+// AI 開示注入（#877 modal フロー）:
+//   1. 全 track の uuid を DOM order で解決する（基点は title_<uuid>）
+//   2. enabled=false: 各 track の「いいえ」radio を明示確定（modal は開かない）
+//   3. enabled=true: 1st track の「はい」radio を click → modal mount を待つ
+//      → modal 内で各設定 + apply-all → 保存 button → modal unmount を待つ
+// apply-all により 25 track 全部へ DistroKid 側が伝播するため、track ごとの inline 注入はしない。
+export async function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): Promise<void> {
   const uuids = resolveTrackUuids(root);
   if (uuids.length === 0) {
     throw new FieldNotFoundError(TITLE_NAME_SELECTOR);
   }
-  for (const uuid of uuids) {
-    injectAiDisclosureForTrack(root, uuid, ai);
+
+  if (!ai.enabled) {
+    // 人手 default に頼らず、各 track の「いいえ」を明示確定する（modal は開かない）。
+    for (const uuid of uuids) {
+      setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(uuid).no), true);
+    }
+    return;
   }
+
+  const firstUuid = uuids[0];
+  setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(firstUuid).yes), true);
+  const modal = await waitForElement(root, AI_MODAL_SELECTORS.modal, AI_MODAL_WAIT_TIMEOUT_MS);
+  applyModalSelections(modal, firstUuid, ai);
+  requireElement<HTMLButtonElement>(modal, AI_MODAL_SELECTORS.saveButton).click();
+  await waitForRemoval(modal, AI_MODAL_WAIT_TIMEOUT_MS);
 }

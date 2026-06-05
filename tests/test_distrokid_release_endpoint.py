@@ -105,8 +105,11 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
         "ai_disclosure": {
             "enabled": True,
             "lyrics": True,
-            "composition": True,
+            "music": True,
+            "recording_scope": "full",
             "partial_audio_type": None,
+            "artist_persona": True,
+            "apply_to_all": True,
         },
     }
     release = payload["release"]
