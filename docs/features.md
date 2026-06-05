@@ -51,6 +51,7 @@
 | /thumbnail | CTR 最適化プロンプトでサムネイル画像を生成（Gemini / OpenAI） |
 | /lyria | Vertex AI Lyria 3 で長尺マスター音源を自動生成（API 完結） |
 | /suno | Suno UI 用プロンプト（Style + Lyrics）を生成 |
+| /suno-helper | suno-helper Chrome 拡張で Suno UI への連続生成 + playlist 一括追加を運用 |
 | /masterup | Suno で生成した楽曲を DL + クロスフェードマスター化 |
 | /loop-video | 静止画から 8 秒シームレスループ動画を生成（Veo 3.1） |
 | /videoup | マスター音源 + 背景画像 / 動画から最終 MP4 を合成 |
