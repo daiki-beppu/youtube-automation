@@ -3,38 +3,37 @@
 // content script は manifest の matches (`https://suno.com/*`) でしか注入されず、Playwright の
 // page.evaluate に渡す関数はシリアライズされブラウザ文脈で実行されるため本番 `shared/playlist-dom.ts`
 // を直接 import できない (既存 suno-queue.spec.ts と同じ制約)。よってここでは
-// selectRecentCompletedClips / multiSelectClips / openAddToPlaylistDialogViaCmdP /
+// selectRecentClips / multiSelectClips / openAddToPlaylistDialogViaCmdP /
 // fillPlaylistNameAndCreate / waitForPlaylistDialogClose と同手法を inline 再現し、
-// 「完了 clip を multi-select → Cmd+P で dialog → 名前入力 → Create → dialog 消滅」が実ブラウザの
+// 「clip を multi-select → Cmd+P で dialog → 名前入力 → Create → dialog 消滅」が実ブラウザの
 // layout 上で成立することを示す。本番関数の回帰は jsdom unit (tests/dom-playlist.test.ts) が担う。
 import { expect, test } from "@playwright/test";
 
-// Create 画面の mock。
-//   - 完了 clip-row 4 件 (= 2 entry × 2 clip) + streaming 2 件（選択対象外）
-//   - 各 clip-row は `.multi-select-button > button[aria-label="Select clip"]`
+// Create 画面の mock (#881)。
+//   - `.clip-browser-list-scroller` 直下は **単一の中間ラッパ div** 1 件で、その配下に clip row 4 件
+//     （= 2 entry × 2 clip）が並ぶ。実機 (order.md L26) の `scroller > 単一中間ラッパ > per-clip div`
+//     構造を写像し、`:scope > div`（1 row に collapse する素朴実装）との差を e2e でも検出可能にする。
+//     data-testid は廃止済みのため使わない
+//   - 各 per-clip row は `div(per-clip) > .multi-select-button > button[aria-label="Select clip"]` 構造
 //   - OneTrust cookie dialog (role=dialog, aria-label="Privacy Preference Center", id="ot-...") が常駐し、
 //     contrived に "Add to Playlist" テキストを含む（除外フィルタの検証用）
 //   - Cmd+P で #playlist-dialog (初期 display:none) が開く。Create Playlist click で閉じる
 const MOCK_HTML = `<!doctype html>
 <html>
   <body>
-    <div id="grid">
-      ${Array.from({ length: 4 })
-        .map(
-          (_, i) =>
-            `<div data-testid="clip-row" data-clip-status="complete" id="done-${i}" style="width:200px;height:60px">` +
-            `<div class="multi-select-button"><button aria-label="Select clip" style="width:20px;height:20px"></button></div>` +
-            `</div>`,
-        )
-        .join("\n")}
-      ${Array.from({ length: 2 })
-        .map(
-          (_, i) =>
-            `<div data-testid="clip-row" data-clip-status="streaming" id="streaming-${i}" style="width:200px;height:60px">` +
-            `<div class="multi-select-button"><button aria-label="Select clip" style="width:20px;height:20px"></button></div>` +
-            `</div>`,
-        )
-        .join("\n")}
+    <div class="clip-browser-list-scroller">
+      <div class="css-emotion-list-wrapper">
+        ${Array.from({ length: 4 })
+          .map(
+            (_, i) =>
+              `<div id="clip-${i}" style="width:200px;height:60px">` +
+              `<div class="multi-select-button">` +
+              `<button aria-label="Select clip" style="width:20px;height:20px"></button>` +
+              `</div>` +
+              `</div>`,
+          )
+          .join("\n")}
+      </div>
     </div>
 
     <div id="ot-sdk-container" role="dialog" aria-label="Privacy Preference Center" style="width:360px;height:200px">
@@ -67,7 +66,7 @@ const MOCK_HTML = `<!doctype html>
   </body>
 </html>`;
 
-test("完了 clip を multi-select し Cmd+P → 名前入力 → Create Playlist → dialog 消滅 (#854)", async ({ page }) => {
+test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → dialog 消滅 (#854, #881)", async ({ page }) => {
   await page.setContent(MOCK_HTML);
 
   const result = await page.evaluate(async () => {
@@ -87,10 +86,25 @@ test("完了 clip を multi-select し Cmd+P → 名前入力 → Create Playlis
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    const selectRecentCompletedClips = (count: number): HTMLElement[] =>
-      Array.from(document.querySelectorAll<HTMLElement>('[data-testid="clip-row"][data-clip-status="complete"]'))
-        .filter(isVisible)
-        .slice(0, count);
+    const selectRecentClips = (count: number): HTMLElement[] => {
+      const scroller = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
+      if (!scroller) throw new Error("clip row が見つかりません。Suno の UI 変更の可能性があります。");
+      // ボタン基点で per-clip row（closest('.multi-select-button').parentElement）を DOM 順に重複排除収集。
+      // 中間ラッパで `:scope > div` が 1 row に collapse する問題を避ける（本番 selectRecentClips と同手法）。
+      const buttons = scroller.querySelectorAll<HTMLElement>(
+        '.multi-select-button > button[aria-label="Select clip"], .multi-select-button > button[aria-label="Deselect clip"]',
+      );
+      const seen = new Set<HTMLElement>();
+      const rows: HTMLElement[] = [];
+      for (const button of Array.from(buttons)) {
+        const row = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+        if (!row || seen.has(row)) continue;
+        seen.add(row);
+        if (isVisible(row)) rows.push(row);
+      }
+      if (rows.length === 0) throw new Error("clip row が見つかりません。Suno の UI 変更の可能性があります。");
+      return rows.slice(0, count);
+    };
 
     const multiSelectClips = async (rows: HTMLElement[]): Promise<void> => {
       for (const row of rows) {
@@ -145,7 +159,7 @@ test("完了 clip を multi-select し Cmd+P → 名前入力 → Create Playlis
     };
 
     // --- フロー実行 ---
-    const rows = selectRecentCompletedClips(40);
+    const rows = selectRecentClips(40);
     await multiSelectClips(rows);
     const selectedCount = document.querySelectorAll('.multi-select-button > button[aria-label="Deselect clip"]').length;
 
@@ -160,7 +174,7 @@ test("完了 clip を multi-select し Cmd+P → 名前入力 → Create Playlis
     const dialogClosed = document.getElementById("playlist-dialog") === null;
 
     return {
-      completedRowCount: rows.length,
+      clipRowCount: rows.length,
       selectedCount,
       dialogIsReal,
       cookieExcluded: dialogIsReal && cookieStillPresent,
@@ -169,7 +183,7 @@ test("完了 clip を multi-select し Cmd+P → 名前入力 → Create Playlis
     };
   });
 
-  expect(result.completedRowCount).toBe(4); // 完了 4 件のみ（streaming は対象外）
+  expect(result.clipRowCount).toBe(4); // 単一中間ラッパ配下の per-clip row 4 件（collapse なら 1 で落ちる）
   expect(result.selectedCount).toBe(4); // 4 件すべて multi-select された
   expect(result.dialogIsReal).toBe(true); // cookie ではなく実 dialog を開いた
   expect(result.cookieExcluded).toBe(true); // cookie dialog は残存するが拾われていない
