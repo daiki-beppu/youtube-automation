@@ -116,7 +116,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
         ```
    - それ以外のモード: `/thumbnail <theme>` を Agent で実行（テキストオーバーレイ生成。`/thumbnail` の品質チェック節で同等 QA が走る）
 4. **音楽素材生成**: Agent ツールで音楽エンジンに応じたスキルを実行:
-   - Suno: `/suno <theme>` を Skill ツールで実行（プロンプト生成）
+   - Suno: `/suno <theme>` を Skill ツールで実行（プロンプト生成のみ。実際の楽曲生成は `/suno-helper` で連続実行する）
      - **`/suno` 呼び出し前提条件チェック**（#571）: `config/skills/suno.yaml::genre_line` を読み、空のときは `config/channel/analytics.json::benchmark.channels[].slug` 全件について `data/video_analysis/<slug>/*.json` の存在を確認する。**両方とも未充足**（`genre_line` 空 AND 全 slug で分析結果不在）であれば `/suno` を起動せず、`uv run yt-video-analyze --source benchmark --channel <slug> --top 5` を先行実行するようユーザーに案内して Phase 2c を一旦停止する（`data/benchmark_*.json` が無ければさらにその前段で `/benchmark` を案内）。AI が `genre_line` を手書きで埋めて続行することは禁止
    - Lyria: `/lyria <theme>` を Skill ツールで実行（プロンプト設計のみ。Lyria 3 API 呼び出しは `/wf-next` で実行）
 5. `workflow-state.json` を更新:
@@ -162,10 +162,10 @@ Phase 1 の成果物を `20-documentation/` に保存:
    ```
 
    音楽エンジンに応じた次ステップ案内:
-   - **Suno**: 「`suno-prompts.md` のプロンプトを SunoAI に投入 → プレイリスト作成後 `/wf-next` を実行してください」
+   - **Suno**: 「`/suno-helper` を実行してください。`yt-collection-serve` で `suno-prompts.json` を配信 → suno-helper Chrome 拡張で Suno タブに連続注入 → 全件完了で playlist 一括追加まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
    - **Lyria**: 「`/wf-next` を実行すると Lyria 3 API が呼ばれ、コレクション尺に応じてセグメントが生成されます → ミキシング+マスタリング後に再度 `/wf-next`」
 
-**重要**: `/wf-next` への自動接続はしない。ユーザーが手動で `/wf-next` を呼ぶ。
+**重要**: `/suno-helper` / `/wf-next` への自動接続はしない（`/suno-helper` は Chrome + Suno ログイン + 拡張ロードの physical 準備、`/wf-next` は次フェーズ進行の意思決定をそれぞれ user に委ねる）。ユーザーが手動で呼ぶ。
 
 ## 障害時ガイダンス
 
@@ -182,6 +182,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
 - サムネイル生成: `/thumbnail` スキル
 - ループ動画生成: `/loop-video` スキル
 - 音楽プロンプト生成: `/suno` スキル
+- Suno UI への連続注入 + playlist 一括追加: `/suno-helper` スキル
 - 音楽プロンプト設計 + Lyria 3 API 呼び出し: `/lyria` スキル
 - 後続ステップ管理: `/wf-next`
 - 進捗確認: `/wf-status`
