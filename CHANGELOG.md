@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(skills)`: `/wf-new` Phase 2c の Suno 分岐と Phase 2d 完了ガイダンスを `/suno-helper` 連携に書き換えた。Phase 2c で `/suno` の役割を「プロンプト生成のみ。実際の楽曲生成は `/suno-helper` で連続実行」と明示し、Phase 2d 完了ガイダンスの Suno 分岐を従来の「`suno-prompts.md` のプロンプトを SunoAI に投入 → プレイリスト作成後 `/wf-next`」から「`/suno-helper` を実行 → `yt-collection-serve` で `suno-prompts.json` を配信 → suno-helper Chrome 拡張で連続注入 → 全件完了で playlist 一括追加まで自動。完了後に `/wf-next`」に置き換えた。Cross References にも `/suno-helper` を追記。自動 invoke は引き続き行わない（Chrome + Suno ログイン + 拡張ロードの physical 準備が user 側にあり、`/wf-next` への自動接続を入れていない既存方針と整合）。Lyria 分岐は不変
+
 - `feat(suno-helper)`: `extractPlaylistName` (`shared/api.ts`) の命名規則を `<channel>-<theme>` から `<channel> | <theme>` (`|` の前後にスペース) へ変更し、シグネチャを `(collectionId, theme)` の 2 引数に変えた。channel 部分自体がハイフン区切り (例: `soulful-grooves`) になるチャンネルがあり、id 単体では channel と theme の境界を機械的に判定できなかったため、`/collections` レスポンスの `name` field (= 既に server 側で抽出済みの theme slug) を渡して逆向きに境界を確定する。検証ロジックは「末尾 `-collection` 剥がし → 末尾 `-<theme>` 照合 (不整合は fail-loud) → 残りを `-` 分割し parts[0] が 8 桁日付 + parts>=2 → channel = `parts.slice(1).join("-")` (空ならエラー) → `<channel> | <theme>` を返す」。例: `("20260601-rjn-dawn-cloud-fold-collection", "dawn-cloud-fold")` -> `"rjn | dawn-cloud-fold"`、`("20260520-soulful-grooves-midnight-mood-collection", "midnight-mood")` -> `"soulful-grooves | midnight-mood"`。popup の display only 表示と content script の Suno playlist 名注入はこの新形式をそのまま使う。呼び出し元 (`useSunoRunner.ts`) は collection summary から id + name の両方を渡すように更新。Vitest の `extract-playlist-name.test.ts` を新シグネチャ・新形式の expected に全面更新し、theme 空文字 / id-theme 不整合 / channel 空の新たな fail-loud 経路もカバーする
 
 ### Added
