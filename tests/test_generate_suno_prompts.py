@@ -37,13 +37,18 @@ def channel_dir(tmp_path, monkeypatch):
 
 
 def _write_minimal_patterns(dir_: Path) -> Path:
-    """1 パターン × 1 シーンの最小 suno-patterns.yaml を作る."""
+    """1 パターン × 1 シーンの最小 suno-patterns.yaml を作る.
+
+    yaml top-level に `tracks: 2` を併設して `tracks_per_collection` の
+    fail-loud 検証 (ceil(2/2) = 1 entry) と整合させる。
+    """
     path = dir_ / "patterns.yaml"
     path.write_text(
         yaml.safe_dump(
             {
                 "title": "Test Collection",
                 "mode": "instrumental",
+                "tracks": 2,
                 "patterns": [
                     {
                         "name_jp": "テスト",
@@ -680,3 +685,248 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     assert isinstance(data, list)
     assert len(data) == 1
     assert set(data[0]) == {"name", "style", "lyrics"}
+
+
+# ---------------------------------------------------------------------------
+# tracks_per_collection モデル (インストモードのフラット曲数指定) の回帰テスト
+# ---------------------------------------------------------------------------
+
+
+def _write_instrumental_patterns_with_scenes(dir_: Path, scene_count: int, *, tracks_top: int | None = None) -> Path:
+    """1 pattern に scene_count 個の scenes を持つインスト yaml を書き出す.
+
+    tracks_top を渡すと yaml top-level に `tracks:` キーを併設する (コレクション上書き経路を試す)。
+    """
+    payload: dict = {
+        "title": "Test Collection",
+        "mode": "instrumental",
+        "patterns": [
+            {
+                "name_jp": "テスト",
+                "name_en": "Test",
+                "tempo": "slow",
+                "scenes": [f"scene description {i}" for i in range(scene_count)],
+            }
+        ],
+    }
+    if tracks_top is not None:
+        payload["tracks"] = tracks_top
+    path = dir_ / "patterns.yaml"
+    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    return path
+
+
+def test_instrumental_tracks_per_collection_match_passes(channel_dir, tmp_path):
+    """Given config に tracks_per_collection=2、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then ceil(2/2)=1 と entries=1 が一致するため通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", tracks_per_collection=2)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 1
+
+
+def test_instrumental_tracks_per_collection_mismatch_fails_loud(channel_dir, tmp_path):
+    """Given config に tracks_per_collection=10、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then ceil(10/2)=5 が必要だが entries=1 なので ConfigError で fail-loud する。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", tracks_per_collection=10)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    msg = str(exc_info.value)
+    assert "tracks_per_collection=10" in msg
+    assert "5" in msg  # 期待 entry 数
+    assert "1" in msg  # 実 entry 数
+
+
+def test_instrumental_yaml_tracks_overrides_config(channel_dir, tmp_path):
+    """Given config に tracks_per_collection=20、yaml top-level に tracks: 2、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then yaml の tracks=2 が config を上書きし、ceil(2/2)=1 と entries=1 が一致して通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", tracks_per_collection=20)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1, tracks_top=2)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 1
+
+
+def test_vocal_mode_skips_tracks_per_collection_validation(channel_dir, tmp_path):
+    """Given vocal genre_line + config に tracks_per_collection=20、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then ボーカルモードは tracks_per_collection 検証対象外なので 1 entry でも通る。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi hip hop with soft male vocals",
+        tracks_per_collection=20,
+    )
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
+    # mode を vocal に上書きして genre_line の vocal 判定と整合させる
+    data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    data["mode"] = "vocal"
+    data["patterns"][0]["lyrics"] = "[Intro]\nla la\n"
+    patterns_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 1
+
+
+def test_instrumental_default_tracks_per_collection_is_20(channel_dir, tmp_path):
+    """Given config.default.yaml の tracks_per_collection=20 を上書きせず、yaml に 10 scenes
+    When build_prompt_entries を呼ぶ
+    Then default の 20 と ceil(20/2)=10 entries が一致して通る。channel override を書かなくても
+         default の典型値が効くことを担保する。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=10)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 10
+
+
+def test_legacy_patterns_per_collection_key_is_silently_ignored(channel_dir, tmp_path):
+    """Given config に旧キー patterns_per_collection=4 が残っていても (新キーは default の 20)
+    When build_prompt_entries を呼ぶ
+    Then コード側は新キー tracks_per_collection しか読まないため、ceil(20/2)=10 entries と
+         整合させていれば旧キーの混在は無害に通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", patterns_per_collection=4)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=10)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 10
+
+
+# ---------------------------------------------------------------------------
+# 全曲ユニーク title (entry name) 検証の回帰テスト
+# ---------------------------------------------------------------------------
+
+
+def _write_patterns_with_explicit_entries(dir_: Path, entries: list[dict], tracks_top: int) -> Path:
+    """name_jp / name_en を明示した複数 entry の yaml を書き出す.
+
+    重複検証テスト用に各 entry の name を任意に指定したいので独立 helper を用意する。
+    """
+    payload: dict = {
+        "title": "Test Collection",
+        "mode": "instrumental",
+        "tracks": tracks_top,
+        "patterns": entries,
+    }
+    path = dir_ / "patterns.yaml"
+    path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def test_unique_titles_pass_when_all_entries_have_distinct_names(channel_dir, tmp_path):
+    """Given 全 entry が固有の name_jp / name_en を持つ yaml
+    When build_prompt_entries を呼ぶ
+    Then ユニーク検証は通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "朝のキッチン", "name_en": "Morning Kitchen", "tempo": "gentle", "scenes": ["a warm kitchen"]},
+        ],
+        tracks_top=4,
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"] != entries[1]["name"]
+
+
+def test_unique_titles_fail_loud_when_two_entries_share_name(channel_dir, tmp_path):
+    """Given 同一の name_jp / name_en を持つ entry が 2 つある yaml
+    When build_prompt_entries を呼ぶ
+    Then ConfigError で fail-loud し、重複した name が messages に含まれる。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "gentle", "scenes": ["another rooftop"]},
+        ],
+        tracks_top=4,
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    msg = str(exc_info.value)
+    assert "ユニーク" in msg
+    assert "屋上の静寂 — Rooftop Silence" in msg
+
+
+def test_unique_titles_treat_name_jp_and_name_en_combo_as_identity(channel_dir, tmp_path):
+    """Given name_jp は同じだが name_en が異なる 2 entry
+    When build_prompt_entries を呼ぶ
+    Then 識別子は `{name_jp} — {name_en}` の組なので別物として通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "屋上", "name_en": "Rooftop Sunset", "tempo": "gentle", "scenes": ["a warm rooftop"]},
+        ],
+        tracks_top=4,
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"] != entries[1]["name"]
+
+
+def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguates(channel_dir, tmp_path):
+    """Given 1 pattern 内に複数 scene を持つ vocal yaml (genre_line で auto vocal 判定)
+    When build_prompt_entries を呼ぶ
+    Then `(Variation N)` 付与で entry name はユニーク化されるためエラーなく通る。
+
+    既存の multi-scene pattern (#854 由来) との後方互換を担保する。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi hip hop with soft male vocals",
+    )
+    payload: dict = {
+        "title": "Vocal Test",
+        "mode": "vocal",
+        "patterns": [
+            {
+                "name_jp": "通学路",
+                "name_en": "Walking Home",
+                "scenes": ["a quiet morning street", "an afternoon shortcut"],
+                "lyrics": "[Intro]\nla la\n",
+            }
+        ],
+    }
+    patterns_path = tmp_path / "patterns.yaml"
+    patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"].endswith("(Variation 1)")
+    assert entries[1]["name"].endswith("(Variation 2)")

@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,6 +89,67 @@ class _ResolvedPrompts:
     patterns: list[_ResolvedPattern]
 
 
+def _validate_instrumental_track_count(
+    yaml_path: Path,
+    entries_count: int,
+    tracks_per_collection: int,
+) -> None:
+    """インストモードで yaml の entry 数が ceil(tracks_per_collection / 2) と一致するか fail-loud で検証する.
+
+    Suno は 1 リクエスト = 2 clip 生成するため、最終 clip 数 `tracks_per_collection` を満たすには
+    yaml `patterns:` 配列の `scenes` 行数の合計 (= 連続生成の entry 数) が `ceil(N/2)` と
+    一致する必要がある。ズレを silent に通すと運用上「曲数不足」「曲数過剰」に気付けないため、
+    新運用 (tracks_per_collection を明示指定) では fail-loud にして AI / operator に修正を促す。
+    """
+    expected = math.ceil(tracks_per_collection / 2)
+    if entries_count == expected:
+        return
+    raise ConfigError(
+        f"インストモード: tracks_per_collection={tracks_per_collection} から "
+        f"ceil({tracks_per_collection}/2)={expected} 個の entry が必要ですが、"
+        f"{yaml_path.name} には {entries_count} 個あります "
+        f"(`patterns:` 配列の `scenes` 行数の合計)。"
+    )
+
+
+def _entry_names_from_resolved(resolved: list[_ResolvedPattern]) -> list[str]:
+    """`build_prompt_entries` と同一ロジックで最終的な entry.name のみを構築する.
+
+    Suno UI Song Title 欄へ注入される値 (suno-helper 拡張は `entry.title ?? entry.name` を読む)
+    の SSOT。複数 scene を持つ pattern は `(Variation N)` 付与でユニーク化される (#854 由来)。
+    """
+    names: list[str] = []
+    for p in resolved:
+        base_name = f"{p.name_jp} — {p.name_en}"
+        multi = len(p.scenes) > 1
+        for j in range(1, len(p.scenes) + 1):
+            names.append(f"{base_name} (Variation {j})" if multi else base_name)
+    return names
+
+
+def _validate_unique_titles(yaml_path: Path, entry_names: list[str]) -> None:
+    """全 entry の最終 name (Suno UI Song Title 欄に注入される値) が重複していないか fail-loud で検証する.
+
+    重複は (1) Suno Library で同名 clip が並んで識別不能になる、(2) `/suno-helper` の進捗 phase で
+    どの entry の clip か追跡しにくくなる、(3) `/masterup` のリネーム時に衝突する、といった運用問題を
+    起こすため yaml レベルで弾く。インストモードは entry が独立した世界観を持つ前提で AI が固有の
+    `name_jp` / `name_en` を毎回設計する必要があり、ボーカルモードは pattern 間で重複しないことが
+    自明設計なので両モードで一律検証する (Variation 付与済みの後の name が比較対象)。
+    """
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for name in entry_names:
+        if name in seen:
+            duplicates.add(name)
+        seen.add(name)
+    if not duplicates:
+        return
+    raise ConfigError(
+        f"全曲のタイトル (entry name) はユニークでなければなりません。"
+        f"{yaml_path.name} で以下が重複しています: {', '.join(sorted(duplicates))}"
+    )
+
+
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
@@ -140,6 +202,21 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
                 lyrics=raw_lyrics.rstrip() if raw_lyrics else "",
             )
         )
+
+    # インストモードのみ: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、
+    # ceil(N/2) と yaml の entry 数 (scene 行数の合計) が一致するか fail-loud で検証する。
+    # ボーカルモードは曲数定義が異なるため (1 prompt = 1 ベストを選曲、別途整理予定) 検証しない。
+    # tracks_per_collection が未指定の旧運用は silent skip して後方互換を保つ。
+    if not is_vocal:
+        tracks_override = data.get("tracks")
+        tracks_per_collection = tracks_override if tracks_override is not None else suno.get("tracks_per_collection")
+        if tracks_per_collection is not None:
+            entries_count = sum(len(p.scenes) for p in resolved)
+            _validate_instrumental_track_count(patterns_path, entries_count, tracks_per_collection)
+
+    # 全曲ユニーク title: Suno UI Song Title 欄に注入される最終 name の重複を fail-loud で弾く。
+    # インスト・ボーカル両モード一律 (詳細は `_validate_unique_titles` の docstring 参照)。
+    _validate_unique_titles(patterns_path, _entry_names_from_resolved(resolved))
 
     return _ResolvedPrompts(
         title=title,
