@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,6 +89,29 @@ class _ResolvedPrompts:
     patterns: list[_ResolvedPattern]
 
 
+def _validate_instrumental_track_count(
+    yaml_path: Path,
+    entries_count: int,
+    tracks_per_collection: int,
+) -> None:
+    """インストモードで yaml の entry 数が ceil(tracks_per_collection / 2) と一致するか fail-loud で検証する.
+
+    Suno は 1 リクエスト = 2 clip 生成するため、最終 clip 数 `tracks_per_collection` を満たすには
+    yaml `patterns:` 配列の `scenes` 行数の合計 (= 連続生成の entry 数) が `ceil(N/2)` と
+    一致する必要がある。ズレを silent に通すと運用上「曲数不足」「曲数過剰」に気付けないため、
+    新運用 (tracks_per_collection を明示指定) では fail-loud にして AI / operator に修正を促す。
+    """
+    expected = math.ceil(tracks_per_collection / 2)
+    if entries_count == expected:
+        return
+    raise ConfigError(
+        f"インストモード: tracks_per_collection={tracks_per_collection} から "
+        f"ceil({tracks_per_collection}/2)={expected} 個の entry が必要ですが、"
+        f"{yaml_path.name} には {entries_count} 個あります "
+        f"(`patterns:` 配列の `scenes` 行数の合計)。"
+    )
+
+
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
@@ -140,6 +164,17 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
                 lyrics=raw_lyrics.rstrip() if raw_lyrics else "",
             )
         )
+
+    # インストモードのみ: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、
+    # ceil(N/2) と yaml の entry 数 (scene 行数の合計) が一致するか fail-loud で検証する。
+    # ボーカルモードは曲数定義が異なるため (1 prompt = 1 ベストを選曲、別途整理予定) 検証しない。
+    # tracks_per_collection が未指定の旧運用は silent skip して後方互換を保つ。
+    if not is_vocal:
+        tracks_override = data.get("tracks")
+        tracks_per_collection = tracks_override if tracks_override is not None else suno.get("tracks_per_collection")
+        if tracks_per_collection is not None:
+            entries_count = sum(len(p.scenes) for p in resolved)
+            _validate_instrumental_track_count(patterns_path, entries_count, tracks_per_collection)
 
     return _ResolvedPrompts(
         title=title,
