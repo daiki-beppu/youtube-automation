@@ -1,6 +1,6 @@
 ---
 name: suno
-description: "Use when Suno UI に投入する音楽プロンプト (Style + Lyrics) を生成したいとき。SunoAI V5 向けのパターン YAML と suno-prompts.md を作成する（楽曲生成は人手で Suno UI、DL + マスター化は次工程 /masterup）。プロンプト作成・Style 文・Lyrics テンプレートなど Suno 手動生成の前段で使用すること。Lyria チャンネルでは /lyria を使う"
+description: "Use when Suno UI に投入する音楽プロンプト (Style + Lyrics) を生成したいとき。SunoAI V5 向けのパターン YAML と suno-prompts.md / suno-prompts.json を作成する（次工程 `/suno-helper` でブラウザ自動生成 + playlist 一括追加、その後 `/masterup` で DL + マスター化）。プロンプト作成・Style 文・Lyrics テンプレートなど Suno 連続生成の前段で使用すること。Lyria チャンネルでは /lyria を使う"
 ---
 
 ## Overview
@@ -425,13 +425,13 @@ uv run yt-generate-suno <collection-path>
 
 `config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` を生成する。設定変更時はスクリプト再実行のみで全プロンプトに反映される。
 
-`suno-prompts.md` と同じ `20-documentation/` ディレクトリに、各パターンの `{ name, style, lyrics }` を配列化した **`suno-prompts.json`** も併出される。これは Step 2.5 の Chrome 拡張（`yt-collection-serve` 経由）が fetch する配信元で、`suno-prompts.md` の Style 行と同一内容から生成されるため両者はドリフトしない。
+`suno-prompts.md` と同じ `20-documentation/` ディレクトリに、各パターンの `{ name, style, lyrics }` を配列化した **`suno-prompts.json`** も併出される。これは Step 3 の Chrome 拡張（`yt-collection-serve` 経由）が fetch する配信元で、`suno-prompts.md` の Style 行と同一内容から生成されるため両者はドリフトしない。
 
-**ボーカルモードの出力**: 各パターンに **Style 欄**（情景フレーズ + genre_line）+ **Lyrics 欄**（歌詞そのまま）の 2 ブロックが書き出される。Suno 側で Custom Mode に入って **Instrumental トグル OFF** にした状態で両方を投入する（Step 2.5 の自動投入、または fallback の手コピペ）。
+**ボーカルモードの出力**: 各パターンに **Style 欄**（情景フレーズ + genre_line）+ **Lyrics 欄**（歌詞そのまま）の 2 ブロックが書き出される。Suno 側で Custom Mode に入って **Instrumental トグル OFF** にした状態で両方を投入する（Step 3 の自動投入、または fallback の手コピペ）。
 
 保存後、`workflow-state.json` の `music.generated = true` に更新する。
 
-### Step 2.5: Chrome 拡張 + yt-collection-serve で自動投入（推奨）
+### Step 3: `/suno-helper` で自動投入（推奨）
 
 `suno-prompts.json` を Chrome 拡張（`extensions/suno-helper/`）が読み取り、Suno Custom Mode の Style/Lyrics 両フィールドへ順次注入 → Generate 押下 → 生成完了検知 → 次パターン、を連続実行する。手コピペ（4 パターン × 3 回 ≒ 12 サイクル）を自動化する経路。
 
@@ -450,7 +450,7 @@ uv run yt-generate-suno <collection-path>
 4. **取得 → 連続実行**: 拡張ポップアップでサーバー URL（既定 `http://localhost:7873`）を入れて **データ取得** → パターン一覧を確認 → **全パターンを連続実行**。
 5. **停止と継続**: reCAPTCHA / エラー検知時は拡張が自動停止しポップアップに警告を出す。手動で解決後、再度 **連続実行** で続行できる。
 
-### Step 2.5 fallback: 拡張が使えない／壊れたときの手コピペ
+### Step 3 の fallback: 拡張が使えない／壊れたときの手コピペ
 
 拡張をロードできない、Suno の UI 変更で注入先セレクタが外れた（`extensions/shared/dom.ts` の `SELECTORS` 保守が必要）、その他自動投入が機能しない場合は、従来どおり **`suno-prompts.md` を見ながら手コピペ** に切り替える:
 
@@ -460,7 +460,7 @@ uv run yt-generate-suno <collection-path>
 
 自動・手動どちらの経路でも投入内容は同一（`suno-prompts.md` と `suno-prompts.json` は同一の中間表現から生成）。
 
-### Step 3: workflow-state.json の planning.music を更新
+### Step 4: workflow-state.json の planning.music を更新
 
 `/alignment-check` がコレクション横断で音楽 mood × サムネ × タイトルの整合を機械的に判定できるよう、`workflow-state.json` の `planning.music` セクションを populate する。新規制作分は必須。
 
@@ -502,21 +502,27 @@ uv run yt-generate-suno <collection-path>
 
 ## 障害時ガイダンス
 
-Suno での楽曲生成は人手で Suno UI 上で行うため、本スキル自体は外部 API を呼ばない（生成プロンプトを作るだけ）。
+本スキル自体は外部 API を呼ばない（生成プロンプトを作るだけ）。実際の楽曲生成は `/suno-helper` で自動投入、またはその fallback として手コピペで行う。
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| Suno UI / CDN 障害 | Suno 側でエラー・生成が進まない | 本スキルの責務外（人手生成）。[Suno 公式サイト](https://suno.com)・公式 SNS で障害情報を確認し、時間を置いて UI で再試行。DL/マスター化は `/masterup` 側の障害ガイダンスに従う |
+| Suno UI / CDN 障害 | Suno 側でエラー・生成が進まない | 本スキルの責務外（楽曲生成は `/suno-helper`）。[Suno 公式サイト](https://suno.com)・公式 SNS で障害情報を確認し、時間を置いて UI で再試行。DL/マスター化は `/masterup` 側の障害ガイダンスに従う |
 
 ## Next Step
 
 ### インストゥルメンタル
-→ SunoAI Custom Mode（**Instrumental ON**）にプロンプトを投入して楽曲生成（Step 2.5 の拡張自動投入を推奨、不可時は手コピペ fallback）
-→ ダウンロード対象のプレイリストを作成
+→ `/suno-helper` で SunoAI Custom Mode（**Instrumental ON**）に自動投入して連続生成 + playlist 一括追加
 → `/masterup <playlist-url>` でダウンロード + マスター音源生成
 
 ### ボーカル（歌詞あり）
-→ SunoAI Custom Mode（**Instrumental OFF**）に Style + Lyrics を投入して楽曲生成（Step 2.5 の拡張自動投入を推奨、不可時は手コピペ fallback）
+→ `/suno-helper` で SunoAI Custom Mode（**Instrumental OFF**）に Style + Lyrics を自動投入して連続生成 + playlist 一括追加
 → 歌唱の発音・ピッチが破綻していないか必ず試聴チェック
-→ ダウンロード対象のプレイリストを作成
 → `/masterup <playlist-url>` でダウンロード + マスター音源生成
+
+## Cross References
+
+- 前工程（テーマ確定 + 制作開始）: `/wf-new`
+- 次工程（ブラウザ自動生成 + playlist 一括追加）: `/suno-helper`
+- 後工程（DL + マスター化）: `/masterup`
+- 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
+- サーバー CLI: `src/youtube_automation/scripts/collection_serve.py`
