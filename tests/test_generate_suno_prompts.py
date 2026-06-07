@@ -809,3 +809,124 @@ def test_legacy_patterns_per_collection_key_is_silently_ignored(channel_dir, tmp
     entries = build_prompt_entries(patterns_path)
 
     assert len(entries) == 10
+
+
+# ---------------------------------------------------------------------------
+# 全曲ユニーク title (entry name) 検証の回帰テスト
+# ---------------------------------------------------------------------------
+
+
+def _write_patterns_with_explicit_entries(dir_: Path, entries: list[dict], tracks_top: int) -> Path:
+    """name_jp / name_en を明示した複数 entry の yaml を書き出す.
+
+    重複検証テスト用に各 entry の name を任意に指定したいので独立 helper を用意する。
+    """
+    payload: dict = {
+        "title": "Test Collection",
+        "mode": "instrumental",
+        "tracks": tracks_top,
+        "patterns": entries,
+    }
+    path = dir_ / "patterns.yaml"
+    path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def test_unique_titles_pass_when_all_entries_have_distinct_names(channel_dir, tmp_path):
+    """Given 全 entry が固有の name_jp / name_en を持つ yaml
+    When build_prompt_entries を呼ぶ
+    Then ユニーク検証は通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "朝のキッチン", "name_en": "Morning Kitchen", "tempo": "gentle", "scenes": ["a warm kitchen"]},
+        ],
+        tracks_top=4,
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"] != entries[1]["name"]
+
+
+def test_unique_titles_fail_loud_when_two_entries_share_name(channel_dir, tmp_path):
+    """Given 同一の name_jp / name_en を持つ entry が 2 つある yaml
+    When build_prompt_entries を呼ぶ
+    Then ConfigError で fail-loud し、重複した name が messages に含まれる。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "gentle", "scenes": ["another rooftop"]},
+        ],
+        tracks_top=4,
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    msg = str(exc_info.value)
+    assert "ユニーク" in msg
+    assert "屋上の静寂 — Rooftop Silence" in msg
+
+
+def test_unique_titles_treat_name_jp_and_name_en_combo_as_identity(channel_dir, tmp_path):
+    """Given name_jp は同じだが name_en が異なる 2 entry
+    When build_prompt_entries を呼ぶ
+    Then 識別子は `{name_jp} — {name_en}` の組なので別物として通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "屋上", "name_en": "Rooftop Sunset", "tempo": "gentle", "scenes": ["a warm rooftop"]},
+        ],
+        tracks_top=4,
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"] != entries[1]["name"]
+
+
+def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguates(channel_dir, tmp_path):
+    """Given 1 pattern 内に複数 scene を持つ vocal yaml (genre_line で auto vocal 判定)
+    When build_prompt_entries を呼ぶ
+    Then `(Variation N)` 付与で entry name はユニーク化されるためエラーなく通る。
+
+    既存の multi-scene pattern (#854 由来) との後方互換を担保する。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi hip hop with soft male vocals",
+    )
+    payload: dict = {
+        "title": "Vocal Test",
+        "mode": "vocal",
+        "patterns": [
+            {
+                "name_jp": "通学路",
+                "name_en": "Walking Home",
+                "scenes": ["a quiet morning street", "an afternoon shortcut"],
+                "lyrics": "[Intro]\nla la\n",
+            }
+        ],
+    }
+    patterns_path = tmp_path / "patterns.yaml"
+    patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"].endswith("(Variation 1)")
+    assert entries[1]["name"].endswith("(Variation 2)")

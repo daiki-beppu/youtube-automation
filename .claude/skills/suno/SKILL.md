@@ -157,10 +157,14 @@ $ARGUMENTS
 2. **曲数を確定する**: `config/skills/suno.yaml::tracks_per_collection` を読み、コレクション単位で
    変えたい場合のみ `suno-patterns.yaml` の top-level `tracks:` キーで上書きする
 3. **`ceil(tracks / 2)` 個の entry を設計する**: 各 entry は固有の `name_jp` / `name_en` / `scenes` (1 行)
-   / `tempo` を持つ。entry 間で情景が被らないよう、視点・時刻・場所・季節などを散らす
+   / `tempo` を持つ。**`name_jp` / `name_en` の組（= Suno UI Song Title 欄に注入される `entry.name`）は
+   全 entry でユニーク必須** (重複すると Library / playlist / `/masterup` のリネーム時に衝突する)。
+   entry 間で情景が被らないよう、視点・時刻・場所・季節などを散らす
 4. **style variant を割り当てる**: `style_strategy: single` なら全 entry 同じ variant、`mixed` なら
    entry ごとに variant を切り替える（例: A:lo-fi / B:ambient / C:piano / D:nature）
-5. **`yt-generate-suno` 実行で検証**: entry 数が `ceil(tracks / 2)` と一致しないと fail-loud で停止する
+5. **`yt-generate-suno` 実行で検証**: 以下のいずれかに違反すると fail-loud で停止する。
+   - entry 数が `ceil(tracks / 2)` と一致しない
+   - `entry.name`（= `{name_jp} — {name_en}`）が他 entry と重複している
 
 ### 生成計画（インストモード）
 
@@ -467,6 +471,8 @@ patterns:
 - `style` 指定時は variant の genre_line にテンポが含まれるため、`tempo` は省略可能
 - インストモードは各 entry **1 シーン**のみ。1 entry = 1 Generate = 2 clip 採用（選曲しない）
 - インストモードで `len(patterns)` が `ceil(tracks / 2)` と一致しないと `yt-generate-suno` が fail-loud で停止する
+- **全 entry の `name_jp` / `name_en` の組はユニーク必須**。重複していると `yt-generate-suno` が fail-loud で停止する
+  （Suno Library / playlist 識別 / `/masterup` リネーム衝突を防ぐため、両モード共通の制約）
 - ボーカルモードでは各パターン **1 セット（scenes + lyrics）**。`tracks_per_pattern` 回生成で
   `tracks_per_pattern * 2` トラック/パターン（既定 3 回 = 6 トラック）。`pattern_strategy: single` の
   場合、`patterns:` 配列は **1 要素だけ** にする（A 〜 D を並べない）
