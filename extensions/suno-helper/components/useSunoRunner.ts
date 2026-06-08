@@ -1,6 +1,8 @@
-// popup の状態管理フック。旧 popup.js の挙動 (取得 / 連続実行 / 停止 / 進捗・エラー表示) を保持する。
+// overlay / popup 共用の状態管理フック。旧 popup.js の挙動 (取得 / 連続実行 / 停止 / 進捗・エラー表示) を保持する。
+// run / stop / queryProgress / progress は tabId を指定せず background 宛に送る（#892）。overlay は
+// content script で `browser.tabs.*` を呼べないため、background が送信元と同一タブの runner content へ中継する
+// （中継ロジックは entrypoints/background.ts + lib/overlay-relay.ts）。
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
@@ -19,6 +21,7 @@ import {
   type ResumeState,
   resolveRunRange,
   resumeBannerRange,
+  resumeRunRange,
   type RunRange,
   shouldShowResumeBanner,
 } from "../lib/resume-state";
@@ -55,16 +58,9 @@ interface RunnerState {
   acceptResume: () => void;
   dismissResume: () => void;
   fetchData: () => Promise<void>;
-  run: () => Promise<void>;
+  // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
+  run: (overrides?: { range?: RunRange }) => Promise<void>;
   stop: () => Promise<void>;
-}
-
-async function activeTabId(): Promise<number> {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (typeof tab?.id !== "number") {
-    throw new Error("アクティブなタブが見つかりません。");
-  }
-  return tab.id;
 }
 
 export function useSunoRunner(): RunnerState {
@@ -149,18 +145,6 @@ export function useSunoRunner(): RunnerState {
     });
   }, []);
 
-  // バナー承認: range UI に「失敗 entry..末尾」を 1-based で prefill し、範囲指定モードへ切替える (#872)。
-  const acceptResume = useCallback(() => {
-    if (!resumeBanner) {
-      return;
-    }
-    const prefilled = resumeBannerRange(resumeBanner);
-    setRangeMode("range");
-    setRangeStart(String(prefilled.start));
-    setRangeEnd(String(prefilled.end));
-    setResumeDismissed(true);
-  }, [resumeBanner]);
-
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);
   }, []);
@@ -203,13 +187,13 @@ export function useSunoRunner(): RunnerState {
     return () => unwatch();
   }, [entries, report]);
 
-  // popup 再 open 時、content が保持する snapshot から進捗を即時復元する (#852)。
-  // Suno タブでない / content 未注入は queryProgress が失敗 → 復元せず従来表示へ silent fallback。
+  // overlay mount / popup 再 open 時、runner content が保持する snapshot から進捗を即時復元する (#852)。
+  // queryProgress は background 経由で同一タブの runner content へ中継される (#892)。runner 未注入なら
+  // 中継が失敗 → 復元せず従来表示へ silent fallback。
   useEffect(() => {
     void (async () => {
       try {
-        const tabId = await activeTabId();
-        const snapshot = await sendMessage("queryProgress", undefined, tabId);
+        const snapshot = await sendMessage("queryProgress", undefined);
         const restored = buildRestoreState(snapshot);
         if (!restored) {
           return;
@@ -222,7 +206,7 @@ export function useSunoRunner(): RunnerState {
         setRestoredFailedIndex(restored.failedIndex);
         report(restored.status, restored.isError);
       } catch {
-        // Suno タブでない / content 未注入では queryProgress が到達しない。復元を諦め従来表示を維持する。
+        // runner content 未注入（中継先不在）では queryProgress が到達しない。復元を諦め従来表示を維持する。
       }
     })();
   }, [report]);
@@ -251,45 +235,73 @@ export function useSunoRunner(): RunnerState {
     }
   }, [url, selectedCollectionId, report]);
 
-  const run = useCallback(async () => {
-    if (entries.length === 0) {
-      return;
-    }
-    // 範囲指定モードは 1-based 入力を 0-based inclusive range へ解決する (#872)。
-    // 不正入力は resolveRunRange が throw → ここで捕捉し fail-loud で UI に出す（content へ送らない）。
-    let range: RunRange | undefined;
-    if (rangeMode === "range") {
-      try {
-        const start = Number(rangeStart);
-        const end = rangeEnd.trim() === "" ? undefined : Number(rangeEnd);
-        range = resolveRunRange(start, end, entries.length);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        report(message, true);
+  const run = useCallback(
+    async (overrides?: { range?: RunRange }) => {
+      // 二重実行ガード (#892 要件7)。実行中の再入（「再開」連打等）を no-op で弾く。
+      if (isRunning) {
         return;
       }
-    }
-    try {
-      const tabId = await activeTabId();
-      // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
-      // collectionId は ERROR 停止時の resume 紐付けに使う。単一ファイル mode（空文字）は undefined で送る (#872)。
-      await sendMessage(
-        "run",
-        { entries, playlistName: derivedPlaylistName, range, collectionId: selectedCollectionId || undefined },
-        tabId,
-      );
+      if (entries.length === 0) {
+        return;
+      }
+      // overrides.range（1-click 自動再開）があればそれを優先する (#892 要件6)。
+      // 無ければ range UI の状態から解決する（従来挙動）。range モードの 1-based 入力は
+      // 0-based inclusive へ変換し、不正入力は resolveRunRange が throw → fail-loud で UI に出す。
+      let range = overrides?.range;
+      if (range === undefined && rangeMode === "range") {
+        try {
+          const start = Number(rangeStart);
+          const end = rangeEnd.trim() === "" ? undefined : Number(rangeEnd);
+          range = resolveRunRange(start, end, entries.length);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          report(message, true);
+          return;
+        }
+      }
+      // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setIsRunning(true);
-      report("連続実行を開始しました。");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      report(formatRunError(message), true);
+      try {
+        // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
+        // collectionId は ERROR 停止時の resume 紐付けに使う。単一ファイル mode（空文字）は undefined で送る (#872)。
+        // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
+        await sendMessage("run", {
+          entries,
+          playlistName: derivedPlaylistName,
+          range,
+          collectionId: selectedCollectionId || undefined,
+        });
+        report("連続実行を開始しました。");
+      } catch (err) {
+        // 送信失敗時はフラグを戻して再実行可能にする（実行は始まっていない）。
+        setIsRunning(false);
+        const message = err instanceof Error ? err.message : String(err);
+        report(formatRunError(message), true);
+      }
+    },
+    [isRunning, entries, rangeMode, rangeStart, rangeEnd, derivedPlaylistName, selectedCollectionId, report],
+  );
+
+  // バナー承認 = 1-click 自動再開 (#892 要件6)。range UI を「失敗 entry..末尾」で prefill しつつ、
+  // ローカル構築した 0-based range を引数で run へ渡してそのまま生成を再開する。React state は
+  // 次レンダ反映で closure から読めないため、prefill した state ではなく引数で range を渡す（order.md §2）。
+  // prefill 自体は再開後の UI 表示整合のために残す。run は定義後でないと参照できないためここに置く。
+  const acceptResume = useCallback(() => {
+    if (!resumeBanner) {
+      return;
     }
-  }, [entries, rangeMode, rangeStart, rangeEnd, derivedPlaylistName, selectedCollectionId, report]);
+    const prefilled = resumeBannerRange(resumeBanner);
+    setRangeMode("range");
+    setRangeStart(String(prefilled.start));
+    setRangeEnd(String(prefilled.end));
+    setResumeDismissed(true);
+    void run({ range: resumeRunRange(resumeBanner) });
+  }, [resumeBanner, run]);
 
   const stop = useCallback(async () => {
     try {
-      const tabId = await activeTabId();
-      await sendMessage("stop", undefined, tabId);
+      // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
+      await sendMessage("stop", undefined);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       report(formatStopError(message), true);

@@ -1,4 +1,4 @@
-// popup ⇄ content script ⇄ server 間の契約文字列を固定する回帰テスト。
+// overlay ⇄ content script ⇄ server 間の契約文字列を固定する回帰テスト。
 // 旧実装 `extensions/suno-helper/constants.js` の値を WXT 移行後も不変に保つ。
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
@@ -13,6 +13,7 @@ import {
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
   MAX_INJECT_RETRY,
+  OVERLAY_STATE_KEY,
   PHASE,
   PROMPTS_ROUTE,
   QUEUE_ERROR_WAIT_MS,
@@ -32,6 +33,17 @@ describe("shared/constants: サーバー互換の契約値", () => {
 
   it("Given 移行後の定数 When DEFAULT_URL を読む Then 旧実装と同じローカル配信元である", () => {
     expect(DEFAULT_URL).toBe("http://localhost:7873");
+  });
+
+  it("Given overlay 化 (#892) When OVERLAY_STATE_KEY を読む Then overlay 位置・最小化を永続化する key 名である", () => {
+    // overlay の position/minimized/hidden を chrome.storage.local に保存する単一 key (order.md §1)。
+    // lib/overlay-state.ts がこれを SSOT として参照する。
+    expect(OVERLAY_STATE_KEY).toBe("sunoOverlayState");
+  });
+
+  it("Given storage key 群 When OVERLAY_STATE_KEY を他 key と比較 Then 既存 key と衝突しない", () => {
+    // 同一 chrome.storage.local 名前空間で resume / server URL state と key が被らないこと。
+    expect(new Set([STORAGE_KEY, "sunoResumeState", OVERLAY_STATE_KEY]).size).toBe(3);
   });
 });
 
