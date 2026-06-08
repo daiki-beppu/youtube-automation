@@ -1,4 +1,4 @@
-// popup ⇄ content script ⇄ server 間の契約文字列を 1 箇所に集約する。
+// overlay ⇄ content script ⇄ server 間の契約文字列を 1 箇所に集約する。
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
 // SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
@@ -8,8 +8,12 @@ import type { PromptEntry } from "./api";
 export const STORAGE_KEY = "sunoServerUrl";
 
 /** ERROR 停止時の途中再開 state を保存する chrome.storage.local の key (#872)。
- * popup と content が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
+ * overlay と content が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const RESUME_STATE_KEY = "sunoResumeState";
+
+/** overlay の position/minimized/hidden を保存する chrome.storage.local の単一 key (#892)。
+ * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
+export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
@@ -77,7 +81,7 @@ export const PHASE = {
 
 export type Phase = (typeof PHASE)[keyof typeof PHASE];
 
-/** content → popup の進捗ペイロード。 */
+/** runner content → overlay の進捗ペイロード。 */
 export interface ProgressPayload {
   phase: Phase;
   total: number;
@@ -85,11 +89,11 @@ export interface ProgressPayload {
   message?: string;
 }
 
-/** popup の各パターン行の表示状態。 */
+/** overlay の各パターン行の表示状態。 */
 export type ItemState = "idle" | "active" | "done";
 
 /** content script が SSOT として保持する進捗スナップショット (#852)。
- * popup を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
+ * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
 export interface SnapshotPayload {
   entries: PromptEntry[];
   itemStates: ItemState[];

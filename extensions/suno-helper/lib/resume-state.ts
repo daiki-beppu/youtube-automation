@@ -88,6 +88,16 @@ export function resumeBannerRange(banner: ResumeBanner): { start: number; end: n
   return { start: banner.failedIndex + 1, end: banner.total };
 }
 
+/**
+ * バナー承認 → 1-click 自動再開で run() へ直接渡す 0-based inclusive range を構築する (#892 要件6)。
+ * 失敗 entry (0-based failedIndex) から末尾 (total-1) まで。React state は次レンダ反映で closure から
+ * 読めないため、acceptResume はこの純関数でローカルに range を組み立てて run({ range }) へ引数で渡す。
+ * 旧経路 resumeBannerRange(1-based prefill) → resolveRunRange と同一の絶対 index を返す（round-trip 一致）。
+ */
+export function resumeRunRange(banner: ResumeBanner): RunRange {
+  return { start: banner.failedIndex, end: banner.total - 1 };
+}
+
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---
 
 let cachedItem: ReturnType<typeof storage.defineItem<ResumeState | null>> | null = null;

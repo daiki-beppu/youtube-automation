@@ -1,5 +1,6 @@
-// background ↔ content ↔ popup の message を @webext-core/messaging で型付けする。
-// payload 定義をここに集約する (要件3)。
+// overlay ⇄ background ⇄ runner の message を @webext-core/messaging で型付けする (#892)。
+// overlay / runner はともに content script で互いに直接 messaging できないため、background が中継する
+// （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
 import type { PromptEntry } from "../../shared/api";
@@ -17,14 +18,16 @@ export type RunPayload =
   | { entries: PromptEntry[]; playlistName?: string; range?: RunRange; collectionId?: string };
 
 interface ProtocolMap {
-  /** popup → content: 連続実行を開始する。 */
+  /** overlay → background → runner: 連続実行を開始する。 */
   run(payload: RunPayload): { ok: true };
-  /** popup → content: 連続実行を中断する。 */
+  /** overlay → background → runner: 連続実行を中断する。 */
   stop(): { ok: true };
-  /** content → popup: 進捗を通知する。 */
+  /** runner → background → overlay: 進捗を通知する。 */
   progress(payload: ProgressPayload): void;
-  /** popup → content: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */
+  /** overlay → background → runner: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */
   queryProgress(): SnapshotPayload | null;
+  /** background → overlay content: action クリックで overlay 表示を toggle する (#892)。 */
+  toggleOverlay(): void;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();

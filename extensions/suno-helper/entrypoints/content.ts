@@ -48,6 +48,8 @@ export default defineContentScript({
   matches: [...SUNO_MATCHES],
   main() {
     let aborted = false;
+    // 連続実行の二重起動ガード (#892 要件7)。runAll 実行中の run 再着信を弾く。
+    let running = false;
     // popup を閉じても進捗を維持・復元するための SSOT (#852)。run 開始で initSnapshot、
     // 以降は emitProgress が sendMessage より前に同期更新する（queryProgress と race しないため）。
     let currentSnapshot: SnapshotPayload | null = null;
@@ -217,13 +219,20 @@ export default defineContentScript({
     }
 
     onMessage("run", ({ data }) => {
+      // 二重実行ガード (#892 要件7)。実行中の run 再着信は no-op で ack のみ返す（再開連打対策）。
+      if (running) {
+        return { ok: true } as const;
+      }
+      running = true;
       aborted = false;
       // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。range / collectionId は無し。
       const { entries, playlistName, range, collectionId } = Array.isArray(data)
         ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined }
         : data;
       currentSnapshot = initSnapshot(entries, playlistName);
-      void runAll(entries, { range, collectionId, playlistName });
+      void runAll(entries, { range, collectionId, playlistName }).finally(() => {
+        running = false;
+      });
       return { ok: true } as const;
     });
 
