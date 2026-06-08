@@ -13,14 +13,12 @@ describe("shared/origin: allowOrigin 未指定 (chrome-extension:// scheme + hel
     expect(isOriginAllowed("chrome-extension://abcdefghijklmnop", null)).toBe(true);
   });
 
-  it.each([
-    "https://suno.com",
-    "https://www.suno.com",
-    "https://distrokid.com",
-    "https://www.distrokid.com",
-  ])("Given helper サイト origin %s When 判定する Then デフォルトで許可する（#896）", (origin) => {
-    expect(isOriginAllowed(origin, null)).toBe(true);
-  });
+  it.each(["https://suno.com", "https://www.suno.com", "https://distrokid.com", "https://www.distrokid.com"])(
+    "Given helper サイト origin %s When 判定する Then デフォルトで許可する（#896）",
+    (origin) => {
+      expect(isOriginAllowed(origin, null)).toBe(true);
+    },
+  );
 
   it("Given 許可リスト外の web origin When 判定する Then 拒否する", () => {
     expect(isOriginAllowed("https://evil.com", null)).toBe(false);
