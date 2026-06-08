@@ -143,8 +143,18 @@ export default defineContentScript({
       const total = entries.length;
       const startIndex = range ? range.start : 0;
       const endIndex = range ? range.end : total - 1;
+      // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
+      // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
+      // そのまま流用し (要件3)、中断 index を載せる。collectionId が無い単一ファイル mode は
+      // 再開対象を特定できないため永続化しない（両 phase 共通の guard、要件4 と一貫）。
+      function persistInterruptState(interruptedIndex: number): void {
+        if (collectionId) {
+          void writeResumeState({ collectionId, failedIndex: interruptedIndex, total, timestamp: Date.now() });
+        }
+      }
       for (let i = startIndex; i <= endIndex; i++) {
         if (aborted) {
+          persistInterruptState(i);
           emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
         }
@@ -159,6 +169,7 @@ export default defineContentScript({
             queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
           });
           if (aborted) {
+            persistInterruptState(i);
             emitProgress({ phase: PHASE.STOPPED, index: i, total });
             return;
           }
@@ -176,6 +187,7 @@ export default defineContentScript({
             describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
           });
           if (aborted) {
+            persistInterruptState(i);
             emitProgress({ phase: PHASE.STOPPED, index: i, total });
             return;
           }
@@ -186,16 +198,14 @@ export default defineContentScript({
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, index: i, total, message });
           // 失敗 index を永続化し、次回 popup 起動時の再開バナーで提示する (#872 要件3)。
-          // collection 識別子が無い単一ファイル mode は再開対象を特定できないため永続化しない。
-          if (collectionId) {
-            void writeResumeState({ collectionId, failedIndex: i, total, timestamp: Date.now() });
-          }
+          persistInterruptState(i);
           return;
         }
       }
       // collection mode のみ: 全 entry 生成後、FINISHED 直前に clip 一括 playlist 追加を実行する (#854)。
       if (playlistName) {
         if (aborted) {
+          persistInterruptState(total);
           emitProgress({ phase: PHASE.STOPPED, total });
           return;
         }
@@ -207,6 +217,7 @@ export default defineContentScript({
           return;
         }
         if (aborted) {
+          persistInterruptState(total);
           emitProgress({ phase: PHASE.STOPPED, total });
           return;
         }
