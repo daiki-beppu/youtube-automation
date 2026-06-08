@@ -52,6 +52,23 @@ export function topRightPosition(viewport: Size, size: Size): Point {
   return clampPosition({ x: viewport.width - size.width - OVERLAY_MARGIN, y: OVERLAY_MARGIN }, viewport, size);
 }
 
+/**
+ * toggleOverlay 受信時の hidden 反転 (#897 要件2/5)。position / minimized は保持し、
+ * 入力を変異させず新オブジェクトを返す純関数。拡張アイコンクリックで hidden:true → false に戻す本丸。
+ */
+export function toggleHidden(state: OverlayState): OverlayState {
+  return { ...state, hidden: !state.hidden };
+}
+
+/**
+ * hidden を unmount でなく CSS（display）で表現する (#897 要件1/3)。
+ * `if (hidden) return null;` で OverlayShell を unmount すると toggleOverlay リスナーごと消えるため、
+ * DOM に残したまま display:none で隠す。Suno UI への pointer-events 干渉も起こさない。
+ */
+export function hiddenStyle(hidden: boolean): { display: "none" | "block" } {
+  return { display: hidden ? "none" : "block" };
+}
+
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---
 
 let cachedItem: ReturnType<typeof storage.defineItem<OverlayState | null>> | null = null;

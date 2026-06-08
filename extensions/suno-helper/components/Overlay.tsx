@@ -6,8 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { onMessage } from "../lib/messaging";
 import {
   clampPosition,
+  hiddenStyle,
   type OverlayState,
   readOverlayState,
+  toggleHidden,
   topRightPosition,
   writeOverlayState,
 } from "../lib/overlay-state";
@@ -83,12 +85,14 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   }, [position]);
 
   // action クリック（background → toggleOverlay）で表示を切り替える (要件5)。
+  // hidden=true でも OverlayShell は unmount せず CSS で隠すため（要件1/3）、この effect は
+  // 表示状態に関わらず常に生存し、hidden→visible への復帰メッセージを受け取れる (#897)。
   useEffect(() => {
     const unwatch = onMessage("toggleOverlay", () => {
       setHidden((prev) => {
-        const next = !prev;
-        persist({ position: positionRef.current, minimized: minimizedRef.current, hidden: next });
-        return next;
+        const next = toggleHidden({ position: positionRef.current, minimized: minimizedRef.current, hidden: prev });
+        persist(next);
+        return next.hidden;
       });
     });
     return () => unwatch();
@@ -102,15 +106,19 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
     });
   }, [persist]);
 
-  if (hidden) {
-    return null;
-  }
-
+  // hidden は unmount でなく display:none で表現する (要件1/3)。unmount すると toggleOverlay
+  // リスナーが消え拡張アイコンで復帰不能になるため (#897)、DOM に残したまま CSS で隠す。
   return (
     <div
       ref={containerRef}
       className="fixed overflow-hidden rounded-lg border border-gray-300 bg-white shadow-xl"
-      style={{ left: position.x, top: position.y, width: OVERLAY_WIDTH, zIndex: 2147483647 }}
+      style={{
+        left: position.x,
+        top: position.y,
+        width: OVERLAY_WIDTH,
+        zIndex: 2147483647,
+        ...hiddenStyle(hidden),
+      }}
     >
       {/* handle: 常に pointer-events:auto。最小化中もここだけ残り再展開を受け付ける (要件4)。 */}
       <div
