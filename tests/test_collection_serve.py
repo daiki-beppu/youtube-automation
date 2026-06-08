@@ -3,13 +3,15 @@
 issue #698: #692 の `yt-suno-serve` を `yt-collection-serve` に一般化し、
 エンドポイントをサブパス分離する。`/suno/prompts.json` は #692 と同じ
 配列 JSON を返す（契約不変・ルートのみ `/prompts.json` → `/suno/prompts.json`）。
-CORS は Chrome 拡張オリジン (`chrome-extension://...`) のみ許可し、全ルートで同一ポリシー。
+CORS はデフォルトで `chrome-extension://` と suno.com / distrokid.com 系 web origin を
+許可し（#896）、全ルートで同一ポリシー。
 
 契約（draft が実装すべき public API）:
 - `resolve_prompts_path(path: Path) -> Path`
     dir → `<dir>/20-documentation/suno-prompts.json` / file → そのまま / 不在 → ConfigError。
 - `is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool`
-    allow_origin=None なら `chrome-extension://` scheme を許可。指定時は完全一致のみ許可。
+    allow_origin=None なら `chrome-extension://` scheme と
+    suno.com / distrokid.com 系 web origin を許可。指定時は完全一致のみ許可。
 - `create_server(port, allow_origin, *, prompts_path, collection_dir, distrokid) -> ThreadingHTTPServer`
     `GET /suno/prompts.json` で配列 JSON、`OPTIONS` で preflight を返すサーバーを生成する。
     distrokid は `Distrokid | None`（None / 無効時は `/distrokid/*` が 404）。
@@ -102,31 +104,46 @@ def test_resolve_prompts_path_missing_path_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# is_origin_allowed: CORS 判定（scheme 検証 + --allow-origin 完全一致）— 不変
+# is_origin_allowed: CORS 判定
+#   - allow_origin=None  : chrome-extension:// scheme + helper サイト origin を許可（#896）
+#   - allow_origin 指定時 : その値との完全一致のみ許可（lock 維持・要件2）
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     ("origin", "allow_origin", "expected"),
     [
-        # allow_origin 未指定: chrome-extension:// scheme を許可
+        # allow_origin 未指定: chrome-extension:// scheme を許可（従来挙動維持）
         ("chrome-extension://abcdefghijklmnop", None, True),
         ("chrome-extension://anotherextensionid", None, True),
-        # allow_origin 未指定: web オリジンは不許可
+        # allow_origin 未指定: helper サイト origin をデフォルト許可（#896 / overlay 化対応）
+        ("https://suno.com", None, True),
+        ("https://www.suno.com", None, True),
+        ("https://distrokid.com", None, True),
+        ("https://www.distrokid.com", None, True),
+        # allow_origin 未指定: 許可リスト外の web origin は拒否（要件4）
         ("http://localhost:3000", None, False),
-        ("https://suno.com", None, False),
+        ("https://evil.com", None, False),
+        # allow_origin 未指定: 完全一致集合なので偽装・scheme/末尾差異は通さない
+        ("https://suno.com.evil.com", None, False),  # 前方一致なら通る偽装 → 拒否
+        ("http://suno.com", None, False),  # http scheme は許可しない
+        ("https://suno.com/", None, False),  # Origin ヘッダに末尾スラッシュは付かない
         # Origin ヘッダ無し
         (None, None, False),
-        # allow_origin 指定: 完全一致のみ許可
+        # allow_origin 指定（extension lock）: 完全一致のみ許可、デフォルト許可リストは効かない
         ("chrome-extension://exactid", "chrome-extension://exactid", True),
         ("chrome-extension://otherid", "chrome-extension://exactid", False),
         ("https://suno.com", "chrome-extension://exactid", False),
+        # allow_origin 指定（web origin lock）: その origin との完全一致のみ許可
+        ("https://suno.com", "https://suno.com", True),
+        ("https://www.suno.com", "https://suno.com", False),
     ],
 )
 def test_is_origin_allowed(origin, allow_origin, expected):
     """Given (origin, allow_origin) の組
     When is_origin_allowed を呼ぶ
-    Then 拡張オリジン scheme 検証 / 完全一致ロックの契約どおり真偽を返す。
+    Then デフォルト許可（extension scheme + helper サイト origin）/ 完全一致ロックの
+         契約どおり真偽を返す。
     """
     assert is_origin_allowed(origin, allow_origin) is expected
 
@@ -212,15 +229,30 @@ def test_get_suno_prompts_json_sets_cors_header_for_extension_origin(serve):
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
-def test_get_suno_prompts_json_omits_cors_header_for_web_origin(serve):
-    """Given web オリジンからの GET
-    When Origin が https://...
-    Then Access-Control-Allow-Origin ヘッダを付けない（拡張のみ許可）。
+def test_get_suno_prompts_json_sets_cors_header_for_suno_origin(serve):
+    """Given suno.com の content script オリジンからの GET（overlay 化後の発火元・#896）
+    When Origin が https://suno.com
+    Then デフォルト起動でも Access-Control-Allow-Origin がそのオリジンを echo する。
     """
     base = serve([{"name": "A", "style": "s", "lyrics": ""}])
     req = urllib.request.Request(
         f"{base}{_SUNO_PROMPTS_ROUTE}",
         headers={"Origin": "https://suno.com"},
+    )
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+
+
+def test_get_suno_prompts_json_omits_cors_header_for_unknown_origin(serve):
+    """Given 許可リスト外の web オリジンからの GET
+    When Origin が https://evil.com
+    Then Access-Control-Allow-Origin ヘッダを付けない（許可リスト外は拒否）。
+    """
+    base = serve([{"name": "A", "style": "s", "lyrics": ""}])
+    req = urllib.request.Request(
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
+        headers={"Origin": "https://evil.com"},
     )
 
     with urllib.request.urlopen(req) as resp:
@@ -244,6 +276,23 @@ def test_options_preflight_allows_extension_origin(serve):
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
+def test_options_preflight_echoes_suno_origin(serve):
+    """Given suno.com からの preflight（受け入れ基準: curl OPTIONS で echo される・#896）
+    When `OPTIONS /suno/prompts.json` で Origin が https://suno.com
+    Then デフォルト起動でも 2xx + Access-Control-Allow-Origin: https://suno.com を返す。
+    """
+    base = serve([])
+    req = urllib.request.Request(
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
+        method="OPTIONS",
+        headers={"Origin": "https://suno.com"},
+    )
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status in (200, 204)
+        assert resp.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+
+
 def test_allow_origin_exact_match_locks_to_single_extension(serve):
     """Given --allow-origin で 1 拡張に固定
     When 別の拡張オリジンから GET
@@ -254,6 +303,22 @@ def test_allow_origin_exact_match_locks_to_single_extension(serve):
     req = urllib.request.Request(
         f"{base}{_SUNO_PROMPTS_ROUTE}",
         headers={"Origin": "chrome-extension://someotherid"},
+    )
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
+def test_allow_origin_lock_does_not_admit_default_web_origin(serve):
+    """Given --allow-origin で 1 拡張に固定（lock 維持・要件2）
+    When suno.com（デフォルト許可リスト掲載 origin）から GET
+    Then lock 時は完全一致のみなので CORS ヘッダを付けない（デフォルト許可は効かない）。
+    """
+    locked = "chrome-extension://lockedextensionid"
+    base = serve([], allow_origin=locked)
+    req = urllib.request.Request(
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
+        headers={"Origin": "https://suno.com"},
     )
 
     with urllib.request.urlopen(req) as resp:

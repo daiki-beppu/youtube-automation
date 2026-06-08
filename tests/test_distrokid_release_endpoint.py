@@ -324,10 +324,10 @@ def test_distrokid_release_sets_cors_header_for_extension_origin(serve, tmp_path
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
-def test_distrokid_release_omits_cors_header_for_web_origin(serve, tmp_path):
-    """Given enabled な distrokid + web オリジン
+def test_distrokid_release_sets_cors_header_for_distrokid_origin(serve, tmp_path):
+    """Given enabled な distrokid + distrokid.com の content script オリジン（#896）
     When `GET /distrokid/release.json`
-    Then CORS ヘッダを付けない（拡張のみ許可・同一ポリシー）。
+    Then デフォルト起動でも Access-Control-Allow-Origin がそのオリジンを echo する。
     """
     collection = _make_collection(tmp_path)
     distrokid = Distrokid(enabled=True, profile=_profile())
@@ -335,6 +335,23 @@ def test_distrokid_release_omits_cors_header_for_web_origin(serve, tmp_path):
     req = urllib.request.Request(
         f"{base}{DISTROKID_RELEASE_ROUTE}",
         headers={"Origin": "https://distrokid.com"},
+    )
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.headers.get("Access-Control-Allow-Origin") == "https://distrokid.com"
+
+
+def test_distrokid_release_omits_cors_header_for_unknown_origin(serve, tmp_path):
+    """Given enabled な distrokid + 許可リスト外の web オリジン
+    When `GET /distrokid/release.json`
+    Then CORS ヘッダを付けない（許可リスト外は拒否・同一ポリシー）。
+    """
+    collection = _make_collection(tmp_path)
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    base = serve(collection_dir=collection, distrokid=distrokid)
+    req = urllib.request.Request(
+        f"{base}{DISTROKID_RELEASE_ROUTE}",
+        headers={"Origin": "https://evil.com"},
     )
 
     with urllib.request.urlopen(req) as resp:

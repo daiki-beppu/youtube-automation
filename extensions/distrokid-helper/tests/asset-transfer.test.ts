@@ -1,8 +1,9 @@
 // `lib/asset-transfer.ts` の直列化契約テスト。
 //
-// content script からの asset fetch はページ origin（distrokid.com）で CORS 評価され、
-// `chrome-extension://` のみ許可するサーバーに遮断される。そのため fetch は popup 側で行い、
-// 取得した File を base64 で content へ転送して復元する（SUP-NEW-asset-fetch-cors の修正）。
+// asset fetch は popup 側（`chrome-extension://` origin）で行い、取得した File を base64 で
+// content へ転送して復元する（SUP-NEW-asset-fetch-cors の修正）。#896 でサーバーが
+// distrokid.com origin もデフォルト許可したが、content script fetch への書き換えは
+// #896 のスコープ外のため popup fetch 構成を維持する。
 // ここでは「転送往復でバイト列が壊れないこと」と「fetch 経路が content に残っていないこと」を固定する。
 
 import { describe, it, expect } from "vitest";

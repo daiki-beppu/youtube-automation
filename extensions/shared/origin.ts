@@ -10,10 +10,21 @@
 
 const EXTENSION_ORIGIN_SCHEME = "chrome-extension://";
 
+// overlay 化（#892/#895）で content script の fetch が page origin になったため、
+// helper 拡張がホストされる web origin をデフォルト許可する（#896）。完全一致のみ。
+// サーバー側 SSOT `collection_serve.py::_DEFAULT_ALLOWED_WEB_ORIGINS` と同値。
+const DEFAULT_ALLOWED_WEB_ORIGINS = new Set([
+  "https://suno.com",
+  "https://www.suno.com",
+  "https://distrokid.com",
+  "https://www.distrokid.com",
+]);
+
 /**
  * CORS 判定。
  *
- * - `allowOrigin === null`  → `chrome-extension://` scheme のみ許可
+ * - `allowOrigin === null`  → `chrome-extension://` scheme + helper サイト web origin
+ *                             （suno.com / distrokid.com、完全一致）を許可（#896）
  * - `allowOrigin` 指定時     → その値との完全一致のみ許可 (scheme 不問)
  * - origin が空/欠落         → 常に false
  */
@@ -27,5 +38,8 @@ export function isOriginAllowed(
   if (allowOrigin !== null) {
     return origin === allowOrigin;
   }
-  return origin.startsWith(EXTENSION_ORIGIN_SCHEME);
+  if (origin.startsWith(EXTENSION_ORIGIN_SCHEME)) {
+    return true;
+  }
+  return DEFAULT_ALLOWED_WEB_ORIGINS.has(origin);
 }

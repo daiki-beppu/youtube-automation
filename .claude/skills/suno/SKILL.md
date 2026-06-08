@@ -503,7 +503,7 @@ uv run yt-generate-suno <collection-path>
 2. **サーバー起動**: ターミナルで `suno-prompts.json` を localhost に配信する。`Ctrl-C` で停止できるフォアグラウンドプロセス。
    ```bash
    uv run yt-collection-serve collections/planning/<theme>
-   # → http://localhost:7873/suno/prompts.json で配信（CORS は chrome-extension:// のみ許可）
+   # → http://localhost:7873/suno/prompts.json で配信（CORS はデフォルトで chrome-extension:// と suno.com 系 web origin を許可。#896）
    ```
    コレクションディレクトリの代わりに `suno-prompts.json` のパスを直接渡してもよい。ポートを変える場合は `--port <PORT>`。
 3. **Suno を開く**: Chrome で Suno の **Custom Mode** 画面を開く（ボーカルモードは **Instrumental トグル OFF**）。
