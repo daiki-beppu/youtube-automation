@@ -24,6 +24,8 @@ import {
   SETTLE_MS,
   detectRecaptcha,
   getInFlightClipCount,
+  injectAdvancedFields,
+  resolveAdvancedFields,
   resolveFields,
   resolveGenerateButton,
   setNativeValue,
@@ -80,6 +82,12 @@ export default defineContentScript({
         // title 欄不在は Suno 側 UI 改装の可能性。style/lyrics と違い fail-soft（警告のみで続行）。
         console.warn("Song Title 欄が見つかりませんでした。タイトル注入を skip して続行します。");
       }
+      // Custom Mode > More Options の 3 フィールド (#900)。radix slider への注入は keydown dispatch
+      // (ArrowRight/Left, bubbles:true composed:true) を採用した。実機検証で radix Slider root の
+      // keydown listener に合成イベントが届き aria-valuenow が動くことを確認済み（pointer event 合成
+      // fallback は不要だった）。entry に値があり selector が不在なら injectAdvancedFields が throw する
+      // (fail-loud)。値が無ければ skip する (fail-soft、後方互換)。
+      await injectAdvancedFields(entry, resolveAdvancedFields());
       await abortableSleep(SETTLE_MS, () => aborted);
 
       if (detectRecaptcha()) {

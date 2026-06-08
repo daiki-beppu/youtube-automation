@@ -542,7 +542,11 @@ def test_build_prompt_entries_returns_name_style_lyrics_schema(channel_dir, tmp_
     assert isinstance(entries, list)
     assert len(entries) == 1
     entry = entries[0]
-    assert set(entry) == {"name", "style", "lyrics"}
+    # #900: strict 等価 (== {...}) から subset 検証へ緩和。More Options 3 フィールド
+    # (style_influence / weirdness / exclude_styles) が channel override にあれば追加されうるため、
+    # base 3 キーが必ず含まれることのみを担保する (追加キー無しの厳密検証は backward-compat 専用
+    # テスト test_build_prompt_entries_omits_advanced_fields_without_channel_override が担う)。
+    assert {"name", "style", "lyrics"} <= set(entry)
     assert all(isinstance(entry[key], str) for key in ("name", "style", "lyrics"))
 
 
@@ -684,7 +688,8 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
     assert isinstance(data, list)
     assert len(data) == 1
-    assert set(data[0]) == {"name", "style", "lyrics"}
+    # #900: strict 等価から subset 検証へ緩和 (build_prompt_entries 側の relaxation と同様)。
+    assert {"name", "style", "lyrics"} <= set(data[0])
 
 
 # ---------------------------------------------------------------------------
@@ -930,3 +935,207 @@ def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguat
     assert len(entries) == 2
     assert entries[0]["name"].endswith("(Variation 1)")
     assert entries[1]["name"].endswith("(Variation 2)")
+
+
+# ---------------------------------------------------------------------------
+# issue #900: More Options 3 フィールド (style_influence / weirdness / exclude_styles)
+# の suno-prompts.json への wire
+#
+# 採用方針 (plan.md A 案): JSON への反映は **channel override (config/skills/suno.yaml) に
+# 明示設定されたキーのみ**。config.default.yaml 同梱の既定値 (style_influence: 85 /
+# exclude_styles リスト) は JSON には載せない (= 要件2「何も足さない既存 collection は 3 キー
+# ちょうど」を満たすため)。MD 出力は従来どおり merged 値 (既定 85) を表示する。
+#
+# 【要レビュー】product owner が B 案 (同梱既定の暗黙 auto-flow) を意図する場合、本セクションの
+# テストは設計やり直しが必要 (特に backward-compat の exact-3-keys テスト)。
+# ---------------------------------------------------------------------------
+
+
+def test_build_prompt_entries_includes_style_influence_from_channel_override(channel_dir, tmp_path):
+    """要件1: Given channel override に style_influence: 85
+    When build_prompt_entries を呼ぶ
+    Then entry に "style_influence": 85 (int) が含まれる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=85)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["style_influence"] == 85
+    assert isinstance(entries[0]["style_influence"], int)
+
+
+def test_build_prompt_entries_includes_weirdness_from_channel_override(channel_dir, tmp_path):
+    """要件1: Given channel override に weirdness: 30
+    When build_prompt_entries を呼ぶ
+    Then entry に "weirdness": 30 (int) が含まれる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", weirdness=30)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["weirdness"] == 30
+    assert isinstance(entries[0]["weirdness"], int)
+
+
+def test_build_prompt_entries_includes_exclude_styles_from_channel_override(channel_dir, tmp_path):
+    """要件1: Given channel override に exclude_styles: "hyperpop, edm"
+    When build_prompt_entries を呼ぶ
+    Then entry に "exclude_styles": "hyperpop, edm" (str) が含まれる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="hyperpop, edm")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["exclude_styles"] == "hyperpop, edm"
+    assert isinstance(entries[0]["exclude_styles"], str)
+
+
+def test_build_prompt_entries_includes_all_three_advanced_fields(channel_dir, tmp_path):
+    """要件6: 新規 3 フィールドを全て含む test ケース 1 件。
+
+    Given channel override に style_influence / weirdness / exclude_styles 全て設定
+    When build_prompt_entries を呼ぶ
+    Then base 3 キーに加え 3 フィールドが正しい値で載る (合計 6 キーちょうど)。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_influence=85,
+        weirdness=30,
+        exclude_styles="hyperpop, edm",
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+    entry = entries[0]
+
+    assert {"name", "style", "lyrics"} <= set(entry)
+    assert entry["style_influence"] == 85
+    assert entry["weirdness"] == 30
+    assert entry["exclude_styles"] == "hyperpop, edm"
+    assert set(entry) == {"name", "style", "lyrics", "style_influence", "weirdness", "exclude_styles"}
+
+
+def test_build_prompt_entries_includes_zero_valued_sliders(channel_dir, tmp_path):
+    """境界値: Given channel override に style_influence: 0 / weirdness: 0
+    When build_prompt_entries を呼ぶ
+    Then 0 は falsy だが有効値なので両方とも entry に載る。
+
+    `if value is not None` でなく `if value:` でガードすると 0 が脱落する典型バグの回帰ガード。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=0, weirdness=0)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["style_influence"] == 0
+    assert entries[0]["weirdness"] == 0
+
+
+def test_build_prompt_entries_omits_advanced_fields_without_channel_override(channel_dir, tmp_path):
+    """要件2 + A 案の核心: Given channel override が genre_line のみ (More Options 無し) の既存 collection
+    When build_prompt_entries を呼ぶ
+    Then name/style/lyrics の 3 キーちょうど。
+
+    config.default.yaml の style_influence: 85 / exclude_styles リストは merged config に存在するが、
+    A 案では JSON に **載せない** (channel override に明示されたキーのみ wire する)。
+    この test が A 案 (明示 gating) と B 案 (既定の暗黙 auto-flow) を機械的に区別し、後方互換を pin する。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert set(entries[0]) == {"name", "style", "lyrics"}
+    assert "style_influence" not in entries[0]
+    assert "weirdness" not in entries[0]
+    assert "exclude_styles" not in entries[0]
+
+
+def test_build_prompt_entries_omits_advanced_fields_when_no_override_file(channel_dir, tmp_path):
+    """要件2 + A 案: Given channel に suno.yaml override ファイルが無い
+    When build_prompt_entries を呼ぶ
+    Then name/style/lyrics の 3 キーちょうど。
+
+    override ファイル不在 → load_channel_override は {} → default.yaml の既定 style_influence: 85 /
+    exclude_styles は JSON に載らない。
+    """
+    # suno.yaml を書かない (channel_dir フィクスチャは config/skills ディレクトリのみ作る)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert set(entries[0]) == {"name", "style", "lyrics"}
+
+
+def test_md_shows_default_style_influence_but_json_omits_it(channel_dir, tmp_path):
+    """A 案の MD/JSON 非対称を pin する。
+
+    Given channel override が genre_line のみ (advanced 無し)
+    When MD と JSON を生成
+    Then MD は merged の Style Influence (default 85%) を表示するが、JSON entry は
+         style_influence キーを持たない (既存 MD 出力は無改修)。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "| Style Influence | 85% |" in md
+    assert "style_influence" not in entries[0]
+
+
+def test_channel_override_style_influence_flows_to_both_md_and_json(channel_dir, tmp_path):
+    """Given channel override に style_influence: 70
+    When MD と JSON を生成
+    Then MD は 70% を表示し、JSON entry も "style_influence": 70 を持つ (override は両方に効く)。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=70)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "| Style Influence | 70% |" in md
+    assert entries[0]["style_influence"] == 70
+
+
+def test_advanced_fields_apply_to_every_entry_collection_scope(channel_dir, tmp_path):
+    """Given multi-scene pattern + channel override の weirdness
+    When build_prompt_entries を呼ぶ
+    Then 全 entry に同じ weirdness が載る (3 値は collection スコープで全 entry 共通)。
+    """
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", weirdness=40)
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert all(e["weirdness"] == 40 for e in entries)
+
+
+def test_main_json_output_includes_advanced_fields_when_overridden(channel_dir, tmp_path, monkeypatch):
+    """Given channel override に 3 フィールド + main 実行
+    When suno-prompts.json を json.loads
+    Then 配信される JSON entry に 3 フィールドが含まれる (end-to-end の wire 検証)。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_influence=85,
+        weirdness=30,
+        exclude_styles="hyperpop, edm",
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    main()
+
+    data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
+    assert data[0]["style_influence"] == 85
+    assert data[0]["weirdness"] == 30
+    assert data[0]["exclude_styles"] == "hyperpop, edm"

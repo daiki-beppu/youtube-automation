@@ -16,6 +16,15 @@ export interface PromptEntry {
   title?: string;
   style: string;
   lyrics: string;
+  // --- Custom Mode > More Options の 3 フィールド (#900) ---
+  // いずれも optional・後方互換。命名は wire 形 snake_case で TS/Python/サーバー契約を統一する。
+  // 値が無い (undefined) entry は拡張側で fail-soft に skip される（既存 collection の後方互換）。
+  /** Style Influence slider (0-100 整数)。Suno の Style Influence 欄へ注入。 */
+  style_influence?: number;
+  /** Weirdness slider (0-100 整数)。Suno の Weirdness 欄へ注入。 */
+  weirdness?: number;
+  /** Exclude styles free text。Suno の Exclude styles 欄へ注入。 */
+  exclude_styles?: string;
 }
 
 /** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。 */

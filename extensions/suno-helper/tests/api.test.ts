@@ -95,6 +95,68 @@ describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", (
   });
 });
 
+describe("shared/api PromptEntry: More Options 3 フィールドの optional 契約 (#900)", () => {
+  // 契約 (draft が実装する shared/api.ts PromptEntry):
+  //   style_influence?: number;  // 0-100 整数 (Suno Style Influence slider)
+  //   weirdness?: number;        // 0-100 整数 (Suno Weirdness slider)
+  //   exclude_styles?: string;   // free text (Suno Exclude styles input)
+  // いずれも optional・後方互換。命名は wire 形 snake_case で TS/Python/サーバー契約を統一する。
+
+  it("Given 3 フィールド付き entry When fetch する Then 各値を保持して返す", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "", style_influence: 85, weirdness: 30, exclude_styles: "hyperpop, edm" },
+    ];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchPrompts(BASE_URL);
+
+    expect(result[0].style_influence).toBe(85);
+    expect(result[0].weirdness).toBe(30);
+    expect(result[0].exclude_styles).toBe("hyperpop, edm");
+  });
+
+  it("Given 3 フィールド無し entry When fetch する Then 各 field は undefined（optional なので throw しない）", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchPrompts(BASE_URL);
+
+    expect(result[0].style_influence).toBeUndefined();
+    expect(result[0].weirdness).toBeUndefined();
+    expect(result[0].exclude_styles).toBeUndefined();
+  });
+
+  it("Given フィールド有/無 混在配列 When fetch する Then 双方が PromptEntry[] として通る（後方互換）", async () => {
+    // 型注釈 PromptEntry が advanced フィールドを optional で持つことのコンパイル時担保も兼ねる。
+    const withAdvanced: PromptEntry = {
+      name: "p1",
+      style: "lofi",
+      lyrics: "",
+      style_influence: 85,
+      weirdness: 30,
+      exclude_styles: "hyperpop, edm",
+    };
+    const without: PromptEntry = { name: "p2", style: "ambient", lyrics: "" };
+    mockFetch(() => ({ ok: true, status: 200, json: async () => [withAdvanced, without] }));
+
+    const result = await fetchPrompts(BASE_URL);
+
+    expect(result).toEqual([withAdvanced, without]);
+    expect(result[0].style_influence).toBe(85);
+    expect(result[1].style_influence).toBeUndefined();
+  });
+
+  it("Given weirdness=0 / style_influence=0 entry When fetch する Then 0 を保持する（falsy だが有効値）", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "", style_influence: 0, weirdness: 0 }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchPrompts(BASE_URL);
+
+    expect(result[0].style_influence).toBe(0);
+    expect(result[0].weirdness).toBe(0);
+  });
+});
+
 describe("shared/api fetchPrompts: 異常系 (fail-loud)", () => {
   it("Given HTTP 500 When fetch する Then ステータスを含めて throw する", async () => {
     mockFetch(() => ({ ok: false, status: 500, json: async () => ({}) }));
