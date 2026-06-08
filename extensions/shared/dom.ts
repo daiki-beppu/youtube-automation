@@ -12,10 +12,22 @@ const SELECTORS = {
   // Song Title 欄は testid/aria/label を持たず placeholder のみ安定 (#844 実 DOM 検証)。
   // 表記変更 ((Optional) の有無等) に耐えるよう "Song Title" の弱い case-insensitive substring match。
   title: 'input[placeholder*="Song Title" i]',
+  // Custom Mode > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
+  //   - Exclude styles: native text input (placeholder 完全一致、maxlength=1000)
+  //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
+  // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
+  excludeStyles: 'input[placeholder="Exclude styles"]',
+  weirdness: '[role="slider"][aria-label="Weirdness"]',
+  styleInfluence: '[role="slider"][aria-label="Style Influence"]',
   generateLabel: /^(create|generate|生成)$/i,
   recaptcha:
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
 } as const;
+
+/** radix slider 注入後の読み戻し検証の poll 間隔 (ms)。 */
+const SLIDER_READBACK_POLL_MS = 100;
+/** radix slider 注入後の読み戻し検証の最大 poll 回数。これを超えても不一致なら fail-loud で throw。 */
+const SLIDER_READBACK_MAX_POLLS = 5;
 
 /**
  * clip カードの in-flight マーカー（#866、実機検証で確定）。Suno が `data-testid="clip-row"` と
@@ -107,6 +119,118 @@ export function setNativeValue(
   setter.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * radix Slider に target 値を注入する（#900）。
+ *   1. slider.focus()
+ *   2. current = aria-valuenow を読む
+ *   3. delta = target - current。delta>=0 で ArrowRight、<0 で ArrowLeft を |delta| 回 dispatch
+ *   4. 読み戻し poll（SLIDER_READBACK_POLL_MS 間隔 × SLIDER_READBACK_MAX_POLLS 回）で
+ *      aria-valuenow === target を検証。一致で resolve、尽きても不一致なら throw（fail-loud）。
+ *
+ * KeyboardEvent は `bubbles: true, composed: true` で dispatch する。radix Slider root は
+ * keydown を addEventListener でバインドし bubbling 経由で受けるため、isTrusted=false の合成
+ * イベントでも root に到達する（text input の change と異なり値が動く。実機・mock 双方で確認済み）。
+ */
+export async function setSliderValue(
+  slider: HTMLElement,
+  target: number,
+): Promise<void> {
+  slider.focus();
+  const current = Number(slider.getAttribute("aria-valuenow"));
+  const delta = target - current;
+  const key = delta >= 0 ? "ArrowRight" : "ArrowLeft";
+  for (let i = 0; i < Math.abs(delta); i++) {
+    slider.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, composed: true }),
+    );
+  }
+  for (let attempt = 0; attempt < SLIDER_READBACK_MAX_POLLS; attempt++) {
+    if (Number(slider.getAttribute("aria-valuenow")) === target) {
+      return;
+    }
+    await sleep(SLIDER_READBACK_POLL_MS);
+  }
+  throw new Error(
+    `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
+      `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。Suno の UI 変更の可能性があります。`,
+  );
+}
+
+/** More Options 3 フィールドの解決結果（#900）。不在は null（fail-soft）。 */
+export interface ResolvedAdvancedFields {
+  excludeStyles: HTMLInputElement | null;
+  weirdness: HTMLElement | null;
+  styleInfluence: HTMLElement | null;
+}
+
+/** injectAdvancedFields が読む entry の advanced 値（PromptEntry の部分集合）。 */
+export interface AdvancedFieldValues {
+  style_influence?: number;
+  weirdness?: number;
+  exclude_styles?: string;
+}
+
+/**
+ * Custom Mode > More Options の 3 フィールドを strict visible で解決する（#900）。
+ * 3 要素すべて不在でも throw しない（fail-soft）。throw / skip の非対称契約は呼び出し側
+ * (injectAdvancedFields) が entry の値有無と突き合わせて判定する。
+ */
+export function resolveAdvancedFields(): ResolvedAdvancedFields {
+  const excludeStyles =
+    Array.from(
+      document.querySelectorAll<HTMLInputElement>(SELECTORS.excludeStyles),
+    ).find(isVisible) ?? null;
+  const weirdness =
+    Array.from(
+      document.querySelectorAll<HTMLElement>(SELECTORS.weirdness),
+    ).find(isVisible) ?? null;
+  const styleInfluence =
+    Array.from(
+      document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence),
+    ).find(isVisible) ?? null;
+  return { excludeStyles, weirdness, styleInfluence };
+}
+
+/**
+ * entry の advanced 値を解決済み field へ注入する（#900）。
+ * 注入順序は Exclude styles (text, 高速) → Weirdness → Style Influence。
+ *
+ * 非対称契約（req 4）:
+ *   - entry に値有 (`!== undefined`) + 対応 selector が null → throw（fail-loud、UI 改装検知）
+ *   - entry に値無 (`=== undefined`)                        → skip（fail-soft、後方互換）
+ *   - entry に値有 + selector 有                            → 注入する
+ * 値の有無は `!== undefined` で判定する。0 や "" の falsy 値を truthy 判定で脱落させない。
+ */
+export async function injectAdvancedFields(
+  entry: AdvancedFieldValues,
+  fields: ResolvedAdvancedFields,
+): Promise<void> {
+  if (entry.exclude_styles !== undefined) {
+    if (!fields.excludeStyles) {
+      throw new Error(
+        "Exclude styles 欄が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+      );
+    }
+    setNativeValue(fields.excludeStyles, entry.exclude_styles);
+  }
+  if (entry.weirdness !== undefined) {
+    if (!fields.weirdness) {
+      throw new Error(
+        "Weirdness slider が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+      );
+    }
+    await setSliderValue(fields.weirdness, entry.weirdness);
+  }
+  if (entry.style_influence !== undefined) {
+    if (!fields.styleInfluence) {
+      throw new Error(
+        "Style Influence slider が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+      );
+    }
+    await setSliderValue(fields.styleInfluence, entry.style_influence);
+  }
 }
 
 /**

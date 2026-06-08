@@ -21,9 +21,11 @@ import {
   detectRecaptcha,
   isQueueLimitErrorVisible,
   QUEUE_LIMIT_ERROR_SELECTOR,
+  resolveAdvancedFields,
   resolveFields,
   resolveGenerateButton,
   setNativeValue,
+  setSliderValue,
 } from "../../shared/dom";
 import { addCaptchaIframe, addQueueErrorDialog, markBbox } from "./_helpers";
 
@@ -639,5 +641,223 @@ describe("abortableSleep: 中断可能な待機 (#847)", () => {
 
     await expect(normal).resolves.toBeUndefined();
     await expect(aborted).resolves.toBeUndefined();
+  });
+});
+
+// radix Slider を模す: ArrowRight/Left の keydown で aria-valuenow を ±1 する。
+// 実 Suno の radix Slider root は addEventListener('keydown') で値を駆動するため、
+// setSliderValue は focus → keydown dispatch → aria-valuenow 読み戻し検証で動く前提。
+function addSlider(opts: { ariaLabel?: string; value: number; visible?: boolean; respond?: boolean }): HTMLElement {
+  const slider = document.createElement("div");
+  slider.setAttribute("role", "slider");
+  if (opts.ariaLabel !== undefined) slider.setAttribute("aria-label", opts.ariaLabel);
+  slider.setAttribute("aria-valuenow", String(opts.value));
+  slider.setAttribute("tabindex", "0");
+  document.body.appendChild(slider);
+  setRect(slider, opts.visible === false ? ZERO_RECT : VISIBLE_RECT);
+  if (opts.respond !== false) {
+    slider.addEventListener("keydown", (e) => {
+      const key = (e as KeyboardEvent).key;
+      const cur = Number(slider.getAttribute("aria-valuenow"));
+      if (key === "ArrowRight") slider.setAttribute("aria-valuenow", String(cur + 1));
+      else if (key === "ArrowLeft") slider.setAttribute("aria-valuenow", String(cur - 1));
+    });
+  }
+  return slider;
+}
+
+describe("setSliderValue: radix slider への keydown 駆動注入 (#900)", () => {
+  // 契約 (draft が実装する public API, shared/dom.ts):
+  //   setSliderValue(slider: HTMLElement, target: number): Promise<void>
+  //     1. slider.focus()
+  //     2. current = Number(slider.getAttribute("aria-valuenow"))
+  //     3. delta = target - current。delta>=0 なら ArrowRight、<0 なら ArrowLeft を
+  //        |delta| 回 dispatch（KeyboardEvent, bubbles:true, composed:true で radix root へ届かせる）
+  //     4. 読み戻し poll（100ms 間隔 × 最大 5 回）で aria-valuenow === target を検証
+  //     5. 一致で resolve / 5 回後も不一致なら throw（fail-loud。silent に値ずれを通さない）
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given valuenow=50, target=85 When setSliderValue Then ArrowRight×35 で aria-valuenow が 85 になる", async () => {
+    const slider = addSlider({ ariaLabel: "Style Influence", value: 50 });
+    let rightCount = 0;
+    slider.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "ArrowRight") rightCount += 1;
+    });
+
+    const pending = setSliderValue(slider, 85);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(slider.getAttribute("aria-valuenow")).toBe("85");
+    expect(rightCount).toBe(35); // delta = 85 - 50
+  });
+
+  it("Given valuenow=90, target=85 When setSliderValue Then ArrowLeft×5 で aria-valuenow が 85 になる", async () => {
+    const slider = addSlider({ ariaLabel: "Weirdness", value: 90 });
+    let leftCount = 0;
+    slider.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "ArrowLeft") leftCount += 1;
+    });
+
+    const pending = setSliderValue(slider, 85);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(slider.getAttribute("aria-valuenow")).toBe("85");
+    expect(leftCount).toBe(5); // |85 - 90|
+  });
+
+  it("Given valuenow=85, target=85 (delta 0) When setSliderValue Then keydown を出さず resolve する", async () => {
+    const slider = addSlider({ ariaLabel: "Weirdness", value: 85 });
+    let keyCount = 0;
+    slider.addEventListener("keydown", () => {
+      keyCount += 1;
+    });
+
+    const pending = setSliderValue(slider, 85);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(keyCount).toBe(0);
+    expect(slider.getAttribute("aria-valuenow")).toBe("85");
+  });
+
+  it("Given valuenow=0, target=40 When setSliderValue Then 起点で focus を呼ぶ", async () => {
+    const slider = addSlider({ ariaLabel: "Weirdness", value: 0 });
+    const focusSpy = vi.spyOn(slider, "focus");
+
+    const pending = setSliderValue(slider, 40);
+    await vi.advanceTimersByTimeAsync(1000);
+    await pending;
+
+    expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it("Given keydown が bubbling 必要 When setSliderValue Then composed/bubbles 付きで親へ届く（radix root 到達担保）", async () => {
+    // 実 Suno の radix Slider root は子 thumb の keydown を bubbling で受ける。
+    // dispatchEvent が bubbles:true でなければ root の listener に届かず値が動かない。
+    const slider = addSlider({ ariaLabel: "Style Influence", value: 50 });
+    let bubbledToBody = 0;
+    const handler = (e: Event): void => {
+      if ((e as KeyboardEvent).key === "ArrowRight") bubbledToBody += 1;
+    };
+    document.body.addEventListener("keydown", handler);
+
+    const pending = setSliderValue(slider, 53);
+    await vi.advanceTimersByTimeAsync(1000);
+    await pending;
+    document.body.removeEventListener("keydown", handler);
+
+    expect(bubbledToBody).toBe(3); // body まで bubbling した keydown 数 = delta
+  });
+
+  it("Given slider が keydown に反応しない When setSliderValue Then 読み戻し検証に失敗して throw する", async () => {
+    // respond:false は値を更新しない壊れた / UI 改装後の slider を模す。読み戻し poll が
+    // target に届かないまま尽きたら silent に通さず throw する（fail-loud）。
+    const slider = addSlider({ ariaLabel: "Style Influence", value: 50, respond: false });
+
+    const pending = setSliderValue(slider, 85);
+    const caught = pending.catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(2000);
+    const err = await caught;
+
+    expect(err).toBeInstanceOf(Error);
+    expect(slider.getAttribute("aria-valuenow")).toBe("50"); // 値は動いていない
+  });
+});
+
+// Suno Exclude styles の native text input を模す（placeholder 完全一致で識別する）。
+function addExcludeInput(opts: { visible?: boolean } = {}): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Exclude styles";
+  input.setAttribute("maxlength", "1000");
+  document.body.appendChild(input);
+  setRect(input, opts.visible === false ? ZERO_RECT : VISIBLE_RECT);
+  return input;
+}
+
+describe("resolveAdvancedFields: More Options 3 フィールドの解決 (#900, fail-soft)", () => {
+  // 契約 (draft が実装する public API, shared/dom.ts):
+  //   resolveAdvancedFields(): {
+  //     excludeStyles: HTMLInputElement | null;  // input[placeholder="Exclude styles"]、strict visible、不在 null
+  //     weirdness: HTMLElement | null;           // [role="slider"][aria-label="Weirdness"]、strict visible、不在 null
+  //     styleInfluence: HTMLElement | null;      // [role="slider"][aria-label="Style Influence"]、strict visible、不在 null
+  //   }
+  //   3 要素すべて不在でも throw しない（fail-soft）。throw / skip の非対称契約は呼び出し側
+  //   (injectAdvancedFields) が entry の値有無と突き合わせて判定する。
+
+  it("Given 3 要素すべて visible When 解決する Then すべて解決する", () => {
+    const exclude = addExcludeInput();
+    const weirdness = addSlider({ ariaLabel: "Weirdness", value: 0 });
+    const styleInfluence = addSlider({ ariaLabel: "Style Influence", value: 50 });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBe(exclude);
+    expect(fields.weirdness).toBe(weirdness);
+    expect(fields.styleInfluence).toBe(styleInfluence);
+  });
+
+  it("Given 要素が何も無い When 解決する Then すべて null（throw しない fail-soft）", () => {
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBeNull();
+    expect(fields.weirdness).toBeNull();
+    expect(fields.styleInfluence).toBeNull();
+  });
+
+  it("Given Exclude styles input だけ存在 When 解決する Then excludeStyles のみ解決し slider 2 つは null", () => {
+    const exclude = addExcludeInput();
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBe(exclude);
+    expect(fields.weirdness).toBeNull();
+    expect(fields.styleInfluence).toBeNull();
+  });
+
+  it("Given slider 2 つだけ存在 When 解決する Then aria-label で Weirdness / Style Influence を区別する", () => {
+    const weirdness = addSlider({ ariaLabel: "Weirdness", value: 0 });
+    const styleInfluence = addSlider({ ariaLabel: "Style Influence", value: 50 });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.weirdness).toBe(weirdness);
+    expect(fields.styleInfluence).toBe(styleInfluence);
+    expect(fields.excludeStyles).toBeNull();
+  });
+
+  it("Given bbox 0 の slider When 解決する Then strict isVisible が除外し null", () => {
+    addSlider({ ariaLabel: "Weirdness", value: 0, visible: false });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.weirdness).toBeNull();
+  });
+
+  it("Given visibility:hidden の Exclude styles input When 解決する Then strict isVisible が除外し null", () => {
+    const exclude = addExcludeInput();
+    exclude.style.visibility = "hidden";
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBeNull();
+  });
+
+  it("Given placeholder 不一致の input のみ When 解決する Then excludeStyles は null（厳密 placeholder 一致）", () => {
+    const other = document.createElement("input");
+    other.placeholder = "Search styles";
+    document.body.appendChild(other);
+    setRect(other, VISIBLE_RECT);
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBeNull();
   });
 });

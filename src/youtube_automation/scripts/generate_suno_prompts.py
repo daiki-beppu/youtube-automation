@@ -18,7 +18,7 @@ from youtube_automation.scripts.suno_artifacts import (
 )
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
 from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8
@@ -80,12 +80,23 @@ class _ResolvedPattern:
     lyrics: str  # rstrip 済み。歌詞が無ければ ""
 
 
+# suno-prompts.json へ wire する More Options 3 フィールドの key 一覧 (#900)。
+# JSON への反映は **channel override (config/skills/suno.yaml) に明示設定されたキーのみ**。
+# config.default.yaml 同梱の既定値 (style_influence: 85 等) は JSON には載せない
+# (= 「何も足さない既存 collection は name/style/lyrics の 3 キーちょうど」の後方互換を守るため)。
+# MD 出力は従来どおり merged 値 (既定込み) を表示する。
+_ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles")
+
+
 @dataclass
 class _ResolvedPrompts:
     title: str
     is_vocal: bool
     style_influence: int
     exclude_styles: str
+    # channel override に明示設定された More Options フィールドのみを保持する (#900)。
+    # collection スコープ: 全 entry に同じ値が載る。未設定キーは dict に含めない。
+    advanced_json_fields: dict
     patterns: list[_ResolvedPattern]
 
 
@@ -153,6 +164,10 @@ def _validate_unique_titles(yaml_path: Path, entry_names: list[str]) -> None:
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
+    # JSON 反映は channel override に明示されたキーのみ gating する (#900、A 案)。merged config では
+    # default.yaml の既定値と区別できないため、override 単体を別途読む。
+    override = load_channel_override("suno")
+    advanced_json_fields = {k: override[k] for k in _ADVANCED_JSON_KEYS if k in override}
     fb_genre, fb_exclude = _collect_video_analysis_presets()
 
     genre_line = suno.get("genre_line", "") or fb_genre
@@ -223,6 +238,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         is_vocal=is_vocal,
         style_influence=style_influence,
         exclude_styles=exclude_styles,
+        advanced_json_fields=advanced_json_fields,
         patterns=resolved,
     )
 
@@ -298,13 +314,16 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
         multi = len(pattern.scenes) > 1
         for j, scene in enumerate(pattern.scenes, 1):
             name = f"{base_name} (Variation {j})" if multi else base_name
-            entries.append(
-                {
-                    "name": name,
-                    "style": f"{pattern.style_line}\n{scene}",
-                    "lyrics": pattern.lyrics if resolved.is_vocal else "",
-                }
-            )
+            entry = {
+                "name": name,
+                "style": f"{pattern.style_line}\n{scene}",
+                "lyrics": pattern.lyrics if resolved.is_vocal else "",
+            }
+            # More Options 3 フィールド (#900)。channel override に明示されたキーのみ collection
+            # スコープで全 entry に載せる。0 や "" の falsy 値も有効値なので無条件に反映する
+            # (gating は resolve 段で `key in override` 済み)。
+            entry.update(resolved.advanced_json_fields)
+            entries.append(entry)
     return entries
 
 
