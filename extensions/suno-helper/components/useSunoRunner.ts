@@ -13,8 +13,9 @@ import {
   pickInitialCollectionId,
   type PromptEntry,
 } from "../../shared/api";
-import { type ItemState, PHASE } from "../../shared/constants";
+import { type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { DEFAULT_SPEED_PRESET_ID, readSpeedPresetId, writeSpeedPresetId } from "../lib/preset-state";
 import {
   readResumeState,
   type ResumeBanner,
@@ -53,6 +54,9 @@ interface RunnerState {
   setRangeStart: (value: string) => void;
   rangeEnd: string;
   setRangeEnd: (value: string) => void;
+  // 速度プリセット (#875)。実行モード selector の選択値。永続化は setSpeedPreset 内で行う。
+  speedPresetId: SpeedPresetId;
+  setSpeedPreset: (id: SpeedPresetId) => void;
   // 再開バナー (#872)。chrome.storage / content snapshot いずれか有効なソース、無ければ null。
   resumeBanner: ResumeBanner | null;
   acceptResume: () => void;
@@ -82,6 +86,8 @@ export function useSunoRunner(): RunnerState {
   const [rangeMode, setRangeMode] = useState<RangeMode>("all");
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
+  // 速度プリセット (#875)。マウント時に storage から復元し、選択時に永続化する。初期値は既定 (Balanced)。
+  const [speedPresetId, setSpeedPresetId] = useState<SpeedPresetId>(DEFAULT_SPEED_PRESET_ID);
   // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
   const [persistedResume, setPersistedResume] = useState<ResumeState | null>(null);
   // resume state を読んだ popup 起動時刻 (#872)。stale 判定の基準 now をここで一度だけ確定し、
@@ -143,6 +149,17 @@ export function useSunoRunner(): RunnerState {
       setPersistedResume(state);
       setResumeCheckedAt(Date.now());
     });
+  }, []);
+
+  // popup 起動時に永続化済みの速度プリセットを復元する (#875 要件2)。
+  useEffect(() => {
+    void readSpeedPresetId().then(setSpeedPresetId);
+  }, []);
+
+  // 速度プリセットの選択を即時永続化する (#875 要件2)。content は run 開始時に storage から読む。
+  const setSpeedPreset = useCallback((id: SpeedPresetId) => {
+    setSpeedPresetId(id);
+    void writeSpeedPresetId(id);
   }, []);
 
   const dismissResume = useCallback(() => {
@@ -327,6 +344,8 @@ export function useSunoRunner(): RunnerState {
     setRangeStart,
     rangeEnd,
     setRangeEnd,
+    speedPresetId,
+    setSpeedPreset,
     resumeBanner,
     acceptResume,
     dismissResume,

@@ -234,16 +234,33 @@ export async function injectAdvancedFields(
 }
 
 /**
- * 可視な recaptcha / hcaptcha challenge iframe を検知する（#810）。
+ * active な recaptcha / hcaptcha challenge iframe を検知する（#810, #875）。
  * Suno は hCaptcha challenge を非表示プリロード iframe として常駐させるため、
- * querySelector の hit だけでは常に true になってしまう。strict 可視判定で
- * 実 challenge UI が表示された時のみ true を返す。
+ * querySelector の hit だけでは常に true になってしまう。
+ *
+ * #875 で判明した中間状態: silent drop タイミングで iframe の `title` が `""` →
+ * `"hCaptchaチャレンジ"` に変化するが `visibility:hidden` は維持される。従来の strict
+ * `isVisible()` だけでは visibility:hidden で false となり silent drop に流れていた。
+ * そこで bbox を持つ（プリロードでない）iframe の `title` が non-empty なら、visibility に
+ * 関わらず active challenge とみなす。title が空のときのみ従来の strict 可視判定へ fallback する。
  */
 export function detectRecaptcha(): boolean {
   const iframes = document.querySelectorAll<HTMLIFrameElement>(
     SELECTORS.recaptcha,
   );
-  return Array.from(iframes).some((f) => isVisible(f));
+  return Array.from(iframes).some((f) => {
+    // bbox 0 のプリロード iframe は title を持っていても active ではない（title 判定より優先）。
+    const rect = f.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return false;
+    }
+    // title が non-empty = challenge が起動した中間状態。visibility:hidden を許容して捕捉する (#875)。
+    if (f.title.trim().length > 0) {
+      return true;
+    }
+    // title 空はプリロード iframe。従来通り strict 可視判定で実 challenge 表示時のみ true (#810)。
+    return isVisible(f);
+  });
 }
 
 /**

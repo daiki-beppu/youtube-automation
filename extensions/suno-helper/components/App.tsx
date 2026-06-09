@@ -1,6 +1,9 @@
-import { DEFAULT_URL } from "../../shared/constants";
+import { DEFAULT_URL, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
+
+// 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
+const SPEED_PRESET_ORDER: SpeedPresetId[] = ["fast", "balanced", "safe"];
 
 export function App() {
   const {
@@ -22,6 +25,8 @@ export function App() {
     setRangeStart,
     rangeEnd,
     setRangeEnd,
+    speedPresetId,
+    setSpeedPreset,
     resumeBanner,
     acceptResume,
     dismissResume,
@@ -131,6 +136,28 @@ export function App() {
             />
           </div>
         )}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
+        <legend className="px-1 text-xs text-gray-600">実行モード</legend>
+        {SPEED_PRESET_ORDER.map((id) => {
+          const preset = SPEED_PRESETS[id];
+          return (
+            <label key={id} className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="speed-preset"
+                className="mt-1"
+                checked={speedPresetId === id}
+                onChange={() => setSpeedPreset(id)}
+              />
+              <span className="flex flex-col">
+                <span className="font-medium">{preset.label}</span>
+                <span className="text-xs text-gray-500">{preset.riskNote}</span>
+              </span>
+            </label>
+          );
+        })}
       </fieldset>
 
       <div className="flex gap-2">
