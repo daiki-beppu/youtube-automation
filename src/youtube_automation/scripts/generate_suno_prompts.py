@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +18,7 @@ from youtube_automation.scripts.suno_artifacts import (
 )
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
 from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8
@@ -79,18 +80,94 @@ class _ResolvedPattern:
     lyrics: str  # rstrip 済み。歌詞が無ければ ""
 
 
+# suno-prompts.json へ wire する More Options 3 フィールドの key 一覧 (#900)。
+# JSON への反映は **channel override (config/skills/suno.yaml) に明示設定されたキーのみ**。
+# config.default.yaml 同梱の既定値 (style_influence: 85 等) は JSON には載せない
+# (= 「何も足さない既存 collection は name/style/lyrics の 3 キーちょうど」の後方互換を守るため)。
+# MD 出力は従来どおり merged 値 (既定込み) を表示する。
+_ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles")
+
+
 @dataclass
 class _ResolvedPrompts:
     title: str
     is_vocal: bool
     style_influence: int
     exclude_styles: str
+    # channel override に明示設定された More Options フィールドのみを保持する (#900)。
+    # collection スコープ: 全 entry に同じ値が載る。未設定キーは dict に含めない。
+    advanced_json_fields: dict
     patterns: list[_ResolvedPattern]
+
+
+def _validate_instrumental_track_count(
+    yaml_path: Path,
+    entries_count: int,
+    tracks_per_collection: int,
+) -> None:
+    """インストモードで yaml の entry 数が ceil(tracks_per_collection / 2) と一致するか fail-loud で検証する.
+
+    Suno は 1 リクエスト = 2 clip 生成するため、最終 clip 数 `tracks_per_collection` を満たすには
+    yaml `patterns:` 配列の `scenes` 行数の合計 (= 連続生成の entry 数) が `ceil(N/2)` と
+    一致する必要がある。ズレを silent に通すと運用上「曲数不足」「曲数過剰」に気付けないため、
+    新運用 (tracks_per_collection を明示指定) では fail-loud にして AI / operator に修正を促す。
+    """
+    expected = math.ceil(tracks_per_collection / 2)
+    if entries_count == expected:
+        return
+    raise ConfigError(
+        f"インストモード: tracks_per_collection={tracks_per_collection} から "
+        f"ceil({tracks_per_collection}/2)={expected} 個の entry が必要ですが、"
+        f"{yaml_path.name} には {entries_count} 個あります "
+        f"(`patterns:` 配列の `scenes` 行数の合計)。"
+    )
+
+
+def _entry_names_from_resolved(resolved: list[_ResolvedPattern]) -> list[str]:
+    """`build_prompt_entries` と同一ロジックで最終的な entry.name のみを構築する.
+
+    Suno UI Song Title 欄へ注入される値 (suno-helper 拡張は `entry.title ?? entry.name` を読む)
+    の SSOT。複数 scene を持つ pattern は `(Variation N)` 付与でユニーク化される (#854 由来)。
+    """
+    names: list[str] = []
+    for p in resolved:
+        base_name = f"{p.name_jp} — {p.name_en}"
+        multi = len(p.scenes) > 1
+        for j in range(1, len(p.scenes) + 1):
+            names.append(f"{base_name} (Variation {j})" if multi else base_name)
+    return names
+
+
+def _validate_unique_titles(yaml_path: Path, entry_names: list[str]) -> None:
+    """全 entry の最終 name (Suno UI Song Title 欄に注入される値) が重複していないか fail-loud で検証する.
+
+    重複は (1) Suno Library で同名 clip が並んで識別不能になる、(2) `/suno-helper` の進捗 phase で
+    どの entry の clip か追跡しにくくなる、(3) `/masterup` のリネーム時に衝突する、といった運用問題を
+    起こすため yaml レベルで弾く。インストモードは entry が独立した世界観を持つ前提で AI が固有の
+    `name_jp` / `name_en` を毎回設計する必要があり、ボーカルモードは pattern 間で重複しないことが
+    自明設計なので両モードで一律検証する (Variation 付与済みの後の name が比較対象)。
+    """
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for name in entry_names:
+        if name in seen:
+            duplicates.add(name)
+        seen.add(name)
+    if not duplicates:
+        return
+    raise ConfigError(
+        f"全曲のタイトル (entry name) はユニークでなければなりません。"
+        f"{yaml_path.name} で以下が重複しています: {', '.join(sorted(duplicates))}"
+    )
 
 
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
+    # JSON 反映は channel override に明示されたキーのみ gating する (#900、A 案)。merged config では
+    # default.yaml の既定値と区別できないため、override 単体を別途読む。
+    override = load_channel_override("suno")
+    advanced_json_fields = {k: override[k] for k in _ADVANCED_JSON_KEYS if k in override}
     fb_genre, fb_exclude = _collect_video_analysis_presets()
 
     genre_line = suno.get("genre_line", "") or fb_genre
@@ -141,11 +218,27 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             )
         )
 
+    # インストモードのみ: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、
+    # ceil(N/2) と yaml の entry 数 (scene 行数の合計) が一致するか fail-loud で検証する。
+    # ボーカルモードは曲数定義が異なるため (1 prompt = 1 ベストを選曲、別途整理予定) 検証しない。
+    # tracks_per_collection が未指定の旧運用は silent skip して後方互換を保つ。
+    if not is_vocal:
+        tracks_override = data.get("tracks")
+        tracks_per_collection = tracks_override if tracks_override is not None else suno.get("tracks_per_collection")
+        if tracks_per_collection is not None:
+            entries_count = sum(len(p.scenes) for p in resolved)
+            _validate_instrumental_track_count(patterns_path, entries_count, tracks_per_collection)
+
+    # 全曲ユニーク title: Suno UI Song Title 欄に注入される最終 name の重複を fail-loud で弾く。
+    # インスト・ボーカル両モード一律 (詳細は `_validate_unique_titles` の docstring 参照)。
+    _validate_unique_titles(patterns_path, _entry_names_from_resolved(resolved))
+
     return _ResolvedPrompts(
         title=title,
         is_vocal=is_vocal,
         style_influence=style_influence,
         exclude_styles=exclude_styles,
+        advanced_json_fields=advanced_json_fields,
         patterns=resolved,
     )
 
@@ -221,13 +314,16 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
         multi = len(pattern.scenes) > 1
         for j, scene in enumerate(pattern.scenes, 1):
             name = f"{base_name} (Variation {j})" if multi else base_name
-            entries.append(
-                {
-                    "name": name,
-                    "style": f"{pattern.style_line}\n{scene}",
-                    "lyrics": pattern.lyrics if resolved.is_vocal else "",
-                }
-            )
+            entry = {
+                "name": name,
+                "style": f"{pattern.style_line}\n{scene}",
+                "lyrics": pattern.lyrics if resolved.is_vocal else "",
+            }
+            # More Options 3 フィールド (#900)。channel override に明示されたキーのみ collection
+            # スコープで全 entry に載せる。0 や "" の falsy 値も有効値なので無条件に反映する
+            # (gating は resolve 段で `key in override` 済み)。
+            entry.update(resolved.advanced_json_fields)
+            entries.append(entry)
     return entries
 
 

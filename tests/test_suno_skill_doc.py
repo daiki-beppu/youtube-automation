@@ -7,7 +7,7 @@ issue #692 受け入れ基準: 「`.claude/skills/suno/SKILL.md` に新フロー
 全テストが pass してしまうため、ドキュメント契約をこのテストで機械的に担保し再発を防ぐ。
 
 検証する契約:
-1. Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 2.5）が記載されている。
+1. Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
 2. 拡張が使えない／壊れたとき向けの手コピペ fallback 節が記載されている。
 3. 自動投入が読む配信元 `suno-prompts.json` への言及がある。
 """
@@ -37,15 +37,17 @@ def test_skill_md_exists() -> None:
 def test_skill_md_documents_auto_inject_flow() -> None:
     """Given suno SKILL.md
     When 本文を読む
-    Then Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 2.5）が記載されている。
+    Then Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
 
     #698: CLI を `yt-suno-serve` → `yt-collection-serve` に rename したため、
     起動コマンド契約（machine-coupled）を新名に追従する。旧名が残っていないことも検証する。
+    PR #886: 旧 `Step 2.5` 表記は整数並びへ採番し直し、Step 3 タイトルに `/suno-helper` を露出。
     """
     text = _read()
-    for token in ("Step 2.5", "yt-collection-serve", "suno-helper", "連続実行"):
+    for token in ("Step 3", "yt-collection-serve", "suno-helper", "連続実行"):
         assert token in text, f"SKILL.md に新フローの記載がない（`{token}` 不在）"
     assert "yt-suno-serve" not in text, "SKILL.md に旧 CLI 名 `yt-suno-serve` が残っている（#698 で廃止）"
+    assert "Step 2.5" not in text, "SKILL.md に旧 `Step 2.5` 表記が残っている（PR #886 で整数並びへ採番し直し）"
 
 
 def test_skill_md_documents_wxt_unpacked_load_flow() -> None:
@@ -92,15 +94,38 @@ def test_skill_md_documents_manual_fallback() -> None:
     """Given suno SKILL.md
     When 本文を読む
     Then 拡張が使えないときの手コピペ fallback 節が記載されている。
+
+    PR #886: 旧 `Step 2.5 fallback` を `Step 3 の fallback` に採番し直した。
     """
     text = _read()
     assert "fallback" in text, "SKILL.md に fallback への言及がない"
     match = re.search(
-        r"###\s*Step 2\.5 fallback\b.*?(?=^### |^## |\Z)",
+        r"###\s*Step 3 の fallback\b.*?(?=^### |^## |\Z)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
-    assert match, "SKILL.md に `### Step 2.5 fallback` 節が見つからない"
+    assert match, "SKILL.md に `### Step 3 の fallback` 節が見つからない"
     fallback_section = match.group(0)
     assert "手コピペ" in fallback_section, "fallback 節に手コピペ手順の記載がない"
     assert "suno-prompts.md" in fallback_section, "fallback 節が手動投入元 `suno-prompts.md` を参照していない"
+
+
+def test_skill_md_documents_tracks_per_collection_for_instrumental() -> None:
+    """Given suno SKILL.md
+    When 本文を読む
+    Then インストモードが pattern モデルから `tracks_per_collection` ベースに刷新されたことが記載されている。
+
+    本 PR: `/suno-helper` の登場で連続生成 + playlist 一括化が自動化されたため、`/suno` 側の
+    `patterns_per_collection × tracks_per_pattern × 2 (Suno 1 Generate = 2 clip)` 入れ子モデルを
+    インスト側だけ廃止し、フラットな `tracks_per_collection` 指定 → `ceil(N/2)` 個の独立 entry に
+    切り替えた。ボーカルモードは選曲精度のため pattern モデル維持。読み手 (AI / operator) が
+    旧モデルで yaml を書き始めないよう、新節タイトルと算出式の存在をここで機械的に担保する。
+    """
+    text = _read()
+    # 新節タイトルの存在 (インストとボーカルが視認できるレベルで明確に分離されていること)
+    assert "## 曲数ベース設計（インストモード）" in text, "SKILL.md にインスト用の新節タイトルがない"
+    assert "## パターンベース設計（ボーカルモード）" in text, "SKILL.md にボーカル用の節タイトルがない"
+    # 新キー `tracks_per_collection` の言及 (config と yaml 上書きの両ルート)
+    assert "tracks_per_collection" in text, "SKILL.md に新キー `tracks_per_collection` への言及がない"
+    # 算出式 ceil(N/2) の言及 (Suno 1 Generate = 2 clip 仕様の反映確認)
+    assert "ceil" in text, "SKILL.md に `ceil(N/2)` 算出式の言及がない"

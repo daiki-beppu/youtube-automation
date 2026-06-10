@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { fetchAsset, fetchRelease, ReleaseUnavailableError } from "@/lib/api";
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
+import { runInjection } from "@/lib/inject-runner";
 import { serverUrlItem } from "@/lib/storage";
 import type { ReleasePayload } from "@/lib/types";
 import { ServerUrlField } from "@/components/ServerUrlField";
@@ -19,6 +20,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase | null>(null);
   const [message, setMessage] = useState("");
+  // 停止要求フラグ。injection ループの境界で参照し、押下後は以降の送信を打ち切る。
+  const stoppedRef = useRef(false);
 
   useEffect(() => {
     serverUrlItem.getValue().then(setServerUrl);
@@ -72,28 +75,26 @@ export function App() {
     if (payload === null) {
       return;
     }
+    stoppedRef.current = false;
     setBusy(true);
     setPhase(PHASES.INJECTING);
-    setMessage("アセットを取得中");
+    setMessage("注入を開始します");
     try {
-      // asset は popup（chrome-extension:// origin）で fetch する。content からの
-      // fetch はページ origin で CORS 評価され遮断されるため（asset-transfer.ts 参照）。
+      // asset は popup（chrome-extension:// origin）で fetch する。content からの fetch は
+      // ページ origin で CORS 評価され遮断されるため（asset-transfer.ts 参照）。逐次実行・
+      // 停止境界の制御フローは runInjection に抽出し、ここでは transport を束ねて渡す（#871）。
       const tabId = await activeTabId();
-      const { release } = payload;
-      const trackAsset =
-        release.tracks.length > 0
-          ? await fetchAsset(
-              serverUrl,
-              release.tracks[0].asset_path,
-              release.tracks[0].filename,
-            )
-          : null;
-      const coverAsset =
-        release.cover !== null
-          ? await fetchAsset(serverUrl, release.cover.asset_path, release.cover.filename)
-          : null;
-      setMessage("注入を開始します");
-      await sendMessage("inject", { payload, trackAsset, coverAsset }, tabId);
+      await runInjection(payload, {
+        fetchAsset: (assetPath, filename) =>
+          fetchAsset(serverUrl, assetPath, filename),
+        start: (p) => sendMessage("injectStart", { payload: p }, tabId),
+        track: (trackIndex, asset) =>
+          sendMessage("injectTrack", { trackIndex, asset }, tabId),
+        cover: (asset) => sendMessage("injectCover", { asset }, tabId),
+        finish: () => sendMessage("injectFinish", undefined, tabId),
+        setMessage,
+        isStopped: () => stoppedRef.current,
+      });
     } catch (error) {
       setPhase(PHASES.ERROR);
       setMessage(error instanceof Error ? error.message : String(error));
@@ -102,6 +103,8 @@ export function App() {
   };
 
   const handleStop = async () => {
+    // ループ送信を打ち切り、content にも停止を通知する（content が STOPPED を report し busy 解除）。
+    stoppedRef.current = true;
     try {
       await sendMessage("stop", undefined, await activeTabId());
     } catch (error) {

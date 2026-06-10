@@ -1,36 +1,100 @@
-// distrokid.com/new フォームへの注入ロジック。
+// distrokid.com/new フォームへの注入ロジック（#877 で実機 DOM 再検証）。
 //
-// テキスト注入は React 互換のネイティブ value setter + bubbling イベントで行う
-// （React の制御 input は value プロパティを直接書き換えても onChange が走らないため、
-//  prototype の native setter を使って React の value tracker を欺く）。
-// ファイル注入（DataTransfer 経由）は jsdom 非対応のため Playwright が担保する。
+// 静的プロファイル / album / release date / 曲 / songwriter / cover は #813 の id ベース
+// セレクタを継続。AI 開示は #877 で「inline 展開ではなく SweetAlert2 modal で開く」ことが
+// 判明したため、track ごとの inline 注入を破棄し modal フローへ刷新した:
+//   - 「はい/いいえ」: [name="ai_gate_<uuid>"][value="0"|"1"] radio（「はい」で modal が mount）
+//   - modal (.ai-credits-swal-modal) を MutationObserver で待ち、内部で歌詞 / 作曲 /
+//     録音範囲 (.distroAiRecordingScope) / partial 種別 / アーティスト種別
+//     (.distroAiArtistPersona) / apply-all (#ai-apply-all-1) を設定して保存ボタンを click
+//   - apply-all により 25 track 全部へ DistroKid 側が伝播するため、modal は 1st track 分 1 回だけ開く
 //
-// 送信系ボタン（「続ける」）は一切操作しない（規約遵守・要件 #7）。
+// テキスト / SELECT 注入は React 互換のネイティブ value setter + bubbling イベントで行う
+// （React の制御要素は value を直接書き換えても onChange が走らないため、prototype の
+//  native setter で React の value tracker を欺く）。ファイル注入（DataTransfer 経由）は
+// jsdom 非対応のため Playwright が担保する。
+//
+// 隠し要素（type=hidden の #artistName 等）はテキスト/SELECT 解決時に isVisible で排除する。
+// 注入先が見つからない場合は silent skip せず FieldNotFoundError で fail-loud。
+// 送信系ボタン（「続ける」）は一切操作しない（規約遵守・スコープ外）。
 
-import type { DistrokidProfile, ReleaseData, ReleasePayload } from "./types";
+import { isVisible } from "../../shared/visibility";
+import type { AiDisclosure, DistrokidProfile, SongwriterName } from "./types";
 
-// 静的プロファイル 6 項目の注入先セレクタ（name 属性ベース）。
-// distrokid.com の実 DOM 変更時はここを更新する（README の保守手順参照）。
-export const PROFILE_SELECTORS: Record<keyof DistrokidProfile, string> = {
-  artist_name: '[name="artist_name"]',
-  language: '[name="language"]',
-  main_genre: '[name="main_genre"]',
-  songwriter: '[name="songwriter"]',
-  apple_music_credit: '[name="apple_music_credit"]',
-  track_type: '[name="track_type"]',
-};
-
-// 動的リリースデータのテキスト注入先セレクタ。
-export const RELEASE_SELECTORS = {
-  album_title: '[name="album_title"]',
-  release_date: '[name="release_date"]',
+// 静的プロファイルの SELECT 注入先（id ベース）。
+export const PROFILE_SELECTORS = {
+  language: "#language",
+  main_genre: "#genrePrimary",
+  sub_genre: "#genreSecondary",
 } as const;
 
-// ファイル注入先セレクタ（曲 / ジャケット）。
+// アルバム名（アルバム時のみ存在。シングルモードでは要素不在 → skip）。
+export const ALBUM_SELECTORS = {
+  album_title: "#albumTitleInput",
+} as const;
+
+// リリース日（name="releaseDate" / type=date）。
+export const RELEASE_DATE_SELECTOR = "#release-date-dp";
+
+// ファイル注入先（ジャケット + track 別アップロード）。track は 1-indexed。
 export const FILE_SELECTORS = {
-  song_file: '[name="song_file"]',
-  cover_file: '[name="cover_file"]',
+  cover: "#artwork",
+  trackByIndex: (i1: number) => `#js-track-upload-${i1}`,
 } as const;
+
+// track 別フィールド。タイトルは DOM order で解決した uuid、songwriter は 3 分割（1-indexed）。
+export const TRACK_FIELD_SELECTORS = {
+  titleByUuid: (uuid: string) => `[name="title_${uuid}"]`,
+  songwriterByIndex: (i1: number) => ({
+    first: `[name="songwriter_real_name_first${i1}"]`,
+    middle: `[name="songwriter_real_name_middle${i1}"]`,
+    last: `[name="songwriter_real_name_last${i1}"]`,
+  }),
+} as const;
+
+// AI 開示の gate radio（modal を開く / disabled 時に「いいえ」を確定する）。
+// 全 track の uuid は resolveTrackUuids() で title_<uuid> input から DOM order に解決する。
+export const AI_DISCLOSURE_SELECTORS = {
+  // 「はい / いいえ」radio。デフォルトは「いいえ (value=0)」が checked。
+  // 「はい (value=1)」を click すると SweetAlert2 modal が mount する（#877）。
+  gateByUuid: (uuid: string) => ({
+    no: `[name="ai_gate_${uuid}"][value="0"]`,
+    yes: `[name="ai_gate_${uuid}"][value="1"]`,
+  }),
+} as const;
+
+// AI 開示 modal（SweetAlert2 ベース）内のセレクタ群（実 DOM 再検証 #877 に基づく）。
+// modal は 1st track の gate「はい」で 1 回だけ開き、apply-all checkbox で全 track へ伝播する。
+export const AI_MODAL_SELECTORS = {
+  // modal ルート（role="dialog"）。mount/unmount を MutationObserver で待つ基点。
+  modal: ".ai-credits-swal-modal",
+  // 歌詞 / 作曲 AI checkbox（uuid は modal を開いた 1st track のもの）。
+  lyricsByUuid: (uuid: string) => `[name="ai_lyrics_${uuid}"]`,
+  musicByUuid: (uuid: string) => `[name="ai_music_${uuid}"]`,
+  // 録音物の AI 範囲 radio（"full"=音声すべて / "partial"=音声の一部）。
+  recordingScope: (scope: "full" | "partial") =>
+    `.distroAiRecordingScope[value="${scope}"]`,
+  // partial 録音時の種別 radio（partial 選択時のみ visible）。
+  partialAudioTypeByUuid: (uuid: string, type: "vocals" | "instruments") =>
+    `[name="ai_partial_audio_type_${uuid}"][value="${type}"]`,
+  // アーティスト種別 radio（value="0"=人間 / "1"=AI ペルソナ）。
+  artistPersonaByUuid: (uuid: string, value: "0" | "1") =>
+    `[name="ai_artist_persona_${uuid}_0"][value="${value}"]`,
+  // 「Apply these selections to all songs on this release」checkbox。
+  applyAll: "#ai-apply-all-1",
+  // 「保存する」ボタン（送信系ではない・modal を閉じるだけ）。
+  saveButton: "button.swal2-confirm.ai-modal-btn-save",
+} as const;
+
+// AI 開示 modal の mount/unmount 待ち上限（ms）。超過したら fail-loud（silent skip しない）。
+export const AI_MODAL_WAIT_TIMEOUT_MS = 10_000;
+
+// 新規リリース前提の assert 対象（previouslyReleased「いいえ(value=0)」）。
+export const NEW_RELEASE_RADIO_SELECTOR = '[name^="previouslyReleased_"][value="0"]';
+
+// track タイトル input の name 接頭辞（DOM order で uuid を列挙する基点）。
+const TITLE_NAME_PREFIX = "title_";
+const TITLE_NAME_SELECTOR = `[name^="${TITLE_NAME_PREFIX}"]`;
 
 // 注入先フィールドが見つからないことを表す専用エラー。
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
@@ -41,14 +105,25 @@ export class FieldNotFoundError extends Error {
   }
 }
 
-type ValueElement = HTMLInputElement | HTMLTextAreaElement;
+// AI 開示 modal の mount/unmount が制限時間内に観測できなかったことを表す専用エラー。
+// silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
+export class ModalTimeoutError extends Error {
+  constructor(selector: string) {
+    super(`AI 開示 modal の状態変化を待てませんでした: ${selector}`);
+    this.name = "ModalTimeoutError";
+  }
+}
+
+type ValueElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
 // 要素種別に応じた prototype から native value setter を取り出す。
 function nativeValueSetter(el: ValueElement): (value: string) => void {
   const prototype =
     el instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
-      : HTMLInputElement.prototype;
+      : el instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
   const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
   if (!descriptor?.set) {
     throw new Error("native value setter を解決できません");
@@ -64,43 +139,73 @@ export function setNativeValue(el: ValueElement, value: string): void {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-// セレクタで value 要素を解決する。未検出なら fail-loud。
-function requireField(root: ParentNode, selector: string): ValueElement {
-  const el = root.querySelector<ValueElement>(selector);
+// セレクタに一致する可視のテキスト/SELECT 要素を返す（無ければ null）。
+// type=hidden や祖先 display:none の隠し要素を isVisible で排除する。
+function findVisibleField(root: ParentNode, selector: string): ValueElement | null {
+  return (
+    Array.from(root.querySelectorAll<ValueElement>(selector)).filter(isVisible)[0] ?? null
+  );
+}
+
+// 可視要素を要求する。未検出（または隠し要素のみ）なら fail-loud。
+function requireVisibleField(root: ParentNode, selector: string): ValueElement {
+  const el = findVisibleField(root, selector);
   if (el === null) {
     throw new FieldNotFoundError(selector);
   }
   return el;
 }
 
-// 静的プロファイル 6 項目を全注入する。1 つでも欠ければ FieldNotFoundError。
-export function injectProfile(
+// 静的プロファイル（language / main_genre 必須、sub_genre は任意）を注入する。
+export function injectProfile(root: ParentNode, profile: DistrokidProfile): void {
+  setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.language), profile.language);
+  setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.main_genre), profile.main_genre);
+  if (profile.sub_genre !== null) {
+    setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.sub_genre), profile.sub_genre);
+  }
+}
+
+// アルバム名を注入する。album_title 欄はアルバム時のみ存在するため、不在なら skip（シングルモード）。
+export function injectAlbumTitle(root: ParentNode, albumTitle: string): void {
+  const el = findVisibleField(root, ALBUM_SELECTORS.album_title);
+  if (el !== null) {
+    setNativeValue(el, albumTitle);
+  }
+}
+
+// リリース日を注入する（未確定 = null なら注入しない）。
+export function injectReleaseDate(root: ParentNode, releaseDate: string | null): void {
+  if (releaseDate === null) {
+    return;
+  }
+  setNativeValue(requireVisibleField(root, RELEASE_DATE_SELECTOR), releaseDate);
+}
+
+// track タイトル input を DOM order で列挙し uuid 一覧を返す（track の解決基点）。
+// セレクタが name^="title_" を保証するため el.name は常に接頭辞付きの非空文字列。
+export function resolveTrackUuids(root: ParentNode): string[] {
+  return Array.from(root.querySelectorAll<HTMLInputElement>(TITLE_NAME_SELECTOR)).map((el) =>
+    el.name.slice(TITLE_NAME_PREFIX.length),
+  );
+}
+
+// 指定 uuid の track タイトルを注入する。
+export function injectTrackTitle(root: ParentNode, uuid: string, title: string): void {
+  setNativeValue(requireVisibleField(root, TRACK_FIELD_SELECTORS.titleByUuid(uuid)), title);
+}
+
+// 指定 track（1-indexed）に songwriter（3 分割）を注入する。middle は null なら skip。
+export function injectSongwriter(
   root: ParentNode,
-  profile: DistrokidProfile,
+  index1: number,
+  songwriter: SongwriterName,
 ): void {
-  for (const key of Object.keys(PROFILE_SELECTORS) as (keyof DistrokidProfile)[]) {
-    const el = requireField(root, PROFILE_SELECTORS[key]);
-    setNativeValue(el, profile[key]);
+  const sel = TRACK_FIELD_SELECTORS.songwriterByIndex(index1);
+  setNativeValue(requireVisibleField(root, sel.first), songwriter.first);
+  setNativeValue(requireVisibleField(root, sel.last), songwriter.last);
+  if (songwriter.middle !== null) {
+    setNativeValue(requireVisibleField(root, sel.middle), songwriter.middle);
   }
-}
-
-// 動的リリースのテキスト（album_title 必須 / release_date は null ならスキップ）を注入する。
-export function injectRelease(root: ParentNode, release: ReleaseData): void {
-  const albumEl = requireField(root, RELEASE_SELECTORS.album_title);
-  setNativeValue(albumEl, release.album_title);
-
-  // release_date は null がデータ仕様上の正常値（未確定）。null なら注入欄の有無に関わらずスキップ。
-  if (release.release_date !== null) {
-    const dateEl = requireField(root, RELEASE_SELECTORS.release_date);
-    setNativeValue(dateEl, release.release_date);
-  }
-}
-
-// payload からテキスト系を一括注入する（ファイルは別経路: content.ts が injectFile を直接呼ぶ）。
-// profile は payload.profile、album/date は payload.release から読む（envelope 取り違え防止）。
-export function injectAll(root: ParentNode, payload: ReleasePayload): void {
-  injectProfile(root, payload.profile);
-  injectRelease(root, payload.release);
 }
 
 // <input type=file> へ DataTransfer 経由で File をセットし change を bubbles:true で発火する。
@@ -110,4 +215,173 @@ export function injectFile(input: HTMLInputElement, file: File): void {
   transfer.items.add(file);
   input.files = transfer.files;
   input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+// file input は hidden（#artwork / pre-mount track input）のため isVisible は適用しない。
+function requireFileInput(root: ParentNode, selector: string): HTMLInputElement {
+  const input = root.querySelector<HTMLInputElement>(selector);
+  if (input === null) {
+    throw new FieldNotFoundError(selector);
+  }
+  return input;
+}
+
+// 指定 track（1-indexed）に曲ファイルを注入する。
+export function injectTrackFile(root: ParentNode, index1: number, file: File): void {
+  injectFile(requireFileInput(root, FILE_SELECTORS.trackByIndex(index1)), file);
+}
+
+// ジャケットを注入する。
+export function injectCover(root: ParentNode, file: File): void {
+  injectFile(requireFileInput(root, FILE_SELECTORS.cover), file);
+}
+
+// 新規リリース前提（previouslyReleased が「いいえ(value=0)」で checked）を assert する。
+// 過去公開リリースへの対応はスコープ外（別 issue）のため、想定外なら fail-loud。
+export function assertNewRelease(root: ParentNode): void {
+  const noRadios = Array.from(
+    root.querySelectorAll<HTMLInputElement>(NEW_RELEASE_RADIO_SELECTOR),
+  );
+  if (noRadios.length === 0) {
+    throw new FieldNotFoundError(NEW_RELEASE_RADIO_SELECTOR);
+  }
+  if (!noRadios.every((radio) => radio.checked)) {
+    throw new Error(
+      "previouslyReleased が「いいえ(新規)」で checked ではありません（過去公開対応はスコープ外）",
+    );
+  }
+}
+
+// radio / checkbox を目標状態へ合わせる。click で React 互換に checked 切替 + change を発火する。
+// 既に目標状態なら no-op（重複 click を避ける）。
+function setChecked(el: HTMLInputElement, checked: boolean): void {
+  if (el.checked !== checked) {
+    el.click();
+  }
+}
+
+function requireInput(root: ParentNode, selector: string): HTMLInputElement {
+  return requireElement<HTMLInputElement>(root, selector);
+}
+
+// セレクタに一致する要素を要求する。未検出なら fail-loud。
+function requireElement<T extends Element>(root: ParentNode, selector: string): T {
+  const el = root.querySelector<T>(selector);
+  if (el === null) {
+    throw new FieldNotFoundError(selector);
+  }
+  return el;
+}
+
+// root の所属 Document を解決する（MutationObserver の observe 対象を決めるため）。
+function ownerDocumentOf(root: ParentNode): Document {
+  if (root instanceof Document) {
+    return root;
+  }
+  const doc = (root as Element | DocumentFragment).ownerDocument;
+  if (doc === null) {
+    throw new Error("root の Document を解決できません");
+  }
+  return doc;
+}
+
+// selector に一致する要素の出現を待つ（既に在れば即解決）。制限時間超過で ModalTimeoutError。
+export function waitForElement(
+  root: ParentNode,
+  selector: string,
+  timeoutMs: number,
+): Promise<HTMLElement> {
+  const existing = root.querySelector<HTMLElement>(selector);
+  if (existing !== null) {
+    return Promise.resolve(existing);
+  }
+  const observeRoot = ownerDocumentOf(root).body ?? ownerDocumentOf(root);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new ModalTimeoutError(selector));
+    }, timeoutMs);
+    const observer = new MutationObserver(() => {
+      const found = root.querySelector<HTMLElement>(selector);
+      if (found !== null) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve(found);
+      }
+    });
+    observer.observe(observeRoot, { childList: true, subtree: true });
+  });
+}
+
+// 要素が DOM から除去されるのを待つ（既に外れていれば即解決）。制限時間超過で ModalTimeoutError。
+export function waitForRemoval(el: Element, timeoutMs: number): Promise<void> {
+  if (!el.isConnected) {
+    return Promise.resolve();
+  }
+  const observeRoot = el.ownerDocument.body ?? el.ownerDocument;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new ModalTimeoutError(AI_MODAL_SELECTORS.modal));
+    }, timeoutMs);
+    const observer = new MutationObserver(() => {
+      if (!el.isConnected) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve();
+      }
+    });
+    observer.observe(observeRoot, { childList: true, subtree: true });
+  });
+}
+
+// modal 内で AI 開示の各設定を反映する（uuid は modal を開いた 1st track のもの）。
+// partial_audio_type は recording_scope='partial' かつ非 null のときのみ設定する
+// （undefined を null 同等扱いする loose equality `!= null` で FieldNotFoundError を防ぐ #877）。
+function applyModalSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): void {
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid)), ai.lyrics);
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.musicByUuid(uuid)), ai.music);
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.recordingScope(ai.recording_scope)), true);
+  if (ai.recording_scope === "partial" && ai.partial_audio_type != null) {
+    setChecked(
+      requireInput(
+        modal,
+        AI_MODAL_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type),
+      ),
+      true,
+    );
+  }
+  setChecked(
+    requireInput(modal, AI_MODAL_SELECTORS.artistPersonaByUuid(uuid, ai.artist_persona ? "1" : "0")),
+    true,
+  );
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.applyAll), ai.apply_to_all);
+}
+
+// AI 開示注入（#877 modal フロー）:
+//   1. 全 track の uuid を DOM order で解決する（基点は title_<uuid>）
+//   2. enabled=false: 各 track の「いいえ」radio を明示確定（modal は開かない）
+//   3. enabled=true: 1st track の「はい」radio を click → modal mount を待つ
+//      → modal 内で各設定 + apply-all → 保存 button → modal unmount を待つ
+// apply-all により 25 track 全部へ DistroKid 側が伝播するため、track ごとの inline 注入はしない。
+export async function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): Promise<void> {
+  const uuids = resolveTrackUuids(root);
+  if (uuids.length === 0) {
+    throw new FieldNotFoundError(TITLE_NAME_SELECTOR);
+  }
+
+  if (!ai.enabled) {
+    // 人手 default に頼らず、各 track の「いいえ」を明示確定する（modal は開かない）。
+    for (const uuid of uuids) {
+      setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(uuid).no), true);
+    }
+    return;
+  }
+
+  const firstUuid = uuids[0];
+  setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(firstUuid).yes), true);
+  const modal = await waitForElement(root, AI_MODAL_SELECTORS.modal, AI_MODAL_WAIT_TIMEOUT_MS);
+  applyModalSelections(modal, firstUuid, ai);
+  requireElement<HTMLButtonElement>(modal, AI_MODAL_SELECTORS.saveButton).click();
+  await waitForRemoval(modal, AI_MODAL_WAIT_TIMEOUT_MS);
 }

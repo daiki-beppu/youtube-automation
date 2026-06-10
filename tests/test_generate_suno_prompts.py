@@ -37,13 +37,18 @@ def channel_dir(tmp_path, monkeypatch):
 
 
 def _write_minimal_patterns(dir_: Path) -> Path:
-    """1 パターン × 1 シーンの最小 suno-patterns.yaml を作る."""
+    """1 パターン × 1 シーンの最小 suno-patterns.yaml を作る.
+
+    yaml top-level に `tracks: 2` を併設して `tracks_per_collection` の
+    fail-loud 検証 (ceil(2/2) = 1 entry) と整合させる。
+    """
     path = dir_ / "patterns.yaml"
     path.write_text(
         yaml.safe_dump(
             {
                 "title": "Test Collection",
                 "mode": "instrumental",
+                "tracks": 2,
                 "patterns": [
                     {
                         "name_jp": "テスト",
@@ -537,7 +542,11 @@ def test_build_prompt_entries_returns_name_style_lyrics_schema(channel_dir, tmp_
     assert isinstance(entries, list)
     assert len(entries) == 1
     entry = entries[0]
-    assert set(entry) == {"name", "style", "lyrics"}
+    # #900: strict 等価 (== {...}) から subset 検証へ緩和。More Options 3 フィールド
+    # (style_influence / weirdness / exclude_styles) が channel override にあれば追加されうるため、
+    # base 3 キーが必ず含まれることのみを担保する (追加キー無しの厳密検証は backward-compat 専用
+    # テスト test_build_prompt_entries_omits_advanced_fields_without_channel_override が担う)。
+    assert {"name", "style", "lyrics"} <= set(entry)
     assert all(isinstance(entry[key], str) for key in ("name", "style", "lyrics"))
 
 
@@ -679,4 +688,454 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
     assert isinstance(data, list)
     assert len(data) == 1
-    assert set(data[0]) == {"name", "style", "lyrics"}
+    # #900: strict 等価から subset 検証へ緩和 (build_prompt_entries 側の relaxation と同様)。
+    assert {"name", "style", "lyrics"} <= set(data[0])
+
+
+# ---------------------------------------------------------------------------
+# tracks_per_collection モデル (インストモードのフラット曲数指定) の回帰テスト
+# ---------------------------------------------------------------------------
+
+
+def _write_instrumental_patterns_with_scenes(dir_: Path, scene_count: int, *, tracks_top: int | None = None) -> Path:
+    """1 pattern に scene_count 個の scenes を持つインスト yaml を書き出す.
+
+    tracks_top を渡すと yaml top-level に `tracks:` キーを併設する (コレクション上書き経路を試す)。
+    """
+    payload: dict = {
+        "title": "Test Collection",
+        "mode": "instrumental",
+        "patterns": [
+            {
+                "name_jp": "テスト",
+                "name_en": "Test",
+                "tempo": "slow",
+                "scenes": [f"scene description {i}" for i in range(scene_count)],
+            }
+        ],
+    }
+    if tracks_top is not None:
+        payload["tracks"] = tracks_top
+    path = dir_ / "patterns.yaml"
+    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    return path
+
+
+def test_instrumental_tracks_per_collection_match_passes(channel_dir, tmp_path):
+    """Given config に tracks_per_collection=2、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then ceil(2/2)=1 と entries=1 が一致するため通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", tracks_per_collection=2)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 1
+
+
+def test_instrumental_tracks_per_collection_mismatch_fails_loud(channel_dir, tmp_path):
+    """Given config に tracks_per_collection=10、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then ceil(10/2)=5 が必要だが entries=1 なので ConfigError で fail-loud する。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", tracks_per_collection=10)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    msg = str(exc_info.value)
+    assert "tracks_per_collection=10" in msg
+    assert "5" in msg  # 期待 entry 数
+    assert "1" in msg  # 実 entry 数
+
+
+def test_instrumental_yaml_tracks_overrides_config(channel_dir, tmp_path):
+    """Given config に tracks_per_collection=20、yaml top-level に tracks: 2、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then yaml の tracks=2 が config を上書きし、ceil(2/2)=1 と entries=1 が一致して通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", tracks_per_collection=20)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1, tracks_top=2)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 1
+
+
+def test_vocal_mode_skips_tracks_per_collection_validation(channel_dir, tmp_path):
+    """Given vocal genre_line + config に tracks_per_collection=20、yaml に 1 scene
+    When build_prompt_entries を呼ぶ
+    Then ボーカルモードは tracks_per_collection 検証対象外なので 1 entry でも通る。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi hip hop with soft male vocals",
+        tracks_per_collection=20,
+    )
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
+    # mode を vocal に上書きして genre_line の vocal 判定と整合させる
+    data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    data["mode"] = "vocal"
+    data["patterns"][0]["lyrics"] = "[Intro]\nla la\n"
+    patterns_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 1
+
+
+def test_instrumental_default_tracks_per_collection_is_20(channel_dir, tmp_path):
+    """Given config.default.yaml の tracks_per_collection=20 を上書きせず、yaml に 10 scenes
+    When build_prompt_entries を呼ぶ
+    Then default の 20 と ceil(20/2)=10 entries が一致して通る。channel override を書かなくても
+         default の典型値が効くことを担保する。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=10)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 10
+
+
+def test_legacy_patterns_per_collection_key_is_silently_ignored(channel_dir, tmp_path):
+    """Given config に旧キー patterns_per_collection=4 が残っていても (新キーは default の 20)
+    When build_prompt_entries を呼ぶ
+    Then コード側は新キー tracks_per_collection しか読まないため、ceil(20/2)=10 entries と
+         整合させていれば旧キーの混在は無害に通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", patterns_per_collection=4)
+    patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=10)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 10
+
+
+# ---------------------------------------------------------------------------
+# 全曲ユニーク title (entry name) 検証の回帰テスト
+# ---------------------------------------------------------------------------
+
+
+def _write_patterns_with_explicit_entries(dir_: Path, entries: list[dict], tracks_top: int) -> Path:
+    """name_jp / name_en を明示した複数 entry の yaml を書き出す.
+
+    重複検証テスト用に各 entry の name を任意に指定したいので独立 helper を用意する。
+    """
+    payload: dict = {
+        "title": "Test Collection",
+        "mode": "instrumental",
+        "tracks": tracks_top,
+        "patterns": entries,
+    }
+    path = dir_ / "patterns.yaml"
+    path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def test_unique_titles_pass_when_all_entries_have_distinct_names(channel_dir, tmp_path):
+    """Given 全 entry が固有の name_jp / name_en を持つ yaml
+    When build_prompt_entries を呼ぶ
+    Then ユニーク検証は通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "朝のキッチン", "name_en": "Morning Kitchen", "tempo": "gentle", "scenes": ["a warm kitchen"]},
+        ],
+        tracks_top=4,
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"] != entries[1]["name"]
+
+
+def test_unique_titles_fail_loud_when_two_entries_share_name(channel_dir, tmp_path):
+    """Given 同一の name_jp / name_en を持つ entry が 2 つある yaml
+    When build_prompt_entries を呼ぶ
+    Then ConfigError で fail-loud し、重複した name が messages に含まれる。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "gentle", "scenes": ["another rooftop"]},
+        ],
+        tracks_top=4,
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    msg = str(exc_info.value)
+    assert "ユニーク" in msg
+    assert "屋上の静寂 — Rooftop Silence" in msg
+
+
+def test_unique_titles_treat_name_jp_and_name_en_combo_as_identity(channel_dir, tmp_path):
+    """Given name_jp は同じだが name_en が異なる 2 entry
+    When build_prompt_entries を呼ぶ
+    Then 識別子は `{name_jp} — {name_en}` の組なので別物として通る。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "屋上", "name_en": "Rooftop Sunset", "tempo": "gentle", "scenes": ["a warm rooftop"]},
+        ],
+        tracks_top=4,
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"] != entries[1]["name"]
+
+
+def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguates(channel_dir, tmp_path):
+    """Given 1 pattern 内に複数 scene を持つ vocal yaml (genre_line で auto vocal 判定)
+    When build_prompt_entries を呼ぶ
+    Then `(Variation N)` 付与で entry name はユニーク化されるためエラーなく通る。
+
+    既存の multi-scene pattern (#854 由来) との後方互換を担保する。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi hip hop with soft male vocals",
+    )
+    payload: dict = {
+        "title": "Vocal Test",
+        "mode": "vocal",
+        "patterns": [
+            {
+                "name_jp": "通学路",
+                "name_en": "Walking Home",
+                "scenes": ["a quiet morning street", "an afternoon shortcut"],
+                "lyrics": "[Intro]\nla la\n",
+            }
+        ],
+    }
+    patterns_path = tmp_path / "patterns.yaml"
+    patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert entries[0]["name"].endswith("(Variation 1)")
+    assert entries[1]["name"].endswith("(Variation 2)")
+
+
+# ---------------------------------------------------------------------------
+# issue #900: More Options 3 フィールド (style_influence / weirdness / exclude_styles)
+# の suno-prompts.json への wire
+#
+# 採用方針 (plan.md A 案): JSON への反映は **channel override (config/skills/suno.yaml) に
+# 明示設定されたキーのみ**。config.default.yaml 同梱の既定値 (style_influence: 85 /
+# exclude_styles リスト) は JSON には載せない (= 要件2「何も足さない既存 collection は 3 キー
+# ちょうど」を満たすため)。MD 出力は従来どおり merged 値 (既定 85) を表示する。
+#
+# 【要レビュー】product owner が B 案 (同梱既定の暗黙 auto-flow) を意図する場合、本セクションの
+# テストは設計やり直しが必要 (特に backward-compat の exact-3-keys テスト)。
+# ---------------------------------------------------------------------------
+
+
+def test_build_prompt_entries_includes_style_influence_from_channel_override(channel_dir, tmp_path):
+    """要件1: Given channel override に style_influence: 85
+    When build_prompt_entries を呼ぶ
+    Then entry に "style_influence": 85 (int) が含まれる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=85)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["style_influence"] == 85
+    assert isinstance(entries[0]["style_influence"], int)
+
+
+def test_build_prompt_entries_includes_weirdness_from_channel_override(channel_dir, tmp_path):
+    """要件1: Given channel override に weirdness: 30
+    When build_prompt_entries を呼ぶ
+    Then entry に "weirdness": 30 (int) が含まれる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", weirdness=30)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["weirdness"] == 30
+    assert isinstance(entries[0]["weirdness"], int)
+
+
+def test_build_prompt_entries_includes_exclude_styles_from_channel_override(channel_dir, tmp_path):
+    """要件1: Given channel override に exclude_styles: "hyperpop, edm"
+    When build_prompt_entries を呼ぶ
+    Then entry に "exclude_styles": "hyperpop, edm" (str) が含まれる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="hyperpop, edm")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["exclude_styles"] == "hyperpop, edm"
+    assert isinstance(entries[0]["exclude_styles"], str)
+
+
+def test_build_prompt_entries_includes_all_three_advanced_fields(channel_dir, tmp_path):
+    """要件6: 新規 3 フィールドを全て含む test ケース 1 件。
+
+    Given channel override に style_influence / weirdness / exclude_styles 全て設定
+    When build_prompt_entries を呼ぶ
+    Then base 3 キーに加え 3 フィールドが正しい値で載る (合計 6 キーちょうど)。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_influence=85,
+        weirdness=30,
+        exclude_styles="hyperpop, edm",
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+    entry = entries[0]
+
+    assert {"name", "style", "lyrics"} <= set(entry)
+    assert entry["style_influence"] == 85
+    assert entry["weirdness"] == 30
+    assert entry["exclude_styles"] == "hyperpop, edm"
+    assert set(entry) == {"name", "style", "lyrics", "style_influence", "weirdness", "exclude_styles"}
+
+
+def test_build_prompt_entries_includes_zero_valued_sliders(channel_dir, tmp_path):
+    """境界値: Given channel override に style_influence: 0 / weirdness: 0
+    When build_prompt_entries を呼ぶ
+    Then 0 は falsy だが有効値なので両方とも entry に載る。
+
+    `if value is not None` でなく `if value:` でガードすると 0 が脱落する典型バグの回帰ガード。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=0, weirdness=0)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["style_influence"] == 0
+    assert entries[0]["weirdness"] == 0
+
+
+def test_build_prompt_entries_omits_advanced_fields_without_channel_override(channel_dir, tmp_path):
+    """要件2 + A 案の核心: Given channel override が genre_line のみ (More Options 無し) の既存 collection
+    When build_prompt_entries を呼ぶ
+    Then name/style/lyrics の 3 キーちょうど。
+
+    config.default.yaml の style_influence: 85 / exclude_styles リストは merged config に存在するが、
+    A 案では JSON に **載せない** (channel override に明示されたキーのみ wire する)。
+    この test が A 案 (明示 gating) と B 案 (既定の暗黙 auto-flow) を機械的に区別し、後方互換を pin する。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert set(entries[0]) == {"name", "style", "lyrics"}
+    assert "style_influence" not in entries[0]
+    assert "weirdness" not in entries[0]
+    assert "exclude_styles" not in entries[0]
+
+
+def test_build_prompt_entries_omits_advanced_fields_when_no_override_file(channel_dir, tmp_path):
+    """要件2 + A 案: Given channel に suno.yaml override ファイルが無い
+    When build_prompt_entries を呼ぶ
+    Then name/style/lyrics の 3 キーちょうど。
+
+    override ファイル不在 → load_channel_override は {} → default.yaml の既定 style_influence: 85 /
+    exclude_styles は JSON に載らない。
+    """
+    # suno.yaml を書かない (channel_dir フィクスチャは config/skills ディレクトリのみ作る)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert set(entries[0]) == {"name", "style", "lyrics"}
+
+
+def test_md_shows_default_style_influence_but_json_omits_it(channel_dir, tmp_path):
+    """A 案の MD/JSON 非対称を pin する。
+
+    Given channel override が genre_line のみ (advanced 無し)
+    When MD と JSON を生成
+    Then MD は merged の Style Influence (default 85%) を表示するが、JSON entry は
+         style_influence キーを持たない (既存 MD 出力は無改修)。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "| Style Influence | 85% |" in md
+    assert "style_influence" not in entries[0]
+
+
+def test_channel_override_style_influence_flows_to_both_md_and_json(channel_dir, tmp_path):
+    """Given channel override に style_influence: 70
+    When MD と JSON を生成
+    Then MD は 70% を表示し、JSON entry も "style_influence": 70 を持つ (override は両方に効く)。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=70)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "| Style Influence | 70% |" in md
+    assert entries[0]["style_influence"] == 70
+
+
+def test_advanced_fields_apply_to_every_entry_collection_scope(channel_dir, tmp_path):
+    """Given multi-scene pattern + channel override の weirdness
+    When build_prompt_entries を呼ぶ
+    Then 全 entry に同じ weirdness が載る (3 値は collection スコープで全 entry 共通)。
+    """
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", weirdness=40)
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert all(e["weirdness"] == 40 for e in entries)
+
+
+def test_main_json_output_includes_advanced_fields_when_overridden(channel_dir, tmp_path, monkeypatch):
+    """Given channel override に 3 フィールド + main 実行
+    When suno-prompts.json を json.loads
+    Then 配信される JSON entry に 3 フィールドが含まれる (end-to-end の wire 検証)。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_influence=85,
+        weirdness=30,
+        exclude_styles="hyperpop, edm",
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    main()
+
+    data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
+    assert data[0]["style_influence"] == 85
+    assert data[0]["weirdness"] == 30
+    assert data[0]["exclude_styles"] == "hyperpop, edm"

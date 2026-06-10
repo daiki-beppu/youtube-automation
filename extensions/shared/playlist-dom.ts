@@ -1,0 +1,324 @@
+// 生成完了後の clip 一括 playlist 追加フロー (Cmd+P) に使う DOM 操作群 (#854)。
+// order.md 実機 DOM 検証 (Step 0) で確定したセレクタ・操作仕様をこの 1 箇所に集約する
+// （Suno の DOM は変わりうるため、壊れたら README / order.md を参照して更新する）。
+// Style/Lyrics 注入系 (shared/dom.ts) とは責務が異なるため別モジュールに分ける。
+import { setNativeValue, sleep } from "./dom";
+import { isVisible } from "./visibility";
+
+/**
+ * clip list のスクロールコンテナ (#881)。配下に（Emotion の中間ラッパ div を挟んで）
+ * per-clip 要素が並び、各 clip が `.multi-select-button` を 1 つ内包する。
+ *
+ * Suno は `data-testid="clip-row"` を完全廃止したため、attribute 識別を捨て、
+ * 安定して残っているこのコンテナ class + 配下の `.multi-select-button` 構造で row を判定する
+ * （Emotion の hash 揺れする class には依存しない）。壊れたら order.md / README を参照して更新する。
+ */
+export const CLIP_LIST_SCROLLER_SELECTOR = ".clip-browser-list-scroller";
+/** 各 clip が 1 つ内包する multi-select ボタンのラッパ。clip row の構造シグナル兼 row 導出の基点 (#881)。 */
+const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
+/** 未選択の clip 選択ボタン。click すると aria-label が "Deselect clip" に切り替わる（= 冪等）。 */
+export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
+/** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
+export const DESELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Deselect clip"]`;
+/** Add to Playlist dialog 内の playlist 名入力欄。 */
+export const PLAYLIST_NAME_INPUT_SELECTOR =
+  'input[placeholder="Playlist Name"]';
+
+/** Add to Playlist dialog の見出しテキスト（React Aria auto-generated ID には依らず text content で判定）。 */
+const PLAYLIST_DIALOG_HEADING = "Add to Playlist";
+/** 新規 playlist 作成ボタンのラベル（case-insensitive substring match）。 */
+const CREATE_PLAYLIST_BUTTON_TEXT = "create playlist";
+/** Cmd+P 発火後に dialog 出現を待つ poll 間隔と上限 (ms)。 */
+const DIALOG_OPEN_POLL_MS = 100;
+const DIALOG_OPEN_TIMEOUT_MS = 5000;
+/** Create Playlist click 後に新規 playlist row が dialog 内 list に現れるのを待つ poll 間隔と上限 (ms)。 */
+const PLAYLIST_ROW_APPEAR_POLL_MS = 100;
+const PLAYLIST_ROW_APPEAR_TIMEOUT_MS = 5000;
+/** multi-select click 後、対象 row が selected 状態（aria-label="Deselect clip"）へ遷移したかを verify する poll 間隔と上限 (ms)。 */
+const CLIP_SELECT_VERIFY_POLL_MS = 50;
+const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
+
+/**
+ * 可視な Add to Playlist dialog を 1 つ探す（OneTrust cookie consent dialog 除外フィルタ込み）。
+ * 見つからなければ null。order.md: cookie dialog は id^="ot-" または aria-label が /privacy/i で除外する。
+ */
+function findPlaylistDialog(): HTMLElement | null {
+  const dialogs = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="dialog"]'),
+  );
+  return (
+    dialogs.find((dialog) => {
+      if (!isVisible(dialog)) {
+        return false;
+      }
+      if (dialog.id.startsWith("ot-")) {
+        return false;
+      }
+      if (/privacy/i.test(dialog.getAttribute("aria-label") ?? "")) {
+        return false;
+      }
+      return (dialog.textContent ?? "").includes(PLAYLIST_DIALOG_HEADING);
+    }) ?? null
+  );
+}
+
+/** clip row が DOM 上に存在しないことが確定したときの fail-loud メッセージ (#881)。 */
+const CLIP_ROW_NOT_FOUND_MESSAGE =
+  "clip row が見つかりません。Suno の UI 変更の可能性があります。";
+
+/**
+ * clip row を DOM 順（= 直近生成が先頭）で先頭から count 件取得する (#881)。
+ *
+ * row は **multi-select ボタンを基点に per-clip 粒度で導出する**。
+ * `.clip-browser-list-scroller` 配下の Select/Deselect ボタンを全件取得し、各ボタンの
+ * `closest('.multi-select-button')?.parentElement`（= その clip の row 要素）を DOM 順で
+ * 重複排除しながら収集する。生成中 / 完了は区別しない（playlist 追加は未完了 clip でも可能で、
+ * 生成完了後に自動反映されるため status は問わない）。strict isVisible() で非可視 row を除外する。
+ *
+ * `:scope > div`（scroller 直下 div を row とする素朴な実装）は採らない: 実機の
+ * `scroller > 中間ラッパ div > per-clip div ...`（order.md L26）構造下では中間ラッパ 1 件に
+ * 潰れ、全 clip が 1 row に collapse して `multiSelectClips` が先頭 1 ボタンしか click できない。
+ * ボタン基点の祖先導出はネスト深度・Emotion hash 非依存で per-clip 粒度を保証する。
+ *
+ * fail-loud (#881): コンテナ不在、または row 0 件のいずれでも即 throw する。
+ * 空配列を返すと後段 `multiSelectClips([])` が `0 >= 0` で silent resolve し、
+ * 真因（clip row selector の廃止）が Add to Playlist dialog timeout という代理症状でしか
+ * 顕在化しなくなるため、検出境界で UI 変更を fail-loud にする。
+ */
+export function selectRecentClips(count: number): HTMLElement[] {
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  const buttons = scroller.querySelectorAll<HTMLElement>(
+    `${SELECT_CLIP_BUTTON_SELECTOR}, ${DESELECT_CLIP_BUTTON_SELECTOR}`,
+  );
+  const seen = new Set<HTMLElement>();
+  const rows: HTMLElement[] = [];
+  for (const button of buttons) {
+    const row = button.closest(MULTI_SELECT_BUTTON_SELECTOR)?.parentElement;
+    if (!row || seen.has(row)) {
+      continue;
+    }
+    seen.add(row);
+    if (isVisible(row)) {
+      rows.push(row);
+    }
+  }
+
+  if (rows.length === 0) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+  return rows.slice(0, count);
+}
+
+/**
+ * 各 clip-row の未選択 Select clip ボタンを click し、対象 row 全てが selected 状態
+ * （aria-label="Deselect clip"）へ遷移したことを poll で verify する (#854, #878)。
+ *
+ * silent fail 撤廃 (#878): 旧実装は `querySelector(...)?.click()` で
+ *   - Select clip ボタン不在 → silent skip
+ *   - click が Suno handler に届かず未選択のまま → 検知なし
+ * を許し、0 件選択でも void resolve していた。これが後段の Add to Playlist dialog 検出
+ * timeout という代理症状で初めて顕在化していたため、選択側で fail-loud にする。
+ *
+ * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は selectRecentClips が
+ *   先に fail-loud throw する前提。万一 0 件で到達したら `0 >= 0` で silent resolve させない）(#881)。
+ * - 既に選択済み（Deselect clip 在）の row は idempotent に skip（click しない）。
+ * - Select clip ボタンが無く、かつ未選択（Deselect も無い）row は UI 変更とみなし即 throw。
+ * - 全 click 後、対象 row が deadline 内に Deselect clip へ遷移しなければ throw。
+ */
+export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
+  if (rows.length === 0) {
+    throw new Error(
+      "multiSelectClips に空の rows が渡されました（内部不変条件違反）。",
+    );
+  }
+  for (const row of rows) {
+    if (row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR)) {
+      continue;
+    }
+    const button = row.querySelector<HTMLButtonElement>(
+      SELECT_CLIP_BUTTON_SELECTOR,
+    );
+    if (!button) {
+      throw new Error(
+        "Select clip button が見つかりません。Suno の UI 変更の可能性があります。",
+      );
+    }
+    button.click();
+  }
+
+  const deadline = Date.now() + CLIP_SELECT_VERIFY_TIMEOUT_MS;
+  for (;;) {
+    const selected = rows.filter((row) =>
+      row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR),
+    ).length;
+    if (selected >= rows.length) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`,
+      );
+    }
+    await sleep(CLIP_SELECT_VERIFY_POLL_MS);
+  }
+}
+
+/**
+ * Cmd+P (Mac=metaKey / 他=ctrlKey) を document に dispatch して Add to Playlist dialog を開き、
+ * 出現した dialog を返す (#854)。cookie consent dialog は findPlaylistDialog の除外フィルタで拾わない。
+ * 上限まで待っても出なければ throw（silent に続行しない）。
+ */
+export async function openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement> {
+  const isMac = navigator.platform.toLowerCase().includes("mac");
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "p",
+      metaKey: isMac,
+      ctrlKey: !isMac,
+      bubbles: true,
+    }),
+  );
+
+  const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
+  for (;;) {
+    const dialog = findPlaylistDialog();
+    if (dialog) {
+      return dialog;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        "Add to Playlist dialog を検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。",
+      );
+    }
+    await sleep(DIALOG_OPEN_POLL_MS);
+  }
+}
+
+/**
+ * dialog 内の playlist 名入力欄へ name を注入し、Create Playlist ボタンを click する (#854)。
+ * 入力欄 / ボタンが dialog scope に無ければ throw（silent skip しない）。注入は #807 の setNativeValue。
+ */
+export async function fillPlaylistNameAndCreate(
+  dialog: HTMLElement,
+  name: string,
+): Promise<void> {
+  const input = dialog.querySelector<HTMLInputElement>(
+    PLAYLIST_NAME_INPUT_SELECTOR,
+  );
+  if (!input) {
+    throw new Error("Playlist Name 入力欄が dialog 内に見つかりません。");
+  }
+  setNativeValue(input, name);
+
+  const create = Array.from(
+    dialog.querySelectorAll<HTMLButtonElement>("button"),
+  ).find((btn) =>
+    (btn.textContent ?? "").toLowerCase().includes(CREATE_PLAYLIST_BUTTON_TEXT),
+  );
+  if (!create) {
+    throw new Error("Create Playlist ボタンが dialog 内に見つかりません。");
+  }
+  create.click();
+}
+
+/**
+ * dialog 内 playlist row の label（playlist 名 text を持つ末端 `<div>`）を識別する CSS セレクタ。
+ *
+ * 実機 Suno dialog row 構造:
+ *   <div>                                  ← row wrapper (React onClick handler、role/aria 不可視)
+ *     <img />
+ *     <div class="ml-4 font-sans">{name}</div>  ← この div を狙う
+ *   </div>
+ *
+ * playlist 名は attribute (aria-label / data-*) ではなく **text content のみ** で識別される。
+ * `ml-4 font-sans` は Tailwind utility だが現状で最も安定したシグナル（壊れたら #859 のように
+ * 再 snippet 取得して定数を直す）。click は label に直接行い、bubbling で row wrapper の React
+ * onClick handler に届く想定。
+ */
+export const PLAYLIST_ROW_LABEL_SELECTOR = "div.ml-4.font-sans";
+
+/**
+ * dialog 内の playlist 一覧から name と完全一致する label を DOM 順で全て返す (#NEW)。
+ *
+ * - text は **完全一致**（前方一致だと "DF | X" と "DF | X2" を取り違える）。
+ * - 同名 row 複数時は呼び出し側が DOM 順で最後 = 最新を選ぶ想定で配列で返す
+ *   （Suno は Create Playlist で重複作成を許容するため、テスト残骸の古い同名 row が並ぶことがある）。
+ */
+function findPlaylistRowsByName(
+  dialog: HTMLElement,
+  name: string,
+): HTMLElement[] {
+  return Array.from(
+    dialog.querySelectorAll<HTMLElement>(PLAYLIST_ROW_LABEL_SELECTOR),
+  ).filter((el) => (el.textContent ?? "").trim() === name);
+}
+
+/**
+ * Create Playlist click 直後、dialog 内 list に新規 playlist row が現れるのを poll で待ち、
+ * その row を click して選択中 clip を新規 playlist に追加する (#NEW)。
+ *
+ * Suno の Cmd+P dialog 仕様: 「Create Playlist」ボタンは新規 playlist を **空で作成するのみ**で、
+ * 選択中 clip は追加されない。clip を入れるには、作成直後に dialog 内 list に表示される
+ * 該当 playlist row を改めて click する必要がある。
+ *
+ * 同名 playlist が複数並ぶ場合（Suno は重複名を許容）、DOM 順で **最後の row**（= 直前に作成した最新）
+ * を click する。これにより、前回テスト等で残っていた古い同名 playlist には触らない。
+ *
+ * 期限内に row が出現しなければ throw（silent skip しない）。
+ */
+export async function clickPlaylistRowByName(
+  dialog: HTMLElement,
+  name: string,
+): Promise<void> {
+  const deadline = Date.now() + PLAYLIST_ROW_APPEAR_TIMEOUT_MS;
+  for (;;) {
+    const rows = findPlaylistRowsByName(dialog, name);
+    if (rows.length > 0) {
+      rows[rows.length - 1].click();
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Playlist "${name}" 行が dialog 内 list に出現しませんでした。Suno の UI 変更の可能性があります。`,
+      );
+    }
+    await sleep(PLAYLIST_ROW_APPEAR_POLL_MS);
+  }
+}
+
+export interface WaitForPlaylistDialogCloseOptions {
+  /** 中断フラグ。true を返した時点で待機を打ち切り resolve する（throw しない、停止対応）。 */
+  isAborted: () => boolean;
+  pollIntervalMs: number;
+  timeoutMs: number;
+}
+
+/**
+ * Add to Playlist dialog の消滅（= playlist 作成完了）まで poll で待機する (#854)。
+ *   - dialog が無くなったら resolve
+ *   - isAborted() が true なら即 resolve（throw しない、停止対応）
+ *   - deadline 超過で timeout throw
+ */
+export async function waitForPlaylistDialogClose(
+  options: WaitForPlaylistDialogCloseOptions,
+): Promise<void> {
+  const deadline = Date.now() + options.timeoutMs;
+  for (;;) {
+    if (options.isAborted()) {
+      return;
+    }
+    if (!findPlaylistDialog()) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error("Add to Playlist dialog が閉じませんでした。");
+    }
+    await sleep(options.pollIntervalMs);
+  }
+}

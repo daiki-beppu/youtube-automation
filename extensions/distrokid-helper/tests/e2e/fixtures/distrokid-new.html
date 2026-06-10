@@ -1,35 +1,198 @@
 <!doctype html>
 <!--
-  distrokid.com/new を模した最小モックフォーム。
-  実 DistroKid はログイン必須の第三者サイトで現地調査不能のため、
-  injector のセレクタ契約（name 属性ベース）と一致する属性を持つ要素を並べる。
-  実 DOM 確定後はセレクタマップと合わせて更新する（README の保守手順参照）。
+  distrokid.com/new（アルバムモード howmanysongs=2）を実機 DOM に基づいてミラーしたモック
+  （#877 で AI 開示部分を SweetAlert2 modal フローに再構築）。
+
+    - #artistName は type=hidden（/new に可視入力欄なし → 注入対象外、visibility で排除）
+    - #language / #genrePrimary / #genreSecondary は SELECT
+    - 曲タイトルは [name="title_<uuid>"]（DOM order で track を解決）
+    - songwriter は track 別 3 分割: songwriter_real_name_{first,middle,last}<N>（N=1-based）
+    - 曲アップロードは #js-track-upload-<N>（name="file"、1-indexed pre-mount）
+    - #albumTitleInput はアルバム時のみ存在（シングルモードでは無い）
+    - リリース日は #release-date-dp（name="releaseDate"、type=date）
+    - ジャケットは #artwork（name="artwork"、hidden file input）
+    - previouslyReleased は value="0"（いいえ）を checked（新規リリース前提）
+    - AI 開示は track 単位の ai_gate radio（初期「いいえ」checked）。「はい」を click すると
+      SweetAlert2 ベースの modal (.ai-credits-swal-modal) が body に mount する（実 UI の挙動を模す）。
+      modal 内に歌詞 / 作曲 checkbox・録音範囲 radio (.distroAiRecordingScope)・partial 種別 radio・
+      アーティスト種別 radio (.distroAiArtistPersona)・apply-all (#ai-apply-all-1)・保存/キャンセル button を持つ。
+      「保存」で modal を unmount し、apply-all が入っていれば全 track の ai_gate「はい」を checked にする
+      （DistroKid 側の伝播を模す）。
 -->
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <title>DistroKid New Release (mock)</title>
+    <title>DistroKid New Release album mock</title>
   </head>
   <body>
     <form id="release-form">
-      <input name="artist_name" type="text" />
-      <input name="language" type="text" />
-      <input name="main_genre" type="text" />
-      <input name="songwriter" type="text" />
-      <input name="apple_music_credit" type="text" />
-      <input name="track_type" type="text" />
-      <input name="album_title" type="text" />
-      <input name="release_date" type="text" />
-      <input name="song_file" type="file" />
-      <input name="cover_file" type="file" />
+      <!-- アカウント設定で事前登録される暗黙値。/new には hidden のみ（注入対象外）。 -->
+      <input id="artistName" name="artistName" type="hidden" value="City Nights" />
+
+      <select id="language" name="language">
+        <option value="">--</option>
+        <option value="ja">Japanese</option>
+        <option value="en">English</option>
+      </select>
+
+      <select id="genrePrimary" name="genre1">
+        <option value="">--</option>
+        <option value="Electronic">Electronic</option>
+        <option value="Pop">Pop</option>
+      </select>
+
+      <select id="genreSecondary" name="genre2">
+        <option value="">--</option>
+        <option value="House">House</option>
+      </select>
+
+      <!-- アルバム時のみ存在。シングルモードのモックでは削除する。 -->
+      <input id="albumTitleInput" name="albumtitle" type="text" />
+
+      <input id="release-date-dp" name="releaseDate" type="date" />
+
+      <!-- ジャケット（hidden file input） -->
+      <input id="artwork" name="artwork" type="file" />
+
+      <!-- Track 1 -->
+      <fieldset data-track="1">
+        <input name="title_uuid-track-1" type="text" />
+        <input name="songwriter_real_name_first1" type="text" />
+        <input name="songwriter_real_name_middle1" type="text" />
+        <input name="songwriter_real_name_last1" type="text" />
+        <input id="js-track-upload-1" name="file" type="file" />
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-1" value="0" checked />
+          いいえ</label
+        >
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-1" value="1" />
+          はい</label
+        >
+        <!-- AI 開示 gate (「はい」で swal2 modal が mount する #877) -->
+        <div class="ai-credits-gate-row">
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-1" value="0" checked />
+            いいえ</label
+          >
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-1" value="1" /> はい</label
+          >
+        </div>
+      </fieldset>
+
+      <!-- Track 2 -->
+      <fieldset data-track="2">
+        <input name="title_uuid-track-2" type="text" />
+        <input name="songwriter_real_name_first2" type="text" />
+        <input name="songwriter_real_name_middle2" type="text" />
+        <input name="songwriter_real_name_last2" type="text" />
+        <input id="js-track-upload-2" name="file" type="file" />
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-2" value="0" checked />
+          いいえ</label
+        >
+        <label
+          ><input type="radio" name="previouslyReleased_uuid-track-2" value="1" />
+          はい</label
+        >
+        <!-- AI 開示 gate (「はい」で swal2 modal が mount する #877) -->
+        <div class="ai-credits-gate-row">
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-2" value="0" checked />
+            いいえ</label
+          >
+          <label
+            ><input type="radio" name="ai_gate_uuid-track-2" value="1" /> はい</label
+          >
+        </div>
+      </fieldset>
+
       <button id="continue" type="button">続ける</button>
     </form>
+
     <script>
       // 「続ける」が拡張から押されていないことを e2e で検証するためのフラグ。
       window.__continueClicked = false;
       document.getElementById("continue").addEventListener("click", () => {
         window.__continueClicked = true;
       });
+
+      // ai_gate「はい」click 時に SweetAlert2 modal を mount する（実 UI の展開挙動を模す）。
+      // modal は 1 つだけ（既に開いていれば再 mount しない）。uuid は開いた track のもの。
+      function buildAiModal(uuid) {
+        const modal = document.createElement("div");
+        modal.className = "ai-credits-swal-modal";
+        modal.setAttribute("role", "dialog");
+        modal.innerHTML = [
+          '<div class="swal2-content"><div class="ai-credits-swal-html">',
+          '<div class="ai-credits-swal-shell">',
+          '<div id="ai-details-1" class="ai-credits-details">',
+          '<label><input type="checkbox" class="distroAiLyrics" name="ai_lyrics_' +
+            uuid +
+            '" /> 歌詞</label>',
+          '<label><input type="checkbox" class="distroAiMusic" name="ai_music_' +
+            uuid +
+            '" /> 作曲</label>',
+          '<label><input type="radio" class="distroAiRecordingScope" name="ai_recording_scope_' +
+            uuid +
+            '" value="full" /> 音声すべて</label>',
+          '<label><input type="radio" class="distroAiRecordingScope" name="ai_recording_scope_' +
+            uuid +
+            '" value="partial" /> 音声の一部</label>',
+          '<label><input type="radio" class="distroAiPartialAudioType" name="ai_partial_audio_type_' +
+            uuid +
+            '" value="vocals" /> ボーカル</label>',
+          '<label><input type="radio" class="distroAiPartialAudioType" name="ai_partial_audio_type_' +
+            uuid +
+            '" value="instruments" /> 楽器</label>',
+          '<div id="ai-artist-questions-1">',
+          '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
+            uuid +
+            '_0" value="0" /> 人間</label>',
+          '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
+            uuid +
+            '_0" value="1" /> AIペルソナ</label>',
+          "</div>",
+          '<label><input type="checkbox" id="ai-apply-all-1" /> すべての曲に適用</label>',
+          "</div></div></div></div>",
+          '<div class="swal2-actions">',
+          '<button type="button" class="swal2-cancel ai-modal-btn-cancel">キャンセル</button>',
+          '<button type="button" class="swal2-confirm ai-modal-btn-save">保存する</button>',
+          "</div>",
+        ].join("");
+        // 保存: modal を閉じ、apply-all なら全 track の ai_gate「はい」を checked にする。
+        modal
+          .querySelector(".ai-modal-btn-save")
+          .addEventListener("click", () => {
+            const applyAll = modal.querySelector("#ai-apply-all-1").checked;
+            if (applyAll) {
+              document
+                .querySelectorAll(
+                  'input[type="radio"][name^="ai_gate_"][value="1"]',
+                )
+                .forEach((yes) => {
+                  yes.checked = true;
+                });
+            }
+            modal.remove();
+          });
+        modal
+          .querySelector(".ai-modal-btn-cancel")
+          .addEventListener("click", () => modal.remove());
+        return modal;
+      }
+
+      document
+        .querySelectorAll('input[type="radio"][name^="ai_gate_"][value="1"]')
+        .forEach((radio) => {
+          radio.addEventListener("click", (e) => {
+            if (document.querySelector(".ai-credits-swal-modal")) return;
+            const name = e.target.getAttribute("name"); // ai_gate_<uuid>
+            const uuid = name.slice("ai_gate_".length);
+            document.body.appendChild(buildAiModal(uuid));
+          });
+        });
     </script>
   </body>
 </html>

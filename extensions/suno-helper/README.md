@@ -53,7 +53,7 @@ pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install c
 
 ## CORS
 
-サーバー（`yt-collection-serve`）は CORS を `chrome-extension://` オリジンのみ許可する。`--allow-origin chrome-extension://<id>` で特定拡張 ID に固定もできる。判定ロジックは `../shared/origin.ts`（サーバー側 `collection_serve.py::is_origin_allowed` と対の契約）。
+サーバー（`yt-collection-serve`）は CORS をデフォルトで `chrome-extension://` オリジンと helper サイト web origin（`https://suno.com` / `https://www.suno.com`）に許可する。overlay 化（#892）後は content script の fetch が `https://suno.com` origin になるため、引数なし起動でそのまま通る（#896）。`--allow-origin <origin>` で単一 origin（拡張 ID や特定 web origin）の完全一致に固定もできる。判定ロジックは `../shared/origin.ts`（サーバー側 `collection_serve.py::is_origin_allowed` と対の契約）。
 
 ## スコープ外
 

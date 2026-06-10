@@ -4,7 +4,9 @@
 `yt-collection-serve` の `/distrokid/release.json` エンドポイントが静的プロファイルとして
 参照する。`enabled == false`（既定）のチャンネルでは `/distrokid/*` 系が 404 を返す。
 
-`profile` のフィールドは distrokid.com/new のリリース登録フォーム項目に対応する。
+`profile` のフィールドは distrokid.com/new のリリース登録フォーム項目（実 DOM 検証済み・#813）
+に対応する。PR #803 の想像 schema（フラット 6 文字列）を撤廃し、songwriter は氏名 3 分割の
+nested 構造に、AI 開示は `ai_disclosure` に再設計した。
 """
 
 from __future__ import annotations
@@ -13,34 +15,74 @@ from dataclasses import dataclass, field
 
 # distrokid.enabled == True のとき profile に必須となるフィールド（条件付き必須）。
 # loader の条件付きバリデーションと dataclass フィールドの SSOT。
+# songwriter / ai_disclosure は任意（distrokid.com/new で省略可能）。
 REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
-    "artist_name",
     "language",
     "main_genre",
-    "songwriter",
-    "apple_music_credit",
-    "track_type",
 )
+
+
+@dataclass(frozen=True)
+class SongwriterName:
+    """作曲者の本名（distrokid.com/new は first/middle/last の 3 欄に分割）.
+
+    - `first`: 名（songwriter_real_name_first<N>）
+    - `last`: 姓（songwriter_real_name_last<N>）
+    - `middle`: ミドルネーム（songwriter_real_name_middle<N>、任意）
+    """
+
+    first: str
+    last: str
+    middle: str | None = None
+
+
+@dataclass(frozen=True)
+class AiDisclosure:
+    """AI 開示（distrokid.com/new の AI 使用開示）.
+
+    実 DOM 再検証（#877）で判明した構造: AI 開示は inline 展開ではなく SweetAlert2 ベースの
+    modal（`.ai-credits-swal-modal`）で開く。「はい/いいえ」の `ai_gate_<uuid>` radio で「はい」を
+    選ぶと modal が mount し、modal 内で以下を設定して「保存」する。modal の
+    「Apply these selections to all songs on this release」checkbox を入れると全 track に伝播する。
+
+    - `enabled`: 「はい (AI 使用)」radio を選択して modal を開くか
+    - `lyrics`: 歌詞 AI checkbox（`ai_lyrics_<uuid>` / `.distroAiLyrics`）を check するか
+    - `music`: 作曲 AI checkbox（`ai_music_<uuid>` / `.distroAiMusic`）を check するか
+    - `recording_scope`: 録音物の AI 範囲（`.distroAiRecordingScope`）。
+      `"full"`（音声すべて）| `"partial"`（音声の一部）
+    - `partial_audio_type`: `recording_scope="partial"` 時の種別
+      （`"vocals"` | `"instruments"`）。`"full"` の場合は `None`
+    - `artist_persona`: アーティストが AI ペルソナか（`.distroAiArtistPersona`）。
+      `True` = AI ペルソナ（value=1）/ `False` = 人間アーティスト（value=0）。
+      Suno 等の生成チャンネルは `True` が運用上の正解
+    - `apply_to_all`: modal の Apply-to-all checkbox を入れて全 track に伝播するか
+    """
+
+    enabled: bool = True
+    lyrics: bool = True
+    music: bool = True
+    recording_scope: str = "full"
+    partial_audio_type: str | None = None
+    artist_persona: bool = True
+    apply_to_all: bool = True
 
 
 @dataclass(frozen=True)
 class DistrokidProfile:
     """`distrokid.profile` セクション（distrokid.com/new フォーム項目に対応）.
 
-    - `artist_name`: アーティスト名
-    - `language`: メタデータ言語
-    - `main_genre`: メインジャンル
-    - `songwriter`: 作曲者の本名
-    - `apple_music_credit`: Apple Music 表示クレジット
-    - `track_type`: トラック種別（例: Instrumental）
+    - `language`: メタデータ言語（language SELECT の value）
+    - `main_genre`: メインジャンル（genrePrimary SELECT の value）
+    - `sub_genre`: サブジャンル（genreSecondary SELECT の value、任意）
+    - `songwriter`: 作曲者の本名（任意、省略時はトラック側で手入力）
+    - `ai_disclosure`: AI 開示モーダルの設定（既定は全 AI 開示）
     """
 
-    artist_name: str = ""
     language: str = ""
     main_genre: str = ""
-    songwriter: str = ""
-    apple_music_credit: str = ""
-    track_type: str = ""
+    sub_genre: str | None = None
+    songwriter: SongwriterName | None = None
+    ai_disclosure: AiDisclosure = field(default_factory=AiDisclosure)
 
 
 @dataclass(frozen=True)

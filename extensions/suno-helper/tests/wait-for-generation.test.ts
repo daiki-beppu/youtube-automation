@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GENERATE_TIMEOUT_MS, POLL_INTERVAL_MS, SETTLE_MS, waitForGeneration } from "../../shared/dom";
+import { addCaptchaIframe } from "./_helpers";
 
 const FAST_OPTIONS = { timeoutMs: 1000, pollIntervalMs: 10, settleMs: 10 } as const;
 
@@ -56,14 +57,35 @@ describe("waitForGeneration: 完了検知", () => {
 });
 
 describe("waitForGeneration: reCAPTCHA 検知", () => {
-  it("Given 待機中に reCAPTCHA 出現 When poll する Then throw する", async () => {
+  it("Given 待機中に可視 reCAPTCHA 出現 When poll する Then throw する", async () => {
     const btn = disabledButton();
-    document.body.innerHTML += '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>';
+    addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
 
     const pending = waitForGeneration(btn, { isAborted: () => false, ...FAST_OPTIONS });
     const expectation = expect(pending).rejects.toThrow(/reCAPTCHA/);
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs + FAST_OPTIONS.pollIntervalMs);
     await expectation;
+  });
+});
+
+describe("waitForGeneration: プリロード hCaptcha 誤検知の回帰ガード (#810)", () => {
+  it("Given 非表示プリロード hCaptcha が常駐 (visibility:hidden) When button が enabled に戻る Then 中断せず resolve する", async () => {
+    const btn = disabledButton();
+    // Suno は hCaptcha challenge UI をプリロード iframe として常駐させる。可視判定で弾けないと
+    // detectRecaptcha が常に true になり、生成完了待ち直後に誤って throw していた (#810)。
+    addCaptchaIframe({
+      src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
+      visibility: "hidden",
+      width: 300,
+      height: 150,
+    });
+
+    const pending = waitForGeneration(btn, { isAborted: () => false, ...FAST_OPTIONS });
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs);
+    btn.disabled = false; // 生成完了 = enabled 復帰
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs);
+
+    await expect(pending).resolves.toBeUndefined();
   });
 });
 
@@ -89,10 +111,11 @@ describe("waitForGeneration: 中断", () => {
   });
 });
 
-describe("shared/dom: タイミング定数 (旧 content.js:18-20 を保持)", () => {
-  it("Given 公開定数 When 値を読む Then 旧実装の既定値と一致する", () => {
+describe("shared/dom: タイミング定数", () => {
+  it("Given 公開定数 When 値を読む Then 規定値と一致する", () => {
     expect(GENERATE_TIMEOUT_MS).toBe(180000);
-    expect(POLL_INTERVAL_MS).toBe(1000);
+    // POLL_INTERVAL_MS は 1000→500 に短縮（停止反応性 + Generate 再 enable 検知向上）。
+    expect(POLL_INTERVAL_MS).toBe(500);
     expect(SETTLE_MS).toBe(1500);
   });
 });

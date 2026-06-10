@@ -32,7 +32,12 @@ from youtube_automation.scripts.distrokid_release import (
     build_release_payload,
     resolve_asset_path,
 )
-from youtube_automation.utils.config.distrokid import Distrokid, DistrokidProfile
+from youtube_automation.utils.config.distrokid import (
+    AiDisclosure,
+    Distrokid,
+    DistrokidProfile,
+    SongwriterName,
+)
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
@@ -42,13 +47,13 @@ _PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-png-bytes"
 
 
 def _profile() -> DistrokidProfile:
+    """#813 新 schema の profile（nested songwriter + ai_disclosure）."""
     return DistrokidProfile(
-        artist_name="City Nights",
-        language="English",
+        language="ja",
         main_genre="Electronic",
-        songwriter="Jane Doe",
-        apple_music_credit="Jane Doe",
-        track_type="Instrumental",
+        sub_genre="House",
+        songwriter=SongwriterName(first="Jane", last="Doe"),
+        ai_disclosure=AiDisclosure(),
     )
 
 
@@ -91,13 +96,21 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
 
     payload = build_release_payload(collection, distrokid)
 
+    # build_release_payload は asdict(profile) で nested dataclass を再帰的に dict 化する。
     assert payload["profile"] == {
-        "artist_name": "City Nights",
-        "language": "English",
+        "language": "ja",
         "main_genre": "Electronic",
-        "songwriter": "Jane Doe",
-        "apple_music_credit": "Jane Doe",
-        "track_type": "Instrumental",
+        "sub_genre": "House",
+        "songwriter": {"first": "Jane", "last": "Doe", "middle": None},
+        "ai_disclosure": {
+            "enabled": True,
+            "lyrics": True,
+            "music": True,
+            "recording_scope": "full",
+            "partial_audio_type": None,
+            "artist_persona": True,
+            "apply_to_all": True,
+        },
     }
     release = payload["release"]
     assert release["album_title"] == "city-nights"
@@ -311,10 +324,10 @@ def test_distrokid_release_sets_cors_header_for_extension_origin(serve, tmp_path
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
-def test_distrokid_release_omits_cors_header_for_web_origin(serve, tmp_path):
-    """Given enabled な distrokid + web オリジン
+def test_distrokid_release_sets_cors_header_for_distrokid_origin(serve, tmp_path):
+    """Given enabled な distrokid + distrokid.com の content script オリジン（#896）
     When `GET /distrokid/release.json`
-    Then CORS ヘッダを付けない（拡張のみ許可・同一ポリシー）。
+    Then デフォルト起動でも Access-Control-Allow-Origin がそのオリジンを echo する。
     """
     collection = _make_collection(tmp_path)
     distrokid = Distrokid(enabled=True, profile=_profile())
@@ -322,6 +335,23 @@ def test_distrokid_release_omits_cors_header_for_web_origin(serve, tmp_path):
     req = urllib.request.Request(
         f"{base}{DISTROKID_RELEASE_ROUTE}",
         headers={"Origin": "https://distrokid.com"},
+    )
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.headers.get("Access-Control-Allow-Origin") == "https://distrokid.com"
+
+
+def test_distrokid_release_omits_cors_header_for_unknown_origin(serve, tmp_path):
+    """Given enabled な distrokid + 許可リスト外の web オリジン
+    When `GET /distrokid/release.json`
+    Then CORS ヘッダを付けない（許可リスト外は拒否・同一ポリシー）。
+    """
+    collection = _make_collection(tmp_path)
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    base = serve(collection_dir=collection, distrokid=distrokid)
+    req = urllib.request.Request(
+        f"{base}{DISTROKID_RELEASE_ROUTE}",
+        headers={"Origin": "https://evil.com"},
     )
 
     with urllib.request.urlopen(req) as resp:

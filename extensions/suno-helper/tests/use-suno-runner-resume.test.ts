@@ -1,0 +1,159 @@
+// 1-click 自動再開 (#892 要件6) の range 構築ロジックの回帰テスト。
+//
+// 旧挙動: ResumeBanner「再開」は range UI を 1-based で prefill するだけで止まり、
+//         ユーザーが「連続実行」を再押下して初めて生成が走り出した（2 操作）。
+// 新挙動 (要件6): 「再開」1 クリックで run() まで自動実行する。React state は次レンダ反映で
+//         closure から読めないため、acceptResume は 0-based inclusive な RunRange を
+//         ローカルに構築して run({ range }) へ引数で渡す（order.md §2）。
+//
+// その「0-based RunRange 構築」を純関数 resumeRunRange へ抽出して tester surface とする
+// （@testing-library/react 未導入のため、フック本体ではなく純関数で担保する＝既存 plan §6 の推奨）。
+// 想定インターフェース（draft step で lib/resume-state.ts に追加すること。range SSOT に同居）:
+//   export function resumeRunRange(banner: ResumeBanner): RunRange
+//   // 失敗 entry (0-based failedIndex) から末尾 (total-1) まで。手動経路と同じ絶対 index を返す。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+import { resolveRunRange, resumeBannerRange, resumeRunRange } from "../lib/resume-state";
+import type { ResumeBanner } from "../lib/resume-state";
+
+function makeBanner(overrides: Partial<ResumeBanner> = {}): ResumeBanner {
+  return { failedIndex: 19, total: 24, ...overrides };
+}
+
+const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+
+describe("resumeRunRange: バナー承認 → 自動 run() に渡す 0-based inclusive range (要件6)", () => {
+  it("Given failedIndex=19, total=24 When 構築 Then 0-based inclusive {19, 23}（失敗 entry〜末尾）", () => {
+    expect(resumeRunRange(makeBanner({ failedIndex: 19, total: 24 }))).toEqual({ start: 19, end: 23 });
+  });
+
+  it("Given failedIndex=0 (先頭で失敗), total=3 When 構築 Then {0, 2}（全域を再実行）", () => {
+    expect(resumeRunRange(makeBanner({ failedIndex: 0, total: 3 }))).toEqual({ start: 0, end: 2 });
+  });
+
+  it("Given failedIndex=total-1 (末尾で失敗), total=3 When 構築 Then 単一要素 {2, 2}", () => {
+    expect(resumeRunRange(makeBanner({ failedIndex: 2, total: 3 }))).toEqual({ start: 2, end: 2 });
+  });
+
+  it("Given total=1 の単一 entry が先頭で失敗 When 構築 Then {0, 0}", () => {
+    expect(resumeRunRange(makeBanner({ failedIndex: 0, total: 1 }))).toEqual({ start: 0, end: 0 });
+  });
+});
+
+// 要件6 の核心契約: 1-click 自動再開（resumeRunRange を直接 run へ）と、
+// 旧来の「prefill (resumeBannerRange) → run ボタン (resolveRunRange)」経路が
+// 同一の絶対 index を生むこと。新経路が UI round-trip を飛ばしても挙動が一致する保証。
+describe("整合性: 自動再開 range が prefill→手動 run 経路と同一 index になる (要件6)", () => {
+  it("Given failedIndex=19/total=24 When 両経路で range 算出 Then 0-based {19,23} で一致する", () => {
+    const banner = makeBanner({ failedIndex: 19, total: 24 });
+
+    const auto = resumeRunRange(banner); // 1-click 経路: 直接 0-based
+    const prefilled = resumeBannerRange(banner); // 旧経路: 1-based UI prefill
+    const viaUi = resolveRunRange(prefilled.start, prefilled.end, banner.total); // 旧経路: run で 0-based 化
+
+    expect(auto).toEqual(viaUi);
+    expect(auto).toEqual({ start: 19, end: 23 });
+  });
+
+  it("Given failedIndex=0/total=3 When 両経路で range 算出 Then 一致する（先頭失敗の境界）", () => {
+    const banner = makeBanner({ failedIndex: 0, total: 3 });
+
+    const auto = resumeRunRange(banner);
+    const prefilled = resumeBannerRange(banner);
+    const viaUi = resolveRunRange(prefilled.start, prefilled.end, banner.total);
+
+    expect(auto).toEqual(viaUi);
+  });
+
+  it("Given failedIndex=2/total=3 When 両経路で range 算出 Then 単一要素で一致する（末尾失敗の境界）", () => {
+    const banner = makeBanner({ failedIndex: 2, total: 3 });
+
+    const auto = resumeRunRange(banner);
+    const prefilled = resumeBannerRange(banner);
+    const viaUi = resolveRunRange(prefilled.start, prefilled.end, banner.total);
+
+    expect(auto).toEqual(viaUi);
+    expect(auto).toEqual({ start: 2, end: 2 });
+  });
+});
+
+// #898: playlist phase で STOPPED したときは entry が全件 done のため、保存する failedIndex は
+// `total`（最終 entry の次）になる（plan 7b）。その値で再開すると entry ループは空回しし、
+// playlist 追加のみが再実行される。resumeRunRange は無改修でこの境界を扱う（要件6）ことを担保する。
+describe("resumeRunRange: playlist phase 停止 (failedIndex=total) は空 entry range を返す (#898 要件6/7b)", () => {
+  it("Given failedIndex=total=8 (全 entry done 後の playlist 停止) When 構築 Then {8, 7}（start>end の空 entry range）", () => {
+    // start(8) > end(7) なので runAll の for ループは 1 度も回らず、playlist phase だけが再実行される。
+    expect(resumeRunRange(makeBanner({ failedIndex: 8, total: 8 }))).toEqual({ start: 8, end: 7 });
+  });
+
+  it("Given failedIndex=total=1 (単一 entry 完了後の playlist 停止) When 構築 Then {1, 0}（空 entry range）", () => {
+    expect(resumeRunRange(makeBanner({ failedIndex: 1, total: 1 }))).toEqual({ start: 1, end: 0 });
+  });
+
+  it("Given playlist 停止の failedIndex=total When start と end を比べる Then start > end（entry を 1 件も再生成しない）", () => {
+    const range = resumeRunRange(makeBanner({ failedIndex: 5, total: 5 }));
+
+    expect(range.start).toBeGreaterThan(range.end);
+  });
+});
+
+// #898: runAll は defineContentScript 内の closure で export を持たず unit import できないため、
+// content.ts をソーステキストとして読み、STOPPED 5 箇所すべてで resume save が走る構造を機械担保する
+// （ssot-dedup.test.ts の read() 手法を雛形）。実装前は失敗し、draft step の実装後に pass する。
+describe("content.ts: STOPPED phase は resume state を保存する (#898 要件1/2/3/7)", () => {
+  const contentSource = read("../entrypoints/content.ts");
+
+  it("Given content.ts When PHASE.STOPPED emit を数える Then 正確に 5 箇所（漏れ・重複なし, 要件2）", () => {
+    const stoppedEmits = contentSource.match(/emitProgress\(\{ phase: PHASE\.STOPPED/g) ?? [];
+
+    expect(stoppedEmits).toHaveLength(5);
+  });
+
+  it("Given ループ内 STOPPED 3 箇所 When 直前を読む Then persistInterruptState(i) が隣接する（中断 entry の絶対 index, 要件7a）", () => {
+    const loopStops =
+      contentSource.match(
+        /persistInterruptState\(i\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, index: i, total \}\)/g,
+      ) ?? [];
+
+    expect(loopStops).toHaveLength(3);
+  });
+
+  it("Given playlist phase STOPPED 2 箇所 When 直前を読む Then persistInterruptState(total) が隣接する（全 entry done 後, 要件7b）", () => {
+    const playlistStops =
+      contentSource.match(/persistInterruptState\(total\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, total \}\)/g) ??
+      [];
+
+    expect(playlistStops).toHaveLength(2);
+  });
+
+  it("Given persistInterruptState 定義 When 中身を読む Then collectionId ガード下で failedIndex/total/timestamp を writeResumeState する（要件1/3）", () => {
+    // failedIndex 名を rename せず流用すること（要件3）。引数 interruptedIndex を failedIndex に載せる。
+    // ERROR / STOPPED 両 phase 共通ヘルパー（dry-duplication 解消, AI-898-001）。
+    expect(contentSource).toMatch(
+      /function persistInterruptState\(interruptedIndex: number\): void \{[\s\S]*?if \(collectionId\)[\s\S]*?void writeResumeState\(\{ collectionId, failedIndex: interruptedIndex, total, timestamp: Date\.now\(\) \}\)/,
+    );
+  });
+});
+
+// #898: 既存 ERROR / FINISHED 経路の resume 挙動を STOPPED 追加で壊さないこと（要件4/5）を機械担保する。
+// この 2 件は実装前後どちらでも pass する（不変経路の回帰検出器）。
+describe("content.ts: 既存 ERROR / FINISHED の resume 挙動は回帰しない (#898 要件4/5)", () => {
+  const contentSource = read("../entrypoints/content.ts");
+
+  it("Given ERROR phase When 読む Then persistInterruptState(i) で resume state を従来どおり保存する（要件4）", () => {
+    // dry-duplication 解消 (AI-898-001) で ERROR の inline writeResumeState は共通ヘルパー
+    // persistInterruptState(i) に統合。failedIndex: i を保存する挙動は不変（要件4 = 回帰しない）。
+    expect(contentSource).toMatch(
+      /emitProgress\(\{ phase: PHASE\.ERROR, index: i, total, message \}\);[\s\S]*?persistInterruptState\(i\);/,
+    );
+  });
+
+  it("Given FINISHED phase When 読む Then clearResumeStateForCollection で resume state を消す（要件5）", () => {
+    expect(contentSource).toMatch(
+      /void clearResumeStateForCollection\(collectionId\);[\s\S]*?emitProgress\(\{ phase: PHASE\.FINISHED, total \}\)/,
+    );
+  });
+});

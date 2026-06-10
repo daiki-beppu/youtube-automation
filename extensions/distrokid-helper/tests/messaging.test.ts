@@ -9,6 +9,15 @@
 
 import { describe, it, expect } from "vitest";
 import { PHASES, sendMessage, onMessage } from "../lib/messaging";
+import type { InjectTrackRequest } from "../lib/messaging";
+import type { SerializedAsset } from "../lib/asset-transfer";
+
+// #871 per-track 分割（コンパイル時契約）:
+// asset は injectTrack で 1 件ずつ送る。fetchAsset は取得失敗時に throw する（null を返さない）
+// ため asset は常に SerializedAsset で欠落しない。`SerializedAsset | null` へ退行させると
+// 下の代入が型エラーになり `pnpm compile`（tsc --noEmit）で検出される。
+const _trackAssetIsNonNull: SerializedAsset = {} as InjectTrackRequest["asset"];
+void _trackAssetIsNonNull;
 
 describe("PHASES（PROGRESS フェーズ契約）", () => {
   it("注入フローのフェーズを過不足なく定義する", () => {

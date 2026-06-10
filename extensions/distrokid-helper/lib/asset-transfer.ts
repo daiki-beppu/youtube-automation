@@ -1,10 +1,11 @@
 // asset（曲 / ジャケット）を popup ↔ content 間で受け渡すための直列化。
 //
 // なぜ popup 側で fetch するのか:
-//   content script の fetch はページ origin（distrokid.com）で CORS 評価されるため、
-//   `chrome-extension://` origin のみ許可する yt-collection-serve（collection_serve.py の
-//   is_origin_allowed）に遮断される。fetch は必ず拡張コンテキスト（popup）で行い、
-//   取得した File のバイト列を base64 で content へ転送する。
+//   #896 で yt-collection-serve（collection_serve.py の is_origin_allowed）が
+//   デフォルトで distrokid.com origin も許可するようになったが、distrokid-helper 本体を
+//   content script fetch へ書き換えるのは #896 のスコープ外（別 issue）。現状は fetch を
+//   拡張コンテキスト（popup, `chrome-extension://` origin）で行い、
+//   取得した File のバイト列を base64 で content へ転送する構成を維持する。
 //   （@webext-core/messaging は runtime メッセージを JSON 直列化するため File/Blob を
 //    そのまま渡せない。base64 文字列に変換して転送する。）
 
