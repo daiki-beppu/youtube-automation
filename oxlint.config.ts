@@ -29,6 +29,34 @@ const HEAVY_DEPS_BANNED_IN_THIN_CLIENTS = {
   patterns: ["googleapis/*"],
 };
 
+// #822: packages/core は pure domain logic。op (1Password CLI) を含む subprocess
+// 起動は cli/service 層 (packages/cli/lib/secrets.ts) に隔離する。core/src 配下で
+// `Bun.spawn` / `Bun.spawnSync` / `bun:ffi` を直接呼ぶ regression を error 化する。
+const OP_SPAWN_BANNED_IN_CORE = [
+  {
+    message:
+      "#822: subprocess 起動 (op CLI 含む) は packages/cli/lib/secrets.ts に隔離。packages/core/src からの Bun.spawn 直呼びは禁止。",
+    object: "Bun",
+    property: "spawn",
+  },
+  {
+    message:
+      "#822: subprocess 起動 (op CLI 含む) は packages/cli/lib/secrets.ts に隔離。packages/core/src からの Bun.spawnSync 直呼びは禁止。",
+    object: "Bun",
+    property: "spawnSync",
+  },
+];
+
+const FFI_BANNED_IN_CORE = {
+  paths: [
+    {
+      message:
+        "#822: bun:ffi (native spawn) は packages/core から使用禁止。subprocess は cli/service 層へ。",
+      name: "bun:ffi",
+    },
+  ],
+};
+
 export default defineConfig({
   extends: [core],
   ignorePatterns: [
@@ -48,6 +76,13 @@ export default defineConfig({
       files: ["packages/cli/**", "packages/mcp/**"],
       rules: {
         "no-restricted-imports": ["error", HEAVY_DEPS_BANNED_IN_THIN_CLIENTS],
+      },
+    },
+    {
+      files: ["packages/core/src/**", "packages/core/skills-sync/**"],
+      rules: {
+        "no-restricted-imports": ["error", FFI_BANNED_IN_CORE],
+        "no-restricted-properties": ["error", ...OP_SPAWN_BANNED_IN_CORE],
       },
     },
   ],

@@ -19,7 +19,7 @@ test("tsconfig contract: every package source tier is type-checked", async () =>
   const config = JSON.parse(proc.stdout.toString()) as { files: string[] };
   const checked = new Set(config.files.map((file) => resolve(repoRoot, file)));
 
-  const glob = new Glob("packages/*/{src,bin,test}/**/*.ts");
+  const glob = new Glob("packages/*/{src,lib,bin,test}/**/*.ts");
   const uncovered: string[] = [];
   for await (const rel of glob.scan({ cwd: repoRoot })) {
     if (!checked.has(resolve(repoRoot, rel))) {
