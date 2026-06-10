@@ -21,7 +21,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ValidationError } from "@youtube-automation/core";
 import {
   CollectionPaths,
   resolveCollectionDir,
@@ -349,7 +348,7 @@ describe("resolveCollectionDir", () => {
     }
   });
 
-  test("throws ValidationError when cwd is not a collection and no arg is given", () => {
+  test("throws a validation:-prefixed error when cwd is not a collection and no arg is given", () => {
     // Given a cwd missing the required subdirectories
     const root = makeDir("collection");
     const originalCwd = process.cwd();
@@ -357,7 +356,7 @@ describe("resolveCollectionDir", () => {
       process.chdir(root);
 
       // When/Then resolution fails fast
-      expect(() => resolveCollectionDir(null)).toThrow(ValidationError);
+      expect(() => resolveCollectionDir(null)).toThrow(/^validation:/u);
     } finally {
       process.chdir(originalCwd);
     }

@@ -1,6 +1,5 @@
 // DistroKid 配信プロファイル設定（Python `distrokid.py` + loader の移植・optional/opt-in）。
 
-import { ConfigError } from "../errors.ts";
 import { asRecord, isRecord } from "./internal.ts";
 
 // distrokid.enabled === true のとき profile に必須となるフィールド（条件付き必須）。
@@ -44,7 +43,9 @@ export const parseDistrokid = (merged: Record<string, unknown>): Distrokid => {
     return { enabled: false, profile: emptyProfile() };
   }
   if (!isRecord(raw)) {
-    throw new ConfigError("distrokid セクションは object でなければなりません");
+    throw new Error(
+      "config: distrokid セクションは object でなければなりません"
+    );
   }
 
   const enabled = (raw.enabled as boolean | undefined) ?? false;
@@ -54,8 +55,8 @@ export const parseDistrokid = (merged: Record<string, unknown>): Distrokid => {
   if (enabled) {
     const missing = REQUIRED_PROFILE_FIELDS.filter((f) => !profileRoot[f]);
     if (missing.length > 0) {
-      throw new ConfigError(
-        `distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: ${missing.join(", ")}`
+      throw new Error(
+        `config: distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: ${missing.join(", ")}`
       );
     }
   }

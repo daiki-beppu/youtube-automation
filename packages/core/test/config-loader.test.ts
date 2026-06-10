@@ -10,7 +10,6 @@ import {
 import { existsSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { ConfigError } from "@youtube-automation/core";
 // Imported by the published package name + "./config" subpath so the test
 // exercises the core `exports` map. A missing/broken subpath export fails
 // resolution here, not in tsc.
@@ -85,7 +84,7 @@ describe("loadConfig — minimal sections", () => {
 // --- required-key validation ----------------------------------------------
 
 describe("loadConfig — required keys", () => {
-  test("throws ConfigError naming a missing dotted key path", () => {
+  test("throws a config:-prefixed error naming a missing dotted key path", () => {
     // Given a channel missing the required channel.name
     const sections = minimalSections();
     const meta = sections["meta.json"] as { channel: Record<string, unknown> };
@@ -94,7 +93,7 @@ describe("loadConfig — required keys", () => {
     process.env.CHANNEL_DIR = dir;
 
     // When/Then load fails fast, naming the offending key path
-    expect(() => loadConfig()).toThrow(ConfigError);
+    expect(() => loadConfig()).toThrow(/^config:/u);
     expect(() => loadConfig()).toThrow(/channel\.name/u);
   });
 });
@@ -112,7 +111,7 @@ describe("loadConfig — top-level merge", () => {
     process.env.CHANNEL_DIR = dir;
 
     // When/Then the collision is reported, not silently last-wins merged
-    expect(() => loadConfig()).toThrow(ConfigError);
+    expect(() => loadConfig()).toThrow(/^config:/u);
     expect(() => loadConfig()).toThrow(/youtube/u);
   });
 
@@ -124,7 +123,7 @@ describe("loadConfig — top-level merge", () => {
     process.env.CHANNEL_DIR = dir;
 
     // When/Then the non-object top level is rejected at merge time
-    expect(() => loadConfig()).toThrow(ConfigError);
+    expect(() => loadConfig()).toThrow(/^config:/u);
   });
 });
 
@@ -147,7 +146,7 @@ describe("loadConfig — structural guards", () => {
     process.env.CHANNEL_DIR = dir;
 
     // When/Then load fails rather than returning an empty config
-    expect(() => loadConfig()).toThrow(ConfigError);
+    expect(() => loadConfig()).toThrow(/^config:/u);
   });
 });
 

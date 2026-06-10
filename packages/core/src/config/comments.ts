@@ -1,6 +1,5 @@
 // コメント自動返信設定（Python `utils/config/comments.py` + loader の移植・optional）。
 
-import { ConfigError } from "../errors.ts";
 import { asRecord, isRecord } from "./internal.ts";
 
 const PROVIDER_CODEX = "codex";
@@ -67,27 +66,27 @@ const parseGeneratorConfig = (
   raw: Record<string, unknown>
 ): GeneratorConfig => {
   if ("type" in raw) {
-    throw new ConfigError(
-      "comments.generator.type は廃止されました。comments.generator.provider を使用してください"
+    throw new Error(
+      "config: comments.generator.type は廃止されました。comments.generator.provider を使用してください"
     );
   }
   const provider = (raw.provider as string | undefined) ?? PROVIDER_CODEX;
   if (!VALID_PROVIDERS.includes(provider)) {
-    throw new ConfigError(
-      `comments.generator.provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${provider}`
+    throw new Error(
+      `config: comments.generator.provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${provider}`
     );
   }
   const model = (raw.model as string | undefined) ?? null;
   if (provider === PROVIDER_GEMINI && !model) {
-    throw new ConfigError(
-      "comments.generator.provider='gemini' の場合 model は必須です"
+    throw new Error(
+      "config: comments.generator.provider='gemini' の場合 model は必須です"
     );
   }
   const fallback =
     (raw.fallback_on_error as string | undefined) ?? FALLBACK_SKIP;
   if (!VALID_FALLBACK_VALUES.includes(fallback)) {
-    throw new ConfigError(
-      `comments.generator.fallback_on_error は ${VALID_FALLBACK_VALUES.join(" / ")} のいずれかでなければなりません: ${fallback}`
+    throw new Error(
+      `config: comments.generator.fallback_on_error は ${VALID_FALLBACK_VALUES.join(" / ")} のいずれかでなければなりません: ${fallback}`
     );
   }
   return {
@@ -105,34 +104,34 @@ const parseGeneratorConfig = (
 
 const parseRule = (raw: unknown, index: number): CommentRule => {
   if (!isRecord(raw)) {
-    throw new ConfigError(
-      `comments.rules[${index}] は object でなければなりません`
+    throw new Error(
+      `config: comments.rules[${index}] は object でなければなりません`
     );
   }
   const { name } = raw;
   if (!name) {
-    throw new ConfigError(`comments.rules[${index}].name が必須です`);
+    throw new Error(`config: comments.rules[${index}].name が必須です`);
   }
   if ("template_key" in raw) {
-    throw new ConfigError(
-      `comments.rules[${index}].template_key は廃止されました`
+    throw new Error(
+      `config: comments.rules[${index}].template_key は廃止されました`
     );
   }
   if ("generator" in raw) {
-    throw new ConfigError(
-      `comments.rules[${index}].generator は廃止されました。provider を使用してください`
+    throw new Error(
+      `config: comments.rules[${index}].generator は廃止されました。provider を使用してください`
     );
   }
   const ruleProvider = (raw.provider as string | undefined) ?? null;
   if (ruleProvider !== null && !VALID_PROVIDERS.includes(ruleProvider)) {
-    throw new ConfigError(
-      `comments.rules[${index}].provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${ruleProvider}`
+    throw new Error(
+      `config: comments.rules[${index}].provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${ruleProvider}`
     );
   }
   const ruleScope = (raw.scope as string | undefined) ?? SCOPE_ANY;
   if (!VALID_SCOPES.includes(ruleScope)) {
-    throw new ConfigError(
-      `comments.rules[${index}].scope は ${VALID_SCOPES.join(" / ")} のいずれかでなければなりません: ${ruleScope}`
+    throw new Error(
+      `config: comments.rules[${index}].scope は ${VALID_SCOPES.join(" / ")} のいずれかでなければなりません: ${ruleScope}`
     );
   }
   return {
@@ -149,8 +148,8 @@ const parseRule = (raw: unknown, index: number): CommentRule => {
 export const parseComments = (merged: Record<string, unknown>): Comments => {
   const cm = asRecord(merged.comments, "comments");
   if ("templates" in cm) {
-    throw new ConfigError(
-      "comments.templates は廃止されました。LLM provider で返信を生成してください"
+    throw new Error(
+      "config: comments.templates は廃止されました。LLM provider で返信を生成してください"
     );
   }
 
@@ -161,8 +160,8 @@ export const parseComments = (merged: Record<string, unknown>): Comments => {
   let generator = defaultGenerator();
   if (genRaw !== undefined && genRaw !== null) {
     if (!isRecord(genRaw)) {
-      throw new ConfigError(
-        "comments.generator は object でなければなりません"
+      throw new Error(
+        "config: comments.generator は object でなければなりません"
       );
     }
     generator = parseGeneratorConfig(genRaw);

@@ -1,6 +1,5 @@
 // ローカライゼーション設定（Python `utils/config/localizations.py` + loader の移植）。
 
-import { ConfigError } from "../errors.ts";
 import { isRecord } from "./internal.ts";
 
 /**
@@ -28,8 +27,8 @@ export const localizationsAbsent = (
 
 export const parseLocalizations = (data: unknown): Localizations => {
   if (!isRecord(data)) {
-    throw new ConfigError(
-      "localizations.json のトップレベルは object でなければなりません"
+    throw new Error(
+      "config: localizations.json のトップレベルは object でなければなりません"
     );
   }
   return {

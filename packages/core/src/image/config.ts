@@ -6,10 +6,9 @@
 //
 // 移植スコープ（plan §4-D）: legacy `gemini_image:` namespace・`gemini_cli` /
 // `codex` provider・`thinking`・`replace_model` は移植しない。よって未対応の
-// provider 値（"codex" / "gemini_cli" を含む）は ConfigError で fail fast する。
+// provider 値（"codex" / "gemini_cli" を含む）は `config:` prefix Error で fail fast する。
 // 入力キーは snake_case（既存 config パーサと同様）、出力は camelCase。
 
-import { ConfigError } from "../errors.ts";
 import { isRecord } from "./internal.ts";
 
 // サポートする provider 識別子。`getProvider` の dispatch キーと一致させる。
@@ -90,8 +89,8 @@ const buildOpenAI = (sub: Record<string, unknown>): OpenAIConfig => {
       aspectRatio as (typeof OPENAI_SUPPORTED_ASPECT_RATIOS)[number]
     )
   ) {
-    throw new ConfigError(
-      `OpenAI image_generation.openai.aspect_ratio=${JSON.stringify(aspectRatio)} は未対応。` +
+    throw new Error(
+      `config: OpenAI image_generation.openai.aspect_ratio=${JSON.stringify(aspectRatio)} は未対応。` +
         `許容値: ${JSON.stringify(OPENAI_SUPPORTED_ASPECT_RATIOS)}`
     );
   }
@@ -123,7 +122,7 @@ const subSection = (
  * skill-config（raw）から `ImageGenerationConfig` を組み立てる。
  *
  * `image_generation:` namespace が無ければ gemini 既定値を返す。`provider` が
- * {gemini, openai} 以外なら ConfigError で fail fast する。
+ * {gemini, openai} 以外なら `config:` prefix Error で fail fast する。
  */
 export const parseImageGenerationConfig = (
   raw: unknown
@@ -143,8 +142,8 @@ export const parseImageGenerationConfig = (
   if (provider === "openai") {
     return { openai: buildOpenAI(subSection(section, "openai")), provider };
   }
-  throw new ConfigError(
-    `image_generation.provider=${JSON.stringify(provider)} は未対応。` +
+  throw new Error(
+    `config: image_generation.provider=${JSON.stringify(provider)} は未対応。` +
       `許容値: ${JSON.stringify(SUPPORTED_PROVIDERS)}`
   );
 };

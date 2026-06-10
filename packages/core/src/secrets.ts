@@ -5,12 +5,10 @@
 // - 取得経路は次の順で試行する
 //     1. `process.env` にあればそれを使う (OSS 利用者の .env / 既存 export 経由)
 //     2. `op` (1Password CLI) が利用可能なら `op read` で取得する
-//     3. どちらも失敗したら ConfigError を throw する
+//     3. どちらも失敗したら `config:` prefix 付き Error を throw する
 //
 // Python 版の lru_cache メモ化は移植しない: テスト契約が同一プロセスで env を
 // 差し替えながら resolveSecret を繰り返し呼ぶため、都度解決する必要がある。
-
-import { ConfigError } from "./errors.ts";
 
 // 具体キーを保持して既知名の参照を `string` 型に確定させつつ、`satisfies` で
 // 値の型 (URI 文字列) を担保する。
@@ -50,11 +48,11 @@ const readFromOp = async (opRef: string): Promise<string | null> => {
  *
  * @param name `SECRET_REFS` に登録されたシークレット名
  * @returns 解決した値
- * @throws {ConfigError} 未登録の名前、または全ての取得経路で失敗した場合
+ * @throws {Error} `config:` prefix — 未登録の名前、または全ての取得経路で失敗した場合
  */
 export const resolveSecret = async (name: string): Promise<string> => {
   if (!Object.hasOwn(SECRET_REFS, name)) {
-    throw new ConfigError(`未登録のシークレット名: ${name}`);
+    throw new Error(`config: 未登録のシークレット名: ${name}`);
   }
   const opRef = SECRET_REFS[name as keyof typeof SECRET_REFS];
 
@@ -70,8 +68,8 @@ export const resolveSecret = async (name: string): Promise<string> => {
     }
   }
 
-  throw new ConfigError(
-    `${name} を取得できませんでした。\n` +
+  throw new Error(
+    `config: ${name} を取得できませんでした。\n` +
       `  → .env に ${name}=... を設定するか、\n` +
       `  → 1Password の ${opRef} に登録してください`
   );

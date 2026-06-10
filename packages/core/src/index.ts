@@ -3,14 +3,12 @@ export const greeting = (): string =>
   "youtube-channels-automation core (TS rewrite skeleton)";
 
 export {
-  AuthError,
   AutomationError,
-  ConfigError,
-  GeneratorError,
   QuotaExhaustedError,
-  UploadError,
-  ValidationError,
+  ServiceError,
+  toServiceError,
   YouTubeAPIError,
   type YouTubeAPIErrorOptions,
 } from "./errors.ts";
+export { err, ok, type Result } from "./result.ts";
 export { resolveSecret, SECRET_REFS } from "./secrets.ts";

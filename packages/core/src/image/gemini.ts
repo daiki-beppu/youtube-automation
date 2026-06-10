@@ -5,7 +5,6 @@
 // SDK client / sleep / persist は注入され（テストは fake で差し替え）、ここは
 // orchestration（リトライ・base64 decode・参照画像の inline 化）に集中する。
 
-import { ConfigError } from "../errors.ts";
 import { backoffMs, RETRY_MAX } from "./base.ts";
 import type {
   ImageGenerationRequest,
@@ -87,8 +86,8 @@ const isContentPolicyError = (error: unknown): boolean => {
 const defaultCreateClient = async (): Promise<GeminiClient> => {
   const project = process.env.GOOGLE_CLOUD_PROJECT;
   if (!project) {
-    throw new ConfigError(
-      "GOOGLE_CLOUD_PROJECT が未設定です。Vertex AI の project を指定してください"
+    throw new Error(
+      "config: GOOGLE_CLOUD_PROJECT が未設定です。Vertex AI の project を指定してください"
     );
   }
   const { GoogleGenAI } = await import("@google/genai");

@@ -10,14 +10,13 @@
 //   { data: [ { b64_json: <base64 string> }, ... ] }
 // The provider decodes the first item carrying `b64_json` (openai.py:137-144),
 // maps aspect ratio → size (16:9→1536x1024, 9:16→1024x1536, openai.py:34-37),
-// and rejects unmapped ratios with ConfigError WITHOUT retrying.
+// and rejects unmapped ratios with a `config:`-prefixed Error WITHOUT retrying.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ConfigError } from "@youtube-automation/core";
 import { OpenAIImageProvider } from "@youtube-automation/core/image";
 import type { ImageGenerationRequest } from "@youtube-automation/core/image";
 
@@ -268,7 +267,7 @@ describe("OpenAIImageProvider.generate success", () => {
 // --- fail-fast on aspect ratio -------------------------------------------
 
 describe("OpenAIImageProvider.generate aspect-ratio guard", () => {
-  test("throws ConfigError for an unmapped aspect ratio without calling the SDK", async () => {
+  test("throws a config:-prefixed error for an unmapped aspect ratio without calling the SDK", async () => {
     // Given a request whose ratio is not 16:9 or 9:16 (openai.py:63-67)
     const { client, generateCalls } = makeOpenAIClient({
       generate: [() => imageResponse("ignored")],
@@ -280,10 +279,10 @@ describe("OpenAIImageProvider.generate aspect-ratio guard", () => {
     );
 
     // When generating at an unsupported ratio
-    // Then it fails fast: ConfigError, no client, no SDK call, no retry wait
+    // Then it fails fast: config:-prefixed Error, no client, no SDK call, no retry wait
     await expect(
       provider.generate(request(join(workdir, "square.png"), "1:1"))
-    ).rejects.toThrow(ConfigError);
+    ).rejects.toThrow(/^config:/u);
     expect(recorders.clientCreatedCount()).toBe(0);
     expect(generateCalls).toHaveLength(0);
     expect(recorders.sleeps).toEqual([]);

@@ -12,8 +12,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 
-import { ValidationError } from "./errors.ts";
-
 const SHORT_THUMBNAIL_EXTENSIONS = ["jpg", "png"] as const;
 const SHORT_LOOP_INPUT_NAMES = ["short.png", "short.jpg"] as const;
 
@@ -250,7 +248,7 @@ export class CollectionPaths {
  * `arg` 指定時はそのパスを resolve して返す。未指定時は CWD が `01-master/` と
  * `02-Individual-music/` を持つコレクションディレクトリであることを検証して返す。
  *
- * @throws {ValidationError} 判定に失敗したとき（Fail Fast）。
+ * @throws {Error} `validation:` prefix — 判定に失敗したとき（Fail Fast）。
  */
 export const resolveCollectionDir = (arg: string | null): string => {
   if (arg) {
@@ -263,8 +261,8 @@ export const resolveCollectionDir = (arg: string | null): string => {
     return cwd;
   }
 
-  throw new ValidationError(
-    "コレクションディレクトリを解決できません。引数で指定するか、" +
+  throw new Error(
+    "validation: コレクションディレクトリを解決できません。引数で指定するか、" +
       "01-master/ と 02-Individual-music/ を持つディレクトリで実行してください。"
   );
 };

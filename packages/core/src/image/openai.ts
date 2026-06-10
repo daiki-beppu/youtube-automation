@@ -3,12 +3,11 @@
 //
 // `openai` SDK の `images.generate` / `images.edit` を呼ぶ。`aspectRatio` を
 // OpenAI Images API の `size` 文字列にマップし、未対応比率は SDK を呼ぶ前に
-// ConfigError で fail fast（リトライしない）。SDK client / sleep / persist は
+// `config:` prefix Error で fail fast（リトライしない）。SDK client / sleep / persist は
 // 注入され（テストは fake で差し替え）、API キーは `resolveSecret` 経由で取得する。
 
 import { basename } from "node:path";
 
-import { ConfigError } from "../errors.ts";
 import { resolveSecret } from "../secrets.ts";
 import { backoffMs, RETRY_MAX } from "./base.ts";
 import type {
@@ -92,8 +91,8 @@ export class OpenAIImageProvider implements ImageProvider {
     const size = ASPECT_RATIO_TO_SIZE[req.aspectRatio];
     if (size === undefined) {
       // 未対応比率は client 生成・SDK 呼び出し前に fail fast（リトライしない）。
-      throw new ConfigError(
-        `OpenAI image_generation の aspect_ratio=${JSON.stringify(req.aspectRatio)} は未対応。` +
+      throw new Error(
+        `config: OpenAI image_generation の aspect_ratio=${JSON.stringify(req.aspectRatio)} は未対応。` +
           `許容値: ${JSON.stringify(Object.keys(ASPECT_RATIO_TO_SIZE))}`
       );
     }
