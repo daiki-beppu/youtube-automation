@@ -25,6 +25,10 @@ function makePayload(trackCount: number): ReleasePayload {
         artist_persona: true,
         apply_to_all: true,
       },
+      credits: {
+        performer_role: "Audio",
+        producer_role: "Producer",
+      },
     },
     release: {
       album_title: "Vol.1",

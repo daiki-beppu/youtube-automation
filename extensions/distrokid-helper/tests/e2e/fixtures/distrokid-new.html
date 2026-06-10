@@ -85,7 +85,27 @@
         <div id="credit-containers"></div>
       </div>
 
+      <!-- オプション (upsell) checkbox 群（#919）。フィル時に強制 uncheck で \$0 保証。 -->
+      <label
+        ><input type="checkbox" name="store" />ディスカバリーパック（24.75ドル／年）</label
+      >
+      <label
+        ><input type="checkbox" name="extras" />レガシーパック（49ドル）</label
+      >
+      <label
+        ><input type="checkbox" name="extras" />ストアマキシマイザー（7.95ドル／年）</label
+      >
+
+      <!-- DistroKid 利用規約同意 checkbox（#919）。フィル時に強制 check。 -->
+      <label
+        ><input type="checkbox" id="areyousuretandc" />DistroKid
+        ディストリビューション規約に同意します</label
+      >
+
       <button id="continue" type="button">続ける</button>
+      <button id="doneButton" type="button" class="distroDoneButtonWithAPI btn info">
+        続ける
+      </button>
     </form>
 
     <script>
@@ -130,9 +150,20 @@
       }
 
       // 全 track の credit 入力欄を事前生成する（初期は hidden、トリガー click で visible 化）。
+      // #919: role 欄も含める（performer 86 options のサブセット / producer 40 options のサブセット）。
+      // 実機の `dk-searchable-select__native` は display:none で隠されるが、e2e fixture では簡略化のため
+      // 通常の `<select>` として置く（fail-loud / setSelectValue の挙動は jsdom 側で担保済み）。
       function renderCredits(count) {
         const root = document.getElementById("credit-containers");
         root.innerHTML = "";
+        const perfOpts =
+          '<option value="unselected">担当を選択</option>' +
+          '<option value="Audio">オーディオ</option>' +
+          '<option value="Synthesizer">シンセサイザー</option>';
+        const prodOpts =
+          '<option value="unselected">担当を選択</option>' +
+          '<option value="Producer">プロデューサー</option>' +
+          '<option value="Executive producer">エグゼクティブプロデューサー</option>';
         for (let n = 1; n <= count; n += 1) {
           const container = document.createElement("div");
           container.className = "credit-input-container";
@@ -141,9 +172,19 @@
             '<input type="text" name="performer-name" id="track-' +
               n +
               '-performer-1-name" class="performer-name coolInput" placeholder="名前" />',
+            '<select id="track-' +
+              n +
+              '-performer-1-role" class="performer-role coolInput dk-searchable-select__native">' +
+              perfOpts +
+              "</select>",
             '<input type="text" name="producer-name" id="track-' +
               n +
               '-producer-1-name" class="producer-name coolInput" placeholder="名前" />',
+            '<select id="track-' +
+              n +
+              '-producer-1-role" class="producer-role coolInput dk-searchable-select__native">' +
+              prodOpts +
+              "</select>",
           ].join("");
           root.appendChild(container);
         }

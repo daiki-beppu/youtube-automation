@@ -29,7 +29,12 @@
 //       各 track の performer/producer へ #artistName（アカウント登録のアーティスト名）を注入する。
 
 import { isVisible } from "../../shared/visibility";
-import type { AiDisclosure, DistrokidProfile, SongwriterName } from "./types";
+import type {
+  AiDisclosure,
+  DistrokidProfile,
+  DistrokidProfileCredits,
+  SongwriterName,
+} from "./types";
 
 // 静的プロファイルの SELECT 注入先（id ベース）。
 export const PROFILE_SELECTORS = {
@@ -117,14 +122,40 @@ export const TRACK_ROW_WAIT_TIMEOUT_MS = 10_000;
 // BGM チャンネルは演奏者 = プロデューサー = アーティスト名の前提（#888）。
 export const ARTIST_NAME_SELECTOR = "#artistName";
 
-// Apple Music クレジット（演奏者 / プロデューサー）入力欄（#888）。track は 1-indexed。
+// Apple Music クレジット（演奏者 / プロデューサー）入力欄（#888 / #919）。track は 1-indexed。
+//
+// 各 track には credit 行が 2 つあり、performer 行（演奏者）と producer 行（プロデューサー）
+// で構成される。各行は name 欄（input type=text）と role 欄（select、86 / 40 options）の
+// ペア。role 欄は `dk-searchable-select__native` クラスで `display:none` に隠され、上に
+// DistroKid 独自の searchable dropdown UI（`.dk-searchable-select__input`）が乗る設計
+// （実 DOM 検証済み・#919）。ネイティブ `<select>` の `selectedIndex` 変更 + `change` event
+// dispatch で独自 UI 側の表示テキストも同期されるため、`setSelectValue` だけで完結する。
 export const APPLE_CREDIT_SELECTORS = {
   // 全 track 共通の展開トリガー。click で全 track の credit 入力欄が visible 化する。
   addTrigger: ".requirements-item-title",
   // .requirements-item-title は複数あり得るため textContent で絞り込む。
   addTriggerText: "クレジットを追加",
-  performerByTrack: (track1: number) => `#track-${track1}-performer-1-name`,
-  producerByTrack: (track1: number) => `#track-${track1}-producer-1-name`,
+  performerNameByTrack: (track1: number) => `#track-${track1}-performer-1-name`,
+  performerRoleByTrack: (track1: number) => `#track-${track1}-performer-1-role`,
+  producerNameByTrack: (track1: number) => `#track-${track1}-producer-1-name`,
+  producerRoleByTrack: (track1: number) => `#track-${track1}-producer-1-role`,
+} as const;
+
+// 利用規約同意 checkbox（#919）。「DistroKid ディストリビューション規約を読み、同意しました」。
+// unchecked のままだと送信時に validation で止まるため、フィル完了時点で強制 check する。
+export const TERMS_AGREEMENT_SELECTOR = "#areyousuretandc";
+
+// 続けるボタン（#919）。フィル完了後、確認ボタンが視界に入るよう scrollIntoView する。
+// 規約遵守でクリックは行わない（送信は必ず人間が押す）。
+export const DONE_BUTTON_SELECTOR = "#doneButton";
+
+// オプション（upsell）checkbox 群（#919）。レガシーパック / ディスカバリーパック /
+// ストアマキシマイザー / DistroVid / 音量正規化 等の有料オプションを誤クリックから守るため、
+// フィル時に強制 uncheck して請求額が 0 ドルになる状態を保証する。
+// `name="store"` はディスカバリーパック専用、`name="extras"` がそれ以外の upsell 全部。
+export const UPSELL_SELECTORS = {
+  store: 'input[type="checkbox"][name="store"]',
+  extras: 'input[type="checkbox"][name="extras"]',
 } as const;
 
 // 新規リリース前提の assert 対象（previouslyReleased「いいえ(value=0)」）。
@@ -263,20 +294,61 @@ export function injectProfile(root: ParentNode, profile: DistrokidProfile): void
   }
 }
 
-// アルバム名を注入する。album_title 欄はアルバム時のみ存在するため、不在なら skip（シングルモード）。
+// アルバム名を注入する（#919）。
+//
+// `#albumTitleInput` は `<input type=text>` で id 一意。type=hidden ではないため
+// findVisibleField の isVisible filter は不要。`setTrackCount` 直後は DistroKid 内部の
+// re-layout 中で `getBoundingClientRect` が一時的に 0×0 になることがあり、isVisible が
+// false 判定して silent skip するレースが #919 retest で観測されたため、id ベースで直接
+// 取得して fail-loud にする。input は track 数が 1 のとき非マウントになる可能性があるため、
+// 不在は ConfigError ではなく FieldNotFoundError として上位に伝播させる。
 export function injectAlbumTitle(root: ParentNode, albumTitle: string): void {
-  const el = findVisibleField(root, ALBUM_SELECTORS.album_title);
-  if (el !== null) {
-    setNativeValue(el, albumTitle);
-  }
+  setNativeValue(requireInput(root, ALBUM_SELECTORS.album_title), albumTitle);
 }
 
-// リリース日を注入する（未確定 = null なら注入しない）。
+// リリース日を注入する（#919）。未確定 = null なら注入しない（フォーム空のまま）。
+//
+// `#release-date-dp` は `<input type=date>` で id 一意。同じく `injectAlbumTitle` と
+// 同じ理由で isVisible filter を外し id 直接取得に変更した（race condition 回避）。
 export function injectReleaseDate(root: ParentNode, releaseDate: string | null): void {
   if (releaseDate === null) {
     return;
   }
-  setNativeValue(requireVisibleField(root, RELEASE_DATE_SELECTOR), releaseDate);
+  setNativeValue(requireInput(root, RELEASE_DATE_SELECTOR), releaseDate);
+}
+
+// DistroKid 利用規約同意 checkbox を強制 check する（#919）。
+// `#areyousuretandc` が unchecked のままだと送信時に validation で止まるため、フィル時に
+// 必ず check する。要素不在は FieldNotFoundError（fail-loud）で UI 変更を即座に検知する。
+export function acceptTermsAgreement(root: ParentNode): void {
+  setChecked(requireInput(root, TERMS_AGREEMENT_SELECTOR), true);
+}
+
+// 続けるボタン（`#doneButton`）を視界へスクロールする（#919）。
+// フィル完了直後はページ上端のアルバム情報部分にスクロール位置がある運用が多いため、
+// 25 トラック分の長いフォームの最下部にある送信ボタンが見えず、人間が「フィル終わったが
+// 何も起きない」と誤認する UX バグを防ぐ。要素不在は無音 skip（送信ボタンは DistroKid 側の
+// UI 変更で id が変わる可能性があり、scroll は補助的 UX のため致命ではない）。
+// 規約遵守でクリックは行わない（送信は必ず人間が押す・本拡張のスコープ外）。
+export function scrollToDoneButton(root: ParentNode): void {
+  const btn = root.querySelector<HTMLElement>(DONE_BUTTON_SELECTOR);
+  if (btn !== null) {
+    btn.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+// 全 upsell checkbox を強制 uncheck し、請求額が 0 ドルになる状態を保証する（#919）。
+// レガシーパック / ディスカバリーパック / ストアマキシマイザー / DistroVid / 音量正規化 等の
+// 有料オプションを誤クリックから守る。配下に upsell 不在なら何もしない（forEach の空配列）。
+// 将来 config 化（`profile.upsells.legacy_pack` 等で opt-in）する想定だが、現状は全強制 uncheck。
+export function uncheckUpsells(root: ParentNode): void {
+  const all = [
+    ...Array.from(root.querySelectorAll<HTMLInputElement>(UPSELL_SELECTORS.store)),
+    ...Array.from(root.querySelectorAll<HTMLInputElement>(UPSELL_SELECTORS.extras)),
+  ];
+  for (const cb of all) {
+    setChecked(cb, false);
+  }
 }
 
 // track タイトル input を DOM order で列挙し uuid 一覧を返す（track の解決基点）。
@@ -505,15 +577,45 @@ function requireCreditTrigger(root: ParentNode): HTMLElement {
   return trigger;
 }
 
-// Apple Music クレジット（演奏者 / プロデューサー）を全 track に注入する（#888）。
+// Apple Music クレジット（演奏者 / プロデューサー）を全 track に注入する（#888 / #919）。
+//
 // トップレベルの「クレジットを追加」を 1 回 click して全 track の入力欄を visible 化し、
-// 各 track の performer / producer に #artistName（アカウント登録のアーティスト名）を入力する。
-export function injectAppleMusicCredits(root: ParentNode, trackCount: number): void {
+// 各 track の performer / producer に以下を注入する:
+//   - name 欄: `#artistName`（アカウント登録のアーティスト名）
+//   - role 欄: `credits.performer_role` / `credits.producer_role`（profile 由来、既定 Audio + Producer）
+// role 欄は `dk-searchable-select__native` クラスで display:none に隠れたネイティブ select だが、
+// `setSelectValue` でネイティブ側に setSelectedIndex + change dispatch すれば DistroKid 独自 UI
+// （`.dk-searchable-select__input`）の表示テキストも同期される（実 DOM 検証済み・#919）。
+export function injectAppleMusicCredits(
+  root: ParentNode,
+  trackCount: number,
+  credits: DistrokidProfileCredits,
+): void {
   const artistName = requireArtistName(root);
   requireCreditTrigger(root).click();
   for (let track1 = 1; track1 <= trackCount; track1 += 1) {
-    setNativeValue(requireInput(root, APPLE_CREDIT_SELECTORS.performerByTrack(track1)), artistName);
-    setNativeValue(requireInput(root, APPLE_CREDIT_SELECTORS.producerByTrack(track1)), artistName);
+    setNativeValue(
+      requireInput(root, APPLE_CREDIT_SELECTORS.performerNameByTrack(track1)),
+      artistName,
+    );
+    setSelectValue(
+      requireElement<HTMLSelectElement>(
+        root,
+        APPLE_CREDIT_SELECTORS.performerRoleByTrack(track1),
+      ),
+      credits.performer_role,
+    );
+    setNativeValue(
+      requireInput(root, APPLE_CREDIT_SELECTORS.producerNameByTrack(track1)),
+      artistName,
+    );
+    setSelectValue(
+      requireElement<HTMLSelectElement>(
+        root,
+        APPLE_CREDIT_SELECTORS.producerRoleByTrack(track1),
+      ),
+      credits.producer_role,
+    );
   }
 }
 
