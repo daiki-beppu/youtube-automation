@@ -19,6 +19,11 @@ const SELECTORS = {
   excludeStyles: 'input[placeholder="Exclude styles"]',
   weirdness: '[role="slider"][aria-label="Weirdness"]',
   styleInfluence: '[role="slider"][aria-label="Style Influence"]',
+  // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
+  // aria-label / data-testid を持たないため、`data-selected` 属性 (Suno が排他トグル用に意図して
+  // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
+  // Emotion class hash や親 div の role/class には依存しない。
+  vocalGenderButtons: 'button[data-selected][type="button"]',
   generateLabel: /^(create|generate|生成)$/i,
   recaptcha:
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
@@ -158,11 +163,16 @@ export async function setSliderValue(
   );
 }
 
-/** More Options 3 フィールドの解決結果（#900）。不在は null（fail-soft）。 */
+/** More Options の advanced フィールド解決結果（#900, vocal gender 追加）。不在は null（fail-soft）。 */
 export interface ResolvedAdvancedFields {
   excludeStyles: HTMLInputElement | null;
   weirdness: HTMLElement | null;
   styleInfluence: HTMLElement | null;
+  /** Voice section の Male / Female ボタンペア。将来 neutral 等が追加されても nested で拡張しやすい形にしておく。 */
+  vocalGender: {
+    male: HTMLButtonElement | null;
+    female: HTMLButtonElement | null;
+  };
 }
 
 /** injectAdvancedFields が読む entry の advanced 値（PromptEntry の部分集合）。 */
@@ -170,6 +180,7 @@ export interface AdvancedFieldValues {
   style_influence?: number;
   weirdness?: number;
   exclude_styles?: string;
+  vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
 /**
@@ -203,7 +214,32 @@ export function resolveAdvancedFields(): ResolvedAdvancedFields {
       document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence),
     ),
   );
-  return { excludeStyles, weirdness, styleInfluence };
+  return {
+    excludeStyles,
+    weirdness,
+    styleInfluence,
+    vocalGender: resolveVocalGenderButtons(),
+  };
+}
+
+/**
+ * Voice section の Male / Female ボタンを解決する。
+ * data-selected 属性で候補を全 query → textContent 完全一致 ("Male" / "Female") で絞り込み。
+ * pickPreferVisible で visible 優先（collapsed 時の fallback として hidden も拾う）。
+ * 不在は null（fail-soft）。判定は case-sensitive（"male" lowercase 等は拾わない）。
+ */
+function resolveVocalGenderButtons(): {
+  male: HTMLButtonElement | null;
+  female: HTMLButtonElement | null;
+} {
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(SELECTORS.vocalGenderButtons),
+  );
+  const findByLabel = (label: "Male" | "Female"): HTMLButtonElement | null =>
+    pickPreferVisible(
+      candidates.filter((b) => b.textContent?.trim() === label),
+    );
+  return { male: findByLabel("Male"), female: findByLabel("Female") };
 }
 
 /**
@@ -215,6 +251,8 @@ export function resolveAdvancedFields(): ResolvedAdvancedFields {
  *   - entry に値無 (`=== undefined`)                        → skip（fail-soft、後方互換）
  *   - entry に値有 + selector 有 + input                    → setNativeValue で注入（collapsed でも React 反映を実機確認済み）
  *   - entry に値有 + selector 有 + slider                   → 注入試行し失敗時は warn + skip
+ *   - vocal_gender = "male" / "female"                     → 対応ボタンが既に data-selected=true なら skip、false なら click（冪等）
+ *   - vocal_gender = "neutral" / "auto"                    → click しない（既選択を解除しない、"Auto = Suno に任せる"解釈）
  *
  * slider fail-soft 化の根拠（実機検証）:
  *   Suno の Weirdness / Style Influence slider は emotion 自作で onKeyDown 内に isTrusted チェックが
@@ -236,6 +274,20 @@ export async function injectAdvancedFields(
       );
     }
     setNativeValue(fields.excludeStyles, entry.exclude_styles);
+  }
+  if (entry.vocal_gender === "male" || entry.vocal_gender === "female") {
+    const target =
+      entry.vocal_gender === "male"
+        ? fields.vocalGender.male
+        : fields.vocalGender.female;
+    if (!target) {
+      throw new Error(
+        `Vocal gender button (${entry.vocal_gender}) が見つかりません。Suno の UI 変更の可能性があります。`,
+      );
+    }
+    if (target.getAttribute("data-selected") !== "true") {
+      target.click();
+    }
   }
   if (entry.weirdness !== undefined) {
     if (!fields.weirdness) {

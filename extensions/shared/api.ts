@@ -26,6 +26,12 @@ export interface PromptEntry {
   weirdness?: number;
   /** Exclude styles free text。Suno の Exclude styles 欄へ注入。 */
   exclude_styles?: string;
+  /**
+   * Voice section の Male / Female ボタン (Suno UI)。"male" / "female" のみ対応ボタンを click する。
+   * "neutral" / "auto" / undefined は何もしない（既選択を解除しない、"Auto = Suno に任せる"解釈）。
+   * Suno 側の解釈とサーバー契約を揃えるため空文字は許容せず Python 側で省略する。
+   */
+  vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
 /** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。 */

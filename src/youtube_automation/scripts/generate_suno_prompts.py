@@ -80,12 +80,34 @@ class _ResolvedPattern:
     lyrics: str  # rstrip 済み。歌詞が無ければ ""
 
 
-# suno-prompts.json へ wire する More Options 3 フィールドの key 一覧 (#900)。
+# suno-prompts.json へ wire する More Options の key 一覧 (#900, vocal_gender 追加)。
 # JSON への反映は **channel override (config/skills/suno.yaml) に明示設定されたキーのみ**。
 # config.default.yaml 同梱の既定値 (style_influence: 85 等) は JSON には載せない
 # (= 「何も足さない既存 collection は name/style/lyrics の 3 キーちょうど」の後方互換を守るため)。
 # MD 出力は従来どおり merged 値 (既定込み) を表示する。
-_ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles")
+# vocal_gender は suno-helper 拡張が Suno UI Voice section の Male / Female ボタン押下に使う
+# (拡張型契約: "male" | "female" | "neutral" | "auto")。空文字は「未指定」として JSON 出力から省く
+# (_build_advanced_json_fields の skip ロジック参照)。
+_ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender")
+
+
+def _build_advanced_json_fields(override: dict) -> dict:
+    """channel override から JSON 反映用 advanced フィールド dict を構築する (#900)。
+
+    - override に明示されたキーのみ含める (default.yaml の既定値は無視、#900 の A 案)
+    - vocal_gender は "" を「未指定」として skip する (拡張型契約と一貫させる)
+    - 他キー (style_influence: 0 / weirdness: 0 / exclude_styles: "") は明示設定なら値そのまま wire
+      (0 などの falsy 境界値が脱落しない契約は #900 で pin 済み)
+    """
+    out: dict = {}
+    for key in _ADVANCED_JSON_KEYS:
+        if key not in override:
+            continue
+        value = override[key]
+        if key == "vocal_gender" and value == "":
+            continue
+        out[key] = value
+    return out
 
 
 @dataclass
@@ -167,7 +189,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     # JSON 反映は channel override に明示されたキーのみ gating する (#900、A 案)。merged config では
     # default.yaml の既定値と区別できないため、override 単体を別途読む。
     override = load_channel_override("suno")
-    advanced_json_fields = {k: override[k] for k in _ADVANCED_JSON_KEYS if k in override}
+    advanced_json_fields = _build_advanced_json_fields(override)
     fb_genre, fb_exclude = _collect_video_analysis_presets()
 
     genre_line = suno.get("genre_line", "") or fb_genre

@@ -8,16 +8,18 @@
 // そのため resolveAdvancedFields() の解決結果 (fields) と entry の値有無を突き合わせる純ロジックを
 // shared/dom.ts::injectAdvancedFields として抽出し、依存 (resolved fields) を引数注入して検証する。
 //
-// 契約 (draft が実装する public API、shared/dom.ts):
+// 契約 (shared/dom.ts):
 //   injectAdvancedFields(entry, fields): Promise<void>
-//     entry:  { style_influence?: number; weirdness?: number; exclude_styles?: string }
-//     fields: { excludeStyles: HTMLInputElement | null; weirdness: HTMLElement | null; styleInfluence: HTMLElement | null }
-//   注入順序: Exclude styles (text, 高速) → Weirdness → Style Influence
+//     entry:  AdvancedFieldValues { style_influence?, weirdness?, exclude_styles?, vocal_gender? }
+//     fields: ResolvedAdvancedFields { excludeStyles, weirdness, styleInfluence, vocalGender: { male, female } }
+//   注入順序: Exclude styles (text, 高速) → vocal_gender (click 1 回) → Weirdness → Style Influence
 //   各フィールドの非対称契約:
 //     - entry に値有 (=== undefined でない) + 対応 selector が null → throw (fail-loud、UI 改装検知)
 //     - entry に値無 (=== undefined)                              → skip (fail-soft、後方互換)
 //     - entry に値有 + selector 有                                 → 注入する
-//       (exclude_styles は setNativeValue / slider 2 つは setSliderValue)
+//       (exclude_styles は setNativeValue / slider 2 つは setSliderValue / vocal_gender は click)
+//     - vocal_gender = "neutral" / "auto"                          → click しない (既選択を解除しない)
+//     - vocal_gender = "male" / "female" + 対応ボタンが既選択 → click しない (冪等)
 //   値の有無判定は `!== undefined`。0 や "" の falsy 値を truthy 判定で脱落させない。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,10 +52,37 @@ function makeExcludeInput(): HTMLInputElement {
   return input;
 }
 
+/**
+ * Suno Voice section の Male / Female ボタンペアを模す。
+ * 実 DOM 構造: <div><button data-selected>Male</button><button data-selected>Female</button></div>
+ */
+function makeVocalGenderPair(
+  opts: {
+    maleSelected?: boolean;
+    femaleSelected?: boolean;
+  } = {},
+): { male: HTMLButtonElement; female: HTMLButtonElement } {
+  const wrapper = document.createElement("div");
+  document.body.appendChild(wrapper);
+  const make = (label: string, selected: boolean): HTMLButtonElement => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute("data-selected", selected ? "true" : "false");
+    btn.textContent = label;
+    wrapper.appendChild(btn);
+    return btn;
+  };
+  return {
+    male: make("Male", opts.maleSelected === true),
+    female: make("Female", opts.femaleSelected === true),
+  };
+}
+
 const ALL_NULL: ResolvedAdvancedFields = {
   excludeStyles: null,
   weirdness: null,
   styleInfluence: null,
+  vocalGender: { male: null, female: null },
 };
 
 beforeEach(() => {
@@ -89,7 +118,10 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       const slider = makeSlider(50);
       const exclude = makeExcludeInput();
 
-      await injectAdvancedFields({}, { excludeStyles: exclude, weirdness: slider, styleInfluence: slider });
+      await injectAdvancedFields(
+        {},
+        { ...ALL_NULL, excludeStyles: exclude, weirdness: slider, styleInfluence: slider },
+      );
 
       expect(slider.getAttribute("aria-valuenow")).toBe("50");
       expect(exclude.value).toBe("");
@@ -102,7 +134,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
 
       const pending = injectAdvancedFields(
         { exclude_styles: "hyperpop, edm" },
-        { excludeStyles: exclude, weirdness: null, styleInfluence: null },
+        { ...ALL_NULL, excludeStyles: exclude },
       );
       await vi.advanceTimersByTimeAsync(2000);
       await pending;
@@ -113,7 +145,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
     it("Given entry.weirdness=30 + slider 有 When 注入 Then aria-valuenow が 30 になる", async () => {
       const weirdness = makeSlider(0);
 
-      const pending = injectAdvancedFields({ weirdness: 30 }, { excludeStyles: null, weirdness, styleInfluence: null });
+      const pending = injectAdvancedFields({ weirdness: 30 }, { ...ALL_NULL, weirdness });
       await vi.advanceTimersByTimeAsync(2000);
       await pending;
 
@@ -123,10 +155,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
     it("Given entry.style_influence=85 + slider 有 When 注入 Then aria-valuenow が 85 になる", async () => {
       const styleInfluence = makeSlider(50);
 
-      const pending = injectAdvancedFields(
-        { style_influence: 85 },
-        { excludeStyles: null, weirdness: null, styleInfluence },
-      );
+      const pending = injectAdvancedFields({ style_influence: 85 }, { ...ALL_NULL, styleInfluence });
       await vi.advanceTimersByTimeAsync(2000);
       await pending;
 
@@ -137,7 +166,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       // current 50 → target 0 (ArrowLeft×50)。truthy 判定だと 0 が skip され値ずれが残る。
       const weirdness = makeSlider(50);
 
-      const pending = injectAdvancedFields({ weirdness: 0 }, { excludeStyles: null, weirdness, styleInfluence: null });
+      const pending = injectAdvancedFields({ weirdness: 0 }, { ...ALL_NULL, weirdness });
       await vi.advanceTimersByTimeAsync(2000);
       await pending;
 
@@ -154,7 +183,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       const weirdness = makeSlider(50, { respond: false });
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-      const pending = injectAdvancedFields({ weirdness: 30 }, { excludeStyles: null, weirdness, styleInfluence: null });
+      const pending = injectAdvancedFields({ weirdness: 30 }, { ...ALL_NULL, weirdness });
       await vi.advanceTimersByTimeAsync(2000);
       await expect(pending).resolves.toBeUndefined();
 
@@ -166,10 +195,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       const styleInfluence = makeSlider(50, { respond: false });
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-      const pending = injectAdvancedFields(
-        { style_influence: 85 },
-        { excludeStyles: null, weirdness: null, styleInfluence },
-      );
+      const pending = injectAdvancedFields({ style_influence: 85 }, { ...ALL_NULL, styleInfluence });
       await vi.advanceTimersByTimeAsync(2000);
       await expect(pending).resolves.toBeUndefined();
 
@@ -188,7 +214,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
 
       const pending = injectAdvancedFields(
         { weirdness: 30, style_influence: 85 },
-        { excludeStyles: null, weirdness, styleInfluence },
+        { ...ALL_NULL, weirdness, styleInfluence },
       );
       await vi.advanceTimersByTimeAsync(3000);
       await pending;
@@ -207,7 +233,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
 
       const pending = injectAdvancedFields(
         { exclude_styles: "hyperpop", weirdness: 30, style_influence: 85 },
-        { excludeStyles: exclude, weirdness, styleInfluence },
+        { ...ALL_NULL, excludeStyles: exclude, weirdness, styleInfluence },
       );
       await vi.advanceTimersByTimeAsync(5000);
       await pending;
@@ -217,6 +243,104 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       expect(styleInfluence.getAttribute("aria-valuenow")).toBe("50");
       expect(warnSpy).toHaveBeenCalledTimes(2);
       warnSpy.mockRestore();
+    });
+  });
+
+  describe("vocal_gender 注入 (Male / Female ボタン click)", () => {
+    // 契約:
+    //   - vocal_gender = "male" → fields.vocalGender.male.click() (data-selected=false の時のみ)
+    //   - vocal_gender = "female" → fields.vocalGender.female.click() (data-selected=false の時のみ)
+    //   - vocal_gender = "neutral" / "auto" → click しない (既選択を解除しない)
+    //   - vocal_gender 未指定 → click しない (両方 null でも throw しない、fail-soft)
+    //   - vocal_gender 値有 + 対応ボタン null → throw (fail-loud)
+
+    it('Given vocal_gender="male" + Male 未選択 When 注入 Then Male.click() で data-selected=true、Female 不変', async () => {
+      const { male, female } = makeVocalGenderPair();
+      const maleClick = vi.spyOn(male, "click");
+      const femaleClick = vi.spyOn(female, "click");
+      // click を listen して data-selected トグルを再現（Suno UI を模す）
+      male.addEventListener("click", () => male.setAttribute("data-selected", "true"));
+
+      await injectAdvancedFields({ vocal_gender: "male" }, { ...ALL_NULL, vocalGender: { male, female } });
+
+      expect(maleClick).toHaveBeenCalledTimes(1);
+      expect(femaleClick).not.toHaveBeenCalled();
+      expect(male.getAttribute("data-selected")).toBe("true");
+      expect(female.getAttribute("data-selected")).toBe("false");
+    });
+
+    it('Given vocal_gender="male" + Male 既選択 When 注入 Then click せず冪等', async () => {
+      const { male, female } = makeVocalGenderPair({ maleSelected: true });
+      const maleClick = vi.spyOn(male, "click");
+      const femaleClick = vi.spyOn(female, "click");
+
+      await injectAdvancedFields({ vocal_gender: "male" }, { ...ALL_NULL, vocalGender: { male, female } });
+
+      expect(maleClick).not.toHaveBeenCalled();
+      expect(femaleClick).not.toHaveBeenCalled();
+    });
+
+    it('Given vocal_gender="female" + Female 未選択 When 注入 Then Female.click() のみ', async () => {
+      const { male, female } = makeVocalGenderPair();
+      const maleClick = vi.spyOn(male, "click");
+      const femaleClick = vi.spyOn(female, "click");
+      female.addEventListener("click", () => female.setAttribute("data-selected", "true"));
+
+      await injectAdvancedFields({ vocal_gender: "female" }, { ...ALL_NULL, vocalGender: { male, female } });
+
+      expect(femaleClick).toHaveBeenCalledTimes(1);
+      expect(maleClick).not.toHaveBeenCalled();
+      expect(female.getAttribute("data-selected")).toBe("true");
+    });
+
+    it('Given vocal_gender="neutral" + Male 既選択 When 注入 Then どちらも click せず既選択を保持', async () => {
+      // "neutral" / "auto" は「Suno に任せる」解釈なので既選択を解除しない（拡張は触らない）。
+      const { male, female } = makeVocalGenderPair({ maleSelected: true });
+      const maleClick = vi.spyOn(male, "click");
+      const femaleClick = vi.spyOn(female, "click");
+
+      await injectAdvancedFields({ vocal_gender: "neutral" }, { ...ALL_NULL, vocalGender: { male, female } });
+
+      expect(maleClick).not.toHaveBeenCalled();
+      expect(femaleClick).not.toHaveBeenCalled();
+      expect(male.getAttribute("data-selected")).toBe("true");
+    });
+
+    it('Given vocal_gender="auto" When 注入 Then どちらも click しない', async () => {
+      const { male, female } = makeVocalGenderPair();
+      const maleClick = vi.spyOn(male, "click");
+      const femaleClick = vi.spyOn(female, "click");
+
+      await injectAdvancedFields({ vocal_gender: "auto" }, { ...ALL_NULL, vocalGender: { male, female } });
+
+      expect(maleClick).not.toHaveBeenCalled();
+      expect(femaleClick).not.toHaveBeenCalled();
+    });
+
+    it('Given vocal_gender="male" + Male ボタン null When 注入 Then throw (fail-loud)', async () => {
+      await expect(injectAdvancedFields({ vocal_gender: "male" }, ALL_NULL)).rejects.toThrow(
+        /Vocal gender button \(male\)/,
+      );
+    });
+
+    it("Given vocal_gender 未指定 + 両ボタン null When 注入 Then throw しない (fail-soft、後方互換)", async () => {
+      await expect(injectAdvancedFields({}, ALL_NULL)).resolves.toBeUndefined();
+    });
+
+    it('Given exclude_styles + vocal_gender="male" 同時指定 When 注入 Then 両方適用される', async () => {
+      const exclude = makeExcludeInput();
+      const { male, female } = makeVocalGenderPair();
+      const maleClick = vi.spyOn(male, "click");
+      male.addEventListener("click", () => male.setAttribute("data-selected", "true"));
+
+      await injectAdvancedFields(
+        { exclude_styles: "hyperpop", vocal_gender: "male" },
+        { ...ALL_NULL, excludeStyles: exclude, vocalGender: { male, female } },
+      );
+
+      expect(exclude.value).toBe("hyperpop");
+      expect(maleClick).toHaveBeenCalledTimes(1);
+      expect(male.getAttribute("data-selected")).toBe("true");
     });
   });
 
@@ -238,7 +362,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
 
       const pending = injectAdvancedFields(
         { exclude_styles: "hyperpop", weirdness: 30, style_influence: 85 },
-        { excludeStyles: exclude, weirdness, styleInfluence },
+        { ...ALL_NULL, excludeStyles: exclude, weirdness, styleInfluence },
       );
       await vi.advanceTimersByTimeAsync(3000);
       await pending;
