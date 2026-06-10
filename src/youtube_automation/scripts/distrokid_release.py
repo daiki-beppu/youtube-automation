@@ -93,7 +93,13 @@ def _default_release(paths: CollectionPaths) -> dict:
 
 
 def _disc_source_payload(paths: CollectionPaths, distrokid_source: str, profile: dict) -> dict:
-    """30-distrokid disc-source 経路: metadata.md 主導で payload を組み立てる."""
+    """30-distrokid disc-source 経路: metadata.md 主導で payload を組み立てる.
+
+    profile.language は `config/channel/distrokid.json` を権威に使う。
+    metadata.md の「言語」セルは人間向け転記用テンプレで、DistroKid form 言語 option
+    と意味が異なる値（例: "Instrumental" のような楽曲属性表記）が入りうるため、
+    payload には反映しない（#888）。
+    """
     source_dir = _resolve_source_dir(paths.root, distrokid_source)
     metadata_path = source_dir / _METADATA_FILENAME
     if not metadata_path.is_file():
@@ -102,9 +108,8 @@ def _disc_source_payload(paths: CollectionPaths, distrokid_source: str, profile:
     album_meta = parse_album_metadata(metadata_path)
     title_by_filename = {row["filename"]: row["title"] for row in parse_track_table(metadata_path)}
 
-    language = album_meta["language"] or profile["language"]
     return {
-        "profile": {**profile, "language": language},
+        "profile": profile,
         "release": {
             "album_title": album_meta["album_title"] or _kebab_to_title(source_dir.name),
             "tracks": _disc_tracks(paths.root, source_dir, title_by_filename),
