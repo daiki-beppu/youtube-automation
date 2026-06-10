@@ -1,5 +1,6 @@
 import { DEFAULT_URL, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import { PatternList } from "./PatternList";
+import { PlaylistCaptureTab } from "./PlaylistCaptureTab";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -10,6 +11,7 @@ export function App() {
     url,
     setUrl,
     collections,
+    allMapped,
     selectedCollectionId,
     selectCollection,
     entries,
@@ -66,6 +68,9 @@ export function App() {
           </select>
         </label>
       )}
+
+      {/* 全 collection が既にマッピング済みで filter 後 0 件のとき (#893 要件 B)。 */}
+      {allMapped && <p className="text-xs text-gray-600">未マッピング collection はありません。</p>}
 
       {playlistName && (
         <p className="text-xs text-gray-600">
@@ -191,6 +196,9 @@ export function App() {
       {status && (
         <p className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}>{status}</p>
       )}
+
+      {/* overlay 下部の Suno playlist capture セクション (#893)。サーバー URL は上の入力欄を共用する。 */}
+      <PlaylistCaptureTab baseUrl={url} />
     </div>
   );
 }

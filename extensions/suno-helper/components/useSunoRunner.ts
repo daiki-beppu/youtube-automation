@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   type CollectionSummary,
+  excludeMappedCollections,
   extractPlaylistName,
   fetchCollectionPrompts,
   fetchCollections,
@@ -37,6 +38,9 @@ interface RunnerState {
   url: string;
   setUrl: (url: string) => void;
   collections: CollectionSummary[];
+  // fetchCollections は collection を返したが全て mapped 済みで filter 後 0 件になった状態 (#893 要件 B)。
+  // App が「未マッピング collection はありません」の placeholder を出すための表示フラグ。
+  allMapped: boolean;
   selectedCollectionId: string;
   selectCollection: (id: string) => void;
   entries: PromptEntry[];
@@ -70,6 +74,8 @@ interface RunnerState {
 export function useSunoRunner(): RunnerState {
   const [url, setUrl] = useState("");
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
+  // fetchCollections が非空だが全件 mapped で filter 後 0 件になったか (#893 要件 B)。placeholder 表示用。
+  const [allMapped, setAllMapped] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
@@ -168,12 +174,17 @@ export function useSunoRunner(): RunnerState {
 
   const loadCollections = useCallback(async (baseUrl: string) => {
     try {
-      const list = await fetchCollections(baseUrl);
+      const fetched = await fetchCollections(baseUrl);
+      // 既にマッピング済み collection をドロップダウンから外す (#893 追加要件 B)。prefix 未指定の
+      // 旧サーバーは mapped を返さず全件残る（後方互換）。fetched 非空 + filter 後空 = 全件マッピング済み。
+      const list = excludeMappedCollections(fetched);
       setCollections(list);
+      setAllMapped(fetched.length > 0 && list.length === 0);
       setSelectedCollectionId(pickInitialCollectionId(list) ?? "");
     } catch {
       // 単一ファイル mode サーバーは `/collections` が 404。ドロップダウンを出さず単一 mode へ fallback。
       setCollections([]);
+      setAllMapped(false);
       setSelectedCollectionId("");
     }
   }, []);
@@ -329,6 +340,7 @@ export function useSunoRunner(): RunnerState {
     url,
     setUrl,
     collections,
+    allMapped,
     selectedCollectionId,
     selectCollection: setSelectedCollectionId,
     entries,

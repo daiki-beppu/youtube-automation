@@ -535,11 +535,14 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
         body = json.loads(resp.read().decode("utf-8"))
 
     by_id = {row["id"]: row for row in body}
+    # #893 追加要件 B: build_collections_index は各 entry に mapped を含める。
+    # dir mode の serve_dir fixture は playlist_capture を渡さない（prefix 無）ため全件 mapped=False。
     assert by_id["20260601-clm-aaa-collection"] == {
         "id": "20260601-clm-aaa-collection",
         "name": "aaa-collection",
         "has_prompts": True,
         "pattern_count": 1,
+        "mapped": False,
     }
     assert by_id["20260602-clm-bbb-collection"]["has_prompts"] is False
     assert by_id["20260602-clm-bbb-collection"]["pattern_count"] is None
