@@ -1,12 +1,16 @@
-// The domain exception hierarchy is one cohesive unit (order.md targets a
-// single packages/core errors module), so the per-file class cap is relaxed
-// here rather than scattering the hierarchy across files.
+// Error strategy for packages/core (ADR-0003 §2-3).
+//
+// Only the three payload-carrying classes survive as `instanceof`-discriminated
+// throw types: `AutomationError` (base), `YouTubeAPIError` (statusCode / reason
+// / context), and `QuotaExhaustedError` (retryAfterSeconds). The former
+// name-tag classes (Config / Auth / Validation / Upload / Generator) are gone;
+// callers throw `new Error("config: ...")` / `"validation: ..."` and the
+// boundary converts everything to a `ServiceError` via `toServiceError`.
+//
+// The three surviving classes form one cohesive payload hierarchy, so the
+// per-file class cap is relaxed here rather than scattering them across files.
 /* eslint-disable max-classes-per-file */
-
-// Domain exception hierarchy, ported from the Python `utils/exceptions.py`.
-// `AutomationError` is the base every domain error extends, so a single
-// `catch (e instanceof AutomationError)` site captures all of them while
-// `instanceof` on the concrete class still discriminates.
+import { z } from "zod";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -48,70 +52,6 @@ export class AutomationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "AutomationError";
-  }
-}
-
-/**
- * Config file load / validation error.
- *
- * - missing required keys in config/channel/*.json
- * - config file not found
- * - JSON parse error
- */
-export class ConfigError extends AutomationError {
-  constructor(message: string) {
-    super(message);
-    this.name = "ConfigError";
-  }
-}
-
-/**
- * OAuth 2.0 authentication error.
- *
- * - client_secrets.json load failure
- * - run_local_server flow failure
- * - GoogleAuthError family roll-up
- */
-export class AuthError extends AutomationError {
-  constructor(message: string) {
-    super(message);
-    this.name = "AuthError";
-  }
-}
-
-/**
- * Input data validation error.
- *
- * - invalid metadata values
- * - invalid file paths
- * - invalid collection names
- */
-export class ValidationError extends AutomationError {
-  constructor(message: string) {
-    super(message);
-    this.name = "ValidationError";
-  }
-}
-
-/**
- * Video / thumbnail upload failure.
- *
- * - retry limit reached
- * - file missing
- * - thumbnail compression failure
- */
-export class UploadError extends AutomationError {
-  constructor(message: string) {
-    super(message);
-    this.name = "UploadError";
-  }
-}
-
-/** Reply-generation backend failure (API error, malformed response, etc.). */
-export class GeneratorError extends AutomationError {
-  constructor(message: string) {
-    super(message);
-    this.name = "GeneratorError";
   }
 }
 
@@ -188,3 +128,85 @@ export class QuotaExhaustedError extends YouTubeAPIError {
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+// ServiceError (ADR-0003 §2): the wire-shape every service boundary emits. A
+// zod discriminated union on `domain` so MCP can `JSON.stringify` it straight
+// into a JSON-RPC error — a class hierarchy would lose its prototype chain.
+export const ServiceError = z.discriminatedUnion("domain", [
+  z.object({
+    domain: z.literal("quota"),
+    httpStatus: z.literal(429),
+    message: z.string(),
+    retryAfterSeconds: z.number().optional(),
+  }),
+  z.object({
+    domain: z.literal("api"),
+    httpStatus: z.number(),
+    message: z.string(),
+    reason: z.string().optional(),
+  }),
+  z.object({ domain: z.literal("auth"), message: z.string() }),
+  z.object({
+    domain: z.literal("config"),
+    message: z.string(),
+    path: z.string().optional(),
+  }),
+  z.object({
+    domain: z.literal("validation"),
+    field: z.string().optional(),
+    message: z.string(),
+  }),
+  z.object({
+    domain: z.literal("io"),
+    message: z.string(),
+    path: z.string().optional(),
+  }),
+]);
+export type ServiceError = z.infer<typeof ServiceError>;
+
+/**
+ * Convert any thrown value into a {@link ServiceError} at a service boundary
+ * (ADR-0003 §3).
+ *
+ * The `instanceof` checks come first so payload-carrying errors keep their
+ * fields. `QuotaExhaustedError` MUST be tested before `YouTubeAPIError` — it
+ * extends it, so the order is load-bearing or quota errors degrade to `api`.
+ * Everything else falls back to the `message` prefix convention; an unprefixed
+ * `Error` (or any non-Error value via `String`) lands in `io`.
+ */
+export const toServiceError = (e: unknown): ServiceError => {
+  if (e instanceof QuotaExhaustedError) {
+    return {
+      domain: "quota",
+      httpStatus: 429,
+      message: e.message,
+      retryAfterSeconds: e.retryAfterSeconds,
+    };
+  }
+  if (e instanceof YouTubeAPIError) {
+    return {
+      domain: "api",
+      httpStatus: e.statusCode ?? 500,
+      message: e.message,
+      reason: e.reason,
+    };
+  }
+  if (e instanceof z.ZodError) {
+    return {
+      domain: "validation",
+      field: e.issues[0]?.path.map(String).join("."),
+      message: e.message,
+    };
+  }
+  const message = e instanceof Error ? e.message : String(e);
+  if (message.startsWith("config:")) {
+    return { domain: "config", message };
+  }
+  if (message.startsWith("auth:")) {
+    return { domain: "auth", message };
+  }
+  if (message.startsWith("validation:")) {
+    return { domain: "validation", message };
+  }
+  return { domain: "io", message };
+};

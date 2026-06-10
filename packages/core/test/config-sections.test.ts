@@ -9,7 +9,6 @@ import {
   test,
 } from "bun:test";
 
-import { ConfigError } from "@youtube-automation/core";
 import { loadConfig, reset } from "@youtube-automation/core/config";
 
 import {
@@ -519,7 +518,7 @@ describe("distrokid", () => {
     sections["distrokid.json"] = { distrokid: ["not", "an", "object"] };
 
     // When/Then the section guard fires
-    expect(() => load(sections)).toThrow(ConfigError);
+    expect(() => load(sections)).toThrow(/^config:/u);
   });
 
   test("rejects a non-object distrokid.profile via the shared asRecord guard", () => {

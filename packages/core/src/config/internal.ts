@@ -2,8 +2,6 @@
 // Python 版が `isinstance(x, dict)` / `x or {}` で行っていた object 判定を、
 // 配列を object 扱いしない厳密な形で TS へ移植する。
 
-import { ConfigError } from "../errors.ts";
-
 /** 配列を除外した plain object 判定（Python の `isinstance(x, dict)` 相当）。 */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,7 +20,7 @@ export const asRecord = (
     return {};
   }
   if (!isRecord(value)) {
-    throw new ConfigError(`${label} は object でなければなりません`);
+    throw new Error(`config: ${label} は object でなければなりません`);
   }
   return value;
 };

@@ -12,12 +12,11 @@
 // Scope note (plan §4-D): legacy `gemini_image:` namespace, `gemini_cli`/`codex`
 // providers, `thinking`, and `replace_model` are intentionally NOT ported, so an
 // unsupported `provider` value (including "codex"/"gemini_cli") must fail fast
-// with ConfigError. Input keys are snake_case (matching the existing config
-// parsers); the parsed result is camelCase.
+// with a `config:`-prefixed Error. Input keys are snake_case (matching the
+// existing config parsers); the parsed result is camelCase.
 
 import { describe, expect, test } from "bun:test";
 
-import { ConfigError } from "@youtube-automation/core";
 import {
   getProvider,
   OPENAI_SUPPORTED_ASPECT_RATIOS,
@@ -157,18 +156,18 @@ describe("parseImageGenerationConfig fail-fast", () => {
           provider: "openai",
         },
       })
-    ).toThrow(ConfigError);
+    ).toThrow(/^config:/u);
   });
 
   test("rejects an unsupported provider name", () => {
     // Given a provider value outside {gemini, openai} (config.py:150-151)
     // When parsing it
-    // Then a ConfigError is raised
+    // Then a config:-prefixed Error is raised
     expect(() =>
       parseImageGenerationConfig({
         image_generation: { provider: "midjourney" },
       })
-    ).toThrow(ConfigError);
+    ).toThrow(/^config:/u);
   });
 
   test("rejects the de-scoped codex provider", () => {
@@ -179,7 +178,7 @@ describe("parseImageGenerationConfig fail-fast", () => {
       parseImageGenerationConfig({
         image_generation: { provider: "codex" },
       })
-    ).toThrow(ConfigError);
+    ).toThrow(/^config:/u);
   });
 
   test("rejects the de-scoped gemini_cli provider", () => {
@@ -190,7 +189,7 @@ describe("parseImageGenerationConfig fail-fast", () => {
       parseImageGenerationConfig({
         image_generation: { provider: "gemini_cli" },
       })
-    ).toThrow(ConfigError);
+    ).toThrow(/^config:/u);
   });
 });
 
@@ -226,7 +225,7 @@ describe("getProvider dispatch", () => {
     // Given a hand-rolled config carrying an unsupported provider (__init__.py:75)
     const bogus = { provider: "codex" } as unknown as ImageGenerationConfig;
     // When dispatching it
-    // Then getProvider raises ConfigError rather than returning undefined
-    expect(() => getProvider(bogus)).toThrow(ConfigError);
+    // Then getProvider raises a config:-prefixed Error rather than returning undefined
+    expect(() => getProvider(bogus)).toThrow(/^config:/u);
   });
 });

@@ -4,7 +4,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { ConfigError } from "../errors.ts";
 import { parseAnalytics } from "./analytics.ts";
 import { parseAudio } from "./audio.ts";
 import { parseComments } from "./comments.ts";
@@ -72,8 +71,8 @@ const resolveChannelDir = (): string => {
     }
     current = parent;
   }
-  throw new ConfigError(
-    "CHANNEL_DIR 環境変数を設定するか、config/channel/ を持つディレクトリ配下で実行してください"
+  throw new Error(
+    "config: CHANNEL_DIR 環境変数を設定するか、config/channel/ を持つディレクトリ配下で実行してください"
   );
 };
 
@@ -100,17 +99,19 @@ const loadAndMerge = (files: string[]): Record<string, unknown> => {
     try {
       data = JSON.parse(readFileSync(path, "utf-8"));
     } catch (error) {
-      throw new ConfigError(`JSON パース失敗: ${path}: ${String(error)}`);
+      throw new Error(`config: JSON パース失敗: ${path}: ${String(error)}`, {
+        cause: error,
+      });
     }
     if (!isRecord(data)) {
-      throw new ConfigError(
-        `${path} のトップレベルは object でなければなりません`
+      throw new Error(
+        `config: ${path} のトップレベルは object でなければなりません`
       );
     }
     for (const [key, value] of Object.entries(data)) {
       if (key in merged) {
-        throw new ConfigError(
-          `トップレベルキー '${key}' が ${keyOrigin[key]} と ${basename(path)} の両方に存在します`
+        throw new Error(
+          `config: トップレベルキー '${key}' が ${keyOrigin[key]} と ${basename(path)} の両方に存在します`
         );
       }
       merged[key] = value;
@@ -136,8 +137,8 @@ const validateRequired = (merged: Record<string, unknown>): void => {
     }
   }
   if (missing.length > 0) {
-    throw new ConfigError(
-      `config/channel/ に必須キーがありません: ${missing.join(", ")}`
+    throw new Error(
+      `config: config/channel/ に必須キーがありません: ${missing.join(", ")}`
     );
   }
 };
@@ -154,14 +155,15 @@ const loadLocalizations = (
   try {
     data = JSON.parse(readFileSync(locPath, "utf-8"));
   } catch (error) {
-    throw new ConfigError(
-      `localizations.json の JSON パース失敗: ${locPath}: ${String(error)}`
+    throw new Error(
+      `config: localizations.json の JSON パース失敗: ${locPath}: ${String(error)}`,
+      { cause: error }
     );
   }
   return parseLocalizations(data);
 };
 
-// ファイル跨ぎ整合性チェック（違反はすべて ConfigError）。
+// ファイル跨ぎ整合性チェック（違反はすべて config: prefix Error）。
 const validateCrossFile = (
   youtube: YoutubeSection,
   content: Content,
@@ -173,8 +175,8 @@ const validateCrossFile = (
       (lang) => !localizations.supportedLanguages.includes(lang)
     );
     if (unknownLangs.length > 0) {
-      throw new ConfigError(
-        `content_model.languages に localizations.supported_languages へ未登録の言語があります: ${JSON.stringify(unknownLangs)}`
+      throw new Error(
+        `config: content_model.languages に localizations.supported_languages へ未登録の言語があります: ${JSON.stringify(unknownLangs)}`
       );
     }
   }
@@ -185,8 +187,8 @@ const validateCrossFile = (
     .filter((key) => !themeKeys.has(key))
     .toSorted();
   if (unknownScenes.length > 0) {
-    throw new ConfigError(
-      `title.theme_scenes に tags.themes で定義されていないテーマキーがあります: ${JSON.stringify(unknownScenes)}`
+    throw new Error(
+      `config: title.theme_scenes に tags.themes で定義されていないテーマキーがあります: ${JSON.stringify(unknownScenes)}`
     );
   }
 };
@@ -223,13 +225,13 @@ const build = (channelRoot: string): ChannelConfig => {
   const legacyPath = join(channelRoot, "config", "channel_config.json");
 
   if (existsSync(legacyPath)) {
-    throw new ConfigError(
-      `旧 channel_config.json が残っています: ${legacyPath}\nyt-config-migrate で新構造 (config/channel/*.json) へ変換してください`
+    throw new Error(
+      `config: 旧 channel_config.json が残っています: ${legacyPath}\nyt-config-migrate で新構造 (config/channel/*.json) へ変換してください`
     );
   }
   if (!isDir(channelSubdir)) {
-    throw new ConfigError(
-      `config/channel/ ディレクトリが見つかりません: ${channelSubdir}`
+    throw new Error(
+      `config: config/channel/ ディレクトリが見つかりません: ${channelSubdir}`
     );
   }
 
@@ -238,8 +240,8 @@ const build = (channelRoot: string): ChannelConfig => {
     .toSorted()
     .map((name) => join(channelSubdir, name));
   if (files.length === 0) {
-    throw new ConfigError(
-      `config/channel/ に JSON ファイルが 1 つもありません: ${channelSubdir}`
+    throw new Error(
+      `config: config/channel/ に JSON ファイルが 1 つもありません: ${channelSubdir}`
     );
   }
 

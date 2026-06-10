@@ -7,7 +7,6 @@
 
 import type { ChannelConfig } from "../config/config.ts";
 import { hashtagLine, renderOpening, titleCase } from "../config/content.ts";
-import { ValidationError } from "../errors.ts";
 import {
   codepointLength,
   DESCRIPTION_CODEPOINT_LIMIT,
@@ -44,8 +43,8 @@ const metadataString = (
 /**
  * scene_phrases を localizations の全言語で試算し、100 codepoint 超過を一括検出する。
  *
- * @throws {ValidationError} scene_phrases が一部言語で欠落、または `title_template` が
- *   無い言語があるとき。
+ * @throws {Error} `validation:` prefix — scene_phrases が一部言語で欠落、または
+ *   `title_template` が無い言語があるとき。
  */
 export const validateScenePhrases = (
   scenePhrases: Readonly<Record<string, string>>,
@@ -57,8 +56,8 @@ export const validateScenePhrases = (
 
   const missing = supported.filter((lang) => !scenePhrases[lang]);
   if (missing.length > 0) {
-    throw new ValidationError(
-      `scene_phrases に翻訳が不足しています。不足言語: ${JSON.stringify(missing)}\n` +
+    throw new Error(
+      `validation: scene_phrases に翻訳が不足しています。不足言語: ${JSON.stringify(missing)}\n` +
         "→ コレクションの workflow-state.json に scene_phrases: {en, ja, ...} を populate してください。"
     );
   }
@@ -74,8 +73,8 @@ export const validateScenePhrases = (
     const langData = loc.languages?.[lang] ?? {};
     const titleTpl = langData.title_template;
     if (!titleTpl) {
-      throw new ValidationError(
-        `localizations.json: language '${lang}' に title_template が無い`
+      throw new Error(
+        `validation: localizations.json: language '${lang}' に title_template が無い`
       );
     }
     const activities = langData.activities ?? bestForLine;
@@ -120,7 +119,7 @@ interface CompleteCollectionTitleOptions {
 /**
  * content.json の title.template から Complete Collection タイトルを生成する（100 codepoint 制限）。
  *
- * @throws {ValidationError} タイトルが 100 codepoint を超過したとき（silent slice 禁止）。
+ * @throws {Error} `validation:` prefix — タイトルが 100 codepoint を超過したとき（silent slice 禁止）。
  */
 export const generateCompleteCollectionTitle = (
   config: ChannelConfig,
@@ -142,8 +141,8 @@ export const generateCompleteCollectionTitle = (
   );
   const length = codepointLength(title);
   if (length > TITLE_CODEPOINT_LIMIT) {
-    throw new ValidationError(
-      `生成したタイトルが ${length} codepoint と ${TITLE_CODEPOINT_LIMIT} を超過: \n  ${title}\n` +
+    throw new Error(
+      `validation: 生成したタイトルが ${length} codepoint と ${TITLE_CODEPOINT_LIMIT} を超過: \n  ${title}\n` +
         "→ config/channel/content.json の title.theme_scenes の scene を短く書き直してください"
     );
   }
@@ -225,7 +224,7 @@ interface LocalizedText {
  *
  * 100 codepoint 超過は全言語まとめて検出し、1 件でもあれば throw する。
  *
- * @throws {ValidationError} scene_phrases 欠落・title_template 欠落・codepoint 超過時。
+ * @throws {Error} `validation:` prefix — scene_phrases 欠落・title_template 欠落・codepoint 超過時。
  */
 export const generateLocalizations = (
   config: ChannelConfig,
@@ -244,8 +243,8 @@ export const generateLocalizations = (
 
   const violations = validateScenePhrases(scenePhrases, config, sceneEmoji);
   if (violations.length > 0) {
-    throw new ValidationError(
-      `localizations の ${violations.length} 言語でタイトルが ${TITLE_CODEPOINT_LIMIT} codepoint を超過:\n` +
+    throw new Error(
+      `validation: localizations の ${violations.length} 言語でタイトルが ${TITLE_CODEPOINT_LIMIT} codepoint を超過:\n` +
         `${formatSceneTitleViolations(violations)}\n` +
         "→ workflow-state.json の該当 scene_phrases を短縮してください"
     );

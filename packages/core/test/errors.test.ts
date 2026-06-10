@@ -5,15 +5,16 @@ import { describe, expect, test } from "bun:test";
 // file. A broken `exports` or missing barrel entry fails resolution here
 // instead of slipping past tsc.
 import {
-  AuthError,
   AutomationError,
-  ConfigError,
-  GeneratorError,
+  err,
+  ok,
   QuotaExhaustedError,
-  UploadError,
-  ValidationError,
+  ServiceError,
+  toServiceError,
   YouTubeAPIError,
 } from "@youtube-automation/core";
+import type { Result } from "@youtube-automation/core";
+import { z } from "zod";
 
 // Builds a gaxios-shaped error: a real Error (so `error instanceof Error`
 // holds and `.message` is read for the wrapped message) with a `response`
@@ -38,39 +39,6 @@ describe("AutomationError (base)", () => {
     expect(error.message).toBe("boom");
     expect(error.name).toBe("AutomationError");
   });
-});
-
-describe("plain domain subclasses extend AutomationError", () => {
-  // Each entry: concrete class paired with its expected `name`.
-  const cases: readonly (readonly [
-    new (m: string) => AutomationError,
-    string,
-  ])[] = [
-    [ConfigError, "ConfigError"],
-    [AuthError, "AuthError"],
-    [ValidationError, "ValidationError"],
-    [UploadError, "UploadError"],
-    [GeneratorError, "GeneratorError"],
-  ];
-
-  for (const [Ctor, name] of cases) {
-    test(`${name} instanceof AutomationError and Error`, () => {
-      // Given an instance of the domain subclass
-      const error = new Ctor("nope");
-      // Then it sits under AutomationError in the hierarchy
-      expect(error).toBeInstanceOf(AutomationError);
-      expect(error).toBeInstanceOf(Error);
-      expect(error).toBeInstanceOf(Ctor);
-    });
-
-    test(`${name} carries its message and class name`, () => {
-      // Given an instance with a message
-      const error = new Ctor("nope");
-      // Then message and name are preserved
-      expect(error.message).toBe("nope");
-      expect(error.name).toBe(name);
-    });
-  }
 });
 
 describe("YouTubeAPIError", () => {
@@ -234,64 +202,251 @@ describe("QuotaExhaustedError", () => {
   });
 });
 
-describe("throw / catch round-trips", () => {
-  // Each domain class must be catchable both as itself and as AutomationError.
-  const throwers: readonly (readonly [string, () => never])[] = [
-    [
-      "ConfigError",
-      () => {
-        throw new ConfigError("c");
-      },
-    ],
-    [
-      "YouTubeAPIError",
-      () => {
-        throw new YouTubeAPIError("y");
-      },
-    ],
-    [
-      "QuotaExhaustedError",
-      () => {
-        throw new QuotaExhaustedError("q");
-      },
-    ],
-    [
-      "AuthError",
-      () => {
-        throw new AuthError("a");
-      },
-    ],
-    [
-      "ValidationError",
-      () => {
-        throw new ValidationError("v");
-      },
-    ],
-    [
-      "UploadError",
-      () => {
-        throw new UploadError("u");
-      },
-    ],
-    [
-      "GeneratorError",
-      () => {
-        throw new GeneratorError("g");
-      },
-    ],
-  ];
+// --- Result / ok / err ----------------------------------------------------
 
-  for (const [name, thrower] of throwers) {
-    test(`${name} is catchable as AutomationError`, () => {
-      // When the domain error is thrown
-      // Then a generic AutomationError catch site captures it
-      let caught: unknown;
-      try {
-        thrower();
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toBeInstanceOf(AutomationError);
+describe("Result helpers", () => {
+  test("ok wraps a value into a success Result", () => {
+    // Given a success value
+    const result: Result<number, string> = ok(42);
+    // Then the discriminant is ok:true and the value is carried
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(42);
+    }
+  });
+
+  test("err wraps an error into a failure Result", () => {
+    // Given a failure value
+    const result: Result<number, string> = err("boom");
+    // Then the discriminant is ok:false and the error is carried
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("boom");
+    }
+  });
+
+  test("ok carries object values by reference without copying", () => {
+    // Given an object payload
+    const payload = { id: 7 };
+    const result = ok(payload);
+    // Then the wrapper exposes the exact same reference (no defensive clone)
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(payload);
+    }
+  });
+
+  test("the ok discriminant narrows away the error arm at runtime", () => {
+    // Given a failure Result discriminated only by the `ok` flag
+    const result: Result<string, ServiceError> = err({
+      domain: "io",
+      message: "disk full",
     });
-  }
+    // Then `ok` is the single source of truth for which arm is populated
+    expect("value" in result).toBe(false);
+    expect("error" in result).toBe(true);
+  });
+});
+
+// --- ServiceError zod schema ----------------------------------------------
+
+describe("ServiceError schema", () => {
+  test("accepts a quota variant pinned to httpStatus 429", () => {
+    // Given a quota-domain payload
+    const parsed = ServiceError.parse({
+      domain: "quota",
+      httpStatus: 429,
+      message: "quota gone",
+      retryAfterSeconds: 30,
+    });
+    // Then it round-trips with the discriminator and payload intact
+    expect(parsed).toEqual({
+      domain: "quota",
+      httpStatus: 429,
+      message: "quota gone",
+      retryAfterSeconds: 30,
+    });
+  });
+
+  test("rejects a quota variant whose httpStatus is not the 429 literal", () => {
+    // Given a quota payload with a non-429 status
+    // When parsing it
+    // Then the literal(429) constraint fails fast
+    expect(() =>
+      ServiceError.parse({ domain: "quota", httpStatus: 500, message: "m" })
+    ).toThrow();
+  });
+
+  test("accepts an api variant with an arbitrary numeric httpStatus", () => {
+    // Given an api-domain payload
+    const parsed = ServiceError.parse({
+      domain: "api",
+      httpStatus: 403,
+      message: "api failed",
+      reason: "forbidden",
+    });
+    // Then the numeric status and optional reason survive
+    expect(parsed.domain).toBe("api");
+    if (parsed.domain === "api") {
+      expect(parsed.httpStatus).toBe(403);
+      expect(parsed.reason).toBe("forbidden");
+    }
+  });
+
+  test("accepts the auth / config / validation / io variants", () => {
+    // Given each remaining domain payload
+    // Then all parse against the discriminated union
+    expect(ServiceError.parse({ domain: "auth", message: "a" }).domain).toBe(
+      "auth"
+    );
+    expect(
+      ServiceError.parse({ domain: "config", message: "c", path: "x" }).domain
+    ).toBe("config");
+    expect(
+      ServiceError.parse({ domain: "validation", field: "x", message: "v" })
+        .domain
+    ).toBe("validation");
+    expect(
+      ServiceError.parse({ domain: "io", message: "i", path: "/tmp" }).domain
+    ).toBe("io");
+  });
+
+  test("rejects an unknown domain discriminator", () => {
+    // Given a payload whose domain is outside the 6-variant union
+    // When parsing it
+    // Then the discriminatedUnion rejects it
+    expect(() =>
+      ServiceError.parse({ domain: "network", message: "m" })
+    ).toThrow();
+  });
+});
+
+// --- toServiceError -------------------------------------------------------
+
+describe("toServiceError", () => {
+  test("maps QuotaExhaustedError to the quota domain (before the api branch)", () => {
+    // Given a QuotaExhaustedError (which is also a YouTubeAPIError)
+    const error = new QuotaExhaustedError("quota gone", 45);
+    // When converting it
+    const se = toServiceError(error);
+    // Then the quota branch wins over the api branch despite the inheritance
+    expect(se).toEqual({
+      domain: "quota",
+      httpStatus: 429,
+      message: "quota gone",
+      retryAfterSeconds: 45,
+    });
+  });
+
+  test("maps YouTubeAPIError to the api domain with its statusCode", () => {
+    // Given a YouTubeAPIError carrying status + reason
+    const error = new YouTubeAPIError("api failed", {
+      reason: "forbidden",
+      statusCode: 403,
+    });
+    // When converting it
+    const se = toServiceError(error);
+    // Then it becomes an api-domain ServiceError
+    expect(se).toEqual({
+      domain: "api",
+      httpStatus: 403,
+      message: "api failed",
+      reason: "forbidden",
+    });
+  });
+
+  test("defaults a YouTubeAPIError without statusCode to httpStatus 500", () => {
+    // Given a YouTubeAPIError with no status code
+    const error = new YouTubeAPIError("api failed");
+    // When converting it
+    const se = toServiceError(error);
+    // Then the api branch falls back to 500 rather than emitting undefined
+    expect(se.domain).toBe("api");
+    if (se.domain === "api") {
+      expect(se.httpStatus).toBe(500);
+    }
+  });
+
+  test("maps a ZodError to the validation domain with the issue path as field", () => {
+    // Given a zod validation failure on a nested field
+    const schema = z.object({ a: z.object({ b: z.string() }) });
+    const result = schema.safeParse({ a: { b: 123 } });
+    expect(result.success).toBe(false);
+    // When converting the ZodError
+    const se = toServiceError((result as { error: z.ZodError }).error);
+    // Then the validation domain carries the dotted issue path
+    expect(se.domain).toBe("validation");
+    if (se.domain === "validation") {
+      expect(se.field).toBe("a.b");
+    }
+  });
+
+  test("maps a config:-prefixed Error to the config domain", () => {
+    // Given a plain Error using the config prefix convention
+    const error = new Error("config: missing channel.name");
+    // When converting it
+    const se = toServiceError(error);
+    // Then the prefix routes it to the config domain (message preserved)
+    expect(se).toEqual({
+      domain: "config",
+      message: "config: missing channel.name",
+    });
+  });
+
+  test("maps an auth:-prefixed Error to the auth domain", () => {
+    // Given a plain Error using the auth prefix convention
+    const error = new Error("auth: token expired");
+    // When converting it
+    const se = toServiceError(error);
+    // Then the prefix routes it to the auth domain
+    expect(se).toEqual({ domain: "auth", message: "auth: token expired" });
+  });
+
+  test("maps a validation:-prefixed Error to the validation domain", () => {
+    // Given a plain Error using the validation prefix convention
+    const error = new Error("validation: unknown placeholder {adjective}");
+    // When converting it
+    const se = toServiceError(error);
+    // Then the prefix routes it to the validation domain
+    expect(se.domain).toBe("validation");
+    expect(se.message).toBe("validation: unknown placeholder {adjective}");
+  });
+
+  test("maps an unprefixed Error to the io domain", () => {
+    // Given a plain Error with no recognised prefix
+    const error = new Error("disk full");
+    // When converting it
+    const se = toServiceError(error);
+    // Then it falls back to the io domain
+    expect(se).toEqual({ domain: "io", message: "disk full" });
+  });
+
+  test("maps a non-Error thrown value to the io domain via String()", () => {
+    // Given a thrown value that is not an Error instance
+    // When converting a string and a number
+    const fromString = toServiceError("boom");
+    const fromNumber = toServiceError(42);
+    // Then both are stringified into an io-domain ServiceError
+    expect(fromString).toEqual({ domain: "io", message: "boom" });
+    expect(fromNumber).toEqual({ domain: "io", message: "42" });
+  });
+
+  test("every toServiceError result parses back through the ServiceError schema", () => {
+    // Given representative inputs across all known branches
+    const inputs: unknown[] = [
+      new QuotaExhaustedError("q", 10),
+      new YouTubeAPIError("api", { statusCode: 500 }),
+      new Error("config: c"),
+      new Error("auth: a"),
+      new Error("validation: v"),
+      new Error("io"),
+      "raw",
+    ];
+    // When converting each and re-validating against the schema
+    // Then every ServiceError is a valid member of the discriminated union
+    for (const input of inputs) {
+      const se = toServiceError(input);
+      expect(() => ServiceError.parse(se)).not.toThrow();
+    }
+  });
 });

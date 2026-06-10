@@ -8,7 +8,6 @@
 // - RETRY_MAX / RETRY_BACKOFF: 共通リトライ定数
 // - OPENAI_SUPPORTED_ASPECT_RATIOS: OpenAI が受理するアスペクト比
 
-import { ConfigError } from "../errors.ts";
 import type { ImageProvider } from "./base.ts";
 import type { ImageGenerationConfig } from "./config.ts";
 import { GeminiImageProvider } from "./gemini.ts";
@@ -34,7 +33,7 @@ export { OpenAIImageProvider, type OpenAIProviderDeps } from "./openai.ts";
 /**
  * `ImageGenerationConfig` から対応する provider 実装を返す。
  *
- * `provider` が {gemini, openai} 以外（手組みの不正値など）なら ConfigError で fail fast。
+ * `provider` が {gemini, openai} 以外（手組みの不正値など）なら `config:` prefix Error で fail fast。
  */
 export const getProvider = (config: ImageGenerationConfig): ImageProvider => {
   if (config.provider === "gemini") {
@@ -44,5 +43,5 @@ export const getProvider = (config: ImageGenerationConfig): ImageProvider => {
     return new OpenAIImageProvider(config.openai);
   }
   const { provider } = config as { provider: string };
-  throw new ConfigError(`未対応の provider=${JSON.stringify(provider)}`);
+  throw new Error(`config: 未対応の provider=${JSON.stringify(provider)}`);
 };

@@ -3,17 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// `ConfigError` stays in core (shared domain error); the cli imports it by the
-// published package name, exercising the cli→core `workspace:*` boundary the
-// same way run.test.ts does.
-import { ConfigError } from "@youtube-automation/core";
 // `reset()` clears the channelDir singleton between cases so a per-test
 // CHANNEL_DIR actually takes effect (channelDir() memoizes its first resolve).
 import { reset } from "@youtube-automation/core/config";
 
 // Relative import of the cli's own module (#822 move target). The acceptance
 // criteria require cli callsites to reach secrets via the relative path, not a
-// re-export from @youtube-automation/core.
+// re-export from @youtube-automation/core. `ConfigError` was retired in #821
+// (5 名前タグ class 撤廃) — the `config:` prefix on plain Error is now the
+// single source of domain truth, routed by toServiceError.
 import {
   resolveClientSecretsJson,
   resolveSecret,
@@ -185,7 +183,7 @@ describe("resolveSecret op path", () => {
     spawnSpy.mockRestore();
   });
 
-  test("throws ConfigError when op exits non-zero", async () => {
+  test("throws a config:-prefixed error when op exits non-zero", async () => {
     // Given an available op CLI that fails (e.g. not signed in)
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(fakeProc("", 1));
@@ -193,14 +191,14 @@ describe("resolveSecret op path", () => {
     // When resolving with no env fallback
     // Then resolution fails fast (secrets.py:72 swallow → :75 raise)
     await expect(resolveSecret("STREAM_WEBHOOK_URL")).rejects.toThrow(
-      ConfigError
+      /^config:/u
     );
 
     whichSpy.mockRestore();
     spawnSpy.mockRestore();
   });
 
-  test("throws ConfigError when op succeeds but output is blank", async () => {
+  test("throws a config:-prefixed error when op succeeds but output is blank", async () => {
     // Given op exits 0 but yields only whitespace
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(fakeProc("   \n", 0));
@@ -208,7 +206,7 @@ describe("resolveSecret op path", () => {
     // When resolving with no env fallback
     // Then the blank value is rejected (secrets.py:70 `if value`)
     await expect(resolveSecret("STREAM_WEBHOOK_URL")).rejects.toThrow(
-      ConfigError
+      /^config:/u
     );
 
     whichSpy.mockRestore();
@@ -219,29 +217,29 @@ describe("resolveSecret op path", () => {
 // --- failure modes -------------------------------------------------------
 
 describe("resolveSecret failures", () => {
-  test("throws ConfigError for an unregistered name", async () => {
+  test("throws a config:-prefixed error for an unregistered name", async () => {
     // Given a name absent from SECRET_REFS (secrets.py:52)
     // When resolving it
-    // Then a ConfigError is raised before any lookup
+    // Then it fails fast before any lookup, tagged via the config prefix
     await expect(resolveSecret("NOT_A_REAL_SECRET")).rejects.toThrow(
-      ConfigError
+      /^config:/u
     );
   });
 
-  test("throws ConfigError when env is unset and op is unavailable", async () => {
+  test("throws a config:-prefixed error when env is unset and op is unavailable", async () => {
     // Given no env var and no op CLI on PATH (secrets.py:60 false branch)
     const whichSpy = spyOn(Bun, "which").mockReturnValue(null);
 
     // When resolving the name
-    // Then resolution fails with guidance naming the secret
+    // Then resolution fails with the config prefix and guidance naming the secret
     const promise = resolveSecret("OPENAI_API_KEY");
-    await expect(promise).rejects.toThrow(ConfigError);
+    await expect(promise).rejects.toThrow(/^config:/u);
     await expect(promise).rejects.toThrow(/OPENAI_API_KEY/u);
 
     whichSpy.mockRestore();
   });
 
-  test("ConfigError is an Error subclass with a named tag", async () => {
+  test("the thrown failure is a plain Error tagged by the config: prefix", async () => {
     // Given a guaranteed failure (unregistered name)
     // When catching the thrown error
     let caught: unknown;
@@ -250,10 +248,11 @@ describe("resolveSecret failures", () => {
     } catch (error) {
       caught = error;
     }
-    // Then it is a proper Error subclass identifiable by name
+    // Then it is a plain Error whose message carries the config domain prefix
+    // (the named tag class is removed; the `config:` prefix convention
+    // is the single source of domain truth, routed by toServiceError)
     expect(caught).toBeInstanceOf(Error);
-    expect(caught).toBeInstanceOf(ConfigError);
-    expect((caught as ConfigError).name).toBe("ConfigError");
+    expect((caught as Error).message).toMatch(/^config:/u);
   });
 });
 
@@ -367,7 +366,7 @@ describe("resolveClientSecretsJson", () => {
     spawnSpy.mockRestore();
   });
 
-  test("throws ConfigError when env, file, and op all fail", async () => {
+  test("throws a config:-prefixed error when env, file, and op all fail", async () => {
     // Given no env, a channel dir without the file, and no op CLI on PATH
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
@@ -375,8 +374,10 @@ describe("resolveClientSecretsJson", () => {
     const whichSpy = spyOn(Bun, "which").mockReturnValue(null);
 
     // When resolving with every source exhausted
-    // Then resolution fails fast with a ConfigError
-    await expect(resolveClientSecretsJson()).rejects.toThrow(ConfigError);
+    // Then resolution fails fast with a plain Error tagged by the config prefix
+    // (named ConfigError class was retired in #821; `config:` prefix is the
+    // single source of domain truth, routed by toServiceError)
+    await expect(resolveClientSecretsJson()).rejects.toThrow(/^config:/u);
 
     whichSpy.mockRestore();
   });

@@ -3,17 +3,18 @@
 //
 // `openai` SDK の `images.generate` / `images.edit` を呼ぶ。`aspectRatio` を
 // OpenAI Images API の `size` 文字列にマップし、未対応比率は SDK を呼ぶ前に
-// ConfigError で fail fast（リトライしない）。SDK client / sleep / persist は
+// `config:` prefix Error で fail fast（リトライしない）。SDK client / sleep / persist は
 // 注入され（テストは fake で差し替え）、API キーは env から取得する。
 //
 // #822 で秘密解決を cli 層 (`packages/cli/lib/secrets.ts`) へ移設したため、core は
 // op (1Password) を呼べない（ADR 0002 / oxlint で機械担保）。production default は
 // `OPENAI_API_KEY` env を直読みし、未設定なら fail fast する。op fallback が必要な
 // 経路は cli/service 層が `createClient` を注入して供給する。
+// 名前タグ class (ConfigError 等) は #821 で撤廃済み — `config:` prefix が
+// ドメインエラーの単一の真実であり、toServiceError でルーティングされる。
 
 import { basename } from "node:path";
 
-import { ConfigError } from "../errors.ts";
 import { backoffMs, RETRY_MAX } from "./base.ts";
 import type {
   ImageGenerationRequest,
@@ -66,8 +67,8 @@ const decodeFirstImage = (response: unknown): Uint8Array | null => {
 const defaultCreateClient = async (): Promise<OpenAIClient> => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new ConfigError(
-      "OPENAI_API_KEY が未設定です。" +
+    throw new Error(
+      "config: OPENAI_API_KEY が未設定です。" +
         ".env に設定するか、OpenAIImageProvider に createClient を注入してください"
     );
   }
@@ -102,8 +103,8 @@ export class OpenAIImageProvider implements ImageProvider {
     const size = ASPECT_RATIO_TO_SIZE[req.aspectRatio];
     if (size === undefined) {
       // 未対応比率は client 生成・SDK 呼び出し前に fail fast（リトライしない）。
-      throw new ConfigError(
-        `OpenAI image_generation の aspect_ratio=${JSON.stringify(req.aspectRatio)} は未対応。` +
+      throw new Error(
+        `config: OpenAI image_generation の aspect_ratio=${JSON.stringify(req.aspectRatio)} は未対応。` +
           `許容値: ${JSON.stringify(Object.keys(ASPECT_RATIO_TO_SIZE))}`
       );
     }

@@ -1,6 +1,5 @@
 // YouTube API 設定・music_engine・content_model・overlays（Python `youtube.py` の移植）。
 
-import { ConfigError } from "../errors.ts";
 import { asRecord, isRecord } from "./internal.ts";
 
 /** `youtube` セクション（API 基本設定）。 */
@@ -125,7 +124,9 @@ const parseEncoder = (raw: unknown): OverlayEncoder => {
 const parseOverlays = (raw: unknown): Overlays => {
   const root = raw === undefined || raw === null ? {} : raw;
   if (!isRecord(root)) {
-    throw new ConfigError("overlays セクションは object でなければなりません");
+    throw new Error(
+      "config: overlays セクションは object でなければなりません"
+    );
   }
   return {
     audioVisualizer: parseAudioVisualizer(root.audio_visualizer),
