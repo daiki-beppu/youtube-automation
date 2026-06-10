@@ -2,6 +2,8 @@
 // （Python `utils/image_provider/__init__.py` の移植）。
 //
 // 公開 API:
+// - generateImageService(input, deps): ADR-0003 Result 境界（ImageProvider.generate をラップ）
+// - GenerateImageInput / GenerateImageOutput: service 境界の zod schema（+ z.infer 型）
 // - getProvider(config): ImageGenerationConfig から ImageProvider 実装にディスパッチ
 // - parseImageGenerationConfig(raw): skill-config から ImageGenerationConfig を構築
 // - ImageProvider / ImageGenerationRequest / ImageGenerationResult: 抽象契約
@@ -29,6 +31,8 @@ export {
 } from "./config.ts";
 export { GeminiImageProvider, type GeminiProviderDeps } from "./gemini.ts";
 export { OpenAIImageProvider, type OpenAIProviderDeps } from "./openai.ts";
+export { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
+export { generateImageService } from "./service.ts";
 
 /**
  * `ImageGenerationConfig` から対応する provider 実装を返す。

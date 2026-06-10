@@ -1,10 +1,18 @@
-// Tests for the OpenAIImageProvider — TS port of `utils/image_provider/openai.py`.
+// Tests for `generateImageService` over the OpenAI provider — the ADR-0003
+// Result boundary that wraps `OpenAIImageProvider.generate` (Issue #823).
 //
-// The SDK client, the backoff sleep, and the image-persist step are injected
-// (plan §6/§8). Because `createClient` is injected, the default factory's
+// The generate-path tests now call `generateImageService(input, { provider })`
+// and assert on the Result discriminant (`r.ok` / `r.value` / `r.error`). The
+// provider is still constructed directly with injected deps (SDK client /
+// backoff sleep / image-persist), so its orchestration — aspect-ratio → size
+// mapping, b64 decode, edit-vs-generate dispatch, retry — is still exercised
+// against in-memory fakes, but observed through the boundary:
+//   - provider success                 → ok(value.savedPath)
+//   - provider `{ success: false }`    → err(domain "io")     (unprefixed)
+//   - provider `config:`-prefixed throw→ err(domain "config")
+// Because `createClient` is injected, the default factory's
 // `process.env.OPENAI_API_KEY` + `new OpenAI(...)` path is bypassed — no env
-// setup is needed. (#822 moved op-based secret resolution to the cli layer, so
-// the core default factory now reads the key from env directly.)
+// setup is needed. (#822 moved op-based secret resolution to the cli layer.)
 //
 // Faithful SDK shape (verified against openai-node docs): the client exposes
 // `images.generate(params)` and `images.edit(params)`, each returning
@@ -18,8 +26,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { OpenAIImageProvider } from "@youtube-automation/core/image";
-import type { ImageGenerationRequest } from "@youtube-automation/core/image";
+import {
+  generateImageService,
+  OpenAIImageProvider,
+} from "@youtube-automation/core/image";
+import type { GenerateImageInput } from "@youtube-automation/core/image";
 
 type OpenAIDeps = NonNullable<
   ConstructorParameters<typeof OpenAIImageProvider>[1]
@@ -122,7 +133,7 @@ const request = (
   outputPath: string,
   aspectRatio: string,
   references?: string[]
-): ImageGenerationRequest => ({
+): GenerateImageInput => ({
   aspectRatio,
   imageSize: "",
   outputPath,
@@ -155,7 +166,7 @@ describe("OpenAIImageProvider identity", () => {
 
 // --- success path ---------------------------------------------------------
 
-describe("OpenAIImageProvider.generate success", () => {
+describe("generateImageService (openai) success", () => {
   test("maps 16:9 → 1536x1024 and persists the decoded b64 image", async () => {
     // Given a generate response with a single b64 image
     const original = new Uint8Array([0xff, 0xd8, 0xff, 5, 6, 7]);
@@ -170,12 +181,18 @@ describe("OpenAIImageProvider.generate success", () => {
     );
     const outputPath = join(workdir, "wide.png");
 
-    // When generating at 16:9
-    const result = await provider.generate(request(outputPath, "16:9"));
+    // When generating at 16:9 through the service
+    const r = await generateImageService(request(outputPath, "16:9"), {
+      provider,
+    });
 
-    // Then the size maps to landscape, bytes decode, and the path returns
-    expect(result.success).toBe(true);
-    expect(result.savedPath).toBe(outputPath);
+    // Then the result is ok, the size maps to landscape, bytes decode, and the
+    // path is carried in `value`
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
+    }
+    expect(r.value.savedPath).toBe(outputPath);
     const [persisted] = recorders.persisted;
     if (!persisted) {
       throw new Error("expected a persisted image");
@@ -204,10 +221,14 @@ describe("OpenAIImageProvider.generate success", () => {
       makeDeps(client, recorders)
     );
 
-    // When generating at 9:16
-    await provider.generate(request(join(workdir, "tall.png"), "9:16"));
+    // When generating at 9:16 through the service
+    const r = await generateImageService(
+      request(join(workdir, "tall.png"), "9:16"),
+      { provider }
+    );
 
-    // Then the size maps to portrait (openai.py:36)
+    // Then it succeeds and the size maps to portrait (openai.py:36)
+    expect(r.ok).toBe(true);
     const params = generateCalls[0] as { size?: unknown };
     expect(params.size).toBe("1024x1536");
   });
@@ -225,13 +246,14 @@ describe("OpenAIImageProvider.generate success", () => {
       makeDeps(client, recorders)
     );
 
-    // When generating
-    const result = await provider.generate(
-      request(join(workdir, "first.png"), "16:9")
+    // When generating through the service
+    const r = await generateImageService(
+      request(join(workdir, "first.png"), "16:9"),
+      { provider }
     );
 
     // Then the second item supplies the decoded bytes
-    expect(result.success).toBe(true);
+    expect(r.ok).toBe(true);
     const [persisted] = recorders.persisted;
     if (!persisted) {
       throw new Error("expected a persisted image");
@@ -253,13 +275,14 @@ describe("OpenAIImageProvider.generate success", () => {
       makeDeps(client, recorders)
     );
 
-    // When generating with a reference image
-    const result = await provider.generate(
-      request(join(workdir, "edit-out.png"), "16:9", [refPath])
+    // When generating with a reference image through the service
+    const r = await generateImageService(
+      request(join(workdir, "edit-out.png"), "16:9", [refPath]),
+      { provider }
     );
 
-    // Then the edit endpoint is used and the generate endpoint is not
-    expect(result.success).toBe(true);
+    // Then it succeeds via the edit endpoint and the generate endpoint is unused
+    expect(r.ok).toBe(true);
     expect(editCalls).toHaveLength(1);
     expect(generateCalls).toHaveLength(0);
   });
@@ -267,8 +290,8 @@ describe("OpenAIImageProvider.generate success", () => {
 
 // --- fail-fast on aspect ratio -------------------------------------------
 
-describe("OpenAIImageProvider.generate aspect-ratio guard", () => {
-  test("throws a config:-prefixed error for an unmapped aspect ratio without calling the SDK", async () => {
+describe("generateImageService (openai) aspect-ratio guard", () => {
+  test("maps the unmapped-ratio config error to a config ServiceError without calling the SDK", async () => {
     // Given a request whose ratio is not 16:9 or 9:16 (openai.py:63-67)
     const { client, generateCalls } = makeOpenAIClient({
       generate: [() => imageResponse("ignored")],
@@ -279,11 +302,20 @@ describe("OpenAIImageProvider.generate aspect-ratio guard", () => {
       makeDeps(client, recorders)
     );
 
-    // When generating at an unsupported ratio
-    // Then it fails fast: config:-prefixed Error, no client, no SDK call, no retry wait
-    await expect(
-      provider.generate(request(join(workdir, "square.png"), "1:1"))
-    ).rejects.toThrow(/^config:/u);
+    // When generating at an unsupported ratio through the service
+    const r = await generateImageService(
+      request(join(workdir, "square.png"), "1:1"),
+      { provider }
+    );
+
+    // Then the provider's `config:`-prefixed throw becomes a config
+    // ServiceError, and it fails fast: no client, no SDK call, no retry wait
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected failure");
+    }
+    expect(r.error.domain).toBe("config");
+    expect(r.error.message).toMatch(/^config:/u);
     expect(recorders.clientCreatedCount()).toBe(0);
     expect(generateCalls).toHaveLength(0);
     expect(recorders.sleeps).toEqual([]);
@@ -292,7 +324,7 @@ describe("OpenAIImageProvider.generate aspect-ratio guard", () => {
 
 // --- retry path -----------------------------------------------------------
 
-describe("OpenAIImageProvider.generate retry", () => {
+describe("generateImageService (openai) retry", () => {
   test("retries on an image-less response and fails after RETRY_MAX attempts", async () => {
     // Given a response with no decodable image (openai.py:106-108)
     const { client, generateCalls } = makeOpenAIClient({
@@ -304,14 +336,19 @@ describe("OpenAIImageProvider.generate retry", () => {
       makeDeps(client, recorders)
     );
 
-    // When generating
-    const result = await provider.generate(
-      request(join(workdir, "empty.png"), "16:9")
+    // When generating through the service
+    const r = await generateImageService(
+      request(join(workdir, "empty.png"), "16:9"),
+      { provider }
     );
 
-    // Then all 3 attempts run with two backoff waits, ending in failure
-    expect(result.success).toBe(false);
-    expect(result.savedPath).toBeNull();
+    // Then the unprefixed provider failure maps to an `io` ServiceError after
+    // all 3 attempts and two backoff waits
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected failure");
+    }
+    expect(r.error.domain).toBe("io");
     expect(generateCalls).toHaveLength(3);
     expect(recorders.sleeps).toEqual([10_000, 30_000]);
     expect(recorders.persisted).toEqual([]);
@@ -334,13 +371,14 @@ describe("OpenAIImageProvider.generate retry", () => {
       makeDeps(client, recorders)
     );
 
-    // When generating
-    const result = await provider.generate(
-      request(join(workdir, "retry-ok.png"), "16:9")
+    // When generating through the service
+    const r = await generateImageService(
+      request(join(workdir, "retry-ok.png"), "16:9"),
+      { provider }
     );
 
     // Then the second attempt wins after a single backoff wait
-    expect(result.success).toBe(true);
+    expect(r.ok).toBe(true);
     expect(generateCalls).toHaveLength(2);
     expect(recorders.sleeps).toEqual([10_000]);
   });
