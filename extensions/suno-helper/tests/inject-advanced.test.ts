@@ -154,17 +154,11 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       const weirdness = makeSlider(50, { respond: false });
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-      const pending = injectAdvancedFields(
-        { weirdness: 30 },
-        { excludeStyles: null, weirdness, styleInfluence: null },
-      );
+      const pending = injectAdvancedFields({ weirdness: 30 }, { excludeStyles: null, weirdness, styleInfluence: null });
       await vi.advanceTimersByTimeAsync(2000);
       await expect(pending).resolves.toBeUndefined();
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Weirdness slider 注入を skip"),
-        expect.any(Error),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Weirdness slider 注入を skip"), expect.any(Error));
       warnSpy.mockRestore();
     });
 
