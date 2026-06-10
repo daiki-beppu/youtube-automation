@@ -1,5 +1,7 @@
-import { describe, expect, spyOn, test } from "bun:test";
-import { resolve } from "node:path";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import process from "node:process";
 
 // Importing core by its package name + ADR 0002 subpath from the *cli* package
@@ -11,6 +13,18 @@ import { runSkillsCli } from "../skills-sync/cli.ts";
 
 // Repo root is three levels up from packages/cli/test/.
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
+
+// ADR-0003: listSkillsService returns Result. Unwrap the ok arm so e2e
+// assertions can compare the cli rendering against the service's payload.
+const listOk = async (input: { skillsDir?: string }) => {
+  const r = await listSkillsService(input);
+  if (!r.ok) {
+    throw new Error(
+      `expected an ok Result, got error: ${JSON.stringify(r.error)}`
+    );
+  }
+  return r.value;
+};
 
 // Captures everything written to stdout (console.log routes through here too)
 // for the duration of `fn`, then restores the original writer.
@@ -49,7 +63,7 @@ describe("runSkillsCli — text output (default)", () => {
 
     // Then at least one skill appears as a `  - <name>` line, and every listed
     // skill from the service is present in the rendered text.
-    const expected = await listSkillsService({});
+    const expected = await listOk({});
     expect(output).toMatch(/^ {2}- .+$/mu);
     for (const skill of expected.skills) {
       expect(output).toContain(`  - ${skill}`);
@@ -75,10 +89,53 @@ describe("runSkillsCli — json output (--json)", () => {
     const parsed = JSON.parse(output) as { source: string; skills: string[] };
 
     // When compared with the service result
-    const expected = await listSkillsService({});
+    const expected = await listOk({});
 
     // Then the cli does no reshaping of the service contract.
     expect(parsed.skills).toEqual(expected.skills);
+  });
+});
+
+describe("runSkillsCli — --skills-dir option propagates to the service", () => {
+  // The new --skills-dir flag must travel cli arg → service input → readdir.
+  // A fixture dir with out-of-order subdirectories proves the cli is reading
+  // *this* dir (not the bundled default) end to end.
+  let fixtureDir: string;
+
+  beforeAll(() => {
+    fixtureDir = mkdtempSync(join(tmpdir(), "cli-skills-fixture-"));
+    for (const name of ["delta", "bravo", "charlie"]) {
+      mkdirSync(join(fixtureDir, name));
+    }
+  });
+
+  afterAll(() => {
+    rmSync(fixtureDir, { force: true, recursive: true });
+  });
+
+  test("--json lists the directories under the supplied --skills-dir", async () => {
+    // Given `list --skills-dir <fixture> --json`
+    // When the cli wrapper runs
+    const output = await captureStdout(() =>
+      runSkillsCli(["list", "--skills-dir", fixtureDir, "--json"])
+    );
+
+    // Then stdout reports the fixture's subdirectories (sorted) and echoes the
+    // fixture as the source — the option reached the service unchanged.
+    const parsed = JSON.parse(output) as { source: string; skills: string[] };
+    expect(parsed.skills).toEqual(["bravo", "charlie", "delta"]);
+    expect(parsed.source).toBe(fixtureDir);
+  });
+
+  test("text output header reports the supplied --skills-dir as source", async () => {
+    // Given `list --skills-dir <fixture>` without --json
+    // When the cli wrapper runs
+    const output = await captureStdout(() =>
+      runSkillsCli(["list", "--skills-dir", fixtureDir])
+    );
+
+    // Then the header source is the fixture dir, not the bundled default.
+    expect(output).toContain(`(source: ${fixtureDir})`);
   });
 });
 
@@ -93,6 +150,12 @@ describe("runSkillsCli — usage errors (fail fast)", () => {
     // Given empty argv
     // When/Then the wrapper surfaces a usage error.
     await expect(runSkillsCli([])).rejects.toThrow();
+  });
+
+  test("rejects an unknown option", async () => {
+    // Given `list` with an unsupported flag
+    // When/Then the wrapper surfaces a usage error rather than ignoring it.
+    await expect(runSkillsCli(["list", "--bogus"])).rejects.toThrow();
   });
 });
 
@@ -120,6 +183,27 @@ describe("yt-skills bin — end-to-end (bunx entry)", () => {
     expect(proc.exitCode).toBe(0);
     const parsed = JSON.parse(proc.stdout.toString()) as { skills: string[] };
     expect(Array.isArray(parsed.skills)).toBe(true);
+  });
+
+  test("`yt-skills list --skills-dir <missing>` exits 1 with an io-domain stderr prefix", () => {
+    // Given a `list` against a path that does not exist
+    const missingDir = join(tmpdir(), "skills-bin-missing-xyz-824");
+    const proc = Bun.spawnSync(
+      [
+        "bun",
+        "packages/cli/bin/yt-skills.ts",
+        "list",
+        "--skills-dir",
+        missingDir,
+      ],
+      { cwd: repoRoot }
+    );
+
+    // Then the service error surfaces as exit 1 (non-quota) with a domain-
+    // prefixed stderr line, and nothing is written to stdout.
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toContain("[io]");
+    expect(proc.stdout.toString()).toBe("");
   });
 
   test("`yt-skills <unknown>` exits non-zero", () => {
