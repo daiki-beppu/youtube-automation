@@ -1,7 +1,11 @@
 # automation リポジトリの takt 設定
 # provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
 draft_pr: false
-base_branch: main
+# Phase 1B-3 (#727 epic) の retrofit / 新規 service は packages/{core,cli}/ への作業で、
+# これらは feat/ts-rewrite branch にしか存在しない。main を base にすると takt が作成する
+# worktree に packages/ が存在せず作業不可能。Phase 3 完了で feat/ts-rewrite を main に merge
+# する際に `base_branch: main` へ戻す。
+base_branch: feat/ts-rewrite
 
 # 全 persona を Claude/opus に固定する（本リポジトリは品質側に振り、Codex への依存を切る）。
 # - planner / 各 reviewer はグローバル設定でもともと claude/opus
