@@ -6,6 +6,7 @@
 import {
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
+  PLAYLISTS_CAPTURE_ROUTE,
   PROMPTS_ROUTE,
 } from "./constants";
 
@@ -33,6 +34,21 @@ export interface CollectionSummary {
   name: string;
   has_prompts: boolean;
   pattern_count: number | null;
+  // 既に config/suno-playlists.json にマッピング済みか (#893 追加要件 B)。
+  // optional・後方互換: prefix 未設定の旧サーバーは返さず undefined（全件表示の従来挙動）。
+  mapped?: boolean;
+}
+
+/** Suno `/me` から捕捉した 1 playlist (#893)。POST /suno/playlists の body 要素。 */
+export interface CapturedPlaylist {
+  title: string;
+  url: string;
+}
+
+/** POST /suno/playlists の 200 レスポンス (#893)。書き込み件数と出力先パス。 */
+export interface CapturedPlaylistsResult {
+  written: number;
+  path: string;
 }
 
 /**
@@ -140,4 +156,34 @@ export function extractPlaylistName(
     throw new Error(`channel 部分が空: id=${collectionId}`);
   }
   return `${channel} | ${theme}`;
+}
+
+/**
+ * 捕捉した playlist 一覧を POST /suno/playlists へ送る (#893)。
+ * body は配列のまま（envelope 包みしない）。非 2xx はステータスを含めて throw する fail-loud 契約。
+ * prefix によるフィルタはサーバー側 normalize_suno_title に閉じるため、ここでは全件そのまま送る。
+ */
+export async function postCapturedPlaylists(
+  baseUrl: string,
+  items: CapturedPlaylist[],
+): Promise<CapturedPlaylistsResult> {
+  const resp = await fetch(`${baseUrl}${PLAYLISTS_CAPTURE_ROUTE}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+  });
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  return (await resp.json()) as CapturedPlaylistsResult;
+}
+
+/**
+ * 既にマッピング済み (mapped===true) の collection を除外する純関数 (#893 追加要件 B)。
+ * mapped 未設定（prefix 未指定の旧運用）は除外対象にしないため全件残す（後方互換）。
+ */
+export function excludeMappedCollections(
+  collections: CollectionSummary[],
+): CollectionSummary[] {
+  return collections.filter((c) => c.mapped !== true);
 }

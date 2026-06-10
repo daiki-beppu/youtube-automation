@@ -38,6 +38,8 @@ import {
   selectRecentClips,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
+import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
+import { triggerPlaylistCaptureFailSoft } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
 
 export default defineContentScript({
@@ -229,6 +231,13 @@ export default defineContentScript({
           emitProgress({ phase: PHASE.STOPPED, total });
           return;
         }
+        // playlist 化完了直後、FINISHED 直前に capture を自動 trigger する (#893 追加要件 A)。
+        // bg tab で `/me` を開閉し scrape→POST する実処理は background が担う。fail soft:
+        // 送信失敗は warning のみで FINISHED へ進める（capture はベストエフォート）。
+        await triggerPlaylistCaptureFailSoft(
+          () => sendMessage("requestPlaylistCapture", undefined),
+          (err) => console.warn("[suno-helper] playlist capture trigger failed:", err),
+        );
       }
       // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
       if (collectionId) {
@@ -262,5 +271,9 @@ export default defineContentScript({
 
     // popup 再 open 時の進捗復元 (#852)。run 未実行は null（buildRestoreState が従来表示へフォールバック）。
     onMessage("queryProgress", () => currentSnapshot);
+
+    // 自身の document（Suno `/me`）から playlist 一覧を scrape して返す (#893)。
+    // overlay の手動 Capture（background 経由）と background の bg tab 自動 capture が共用する。
+    onMessage("capturePlaylists", () => scrapePlaylistsFromMe(document));
   },
 });
