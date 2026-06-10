@@ -1,19 +1,21 @@
-// オーディオ設定（Python `utils/config/audio.py` の移植・optional）。
+// オーディオ設定（optional）。merged から `audio` を取り出し camelCase へ transform。
 
-import { asRecord } from "./internal.ts";
+import { z } from "zod";
+
+import { snakeToCamel } from "../../internal/case.ts";
 
 /** `audio` セクション（optional）。 */
-export interface Audio {
-  readonly targetDurationMin: number | null;
-  readonly targetDurationMax: number | null;
-  readonly chapterMax: number;
-}
+export const Audio = z
+  .object({
+    audio: z
+      .object({
+        chapter_max: z.number().default(100),
+        target_duration_max: z.number().nullable().default(null),
+        target_duration_min: z.number().nullable().default(null),
+      })
+      .strict()
+      .prefault({}),
+  })
+  .transform((o) => snakeToCamel(o.audio));
 
-export const parseAudio = (merged: Record<string, unknown>): Audio => {
-  const ad = asRecord(merged.audio, "audio");
-  return {
-    chapterMax: (ad.chapter_max as number | undefined) ?? 100,
-    targetDurationMax: (ad.target_duration_max as number | undefined) ?? null,
-    targetDurationMin: (ad.target_duration_min as number | undefined) ?? null,
-  };
-};
+export type Audio = z.infer<typeof Audio>;

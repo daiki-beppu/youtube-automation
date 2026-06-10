@@ -521,9 +521,9 @@ describe("distrokid", () => {
     expect(() => load(sections)).toThrow(/^config:/u);
   });
 
-  test("rejects a non-object distrokid.profile via the shared asRecord guard", () => {
-    // Given profile declared as an array (regression guard for the DRY
-    // refactor that delegated this boundary check to internal.asRecord)
+  test("rejects a non-object distrokid.profile via the shared isPlainObject guard", () => {
+    // Given profile declared as an array (regression guard for the superRefine
+    // boundary check that delegates to internal.isPlainObject)
     const sections = minimalSections();
     sections["distrokid.json"] = {
       distrokid: { enabled: false, profile: ["not", "an", "object"] },
@@ -567,5 +567,30 @@ describe("localizations", () => {
     expect(config.localizations.exists).toBe(true);
     expect(config.localizations.supportedLanguages).toEqual(["ja", "en"]);
     expect(config.localizations.defaultLanguage).toBe("ja");
+  });
+
+  test("preserves the raw snake_case passthrough map in data verbatim", () => {
+    // Given a localizations.json whose nested language entries use snake_case
+    // keys that downstream metadata (loc-data) reads verbatim
+    const sections = minimalSections();
+    const localizations = {
+      default_language: "ja",
+      languages: {
+        en: { short_title_template: "{theme} #Shorts", title_template: "{x}" },
+      },
+      supported_languages: ["ja", "en"],
+    };
+
+    // When the channel is loaded
+    const config = load(sections, localizations);
+
+    // Then `data` carries the JSON through untouched — the snake_case keys are
+    // NOT folded to camelCase (the passthrough map bypasses snakeToCamel, so a
+    // regression that wrapped it would surface here, not only downstream).
+    expect(config.localizations.data).toEqual(localizations);
+    const langs = (
+      config.localizations.data as { languages: typeof localizations.languages }
+    ).languages;
+    expect(langs.en.short_title_template).toBe("{theme} #Shorts");
   });
 });

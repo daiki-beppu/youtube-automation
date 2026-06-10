@@ -1,37 +1,32 @@
-// ワークフロー設定（Python `utils/config/workflow.py` + loader `_build_workflow` の移植）。
+// ワークフロー設定（optional）。merged から `workflow` を取り出し camelCase へ。
+//
+// 旧 top-level `post_upload` / `short` キーは必須でないため strict にせず silently strip する
+// （後方互換・#508）。検証対象は `wf_next.approval_gates` のみ。
 
-import { asRecord } from "./internal.ts";
+import { z } from "zod";
 
-/** `/wf-next` の承認ゲート設定（既定は両方 false で全自動進行）。 */
-interface ApprovalGates {
-  readonly audio: boolean;
-  readonly upload: boolean;
-}
+import { snakeToCamel } from "../../internal/case.ts";
 
-/** `/wf-next` 関連設定（`wf_next` セクション）。 */
-interface WfNext {
-  readonly approvalGates: ApprovalGates;
-}
+/** `workflow` セクション（`/wf-next` の承認ゲート設定）。 */
+export const Workflow = z
+  .object({
+    workflow: z
+      .object({
+        wf_next: z
+          .object({
+            approval_gates: z
+              .object({
+                audio: z.boolean().default(false),
+                upload: z.boolean().default(false),
+              })
+              .strict()
+              .prefault({}),
+          })
+          .strict()
+          .prefault({}),
+      })
+      .prefault({}),
+  })
+  .transform((o) => snakeToCamel(o.workflow));
 
-/** ワークフロー責務の合成（`workflow` セクション）。 */
-export interface Workflow {
-  readonly wfNext: WfNext;
-}
-
-export const parseWorkflow = (merged: Record<string, unknown>): Workflow => {
-  // 旧 top-level `post_upload` / `short` キーは必須登録していないため silently ignore。
-  const wf = asRecord(merged.workflow, "workflow");
-  const wfNext = asRecord(wf.wf_next, "workflow.wf_next");
-  const gates = asRecord(
-    wfNext.approval_gates,
-    "workflow.wf_next.approval_gates"
-  );
-  return {
-    wfNext: {
-      approvalGates: {
-        audio: (gates.audio as boolean | undefined) ?? false,
-        upload: (gates.upload as boolean | undefined) ?? false,
-      },
-    },
-  };
-};
+export type Workflow = z.infer<typeof Workflow>;

@@ -1,68 +1,53 @@
-// チャンネルメタ情報とブランディング設定（Python `utils/config/meta.py` の移植）。
+// チャンネルメタ情報とブランディング設定（merged の `channel` + `youtube_channel` を合成）。
 
-import { isRecord } from "./internal.ts";
+import { z } from "zod";
 
-/** `youtube_channel` セクション（YouTube チャンネル本体設定・任意）。 */
-export interface Branding {
-  readonly description: string;
-  readonly keywords: readonly string[];
-  readonly country: string;
-  readonly defaultLanguage: string;
-  readonly unsubscribedTrailer: string;
-  // 未設定は null。`false` は明示的な「子供向けでない」申告として保持する。
-  readonly madeForKids: boolean | null;
-}
+import { snakeToCamel } from "../../internal/case.ts";
 
 /** `channel` セクション + `youtube_channel`（Branding）の合成。 */
-export interface ChannelMeta {
-  readonly channelName: string;
-  readonly channelShort: string;
-  readonly youtubeHandle: string;
-  readonly channelUrl: string;
-  readonly coreMessage: string;
-  readonly ctaSubscribe: string;
-  readonly tagline: string;
-  // YouTube チャンネル ID（`UC...`）。未設定（空文字）時は照合をスキップ (#561)。
-  readonly channelId: string;
-  readonly branding: Branding;
-}
+export const ChannelMeta = z
+  .object({
+    channel: z
+      .object({
+        // YouTube チャンネル ID（`UC...`）。未設定（空文字）時は照合をスキップ (#561)。
+        channel_id: z.string().default(""),
+        core_message: z.string().default(""),
+        cta_subscribe: z.string().default(""),
+        name: z.string(),
+        short: z.string(),
+        tagline: z.string().default(""),
+        url: z.string(),
+        youtube_handle: z.string(),
+      })
+      .strict(),
+    // `youtube_channel` セクション（YouTube チャンネル本体設定・任意）。
+    // 未設定は null。`false` は明示的な「子供向けでない」申告として保持する。
+    youtube_channel: z
+      .object({
+        country: z.string().default(""),
+        default_language: z.string().default(""),
+        description: z.string().default(""),
+        keywords: z.array(z.string()).default([]),
+        made_for_kids: z.boolean().nullable().default(null),
+        unsubscribed_trailer: z.string().default(""),
+      })
+      .strict()
+      .prefault({}),
+  })
+  .transform((o) => ({
+    branding: snakeToCamel(o.youtube_channel),
+    channelId: o.channel.channel_id,
+    channelName: o.channel.name,
+    channelShort: o.channel.short,
+    channelUrl: o.channel.url,
+    coreMessage: o.channel.core_message,
+    ctaSubscribe: o.channel.cta_subscribe,
+    tagline: o.channel.tagline,
+    youtubeHandle: o.channel.youtube_handle,
+  }));
 
-const parseBranding = (data: unknown): Branding => {
-  if (!isRecord(data)) {
-    return {
-      country: "",
-      defaultLanguage: "",
-      description: "",
-      keywords: [],
-      madeForKids: null,
-      unsubscribedTrailer: "",
-    };
-  }
-  return {
-    country: (data.country as string | undefined) ?? "",
-    defaultLanguage: (data.default_language as string | undefined) ?? "",
-    description: (data.description as string | undefined) ?? "",
-    keywords: [...((data.keywords as string[] | undefined) ?? [])],
-    madeForKids: (data.made_for_kids as boolean | undefined) ?? null,
-    unsubscribedTrailer:
-      (data.unsubscribed_trailer as string | undefined) ?? "",
-  };
-};
-
-export const parseMeta = (merged: Record<string, unknown>): ChannelMeta => {
-  const ch = merged.channel as Record<string, unknown>;
-  return {
-    branding: parseBranding(merged.youtube_channel),
-    channelId: (ch.channel_id as string | undefined) ?? "",
-    channelName: ch.name as string,
-    channelShort: ch.short as string,
-    channelUrl: ch.url as string,
-    coreMessage: (ch.core_message as string | undefined) ?? "",
-    ctaSubscribe: (ch.cta_subscribe as string | undefined) ?? "",
-    tagline: (ch.tagline as string | undefined) ?? "",
-    youtubeHandle: ch.youtube_handle as string,
-  };
-};
+export type ChannelMeta = z.infer<typeof ChannelMeta>;
+export type Branding = ChannelMeta["branding"];
 
 /**
  * Branding を YouTube API / yt-channel-settings が扱う dict 形式に戻す。
