@@ -921,3 +921,107 @@ describe("resolveAdvancedFields: More Options 3 フィールドの解決 (#900, 
     expect(fields.excludeStyles).toBeNull();
   });
 });
+
+// Suno Voice section の Male / Female ボタンペアを模す。
+// 実 DOM 構造: <div><button data-selected>Male</button><button data-selected>Female</button></div>
+function addVocalGenderButtons(
+  opts: {
+    maleSelected?: boolean;
+    femaleSelected?: boolean;
+    visible?: boolean;
+  } = {},
+): { male: HTMLButtonElement; female: HTMLButtonElement } {
+  const wrapper = document.createElement("div");
+  document.body.appendChild(wrapper);
+  const make = (label: string, selected: boolean): HTMLButtonElement => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute("data-selected", selected ? "true" : "false");
+    btn.textContent = label;
+    wrapper.appendChild(btn);
+    setRect(btn, opts.visible === false ? ZERO_RECT : VISIBLE_RECT);
+    return btn;
+  };
+  return {
+    male: make("Male", opts.maleSelected === true),
+    female: make("Female", opts.femaleSelected === true),
+  };
+}
+
+describe("resolveAdvancedFields: vocal gender (Male / Female) ボタン解決", () => {
+  // 契約: resolveAdvancedFields() が ResolvedAdvancedFields.vocalGender = { male, female } を返す。
+  //   - SELECTOR は `button[data-selected][type="button"]` で候補を全 query → textContent === "Male"/"Female" で絞り込み
+  //   - visible 優先・なければ DOM 上の最初の要素（pickPreferVisible）
+  //   - 不在は null（fail-soft、throw しない）
+  //   - 判定は case-sensitive（"male" lowercase は拾わない、誤検出耐性）
+
+  it("Given Male / Female ボタン両方存在 When 解決する Then 両方解決する", () => {
+    const { male, female } = addVocalGenderButtons();
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.vocalGender.male).toBe(male);
+    expect(fields.vocalGender.female).toBe(female);
+  });
+
+  it("Given Male のみ存在 When 解決する Then male: ボタン / female: null", () => {
+    const wrapper = document.createElement("div");
+    document.body.appendChild(wrapper);
+    const male = document.createElement("button");
+    male.type = "button";
+    male.setAttribute("data-selected", "false");
+    male.textContent = "Male";
+    wrapper.appendChild(male);
+    setRect(male, VISIBLE_RECT);
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.vocalGender.male).toBe(male);
+    expect(fields.vocalGender.female).toBeNull();
+  });
+
+  it("Given Male / Female ボタンが何も存在しない When 解決する Then 両方 null（resolveAdvancedFields は throw しない）", () => {
+    const fields = resolveAdvancedFields();
+
+    expect(fields.vocalGender.male).toBeNull();
+    expect(fields.vocalGender.female).toBeNull();
+  });
+
+  it("Given visible Male + hidden Male 混在 When 解決する Then visible を優先する", () => {
+    // pickPreferVisible 流用確認（UI 再構築で同 label の button が一時的に複数残った場合の耐性）。
+    const wrapper = document.createElement("div");
+    document.body.appendChild(wrapper);
+    const hidden = document.createElement("button");
+    hidden.type = "button";
+    hidden.setAttribute("data-selected", "false");
+    hidden.textContent = "Male";
+    wrapper.appendChild(hidden);
+    setRect(hidden, ZERO_RECT);
+    const visible = document.createElement("button");
+    visible.type = "button";
+    visible.setAttribute("data-selected", "false");
+    visible.textContent = "Male";
+    wrapper.appendChild(visible);
+    setRect(visible, VISIBLE_RECT);
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.vocalGender.male).toBe(visible);
+  });
+
+  it('Given textContent が "male" lowercase の偽 button のみ When 解決する Then male: null（厳密 case-sensitive）', () => {
+    // 誤検出耐性: Suno の他 UI ("e-mail" の "mail" 等) を拾わないために case-sensitive 完全一致で判定する。
+    const wrapper = document.createElement("div");
+    document.body.appendChild(wrapper);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute("data-selected", "false");
+    btn.textContent = "male";
+    wrapper.appendChild(btn);
+    setRect(btn, VISIBLE_RECT);
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.vocalGender.male).toBeNull();
+  });
+});

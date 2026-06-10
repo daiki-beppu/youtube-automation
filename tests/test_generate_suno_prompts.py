@@ -1035,6 +1035,35 @@ def test_build_prompt_entries_includes_zero_valued_sliders(channel_dir, tmp_path
     assert entries[0]["weirdness"] == 0
 
 
+def test_build_prompt_entries_includes_vocal_gender_male(channel_dir, tmp_path):
+    """channel override に vocal_gender: male があれば entry に wire される。
+
+    suno-helper 拡張は entry.vocal_gender を読んで Suno UI Voice section の Male/Female ボタンを click する。
+    Python → JSON → 拡張の経路を pin する。"male" / "female" / "neutral" / "auto" が拡張型契約。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="male")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["vocal_gender"] == "male"
+
+
+def test_build_prompt_entries_omits_empty_vocal_gender(channel_dir, tmp_path):
+    """channel override に vocal_gender: "" (空文字) があれば JSON に出さない (skip)。
+
+    config.default.yaml は `vocal_gender: ""` を既定値として持つ。チャンネルが明示的に空文字を上書き
+    しても、拡張型契約 ("male"|"female"|"neutral"|"auto") に "" は無く、拡張側は何もしない。
+    JSON に "" を載せると型契約とミスマッチするため Python 側で skip する (一貫性と冗長排除)。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert "vocal_gender" not in entries[0]
+
+
 def test_build_prompt_entries_omits_advanced_fields_without_channel_override(channel_dir, tmp_path):
     """要件2 + A 案の核心: Given channel override が genre_line のみ (More Options 無し) の既存 collection
     When build_prompt_entries を呼ぶ
