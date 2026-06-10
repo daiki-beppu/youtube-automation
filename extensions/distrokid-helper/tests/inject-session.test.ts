@@ -52,7 +52,9 @@ interface InjectorCall {
 function makeInjector(): { injector: Injector; calls: InjectorCall[] } {
   const calls: InjectorCall[] = [];
   const injector: Injector = {
-    injectStaticFields: () => calls.push({ kind: "static" }),
+    injectStaticFields: async () => {
+      calls.push({ kind: "static" });
+    },
     injectTrackFile: (trackIndex, file) =>
       calls.push({ kind: "trackFile", trackIndex, fileName: file.name }),
     injectCover: (file) => calls.push({ kind: "cover", fileName: file.name }),
@@ -76,12 +78,12 @@ describe("InjectSession", () => {
     session = new InjectSession(made.injector, report);
   });
 
-  it("injectStart は静的フィールドを注入し INJECTING を報告する", () => {
+  it("injectStart は静的フィールドを注入し INJECTING を報告する", async () => {
     // Given: 2 track の payload
     const payload = makePayload(2);
 
-    // When: セッションを開始する
-    session.start(payload);
+    // When: セッションを開始する（track 行生成待ちのため async）
+    await session.start(payload);
 
     // Then: 静的フィールドが注入され INJECTING が報告される
     expect(calls).toEqual([{ kind: "static" }]);
@@ -102,9 +104,9 @@ describe("InjectSession", () => {
     await expect(session.finish()).rejects.toThrow(/injectStart/);
   });
 
-  it("track は範囲内なら 0-indexed で曲ファイルを注入する", () => {
+  it("track は範囲内なら 0-indexed で曲ファイルを注入する", async () => {
     // Given: 2 track のセッション
-    session.start(makePayload(2));
+    await session.start(makePayload(2));
 
     // When: index 1 の track を注入する
     session.track(1, makeAsset("track-02.mp3"));
@@ -121,18 +123,18 @@ describe("InjectSession", () => {
     });
   });
 
-  it("trackIndex が範囲外なら throw する", () => {
+  it("trackIndex が範囲外なら throw する", async () => {
     // Given: 2 track のセッション
-    session.start(makePayload(2));
+    await session.start(makePayload(2));
 
     // When / Then: 範囲外 index は fail-loud
     expect(() => session.track(2, makeAsset("track-03.mp3"))).toThrow(/範囲外/);
     expect(() => session.track(-1, makeAsset("track-00.mp3"))).toThrow(/範囲外/);
   });
 
-  it("cover はジャケット File を注入する", () => {
+  it("cover はジャケット File を注入する", async () => {
     // Given
-    session.start(makePayload(1));
+    await session.start(makePayload(1));
 
     // When
     session.cover(makeAsset("main.png"));
@@ -143,7 +145,7 @@ describe("InjectSession", () => {
 
   it("finish は AI 開示を注入し DONE を報告してセッションを終了する", async () => {
     // Given: 開始済みセッション
-    session.start(makePayload(1));
+    await session.start(makePayload(1));
 
     // When: 完了する（AI 開示は modal フローのため async）
     await session.finish();
@@ -159,9 +161,9 @@ describe("InjectSession", () => {
     expect(() => session.track(0, makeAsset("track-01.mp3"))).toThrow(/injectStart/);
   });
 
-  it("stop は STOPPED を報告してセッションを破棄する", () => {
+  it("stop は STOPPED を報告してセッションを破棄する", async () => {
     // Given: 開始済みセッション
-    session.start(makePayload(1));
+    await session.start(makePayload(1));
 
     // When: 停止する
     session.stop();

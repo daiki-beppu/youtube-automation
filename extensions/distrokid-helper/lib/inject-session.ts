@@ -17,8 +17,10 @@ export type Reporter = (phase: Phase, message: string) => void;
 
 // 注入 primitive（DOM 操作）。content が document 束縛の実装を渡す。
 export interface Injector {
-  // プロファイル + アルバム名 + リリース日 + 全 track のタイトル / songwriter（asset なし）。
-  injectStaticFields(payload: ReleasePayload): void;
+  // トラック数 set + 行生成待機 + プロファイル + アルバム名 + リリース日 +
+  // 全 track のタイトル / songwriter + Apple Music クレジット（asset なし）。
+  // track 行の生成を MutationObserver で待つため async（#888）。
+  injectStaticFields(payload: ReleasePayload): Promise<void>;
   // 1 track（0-indexed）の曲ファイル。
   injectTrackFile(trackIndex: number, file: File): void;
   // ジャケット。
@@ -36,9 +38,9 @@ export class InjectSession {
     private readonly report: Reporter,
   ) {}
 
-  start(payload: ReleasePayload): void {
+  async start(payload: ReleasePayload): Promise<void> {
     this.report(PHASES.INJECTING, "プロファイルを注入中");
-    this.injector.injectStaticFields(payload);
+    await this.injector.injectStaticFields(payload);
     this.payload = payload;
   }
 

@@ -17,6 +17,16 @@
 // 隠し要素（type=hidden の #artistName 等）はテキスト/SELECT 解決時に isVisible で排除する。
 // 注入先が見つからない場合は silent skip せず FieldNotFoundError で fail-loud。
 // 送信系ボタン（「続ける」）は一切操作しない（規約遵守・スコープ外）。
+//
+// #888 で実 DOM 再検証に基づき以下を追加:
+//   (A) AI 開示 modal の段階的 trigger: 録音範囲 radio は name=null のため class+track+value で
+//       紐付ける。full check で artist_persona radio が dynamic inject されるため MutationObserver
+//       で出現を待つ。partial check で種別 radio が visible 化する。apply-all は album mode のみ存在。
+//       modal 内 input は click + bubbles:true の change dispatch で段階的 trigger を確実に発火する。
+//   (B) トラック数 select（#howManySongsOnThisAlbum）に曲数を set し、track 行（title_<uuid>）の
+//       生成完了を MutationObserver で待ってから後続注入へ進む（順序保証）。
+//   (C) Apple Music クレジット: 「クレジットを追加」を 1 回 click して全 track の入力欄を visible 化し、
+//       各 track の performer/producer へ #artistName（アカウント登録のアーティスト名）を注入する。
 
 import { isVisible } from "../../shared/visibility";
 import type { AiDisclosure, DistrokidProfile, SongwriterName } from "./types";
@@ -63,8 +73,14 @@ export const AI_DISCLOSURE_SELECTORS = {
   }),
 } as const;
 
-// AI 開示 modal（SweetAlert2 ベース）内のセレクタ群（実 DOM 再検証 #877 に基づく）。
+// modal を操作する track 番号（1-indexed）。modal は 1st track の gate「はい」で開き、
+// 録音範囲は track 単位の radio（track 属性）で設定する。apply-all が全 track へ伝播する。
+const MODAL_TRACK = 1;
+
+// AI 開示 modal（SweetAlert2 ベース）内のセレクタ群（実 DOM 再検証 #877 / #888 に基づく）。
 // modal は 1st track の gate「はい」で 1 回だけ開き、apply-all checkbox で全 track へ伝播する。
+// 段階的 trigger（#888）: full check で artist_persona radio が dynamic inject され、
+// partial check で partial 種別 radio が visible 化する。apply-all は album mode のみ存在する。
 export const AI_MODAL_SELECTORS = {
   // modal ルート（role="dialog"）。mount/unmount を MutationObserver で待つ基点。
   modal: ".ai-credits-swal-modal",
@@ -72,22 +88,44 @@ export const AI_MODAL_SELECTORS = {
   lyricsByUuid: (uuid: string) => `[name="ai_lyrics_${uuid}"]`,
   musicByUuid: (uuid: string) => `[name="ai_music_${uuid}"]`,
   // 録音物の AI 範囲 radio（"full"=音声すべて / "partial"=音声の一部）。
-  recordingScope: (scope: "full" | "partial") =>
-    `.distroAiRecordingScope[value="${scope}"]`,
-  // partial 録音時の種別 radio（partial 選択時のみ visible）。
+  // 実 DOM では name 属性が null のため、class + track 番号 + value で紐付ける（#888）。
+  recordingScopeByTrack: (track1: number, scope: "full" | "partial") =>
+    `[class*="distroAiRecordingScope"][track="${track1}"][value="${scope}"]`,
+  // partial 録音時の種別 radio（partial 選択後に visible 化する）。
   partialAudioTypeByUuid: (uuid: string, type: "vocals" | "instruments") =>
     `[name="ai_partial_audio_type_${uuid}"][value="${type}"]`,
-  // アーティスト種別 radio（value="0"=人間 / "1"=AI ペルソナ）。
+  // アーティスト種別 radio（value="0"=人間 / "1"=AI ペルソナ）。full check 後に dynamic inject。
   artistPersonaByUuid: (uuid: string, value: "0" | "1") =>
     `[name="ai_artist_persona_${uuid}_0"][value="${value}"]`,
-  // 「Apply these selections to all songs on this release」checkbox。
+  // 「Apply these selections to all songs on this release」checkbox（album mode のみ存在）。
   applyAll: "#ai-apply-all-1",
   // 「保存する」ボタン（送信系ではない・modal を閉じるだけ）。
   saveButton: "button.swal2-confirm.ai-modal-btn-save",
 } as const;
 
-// AI 開示 modal の mount/unmount 待ち上限（ms）。超過したら fail-loud（silent skip しない）。
+// AI 開示 modal の mount/unmount / 段階的 inject 待ち上限（ms）。超過したら fail-loud。
 export const AI_MODAL_WAIT_TIMEOUT_MS = 10_000;
+
+// トラック数 select（#888）。DistroKid /new は album/single radio ではなく曲数 dropdown で
+// track 数を決める。value を set + change 発火で track 行が生成される。
+export const TRACK_COUNT_SELECTOR = "#howManySongsOnThisAlbum";
+
+// track 行（title_<uuid> input）の生成完了を待つ上限（ms）。超過したら fail-loud。
+export const TRACK_ROW_WAIT_TIMEOUT_MS = 10_000;
+
+// Apple Music クレジット用のアーティスト名（アカウント登録の hidden 値）。
+// BGM チャンネルは演奏者 = プロデューサー = アーティスト名の前提（#888）。
+export const ARTIST_NAME_SELECTOR = "#artistName";
+
+// Apple Music クレジット（演奏者 / プロデューサー）入力欄（#888）。track は 1-indexed。
+export const APPLE_CREDIT_SELECTORS = {
+  // 全 track 共通の展開トリガー。click で全 track の credit 入力欄が visible 化する。
+  addTrigger: ".requirements-item-title",
+  // .requirements-item-title は複数あり得るため textContent で絞り込む。
+  addTriggerText: "クレジットを追加",
+  performerByTrack: (track1: number) => `#track-${track1}-performer-1-name`,
+  producerByTrack: (track1: number) => `#track-${track1}-producer-1-name`,
+} as const;
 
 // 新規リリース前提の assert 対象（previouslyReleased「いいえ(value=0)」）。
 export const NEW_RELEASE_RADIO_SELECTOR = '[name^="previouslyReleased_"][value="0"]';
@@ -111,6 +149,15 @@ export class ModalTimeoutError extends Error {
   constructor(selector: string) {
     super(`AI 開示 modal の状態変化を待てませんでした: ${selector}`);
     this.name = "ModalTimeoutError";
+  }
+}
+
+// トラック数 select 変更後に track 行が制限時間内に生成されなかったことを表す専用エラー。
+// silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
+export class TrackCountTimeoutError extends Error {
+  constructor(selector: string, expected: number) {
+    super(`track 行の生成を待てませんでした: ${selector}（期待数=${expected}）`);
+    this.name = "TrackCountTimeoutError";
   }
 }
 
@@ -252,11 +299,19 @@ export function assertNewRelease(root: ParentNode): void {
   }
 }
 
-// radio / checkbox を目標状態へ合わせる。click で React 互換に checked 切替 + change を発火する。
-// 既に目標状態なら no-op（重複 click を避ける）。
-function setChecked(el: HTMLInputElement, checked: boolean): void {
+// radio / checkbox を目標状態へ合わせる。目標と異なるときだけ click して checked を切り替える
+// （既に目標状態なら no-op で重複 click を避ける）。gate radio のように click 自体が副作用を
+// 起こす（modal mount 等）要素はこれで足りる。
+//
+// modal 内 input（#888）は dispatchChange=true を渡す。DistroKid 側の段階的 trigger（persona
+// inject / partial 種別 visible 化）は bubbles:true の change を要求するため、click のネイティブ
+// change に加えて明示 dispatch して確実に発火させる。
+function setChecked(el: HTMLInputElement, checked: boolean, dispatchChange = false): void {
   if (el.checked !== checked) {
     el.click();
+  }
+  if (dispatchChange) {
+    el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 }
 
@@ -335,27 +390,130 @@ export function waitForRemoval(el: Element, timeoutMs: number): Promise<void> {
   });
 }
 
+// selector に一致する要素が count 個に達するのを待つ（既に満たせば即解決）。
+// 制限時間超過で TrackCountTimeoutError（fail-loud）。
+export function waitForElementCount(
+  root: ParentNode,
+  selector: string,
+  count: number,
+  timeoutMs: number,
+): Promise<void> {
+  const reached = () => root.querySelectorAll(selector).length >= count;
+  if (reached()) {
+    return Promise.resolve();
+  }
+  const observeRoot = ownerDocumentOf(root).body ?? ownerDocumentOf(root);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new TrackCountTimeoutError(selector, count));
+    }, timeoutMs);
+    const observer = new MutationObserver(() => {
+      if (reached()) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve();
+      }
+    });
+    observer.observe(observeRoot, { childList: true, subtree: true });
+  });
+}
+
+// トラック数 select に曲数を set し、track 行（title_<uuid>）の生成完了を待つ（#888）。
+// value 変更だけでは onchange handler が動かないため change を bubbles:true で発火する。
+// 行生成を待ってから後続の注入（プロファイル / タイトル / credit）へ進む（順序保証）。
+export async function setTrackCount(root: ParentNode, count: number): Promise<void> {
+  setNativeValue(requireElement<HTMLSelectElement>(root, TRACK_COUNT_SELECTOR), String(count));
+  await waitForElementCount(root, TITLE_NAME_SELECTOR, count, TRACK_ROW_WAIT_TIMEOUT_MS);
+}
+
+// アカウント登録のアーティスト名（#artistName hidden）を解決する。未登録なら fail-loud。
+function requireArtistName(root: ParentNode): string {
+  const el = root.querySelector<HTMLInputElement>(ARTIST_NAME_SELECTOR);
+  if (el === null) {
+    throw new FieldNotFoundError(ARTIST_NAME_SELECTOR);
+  }
+  const name = el.value.trim();
+  if (name === "") {
+    throw new Error(`${ARTIST_NAME_SELECTOR} の値が空です（アーティスト名が未登録）`);
+  }
+  return name;
+}
+
+// Apple Music クレジット展開トリガー（「クレジットを追加」）を解決する。
+// .requirements-item-title は複数あり得るため textContent で絞り込む（fail-loud）。
+function requireCreditTrigger(root: ParentNode): HTMLElement {
+  const trigger = Array.from(
+    root.querySelectorAll<HTMLElement>(APPLE_CREDIT_SELECTORS.addTrigger),
+  ).find((el) => el.textContent?.includes(APPLE_CREDIT_SELECTORS.addTriggerText));
+  if (trigger === undefined) {
+    throw new FieldNotFoundError(
+      `${APPLE_CREDIT_SELECTORS.addTrigger}（text: ${APPLE_CREDIT_SELECTORS.addTriggerText}）`,
+    );
+  }
+  return trigger;
+}
+
+// Apple Music クレジット（演奏者 / プロデューサー）を全 track に注入する（#888）。
+// トップレベルの「クレジットを追加」を 1 回 click して全 track の入力欄を visible 化し、
+// 各 track の performer / producer に #artistName（アカウント登録のアーティスト名）を入力する。
+export function injectAppleMusicCredits(root: ParentNode, trackCount: number): void {
+  const artistName = requireArtistName(root);
+  requireCreditTrigger(root).click();
+  for (let track1 = 1; track1 <= trackCount; track1 += 1) {
+    setNativeValue(requireInput(root, APPLE_CREDIT_SELECTORS.performerByTrack(track1)), artistName);
+    setNativeValue(requireInput(root, APPLE_CREDIT_SELECTORS.producerByTrack(track1)), artistName);
+  }
+}
+
 // modal 内で AI 開示の各設定を反映する（uuid は modal を開いた 1st track のもの）。
-// partial_audio_type は recording_scope='partial' かつ非 null のときのみ設定する
-// （undefined を null 同等扱いする loose equality `!= null` で FieldNotFoundError を防ぐ #877）。
-function applyModalSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): void {
-  setChecked(requireInput(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid)), ai.lyrics);
-  setChecked(requireInput(modal, AI_MODAL_SELECTORS.musicByUuid(uuid)), ai.music);
-  setChecked(requireInput(modal, AI_MODAL_SELECTORS.recordingScope(ai.recording_scope)), true);
-  if (ai.recording_scope === "partial" && ai.partial_audio_type != null) {
+// 段階的 trigger（#888）:
+//   - recording_scope='full' → full radio を check すると persona radio が dynamic inject される
+//     ため、出現を MutationObserver で待ってから persona を設定する
+//   - recording_scope='partial' → partial radio を check すると種別 radio が visible 化するため、
+//     partial_audio_type が非 null のときのみ設定する（undefined を loose equality で skip #877）
+//   - apply-all は album mode のみ存在するため、不在なら skip（single mode 許容）
+function applyModalSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): Promise<void> {
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid)), ai.lyrics, true);
+  setChecked(requireInput(modal, AI_MODAL_SELECTORS.musicByUuid(uuid)), ai.music, true);
+  setChecked(
+    requireInput(modal, AI_MODAL_SELECTORS.recordingScopeByTrack(MODAL_TRACK, ai.recording_scope)),
+    true,
+    true,
+  );
+
+  if (ai.recording_scope === "full") {
+    return applyFullScopeSelections(modal, uuid, ai);
+  }
+  if (ai.partial_audio_type != null) {
     setChecked(
-      requireInput(
-        modal,
-        AI_MODAL_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type),
-      ),
+      requireInput(modal, AI_MODAL_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type)),
+      true,
       true,
     );
   }
-  setChecked(
-    requireInput(modal, AI_MODAL_SELECTORS.artistPersonaByUuid(uuid, ai.artist_persona ? "1" : "0")),
-    true,
-  );
-  setChecked(requireInput(modal, AI_MODAL_SELECTORS.applyAll), ai.apply_to_all);
+  applyAllSelection(modal, ai);
+  return Promise.resolve();
+}
+
+// full check 後に dynamic inject される persona radio の出現を待ってから設定する。
+async function applyFullScopeSelections(
+  modal: ParentNode,
+  uuid: string,
+  ai: AiDisclosure,
+): Promise<void> {
+  const personaSelector = AI_MODAL_SELECTORS.artistPersonaByUuid(uuid, ai.artist_persona ? "1" : "0");
+  await waitForElement(modal, personaSelector, AI_MODAL_WAIT_TIMEOUT_MS);
+  setChecked(requireInput(modal, personaSelector), true, true);
+  applyAllSelection(modal, ai);
+}
+
+// apply-all checkbox を設定する。album mode のみ存在するため不在なら skip（single mode 許容 #888）。
+function applyAllSelection(modal: ParentNode, ai: AiDisclosure): void {
+  const applyAll = modal.querySelector<HTMLInputElement>(AI_MODAL_SELECTORS.applyAll);
+  if (applyAll !== null) {
+    setChecked(applyAll, ai.apply_to_all, true);
+  }
 }
 
 // AI 開示注入（#877 modal フロー）:
@@ -381,7 +539,7 @@ export async function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): Pr
   const firstUuid = uuids[0];
   setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(firstUuid).yes), true);
   const modal = await waitForElement(root, AI_MODAL_SELECTORS.modal, AI_MODAL_WAIT_TIMEOUT_MS);
-  applyModalSelections(modal, firstUuid, ai);
+  await applyModalSelections(modal, firstUuid, ai);
   requireElement<HTMLButtonElement>(modal, AI_MODAL_SELECTORS.saveButton).click();
   await waitForRemoval(modal, AI_MODAL_WAIT_TIMEOUT_MS);
 }
