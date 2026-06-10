@@ -6,7 +6,8 @@
 - track[].title を `<source>/metadata.md` のトラック表から引く
 - cover を `<collection>/30-distrokid/cover_art_3000.jpg` 優先で選ぶ
 - album_title を metadata.md 枠（空なら disc dirname kebab→Title）から決める
-- language を metadata.md override（無ければ profile）で上書きする
+- language は profile（config/channel/distrokid.json）を権威に使う（metadata.md
+  「言語」セルは転記用テンプレで payload には影響しない、#888）
 ことを検証する。distrokid_source 未指定は従来経路（後方互換）。
 
 契約（draft が実装すべき public API、後方互換拡張）:
@@ -242,10 +243,14 @@ def test_disc_source_cover_falls_back_to_thumbnail_when_absent(tmp_path):
     assert cover["filename"] == "thumbnail.png"
 
 
-def test_disc_source_language_overridden_by_metadata(tmp_path):
-    """Given metadata.md の 言語=Instrumental
+def test_disc_source_language_uses_profile_ignoring_metadata(tmp_path):
+    """Given metadata.md の 言語=Instrumental（DistroKid form 言語 option と意味が異なる値）
     When distrokid_source 指定で build_release_payload
-    Then profile.language が Instrumental に override される。
+    Then profile.language は config 由来の "ja" を維持する（metadata.md は権威ではない）。
+
+    metadata.md の「言語」セルは人間が読む転記用テンプレで、DistroKid form の言語
+    option（English 等の言語名）と意味が異なる値（例: "Instrumental" は楽曲属性）が
+    書かれうるため、payload には反映しない（#888 / 拡張側の OptionNotFoundError 予防）。
     """
     collection = _make_collection(tmp_path)
     _make_disc_source(collection, language="Instrumental")
@@ -253,13 +258,13 @@ def test_disc_source_language_overridden_by_metadata(tmp_path):
 
     payload = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
 
-    assert payload["profile"]["language"] == "Instrumental"
+    assert payload["profile"]["language"] == "ja"
 
 
-def test_disc_source_language_falls_back_to_profile_when_blank(tmp_path):
+def test_disc_source_language_uses_profile_when_metadata_blank(tmp_path):
     """Given metadata.md の 言語が HTML コメント枠（未記入）
     When distrokid_source 指定で build_release_payload
-    Then profile.language は元の profile 値（ja）のまま。
+    Then profile.language は元の profile 値（ja）のまま（非空時と同じ挙動）。
     """
     collection = _make_collection(tmp_path)
     _make_disc_source(collection, language=None)
@@ -429,10 +434,11 @@ def serve(tmp_path):
 def test_release_endpoint_serves_disc_source_payload(serve, tmp_path):
     """Given create_server に distrokid_source を渡す
     When `GET /distrokid/release.json`
-    Then disc-source の payload（25 tracks / cover_art_3000 / Instrumental）を返す。
+    Then disc-source の payload（25 tracks / cover_art_3000 / profile.language=ja）を返す。
 
     distrokid_source が create_server → _serve_distrokid_release →
-    build_release_payload まで伝搬することの統合検証。
+    build_release_payload まで伝搬することの統合検証。language は profile 値を維持する
+    （metadata.md の「言語」は payload に影響しない、#888）。
     """
     collection = _make_collection(tmp_path)
     _make_disc_source(collection)
@@ -446,7 +452,7 @@ def test_release_endpoint_serves_disc_source_payload(serve, tmp_path):
     assert len(body["release"]["tracks"]) == 25
     assert body["release"]["tracks"][0]["title"] == "Slip Right Through"
     assert body["release"]["cover"]["filename"] == "cover_art_3000.jpg"
-    assert body["profile"]["language"] == "Instrumental"
+    assert body["profile"]["language"] == "ja"
 
 
 def test_release_asset_serves_disc_source_mp3(serve, tmp_path):

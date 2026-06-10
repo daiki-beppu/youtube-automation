@@ -35,6 +35,15 @@ export interface AiDisclosure {
   apply_to_all: boolean;
 }
 
+// Apple Music の track credits 行（performer 行 / producer 行）の既定 role。
+// 実 DOM の `#track-N-performer-1-role`（86 options）/ `#track-N-producer-1-role`
+// （40 options）の SELECT value に対応する英語値。
+// Python の utils.config.distrokid.DistrokidProfileCredits と 1:1（#919）。
+export interface DistrokidProfileCredits {
+  performer_role: string;
+  producer_role: string;
+}
+
 // `distrokid.profile` セクション（distrokid.com/new フォーム項目に対応する静的プロファイル）。
 export interface DistrokidProfile {
   language: string;
@@ -42,6 +51,7 @@ export interface DistrokidProfile {
   sub_genre: string | null;
   songwriter: SongwriterName | null;
   ai_disclosure: AiDisclosure;
+  credits: DistrokidProfileCredits;
 }
 
 // 1 トラックのメタ + asset 参照（asset_path は "/distrokid/assets/" 接頭辞込み）。

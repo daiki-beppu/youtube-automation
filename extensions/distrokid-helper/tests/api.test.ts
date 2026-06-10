@@ -35,6 +35,10 @@ const SAMPLE_PAYLOAD: ReleasePayload = {
       artist_persona: true,
       apply_to_all: true,
     },
+    credits: {
+      performer_role: "Audio",
+      producer_role: "Producer",
+    },
   },
   release: {
     album_title: "Summer Vibes",

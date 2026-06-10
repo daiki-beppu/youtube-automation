@@ -111,6 +111,10 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
             "artist_persona": True,
             "apply_to_all": True,
         },
+        "credits": {
+            "performer_role": "Audio",
+            "producer_role": "Producer",
+        },
     }
     release = payload["release"]
     assert release["album_title"] == "city-nights"

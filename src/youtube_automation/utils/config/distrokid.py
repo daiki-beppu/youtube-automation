@@ -68,6 +68,25 @@ class AiDisclosure:
 
 
 @dataclass(frozen=True)
+class DistrokidProfileCredits:
+    """Apple Music クレジット既定値（distrokid.com/new の track credits 行）.
+
+    各トラックの credits は performer 行と producer 行のペアで構成される（実 DOM 検証済み・#919）。
+    人名（`track-N-performer-1-name` / `track-N-producer-1-name`）は DistroKid 側で
+    アルバム artist で自動フィルされるため、本 dataclass では役割（role select）の既定値
+    のみを保持する。SELECT の `value` 属性に対応する英語値で指定する（i18n は DistroKid 側）。
+
+    - `performer_role`: performer 行の role（`track-N-performer-1-role` の SELECT value）。
+      AI 制作 BGM は `"Audio"`（オーディオ）を既定とする。86 options。
+    - `producer_role`: producer 行の role（`track-N-producer-1-role` の SELECT value）。
+      `"Producer"`（プロデューサー）を既定とする。40 options。
+    """
+
+    performer_role: str = "Audio"
+    producer_role: str = "Producer"
+
+
+@dataclass(frozen=True)
 class DistrokidProfile:
     """`distrokid.profile` セクション（distrokid.com/new フォーム項目に対応）.
 
@@ -76,6 +95,7 @@ class DistrokidProfile:
     - `sub_genre`: サブジャンル（genreSecondary SELECT の value、任意）
     - `songwriter`: 作曲者の本名（任意、省略時はトラック側で手入力）
     - `ai_disclosure`: AI 開示モーダルの設定（既定は全 AI 開示）
+    - `credits`: Apple Music クレジットの既定値（既定は Audio + Producer）
     """
 
     language: str = ""
@@ -83,6 +103,7 @@ class DistrokidProfile:
     sub_genre: str | None = None
     songwriter: SongwriterName | None = None
     ai_disclosure: AiDisclosure = field(default_factory=AiDisclosure)
+    credits: DistrokidProfileCredits = field(default_factory=DistrokidProfileCredits)
 
 
 @dataclass(frozen=True)

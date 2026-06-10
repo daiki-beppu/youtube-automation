@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 //
-// `lib/distrokid-injector.ts` のセレクタ契約 + 注入オーケストレーションのテスト（#813）。
+// `lib/distrokid-injector.ts` のセレクタ契約 + 注入オーケストレーションのテスト（#813 / #877 / #888）。
 //
-// このバグ修正の核心は「PR #803 の想像セレクタ（name 属性ベース）を、実 DOM 検証に基づく
-// id ベースセレクタへ刷新する」こと。前半はセレクタ定数が実 DOM 検証サマリ（order.md）と
-// 1:1 一致することを固定する。後半は注入オーケストレーション関数（プロファイル / アルバム名 /
-// リリース日 / track uuid 解決 / songwriter / 新規リリース assert / AI 開示モーダル）の
-// 受け入れ条件に直結する分岐を jsdom で固定する。
+// #888 で実 DOM 再検証に基づき以下を固定する:
+//   (A) AI 開示 modal の段階的 trigger（録音範囲 radio は class+track+value、full check で
+//       persona radio が dynamic inject される → MutationObserver で待機、apply-all は album mode のみ）
+//   (B) トラック数 select（#howManySongsOnThisAlbum）への曲数 set + track 行生成待機
+//   (C) Apple Music クレジット（演奏者 / プロデューサー）の全 track 一括注入
 //
 // jsdom はレイアウトを行わず getBoundingClientRect() が常に全 0 を返すため、可視要素には
 // VISIBLE_RECT を擬似付与する（production の strict isVisible は bbox を見て hidden を排除する）。
@@ -24,23 +24,46 @@ import {
   injectSongwriter,
   assertNewRelease,
   injectAiDisclosure,
+  injectAppleMusicCredits,
+  setTrackCount,
   waitForElement,
+  waitForElementCount,
   waitForRemoval,
   PROFILE_SELECTORS,
   ALBUM_SELECTORS,
   RELEASE_DATE_SELECTOR,
   FILE_SELECTORS,
   TRACK_FIELD_SELECTORS,
+  TRACK_COUNT_SELECTOR,
+  ARTIST_NAME_SELECTOR,
+  APPLE_CREDIT_SELECTORS,
   AI_DISCLOSURE_SELECTORS,
   AI_MODAL_SELECTORS,
   FieldNotFoundError,
   ModalTimeoutError,
+  TrackCountTimeoutError,
+  OptionNotFoundError,
+} from "../lib/distrokid-injector";
+import {
+  acceptTermsAgreement,
+  scrollToDoneButton,
+  uncheckUpsells,
+  TERMS_AGREEMENT_SELECTOR,
+  DONE_BUTTON_SELECTOR,
+  UPSELL_SELECTORS,
 } from "../lib/distrokid-injector";
 import type {
   DistrokidProfile,
   AiDisclosure,
+  DistrokidProfileCredits,
   SongwriterName,
 } from "../lib/types";
+
+// Apple Music credits default（profile.credits の標準値・テスト共通）。
+const SAMPLE_CREDITS: DistrokidProfileCredits = {
+  performer_role: "Audio",
+  producer_role: "Producer",
+};
 
 // jsdom はレイアウトしないため、可視要素には非 0 bbox を擬似付与して isVisible を通す。
 const VISIBLE_RECT = {
@@ -103,6 +126,24 @@ function mountSelect(id: string, values: string[]): HTMLSelectElement {
   return makeVisible(select);
 }
 
+// {value, text} を別指定できる mount。実機 DistroKid の <option value="25">R&B／ソウル</option>
+// のように value が数値で text が日本語ラベルというパターンを再現するため。
+function mountSelectWithOptions(
+  id: string,
+  options: ReadonlyArray<{ value: string; text: string }>,
+): HTMLSelectElement {
+  const select = document.createElement("select");
+  select.id = id;
+  for (const o of options) {
+    const opt = document.createElement("option");
+    opt.value = o.value;
+    opt.textContent = o.text;
+    select.appendChild(opt);
+  }
+  document.body.appendChild(select);
+  return makeVisible(select);
+}
+
 function makeCheckbox(
   parent: ParentNode,
   attrs: { id?: string; name?: string },
@@ -127,6 +168,21 @@ function makeRadio(
   return r;
 }
 
+// 録音範囲 radio（実 DOM 準拠 #888: name は null、class + track + value で紐付ける）。
+function makeScopeRadio(
+  parent: ParentNode,
+  track1: number,
+  value: "full" | "partial",
+): HTMLInputElement {
+  const r = document.createElement("input");
+  r.type = "radio";
+  r.className = "distroAiRecordingScope";
+  r.setAttribute("track", String(track1));
+  r.setAttribute("value", value);
+  (parent as Node).appendChild(r);
+  return r;
+}
+
 // track 単位の title input + ai_gate radio（yes/no）を fieldset に mount する（modal 開閉の起点）。
 function mountTrackGate(uuid: string): {
   fieldset: HTMLFieldSetElement;
@@ -144,7 +200,9 @@ function mountTrackGate(uuid: string): {
   return { fieldset, gateNo, gateYes };
 }
 
-// 実 DOM 再検証（#877）に基づく SweetAlert2 modal を組み立てる（uuid は modal を開いた 1st track）。
+// 実 DOM 再検証（#877 / #888）に基づく SweetAlert2 modal を組み立てる（uuid は modal を開いた 1st track）。
+// persona radio は初期には存在せず、録音範囲 full の change で #ai-artist-questions-1 へ dynamic inject する。
+// apply-all は album mode（opts.album）のときのみ存在する。
 interface ModalRefs {
   modal: HTMLElement;
   lyrics: HTMLInputElement;
@@ -153,9 +211,11 @@ interface ModalRefs {
   scopePartial: HTMLInputElement;
   partialVocals: HTMLInputElement;
   partialInstruments: HTMLInputElement;
-  personaHuman: HTMLInputElement;
-  personaAi: HTMLInputElement;
-  applyAll: HTMLInputElement;
+  personaContainer: HTMLElement;
+  // full check で dynamic inject された persona radio を返す（modal 除去後も closure 参照で
+  // checked 状態を読めるようにする）。未 inject なら null。
+  getPersona: (value: "0" | "1") => HTMLInputElement | null;
+  applyAll: HTMLInputElement | null;
   save: HTMLButtonElement;
   saveClicks: () => number;
 }
@@ -165,7 +225,7 @@ function withClass<T extends HTMLElement>(el: T, className: string): T {
   return el;
 }
 
-function buildModal(uuid: string): ModalRefs {
+function buildModal(uuid: string, opts: { album: boolean }): ModalRefs {
   const modal = document.createElement("div");
   modal.className = "ai-credits-swal-modal";
   modal.setAttribute("role", "dialog");
@@ -176,15 +236,9 @@ function buildModal(uuid: string): ModalRefs {
   const lyrics = withClass(makeCheckbox(details, { name: `ai_lyrics_${uuid}` }), "distroAiLyrics");
   const music = withClass(makeCheckbox(details, { name: `ai_music_${uuid}` }), "distroAiMusic");
 
-  const scopeName = `ai_recording_scope_${uuid}`;
-  const scopeFull = withClass(
-    makeRadio(details, { name: scopeName, value: "full" }),
-    "distroAiRecordingScope",
-  );
-  const scopePartial = withClass(
-    makeRadio(details, { name: scopeName, value: "partial" }),
-    "distroAiRecordingScope",
-  );
+  // 録音範囲 radio（name は null、track=1）。
+  const scopeFull = makeScopeRadio(details, 1, "full");
+  const scopePartial = makeScopeRadio(details, 1, "partial");
 
   const partialVocals = withClass(
     makeRadio(details, { name: `ai_partial_audio_type_${uuid}`, value: "vocals" }),
@@ -195,17 +249,31 @@ function buildModal(uuid: string): ModalRefs {
     "distroAiPartialAudioType",
   );
 
-  const personaName = `ai_artist_persona_${uuid}_0`;
-  const personaHuman = withClass(
-    makeRadio(details, { name: personaName, value: "0" }),
-    "distroAiArtistPersona",
-  );
-  const personaAi = withClass(
-    makeRadio(details, { name: personaName, value: "1" }),
-    "distroAiArtistPersona",
-  );
+  // persona radio はここでは作らない。full check で dynamic inject する。
+  const personaContainer = document.createElement("div");
+  personaContainer.id = "ai-artist-questions-1";
+  details.appendChild(personaContainer);
 
-  const applyAll = makeCheckbox(details, { id: "ai-apply-all-1" });
+  const personaName = `ai_artist_persona_${uuid}_0`;
+  const personaByValue: Record<string, HTMLInputElement> = {};
+  // full check（change）で persona radio を遅延 inject し、injector 側の MutationObserver 待機経路を通す。
+  scopeFull.addEventListener("change", () => {
+    if (!scopeFull.checked) return;
+    if (personaContainer.querySelector('[name^="ai_artist_persona_"]') !== null) return;
+    setTimeout(() => {
+      if (personaContainer.querySelector('[name^="ai_artist_persona_"]') !== null) return;
+      personaByValue["0"] = withClass(
+        makeRadio(personaContainer, { name: personaName, value: "0" }),
+        "distroAiArtistPersona",
+      );
+      personaByValue["1"] = withClass(
+        makeRadio(personaContainer, { name: personaName, value: "1" }),
+        "distroAiArtistPersona",
+      );
+    }, 0);
+  });
+
+  const applyAll = opts.album ? makeCheckbox(details, { id: "ai-apply-all-1" }) : null;
 
   const save = document.createElement("button");
   save.className = "swal2-confirm ai-modal-btn-save";
@@ -225,8 +293,8 @@ function buildModal(uuid: string): ModalRefs {
     scopePartial,
     partialVocals,
     partialInstruments,
-    personaHuman,
-    personaAi,
+    personaContainer,
+    getPersona: (value: "0" | "1") => personaByValue[value] ?? null,
     applyAll,
     save,
     saveClicks: () => saveClicks,
@@ -235,7 +303,10 @@ function buildModal(uuid: string): ModalRefs {
 
 // track gate を mount し、1st track の「はい」click で modal を遅延 mount する配線を張る。
 // setTimeout(0) で mount することで injector 側 MutationObserver の待機経路を実際に通す。
-function setupModalForm(uuids: string[]): {
+function setupModalForm(
+  uuids: string[],
+  opts: { album: boolean } = { album: uuids.length > 1 },
+): {
   gates: { uuid: string; gateNo: HTMLInputElement; gateYes: HTMLInputElement }[];
   getModalRefs: () => ModalRefs | null;
 } {
@@ -245,7 +316,7 @@ function setupModalForm(uuids: string[]): {
     gateYes.addEventListener("click", () => {
       setTimeout(() => {
         if (document.querySelector(AI_MODAL_SELECTORS.modal) === null) {
-          modalRefs = buildModal(uuid);
+          modalRefs = buildModal(uuid, opts);
           document.body.appendChild(modalRefs.modal);
         }
       }, 0);
@@ -260,7 +331,6 @@ beforeEach(() => {
 });
 
 // 新 schema の型契約を構造的に固定する（Python の DistrokidProfile と 1:1）。
-// 旧フラット 6 文字列（artist_name 等）が無いこと・nested 構造であることを compile 時に担保する。
 const SAMPLE_SONGWRITER: SongwriterName = { first: "Jane", middle: null, last: "Doe" };
 const SAMPLE_AI: AiDisclosure = {
   enabled: true,
@@ -277,6 +347,7 @@ const SAMPLE_PROFILE: DistrokidProfile = {
   sub_genre: "House",
   songwriter: SAMPLE_SONGWRITER,
   ai_disclosure: SAMPLE_AI,
+  credits: SAMPLE_CREDITS,
 };
 
 describe("新 schema 型契約（lib/types）", () => {
@@ -337,6 +408,29 @@ describe("TRACK_FIELD_SELECTORS（track 別タイトル + songwriter 3 分割）
       middle: '[name="songwriter_real_name_middle2"]',
       last: '[name="songwriter_real_name_last2"]',
     });
+  });
+});
+
+describe("TRACK_COUNT_SELECTOR / APPLE_CREDIT_SELECTORS（#888 実 DOM 準拠）", () => {
+  it("トラック数 select は #howManySongsOnThisAlbum", () => {
+    expect(TRACK_COUNT_SELECTOR).toBe("#howManySongsOnThisAlbum");
+  });
+
+  it("artist 名は #artistName（アカウント登録の hidden）", () => {
+    expect(ARTIST_NAME_SELECTOR).toBe("#artistName");
+  });
+
+  it("credit トリガーは .requirements-item-title（text=「クレジットを追加」）", () => {
+    expect(APPLE_CREDIT_SELECTORS.addTrigger).toBe(".requirements-item-title");
+    expect(APPLE_CREDIT_SELECTORS.addTriggerText).toBe("クレジットを追加");
+  });
+
+  it("performer/producer の name / role は #track-{N}-{role}-1-{kind}（1-indexed）を返す", () => {
+    // #919 で role 欄も注入対象に追加したため、name と role を別 selector に分けた。
+    expect(APPLE_CREDIT_SELECTORS.performerNameByTrack(3)).toBe("#track-3-performer-1-name");
+    expect(APPLE_CREDIT_SELECTORS.performerRoleByTrack(3)).toBe("#track-3-performer-1-role");
+    expect(APPLE_CREDIT_SELECTORS.producerNameByTrack(3)).toBe("#track-3-producer-1-name");
+    expect(APPLE_CREDIT_SELECTORS.producerRoleByTrack(3)).toBe("#track-3-producer-1-role");
   });
 });
 
@@ -431,8 +525,111 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
   });
 });
 
-describe("injectAlbumTitle（アルバム時のみ・シングルモードは skip）", () => {
-  it("可視の #albumTitleInput に注入する（アルバム時）", () => {
+// #888 第2回 retest: payload が option.value と不一致だと selectedIndex が -1 になり、
+// DistroKid 本体の submit handler 内で jQuery .val() == null → null.trim() crash する。
+// setNativeValue は <select> 検出時に option.value → text → 部分一致（normalize）の順で
+// 一致を取り、最終的に selectedIndex を更新する必要がある。
+describe("setNativeValue（<select>）— option の value / text 一致 + normalize fallback", () => {
+  it("option.value 完全一致を優先する（既存パターン）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択" },
+      { value: "9", text: "Electronic" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    setNativeValue(sel, "25");
+
+    expect(sel.value).toBe("25");
+    expect(sel.selectedIndex).toBe(2);
+  });
+
+  it("option.text 完全一致で実機ラベル（日本語）が選ばれる", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択" },
+      { value: "9", text: "Electronic" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    setNativeValue(sel, "R&B／ソウル");
+
+    expect(sel.value).toBe("25");
+    expect(sel.selectedIndex).toBe(2);
+  });
+
+  it("normalize で ／ → / 変換 + lowercase を吸収する（text 完全一致）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    // payload は半角 / + 全大文字
+    setNativeValue(sel, "R&B/ソウル");
+
+    expect(sel.value).toBe("25");
+  });
+
+  it("text 部分一致 fallback（payload が option.text の前方）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択" },
+      { value: "9", text: "Electronic Dance" },
+    ]);
+
+    // payload "Electronic" は option.text "Electronic Dance" の部分集合
+    setNativeValue(sel, "Electronic");
+
+    expect(sel.value).toBe("9");
+  });
+
+  it("placeholder (value=\"\") は部分一致経路から除外される", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択（全 44 件）" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    // payload "ジャンル" は placeholder の text に含まれるが、value="" のため skip され
+    // R&B option ともマッチしないので OptionNotFoundError
+    expect(() => setNativeValue(sel, "ジャンル")).toThrow(OptionNotFoundError);
+  });
+
+  it("一致無しなら OptionNotFoundError で fail-loud（null.trim crash 予防）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "9", text: "Electronic" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    expect(() => setNativeValue(sel, "存在しないジャンル名")).toThrow(OptionNotFoundError);
+    // 一致が無いので selectedIndex も初期のまま
+    expect(sel.selectedIndex).toBe(0);
+  });
+
+  it("成功時に input / change イベントを bubbles:true で発火する（React 互換）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+    let inputs = 0;
+    let changes = 0;
+    sel.addEventListener("input", (e) => {
+      if (e.bubbles) inputs += 1;
+    });
+    sel.addEventListener("change", (e) => {
+      if (e.bubbles) changes += 1;
+    });
+
+    setNativeValue(sel, "25");
+
+    expect(inputs).toBe(1);
+    expect(changes).toBe(1);
+  });
+
+  it("OptionNotFoundError は selector と payload 値を含むメッセージを持つ", () => {
+    const err = new OptionNotFoundError("#genrePrimary", "Electronic");
+    expect(err.message).toContain("#genrePrimary");
+    expect(err.message).toContain("Electronic");
+    expect(err.name).toBe("OptionNotFoundError");
+  });
+});
+
+describe("injectAlbumTitle（#919 id 直接取得・fail-loud）", () => {
+  it("#albumTitleInput に注入する", () => {
     // Given
     const el = mountInput({ id: "albumTitleInput", type: "text" });
 
@@ -443,20 +640,45 @@ describe("injectAlbumTitle（アルバム時のみ・シングルモードは sk
     expect(el.value).toBe("My Album");
   });
 
-  it("要素不在ならスキップ（シングルモード・throw しない）", () => {
-    // Then: album_title 欄が無くても fail-loud しない
-    expect(() => injectAlbumTitle(document, "X")).not.toThrow();
+  it("bbox=0 でも id があれば注入する（race condition 回避・#919）", () => {
+    // Given: setTrackCount(25) 直後の DistroKid 内部 re-layout で bbox=0 になる瞬間を再現。
+    // 旧 injectAlbumTitle は findVisibleField の isVisible filter で silent skip していた。
+    const el = mountInput({ id: "albumTitleInput", type: "text" });
+    el.getBoundingClientRect = () => ZERO_RECT;
+
+    // When
+    injectAlbumTitle(document, "My Album");
+
+    // Then: id ベース取得なので bbox=0 でも注入される
+    expect(el.value).toBe("My Album");
+  });
+
+  it("要素不在なら FieldNotFoundError（fail-loud）", () => {
+    // Then: シングルモードや UI 変更で要素が消えた場合は fail-loud で気付く。
+    expect(() => injectAlbumTitle(document, "X")).toThrow(FieldNotFoundError);
   });
 });
 
-describe("injectReleaseDate（未確定 null は注入しない）", () => {
+describe("injectReleaseDate（#919 id 直接取得・null は skip）", () => {
   it("null なら何もしない（要素不在でも throw しない）", () => {
     expect(() => injectReleaseDate(document, null)).not.toThrow();
   });
 
-  it("値ありで可視 #release-date-dp に注入する", () => {
+  it("値ありで #release-date-dp に注入する", () => {
     // Given
     const el = mountInput({ id: "release-date-dp", type: "date" });
+
+    // When
+    injectReleaseDate(document, "2026-07-01");
+
+    // Then
+    expect(el.value).toBe("2026-07-01");
+  });
+
+  it("bbox=0 でも id があれば注入する（race condition 回避・#919）", () => {
+    // Given
+    const el = mountInput({ id: "release-date-dp", type: "date" });
+    el.getBoundingClientRect = () => ZERO_RECT;
 
     // When
     injectReleaseDate(document, "2026-07-01");
@@ -579,7 +801,7 @@ describe("assertNewRelease（新規リリース前提の assert）", () => {
   });
 });
 
-describe("AI_DISCLOSURE_SELECTORS / AI_MODAL_SELECTORS（実 DOM 準拠 #877）", () => {
+describe("AI_DISCLOSURE_SELECTORS / AI_MODAL_SELECTORS（実 DOM 準拠 #877 / #888）", () => {
   it("gateByUuid は ai_gate_<uuid> の yes / no radio selector を返す", () => {
     expect(AI_DISCLOSURE_SELECTORS.gateByUuid("abc")).toEqual({
       no: '[name="ai_gate_abc"][value="0"]',
@@ -598,12 +820,12 @@ describe("AI_DISCLOSURE_SELECTORS / AI_MODAL_SELECTORS（実 DOM 準拠 #877）"
     expect(AI_MODAL_SELECTORS.musicByUuid("abc")).toBe('[name="ai_music_abc"]');
   });
 
-  it("recordingScope は full / partial の radio selector を返す", () => {
-    expect(AI_MODAL_SELECTORS.recordingScope("full")).toBe(
-      '.distroAiRecordingScope[value="full"]',
+  it("recordingScopeByTrack は class+track+value の radio selector を返す（name は null）", () => {
+    expect(AI_MODAL_SELECTORS.recordingScopeByTrack(1, "full")).toBe(
+      '[class*="distroAiRecordingScope"][track="1"][value="full"]',
     );
-    expect(AI_MODAL_SELECTORS.recordingScope("partial")).toBe(
-      '.distroAiRecordingScope[value="partial"]',
+    expect(AI_MODAL_SELECTORS.recordingScopeByTrack(1, "partial")).toBe(
+      '[class*="distroAiRecordingScope"][track="1"][value="partial"]',
     );
   });
 
@@ -658,7 +880,395 @@ describe("waitForElement / waitForRemoval（MutationObserver ベース）", () =
   });
 });
 
-describe("injectAiDisclosure（#877 modal フロー・async）", () => {
+describe("waitForElementCount（#888 track 行生成待ち）", () => {
+  it("既に count 個あれば即解決する", async () => {
+    mountInput({ name: "title_a" });
+    mountInput({ name: "title_b" });
+    await expect(
+      waitForElementCount(document, '[name^="title_"]', 2, 1000),
+    ).resolves.toBeUndefined();
+  });
+
+  it("後から count 個に達するのを MutationObserver で解決する", async () => {
+    const promise = waitForElementCount(document, '[name^="title_"]', 2, 1000);
+    setTimeout(() => {
+      mountInput({ name: "title_a" });
+      mountInput({ name: "title_b" });
+    }, 0);
+    await expect(promise).resolves.toBeUndefined();
+  });
+
+  it("制限時間内に達しなければ TrackCountTimeoutError で fail-loud", async () => {
+    mountInput({ name: "title_a" });
+    await expect(
+      waitForElementCount(document, '[name^="title_"]', 3, 20),
+    ).rejects.toBeInstanceOf(TrackCountTimeoutError);
+  });
+});
+
+describe("setTrackCount（#888 トラック数 select + 行生成待機）", () => {
+  it("select に曲数を set + change 発火し、行が揃えば解決する", async () => {
+    // Given: select と、既に揃った 2 つの title 行
+    const select = mountSelect("howManySongsOnThisAlbum", ["1", "2", "3"]);
+    mountInput({ name: "title_a" });
+    mountInput({ name: "title_b" });
+    let changes = 0;
+    select.addEventListener("change", () => {
+      changes += 1;
+    });
+
+    // When
+    await setTrackCount(document, 2);
+
+    // Then: 値がセットされ change が発火する
+    expect(select.value).toBe("2");
+    expect(changes).toBeGreaterThan(0);
+  });
+
+  it("change で後から生成される track 行を待つ", async () => {
+    // Given: change で 2 行を遅延生成する select
+    const select = mountSelect("howManySongsOnThisAlbum", ["1", "2"]);
+    select.addEventListener("change", () => {
+      setTimeout(() => {
+        mountInput({ name: "title_a" });
+        mountInput({ name: "title_b" });
+      }, 0);
+    });
+
+    // When / Then: 行生成を待って解決し、uuid が DOM order で解決できる
+    await expect(setTrackCount(document, 2)).resolves.toBeUndefined();
+    expect(resolveTrackUuids(document)).toEqual(["a", "b"]);
+  });
+
+  it("select が無ければ FieldNotFoundError で fail-loud", async () => {
+    await expect(setTrackCount(document, 2)).rejects.toBeInstanceOf(FieldNotFoundError);
+  });
+});
+
+describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・role 含む）", () => {
+  // #artistName + trigger + 各 track の performer/producer の name + role を mount する。
+  // role は実機 DOM に合わせて `dk-searchable-select__native` 相当のネイティブ select として組む
+  // （options は profile.credits に揃えるためのデフォルト Audio / Producer + 担当未選択を含む）。
+  function mountCreditDom(
+    trackCount: number,
+    opts: { artist: string; mountRole?: boolean },
+  ): { getTriggerClicks: () => number } {
+    const mountRole = opts.mountRole ?? true;
+    const artist = document.createElement("input");
+    artist.id = "artistName";
+    artist.type = "hidden";
+    artist.setAttribute("value", opts.artist);
+    document.body.appendChild(artist);
+
+    const trigger = document.createElement("div");
+    trigger.className = "requirements-item-title";
+    trigger.textContent = "クレジットを追加";
+    document.body.appendChild(trigger);
+    let triggerClicks = 0;
+    trigger.addEventListener("click", () => {
+      triggerClicks += 1;
+    });
+
+    // credit 入力欄は DOM 上に事前存在する（trigger click で visible 化するだけ）。
+    for (let n = 1; n <= trackCount; n += 1) {
+      mountInput({ id: `track-${n}-performer-1-name`, name: "performer-name" });
+      mountInput({ id: `track-${n}-producer-1-name`, name: "producer-name" });
+      if (mountRole) {
+        // performer role: 86 options のサブセット（unselected + Audio + Synthesizer）。
+        mountSelectWithOptions(`track-${n}-performer-1-role`, [
+          { value: "unselected", text: "担当を選択" },
+          { value: "Audio", text: "オーディオ" },
+          { value: "Synthesizer", text: "シンセサイザー" },
+        ]);
+        // producer role: 40 options のサブセット（unselected + Producer + Executive producer）。
+        mountSelectWithOptions(`track-${n}-producer-1-role`, [
+          { value: "unselected", text: "担当を選択" },
+          { value: "Producer", text: "プロデューサー" },
+          { value: "Executive producer", text: "エグゼクティブプロデューサー" },
+        ]);
+      }
+    }
+    return { getTriggerClicks: () => triggerClicks };
+  }
+
+  it("trigger を 1 回 click し、全 track の name / role を注入する", () => {
+    // Given
+    const { getTriggerClicks } = mountCreditDom(3, { artist: "Soulful Grooves" });
+
+    // When
+    injectAppleMusicCredits(document, 3, SAMPLE_CREDITS);
+
+    // Then: トリガーは 1 回だけ click され、全 track の name + role が注入される
+    expect(getTriggerClicks()).toBe(1);
+    for (let n = 1; n <= 3; n += 1) {
+      expect(
+        document.querySelector<HTMLInputElement>(`#track-${n}-performer-1-name`)!.value,
+      ).toBe("Soulful Grooves");
+      expect(
+        document.querySelector<HTMLSelectElement>(`#track-${n}-performer-1-role`)!.value,
+      ).toBe("Audio");
+      expect(
+        document.querySelector<HTMLInputElement>(`#track-${n}-producer-1-name`)!.value,
+      ).toBe("Soulful Grooves");
+      expect(
+        document.querySelector<HTMLSelectElement>(`#track-${n}-producer-1-role`)!.value,
+      ).toBe("Producer");
+    }
+  });
+
+  it("role select の change event が dispatch される（独自 UI 同期のため）", () => {
+    // Given: change event を観測する
+    mountCreditDom(1, { artist: "X" });
+    const perfRole = document.querySelector<HTMLSelectElement>("#track-1-performer-1-role")!;
+    const prodRole = document.querySelector<HTMLSelectElement>("#track-1-producer-1-role")!;
+    let perfChanges = 0;
+    let prodChanges = 0;
+    perfRole.addEventListener("change", () => {
+      perfChanges += 1;
+    });
+    prodRole.addEventListener("change", () => {
+      prodChanges += 1;
+    });
+
+    // When
+    injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+
+    // Then: setSelectValue は input + change を bubbles:true で 1 回ずつ dispatch する。
+    // 実機 DistroKid の `dk-searchable-select` 独自 UI は change を listen して表示テキストを同期する。
+    expect(perfChanges).toBe(1);
+    expect(prodChanges).toBe(1);
+  });
+
+  it("複数の .requirements-item-title から「クレジットを追加」を textContent で選ぶ", () => {
+    // Given: 無関係な requirements-item-title が先に存在する
+    const decoy = document.createElement("div");
+    decoy.className = "requirements-item-title";
+    decoy.textContent = "別の要件";
+    let decoyClicks = 0;
+    decoy.addEventListener("click", () => {
+      decoyClicks += 1;
+    });
+    document.body.appendChild(decoy);
+    const { getTriggerClicks } = mountCreditDom(1, { artist: "X" });
+
+    // When
+    injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+
+    // Then: 「クレジットを追加」のみ click され、decoy は触らない
+    expect(getTriggerClicks()).toBe(1);
+    expect(decoyClicks).toBe(0);
+  });
+
+  it("#artistName が無ければ FieldNotFoundError", () => {
+    // Given: trigger と入力欄はあるが #artistName が無い
+    const trigger = document.createElement("div");
+    trigger.className = "requirements-item-title";
+    trigger.textContent = "クレジットを追加";
+    document.body.appendChild(trigger);
+    mountInput({ id: "track-1-performer-1-name", name: "performer-name" });
+    mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
+
+    // Then
+    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+  });
+
+  it("#artistName が空なら fail-loud（FieldNotFoundError ではない）", () => {
+    // Given: #artistName はあるが値が空
+    mountCreditDom(1, { artist: "" });
+
+    // Then: 未検出ではないため FieldNotFoundError とは区別される
+    let caught: unknown;
+    try {
+      injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(FieldNotFoundError);
+  });
+
+  it("trigger が無ければ FieldNotFoundError", () => {
+    // Given: #artistName と入力欄はあるが trigger が無い
+    const artist = document.createElement("input");
+    artist.id = "artistName";
+    artist.type = "hidden";
+    artist.setAttribute("value", "X");
+    document.body.appendChild(artist);
+    mountInput({ id: "track-1-performer-1-name", name: "performer-name" });
+    mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
+
+    // Then
+    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+  });
+
+  it("performer name 欄が無ければ FieldNotFoundError", () => {
+    // Given: trigger と #artistName はあるが producer のみで performer name 欄が無い
+    const artist = document.createElement("input");
+    artist.id = "artistName";
+    artist.type = "hidden";
+    artist.setAttribute("value", "X");
+    document.body.appendChild(artist);
+    const trigger = document.createElement("div");
+    trigger.className = "requirements-item-title";
+    trigger.textContent = "クレジットを追加";
+    document.body.appendChild(trigger);
+    mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
+    mountSelectWithOptions("track-1-producer-1-role", [{ value: "Producer", text: "プロデューサー" }]);
+
+    // Then
+    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+  });
+
+  it("performer role select が無ければ FieldNotFoundError", () => {
+    // Given: role select だけが欠落している（name 欄は揃っている）
+    mountCreditDom(1, { artist: "X", mountRole: false });
+
+    // Then
+    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+  });
+
+  it("role が option に無ければ OptionNotFoundError", () => {
+    // Given: performer_role に "NonExistent" を指定し、option に無い値を要求する
+    mountCreditDom(1, { artist: "X" });
+
+    // Then: setSelectValue が fail-loud
+    expect(() =>
+      injectAppleMusicCredits(document, 1, { performer_role: "NonExistent", producer_role: "Producer" }),
+    ).toThrow(OptionNotFoundError);
+  });
+});
+
+describe("acceptTermsAgreement（#919 利用規約同意の強制 check）", () => {
+  it("unchecked なら check に切り替える", () => {
+    // Given
+    const cb = makeCheckbox(document.body, { id: "areyousuretandc" });
+    expect(cb.checked).toBe(false);
+
+    // When
+    acceptTermsAgreement(document);
+
+    // Then
+    expect(cb.checked).toBe(true);
+  });
+
+  it("既に checked なら no-op（click せず checked を維持）", () => {
+    // Given
+    const cb = makeCheckbox(document.body, { id: "areyousuretandc" });
+    cb.checked = true;
+    let clicks = 0;
+    cb.addEventListener("click", () => {
+      clicks += 1;
+    });
+
+    // When
+    acceptTermsAgreement(document);
+
+    // Then: setChecked は目標と一致なら click しない
+    expect(clicks).toBe(0);
+    expect(cb.checked).toBe(true);
+  });
+
+  it("要素不在なら FieldNotFoundError", () => {
+    expect(() => acceptTermsAgreement(document)).toThrow(FieldNotFoundError);
+  });
+
+  it("セレクタ定数は #areyousuretandc を保証する（DistroKid native id）", () => {
+    expect(TERMS_AGREEMENT_SELECTOR).toBe("#areyousuretandc");
+  });
+});
+
+describe("uncheckUpsells（#919 オプション強制 $0 保証）", () => {
+  it("checked な name=store / name=extras を全部 uncheck する", () => {
+    // Given: ディスカバリーパック (store) と複数の extras (legacy / mastering / store-maximizer 等)
+    const store = makeCheckbox(document.body, { name: "store" });
+    store.checked = true;
+    const legacy = makeCheckbox(document.body, { name: "extras" });
+    legacy.checked = true;
+    const distroVid = makeCheckbox(document.body, { name: "extras" });
+    distroVid.checked = true;
+
+    // When
+    uncheckUpsells(document);
+
+    // Then: すべて uncheck になる
+    expect(store.checked).toBe(false);
+    expect(legacy.checked).toBe(false);
+    expect(distroVid.checked).toBe(false);
+  });
+
+  it("既に全 unchecked なら no-op（click しない）", () => {
+    // Given
+    const store = makeCheckbox(document.body, { name: "store" });
+    const extras = makeCheckbox(document.body, { name: "extras" });
+    let clicks = 0;
+    store.addEventListener("click", () => {
+      clicks += 1;
+    });
+    extras.addEventListener("click", () => {
+      clicks += 1;
+    });
+
+    // When
+    uncheckUpsells(document);
+
+    // Then
+    expect(clicks).toBe(0);
+    expect(store.checked).toBe(false);
+    expect(extras.checked).toBe(false);
+  });
+
+  it("upsell 配下が空でも throw しない（forEach の空配列）", () => {
+    expect(() => uncheckUpsells(document)).not.toThrow();
+  });
+
+  it("name=store / name=extras 以外の checkbox は触らない", () => {
+    // Given: 利用規約 checkbox（#areyousuretandc）は touch しない
+    const terms = makeCheckbox(document.body, { id: "areyousuretandc" });
+    terms.checked = true;
+
+    // When
+    uncheckUpsells(document);
+
+    // Then
+    expect(terms.checked).toBe(true);
+  });
+
+  it("セレクタ定数は実機 DOM の name 属性を保証する", () => {
+    expect(UPSELL_SELECTORS.store).toBe('input[type="checkbox"][name="store"]');
+    expect(UPSELL_SELECTORS.extras).toBe('input[type="checkbox"][name="extras"]');
+  });
+});
+
+describe("scrollToDoneButton（#919 フィル完了後の UX 補助）", () => {
+  it("要素ありで scrollIntoView を呼ぶ", () => {
+    // Given
+    const btn = document.createElement("button");
+    btn.id = "doneButton";
+    document.body.appendChild(btn);
+    let scrollCalls = 0;
+    btn.scrollIntoView = ((arg: ScrollIntoViewOptions | boolean) => {
+      scrollCalls += 1;
+      // smooth + center が指定されていることを assert
+      expect(arg).toEqual({ behavior: "smooth", block: "center" });
+    }) as typeof btn.scrollIntoView;
+
+    // When
+    scrollToDoneButton(document);
+
+    // Then
+    expect(scrollCalls).toBe(1);
+  });
+
+  it("要素不在でも throw しない（補助 UX のため致命ではない）", () => {
+    expect(() => scrollToDoneButton(document)).not.toThrow();
+  });
+
+  it("セレクタ定数は #doneButton を保証する", () => {
+    expect(DONE_BUTTON_SELECTOR).toBe("#doneButton");
+  });
+});
+
+describe("injectAiDisclosure（#877 / #888 modal フロー・段階的 trigger・async）", () => {
   it("title input (track) が無ければ FieldNotFoundError（uuid 解決不可）", async () => {
     await expect(injectAiDisclosure(document, SAMPLE_AI)).rejects.toBeInstanceOf(
       FieldNotFoundError,
@@ -666,7 +1276,7 @@ describe("injectAiDisclosure（#877 modal フロー・async）", () => {
   });
 
   it("enabled=true で 1st track の「はい」を 1 回だけ click し modal を開閉する", async () => {
-    // Given: 2 track（1st の「はい」で modal が開く）
+    // Given: 2 track（1st の「はい」で album modal が開く）
     const { gates, getModalRefs } = setupModalForm(["uuid-a", "uuid-b"]);
     let track2YesClicks = 0;
     gates[1].gateYes.addEventListener("click", () => {
@@ -684,8 +1294,8 @@ describe("injectAiDisclosure（#877 modal フロー・async）", () => {
     expect(getModalRefs()?.saveClicks()).toBe(1);
   });
 
-  it("modal 内で lyrics / music / recording_scope(full) / persona(AI) / apply-all を設定する", async () => {
-    const { getModalRefs } = setupModalForm(["uuid-a"]);
+  it("modal 内で lyrics / music / recording_scope(full) を設定し、full check 後に inject される persona(AI) と apply-all を設定する", async () => {
+    const { getModalRefs } = setupModalForm(["uuid-a"], { album: true });
 
     await injectAiDisclosure(document, SAMPLE_AI);
 
@@ -695,27 +1305,27 @@ describe("injectAiDisclosure（#877 modal フロー・async）", () => {
     expect(refs!.music.checked).toBe(true);
     expect(refs!.scopeFull.checked).toBe(true);
     expect(refs!.scopePartial.checked).toBe(false);
-    // artist_persona=true → AI ペルソナ(value=1)
-    expect(refs!.personaAi.checked).toBe(true);
-    expect(refs!.personaHuman.checked).toBe(false);
-    expect(refs!.applyAll.checked).toBe(true);
+    // full check で dynamic inject された persona radio（AI=value:1）が選ばれている
+    expect(refs!.getPersona("1")?.checked).toBe(true);
+    expect(refs!.getPersona("0")?.checked).toBe(false);
+    expect(refs!.applyAll!.checked).toBe(true);
     // recording_scope=full なので partial 種別 radio には触れない
     expect(refs!.partialVocals.checked).toBe(false);
     expect(refs!.partialInstruments.checked).toBe(false);
   });
 
   it("artist_persona=false なら 人間アーティスト(value=0) を選ぶ", async () => {
-    const { getModalRefs } = setupModalForm(["uuid-a"]);
+    const { getModalRefs } = setupModalForm(["uuid-a"], { album: true });
 
     await injectAiDisclosure(document, { ...SAMPLE_AI, artist_persona: false });
 
     const refs = getModalRefs()!;
-    expect(refs.personaHuman.checked).toBe(true);
-    expect(refs.personaAi.checked).toBe(false);
+    expect(refs.getPersona("0")?.checked).toBe(true);
+    expect(refs.getPersona("1")?.checked).toBe(false);
   });
 
-  it("recording_scope='partial' + partial_audio_type='vocals' で partial radio を選ぶ", async () => {
-    const { getModalRefs } = setupModalForm(["uuid-a"]);
+  it("recording_scope='partial' + partial_audio_type='vocals' で partial radio を選ぶ（persona は inject されない）", async () => {
+    const { getModalRefs } = setupModalForm(["uuid-a"], { album: true });
 
     await injectAiDisclosure(document, {
       ...SAMPLE_AI,
@@ -727,19 +1337,34 @@ describe("injectAiDisclosure（#877 modal フロー・async）", () => {
     expect(refs.scopePartial.checked).toBe(true);
     expect(refs.partialVocals.checked).toBe(true);
     expect(refs.partialInstruments.checked).toBe(false);
+    // partial では persona radio は inject されない（full 専用の段階的 trigger）
+    expect(refs.getPersona("0")).toBeNull();
+    expect(refs.getPersona("1")).toBeNull();
   });
 
   it("apply_to_all=false なら apply-all checkbox を入れない", async () => {
-    const { getModalRefs } = setupModalForm(["uuid-a"]);
+    const { getModalRefs } = setupModalForm(["uuid-a"], { album: true });
 
     await injectAiDisclosure(document, { ...SAMPLE_AI, apply_to_all: false });
 
-    expect(getModalRefs()!.applyAll.checked).toBe(false);
+    expect(getModalRefs()!.applyAll!.checked).toBe(false);
+  });
+
+  it("single mode（apply-all 不在）でも fail-loud せず full フローを完走する", async () => {
+    // Given: apply-all を持たない single mode modal
+    const { getModalRefs } = setupModalForm(["uuid-a"], { album: false });
+
+    // When / Then: apply-all 不在を許容して完走する
+    await expect(injectAiDisclosure(document, SAMPLE_AI)).resolves.toBeUndefined();
+    const refs = getModalRefs()!;
+    expect(refs.applyAll).toBeNull();
+    expect(refs.scopeFull.checked).toBe(true);
+    expect(refs.getPersona("1")?.checked).toBe(true);
   });
 
   it("partial_audio_type=undefined でも FieldNotFoundError を出さない（loose equality 回帰 #877）", async () => {
     // Given: recording_scope=partial だが partial_audio_type が undefined（旧バグの再現条件）
-    const { getModalRefs } = setupModalForm(["uuid-a"]);
+    const { getModalRefs } = setupModalForm(["uuid-a"], { album: true });
     const ai = {
       ...SAMPLE_AI,
       recording_scope: "partial",
@@ -769,7 +1394,8 @@ describe("injectAiDisclosure（#877 modal フロー・async）", () => {
   });
 
   it("modal 内に保存ボタンが無ければ FieldNotFoundError で fail-loud", async () => {
-    // Given: gate「はい」で modal は開くが save ボタンが無い不正 modal
+    // Given: gate「はい」で modal は開くが save ボタンが無い不正 modal。
+    // persona inject 待ちを避けるため partial scope で開く。
     mountTrackGate("uuid-a");
     const yes = document.querySelector<HTMLInputElement>(
       '[name="ai_gate_uuid-a"][value="1"]',
@@ -779,26 +1405,24 @@ describe("injectAiDisclosure（#877 modal フロー・async）", () => {
         const modal = document.createElement("div");
         modal.className = "ai-credits-swal-modal";
         const details = document.createElement("div");
-        // 必須フィールドは置くが save ボタンを欠く
         withClass(makeCheckbox(details, { name: "ai_lyrics_uuid-a" }), "distroAiLyrics");
         withClass(makeCheckbox(details, { name: "ai_music_uuid-a" }), "distroAiMusic");
-        withClass(
-          makeRadio(details, { name: "scope", value: "full" }),
-          "distroAiRecordingScope",
-        );
-        withClass(
-          makeRadio(details, { name: "ai_artist_persona_uuid-a_0", value: "1" }),
-          "distroAiArtistPersona",
-        );
-        makeCheckbox(details, { id: "ai-apply-all-1" });
+        // partial scope radio（track=1）。partial_audio_type=null で種別設定は skip される。
+        makeScopeRadio(details, 1, "partial");
         modal.appendChild(details);
+        // save ボタンを欠く
         document.body.appendChild(modal);
       }, 0);
     });
 
-    await expect(injectAiDisclosure(document, SAMPLE_AI)).rejects.toBeInstanceOf(
-      FieldNotFoundError,
-    );
+    await expect(
+      injectAiDisclosure(document, {
+        ...SAMPLE_AI,
+        recording_scope: "partial",
+        partial_audio_type: null,
+        apply_to_all: false,
+      }),
+    ).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 });
 

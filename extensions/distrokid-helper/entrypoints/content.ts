@@ -9,9 +9,11 @@
 // 「続ける」等の送信系操作は一切行わない（規約遵守・スコープ外）。
 
 import {
+  acceptTermsAgreement,
   assertNewRelease,
   injectAiDisclosure,
   injectAlbumTitle,
+  injectAppleMusicCredits,
   injectCover,
   injectProfile,
   injectReleaseDate,
@@ -19,6 +21,9 @@ import {
   injectTrackFile,
   injectTrackTitle,
   resolveTrackUuids,
+  scrollToDoneButton,
+  setTrackCount,
+  uncheckUpsells,
 } from "@/lib/distrokid-injector";
 import { InjectSession, type Injector } from "@/lib/inject-session";
 import { onMessage, sendMessage } from "@/lib/messaging";
@@ -27,9 +32,13 @@ import type { ReleasePayload } from "@/lib/types";
 // document 束縛の注入 primitive。AI 開示モーダル（Suno 楽曲は通過必須）も含め
 // 実 DOM 操作はすべて lib/distrokid-injector.ts へ委譲する。
 const documentInjector: Injector = {
-  injectStaticFields(payload: ReleasePayload): void {
+  async injectStaticFields(payload: ReleasePayload): Promise<void> {
     const { profile, release } = payload;
-    // 新規リリース前提を最初に assert（過去公開対応はスコープ外）。
+    // (B) トラック数を payload に合わせて set し、track 行の生成完了を待つ（#888）。
+    // 以降の注入（assert / プロファイル / タイトル / credit）は行生成後に開始する（順序保証）。
+    await setTrackCount(document, release.tracks.length);
+
+    // 新規リリース前提を assert（過去公開対応はスコープ外）。
     assertNewRelease(document);
     injectProfile(document, profile);
     injectAlbumTitle(document, release.album_title);
@@ -48,6 +57,14 @@ const documentInjector: Injector = {
         injectSongwriter(document, i + 1, profile.songwriter);
       }
     });
+
+    // (C) Apple Music クレジット（演奏者 / プロデューサー）を全 track に注入する（#888 / #919）。
+    // name 欄に #artistName を、role 欄に profile.credits.performer_role / producer_role を入れる。
+    injectAppleMusicCredits(document, release.tracks.length, profile.credits);
+
+    // (D) 利用規約同意 + upsell 強制 uncheck（#919）。送信前提条件と請求額 \$0 保証。
+    acceptTermsAgreement(document);
+    uncheckUpsells(document);
   },
   injectTrackFile(trackIndex: number, file: File): void {
     // injector は 0-indexed、DOM の file input は 1-indexed。
@@ -58,6 +75,8 @@ const documentInjector: Injector = {
   },
   async injectAiDisclosure(payload: ReleasePayload): Promise<void> {
     await injectAiDisclosure(document, payload.profile.ai_disclosure);
+    // (E) フィル完了直後、続けるボタンを視界へスクロール（#919）。送信は人間が手動で押す。
+    scrollToDoneButton(document);
   },
 };
 
