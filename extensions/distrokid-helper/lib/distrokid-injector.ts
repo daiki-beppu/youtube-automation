@@ -468,12 +468,15 @@ export function injectAppleMusicCredits(root: ParentNode, trackCount: number): v
 
 // modal 内で AI 開示の各設定を反映する（uuid は modal を開いた 1st track のもの）。
 // 段階的 trigger（#888）:
+//   - modal mount 直後は SweetAlert2 の show animation 中で内部 form が未描画なことがあるため、
+//     最初の操作対象（lyrics checkbox）の出現を MutationObserver で待ってから注入を始める
 //   - recording_scope='full' → full radio を check すると persona radio が dynamic inject される
 //     ため、出現を MutationObserver で待ってから persona を設定する
 //   - recording_scope='partial' → partial radio を check すると種別 radio が visible 化するため、
 //     partial_audio_type が非 null のときのみ設定する（undefined を loose equality で skip #877）
 //   - apply-all は album mode のみ存在するため、不在なら skip（single mode 許容）
-function applyModalSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): Promise<void> {
+async function applyModalSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): Promise<void> {
+  await waitForElement(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid), AI_MODAL_WAIT_TIMEOUT_MS);
   setChecked(requireInput(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid)), ai.lyrics, true);
   setChecked(requireInput(modal, AI_MODAL_SELECTORS.musicByUuid(uuid)), ai.music, true);
   setChecked(
