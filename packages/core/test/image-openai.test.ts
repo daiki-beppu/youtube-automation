@@ -2,8 +2,9 @@
 //
 // The SDK client, the backoff sleep, and the image-persist step are injected
 // (plan §6/§8). Because `createClient` is injected, the default factory's
-// `resolveSecret("OPENAI_API_KEY")` + `new OpenAI(...)` path is bypassed — no
-// env or 1Password setup is needed.
+// `process.env.OPENAI_API_KEY` + `new OpenAI(...)` path is bypassed — no env
+// setup is needed. (#822 moved op-based secret resolution to the cli layer, so
+// the core default factory now reads the key from env directly.)
 //
 // Faithful SDK shape (verified against openai-node docs): the client exposes
 // `images.generate(params)` and `images.edit(params)`, each returning

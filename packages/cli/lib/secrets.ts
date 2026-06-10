@@ -1,4 +1,10 @@
-// アプリ層で秘密値を取得するヘルパー (Python `utils/secrets.py::get_secret` の移植)。
+// アプリ層で秘密値を取得するヘルパー (Python `utils/secrets.py::get_secret` および
+// `auth/oauth_handler` の client_secrets 探索の移植)。
+//
+// #822 で `packages/core/src/secrets.ts` から cli 層へ移設した。op (1Password CLI)
+// の subprocess 起動はインフラ依存であり、ADR 0002 の「core は pure domain logic /
+// 重い依存・subprocess は cli/service 層に隔離」方針に従う。core から op を直接
+// 呼ぶ regression は oxlint (`packages/core/src/**`) で error 化して防ぐ。
 //
 // 設計方針:
 // - 秘密はシェル環境変数や .env に常時存在させず、必要になった瞬間に取得する
@@ -10,7 +16,11 @@
 // Python 版の lru_cache メモ化は移植しない: テスト契約が同一プロセスで env を
 // 差し替えながら resolveSecret を繰り返し呼ぶため、都度解決する必要がある。
 
-import { ConfigError } from "./errors.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { ConfigError } from "@youtube-automation/core";
+import { channelDir } from "@youtube-automation/core/config";
 
 // 具体キーを保持して既知名の参照を `string` 型に確定させつつ、`satisfies` で
 // 値の型 (URI 文字列) を担保する。
@@ -75,4 +85,33 @@ export const resolveSecret = async (name: string): Promise<string> => {
       `  → .env に ${name}=... を設定するか、\n` +
       `  → 1Password の ${opRef} に登録してください`
   );
+};
+
+// チャンネルディレクトリ配下の OAuth client_secrets ファイルパス。
+const CLIENT_SECRETS_RELATIVE_PATH = join("auth", "client_secrets.json");
+
+/**
+ * OAuth client_secrets.json の **中身** (JSON 文字列) を解決する。
+ *
+ * Python `auth/oauth_handler` の探索順を踏襲した fallback chain:
+ *   1. `CLIENT_SECRETS_JSON` 環境変数 (JSON content を直接保持)
+ *   2. `<channel>/auth/client_secrets.json` ファイル
+ *   3. `op read SECRET_REFS.CLIENT_SECRETS_JSON`
+ *
+ * @returns client_secrets.json の内容文字列 (パスではなく content)
+ * @throws {ConfigError} 全ての取得経路で失敗した場合
+ */
+export const resolveClientSecretsJson = async (): Promise<string> => {
+  const envValue = process.env.CLIENT_SECRETS_JSON;
+  if (envValue) {
+    return envValue;
+  }
+
+  const filePath = join(channelDir(), CLIENT_SECRETS_RELATIVE_PATH);
+  if (existsSync(filePath)) {
+    return readFileSync(filePath, "utf-8");
+  }
+
+  // env も file も無ければ op 経路 (+ 最終 throw) を resolveSecret に委ねる。
+  return await resolveSecret("CLIENT_SECRETS_JSON");
 };

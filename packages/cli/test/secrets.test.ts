@@ -1,13 +1,24 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-// Imports by the published package name (not a relative path) so the test
-// exercises the package `exports` map, mirroring index.test.ts. A missing
-// re-export from src/index.ts would fail resolution here.
+// `ConfigError` stays in core (shared domain error); the cli imports it by the
+// published package name, exercising the cli→core `workspace:*` boundary the
+// same way run.test.ts does.
+import { ConfigError } from "@youtube-automation/core";
+// `reset()` clears the channelDir singleton between cases so a per-test
+// CHANNEL_DIR actually takes effect (channelDir() memoizes its first resolve).
+import { reset } from "@youtube-automation/core/config";
+
+// Relative import of the cli's own module (#822 move target). The acceptance
+// criteria require cli callsites to reach secrets via the relative path, not a
+// re-export from @youtube-automation/core.
 import {
-  ConfigError,
+  resolveClientSecretsJson,
   resolveSecret,
   SECRET_REFS,
-} from "@youtube-automation/core";
+} from "../lib/secrets.ts";
 
 // --- helpers -------------------------------------------------------------
 
@@ -243,5 +254,130 @@ describe("resolveSecret failures", () => {
     expect(caught).toBeInstanceOf(Error);
     expect(caught).toBeInstanceOf(ConfigError);
     expect((caught as ConfigError).name).toBe("ConfigError");
+  });
+});
+
+// --- resolveClientSecretsJson (#822 new helper) --------------------------
+
+// Mirrors the ADR-0003 §4 fallback chain:
+//   1. CLIENT_SECRETS_JSON env  →  2. <channel>/auth/client_secrets.json
+//   →  3. op read SECRET_REFS.CLIENT_SECRETS_JSON
+// The return value is the JSON *content* string (not a path), per the
+// `clientSecretsJson: string` contract.
+describe("resolveClientSecretsJson", () => {
+  let savedChannelDir: string | undefined;
+  const tmpDirs: string[] = [];
+
+  beforeEach(() => {
+    savedChannelDir = process.env.CHANNEL_DIR;
+    Reflect.deleteProperty(process.env, "CHANNEL_DIR");
+    reset();
+  });
+
+  afterEach(() => {
+    if (savedChannelDir === undefined) {
+      Reflect.deleteProperty(process.env, "CHANNEL_DIR");
+    } else {
+      process.env.CHANNEL_DIR = savedChannelDir;
+    }
+    reset();
+    while (tmpDirs.length > 0) {
+      const dir = tmpDirs.pop();
+      if (dir !== undefined) {
+        rmSync(dir, { force: true, recursive: true });
+      }
+    }
+  });
+
+  // Creates a throwaway channel root and registers it for teardown.
+  const makeChannelDir = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), "cli-secrets-"));
+    tmpDirs.push(dir);
+    return dir;
+  };
+
+  test("returns the CLIENT_SECRETS_JSON env content without reading file or op", async () => {
+    // Given the JSON content supplied directly via env (step 1)
+    const json = '{"installed":{"client_id":"from-env"}}';
+    process.env.CLIENT_SECRETS_JSON = json;
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // When resolving the client secrets
+    const result = await resolveClientSecretsJson();
+
+    // Then the env content wins and op is never spawned
+    expect(result).toBe(json);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("reads <channel>/auth/client_secrets.json when env is unset", async () => {
+    // Given a channel dir holding the auth file (step 2)
+    const dir = makeChannelDir();
+    const json = '{"installed":{"client_id":"from-file"}}';
+    mkdirSync(join(dir, "auth"), { recursive: true });
+    writeFileSync(join(dir, "auth", "client_secrets.json"), json, "utf-8");
+    process.env.CHANNEL_DIR = dir;
+    reset();
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // When resolving with no env override
+    const result = await resolveClientSecretsJson();
+
+    // Then the file content is returned and op is not consulted
+    expect(result).toBe(json);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("falls back to op read when env and the channel file are absent", async () => {
+    // Given a channel dir without an auth/client_secrets.json file (step 3)
+    const dir = makeChannelDir();
+    process.env.CHANNEL_DIR = dir;
+    reset();
+    const opJson = '{"installed":{"client_id":"from-op"}}';
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc(`${opJson}\n`, 0)
+    );
+
+    // When resolving with neither env nor file present
+    const result = await resolveClientSecretsJson();
+
+    // Then op supplies the value via the mapped op:// reference
+    expect(result).toBe(opJson);
+    const argvs = spawnSpy.mock.calls.map((call) => call[0]);
+    expect(argvs).toContainEqual([
+      "op",
+      "read",
+      SECRET_REFS.CLIENT_SECRETS_JSON,
+    ]);
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("throws ConfigError when env, file, and op all fail", async () => {
+    // Given no env, a channel dir without the file, and no op CLI on PATH
+    const dir = makeChannelDir();
+    process.env.CHANNEL_DIR = dir;
+    reset();
+    const whichSpy = spyOn(Bun, "which").mockReturnValue(null);
+
+    // When resolving with every source exhausted
+    // Then resolution fails fast with a ConfigError
+    await expect(resolveClientSecretsJson()).rejects.toThrow(ConfigError);
+
+    whichSpy.mockRestore();
   });
 });
