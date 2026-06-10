@@ -145,6 +145,81 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
     });
   });
 
+  describe("slider 注入失敗 → warn + skip (fail-soft, Suno bot 対策耐性)", () => {
+    // 実機検証で Suno の slider が isTrusted=false の合成イベントを onKeyDown 内で弾くと判明。
+    // dispatchEvent ベースの setSliderValue は原理的に動かず throw する。連続生成を止めると
+    // ユーザー体験が大きく劣化するため、本層では throw を catch して warn + skip に吸収する。
+    // (trusted event 化は chrome.debugger API で別 issue 対応予定)
+    it("Given weirdness slider が反応しない When 注入 Then throw せず console.warn する", async () => {
+      const weirdness = makeSlider(50, { respond: false });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const pending = injectAdvancedFields({ weirdness: 30 }, { excludeStyles: null, weirdness, styleInfluence: null });
+      await vi.advanceTimersByTimeAsync(2000);
+      await expect(pending).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Weirdness slider 注入を skip"), expect.any(Error));
+      warnSpy.mockRestore();
+    });
+
+    it("Given style_influence slider が反応しない When 注入 Then throw せず console.warn する", async () => {
+      const styleInfluence = makeSlider(50, { respond: false });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const pending = injectAdvancedFields(
+        { style_influence: 85 },
+        { excludeStyles: null, weirdness: null, styleInfluence },
+      );
+      await vi.advanceTimersByTimeAsync(2000);
+      await expect(pending).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Style Influence slider 注入を skip"),
+        expect.any(Error),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("Given weirdness 失敗 + style_influence 反応する When 注入 Then weirdness は skip、style_influence は注入する", async () => {
+      // weirdness 失敗が後続 slider 投入を巻き込んで止めないことを担保（連続生成継続の必要条件）
+      const weirdness = makeSlider(50, { respond: false });
+      const styleInfluence = makeSlider(50);
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const pending = injectAdvancedFields(
+        { weirdness: 30, style_influence: 85 },
+        { excludeStyles: null, weirdness, styleInfluence },
+      );
+      await vi.advanceTimersByTimeAsync(3000);
+      await pending;
+
+      expect(weirdness.getAttribute("aria-valuenow")).toBe("50");
+      expect(styleInfluence.getAttribute("aria-valuenow")).toBe("85");
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
+
+    it("Given exclude_styles + 両 slider 失敗 When 注入 Then exclude_styles は入る、両 slider は warn", async () => {
+      const exclude = makeExcludeInput();
+      const weirdness = makeSlider(50, { respond: false });
+      const styleInfluence = makeSlider(50, { respond: false });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const pending = injectAdvancedFields(
+        { exclude_styles: "hyperpop", weirdness: 30, style_influence: 85 },
+        { excludeStyles: exclude, weirdness, styleInfluence },
+      );
+      await vi.advanceTimersByTimeAsync(5000);
+      await pending;
+
+      expect(exclude.value).toBe("hyperpop");
+      expect(weirdness.getAttribute("aria-valuenow")).toBe("50");
+      expect(styleInfluence.getAttribute("aria-valuenow")).toBe("50");
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      warnSpy.mockRestore();
+    });
+  });
+
   describe("注入順序: Exclude styles → Weirdness → Style Influence", () => {
     it("Given 3 フィールド全て設定 When 注入 Then 指定順で副作用が起きる", async () => {
       const order: string[] = [];

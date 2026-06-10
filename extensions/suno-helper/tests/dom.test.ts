@@ -828,14 +828,17 @@ function addExcludeInput(opts: { visible?: boolean } = {}): HTMLInputElement {
 }
 
 describe("resolveAdvancedFields: More Options 3 フィールドの解決 (#900, fail-soft)", () => {
-  // 契約 (draft が実装する public API, shared/dom.ts):
+  // 契約 (shared/dom.ts):
   //   resolveAdvancedFields(): {
-  //     excludeStyles: HTMLInputElement | null;  // input[placeholder="Exclude styles"]、strict visible、不在 null
-  //     weirdness: HTMLElement | null;           // [role="slider"][aria-label="Weirdness"]、strict visible、不在 null
-  //     styleInfluence: HTMLElement | null;      // [role="slider"][aria-label="Style Influence"]、strict visible、不在 null
+  //     excludeStyles: HTMLInputElement | null;
+  //     weirdness: HTMLElement | null;
+  //     styleInfluence: HTMLElement | null;
   //   }
-  //   3 要素すべて不在でも throw しない（fail-soft）。throw / skip の非対称契約は呼び出し側
-  //   (injectAdvancedFields) が entry の値有無と突き合わせて判定する。
+  //   挙動: visible 優先・なければ DOM 上の最初の要素。0 件のみ null（fail-soft、throw しない）。
+  //   実機検証で More Options collapsed 時に 3 要素とも祖先 display:none で isVisible=false になるが
+  //   DOM 自体は残ること、input は閉じてても setNativeValue で React props まで更新されることを確認済み。
+  //   そのため strict visible 必須を緩めて collapsed 時にも要素を掴む。Slider は閉開問わず合成イベントが
+  //   弾かれるため注入時 fail-soft で吸収する（injectAdvancedFields 側）。
 
   it("Given 3 要素すべて visible When 解決する Then すべて解決する", () => {
     const exclude = addExcludeInput();
@@ -878,21 +881,33 @@ describe("resolveAdvancedFields: More Options 3 フィールドの解決 (#900, 
     expect(fields.excludeStyles).toBeNull();
   });
 
-  it("Given bbox 0 の slider When 解決する Then strict isVisible が除外し null", () => {
-    addSlider({ ariaLabel: "Weirdness", value: 0, visible: false });
+  it("Given hidden slider のみ When 解決する Then hidden 要素を返す（collapsed 時の DOM 要素を掴む）", () => {
+    // More Options collapsed 時の挙動。strict visible 必須を撤回した結果、hidden でも DOM 上の要素を返す。
+    const hidden = addSlider({ ariaLabel: "Weirdness", value: 0, visible: false });
 
     const fields = resolveAdvancedFields();
 
-    expect(fields.weirdness).toBeNull();
+    expect(fields.weirdness).toBe(hidden);
   });
 
-  it("Given visibility:hidden の Exclude styles input When 解決する Then strict isVisible が除外し null", () => {
+  it("Given visibility:hidden の Exclude styles input When 解決する Then 該当 input を返す（collapsed 時も値注入できる）", () => {
     const exclude = addExcludeInput();
     exclude.style.visibility = "hidden";
 
     const fields = resolveAdvancedFields();
 
-    expect(fields.excludeStyles).toBeNull();
+    expect(fields.excludeStyles).toBe(exclude);
+  });
+
+  it("Given visible + hidden 混在 When 解決する Then visible を優先する", () => {
+    // 同じ selector に複数 hit する誤検出耐性。実機の Suno UI 改装で visible/hidden が混在した場合に visible を選ぶ。
+    const hidden = addExcludeInput();
+    hidden.style.visibility = "hidden";
+    const visible = addExcludeInput();
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBe(visible);
   });
 
   it("Given placeholder 不一致の input のみ When 解決する Then excludeStyles は null（厳密 placeholder 一致）", () => {

@@ -154,7 +154,7 @@ export async function setSliderValue(
   }
   throw new Error(
     `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
-      `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。Suno の UI 変更の可能性があります。`,
+      `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。Suno が合成イベントを弾いている可能性が高いです（chrome.debugger 化は別 issue で対応予定）。`,
   );
 }
 
@@ -173,23 +173,36 @@ export interface AdvancedFieldValues {
 }
 
 /**
- * Custom Mode > More Options の 3 フィールドを strict visible で解決する（#900）。
+ * 候補から「visible 優先、なければ最初の要素」を返す（#900 改）。
+ * Suno は More Options collapsed 時に祖先を display:none で隠す。input には setNativeValue
+ * で値を入れれば React props まで更新されること、slider は visible でも合成イベントが効かないこと
+ * を実機検証で確認済み。strict visible 必須を緩めて collapsed 時も DOM 上の要素を掴むことで、
+ * input は値が入り（解決）、slider は注入時に fail-soft で skip（injectAdvancedFields 側）になる。
+ */
+function pickPreferVisible<T extends HTMLElement>(els: T[]): T | null {
+  return els.find(isVisible) ?? els[0] ?? null;
+}
+
+/**
+ * Custom Mode > More Options の 3 フィールドを解決する（#900）。
+ * visible 優先、なければ DOM 上の最初の要素を返す（collapsed 時の null 化を回避）。
  * 3 要素すべて不在でも throw しない（fail-soft）。throw / skip の非対称契約は呼び出し側
  * (injectAdvancedFields) が entry の値有無と突き合わせて判定する。
  */
 export function resolveAdvancedFields(): ResolvedAdvancedFields {
-  const excludeStyles =
+  const excludeStyles = pickPreferVisible(
     Array.from(
       document.querySelectorAll<HTMLInputElement>(SELECTORS.excludeStyles),
-    ).find(isVisible) ?? null;
-  const weirdness =
-    Array.from(
-      document.querySelectorAll<HTMLElement>(SELECTORS.weirdness),
-    ).find(isVisible) ?? null;
-  const styleInfluence =
+    ),
+  );
+  const weirdness = pickPreferVisible(
+    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.weirdness)),
+  );
+  const styleInfluence = pickPreferVisible(
     Array.from(
       document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence),
-    ).find(isVisible) ?? null;
+    ),
+  );
   return { excludeStyles, weirdness, styleInfluence };
 }
 
@@ -197,10 +210,19 @@ export function resolveAdvancedFields(): ResolvedAdvancedFields {
  * entry の advanced 値を解決済み field へ注入する（#900）。
  * 注入順序は Exclude styles (text, 高速) → Weirdness → Style Influence。
  *
- * 非対称契約（req 4）:
+ * 非対称契約:
  *   - entry に値有 (`!== undefined`) + 対応 selector が null → throw（fail-loud、UI 改装検知）
  *   - entry に値無 (`=== undefined`)                        → skip（fail-soft、後方互換）
- *   - entry に値有 + selector 有                            → 注入する
+ *   - entry に値有 + selector 有 + input                    → setNativeValue で注入（collapsed でも React 反映を実機確認済み）
+ *   - entry に値有 + selector 有 + slider                   → 注入試行し失敗時は warn + skip
+ *
+ * slider fail-soft 化の根拠（実機検証）:
+ *   Suno の Weirdness / Style Influence slider は emotion 自作で onKeyDown 内に isTrusted チェックが
+ *   ある。合成 KeyboardEvent / MouseEvent / PointerEvent はすべて弾かれ、現状の dispatchEvent 方式では
+ *   原理的に値を変えられない。bot 対策で組み込まれていると見られる。throw で連続生成を止めるとユーザー
+ *   体験が大きく劣化するため、本 PR では注入失敗を warn + skip で吸収する。trusted event 経由の真の
+ *   解決は別 issue で chrome.debugger API ベースの設計を予定（manifest permission 拡張が必要）。
+ *
  * 値の有無は `!== undefined` で判定する。0 や "" の falsy 値を truthy 判定で脱落させない。
  */
 export async function injectAdvancedFields(
@@ -210,7 +232,7 @@ export async function injectAdvancedFields(
   if (entry.exclude_styles !== undefined) {
     if (!fields.excludeStyles) {
       throw new Error(
-        "Exclude styles 欄が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+        "Exclude styles 欄が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
     setNativeValue(fields.excludeStyles, entry.exclude_styles);
@@ -218,18 +240,26 @@ export async function injectAdvancedFields(
   if (entry.weirdness !== undefined) {
     if (!fields.weirdness) {
       throw new Error(
-        "Weirdness slider が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+        "Weirdness slider が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
-    await setSliderValue(fields.weirdness, entry.weirdness);
+    try {
+      await setSliderValue(fields.weirdness, entry.weirdness);
+    } catch (e) {
+      console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
+    }
   }
   if (entry.style_influence !== undefined) {
     if (!fields.styleInfluence) {
       throw new Error(
-        "Style Influence slider が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+        "Style Influence slider が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
-    await setSliderValue(fields.styleInfluence, entry.style_influence);
+    try {
+      await setSliderValue(fields.styleInfluence, entry.style_influence);
+    } catch (e) {
+      console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
+    }
   }
 }
 
