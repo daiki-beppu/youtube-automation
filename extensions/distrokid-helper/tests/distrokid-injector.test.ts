@@ -42,6 +42,7 @@ import {
   FieldNotFoundError,
   ModalTimeoutError,
   TrackCountTimeoutError,
+  OptionNotFoundError,
 } from "../lib/distrokid-injector";
 import type {
   DistrokidProfile,
@@ -104,6 +105,24 @@ function mountSelect(id: string, values: string[]): HTMLSelectElement {
     const opt = document.createElement("option");
     opt.value = v;
     opt.textContent = v;
+    select.appendChild(opt);
+  }
+  document.body.appendChild(select);
+  return makeVisible(select);
+}
+
+// {value, text} を別指定できる mount。実機 DistroKid の <option value="25">R&B／ソウル</option>
+// のように value が数値で text が日本語ラベルというパターンを再現するため。
+function mountSelectWithOptions(
+  id: string,
+  options: ReadonlyArray<{ value: string; text: string }>,
+): HTMLSelectElement {
+  const select = document.createElement("select");
+  select.id = id;
+  for (const o of options) {
+    const opt = document.createElement("option");
+    opt.value = o.value;
+    opt.textContent = o.text;
     select.appendChild(opt);
   }
   document.body.appendChild(select);
@@ -484,6 +503,109 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     expect(() =>
       injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null }),
     ).toThrow(FieldNotFoundError);
+  });
+});
+
+// #888 第2回 retest: payload が option.value と不一致だと selectedIndex が -1 になり、
+// DistroKid 本体の submit handler 内で jQuery .val() == null → null.trim() crash する。
+// setNativeValue は <select> 検出時に option.value → text → 部分一致（normalize）の順で
+// 一致を取り、最終的に selectedIndex を更新する必要がある。
+describe("setNativeValue（<select>）— option の value / text 一致 + normalize fallback", () => {
+  it("option.value 完全一致を優先する（既存パターン）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択" },
+      { value: "9", text: "Electronic" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    setNativeValue(sel, "25");
+
+    expect(sel.value).toBe("25");
+    expect(sel.selectedIndex).toBe(2);
+  });
+
+  it("option.text 完全一致で実機ラベル（日本語）が選ばれる", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択" },
+      { value: "9", text: "Electronic" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    setNativeValue(sel, "R&B／ソウル");
+
+    expect(sel.value).toBe("25");
+    expect(sel.selectedIndex).toBe(2);
+  });
+
+  it("normalize で ／ → / 変換 + lowercase を吸収する（text 完全一致）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    // payload は半角 / + 全大文字
+    setNativeValue(sel, "R&B/ソウル");
+
+    expect(sel.value).toBe("25");
+  });
+
+  it("text 部分一致 fallback（payload が option.text の前方）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択" },
+      { value: "9", text: "Electronic Dance" },
+    ]);
+
+    // payload "Electronic" は option.text "Electronic Dance" の部分集合
+    setNativeValue(sel, "Electronic");
+
+    expect(sel.value).toBe("9");
+  });
+
+  it("placeholder (value=\"\") は部分一致経路から除外される", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択（全 44 件）" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    // payload "ジャンル" は placeholder の text に含まれるが、value="" のため skip され
+    // R&B option ともマッチしないので OptionNotFoundError
+    expect(() => setNativeValue(sel, "ジャンル")).toThrow(OptionNotFoundError);
+  });
+
+  it("一致無しなら OptionNotFoundError で fail-loud（null.trim crash 予防）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "9", text: "Electronic" },
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+
+    expect(() => setNativeValue(sel, "存在しないジャンル名")).toThrow(OptionNotFoundError);
+    // 一致が無いので selectedIndex も初期のまま
+    expect(sel.selectedIndex).toBe(0);
+  });
+
+  it("成功時に input / change イベントを bubbles:true で発火する（React 互換）", () => {
+    const sel = mountSelectWithOptions("genrePrimary", [
+      { value: "25", text: "R&B／ソウル" },
+    ]);
+    let inputs = 0;
+    let changes = 0;
+    sel.addEventListener("input", (e) => {
+      if (e.bubbles) inputs += 1;
+    });
+    sel.addEventListener("change", (e) => {
+      if (e.bubbles) changes += 1;
+    });
+
+    setNativeValue(sel, "25");
+
+    expect(inputs).toBe(1);
+    expect(changes).toBe(1);
+  });
+
+  it("OptionNotFoundError は selector と payload 値を含むメッセージを持つ", () => {
+    const err = new OptionNotFoundError("#genrePrimary", "Electronic");
+    expect(err.message).toContain("#genrePrimary");
+    expect(err.message).toContain("Electronic");
+    expect(err.name).toBe("OptionNotFoundError");
   });
 });
 

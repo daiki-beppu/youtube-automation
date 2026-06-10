@@ -143,6 +143,18 @@ export class FieldNotFoundError extends Error {
   }
 }
 
+// <select> の option lookup が失敗したことを表す専用エラー。
+// 拡張は payload に option.value または option.text を送るが、実機の <option> 一覧に該当が
+// 無い場合に発火する。DistroKid 本体の submit handler は jQuery .val() が null になると
+// `.trim()` で crash するため、silent skip せず fail-loud にして config と実機 UI の不整合を
+// 即座に検知する（#888 第2回 retest で判明）。
+export class OptionNotFoundError extends Error {
+  constructor(selector: string, payloadValue: string) {
+    super(`<select> に該当 option がありません: ${selector} / payload="${payloadValue}"`);
+    this.name = "OptionNotFoundError";
+  }
+}
+
 // AI 開示 modal の mount/unmount が制限時間内に観測できなかったことを表す専用エラー。
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
 export class ModalTimeoutError extends Error {
@@ -180,8 +192,47 @@ function nativeValueSetter(el: ValueElement): (value: string) => void {
 }
 
 // native setter で値をセットし、input / change を bubbles:true で発火する（React 互換）。
+// <select> は payload と option の一致判定が必要なため setSelectValue に委譲する。
+// 単純な el.value = payload では payload が option.value と不一致の場合 selectedIndex が
+// -1 のままになり、DistroKid 本体の submit handler 内で jQuery .val() == null → null.trim()
+// crash する（#888 第2回 retest で判明）。
 export function setNativeValue(el: ValueElement, value: string): void {
+  if (el instanceof HTMLSelectElement) {
+    setSelectValue(el, value);
+    return;
+  }
   nativeValueSetter(el)(value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+// <select> option の値マッチ用 normalize。全角→半角（NFKC）+ ／→/ + 小文字化 + trim で
+// 日本語 UI（"R&B／ソウル"）と payload 表記（"r&b/soul"）の差を最大限吸収する。
+function normalizeOptionText(s: string): string {
+  return s.normalize("NFKC").replace(/／/g, "/").toLowerCase().trim();
+}
+
+// <select> に対して payload 値で option を選ぶ。
+// 優先順: option.value 完全一致 → option.text 完全一致（normalize）→ option.text 部分一致
+// （normalize、placeholder value="" は除外）。一致無しなら OptionNotFoundError で fail-loud。
+function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
+  const target = normalizeOptionText(payloadValue);
+  const opts = Array.from(el.options);
+  let idx = opts.findIndex((o) => o.value === payloadValue);
+  if (idx === -1) {
+    idx = opts.findIndex((o) => normalizeOptionText(o.text) === target);
+  }
+  if (idx === -1) {
+    idx = opts.findIndex((o) => {
+      if (o.value === "") return false;
+      const t = normalizeOptionText(o.text);
+      return t.includes(target) || target.includes(t);
+    });
+  }
+  if (idx === -1) {
+    throw new OptionNotFoundError(el.id ? `#${el.id}` : el.tagName.toLowerCase(), payloadValue);
+  }
+  el.selectedIndex = idx;
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
