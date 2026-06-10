@@ -4,6 +4,12 @@
 // を実装し、`ImageGenerationResult` を返す。Provider 中立の値のみを `Request` に保持し、
 // API 固有の `size` 文字列・`quality` 等は Provider 実装側で `aspectRatio` から導出する。
 
+// 1 件分の画像生成リクエストは service 境界の入力 schema を単一の真実とする
+// （ADR-0003 §8: zod を source of truth）。provider はその検証済みの値を受け取る。
+import type { GenerateImageInput } from "./schema.ts";
+
+export type ImageGenerationRequest = GenerateImageInput;
+
 // 共通リトライ定数（Gemini / OpenAI で共有）。秒単位。
 export const RETRY_MAX = 3;
 export const RETRY_BACKOFF = [10, 30, 60] as const;
@@ -23,23 +29,6 @@ export const backoffMs = (attempt: number): number => {
   }
   return seconds * 1000;
 };
-
-/**
- * 1 件分の画像生成リクエスト。
- *
- * - `prompt`: 生成プロンプト
- * - `outputPath`: 出力先（拡張子 .png なら PNG、.jpg なら JPEG として保存）
- * - `aspectRatio`: "16:9" / "9:16" / "1:1" など。OpenAI は 16:9 / 9:16 のみ受理
- * - `imageSize`: Provider 固有の解像度ヒント（Gemini は "1K"/"2K"/"4K" 等）
- * - `references`: 参照画像パス（省略・空なら参照なしモード）
- */
-export interface ImageGenerationRequest {
-  readonly prompt: string;
-  readonly outputPath: string;
-  readonly aspectRatio: string;
-  readonly imageSize: string;
-  readonly references?: readonly string[];
-}
 
 /**
  * 画像生成の結果。
