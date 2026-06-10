@@ -1,6 +1,5 @@
 // プレイリスト設定（Python `utils/config/playlists.py` + loader `_build_playlists` の移植）。
 
-import { ConfigError } from "../errors.ts";
 import { isRecord } from "./internal.ts";
 
 /**
@@ -22,7 +21,9 @@ export const parsePlaylists = (merged: Record<string, unknown>): Playlists => {
     return { items: {} };
   }
   if (!isRecord(raw)) {
-    throw new ConfigError("playlists セクションは object でなければなりません");
+    throw new Error(
+      "config: playlists セクションは object でなければなりません"
+    );
   }
   const items: Record<string, Record<string, unknown>> = {};
   for (const [key, value] of Object.entries(raw)) {
@@ -32,8 +33,8 @@ export const parsePlaylists = (merged: Record<string, unknown>): Playlists => {
       items[key] = { ...value };
     } else {
       // list / number / null など想定外型は Fail Fast で弾く（#419）。
-      throw new ConfigError(
-        `playlists.${key} は string または object でなければなりません`
+      throw new Error(
+        `config: playlists.${key} は string または object でなければなりません`
       );
     }
   }

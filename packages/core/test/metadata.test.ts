@@ -34,7 +34,6 @@ import {
   test,
 } from "bun:test";
 
-import { ValidationError } from "@youtube-automation/core";
 import { loadConfig, reset } from "@youtube-automation/core/config";
 import type { ChannelConfig } from "@youtube-automation/core/config";
 import {
@@ -151,7 +150,7 @@ describe("formatTitleTemplate", () => {
     ).toBe("Village - Study");
   });
 
-  test("throws ValidationError naming an unknown placeholder", () => {
+  test("throws a validation:-prefixed error naming an unknown placeholder", () => {
     // Given a template referencing a key absent from the values dict
     expect(() =>
       formatTitleTemplate(
@@ -159,7 +158,7 @@ describe("formatTitleTemplate", () => {
         { theme: "Village" },
         "content.json: title.template"
       )
-    ).toThrow(ValidationError);
+    ).toThrow(/^validation:/u);
   });
 
   test("includes the offending key and context in the error message", () => {

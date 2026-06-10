@@ -5,8 +5,6 @@
 // テンプレートが使う範囲（`{field}` 置換、`{{` `}}` エスケープ、`{a.b}` / `{c[0]}`
 // の root 名抽出）に限定して faithfully に再現する。
 
-import { ValidationError } from "../errors.ts";
-
 interface FormatToken {
   readonly literal: string;
   readonly field: string | null;
@@ -28,8 +26,8 @@ const parseFormat = (template: string): FormatToken[] => {
       }
       const end = template.indexOf("}", i + 1);
       if (end === -1) {
-        throw new ValidationError(
-          `テンプレートに対応する '}' が無い '{' があります: ${template}`
+        throw new Error(
+          `validation: テンプレートに対応する '}' が無い '{' があります: ${template}`
         );
       }
       tokens.push({ field: template.slice(i + 1, end), literal });
@@ -43,8 +41,8 @@ const parseFormat = (template: string): FormatToken[] => {
         i += 2;
         continue;
       }
-      throw new ValidationError(
-        `テンプレートに単独の '}' があります: ${template}`
+      throw new Error(
+        `validation: テンプレートに単独の '}' があります: ${template}`
       );
     }
     literal += ch;
@@ -96,8 +94,8 @@ export const pyFormat = (
     }
     const base = baseName(field);
     if (!(base in values)) {
-      throw new ValidationError(
-        `テンプレートのプレースホルダ '${base}' に対応する値がありません: ${template}`
+      throw new Error(
+        `validation: テンプレートのプレースホルダ '${base}' に対応する値がありません: ${template}`
       );
     }
     out += values[base];
@@ -106,11 +104,11 @@ export const pyFormat = (
 };
 
 /**
- * title テンプレートを整形する。未知プレースホルダは actionable な ValidationError にする。
+ * title テンプレートを整形する。未知プレースホルダは actionable な `validation:` prefix Error にする。
  *
  * `str.format()` を直接呼ぶと提供キー外のプレースホルダ（例: `{adjective}`）で opaque な
  * KeyError を投げて upload 全体が深部でクラッシュする（Python #574）。事前検出して
- * 「使用不可プレースホルダ名 + 許可キー一覧」を含む ValidationError に変換する。
+ * 「使用不可プレースホルダ名 + 許可キー一覧」を含む `validation:` prefix Error に変換する。
  */
 export const formatTitleTemplate = (
   template: string,
@@ -122,8 +120,8 @@ export const formatTitleTemplate = (
     .filter((name) => !allowed.has(name))
     .toSorted();
   if (unknown.length > 0) {
-    throw new ValidationError(
-      `${context}: 使用できないプレースホルダ ${JSON.stringify(unknown)} が含まれています。\n` +
+    throw new Error(
+      `validation: ${context}: 使用できないプレースホルダ ${JSON.stringify(unknown)} が含まれています。\n` +
         `→ 使用可能なキー: ${JSON.stringify([...allowed].toSorted())}\n` +
         `→ テンプレート: ${template}`
     );

@@ -1,6 +1,5 @@
 // 固定コメント（オーナーコメント）自動投稿設定（Python `pinned_comment.py` + loader の移植）。
 
-import { ConfigError } from "../errors.ts";
 import { isRecord } from "./internal.ts";
 
 const DEFAULT_HISTORY_FILE = "pinned_comment_history.json";
@@ -22,16 +21,16 @@ export const parsePinnedComment = (
   const raw = merged.pinned_comment;
   const pc = raw === undefined || raw === null ? {} : raw;
   if (!isRecord(pc)) {
-    throw new ConfigError(
-      "pinned_comment セクションは object でなければなりません"
+    throw new Error(
+      "config: pinned_comment セクションは object でなければなりません"
     );
   }
   const templatesRaw = pc.templates;
   const templatesRoot =
     templatesRaw === undefined || templatesRaw === null ? {} : templatesRaw;
   if (!isRecord(templatesRoot)) {
-    throw new ConfigError(
-      "pinned_comment.templates は {言語: テンプレート文字列} の object でなければなりません"
+    throw new Error(
+      "config: pinned_comment.templates は {言語: テンプレート文字列} の object でなければなりません"
     );
   }
   const templates: Record<string, string> = {};
