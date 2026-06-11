@@ -43,6 +43,7 @@ from youtube_automation.scripts.suno_artifacts import (
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import Distrokid, load_config
 from youtube_automation.utils.distrokid_metadata import parse_album_metadata
+from youtube_automation.utils.distrokid_spec import find_disc_entry, read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError
 
 DEFAULT_PORT = 7873
@@ -215,12 +216,36 @@ def find_distrokid_discs(collection_dir: Path) -> list[str]:
 
 
 def _read_disc_album_title(collection_dir: Path, disc: str) -> str | None:
-    """disc ディレクトリの `metadata.md` から album_title を読む（#934）.
+    """disc ディレクトリの album_title を読む（#941 spec 優先 / metadata.md フォールバック）.
 
-    不在・読み取りエラー・album_title 空は None を返す（一覧表示で例外を投げない fail-soft）。
-    release.json 組み立て時の fail-loud は `build_release_payload` 側で行う。
+    読み取り優先順位（#934 の fail-soft 方針を維持）:
+    1. <collection>/30-distrokid/spec.json に disc のエントリがあり album_title が非空
+       → spec の値を返す。
+    2. spec 不在 / エントリ無し / spec 破損（ConfigError / OSError）
+       → 従来の metadata.md fail-soft 読み。
+    3. metadata.md も不在・エラー・album_title 空
+       → None（呼び出し元の kebab_to_title フォールバックに任せる）。
+
+    一覧表示用途なので例外を投げない（fail-soft）。
+    release.json 組み立て時の fail-loud は `build_release_payload` 側で行う（#934）。
     """
-    metadata_path = collection_dir / _DISTROKID_DIRNAME / disc / _DISTROKID_METADATA_FILENAME
+    distrokid_dir = collection_dir / _DISTROKID_DIRNAME
+
+    # spec.json 優先（#941）。破損 spec は fail-soft で metadata.md に降りる。
+    try:
+        spec = read_collection_spec(distrokid_dir)
+        if spec is not None:
+            entry = find_disc_entry(spec, disc)
+            if entry is not None:
+                album_title = entry.get("album_title")
+                if album_title:
+                    return str(album_title)
+    except (ConfigError, OSError):
+        # spec 破損・読み取りエラーは一覧表示なので fail-soft（metadata.md に降りる）。
+        pass
+
+    # metadata.md フォールバック（後方互換、従来の動作）。
+    metadata_path = distrokid_dir / disc / _DISTROKID_METADATA_FILENAME
     if not metadata_path.is_file():
         return None
     try:

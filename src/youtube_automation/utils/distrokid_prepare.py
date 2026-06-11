@@ -31,6 +31,9 @@ from youtube_automation.utils.distrokid_metadata import (
     parse_album_metadata,
     parse_track_table,
 )
+from youtube_automation.utils.distrokid_spec import (  # noqa: F401  re-export (#941)
+    SPEC_FILENAME,
+)
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.time_utils import format_duration_mss
 
@@ -43,9 +46,6 @@ INDIVIDUAL_MUSIC_DIRNAME = "02-Individual-music"
 
 # ジャケット画像の固定ファイル名。distrokid_release.py の _COVER_ART_FILENAME と対称。
 COVER_ART_FILENAME = "cover_art_3000.jpg"
-
-# spec.json のファイル名
-SPEC_FILENAME = "spec.json"
 
 # 1 disc の最大曲数（DistroKid 慣行上限）（#936）。
 _MAX_TRACKS_PER_DISC = 35
