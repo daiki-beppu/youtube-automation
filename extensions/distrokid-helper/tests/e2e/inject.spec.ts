@@ -259,6 +259,19 @@ test("配信先ストア check（除外 2 ストア uncheck 保証）+ upsell un
   expect(continueClicked).toBe(false);
 });
 
+test("release_date（YYYY-MM-DD）を #release-date-dp に注入できる（#932）", async ({
+  page,
+}) => {
+  // Given: 実 DOM ミラー（#release-date-dp は type=date）
+  await page.goto(fixtureUrl);
+
+  // When: YYYY-MM-DD 形式で setNativeValue する
+  await setNativeValue(page, "#release-date-dp", "2026-07-15");
+
+  // Then: 値が反映される
+  await expect(page.locator("#release-date-dp")).toHaveValue("2026-07-15");
+});
+
 test("checkAllStores は事前 checked の chksnap / chkroblox を uncheck する（#928 デフォルト全 check からの除外保証）", async ({
   page,
 }) => {

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
@@ -39,14 +40,37 @@ def _asset_path(root: Path, target: Path) -> str:
     return f"{DISTROKID_ASSETS_PREFIX}{rel}"
 
 
+def _normalize_release_date(raw: object) -> str | None:
+    """ISO 8601 文字列を `YYYY-MM-DD` へ正規化する（#932）.
+
+    注入先の `#release-date-dp` は `<input type="date">` のため `YYYY-MM-DD` のみ受け付ける。
+    `publish_target_at` はリポジトリ慣行として ISO datetime（例: `"2026-03-22T08:00:00+09:00"`）
+    で記録される場合があるため、datetime.fromisoformat で parse して date 部だけを取り出す。
+    date のみの文字列（`"2026-03-22"`）も同じ 1 本で処理できる（datetime が付いていない場合
+    は date として parse し isoformat をそのまま返す）。
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ConfigError(f"planning.publish_target_at を ISO 8601 形式で指定してください: {raw!r}")
+    try:
+        return datetime.fromisoformat(raw).date().isoformat()
+    except ValueError as exc:
+        raise ConfigError(f"planning.publish_target_at を ISO 8601 形式で指定してください: {raw!r}") from exc
+
+
 def _read_release_date(paths: CollectionPaths) -> str | None:
-    """workflow-state.json の `planning.publish_target_at` を読む（無ければ None）."""
+    """workflow-state.json の `planning.publish_target_at` を `YYYY-MM-DD` で読む（無ければ None）.
+
+    serve payload に載せる値は `<input type="date">` が受け付ける `YYYY-MM-DD` に正規化する（#932）。
+    """
     state_path = paths.workflow_state_path
     if not state_path.is_file():
         return None
     data = json.loads(state_path.read_text(encoding="utf-8"))
     planning = data.get(_PLANNING_KEY) or {}
-    return planning.get(_PUBLISH_TARGET_KEY)
+    raw = planning.get(_PUBLISH_TARGET_KEY)
+    return _normalize_release_date(raw)
 
 
 def _cover_entry(root: Path, cover: Path | None) -> dict | None:
