@@ -22,11 +22,7 @@ describe("describeRelayFailure: content script 未注入（想定内）は info 
     expect(text).toMatch(/ハードリロード/);
   });
 
-  it.each([
-    "Receiving end does not exist",
-    "could not establish connection",
-    "RECEIVING END DOES NOT EXIST",
-  ])(
+  it.each(["Receiving end does not exist", "could not establish connection", "RECEIVING END DOES NOT EXIST"])(
     "Given 大文字小文字ゆらぎ %j When 整形 Then level=info（isContentScriptMissingError の i フラグ経路）",
     (message) => {
       expect(describeRelayFailure("toggleOverlay", message).level).toBe("info");

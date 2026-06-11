@@ -106,10 +106,7 @@ export function formatStopError(message: string): string {
  * info に落とし、それ以外は warn で残す。catch せず放置すると未処理 rejection として
  * chrome://extensions のエラーバッジを汚染するため、必ず本関数経由で消費する（#937）。
  */
-export function describeRelayFailure(
-  action: string,
-  message: string,
-): { level: "info" | "warn"; text: string } {
+export function describeRelayFailure(action: string, message: string): { level: "info" | "warn"; text: string } {
   if (isContentScriptMissingError(message)) {
     return {
       level: "info",
