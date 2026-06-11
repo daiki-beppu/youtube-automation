@@ -63,7 +63,32 @@ pnpm compile
 
 ## 使い方
 
-1. コレクション完成後、サーバーを起動:
+### dir mode（コレクション選択 UI、#934）
+
+複数の disc（アルバム）を管理しているチャンネルには dir mode を使う。
+
+1. コレクションルートを指定してサーバーを起動:
+   ```bash
+   uv run yt-collection-serve <collections_root> --playlist-capture-root <channel_root>
+   # 例: uv run yt-collection-serve collections/ --playlist-capture-root .
+   # → GET /distrokid/collections でコレクション一覧を配信
+   ```
+2. Chrome で `distrokid.com/new` を開く。
+3. 拡張ポップアップで **サーバー URL** を確認し **データ取得**（または URL blur 後に自動取得）。
+4. popup に **コレクション選択** のドロップダウンが表示される。未配信の disc のみ列挙される。
+5. disc を選んで **データ取得** → レビューを確認して **フォーム一括入力**。
+6. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。
+7. フィル完了後、拡張が自動的に `POST /distrokid/releases` で配信済み記録を送信し、ドロップダウンから当該 disc が消える。
+
+**配信済み記録の保存先**: `<channel_root>/config/distrokid-releases.json`（`"<collection_id>/<disc>"` キー）。フィルしたが実際には配信しなかった場合は、該当キーを手で削除して「未配信」状態に戻す。
+
+**POST 失敗時**: フィル成功の表示を覆さず、warning メッセージを表示するのみ（補助機能のため）。
+
+### 単一ファイル mode（後方互換）
+
+単一の disc だけを管理している場合や、旧形式でサーバーを起動した場合は従来の動作を引き続き使える。
+
+1. コレクションのディレクトリを指定してサーバーを起動:
    ```bash
    uv run yt-collection-serve collections/planning/<theme>
    # → http://localhost:7873/distrokid/release.json で配信
@@ -72,6 +97,7 @@ pnpm compile
    （`enabled: false` / 未配置だと `/distrokid/*` が 404 になり、popup がガイダンスを表示する）。
 2. Chrome で `distrokid.com/new` を開く。
 3. 拡張ポップアップで **サーバー URL**（既定 `http://localhost:7873`）を入力し **データ取得**。
+   コレクション選択 UI は表示されない（単一 mode のため）。
 4. レビュー表示を確認して **フォーム一括入力**。プロファイル + 動的データがフォームに注入される。
 5. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。
 

@@ -21,9 +21,17 @@ from youtube_automation.utils.distrokid_metadata import (
 )
 from youtube_automation.utils.exceptions import ConfigError
 
-# 外部 HTTP 契約: distrokid-helper 拡張が fetch するサブパス。
+# 外部 HTTP 契約: distrokid-helper 拡張が fetch するサブパス（単一 mode）。
 DISTROKID_RELEASE_ROUTE = "/distrokid/release.json"
 DISTROKID_ASSETS_PREFIX = "/distrokid/assets/"
+
+# dir mode で使う collection-scoped リリース / アセットのルートサフィックス（#934）。
+# `/collections/<id>/distrokid/<disc>/release.json`
+#   → COLLECTIONS_ROUTE + "/<id>" + DISTROKID_COLLECTION_RELEASE_SUFFIX.format(disc=disc)
+# `/collections/<id>/distrokid/assets/<rel>`
+#   → COLLECTIONS_ROUTE + "/<id>" + DISTROKID_COLLECTION_ASSETS_PREFIX
+DISTROKID_COLLECTION_RELEASE_SUFFIX = "/distrokid/{disc}/release.json"
+DISTROKID_COLLECTION_ASSETS_PREFIX = "/distrokid/assets/"
 
 # workflow-state.json 内のリリース予定日のキー。
 _PLANNING_KEY = "planning"
@@ -34,10 +42,14 @@ _METADATA_FILENAME = "metadata.md"
 _COVER_ART_FILENAME = "cover_art_3000.jpg"
 
 
-def _asset_path(root: Path, target: Path) -> str:
-    """コレクションルートからの相対パスを `/distrokid/assets/<rel>` 形式に変換する."""
+def _asset_path(root: Path, target: Path, *, assets_prefix: str = DISTROKID_ASSETS_PREFIX) -> str:
+    """コレクションルートからの相対パスを `<assets_prefix><rel>` 形式に変換する（#934）.
+
+    dir mode では `assets_prefix` を collection-scoped パス
+    (`/collections/<id>/distrokid/assets/`) に差し替えることで後方互換を維持する。
+    """
     rel = target.relative_to(root).as_posix()
-    return f"{DISTROKID_ASSETS_PREFIX}{rel}"
+    return f"{assets_prefix}{rel}"
 
 
 def _normalize_release_date(raw: object) -> str | None:
@@ -73,11 +85,11 @@ def _read_release_date(paths: CollectionPaths) -> str | None:
     return _normalize_release_date(raw)
 
 
-def _cover_entry(root: Path, cover: Path | None) -> dict | None:
-    """ジャケット画像を payload の cover レコードへ変換する（無ければ None）."""
+def _cover_entry(root: Path, cover: Path | None, *, assets_prefix: str = DISTROKID_ASSETS_PREFIX) -> dict | None:
+    """ジャケット画像を payload の cover レコードへ変換する（無ければ None）（#934）."""
     if cover is None:
         return None
-    return {"filename": cover.name, "asset_path": _asset_path(root, cover)}
+    return {"filename": cover.name, "asset_path": _asset_path(root, cover, assets_prefix=assets_prefix)}
 
 
 def build_release_payload(
@@ -85,39 +97,48 @@ def build_release_payload(
     distrokid: Distrokid,
     *,
     distrokid_source: str | None = None,
+    assets_prefix: str = DISTROKID_ASSETS_PREFIX,
 ) -> dict:
-    """profile（静的）と collection 動的データをマージしたリリースペイロードを返す.
+    """profile（静的）と collection 動的データをマージしたリリースペイロードを返す（#934）.
 
     `distrokid_source` 指定時は `<collection>/<source>/`（30-distrokid の disc 単位）を
     source として組み立てる。未指定時は従来の `02-Individual-music/` 経路（後方互換）。
+
+    `assets_prefix` は `_asset_path` に渡す prefix。dir mode では collection-scoped パス
+    （`/collections/<id>/distrokid/assets/`）を指定する。既定は後方互換の `/distrokid/assets/`。
     """
     paths = CollectionPaths(collection_dir)
     profile = asdict(distrokid.profile)
     if distrokid_source is None:
-        return {"profile": profile, "release": _default_release(paths)}
-    return _disc_source_payload(paths, distrokid_source, profile)
+        return {"profile": profile, "release": _default_release(paths, assets_prefix=assets_prefix)}
+    return _disc_source_payload(paths, distrokid_source, profile, assets_prefix=assets_prefix)
 
 
-def _default_release(paths: CollectionPaths) -> dict:
-    """従来経路: `02-Individual-music/` を 1 アルバムとして組み立てる."""
+def _default_release(paths: CollectionPaths, *, assets_prefix: str = DISTROKID_ASSETS_PREFIX) -> dict:
+    """従来経路: `02-Individual-music/` を 1 アルバムとして組み立てる（#934 assets_prefix 追加）."""
     tracks = [
         {
             "title": track.stem,
             "filename": track.name,
-            "asset_path": _asset_path(paths.root, track),
+            "asset_path": _asset_path(paths.root, track, assets_prefix=assets_prefix),
         }
         for track in paths.individual_music_files()
     ]
     return {
         "album_title": paths.collection_name,
         "tracks": tracks,
-        "cover": _cover_entry(paths.root, paths.find_thumbnail()),
+        "cover": _cover_entry(paths.root, paths.find_thumbnail(), assets_prefix=assets_prefix),
         "release_date": _read_release_date(paths),
     }
 
 
-def _disc_source_payload(paths: CollectionPaths, distrokid_source: str, profile: dict) -> dict:
-    """30-distrokid disc-source 経路: metadata.md 主導で payload を組み立てる.
+def _disc_source_payload(
+    paths: CollectionPaths,
+    distrokid_source: str,
+    profile: dict,
+    assets_prefix: str = DISTROKID_ASSETS_PREFIX,
+) -> dict:
+    """30-distrokid disc-source 経路: metadata.md 主導で payload を組み立てる（#934 assets_prefix 追加）.
 
     profile.language は `config/channel/distrokid.json` を権威に使う。
     metadata.md の「言語」セルは人間向け転記用テンプレで、DistroKid form 言語 option
@@ -135,9 +156,9 @@ def _disc_source_payload(paths: CollectionPaths, distrokid_source: str, profile:
     return {
         "profile": profile,
         "release": {
-            "album_title": album_meta["album_title"] or _kebab_to_title(source_dir.name),
-            "tracks": _disc_tracks(paths.root, source_dir, title_by_filename),
-            "cover": _disc_cover(paths, source_dir),
+            "album_title": album_meta["album_title"] or kebab_to_title(source_dir.name),
+            "tracks": _disc_tracks(paths.root, source_dir, title_by_filename, assets_prefix=assets_prefix),
+            "cover": _disc_cover(paths, source_dir, assets_prefix=assets_prefix),
             "release_date": _read_release_date(paths),
         },
     }
@@ -155,26 +176,37 @@ def _resolve_source_dir(root: Path, distrokid_source: str) -> Path:
     return candidate
 
 
-def _disc_tracks(root: Path, source_dir: Path, title_by_filename: dict[str, str]) -> list[dict]:
-    """disc-source の mp3 をソート順で組み立てる（タイトルは metadata.md → stem 救済）."""
+def _disc_tracks(
+    root: Path,
+    source_dir: Path,
+    title_by_filename: dict[str, str],
+    *,
+    assets_prefix: str = DISTROKID_ASSETS_PREFIX,
+) -> list[dict]:
+    """disc-source の mp3 をソート順で組み立てる（タイトルは metadata.md → stem 救済）（#934 assets_prefix 追加）."""
     return [
         {
             "title": title_by_filename.get(track.name, track.stem),
             "filename": track.name,
-            "asset_path": _asset_path(root, track),
+            "asset_path": _asset_path(root, track, assets_prefix=assets_prefix),
         }
         for track in sorted(source_dir.glob("*.mp3"))
     ]
 
 
-def _disc_cover(paths: CollectionPaths, source_dir: Path) -> dict | None:
-    """`30-distrokid/cover_art_3000.jpg` 優先、無ければ既存サムネイルへフォールバック."""
+def _disc_cover(
+    paths: CollectionPaths,
+    source_dir: Path,
+    *,
+    assets_prefix: str = DISTROKID_ASSETS_PREFIX,
+) -> dict | None:
+    """`30-distrokid/cover_art_3000.jpg` 優先、無ければ既存サムネイルへフォールバック（#934 assets_prefix 追加）."""
     cover_art = source_dir.parent / _COVER_ART_FILENAME
     cover = cover_art if cover_art.is_file() else paths.find_thumbnail()
-    return _cover_entry(paths.root, cover)
+    return _cover_entry(paths.root, cover, assets_prefix=assets_prefix)
 
 
-def _kebab_to_title(dirname: str) -> str:
+def kebab_to_title(dirname: str) -> str:
     """disc dirname を kebab→Title 化する（"disc1-coding-focus-vol1" → "Disc1 Coding Focus Vol1"）."""
     return " ".join(word.capitalize() for word in dirname.split("-"))
 

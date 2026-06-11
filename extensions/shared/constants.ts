@@ -120,6 +120,25 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
   },
 };
 
+/** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
+ * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_COLLECTIONS_ROUTE。 */
+export const DISTROKID_COLLECTIONS_ROUTE = "/distrokid/collections";
+
+/** yt-collection-serve の DistroKid 配信済み記録 POST サブパス（#934）。
+ * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_RELEASES_ROUTE。 */
+export const DISTROKID_RELEASES_ROUTE = "/distrokid/releases";
+
+/** 個別 collection の release.json 配信サブパスを組み立てる（#934）。
+ * 例: distrokidReleaseRoute("20260526-soulful-grooves-coding-focus-collection", "disc1-coding-focus-vol1")
+ *   -> "/collections/20260526-soulful-grooves-coding-focus-collection/distrokid/disc1-coding-focus-vol1/release.json"
+ * asset_path は `/collections/<id>/distrokid/assets/<rel>` 形式のため baseUrl 連結で取得できる。 */
+export function distrokidReleaseRoute(
+  collectionId: string,
+  disc: string,
+): string {
+  return `/collections/${collectionId}/distrokid/${disc}/release.json`;
+}
+
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL = "http://localhost:7873";
 
