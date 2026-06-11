@@ -476,33 +476,37 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
     });
   });
 
-  describe("title 判定による active challenge 検知の 4 組合せ (#875)", () => {
-    // #875: hCaptcha iframe の title が non-empty になった瞬間を active challenge とみなし、
+  describe("title 判定による active challenge 検知の 4 組合せ (#875, #924)", () => {
+    // #875: hCaptcha challenge iframe の title が non-empty になった瞬間を active challenge とみなし、
     // visibility:hidden の中間状態でも捕捉する。title 空のときのみ従来 strict isVisible へ fallback。
     // 真因: silent drop タイミングで title が "" → "hCaptchaチャレンジ" に変化するが visibility:hidden は
     // 維持されるため、従来 strict isVisible では false で素通りしていた。
-    const HCAPTCHA_SRC = "https://hcaptcha-assets-prod.suno.com/captcha/v1/x";
+    // #924: title 非空ヒューリスティックは challenge 系 iframe（#frame=challenge / /bframe）に限定する。
+    // anchor / checkbox / badge 系 widget は常時 title を持つため、src に challenge 識別子を含む
+    // iframe のみに絞らないと誤検知する。
+    // → visibility:hidden の中間状態を捕捉するテストでは src に #frame=challenge を付与する。
+    const HCAPTCHA_CHALLENGE_SRC = "https://hcaptcha-assets-prod.suno.com/captcha/v1/x#frame=challenge";
 
     it("Given title 空 × visible When 検知する Then true (従来 strict isVisible 経路)", () => {
-      addCaptchaIframe({ src: HCAPTCHA_SRC, width: 300, height: 150 });
+      addCaptchaIframe({ src: HCAPTCHA_CHALLENGE_SRC, width: 300, height: 150 });
       expect(detectRecaptcha()).toBe(true);
     });
 
     it("Given title 空 × visibility:hidden When 検知する Then false (プリロード誤検知防止)", () => {
-      addCaptchaIframe({ src: HCAPTCHA_SRC, visibility: "hidden", width: 300, height: 150 });
+      addCaptchaIframe({ src: HCAPTCHA_CHALLENGE_SRC, visibility: "hidden", width: 300, height: 150 });
       expect(detectRecaptcha()).toBe(false);
     });
 
     it("Given title 非空 × visible When 検知する Then true (active challenge)", () => {
-      addCaptchaIframe({ src: HCAPTCHA_SRC, title: "hCaptchaチャレンジ", width: 300, height: 150 });
+      addCaptchaIframe({ src: HCAPTCHA_CHALLENGE_SRC, title: "hCaptchaチャレンジ", width: 300, height: 150 });
       expect(detectRecaptcha()).toBe(true);
     });
 
-    it("Given title 非空 × visibility:hidden When 検知する Then true (#875 隠れ challenge を捕捉)", () => {
+    it("Given challenge 系 src + title 非空 × visibility:hidden When 検知する Then true (#875 隠れ challenge を捕捉)", () => {
       // 本 issue の核心ケース: title="hCaptchaチャレンジ" だが visibility:hidden の中間状態。
-      // 従来 false で silent drop に流れていたのを true で ack timeout 前に捕捉して即停止する。
+      // challenge 系 src (#frame=challenge) のみに title 判定を適用するため、anchor 等は誤検知しない (#924)。
       addCaptchaIframe({
-        src: HCAPTCHA_SRC,
+        src: HCAPTCHA_CHALLENGE_SRC,
         title: "hCaptchaチャレンジ",
         visibility: "hidden",
         width: 300,
@@ -514,7 +518,7 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
     it("Given title 非空 だが bbox 0×0 When 検知する Then false (bbox 判定を title より優先)", () => {
       // bbox 0 チェックを title 判定より前に置く。0×0 のプリロード iframe が title を持っていても
       // 誤検知しない（既存 bbox 0×0 ケースと整合）。
-      addCaptchaIframe({ src: HCAPTCHA_SRC, title: "hCaptchaチャレンジ", width: 0, height: 0 });
+      addCaptchaIframe({ src: HCAPTCHA_CHALLENGE_SRC, title: "hCaptchaチャレンジ", width: 0, height: 0 });
       expect(detectRecaptcha()).toBe(false);
     });
   });
@@ -522,6 +526,76 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
   it("Given challenge 類似 iframe 無し When 検知する Then false", () => {
     addCaptchaIframe({ src: "https://suno.com/embed" });
     expect(detectRecaptcha()).toBe(false);
+  });
+
+  describe("title 判定は challenge 系 iframe に限定 (#924)", () => {
+    // #924: anchor / checkbox / badge 系 widget は常時 title を持つ。
+    // title 非空ヒューリスティックを challenge 系（#frame=challenge / /bframe）に限定することで
+    // widget の誤検知を防ぐ。
+
+    it("Given hidden hCaptcha checkbox widget (title 非空, visibility:hidden, bbox>0) When 検知する Then false (widget 誤検知防止)", () => {
+      // hCaptcha checkbox widget の src は #frame=challenge を含まないため、
+      // title 非空でも challenge 系として扱わず isVisible() fallback で false。
+      addCaptchaIframe({
+        src: "https://newassets.hcaptcha.com/captcha/v1/x/static/hcaptcha.html#frame=checkbox",
+        title: "hCaptchaチェックボックス",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given hidden reCAPTCHA anchor (title='reCAPTCHA', visibility:hidden, bbox>0) When 検知する Then false (anchor 誤検知防止)", () => {
+      // reCAPTCHA anchor widget は title="reCAPTCHA" を常時持つが src に /bframe も #frame=challenge も含まない。
+      // challenge 系ではないため title 非空でも isVisible() fallback で false。
+      addCaptchaIframe({
+        src: "https://www.google.com/recaptcha/api2/anchor?k=x",
+        title: "reCAPTCHA",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given hidden reCAPTCHA bframe (title 非空, visibility:hidden, bbox>0) When 検知する Then true (/bframe は challenge 系)", () => {
+      // reCAPTCHA bframe は /bframe を含む challenge 系 iframe。
+      // title 非空 × visibility:hidden でも challenge と判定して true (#875 挙動を維持)。
+      addCaptchaIframe({
+        src: "https://www.google.com/recaptcha/api2/bframe?k=x",
+        title: "reCAPTCHA チャレンジ",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given hidden hCaptcha challenge (#frame=challenge, title 非空, visibility:hidden, bbox>0) When 検知する Then true (#875 回帰ガード)", () => {
+      // #875 の核心ケース回帰ガード: #frame=challenge 付き hCaptcha challenge は
+      // visibility:hidden でも title 非空であれば true。
+      addCaptchaIframe({
+        src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x#frame=challenge",
+        title: "hCaptchaチャレンジ",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(true);
+    });
+
+    it("Given 可視 anchor widget (src=anchor, visible, bbox>0, title='reCAPTCHA') When 検知する Then true (従来 isVisible 経路の維持)", () => {
+      // anchor widget であっても可視であれば isVisible() 経路で true。
+      // challenge 系限定は title 非空ヒューリスティックの話であり、可視判定は変わらない。
+      addCaptchaIframe({
+        src: "https://www.google.com/recaptcha/api2/anchor?k=x",
+        title: "reCAPTCHA",
+        width: 300,
+        height: 150,
+      });
+      expect(detectRecaptcha()).toBe(true);
+    });
   });
 });
 

@@ -316,15 +316,30 @@ export async function injectAdvancedFields(
 }
 
 /**
- * active な recaptcha / hcaptcha challenge iframe を検知する（#810, #875）。
+ * challenge 系 iframe か（anchor / checkbox / badge 系 widget は除外）。
+ * hCaptcha challenge は src に `#frame=challenge`、reCAPTCHA challenge は `/bframe` を含む。
+ * anchor / checkbox / badge 系 widget は常時 title を持つため、title 判定を challenge 系に限定する (#924)。
+ */
+function isChallengeFrame(src: string): boolean {
+  return src.includes("frame=challenge") || src.includes("/bframe");
+}
+
+/**
+ * active な recaptcha / hcaptcha challenge iframe を検知する（#810, #875, #924）。
  * Suno は hCaptcha challenge を非表示プリロード iframe として常駐させるため、
  * querySelector の hit だけでは常に true になってしまう。
  *
  * #875 で判明した中間状態: silent drop タイミングで iframe の `title` が `""` →
  * `"hCaptchaチャレンジ"` に変化するが `visibility:hidden` は維持される。従来の strict
  * `isVisible()` だけでは visibility:hidden で false となり silent drop に流れていた。
- * そこで bbox を持つ（プリロードでない）iframe の `title` が non-empty なら、visibility に
- * 関わらず active challenge とみなす。title が空のときのみ従来の strict 可視判定へ fallback する。
+ * そこで bbox を持つ（プリロードでない）**challenge 系** iframe の `title` が non-empty なら、
+ * visibility に関わらず active challenge とみなす。
+ *
+ * #924 で判明した誤検知: title 非空ヒューリスティックを全 iframe に適用すると、
+ * anchor / checkbox / badge 系の常駐 widget iframe（reCAPTCHA anchor は title="reCAPTCHA"、
+ * hCaptcha checkbox widget も常時 title あり）まで誤検知してしまう。
+ * title 非空ヒューリスティックは challenge 系 iframe（`frame=challenge` / `/bframe`）に限定し、
+ * それ以外の iframe は従来通り strict isVisible() のみで判定する。
  */
 export function detectRecaptcha(): boolean {
   const iframes = document.querySelectorAll<HTMLIFrameElement>(
@@ -336,12 +351,20 @@ export function detectRecaptcha(): boolean {
     if (rect.width === 0 || rect.height === 0) {
       return false;
     }
-    // title が non-empty = challenge が起動した中間状態。visibility:hidden を許容して捕捉する (#875)。
-    if (f.title.trim().length > 0) {
-      return true;
+    // challenge 系 iframe かつ title 非空 = challenge が起動した中間状態。
+    // visibility:hidden を許容して捕捉する (#875)。
+    // anchor / checkbox / badge 系 widget は常時 title を持つため challenge 系に限定 (#924)。
+    const active =
+      (isChallengeFrame(f.src) && f.title.trim().length > 0) || isVisible(f);
+    if (active) {
+      console.debug("[suno-helper] captcha challenge iframe detected", {
+        src: f.src,
+        title: f.title,
+        bbox: { width: rect.width, height: rect.height },
+        visibility: getComputedStyle(f).visibility,
+      });
     }
-    // title 空はプリロード iframe。従来通り strict 可視判定で実 challenge 表示時のみ true (#810)。
-    return isVisible(f);
+    return active;
   });
 }
 
