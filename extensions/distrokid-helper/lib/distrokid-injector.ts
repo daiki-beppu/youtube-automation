@@ -157,6 +157,10 @@ export const STORE_SELECTORS = {
   distribution: 'input[type="checkbox"][name="store"][id^="chk"]',
 } as const;
 
+// 配信除外ストア（#928）。check 時に確認ポップアップが表示され自動フィルを阻害するため、
+// check せず、checked なら uncheck して配信外を保証する（運用上もこの 2 ストアへは配信しない）。
+export const EXCLUDED_STORE_IDS = ["chksnap", "chkroblox"] as const;
+
 // オプション（upsell）checkbox 群（#923）。
 // name="store" は実配信先 26 個と共有されるが、実配信先は id^="chk" を持つため
 // :not([id^="chk"]) で shazam（ディスカバリーパック）/ audiomack のみ対象にする（#923）。
@@ -394,11 +398,18 @@ export function uncheckUpsells(root: ParentNode): void {
   }
 }
 
-// 配信先ストア 26 個をすべて check する（#923）。
+// 配信先ストア checkbox を check する（#923 / #928）。
 // DistroKid のデフォルトは全ストア check だが、過去のバグで uncheck 状態になることがある。
 // Apple Music が checked でないと credit 入力欄が不可視になり、後続の injectAppleMusicCredits が
 // 失敗する原因になる（順序依存あり）（#923）。
 // 対象が 0 件なら FieldNotFoundError で fail-loud（DistroKid UI 変更の即検知）。
+//
+// EXCLUDED_STORE_IDS（chksnap / chkroblox）に該当する checkbox は check せず、
+// 事前に checked の場合は uncheck して配信外を保証する（#928）。
+// check 時に確認ポップアップが表示されるため自動フィルを阻害し、運用上も配信しない。
+// なお Snapchat（#chksnap）が unchecked のままになるため、条件付き重要事項
+// #areyousuresnap は不可視のまま残り、acceptImportantTerms の isVisible フィルタで
+// 自然にスキップされる（実装変更不要）。
 export function checkAllStores(root: ParentNode): void {
   const checkboxes = Array.from(
     root.querySelectorAll<HTMLInputElement>(STORE_SELECTORS.distribution),
@@ -406,8 +417,13 @@ export function checkAllStores(root: ParentNode): void {
   if (checkboxes.length === 0) {
     throw new FieldNotFoundError(STORE_SELECTORS.distribution);
   }
+  const excluded = new Set<string>(EXCLUDED_STORE_IDS);
   for (const cb of checkboxes) {
-    setChecked(cb, true);
+    if (excluded.has(cb.id)) {
+      setChecked(cb, false);
+    } else {
+      setChecked(cb, true);
+    }
   }
 }
 

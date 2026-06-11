@@ -45,6 +45,7 @@ import {
   AI_DISCLOSURE_SELECTORS,
   AI_MODAL_SELECTORS,
   STORE_SELECTORS,
+  EXCLUDED_STORE_IDS,
   DONE_BUTTON_SELECTOR,
   UPSELL_SELECTORS,
   CREDIT_TRIGGER_WAIT_TIMEOUT_MS,
@@ -1210,20 +1211,41 @@ describe("uncheckUpsells（#919 オプション強制 $0 保証）", () => {
   });
 });
 
-describe("checkAllStores（#923 配信先ストア全 check）", () => {
-  it("chk* id を持つ store checkbox を全部 check する", () => {
+describe("checkAllStores（#923 / #928 配信先ストア check・除外 2 ストア uncheck 保証）", () => {
+  it("除外 2 ストア（chksnap / chkroblox）以外の chk* を check する", () => {
     // Given
     const cb1 = makeCheckbox(document.body, { id: "chkspotify", name: "store" });
     const cb2 = makeCheckbox(document.body, { id: "chkapplemusic", name: "store" });
-    expect(cb1.checked).toBe(false);
-    expect(cb2.checked).toBe(false);
+    const cbSnap = makeCheckbox(document.body, { id: "chksnap", name: "store" });
+    const cbRoblox = makeCheckbox(document.body, { id: "chkroblox", name: "store" });
 
     // When
     checkAllStores(document);
 
-    // Then: 全部 check される
+    // Then: 除外 2 ストア以外は check、除外 2 ストアは unchecked のまま
     expect(cb1.checked).toBe(true);
     expect(cb2.checked).toBe(true);
+    expect(cbSnap.checked).toBe(false);
+    expect(cbRoblox.checked).toBe(false);
+  });
+
+  it("chksnap / chkroblox が事前に checked の場合は uncheck される（DistroKid デフォルト全 check からの配信外保証）", () => {
+    // Given: DistroKid のデフォルト全 check 状態を再現
+    const cbSnap = makeCheckbox(document.body, { id: "chksnap", name: "store" });
+    cbSnap.checked = true;
+    const cbRoblox = makeCheckbox(document.body, { id: "chkroblox", name: "store" });
+    cbRoblox.checked = true;
+    const cbSpotify = makeCheckbox(document.body, { id: "chkspotify", name: "store" });
+    cbSpotify.checked = true;
+
+    // When
+    checkAllStores(document);
+
+    // Then: 除外 2 ストアは uncheck される
+    expect(cbSnap.checked).toBe(false);
+    expect(cbRoblox.checked).toBe(false);
+    // 他ストアは check 維持（no-op）
+    expect(cbSpotify.checked).toBe(true);
   });
 
   it("chk* id なし（shazam / audiomack）は check しない", () => {
@@ -1251,6 +1273,10 @@ describe("checkAllStores（#923 配信先ストア全 check）", () => {
     expect(STORE_SELECTORS.distribution).toBe(
       'input[type="checkbox"][name="store"][id^="chk"]',
     );
+  });
+
+  it("EXCLUDED_STORE_IDS は [\"chksnap\", \"chkroblox\"] の契約を固定する", () => {
+    expect(EXCLUDED_STORE_IDS).toEqual(["chksnap", "chkroblox"]);
   });
 });
 
