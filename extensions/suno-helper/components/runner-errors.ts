@@ -99,3 +99,22 @@ export function formatStopError(message: string): string {
   }
   return `停止リクエスト失敗: ${message}`;
 }
+
+/**
+ * background の fire-and-forget 中継（toggleOverlay 等）が reject したときの SW console ログを決める。
+ * content script 未注入（非 Suno タブでのアイコンクリック / 拡張リロード後の stale タブ）は想定内なので
+ * info に落とし、それ以外は warn で残す。catch せず放置すると未処理 rejection として
+ * chrome://extensions のエラーバッジを汚染するため、必ず本関数経由で消費する（#937）。
+ */
+export function describeRelayFailure(
+  action: string,
+  message: string,
+): { level: "info" | "warn"; text: string } {
+  if (isContentScriptMissingError(message)) {
+    return {
+      level: "info",
+      text: `[suno-helper] ${action} の中継先がありません（Suno タブ以外、または拡張リロード後はタブをハードリロードしてください）: ${message}`,
+    };
+  }
+  return { level: "warn", text: `[suno-helper] ${action} の中継に失敗しました: ${message}` };
+}

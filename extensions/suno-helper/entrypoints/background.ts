@@ -3,6 +3,7 @@
 // overlay (content script) は `browser.tabs.*` を呼べないため、overlay の no-tabId メッセージを受けて
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
 import { postCapturedPlaylists } from "../../shared/api";
+import { describeRelayFailure } from "../components/runner-errors";
 import { autoCapturePlaylists, captureFromTab } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
@@ -49,7 +50,15 @@ export default defineBackground(() => {
       // タブ id が取れないケース（特殊ページ等）は overlay も注入されていないため中継しない。
       return;
     }
-    void sendMessage("toggleOverlay", undefined, tab.id);
+    // overlay 未注入のタブ（suno.com 以外 / 拡張リロード後の stale タブ）では必ず reject するため
+    // catch して消費する。放置すると未処理 rejection としてエラーバッジに記録される（#937）。
+    sendMessage("toggleOverlay", undefined, tab.id).catch((err: unknown) => {
+      const { level, text } = describeRelayFailure(
+        "toggleOverlay",
+        err instanceof Error ? err.message : String(err),
+      );
+      console[level](text);
+    });
   });
 
   // overlay → runner 中継 (#892)。overlay が送る run / stop / queryProgress を送信元と同一タブの
@@ -81,6 +90,10 @@ export default defineBackground(() => {
     if (tabId === null) {
       return;
     }
-    void sendMessage("progress", data, tabId);
+    // ページ遷移・タブ閉鎖のレースで overlay 側リスナーが消えていると reject する。progress は
+    // 高頻度かつ取りこぼしても次の通知で追いつくため、debug ログのみ残して握りつぶす（#937）。
+    sendMessage("progress", data, tabId).catch((err: unknown) => {
+      console.debug("[suno-helper] progress 中継先なし（overlay 消滅レース）:", err);
+    });
   });
 });
