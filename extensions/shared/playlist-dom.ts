@@ -37,6 +37,8 @@ const PLAYLIST_ROW_APPEAR_TIMEOUT_MS = 5000;
 /** multi-select click 後、対象 row が selected 状態（aria-label="Deselect clip"）へ遷移したかを verify する poll 間隔と上限 (ms)。 */
 const CLIP_SELECT_VERIFY_POLL_MS = 50;
 const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
+/** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924)。 */
+const CLIP_SELECT_VERIFY_MS_PER_ROW = 50;
 
 /**
  * 可視な Add to Playlist dialog を 1 つ探す（OneTrust cookie consent dialog 除外フィルタ込み）。
@@ -67,7 +69,7 @@ const CLIP_ROW_NOT_FOUND_MESSAGE =
   "clip row が見つかりません。Suno の UI 変更の可能性があります。";
 
 /**
- * clip row を DOM 順（= 直近生成が先頭）で先頭から count 件取得する (#881)。
+ * scroller 配下のロード済み clip row を DOM 順（= 直近生成が先頭）で全件収集する内部ヘルパ。
  *
  * row は **multi-select ボタンを基点に per-clip 粒度で導出する**。
  * `.clip-browser-list-scroller` 配下の Select/Deselect ボタンを全件取得し、各ボタンの
@@ -80,19 +82,9 @@ const CLIP_ROW_NOT_FOUND_MESSAGE =
  * 潰れ、全 clip が 1 row に collapse して `multiSelectClips` が先頭 1 ボタンしか click できない。
  * ボタン基点の祖先導出はネスト深度・Emotion hash 非依存で per-clip 粒度を保証する。
  *
- * fail-loud (#881): コンテナ不在、または row 0 件のいずれでも即 throw する。
- * 空配列を返すと後段 `multiSelectClips([])` が `0 >= 0` で silent resolve し、
- * 真因（clip row selector の廃止）が Add to Playlist dialog timeout という代理症状でしか
- * 顕在化しなくなるため、検出境界で UI 変更を fail-loud にする。
+ * 0 件の場合は `CLIP_ROW_NOT_FOUND_MESSAGE` で throw（fail-loud、#881 維持）。
  */
-export function selectRecentClips(count: number): HTMLElement[] {
-  const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR,
-  );
-  if (!scroller) {
-    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
-  }
-
+function collectLoadedClipRows(scroller: HTMLElement): HTMLElement[] {
   const buttons = scroller.querySelectorAll<HTMLElement>(
     `${SELECT_CLIP_BUTTON_SELECTOR}, ${DESELECT_CLIP_BUTTON_SELECTOR}`,
   );
@@ -112,7 +104,98 @@ export function selectRecentClips(count: number): HTMLElement[] {
   if (rows.length === 0) {
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
   }
-  return rows.slice(0, count);
+  return rows;
+}
+
+export interface EnsureClipRowsLoadedOptions {
+  /** 中断フラグ。true で即 return（throw しない。呼び出し側が aborted を再チェック）。 */
+  isAborted: () => boolean;
+  /** ロード判定の poll 間隔 (ms)。既定 100。 */
+  pollIntervalMs?: number;
+  /** スクロール後、追加 row のロードを待つ上限 (ms)。既定 3000。 */
+  loadSettleTimeoutMs?: number;
+}
+
+/**
+ * 遅延ロードの clip list を底方向へスクロールし、count 件の row がロードされるまで進める (#924)。
+ * 戻り値はロード済み row の先頭 count 件（DOM 順 = 直近生成が先頭）。
+ * リスト末尾（追加ロードが止まる）まで進めても不足する場合は
+ * 「X/Y 件」を含むメッセージで fail-loud throw する（従来の silent slice を廃止）。
+ *
+ * 実機検証で確認した遅延ロードの特性（#924）:
+ *   - clip list（`.clip-browser-list-scroller`）は無限スクロール実装。
+ *     初期ロードは 40 row のみ。`scroller.scrollTop = scroller.scrollHeight` +
+ *     `scroller.dispatchEvent(new Event("scroll"))` で +20 row ずつ追加ロードされる
+ *     （40→60→80→100 を実測）。
+ *   - ロード済み row は unmount されない（仮想化ではない）。row は `position: static` の
+ *     通常フロー配置で、画面外でも `isVisible()` を通り click 可能。
+ *   - scrollTop 代入 + scroll event dispatch でロードが走ることを実機確認済み。
+ *
+ * fail-loud (#881): コンテナ不在または row 0 件は即 throw する（空配列を返さない）。
+ * 追加ロードが止まった（リスト末尾）のに count に届かない場合も fail-loud throw する
+ * （silent slice を廃止し、追加漏れを検出境界で即顕在化させる）。
+ */
+export async function ensureClipRowsLoaded(
+  count: number,
+  options: EnsureClipRowsLoadedOptions,
+): Promise<HTMLElement[]> {
+  const {
+    isAborted,
+    pollIntervalMs = 100,
+    loadSettleTimeoutMs = 3000,
+  } = options;
+
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  // 初回 row 収集: 0 件なら fail-loud throw（#881 維持）
+  let rows = collectLoadedClipRows(scroller);
+
+  for (;;) {
+    // 中断: 現時点の先頭 count 件（不足していても）を返して即終了
+    if (isAborted()) {
+      return rows.slice(0, count);
+    }
+
+    // 十分な row がロードされた: scrollTop を 0 に戻して先頭 count 件を返す
+    // （multi-select や Cmd+P 操作を初期表示位置で行うため、スクロールを元に戻す）
+    if (rows.length >= count) {
+      scroller.scrollTop = 0;
+      scroller.dispatchEvent(new Event("scroll"));
+      return rows.slice(0, count);
+    }
+
+    // 不足: スクロールで追加ロードを促す
+    const prevCount = rows.length;
+    scroller.scrollTop = scroller.scrollHeight;
+    scroller.dispatchEvent(new Event("scroll"));
+
+    // 追加 row のロードを poll で待つ
+    const settleDeadline = Date.now() + loadSettleTimeoutMs;
+    for (;;) {
+      await sleep(pollIntervalMs);
+      if (isAborted()) {
+        // 中断: ロード待ち中でも即終了
+        rows = collectLoadedClipRows(scroller);
+        return rows.slice(0, count);
+      }
+      rows = collectLoadedClipRows(scroller);
+      if (rows.length > prevCount) {
+        // 追加ロードを検出: 外側ループに戻って再評価
+        break;
+      }
+      if (Date.now() >= settleDeadline) {
+        // リスト末尾到達（追加ロードが止まった）のに不足
+        throw new Error(
+          `clip row が ${rows.length}/${count} 件しかロードできませんでした。生成済み clip が不足しているか、Suno の UI 変更の可能性があります。`,
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -125,8 +208,9 @@ export function selectRecentClips(count: number): HTMLElement[] {
  * を許し、0 件選択でも void resolve していた。これが後段の Add to Playlist dialog 検出
  * timeout という代理症状で初めて顕在化していたため、選択側で fail-loud にする。
  *
- * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は selectRecentClips が
- *   先に fail-loud throw する前提。万一 0 件で到達したら `0 >= 0` で silent resolve させない）(#881)。
+ * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は ensureClipRowsLoaded
+ *   （内部の collectLoadedClipRows）が先に fail-loud throw する前提。万一 0 件で到達したら
+ *   `0 >= 0` で silent resolve させない）(#881, #924)。
  * - 既に選択済み（Deselect clip 在）の row は idempotent に skip（click しない）。
  * - Select clip ボタンが無く、かつ未選択（Deselect も無い）row は UI 変更とみなし即 throw。
  * - 全 click 後、対象 row が deadline 内に Deselect clip へ遷移しなければ throw。
@@ -152,7 +236,14 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
     button.click();
   }
 
-  const deadline = Date.now() + CLIP_SELECT_VERIFY_TIMEOUT_MS;
+  // 大規模 collection（60-80 件など）では 1 秒では全 row の selected 遷移が間に合わないリスクがある。
+  // row 数でスケールし、最低でも CLIP_SELECT_VERIFY_TIMEOUT_MS を確保する（#924）。
+  const deadline =
+    Date.now() +
+    Math.max(
+      CLIP_SELECT_VERIFY_TIMEOUT_MS,
+      rows.length * CLIP_SELECT_VERIFY_MS_PER_ROW,
+    );
   for (;;) {
     const selected = rows.filter((row) =>
       row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR),

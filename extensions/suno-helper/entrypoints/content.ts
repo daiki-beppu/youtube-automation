@@ -37,10 +37,10 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
+  ensureClipRowsLoaded,
   fillPlaylistNameAndCreate,
   multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
-  selectRecentClips,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
@@ -129,11 +129,16 @@ export default defineContentScript({
      */
     async function addClipsToPlaylist(entryCount: number, playlistName: string): Promise<void> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: entryCount, message: playlistName });
-      // 直近 entry 数 × 2 clip を multi-select する。selectRecentClips は生成中 / 完了を区別せず
-      // scroller 配下の multi-select ボタンから per-clip row を導出して拾う（未完成分は Suno 側で
-      // playlist 追加後に生成完了時点で自動反映される）。
-      // clip row が 1 件も無ければ selectRecentClips が fail-loud throw する（#881）。
-      const rows = selectRecentClips(entryCount * CLIPS_PER_REQUEST);
+      // 直近 entry 数 × CLIPS_PER_REQUEST 件の clip を multi-select する。
+      // clip list は遅延ロード（無限スクロール）のため、初期ロード（40 件）では不足する場合がある (#924)。
+      // ensureClipRowsLoaded がスクロールで追加ロードを促し、count 件揃うまで待機する。
+      // clip row が 1 件も無ければ fail-loud throw する（#881）。
+      const rows = await ensureClipRowsLoaded(entryCount * CLIPS_PER_REQUEST, {
+        isAborted: () => aborted,
+      });
+      if (aborted) {
+        return; // ロード待ち中に停止された。部分状態のまま Cmd+P に進まない（呼び出し元の STOPPED guard が persist する）
+      }
       await multiSelectClips(rows);
       await abortableSleep(SETTLE_MS, () => aborted);
 
