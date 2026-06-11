@@ -53,10 +53,7 @@ export default defineBackground(() => {
     // overlay 未注入のタブ（suno.com 以外 / 拡張リロード後の stale タブ）では必ず reject するため
     // catch して消費する。放置すると未処理 rejection としてエラーバッジに記録される（#937）。
     sendMessage("toggleOverlay", undefined, tab.id).catch((err: unknown) => {
-      const { level, text } = describeRelayFailure(
-        "toggleOverlay",
-        err instanceof Error ? err.message : String(err),
-      );
+      const { level, text } = describeRelayFailure("toggleOverlay", err instanceof Error ? err.message : String(err));
       console[level](text);
     });
   });
