@@ -9,7 +9,14 @@
 //   - resumeBannerRange: バナー承認時に range UI へ prefill する 1-based start/end。要件4
 import { describe, expect, it } from "vitest";
 
-import { RESUME_STALE_MS, resolveRunRange, resumeBannerRange, shouldShowResumeBanner } from "../lib/resume-state";
+import {
+  RESUME_STALE_MS,
+  resolveInterruptIndex,
+  resolveRunRange,
+  resumeBannerRange,
+  resumeRunRange,
+  shouldShowResumeBanner,
+} from "../lib/resume-state";
 import type { ResumeState } from "../lib/resume-state";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -126,5 +133,31 @@ describe("round-trip: バナー prefill → run range が「失敗 index..末尾
     const range = resolveRunRange(prefilled.start, prefilled.end, state.total); // content へ渡す 0-based
 
     expect(range).toEqual({ start: 19, end: 23 });
+  });
+});
+
+describe("resolveInterruptIndex: 中断時の「次に実行する index」決定 (#924)", () => {
+  it("Given submitted=false When 算出 Then i（click 前の中断・エラーなので当該 entry を再生成する）", () => {
+    expect(resolveInterruptIndex(5, false, false)).toBe(5);
+  });
+
+  it("Given submitted=true, isNotAcknowledged=false When 算出 Then i+1（投入済み受理確認済み: 次の entry から再開）", () => {
+    expect(resolveInterruptIndex(5, true, false)).toBe(6);
+  });
+
+  it("Given submitted=true, isNotAcknowledged=true When 算出 Then i（silent drop 確定: 当該 entry を再生成する）", () => {
+    expect(resolveInterruptIndex(5, true, true)).toBe(5);
+  });
+
+  it("Given i=total-1 (末尾), submitted=true, isNotAcknowledged=false When 算出 Then total になり playlist-phase persist と同義", () => {
+    const total = 24;
+    const i = total - 1; // 最後の entry
+    const interruptIndex = resolveInterruptIndex(i, true, false);
+    expect(interruptIndex).toBe(total); // = 24
+
+    // resumeRunRange({ failedIndex: total, total }) → { start: total, end: total-1 } → 0 回ループ
+    // → playlist 追加のみ実行される round-trip を確認する。
+    const range = resumeRunRange({ failedIndex: interruptIndex, total });
+    expect(range).toEqual({ start: total, end: total - 1 }); // start > end → 0 回ループ
   });
 });

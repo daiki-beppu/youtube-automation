@@ -12,8 +12,13 @@ import {
 } from "../../shared/constants";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
 import { applyJitter, readSpeedPresetId, resolveSpeedPreset } from "../lib/preset-state";
-import { clearResumeStateForCollection, type RunRange, writeResumeState } from "../lib/resume-state";
-import { injectWithVerification } from "../lib/inject-retry";
+import {
+  clearResumeStateForCollection,
+  resolveInterruptIndex,
+  type RunRange,
+  writeResumeState,
+} from "../lib/resume-state";
+import { InjectNotAcknowledgedError, injectWithVerification } from "../lib/inject-retry";
 import {
   abortableSleep,
   GENERATE_TIMEOUT_MS,
@@ -48,6 +53,10 @@ export default defineContentScript({
     let aborted = false;
     // 連続実行の二重起動ガード (#892 要件7)。runAll 実行中の run 再着信を弾く。
     let running = false;
+    // 直近の injectAndGenerate で Generate を click した entry の 0-based index (#924)。
+    // -1 は「まだ click していない」。中断時に submitted 判定と組み合わせて interruptIndex を決定する。
+    // run ハンドラで -1 にリセットし、injectAndGenerate の冒頭でも attempt ごとにリセットする（理由は同関数コメント参照）。
+    let lastSubmittedEntryIndex = -1;
     // popup を閉じても進捗を維持・復元するための SSOT (#852)。run 開始で initSnapshot、
     // 以降は emitProgress が sendMessage より前に同期更新する（queryProgress と race しないため）。
     let currentSnapshot: SnapshotPayload | null = null;
@@ -62,6 +71,11 @@ export default defineContentScript({
     }
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
+      // attempt ごとに lastSubmittedEntryIndex を -1 にリセットする。
+      // injectWithVerification が silent drop を検知して同一 entry を retry するとき、
+      // 前 attempt の click が lastSubmittedEntryIndex に残っていると「投入済み」と誤判定し、
+      // retry 中に captcha throw が来た場合に当該 entry を skip するバグ（欠落）を防ぐ (#924)。
+      lastSubmittedEntryIndex = -1;
       const { style, lyrics, title } = resolveFields();
       setNativeValue(style, entry.style);
       if (lyrics) {
@@ -86,12 +100,19 @@ export default defineContentScript({
       await injectAdvancedFields(entry, resolveAdvancedFields());
       await abortableSleep(SETTLE_MS, () => aborted);
 
+      if (aborted) {
+        return; // 停止押下後は Generate を押さない（未投入のまま STOPPED 経路へ）
+      }
+
       if (detectRecaptcha()) {
         throw new Error("reCAPTCHA を検知しました。手動で解決してから再開してください。");
       }
 
       const button = resolveGenerateButton();
       button.click();
+      // Generate click 直後に lastSubmittedEntryIndex を更新する。中断時の interruptIndex 計算で
+      // 「この entry は click 済み（submitted）」と判定できるようにする (#924)。
+      lastSubmittedEntryIndex = index;
       // Generate 押下後は最大 GENERATE_TIMEOUT_MS の生成完了待ちに入る。注入中と区別して表示する。
       emitProgress({ phase: PHASE.GENERATING, index, total });
       await waitForGeneration(button, {
@@ -163,6 +184,7 @@ export default defineContentScript({
       }
       for (let i = startIndex; i <= endIndex; i++) {
         if (aborted) {
+          // ループ先頭の中断: この時点でまだ Generate を click していないため i をそのまま使う (#924)。
           persistInterruptState(i);
           emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
@@ -178,6 +200,7 @@ export default defineContentScript({
             queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
           });
           if (aborted) {
+            // waitForQueueSlot 後の中断: まだ Generate を click していないため i をそのまま使う (#924)。
             persistInterruptState(i);
             emitProgress({ phase: PHASE.STOPPED, index: i, total });
             return;
@@ -196,8 +219,15 @@ export default defineContentScript({
             describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
           });
           if (aborted) {
-            persistInterruptState(i);
-            emitProgress({ phase: PHASE.STOPPED, index: i, total });
+            // injectWithVerification 完了後の中断チェック。injectAndGenerate 内で Generate を click し
+            // waitForGeneration まで完了しているため submitted=true。interruptIndex は i+1 とし、
+            // 再開時にこの entry を重複生成しない (#924)。
+            // emitProgress の index も interruptIndex にする: snapshot.applyProgress (lib/snapshot.ts:47) が
+            // ERROR payload の index を failedIndex として記録し、useSunoRunner.ts:140-142 が chrome.storage
+            // 喪失時の冗長ソースに使うため、両系統の failedIndex を一致させる必要がある。
+            const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
+            persistInterruptState(interruptIndex);
+            emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
             return;
           }
           emitProgress({ phase: PHASE.DONE, index: i, total });
@@ -206,9 +236,19 @@ export default defineContentScript({
           await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          emitProgress({ phase: PHASE.ERROR, index: i, total, message });
+          // interruptIndex: submitted（Generate click 済み）かつ silent drop 確定でない → i+1（重複しない）。
+          // InjectNotAcknowledgedError（全 attempt 未受理）は silent drop 確定のため i（再生成する）。
+          // emitProgress の index も interruptIndex にする: snapshot.applyProgress (lib/snapshot.ts:47) が
+          // ERROR payload の index を failedIndex として記録し、useSunoRunner.ts:140-142 が chrome.storage
+          // 喪失時の冗長ソースに使うため、両系統の failedIndex を一致させる必要がある (#924)。
+          const interruptIndex = resolveInterruptIndex(
+            i,
+            lastSubmittedEntryIndex === i,
+            err instanceof InjectNotAcknowledgedError,
+          );
+          emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total, message });
           // 失敗 index を永続化し、次回 popup 起動時の再開バナーで提示する (#872 要件3)。
-          persistInterruptState(i);
+          persistInterruptState(interruptIndex);
           return;
         }
       }
@@ -253,6 +293,7 @@ export default defineContentScript({
       }
       running = true;
       aborted = false;
+      lastSubmittedEntryIndex = -1;
       // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。range / collectionId は無し。
       const { entries, playlistName, range, collectionId } = Array.isArray(data)
         ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined }

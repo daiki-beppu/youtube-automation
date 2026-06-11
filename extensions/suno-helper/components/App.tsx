@@ -81,8 +81,14 @@ export function App() {
       {resumeBanner && (
         <div className="flex flex-col gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs text-amber-900">
           <p>
-            前回 entry <span className="font-semibold">{resumeBanner.failedIndex + 1}</span> で停止しました。entry{" "}
-            {resumeBanner.failedIndex + 1} から再開しますか？
+            {resumeBanner.failedIndex < resumeBanner.total ? (
+              <>
+                前回の実行が中断されました。entry <span className="font-semibold">{resumeBanner.failedIndex + 1}</span>{" "}
+                から再開しますか？
+              </>
+            ) : (
+              <>全 entry 投入済みです。playlist 追加から再開しますか？</>
+            )}
           </p>
           <div className="flex gap-2">
             <button
