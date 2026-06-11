@@ -1,0 +1,1 @@
+../../../../src/youtube_automation/scripts/distrokid_prepare.py
