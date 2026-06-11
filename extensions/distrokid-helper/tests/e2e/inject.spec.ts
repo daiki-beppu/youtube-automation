@@ -181,31 +181,54 @@ test("AI 開示 modal は full check で persona radio を dynamic inject し、
   expect(continueClicked).toBe(false);
 });
 
-test("配信先ストア全 check + upsell uncheck + credits 可視化 + areyousure check (#923)", async ({
+test("配信先ストア check（除外 2 ストア uncheck 保証）+ upsell uncheck + credits 可視化 + areyousure check (#923 / #928)", async ({
   page,
 }) => {
   // Given: fixture（初期状態: ストア全 unchecked、credits hidden）
   await page.goto(fixtureUrl);
   await setNativeValue(page, "#howManySongsOnThisAlbum", "2");
 
-  // storesが全部 unchecked であることを確認（最悪ケース再現）
+  // stores が全部 unchecked であることを確認（最悪ケース再現）
   await expect(page.locator("#chkspotify")).not.toBeChecked();
   await expect(page.locator("#chkapplemusic")).not.toBeChecked();
 
   // credits section は hidden（Apple Music unchecked なので）
   await expect(page.locator(".requirements-item")).toBeHidden();
 
-  // When: 配信先ストアを全 check（checkAllStores の模擬）
-  for (const id of ["chkspotify", "chkapplemusic", "chkitunes", "chkgoogle", "chksnap", "chktiktok"]) {
-    await page.locator(`#${id}`).check();
+  // When: checkAllStores の模擬 — 除外 2 ストア（chksnap / chkroblox）以外を check し、
+  // 除外ストアが事前 checked の場合は uncheck する（#928）。
+  // fixture の初期は全 unchecked なので除外 2 ストアは skip（uncheck 保証は事前 checked ケースで確認）。
+  const allStoreIds = await page.evaluate(() =>
+    Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="store"][id^="chk"]'),
+    ).map((cb) => cb.id),
+  );
+  const excludedIds = new Set(["chksnap", "chkroblox"]);
+  for (const id of allStoreIds) {
+    if (excludedIds.has(id)) {
+      // 除外ストアが checked なら uncheck、unchecked なら触らない
+      const isChecked = await page.locator(`#${id}`).isChecked();
+      if (isChecked) {
+        await page.locator(`#${id}`).uncheck();
+      }
+    } else {
+      await page.locator(`#${id}`).check();
+    }
   }
 
-  // Then: 配信先 chk* は全 checked
+  // Then: 除外 2 ストアは unchecked のまま
+  await expect(page.locator("#chksnap")).not.toBeChecked();
+  await expect(page.locator("#chkroblox")).not.toBeChecked();
+
+  // Then: 他の配信先 chk* は checked
   await expect(page.locator("#chkspotify")).toBeChecked();
   await expect(page.locator("#chkapplemusic")).toBeChecked();
 
   // Then: credits section が visible 化（Apple Music checked → trigger 表示）
   await expect(page.locator(".requirements-item")).toBeVisible();
+
+  // Then: #areyousuresnap は hidden のまま（Snapchat が check されないため可視化されない）（#928）
+  await expect(page.locator("#label-areyousuresnap")).toBeHidden();
 
   // When: upsell uncheck（shazam / audiomack は name=store だが id なし）
   await page.evaluate(() => {
@@ -233,6 +256,50 @@ test("配信先ストア全 check + upsell uncheck + credits 可視化 + areyous
 
   // Then: 送信ボタンは押されていない
   const continueClicked = await page.evaluate(() => (window as unknown as { __continueClicked: boolean }).__continueClicked);
+  expect(continueClicked).toBe(false);
+});
+
+test("checkAllStores は事前 checked の chksnap / chkroblox を uncheck する（#928 デフォルト全 check からの除外保証）", async ({
+  page,
+}) => {
+  // Given: DistroKid のデフォルト全 check 状態（chksnap / chkroblox も checked）を再現
+  await page.goto(fixtureUrl);
+  await page.evaluate(() => {
+    // 全配信先を強制 checked にする（デフォルト全 check 状態の模倣）
+    document.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="store"][id^="chk"]')
+      .forEach((cb) => { cb.checked = true; });
+  });
+  await expect(page.locator("#chksnap")).toBeChecked();
+  await expect(page.locator("#chkroblox")).toBeChecked();
+
+  // When: checkAllStores の模擬 — 除外ストアを uncheck する（#928）
+  await page.evaluate(() => {
+    const excluded = new Set(["chksnap", "chkroblox"]);
+    document.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="store"][id^="chk"]')
+      .forEach((cb) => {
+        if (excluded.has(cb.id)) {
+          if (cb.checked) cb.click();
+        } else {
+          if (!cb.checked) cb.click();
+        }
+      });
+  });
+
+  // Then: 除外 2 ストアは uncheck されている
+  await expect(page.locator("#chksnap")).not.toBeChecked();
+  await expect(page.locator("#chkroblox")).not.toBeChecked();
+
+  // Then: #areyousuresnap は hidden のまま（Snapchat が uncheck されたため）（#928）
+  await expect(page.locator("#label-areyousuresnap")).toBeHidden();
+
+  // Then: 他の配信先は checked のまま
+  await expect(page.locator("#chkspotify")).toBeChecked();
+  await expect(page.locator("#chkapplemusic")).toBeChecked();
+
+  // Then: 送信ボタンは押されていない（__continueClicked ガード維持）
+  const continueClicked = await page.evaluate(
+    () => (window as unknown as { __continueClicked: boolean }).__continueClicked,
+  );
   expect(continueClicked).toBe(false);
 });
 
