@@ -39,6 +39,7 @@ from youtube_automation.utils.config.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
+from youtube_automation.utils.distrokid_spec import write_collection_spec
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _COLLECTIONS_ROUTE = "/collections"
@@ -837,3 +838,113 @@ def test_post_distrokid_releases_missing_field_returns_400(tmp_path, serve_dir_d
         )
 
     assert exc_info.value.code == 400
+
+
+# ---------------------------------------------------------------------------
+# spec.json 優先（#941）: _read_disc_album_title / build_distrokid_collections_index
+# ---------------------------------------------------------------------------
+
+
+def _make_spec_for_disc(distrokid_dir: Path, disc_slug: str, album_title: str) -> None:
+    """30-distrokid/spec.json に指定 disc のエントリを書き込む（#941 テスト用）."""
+    spec = {
+        "version": 1,
+        "artist": "Test Artist",
+        "language": "English",
+        "genre_primary": "Electronic",
+        "genre_secondary": None,
+        "label": None,
+        "discs": [
+            {
+                "slug": disc_slug,
+                "album_title": album_title,
+                "tracks": [],
+            }
+        ],
+    }
+    write_collection_spec(distrokid_dir, spec)
+
+
+def test_build_distrokid_collections_index_uses_spec_album_title(tmp_path):
+    """Given spec.json に album_title がある disc（metadata.md の値と異なる）
+    When build_distrokid_collections_index を呼ぶ
+    Then spec の album_title が index に反映される（spec 優先）。
+    (#941)
+    """
+    planning = tmp_path / "planning"
+    coll = planning / "20260526-abc-collection"
+    coll.mkdir(parents=True)
+    disc_slug = "disc1-coding-focus-vol1"
+    # metadata.md は "MD Album Title" だが spec は "Spec Album Title"
+    _make_disc(coll, disc_slug, album_title="MD Album Title")
+    distrokid_dir = coll / "30-distrokid"
+    _make_spec_for_disc(distrokid_dir, disc_slug, "Spec Album Title")
+
+    rows = build_distrokid_collections_index(planning)
+
+    assert rows[0]["album_title"] == "Spec Album Title"
+
+
+def test_build_distrokid_collections_index_spec_corrupted_falls_back_to_metadata(tmp_path):
+    """Given 破損した spec.json + 有効な metadata.md
+    When build_distrokid_collections_index を呼ぶ
+    Then spec 破損は fail-soft で metadata.md の値にフォールバックする（500 にならない）。
+    (#941)
+    """
+    planning = tmp_path / "planning"
+    coll = planning / "20260526-abc-collection"
+    coll.mkdir(parents=True)
+    disc_slug = "disc1-coding-focus-vol1"
+    _make_disc(coll, disc_slug, album_title="MD Album Title")
+
+    # 破損した spec.json を書き込む
+    distrokid_dir = coll / "30-distrokid"
+    (distrokid_dir / "spec.json").write_text("{ broken json }", encoding="utf-8")
+
+    rows = build_distrokid_collections_index(planning)
+
+    # spec 破損は fail-soft → metadata.md の album_title にフォールバック
+    assert rows[0]["album_title"] == "MD Album Title"
+
+
+def test_build_distrokid_collections_index_spec_corrupted_falls_back_to_kebab(tmp_path):
+    """Given 破損した spec.json + metadata.md 無し
+    When build_distrokid_collections_index を呼ぶ
+    Then spec 破損・metadata.md 不在の両方を fail-soft で通過し kebab フォールバック（500 にならない）。
+    (#941)
+    """
+    planning = tmp_path / "planning"
+    coll = planning / "20260526-abc-collection"
+    coll.mkdir(parents=True)
+    disc_slug = "disc1-coding-focus-vol1"
+    _make_disc(coll, disc_slug, with_metadata=False)
+
+    # 破損した spec.json を書き込む
+    distrokid_dir = coll / "30-distrokid"
+    (distrokid_dir / "spec.json").write_text("{ broken json }", encoding="utf-8")
+
+    rows = build_distrokid_collections_index(planning)
+
+    # kebab_to_title("disc1-coding-focus-vol1") → "Disc1 Coding Focus Vol1"
+    assert rows[0]["album_title"] == "Disc1 Coding Focus Vol1"
+
+
+def test_get_distrokid_collections_spec_album_title_reflected_in_index(serve_dir_dk, tmp_path):
+    """Given spec.json に album_title がある disc
+    When `GET /distrokid/collections`
+    Then spec の album_title が collections index に反映される。
+    (#941)
+    """
+    planning = tmp_path / "planning"
+    coll = planning / "20260526-abc-collection"
+    coll.mkdir(parents=True)
+    disc_slug = "disc1-coding-focus-vol1"
+    _make_disc(coll, disc_slug, album_title="MD Album Title")
+    distrokid_dir = coll / "30-distrokid"
+    _make_spec_for_disc(distrokid_dir, disc_slug, "Spec Album Title")
+    base = serve_dir_dk(planning)
+
+    with urllib.request.urlopen(f"{base}{_DISTROKID_COLLECTIONS_ROUTE}") as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body[0]["album_title"] == "Spec Album Title"

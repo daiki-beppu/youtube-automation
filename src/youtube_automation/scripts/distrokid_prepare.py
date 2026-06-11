@@ -36,7 +36,6 @@ from youtube_automation.utils.distrokid_prepare import (
     COVER_ART_FILENAME,
     DISTROKID_DIRNAME,
     INDIVIDUAL_MUSIC_DIRNAME,
-    SPEC_FILENAME,
     build_draft_spec,
     format_total_duration,
     render_metadata_md,
@@ -47,6 +46,7 @@ from youtube_automation.utils.distrokid_prepare import (
     verify_roundtrip,
     write_release_date,
 )
+from youtube_automation.utils.distrokid_spec import SPEC_FILENAME, write_collection_spec
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.probe import probe_duration
 
@@ -181,6 +181,15 @@ def _cmd_build(args: argparse.Namespace) -> None:
             if disc_dir.is_dir():
                 shutil.rmtree(disc_dir)
 
+    # 検証済み spec を canonical パス（30-distrokid/spec.json）へ atomic 書き込みする（#941）。
+    # serve が 30-distrokid/spec.json を SSOT として直接読むために必要。
+    # --spec が canonical と同一パスでも問題ない（読み込み済み dict を書くため自己上書き OK）。
+    # 冪等性チェックの後に書く: --force 不足で build を拒否した場合に
+    # ディスク上の状態を一切変更しないため（#941）。
+    write_collection_spec(distrokid_dir, spec)
+    # spec.json を先頭に追加。serve が SSOT として直接読む canonical ファイル（#941）。
+    generated_files: list[Path] = [distrokid_dir / SPEC_FILENAME]
+
     # 全 disc の mp3 を probe して尺計測
     all_durations: dict[str, float] = {}
     for disc in discs:
@@ -203,7 +212,6 @@ def _cmd_build(args: argparse.Namespace) -> None:
             global_numbers[fn] = _global_num(fn)
 
     # 各 disc の成果物生成
-    generated_files: list[Path] = []
     disc_infos: list[dict] = []
 
     for disc in discs:

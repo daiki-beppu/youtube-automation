@@ -19,6 +19,11 @@ from youtube_automation.utils.distrokid_metadata import (
     parse_album_metadata,
     parse_track_table,
 )
+from youtube_automation.utils.distrokid_spec import (
+    find_disc_entry,
+    read_collection_spec,
+    title_map_from_entry,
+)
 from youtube_automation.utils.exceptions import ConfigError
 
 # 外部 HTTP 契約: distrokid-helper 拡張が fetch するサブパス（単一 mode）。
@@ -138,7 +143,17 @@ def _disc_source_payload(
     profile: dict,
     assets_prefix: str = DISTROKID_ASSETS_PREFIX,
 ) -> dict:
-    """30-distrokid disc-source 経路: metadata.md 主導で payload を組み立てる（#934 assets_prefix 追加）.
+    """30-distrokid disc-source 経路: spec.json 優先 / metadata.md フォールバックで payload を組み立てる（#941）.
+
+    読み取り優先順位:
+    1. <collection>/30-distrokid/spec.json が存在し、対象 disc のエントリがある場合
+       → spec.json を SSOT として album_title / title_by_filename を決定する。
+       metadata.md は読まない（不在でも raise しない）。
+    2. spec.json が不在 or 対象 disc のエントリが無い場合
+       → 従来の metadata.md 必須経路（不在は ConfigError、fail-loud）。
+    3. spec.json が存在するが破損している場合
+       → read_collection_spec が ConfigError を raise し、そのまま伝播（fail-loud）。
+       黙って metadata.md にフォールバックすると古いデータを配信しうるため（#941）。
 
     profile.language は `config/channel/distrokid.json` を権威に使う。
     metadata.md の「言語」セルは人間向け転記用テンプレで、DistroKid form 言語 option
@@ -146,17 +161,30 @@ def _disc_source_payload(
     payload には反映しない（#888）。
     """
     source_dir = _resolve_source_dir(paths.root, distrokid_source)
-    metadata_path = source_dir / _METADATA_FILENAME
-    if not metadata_path.is_file():
-        raise ConfigError(f"{_METADATA_FILENAME} not found under {distrokid_source}")
 
-    album_meta = parse_album_metadata(metadata_path)
-    title_by_filename = {row["filename"]: row["title"] for row in parse_track_table(metadata_path)}
+    # spec.json 優先経路: <collection>/30-distrokid/spec.json を読む（#941）。
+    # read_collection_spec は破損 spec で ConfigError を raise するので try で包まない。
+    distrokid_dir = source_dir.parent
+    spec = read_collection_spec(distrokid_dir)
+    entry = find_disc_entry(spec, source_dir.name) if spec is not None else None
+
+    if entry is not None:
+        # spec に disc エントリあり → spec を SSOT として組み立てる。metadata.md は読まない。
+        album_title = entry.get("album_title") or kebab_to_title(source_dir.name)
+        title_by_filename = title_map_from_entry(entry)
+    else:
+        # spec 不在 or disc エントリ無し → 従来の metadata.md 必須経路（後方互換）。
+        metadata_path = source_dir / _METADATA_FILENAME
+        if not metadata_path.is_file():
+            raise ConfigError(f"{_METADATA_FILENAME} not found under {distrokid_source}")
+        album_meta = parse_album_metadata(metadata_path)
+        album_title = album_meta["album_title"] or kebab_to_title(source_dir.name)
+        title_by_filename = {row["filename"]: row["title"] for row in parse_track_table(metadata_path)}
 
     return {
         "profile": profile,
         "release": {
-            "album_title": album_meta["album_title"] or kebab_to_title(source_dir.name),
+            "album_title": album_title,
             "tracks": _disc_tracks(paths.root, source_dir, title_by_filename, assets_prefix=assets_prefix),
             "cover": _disc_cover(paths, source_dir, assets_prefix=assets_prefix),
             "release_date": _read_release_date(paths),

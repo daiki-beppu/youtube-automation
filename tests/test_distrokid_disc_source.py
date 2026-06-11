@@ -37,6 +37,7 @@ from youtube_automation.utils.config.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
+from youtube_automation.utils.distrokid_spec import write_collection_spec
 from youtube_automation.utils.exceptions import ConfigError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
@@ -470,3 +471,167 @@ def test_release_asset_serves_disc_source_mp3(serve, tmp_path):
         assert resp.status == 200
         assert resp.headers.get("Content-Type") == "audio/mpeg"
         assert resp.read() == _MP3_BYTES
+
+
+# ---------------------------------------------------------------------------
+# spec.json 優先経路（#941）
+# ---------------------------------------------------------------------------
+
+
+def _make_spec(distrokid_dir, disc_slug, tracks, *, album_title="Spec Album Title"):
+    """30-distrokid/spec.json を作成する（#941 テスト用）."""
+    spec = {
+        "version": 1,
+        "artist": "Test Artist",
+        "language": "English",
+        "genre_primary": "Electronic",
+        "genre_secondary": None,
+        "label": None,
+        "discs": [
+            {
+                "slug": disc_slug,
+                "album_title": album_title,
+                "tracks": [{"filename": fn, "title": title} for fn, title in tracks],
+            }
+        ],
+    }
+    write_collection_spec(distrokid_dir, spec)
+    return spec
+
+
+def test_spec_priority_over_metadata_md_no_metadata(tmp_path):
+    """Given spec.json あり + metadata.md 無し
+    When distrokid_source 指定で build_release_payload
+    Then spec の album_title / track title で payload が組み上がる。
+    (#941: spec が SSOT、metadata.md 不在でも raise しない)
+    """
+    collection = _make_collection(tmp_path)
+    disc_slug = "disc1-coding-focus-vol1"
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    # mp3 を 2 つ置く
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (source_dir / "02-easy-release.mp3").write_bytes(_MP3_BYTES)
+    # metadata.md は置かない
+    # cover_art_3000.jpg
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+
+    distrokid_dir = collection / "30-distrokid"
+    _make_spec(
+        distrokid_dir,
+        disc_slug,
+        [
+            ("01-slip-right-through.mp3", "Slip Right Through"),
+            ("02-easy-release.mp3", "Easy Release"),
+        ],
+        album_title="Spec Album Title",
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    payload = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
+
+    assert payload["release"]["album_title"] == "Spec Album Title"
+    assert payload["release"]["tracks"][0]["title"] == "Slip Right Through"
+    assert payload["release"]["tracks"][1]["title"] == "Easy Release"
+    assert len(payload["release"]["tracks"]) == 2
+
+
+def test_spec_priority_unknown_mp3_falls_back_to_stem(tmp_path):
+    """Given spec.json あり + spec に存在しない mp3 が disc に追加された
+    When distrokid_source 指定で build_release_payload
+    Then 未知 filename は stem をタイトルにフォールバック（既存 _disc_tracks の救済ロジック）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    disc_slug = "disc1-coding-focus-vol1"
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (source_dir / "99-extra-unknown.mp3").write_bytes(_MP3_BYTES)  # spec に無い
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+
+    distrokid_dir = collection / "30-distrokid"
+    _make_spec(
+        distrokid_dir,
+        disc_slug,
+        [("01-slip-right-through.mp3", "Slip Right Through")],  # 99-extra-unknown.mp3 は含めない
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    tracks = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)["release"]["tracks"]
+
+    extra = next(t for t in tracks if t["filename"] == "99-extra-unknown.mp3")
+    assert extra["title"] == "99-extra-unknown"  # stem フォールバック
+
+
+def test_spec_disc_entry_missing_falls_back_to_metadata(tmp_path):
+    """Given spec.json はあるが対象 disc のエントリが無い
+    When distrokid_source 指定で build_release_payload
+    Then metadata.md フォールバック経路に乗る（metadata.md 不在なら従来どおり ConfigError）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+    # metadata.md を置かない → フォールバック先も不在 → ConfigError
+
+    distrokid_dir = collection / "30-distrokid"
+    # spec には別の disc しかない
+    _make_spec(
+        distrokid_dir,
+        "disc99-other-vol99",  # 対象 disc1-coding-focus-vol1 とは別 slug
+        [("01-slip-right-through.mp3", "Slip Right Through")],
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError, match="metadata.md"):
+        build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
+
+
+def test_spec_disc_entry_missing_uses_metadata_when_present(tmp_path):
+    """Given spec.json に対象 disc エントリ無し + metadata.md あり
+    When distrokid_source 指定で build_release_payload
+    Then metadata.md の値を使う（後方互換フォールバック）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    _make_disc_source(collection, album_title="MD Album Title")
+
+    distrokid_dir = collection / "30-distrokid"
+    # spec には別の disc しかない（対象エントリ無し）
+    _make_spec(
+        distrokid_dir,
+        "disc99-other",
+        [("01-slip-right-through.mp3", "Slip Right Through")],
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    payload = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
+
+    # metadata.md の album_title を使う
+    assert payload["release"]["album_title"] == "MD Album Title"
+
+
+def test_spec_corrupted_raises_config_error(tmp_path):
+    """Given 破損した spec.json（不正 JSON）
+    When distrokid_source 指定で build_release_payload
+    Then ConfigError を raise する（fail-loud; 黙った md フォールバックは行わない）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+
+    # 破損した spec.json を書き込む
+    distrokid_dir = collection / "30-distrokid"
+    (distrokid_dir / "spec.json").write_text("{ broken json }", encoding="utf-8")
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError):
+        build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)

@@ -34,6 +34,7 @@ from youtube_automation.utils.distrokid_prepare import (
     verify_roundtrip,
     write_release_date,
 )
+from youtube_automation.utils.distrokid_spec import read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 # fake mp3 bytes（test_distrokid_disc_source.py と同じパターン）
@@ -988,3 +989,186 @@ def _unique_spec_inplace(spec: dict) -> None:
                 track.pop("needs_unique", None)
             else:
                 seen[title] = seen.get(title, 0) + 1
+
+
+# ---------------------------------------------------------------------------
+# 10. spec.json canonical 書き込み（#941）
+# ---------------------------------------------------------------------------
+
+
+class TestBuildWritesCanonicalSpec:
+    """build サブコマンドが canonical 30-distrokid/spec.json を書くことを検証する（#941）."""
+
+    def _run_build(self, collection: Path, spec_path: Path, monkeypatch) -> None:
+        """build を実行するヘルパー."""
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            lambda p: 199.0,
+        )
+        sys.argv = ["yt-distrokid-prepare", "build", "--spec", str(spec_path), str(collection)]
+        dp_script.main()
+
+    def _prepare(self, tmp_path: Path, n_tracks: int = 2) -> tuple[Path, Path]:
+        """コレクションと外部 spec パスを用意して返す."""
+        collection = _make_collection(tmp_path, n_tracks=n_tracks)
+        music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
+        filenames = sorted(f.name for f in music_dir.glob("*.mp3"))
+        chunks = split_tracks(filenames)
+        spec = build_draft_spec(
+            collection.name,
+            chunks,
+            artist="Test Artist",
+            language="English",
+            genre_primary="Electronic",
+            genre_secondary=None,
+        )
+        _unique_spec_inplace(spec)
+        # canonical パス外（/tmp 相当）に spec を置く（canonical 外パス指定のテスト）
+        external_spec_path = tmp_path / "external-spec.json"
+        external_spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        return collection, external_spec_path
+
+    def test_build_writes_canonical_spec_json(self, tmp_path, monkeypatch):
+        """Given --spec に canonical パス外のファイルを指定
+        When build を実行する
+        Then 30-distrokid/spec.json が書き込まれる（canonical パス書き込み）。
+        (#941)
+        """
+        collection, external_spec_path = self._prepare(tmp_path)
+
+        self._run_build(collection, external_spec_path, monkeypatch)
+
+        canonical = collection / DISTROKID_DIRNAME / SPEC_FILENAME
+        assert canonical.is_file()
+
+    def test_build_canonical_spec_content_matches_loaded_spec(self, tmp_path, monkeypatch):
+        """Given 外部 spec ファイルで build
+        When 完了後に 30-distrokid/spec.json を read_collection_spec で読む
+        Then 外部 spec の内容と一致する。
+        (#941)
+        """
+        collection, external_spec_path = self._prepare(tmp_path)
+        original_spec = json.loads(external_spec_path.read_text(encoding="utf-8"))
+
+        self._run_build(collection, external_spec_path, monkeypatch)
+
+        result = read_collection_spec(collection / DISTROKID_DIRNAME)
+
+        assert result is not None
+        assert result["artist"] == original_spec["artist"]
+        assert result["discs"] == original_spec["discs"]
+
+    def test_build_force_rewrites_canonical_spec(self, tmp_path, monkeypatch):
+        """Given 1 回目 build で spec.json が書かれた後、--force で再 build
+        When 2 回目の build を実行する
+        Then spec.json が更新される（再書き込み冪等）。
+        (#941)
+        """
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        collection, external_spec_path = self._prepare(tmp_path)
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            lambda p: 199.0,
+        )
+
+        # 1 回目
+        sys.argv = ["yt-distrokid-prepare", "build", "--spec", str(external_spec_path), str(collection)]
+        dp_script.main()
+
+        canonical = collection / DISTROKID_DIRNAME / SPEC_FILENAME
+        assert canonical.is_file()
+        first_mtime = canonical.stat().st_mtime
+
+        # 少し待って mtime を変化させる
+        import time
+
+        time.sleep(0.05)
+
+        # 2 回目（--force）
+        sys.argv = [
+            "yt-distrokid-prepare",
+            "build",
+            "--spec",
+            str(external_spec_path),
+            str(collection),
+            "--force",
+        ]
+        dp_script.main()
+
+        second_mtime = canonical.stat().st_mtime
+        # 2 回目の build で spec.json が更新された（mtime が変わった）
+        assert second_mtime >= first_mtime
+
+    def test_refused_build_does_not_touch_canonical_spec(self, tmp_path, monkeypatch):
+        """Given 1 回目 build 済み、外部 spec の内容を変更して --force なしで再 build
+        When 冪等性チェックで build が拒否される（exit 1）
+        Then canonical spec.json は 1 回目の内容のまま変更されない
+        （build が拒否されたらディスク上の状態を一切変更しない）。
+        (#941)
+        """
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        collection, external_spec_path = self._prepare(tmp_path)
+
+        self._run_build(collection, external_spec_path, monkeypatch)
+
+        canonical = collection / DISTROKID_DIRNAME / SPEC_FILENAME
+        first_content = canonical.read_text(encoding="utf-8")
+
+        # 外部 spec の artist を変更して --force なしで再 build → 拒否される
+        modified = json.loads(external_spec_path.read_text(encoding="utf-8"))
+        modified["artist"] = "Changed Artist"
+        external_spec_path.write_text(json.dumps(modified, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        sys.argv = ["yt-distrokid-prepare", "build", "--spec", str(external_spec_path), str(collection)]
+        with pytest.raises(SystemExit) as exc_info:
+            dp_script.main()
+        assert exc_info.value.code == 1
+
+        # 拒否された build は canonical spec を書き換えない
+        assert canonical.read_text(encoding="utf-8") == first_content
+
+    def test_build_canonical_path_spec_self_overwrite_ok(self, tmp_path, monkeypatch):
+        """Given --spec に canonical パス（30-distrokid/spec.json）を直接指定
+        When build を実行する
+        Then 自己上書きで問題なく完了する（canonical と同一パスでも OK）。
+        (#941)
+        """
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        collection = _make_collection(tmp_path, n_tracks=2)
+        music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
+        filenames = sorted(f.name for f in music_dir.glob("*.mp3"))
+        chunks = split_tracks(filenames)
+        spec = build_draft_spec(
+            collection.name,
+            chunks,
+            artist="Test Artist",
+            language="English",
+            genre_primary="Electronic",
+            genre_secondary=None,
+        )
+        _unique_spec_inplace(spec)
+
+        # canonical パス = 30-distrokid/spec.json に spec を書く
+        canonical = collection / DISTROKID_DIRNAME / SPEC_FILENAME
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        canonical.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            lambda p: 199.0,
+        )
+
+        # canonical パス自体を --spec に渡す（自己上書き）
+        sys.argv = ["yt-distrokid-prepare", "build", "--spec", str(canonical), str(collection)]
+        dp_script.main()  # 例外なし
+
+        # spec.json が残存している
+        assert canonical.is_file()
+        result = read_collection_spec(collection / DISTROKID_DIRNAME)
+        assert result is not None
