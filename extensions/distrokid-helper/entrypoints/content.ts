@@ -9,8 +9,9 @@
 // 「続ける」等の送信系操作は一切行わない（規約遵守・スコープ外）。
 
 import {
-  acceptTermsAgreement,
+  acceptImportantTerms,
   assertNewRelease,
+  checkAllStores,
   injectAiDisclosure,
   injectAlbumTitle,
   injectAppleMusicCredits,
@@ -20,6 +21,7 @@ import {
   injectSongwriter,
   injectTrackFile,
   injectTrackTitle,
+  RELOAD_GUIDANCE,
   resolveTrackUuids,
   scrollToDoneButton,
   setTrackCount,
@@ -48,7 +50,7 @@ const documentInjector: Injector = {
     const uuids = resolveTrackUuids(document);
     if (uuids.length !== release.tracks.length) {
       throw new Error(
-        `track 数が DOM と一致しません: DOM=${uuids.length}, payload=${release.tracks.length}`,
+        `track 数が DOM と一致しません: DOM=${uuids.length}, payload=${release.tracks.length}。${RELOAD_GUIDANCE}`,
       );
     }
     release.tracks.forEach((track, i) => {
@@ -58,13 +60,14 @@ const documentInjector: Injector = {
       }
     });
 
-    // (C) Apple Music クレジット（演奏者 / プロデューサー）を全 track に注入する（#888 / #919）。
-    // name 欄に #artistName を、role 欄に profile.credits.performer_role / producer_role を入れる。
-    injectAppleMusicCredits(document, release.tracks.length, profile.credits);
-
-    // (D) 利用規約同意 + upsell 強制 uncheck（#919）。送信前提条件と請求額 \$0 保証。
-    acceptTermsAgreement(document);
+    // Apple Music check が credits 可視化の前提になるため、ストア check を先に行う（#923）。
+    checkAllStores(document);
+    // chk* 除外済みなので配信先は巻き込まない（#923）。
     uncheckUpsells(document);
+    // ストア check 後に可視化されるため await（#923）。
+    await injectAppleMusicCredits(document, release.tracks.length, profile.credits);
+    // ストア check 後でないと条件付き areyousure が不可視のため、ストア check 後に実行（#923）。
+    acceptImportantTerms(document);
   },
   injectTrackFile(trackIndex: number, file: File): void {
     // injector は 0-indexed、DOM の file input は 1-indexed。

@@ -141,20 +141,27 @@ export const APPLE_CREDIT_SELECTORS = {
   producerRoleByTrack: (track1: number) => `#track-${track1}-producer-1-role`,
 } as const;
 
-// 利用規約同意 checkbox（#919）。「DistroKid ディストリビューション規約を読み、同意しました」。
-// unchecked のままだと送信時に validation で止まるため、フィル完了時点で強制 check する。
-export const TERMS_AGREEMENT_SELECTOR = "#areyousuretandc";
+// credit trigger（「クレジットを追加」）の可視化待ち上限（ms）（#923）。
+// checkAllStores() 後、DistroKid 側が Apple Music ストア check に応じて credit trigger を
+// re-render するまでの待ち上限。既存定数（AI_MODAL_WAIT_TIMEOUT_MS / TRACK_ROW_WAIT_TIMEOUT_MS）
+// に合わせ 10_000 ms とし、実機の遅延に対して安全側を取る。
+export const CREDIT_TRIGGER_WAIT_TIMEOUT_MS = 10_000;
 
 // 続けるボタン（#919）。フィル完了後、確認ボタンが視界に入るよう scrollIntoView する。
 // 規約遵守でクリックは行わない（送信は必ず人間が押す）。
 export const DONE_BUTTON_SELECTOR = "#doneButton";
 
-// オプション（upsell）checkbox 群（#919）。レガシーパック / ディスカバリーパック /
-// ストアマキシマイザー / DistroVid / 音量正規化 等の有料オプションを誤クリックから守るため、
-// フィル時に強制 uncheck して請求額が 0 ドルになる状態を保証する。
-// `name="store"` はディスカバリーパック専用、`name="extras"` がそれ以外の upsell 全部。
+// 実配信先ストア checkbox 群（#923）。DistroKid のデフォルトは全ストア check。
+// name="store" は upsell（shazam / audiomack）と共有されるため id^="chk" で区別する（#923）。
+export const STORE_SELECTORS = {
+  distribution: 'input[type="checkbox"][name="store"][id^="chk"]',
+} as const;
+
+// オプション（upsell）checkbox 群（#923）。
+// name="store" は実配信先 26 個と共有されるが、実配信先は id^="chk" を持つため
+// :not([id^="chk"]) で shazam（ディスカバリーパック）/ audiomack のみ対象にする（#923）。
 export const UPSELL_SELECTORS = {
-  store: 'input[type="checkbox"][name="store"]',
+  store: 'input[type="checkbox"][name="store"]:not([id^="chk"])',
   extras: 'input[type="checkbox"][name="extras"]',
 } as const;
 
@@ -164,6 +171,10 @@ export const NEW_RELEASE_RADIO_SELECTOR = '[name^="previouslyReleased_"][value="
 // track タイトル input の name 接頭辞（DOM order で uuid を列挙する基点）。
 const TITLE_NAME_PREFIX = "title_";
 const TITLE_NAME_SELECTOR = `[name^="${TITLE_NAME_PREFIX}"]`;
+
+// リロードで直るエラーへのリロード案内（#923）。VisibilityTimeoutError / ModalTimeoutError /
+// TrackCountTimeoutError の message 末尾に付加し、ユーザーがリロードで再試行できるようにする。
+export const RELOAD_GUIDANCE = "ページをリロードして最初からやり直してください。";
 
 // 注入先フィールドが見つからないことを表す専用エラー。
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
@@ -190,7 +201,7 @@ export class OptionNotFoundError extends Error {
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
 export class ModalTimeoutError extends Error {
   constructor(selector: string) {
-    super(`AI 開示 modal の状態変化を待てませんでした: ${selector}`);
+    super(`AI 開示 modal の状態変化を待てませんでした: ${selector}。${RELOAD_GUIDANCE}`);
     this.name = "ModalTimeoutError";
   }
 }
@@ -199,8 +210,17 @@ export class ModalTimeoutError extends Error {
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
 export class TrackCountTimeoutError extends Error {
   constructor(selector: string, expected: number) {
-    super(`track 行の生成を待てませんでした: ${selector}（期待数=${expected}）`);
+    super(`track 行の生成を待てませんでした: ${selector}（期待数=${expected}）。${RELOAD_GUIDANCE}`);
     this.name = "TrackCountTimeoutError";
+  }
+}
+
+// 要素の可視化が制限時間内に観測できなかったことを表す専用エラー（#923）。
+// silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
+export class VisibilityTimeoutError extends Error {
+  constructor(selector: string) {
+    super(`要素の可視化を待てませんでした: ${selector}。${RELOAD_GUIDANCE}`);
+    this.name = "VisibilityTimeoutError";
   }
 }
 
@@ -317,11 +337,34 @@ export function injectReleaseDate(root: ParentNode, releaseDate: string | null):
   setNativeValue(requireInput(root, RELEASE_DATE_SELECTOR), releaseDate);
 }
 
-// DistroKid 利用規約同意 checkbox を強制 check する（#919）。
-// `#areyousuretandc` が unchecked のままだと送信時に validation で止まるため、フィル時に
-// 必ず check する。要素不在は FieldNotFoundError（fail-loud）で UI 変更を即座に検知する。
-export function acceptTermsAgreement(root: ParentNode): void {
-  setChecked(requireInput(root, TERMS_AGREEMENT_SELECTOR), true);
+// 重要事項 checkbox の id 一覧（常時可視・rect 0×0 レースを回避するため id 直接取得）（#923）。
+const IMPORTANT_TERMS_REQUIRED_IDS = [
+  "#areyousurepromoservices",
+  "#areyousurerecorded",
+  "#areyousureotherartist",
+  "#areyousuretandc",
+] as const;
+
+// 条件付き重要事項 checkbox のセレクタ（ストア選択に連動して可視化）（#923）。
+const IMPORTANT_TERMS_CONDITIONAL_SELECTOR = 'input[type="checkbox"].areyousure';
+
+// 重要事項 checkbox（重要事項・利用規約等）を check する（#923）。
+// required 4 個は id 直接取得（isVisible 非依存）で確実に check する（bbox 0 レース回避）。
+// conditional は .areyousure を列挙し required id を除外した上で可視のもののみ check する
+// （不可視はストア未選択等で DistroKid が要求していない状態なので触らない）。
+export function acceptImportantTerms(root: ParentNode): void {
+  // required 4 個を id で直接 check（bbox 0 レース回避）
+  for (const id of IMPORTANT_TERMS_REQUIRED_IDS) {
+    setChecked(requireInput(root, id), true);
+  }
+  // conditional: .areyousure を列挙し、required id を除外した上で可視のもののみ check
+  const requiredIds = new Set(IMPORTANT_TERMS_REQUIRED_IDS.map((id) => id.slice(1)));
+  const conditionals = Array.from(
+    root.querySelectorAll<HTMLInputElement>(IMPORTANT_TERMS_CONDITIONAL_SELECTOR),
+  ).filter((cb) => !requiredIds.has(cb.id) && isVisible(cb));
+  for (const cb of conditionals) {
+    setChecked(cb, true);
+  }
 }
 
 // 続けるボタン（`#doneButton`）を視界へスクロールする（#919）。
@@ -348,6 +391,23 @@ export function uncheckUpsells(root: ParentNode): void {
   ];
   for (const cb of all) {
     setChecked(cb, false);
+  }
+}
+
+// 配信先ストア 26 個をすべて check する（#923）。
+// DistroKid のデフォルトは全ストア check だが、過去のバグで uncheck 状態になることがある。
+// Apple Music が checked でないと credit 入力欄が不可視になり、後続の injectAppleMusicCredits が
+// 失敗する原因になる（順序依存あり）（#923）。
+// 対象が 0 件なら FieldNotFoundError で fail-loud（DistroKid UI 変更の即検知）。
+export function checkAllStores(root: ParentNode): void {
+  const checkboxes = Array.from(
+    root.querySelectorAll<HTMLInputElement>(STORE_SELECTORS.distribution),
+  );
+  if (checkboxes.length === 0) {
+    throw new FieldNotFoundError(STORE_SELECTORS.distribution);
+  }
+  for (const cb of checkboxes) {
+    setChecked(cb, true);
   }
 }
 
@@ -542,6 +602,34 @@ export function waitForElementCount(
   });
 }
 
+// 指定要素が可視になるのを待つ（既に可視なら即解決）。制限時間超過で VisibilityTimeoutError。
+// checkAllStores() 後に credit trigger が visible 化するまでの待機に使用する（#923）。
+export function waitForElementVisible(el: HTMLElement, timeoutMs: number): Promise<void> {
+  if (isVisible(el)) {
+    return Promise.resolve();
+  }
+  const observeRoot = el.ownerDocument.body ?? el.ownerDocument;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new VisibilityTimeoutError(el.id ? `#${el.id}` : el.tagName.toLowerCase()));
+    }, timeoutMs);
+    const observer = new MutationObserver(() => {
+      if (isVisible(el)) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve();
+      }
+    });
+    observer.observe(observeRoot, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class", "hidden"],
+    });
+  });
+}
+
 // トラック数 select に曲数を set し、track 行（title_<uuid>）の生成完了を待つ（#888）。
 // value 変更だけでは onchange handler が動かないため change を bubbles:true で発火する。
 // 行生成を待ってから後続の注入（プロファイル / タイトル / credit）へ進む（順序保証）。
@@ -577,7 +665,7 @@ function requireCreditTrigger(root: ParentNode): HTMLElement {
   return trigger;
 }
 
-// Apple Music クレジット（演奏者 / プロデューサー）を全 track に注入する（#888 / #919）。
+// Apple Music クレジット（演奏者 / プロデューサー）を全 track に注入する（#888 / #919 / #923）。
 //
 // トップレベルの「クレジットを追加」を 1 回 click して全 track の入力欄を visible 化し、
 // 各 track の performer / producer に以下を注入する:
@@ -586,13 +674,18 @@ function requireCreditTrigger(root: ParentNode): HTMLElement {
 // role 欄は `dk-searchable-select__native` クラスで display:none に隠れたネイティブ select だが、
 // `setSelectValue` でネイティブ側に setSelectedIndex + change dispatch すれば DistroKid 独自 UI
 // （`.dk-searchable-select__input`）の表示テキストも同期される（実 DOM 検証済み・#919）。
-export function injectAppleMusicCredits(
+// Apple Music ストア check 後に credit trigger が可視化されるまで待つ（#923）。
+// checkAllStores() でストアを check してから本関数が呼ばれる順序依存（content.ts で保証）。
+export async function injectAppleMusicCredits(
   root: ParentNode,
   trackCount: number,
   credits: DistrokidProfileCredits,
-): void {
+): Promise<void> {
   const artistName = requireArtistName(root);
-  requireCreditTrigger(root).click();
+  const trigger = requireCreditTrigger(root);
+  // Apple Music ストア check 後に credit trigger が可視化されるまで待つ（#923）。
+  await waitForElementVisible(trigger, CREDIT_TRIGGER_WAIT_TIMEOUT_MS);
+  trigger.click();
   for (let track1 = 1; track1 <= trackCount; track1 += 1) {
     setNativeValue(
       requireInput(root, APPLE_CREDIT_SELECTORS.performerNameByTrack(track1)),
