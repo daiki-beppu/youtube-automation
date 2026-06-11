@@ -112,7 +112,7 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
             "apply_to_all": True,
         },
         "credits": {
-            "performer_role": "Audio",
+            "performer_role": "Synthesizer",
             "producer_role": "Producer",
         },
     }

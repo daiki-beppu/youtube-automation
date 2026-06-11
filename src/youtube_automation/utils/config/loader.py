@@ -607,7 +607,7 @@ def _build_credits(raw: object) -> DistrokidProfileCredits:
     if not isinstance(raw, dict):
         raise ConfigError(f"distrokid.profile.credits は object でなければなりません（got {type(raw).__name__}）")
     return DistrokidProfileCredits(
-        performer_role=str(raw.get("performer_role", "Audio")),
+        performer_role=str(raw.get("performer_role", "Synthesizer")),
         producer_role=str(raw.get("producer_role", "Producer")),
     )
 
