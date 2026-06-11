@@ -6,6 +6,8 @@
 import {
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
+  DISTROKID_COLLECTIONS_ROUTE,
+  DISTROKID_RELEASES_ROUTE,
   PLAYLISTS_CAPTURE_ROUTE,
   PROMPTS_ROUTE,
 } from "./constants";
@@ -192,4 +194,69 @@ export function excludeMappedCollections(
   collections: CollectionSummary[],
 ): CollectionSummary[] {
   return collections.filter((c) => c.mapped !== true);
+}
+
+/** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */
+export interface DistrokidCollectionSummary {
+  collection_id: string;
+  name: string;
+  disc: string;
+  album_title: string;
+  track_count: number;
+  released: boolean;
+}
+
+/** POST /distrokid/releases の body (#934)。配信済みとして記録する disc の識別情報。 */
+export interface DistrokidReleaseRecord {
+  collection_id: string;
+  disc: string;
+  album_title: string;
+}
+
+/**
+ * DistroKid dir mode サーバーの disc 一覧を取得する (#934)。
+ * 非 2xx は fail-loud で throw（単一 mode サーバーの 404 は popup の fallback トリガー）。
+ * 空配列は throw せず返す（0 件 = 未配信 disc なしの正常ケース）。
+ */
+export async function fetchDistrokidCollections(
+  baseUrl: string,
+): Promise<DistrokidCollectionSummary[]> {
+  const resp = await fetch(`${baseUrl}${DISTROKID_COLLECTIONS_ROUTE}`);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  const data: unknown = await resp.json();
+  if (!Array.isArray(data)) {
+    throw new Error("配列ではない JSON が返りました。");
+  }
+  return data as DistrokidCollectionSummary[];
+}
+
+/**
+ * 配信済み (released===true) の disc を除外する純関数 (#934)。
+ * fetchDistrokidCollections の結果から popup のドロップダウンに出す候補を絞る。
+ */
+export function excludeReleasedDiscs(
+  list: DistrokidCollectionSummary[],
+): DistrokidCollectionSummary[] {
+  return list.filter((item) => item.released !== true);
+}
+
+/**
+ * フィル完了後に配信済みとして記録する (#934)。POST /distrokid/releases。
+ * 失敗は caller が warn 表示するだけで、フィル成功を覆さない補助機能として扱う。
+ * 非 2xx は fail-loud で throw する（caller が warn 処理する）。
+ */
+export async function recordDistrokidRelease(
+  baseUrl: string,
+  record: DistrokidReleaseRecord,
+): Promise<void> {
+  const resp = await fetch(`${baseUrl}${DISTROKID_RELEASES_ROUTE}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(record),
+  });
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
 }
