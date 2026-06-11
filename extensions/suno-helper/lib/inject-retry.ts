@@ -7,6 +7,18 @@
 // この retry ループを content.ts のクロージャ内インライン関数にすると unit test から到達できないため、
 // 依存（inject / getInFlightClipCount / waitForInFlightIncrease / isAborted）を DI した純ロジックとして切り出す。
 
+/**
+ * 全 attempt で in-flight 増加が確認できなかった（= 投入が Suno に受理されていない）終端エラー (#924)。
+ * runAll の ERROR catch で instanceof を判定し、silent drop 確定の場合は current entry を再生成する
+ * よう interruptIndex を currentIndex に保つ（投入済み・受理済みの entry は skip して重複を防ぐ方針との対称）。
+ */
+export class InjectNotAcknowledgedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InjectNotAcknowledgedError";
+  }
+}
+
 export interface InjectWithVerificationOptions {
   /** entry を 1 回 inject + Generate する（= () => injectAndGenerate(entry, i, total)）。 */
   inject: () => Promise<void>;
@@ -60,5 +72,7 @@ export async function injectWithVerification(options: InjectWithVerificationOpti
       );
     }
   }
-  throw new Error(`${options.describeEntry()} の inject が ${options.maxRetry + 1} 回 silent drop されました`);
+  throw new InjectNotAcknowledgedError(
+    `${options.describeEntry()} の inject が ${options.maxRetry + 1} 回 silent drop されました`,
+  );
 }

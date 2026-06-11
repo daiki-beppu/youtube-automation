@@ -30,7 +30,11 @@
 //   - 全 attempt drop なら throw（fail-loud、describeEntry をメッセージに含む）
 import { describe, expect, it, vi } from "vitest";
 
-import { injectWithVerification, type InjectWithVerificationOptions } from "../lib/inject-retry";
+import {
+  InjectNotAcknowledgedError,
+  injectWithVerification,
+  type InjectWithVerificationOptions,
+} from "../lib/inject-retry";
 
 /** 既定値を持つ options を作り、test ごとに必要な mock だけ override する。 */
 function makeOptions(overrides: Partial<InjectWithVerificationOptions> = {}): InjectWithVerificationOptions {
@@ -141,5 +145,46 @@ describe("injectWithVerification: inject 受理検証 + retry (#864)", () => {
 
     expect(inject).toHaveBeenCalledTimes(1);
     expect(waitForInFlightIncrease).not.toHaveBeenCalled(); // 中断後は受理確認に進まない
+  });
+});
+
+describe("InjectNotAcknowledgedError: 全 attempt 未受理の終端エラー (#924)", () => {
+  it("Given 全 attempt drop When 終端 throw Then InjectNotAcknowledgedError の instanceof である", async () => {
+    const waitForInFlightIncrease = vi.fn().mockResolvedValue(false);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    let caughtError: unknown;
+    try {
+      await injectWithVerification(makeOptions({ waitForInFlightIncrease, maxRetry: 1 }));
+    } catch (err) {
+      caughtError = err;
+    }
+    warn.mockRestore();
+
+    expect(caughtError).toBeInstanceOf(InjectNotAcknowledgedError);
+  });
+
+  it("Given InjectNotAcknowledgedError When name を確認 Then 'InjectNotAcknowledgedError' である", () => {
+    const err = new InjectNotAcknowledgedError("テスト");
+    expect(err.name).toBe("InjectNotAcknowledgedError");
+  });
+
+  it("Given InjectNotAcknowledgedError When message を確認 Then 渡したメッセージがそのまま保持される（メッセージ不変）", async () => {
+    const waitForInFlightIncrease = vi.fn().mockResolvedValue(false);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const describeEntry = () => "entry 3 (silent-drop-test)";
+
+    let caughtError: unknown;
+    try {
+      await injectWithVerification(makeOptions({ waitForInFlightIncrease, maxRetry: 0, describeEntry }));
+    } catch (err) {
+      caughtError = err;
+    }
+    warn.mockRestore();
+
+    expect(caughtError).toBeInstanceOf(InjectNotAcknowledgedError);
+    expect((caughtError as InjectNotAcknowledgedError).message).toBe(
+      "entry 3 (silent-drop-test) の inject が 1 回 silent drop されました",
+    );
   });
 });

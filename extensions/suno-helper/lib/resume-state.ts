@@ -14,7 +14,13 @@ import { RESUME_STATE_KEY } from "../../shared/constants";
 export interface ResumeState {
   /** 停止した collection の識別子（popup 選択中の collection id）。 */
   collectionId: string;
-  /** 停止した entry の 0-based index。 */
+  /**
+   * 次に実行する 0-based index（投入済み entry を含まない）(#924)。
+   * - Generate click 前に中断: 中断 entry の index（再開時に再生成する）。
+   * - Generate click 済み・受理確認済み: currentIndex + 1（再開時に重複生成しない）。
+   * - Generate click 済み・silent drop 確定（InjectNotAcknowledgedError）: currentIndex（再開時に再生成する）。
+   * `failedIndex === total` のときは全 entry 投入済みを意味し、再開時は playlist phase のみ実行される。
+   */
   failedIndex: number;
   /** 連続実行対象の総 entry 数。 */
   total: number;
@@ -96,6 +102,17 @@ export function resumeBannerRange(banner: ResumeBanner): { start: number; end: n
  */
 export function resumeRunRange(banner: ResumeBanner): RunRange {
   return { start: banner.failedIndex, end: banner.total - 1 };
+}
+
+/**
+ * 中断時に persist / emit する「次に実行する 0-based index」を決定する (#924)。
+ *   - submitted（当該 entry の Generate を click 済み）かつ未受理確定でない → currentIndex + 1（再生成しない）
+ *   - それ以外（click 前の中断 / silent drop 確定）→ currentIndex（再開時に再生成）
+ * currentIndex + 1 === total のケースは playlist-phase persist (failedIndex=total) と同義になり、
+ * resumeRunRange → {start: total, end: total-1} → runAll 0 回ループ → playlist 追加のみ実行となる。
+ */
+export function resolveInterruptIndex(currentIndex: number, submitted: boolean, isNotAcknowledged: boolean): number {
+  return submitted && !isNotAcknowledged ? currentIndex + 1 : currentIndex;
 }
 
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---
