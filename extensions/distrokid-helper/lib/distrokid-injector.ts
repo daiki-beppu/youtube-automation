@@ -330,15 +330,27 @@ export function injectAlbumTitle(root: ParentNode, albumTitle: string): void {
   setNativeValue(requireInput(root, ALBUM_SELECTORS.album_title), albumTitle);
 }
 
-// リリース日を注入する（#919）。未確定 = null なら注入しない（フォーム空のまま）。
+// リリース日を注入する（#919 / #932）。未確定 = null なら注入しない（フォーム空のまま）。
 //
 // `#release-date-dp` は `<input type=date>` で id 一意。同じく `injectAlbumTitle` と
 // 同じ理由で isVisible filter を外し id 直接取得に変更した（race condition 回避）。
+//
+// DistroKid の契約プランによってはリリース日指定 UI 自体が出ない場合があるため、
+// 値ありで要素不在のときは FieldNotFoundError を投げずに warn + skip してフィルを続行する（#932）。
 export function injectReleaseDate(root: ParentNode, releaseDate: string | null): void {
   if (releaseDate === null) {
     return;
   }
-  setNativeValue(requireInput(root, RELEASE_DATE_SELECTOR), releaseDate);
+  const el = root.querySelector<HTMLInputElement>(RELEASE_DATE_SELECTOR);
+  if (el === null) {
+    // リリース日指定は DistroKid の契約プランによって UI 自体が出ないため、
+    // 不在はプラン非対応とみなし warn + skip する（フィル全体は止めない）（#932）。
+    console.warn(
+      `[distrokid-helper] リリース日フィールドが見つからないため skip します（プラン非対応の可能性）: ${RELEASE_DATE_SELECTOR}（#932）`,
+    );
+    return;
+  }
+  setNativeValue(el, releaseDate);
 }
 
 // 重要事項 checkbox の id 一覧（常時可視・rect 0×0 レースを回避するため id 直接取得）（#923）。

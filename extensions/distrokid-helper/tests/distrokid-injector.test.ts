@@ -13,7 +13,7 @@
 // File 注入（DataTransfer）と MutationObserver による実展開待ちのうち、DOM 非同期挿入のみ
 // jsdom で再現できる。実 file input への DataTransfer セットは Playwright（tests/e2e）が担う。
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
   setNativeValue,
   injectProfile,
@@ -663,7 +663,11 @@ describe("injectAlbumTitle（#919 id 直接取得・fail-loud）", () => {
   });
 });
 
-describe("injectReleaseDate（#919 id 直接取得・null は skip）", () => {
+describe("injectReleaseDate（#919 id 直接取得・null は skip / #932 プラン非対応は warn+skip）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("null なら何もしない（要素不在でも throw しない）", () => {
     expect(() => injectReleaseDate(document, null)).not.toThrow();
   });
@@ -691,10 +695,16 @@ describe("injectReleaseDate（#919 id 直接取得・null は skip）", () => {
     expect(el.value).toBe("2026-07-01");
   });
 
-  it("値ありで要素不在なら FieldNotFoundError", () => {
-    expect(() => injectReleaseDate(document, "2026-07-01")).toThrow(
-      FieldNotFoundError,
-    );
+  it("値ありで要素不在でも throw せず skip し console.warn が呼ばれる（#932 プラン非対応）", () => {
+    // Given: #release-date-dp が DOM に存在しない（プラン非対応の契約の模倣）
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // When / Then: throw しない
+    expect(() => injectReleaseDate(document, "2026-07-01")).not.toThrow();
+
+    // Then: console.warn が呼ばれ、セレクタが含まれる
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0][0]).toContain("#release-date-dp");
   });
 });
 
