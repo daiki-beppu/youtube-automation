@@ -77,12 +77,13 @@ class DistrokidProfileCredits:
     のみを保持する。SELECT の `value` 属性に対応する英語値で指定する（i18n は DistroKid 側）。
 
     - `performer_role`: performer 行の role（`track-N-performer-1-role` の SELECT value）。
-      AI 制作 BGM は `"Audio"`（オーディオ）を既定とする。86 options。
+      実 DOM 検証（#930 / 2026-06-11）: 84 options・楽器名のみ。`"Audio"` は存在しない。
+      AI 制作 BGM は `"Synthesizer"` を既定とする。
     - `producer_role`: producer 行の role（`track-N-producer-1-role` の SELECT value）。
       `"Producer"`（プロデューサー）を既定とする。40 options。
     """
 
-    performer_role: str = "Audio"
+    performer_role: str = "Synthesizer"
     producer_role: str = "Producer"
 
 
@@ -95,7 +96,7 @@ class DistrokidProfile:
     - `sub_genre`: サブジャンル（genreSecondary SELECT の value、任意）
     - `songwriter`: 作曲者の本名（任意、省略時はトラック側で手入力）
     - `ai_disclosure`: AI 開示モーダルの設定（既定は全 AI 開示）
-    - `credits`: Apple Music クレジットの既定値（既定は Audio + Producer）
+    - `credits`: Apple Music クレジットの既定値（既定は Synthesizer + Producer）
     """
 
     language: str = ""

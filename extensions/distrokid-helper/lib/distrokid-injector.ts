@@ -686,7 +686,7 @@ function requireCreditTrigger(root: ParentNode): HTMLElement {
 // トップレベルの「クレジットを追加」を 1 回 click して全 track の入力欄を visible 化し、
 // 各 track の performer / producer に以下を注入する:
 //   - name 欄: `#artistName`（アカウント登録のアーティスト名）
-//   - role 欄: `credits.performer_role` / `credits.producer_role`（profile 由来、既定 Audio + Producer）
+//   - role 欄: `credits.performer_role` / `credits.producer_role`（profile 由来、既定 Synthesizer + Producer）
 // role 欄は `dk-searchable-select__native` クラスで display:none に隠れたネイティブ select だが、
 // `setSelectValue` でネイティブ側に setSelectedIndex + change dispatch すれば DistroKid 独自 UI
 // （`.dk-searchable-select__input`）の表示テキストも同期される（実 DOM 検証済み・#919）。
