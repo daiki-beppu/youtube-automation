@@ -29,6 +29,11 @@ import {
   waitForElement,
   waitForElementCount,
   waitForRemoval,
+  waitForElementVisible,
+  checkAllStores,
+  acceptImportantTerms,
+  scrollToDoneButton,
+  uncheckUpsells,
   PROFILE_SELECTORS,
   ALBUM_SELECTORS,
   RELEASE_DATE_SELECTOR,
@@ -39,18 +44,16 @@ import {
   APPLE_CREDIT_SELECTORS,
   AI_DISCLOSURE_SELECTORS,
   AI_MODAL_SELECTORS,
+  STORE_SELECTORS,
+  DONE_BUTTON_SELECTOR,
+  UPSELL_SELECTORS,
+  CREDIT_TRIGGER_WAIT_TIMEOUT_MS,
   FieldNotFoundError,
   ModalTimeoutError,
   TrackCountTimeoutError,
   OptionNotFoundError,
-} from "../lib/distrokid-injector";
-import {
-  acceptTermsAgreement,
-  scrollToDoneButton,
-  uncheckUpsells,
-  TERMS_AGREEMENT_SELECTOR,
-  DONE_BUTTON_SELECTOR,
-  UPSELL_SELECTORS,
+  VisibilityTimeoutError,
+  RELOAD_GUIDANCE,
 } from "../lib/distrokid-injector";
 import type {
   DistrokidProfile,
@@ -963,6 +966,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     const trigger = document.createElement("div");
     trigger.className = "requirements-item-title";
     trigger.textContent = "クレジットを追加";
+    makeVisible(trigger as HTMLElement);
     document.body.appendChild(trigger);
     let triggerClicks = 0;
     trigger.addEventListener("click", () => {
@@ -991,12 +995,12 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     return { getTriggerClicks: () => triggerClicks };
   }
 
-  it("trigger を 1 回 click し、全 track の name / role を注入する", () => {
+  it("trigger を 1 回 click し、全 track の name / role を注入する", async () => {
     // Given
     const { getTriggerClicks } = mountCreditDom(3, { artist: "Soulful Grooves" });
 
     // When
-    injectAppleMusicCredits(document, 3, SAMPLE_CREDITS);
+    await injectAppleMusicCredits(document, 3, SAMPLE_CREDITS);
 
     // Then: トリガーは 1 回だけ click され、全 track の name + role が注入される
     expect(getTriggerClicks()).toBe(1);
@@ -1016,7 +1020,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     }
   });
 
-  it("role select の change event が dispatch される（独自 UI 同期のため）", () => {
+  it("role select の change event が dispatch される（独自 UI 同期のため）", async () => {
     // Given: change event を観測する
     mountCreditDom(1, { artist: "X" });
     const perfRole = document.querySelector<HTMLSelectElement>("#track-1-performer-1-role")!;
@@ -1031,7 +1035,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     });
 
     // When
-    injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+    await injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
 
     // Then: setSelectValue は input + change を bubbles:true で 1 回ずつ dispatch する。
     // 実機 DistroKid の `dk-searchable-select` 独自 UI は change を listen して表示テキストを同期する。
@@ -1039,7 +1043,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     expect(prodChanges).toBe(1);
   });
 
-  it("複数の .requirements-item-title から「クレジットを追加」を textContent で選ぶ", () => {
+  it("複数の .requirements-item-title から「クレジットを追加」を textContent で選ぶ", async () => {
     // Given: 無関係な requirements-item-title が先に存在する
     const decoy = document.createElement("div");
     decoy.className = "requirements-item-title";
@@ -1052,14 +1056,14 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     const { getTriggerClicks } = mountCreditDom(1, { artist: "X" });
 
     // When
-    injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+    await injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
 
     // Then: 「クレジットを追加」のみ click され、decoy は触らない
     expect(getTriggerClicks()).toBe(1);
     expect(decoyClicks).toBe(0);
   });
 
-  it("#artistName が無ければ FieldNotFoundError", () => {
+  it("#artistName が無ければ FieldNotFoundError", async () => {
     // Given: trigger と入力欄はあるが #artistName が無い
     const trigger = document.createElement("div");
     trigger.className = "requirements-item-title";
@@ -1068,18 +1072,18 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     mountInput({ id: "track-1-performer-1-name", name: "performer-name" });
     mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
 
-    // Then
-    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+    // Then: async function → rejected promise
+    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
-  it("#artistName が空なら fail-loud（FieldNotFoundError ではない）", () => {
+  it("#artistName が空なら fail-loud（FieldNotFoundError ではない）", async () => {
     // Given: #artistName はあるが値が空
     mountCreditDom(1, { artist: "" });
 
     // Then: 未検出ではないため FieldNotFoundError とは区別される
     let caught: unknown;
     try {
-      injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+      await injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
     } catch (e) {
       caught = e;
     }
@@ -1087,7 +1091,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     expect(caught).not.toBeInstanceOf(FieldNotFoundError);
   });
 
-  it("trigger が無ければ FieldNotFoundError", () => {
+  it("trigger が無ければ FieldNotFoundError", async () => {
     // Given: #artistName と入力欄はあるが trigger が無い
     const artist = document.createElement("input");
     artist.id = "artistName";
@@ -1097,11 +1101,11 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     mountInput({ id: "track-1-performer-1-name", name: "performer-name" });
     mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
 
-    // Then
-    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+    // Then: async function → rejected promise
+    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
-  it("performer name 欄が無ければ FieldNotFoundError", () => {
+  it("performer name 欄が無ければ FieldNotFoundError", async () => {
     // Given: trigger と #artistName はあるが producer のみで performer name 欄が無い
     const artist = document.createElement("input");
     artist.id = "artistName";
@@ -1111,69 +1115,36 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     const trigger = document.createElement("div");
     trigger.className = "requirements-item-title";
     trigger.textContent = "クレジットを追加";
+    makeVisible(trigger as HTMLElement);
     document.body.appendChild(trigger);
     mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
     mountSelectWithOptions("track-1-producer-1-role", [{ value: "Producer", text: "プロデューサー" }]);
 
     // Then
-    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
-  it("performer role select が無ければ FieldNotFoundError", () => {
+  it("performer role select が無ければ FieldNotFoundError", async () => {
     // Given: role select だけが欠落している（name 欄は揃っている）
     mountCreditDom(1, { artist: "X", mountRole: false });
 
     // Then
-    expect(() => injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).toThrow(FieldNotFoundError);
+    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
-  it("role が option に無ければ OptionNotFoundError", () => {
+  it("role が option に無ければ OptionNotFoundError", async () => {
     // Given: performer_role に "NonExistent" を指定し、option に無い値を要求する
     mountCreditDom(1, { artist: "X" });
 
     // Then: setSelectValue が fail-loud
-    expect(() =>
+    await expect(
       injectAppleMusicCredits(document, 1, { performer_role: "NonExistent", producer_role: "Producer" }),
-    ).toThrow(OptionNotFoundError);
-  });
-});
-
-describe("acceptTermsAgreement（#919 利用規約同意の強制 check）", () => {
-  it("unchecked なら check に切り替える", () => {
-    // Given
-    const cb = makeCheckbox(document.body, { id: "areyousuretandc" });
-    expect(cb.checked).toBe(false);
-
-    // When
-    acceptTermsAgreement(document);
-
-    // Then
-    expect(cb.checked).toBe(true);
+    ).rejects.toBeInstanceOf(OptionNotFoundError);
   });
 
-  it("既に checked なら no-op（click せず checked を維持）", () => {
-    // Given
-    const cb = makeCheckbox(document.body, { id: "areyousuretandc" });
-    cb.checked = true;
-    let clicks = 0;
-    cb.addEventListener("click", () => {
-      clicks += 1;
-    });
-
-    // When
-    acceptTermsAgreement(document);
-
-    // Then: setChecked は目標と一致なら click しない
-    expect(clicks).toBe(0);
-    expect(cb.checked).toBe(true);
-  });
-
-  it("要素不在なら FieldNotFoundError", () => {
-    expect(() => acceptTermsAgreement(document)).toThrow(FieldNotFoundError);
-  });
-
-  it("セレクタ定数は #areyousuretandc を保証する（DistroKid native id）", () => {
-    expect(TERMS_AGREEMENT_SELECTOR).toBe("#areyousuretandc");
+  it("CREDIT_TRIGGER_WAIT_TIMEOUT_MS は 10_000 ms（既存定数群と同値）", () => {
+    // #923: checkAllStores() 後の DistroKid 側 re-render で credit trigger が可視化されるまでの待ち上限
+    expect(CREDIT_TRIGGER_WAIT_TIMEOUT_MS).toBe(10_000);
   });
 });
 
@@ -1233,9 +1204,231 @@ describe("uncheckUpsells（#919 オプション強制 $0 保証）", () => {
     expect(terms.checked).toBe(true);
   });
 
-  it("セレクタ定数は実機 DOM の name 属性を保証する", () => {
-    expect(UPSELL_SELECTORS.store).toBe('input[type="checkbox"][name="store"]');
+  it("セレクタ定数は実機 DOM の name 属性を保証する（#923 chk* 除外版）", () => {
+    expect(UPSELL_SELECTORS.store).toBe('input[type="checkbox"][name="store"]:not([id^="chk"])');
     expect(UPSELL_SELECTORS.extras).toBe('input[type="checkbox"][name="extras"]');
+  });
+});
+
+describe("checkAllStores（#923 配信先ストア全 check）", () => {
+  it("chk* id を持つ store checkbox を全部 check する", () => {
+    // Given
+    const cb1 = makeCheckbox(document.body, { id: "chkspotify", name: "store" });
+    const cb2 = makeCheckbox(document.body, { id: "chkapplemusic", name: "store" });
+    expect(cb1.checked).toBe(false);
+    expect(cb2.checked).toBe(false);
+
+    // When
+    checkAllStores(document);
+
+    // Then: 全部 check される
+    expect(cb1.checked).toBe(true);
+    expect(cb2.checked).toBe(true);
+  });
+
+  it("chk* id なし（shazam / audiomack）は check しない", () => {
+    // Given: id^="chk" を持つ配信先と id なし upsell が混在
+    const real = makeCheckbox(document.body, { id: "chkspotify", name: "store" });
+    const shazam = makeCheckbox(document.body, { name: "store" });
+    shazam.setAttribute("value", "shazam");
+    shazam.checked = false;
+
+    // When
+    checkAllStores(document);
+
+    // Then: 配信先は check、shazam は untouched
+    expect(real.checked).toBe(true);
+    expect(shazam.checked).toBe(false);
+  });
+
+  it("対象 0 件で FieldNotFoundError（fail-loud）", () => {
+    // Given: name=store の checkbox が一切無い
+    // Then: UI 変更検知のため fail-loud
+    expect(() => checkAllStores(document)).toThrow(FieldNotFoundError);
+  });
+
+  it("STORE_SELECTORS.distribution は id^=chk の配信先だけ対象にする", () => {
+    expect(STORE_SELECTORS.distribution).toBe(
+      'input[type="checkbox"][name="store"][id^="chk"]',
+    );
+  });
+});
+
+describe("uncheckUpsells（#923 chk* 配信先を巻き込まない回帰）", () => {
+  it("chk* id を持つ store は uncheck しない（#923 回帰防止）", () => {
+    // Given: 配信先 checkbox（id^="chk"）が checked
+    const spotify = makeCheckbox(document.body, { id: "chkspotify", name: "store" });
+    spotify.checked = true;
+    let spotifyClicks = 0;
+    spotify.addEventListener("click", () => {
+      spotifyClicks += 1;
+    });
+
+    // When
+    uncheckUpsells(document);
+
+    // Then: 配信先は touch しない（UPSELL_SELECTORS.store は :not([id^="chk"]) を含む）
+    expect(spotifyClicks).toBe(0);
+    expect(spotify.checked).toBe(true);
+  });
+
+  it("shazam（id なし name=store）は uncheck する", () => {
+    // Given: Discovery Pack（shazam）は id なし
+    const shazam = makeCheckbox(document.body, { name: "store" });
+    shazam.setAttribute("value", "shazam");
+    shazam.checked = true;
+
+    // When
+    uncheckUpsells(document);
+
+    // Then: shazam は uncheck される
+    expect(shazam.checked).toBe(false);
+  });
+
+  it("extras は uncheck する", () => {
+    // Given
+    const legacy = makeCheckbox(document.body, { name: "extras" });
+    legacy.checked = true;
+
+    // When
+    uncheckUpsells(document);
+
+    // Then
+    expect(legacy.checked).toBe(false);
+  });
+});
+
+describe("acceptImportantTerms（#923 重要事項 4 個 + 条件付き）", () => {
+  // required 4 個を mount（bbox=0 でも check されることを確認するため getBoundingClientRect をモックしない）
+  function mountRequiredTerms(): HTMLInputElement[] {
+    return [
+      "#areyousurepromoservices",
+      "#areyousurerecorded",
+      "#areyousureotherartist",
+      "#areyousuretandc",
+    ].map((id) => {
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.id = id.slice(1);
+      cb.className = "areyousure";
+      document.body.appendChild(cb);
+      return cb;
+    });
+  }
+
+  it("required 4 個を bbox=0 でも check する（rect 0×0 レース回避）", () => {
+    // Given: 4 個は bbox=0（isVisible で false だが id 直接取得で check される）
+    const cbs = mountRequiredTerms();
+    // bbox=0 のまま（makeVisible しない）
+
+    // When
+    acceptImportantTerms(document);
+
+    // Then: 全部 check される
+    for (const cb of cbs) {
+      expect(cb.checked).toBe(true);
+    }
+  });
+
+  it("conditional の可視のもののみ check する（不可視は skip）", () => {
+    // Given: required 4 個 + 可視 conditional 1 個 + 不可視 conditional 1 個
+    mountRequiredTerms();
+    const visibleCond = document.createElement("input");
+    visibleCond.type = "checkbox";
+    visibleCond.id = "areyousureyoutube";
+    visibleCond.className = "areyousure";
+    makeVisible(visibleCond);
+    document.body.appendChild(visibleCond);
+    const hiddenCond = document.createElement("input");
+    hiddenCond.type = "checkbox";
+    hiddenCond.id = "areyousuresnap";
+    hiddenCond.className = "areyousure";
+    // bbox=0 → isVisible false → skip
+    document.body.appendChild(hiddenCond);
+
+    // When
+    acceptImportantTerms(document);
+
+    // Then: visible は check、hidden は skip
+    expect(visibleCond.checked).toBe(true);
+    expect(hiddenCond.checked).toBe(false);
+  });
+
+  it("required id のいずれかが不在なら FieldNotFoundError", () => {
+    // Given: areyousuretandc だけない
+    for (const id of ["areyousurepromoservices", "areyousurerecorded", "areyousureotherartist"]) {
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.id = id;
+      document.body.appendChild(cb);
+    }
+
+    // Then
+    expect(() => acceptImportantTerms(document)).toThrow(FieldNotFoundError);
+  });
+
+  it("#areyousuretandc が既に checked なら no-op（click せず checked を維持）", () => {
+    // Given: required 4 個を mount し、#areyousuretandc だけ事前 check
+    const cbs = mountRequiredTerms();
+    const tandc = cbs.find((cb) => cb.id === "areyousuretandc")!;
+    tandc.checked = true;
+    let clicks = 0;
+    tandc.addEventListener("click", () => {
+      clicks += 1;
+    });
+
+    // When
+    acceptImportantTerms(document);
+
+    // Then: setChecked は目標と一致なら click しない
+    expect(clicks).toBe(0);
+    expect(tandc.checked).toBe(true);
+  });
+});
+
+describe("VisibilityTimeoutError / waitForElementVisible（#923）", () => {
+  it("既に可視なら即解決する", async () => {
+    // Given: bbox 非 0 の要素
+    const el = document.createElement("div");
+    el.id = "test-visible";
+    makeVisible(el as HTMLElement);
+    document.body.appendChild(el);
+
+    // Then: 即解決
+    await expect(waitForElementVisible(el, 1000)).resolves.toBeUndefined();
+  });
+
+  it("後から可視化される要素を解決する", async () => {
+    // Given: 最初は bbox=0
+    const el = document.createElement("div");
+    el.id = "test-late-visible";
+    document.body.appendChild(el);
+    const promise = waitForElementVisible(el, 1000);
+    // 後から可視化（getBoundingClientRect を mock して MutationObserver をトリガー）
+    setTimeout(() => {
+      makeVisible(el as HTMLElement);
+      // attribute 変更で MutationObserver をトリガー
+      el.setAttribute("style", "display:block");
+    }, 0);
+
+    // Then
+    await expect(promise).resolves.toBeUndefined();
+  });
+
+  it("制限時間内に可視化されなければ VisibilityTimeoutError", async () => {
+    // Given: bbox=0 のまま
+    const el = document.createElement("div");
+    el.id = "test-never-visible";
+    document.body.appendChild(el);
+
+    // Then
+    await expect(waitForElementVisible(el, 20)).rejects.toBeInstanceOf(VisibilityTimeoutError);
+  });
+
+  it("RELOAD_GUIDANCE が ModalTimeoutError / TrackCountTimeoutError / VisibilityTimeoutError の message に含まれる", () => {
+    expect(new ModalTimeoutError("#foo").message).toContain(RELOAD_GUIDANCE);
+    expect(new TrackCountTimeoutError("#foo", 2).message).toContain(RELOAD_GUIDANCE);
+    expect(new VisibilityTimeoutError("#foo").message).toContain(RELOAD_GUIDANCE);
   });
 });
 

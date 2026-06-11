@@ -181,6 +181,61 @@ test("AI 開示 modal は full check で persona radio を dynamic inject し、
   expect(continueClicked).toBe(false);
 });
 
+test("配信先ストア全 check + upsell uncheck + credits 可視化 + areyousure check (#923)", async ({
+  page,
+}) => {
+  // Given: fixture（初期状態: ストア全 unchecked、credits hidden）
+  await page.goto(fixtureUrl);
+  await setNativeValue(page, "#howManySongsOnThisAlbum", "2");
+
+  // storesが全部 unchecked であることを確認（最悪ケース再現）
+  await expect(page.locator("#chkspotify")).not.toBeChecked();
+  await expect(page.locator("#chkapplemusic")).not.toBeChecked();
+
+  // credits section は hidden（Apple Music unchecked なので）
+  await expect(page.locator(".requirements-item")).toBeHidden();
+
+  // When: 配信先ストアを全 check（checkAllStores の模擬）
+  for (const id of ["chkspotify", "chkapplemusic", "chkitunes", "chkgoogle", "chksnap", "chktiktok"]) {
+    await page.locator(`#${id}`).check();
+  }
+
+  // Then: 配信先 chk* は全 checked
+  await expect(page.locator("#chkspotify")).toBeChecked();
+  await expect(page.locator("#chkapplemusic")).toBeChecked();
+
+  // Then: credits section が visible 化（Apple Music checked → trigger 表示）
+  await expect(page.locator(".requirements-item")).toBeVisible();
+
+  // When: upsell uncheck（shazam / audiomack は name=store だが id なし）
+  await page.evaluate(() => {
+    document.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="store"]:not([id^="chk"])').forEach(cb => { if (cb.checked) cb.click(); });
+    document.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="extras"]').forEach(cb => { if (cb.checked) cb.click(); });
+  });
+
+  // Then: shazam / audiomack は unchecked、配信先は維持
+  const shazamChecked = await page.evaluate(() => document.querySelector<HTMLInputElement>('input[name="store"][value="shazam"]')?.checked);
+  expect(shazamChecked).toBe(false);
+  await expect(page.locator("#chkspotify")).toBeChecked(); // 配信先は維持
+
+  // When: 「クレジットを追加」click → credit 入力欄 visible
+  await page.getByText("クレジットを追加").click();
+  await expect(page.locator("#track-1-performer-1-name")).toBeVisible();
+
+  // When: areyousure required 4 個を check
+  for (const id of ["areyousurepromoservices", "areyousurerecorded", "areyousureotherartist", "areyousuretandc"]) {
+    await page.locator(`#${id}`).check();
+  }
+  // Then: required 4 個が checked
+  for (const id of ["areyousurepromoservices", "areyousurerecorded", "areyousureotherartist", "areyousuretandc"]) {
+    await expect(page.locator(`#${id}`)).toBeChecked();
+  }
+
+  // Then: 送信ボタンは押されていない
+  const continueClicked = await page.evaluate(() => (window as unknown as { __continueClicked: boolean }).__continueClicked);
+  expect(continueClicked).toBe(false);
+});
+
 test("Apple Music「クレジットを追加」click で全 track の credit 入力欄が visible 化し、注入できる (#888)", async ({
   page,
 }) => {
@@ -192,6 +247,11 @@ test("Apple Music「クレジットを追加」click で全 track の credit 入
     await expect(page.locator(`#track-${n}-producer-1-name`)).toHaveCount(1);
     await expect(page.locator(`#track-${n}-performer-1-name`)).toBeHidden();
   }
+
+  // Given: Apple Music checkbox を check して credit section を visible 化する（#923 fixture 変更対応）。
+  // 初期は unchecked のため、credit trigger も hidden になっている。
+  await page.locator("#chkapplemusic").check();
+  await expect(page.locator(".requirements-item")).toBeVisible();
 
   // When: 「クレジットを追加」を 1 回 click → 全 track の入力欄が visible 化する
   await page.getByText("クレジットを追加").click();

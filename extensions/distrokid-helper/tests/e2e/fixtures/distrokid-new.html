@@ -79,16 +79,24 @@
       <!-- track 行はここに生成される。 -->
       <div id="tracks"></div>
 
-      <!-- Apple Music クレジット（#888）。 -->
-      <div class="requirements-item">
+      <!-- Apple Music クレジット（#888 / #923）。初期は hidden（Apple Music unchecked なので）。 -->
+      <div class="requirements-item" hidden>
         <div class="requirements-item-title">クレジットを追加</div>
         <div id="credit-containers"></div>
       </div>
 
-      <!-- オプション (upsell) checkbox 群（#919）。フィル時に強制 uncheck で \$0 保証。 -->
-      <label
-        ><input type="checkbox" name="store" />ディスカバリーパック（24.75ドル／年）</label
-      >
+      <!-- 配信先ストア（実 DOM 準拠 #923）。実配信先は id^="chk"、upsell は id なし。初期は unchecked（クリア済み最悪状態再現）。 -->
+      <label><input type="checkbox" name="store" id="chkspotify" value="spotify" class="distroStore" />Spotify</label>
+      <label><input type="checkbox" name="store" id="chkapplemusic" value="applemusic" class="distroStore" />Apple Music</label>
+      <label><input type="checkbox" name="store" id="chkitunes" value="itunes" class="distroStore" />iTunes</label>
+      <label><input type="checkbox" name="store" id="chkgoogle" value="google" class="distroStore" />YouTube Music</label>
+      <label><input type="checkbox" name="store" id="chksnap" value="snap" class="distroStore" />Snapchat</label>
+      <label><input type="checkbox" name="store" id="chktiktok" value="tiktok" class="distroStore" />TikTok</label>
+      <!-- upsell（id なし）: Discovery Pack（shazam）/ Audiomack -->
+      <label><input type="checkbox" name="store" value="shazam" class="distroStore" />ディスカバリーパック（24.75ドル／年）</label>
+      <label><input type="checkbox" name="store" value="audiomack" class="distroStore js-audiomackExtraCheckbox" />Audiomack（無料）</label>
+
+      <!-- オプション (upsell) extras checkbox 群（#919）。フィル時に強制 uncheck で \$0 保証。 -->
       <label
         ><input type="checkbox" name="extras" />レガシーパック（49ドル）</label
       >
@@ -96,9 +104,17 @@
         ><input type="checkbox" name="extras" />ストアマキシマイザー（7.95ドル／年）</label
       >
 
+      <!-- 重要事項 checkbox（#923）。required 4 個は常時可視。conditional は ストア連動で可視化。 -->
+      <label><input type="checkbox" class="areyousure" id="areyousurepromoservices" />再生回数増加サービスを利用しません</label>
+      <label><input type="checkbox" class="areyousure" id="areyousurerecorded" />自己レコーディングです</label>
+      <label><input type="checkbox" class="areyousure" id="areyousureotherartist" />他アーティスト名は使いません</label>
+      <!-- conditional: areyousureyoutube (hidden initially, shown when chkgoogle checked) -->
+      <label id="label-areyousureyoutube" hidden><input type="checkbox" class="areyousure" id="areyousureyoutube" />YouTube Music 配信同意</label>
+      <label id="label-areyousuresnap" hidden><input type="checkbox" class="areyousure" id="areyousuresnap" />Snapchat 配信同意</label>
+
       <!-- DistroKid 利用規約同意 checkbox（#919）。フィル時に強制 check。 -->
       <label
-        ><input type="checkbox" id="areyousuretandc" />DistroKid
+        ><input type="checkbox" class="areyousure" id="areyousuretandc" />DistroKid
         ディストリビューション規約に同意します</label
       >
 
@@ -317,6 +333,21 @@
 
       // 初期描画（既定は 1 曲 = シングル）。
       changedSongCount();
+
+      // chkapplemusic check/uncheck で credit section の visibility を連動する（#923）。
+      document.querySelector('#chkapplemusic').addEventListener('change', function() {
+        document.querySelector('.requirements-item').hidden = !this.checked;
+      });
+
+      // chkgoogle check で areyousureyoutube を visible 化
+      document.querySelector('#chkgoogle').addEventListener('change', function() {
+        document.querySelector('#label-areyousureyoutube').hidden = !this.checked;
+      });
+
+      // chksnap check で areyousuresnap を visible 化
+      document.querySelector('#chksnap').addEventListener('change', function() {
+        document.querySelector('#label-areyousuresnap').hidden = !this.checked;
+      });
     </script>
   </body>
 </html>
