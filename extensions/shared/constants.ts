@@ -45,8 +45,15 @@ export const INTER_CREATE_DELAY_MS = 3000;
 export const QUEUE_ERROR_WAIT_MS = 30000;
 
 /** queue 空きスロット待ち専用の timeout (#864 root cause 1)。single clip 完了待ち GENERATE_TIMEOUT_MS=3分 の
- * 流用は、20 clip 積んだ最初の空き待ちで焼き切れる。queue 空き待ちは別系統の 5 分として独立させる。 */
+ * 流用は、20 clip 積んだ最初の空き待ちで焼き切れる。queue 空き待ちは別系統の 5 分として独立させる。
+ * #948 以降は stall ベース判定（INFLIGHT_STALL_TIMEOUT_MS）が主経路で、本定数は
+ * getLastChangeAt を注入しない呼び出し（固定 deadline 経路）専用。 */
 export const QUEUE_SLOT_WAIT_TIMEOUT_MS = 300000;
+
+/** queue 空き待ちの stall 判定閾値 (#948)。正確な in-flight カウントの下では「上限で長く待つ」のは
+ * 正常状態であり、固定 deadline での fail-loud は誤停止になる。in-flight 集合（観測 clip の status）が
+ * この時間まったく変化しないときのみ「Suno 側が固まった」とみなして throw する。 */
+export const INFLIGHT_STALL_TIMEOUT_MS = 600000;
 
 /** inject 後に in-flight が CLIPS_PER_REQUEST 増えるまで poll wait する上限 (#864 root cause 3)。 */
 export const INJECT_ACK_TIMEOUT_MS = 30000;

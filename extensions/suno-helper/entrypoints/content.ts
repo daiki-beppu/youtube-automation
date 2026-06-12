@@ -3,6 +3,7 @@
 import type { PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
+  INFLIGHT_STALL_TIMEOUT_MS,
   PHASE,
   type ProgressPayload,
   QUEUE_ERROR_WAIT_MS,
@@ -246,12 +247,17 @@ export default defineContentScript({
           await waitForQueueSlot(maxGeneratingClips, {
             isAborted: () => aborted,
             pollIntervalMs: POLL_INTERVAL_MS,
-            // queue 空き待ちは single clip 完了待ち (GENERATE_TIMEOUT_MS) とは別系統の 5 分 (#864 root cause 1)。
+            // getLastChangeAt 注入により stall 経路で動くため timeoutMs は実質未使用（後方互換用に残す）。
             timeoutMs: QUEUE_SLOT_WAIT_TIMEOUT_MS,
             queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
             // bridge の status ベースカウント (#948)。Remix disabled プロキシは完了後も disabled が
             // 残り過大カウントするため、観測があれば一次情報（API status）で数える。
             getCount: currentInFlightCount,
+            // stall ベース判定 (#948): 正確なカウントの下では上限での長い待ちは正常状態
+            //（clip 完了に数分かかる）。固定 5 分 deadline は誤停止になるため、
+            // 「in-flight 集合が 10 分間まったく変化しない」ときのみ fail-loud に倒す。
+            getLastChangeAt: () => tracker.lastChangeAt(),
+            stallTimeoutMs: INFLIGHT_STALL_TIMEOUT_MS,
           });
           if (aborted) {
             // waitForQueueSlot 後の中断: まだ Generate を click していないため i をそのまま使う (#924)。
