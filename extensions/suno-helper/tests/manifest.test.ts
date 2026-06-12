@@ -54,3 +54,12 @@ describe("wxt.config: manifest 権限の SSOT 一致", () => {
     }
   });
 });
+
+// MAIN world fetch bridge (#948) は filterEntrypoints に載らないと build から落ちて
+// silent に DOM プロキシ縮退し続ける。entrypoint の登録漏れを機械的に塞ぐ。
+// （bridge は権限を一切追加しない設計: 上の permissions 検証が据え置きであることと対）
+describe("wxt.config: suno-bridge entrypoint の登録 (#948)", () => {
+  it("Given filterEntrypoints When 読む Then suno-bridge を含む", () => {
+    expect(wxtConfig.filterEntrypoints).toContain("suno-bridge");
+  });
+});
