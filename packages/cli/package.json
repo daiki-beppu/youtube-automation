@@ -2,13 +2,13 @@
   "name": "@youtube-automation/cli",
   "version": "0.1.0-alpha.0",
   "private": true,
-  "description": "yt-* command line entry points for the youtube-channels-automation TS rewrite (skeleton).",
+  "description": "yt command line entry point for the youtube-channels-automation TS rewrite (ADR-0004 citty dispatcher).",
   "bin": {
-    "yt": "./bin/yt.ts",
-    "yt-skills": "./bin/yt-skills.ts"
+    "yt": "./bin/yt.ts"
   },
   "type": "module",
   "dependencies": {
-    "@youtube-automation/core": "workspace:*"
+    "@youtube-automation/core": "workspace:*",
+    "citty": "^0.2.2"
   }
 }

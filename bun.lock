@@ -21,9 +21,11 @@
       "version": "0.1.0-alpha.0",
       "bin": {
         "yt": "./bin/yt.ts",
+        "yt-skills": "./bin/yt-skills.ts",
       },
       "dependencies": {
         "@youtube-automation/core": "workspace:*",
+        "citty": "^0.2.2",
       },
     },
     "packages/core": {
