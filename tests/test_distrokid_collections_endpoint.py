@@ -627,6 +627,33 @@ def test_get_collection_distrokid_release_json_distrokid_disabled_returns_404(se
     assert exc_info.value.code == 404
 
 
+def test_get_collection_distrokid_release_json_broken_spec_returns_500(serve_dir_dk, tmp_path):
+    """Given 破損 spec.json（存在するが不正 JSON）
+    When `GET /collections/<id>/distrokid/<disc>/release.json`
+    Then 接続切断ではなく 500 + JSON エラーボディ（CORS 付き）を返す（#944）。
+
+    fail-loud の設計意図（破損 spec で古いデータを配信しない）は維持しつつ、
+    拡張がメッセージなしのネットワークエラーではなく HTTP 500 を受け取れることを担保する。
+    """
+    planning = tmp_path / "planning"
+    coll = _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    (coll / "30-distrokid" / "spec.json").write_text("{ broken", encoding="utf-8")
+    base = serve_dir_dk(planning)
+
+    req = urllib.request.Request(
+        f"{base}{_COLLECTIONS_ROUTE}/20260526-abc-collection/distrokid/disc1-alpha/release.json",
+        headers={"Origin": "https://distrokid.com"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 500
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://distrokid.com"
+    body = json.loads(err.read().decode("utf-8"))
+    assert "spec.json" in body["error"]
+
+
 # ---------------------------------------------------------------------------
 # GET /collections/<id>/distrokid/assets/<rel>
 # ---------------------------------------------------------------------------

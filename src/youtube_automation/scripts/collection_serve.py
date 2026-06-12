@@ -473,6 +473,18 @@ def create_server(
             self.end_headers()
             self.wfile.write(body)
 
+        def _send_json_error(self, status: int, message: str) -> None:
+            # send_error は CORS ヘッダを付けず HTML を返すため、拡張へ届けるエラーは
+            # JSON + CORS で返す（#944）。message に改行を含む ConfigError も安全に運べる。
+            origin = self._allowed_origin()
+            body = json.dumps({"error": message}, ensure_ascii=False).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self._send_cors(origin)
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_OPTIONS(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)
             origin = self._allowed_origin()
             self.send_response(204)
@@ -664,12 +676,18 @@ def create_server(
                 # asset_path を collection-scoped 形式にするための prefix を組み立てる（#934）。
                 coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
                 distrokid_source = f"{_DISTROKID_DIRNAME}/{disc}"
-                payload = build_release_payload(
-                    coll_dir,
-                    distrokid,
-                    distrokid_source=distrokid_source,
-                    assets_prefix=coll_assets_prefix,
-                )
+                try:
+                    payload = build_release_payload(
+                        coll_dir,
+                        distrokid,
+                        distrokid_source=distrokid_source,
+                        assets_prefix=coll_assets_prefix,
+                    )
+                except ConfigError as exc:
+                    # 破損 spec.json 等の fail-loud は handler 落ち（接続切断）ではなく
+                    # 500 + メッセージで拡張へ届ける（#944）。配信停止の意図は維持する。
+                    self._send_json_error(500, str(exc))
+                    return
                 body = json.dumps(payload).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
@@ -680,7 +698,12 @@ def create_server(
             if not distrokid_enabled:
                 self.send_error(404, "Not Found")
                 return
-            payload = build_release_payload(collection_dir, distrokid, distrokid_source=distrokid_source)
+            try:
+                payload = build_release_payload(collection_dir, distrokid, distrokid_source=distrokid_source)
+            except ConfigError as exc:
+                # 単一 mode も同様: 破損 spec / metadata.md 不在の fail-loud を 500 で返す（#944）。
+                self._send_json_error(500, str(exc))
+                return
             body = json.dumps(payload).encode("utf-8")
             self._send_bytes(body, "application/json; charset=utf-8")
 
