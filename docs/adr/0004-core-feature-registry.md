@@ -72,7 +72,7 @@ export const REGISTRY = {
 
 ### 4. CLI flags は per-command 手書き、Result→exit-code は共通 helper
 
-zod schema から CLI flags を自動導出しない (positional / alias / UX は schema に乗らない)。各 `packages/cli/commands/<feature>/cli.ts` は citty `defineCommand` で args を手書きし、registry entry の `run` を呼ぶ。出力整形と exit code は `packages/cli/lib/run-command.ts` の共通 helper に集約する:
+zod schema から CLI flags を自動導出しない (positional / alias / UX は schema に乗らない)。各 `packages/cli/src/commands/<feature>/cli.ts` は citty `defineCommand` で args を手書きし、registry entry の `run` を呼ぶ。出力整形と exit code は `packages/cli/lib/run-command.ts` の共通 helper に集約する:
 
 - `r.ok` → stdout へ整形出力 (`--json` で raw JSON)
 - `!r.ok` → stderr へ `[domain] message`、exit code は `quota` = 75 (EX_TEMPFAIL)、それ以外 = 1
