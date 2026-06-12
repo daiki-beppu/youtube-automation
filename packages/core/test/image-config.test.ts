@@ -3,8 +3,6 @@
 // and `utils/image_provider/__init__.py::get_provider`.
 //
 // Signature contract (test-first spec the draft implements), from plan §6/§7:
-//   RETRY_MAX = 3
-//   RETRY_BACKOFF = [10, 30, 60]            // seconds
 //   OPENAI_SUPPORTED_ASPECT_RATIOS = ["16:9", "9:16"]
 //   parseImageGenerationConfig(raw: unknown): ImageGenerationConfig
 //   getProvider(config: ImageGenerationConfig, deps?): ImageProvider
@@ -21,28 +19,14 @@ import {
   getProvider,
   OPENAI_SUPPORTED_ASPECT_RATIOS,
   parseImageGenerationConfig,
-  RETRY_BACKOFF,
-  RETRY_MAX,
 } from "@youtube-automation/core/image";
 import type { ImageGenerationConfig } from "@youtube-automation/core/image";
 
-// --- shared retry constants ----------------------------------------------
+// --- shared aspect-ratio constants -----------------------------------------
+// (RETRY_MAX / RETRY_BACKOFF were promoted into the withRetry defaults in
+// #959 and are asserted behaviorally in retry.test.ts.)
 
-describe("retry constants", () => {
-  test("RETRY_MAX is 3 (base.py:14)", () => {
-    // Given the ported retry budget
-    // When reading the exported constant
-    // Then it matches the Python value
-    expect(RETRY_MAX).toBe(3);
-  });
-
-  test("RETRY_BACKOFF is the 10/30/60 second schedule (base.py:15)", () => {
-    // Given the ported backoff schedule (in seconds)
-    // When reading the exported tuple
-    // Then it carries the three documented waits
-    expect([...RETRY_BACKOFF]).toEqual([10, 30, 60]);
-  });
-
+describe("aspect-ratio constants", () => {
   test("OPENAI_SUPPORTED_ASPECT_RATIOS is exactly 16:9 and 9:16 (config.py:24)", () => {
     // Given OpenAI's restricted aspect-ratio set
     // When reading the exported tuple
