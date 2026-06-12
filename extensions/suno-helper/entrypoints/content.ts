@@ -20,12 +20,14 @@ import {
   writeResumeState,
 } from "../lib/resume-state";
 import { InjectNotAcknowledgedError, injectWithVerification } from "../lib/inject-retry";
+import { runEntryWithRetry } from "../lib/entry-retry";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
 import { attachBridgeListener, createFeedPoller } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
 import {
   abortableSleep,
   CAPTCHA_WAIT_TIMEOUT_MS,
+  FatalRunError,
   GENERATE_TIMEOUT_MS,
   POLL_INTERVAL_MS,
   SETTLE_MS,
@@ -118,7 +120,10 @@ export default defineContentScript({
         setNativeValue(lyrics, entry.lyrics);
       } else if (entry.lyrics) {
         // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
-        throw new Error("Lyrics 欄が見つかりません。Instrumental OFF（Custom Mode）になっているか確認してください。");
+        // 設定不整合は全 entry で再発するため fatal（entry retry の対象外）。
+        throw new FatalRunError(
+          "Lyrics 欄が見つかりません。Instrumental OFF（Custom Mode）になっているか確認してください。",
+        );
       }
       if (title) {
         // Song Title は entry.title 優先、無ければ entry.name で代替する (#844)。
@@ -213,6 +218,8 @@ export default defineContentScript({
       collectionId?: string;
       // collection mode のときの playlist 名 (#854)。全 entry 完了後の clip 一括追加に使う。
       playlistName?: string;
+      // 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。
+      indices?: number[];
     }
 
     async function runAll(entries: PromptEntry[], options: RunOptions): Promise<void> {
@@ -225,97 +232,137 @@ export default defineContentScript({
       const total = entries.length;
       const startIndex = range ? range.start : 0;
       const endIndex = range ? range.end : total - 1;
+      // 実行対象の 0-based index 列 (#948)。indices（失敗分のみ再実行）が最優先、無ければ range 由来。
+      const order = options.indices ?? Array.from({ length: endIndex - startIndex + 1 }, (_, k) => startIndex + k);
+      // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
+      // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
+      const failedIndices: number[] = [];
       // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
       // そのまま流用し (要件3)、中断 index を載せる。collectionId が無い単一ファイル mode は
       // 再開対象を特定できないため永続化しない（両 phase 共通の guard、要件4 と一貫）。
+      // スキップ済み failedIndices があれば一緒に永続化する (#948)。
       function persistInterruptState(interruptedIndex: number): void {
         if (collectionId) {
-          void writeResumeState({ collectionId, failedIndex: interruptedIndex, total, timestamp: Date.now() });
+          void writeResumeState({
+            collectionId,
+            failedIndex: interruptedIndex,
+            total,
+            timestamp: Date.now(),
+            failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
+          });
         }
       }
-      for (let i = startIndex; i <= endIndex; i++) {
+      for (const i of order) {
         if (aborted) {
           // ループ先頭の中断: この時点でまだ Generate を click していないため i をそのまま使う (#924)。
           persistInterruptState(i);
           emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
         }
-        try {
-          // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
-          emitProgress({ phase: PHASE.WAITING_SLOT, index: i, total });
-          await waitForQueueSlot(maxGeneratingClips, {
-            isAborted: () => aborted,
-            pollIntervalMs: POLL_INTERVAL_MS,
-            // getLastChangeAt 注入により stall 経路で動くため timeoutMs は実質未使用（後方互換用に残す）。
-            timeoutMs: QUEUE_SLOT_WAIT_TIMEOUT_MS,
-            queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
-            // bridge の status ベースカウント (#948)。Remix disabled プロキシは完了後も disabled が
-            // 残り過大カウントするため、観測があれば一次情報（API status）で数える。
-            getCount: currentInFlightCount,
-            // stall ベース判定 (#948): 正確なカウントの下では上限での長い待ちは正常状態
-            //（clip 完了に数分かかる）。固定 5 分 deadline は誤停止になるため、
-            // 「in-flight 集合が 10 分間まったく変化しない」ときのみ fail-loud に倒す。
-            getLastChangeAt: () => tracker.lastChangeAt(),
-            stallTimeoutMs: INFLIGHT_STALL_TIMEOUT_MS,
-          });
-          if (aborted) {
-            // waitForQueueSlot 後の中断: まだ Generate を click していないため i をそのまま使う (#924)。
-            persistInterruptState(i);
-            emitProgress({ phase: PHASE.STOPPED, index: i, total });
-            return;
-          }
-          emitProgress({ phase: PHASE.INJECTING, index: i, total });
-          // inject 後に受理（ACK）を検証し、silent drop なら同じ entry を retry する (#864 root cause 3)。
-          // ACK は bridge の generate レスポンス観測 OR DOM 増分のハイブリッド (#948)。
-          await injectWithVerification({
-            inject: () => injectAndGenerate(entries[i], i, total),
-            markBeforeInject: () =>
-              markAck({
-                getSubmissionCount: () => tracker.submissionCount(),
-                getDomInFlightCount: getInFlightClipCount,
-                sleep,
-              }),
-            waitForAck,
-            isAborted: () => aborted,
-            maxRetry: preset.maxInjectRetry,
-            ackTimeoutMs: preset.injectAckTimeoutMs,
-            pollIntervalMs: POLL_INTERVAL_MS,
-            describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
-          });
-          if (aborted) {
-            // injectWithVerification 完了後の中断チェック。injectAndGenerate 内で Generate を click し
-            // waitForGeneration まで完了しているため submitted=true。interruptIndex は i+1 とし、
-            // 再開時にこの entry を重複生成しない (#924)。
-            // emitProgress の index も interruptIndex にする: snapshot.applyProgress (lib/snapshot.ts:47) が
-            // ERROR payload の index を failedIndex として記録し、useSunoRunner.ts:140-142 が chrome.storage
-            // 喪失時の冗長ソースに使うため、両系統の failedIndex を一致させる必要がある。
-            const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
-            persistInterruptState(interruptIndex);
-            emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
-            return;
-          }
-          emitProgress({ phase: PHASE.DONE, index: i, total });
-          // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
-          // preset の基準間隔に ±jitter を加えて bot 判定の固定間隔シグナルを消す (#875)。毎回 fresh 算出する。
-          await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+        // 1 entry の実行を失敗分類つきで包む (#948)。一時的な失敗は preset.maxEntryRetry 回まで
+        // 同一 entry を再試行し、それでも失敗ならスキップして次へ（run 全体は止めない）。
+        const result = await runEntryWithRetry({
+          attempt: async () => {
+            // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
+            emitProgress({ phase: PHASE.WAITING_SLOT, index: i, total });
+            await waitForQueueSlot(maxGeneratingClips, {
+              isAborted: () => aborted,
+              pollIntervalMs: POLL_INTERVAL_MS,
+              // getLastChangeAt 注入により stall 経路で動くため timeoutMs は実質未使用（後方互換用に残す）。
+              timeoutMs: QUEUE_SLOT_WAIT_TIMEOUT_MS,
+              queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
+              // bridge の status ベースカウント (#948)。Remix disabled プロキシは完了後も disabled が
+              // 残り過大カウントするため、観測があれば一次情報（API status）で数える。
+              getCount: currentInFlightCount,
+              // stall ベース判定 (#948): 正確なカウントの下では上限での長い待ちは正常状態
+              //（clip 完了に数分かかる）。固定 5 分 deadline は誤停止になるため、
+              // 「in-flight 集合が 10 分間まったく変化しない」ときのみ fail-loud に倒す。
+              getLastChangeAt: () => tracker.lastChangeAt(),
+              stallTimeoutMs: INFLIGHT_STALL_TIMEOUT_MS,
+            });
+            if (aborted) {
+              return; // 中断は直後の outcome 判定で STOPPED 経路へ
+            }
+            emitProgress({ phase: PHASE.INJECTING, index: i, total });
+            // inject 後に受理（ACK）を検証し、silent drop なら同じ entry を retry する (#864 root cause 3)。
+            // ACK は bridge の generate レスポンス観測 OR DOM 増分のハイブリッド (#948)。
+            await injectWithVerification({
+              inject: () => injectAndGenerate(entries[i], i, total),
+              markBeforeInject: () =>
+                markAck({
+                  getSubmissionCount: () => tracker.submissionCount(),
+                  getDomInFlightCount: getInFlightClipCount,
+                  sleep,
+                }),
+              waitForAck,
+              isAborted: () => aborted,
+              maxRetry: preset.maxInjectRetry,
+              ackTimeoutMs: preset.injectAckTimeoutMs,
+              pollIntervalMs: POLL_INTERVAL_MS,
+              describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
+            });
+          },
+          isAborted: () => aborted,
+          // Generate click 済みで受理失敗確定でないエラー（典型: 生成完了待ち timeout）は再実行すると
+          // 重複生成になるため presumed-done（resolveInterruptIndex の i+1 判断と同じ）。
+          wasSubmitted: (err) => lastSubmittedEntryIndex === i && !(err instanceof InjectNotAcknowledgedError),
+          isFatal: (err) => err instanceof FatalRunError,
+          maxRetry: preset.maxEntryRetry,
+          retryDelayMs: () => applyJitter(preset.interCreateDelayMs, preset.jitterMs),
+          sleep: abortableSleep,
+          describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
+        });
+        if (result.outcome === "fatal") {
+          const message = result.error instanceof Error ? result.error.message : String(result.error);
           // interruptIndex: submitted（Generate click 済み）かつ silent drop 確定でない → i+1（重複しない）。
-          // InjectNotAcknowledgedError（全 attempt 未受理）は silent drop 確定のため i（再生成する）。
-          // emitProgress の index も interruptIndex にする: snapshot.applyProgress (lib/snapshot.ts:47) が
-          // ERROR payload の index を failedIndex として記録し、useSunoRunner.ts:140-142 が chrome.storage
-          // 喪失時の冗長ソースに使うため、両系統の failedIndex を一致させる必要がある (#924)。
+          // emitProgress の index も interruptIndex にする: snapshot.applyProgress が ERROR payload の
+          // index を failedIndex として記録し、popup が chrome.storage 喪失時の冗長ソースに使うため (#924)。
           const interruptIndex = resolveInterruptIndex(
             i,
             lastSubmittedEntryIndex === i,
-            err instanceof InjectNotAcknowledgedError,
+            result.error instanceof InjectNotAcknowledgedError,
           );
           emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total, message });
-          // 失敗 index を永続化し、次回 popup 起動時の再開バナーで提示する (#872 要件3)。
           persistInterruptState(interruptIndex);
           return;
         }
+        if (result.outcome === "aborted" || aborted) {
+          // attempt 中の中断（waitForQueueSlot / injectAndGenerate 内の silent return 含む）。
+          // Generate click 済みなら i+1 を persist し再開時の重複生成を防ぐ (#924)。
+          const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
+          persistInterruptState(interruptIndex);
+          emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
+          return;
+        }
+        if (result.outcome === "failed") {
+          const message = result.error instanceof Error ? result.error.message : String(result.error);
+          failedIndices.push(i);
+          console.warn(`[suno-helper] entry ${i} をスキップして続行します: ${message}`);
+          emitProgress({ phase: PHASE.ENTRY_FAILED, index: i, total, message });
+          continue; // run 全体は止めない。retry 間で既に間隔を空けているため即次 entry へ。
+        }
+        if (result.outcome === "presumed-done") {
+          const message = result.error instanceof Error ? result.error.message : String(result.error);
+          console.warn(`[suno-helper] entry ${i} は投入済みのため生成済み扱いで続行します: ${message}`);
+        }
+        emitProgress({ phase: PHASE.DONE, index: i, total });
+        // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
+        // preset の基準間隔に ±jitter を加えて bot 判定の固定間隔シグナルを消す (#875)。毎回 fresh 算出する。
+        await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);
+      }
+      // スキップした失敗 entry が残っている場合は playlist 追加を保留して終了する (#948)。
+      // 失敗分のみ再実行して完走した run が playlist 追加を実行する（同名 playlist の重複作成と
+      // 歯抜け playlist を防ぐ）。failedIndex=total で persist し、failedIndices を再実行導線へ渡す。
+      if (failedIndices.length > 0) {
+        persistInterruptState(total);
+        const list = failedIndices.map((i) => i + 1).join(", ");
+        emitProgress({
+          phase: PHASE.FINISHED,
+          total,
+          message: `${failedIndices.length} 件の entry が失敗しました (entry ${list})。「失敗分のみ再実行」で完走後に playlist 追加が実行されます。`,
+        });
+        return;
       }
       // collection mode のみ: 全 entry 生成後、FINISHED 直前に clip 一括 playlist 追加を実行する (#854)。
       if (playlistName) {
@@ -360,14 +407,14 @@ export default defineContentScript({
       aborted = false;
       lastSubmittedEntryIndex = -1;
       // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。range / collectionId は無し。
-      const { entries, playlistName, range, collectionId } = Array.isArray(data)
-        ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined }
+      const { entries, playlistName, range, collectionId, indices } = Array.isArray(data)
+        ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined, indices: undefined }
         : data;
       currentSnapshot = initSnapshot(entries, playlistName);
       // run 中のみ active feed poll で clip status を追う (#948)。passive 観測が生きていれば
       // poller は stale 判定で自発的に黙る（intervalMs ごとの no-op tick のみ）。
       feedPoller.start();
-      void runAll(entries, { range, collectionId, playlistName }).finally(() => {
+      void runAll(entries, { range, collectionId, playlistName, indices }).finally(() => {
         running = false;
         feedPoller.stop();
       });

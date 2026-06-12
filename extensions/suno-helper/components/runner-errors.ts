@@ -17,6 +17,8 @@ export interface RestoreState {
   // ERROR 停止した entry の 0-based index (#872 要件3)。chrome.storage の resume state と二重化し、
   // popup の再開バナーの冗長ソースとして消費する。ERROR phase 到達時のみ確定、それ以外は undefined。
   failedIndex?: number;
+  // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
+  failedIndices?: number[];
 }
 
 /**
@@ -41,11 +43,17 @@ export function phaseToStatus(
       return { text: `[${n}/${total}] 生成待ち…` };
     case PHASE.DONE:
       return { text: `[${n}/${total}] 完了` };
+    case PHASE.ENTRY_FAILED:
+      // entry 単位の失敗スキップ (#948)。run 全体は継続するため error フラグは立てない（status は黄信号扱い）。
+      return { text: `[${n}/${total}] 失敗のためスキップ: ${message ?? ""}` };
     case PHASE.ADDING_TO_PLAYLIST:
       // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
       return { text: `Playlist '${message ?? ""}' へ追加中…` };
     case PHASE.FINISHED:
-      return { text: `完了: ${total} パターンを実行しました。` };
+      // 失敗スキップ付き完走 (#948) は message に失敗一覧が載る。無ければ従来文言。
+      return message
+        ? { text: `完了（一部失敗）: ${message}`, error: true }
+        : { text: `完了: ${total} パターンを実行しました。` };
     case PHASE.STOPPED:
       return { text: "停止しました。手動で続行できます。", error: true };
     case PHASE.ERROR:
@@ -75,6 +83,7 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     isError: Boolean(error),
     playlistName: snap.playlistName,
     failedIndex: snap.failedIndex,
+    failedIndices: snap.failedIndices,
   };
 }
 

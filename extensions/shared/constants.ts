@@ -85,6 +85,8 @@ export interface SpeedPreset {
   maxInflightRequests: number;
   maxInjectRetry: number;
   injectAckTimeoutMs: number;
+  /** entry 単位の失敗（非 fatal）を同一 entry で再試行する最大回数 (#948)。超過でスキップして次 entry へ。 */
+  maxEntryRetry: number;
   label: string;
   riskNote: string;
 }
@@ -101,6 +103,7 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
     maxInflightRequests: MAX_INFLIGHT_REQUESTS,
     maxInjectRetry: MAX_INJECT_RETRY,
     injectAckTimeoutMs: INJECT_ACK_TIMEOUT_MS,
+    maxEntryRetry: 1,
     label: "⚡ Fast",
     riskNote:
       "〜10 entries の小 collection 向け。現状値。連続実行が長引くと bot 判定で silent drop しやすい。",
@@ -111,6 +114,7 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
     maxInflightRequests: 5,
     maxInjectRetry: 1,
     injectAckTimeoutMs: 45000,
+    maxEntryRetry: 2,
     label: "⚖️ Balanced",
     riskNote:
       "20-30 entries の標準 collection 向け。10s ±3s 間隔で自然化したデフォルト。",
@@ -121,6 +125,7 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
     maxInflightRequests: 3,
     maxInjectRetry: 0,
     injectAckTimeoutMs: 60000,
+    maxEntryRetry: 3,
     label: "🐢 Safe",
     riskNote:
       "30+ entries / 過去に hCaptcha challenge を踏んだ場合向け。20s ±5s と保守的で時間はかかる。",
@@ -216,6 +221,9 @@ export const PHASE = {
   // captcha challenge の解消（自動 verify or 手動解決）待ち。即 fail-loud せず待機して自動続行する。非終了 phase。
   WAITING_CAPTCHA: "waiting-captcha",
   DONE: "done",
+  // entry 単位の失敗 (#948)。リトライ上限まで失敗した entry をスキップして次へ進むときに emit する。
+  // 非終了 phase（run 全体は継続する）。失敗 index は snapshot の failedIndices に蓄積される。
+  ENTRY_FAILED: "entry-failed",
   // 全 entry の生成 DONE 後、FINISHED 直前に挟む clip 一括 playlist 追加 phase (#854)。非終了 phase。
   ADDING_TO_PLAYLIST: "adding-to-playlist",
   FINISHED: "finished",
@@ -233,8 +241,8 @@ export interface ProgressPayload {
   message?: string;
 }
 
-/** overlay の各パターン行の表示状態。 */
-export type ItemState = "idle" | "active" | "done";
+/** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
+export type ItemState = "idle" | "active" | "done" | "failed";
 
 /** content script が SSOT として保持する進捗スナップショット (#852)。
  * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
@@ -249,4 +257,7 @@ export interface SnapshotPayload {
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。
   failedIndex?: number;
+  // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
+  // ENTRY_FAILED phase の受信ごとに蓄積され、popup の「失敗分のみ再実行」導線が消費する。
+  failedIndices?: number[];
 }

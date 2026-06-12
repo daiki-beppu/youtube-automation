@@ -89,3 +89,31 @@ describe("phaseToStatus: INJECTING の entry 名解決", () => {
     expect(result.text).toBe("[3/3] 注入中: pattern-3");
   });
 });
+
+describe("phaseToStatus: ENTRY_FAILED / 失敗付き FINISHED (#948)", () => {
+  it("Given ENTRY_FAILED When 変換する Then スキップ文言を返し error フラグは立てない（run 継続中）", () => {
+    const { text, error } = phaseToStatus(
+      { phase: PHASE.ENTRY_FAILED, index: 2, total: 55, message: "生成キューの空き待ちが失敗" },
+      [],
+    );
+    expect(text).toContain("[3/55]");
+    expect(text).toContain("スキップ");
+    expect(error).toBeFalsy();
+  });
+
+  it("Given message 付き FINISHED（失敗スキップあり） When 変換する Then 一部失敗を明示し error フラグを立てる", () => {
+    const { text, error } = phaseToStatus(
+      { phase: PHASE.FINISHED, total: 55, message: "2 件の entry が失敗しました (entry 3, 7)" },
+      [],
+    );
+    expect(text).toContain("一部失敗");
+    expect(text).toContain("entry 3, 7");
+    expect(error).toBe(true);
+  });
+
+  it("Given message 無し FINISHED When 変換する Then 従来文言のまま（後方互換）", () => {
+    const { text, error } = phaseToStatus({ phase: PHASE.FINISHED, total: 10 }, []);
+    expect(text).toBe("完了: 10 パターンを実行しました。");
+    expect(error).toBeFalsy();
+  });
+});

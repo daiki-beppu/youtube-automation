@@ -65,9 +65,14 @@ interface RunnerState {
   resumeBanner: ResumeBanner | null;
   acceptResume: () => void;
   dismissResume: () => void;
+  // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。表示と再実行導線に使う。
+  failedEntries: number[];
+  // 失敗分のみ再実行 (#948)。run({indices: failedEntries}) を 1-click で投げる。
+  rerunFailed: () => void;
   fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
-  run: (overrides?: { range?: RunRange }) => Promise<void>;
+  // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
+  run: (overrides?: { range?: RunRange; indices?: number[] }) => Promise<void>;
   stop: () => Promise<void>;
 }
 
@@ -88,6 +93,8 @@ export function useSunoRunner(): RunnerState {
   // content snapshot 由来の失敗 index (#872 要件3)。chrome.storage の resume state が失われても、
   // 現在タブの live snapshot が ERROR phase で保持する failedIndex を再開バナーの冗長ソースにする。
   const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
+  // content snapshot 由来のスキップ済み失敗 index 一覧 (#948)。chrome.storage と二重化する。
+  const [restoredFailedIndices, setRestoredFailedIndices] = useState<number[] | undefined>(undefined);
   // 実行範囲 UI の状態 (#872)。rangeStart/rangeEnd は入力欄の生文字列（1-based 表示）。
   const [rangeMode, setRangeMode] = useState<RangeMode>("all");
   const [rangeStart, setRangeStart] = useState("");
@@ -142,6 +149,19 @@ export function useSunoRunner(): RunnerState {
     }
     return null;
   }, [persistedResume, selectedCollectionId, resumeDismissed, resumeCheckedAt, restoredFailedIndex, entries.length]);
+
+  // 失敗スキップされた entry の一覧 (#948)。resumeBanner と同じ二重ソース
+  // （chrome.storage 優先、無ければ content snapshot）から解決する。
+  const failedEntries = useMemo<number[]>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume?.failedIndices?.length &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.failedIndices;
+    }
+    return restoredFailedIndices ?? [];
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredFailedIndices]);
 
   const report = useCallback((text: string, error = false) => {
     setStatus(text);
@@ -232,6 +252,7 @@ export function useSunoRunner(): RunnerState {
         setRestoredPlaylistName(restored.playlistName);
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
+        setRestoredFailedIndices(restored.failedIndices);
         report(restored.status, restored.isError);
       } catch {
         // runner content 未注入（中継先不在）では queryProgress が到達しない。復元を諦め従来表示を維持する。
@@ -264,7 +285,7 @@ export function useSunoRunner(): RunnerState {
   }, [url, selectedCollectionId, report]);
 
   const run = useCallback(
-    async (overrides?: { range?: RunRange }) => {
+    async (overrides?: { range?: RunRange; indices?: number[] }) => {
       // 二重実行ガード (#892 要件7)。実行中の再入（「再開」連打等）を no-op で弾く。
       if (isRunning) {
         return;
@@ -276,7 +297,7 @@ export function useSunoRunner(): RunnerState {
       // 無ければ range UI の状態から解決する（従来挙動）。range モードの 1-based 入力は
       // 0-based inclusive へ変換し、不正入力は resolveRunRange が throw → fail-loud で UI に出す。
       let range = overrides?.range;
-      if (range === undefined && rangeMode === "range") {
+      if (range === undefined && overrides?.indices === undefined && rangeMode === "range") {
         try {
           const start = Number(rangeStart);
           const end = rangeEnd.trim() === "" ? undefined : Number(rangeEnd);
@@ -298,6 +319,7 @@ export function useSunoRunner(): RunnerState {
           playlistName: derivedPlaylistName,
           range,
           collectionId: selectedCollectionId || undefined,
+          indices: overrides?.indices,
         });
         report("連続実行を開始しました。");
       } catch (err) {
@@ -325,6 +347,17 @@ export function useSunoRunner(): RunnerState {
     setResumeDismissed(true);
     void run({ range: resumeRunRange(resumeBanner) });
   }, [resumeBanner, run]);
+
+  // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
+  // 完走すると content 側が playlist 追加まで実行し resume state を消す。
+  const rerunFailed = useCallback(() => {
+    if (failedEntries.length === 0) {
+      return;
+    }
+    setResumeDismissed(true);
+    setRestoredFailedIndices(undefined);
+    void run({ indices: failedEntries });
+  }, [failedEntries, run]);
 
   const stop = useCallback(async () => {
     try {
@@ -361,6 +394,8 @@ export function useSunoRunner(): RunnerState {
     resumeBanner,
     acceptResume,
     dismissResume,
+    failedEntries,
+    rerunFailed,
     fetchData,
     run,
     stop,

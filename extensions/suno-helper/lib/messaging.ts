@@ -15,7 +15,14 @@ import type { RunRange } from "./resume-state";
  */
 export type RunPayload =
   | PromptEntry[]
-  | { entries: PromptEntry[]; playlistName?: string; range?: RunRange; collectionId?: string };
+  | {
+      entries: PromptEntry[];
+      playlistName?: string;
+      range?: RunRange;
+      collectionId?: string;
+      /** 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。 */
+      indices?: number[];
+    };
 
 interface ProtocolMap {
   /** overlay → background → runner: 連続実行を開始する。 */

@@ -65,6 +65,21 @@ export const POLL_INTERVAL_MS = 500;
 /** 注入後・クリック後の安定化待ち (ms)。 */
 export const SETTLE_MS = 1500;
 
+/**
+ * run 全体を止めるべき致命的エラー (#948)。entry 単位のリトライ/スキップ（lib/entry-retry.ts）の
+ * 対象外で、catch されず ERROR phase へ直行する。該当するのは「次の entry でも必ず再発する」失敗:
+ *   - DOM セレクタ不在（Suno UI 改装 / Custom Mode 画面でない）
+ *   - captcha challenge の手動解決待ち timeout（人間の介入が必要）
+ *   - queue の stall / timeout（Suno 側の系統的な停滞）
+ * 一時的・entry 固有の失敗（生成完了待ち timeout / inject 未受理）は通常の Error のまま残す。
+ */
+export class FatalRunError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FatalRunError";
+  }
+}
+
 export interface ResolvedFields {
   style: HTMLTextAreaElement;
   lyrics: HTMLTextAreaElement | null;
@@ -279,7 +294,7 @@ export async function injectAdvancedFields(
 ): Promise<void> {
   if (entry.exclude_styles !== undefined) {
     if (!fields.excludeStyles) {
-      throw new Error(
+      throw new FatalRunError(
         "Exclude styles 欄が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
@@ -291,7 +306,7 @@ export async function injectAdvancedFields(
         ? fields.vocalGender.male
         : fields.vocalGender.female;
     if (!target) {
-      throw new Error(
+      throw new FatalRunError(
         `Vocal gender button (${entry.vocal_gender}) が見つかりません。Suno の UI 変更の可能性があります。`,
       );
     }
@@ -301,7 +316,7 @@ export async function injectAdvancedFields(
   }
   if (entry.weirdness !== undefined) {
     if (!fields.weirdness) {
-      throw new Error(
+      throw new FatalRunError(
         "Weirdness slider が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
@@ -313,7 +328,7 @@ export async function injectAdvancedFields(
   }
   if (entry.style_influence !== undefined) {
     if (!fields.styleInfluence) {
-      throw new Error(
+      throw new FatalRunError(
         "Style Influence slider が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
@@ -415,7 +430,7 @@ export function resolveFields(): ResolvedFields {
     document.querySelectorAll<HTMLTextAreaElement>(SELECTORS.textareas),
   ).filter(isVisible);
   if (areas.length === 0) {
-    throw new Error(
+    throw new FatalRunError(
       "textarea が見つかりません。Suno の Custom Mode 画面を開いてください。",
     );
   }
@@ -424,7 +439,7 @@ export function resolveFields(): ResolvedFields {
   // Style は「Lyrics でない可視 textarea」。この述語が silent な上書き（Style==Lyrics）を構造的に禁ずる。
   const style = areas.find((el) => el !== lyrics);
   if (!style) {
-    throw new Error(
+    throw new FatalRunError(
       "Style 欄が見つかりません。Lyrics 以外の可視 textarea を検出できませんでした。",
     );
   }
@@ -446,7 +461,7 @@ export function resolveGenerateButton(): HTMLButtonElement {
     SELECTORS.generateLabel.test((el.textContent || "").trim()),
   );
   if (!btn) {
-    throw new Error(
+    throw new FatalRunError(
       "Generate ボタンが見つかりません。Suno の UI 変更の可能性があります。",
     );
   }
@@ -489,7 +504,7 @@ export async function waitForCaptchaClear(
     }
     await sleep(options.pollIntervalMs);
   }
-  throw new Error(
+  throw new FatalRunError(
     `captcha challenge が ${Math.round(options.timeoutMs / 60000)} 分以内に解消されませんでした。画面の challenge を手動で解決してから再開してください。`,
   );
 }
@@ -653,12 +668,14 @@ export async function waitForQueueSlot(
       // 待ち続ける。集合が完全に固まったときのみ「Suno 側の停滞」として fail-loud。
       const lastActivity = Math.max(startAt, options.getLastChangeAt());
       if (Date.now() - lastActivity >= stallTimeoutMs) {
-        throw new Error(
+        throw new FatalRunError(
           `生成キューの空き待ち中、in-flight の状態が ${Math.round(stallTimeoutMs / 60000)} 分間変化しませんでした。Suno 側で生成が停滞している可能性があります。`,
         );
       }
     } else if (Date.now() >= deadline) {
-      throw new Error("生成キューの空きスロット待ちがタイムアウトしました。");
+      throw new FatalRunError(
+        "生成キューの空きスロット待ちがタイムアウトしました。",
+      );
     }
     if (isQueueLimitErrorVisible()) {
       // toast 中はスロットが空いていても投入しない。消失を待つ。
