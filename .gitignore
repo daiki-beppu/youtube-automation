@@ -11,6 +11,9 @@ __pycache__/
 # Pytest temp（--basetemp などで生成される一時ディレクトリ）
 .tmp_test/
 
+# デバッグ用一時ファイル（chrome-devtools の DOM スナップショット等）
+.tmp/
+
 # Nix / tooling caches (do not commit eval / fetcher / tarball caches)
 .cache/
 
