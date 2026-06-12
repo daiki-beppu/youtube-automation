@@ -120,6 +120,53 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
   },
 };
 
+/** Suno studio API のオリジン（#948、chrome-devtools 実機観測で確定）。
+ * MAIN world bridge が生成投入 / clip status を観測・照会する対象。 */
+export const SUNO_API_ORIGIN = "https://studio-api-prod.suno.com";
+
+/** 生成投入 endpoint のパス（#948）。レスポンス JSON の `clips[].id` / `clips[].status` を観測する。 */
+export const GENERATE_ENDPOINT_PATH = "/api/generate/v2-web/";
+
+/** clip status 照会 endpoint のパス prefix（#948）。`/api/feed/v2?ids=...` 形式で Bearer 必須。
+ * ページ自身の fetch を passive 観測しつつ、必要時は bridge が同 endpoint を active poll する。 */
+export const FEED_ENDPOINT_PATH = "/api/feed/";
+
+/** active feed poll に使う具体 endpoint（#948）。 */
+export const FEED_V2_PATH = "/api/feed/v2";
+
+/** MAIN world bridge ⇄ ISOLATED content script の window.postMessage 識別マーカー（#948）。 */
+export const BRIDGE_SOURCE = "suno-helper-bridge";
+
+/** bridge メッセージ種別（#948）。window.postMessage の `type` フィールドに載せる。 */
+export const BRIDGE_MSG = {
+  /** bridge → content: generate レスポンスで観測した投入 clip 一覧。 */
+  GENERATE_CLIPS: "generate-clips",
+  /** bridge → content: feed レスポンスで観測した clip status 一覧。 */
+  FEED_CLIPS: "feed-clips",
+  /** content → bridge: feed/v2 の active poll 要求（requestId + ids）。 */
+  FEED_POLL_REQUEST: "feed-poll-request",
+  /** bridge → content: active poll の応答（requestId + clips | null）。 */
+  FEED_POLL_RESPONSE: "feed-poll-response",
+} as const;
+
+/** 生成が終端に達した clip status（#948）。これら以外はキュー slot を占有する in-flight とみなす。 */
+export const TERMINAL_CLIP_STATUSES = ["complete", "error"] as const;
+
+/** passive 観測がこの時間途絶え、かつ未終端 clip が残っているとき active feed poll に切り替える閾値 (ms)。 */
+export const FEED_STALE_MS = 15000;
+
+/** active feed poll の実行間隔 (ms)。ページ自身のポーリング頻度（数秒間隔）と同程度に抑える。 */
+export const FEED_POLL_INTERVAL_MS = 5000;
+
+/** active feed poll の応答待ち上限 (ms)。bridge 不在・token 未捕捉時に listener 側が諦める時間。 */
+export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
+
+/** bridge が観測した clip の最小表現（#948）。status は Suno API の生値（submitted/queued/streaming/complete/error 等）。 */
+export interface ObservedClip {
+  id: string;
+  status: string;
+}
+
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
  * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_COLLECTIONS_ROUTE。 */
 export const DISTROKID_COLLECTIONS_ROUTE = "/distrokid/collections";

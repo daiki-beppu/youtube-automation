@@ -19,6 +19,9 @@ import {
   writeResumeState,
 } from "../lib/resume-state";
 import { InjectNotAcknowledgedError, injectWithVerification } from "../lib/inject-retry";
+import { createAckWaiter, markAck } from "../lib/ack-probe";
+import { attachBridgeListener, createFeedPoller } from "../lib/bridge-listener";
+import { createClipTracker } from "../lib/clip-tracker";
 import {
   abortableSleep,
   CAPTCHA_WAIT_TIMEOUT_MS,
@@ -31,9 +34,9 @@ import {
   resolveFields,
   resolveGenerateButton,
   setNativeValue,
+  sleep,
   waitForCaptchaClear,
   waitForGeneration,
-  waitForInFlightIncrease,
   waitForQueueSlot,
 } from "../../shared/dom";
 import {
@@ -61,6 +64,36 @@ export default defineContentScript({
     // popup を閉じても進捗を維持・復元するための SSOT (#852)。run 開始で initSnapshot、
     // 以降は emitProgress が sendMessage より前に同期更新する（queryProgress と race しないため）。
     let currentSnapshot: SnapshotPayload | null = null;
+
+    // bridge（MAIN world）の観測を集約する in-flight の SSOT (#948)。run の外でも常時受信し、
+    // run 前のページ操作（手動投入等）や前 run の残留 in-flight も passive 合流で数える。
+    const tracker = createClipTracker();
+    attachBridgeListener(tracker);
+    // status 更新は WebSocket 経由でページの feed fetch を期待できないため、run 中は
+    // 未終端 clip がある限り active feed poll で status を追う（runAll の finally で stop）。
+    const feedPoller = createFeedPoller(tracker);
+    let warnedDomFallback = false;
+
+    /** in-flight 数の合成カウント (#948)。bridge 観測があれば status ベース、無ければ DOM プロキシへ縮退。 */
+    function currentInFlightCount(): number {
+      if (tracker.hasObservedAnyTraffic()) {
+        return tracker.getInFlightCount();
+      }
+      if (!warnedDomFallback) {
+        warnedDomFallback = true;
+        console.warn(
+          "[suno-helper] bridge 未観測のため DOM プロキシで in-flight を数えます（過大カウントの可能性あり）",
+        );
+      }
+      return getInFlightClipCount();
+    }
+
+    /** inject ACK のハイブリッド判定 (#948)。bridge の generate レスポンス観測 OR DOM 増分。 */
+    const waitForAck = createAckWaiter({
+      getSubmissionCount: () => tracker.submissionCount(),
+      getDomInFlightCount: getInFlightClipCount,
+      sleep,
+    });
 
     function emitProgress(payload: ProgressPayload): void {
       if (!currentSnapshot) {
@@ -216,6 +249,9 @@ export default defineContentScript({
             // queue 空き待ちは single clip 完了待ち (GENERATE_TIMEOUT_MS) とは別系統の 5 分 (#864 root cause 1)。
             timeoutMs: QUEUE_SLOT_WAIT_TIMEOUT_MS,
             queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
+            // bridge の status ベースカウント (#948)。Remix disabled プロキシは完了後も disabled が
+            // 残り過大カウントするため、観測があれば一次情報（API status）で数える。
+            getCount: currentInFlightCount,
           });
           if (aborted) {
             // waitForQueueSlot 後の中断: まだ Generate を click していないため i をそのまま使う (#924)。
@@ -224,13 +260,18 @@ export default defineContentScript({
             return;
           }
           emitProgress({ phase: PHASE.INJECTING, index: i, total });
-          // inject 後に in-flight が CLIPS_PER_REQUEST 増えたか検証し、silent drop なら同じ entry を retry する (#864 root cause 3)。
+          // inject 後に受理（ACK）を検証し、silent drop なら同じ entry を retry する (#864 root cause 3)。
+          // ACK は bridge の generate レスポンス観測 OR DOM 増分のハイブリッド (#948)。
           await injectWithVerification({
             inject: () => injectAndGenerate(entries[i], i, total),
-            getInFlightClipCount,
-            waitForInFlightIncrease,
+            markBeforeInject: () =>
+              markAck({
+                getSubmissionCount: () => tracker.submissionCount(),
+                getDomInFlightCount: getInFlightClipCount,
+                sleep,
+              }),
+            waitForAck,
             isAborted: () => aborted,
-            clipsPerRequest: CLIPS_PER_REQUEST,
             maxRetry: preset.maxInjectRetry,
             ackTimeoutMs: preset.injectAckTimeoutMs,
             pollIntervalMs: POLL_INTERVAL_MS,
@@ -317,8 +358,12 @@ export default defineContentScript({
         ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined }
         : data;
       currentSnapshot = initSnapshot(entries, playlistName);
+      // run 中のみ active feed poll で clip status を追う (#948)。passive 観測が生きていれば
+      // poller は stale 判定で自発的に黙る（intervalMs ごとの no-op tick のみ）。
+      feedPoller.start();
       void runAll(entries, { range, collectionId, playlistName }).finally(() => {
         running = false;
+        feedPoller.stop();
       });
       return { ok: true } as const;
     });

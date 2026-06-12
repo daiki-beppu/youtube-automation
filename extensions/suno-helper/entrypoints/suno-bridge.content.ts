@@ -1,0 +1,132 @@
+// MAIN world fetch bridge (#948)。Suno ページ自身の fetch をラップし、
+//   - 生成投入（POST /api/generate/v2-web/）のレスポンス → 投入 clip の観測イベント
+//   - feed（/api/feed/*）のレスポンス → clip status の観測イベント
+// を window.postMessage で ISOLATED content script（lib/bridge-listener.ts）へ転送する。
+//
+// MAIN world で動かす理由: content script（ISOLATED）からはページの fetch を観測できず、
+// studio-api への自前 fetch も CORS / 認証文脈の制約を受ける。MAIN world ならページと
+// 同一文脈で観測・照会でき、manifest の権限追加も不要（最小権限契約を維持）。
+//
+// Authorization（Bearer）はこの MAIN world のローカル変数に閉じ、extension 側へは出さない。
+// 失効（401）したら破棄し、ページの次リクエストで自動再捕捉する。
+//
+// 観測は徹底して fail-soft: 解析失敗・転送失敗で例外を漏らさず、ページの fetch 結果には
+// 一切干渉しない（res は clone を読み、原物をそのまま返す）。
+import {
+  BRIDGE_MSG,
+  BRIDGE_SOURCE,
+  FEED_V2_PATH,
+  type ObservedClip,
+  SUNO_API_ORIGIN,
+  SUNO_MATCHES,
+} from "../../shared/constants";
+import {
+  extractAuthHeader,
+  isFeedRequest,
+  isGenerateRequest,
+  isSunoApiUrl,
+  parseClipsFromFeedResponse,
+  parseClipsFromGenerateResponse,
+  resolveRequestUrl,
+} from "../lib/fetch-bridge";
+
+export default defineContentScript({
+  matches: [...SUNO_MATCHES],
+  // ページの最初の fetch（認証付き）から token を捕捉できるよう document_start で注入する。
+  runAt: "document_start",
+  world: "MAIN",
+  main() {
+    const originalFetch = window.fetch.bind(window);
+    let authHeader: string | null = null;
+
+    function post(type: string, payload: Record<string, unknown>): void {
+      window.postMessage({ source: BRIDGE_SOURCE, type, ...payload }, window.location.origin);
+    }
+
+    function postClips(type: string, clips: ObservedClip[] | null): void {
+      if (clips) {
+        post(type, { clips });
+      }
+    }
+
+    /** レスポンス clone を非同期で観測する。fetch の戻りを遅延させない・失敗を漏らさない。 */
+    async function observe(url: string, res: Response): Promise<void> {
+      try {
+        if (!res.ok) {
+          return;
+        }
+        if (isGenerateRequest(url)) {
+          postClips(BRIDGE_MSG.GENERATE_CLIPS, parseClipsFromGenerateResponse(await res.json()));
+        } else if (isFeedRequest(url)) {
+          postClips(BRIDGE_MSG.FEED_CLIPS, parseClipsFromFeedResponse(await res.json()));
+        }
+      } catch {
+        // 観測のみの経路。解析失敗でページにも runner にも影響させない。
+      }
+    }
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      let url = "";
+      try {
+        url = resolveRequestUrl(input);
+        if (isSunoApiUrl(url)) {
+          const auth = extractAuthHeader(input, init);
+          if (auth) {
+            authHeader = auth;
+          }
+        }
+      } catch {
+        // URL 解決の失敗は観測を諦めるだけで、fetch 自体は素通しする。
+      }
+      const res = await originalFetch(input, init);
+      if (url) {
+        void observe(url, res.clone());
+      }
+      return res;
+    };
+
+    /** content script からの active feed poll 要求に応える。token 未捕捉・失敗は clips: null。 */
+    async function handleFeedPoll(requestId: number, ids: string[]): Promise<void> {
+      const respond = (clips: ObservedClip[] | null): void => post(BRIDGE_MSG.FEED_POLL_RESPONSE, { requestId, clips });
+      if (!authHeader || ids.length === 0) {
+        respond(null);
+        return;
+      }
+      try {
+        const res = await originalFetch(`${SUNO_API_ORIGIN}${FEED_V2_PATH}?ids=${ids.join(",")}`, {
+          headers: { authorization: authHeader },
+        });
+        if (res.status === 401) {
+          // token 失効。破棄してページの次リクエストでの再捕捉に委ねる。
+          authHeader = null;
+          respond(null);
+          return;
+        }
+        if (!res.ok) {
+          respond(null);
+          return;
+        }
+        respond(parseClipsFromFeedResponse(await res.json()));
+      } catch {
+        respond(null);
+      }
+    }
+
+    window.addEventListener("message", (event: MessageEvent) => {
+      if (event.source !== window) {
+        return;
+      }
+      const data = event.data as { source?: string; type?: string; requestId?: number; ids?: string[] } | null;
+      if (
+        !data ||
+        data.source !== BRIDGE_SOURCE ||
+        data.type !== BRIDGE_MSG.FEED_POLL_REQUEST ||
+        typeof data.requestId !== "number" ||
+        !Array.isArray(data.ids)
+      ) {
+        return;
+      }
+      void handleFeedPoll(data.requestId, data.ids);
+    });
+  },
+});

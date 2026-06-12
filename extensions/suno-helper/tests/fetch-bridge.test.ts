@@ -1,0 +1,113 @@
+// MAIN world fetch bridge の純関数 (#948) の回帰テスト。
+//
+// URL 判定・Authorization 抽出・レスポンス解析が対象。解析は fail-soft（形崩れで null、
+// throw しない）が契約 — 観測の失敗で生成フローを止めないため。
+import { describe, expect, it } from "vitest";
+
+import { GENERATE_ENDPOINT_PATH, SUNO_API_ORIGIN } from "../../shared/constants";
+import {
+  extractAuthHeader,
+  isFeedRequest,
+  isGenerateRequest,
+  isSunoApiUrl,
+  parseClipsFromFeedResponse,
+  parseClipsFromGenerateResponse,
+  resolveRequestUrl,
+} from "../lib/fetch-bridge";
+
+const GENERATE_URL = `${SUNO_API_ORIGIN}${GENERATE_ENDPOINT_PATH}`;
+const FEED_URL = `${SUNO_API_ORIGIN}/api/feed/v2?ids=aaa,bbb`;
+
+describe("URL 判定: 観測対象 endpoint の識別", () => {
+  it("Given generate endpoint の URL When 判定する Then isGenerateRequest が true", () => {
+    expect(isGenerateRequest(GENERATE_URL)).toBe(true);
+    expect(isFeedRequest(GENERATE_URL)).toBe(false);
+  });
+
+  it("Given feed/v2 の URL When 判定する Then isFeedRequest が true（version 違いも prefix で拾う）", () => {
+    expect(isFeedRequest(FEED_URL)).toBe(true);
+    expect(isFeedRequest(`${SUNO_API_ORIGIN}/api/feed/v3?ids=x`)).toBe(true);
+    expect(isGenerateRequest(FEED_URL)).toBe(false);
+  });
+
+  it("Given 別オリジンの同パス URL When 判定する Then すべて false（オリジン縛り）", () => {
+    const phishing = `https://evil.example.com${GENERATE_ENDPOINT_PATH}`;
+    expect(isSunoApiUrl(phishing)).toBe(false);
+    expect(isGenerateRequest(phishing)).toBe(false);
+    expect(isFeedRequest(`https://evil.example.com/api/feed/v2`)).toBe(false);
+  });
+});
+
+describe("resolveRequestUrl: fetch 第 1 引数からの URL 解決", () => {
+  it("Given string / URL / Request When 解決する Then いずれも URL 文字列を返す", () => {
+    expect(resolveRequestUrl(GENERATE_URL)).toBe(GENERATE_URL);
+    expect(resolveRequestUrl(new URL(GENERATE_URL))).toBe(GENERATE_URL);
+    expect(resolveRequestUrl(new Request(GENERATE_URL))).toBe(GENERATE_URL);
+  });
+});
+
+describe("extractAuthHeader: Authorization の抽出", () => {
+  it("Given record 形式の headers When 抽出する Then 値を返す（大文字小文字非依存）", () => {
+    expect(extractAuthHeader(GENERATE_URL, { headers: { authorization: "Bearer abc" } })).toBe("Bearer abc");
+    expect(extractAuthHeader(GENERATE_URL, { headers: { Authorization: "Bearer abc" } })).toBe("Bearer abc");
+  });
+
+  it("Given Headers / 配列形式 When 抽出する Then 値を返す", () => {
+    expect(extractAuthHeader(GENERATE_URL, { headers: new Headers({ authorization: "Bearer h" }) })).toBe("Bearer h");
+    expect(extractAuthHeader(GENERATE_URL, { headers: [["Authorization", "Bearer a"]] })).toBe("Bearer a");
+  });
+
+  it("Given Request オブジェクトに headers When init 不在 Then Request 側から抽出する", () => {
+    const req = new Request(GENERATE_URL, { headers: { authorization: "Bearer r" } });
+    expect(extractAuthHeader(req)).toBe("Bearer r");
+  });
+
+  it("Given Authorization 不在 When 抽出する Then null", () => {
+    expect(extractAuthHeader(GENERATE_URL, { headers: { "content-type": "application/json" } })).toBeNull();
+    expect(extractAuthHeader(GENERATE_URL)).toBeNull();
+  });
+});
+
+describe("parseClipsFromGenerateResponse: 生成投入レスポンスの解析 (fail-soft)", () => {
+  it("Given 実機形 {id, clips: [{id, status}]} When 解析する Then ObservedClip[] を返す", () => {
+    const json = {
+      id: "batch-1",
+      clips: [
+        { id: "c1", status: "submitted", title: "t1", extra: 1 },
+        { id: "c2", status: "submitted" },
+      ],
+    };
+    expect(parseClipsFromGenerateResponse(json)).toEqual([
+      { id: "c1", status: "submitted" },
+      { id: "c2", status: "submitted" },
+    ]);
+  });
+
+  it("Given 形が崩れた JSON When 解析する Then null（throw しない）", () => {
+    expect(parseClipsFromGenerateResponse(null)).toBeNull();
+    expect(parseClipsFromGenerateResponse("oops")).toBeNull();
+    expect(parseClipsFromGenerateResponse({})).toBeNull();
+    expect(parseClipsFromGenerateResponse({ clips: "not-array" })).toBeNull();
+    expect(parseClipsFromGenerateResponse({ clips: [] })).toBeNull();
+    expect(parseClipsFromGenerateResponse({ clips: [{ id: 1, status: 2 }] })).toBeNull();
+  });
+});
+
+describe("parseClipsFromFeedResponse: feed レスポンスの解析 (両形対応・fail-soft)", () => {
+  it("Given {clips: [...]} 形 When 解析する Then ObservedClip[] を返す", () => {
+    expect(parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming" }] })).toEqual([
+      { id: "c1", status: "streaming" },
+    ]);
+  });
+
+  it("Given 素の配列形 When 解析する Then ObservedClip[] を返す", () => {
+    expect(parseClipsFromFeedResponse([{ id: "c1", status: "complete" }])).toEqual([{ id: "c1", status: "complete" }]);
+  });
+
+  it("Given 形が崩れた JSON When 解析する Then null（throw しない）", () => {
+    expect(parseClipsFromFeedResponse(null)).toBeNull();
+    expect(parseClipsFromFeedResponse({})).toBeNull();
+    expect(parseClipsFromFeedResponse([])).toBeNull();
+    expect(parseClipsFromFeedResponse([{ status: "complete" }])).toBeNull();
+  });
+});
