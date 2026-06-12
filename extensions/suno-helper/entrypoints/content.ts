@@ -22,7 +22,7 @@ import {
 import { InjectNotAcknowledgedError, injectWithVerification } from "../lib/inject-retry";
 import { runEntryWithRetry } from "../lib/entry-retry";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
-import { attachBridgeListener, createFeedPoller } from "../lib/bridge-listener";
+import { attachBridgeListener, createFeedPoller, requestSliderSet } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
 import {
   abortableSleep,
@@ -132,12 +132,14 @@ export default defineContentScript({
         // title 欄不在は Suno 側 UI 改装の可能性。style/lyrics と違い fail-soft（警告のみで続行）。
         console.warn("Song Title 欄が見つかりませんでした。タイトル注入を skip して続行します。");
       }
-      // Custom Mode > More Options の 3 フィールド (#900)。radix slider への注入は keydown dispatch
-      // (ArrowRight/Left, bubbles:true composed:true) を採用した。実機検証で radix Slider root の
-      // keydown listener に合成イベントが届き aria-valuenow が動くことを確認済み（pointer event 合成
-      // fallback は不要だった）。entry に値があり selector が不在なら injectAdvancedFields が throw する
-      // (fail-loud)。値が無ければ skip する (fail-soft、後方互換)。
-      await injectAdvancedFields(entry, resolveAdvancedFields());
+      // Custom Mode > More Options の 3 フィールド (#900)。slider 注入は MAIN world bridge 経由
+      // （React onKeyDown 直接呼び出しで isTrusted チェックを通過、#973）を優先し、失敗時は従来の
+      // 合成 keydown dispatch へ縮退する（e2e mock の plain DOM はこちらで動く）。entry に値があり
+      // selector が不在なら injectAdvancedFields が throw する (fail-loud)。値が無ければ skip する
+      // (fail-soft、後方互換)。
+      await injectAdvancedFields(entry, resolveAdvancedFields(), {
+        bridgeSetSlider: requestSliderSet,
+      });
       await abortableSleep(SETTLE_MS, () => aborted);
 
       if (aborted) {

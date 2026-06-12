@@ -29,6 +29,7 @@ import {
   parseClipsFromGenerateResponse,
   resolveRequestUrl,
 } from "../lib/fetch-bridge";
+import { findSliderElement, setSliderValueViaReact } from "../lib/slider-bridge";
 
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
@@ -112,21 +113,52 @@ export default defineContentScript({
       }
     }
 
+    /**
+     * content script からの slider 注入要求に応える（#973）。React props の onKeyDown を
+     * isTrusted: true の疑似イベントで直接呼び、Suno の bot 検知を通過させる。
+     * 失敗（plain DOM / ハンドラ無効）は ok: false で返し、content 側が合成イベント経路へ縮退する。
+     */
+    async function handleSliderSet(requestId: number, ariaLabel: string, target: number): Promise<void> {
+      const respond = (ok: boolean, actual: number | null): void =>
+        post(BRIDGE_MSG.SLIDER_SET_RESPONSE, { requestId, ok, actual });
+      try {
+        const slider = findSliderElement(ariaLabel);
+        if (!slider) {
+          respond(false, null);
+          return;
+        }
+        const ok = await setSliderValueViaReact(slider, target);
+        const actual = Number(slider.getAttribute("aria-valuenow"));
+        respond(ok, Number.isFinite(actual) ? actual : null);
+      } catch {
+        respond(false, null);
+      }
+    }
+
     window.addEventListener("message", (event: MessageEvent) => {
       if (event.source !== window) {
         return;
       }
-      const data = event.data as { source?: string; type?: string; requestId?: number; ids?: string[] } | null;
-      if (
-        !data ||
-        data.source !== BRIDGE_SOURCE ||
-        data.type !== BRIDGE_MSG.FEED_POLL_REQUEST ||
-        typeof data.requestId !== "number" ||
-        !Array.isArray(data.ids)
-      ) {
+      const data = event.data as {
+        source?: string;
+        type?: string;
+        requestId?: number;
+        ids?: string[];
+        ariaLabel?: string;
+        target?: number;
+      } | null;
+      if (!data || data.source !== BRIDGE_SOURCE || typeof data.requestId !== "number") {
         return;
       }
-      void handleFeedPoll(data.requestId, data.ids);
+      if (data.type === BRIDGE_MSG.FEED_POLL_REQUEST && Array.isArray(data.ids)) {
+        void handleFeedPoll(data.requestId, data.ids);
+      } else if (
+        data.type === BRIDGE_MSG.SLIDER_SET_REQUEST &&
+        typeof data.ariaLabel === "string" &&
+        typeof data.target === "number"
+      ) {
+        void handleSliderSet(data.requestId, data.ariaLabel, data.target);
+      }
     });
   },
 });
