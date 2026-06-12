@@ -265,7 +265,14 @@ export default defineContentScript({
         const result = await runEntryWithRetry({
           attempt: async () => {
             // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
-            emitProgress({ phase: PHASE.WAITING_SLOT, index: i, total });
+            // bridge 無観測の縮退中は message で明示する (#948 PR4: DOM プロキシは過大カウントしうるため
+            // 「待ちが長い」原因をユーザーが切り分けられるようにする)。
+            emitProgress({
+              phase: PHASE.WAITING_SLOT,
+              index: i,
+              total,
+              message: tracker.hasObservedAnyTraffic() ? undefined : "bridge 未観測: DOM 計数で待機中",
+            });
             await waitForQueueSlot(maxGeneratingClips, {
               isAborted: () => aborted,
               pollIntervalMs: POLL_INTERVAL_MS,

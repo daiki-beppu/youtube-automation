@@ -447,3 +447,41 @@ describe("waitForQueueSlot: stall ベース判定 (#948)", () => {
     await expectation;
   });
 });
+
+describe("waitForQueueSlot × clip-tracker 統合: 実測シナリオの回帰 (#948)", () => {
+  // 実測で確認した「DOM 上 20 clips が Remix disabled だが実 status は complete 16 / streaming 4」
+  // の状況で、status ベースのカウントなら即投入再開されることを tracker と組み合わせて pin する。
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given DOM 20 disabled / 実 status complete 16 + streaming 4 When tracker を getCount に注入 Then 即投入再開する", async () => {
+    const { createClipTracker } = await import("../lib/clip-tracker");
+    // DOM プロキシ視点では 20 clips すべて生成中（Balanced 上限 10 を常時超過 = 旧バグの再現条件）。
+    Array.from({ length: 20 }, () => addClipCard({ generating: true }));
+    expect(getInFlightClipCount()).toBe(20);
+
+    const tracker = createClipTracker();
+    const clips = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, status: "submitted" }));
+    for (let i = 0; i < 10; i++) {
+      tracker.registerSubmitted(clips.slice(i * 2, i * 2 + 2));
+    }
+    tracker.applyFeedStatuses(clips.map((c, i) => ({ id: c.id, status: i < 16 ? "complete" : "streaming" })));
+    expect(tracker.getInFlightCount()).toBe(4);
+
+    const pending = waitForQueueSlot(10, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      getCount: () => tracker.getInFlightCount(),
+      getLastChangeAt: () => tracker.lastChangeAt(),
+      stallTimeoutMs: 600000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(pending).resolves.toBeUndefined(); // 4 < 10 で即 resolve（DOM プロキシなら 20 >= 10 で待機）
+  });
+});
