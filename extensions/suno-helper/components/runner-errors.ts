@@ -36,7 +36,8 @@ export function phaseToStatus(
     case PHASE.INJECTING:
       return { text: `[${n}/${total}] 注入中: ${entries[index ?? 0]?.name ?? ""}` };
     case PHASE.WAITING_SLOT:
-      return { text: `[${n}/${total}] 生成キューの空き待ち…` };
+      // message は bridge 縮退の明示 (#948)。通常時は undefined で従来文言のまま。
+      return { text: `[${n}/${total}] 生成キューの空き待ち…${message ? `（${message}）` : ""}` };
     case PHASE.WAITING_CAPTCHA:
       return { text: `[${n}/${total}] captcha 解消待ち…（多くは自動で解消します）` };
     case PHASE.GENERATING:
