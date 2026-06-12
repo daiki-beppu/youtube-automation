@@ -10,6 +10,7 @@
     "./image": "./src/image/index.ts",
     "./metadata": "./src/metadata.ts",
     "./paths": "./src/paths.ts",
+    "./registry": "./src/registry.ts",
     "./skills-sync": "./skills-sync/index.ts"
   },
   "dependencies": {

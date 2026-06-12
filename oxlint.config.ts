@@ -47,6 +47,21 @@ const OP_SPAWN_BANNED_IN_CORE = [
   },
 ];
 
+// ADR 0004: cli と mcp は互いに独立 (依存方向は core ← cli / core ← mcp のみ)。
+// registry は @youtube-automation/core/registry を使い、相互 import を禁止する。
+const ADR0004_MUTUAL_BAN_MESSAGE =
+  "ADR 0004: cli と mcp は互いに独立。共有したいものは packages/core (例: @youtube-automation/core/registry) に置いてください。";
+
+const MCP_BANNED_IN_CLI = {
+  message: ADR0004_MUTUAL_BAN_MESSAGE,
+  name: "@youtube-automation/mcp",
+};
+
+const CLI_BANNED_IN_MCP = {
+  message: ADR0004_MUTUAL_BAN_MESSAGE,
+  name: "@youtube-automation/cli",
+};
+
 const FFI_BANNED_IN_CORE = {
   paths: [
     {
@@ -73,9 +88,39 @@ export default defineConfig({
   ],
   overrides: [
     {
-      files: ["packages/cli/**", "packages/mcp/**"],
+      files: ["packages/cli/**"],
       rules: {
-        "no-restricted-imports": ["error", HEAVY_DEPS_BANNED_IN_THIN_CLIENTS],
+        "no-restricted-imports": [
+          "error",
+          {
+            paths: [
+              ...HEAVY_DEPS_BANNED_IN_THIN_CLIENTS.paths,
+              MCP_BANNED_IN_CLI,
+            ],
+            patterns: [
+              ...HEAVY_DEPS_BANNED_IN_THIN_CLIENTS.patterns,
+              "@youtube-automation/mcp/*",
+            ],
+          },
+        ],
+      },
+    },
+    {
+      files: ["packages/mcp/**"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            paths: [
+              ...HEAVY_DEPS_BANNED_IN_THIN_CLIENTS.paths,
+              CLI_BANNED_IN_MCP,
+            ],
+            patterns: [
+              ...HEAVY_DEPS_BANNED_IN_THIN_CLIENTS.patterns,
+              "@youtube-automation/cli/*",
+            ],
+          },
+        ],
       },
     },
     {
