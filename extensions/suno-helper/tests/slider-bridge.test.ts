@@ -171,6 +171,57 @@ describe("setSliderValueViaReact: React onKeyDown 直接呼び出しによる注
   });
 });
 
+/**
+ * 実 React の再レンダー挙動を模す slider (#979)。
+ * keydown のたびに「render 時点の値を捕捉した新しい closure」へ __reactProps$ の onKeyDown を
+ * 差し替える。古い handler は捕捉済みの値を基準に再セットするだけなので、同じ handler を
+ * 使い回すと 1 step 目以降は同じ値を上書きし続けて動かない（実機で確認した stale handler 問題）。
+ */
+function makeRerenderingReactSlider(value: number): HTMLElement {
+  const slider = document.createElement("div");
+  slider.setAttribute("role", "slider");
+  slider.setAttribute("aria-valuenow", String(value));
+  document.body.appendChild(slider);
+  const render = (current: number): void => {
+    const onKeyDown = (e: KeydownLike): void => {
+      if (e.isTrusted !== true) {
+        return;
+      }
+      const next = e.key === "ArrowRight" ? current + 1 : e.key === "ArrowLeft" ? current - 1 : current;
+      slider.setAttribute("aria-valuenow", String(next));
+      render(next); // setState → 再レンダー: props を新 closure に差し替え
+    };
+    (slider as unknown as Record<string, unknown>).__reactProps$abc123 = { onKeyDown };
+  };
+  render(value);
+  return slider;
+}
+
+describe("setSliderValueViaReact: 再レンダーで handler が差し替わる slider (#979)", () => {
+  it("Given 捕捉した handler の使い回し When 連打 Then 1 step で止まる（バグの再現）", () => {
+    const slider = makeRerenderingReactSlider(50);
+    const stale = findReactKeyDownTarget(slider);
+    expect(stale).not.toBeNull();
+    for (let i = 0; i < 5; i++) {
+      stale?.handler(buildSyntheticKeydown("ArrowLeft", stale.owner, slider));
+    }
+    // 古い closure は「50 を基準に 49 をセット」し続けるため 49 から動かない
+    expect(slider.getAttribute("aria-valuenow")).toBe("49");
+  });
+
+  it("Given 毎 step 再取得する実装 When setSliderValueViaReact(10) Then 10 まで完走する", async () => {
+    const slider = makeRerenderingReactSlider(50);
+    await expect(setSliderValueViaReact(slider, 10)).resolves.toBe(true);
+    expect(slider.getAttribute("aria-valuenow")).toBe("10");
+  });
+
+  it("Given 増加方向 When setSliderValueViaReact(55) Then ArrowRight で到達する", async () => {
+    const slider = makeRerenderingReactSlider(50);
+    await expect(setSliderValueViaReact(slider, 55)).resolves.toBe(true);
+    expect(slider.getAttribute("aria-valuenow")).toBe("55");
+  });
+});
+
 describe("findSliderElement: aria-label による slider 解決", () => {
   it("Given Style Influence slider 有 When 解決 Then 該当要素を返す", () => {
     makeReactSlider(50, { ariaLabel: "Weirdness" });

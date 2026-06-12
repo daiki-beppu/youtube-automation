@@ -800,15 +800,15 @@ function addSlider(opts: { ariaLabel?: string; value: number; visible?: boolean;
   return slider;
 }
 
-describe("setSliderValue: radix slider への keydown 駆動注入 (#900)", () => {
-  // 契約 (draft が実装する public API, shared/dom.ts):
+describe("setSliderValue: radix slider への keydown 駆動注入 (#900, #979 で step 化)", () => {
+  // 契約 (public API, shared/dom.ts):
   //   setSliderValue(slider: HTMLElement, target: number): Promise<void>
   //     1. slider.focus()
-  //     2. current = Number(slider.getAttribute("aria-valuenow"))
-  //     3. delta = target - current。delta>=0 なら ArrowRight、<0 なら ArrowLeft を
-  //        |delta| 回 dispatch（KeyboardEvent, bubbles:true, composed:true で radix root へ届かせる）
-  //     4. 読み戻し poll（100ms 間隔 × 最大 5 回）で aria-valuenow === target を検証
-  //     5. 一致で resolve / 5 回後も不一致なら throw（fail-loud。silent に値ずれを通さない）
+  //     2. aria-valuenow を読み、target との差分方向の keydown を 1 step ずつ dispatch
+  //        （KeyboardEvent, bubbles:true, composed:true で radix root へ届かせる）
+  //     3. 各 step 後に aria-valuenow の変化を poll（100ms × 最大 5 回）してから次 step へ
+  //     4. target 到達で resolve / step 後も不変なら throw（fail-loud。silent に値ずれを通さない）
+  //   #979: 全 diff の同期一括 dispatch は React バッチングで net 1 step に潰れるため step 化した。
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -888,6 +888,25 @@ describe("setSliderValue: radix slider への keydown 駆動注入 (#900)", () =
     document.body.removeEventListener("keydown", handler);
 
     expect(bubbledToBody).toBe(3); // body まで bubbling した keydown 数 = delta
+  });
+
+  it("Given 値の反映が非同期 (React の再レンダー相当) When setSliderValue Then 1 step ずつ待って完走する", async () => {
+    // 実 Suno は keydown 受信時点の state を基準に次値を計算し、再レンダー後に DOM へ反映する。
+    // 同期一括 dispatch だと全イベントが同じ値を読んで net 1 step に潰れる（#979 の実機現象）。
+    // step 化後の実装は各 step の反映を待ってから次を出すため完走する。
+    const slider = addSlider({ ariaLabel: "Weirdness", value: 50, respond: false });
+    slider.addEventListener("keydown", (e) => {
+      const key = (e as KeyboardEvent).key;
+      const cur = Number(slider.getAttribute("aria-valuenow")); // dispatch 時点の値を捕捉
+      const next = key === "ArrowRight" ? cur + 1 : cur - 1;
+      setTimeout(() => slider.setAttribute("aria-valuenow", String(next)), 50);
+    });
+
+    const pending = setSliderValue(slider, 45);
+    await vi.advanceTimersByTimeAsync(10000);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(slider.getAttribute("aria-valuenow")).toBe("45");
   });
 
   it("Given slider が keydown に反応しない When setSliderValue Then 読み戻し検証に失敗して throw する", async () => {

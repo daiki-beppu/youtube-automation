@@ -1,9 +1,10 @@
-// MAIN world での slider 注入ロジック（#973）。
+// MAIN world での slider 注入ロジック（#973, #979）。
 //
-// Suno の Weirdness / Style Influence slider は onKeyDown 内で `isTrusted` をチェックしており、
-// dispatchEvent による合成 KeyboardEvent は原理的に弾かれる（#900 実機検証）。MAIN world からは
-// React が DOM 要素に生やす `__reactProps$*` expando にアクセスできるため、onKeyDown ハンドラを
-// **直接呼び出し**、`isTrusted: true` を持つ疑似イベントオブジェクトを渡すことでチェックを通過させる。
+// MAIN world からは React が DOM 要素に生やす `__reactProps$*` expando にアクセスできるため、
+// Suno の Weirdness / Style Influence slider の onKeyDown ハンドラを **直接呼び出し**て値を動かす。
+// dispatchEvent 経路（shared/dom.ts）より React の内部状態と確実に同期する主経路。
+// なお #900/#973 当時は「isTrusted チェックで合成イベントが弾かれる」と診断していたが、
+// #979 の実機再検証で誤りと判明（合成 dispatchEvent も 1 step ずつ反映を待てば通る）。
 //
 // この module は entrypoints/suno-bridge.content.ts（MAIN world）から呼ばれる。ISOLATED world では
 // `__reactProps$*` が見えない（world 間で JS expando は共有されない）ため、ここに置く意味がある。
@@ -104,10 +105,14 @@ function sleep(ms: number): Promise<void> {
  *   4. target 一致で true
  *
  * step ごとに current を読み直すため、step 幅が 1 でない slider でも過走せず収束する。
+ *
+ * ハンドラは **毎 step 解決し直す**（#979）。React は setState → 再レンダーのたびに
+ * `__reactProps$*` の onKeyDown を新しい closure に差し替えるため、最初に掴んだハンドラは
+ * 1 step 動いた時点で stale になり、捕捉済みの古い値を再セットするだけの空振りになる
+ * （実機検証: 使い回しは 1 step で停止、毎 step 再取得で target まで完走）。
  */
 export async function setSliderValueViaReact(slider: HTMLElement, target: number): Promise<boolean> {
-  const reactTarget = findReactKeyDownTarget(slider);
-  if (!reactTarget) {
+  if (!findReactKeyDownTarget(slider)) {
     return false;
   }
   // 属性不在は NaN（Number(null) は 0 になり「値 0 の slider」と区別できないため明示する）。
@@ -122,6 +127,11 @@ export async function setSliderValueViaReact(slider: HTMLElement, target: number
     }
     if (current === target) {
       return true;
+    }
+    // 再レンダー後の最新 closure を掴むため毎 step 解決し直す（stale handler 対策、#979）。
+    const reactTarget = findReactKeyDownTarget(slider);
+    if (!reactTarget) {
+      return false;
     }
     const key = target > current ? "ArrowRight" : "ArrowLeft";
     try {
