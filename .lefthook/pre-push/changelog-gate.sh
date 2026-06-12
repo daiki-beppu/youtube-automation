@@ -12,6 +12,8 @@
 #   - .claude/skills/
 #   - .claude/CLAUDE.template.md
 #   - pyproject.toml
+#   - packages/
+#   - package.json
 #
 # tests/ や docs/ など上記以外のみの変更はゲート対象外（CI も自動 skip）。
 #
@@ -79,7 +81,7 @@ EOF
 if [ "${changelog_touched}" = "0" ]; then
   echo "" >&2
   echo "changelog-gate: ❌ CHANGELOG ゲート違反" >&2
-  echo "  実コード（src/youtube_automation/ / .claude/skills/ / .claude/CLAUDE.template.md / pyproject.toml）を" >&2
+  echo "  実コード（src/youtube_automation/ / .claude/skills/ / .claude/CLAUDE.template.md / pyproject.toml / packages/ / package.json）を" >&2
   echo "  変更していますが ${CHANGELOG_PATH} が更新されていません。" >&2
   echo "  基準: ${diff_base}" >&2
   echo "" >&2

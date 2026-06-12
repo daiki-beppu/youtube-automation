@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/ts-rewrite]
   pull_request:
-    branches: [main]
+    branches: [main, feat/ts-rewrite]
 
 jobs:
   lint:
@@ -47,7 +47,7 @@ jobs:
           changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           echo "Changed files:"
           echo "$changed"
-          if ! echo "$changed" | grep -qE '^(src/youtube_automation/|\.claude/skills/|\.claude/CLAUDE\.template\.md$|pyproject\.toml$)'; then
+          if ! echo "$changed" | grep -qE '^(src/youtube_automation/|\.claude/skills/|\.claude/CLAUDE\.template\.md$|pyproject\.toml$|packages/|package\.json$)'; then
             echo "No significant code changes, skipping CHANGELOG check"
             exit 0
           fi

@@ -10,11 +10,15 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
+_CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.sh"
 
 _CHANGELOG_LABEL = "skip-changelog"
 _PATH_FILTER_PATTERN = (
-    "^(src/youtube_automation/|\\.claude/skills/|\\.claude/CLAUDE\\.template\\.md$|pyproject\\.toml$)"
+    "^(src/youtube_automation/|\\.claude/skills/|\\.claude/CLAUDE\\.template\\.md$"
+    "|pyproject\\.toml$|packages/|package\\.json$)"
 )
+# CI トリガーで CI を回す対象 branch。#790 cutover で feat/ts-rewrite を外す。
+_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite"]
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
@@ -110,3 +114,32 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
         "::error::CHANGELOG.md must be updated under [Unreleased]. Add an entry or apply 'skip-changelog' label."
         in run_script
     )
+
+
+def test_ci_workflow_triggers_run_on_feat_ts_rewrite_branch() -> None:
+    """#964: feat/ts-rewrite base の子 PR / push でも CI が走る必要がある。
+
+    #790 cutover で feat/ts-rewrite を branches から外したら本テストも更新する。
+    """
+    workflow = _load_ci_workflow()
+    # PyYAML は YAML 1.1 で bare な `on` を真偽値 True にパースするため両キーを許容する。
+    triggers = workflow.get("on", workflow.get(True))
+    assert isinstance(triggers, dict), "on トリガーが存在しない"
+
+    for event in ("push", "pull_request"):
+        branches = triggers.get(event, {}).get("branches")
+        assert branches == _TRIGGER_BRANCHES, f"{event} の branches が契約と不一致: {branches}"
+
+
+def test_ci_changelog_gate_covers_ts_packages() -> None:
+    """#964: CI と lefthook の changelog ゲートが packages/ と package.json を対象にする。"""
+    run_script = _load_ci_workflow()["jobs"]["changelog"]["steps"][1]["run"]
+    gate_script = _read_text(_CHANGELOG_GATE_PATH)
+
+    assert _PATH_FILTER_PATTERN in run_script
+    for token in ("packages/", "package\\.json$"):
+        assert token in run_script, f"CI path filter に {token} が無い"
+
+    # lefthook 側 GATED_PATHS は CI と同じ範囲を担保する。
+    for token in ('"packages/"', '"package.json"'):
+        assert token in gate_script, f"changelog-gate.sh に {token} が無い"
