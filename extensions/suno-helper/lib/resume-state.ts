@@ -26,6 +26,9 @@ export interface ResumeState {
   total: number;
   /** 永続化時刻 (epoch ms)。stale 判定に使う。 */
   timestamp: number;
+  /** リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
+   * 「失敗分のみ再実行」導線が run({indices}) へ渡す。旧 state には無い optional（後方互換）。 */
+  failedIndices?: number[];
 }
 
 /** content へ渡す 0-based inclusive な実行範囲。 */

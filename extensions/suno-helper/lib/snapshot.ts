@@ -19,13 +19,17 @@ export function initSnapshot(entries: PromptEntry[], playlistName?: string): Sna
   };
 }
 
-/** itemStates を phase に応じて遷移させる（INJECTING / DONE のみ、他 phase は不変）。非破壊で新配列を返す。 */
+/** itemStates を phase に応じて遷移させる（INJECTING / DONE / ENTRY_FAILED のみ、他 phase は不変）。非破壊で新配列を返す。 */
 export function nextItemStates(prev: ItemState[], phase: Phase, index?: number): ItemState[] {
   if (phase === PHASE.INJECTING) {
     return prev.map((s, i) => (i === index ? "active" : s === "active" ? "idle" : s));
   }
   if (phase === PHASE.DONE) {
     return prev.map((s, i) => (i === index ? "done" : s));
+  }
+  if (phase === PHASE.ENTRY_FAILED) {
+    // リトライ上限まで失敗しスキップされた entry (#948)。run 全体は継続する。
+    return prev.map((s, i) => (i === index ? "failed" : s));
   }
   return prev;
 }
@@ -47,5 +51,10 @@ export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): 
     // #924: payload.index は resolveInterruptIndex で「次に実行する index」に補正済みのため、
     // ここで受け取った値をそのまま failedIndex として記録すれば chrome.storage 側と意味が一致する。
     failedIndex: payload.phase === PHASE.ERROR ? payload.index : snap.failedIndex,
+    // ENTRY_FAILED の受信ごとにスキップ済み index を蓄積する (#948)。popup の「失敗分のみ再実行」が消費。
+    failedIndices:
+      payload.phase === PHASE.ENTRY_FAILED && payload.index !== undefined
+        ? [...(snap.failedIndices ?? []), payload.index]
+        : snap.failedIndices,
   };
 }

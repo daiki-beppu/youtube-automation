@@ -32,6 +32,8 @@ export function App() {
     resumeBanner,
     acceptResume,
     dismissResume,
+    failedEntries,
+    rerunFailed,
     fetchData,
     run,
     stop,
@@ -106,6 +108,23 @@ export function App() {
               閉じる
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 失敗スキップされた entry の再実行導線 (#948)。実行中は隠す。 */}
+      {failedEntries.length > 0 && !isRunning && (
+        <div className="flex flex-col gap-2 rounded border border-red-300 bg-red-50 px-2 py-2 text-xs text-red-900">
+          <p>
+            失敗してスキップされた entry:{" "}
+            <span className="font-semibold">{failedEntries.map((i) => i + 1).join(", ")}</span>
+          </p>
+          <button
+            type="button"
+            onClick={rerunFailed}
+            className="self-start rounded bg-red-600 px-2 py-1 text-white hover:bg-red-500"
+          >
+            失敗分のみ再実行
+          </button>
         </div>
       )}
 

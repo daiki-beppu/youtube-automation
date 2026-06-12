@@ -40,3 +40,32 @@ describe("snapshot.failedIndex: ERROR 停止 index の二重化 (#872)", () => {
     expect(snap.failedIndex).toBe(2);
   });
 });
+
+describe("applyProgress: ENTRY_FAILED で failedIndices を蓄積する (#948)", () => {
+  it("Given ENTRY_FAILED を 2 回受信 When 適用する Then failedIndices に蓄積され itemStates が failed になる", () => {
+    const entries = [
+      { name: "p1", style: "s" },
+      { name: "p2", style: "s" },
+      { name: "p3", style: "s" },
+    ] as Parameters<typeof initSnapshot>[0];
+    let snap = initSnapshot(entries);
+
+    snap = applyProgress(snap, { phase: PHASE.ENTRY_FAILED, index: 0, total: 3, message: "x" });
+    snap = applyProgress(snap, { phase: PHASE.DONE, index: 1, total: 3 });
+    snap = applyProgress(snap, { phase: PHASE.ENTRY_FAILED, index: 2, total: 3, message: "y" });
+
+    expect(snap.failedIndices).toEqual([0, 2]);
+    expect(snap.itemStates).toEqual(["failed", "done", "failed"]);
+    expect(snap.isRunning).toBe(true); // 非終了 phase（run 全体は継続）
+  });
+
+  it("Given FINISHED（失敗付き完走） When 適用する Then failedIndices を保持したまま isRunning=false", () => {
+    const entries = [{ name: "p1", style: "s" }] as Parameters<typeof initSnapshot>[0];
+    let snap = initSnapshot(entries);
+    snap = applyProgress(snap, { phase: PHASE.ENTRY_FAILED, index: 0, total: 1, message: "x" });
+    snap = applyProgress(snap, { phase: PHASE.FINISHED, total: 1, message: "1 件失敗" });
+
+    expect(snap.failedIndices).toEqual([0]);
+    expect(snap.isRunning).toBe(false);
+  });
+});
