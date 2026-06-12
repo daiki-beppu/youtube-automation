@@ -521,6 +521,21 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
       addCaptchaIframe({ src: HCAPTCHA_CHALLENGE_SRC, title: "hCaptchaチャレンジ", width: 0, height: 0 });
       expect(detectRecaptcha()).toBe(false);
     });
+
+    it("Given 検証完了後の駐機 iframe (title 非空, visibility:hidden, y:-9999) When 検知する Then false (verify 後の恒久誤検知防止)", () => {
+      // 実機観測: 自動 verify 後の challenge iframe は title と bbox を保持したまま画面外 (y:-9999) に
+      // 駐機する。title 非空ヒューリスティック (#875) がこれを active と誤検知すると、再開しても
+      // 即 ERROR で停止し続ける。viewport 上端より完全に上 (rect.bottom <= 0) は active としない。
+      addCaptchaIframe({
+        src: HCAPTCHA_CHALLENGE_SRC,
+        title: "hCaptchaチャレンジ",
+        visibility: "hidden",
+        width: 300,
+        height: 150,
+        y: -9999,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
   });
 
   it("Given challenge 類似 iframe 無し When 検知する Then false", () => {
