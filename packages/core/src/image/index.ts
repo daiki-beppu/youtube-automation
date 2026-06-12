@@ -6,8 +6,8 @@
 // - GenerateImageInput / GenerateImageOutput: service 境界の zod schema（+ z.infer 型）
 // - getProvider(config): ImageGenerationConfig から ImageProvider 実装にディスパッチ
 // - parseImageGenerationConfig(raw): skill-config から ImageGenerationConfig を構築
-// - ImageProvider / ImageGenerationRequest / ImageGenerationResult: 抽象契約
-// - RETRY_MAX / RETRY_BACKOFF: 共通リトライ定数
+// - ImageProvider / ImageGenerationRequest / PersistImage: 抽象契約（1-attempt、#959。
+//   リトライは core root の withRetry を service が所有する）
 // - OPENAI_SUPPORTED_ASPECT_RATIOS: OpenAI が受理するアスペクト比
 
 import type { ImageProvider } from "./base.ts";
@@ -17,10 +17,8 @@ import { OpenAIImageProvider } from "./openai.ts";
 
 export {
   type ImageGenerationRequest,
-  type ImageGenerationResult,
   type ImageProvider,
-  RETRY_BACKOFF,
-  RETRY_MAX,
+  type PersistImage,
 } from "./base.ts";
 export {
   type GeminiConfig,

@@ -11,3 +11,9 @@ export {
   type YouTubeAPIErrorOptions,
 } from "./errors.ts";
 export { err, ok, type Result } from "./result.ts";
+export {
+  defaultShouldRetry,
+  type RetryPolicy,
+  type SleepMs,
+  withRetry,
+} from "./retry.ts";

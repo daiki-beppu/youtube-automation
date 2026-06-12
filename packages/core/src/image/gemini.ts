@@ -1,21 +1,15 @@
 // Gemini 画像生成プロバイダー（Python `utils/image_provider/gemini.py` の移植）。
 //
-// `@google/genai` SDK でのリクエスト送信・参照画像の inlineData 化・
-// SAFETY/RECITATION 即時失敗・指数バックオフリトライ・画像保存を担う。
-// SDK client / sleep / persist は注入され（テストは fake で差し替え）、ここは
-// orchestration（リトライ・base64 decode・参照画像の inline 化）に集中する。
+// `@google/genai` SDK でのリクエスト送信・参照画像の inlineData 化・base64 decode を
+// 担う 1-attempt 契約の provider（#959）。リトライ・バックオフ・永続化は service 層
+// （`service.ts` の `withRetry` + persist）が所有するため、ここでは SDK エラーを
+// そのまま throw する（SAFETY / RECITATION は service 側の `shouldRetry` が
+// non-retryable と判定する）。SDK client は注入され（テストは fake で差し替え）、
+// ここはレスポンス decode と参照画像の inline 化に集中する。
 
-import { backoffMs, RETRY_MAX } from "./base.ts";
-import type {
-  ImageGenerationRequest,
-  ImageGenerationResult,
-  ImageProvider,
-  PersistImage,
-  SleepMs,
-} from "./base.ts";
+import type { ImageGenerationRequest, ImageProvider } from "./base.ts";
 import type { GeminiConfig } from "./config.ts";
 import { isRecord } from "./internal.ts";
-import { defaultPersist, defaultSleep } from "./io.ts";
 import { readReferenceFiles } from "./references.ts";
 
 // `@google/genai` client の最小シェイプ（注入点の seam）。
@@ -28,12 +22,10 @@ interface GeminiClient {
 /** GeminiImageProvider の注入依存。省略時は production default が使われる。 */
 export interface GeminiProviderDeps {
   createClient: () => GeminiClient | Promise<GeminiClient>;
-  persist: PersistImage;
-  sleep: SleepMs;
 }
 
 // `{ candidates: [{ content: { parts: [...] } }] }` から parts を取り出す。
-// 想定外の形は空配列に落とし、「画像なしレスポンス」としてリトライ経路へ合流させる。
+// 想定外の形は空配列に落とし、「画像なしレスポンス」として throw 経路へ合流させる。
 const extractParts = (response: unknown): unknown[] => {
   if (!isRecord(response) || !Array.isArray(response.candidates)) {
     return [];
@@ -76,13 +68,6 @@ const buildContents = (
   return [...parts, prompt];
 };
 
-const isContentPolicyError = (error: unknown): boolean => {
-  const message = (
-    error instanceof Error ? error.message : String(error)
-  ).toUpperCase();
-  return message.includes("SAFETY") || message.includes("RECITATION");
-};
-
 const defaultCreateClient = async (): Promise<GeminiClient> => {
   const project = process.env.GOOGLE_CLOUD_PROJECT;
   if (!project) {
@@ -101,11 +86,9 @@ const defaultCreateClient = async (): Promise<GeminiClient> => {
 
 const defaultDeps = (): GeminiProviderDeps => ({
   createClient: defaultCreateClient,
-  persist: defaultPersist,
-  sleep: defaultSleep,
 });
 
-/** Gemini API（Vertex AI 経由）で画像を 1 枚生成して保存する。 */
+/** Gemini API（Vertex AI 経由）で画像を 1 attempt 生成し、画像 bytes を返す。 */
 export class GeminiImageProvider implements ImageProvider {
   readonly name = "gemini";
   // Gemini はアスペクト比を制限しない（branding/icon.png 用途で 1:1 等を許容）。
@@ -121,9 +104,8 @@ export class GeminiImageProvider implements ImageProvider {
     this.deps = deps ?? defaultDeps();
   }
 
-  async generate(req: ImageGenerationRequest): Promise<ImageGenerationResult> {
-    const { createClient, persist, sleep } = this.deps;
-    const client = await createClient();
+  async generate(req: ImageGenerationRequest): Promise<Uint8Array> {
+    const client = await this.deps.createClient();
     const references = req.references ?? [];
     // req.imageSize が空のときのみ config の既定解像度に委ねる（Python と同じ挙動）。
     const imageSize = req.imageSize || this.config.imageSize;
@@ -136,30 +118,15 @@ export class GeminiImageProvider implements ImageProvider {
       model: this.config.model,
     };
 
-    for (let attempt = 0; attempt < RETRY_MAX; attempt += 1) {
-      try {
-        const response = await client.models.generateContent(params);
-        for (const part of extractParts(response)) {
-          const bytes = inlineImageBytes(part);
-          if (bytes) {
-            const savedPath = await persist(req.outputPath, bytes);
-            return { savedPath, success: true };
-          }
-        }
-        // 画像なしレスポンス → リトライ。
-      } catch (error) {
-        if (isContentPolicyError(error)) {
-          // SAFETY / RECITATION はリトライしても通らないため即時失敗。
-          return { savedPath: null, success: false };
-        }
-        // 一時エラー → リトライ。
-      }
-
-      if (attempt < RETRY_MAX - 1) {
-        await sleep(backoffMs(attempt));
+    // SDK エラー（SAFETY / RECITATION 含む）はそのまま伝播させる。
+    const response = await client.models.generateContent(params);
+    for (const part of extractParts(response)) {
+      const bytes = inlineImageBytes(part);
+      if (bytes) {
+        return bytes;
       }
     }
-
-    return { savedPath: null, success: false };
+    // 画像なしレスポンスは未 prefix Error（service 側で retryable と判定される）。
+    throw new Error("gemini が画像なしレスポンスを返しました");
   }
 }

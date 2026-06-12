@@ -1,16 +1,17 @@
-// Tests for `generateImageService` over the Gemini provider — the ADR-0003
-// Result boundary that wraps `GeminiImageProvider.generate` (Issue #823).
+// Tests for the Gemini provider's 1-attempt contract and for
+// `generateImageService` — the ADR-0003 Result boundary that owns retry and
+// persistence since #959.
 //
-// The generate-path tests now call `generateImageService(input, { provider })`
-// and assert on the Result discriminant (`r.ok` / `r.value` / `r.error`) instead
-// of the provider's raw `ImageGenerationResult`. The provider is still
-// constructed directly with injected deps (SDK client / backoff sleep /
-// image-persist), so these tests still exercise its orchestration — retry,
-// SAFETY/RECITATION short-circuit, base64 decode, reference-image inlining —
-// against in-memory fakes, but observe it through the service boundary:
-//   - provider success            → ok(value.savedPath)
-//   - provider `{ success: false }`→ err(domain "io")  (unprefixed failure)
-//   - schema violation            → err(domain "validation")
+// The provider unit tests construct `GeminiImageProvider` with an injected fake
+// SDK client and assert the new contract directly: `generate(req)` returns the
+// decoded image bytes on success and throws on failure (image-less response →
+// unprefixed Error; SDK errors — SAFETY/RECITATION included — propagate as-is).
+// Retry, backoff and persist now live in the service, so those behaviors are
+// observed through `generateImageService(input, { provider, persist, sleep })`
+// with fake sleep/persist recorders:
+//   - retryable failures           → 3 attempts, [10s, 30s] backoff, err(domain "io")
+//   - SAFETY / RECITATION          → no retry, err(domain "io")
+//   - schema violation             → err(domain "validation"), provider untouched
 // The identity test reads provider metadata the service does not expose, so it
 // keeps talking to the provider directly.
 //
@@ -19,7 +20,7 @@
 //   { candidates: [{ content: { parts: [ <part>, ... ] } }] }
 // where an image part is `{ inlineData: { data: <base64 string>, mimeType } }`
 // and a text part is `{ text: string }`. The provider base64-decodes
-// `inlineData.data` before persisting, mirroring the OpenAI b64 path.
+// `inlineData.data` and returns the raw bytes, mirroring the OpenAI b64 path.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -75,8 +76,9 @@ const textOnlyResponse = (text: string) => ({
   candidates: [{ content: { parts: [{ text }] } }],
 });
 
-// Captures injected sleeps and persists so retries never wait on real timers
-// and saves never touch disk.
+// Captures the sleeps and persists injected into the SERVICE (#959 moved both
+// out of the provider) so retries never wait on real timers and saves never
+// touch disk.
 const makeRecorders = () => {
   const sleeps: number[] = [];
   const persisted: { path: string; bytes: Uint8Array }[] = [];
@@ -94,15 +96,18 @@ const makeRecorders = () => {
   };
 };
 
-const makeDeps = (
-  client: unknown,
+const makeDeps = (client: unknown): GeminiDeps =>
+  ({ createClient: () => client }) as unknown as GeminiDeps;
+
+// Service deps bundling the provider with the fake sleep/persist recorders.
+const serviceDeps = (
+  provider: GeminiImageProvider,
   recorders: ReturnType<typeof makeRecorders>
-): GeminiDeps =>
-  ({
-    createClient: () => client,
-    persist: recorders.persist,
-    sleep: recorders.sleep,
-  }) as unknown as GeminiDeps;
+) => ({
+  persist: recorders.persist,
+  provider,
+  sleep: recorders.sleep,
+});
 
 const geminiConfig = {
   imageSize: "2K",
@@ -141,7 +146,67 @@ describe("GeminiImageProvider identity", () => {
   });
 });
 
-// --- success path ---------------------------------------------------------
+// --- provider 1-attempt contract -------------------------------------------
+
+describe("GeminiImageProvider 1-attempt contract", () => {
+  test("returns the decoded base64 image bytes on success", async () => {
+    // Given a client that returns one inline image part
+    const original = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+    const base64 = Buffer.from(original).toString("base64");
+    const { calls, client } = makeGeminiClient([() => imageResponse(base64)]);
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
+
+    // When calling the provider directly
+    const bytes = await provider.generate(baseRequest(join(workdir, "u.png")));
+
+    // Then the decoded bytes come back from a single SDK call — no retry, no
+    // persistence side effect inside the provider
+    expect([...bytes]).toEqual([...original]);
+    expect(calls).toHaveLength(1);
+  });
+
+  test("throws an unprefixed Error on an image-less response (single attempt)", async () => {
+    // Given a client that only returns text (no image part)
+    const { calls, client } = makeGeminiClient([
+      () => textOnlyResponse("no image in response"),
+    ]);
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
+
+    // When calling the provider directly
+    // Then it throws once without retrying internally; the message carries no
+    // domain prefix so the service-side withRetry treats it as retryable
+    await expect(
+      provider.generate(baseRequest(join(workdir, "miss-unit.png")))
+    ).rejects.toThrow("gemini が画像なしレスポンスを返しました");
+    expect(calls).toHaveLength(1);
+  });
+
+  test("propagates SDK errors as-is (SAFETY included)", async () => {
+    // Given an SDK error carrying a SAFETY content-policy message
+    const sdkError = new Error("blocked due to SAFETY filters");
+    const { calls, client } = makeGeminiClient([
+      () => {
+        throw sdkError;
+      },
+    ]);
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
+
+    // When calling the provider directly
+    let caught: unknown;
+    try {
+      await provider.generate(baseRequest(join(workdir, "safety-unit.png")));
+    } catch (error) {
+      caught = error;
+    }
+
+    // Then the very same error instance surfaces — the non-retryable
+    // classification is the service's job, not the provider's
+    expect(caught).toBe(sdkError);
+    expect(calls).toHaveLength(1);
+  });
+});
+
+// --- service success path ---------------------------------------------------
 
 describe("generateImageService (gemini) success", () => {
   test("decodes the base64 image part and persists the raw bytes", async () => {
@@ -150,17 +215,17 @@ describe("generateImageService (gemini) success", () => {
     const base64 = Buffer.from(original).toString("base64");
     const { client } = makeGeminiClient([() => imageResponse(base64)]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
     const outputPath = join(workdir, "out.png");
 
     // When generating through the service boundary
-    const r = await generateImageService(baseRequest(outputPath), { provider });
+    const r = await generateImageService(
+      baseRequest(outputPath),
+      serviceDeps(provider, recorders)
+    );
 
-    // Then the result is ok, the decoded bytes are persisted, and the saved
-    // path is carried in `value`
+    // Then the result is ok, the decoded bytes are persisted by the SERVICE,
+    // and the saved path is carried in `value`
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -181,15 +246,12 @@ describe("generateImageService (gemini) success", () => {
     const base64 = Buffer.from(new Uint8Array([1, 2, 3])).toString("base64");
     const { calls, client } = makeGeminiClient([() => imageResponse(base64)]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When generating with aspect ratio 16:9 through the service
     const r = await generateImageService(
       baseRequest(join(workdir, "fwd.png")),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then it succeeds, the model is passed through, and the aspect ratio
@@ -209,15 +271,12 @@ describe("generateImageService (gemini) success", () => {
     const base64 = Buffer.from(new Uint8Array([9, 9, 9])).toString("base64");
     const { calls, client } = makeGeminiClient([() => imageResponse(base64)]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When generating with a reference image (gemini.py:45-51)
     const r = await generateImageService(
       { ...baseRequest(join(workdir, "ref-out.png")), references: [refPath] },
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then it still succeeds and the reference bytes are sent as base64 inlineData
@@ -227,35 +286,32 @@ describe("generateImageService (gemini) success", () => {
   });
 });
 
-// --- retry path -----------------------------------------------------------
+// --- service retry path -----------------------------------------------------
 
 describe("generateImageService (gemini) retry", () => {
-  test("retries on an image-less response and fails after RETRY_MAX attempts", async () => {
-    // Given a client that only ever returns text (no image part) (gemini.py:94-96)
+  test("retries on an image-less response and fails after 3 attempts", async () => {
+    // Given a client that only ever returns text (no image part)
     const { calls, client } = makeGeminiClient([
       () => textOnlyResponse("no image in response"),
     ]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When generating through the service
     const r = await generateImageService(
       baseRequest(join(workdir, "miss.png")),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then the unprefixed provider failure maps to an `io` ServiceError after
-    // all 3 attempts and two backoff waits
+    // all 3 attempts and two backoff waits owned by the service's withRetry
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
     }
     expect(r.error.domain).toBe("io");
     expect(calls).toHaveLength(3);
-    // Two waits (between attempt 1→2 and 2→3), in ms = RETRY_BACKOFF seconds × 1000
+    // Two waits (between attempt 1→2 and 2→3), in ms = backoff seconds × 1000
     expect(recorders.sleeps).toEqual([10_000, 30_000]);
     expect(recorders.persisted).toEqual([]);
   });
@@ -273,15 +329,12 @@ describe("generateImageService (gemini) retry", () => {
       () => imageResponse(base64),
     ]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When generating through the service
     const r = await generateImageService(
       baseRequest(join(workdir, "late.png")),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then the third attempt wins after two backoff waits
@@ -302,15 +355,12 @@ describe("generateImageService (gemini) content policy", () => {
       },
     ]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When generating through the service
     const r = await generateImageService(
       baseRequest(join(workdir, "safety.png")),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then it fails (domain "io") immediately with no retry and no backoff wait
@@ -331,15 +381,12 @@ describe("generateImageService (gemini) content policy", () => {
       },
     ]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When generating through the service
     const r = await generateImageService(
       baseRequest(join(workdir, "recite.png")),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then it short-circuits to failure without retrying
@@ -357,17 +404,17 @@ describe("generateImageService input validation", () => {
     const base64 = Buffer.from(new Uint8Array([1])).toString("base64");
     const { calls, client } = makeGeminiClient([() => imageResponse(base64)]);
     const recorders = makeRecorders();
-    const provider = new GeminiImageProvider(
-      geminiConfig,
-      makeDeps(client, recorders)
-    );
+    const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When the input carries an unexpected key the `.strict()` schema rejects
     const malformed = {
       ...baseRequest(join(workdir, "bad.png")),
       unexpected: true,
     } as unknown as GenerateImageInput;
-    const r = await generateImageService(malformed, { provider });
+    const r = await generateImageService(
+      malformed,
+      serviceDeps(provider, recorders)
+    );
 
     // Then the boundary parses first: a validation ServiceError, and the
     // provider is never invoked

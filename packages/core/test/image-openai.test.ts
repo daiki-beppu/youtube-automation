@@ -1,15 +1,17 @@
-// Tests for `generateImageService` over the OpenAI provider — the ADR-0003
-// Result boundary that wraps `OpenAIImageProvider.generate` (Issue #823).
+// Tests for the OpenAI provider's 1-attempt contract and for
+// `generateImageService` — the ADR-0003 Result boundary that owns retry and
+// persistence since #959.
 //
-// The generate-path tests now call `generateImageService(input, { provider })`
-// and assert on the Result discriminant (`r.ok` / `r.value` / `r.error`). The
-// provider is still constructed directly with injected deps (SDK client /
-// backoff sleep / image-persist), so its orchestration — aspect-ratio → size
-// mapping, b64 decode, edit-vs-generate dispatch, retry — is still exercised
-// against in-memory fakes, but observed through the boundary:
-//   - provider success                 → ok(value.savedPath)
-//   - provider `{ success: false }`    → err(domain "io")     (unprefixed)
-//   - provider `config:`-prefixed throw→ err(domain "config")
+// The provider unit tests construct `OpenAIImageProvider` with an injected fake
+// SDK client and assert the new contract directly: `generate(req)` returns the
+// decoded image bytes on success and throws on failure (undecodable response →
+// unprefixed Error; unmapped aspect ratio → `config:`-prefixed Error BEFORE the
+// client is even created). Retry, backoff and persist now live in the service,
+// so those behaviors are observed through
+// `generateImageService(input, { provider, persist, sleep })` with fake
+// sleep/persist recorders:
+//   - retryable failures            → 3 attempts, [10s, 30s] backoff, err(domain "io")
+//   - `config:`-prefixed throw      → fail fast, err(domain "config"), no retry
 // Because `createClient` is injected, the default factory's
 // `process.env.OPENAI_API_KEY` + `new OpenAI(...)` path is bypassed — no env
 // setup is needed. (#822 moved op-based secret resolution to the cli layer.)
@@ -54,7 +56,7 @@ const nextBehavior = (queue: Behavior[] | undefined, i: number): unknown => {
 };
 
 // A fake `openai` client tracking generate/edit calls separately. A throwing
-// behavior surfaces synchronously, which the provider's try/catch handles
+// behavior surfaces synchronously, which the caller's try/catch handles
 // identically to a rejected promise.
 const makeOpenAIClient = (behaviors: {
   generate?: Behavior[];
@@ -87,6 +89,8 @@ const imageResponse = (...b64s: (string | null)[]) => ({
   data: b64s.map((b64) => (b64 === null ? {} : { b64_json: b64 })),
 });
 
+// Captures the sleeps and persists injected into the SERVICE (#959 moved both
+// out of the provider) plus the createClient invocation count.
 const makeRecorders = () => {
   const sleeps: number[] = [];
   const persisted: { path: string; bytes: Uint8Array }[] = [];
@@ -118,9 +122,17 @@ const makeDeps = (
       recorders.countClient();
       return client;
     },
-    persist: recorders.persist,
-    sleep: recorders.sleep,
   }) as unknown as OpenAIDeps;
+
+// Service deps bundling the provider with the fake sleep/persist recorders.
+const serviceDeps = (
+  provider: OpenAIImageProvider,
+  recorders: ReturnType<typeof makeRecorders>
+) => ({
+  persist: recorders.persist,
+  provider,
+  sleep: recorders.sleep,
+});
 
 const openaiConfig = {
   aspectRatio: "16:9" as const,
@@ -164,7 +176,75 @@ describe("OpenAIImageProvider identity", () => {
   });
 });
 
-// --- success path ---------------------------------------------------------
+// --- provider 1-attempt contract -------------------------------------------
+
+describe("OpenAIImageProvider 1-attempt contract", () => {
+  test("returns the decoded b64 image bytes on success", async () => {
+    // Given a generate response with a single b64 image
+    const original = new Uint8Array([0xff, 0xd8, 0xff, 5, 6, 7]);
+    const base64 = Buffer.from(original).toString("base64");
+    const { client, generateCalls } = makeOpenAIClient({
+      generate: [() => imageResponse(base64)],
+    });
+    const recorders = makeRecorders();
+    const provider = new OpenAIImageProvider(
+      openaiConfig,
+      makeDeps(client, recorders)
+    );
+
+    // When calling the provider directly
+    const bytes = await provider.generate(
+      request(join(workdir, "unit.png"), "16:9")
+    );
+
+    // Then the decoded bytes come back from a single SDK call — no retry, no
+    // persistence side effect inside the provider
+    expect([...bytes]).toEqual([...original]);
+    expect(generateCalls).toHaveLength(1);
+  });
+
+  test("throws an unprefixed Error when no response item decodes (single attempt)", async () => {
+    // Given a response with no decodable image (openai.py:106-108)
+    const { client, generateCalls } = makeOpenAIClient({
+      generate: [() => imageResponse()],
+    });
+    const recorders = makeRecorders();
+    const provider = new OpenAIImageProvider(
+      openaiConfig,
+      makeDeps(client, recorders)
+    );
+
+    // When calling the provider directly
+    // Then it throws once without retrying internally; the message carries no
+    // domain prefix so the service-side withRetry treats it as retryable
+    await expect(
+      provider.generate(request(join(workdir, "empty-unit.png"), "16:9"))
+    ).rejects.toThrow("openai が画像なしレスポンスを返しました");
+    expect(generateCalls).toHaveLength(1);
+  });
+
+  test("throws a config:-prefixed Error for an unmapped ratio before creating the client", async () => {
+    // Given a request whose ratio is not 16:9 or 9:16 (openai.py:63-67)
+    const { client, generateCalls } = makeOpenAIClient({
+      generate: [() => imageResponse("ignored")],
+    });
+    const recorders = makeRecorders();
+    const provider = new OpenAIImageProvider(
+      openaiConfig,
+      makeDeps(client, recorders)
+    );
+
+    // When calling the provider directly with 1:1
+    // Then it fails fast: config:-prefixed throw, no client, no SDK call
+    await expect(
+      provider.generate(request(join(workdir, "square-unit.png"), "1:1"))
+    ).rejects.toThrow(/^config:/u);
+    expect(recorders.clientCreatedCount()).toBe(0);
+    expect(generateCalls).toHaveLength(0);
+  });
+});
+
+// --- service success path ---------------------------------------------------
 
 describe("generateImageService (openai) success", () => {
   test("maps 16:9 → 1536x1024 and persists the decoded b64 image", async () => {
@@ -182,12 +262,13 @@ describe("generateImageService (openai) success", () => {
     const outputPath = join(workdir, "wide.png");
 
     // When generating at 16:9 through the service
-    const r = await generateImageService(request(outputPath, "16:9"), {
-      provider,
-    });
+    const r = await generateImageService(
+      request(outputPath, "16:9"),
+      serviceDeps(provider, recorders)
+    );
 
     // Then the result is ok, the size maps to landscape, bytes decode, and the
-    // path is carried in `value`
+    // SERVICE persists them and carries the path in `value`
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -224,7 +305,7 @@ describe("generateImageService (openai) success", () => {
     // When generating at 9:16 through the service
     const r = await generateImageService(
       request(join(workdir, "tall.png"), "9:16"),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then it succeeds and the size maps to portrait (openai.py:36)
@@ -249,7 +330,7 @@ describe("generateImageService (openai) success", () => {
     // When generating through the service
     const r = await generateImageService(
       request(join(workdir, "first.png"), "16:9"),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then the second item supplies the decoded bytes
@@ -278,7 +359,7 @@ describe("generateImageService (openai) success", () => {
     // When generating with a reference image through the service
     const r = await generateImageService(
       request(join(workdir, "edit-out.png"), "16:9", [refPath]),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then it succeeds via the edit endpoint and the generate endpoint is unused
@@ -305,11 +386,12 @@ describe("generateImageService (openai) aspect-ratio guard", () => {
     // When generating at an unsupported ratio through the service
     const r = await generateImageService(
       request(join(workdir, "square.png"), "1:1"),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then the provider's `config:`-prefixed throw becomes a config
     // ServiceError, and it fails fast: no client, no SDK call, no retry wait
+    // (defaultShouldRetry classifies the config: prefix as non-retryable)
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -322,10 +404,10 @@ describe("generateImageService (openai) aspect-ratio guard", () => {
   });
 });
 
-// --- retry path -----------------------------------------------------------
+// --- service retry path -----------------------------------------------------
 
 describe("generateImageService (openai) retry", () => {
-  test("retries on an image-less response and fails after RETRY_MAX attempts", async () => {
+  test("retries on an image-less response and fails after 3 attempts", async () => {
     // Given a response with no decodable image (openai.py:106-108)
     const { client, generateCalls } = makeOpenAIClient({
       generate: [() => imageResponse()],
@@ -339,11 +421,11 @@ describe("generateImageService (openai) retry", () => {
     // When generating through the service
     const r = await generateImageService(
       request(join(workdir, "empty.png"), "16:9"),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then the unprefixed provider failure maps to an `io` ServiceError after
-    // all 3 attempts and two backoff waits
+    // all 3 attempts and two backoff waits owned by the service's withRetry
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -360,7 +442,7 @@ describe("generateImageService (openai) retry", () => {
     const { client, generateCalls } = makeOpenAIClient({
       generate: [
         () => {
-          throw new Error("429 rate limited");
+          throw new Error("rate limited, try again later");
         },
         () => imageResponse(base64),
       ],
@@ -374,7 +456,7 @@ describe("generateImageService (openai) retry", () => {
     // When generating through the service
     const r = await generateImageService(
       request(join(workdir, "retry-ok.png"), "16:9"),
-      { provider }
+      serviceDeps(provider, recorders)
     );
 
     // Then the second attempt wins after a single backoff wait
