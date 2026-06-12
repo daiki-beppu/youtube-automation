@@ -50,11 +50,12 @@ describe("shared/constants: サーバー互換の契約値", () => {
 });
 
 describe("shared/constants: 進捗フェーズ (PHASE)", () => {
-  it("Given PHASE When 全フェーズを読む Then 既存値に加え waiting-slot / adding-to-playlist を保持する (#816, #854)", () => {
+  it("Given PHASE When 全フェーズを読む Then 既存値に加え waiting-slot / adding-to-playlist / waiting-captcha を保持する (#816, #854)", () => {
     expect(PHASE).toEqual({
       INJECTING: "injecting",
       GENERATING: "generating",
       WAITING_SLOT: "waiting-slot",
+      WAITING_CAPTCHA: "waiting-captcha",
       DONE: "done",
       ADDING_TO_PLAYLIST: "adding-to-playlist",
       FINISHED: "finished",

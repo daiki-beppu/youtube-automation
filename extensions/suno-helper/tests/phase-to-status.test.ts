@@ -27,6 +27,11 @@ describe("phaseToStatus: 非終了 phase の進捗文言（live と同一）", (
   it.each<[string, ProgressPayload, string]>([
     ["INJECTING", { phase: PHASE.INJECTING, index: 0, total: 3 }, "[1/3] 注入中: pattern-1"],
     ["WAITING_SLOT", { phase: PHASE.WAITING_SLOT, index: 1, total: 3 }, "[2/3] 生成キューの空き待ち…"],
+    [
+      "WAITING_CAPTCHA",
+      { phase: PHASE.WAITING_CAPTCHA, index: 1, total: 3 },
+      "[2/3] captcha 解消待ち…（多くは自動で解消します）",
+    ],
     ["GENERATING", { phase: PHASE.GENERATING, index: 2, total: 3 }, "[3/3] 生成待ち…"],
     ["DONE", { phase: PHASE.DONE, index: 0, total: 3 }, "[1/3] 完了"],
   ])("Given phase=%s When phaseToStatus Then text=%j・error は falsy", (_label, payload, expected) => {
