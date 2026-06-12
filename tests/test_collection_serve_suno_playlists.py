@@ -160,6 +160,66 @@ def test_derive_collection_slug_matches_normalize_suno_title_for_same_theme():
 
 
 # ---------------------------------------------------------------------------
+# #976: prefix の空白/ハイフン無差別マッチと複数トークンチャンネル名の slug 導出
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_suno_title_matches_space_separated_prefix_against_hyphen_prefix():
+    """Given タイトル `Soulful Grooves | Horn Stab Master`（prefix=soulful-grooves）
+    When normalize_suno_title を呼ぶ
+    Then 空白とハイフンを同一視して `soulful-grooves-horn-stab-master` を返す（#976）。
+    """
+    assert (
+        normalize_suno_title("Soulful Grooves | Horn Stab Master", "soulful-grooves")
+        == "soulful-grooves-horn-stab-master"
+    )
+
+
+def test_normalize_suno_title_still_rejects_partial_multi_token_prefix():
+    """Given タイトル `Soulful | Horn Stab`（prefix=soulful-grooves の前半のみ）
+    When normalize_suno_title を呼ぶ
+    Then prefix 全体が一致しないため None を返す。
+    """
+    assert normalize_suno_title("Soulful | Horn Stab", "soulful-grooves") is None
+
+
+def test_derive_collection_slug_strips_multi_token_channel_matching_prefix():
+    """Given collection id `20260611-soulful-grooves-horn-stab-master-collection`（prefix=soulful-grooves）
+    When derive_collection_slug を呼ぶ
+    Then チャンネル名 2 トークンを丸ごと剥がし `soulful-grooves-horn-stab-master` を返す（#976）。
+
+    旧実装は 1 トークンしか剥がさず `soulful-grooves-grooves-horn-stab-master` になり、
+    playlist 側 slug と永遠に一致しなかった。
+    """
+    assert (
+        derive_collection_slug("20260611-soulful-grooves-horn-stab-master-collection", "soulful-grooves")
+        == "soulful-grooves-horn-stab-master"
+    )
+
+
+def test_derive_collection_slug_falls_back_to_single_token_strip_when_prefix_differs():
+    """Given dir のチャンネル表記（df365）と prefix（DF）が異なる運用
+    When derive_collection_slug を呼ぶ
+    Then 従来どおり先頭 1 トークンを channel として剥がす（後方互換）。
+    """
+    assert (
+        derive_collection_slug("20260601-df365-cognitive-sharpness-mode-collection", "DF")
+        == "df-cognitive-sharpness-mode"
+    )
+
+
+def test_derive_collection_slug_multi_token_matches_normalize_suno_title():
+    """Given 同一 theme の collection id と空白区切りタイトル（複数トークンチャンネル）
+    When それぞれを slug 化する
+    Then 同じ slug を返す（マージキー突合の不変条件、#976）。
+    """
+    slug_from_id = derive_collection_slug("20260611-soulful-grooves-horn-stab-master-collection", "soulful-grooves")
+    slug_from_title = normalize_suno_title("Soulful Grooves | Horn Stab Master", "soulful-grooves")
+
+    assert slug_from_id == slug_from_title == "soulful-grooves-horn-stab-master"
+
+
+# ---------------------------------------------------------------------------
 # _resolve_playlist_capture: root/prefix の意味的不変条件（fail-loud）+ env fallback
 # 要件 1/2/4: 両指定でのみ有効・片方欠落は ConfigError・両不在は None。
 # ---------------------------------------------------------------------------
@@ -376,6 +436,71 @@ def test_read_mapped_slugs_returns_empty_set_when_file_corrupt(tmp_path):
     (config_dir / "suno-playlists.json").write_text("<broken>", encoding="utf-8")
 
     assert read_mapped_slugs(root) == set()
+
+
+def test_read_mapped_slugs_reads_legacy_list_schema(tmp_path):
+    """Given 旧 wf-batch list スキーマ `[{slug, suno_url, suno_title, captured_at}]` の既存ファイル
+    When read_mapped_slugs を呼ぶ
+    Then slug 集合を返す（破損扱いで空集合にしない、#976）。
+    """
+    target = tmp_path / _OUTPUT_RELPATH
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        json.dumps(
+            [
+                {
+                    "slug": "rjn-graphite-hour",
+                    "suno_url": "https://suno.com/playlist/x",
+                    "suno_title": "RJN | Graphite Hour",
+                    "captured_at": "2026-06-09T02:08:37Z",
+                },
+                {"slug": "", "suno_url": "https://suno.com/playlist/y"},
+                "not-a-dict",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert read_mapped_slugs(tmp_path) == {"rjn-graphite-hour"}
+
+
+def test_write_suno_playlists_migrates_legacy_list_schema_without_data_loss(tmp_path):
+    """Given 旧 list スキーマの既存ファイル
+    When 別 slug を write_suno_playlists で merge write する
+    Then 既存 entry は dict スキーマ（title/url 正準キー）へ移行され、消失しない（#976）。
+
+    旧実装は list を「破損」とみなし新規 dict で上書きしていたため、wf-batch 用の
+    既存マッピングが capture 実行で消えるデータロスがあった。
+    """
+    target = tmp_path / _OUTPUT_RELPATH
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        json.dumps(
+            [
+                {
+                    "slug": "rjn-graphite-hour",
+                    "suno_url": "https://suno.com/playlist/x",
+                    "suno_title": "RJN | Graphite Hour",
+                    "captured_at": "2026-06-09T02:08:37Z",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    written = write_suno_playlists(
+        tmp_path,
+        [{"title": "RJN | Honey Hour", "url": "https://suno.com/playlist/z"}],
+        prefix="rjn",
+    )
+
+    assert written == 1
+    data = json.loads(target.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    assert data["rjn-graphite-hour"]["url"] == "https://suno.com/playlist/x"
+    assert data["rjn-graphite-hour"]["title"] == "RJN | Graphite Hour"
+    assert data["rjn-graphite-hour"]["captured_at"] == "2026-06-09T02:08:37Z"
+    assert data["rjn-honey-hour"]["url"] == "https://suno.com/playlist/z"
 
 
 def test_read_mapped_slugs_returns_written_slugs(tmp_path):
