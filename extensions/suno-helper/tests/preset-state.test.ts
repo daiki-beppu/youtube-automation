@@ -38,17 +38,17 @@ describe("resolveSpeedPreset: id → SpeedPreset の解決 (要件3)", () => {
 });
 
 describe("applyJitter: jitter 範囲の算出 (要件3/7)", () => {
-  describe("balanced (base=10000, jitter=±3000) → 受け入れ基準 7-13s", () => {
-    it("Given random=()=>0 When 算出 Then min = base - jitter = 7000", () => {
-      expect(applyJitter(10000, 3000, () => 0)).toBe(7000);
+  describe("balanced (base=6000, jitter=±3000) → #970 増速後の 3-9s", () => {
+    it("Given random=()=>0 When 算出 Then min = base - jitter = 3000", () => {
+      expect(applyJitter(6000, 3000, () => 0)).toBe(3000);
     });
 
-    it("Given random=()=>1 When 算出 Then max = base + jitter = 13000", () => {
-      expect(applyJitter(10000, 3000, () => 1)).toBe(13000);
+    it("Given random=()=>1 When 算出 Then max = base + jitter = 9000", () => {
+      expect(applyJitter(6000, 3000, () => 1)).toBe(9000);
     });
 
-    it("Given random=()=>0.5 When 算出 Then 中央 = base = 10000（jitter 0 寄与）", () => {
-      expect(applyJitter(10000, 3000, () => 0.5)).toBe(10000);
+    it("Given random=()=>0.5 When 算出 Then 中央 = base = 6000（jitter 0 寄与）", () => {
+      expect(applyJitter(6000, 3000, () => 0.5)).toBe(6000);
     });
   });
 
@@ -79,11 +79,11 @@ describe("applyJitter: jitter 範囲の算出 (要件3/7)", () => {
       }
     });
 
-    it("Given random 省略 When balanced preset 値で多数サンプル Then 全て 7000〜13000ms に収まる", () => {
+    it("Given random 省略 When balanced preset 値で多数サンプル Then 全て 3000〜9000ms に収まる", () => {
       for (let i = 0; i < 1000; i++) {
-        const delay = applyJitter(10000, 3000);
-        expect(delay).toBeGreaterThanOrEqual(7000);
-        expect(delay).toBeLessThanOrEqual(13000);
+        const delay = applyJitter(6000, 3000);
+        expect(delay).toBeGreaterThanOrEqual(3000);
+        expect(delay).toBeLessThanOrEqual(9000);
       }
     });
   });

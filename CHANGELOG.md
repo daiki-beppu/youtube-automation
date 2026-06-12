@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `perf(suno-helper)`: Balanced プリセットを増速した（#970、#948 後追い）。`maxInflightRequests` 5 → 10（`MAX_INFLIGHT_REQUESTS` 参照、#816 実機検証の Suno 実上限）、`interCreateDelayMs` 10000 → 6000（jitter ±3000 は維持し bot 検知の固定間隔シグナルを避ける）。従来の保守値は「Remix disabled プロキシによる in-flight 過大カウント + 1 失敗で全停止」時代のリスク対策であり、#948 で API status ベースの正確な計数と自動リトライ / スキップ継続が入った後は失敗 1 回のコストが小さく、定常速度（キュー容量 × 排出速度）を律速する cap を実上限まで開放するのがリスク対効果で最良。キュー飽和後の定常スループットはほぼ 2 倍になる見込み。suno-helper skill のプリセット表も更新。
+
 ### Added
 
 - `feat(suno-helper)`: bridge 縮退の可視化と実測シナリオの回帰テストを追加した（#948 仕上げ）。bridge 無観測で DOM プロキシ計数に縮退しているときは queue 空き待ちの popup 表示に「bridge 未観測: DOM 計数で待機中」を明示し、待ちが長い原因を切り分けられるようにした。実測で確認した「DOM 上 20 clips が Remix disabled だが実 status は complete 16 / streaming 4」の状況で即投入再開されることを clip-tracker × waitForQueueSlot の統合テストで pin。README / suno skill の運用ガイドを #948 の挙動（自動リトライ・スキップ完走・失敗分のみ再実行・stall ベース停止）へ更新した。
