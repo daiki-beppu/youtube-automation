@@ -29,10 +29,12 @@ const SELECTORS = {
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
 } as const;
 
-/** radix slider 注入後の読み戻し検証の poll 間隔 (ms)。 */
+/** radix slider 注入の step ごとの読み戻し検証の poll 間隔 (ms)。 */
 const SLIDER_READBACK_POLL_MS = 100;
-/** radix slider 注入後の読み戻し検証の最大 poll 回数。これを超えても不一致なら fail-loud で throw。 */
+/** step ごとの読み戻し検証の最大 poll 回数。これを超えても不変なら fail-loud で throw。 */
 const SLIDER_READBACK_MAX_POLLS = 5;
+/** slider が target に到達するまでの最大 step 数。Suno slider は 0-100 整数なので余裕を持たせた上限。 */
+const SLIDER_MAX_STEPS = 150;
 
 /**
  * clip カードの in-flight マーカー（#866、実機検証で確定）。Suno が `data-testid="clip-row"` と
@@ -152,40 +154,59 @@ export function setNativeValue(
 }
 
 /**
- * radix Slider に target 値を注入する（#900）。
+ * radix Slider に target 値を注入する（#900, #979 で step 化）。
  *   1. slider.focus()
- *   2. current = aria-valuenow を読む
- *   3. delta = target - current。delta>=0 で ArrowRight、<0 で ArrowLeft を |delta| 回 dispatch
- *   4. 読み戻し poll（SLIDER_READBACK_POLL_MS 間隔 × SLIDER_READBACK_MAX_POLLS 回）で
- *      aria-valuenow === target を検証。一致で resolve、尽きても不一致なら throw（fail-loud）。
+ *   2. aria-valuenow を読み、target との差分方向の keydown を **1 step ずつ** dispatch
+ *   3. 各 step 後に aria-valuenow の変化を poll（SLIDER_READBACK_POLL_MS × SLIDER_READBACK_MAX_POLLS）。
+ *      変化を確認してから次の step へ進む。不変のまま poll が尽きたら throw（fail-loud）
+ *   4. aria-valuenow === target で resolve
+ *
+ * 全 diff 分を同期ループで一括 dispatch すると React の自動バッチングで stale 値に収束し
+ * net 1 step しか動かない（#979 実機検証）。isTrusted=false の合成イベント自体は弾かれて
+ * おらず、1 step ごとに re-render の反映を待てば target まで完走する。
  *
  * KeyboardEvent は `bubbles: true, composed: true` で dispatch する。radix Slider root は
- * keydown を addEventListener でバインドし bubbling 経由で受けるため、isTrusted=false の合成
- * イベントでも root に到達する（text input の change と異なり値が動く。実機・mock 双方で確認済み）。
+ * keydown を addEventListener でバインドし bubbling 経由で受けるため root に到達する。
  */
 export async function setSliderValue(
   slider: HTMLElement,
   target: number,
 ): Promise<void> {
   slider.focus();
-  const current = Number(slider.getAttribute("aria-valuenow"));
-  const delta = target - current;
-  const key = delta >= 0 ? "ArrowRight" : "ArrowLeft";
-  for (let i = 0; i < Math.abs(delta); i++) {
+  const read = (): number => Number(slider.getAttribute("aria-valuenow"));
+  const fail = (): never => {
+    throw new Error(
+      `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
+        `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。` +
+        "keydown 後も aria-valuenow が変化しませんでした。Suno の UI 変更の可能性があります。",
+    );
+  };
+  for (let step = 0; step < SLIDER_MAX_STEPS; step++) {
+    const current = read();
+    if (current === target) {
+      return;
+    }
+    const key = target > current ? "ArrowRight" : "ArrowLeft";
     slider.dispatchEvent(
       new KeyboardEvent("keydown", { key, bubbles: true, composed: true }),
     );
-  }
-  for (let attempt = 0; attempt < SLIDER_READBACK_MAX_POLLS; attempt++) {
-    if (Number(slider.getAttribute("aria-valuenow")) === target) {
-      return;
+    // 同期反映ならそのまま次 step へ。非同期 re-render は poll で変化を待つ。
+    let changed = read() !== current;
+    for (
+      let attempt = 0;
+      !changed && attempt < SLIDER_READBACK_MAX_POLLS;
+      attempt++
+    ) {
+      await sleep(SLIDER_READBACK_POLL_MS);
+      changed = read() !== current;
     }
-    await sleep(SLIDER_READBACK_POLL_MS);
+    if (!changed) {
+      fail();
+    }
   }
-  throw new Error(
-    `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
-      `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。Suno が合成イベントを弾いている可能性が高いです。`,
-  );
+  if (read() !== target) {
+    fail();
+  }
 }
 
 /** More Options の advanced フィールド解決結果（#900, vocal gender 追加）。不在は null（fail-soft）。 */
