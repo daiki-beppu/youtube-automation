@@ -93,14 +93,27 @@ def _slugify(text: str) -> str:
     return re.sub(r"\s+", "-", text.strip().lower())
 
 
+def _prefix_pattern(prefix: str) -> str:
+    r"""prefix を空白/ハイフン無差別の正規表現片にする（#976）。
+
+    `soulful-grooves` ↔ playlist title 側の `Soulful Grooves` のように、チャンネル名の
+    区切りが title では空白・slug ではハイフンになる。セグメント単位で escape し
+    `[\s-]+` で連結することで両表記を同一視する（大小無視は呼び出し側の IGNORECASE）。
+    """
+    segments = [re.escape(seg) for seg in re.split(r"[\s-]+", prefix.strip()) if seg]
+    return r"[\s-]+".join(segments)
+
+
 def normalize_suno_title(title: str, prefix: str) -> str | None:
     """`<prefix> | <theme>` を `<prefix>-<theme-slug>` に正規化する（#893 要件3）。
 
     prefix はパイプ直前トークンと完全一致する必要がある（部分一致は弾く）。大小無視、
-    パイプ前後の空白は任意、theme の連続空白は `-` に畳み込む。prefix 不一致・
-    パイプ無しは None（channel-agnostic フィルタはこの純関数に閉じる）。
+    区切りの空白/ハイフンは無差別（`Soulful Grooves |` も prefix `soulful-grooves` に
+    一致する、#976）、パイプ前後の空白は任意、theme の連続空白は `-` に畳み込む。
+    prefix 不一致・パイプ無しは None（channel-agnostic フィルタはこの純関数に閉じる）。
+    出力 slug の prefix 部は `prefix.lower()` のハイフン正準形。
     """
-    pattern = re.compile(rf"^{re.escape(prefix)}\s*\|\s*(.+)$", re.IGNORECASE)
+    pattern = re.compile(rf"^{_prefix_pattern(prefix)}\s*\|\s*(.+)$", re.IGNORECASE)
     match = pattern.match(title.strip())
     if match is None:
         return None
@@ -119,25 +132,66 @@ def derive_collection_slug(collection_id: str, prefix: str) -> str | None:
     name = collection_id
     if name.endswith(_COLLECTION_DIR_SUFFIX):
         name = name[: -len(_COLLECTION_DIR_SUFFIX)]
-    # `<date>-<channel>-<theme...>` の date と channel を剥がす（CollectionPaths.collection_name と同方針）。
-    parts = name.split("-", 2)
-    if len(parts) >= 3 and parts[0].isdigit():
-        name = parts[2]
+    # `<date>-<channel>-<theme...>` の date を剥がす（CollectionPaths.collection_name と同方針）。
+    parts = name.split("-", 1)
+    if len(parts) == 2 and parts[0].isdigit():
+        name = parts[1]
+    # channel 部を剥がす（#976）: `soulful-grooves` のような複数トークンのチャンネル名は
+    # 旧来の「1 トークン剥がし」だと 2 トークン目が theme に混入し playlist 側 slug と
+    # 永遠に一致しない。prefix と前方一致（大小無視・空白/ハイフン無差別）すれば prefix
+    # 全体を剥がし、一致しなければ従来の 1 トークン剥がしに fallback する
+    # （dir の channel 表記が prefix と異なる運用、例: dir `df365-...` + prefix `DF`）。
+    prefix_match = re.match(rf"^{_prefix_pattern(prefix)}-", name, re.IGNORECASE)
+    if prefix_match is not None:
+        name = name[prefix_match.end() :]
+    elif "-" in name:
+        name = name.split("-", 1)[1]
     theme_slug = _slugify(name)
     if not theme_slug:
         return None
     return f"{prefix.lower()}-{theme_slug}"
 
 
+def _playlists_list_to_dict(data: list) -> dict:
+    """旧 wf-batch list スキーマ `[{slug, suno_url, suno_title, captured_at}]` を dict へ写像する（#976）。
+
+    手書き運用時代のチャンネル（rjn / deepfocus365）に残る形式。slug が無い・非 dict の
+    item は skip（fail-soft）。`suno_title`/`suno_url` を正準キー `title`/`url` に改名し、
+    同名キーが既にあればそちらを優先する。
+    """
+    out: dict = {}
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        slug = item.get("slug")
+        if not isinstance(slug, str) or not slug:
+            continue
+        out[slug] = {
+            "title": str(item.get("title") or item.get("suno_title") or ""),
+            "url": str(item.get("url") or item.get("suno_url") or ""),
+            "captured_at": str(item.get("captured_at") or ""),
+        }
+    return out
+
+
 def _read_playlists_json(target: Path) -> dict:
-    """既存 capture JSON を dict で読む。不在・破損・非 dict は空 dict 扱い（#893）。"""
+    """既存 capture JSON を dict で読む。不在・破損・非 dict/list は空 dict 扱い（#893）。
+
+    旧 wf-batch list スキーマは dict へ写像して返す（#976）。これにより
+    `read_mapped_slugs` の mapped 判定と `write_suno_playlists` の merge が
+    list 形式の既存ファイルを「破損」扱いで無視・上書き消失させない。
+    """
     if not target.is_file():
         return {}
     try:
         data = json.loads(target.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
-    return data if isinstance(data, dict) else {}
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, list):
+        return _playlists_list_to_dict(data)
+    return {}
 
 
 def read_mapped_slugs(root: Path) -> set[str]:

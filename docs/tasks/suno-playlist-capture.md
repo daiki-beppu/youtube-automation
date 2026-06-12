@@ -52,6 +52,9 @@ yt-collection-serve <COLLECTIONS_DIR> \
   扱いで再作成。書き込み件数を返す。
 - `read_mapped_slugs(root: Path) -> set[str]`
   既存 JSON の slug 集合（不在・破損は空集合）。
+- 既存ファイルが旧 wf-batch list スキーマ `[{slug, suno_url, suno_title, captured_at}]` の場合は
+  dict スキーマ `{slug: {title, url, captured_at}}` へ写像して読む（#976）。mapped 判定が効き、
+  merge write でも既存マッピングを消失させない。正準スキーマは dict（write は常に dict で書く）。
 - `derive_collection_slug(collection_id: str, prefix: str) -> str | None`
   collection dir 名から `normalize_suno_title` と同じ slug 形を導出する（マージキー突合の不変条件）。
 
