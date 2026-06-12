@@ -360,3 +360,90 @@ describe("waitForQueueSlot: getCount DI (#948)", () => {
     await expect(pending).resolves.toBeUndefined();
   });
 });
+
+describe("waitForQueueSlot: stall ベース判定 (#948)", () => {
+  // 正確な in-flight カウントの下では「上限で長く待つ」のは正常状態（clip 完了に数分かかる）。
+  // getLastChangeAt 注入時は固定 deadline を廃し、in-flight 集合が stallTimeoutMs 変化しない
+  // ときのみ throw する。status 遷移が続く限り timeoutMs を超えても待ち続けることを pin する。
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const STALL = { pollIntervalMs: 10, timeoutMs: 100, queueErrorWaitMs: 200, stallTimeoutMs: 1000 } as const;
+
+  it("Given status 遷移が続く（lastChangeAt が更新され続ける） When timeoutMs を超えて待つ Then throw せず待機を継続する", async () => {
+    addClipCard({ generating: false }); // DOM fallback の throw 回避用 seed（getCount 注入で参照されない）
+    const getCount = vi.fn().mockReturnValue(20);
+    let lastChange = 0;
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...STALL,
+      getCount,
+      getLastChangeAt: () => lastChange,
+    });
+    let outcome: "resolved" | "rejected" | undefined;
+    pending.then(
+      () => {
+        outcome = "resolved";
+      },
+      () => {
+        outcome = "rejected";
+      },
+    );
+
+    // 固定 deadline (timeoutMs=100) を大きく超えても、変化が続く限り throw しない。
+    for (let i = 0; i < 5; i++) {
+      lastChange = Date.now(); // status 遷移を模す
+      await vi.advanceTimersByTimeAsync(STALL.stallTimeoutMs / 2);
+    }
+    expect(outcome).toBeUndefined();
+
+    getCount.mockReturnValue(18); // slot が空いたら resolve
+    await vi.advanceTimersByTimeAsync(STALL.pollIntervalMs);
+    expect(outcome).toBe("resolved");
+  });
+
+  it("Given in-flight 集合が stallTimeoutMs 変化しない When 待機する Then stall として throw する", async () => {
+    addClipCard({ generating: false });
+    const getCount = vi.fn().mockReturnValue(20);
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...STALL,
+      getCount,
+      getLastChangeAt: () => 0, // 一度も変化しない
+    });
+    const expectation = expect(pending).rejects.toThrow(/変化しませんでした/);
+    await vi.advanceTimersByTimeAsync(STALL.stallTimeoutMs + STALL.pollIntervalMs + 50);
+    await expectation;
+  });
+
+  it("Given stall 経路でも isAborted=true When 待機する Then 即 resolve する（中断優先）", async () => {
+    addClipCard({ generating: false });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => true,
+      ...STALL,
+      getCount: () => 20,
+      getLastChangeAt: () => 0,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given getLastChangeAt 未注入 When 待機する Then 従来どおり固定 deadline で throw する（後方互換）", async () => {
+    addClipCard({ generating: false });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 100,
+      queueErrorWaitMs: 200,
+      getCount: () => 20,
+    });
+    const expectation = expect(pending).rejects.toThrow(/タイムアウト/);
+    await vi.advanceTimersByTimeAsync(100 + 10 + 50);
+    await expectation;
+  });
+});

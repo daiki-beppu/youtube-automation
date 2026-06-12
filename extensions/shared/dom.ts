@@ -544,6 +544,13 @@ export interface WaitForQueueSlotOptions {
   /** in-flight 数の取得関数 (#948)。bridge の status ベースカウントを注入する。
    * 省略時は従来の DOM プロキシ getInFlightClipCount（後方互換 fallback）。 */
   getCount?: () => number;
+  /** in-flight 集合が最後に変化した時刻 (ms) の取得関数 (#948)。注入すると stall ベース判定に切り替わる:
+   * 固定 deadline を廃し、「待機開始 or 最終変化からの経過が stallTimeoutMs を超えたときのみ throw」。
+   * 正確なカウントの下では上限での長い待ちは正常状態のため、固定 deadline は誤停止になる。 */
+  getLastChangeAt?: () => number;
+  /** stall 判定の閾値 (ms)。getLastChangeAt 注入時のみ有効。省略時は INFLIGHT_STALL_TIMEOUT_MS 相当を
+   * 呼び出し側が渡す想定（shared/dom は定数 SSOT の constants.ts に依存しない）。 */
+  stallTimeoutMs?: number;
 }
 
 /**
@@ -613,12 +620,16 @@ export function getInFlightClipCount(): number {
 }
 
 /**
- * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816, #847）。
+ * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816, #847, #948）。
  *   - isAborted() が true なら（toast 中・上限超でも）最優先で即 resolve（throw しない）
  *   - queue 上限エラー toast 表示中は、空きスロットがあっても投入せず待機を継続する（#847）
  *   - toast が消えたら `queueErrorWaitMs` の安全マージンを待ってから判定を再開する（#847）
  *   - in-flight < maxClips になったら resolve（投入再開）
- *   - deadline 超過で timeout throw
+ *   - 終了判定は 2 経路 (#948):
+ *       - stall 経路（getLastChangeAt 注入時）: in-flight 集合が「待機開始 or 最終変化」から
+ *         stallTimeoutMs 変化しないときのみ throw。正確なカウントの下では上限での長い待ちは
+ *         正常状態（clip 完了に数分かかる）のため、固定 deadline は誤停止になる
+ *       - 固定 deadline 経路（従来互換）: timeoutMs 超過で timeout throw
  * Suno は同時 10 リクエスト = 20 clip までしか積めず、超過すると後続が silent fail するため、
  * 各リクエスト投入前にこの関数で空きスロットを待つ。Create→clip card DOM 反映ラグで Suno が投入を
  * reject すると toast が出るため、toast 検知中は投入を止め、消失後に buffer を取ってから再開する。
@@ -628,11 +639,26 @@ export async function waitForQueueSlot(
   options: WaitForQueueSlotOptions,
 ): Promise<void> {
   const getCount = options.getCount ?? getInFlightClipCount;
-  const deadline = Date.now() + options.timeoutMs;
+  const startAt = Date.now();
+  const deadline = startAt + options.timeoutMs;
+  const stallTimeoutMs = options.stallTimeoutMs ?? options.timeoutMs;
   let sawQueueError = false;
-  while (Date.now() < deadline) {
+  for (;;) {
     if (options.isAborted()) {
       return;
+    }
+    // 終了判定はループ先頭で行う（toast が出続ける経路でも必ず到達する）。
+    if (options.getLastChangeAt) {
+      // stall 経路: 観測 clip の status 遷移（submitted→queued→streaming→complete）が続く限り
+      // 待ち続ける。集合が完全に固まったときのみ「Suno 側の停滞」として fail-loud。
+      const lastActivity = Math.max(startAt, options.getLastChangeAt());
+      if (Date.now() - lastActivity >= stallTimeoutMs) {
+        throw new Error(
+          `生成キューの空き待ち中、in-flight の状態が ${Math.round(stallTimeoutMs / 60000)} 分間変化しませんでした。Suno 側で生成が停滞している可能性があります。`,
+        );
+      }
+    } else if (Date.now() >= deadline) {
+      throw new Error("生成キューの空きスロット待ちがタイムアウトしました。");
     }
     if (isQueueLimitErrorVisible()) {
       // toast 中はスロットが空いていても投入しない。消失を待つ。
@@ -652,5 +678,4 @@ export async function waitForQueueSlot(
     }
     await sleep(options.pollIntervalMs);
   }
-  throw new Error("生成キューの空きスロット待ちがタイムアウトしました。");
 }
