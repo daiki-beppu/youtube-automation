@@ -109,15 +109,15 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
       "〜10 entries の小 collection 向け。現状値。連続実行が長引くと bot 判定で silent drop しやすい。",
   },
   balanced: {
-    interCreateDelayMs: 10000,
+    interCreateDelayMs: 6000,
     jitterMs: 3000,
-    maxInflightRequests: 5,
+    maxInflightRequests: MAX_INFLIGHT_REQUESTS,
     maxInjectRetry: 1,
     injectAckTimeoutMs: 45000,
     maxEntryRetry: 2,
     label: "⚖️ Balanced",
     riskNote:
-      "20-30 entries の標準 collection 向け。10s ±3s 間隔で自然化したデフォルト。",
+      "20-55 entries の標準 collection 向け。6s ±3s 間隔で自然化したデフォルト。queue は Suno 実上限まで使う（#970、in-flight が API status 計数になった #948 以降は上限張り付きが正常状態）。",
   },
   safe: {
     interCreateDelayMs: 20000,
