@@ -184,7 +184,7 @@ export async function setSliderValue(
   }
   throw new Error(
     `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
-      `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。Suno が合成イベントを弾いている可能性が高いです（chrome.debugger 化は別 issue で対応予定）。`,
+      `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。Suno が合成イベントを弾いている可能性が高いです。`,
   );
 }
 
@@ -287,10 +287,41 @@ function resolveVocalGenderButtons(): {
  *   解決は別 issue で chrome.debugger API ベースの設計を予定（manifest permission 拡張が必要）。
  *
  * 値の有無は `!== undefined` で判定する。0 や "" の falsy 値を truthy 判定で脱落させない。
+ *
+ * slider 注入経路（#973）: options.bridgeSetSlider があれば MAIN world bridge 経由
+ * （React onKeyDown 直接呼び出し = isTrusted チェック通過）を先に試し、失敗時に従来の
+ * 合成 dispatchEvent（setSliderValue）へ縮退する。どちらも失敗なら warn + skip（従来どおり）。
  */
+export interface AdvancedInjectOptions {
+  /** MAIN world bridge 経由の slider 注入。成功で true。省略時は合成イベント経路のみ。 */
+  bridgeSetSlider?: (ariaLabel: string, target: number) => Promise<boolean>;
+}
+
+/** bridge 優先 → 合成 dispatchEvent 縮退の順で slider に target 値を注入する（#973）。 */
+async function injectSliderValue(
+  slider: HTMLElement,
+  target: number,
+  bridgeSetSlider?: (ariaLabel: string, target: number) => Promise<boolean>,
+): Promise<void> {
+  if (bridgeSetSlider) {
+    const label = slider.getAttribute("aria-label");
+    if (label) {
+      try {
+        if (await bridgeSetSlider(label, target)) {
+          return;
+        }
+      } catch {
+        // bridge 経路の失敗は合成イベント経路へ縮退する（fail-soft）。
+      }
+    }
+  }
+  await setSliderValue(slider, target);
+}
+
 export async function injectAdvancedFields(
   entry: AdvancedFieldValues,
   fields: ResolvedAdvancedFields,
+  options: AdvancedInjectOptions = {},
 ): Promise<void> {
   if (entry.exclude_styles !== undefined) {
     if (!fields.excludeStyles) {
@@ -321,7 +352,11 @@ export async function injectAdvancedFields(
       );
     }
     try {
-      await setSliderValue(fields.weirdness, entry.weirdness);
+      await injectSliderValue(
+        fields.weirdness,
+        entry.weirdness,
+        options.bridgeSetSlider,
+      );
     } catch (e) {
       console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
     }
@@ -333,7 +368,11 @@ export async function injectAdvancedFields(
       );
     }
     try {
-      await setSliderValue(fields.styleInfluence, entry.style_influence);
+      await injectSliderValue(
+        fields.styleInfluence,
+        entry.style_influence,
+        options.bridgeSetSlider,
+      );
     } catch (e) {
       console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
     }

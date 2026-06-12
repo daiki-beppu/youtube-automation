@@ -12,6 +12,7 @@ import {
   FEED_POLL_RESPONSE_TIMEOUT_MS,
   FEED_STALE_MS,
   type ObservedClip,
+  SLIDER_SET_RESPONSE_TIMEOUT_MS,
 } from "../../shared/constants";
 import type { ClipTracker } from "./clip-tracker";
 
@@ -20,6 +21,8 @@ interface BridgeMessage {
   type?: string;
   clips?: unknown;
   requestId?: number;
+  ok?: unknown;
+  actual?: unknown;
 }
 
 function isObservedClipArray(value: unknown): value is ObservedClip[] {
@@ -96,6 +99,48 @@ export function requestFeedPoll(
     window.addEventListener("message", handler);
     window.postMessage(
       { source: BRIDGE_SOURCE, type: BRIDGE_MSG.FEED_POLL_REQUEST, requestId, ids },
+      window.location.origin,
+    );
+  });
+}
+
+/**
+ * bridge へ slider 注入を要求し、応答を待つ（#973）。MAIN world 側が React props の
+ * onKeyDown を isTrusted: true の疑似イベントで直接呼び、aria-valuenow 読み戻しまで検証する。
+ * bridge 不在・plain DOM（e2e mock）・timeout は false（fail-soft。呼び出し側が
+ * 合成 dispatchEvent 経路へ縮退する）。
+ */
+export function requestSliderSet(
+  ariaLabel: string,
+  target: number,
+  timeoutMs: number = SLIDER_SET_RESPONSE_TIMEOUT_MS,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const requestId = nextRequestId++;
+    const cleanup = (result: boolean): void => {
+      window.removeEventListener("message", handler);
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const handler = (event: MessageEvent): void => {
+      if (event.source !== window) {
+        return;
+      }
+      const data = event.data as BridgeMessage | null;
+      if (
+        !data ||
+        data.source !== BRIDGE_SOURCE ||
+        data.type !== BRIDGE_MSG.SLIDER_SET_RESPONSE ||
+        data.requestId !== requestId
+      ) {
+        return;
+      }
+      cleanup(data.ok === true);
+    };
+    const timer = setTimeout(() => cleanup(false), timeoutMs);
+    window.addEventListener("message", handler);
+    window.postMessage(
+      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.SLIDER_SET_REQUEST, requestId, ariaLabel, target },
       window.location.origin,
     );
   });

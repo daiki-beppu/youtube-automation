@@ -159,7 +159,15 @@ export const BRIDGE_MSG = {
   FEED_POLL_REQUEST: "feed-poll-request",
   /** bridge → content: active poll の応答（requestId + clips | null）。 */
   FEED_POLL_RESPONSE: "feed-poll-response",
+  /** content → bridge: slider 値注入要求（requestId + ariaLabel + target）（#973）。 */
+  SLIDER_SET_REQUEST: "slider-set-request",
+  /** bridge → content: slider 値注入の応答（requestId + ok + actual | null）（#973）。 */
+  SLIDER_SET_RESPONSE: "slider-set-response",
 } as const;
+
+/** slider 注入 RPC の応答待ち上限 (ms)（#973）。step 数が多い slider（0→100 等）でも
+ * 1 step あたり数十 ms の readback 待ちで完了する想定だが、余裕を持たせる。 */
+export const SLIDER_SET_RESPONSE_TIMEOUT_MS = 15000;
 
 /** 生成が終端に達した clip status（#948）。これら以外はキュー slot を占有する in-flight とみなす。 */
 export const TERMINAL_CLIP_STATUSES = ["complete", "error"] as const;

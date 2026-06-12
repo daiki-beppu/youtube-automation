@@ -174,11 +174,77 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
     });
   });
 
+  describe("bridge 経由の slider 注入 (#973)", () => {
+    // options.bridgeSetSlider があれば MAIN world bridge 経由（React onKeyDown 直接呼び出し）を
+    // 優先し、bridge が false / throw なら合成 dispatchEvent 経路へ縮退する。
+    it("Given bridge 成功 When 注入 Then 合成イベント経路は使われない", async () => {
+      const styleInfluence = makeSlider(50, { respond: false }); // dispatch では動かない slider
+      styleInfluence.setAttribute("aria-label", "Style Influence");
+      const bridgeSetSlider = vi.fn().mockResolvedValue(true);
+
+      const pending = injectAdvancedFields(
+        { style_influence: 95 },
+        { ...ALL_NULL, styleInfluence },
+        { bridgeSetSlider },
+      );
+      await vi.advanceTimersByTimeAsync(2000);
+      await expect(pending).resolves.toBeUndefined();
+
+      expect(bridgeSetSlider).toHaveBeenCalledWith("Style Influence", 95);
+    });
+
+    it("Given bridge 失敗 (false) When 注入 Then 合成イベント経路へ縮退して注入する", async () => {
+      const weirdness = makeSlider(50); // dispatch で動く slider（e2e mock 相当）
+      weirdness.setAttribute("aria-label", "Weirdness");
+      const bridgeSetSlider = vi.fn().mockResolvedValue(false);
+
+      const pending = injectAdvancedFields({ weirdness: 55 }, { ...ALL_NULL, weirdness }, { bridgeSetSlider });
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(weirdness.getAttribute("aria-valuenow")).toBe("55");
+    });
+
+    it("Given bridge throw When 注入 Then 合成イベント経路へ縮退する（fail-soft）", async () => {
+      const weirdness = makeSlider(50);
+      weirdness.setAttribute("aria-label", "Weirdness");
+      const bridgeSetSlider = vi.fn().mockRejectedValue(new Error("bridge error"));
+
+      const pending = injectAdvancedFields({ weirdness: 55 }, { ...ALL_NULL, weirdness }, { bridgeSetSlider });
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(weirdness.getAttribute("aria-valuenow")).toBe("55");
+    });
+
+    it("Given bridge も合成イベントも失敗 When 注入 Then warn + skip（従来どおり）", async () => {
+      const styleInfluence = makeSlider(50, { respond: false });
+      styleInfluence.setAttribute("aria-label", "Style Influence");
+      const bridgeSetSlider = vi.fn().mockResolvedValue(false);
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const pending = injectAdvancedFields(
+        { style_influence: 95 },
+        { ...ALL_NULL, styleInfluence },
+        { bridgeSetSlider },
+      );
+      await vi.advanceTimersByTimeAsync(2000);
+      await expect(pending).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Style Influence slider 注入を skip"),
+        expect.any(Error),
+      );
+      warnSpy.mockRestore();
+    });
+  });
+
   describe("slider 注入失敗 → warn + skip (fail-soft, Suno bot 対策耐性)", () => {
     // 実機検証で Suno の slider が isTrusted=false の合成イベントを onKeyDown 内で弾くと判明。
     // dispatchEvent ベースの setSliderValue は原理的に動かず throw する。連続生成を止めると
     // ユーザー体験が大きく劣化するため、本層では throw を catch して warn + skip に吸収する。
-    // (trusted event 化は chrome.debugger API で別 issue 対応予定)
+    // (#973 で MAIN world bridge 経由の React onKeyDown 直接呼び出し経路を追加。本 describe は
+    // bridge 不使用時の従来縮退を担保する)
     it("Given weirdness slider が反応しない When 注入 Then throw せず console.warn する", async () => {
       const weirdness = makeSlider(50, { respond: false });
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
