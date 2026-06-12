@@ -236,7 +236,7 @@ def serve(tmp_path):
     """
     started = []
 
-    def _start(*, collection_dir, distrokid, allow_origin=None, prompts=None):
+    def _start(*, collection_dir, distrokid, allow_origin=None, prompts=None, distrokid_source=None):
         prompts_path = tmp_path / "suno-prompts.json"
         prompts_path.write_text(json.dumps(prompts or []), encoding="utf-8")
         server = create_server(
@@ -245,6 +245,7 @@ def serve(tmp_path):
             prompts_path=prompts_path,
             collection_dir=collection_dir,
             distrokid=distrokid,
+            distrokid_source=distrokid_source,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -273,6 +274,32 @@ def test_get_distrokid_release_json_returns_merged_payload(serve, tmp_path):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == build_release_payload(collection, distrokid)
+
+
+def test_get_distrokid_release_json_broken_spec_returns_500(serve, tmp_path):
+    """Given 破損 spec.json を持つ 30-distrokid disc source
+    When `GET /distrokid/release.json`
+    Then 接続切断ではなく 500 + JSON エラーボディを返す（#944）。
+    """
+    collection = _make_collection(tmp_path)
+    disc_dir = collection / "30-distrokid" / "disc1-city-nights-vol1"
+    disc_dir.mkdir(parents=True)
+    (disc_dir / "01-foo.mp3").write_bytes(_MP3_BYTES)
+    (collection / "30-distrokid" / "spec.json").write_text("{ broken", encoding="utf-8")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    base = serve(
+        collection_dir=collection,
+        distrokid=distrokid,
+        distrokid_source="30-distrokid/disc1-city-nights-vol1",
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(f"{base}{DISTROKID_RELEASE_ROUTE}")
+
+    err = exc_info.value
+    assert err.code == 500
+    body = json.loads(err.read().decode("utf-8"))
+    assert "spec.json" in body["error"]
 
 
 def test_get_distrokid_asset_serves_binary_with_mime(serve, tmp_path):
