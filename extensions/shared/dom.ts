@@ -54,6 +54,12 @@ const QUEUE_LIMIT_ERROR_TEXT = "generation in progress";
 
 /** 1 曲の生成完了待ち上限 (ms)。 */
 export const GENERATE_TIMEOUT_MS = 180000;
+/**
+ * captcha challenge の解消待ち上限 (ms)。Suno の hCaptcha は Generate click に反応して起動するが、
+ * 多くは passive 検証で数秒以内に自動 verify されて閉じるため、即 fail-loud せず解消を待つ。
+ * 本当に人間の解決が必要な challenge が残った場合のみ、この上限で fail-loud に倒す。
+ */
+export const CAPTCHA_WAIT_TIMEOUT_MS = 600000;
 /** 生成完了 poll 間隔 (ms)。短くすると停止反応性と Generate ボタン再 enable 検知が早まる。 */
 export const POLL_INTERVAL_MS = 500;
 /** 注入後・クリック後の安定化待ち (ms)。 */
@@ -72,6 +78,10 @@ export interface WaitForGenerationOptions {
   timeoutMs: number;
   pollIntervalMs: number;
   settleMs: number;
+  /** captcha 解消待ちの上限 (ms)。省略時は CAPTCHA_WAIT_TIMEOUT_MS。 */
+  captchaWaitTimeoutMs?: number;
+  /** captcha 解消待ちの開始 (true) / 終了 (false) 通知。popup の phase 表示切り替えに使う。 */
+  onCaptchaWait?: (waiting: boolean) => void;
 }
 
 /** 指定 ms 待機する。注入フローと生成完了待ちの共通 timing util。 */
@@ -351,11 +361,18 @@ export function detectRecaptcha(): boolean {
     if (rect.width === 0 || rect.height === 0) {
       return false;
     }
+    // 検証完了後の challenge iframe は title と bbox を保持したまま画面外 (y:-9999) に駐機する。
+    // viewport 上端より完全に上へ退避した iframe は active ではない（title 判定より優先）。
+    // 実機観測: 駐機 wrapper は visibility:hidden + opacity:0 + z-index:-2147483648。
+    const parkedOffscreen = rect.bottom <= 0;
     // challenge 系 iframe かつ title 非空 = challenge が起動した中間状態。
     // visibility:hidden を許容して捕捉する (#875)。
     // anchor / checkbox / badge 系 widget は常時 title を持つため challenge 系に限定 (#924)。
     const active =
-      (isChallengeFrame(f.src) && f.title.trim().length > 0) || isVisible(f);
+      (isChallengeFrame(f.src) &&
+        f.title.trim().length > 0 &&
+        !parkedOffscreen) ||
+      isVisible(f);
     if (active) {
       console.debug("[suno-helper] captcha challenge iframe detected", {
         src: f.src,
@@ -436,10 +453,52 @@ export function resolveGenerateButton(): HTMLButtonElement {
   return btn;
 }
 
+export interface WaitForCaptchaClearOptions {
+  /** 中断フラグ。true を返した時点で待機を打ち切り resolve する（throw しない）。 */
+  isAborted: () => boolean;
+  pollIntervalMs: number;
+  timeoutMs: number;
+  /** captcha を検知して待機に入るとき 1 回だけ呼ばれる。popup の phase 表示切り替えに使う。 */
+  onWaitStart?: () => void;
+}
+
+/**
+ * active な captcha challenge が解消されるまで待つ。
+ * Suno の hCaptcha は Generate click に反応して起動するが、多くは passive 検証で数秒以内に
+ * 自動 verify されて閉じる（console: `captcha required` → `captcha verified`）。従来の即 throw だと
+ * 人間が解くものが無いのに entry ごとに fail-loud 停止して実用に耐えないため、解消を待って続行する。
+ *   - captcha 不在なら即 resolve（onWaitStart も呼ばない）
+ *   - 解消（自動 verify or 手動解決）で resolve
+ *   - timeoutMs 超過で throw（本当に人間の解決が必要なまま放置されたケースのみ fail-loud）
+ *   - 中断 (isAborted) で即 return
+ */
+export async function waitForCaptchaClear(
+  options: WaitForCaptchaClearOptions,
+): Promise<void> {
+  if (!detectRecaptcha()) {
+    return;
+  }
+  options.onWaitStart?.();
+  const deadline = Date.now() + options.timeoutMs;
+  while (Date.now() < deadline) {
+    if (options.isAborted()) {
+      return;
+    }
+    if (!detectRecaptcha()) {
+      return;
+    }
+    await sleep(options.pollIntervalMs);
+  }
+  throw new Error(
+    `captcha challenge が ${Math.round(options.timeoutMs / 60000)} 分以内に解消されませんでした。画面の challenge を手動で解決してから再開してください。`,
+  );
+}
+
 /**
  * クリック後、ボタンが一旦 disabled になり再度 enabled に戻るまで（= 生成完了）待つ。
  *   - enabled 復帰で resolve
- *   - reCAPTCHA 検知で throw
+ *   - captcha 検知で waitForCaptchaClear へ移行し、解消後に待機を続行（待機時間は deadline を消費しない）
+ *   - captcha が captchaWaitTimeoutMs 以内に解消されなければ throw
  *   - deadline 超過で timeout throw
  *   - 中断 (isAborted) で即 return
  */
@@ -447,7 +506,7 @@ export async function waitForGeneration(
   button: HTMLButtonElement,
   options: WaitForGenerationOptions,
 ): Promise<void> {
-  const deadline = Date.now() + options.timeoutMs;
+  let deadline = Date.now() + options.timeoutMs;
   // disabled に変わるのを少し待つ（生成開始の検知）
   await sleep(options.settleMs);
   while (Date.now() < deadline) {
@@ -455,9 +514,17 @@ export async function waitForGeneration(
       return;
     }
     if (detectRecaptcha()) {
-      throw new Error(
-        "reCAPTCHA を検知しました。手動で解決してから再開してください。",
-      );
+      // captcha 解消待ちは生成完了待ちとは別系統の時間。deadline を待機分だけ延長する。
+      const waitStart = Date.now();
+      await waitForCaptchaClear({
+        isAborted: options.isAborted,
+        pollIntervalMs: options.pollIntervalMs,
+        timeoutMs: options.captchaWaitTimeoutMs ?? CAPTCHA_WAIT_TIMEOUT_MS,
+        onWaitStart: () => options.onCaptchaWait?.(true),
+      });
+      options.onCaptchaWait?.(false);
+      deadline += Date.now() - waitStart;
+      continue;
     }
     if (!button.disabled && button.getAttribute("aria-disabled") !== "true") {
       return;

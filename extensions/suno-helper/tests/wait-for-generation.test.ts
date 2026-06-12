@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 //
-// 生成完了検知 `waitForGeneration` の回帰テスト (旧 content.js:71-86)。
-// 振る舞い: SETTLE 待ち → button が再度 enabled に戻るまで poll →
+// 生成完了検知 `waitForGeneration` と captcha 解消待ち `waitForCaptchaClear` の回帰テスト。
+// waitForGeneration の振る舞い: SETTLE 待ち → button が再度 enabled に戻るまで poll →
 //   - enabled 復帰で resolve (生成完了)
-//   - reCAPTCHA 検知で throw
+//   - captcha 検知で waitForCaptchaClear へ移行し、解消後に待機を続行（deadline は待機分延長）
+//   - captcha が captchaWaitTimeoutMs 以内に解消されなければ throw
 //   - deadline 超過で timeout throw
 //   - 中断 (isAborted) で即 return
 //
@@ -11,7 +12,14 @@
 // 旧実装のモジュール変数 `aborted` / 定数 (GENERATE_TIMEOUT_MS 等) を直接参照しない。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GENERATE_TIMEOUT_MS, POLL_INTERVAL_MS, SETTLE_MS, waitForGeneration } from "../../shared/dom";
+import {
+  CAPTCHA_WAIT_TIMEOUT_MS,
+  GENERATE_TIMEOUT_MS,
+  POLL_INTERVAL_MS,
+  SETTLE_MS,
+  waitForCaptchaClear,
+  waitForGeneration,
+} from "../../shared/dom";
 import { addCaptchaIframe } from "./_helpers";
 
 const FAST_OPTIONS = { timeoutMs: 1000, pollIntervalMs: 10, settleMs: 10 } as const;
@@ -56,15 +64,121 @@ describe("waitForGeneration: 完了検知", () => {
   });
 });
 
-describe("waitForGeneration: reCAPTCHA 検知", () => {
-  it("Given 待機中に可視 reCAPTCHA 出現 When poll する Then throw する", async () => {
+describe("waitForGeneration: captcha 検知で待機し解消後に続行する", () => {
+  it("Given 待機中に可視 captcha 出現 → 自動 verify で消滅 When poll する Then throw せず生成完了まで待って resolve する", async () => {
     const btn = disabledButton();
+    const captcha = addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+    const phases: boolean[] = [];
+
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      captchaWaitTimeoutMs: 500,
+      onCaptchaWait: (waiting) => phases.push(waiting),
+    });
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs + FAST_OPTIONS.pollIntervalMs);
+    captcha.remove(); // 自動 verify で challenge が閉じた
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 2);
+    btn.disabled = false; // 生成完了 = enabled 復帰
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 2);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(phases).toEqual([true, false]); // waiting-captcha 開始 → 解消で終了
+  });
+
+  it("Given captcha の解消待ち中 When 生成 deadline 相当の時間が経過する Then 待機分は deadline を消費しない (延長される)", async () => {
+    const btn = disabledButton();
+    const captcha = addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS, // timeoutMs: 1000
+      captchaWaitTimeoutMs: 5000,
+    });
+    // 生成 deadline (1000ms) を大きく超える 3000ms を captcha 待ちで消費させる
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs + 3000);
+    captcha.remove();
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 2);
+    btn.disabled = false;
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 2);
+
+    await expect(pending).resolves.toBeUndefined(); // 生成タイムアウトに食い込まず完了を検知できる
+  });
+
+  it("Given captcha が captchaWaitTimeoutMs を超えて残留 When poll する Then fail-loud で throw する", async () => {
+    const btn = disabledButton();
+    addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" }); // 消えない challenge
+
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      captchaWaitTimeoutMs: 300,
+    });
+    const expectation = expect(pending).rejects.toThrow(/captcha challenge/);
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs + 300 + FAST_OPTIONS.pollIntervalMs * 2);
+    await expectation;
+  });
+});
+
+describe("waitForCaptchaClear", () => {
+  it("Given captcha 不在 When 呼ぶ Then 即 resolve し onWaitStart も呼ばない", async () => {
+    const onWaitStart = vi.fn();
+
+    await waitForCaptchaClear({
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 1000,
+      onWaitStart,
+    });
+
+    expect(onWaitStart).not.toHaveBeenCalled();
+  });
+
+  it("Given captcha が後から消える When 待つ Then onWaitStart を 1 回呼んで resolve する", async () => {
+    const captcha = addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+    const onWaitStart = vi.fn();
+
+    const pending = waitForCaptchaClear({
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 1000,
+      onWaitStart,
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    captcha.remove();
+    await vi.advanceTimersByTimeAsync(20);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(onWaitStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given captcha が timeoutMs を超えて残留 When 待つ Then throw する", async () => {
     addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
 
-    const pending = waitForGeneration(btn, { isAborted: () => false, ...FAST_OPTIONS });
-    const expectation = expect(pending).rejects.toThrow(/reCAPTCHA/);
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs + FAST_OPTIONS.pollIntervalMs);
+    const pending = waitForCaptchaClear({
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 100,
+    });
+    const expectation = expect(pending).rejects.toThrow(/手動で解決してから再開/);
+    await vi.advanceTimersByTimeAsync(200);
     await expectation;
+  });
+
+  it("Given 待機中に isAborted が true になる When 待つ Then throw せず即 return する", async () => {
+    addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+    let aborted = false;
+
+    const pending = waitForCaptchaClear({
+      isAborted: () => aborted,
+      pollIntervalMs: 10,
+      timeoutMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(30);
+    aborted = true;
+    await vi.advanceTimersByTimeAsync(20);
+
+    await expect(pending).resolves.toBeUndefined();
   });
 });
 
@@ -117,5 +231,6 @@ describe("shared/dom: タイミング定数", () => {
     // POLL_INTERVAL_MS は 1000→500 に短縮（停止反応性 + Generate 再 enable 検知向上）。
     expect(POLL_INTERVAL_MS).toBe(500);
     expect(SETTLE_MS).toBe(1500);
+    expect(CAPTCHA_WAIT_TIMEOUT_MS).toBe(600000);
   });
 });

@@ -21,16 +21,17 @@ import {
 import { InjectNotAcknowledgedError, injectWithVerification } from "../lib/inject-retry";
 import {
   abortableSleep,
+  CAPTCHA_WAIT_TIMEOUT_MS,
   GENERATE_TIMEOUT_MS,
   POLL_INTERVAL_MS,
   SETTLE_MS,
-  detectRecaptcha,
   getInFlightClipCount,
   injectAdvancedFields,
   resolveAdvancedFields,
   resolveFields,
   resolveGenerateButton,
   setNativeValue,
+  waitForCaptchaClear,
   waitForGeneration,
   waitForInFlightIncrease,
   waitForQueueSlot,
@@ -104,8 +105,16 @@ export default defineContentScript({
         return; // 停止押下後は Generate を押さない（未投入のまま STOPPED 経路へ）
       }
 
-      if (detectRecaptcha()) {
-        throw new Error("reCAPTCHA を検知しました。手動で解決してから再開してください。");
+      // captcha が出ていても即停止しない。多くは passive 検証で数秒以内に自動 verify されて閉じるため、
+      // waiting-captcha phase で解消を待って自動続行する。解消されない場合のみ throw（fail-loud は維持）。
+      await waitForCaptchaClear({
+        isAborted: () => aborted,
+        pollIntervalMs: POLL_INTERVAL_MS,
+        timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
+        onWaitStart: () => emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total }),
+      });
+      if (aborted) {
+        return; // captcha 解消待ち中の停止。Generate を押さない（未投入のまま STOPPED 経路へ）
       }
 
       const button = resolveGenerateButton();
@@ -120,6 +129,10 @@ export default defineContentScript({
         timeoutMs: GENERATE_TIMEOUT_MS,
         pollIntervalMs: POLL_INTERVAL_MS,
         settleMs: SETTLE_MS,
+        captchaWaitTimeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
+        // 生成完了待ち中に captcha が出たら waiting-captcha 表示へ切り替え、解消後 generating へ戻す。
+        onCaptchaWait: (waiting) =>
+          emitProgress({ phase: waiting ? PHASE.WAITING_CAPTCHA : PHASE.GENERATING, index, total }),
       });
     }
 
