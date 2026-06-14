@@ -188,7 +188,7 @@ def test_analytics_json_has_default_benchmark_parameters(tmp_path):
     assert "scan_recent" in bm
     assert "min_views" in bm
     assert "freshness_days" in bm
-    assert "analyze_thumbnails" in bm
+    assert "gemini_thumbnail_analysis" in bm
 
 
 # ===================== Case 8: playlists / workflow / audio は空テンプレ =====================

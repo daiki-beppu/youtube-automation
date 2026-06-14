@@ -7,15 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-### Changed
-
-### Deprecated
-
-### Removed
+## [5.5.8] - 2026-06-15
 
 ### Fixed
+
+- `fix(benchmark)`: ベンチマーク収集のサムネイル分析で Gemini 2.5 Pro（Vertex AI）をデフォルトで全動画に呼び出しており、2チャンネル分の初回収集で ¥6,000 の課金が発生していた問題を修正した。サムネイル分析の実行主体を Gemini API からエージェントの画像読み取り機能（Read ツール）に移行した（追加課金なし）。設定キーを `analyze_thumbnails` → `gemini_thumbnail_analysis`（既定 `false`）にリネームし、明示的に Gemini を使う場合もデフォルトモデルを Pro → Flash に変更（コスト 1/10〜1/20）。あわせて実行前のコストプレビュー表示、Gemini 呼び出しの cost_tracker 記録（`"analysis"` カテゴリ新設）、`-y` 確認スキップフラグを追加した。
 
 ### Migration
 
