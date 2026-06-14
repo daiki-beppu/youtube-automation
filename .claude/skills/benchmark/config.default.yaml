@@ -15,12 +15,14 @@ min_views: 10000
 # レポート鮮度（この日数を超えたら更新対象）
 freshness_days: 3
 
-# Gemini によるサムネイル分析を実行するか
-analyze_thumbnails: true
+# Gemini API によるサムネイル分析（Vertex AI 課金あり）。
+# 既定 false — エージェントが Read ツールで分析するため Gemini は不要。
+# 明示的に true にすると Gemini でも分析する（エージェント分析と併用）。
+gemini_thumbnail_analysis: false
 
-# サムネイル分析の詳細設定
+# Gemini サムネイル分析の詳細設定（gemini_thumbnail_analysis: true 時のみ使用）
 thumbnail_analysis:
-  model: gemini-2.5-pro
+  model: gemini-2.5-flash
   delay_sec: 5  # API レート制限対策の待機秒数
   # Gemini に渡すプロンプト。チャンネルのジャンル/世界観に合わせて
   # config/skills/benchmark.yaml で上書きを推奨。

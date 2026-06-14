@@ -35,7 +35,7 @@ def _write_analytics(target: Path, channels: list[dict] | None = None) -> Path:
                     "scan_recent": 10,
                     "min_views": 1000,
                     "freshness_days": 90,
-                    "analyze_thumbnails": True,
+                    "gemini_thumbnail_analysis": False,
                 },
             },
             ensure_ascii=False,

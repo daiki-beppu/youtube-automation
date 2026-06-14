@@ -2,7 +2,7 @@
 scan_recent: 77
 min_views: 55555
 freshness_days: 99
-analyze_thumbnails: false
+gemini_thumbnail_analysis: false
 thumbnail_analysis:
   model: "gemini-2.5-pro"
   delay_sec: 12

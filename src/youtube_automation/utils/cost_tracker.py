@@ -1,10 +1,11 @@
 """画像・動画・音楽生成のコストを統一的に追跡する。
 
-3 カテゴリを別ファイルに記録しつつ、共通スキーマ・共通 API で扱う:
+4 カテゴリを別ファイルに記録しつつ、共通スキーマ・共通 API で扱う:
 
-- data/image_costs.json   画像生成（Nano Banana / Imagen 系）
-- data/video_costs.json   動画生成（Veo 系）
-- data/audio_costs.json   音楽生成（Lyria 系）
+- data/image_costs.json      画像生成（Nano Banana / Imagen 系）
+- data/video_costs.json      動画生成（Veo 系）
+- data/audio_costs.json      音楽生成（Lyria 系）
+- data/analysis_costs.json   分析（Gemini サムネイル分析等）
 
 エントリ共通スキーマ（Issue #132 で `estimated_cost_usd` は新規エントリで
 `null` 固定。実コストは GCP Cloud Console > Billing で確認する）:
@@ -35,18 +36,20 @@ from typing import Literal
 
 from youtube_automation.utils.profile import section
 
-Category = Literal["image", "video", "audio"]
+Category = Literal["image", "video", "audio", "analysis"]
 
 _LOG_FILENAMES: dict[Category, str] = {
     "image": "image_costs.json",
     "video": "video_costs.json",
     "audio": "audio_costs.json",
+    "analysis": "analysis_costs.json",
 }
 
 _CATEGORY_LABELS: dict[Category, str] = {
     "image": "画像",
     "video": "動画",
     "audio": "音楽",
+    "analysis": "分析",
 }
 
 # 旧エントリで `unit` キーが欠落しているときの読み出しフォールバック。
@@ -56,6 +59,7 @@ _LEGACY_UNIT_BY_CATEGORY: dict[Category, str] = {
     "image": "image",
     "video": "second",
     "audio": "song",
+    "analysis": "call",
 }
 
 
@@ -226,7 +230,8 @@ def print_last_report(last_entry: dict | None = None) -> None:
     print()
     print("=== Generation Cost Report ===")
     print(f"  今回:   [{cat_label}] {last['model']} / {last['quantity']}{last['unit']} / file={output_file}")
-    month_detail = " / ".join(f"{_CATEGORY_LABELS[c]} {month_by_cat.get(c, 0)} 件" for c in ("image", "video", "audio"))
+    cats = ("image", "video", "audio", "analysis")
+    month_detail = " / ".join(f"{_CATEGORY_LABELS[c]} {month_by_cat.get(c, 0)} 件" for c in cats)
     print(f"  今月({month}): {month_total} 件")
     print(f"    内訳: {month_detail}")
     print(f"  累計:   {len(entries)} 件")
@@ -255,7 +260,7 @@ def print_summary(category: Category | None = None) -> None:
     print(f"  総件数:   {len(entries)}")
     print()
     print("  カテゴリ別:")
-    for cat in ("image", "video", "audio"):
+    for cat in ("image", "video", "audio", "analysis"):
         count = by_cat.get(cat)
         if not count:
             continue
@@ -272,6 +277,6 @@ def print_summary(category: Category | None = None) -> None:
     print()
     print(_GCP_BILLING_HINT)
     print("  ログ:")
-    for cat in ("image", "video", "audio"):
+    for cat in ("image", "video", "audio", "analysis"):
         print(f"    {cat}: {_log_path(cat)}")
     print()
