@@ -14,6 +14,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   fetchRelease,
+  fetchCollectionRelease,
   fetchAsset,
   ReleaseUnavailableError,
 } from "../lib/api";
@@ -34,6 +35,10 @@ const SAMPLE_PAYLOAD: ReleasePayload = {
       partial_audio_type: null,
       artist_persona: true,
       apply_to_all: true,
+    },
+    credits: {
+      performer_role: "Audio",
+      producer_role: "Producer",
     },
   },
   release: {
@@ -123,6 +128,51 @@ describe("fetchRelease", () => {
 
     // When / Then: ReleaseUnavailableError ではなく汎用 Error
     const promise = fetchRelease("http://localhost:7873");
+    await expect(promise).rejects.toThrow();
+    await expect(promise).rejects.not.toBeInstanceOf(ReleaseUnavailableError);
+  });
+});
+
+describe("fetchCollectionRelease", () => {
+  it("dir mode の collection-scoped release.json を fetch する", async () => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(200, SAMPLE_PAYLOAD));
+
+    // When
+    const result = await fetchCollectionRelease(
+      "http://localhost:7873",
+      "20260526-sg-col",
+      "disc1",
+    );
+
+    // Then: collection-scoped パスへ要求する。
+    expect(result).toEqual(SAMPLE_PAYLOAD);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:7873/collections/20260526-sg-col/distrokid/disc1/release.json",
+      expect.anything(),
+    );
+  });
+
+  it("404 のとき ReleaseUnavailableError を throw する", async () => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(404, {}));
+
+    // When / Then
+    await expect(
+      fetchCollectionRelease("http://localhost:7873", "col-id", "disc1"),
+    ).rejects.toBeInstanceOf(ReleaseUnavailableError);
+  });
+
+  it("404 以外の非 OK では汎用 Error を throw する", async () => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(500, {}));
+
+    // When / Then
+    const promise = fetchCollectionRelease(
+      "http://localhost:7873",
+      "col-id",
+      "disc1",
+    );
     await expect(promise).rejects.toThrow();
     await expect(promise).rejects.not.toBeInstanceOf(ReleaseUnavailableError);
   });

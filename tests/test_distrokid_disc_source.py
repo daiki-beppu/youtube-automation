@@ -6,7 +6,8 @@
 - track[].title を `<source>/metadata.md` のトラック表から引く
 - cover を `<collection>/30-distrokid/cover_art_3000.jpg` 優先で選ぶ
 - album_title を metadata.md 枠（空なら disc dirname kebab→Title）から決める
-- language を metadata.md override（無ければ profile）で上書きする
+- language は profile（config/channel/distrokid.json）を権威に使う（metadata.md
+  「言語」セルは転記用テンプレで payload には影響しない、#888）
 ことを検証する。distrokid_source 未指定は従来経路（後方互換）。
 
 契約（draft が実装すべき public API、後方互換拡張）:
@@ -36,6 +37,7 @@ from youtube_automation.utils.config.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
+from youtube_automation.utils.distrokid_spec import write_collection_spec
 from youtube_automation.utils.exceptions import ConfigError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
@@ -242,10 +244,14 @@ def test_disc_source_cover_falls_back_to_thumbnail_when_absent(tmp_path):
     assert cover["filename"] == "thumbnail.png"
 
 
-def test_disc_source_language_overridden_by_metadata(tmp_path):
-    """Given metadata.md の 言語=Instrumental
+def test_disc_source_language_uses_profile_ignoring_metadata(tmp_path):
+    """Given metadata.md の 言語=Instrumental（DistroKid form 言語 option と意味が異なる値）
     When distrokid_source 指定で build_release_payload
-    Then profile.language が Instrumental に override される。
+    Then profile.language は config 由来の "ja" を維持する（metadata.md は権威ではない）。
+
+    metadata.md の「言語」セルは人間が読む転記用テンプレで、DistroKid form の言語
+    option（English 等の言語名）と意味が異なる値（例: "Instrumental" は楽曲属性）が
+    書かれうるため、payload には反映しない（#888 / 拡張側の OptionNotFoundError 予防）。
     """
     collection = _make_collection(tmp_path)
     _make_disc_source(collection, language="Instrumental")
@@ -253,13 +259,13 @@ def test_disc_source_language_overridden_by_metadata(tmp_path):
 
     payload = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
 
-    assert payload["profile"]["language"] == "Instrumental"
+    assert payload["profile"]["language"] == "ja"
 
 
-def test_disc_source_language_falls_back_to_profile_when_blank(tmp_path):
+def test_disc_source_language_uses_profile_when_metadata_blank(tmp_path):
     """Given metadata.md の 言語が HTML コメント枠（未記入）
     When distrokid_source 指定で build_release_payload
-    Then profile.language は元の profile 値（ja）のまま。
+    Then profile.language は元の profile 値（ja）のまま（非空時と同じ挙動）。
     """
     collection = _make_collection(tmp_path)
     _make_disc_source(collection, language=None)
@@ -429,10 +435,11 @@ def serve(tmp_path):
 def test_release_endpoint_serves_disc_source_payload(serve, tmp_path):
     """Given create_server に distrokid_source を渡す
     When `GET /distrokid/release.json`
-    Then disc-source の payload（25 tracks / cover_art_3000 / Instrumental）を返す。
+    Then disc-source の payload（25 tracks / cover_art_3000 / profile.language=ja）を返す。
 
     distrokid_source が create_server → _serve_distrokid_release →
-    build_release_payload まで伝搬することの統合検証。
+    build_release_payload まで伝搬することの統合検証。language は profile 値を維持する
+    （metadata.md の「言語」は payload に影響しない、#888）。
     """
     collection = _make_collection(tmp_path)
     _make_disc_source(collection)
@@ -446,7 +453,7 @@ def test_release_endpoint_serves_disc_source_payload(serve, tmp_path):
     assert len(body["release"]["tracks"]) == 25
     assert body["release"]["tracks"][0]["title"] == "Slip Right Through"
     assert body["release"]["cover"]["filename"] == "cover_art_3000.jpg"
-    assert body["profile"]["language"] == "Instrumental"
+    assert body["profile"]["language"] == "ja"
 
 
 def test_release_asset_serves_disc_source_mp3(serve, tmp_path):
@@ -464,3 +471,167 @@ def test_release_asset_serves_disc_source_mp3(serve, tmp_path):
         assert resp.status == 200
         assert resp.headers.get("Content-Type") == "audio/mpeg"
         assert resp.read() == _MP3_BYTES
+
+
+# ---------------------------------------------------------------------------
+# spec.json 優先経路（#941）
+# ---------------------------------------------------------------------------
+
+
+def _make_spec(distrokid_dir, disc_slug, tracks, *, album_title="Spec Album Title"):
+    """30-distrokid/spec.json を作成する（#941 テスト用）."""
+    spec = {
+        "version": 1,
+        "artist": "Test Artist",
+        "language": "English",
+        "genre_primary": "Electronic",
+        "genre_secondary": None,
+        "label": None,
+        "discs": [
+            {
+                "slug": disc_slug,
+                "album_title": album_title,
+                "tracks": [{"filename": fn, "title": title} for fn, title in tracks],
+            }
+        ],
+    }
+    write_collection_spec(distrokid_dir, spec)
+    return spec
+
+
+def test_spec_priority_over_metadata_md_no_metadata(tmp_path):
+    """Given spec.json あり + metadata.md 無し
+    When distrokid_source 指定で build_release_payload
+    Then spec の album_title / track title で payload が組み上がる。
+    (#941: spec が SSOT、metadata.md 不在でも raise しない)
+    """
+    collection = _make_collection(tmp_path)
+    disc_slug = "disc1-coding-focus-vol1"
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    # mp3 を 2 つ置く
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (source_dir / "02-easy-release.mp3").write_bytes(_MP3_BYTES)
+    # metadata.md は置かない
+    # cover_art_3000.jpg
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+
+    distrokid_dir = collection / "30-distrokid"
+    _make_spec(
+        distrokid_dir,
+        disc_slug,
+        [
+            ("01-slip-right-through.mp3", "Slip Right Through"),
+            ("02-easy-release.mp3", "Easy Release"),
+        ],
+        album_title="Spec Album Title",
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    payload = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
+
+    assert payload["release"]["album_title"] == "Spec Album Title"
+    assert payload["release"]["tracks"][0]["title"] == "Slip Right Through"
+    assert payload["release"]["tracks"][1]["title"] == "Easy Release"
+    assert len(payload["release"]["tracks"]) == 2
+
+
+def test_spec_priority_unknown_mp3_falls_back_to_stem(tmp_path):
+    """Given spec.json あり + spec に存在しない mp3 が disc に追加された
+    When distrokid_source 指定で build_release_payload
+    Then 未知 filename は stem をタイトルにフォールバック（既存 _disc_tracks の救済ロジック）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    disc_slug = "disc1-coding-focus-vol1"
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (source_dir / "99-extra-unknown.mp3").write_bytes(_MP3_BYTES)  # spec に無い
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+
+    distrokid_dir = collection / "30-distrokid"
+    _make_spec(
+        distrokid_dir,
+        disc_slug,
+        [("01-slip-right-through.mp3", "Slip Right Through")],  # 99-extra-unknown.mp3 は含めない
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    tracks = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)["release"]["tracks"]
+
+    extra = next(t for t in tracks if t["filename"] == "99-extra-unknown.mp3")
+    assert extra["title"] == "99-extra-unknown"  # stem フォールバック
+
+
+def test_spec_disc_entry_missing_falls_back_to_metadata(tmp_path):
+    """Given spec.json はあるが対象 disc のエントリが無い
+    When distrokid_source 指定で build_release_payload
+    Then metadata.md フォールバック経路に乗る（metadata.md 不在なら従来どおり ConfigError）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+    # metadata.md を置かない → フォールバック先も不在 → ConfigError
+
+    distrokid_dir = collection / "30-distrokid"
+    # spec には別の disc しかない
+    _make_spec(
+        distrokid_dir,
+        "disc99-other-vol99",  # 対象 disc1-coding-focus-vol1 とは別 slug
+        [("01-slip-right-through.mp3", "Slip Right Through")],
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError, match="metadata.md"):
+        build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
+
+
+def test_spec_disc_entry_missing_uses_metadata_when_present(tmp_path):
+    """Given spec.json に対象 disc エントリ無し + metadata.md あり
+    When distrokid_source 指定で build_release_payload
+    Then metadata.md の値を使う（後方互換フォールバック）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    _make_disc_source(collection, album_title="MD Album Title")
+
+    distrokid_dir = collection / "30-distrokid"
+    # spec には別の disc しかない（対象エントリ無し）
+    _make_spec(
+        distrokid_dir,
+        "disc99-other",
+        [("01-slip-right-through.mp3", "Slip Right Through")],
+    )
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    payload = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)
+
+    # metadata.md の album_title を使う
+    assert payload["release"]["album_title"] == "MD Album Title"
+
+
+def test_spec_corrupted_raises_config_error(tmp_path):
+    """Given 破損した spec.json（不正 JSON）
+    When distrokid_source 指定で build_release_payload
+    Then ConfigError を raise する（fail-loud; 黙った md フォールバックは行わない）。
+    (#941)
+    """
+    collection = _make_collection(tmp_path)
+    source_dir = collection / _DISC_SOURCE
+    source_dir.mkdir(parents=True)
+    (source_dir / "01-slip-right-through.mp3").write_bytes(_MP3_BYTES)
+    (collection / "30-distrokid" / "cover_art_3000.jpg").write_bytes(_COVER_BYTES)
+
+    # 破損した spec.json を書き込む
+    distrokid_dir = collection / "30-distrokid"
+    (distrokid_dir / "spec.json").write_text("{ broken json }", encoding="utf-8")
+
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError):
+        build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)

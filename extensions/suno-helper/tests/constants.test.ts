@@ -50,12 +50,14 @@ describe("shared/constants: サーバー互換の契約値", () => {
 });
 
 describe("shared/constants: 進捗フェーズ (PHASE)", () => {
-  it("Given PHASE When 全フェーズを読む Then 既存値に加え waiting-slot / adding-to-playlist を保持する (#816, #854)", () => {
+  it("Given PHASE When 全フェーズを読む Then 既存値に加え waiting-slot / adding-to-playlist / waiting-captcha / entry-failed を保持する (#816, #854, #948)", () => {
     expect(PHASE).toEqual({
       INJECTING: "injecting",
       GENERATING: "generating",
       WAITING_SLOT: "waiting-slot",
+      WAITING_CAPTCHA: "waiting-captcha",
       DONE: "done",
+      ENTRY_FAILED: "entry-failed",
       ADDING_TO_PLAYLIST: "adding-to-playlist",
       FINISHED: "finished",
       STOPPED: "stopped",
@@ -148,11 +150,13 @@ describe("shared/constants: 速度プリセット (#875)", () => {
     expect(SPEED_PRESETS.fast.injectAckTimeoutMs).toBe(INJECT_ACK_TIMEOUT_MS);
   });
 
-  it("Given balanced preset When 数値を読む Then 10s / ±3s / inflight 5 / retry 1 / ack 45s", () => {
+  it("Given balanced preset When 数値を読む Then 6s / ±3s / inflight 実上限 / retry 1 / ack 45s (#970)", () => {
+    // #948 で in-flight が API status の正確な計数になったため、queue cap を Suno 実上限
+    // （MAX_INFLIGHT_REQUESTS = 10、#816 実機検証）まで開放し、ジッター付き間隔だけで自然化する。
     expect(SPEED_PRESETS.balanced).toMatchObject({
-      interCreateDelayMs: 10000,
+      interCreateDelayMs: 6000,
       jitterMs: 3000,
-      maxInflightRequests: 5,
+      maxInflightRequests: MAX_INFLIGHT_REQUESTS,
       maxInjectRetry: 1,
       injectAckTimeoutMs: 45000,
     });
@@ -179,12 +183,12 @@ describe("shared/constants: 速度プリセット (#875)", () => {
     },
   );
 
-  it("Given balanced preset When jitter 適用域を求める Then 7000〜13000ms（受け入れ基準 7-13s）", () => {
+  it("Given balanced preset When jitter 適用域を求める Then 3000〜9000ms（#970 増速後の 3-9s）", () => {
     // applyJitter の min/max は preset-state.test.ts で検証。ここでは preset 値が
     // 受け入れ基準の範囲を表現できることだけを確認する。
     const { interCreateDelayMs: base, jitterMs } = SPEED_PRESETS.balanced;
-    expect(base - jitterMs).toBe(7000);
-    expect(base + jitterMs).toBe(13000);
+    expect(base - jitterMs).toBe(3000);
+    expect(base + jitterMs).toBe(9000);
   });
 
   it("Given safe preset When jitter 適用域を求める Then 15000〜25000ms（受け入れ基準 15-25s）", () => {

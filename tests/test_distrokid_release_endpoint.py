@@ -38,6 +38,7 @@ from youtube_automation.utils.config.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
+from youtube_automation.utils.exceptions import ConfigError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
@@ -111,10 +112,15 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
             "artist_persona": True,
             "apply_to_all": True,
         },
+        "credits": {
+            "performer_role": "Synthesizer",
+            "producer_role": "Producer",
+        },
     }
     release = payload["release"]
     assert release["album_title"] == "city-nights"
-    assert release["release_date"] == "2026-03-22T08:00:00+09:00"
+    # serve は publish_target_at を YYYY-MM-DD へ正規化して返す（#932）。
+    assert release["release_date"] == "2026-03-22"
 
 
 def test_build_release_payload_tracks_are_sorted_with_asset_paths(tmp_path):
@@ -230,7 +236,7 @@ def serve(tmp_path):
     """
     started = []
 
-    def _start(*, collection_dir, distrokid, allow_origin=None, prompts=None):
+    def _start(*, collection_dir, distrokid, allow_origin=None, prompts=None, distrokid_source=None):
         prompts_path = tmp_path / "suno-prompts.json"
         prompts_path.write_text(json.dumps(prompts or []), encoding="utf-8")
         server = create_server(
@@ -239,6 +245,7 @@ def serve(tmp_path):
             prompts_path=prompts_path,
             collection_dir=collection_dir,
             distrokid=distrokid,
+            distrokid_source=distrokid_source,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -267,6 +274,32 @@ def test_get_distrokid_release_json_returns_merged_payload(serve, tmp_path):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == build_release_payload(collection, distrokid)
+
+
+def test_get_distrokid_release_json_broken_spec_returns_500(serve, tmp_path):
+    """Given 破損 spec.json を持つ 30-distrokid disc source
+    When `GET /distrokid/release.json`
+    Then 接続切断ではなく 500 + JSON エラーボディを返す（#944）。
+    """
+    collection = _make_collection(tmp_path)
+    disc_dir = collection / "30-distrokid" / "disc1-city-nights-vol1"
+    disc_dir.mkdir(parents=True)
+    (disc_dir / "01-foo.mp3").write_bytes(_MP3_BYTES)
+    (collection / "30-distrokid" / "spec.json").write_text("{ broken", encoding="utf-8")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    base = serve(
+        collection_dir=collection,
+        distrokid=distrokid,
+        distrokid_source="30-distrokid/disc1-city-nights-vol1",
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(f"{base}{DISTROKID_RELEASE_ROUTE}")
+
+    err = exc_info.value
+    assert err.code == 500
+    body = json.loads(err.read().decode("utf-8"))
+    assert "spec.json" in body["error"]
 
 
 def test_get_distrokid_asset_serves_binary_with_mime(serve, tmp_path):
@@ -422,3 +455,57 @@ def test_suno_prompts_still_served_when_distrokid_disabled(serve, tmp_path):
     with urllib.request.urlopen(f"{base}{_SUNO_PROMPTS_ROUTE}") as resp:
         assert resp.status == 200
         assert json.loads(resp.read().decode("utf-8")) == entries
+
+
+# ---------------------------------------------------------------------------
+# release_date 正規化（#932）
+# ---------------------------------------------------------------------------
+
+
+def test_release_date_date_only_string_passes_through(tmp_path):
+    """Given publish_target_at が date のみ（"2026-07-01"）
+    When build_release_payload を呼ぶ
+    Then release_date がそのまま "2026-07-01"（正規化で変化しない）（#932）。
+    """
+    collection = _make_collection(tmp_path, publish_target_at="2026-07-01")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    release_date = build_release_payload(collection, distrokid)["release"]["release_date"]
+
+    assert release_date == "2026-07-01"
+
+
+def test_release_date_iso_datetime_normalized_to_date(tmp_path):
+    """Given publish_target_at が ISO datetime（"2026-03-22T08:00:00+09:00"）
+    When build_release_payload を呼ぶ
+    Then release_date が YYYY-MM-DD に正規化される（#932）。
+    """
+    collection = _make_collection(tmp_path, publish_target_at="2026-03-22T08:00:00+09:00")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    release_date = build_release_payload(collection, distrokid)["release"]["release_date"]
+
+    assert release_date == "2026-03-22"
+
+
+def test_release_date_invalid_format_raises_config_error(tmp_path):
+    """Given publish_target_at が parse 不能な文字列（"22/03/2026"）
+    When build_release_payload を呼ぶ
+    Then ConfigError（fail-loud。ISO 8601 形式でなければ設定ミスとして弾く）（#932）。
+    """
+    collection = _make_collection(tmp_path, publish_target_at="22/03/2026")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError):
+        build_release_payload(collection, distrokid)
+
+
+def test_release_date_absent_yields_none(tmp_path):
+    """Given publish_target_at 未設定（workflow-state.json 無し）
+    When build_release_payload を呼ぶ
+    Then release_date は None（注入 skip でフォームは空のまま）（#932）。
+    """
+    collection = _make_collection(tmp_path, publish_target_at=None)
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    assert build_release_payload(collection, distrokid)["release"]["release_date"] is None

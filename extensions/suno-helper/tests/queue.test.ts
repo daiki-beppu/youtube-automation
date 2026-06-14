@@ -31,7 +31,6 @@ import {
   findCardRoot,
   getInFlightClipCount,
   isClipGenerating,
-  waitForInFlightIncrease,
   waitForQueueSlot,
 } from "../../shared/dom";
 import { addClipCard, addQueueErrorDialog, buildClipCard, completeClipCard } from "./_helpers";
@@ -308,22 +307,12 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
   });
 });
 
-// inject 後に「実際に CLIPS_PER_REQUEST 個 clip が受理されたか」を in-flight 増分で検証する (#864 root cause 3)。
-// 契約 (draft が実装すべき public API、shared/dom.ts):
-//   - waitForInFlightIncrease(beforeCount: number, delta: number,
-//       options: { isAborted: () => boolean; pollIntervalMs: number; timeoutMs: number }): Promise<boolean>
-//     - getInFlightClipCount() >= beforeCount + delta になったら resolve true（受理確認）
-//     - timeout で resolve false（throw しない。retry 判断は caller=injectWithVerification 側）
-//     - isAborted() が true なら未達でも即 resolve true（停止優先。waitForQueueSlot と同じ中断優先）
-//     - 絶対値 beforeCount + delta 比較（相対追跡しない。order.md 契約どおり）
-// waitForQueueSlot と異なり throw せず boolean を返す点が本質的な差分。
-//
-// #866 注: getInFlightClipCount() は Remix btn 0 件で throw するため、「in-flight 0 から増える」
-// シナリオは完了 card（Remix btn enabled = in-flight には数えない）を seed して表現する。
-// 実機でも library には過去の完了 clip が常駐するため、これが現実的な前提。
-describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)", () => {
-  const FAST = { pollIntervalMs: 10, timeoutMs: 1000 } as const;
+// in-flight 増分検証 (waitForInFlightIncrease) は #948 で lib/ack-probe.ts のハイブリッド ACK
+// （bridge の generate レスポンス観測 OR DOM 増分）へ移管した。回帰テストは tests/ack-probe.test.ts。
 
+describe("waitForQueueSlot: getCount DI (#948)", () => {
+  // Remix disabled プロキシは生成完了後も disabled が残り過大カウントする（実測 20 中 16 誤判定）。
+  // bridge の status ベースカウントを getCount として注入できることを担保する。
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -332,92 +321,167 @@ describe("waitForInFlightIncrease: inject 後の in-flight 増分検証 (#864)",
     vi.useRealTimers();
   });
 
-  it("Given 既に beforeCount+delta 以上 (before=0, delta=2, in-flight=2) When 待機 Then 即 resolve true", async () => {
-    addClipCard({ generating: true });
-    addClipCard({ generating: true }); // in-flight 2 >= 0 + 2
+  it("Given getCount を注入 When 待機する Then DOM プロキシではなく getCount で判定する", async () => {
+    // DOM 上は 20 card 生成中（プロキシなら上限到達）だが、getCount は 4 を返す（実 in-flight）。
+    Array.from({ length: 20 }, () => addClipCard({ generating: true }));
 
-    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
+    const getCount = vi.fn().mockReturnValue(4);
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
     await vi.advanceTimersByTimeAsync(0);
 
-    await expect(pending).resolves.toBe(true);
+    await expect(pending).resolves.toBeUndefined(); // 4 < 20 で即 resolve（プロキシの 20 では待たされる）
+    expect(getCount).toHaveBeenCalled();
   });
 
-  it("Given 投入直後はまだ反映されない→後から delta 分 card が生成中になる When poll Then resolve true", async () => {
-    // inject 直後は DOM 反映ラグで in-flight 0（完了 card のみ）。poll 中に 2 card が生成中になったら受理確認。
-    addClipCard({ generating: false }); // 過去の完了 clip（Remix btn 存在 → throw しない、in-flight には数えない）
+  it("Given getCount が上限以上 → poll 中に減る When 待機する Then 減った時点で resolve する", async () => {
+    addClipCard({ generating: false }); // DOM 側は完了 card のみ（プロキシなら 0 で即素通し）
 
-    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
-    let settled: boolean | undefined;
-    void pending.then((v) => {
-      settled = v;
+    const getCount = vi.fn().mockReturnValue(20);
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
     });
 
-    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs * 3);
-    expect(settled).toBeUndefined(); // in-flight 0 のうちは未達
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 3);
+    expect(settled).toBe(false); // getCount=20 >= 20 のうちは待機（DOM の 0 を見ていない）
 
-    addClipCard({ generating: true });
-    addClipCard({ generating: true });
-    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
-
-    await expect(pending).resolves.toBe(true);
+    getCount.mockReturnValue(18);
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs);
+    await expect(pending).resolves.toBeUndefined();
   });
 
-  it("Given delta=2 を 1 件ずつ満たす When 各 poll で再評価 Then 全 delta 到達後にのみ resolve true", async () => {
-    addClipCard({ generating: false }); // in-flight 0 の起点（完了 card を seed）
+  it("Given getCount 未指定 When 待機する Then 従来どおり DOM プロキシで判定する（後方互換）", async () => {
+    addClipCard({ generating: true }); // in-flight 1 < 20
 
-    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
-    let settled: boolean | undefined;
-    void pending.then((v) => {
-      settled = v;
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(pending).resolves.toBeUndefined();
+  });
+});
+
+describe("waitForQueueSlot: stall ベース判定 (#948)", () => {
+  // 正確な in-flight カウントの下では「上限で長く待つ」のは正常状態（clip 完了に数分かかる）。
+  // getLastChangeAt 注入時は固定 deadline を廃し、in-flight 集合が stallTimeoutMs 変化しない
+  // ときのみ throw する。status 遷移が続く限り timeoutMs を超えても待ち続けることを pin する。
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const STALL = { pollIntervalMs: 10, timeoutMs: 100, queueErrorWaitMs: 200, stallTimeoutMs: 1000 } as const;
+
+  it("Given status 遷移が続く（lastChangeAt が更新され続ける） When timeoutMs を超えて待つ Then throw せず待機を継続する", async () => {
+    addClipCard({ generating: false }); // DOM fallback の throw 回避用 seed（getCount 注入で参照されない）
+    const getCount = vi.fn().mockReturnValue(20);
+    let lastChange = 0;
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...STALL,
+      getCount,
+      getLastChangeAt: () => lastChange,
     });
+    let outcome: "resolved" | "rejected" | undefined;
+    pending.then(
+      () => {
+        outcome = "resolved";
+      },
+      () => {
+        outcome = "rejected";
+      },
+    );
 
-    addClipCard({ generating: true }); // in-flight 1 < 2
-    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
-    expect(settled).toBeUndefined(); // 1 件では未達（部分受理では通さない）
+    // 固定 deadline (timeoutMs=100) を大きく超えても、変化が続く限り throw しない。
+    for (let i = 0; i < 5; i++) {
+      lastChange = Date.now(); // status 遷移を模す
+      await vi.advanceTimersByTimeAsync(STALL.stallTimeoutMs / 2);
+    }
+    expect(outcome).toBeUndefined();
 
-    addClipCard({ generating: true }); // in-flight 2 >= 2
-    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
-    await expect(pending).resolves.toBe(true);
+    getCount.mockReturnValue(18); // slot が空いたら resolve
+    await vi.advanceTimersByTimeAsync(STALL.pollIntervalMs);
+    expect(outcome).toBe("resolved");
   });
 
-  it("Given 既存 in-flight 4 / before=4 / delta=2 When 6 まで増える Then resolve true (絶対値 before+delta 比較)", async () => {
-    // before を明示的に渡し、絶対値 before+delta で判定する契約を pin する。
-    Array.from({ length: 4 }, () => addClipCard({ generating: true }));
-    expect(getInFlightClipCount()).toBe(4);
-
-    const pending = waitForInFlightIncrease(4, 2, { isAborted: () => false, ...FAST });
-    let settled: boolean | undefined;
-    void pending.then((v) => {
-      settled = v;
-    });
-
-    addClipCard({ generating: true }); // 5 < 6
-    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
-    expect(settled).toBeUndefined();
-
-    addClipCard({ generating: true }); // 6 >= 6
-    await vi.advanceTimersByTimeAsync(FAST.pollIntervalMs);
-    await expect(pending).resolves.toBe(true);
-  });
-
-  it("Given 増分が達しないまま deadline 超過 When 待機 Then resolve false (throw しない)", async () => {
-    // silent drop を表現。waitForQueueSlot と違い throw せず false を返し、retry 判断は caller に委ねる。
-    // 完了 card を seed し getInFlightClipCount() の throw を避けつつ in-flight は 0 のまま据え置く。
+  it("Given in-flight 集合が stallTimeoutMs 変化しない When 待機する Then stall として throw する", async () => {
     addClipCard({ generating: false });
-
-    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => false, ...FAST });
-
-    await vi.advanceTimersByTimeAsync(FAST.timeoutMs + FAST.pollIntervalMs + 50);
-
-    await expect(pending).resolves.toBe(false);
+    const getCount = vi.fn().mockReturnValue(20);
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...STALL,
+      getCount,
+      getLastChangeAt: () => 0, // 一度も変化しない
+    });
+    const expectation = expect(pending).rejects.toThrow(/変化しませんでした/);
+    await vi.advanceTimersByTimeAsync(STALL.stallTimeoutMs + STALL.pollIntervalMs + 50);
+    await expectation;
   });
 
-  it("Given isAborted=true When 増分未達でも待機 Then 即 resolve true (停止優先)", async () => {
-    // card は 1 件も無い（未達）が、停止押下中は受理判定より中断を優先して true で抜ける
-    // （isAborted を先に評価するため getInFlightClipCount() の throw 経路にも入らない）。
-    const pending = waitForInFlightIncrease(0, 2, { isAborted: () => true, ...FAST });
+  it("Given stall 経路でも isAborted=true When 待機する Then 即 resolve する（中断優先）", async () => {
+    addClipCard({ generating: false });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => true,
+      ...STALL,
+      getCount: () => 20,
+      getLastChangeAt: () => 0,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("Given getLastChangeAt 未注入 When 待機する Then 従来どおり固定 deadline で throw する（後方互換）", async () => {
+    addClipCard({ generating: false });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 100,
+      queueErrorWaitMs: 200,
+      getCount: () => 20,
+    });
+    const expectation = expect(pending).rejects.toThrow(/タイムアウト/);
+    await vi.advanceTimersByTimeAsync(100 + 10 + 50);
+    await expectation;
+  });
+});
+
+describe("waitForQueueSlot × clip-tracker 統合: 実測シナリオの回帰 (#948)", () => {
+  // 実測で確認した「DOM 上 20 clips が Remix disabled だが実 status は complete 16 / streaming 4」
+  // の状況で、status ベースのカウントなら即投入再開されることを tracker と組み合わせて pin する。
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given DOM 20 disabled / 実 status complete 16 + streaming 4 When tracker を getCount に注入 Then 即投入再開する", async () => {
+    const { createClipTracker } = await import("../lib/clip-tracker");
+    // DOM プロキシ視点では 20 clips すべて生成中（Balanced 上限 10 を常時超過 = 旧バグの再現条件）。
+    Array.from({ length: 20 }, () => addClipCard({ generating: true }));
+    expect(getInFlightClipCount()).toBe(20);
+
+    const tracker = createClipTracker();
+    const clips = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, status: "submitted" }));
+    for (let i = 0; i < 10; i++) {
+      tracker.registerSubmitted(clips.slice(i * 2, i * 2 + 2));
+    }
+    tracker.applyFeedStatuses(clips.map((c, i) => ({ id: c.id, status: i < 16 ? "complete" : "streaming" })));
+    expect(tracker.getInFlightCount()).toBe(4);
+
+    const pending = waitForQueueSlot(10, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      getCount: () => tracker.getInFlightCount(),
+      getLastChangeAt: () => tracker.lastChangeAt(),
+      stallTimeoutMs: 600000,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
-    await expect(pending).resolves.toBe(true);
+    await expect(pending).resolves.toBeUndefined(); // 4 < 10 で即 resolve（DOM プロキシなら 20 >= 10 で待機）
   });
 });

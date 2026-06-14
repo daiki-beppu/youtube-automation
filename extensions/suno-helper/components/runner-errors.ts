@@ -17,6 +17,8 @@ export interface RestoreState {
   // ERROR 停止した entry の 0-based index (#872 要件3)。chrome.storage の resume state と二重化し、
   // popup の再開バナーの冗長ソースとして消費する。ERROR phase 到達時のみ確定、それ以外は undefined。
   failedIndex?: number;
+  // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
+  failedIndices?: number[];
 }
 
 /**
@@ -34,16 +36,25 @@ export function phaseToStatus(
     case PHASE.INJECTING:
       return { text: `[${n}/${total}] 注入中: ${entries[index ?? 0]?.name ?? ""}` };
     case PHASE.WAITING_SLOT:
-      return { text: `[${n}/${total}] 生成キューの空き待ち…` };
+      // message は bridge 縮退の明示 (#948)。通常時は undefined で従来文言のまま。
+      return { text: `[${n}/${total}] 生成キューの空き待ち…${message ? `（${message}）` : ""}` };
+    case PHASE.WAITING_CAPTCHA:
+      return { text: `[${n}/${total}] captcha 解消待ち…（多くは自動で解消します）` };
     case PHASE.GENERATING:
       return { text: `[${n}/${total}] 生成待ち…` };
     case PHASE.DONE:
       return { text: `[${n}/${total}] 完了` };
+    case PHASE.ENTRY_FAILED:
+      // entry 単位の失敗スキップ (#948)。run 全体は継続するため error フラグは立てない（status は黄信号扱い）。
+      return { text: `[${n}/${total}] 失敗のためスキップ: ${message ?? ""}` };
     case PHASE.ADDING_TO_PLAYLIST:
       // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
       return { text: `Playlist '${message ?? ""}' へ追加中…` };
     case PHASE.FINISHED:
-      return { text: `完了: ${total} パターンを実行しました。` };
+      // 失敗スキップ付き完走 (#948) は message に失敗一覧が載る。無ければ従来文言。
+      return message
+        ? { text: `完了（一部失敗）: ${message}`, error: true }
+        : { text: `完了: ${total} パターンを実行しました。` };
     case PHASE.STOPPED:
       return { text: "停止しました。手動で続行できます。", error: true };
     case PHASE.ERROR:
@@ -73,6 +84,7 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     isError: Boolean(error),
     playlistName: snap.playlistName,
     failedIndex: snap.failedIndex,
+    failedIndices: snap.failedIndices,
   };
 }
 
@@ -98,4 +110,20 @@ export function formatStopError(message: string): string {
     return `停止リクエスト失敗: ${message}\nSuno タブをハードリロード (⌘+Shift+R / Ctrl+Shift+R) してから再度実行してください。`;
   }
   return `停止リクエスト失敗: ${message}`;
+}
+
+/**
+ * background の fire-and-forget 中継（toggleOverlay 等）が reject したときの SW console ログを決める。
+ * content script 未注入（非 Suno タブでのアイコンクリック / 拡張リロード後の stale タブ）は想定内なので
+ * info に落とし、それ以外は warn で残す。catch せず放置すると未処理 rejection として
+ * chrome://extensions のエラーバッジを汚染するため、必ず本関数経由で消費する（#937）。
+ */
+export function describeRelayFailure(action: string, message: string): { level: "info" | "warn"; text: string } {
+  if (isContentScriptMissingError(message)) {
+    return {
+      level: "info",
+      text: `[suno-helper] ${action} の中継先がありません（Suno タブ以外、または拡張リロード後はタブをハードリロードしてください）: ${message}`,
+    };
+  }
+  return { level: "warn", text: `[suno-helper] ${action} の中継に失敗しました: ${message}` };
 }

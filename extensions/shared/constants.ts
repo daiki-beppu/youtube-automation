@@ -22,6 +22,10 @@ export const PROMPTS_ROUTE = "/suno/prompts.json";
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
 export const COLLECTIONS_ROUTE = "/collections";
 
+/** yt-collection-serve の Suno playlist capture サブパス (#893、POST)。
+ * SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PLAYLISTS_ROUTE。 */
+export const PLAYLISTS_CAPTURE_ROUTE = "/suno/playlists";
+
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
   return `${COLLECTIONS_ROUTE}/${id}${PROMPTS_ROUTE}`;
@@ -41,8 +45,15 @@ export const INTER_CREATE_DELAY_MS = 3000;
 export const QUEUE_ERROR_WAIT_MS = 30000;
 
 /** queue 空きスロット待ち専用の timeout (#864 root cause 1)。single clip 完了待ち GENERATE_TIMEOUT_MS=3分 の
- * 流用は、20 clip 積んだ最初の空き待ちで焼き切れる。queue 空き待ちは別系統の 5 分として独立させる。 */
+ * 流用は、20 clip 積んだ最初の空き待ちで焼き切れる。queue 空き待ちは別系統の 5 分として独立させる。
+ * #948 以降は stall ベース判定（INFLIGHT_STALL_TIMEOUT_MS）が主経路で、本定数は
+ * getLastChangeAt を注入しない呼び出し（固定 deadline 経路）専用。 */
 export const QUEUE_SLOT_WAIT_TIMEOUT_MS = 300000;
+
+/** queue 空き待ちの stall 判定閾値 (#948)。正確な in-flight カウントの下では「上限で長く待つ」のは
+ * 正常状態であり、固定 deadline での fail-loud は誤停止になる。in-flight 集合（観測 clip の status）が
+ * この時間まったく変化しないときのみ「Suno 側が固まった」とみなして throw する。 */
+export const INFLIGHT_STALL_TIMEOUT_MS = 600000;
 
 /** inject 後に in-flight が CLIPS_PER_REQUEST 増えるまで poll wait する上限 (#864 root cause 3)。 */
 export const INJECT_ACK_TIMEOUT_MS = 30000;
@@ -74,6 +85,8 @@ export interface SpeedPreset {
   maxInflightRequests: number;
   maxInjectRetry: number;
   injectAckTimeoutMs: number;
+  /** entry 単位の失敗（非 fatal）を同一 entry で再試行する最大回数 (#948)。超過でスキップして次 entry へ。 */
+  maxEntryRetry: number;
   label: string;
   riskNote: string;
 }
@@ -90,19 +103,21 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
     maxInflightRequests: MAX_INFLIGHT_REQUESTS,
     maxInjectRetry: MAX_INJECT_RETRY,
     injectAckTimeoutMs: INJECT_ACK_TIMEOUT_MS,
+    maxEntryRetry: 1,
     label: "⚡ Fast",
     riskNote:
       "〜10 entries の小 collection 向け。現状値。連続実行が長引くと bot 判定で silent drop しやすい。",
   },
   balanced: {
-    interCreateDelayMs: 10000,
+    interCreateDelayMs: 6000,
     jitterMs: 3000,
-    maxInflightRequests: 5,
+    maxInflightRequests: MAX_INFLIGHT_REQUESTS,
     maxInjectRetry: 1,
     injectAckTimeoutMs: 45000,
+    maxEntryRetry: 2,
     label: "⚖️ Balanced",
     riskNote:
-      "20-30 entries の標準 collection 向け。10s ±3s 間隔で自然化したデフォルト。",
+      "20-55 entries の標準 collection 向け。6s ±3s 間隔で自然化したデフォルト。queue は Suno 実上限まで使う（#970、in-flight が API status 計数になった #948 以降は上限張り付きが正常状態）。",
   },
   safe: {
     interCreateDelayMs: 20000,
@@ -110,11 +125,86 @@ export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
     maxInflightRequests: 3,
     maxInjectRetry: 0,
     injectAckTimeoutMs: 60000,
+    maxEntryRetry: 3,
     label: "🐢 Safe",
     riskNote:
       "30+ entries / 過去に hCaptcha challenge を踏んだ場合向け。20s ±5s と保守的で時間はかかる。",
   },
 };
+
+/** Suno studio API のオリジン（#948、chrome-devtools 実機観測で確定）。
+ * MAIN world bridge が生成投入 / clip status を観測・照会する対象。 */
+export const SUNO_API_ORIGIN = "https://studio-api-prod.suno.com";
+
+/** 生成投入 endpoint のパス（#948）。レスポンス JSON の `clips[].id` / `clips[].status` を観測する。 */
+export const GENERATE_ENDPOINT_PATH = "/api/generate/v2-web/";
+
+/** clip status 照会 endpoint のパス prefix（#948）。`/api/feed/v2?ids=...` 形式で Bearer 必須。
+ * ページ自身の fetch を passive 観測しつつ、必要時は bridge が同 endpoint を active poll する。 */
+export const FEED_ENDPOINT_PATH = "/api/feed/";
+
+/** active feed poll に使う具体 endpoint（#948）。 */
+export const FEED_V2_PATH = "/api/feed/v2";
+
+/** MAIN world bridge ⇄ ISOLATED content script の window.postMessage 識別マーカー（#948）。 */
+export const BRIDGE_SOURCE = "suno-helper-bridge";
+
+/** bridge メッセージ種別（#948）。window.postMessage の `type` フィールドに載せる。 */
+export const BRIDGE_MSG = {
+  /** bridge → content: generate レスポンスで観測した投入 clip 一覧。 */
+  GENERATE_CLIPS: "generate-clips",
+  /** bridge → content: feed レスポンスで観測した clip status 一覧。 */
+  FEED_CLIPS: "feed-clips",
+  /** content → bridge: feed/v2 の active poll 要求（requestId + ids）。 */
+  FEED_POLL_REQUEST: "feed-poll-request",
+  /** bridge → content: active poll の応答（requestId + clips | null）。 */
+  FEED_POLL_RESPONSE: "feed-poll-response",
+  /** content → bridge: slider 値注入要求（requestId + ariaLabel + target）（#973）。 */
+  SLIDER_SET_REQUEST: "slider-set-request",
+  /** bridge → content: slider 値注入の応答（requestId + ok + actual | null）（#973）。 */
+  SLIDER_SET_RESPONSE: "slider-set-response",
+} as const;
+
+/** slider 注入 RPC の応答待ち上限 (ms)（#973）。step 数が多い slider（0→100 等）でも
+ * 1 step あたり数十 ms の readback 待ちで完了する想定だが、余裕を持たせる。 */
+export const SLIDER_SET_RESPONSE_TIMEOUT_MS = 15000;
+
+/** 生成が終端に達した clip status（#948）。これら以外はキュー slot を占有する in-flight とみなす。 */
+export const TERMINAL_CLIP_STATUSES = ["complete", "error"] as const;
+
+/** passive 観測がこの時間途絶え、かつ未終端 clip が残っているとき active feed poll に切り替える閾値 (ms)。 */
+export const FEED_STALE_MS = 15000;
+
+/** active feed poll の実行間隔 (ms)。ページ自身のポーリング頻度（数秒間隔）と同程度に抑える。 */
+export const FEED_POLL_INTERVAL_MS = 5000;
+
+/** active feed poll の応答待ち上限 (ms)。bridge 不在・token 未捕捉時に listener 側が諦める時間。 */
+export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
+
+/** bridge が観測した clip の最小表現（#948）。status は Suno API の生値（submitted/queued/streaming/complete/error 等）。 */
+export interface ObservedClip {
+  id: string;
+  status: string;
+}
+
+/** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
+ * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_COLLECTIONS_ROUTE。 */
+export const DISTROKID_COLLECTIONS_ROUTE = "/distrokid/collections";
+
+/** yt-collection-serve の DistroKid 配信済み記録 POST サブパス（#934）。
+ * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_RELEASES_ROUTE。 */
+export const DISTROKID_RELEASES_ROUTE = "/distrokid/releases";
+
+/** 個別 collection の release.json 配信サブパスを組み立てる（#934）。
+ * 例: distrokidReleaseRoute("20260526-soulful-grooves-coding-focus-collection", "disc1-coding-focus-vol1")
+ *   -> "/collections/20260526-soulful-grooves-coding-focus-collection/distrokid/disc1-coding-focus-vol1/release.json"
+ * asset_path は `/collections/<id>/distrokid/assets/<rel>` 形式のため baseUrl 連結で取得できる。 */
+export function distrokidReleaseRoute(
+  collectionId: string,
+  disc: string,
+): string {
+  return `/collections/${collectionId}/distrokid/${disc}/release.json`;
+}
 
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL = "http://localhost:7873";
@@ -136,7 +226,12 @@ export const PHASE = {
   INJECTING: "injecting",
   GENERATING: "generating",
   WAITING_SLOT: "waiting-slot",
+  // captcha challenge の解消（自動 verify or 手動解決）待ち。即 fail-loud せず待機して自動続行する。非終了 phase。
+  WAITING_CAPTCHA: "waiting-captcha",
   DONE: "done",
+  // entry 単位の失敗 (#948)。リトライ上限まで失敗した entry をスキップして次へ進むときに emit する。
+  // 非終了 phase（run 全体は継続する）。失敗 index は snapshot の failedIndices に蓄積される。
+  ENTRY_FAILED: "entry-failed",
   // 全 entry の生成 DONE 後、FINISHED 直前に挟む clip 一括 playlist 追加 phase (#854)。非終了 phase。
   ADDING_TO_PLAYLIST: "adding-to-playlist",
   FINISHED: "finished",
@@ -154,8 +249,8 @@ export interface ProgressPayload {
   message?: string;
 }
 
-/** overlay の各パターン行の表示状態。 */
-export type ItemState = "idle" | "active" | "done";
+/** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
+export type ItemState = "idle" | "active" | "done" | "failed";
 
 /** content script が SSOT として保持する進捗スナップショット (#852)。
  * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
@@ -170,4 +265,7 @@ export interface SnapshotPayload {
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。
   failedIndex?: number;
+  // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
+  // ENTRY_FAILED phase の受信ごとに蓄積され、popup の「失敗分のみ再実行」導線が消費する。
+  failedIndices?: number[];
 }

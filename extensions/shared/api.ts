@@ -6,6 +6,9 @@
 import {
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
+  DISTROKID_COLLECTIONS_ROUTE,
+  DISTROKID_RELEASES_ROUTE,
+  PLAYLISTS_CAPTURE_ROUTE,
   PROMPTS_ROUTE,
 } from "./constants";
 
@@ -25,6 +28,12 @@ export interface PromptEntry {
   weirdness?: number;
   /** Exclude styles free text。Suno の Exclude styles 欄へ注入。 */
   exclude_styles?: string;
+  /**
+   * Voice section の Male / Female ボタン (Suno UI)。"male" / "female" のみ対応ボタンを click する。
+   * "neutral" / "auto" / undefined は何もしない（既選択を解除しない、"Auto = Suno に任せる"解釈）。
+   * Suno 側の解釈とサーバー契約を揃えるため空文字は許容せず Python 側で省略する。
+   */
+  vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
 /** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。 */
@@ -33,6 +42,21 @@ export interface CollectionSummary {
   name: string;
   has_prompts: boolean;
   pattern_count: number | null;
+  // 既に config/suno-playlists.json にマッピング済みか (#893 追加要件 B)。
+  // optional・後方互換: prefix 未設定の旧サーバーは返さず undefined（全件表示の従来挙動）。
+  mapped?: boolean;
+}
+
+/** Suno `/me` から捕捉した 1 playlist (#893)。POST /suno/playlists の body 要素。 */
+export interface CapturedPlaylist {
+  title: string;
+  url: string;
+}
+
+/** POST /suno/playlists の 200 レスポンス (#893)。書き込み件数と出力先パス。 */
+export interface CapturedPlaylistsResult {
+  written: number;
+  path: string;
 }
 
 /**
@@ -140,4 +164,99 @@ export function extractPlaylistName(
     throw new Error(`channel 部分が空: id=${collectionId}`);
   }
   return `${channel} | ${theme}`;
+}
+
+/**
+ * 捕捉した playlist 一覧を POST /suno/playlists へ送る (#893)。
+ * body は配列のまま（envelope 包みしない）。非 2xx はステータスを含めて throw する fail-loud 契約。
+ * prefix によるフィルタはサーバー側 normalize_suno_title に閉じるため、ここでは全件そのまま送る。
+ */
+export async function postCapturedPlaylists(
+  baseUrl: string,
+  items: CapturedPlaylist[],
+): Promise<CapturedPlaylistsResult> {
+  const resp = await fetch(`${baseUrl}${PLAYLISTS_CAPTURE_ROUTE}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+  });
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  return (await resp.json()) as CapturedPlaylistsResult;
+}
+
+/**
+ * 既にマッピング済み (mapped===true) の collection を除外する純関数 (#893 追加要件 B)。
+ * mapped 未設定（prefix 未指定の旧運用）は除外対象にしないため全件残す（後方互換）。
+ */
+export function excludeMappedCollections(
+  collections: CollectionSummary[],
+): CollectionSummary[] {
+  return collections.filter((c) => c.mapped !== true);
+}
+
+/** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */
+export interface DistrokidCollectionSummary {
+  collection_id: string;
+  name: string;
+  disc: string;
+  album_title: string;
+  track_count: number;
+  released: boolean;
+}
+
+/** POST /distrokid/releases の body (#934)。配信済みとして記録する disc の識別情報。 */
+export interface DistrokidReleaseRecord {
+  collection_id: string;
+  disc: string;
+  album_title: string;
+}
+
+/**
+ * DistroKid dir mode サーバーの disc 一覧を取得する (#934)。
+ * 非 2xx は fail-loud で throw（単一 mode サーバーの 404 は popup の fallback トリガー）。
+ * 空配列は throw せず返す（0 件 = 未配信 disc なしの正常ケース）。
+ */
+export async function fetchDistrokidCollections(
+  baseUrl: string,
+): Promise<DistrokidCollectionSummary[]> {
+  const resp = await fetch(`${baseUrl}${DISTROKID_COLLECTIONS_ROUTE}`);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  const data: unknown = await resp.json();
+  if (!Array.isArray(data)) {
+    throw new Error("配列ではない JSON が返りました。");
+  }
+  return data as DistrokidCollectionSummary[];
+}
+
+/**
+ * 配信済み (released===true) の disc を除外する純関数 (#934)。
+ * fetchDistrokidCollections の結果から popup のドロップダウンに出す候補を絞る。
+ */
+export function excludeReleasedDiscs(
+  list: DistrokidCollectionSummary[],
+): DistrokidCollectionSummary[] {
+  return list.filter((item) => item.released !== true);
+}
+
+/**
+ * フィル完了後に配信済みとして記録する (#934)。POST /distrokid/releases。
+ * 失敗は caller が warn 表示するだけで、フィル成功を覆さない補助機能として扱う。
+ * 非 2xx は fail-loud で throw する（caller が warn 処理する）。
+ */
+export async function recordDistrokidRelease(
+  baseUrl: string,
+  record: DistrokidReleaseRecord,
+): Promise<void> {
+  const resp = await fetch(`${baseUrl}${DISTROKID_RELEASES_ROUTE}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(record),
+  });
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
 }

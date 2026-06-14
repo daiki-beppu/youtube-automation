@@ -19,15 +19,22 @@ const SELECTORS = {
   excludeStyles: 'input[placeholder="Exclude styles"]',
   weirdness: '[role="slider"][aria-label="Weirdness"]',
   styleInfluence: '[role="slider"][aria-label="Style Influence"]',
+  // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
+  // aria-label / data-testid を持たないため、`data-selected` 属性 (Suno が排他トグル用に意図して
+  // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
+  // Emotion class hash や親 div の role/class には依存しない。
+  vocalGenderButtons: 'button[data-selected][type="button"]',
   generateLabel: /^(create|generate|生成)$/i,
   recaptcha:
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
 } as const;
 
-/** radix slider 注入後の読み戻し検証の poll 間隔 (ms)。 */
+/** radix slider 注入の step ごとの読み戻し検証の poll 間隔 (ms)。 */
 const SLIDER_READBACK_POLL_MS = 100;
-/** radix slider 注入後の読み戻し検証の最大 poll 回数。これを超えても不一致なら fail-loud で throw。 */
+/** step ごとの読み戻し検証の最大 poll 回数。これを超えても不変なら fail-loud で throw。 */
 const SLIDER_READBACK_MAX_POLLS = 5;
+/** slider が target に到達するまでの最大 step 数。Suno slider は 0-100 整数なので余裕を持たせた上限。 */
+const SLIDER_MAX_STEPS = 150;
 
 /**
  * clip カードの in-flight マーカー（#866、実機検証で確定）。Suno が `data-testid="clip-row"` と
@@ -49,10 +56,31 @@ const QUEUE_LIMIT_ERROR_TEXT = "generation in progress";
 
 /** 1 曲の生成完了待ち上限 (ms)。 */
 export const GENERATE_TIMEOUT_MS = 180000;
+/**
+ * captcha challenge の解消待ち上限 (ms)。Suno の hCaptcha は Generate click に反応して起動するが、
+ * 多くは passive 検証で数秒以内に自動 verify されて閉じるため、即 fail-loud せず解消を待つ。
+ * 本当に人間の解決が必要な challenge が残った場合のみ、この上限で fail-loud に倒す。
+ */
+export const CAPTCHA_WAIT_TIMEOUT_MS = 600000;
 /** 生成完了 poll 間隔 (ms)。短くすると停止反応性と Generate ボタン再 enable 検知が早まる。 */
 export const POLL_INTERVAL_MS = 500;
 /** 注入後・クリック後の安定化待ち (ms)。 */
 export const SETTLE_MS = 1500;
+
+/**
+ * run 全体を止めるべき致命的エラー (#948)。entry 単位のリトライ/スキップ（lib/entry-retry.ts）の
+ * 対象外で、catch されず ERROR phase へ直行する。該当するのは「次の entry でも必ず再発する」失敗:
+ *   - DOM セレクタ不在（Suno UI 改装 / Custom Mode 画面でない）
+ *   - captcha challenge の手動解決待ち timeout（人間の介入が必要）
+ *   - queue の stall / timeout（Suno 側の系統的な停滞）
+ * 一時的・entry 固有の失敗（生成完了待ち timeout / inject 未受理）は通常の Error のまま残す。
+ */
+export class FatalRunError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FatalRunError";
+  }
+}
 
 export interface ResolvedFields {
   style: HTMLTextAreaElement;
@@ -67,6 +95,10 @@ export interface WaitForGenerationOptions {
   timeoutMs: number;
   pollIntervalMs: number;
   settleMs: number;
+  /** captcha 解消待ちの上限 (ms)。省略時は CAPTCHA_WAIT_TIMEOUT_MS。 */
+  captchaWaitTimeoutMs?: number;
+  /** captcha 解消待ちの開始 (true) / 終了 (false) 通知。popup の phase 表示切り替えに使う。 */
+  onCaptchaWait?: (waiting: boolean) => void;
 }
 
 /** 指定 ms 待機する。注入フローと生成完了待ちの共通 timing util。 */
@@ -122,47 +154,71 @@ export function setNativeValue(
 }
 
 /**
- * radix Slider に target 値を注入する（#900）。
+ * radix Slider に target 値を注入する（#900, #979 で step 化）。
  *   1. slider.focus()
- *   2. current = aria-valuenow を読む
- *   3. delta = target - current。delta>=0 で ArrowRight、<0 で ArrowLeft を |delta| 回 dispatch
- *   4. 読み戻し poll（SLIDER_READBACK_POLL_MS 間隔 × SLIDER_READBACK_MAX_POLLS 回）で
- *      aria-valuenow === target を検証。一致で resolve、尽きても不一致なら throw（fail-loud）。
+ *   2. aria-valuenow を読み、target との差分方向の keydown を **1 step ずつ** dispatch
+ *   3. 各 step 後に aria-valuenow の変化を poll（SLIDER_READBACK_POLL_MS × SLIDER_READBACK_MAX_POLLS）。
+ *      変化を確認してから次の step へ進む。不変のまま poll が尽きたら throw（fail-loud）
+ *   4. aria-valuenow === target で resolve
+ *
+ * 全 diff 分を同期ループで一括 dispatch すると React の自動バッチングで stale 値に収束し
+ * net 1 step しか動かない（#979 実機検証）。isTrusted=false の合成イベント自体は弾かれて
+ * おらず、1 step ごとに re-render の反映を待てば target まで完走する。
  *
  * KeyboardEvent は `bubbles: true, composed: true` で dispatch する。radix Slider root は
- * keydown を addEventListener でバインドし bubbling 経由で受けるため、isTrusted=false の合成
- * イベントでも root に到達する（text input の change と異なり値が動く。実機・mock 双方で確認済み）。
+ * keydown を addEventListener でバインドし bubbling 経由で受けるため root に到達する。
  */
 export async function setSliderValue(
   slider: HTMLElement,
   target: number,
 ): Promise<void> {
   slider.focus();
-  const current = Number(slider.getAttribute("aria-valuenow"));
-  const delta = target - current;
-  const key = delta >= 0 ? "ArrowRight" : "ArrowLeft";
-  for (let i = 0; i < Math.abs(delta); i++) {
+  const read = (): number => Number(slider.getAttribute("aria-valuenow"));
+  const fail = (): never => {
+    throw new Error(
+      `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
+        `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。` +
+        "keydown 後も aria-valuenow が変化しませんでした。Suno の UI 変更の可能性があります。",
+    );
+  };
+  for (let step = 0; step < SLIDER_MAX_STEPS; step++) {
+    const current = read();
+    if (current === target) {
+      return;
+    }
+    const key = target > current ? "ArrowRight" : "ArrowLeft";
     slider.dispatchEvent(
       new KeyboardEvent("keydown", { key, bubbles: true, composed: true }),
     );
-  }
-  for (let attempt = 0; attempt < SLIDER_READBACK_MAX_POLLS; attempt++) {
-    if (Number(slider.getAttribute("aria-valuenow")) === target) {
-      return;
+    // 同期反映ならそのまま次 step へ。非同期 re-render は poll で変化を待つ。
+    let changed = read() !== current;
+    for (
+      let attempt = 0;
+      !changed && attempt < SLIDER_READBACK_MAX_POLLS;
+      attempt++
+    ) {
+      await sleep(SLIDER_READBACK_POLL_MS);
+      changed = read() !== current;
     }
-    await sleep(SLIDER_READBACK_POLL_MS);
+    if (!changed) {
+      fail();
+    }
   }
-  throw new Error(
-    `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
-      `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。Suno の UI 変更の可能性があります。`,
-  );
+  if (read() !== target) {
+    fail();
+  }
 }
 
-/** More Options 3 フィールドの解決結果（#900）。不在は null（fail-soft）。 */
+/** More Options の advanced フィールド解決結果（#900, vocal gender 追加）。不在は null（fail-soft）。 */
 export interface ResolvedAdvancedFields {
   excludeStyles: HTMLInputElement | null;
   weirdness: HTMLElement | null;
   styleInfluence: HTMLElement | null;
+  /** Voice section の Male / Female ボタンペア。将来 neutral 等が追加されても nested で拡張しやすい形にしておく。 */
+  vocalGender: {
+    male: HTMLButtonElement | null;
+    female: HTMLButtonElement | null;
+  };
 }
 
 /** injectAdvancedFields が読む entry の advanced 値（PromptEntry の部分集合）。 */
@@ -170,79 +226,205 @@ export interface AdvancedFieldValues {
   style_influence?: number;
   weirdness?: number;
   exclude_styles?: string;
+  vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
 /**
- * Custom Mode > More Options の 3 フィールドを strict visible で解決する（#900）。
+ * 候補から「visible 優先、なければ最初の要素」を返す（#900 改）。
+ * Suno は More Options collapsed 時に祖先を display:none で隠す。input には setNativeValue
+ * で値を入れれば React props まで更新されること、slider は visible でも合成イベントが効かないこと
+ * を実機検証で確認済み。strict visible 必須を緩めて collapsed 時も DOM 上の要素を掴むことで、
+ * input は値が入り（解決）、slider は注入時に fail-soft で skip（injectAdvancedFields 側）になる。
+ */
+function pickPreferVisible<T extends HTMLElement>(els: T[]): T | null {
+  return els.find(isVisible) ?? els[0] ?? null;
+}
+
+/**
+ * Custom Mode > More Options の 3 フィールドを解決する（#900）。
+ * visible 優先、なければ DOM 上の最初の要素を返す（collapsed 時の null 化を回避）。
  * 3 要素すべて不在でも throw しない（fail-soft）。throw / skip の非対称契約は呼び出し側
  * (injectAdvancedFields) が entry の値有無と突き合わせて判定する。
  */
 export function resolveAdvancedFields(): ResolvedAdvancedFields {
-  const excludeStyles =
+  const excludeStyles = pickPreferVisible(
     Array.from(
       document.querySelectorAll<HTMLInputElement>(SELECTORS.excludeStyles),
-    ).find(isVisible) ?? null;
-  const weirdness =
-    Array.from(
-      document.querySelectorAll<HTMLElement>(SELECTORS.weirdness),
-    ).find(isVisible) ?? null;
-  const styleInfluence =
+    ),
+  );
+  const weirdness = pickPreferVisible(
+    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.weirdness)),
+  );
+  const styleInfluence = pickPreferVisible(
     Array.from(
       document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence),
-    ).find(isVisible) ?? null;
-  return { excludeStyles, weirdness, styleInfluence };
+    ),
+  );
+  return {
+    excludeStyles,
+    weirdness,
+    styleInfluence,
+    vocalGender: resolveVocalGenderButtons(),
+  };
+}
+
+/**
+ * Voice section の Male / Female ボタンを解決する。
+ * data-selected 属性で候補を全 query → textContent 完全一致 ("Male" / "Female") で絞り込み。
+ * pickPreferVisible で visible 優先（collapsed 時の fallback として hidden も拾う）。
+ * 不在は null（fail-soft）。判定は case-sensitive（"male" lowercase 等は拾わない）。
+ */
+function resolveVocalGenderButtons(): {
+  male: HTMLButtonElement | null;
+  female: HTMLButtonElement | null;
+} {
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(SELECTORS.vocalGenderButtons),
+  );
+  const findByLabel = (label: "Male" | "Female"): HTMLButtonElement | null =>
+    pickPreferVisible(
+      candidates.filter((b) => b.textContent?.trim() === label),
+    );
+  return { male: findByLabel("Male"), female: findByLabel("Female") };
 }
 
 /**
  * entry の advanced 値を解決済み field へ注入する（#900）。
  * 注入順序は Exclude styles (text, 高速) → Weirdness → Style Influence。
  *
- * 非対称契約（req 4）:
+ * 非対称契約:
  *   - entry に値有 (`!== undefined`) + 対応 selector が null → throw（fail-loud、UI 改装検知）
  *   - entry に値無 (`=== undefined`)                        → skip（fail-soft、後方互換）
- *   - entry に値有 + selector 有                            → 注入する
+ *   - entry に値有 + selector 有 + input                    → setNativeValue で注入（collapsed でも React 反映を実機確認済み）
+ *   - entry に値有 + selector 有 + slider                   → 注入試行し失敗時は warn + skip
+ *   - vocal_gender = "male" / "female"                     → 対応ボタンが既に data-selected=true なら skip、false なら click（冪等）
+ *   - vocal_gender = "neutral" / "auto"                    → click しない（既選択を解除しない、"Auto = Suno に任せる"解釈）
+ *
+ * slider fail-soft 化の根拠（実機検証）:
+ *   Suno の Weirdness / Style Influence slider は emotion 自作で onKeyDown 内に isTrusted チェックが
+ *   ある。合成 KeyboardEvent / MouseEvent / PointerEvent はすべて弾かれ、現状の dispatchEvent 方式では
+ *   原理的に値を変えられない。bot 対策で組み込まれていると見られる。throw で連続生成を止めるとユーザー
+ *   体験が大きく劣化するため、本 PR では注入失敗を warn + skip で吸収する。trusted event 経由の真の
+ *   解決は別 issue で chrome.debugger API ベースの設計を予定（manifest permission 拡張が必要）。
+ *
  * 値の有無は `!== undefined` で判定する。0 や "" の falsy 値を truthy 判定で脱落させない。
+ *
+ * slider 注入経路（#973）: options.bridgeSetSlider があれば MAIN world bridge 経由
+ * （React onKeyDown 直接呼び出し = isTrusted チェック通過）を先に試し、失敗時に従来の
+ * 合成 dispatchEvent（setSliderValue）へ縮退する。どちらも失敗なら warn + skip（従来どおり）。
  */
+export interface AdvancedInjectOptions {
+  /** MAIN world bridge 経由の slider 注入。成功で true。省略時は合成イベント経路のみ。 */
+  bridgeSetSlider?: (ariaLabel: string, target: number) => Promise<boolean>;
+}
+
+/** bridge 優先 → 合成 dispatchEvent 縮退の順で slider に target 値を注入する（#973）。 */
+async function injectSliderValue(
+  slider: HTMLElement,
+  target: number,
+  bridgeSetSlider?: (ariaLabel: string, target: number) => Promise<boolean>,
+): Promise<void> {
+  if (bridgeSetSlider) {
+    const label = slider.getAttribute("aria-label");
+    if (label) {
+      try {
+        if (await bridgeSetSlider(label, target)) {
+          return;
+        }
+      } catch {
+        // bridge 経路の失敗は合成イベント経路へ縮退する（fail-soft）。
+      }
+    }
+  }
+  await setSliderValue(slider, target);
+}
+
 export async function injectAdvancedFields(
   entry: AdvancedFieldValues,
   fields: ResolvedAdvancedFields,
+  options: AdvancedInjectOptions = {},
 ): Promise<void> {
   if (entry.exclude_styles !== undefined) {
     if (!fields.excludeStyles) {
-      throw new Error(
-        "Exclude styles 欄が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+      throw new FatalRunError(
+        "Exclude styles 欄が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
     setNativeValue(fields.excludeStyles, entry.exclude_styles);
   }
-  if (entry.weirdness !== undefined) {
-    if (!fields.weirdness) {
-      throw new Error(
-        "Weirdness slider が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+  if (entry.vocal_gender === "male" || entry.vocal_gender === "female") {
+    const target =
+      entry.vocal_gender === "male"
+        ? fields.vocalGender.male
+        : fields.vocalGender.female;
+    if (!target) {
+      throw new FatalRunError(
+        `Vocal gender button (${entry.vocal_gender}) が見つかりません。Suno の UI 変更の可能性があります。`,
       );
     }
-    await setSliderValue(fields.weirdness, entry.weirdness);
+    if (target.getAttribute("data-selected") !== "true") {
+      target.click();
+    }
+  }
+  if (entry.weirdness !== undefined) {
+    if (!fields.weirdness) {
+      throw new FatalRunError(
+        "Weirdness slider が見つかりません。Suno の UI 変更の可能性があります。",
+      );
+    }
+    try {
+      await injectSliderValue(
+        fields.weirdness,
+        entry.weirdness,
+        options.bridgeSetSlider,
+      );
+    } catch (e) {
+      console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
+    }
   }
   if (entry.style_influence !== undefined) {
     if (!fields.styleInfluence) {
-      throw new Error(
-        "Style Influence slider が見つかりません。Custom Mode > More Options を開いているか確認してください。",
+      throw new FatalRunError(
+        "Style Influence slider が見つかりません。Suno の UI 変更の可能性があります。",
       );
     }
-    await setSliderValue(fields.styleInfluence, entry.style_influence);
+    try {
+      await injectSliderValue(
+        fields.styleInfluence,
+        entry.style_influence,
+        options.bridgeSetSlider,
+      );
+    } catch (e) {
+      console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
+    }
   }
 }
 
 /**
- * active な recaptcha / hcaptcha challenge iframe を検知する（#810, #875）。
+ * challenge 系 iframe か（anchor / checkbox / badge 系 widget は除外）。
+ * hCaptcha challenge は src に `#frame=challenge`、reCAPTCHA challenge は `/bframe` を含む。
+ * anchor / checkbox / badge 系 widget は常時 title を持つため、title 判定を challenge 系に限定する (#924)。
+ */
+function isChallengeFrame(src: string): boolean {
+  return src.includes("frame=challenge") || src.includes("/bframe");
+}
+
+/**
+ * active な recaptcha / hcaptcha challenge iframe を検知する（#810, #875, #924）。
  * Suno は hCaptcha challenge を非表示プリロード iframe として常駐させるため、
  * querySelector の hit だけでは常に true になってしまう。
  *
  * #875 で判明した中間状態: silent drop タイミングで iframe の `title` が `""` →
  * `"hCaptchaチャレンジ"` に変化するが `visibility:hidden` は維持される。従来の strict
  * `isVisible()` だけでは visibility:hidden で false となり silent drop に流れていた。
- * そこで bbox を持つ（プリロードでない）iframe の `title` が non-empty なら、visibility に
- * 関わらず active challenge とみなす。title が空のときのみ従来の strict 可視判定へ fallback する。
+ * そこで bbox を持つ（プリロードでない）**challenge 系** iframe の `title` が non-empty なら、
+ * visibility に関わらず active challenge とみなす。
+ *
+ * #924 で判明した誤検知: title 非空ヒューリスティックを全 iframe に適用すると、
+ * anchor / checkbox / badge 系の常駐 widget iframe（reCAPTCHA anchor は title="reCAPTCHA"、
+ * hCaptcha checkbox widget も常時 title あり）まで誤検知してしまう。
+ * title 非空ヒューリスティックは challenge 系 iframe（`frame=challenge` / `/bframe`）に限定し、
+ * それ以外の iframe は従来通り strict isVisible() のみで判定する。
  */
 export function detectRecaptcha(): boolean {
   const iframes = document.querySelectorAll<HTMLIFrameElement>(
@@ -254,12 +436,27 @@ export function detectRecaptcha(): boolean {
     if (rect.width === 0 || rect.height === 0) {
       return false;
     }
-    // title が non-empty = challenge が起動した中間状態。visibility:hidden を許容して捕捉する (#875)。
-    if (f.title.trim().length > 0) {
-      return true;
+    // 検証完了後の challenge iframe は title と bbox を保持したまま画面外 (y:-9999) に駐機する。
+    // viewport 上端より完全に上へ退避した iframe は active ではない（title 判定より優先）。
+    // 実機観測: 駐機 wrapper は visibility:hidden + opacity:0 + z-index:-2147483648。
+    const parkedOffscreen = rect.bottom <= 0;
+    // challenge 系 iframe かつ title 非空 = challenge が起動した中間状態。
+    // visibility:hidden を許容して捕捉する (#875)。
+    // anchor / checkbox / badge 系 widget は常時 title を持つため challenge 系に限定 (#924)。
+    const active =
+      (isChallengeFrame(f.src) &&
+        f.title.trim().length > 0 &&
+        !parkedOffscreen) ||
+      isVisible(f);
+    if (active) {
+      console.debug("[suno-helper] captcha challenge iframe detected", {
+        src: f.src,
+        title: f.title,
+        bbox: { width: rect.width, height: rect.height },
+        visibility: getComputedStyle(f).visibility,
+      });
     }
-    // title 空はプリロード iframe。従来通り strict 可視判定で実 challenge 表示時のみ true (#810)。
-    return isVisible(f);
+    return active;
   });
 }
 
@@ -293,7 +490,7 @@ export function resolveFields(): ResolvedFields {
     document.querySelectorAll<HTMLTextAreaElement>(SELECTORS.textareas),
   ).filter(isVisible);
   if (areas.length === 0) {
-    throw new Error(
+    throw new FatalRunError(
       "textarea が見つかりません。Suno の Custom Mode 画面を開いてください。",
     );
   }
@@ -302,7 +499,7 @@ export function resolveFields(): ResolvedFields {
   // Style は「Lyrics でない可視 textarea」。この述語が silent な上書き（Style==Lyrics）を構造的に禁ずる。
   const style = areas.find((el) => el !== lyrics);
   if (!style) {
-    throw new Error(
+    throw new FatalRunError(
       "Style 欄が見つかりません。Lyrics 以外の可視 textarea を検出できませんでした。",
     );
   }
@@ -324,17 +521,59 @@ export function resolveGenerateButton(): HTMLButtonElement {
     SELECTORS.generateLabel.test((el.textContent || "").trim()),
   );
   if (!btn) {
-    throw new Error(
+    throw new FatalRunError(
       "Generate ボタンが見つかりません。Suno の UI 変更の可能性があります。",
     );
   }
   return btn;
 }
 
+export interface WaitForCaptchaClearOptions {
+  /** 中断フラグ。true を返した時点で待機を打ち切り resolve する（throw しない）。 */
+  isAborted: () => boolean;
+  pollIntervalMs: number;
+  timeoutMs: number;
+  /** captcha を検知して待機に入るとき 1 回だけ呼ばれる。popup の phase 表示切り替えに使う。 */
+  onWaitStart?: () => void;
+}
+
+/**
+ * active な captcha challenge が解消されるまで待つ。
+ * Suno の hCaptcha は Generate click に反応して起動するが、多くは passive 検証で数秒以内に
+ * 自動 verify されて閉じる（console: `captcha required` → `captcha verified`）。従来の即 throw だと
+ * 人間が解くものが無いのに entry ごとに fail-loud 停止して実用に耐えないため、解消を待って続行する。
+ *   - captcha 不在なら即 resolve（onWaitStart も呼ばない）
+ *   - 解消（自動 verify or 手動解決）で resolve
+ *   - timeoutMs 超過で throw（本当に人間の解決が必要なまま放置されたケースのみ fail-loud）
+ *   - 中断 (isAborted) で即 return
+ */
+export async function waitForCaptchaClear(
+  options: WaitForCaptchaClearOptions,
+): Promise<void> {
+  if (!detectRecaptcha()) {
+    return;
+  }
+  options.onWaitStart?.();
+  const deadline = Date.now() + options.timeoutMs;
+  while (Date.now() < deadline) {
+    if (options.isAborted()) {
+      return;
+    }
+    if (!detectRecaptcha()) {
+      return;
+    }
+    await sleep(options.pollIntervalMs);
+  }
+  throw new FatalRunError(
+    `captcha challenge が ${Math.round(options.timeoutMs / 60000)} 分以内に解消されませんでした。画面の challenge を手動で解決してから再開してください。`,
+  );
+}
+
 /**
  * クリック後、ボタンが一旦 disabled になり再度 enabled に戻るまで（= 生成完了）待つ。
  *   - enabled 復帰で resolve
- *   - reCAPTCHA 検知で throw
+ *   - captcha 検知で waitForCaptchaClear へ移行し、解消後に待機を続行（待機時間は deadline を消費しない）
+ *   - captcha が captchaWaitTimeoutMs 以内に解消されなければ throw
  *   - deadline 超過で timeout throw
  *   - 中断 (isAborted) で即 return
  */
@@ -342,7 +581,7 @@ export async function waitForGeneration(
   button: HTMLButtonElement,
   options: WaitForGenerationOptions,
 ): Promise<void> {
-  const deadline = Date.now() + options.timeoutMs;
+  let deadline = Date.now() + options.timeoutMs;
   // disabled に変わるのを少し待つ（生成開始の検知）
   await sleep(options.settleMs);
   while (Date.now() < deadline) {
@@ -350,9 +589,17 @@ export async function waitForGeneration(
       return;
     }
     if (detectRecaptcha()) {
-      throw new Error(
-        "reCAPTCHA を検知しました。手動で解決してから再開してください。",
-      );
+      // captcha 解消待ちは生成完了待ちとは別系統の時間。deadline を待機分だけ延長する。
+      const waitStart = Date.now();
+      await waitForCaptchaClear({
+        isAborted: options.isAborted,
+        pollIntervalMs: options.pollIntervalMs,
+        timeoutMs: options.captchaWaitTimeoutMs ?? CAPTCHA_WAIT_TIMEOUT_MS,
+        onWaitStart: () => options.onCaptchaWait?.(true),
+      });
+      options.onCaptchaWait?.(false);
+      deadline += Date.now() - waitStart;
+      continue;
     }
     if (!button.disabled && button.getAttribute("aria-disabled") !== "true") {
       return;
@@ -369,6 +616,16 @@ export interface WaitForQueueSlotOptions {
   timeoutMs: number;
   /** queue 上限エラー toast 消失後に投入再開まで待つ安全マージン (ms、#847)。 */
   queueErrorWaitMs: number;
+  /** in-flight 数の取得関数 (#948)。bridge の status ベースカウントを注入する。
+   * 省略時は従来の DOM プロキシ getInFlightClipCount（後方互換 fallback）。 */
+  getCount?: () => number;
+  /** in-flight 集合が最後に変化した時刻 (ms) の取得関数 (#948)。注入すると stall ベース判定に切り替わる:
+   * 固定 deadline を廃し、「待機開始 or 最終変化からの経過が stallTimeoutMs を超えたときのみ throw」。
+   * 正確なカウントの下では上限での長い待ちは正常状態のため、固定 deadline は誤停止になる。 */
+  getLastChangeAt?: () => number;
+  /** stall 判定の閾値 (ms)。getLastChangeAt 注入時のみ有効。省略時は INFLIGHT_STALL_TIMEOUT_MS 相当を
+   * 呼び出し側が渡す想定（shared/dom は定数 SSOT の constants.ts に依存しない）。 */
+  stallTimeoutMs?: number;
 }
 
 /**
@@ -437,47 +694,17 @@ export function getInFlightClipCount(): number {
   return Array.from(cards).filter(isClipGenerating).length;
 }
 
-export interface WaitForInFlightIncreaseOptions {
-  /** 中断フラグ。true を返した時点で未達でも resolve true する（停止優先）。 */
-  isAborted: () => boolean;
-  pollIntervalMs: number;
-  timeoutMs: number;
-}
-
 /**
- * inject 後に in-flight clip 数が `beforeCount + delta` 以上へ増えるまで poll で待機する（#864 root cause 3）。
- *   - isAborted() が true なら未達でも最優先で即 resolve `true`（停止優先。waitForQueueSlot と同じ中断優先）
- *   - getInFlightClipCount() >= beforeCount + delta になったら resolve `true`（受理確認）
- *   - deadline 超過で resolve `false`（throw しない。retry 判断は caller=injectWithVerification 側に委ねる）
- * waitForQueueSlot と異なり throw せず boolean を返す。Create→clip card DOM 反映ラグで Suno が inject を
- * silent drop しても Generate ボタンは再 enabled になるため、実際に clip が受理されたかを増分で検証する。
- */
-export async function waitForInFlightIncrease(
-  beforeCount: number,
-  delta: number,
-  options: WaitForInFlightIncreaseOptions,
-): Promise<boolean> {
-  const target = beforeCount + delta;
-  const deadline = Date.now() + options.timeoutMs;
-  while (Date.now() < deadline) {
-    if (options.isAborted()) {
-      return true;
-    }
-    if (getInFlightClipCount() >= target) {
-      return true;
-    }
-    await sleep(options.pollIntervalMs);
-  }
-  return false;
-}
-
-/**
- * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816, #847）。
+ * in-flight clip 数が `maxClips` 未満になるまで poll で待機する（#816, #847, #948）。
  *   - isAborted() が true なら（toast 中・上限超でも）最優先で即 resolve（throw しない）
  *   - queue 上限エラー toast 表示中は、空きスロットがあっても投入せず待機を継続する（#847）
  *   - toast が消えたら `queueErrorWaitMs` の安全マージンを待ってから判定を再開する（#847）
  *   - in-flight < maxClips になったら resolve（投入再開）
- *   - deadline 超過で timeout throw
+ *   - 終了判定は 2 経路 (#948):
+ *       - stall 経路（getLastChangeAt 注入時）: in-flight 集合が「待機開始 or 最終変化」から
+ *         stallTimeoutMs 変化しないときのみ throw。正確なカウントの下では上限での長い待ちは
+ *         正常状態（clip 完了に数分かかる）のため、固定 deadline は誤停止になる
+ *       - 固定 deadline 経路（従来互換）: timeoutMs 超過で timeout throw
  * Suno は同時 10 リクエスト = 20 clip までしか積めず、超過すると後続が silent fail するため、
  * 各リクエスト投入前にこの関数で空きスロットを待つ。Create→clip card DOM 反映ラグで Suno が投入を
  * reject すると toast が出るため、toast 検知中は投入を止め、消失後に buffer を取ってから再開する。
@@ -486,11 +713,29 @@ export async function waitForQueueSlot(
   maxClips: number,
   options: WaitForQueueSlotOptions,
 ): Promise<void> {
-  const deadline = Date.now() + options.timeoutMs;
+  const getCount = options.getCount ?? getInFlightClipCount;
+  const startAt = Date.now();
+  const deadline = startAt + options.timeoutMs;
+  const stallTimeoutMs = options.stallTimeoutMs ?? options.timeoutMs;
   let sawQueueError = false;
-  while (Date.now() < deadline) {
+  for (;;) {
     if (options.isAborted()) {
       return;
+    }
+    // 終了判定はループ先頭で行う（toast が出続ける経路でも必ず到達する）。
+    if (options.getLastChangeAt) {
+      // stall 経路: 観測 clip の status 遷移（submitted→queued→streaming→complete）が続く限り
+      // 待ち続ける。集合が完全に固まったときのみ「Suno 側の停滞」として fail-loud。
+      const lastActivity = Math.max(startAt, options.getLastChangeAt());
+      if (Date.now() - lastActivity >= stallTimeoutMs) {
+        throw new FatalRunError(
+          `生成キューの空き待ち中、in-flight の状態が ${Math.round(stallTimeoutMs / 60000)} 分間変化しませんでした。Suno 側で生成が停滞している可能性があります。`,
+        );
+      }
+    } else if (Date.now() >= deadline) {
+      throw new FatalRunError(
+        "生成キューの空きスロット待ちがタイムアウトしました。",
+      );
     }
     if (isQueueLimitErrorVisible()) {
       // toast 中はスロットが空いていても投入しない。消失を待つ。
@@ -505,10 +750,9 @@ export async function waitForQueueSlot(
       await abortableSleep(options.queueErrorWaitMs, options.isAborted);
       continue;
     }
-    if (getInFlightClipCount() < maxClips) {
+    if (getCount() < maxClips) {
       return;
     }
     await sleep(options.pollIntervalMs);
   }
-  throw new Error("生成キューの空きスロット待ちがタイムアウトしました。");
 }

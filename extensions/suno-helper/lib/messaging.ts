@@ -3,7 +3,7 @@
 // （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
-import type { PromptEntry } from "../../shared/api";
+import type { CapturedPlaylist, PromptEntry } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
@@ -15,7 +15,14 @@ import type { RunRange } from "./resume-state";
  */
 export type RunPayload =
   | PromptEntry[]
-  | { entries: PromptEntry[]; playlistName?: string; range?: RunRange; collectionId?: string };
+  | {
+      entries: PromptEntry[];
+      playlistName?: string;
+      range?: RunRange;
+      collectionId?: string;
+      /** 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。 */
+      indices?: number[];
+    };
 
 interface ProtocolMap {
   /** overlay → background → runner: 連続実行を開始する。 */
@@ -28,6 +35,12 @@ interface ProtocolMap {
   queryProgress(): SnapshotPayload | null;
   /** background → overlay content: action クリックで overlay 表示を toggle する (#892)。 */
   toggleOverlay(): void;
+  /** runner content: 自身の document（Suno `/me`）から playlist を scrape して返す (#893)。
+   *  overlay → background → runner の手動 Capture と、background が開く bg `/me` tab への自動 capture が共用する。 */
+  capturePlaylists(): CapturedPlaylist[];
+  /** runner → background: 連続実行の playlist 化完了時に、bg `/me` tab で capture → POST する自動 trigger を要求する (#893)。
+   *  background 側は fail soft（scrape / POST 失敗は warning log のみ）。 */
+  requestPlaylistCapture(): void;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();

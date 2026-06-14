@@ -1,5 +1,6 @@
 import { DEFAULT_URL, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import { PatternList } from "./PatternList";
+import { PlaylistCaptureTab } from "./PlaylistCaptureTab";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -10,6 +11,7 @@ export function App() {
     url,
     setUrl,
     collections,
+    allMapped,
     selectedCollectionId,
     selectCollection,
     entries,
@@ -30,6 +32,8 @@ export function App() {
     resumeBanner,
     acceptResume,
     dismissResume,
+    failedEntries,
+    rerunFailed,
     fetchData,
     run,
     stop,
@@ -67,6 +71,9 @@ export function App() {
         </label>
       )}
 
+      {/* 全 collection が既にマッピング済みで filter 後 0 件のとき (#893 要件 B)。 */}
+      {allMapped && <p className="text-xs text-gray-600">未マッピング collection はありません。</p>}
+
       {playlistName && (
         <p className="text-xs text-gray-600">
           Playlist: <span className="font-medium">{playlistName}</span>
@@ -76,8 +83,14 @@ export function App() {
       {resumeBanner && (
         <div className="flex flex-col gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs text-amber-900">
           <p>
-            前回 entry <span className="font-semibold">{resumeBanner.failedIndex + 1}</span> で停止しました。entry{" "}
-            {resumeBanner.failedIndex + 1} から再開しますか？
+            {resumeBanner.failedIndex < resumeBanner.total ? (
+              <>
+                前回の実行が中断されました。entry <span className="font-semibold">{resumeBanner.failedIndex + 1}</span>{" "}
+                から再開しますか？
+              </>
+            ) : (
+              <>全 entry 投入済みです。playlist 追加から再開しますか？</>
+            )}
           </p>
           <div className="flex gap-2">
             <button
@@ -95,6 +108,23 @@ export function App() {
               閉じる
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 失敗スキップされた entry の再実行導線 (#948)。実行中は隠す。 */}
+      {failedEntries.length > 0 && !isRunning && (
+        <div className="flex flex-col gap-2 rounded border border-red-300 bg-red-50 px-2 py-2 text-xs text-red-900">
+          <p>
+            失敗してスキップされた entry:{" "}
+            <span className="font-semibold">{failedEntries.map((i) => i + 1).join(", ")}</span>
+          </p>
+          <button
+            type="button"
+            onClick={rerunFailed}
+            className="self-start rounded bg-red-600 px-2 py-1 text-white hover:bg-red-500"
+          >
+            失敗分のみ再実行
+          </button>
         </div>
       )}
 
@@ -191,6 +221,9 @@ export function App() {
       {status && (
         <p className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}>{status}</p>
       )}
+
+      {/* overlay 下部の Suno playlist capture セクション (#893)。サーバー URL は上の入力欄を共用する。 */}
+      <PlaylistCaptureTab baseUrl={url} />
     </div>
   );
 }

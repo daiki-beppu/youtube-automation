@@ -21,18 +21,18 @@ export function makePromptEntries(count: number): PromptEntry[] {
 }
 
 /** strict 可視判定用に getBoundingClientRect を擬似的に与える (jsdom は常に 0×0 を返すため)。 */
-export function markBbox(el: HTMLElement, width: number, height: number): void {
+export function markBbox(el: HTMLElement, width: number, height: number, y = 0): void {
   Object.defineProperty(el, "getBoundingClientRect", {
     configurable: true,
     value: () => ({
       width,
       height,
-      top: 0,
+      top: y,
       left: 0,
       right: width,
-      bottom: height,
+      bottom: y + height,
       x: 0,
-      y: 0,
+      y,
       toJSON: () => ({}),
     }),
   });
@@ -52,6 +52,8 @@ export function addCaptchaIframe(opts: {
   opacity?: string;
   width?: number;
   height?: number;
+  /** bbox の y 座標。検証完了後の駐機 iframe（y:-9999）を写像する。 */
+  y?: number;
 }): HTMLIFrameElement {
   const f = document.createElement("iframe");
   if (opts.src !== undefined) f.src = opts.src;
@@ -60,7 +62,7 @@ export function addCaptchaIframe(opts: {
   if (opts.visibility !== undefined) f.style.visibility = opts.visibility;
   if (opts.opacity !== undefined) f.style.opacity = opts.opacity;
   document.body.appendChild(f);
-  markBbox(f, opts.width ?? 300, opts.height ?? 150);
+  markBbox(f, opts.width ?? 300, opts.height ?? 150, opts.y ?? 0);
   return f;
 }
 

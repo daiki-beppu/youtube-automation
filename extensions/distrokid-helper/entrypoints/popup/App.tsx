@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
-import { fetchAsset, fetchRelease, ReleaseUnavailableError } from "@/lib/api";
+import {
+  fetchAsset,
+  fetchCollectionRelease,
+  fetchRelease,
+  ReleaseUnavailableError,
+} from "@/lib/api";
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
 import { runInjection } from "@/lib/inject-runner";
@@ -9,6 +14,13 @@ import type { ReleasePayload } from "@/lib/types";
 import { ServerUrlField } from "@/components/ServerUrlField";
 import { ReleaseReview } from "@/components/ReleaseReview";
 import { StatusBanner } from "@/components/StatusBanner";
+import {
+  fetchDistrokidCollections,
+  excludeReleasedDiscs,
+  recordDistrokidRelease,
+  type DistrokidCollectionSummary,
+  type DistrokidReleaseRecord,
+} from "../../../shared/api";
 
 // 無効チャンネル（distrokid.enabled=false / 未配置）時のガイダンス（要件 #16）。
 const UNAVAILABLE_GUIDANCE =
@@ -20,12 +32,63 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase | null>(null);
   const [message, setMessage] = useState("");
+
+  // dir mode 用コレクション一覧（#934）。空配列 = 単一 mode か 0 件。
+  const [collections, setCollections] = useState<DistrokidCollectionSummary[]>(
+    [],
+  );
+  // 全 disc が配信済みで filter 後 0 件になった場合のフラグ（#934）。
+  const [allReleased, setAllReleased] = useState(false);
+  // 選択中 disc の index（collections 配列の index）。-1 = 未選択（単一 mode）。
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+
   // 停止要求フラグ。injection ループの境界で参照し、押下後は以降の送信を打ち切る。
   const stoppedRef = useRef(false);
+  // dir mode 判定フラグ（fetchDistrokidCollections 成功時に true）。
+  const isDirModeRef = useRef(false);
+  // 現在の payload を取得した disc（#934）。配信済み記録はフィルした payload の
+  // 取得元に束縛する — fetch 後に select を変えても誤った disc を記録しないため。
+  const payloadSourceRef = useRef<DistrokidReleaseRecord | null>(null);
+
+  // サーバー URL が確定したときに DistroKid collection 一覧を試行する (#934)。
+  // 成功（dir mode）: released 除外済み一覧を state にセットし、その一覧を返す。
+  // 失敗（404 等 = 単一 mode）: collections を空のままにして従来動作へ fallback。
+  // setState は次レンダーまで反映されないため、同一ハンドラ内で一覧を使う caller は
+  // 戻り値を直接参照する（stale closure 回避、#934）。
+  const loadCollections = useCallback(
+    async (baseUrl: string): Promise<DistrokidCollectionSummary[]> => {
+      try {
+        const fetched = await fetchDistrokidCollections(baseUrl);
+        const list = excludeReleasedDiscs(fetched);
+        setCollections(list);
+        setAllReleased(fetched.length > 0 && list.length === 0);
+        // 未配信 disc があれば先頭を初期選択する。
+        setSelectedIndex(list.length > 0 ? 0 : -1);
+        isDirModeRef.current = true;
+        return list;
+      } catch {
+        // 単一ファイル mode サーバーは /distrokid/collections が 404。
+        // ドロップダウンを出さず従来の単一 mode へ fallback する（後方互換）。
+        setCollections([]);
+        setAllReleased(false);
+        setSelectedIndex(-1);
+        isDirModeRef.current = false;
+        return [];
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    serverUrlItem.getValue().then(setServerUrl);
-  }, []);
+    // 永続化済みサーバー URL を復元し、URL があれば collection 一覧も試行する。
+    serverUrlItem.getValue().then((stored) => {
+      setServerUrl(stored);
+      const trimmed = stored.trim();
+      if (trimmed) {
+        void loadCollections(trimmed);
+      }
+    });
+  }, [loadCollections]);
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
@@ -38,13 +101,58 @@ export function App() {
     return () => unwatch();
   }, []);
 
+  // データ取得ボタン。dir mode では選択中 disc の collection-scoped release.json を fetch し、
+  // 単一 mode では従来の /distrokid/release.json を fetch する (#934)。
   const handleFetch = async () => {
     setBusy(true);
     setPhase(null);
     setMessage("");
     await serverUrlItem.setValue(serverUrl);
+
+    // URL 変更時に collection 一覧を再取得する（blur 後の最初のデータ取得で最新化）。
+    // state の collections/selectedIndex はこのレンダーの closure では古いままなので、
+    // 戻り値の最新一覧を直接使う（stale closure 回避、#934）。
+    const list = await loadCollections(serverUrl.trim());
+
     try {
-      setPayload(await fetchRelease(serverUrl));
+      let result: ReleasePayload;
+      if (isDirModeRef.current) {
+        if (list.length === 0) {
+          // dir mode で未配信 disc が無い場合は単一 mode へ fallback しない
+          // （dir mode サーバーに /distrokid/release.json は無く、誤った 404 ガイダンスになるため）。
+          setPayload(null);
+          setMessage("未配信の disc はありません。");
+          return;
+        }
+        // 再取得後も同じ disc が残っていれば選択を維持し、消えていれば先頭にする。
+        const prev = collections[selectedIndex];
+        const keptIndex = prev
+          ? list.findIndex(
+              (item) =>
+                item.collection_id === prev.collection_id &&
+                item.disc === prev.disc,
+            )
+          : -1;
+        const effectiveIndex = keptIndex >= 0 ? keptIndex : 0;
+        setSelectedIndex(effectiveIndex);
+        const selected = list[effectiveIndex];
+        // 配信済み記録はこの payload の取得元 disc に束縛する（#934）。
+        payloadSourceRef.current = {
+          collection_id: selected.collection_id,
+          disc: selected.disc,
+          album_title: selected.album_title,
+        };
+        result = await fetchCollectionRelease(
+          serverUrl,
+          selected.collection_id,
+          selected.disc,
+        );
+      } else {
+        // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
+        payloadSourceRef.current = null;
+        result = await fetchRelease(serverUrl);
+      }
+      setPayload(result);
     } catch (error) {
       setPayload(null);
       setPhase(PHASES.ERROR);
@@ -95,6 +203,24 @@ export function App() {
         setMessage,
         isStopped: () => stoppedRef.current,
       });
+
+      // フィル完了後、dir mode で payload を取得した disc のみ配信済み記録を POST する (#934)。
+      // 現在の select 値ではなく payload 取得元（payloadSourceRef）に束縛する —
+      // fetch 後に select を変えてもフィルされたのは取得済み payload の disc のため。
+      // POST 失敗はフィル成功を覆さない（warning を添えるだけ）。
+      const source = payloadSourceRef.current;
+      if (isDirModeRef.current && source !== null) {
+        try {
+          await recordDistrokidRelease(serverUrl, source);
+          // 配信済み記録成功後、一覧を再取得して select から消す (#934)。
+          await loadCollections(serverUrl.trim());
+        } catch (recordError) {
+          // 配信記録失敗はフィル結果に影響しない補助機能のため warn 表示のみ (#934)。
+          setMessage(
+            `注入完了（配信済み記録に失敗しました: ${recordError instanceof Error ? recordError.message : String(recordError)}）`,
+          );
+        }
+      }
     } catch (error) {
       setPhase(PHASES.ERROR);
       setMessage(error instanceof Error ? error.message : String(error));
@@ -124,6 +250,29 @@ export function App() {
         onChange={setServerUrl}
         onFetch={handleFetch}
       />
+
+      {/* dir mode: 未配信 disc 一覧のドロップダウン (#934)。suno-helper App.tsx 55-69 行の構造を踏襲。 */}
+      {collections.length > 0 && (
+        <label className="flex flex-col gap-1 text-sm">
+          コレクション
+          <select
+            value={selectedIndex}
+            onChange={(e) => setSelectedIndex(Number(e.target.value))}
+            className="rounded border border-gray-300 px-2 py-1"
+          >
+            {collections.map((item, idx) => (
+              <option key={`${item.collection_id}/${item.disc}`} value={idx}>
+                {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {/* dir mode で全 disc が配信済みの場合（#934）。suno-helper の allMapped パターンを踏襲。 */}
+      {allReleased && (
+        <p className="text-xs text-gray-600">未配信の disc はありません。</p>
+      )}
 
       {payload !== null && <ReleaseReview payload={payload} />}
 

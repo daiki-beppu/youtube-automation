@@ -30,6 +30,7 @@ from youtube_automation.utils.config.distrokid import (
     AiDisclosure,
     Distrokid,
     DistrokidProfile,
+    DistrokidProfileCredits,
     SongwriterName,
 )
 from youtube_automation.utils.config.localizations import Localizations
@@ -596,6 +597,18 @@ def _build_distrokid_profile(profile_raw: dict) -> DistrokidProfile:
         sub_genre=str(sub_genre) if sub_genre is not None else None,
         songwriter=_build_songwriter(profile_raw.get("songwriter")),
         ai_disclosure=_build_ai_disclosure(profile_raw.get("ai_disclosure")),
+        credits=_build_credits(profile_raw.get("credits")),
+    )
+
+
+def _build_credits(raw: object) -> DistrokidProfileCredits:
+    if raw is None:
+        return DistrokidProfileCredits()
+    if not isinstance(raw, dict):
+        raise ConfigError(f"distrokid.profile.credits は object でなければなりません（got {type(raw).__name__}）")
+    return DistrokidProfileCredits(
+        performer_role=str(raw.get("performer_role", "Synthesizer")),
+        producer_role=str(raw.get("producer_role", "Producer")),
     )
 
 
