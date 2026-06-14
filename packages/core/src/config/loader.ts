@@ -1,58 +1,31 @@
 // `config/channel/*.json` を glob ロード・バリデーションし `ChannelConfig` を組み立てる。
-// Python `utils/config/loader.py` の移植（singleton + reset + channelDir + cross-file 検証）。
+// singleton + reset + channelDir + cross-file 検証（localizations 別ファイル）を担う。
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { parseAnalytics } from "./analytics.ts";
-import { parseAudio } from "./audio.ts";
-import { parseComments } from "./comments.ts";
+import { z } from "zod";
+
+import { ChannelConfigSchema } from "./config.ts";
 import type { ChannelConfig } from "./config.ts";
-import { parseContent } from "./content.ts";
-import type { Content } from "./content.ts";
-import { parseDistrokid } from "./distrokid.ts";
-import { isRecord } from "./internal.ts";
-import { localizationsAbsent, parseLocalizations } from "./localizations.ts";
-import type { Localizations } from "./localizations.ts";
-import { parseMeta } from "./meta.ts";
-import { parsePinnedComment } from "./pinned-comment.ts";
-import { parsePlaylists } from "./playlists.ts";
-import { parseShorts } from "./shorts.ts";
-import { parseWorkflow } from "./workflow.ts";
-import { parseYoutube } from "./youtube.ts";
-import type { YoutubeSection } from "./youtube.ts";
+import { isPlainObject } from "./internal.ts";
+import { Localizations, localizationsAbsent } from "./localizations.ts";
 
 let instance: ChannelConfig | null = null;
 let channelDirCache: string | null = null;
 
-// 必須キー（ドット区切り）。分割前の `_REQUIRED_KEYS` を新構造へ分配。
-const REQUIRED_KEYS_BY_SECTION: Record<string, string[]> = {
-  "content.json": [
-    "genre.primary",
-    "genre.style",
-    "genre.context",
-    "tags.base",
-    "tags.themes",
-    "descriptions.opening",
-    "descriptions.perfect_for",
-    "descriptions.hashtags",
-    "title.template",
-  ],
-  "meta.json": [
-    "channel.name",
-    "channel.short",
-    "channel.youtube_handle",
-    "channel.url",
-  ],
-  "youtube.json": [
-    "youtube.category_id",
-    "youtube.privacy_status",
-    "youtube.language",
-  ],
-};
-
 const isDir = (path: string): boolean =>
   existsSync(path) && statSync(path).isDirectory();
+
+// zod の issue 列を `config:` prefix の 1 行メッセージへ整形する（path. + message）。
+const formatZodError = (error: z.ZodError): string =>
+  error.issues
+    .map((issue) =>
+      issue.path.length > 0
+        ? `${issue.path.join(".")}: ${issue.message}`
+        : issue.message
+    )
+    .join("; ");
 
 // CHANNEL_DIR 環境変数を優先し、未設定なら CWD 祖先を辿って config/channel/ を探す。
 const resolveChannelDir = (): string => {
@@ -103,7 +76,7 @@ const loadAndMerge = (files: string[]): Record<string, unknown> => {
         cause: error,
       });
     }
-    if (!isRecord(data)) {
+    if (!isPlainObject(data)) {
       throw new Error(
         `config: ${path} のトップレベルは object でなければなりません`
       );
@@ -121,28 +94,7 @@ const loadAndMerge = (files: string[]): Record<string, unknown> => {
   return merged;
 };
 
-// 必須キーをドット区切りパスで検証し、欠落をまとめて報告。
-const validateRequired = (merged: Record<string, unknown>): void => {
-  const missing: string[] = [];
-  for (const keys of Object.values(REQUIRED_KEYS_BY_SECTION)) {
-    for (const keyPath of keys) {
-      let current: unknown = merged;
-      for (const part of keyPath.split(".")) {
-        if (!isRecord(current) || !(part in current)) {
-          missing.push(keyPath);
-          break;
-        }
-        current = current[part];
-      }
-    }
-  }
-  if (missing.length > 0) {
-    throw new Error(
-      `config: config/channel/ に必須キーがありません: ${missing.join(", ")}`
-    );
-  }
-};
-
+// localizations.json（config/ 直下・config/channel/ の外）を読み込む。
 const loadLocalizations = (
   channelRoot: string,
   fallbackLanguage: string
@@ -160,64 +112,17 @@ const loadLocalizations = (
       { cause: error }
     );
   }
-  return parseLocalizations(data);
-};
-
-// ファイル跨ぎ整合性チェック（違反はすべて config: prefix Error）。
-const validateCrossFile = (
-  youtube: YoutubeSection,
-  content: Content,
-  localizations: Localizations
-): void => {
-  // 1. content_model.languages ⊆ localizations.supported_languages（localizations 存在時）
-  if (localizations.exists) {
-    const unknownLangs = youtube.contentModel.languages.filter(
-      (lang) => !localizations.supportedLanguages.includes(lang)
-    );
-    if (unknownLangs.length > 0) {
-      throw new Error(
-        `config: content_model.languages に localizations.supported_languages へ未登録の言語があります: ${JSON.stringify(unknownLangs)}`
+  try {
+    return Localizations.parse(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new TypeError(
+        `config: localizations.json: ${formatZodError(error)}`,
+        { cause: error }
       );
     }
+    throw error;
   }
-
-  // 2. title.theme_scenes のキー ⊆ tags.themes のキー
-  const themeKeys = new Set(Object.keys(content.tags.themes));
-  const unknownScenes = Object.keys(content.title.themeScenes)
-    .filter((key) => !themeKeys.has(key))
-    .toSorted();
-  if (unknownScenes.length > 0) {
-    throw new Error(
-      `config: title.theme_scenes に tags.themes で定義されていないテーマキーがあります: ${JSON.stringify(unknownScenes)}`
-    );
-  }
-};
-
-const assemble = (
-  merged: Record<string, unknown>,
-  channelRoot: string
-): ChannelConfig => {
-  const meta = parseMeta(merged);
-  const content = parseContent(merged, meta.channelName);
-  const youtube = parseYoutube(merged);
-  const localizations = loadLocalizations(channelRoot, youtube.api.language);
-
-  validateCrossFile(youtube, content, localizations);
-
-  return {
-    analytics: parseAnalytics(merged),
-    audio: parseAudio(merged),
-    comments: parseComments(merged),
-    content,
-    distrokid: parseDistrokid(merged),
-    localizations,
-    meta,
-    pinnedComment: parsePinnedComment(merged),
-    playlists: parsePlaylists(merged),
-    shorts: parseShorts(merged),
-    workflow: parseWorkflow(merged),
-    youtube,
-  };
 };
 
 const build = (channelRoot: string): ChannelConfig => {
@@ -246,8 +151,35 @@ const build = (channelRoot: string): ChannelConfig => {
   }
 
   const merged = loadAndMerge(files);
-  validateRequired(merged);
-  return assemble(merged, channelRoot);
+
+  let parsed: z.infer<typeof ChannelConfigSchema>;
+  try {
+    parsed = ChannelConfigSchema.parse(merged);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new TypeError(`config: ${formatZodError(error)}`, { cause: error });
+    }
+    throw error;
+  }
+
+  const localizations = loadLocalizations(
+    channelRoot,
+    parsed.youtube.api.language
+  );
+
+  // cross-file: content_model.languages ⊆ localizations.supported_languages（存在時）。
+  if (localizations.exists) {
+    const unknownLangs = parsed.youtube.contentModel.languages.filter(
+      (lang) => !localizations.supportedLanguages.includes(lang)
+    );
+    if (unknownLangs.length > 0) {
+      throw new Error(
+        `config: content_model.languages に localizations.supported_languages へ未登録の言語があります: ${JSON.stringify(unknownLangs)}`
+      );
+    }
+  }
+
+  return { ...parsed, localizations };
 };
 
 /** `config/channel/*.json` を glob ロードし `ChannelConfig` を返す（シングルトン）。 */

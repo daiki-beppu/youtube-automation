@@ -1,29 +1,28 @@
-// Analytics・Benchmark（Python `utils/config/analytics.py` の移植）。
+// Analytics・Benchmark（merged の `analytics` + `benchmark`、どちらも optional）。
+//
+// `benchmark.channels` は JSON 構造を verbatim 保持する（snake key を camel 化しない）。
 
-import { asRecord } from "./internal.ts";
-
-/** `benchmark` セクション（optional）。channels は JSON 構造を verbatim 保持。 */
-interface Benchmark {
-  readonly channels: readonly Record<string, unknown>[];
-}
+import { z } from "zod";
 
 /** `analytics` + `benchmark` の合成（どちらも optional）。 */
-export interface Analytics {
-  readonly collectionFilterKeywords: readonly string[];
-  readonly benchmark: Benchmark;
-}
+export const Analytics = z
+  .object({
+    analytics: z
+      .object({
+        collection_filter_keywords: z.array(z.string()).default([]),
+      })
+      .strict()
+      .prefault({}),
+    benchmark: z
+      .object({
+        channels: z.array(z.record(z.string(), z.unknown())).default([]),
+      })
+      .strict()
+      .prefault({}),
+  })
+  .transform((o) => ({
+    benchmark: { channels: o.benchmark.channels },
+    collectionFilterKeywords: o.analytics.collection_filter_keywords,
+  }));
 
-export const parseAnalytics = (merged: Record<string, unknown>): Analytics => {
-  const an = asRecord(merged.analytics, "analytics");
-  const bm = asRecord(merged.benchmark, "benchmark");
-  return {
-    benchmark: {
-      channels: [
-        ...((bm.channels as Record<string, unknown>[] | undefined) ?? []),
-      ],
-    },
-    collectionFilterKeywords: [
-      ...((an.collection_filter_keywords as string[] | undefined) ?? []),
-    ],
-  };
-};
+export type Analytics = z.infer<typeof Analytics>;

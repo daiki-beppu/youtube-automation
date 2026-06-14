@@ -1,130 +1,96 @@
-// コンテンツ責務（genre / tags / descriptions / title）の型 + parser + ヘルパー。
-// Python `utils/config/content.py` の dataclass メソッドは co-located 純関数として移植。
+// コンテンツ責務（genre / tags / descriptions / title）の schema + ヘルパー。
+// dataclass メソッドは co-located 純関数として保持する。
+//
+// `tags.themes` / `title.theme_scenes` / `title.theme_activities` / `template_check` /
+// `descriptions.metadata` はテーマキー・任意キーを保持する passthrough map のため
+// snakeToCamel は適用せず verbatim 保持する。`channelName` は loader が合成時に注入する。
 
-/** `genre` セクション。 */
-interface Genre {
-  readonly primary: string;
-  readonly style: string;
-  readonly context: string;
-}
-
-/** `tags` セクション。`channelName` は loader が合成時に注入する。 */
-export interface Tags {
-  readonly base: readonly string[];
-  readonly themes: Readonly<Record<string, readonly string[]>>;
-  readonly channelSpecific: readonly string[];
-  readonly channelName: string;
-  readonly minCount: number | null;
-}
+import { z } from "zod";
 
 /** `title.theme_scenes` の各エントリ（TTP 形式）。 */
-interface ThemeScene {
-  readonly scene?: string;
-  readonly activities?: string;
-}
+const ThemeScene = z.object({
+  activities: z.string().optional(),
+  scene: z.string().optional(),
+});
 
-/** `title` セクション。 */
-export interface Title {
-  readonly template: string;
-  readonly defaultActivity: string;
-  readonly themeScenes: Readonly<Record<string, ThemeScene>>;
-  readonly themeActivities: Readonly<Record<string, string>>;
-  readonly templateCheck: Readonly<Record<string, unknown>>;
-}
+/** コンテンツ責務の合成（merged の `genre` + `tags` + `descriptions` + `title`）。 */
+export const Content = z
+  .object({
+    descriptions: z
+      .object({
+        hashtags: z.array(z.string()),
+        metadata: z.record(z.string(), z.unknown()).default({}),
+        opening: z.string(),
+        perfect_for: z.array(z.string()),
+        sub_opening: z.string().default(""),
+      })
+      .strict(),
+    genre: z
+      .object({
+        context: z.string(),
+        primary: z.string(),
+        style: z.string(),
+      })
+      .strict(),
+    tags: z
+      .object({
+        base: z.array(z.string()),
+        channel_specific: z.array(z.string()).default([]),
+        min_count: z.number().nullable().default(null),
+        themes: z.record(z.string(), z.array(z.string())),
+      })
+      .strict(),
+    title: z
+      .object({
+        // 旧実装が default_activities（タイポ）も許容していたので踏襲。
+        default_activities: z.string().optional(),
+        default_activity: z.string().optional(),
+        template: z.string(),
+        template_check: z.record(z.string(), z.unknown()).default({}),
+        theme_activities: z.record(z.string(), z.string()).default({}),
+        theme_scenes: z.record(z.string(), ThemeScene).default({}),
+      })
+      .strict(),
+  })
+  .transform((o) => {
+    const genre = {
+      context: o.genre.context,
+      primary: o.genre.primary,
+      style: o.genre.style,
+    };
+    return {
+      descriptions: {
+        genre,
+        hashtags: o.descriptions.hashtags,
+        metadata: o.descriptions.metadata,
+        opening: o.descriptions.opening,
+        perfectFor: o.descriptions.perfect_for,
+        subOpening: o.descriptions.sub_opening,
+      },
+      genre,
+      tags: {
+        base: o.tags.base,
+        // loader が meta.channelName を注入する（プレースホルダ）。
+        channelName: "",
+        channelSpecific: o.tags.channel_specific,
+        minCount: o.tags.min_count,
+        themes: o.tags.themes,
+      },
+      title: {
+        defaultActivity:
+          o.title.default_activity ?? o.title.default_activities ?? "Study",
+        template: o.title.template,
+        templateCheck: o.title.template_check,
+        themeActivities: o.title.theme_activities,
+        themeScenes: o.title.theme_scenes,
+      },
+    };
+  });
 
-/** `descriptions` セクション。`genre` は loader が合成時に注入する。 */
-export interface Descriptions {
-  readonly opening: string;
-  readonly subOpening: string;
-  readonly perfectFor: readonly string[];
-  readonly hashtags: readonly string[];
-  readonly metadata: Readonly<Record<string, unknown>>;
-  readonly genre: Genre;
-}
-
-/** コンテンツ責務の合成。 */
-export interface Content {
-  readonly genre: Genre;
-  readonly tags: Tags;
-  readonly descriptions: Descriptions;
-  readonly title: Title;
-}
-
-const parseGenre = (merged: Record<string, unknown>): Genre => {
-  const gn = merged.genre as Record<string, unknown>;
-  return {
-    context: gn.context as string,
-    primary: gn.primary as string,
-    style: gn.style as string,
-  };
-};
-
-const parseTags = (
-  merged: Record<string, unknown>,
-  channelName: string
-): Tags => {
-  const tg = merged.tags as Record<string, unknown>;
-  const themesRaw = tg.themes as Record<string, string[]>;
-  return {
-    base: [...(tg.base as string[])],
-    channelName,
-    channelSpecific: [...((tg.channel_specific as string[] | undefined) ?? [])],
-    minCount: (tg.min_count as number | undefined) ?? null,
-    themes: Object.fromEntries(
-      Object.entries(themesRaw).map(([k, v]) => [k, [...v]])
-    ),
-  };
-};
-
-const parseDescriptions = (
-  merged: Record<string, unknown>,
-  genre: Genre
-): Descriptions => {
-  const dp = merged.descriptions as Record<string, unknown>;
-  return {
-    genre,
-    hashtags: [...(dp.hashtags as string[])],
-    metadata: { ...(dp.metadata as Record<string, unknown> | undefined) },
-    opening: dp.opening as string,
-    perfectFor: [...(dp.perfect_for as string[])],
-    subOpening: (dp.sub_opening as string | undefined) ?? "",
-  };
-};
-
-const parseTitle = (merged: Record<string, unknown>): Title => {
-  const tl = merged.title as Record<string, unknown>;
-  // 旧実装が default_activities（タイポ）も許容していたので踏襲。
-  const defaultActivity =
-    (tl.default_activity as string | undefined) ??
-    (tl.default_activities as string | undefined) ??
-    "Study";
-  return {
-    defaultActivity,
-    template: tl.template as string,
-    templateCheck: {
-      ...(tl.template_check as Record<string, unknown> | undefined),
-    },
-    themeActivities: {
-      ...(tl.theme_activities as Record<string, string> | undefined),
-    },
-    themeScenes: {
-      ...(tl.theme_scenes as Record<string, ThemeScene> | undefined),
-    },
-  };
-};
-
-export const parseContent = (
-  merged: Record<string, unknown>,
-  channelName: string
-): Content => {
-  const genre = parseGenre(merged);
-  return {
-    descriptions: parseDescriptions(merged, genre),
-    genre,
-    tags: parseTags(merged, channelName),
-    title: parseTitle(merged),
-  };
-};
+export type Content = z.infer<typeof Content>;
+export type Tags = Content["tags"];
+export type Title = Content["title"];
+export type Descriptions = Content["descriptions"];
 
 /** チャンネル名（小文字）を含むデフォルトタグリスト。 */
 export const tagsDefault = (tags: Tags): string[] => [

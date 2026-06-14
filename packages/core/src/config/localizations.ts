@@ -1,19 +1,25 @@
-// ローカライゼーション設定（Python `utils/config/localizations.py` + loader の移植）。
+// ローカライゼーション設定（`config/localizations.json`、`config/channel/` の外の別ファイル）。
+//
+// - exists=true: `data` に JSON 全量（raw passthrough）、`supportedLanguages` /
+//   `defaultLanguage` も埋める
+// - exists=false: `data={}`、`supportedLanguages=[youtube.api.language]`、`defaultLanguage=""`
 
-import { isRecord } from "./internal.ts";
+import { z } from "zod";
 
-/**
- * `config/localizations.json`（`config/` 直下、`config/channel/` の外）の内容。
- *
- * - exists=true: `data` に JSON 全量、`supportedLanguages` / `defaultLanguage` も埋める
- * - exists=false: `data={}`、`supportedLanguages=[youtube.api.language]`、`defaultLanguage=""`
- */
-export interface Localizations {
-  readonly data: Readonly<Record<string, unknown>>;
-  readonly exists: boolean;
-  readonly supportedLanguages: readonly string[];
-  readonly defaultLanguage: string;
-}
+/** localizations.json の内容を parse して計算済みフィールドへ transform する。 */
+export const Localizations = z
+  .looseObject({
+    default_language: z.string().default(""),
+    supported_languages: z.array(z.string()).default([]),
+  })
+  .transform((o) => ({
+    data: o as Record<string, unknown>,
+    defaultLanguage: o.default_language,
+    exists: true,
+    supportedLanguages: o.supported_languages,
+  }));
+
+export type Localizations = z.infer<typeof Localizations>;
 
 /** localizations.json が存在しないチャンネルのフォールバック値。 */
 export const localizationsAbsent = (
@@ -24,19 +30,3 @@ export const localizationsAbsent = (
   exists: false,
   supportedLanguages: [fallbackLanguage],
 });
-
-export const parseLocalizations = (data: unknown): Localizations => {
-  if (!isRecord(data)) {
-    throw new Error(
-      "config: localizations.json のトップレベルは object でなければなりません"
-    );
-  }
-  return {
-    data,
-    defaultLanguage: (data.default_language as string | undefined) ?? "",
-    exists: true,
-    supportedLanguages: [
-      ...((data.supported_languages as string[] | undefined) ?? []),
-    ],
-  };
-};

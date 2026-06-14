@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(ts-rewrite/core)`: config 15 section を zod boundary parse 化し、手動 `_build_*` / `REQUIRED_KEYS_BY_SECTION` を撤廃した（#825）。`snakeToCamel` 共用ヘルパを `packages/core/internal/case.ts` に新設し、各 section を `z.object().strict().transform(snakeToCamel)` で統一。`loader.ts` は `ChannelConfig.parse(merged)` 1 行に簡素化
 - `perf(suno-helper)`: Balanced プリセットを増速した（#970、#948 後追い）。`maxInflightRequests` 5 → 10（`MAX_INFLIGHT_REQUESTS` 参照、#816 実機検証の Suno 実上限）、`interCreateDelayMs` 10000 → 6000（jitter ±3000 は維持し bot 検知の固定間隔シグナルを避ける）。従来の保守値は「Remix disabled プロキシによる in-flight 過大カウント + 1 失敗で全停止」時代のリスク対策であり、#948 で API status ベースの正確な計数と自動リトライ / スキップ継続が入った後は失敗 1 回のコストが小さく、定常速度（キュー容量 × 排出速度）を律速する cap を実上限まで開放するのがリスク対効果で最良。キュー飽和後の定常スループットはほぼ 2 倍になる見込み。suno-helper skill のプリセット表も更新。
 
 ### Added

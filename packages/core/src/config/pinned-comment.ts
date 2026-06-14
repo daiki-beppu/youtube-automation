@@ -1,50 +1,30 @@
-// 固定コメント（オーナーコメント）自動投稿設定（Python `pinned_comment.py` + loader の移植）。
+// 固定コメント（オーナーコメント）自動投稿設定（merged の `pinned_comment`・optional）。
+//
+// `templates` は `{言語コード: テンプレート文字列}` の map。言語コードを camel 化しないため
+// snakeToCamel は適用せず verbatim 保持する。
 
-import { isRecord } from "./internal.ts";
-
-const DEFAULT_HISTORY_FILE = "pinned_comment_history.json";
-const DEFAULT_DELAY_SEC = 2.5;
-const DEFAULT_LANGUAGE = "en";
+import { z } from "zod";
 
 /** `pinned_comment` セクション（optional・オプトイン）。 */
-export interface PinnedComment {
-  readonly enabled: boolean;
-  readonly historyFile: string;
-  readonly delayBetweenPostsSec: number;
-  readonly defaultLanguage: string;
-  readonly templates: Readonly<Record<string, string>>;
-}
+export const PinnedComment = z
+  .object({
+    pinned_comment: z
+      .object({
+        default_language: z.string().default("en"),
+        delay_between_posts_sec: z.number().default(2.5),
+        enabled: z.boolean().default(false),
+        history_file: z.string().default("pinned_comment_history.json"),
+        templates: z.record(z.string(), z.string()).default({}),
+      })
+      .strict()
+      .prefault({}),
+  })
+  .transform((o) => ({
+    defaultLanguage: o.pinned_comment.default_language,
+    delayBetweenPostsSec: o.pinned_comment.delay_between_posts_sec,
+    enabled: o.pinned_comment.enabled,
+    historyFile: o.pinned_comment.history_file,
+    templates: o.pinned_comment.templates,
+  }));
 
-export const parsePinnedComment = (
-  merged: Record<string, unknown>
-): PinnedComment => {
-  const raw = merged.pinned_comment;
-  const pc = raw === undefined || raw === null ? {} : raw;
-  if (!isRecord(pc)) {
-    throw new Error(
-      "config: pinned_comment セクションは object でなければなりません"
-    );
-  }
-  const templatesRaw = pc.templates;
-  const templatesRoot =
-    templatesRaw === undefined || templatesRaw === null ? {} : templatesRaw;
-  if (!isRecord(templatesRoot)) {
-    throw new Error(
-      "config: pinned_comment.templates は {言語: テンプレート文字列} の object でなければなりません"
-    );
-  }
-  const templates: Record<string, string> = {};
-  for (const [lang, text] of Object.entries(templatesRoot)) {
-    templates[lang] = String(text);
-  }
-  return {
-    defaultLanguage:
-      (pc.default_language as string | undefined) ?? DEFAULT_LANGUAGE,
-    delayBetweenPostsSec:
-      (pc.delay_between_posts_sec as number | undefined) ?? DEFAULT_DELAY_SEC,
-    enabled: (pc.enabled as boolean | undefined) ?? false,
-    historyFile:
-      (pc.history_file as string | undefined) ?? DEFAULT_HISTORY_FILE,
-    templates,
-  };
-};
+export type PinnedComment = z.infer<typeof PinnedComment>;

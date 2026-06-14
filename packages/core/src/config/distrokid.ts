@@ -1,6 +1,12 @@
-// DistroKid 配信プロファイル設定（Python `distrokid.py` + loader の移植・optional/opt-in）。
+// DistroKid 配信プロファイル設定（merged の `distrokid`・optional/opt-in）。
+//
+// 形状検証 + `enabled=true` 時の条件付き必須チェックは superRefine で行い、
+// 既存テストが期待する `config:` prefix のメッセージ（`distrokid.profile は object ...`
+// / 欠落フィールド名）を保持する。
 
-import { asRecord, isRecord } from "./internal.ts";
+import { z } from "zod";
+
+import { isPlainObject } from "./internal.ts";
 
 // distrokid.enabled === true のとき profile に必須となるフィールド（条件付き必須）。
 const REQUIRED_PROFILE_FIELDS = [
@@ -12,65 +18,56 @@ const REQUIRED_PROFILE_FIELDS = [
   "track_type",
 ] as const;
 
-/** `distrokid.profile` セクション（distrokid.com/new フォーム項目に対応）。 */
-interface DistrokidProfile {
-  readonly artistName: string;
-  readonly language: string;
-  readonly mainGenre: string;
-  readonly songwriter: string;
-  readonly appleMusicCredit: string;
-  readonly trackType: string;
-}
+const DistrokidInner = z
+  .object({
+    enabled: z.boolean().default(false),
+    profile: z.unknown().prefault({}),
+  })
+  .superRefine((dk, ctx) => {
+    if (!isPlainObject(dk.profile)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "distrokid.profile は object でなければなりません",
+        path: ["profile"],
+      });
+      return;
+    }
+    const { profile } = dk;
+    // enabled=true のときのみ profile の必須 6 フィールドを条件付き検証（Fail Fast）。
+    if (dk.enabled) {
+      const missing = REQUIRED_PROFILE_FIELDS.filter((f) => !profile[f]);
+      if (missing.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: `distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: ${missing.join(", ")}`,
+          path: ["profile"],
+        });
+      }
+    }
+  });
+
+const str = (value: unknown): string =>
+  typeof value === "string" ? value : "";
 
 /** `distrokid` セクション（optional・opt-in）。 */
-export interface Distrokid {
-  readonly enabled: boolean;
-  readonly profile: DistrokidProfile;
-}
+export const Distrokid = z
+  .object({
+    distrokid: DistrokidInner.prefault({}),
+  })
+  .transform((o) => {
+    // superRefine の isPlainObject 検証通過済みのため、transform 到達時は常に plain object。
+    const profile = o.distrokid.profile as Record<string, unknown>;
+    return {
+      enabled: o.distrokid.enabled,
+      profile: {
+        appleMusicCredit: str(profile.apple_music_credit),
+        artistName: str(profile.artist_name),
+        language: str(profile.language),
+        mainGenre: str(profile.main_genre),
+        songwriter: str(profile.songwriter),
+        trackType: str(profile.track_type),
+      },
+    };
+  });
 
-const emptyProfile = (): DistrokidProfile => ({
-  appleMusicCredit: "",
-  artistName: "",
-  language: "",
-  mainGenre: "",
-  songwriter: "",
-  trackType: "",
-});
-
-export const parseDistrokid = (merged: Record<string, unknown>): Distrokid => {
-  const raw = merged.distrokid;
-  if (raw === undefined || raw === null) {
-    return { enabled: false, profile: emptyProfile() };
-  }
-  if (!isRecord(raw)) {
-    throw new Error(
-      "config: distrokid セクションは object でなければなりません"
-    );
-  }
-
-  const enabled = (raw.enabled as boolean | undefined) ?? false;
-  const profileRoot = asRecord(raw.profile, "distrokid.profile");
-
-  // enabled=true のときのみ profile の必須 6 フィールドを条件付き検証（Fail Fast）。
-  if (enabled) {
-    const missing = REQUIRED_PROFILE_FIELDS.filter((f) => !profileRoot[f]);
-    if (missing.length > 0) {
-      throw new Error(
-        `config: distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: ${missing.join(", ")}`
-      );
-    }
-  }
-
-  return {
-    enabled,
-    profile: {
-      appleMusicCredit:
-        (profileRoot.apple_music_credit as string | undefined) ?? "",
-      artistName: (profileRoot.artist_name as string | undefined) ?? "",
-      language: (profileRoot.language as string | undefined) ?? "",
-      mainGenre: (profileRoot.main_genre as string | undefined) ?? "",
-      songwriter: (profileRoot.songwriter as string | undefined) ?? "",
-      trackType: (profileRoot.track_type as string | undefined) ?? "",
-    },
-  };
-};
+export type Distrokid = z.infer<typeof Distrokid>;
