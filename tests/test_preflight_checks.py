@@ -277,19 +277,25 @@ class TestCheckTitleTemplateCompliance:
         assert msg is not None
         assert "巻数表記" in msg
 
-    def test_rhs_duplicate_rejected(self) -> None:
+    def test_rhs_duplicate_allowed_when_lhs_differs(self) -> None:
+        # LHS が違えば RHS が同じでも OK（タイトル全体が一意であれば許可）
         title = "Brand New Soul Funk Energy | 3 Hours of Soulful Retro Funk Grooves"
         msg = check_title_template_compliance(title, self.EXISTING, self.CFG)
-        assert msg is not None
-        assert "RHS が既存 live タイトルと完全重複" in msg
+        assert msg is None
 
-    def test_volume_and_rhs_duplicate_both_reported(self) -> None:
-        # issue の事故事例: 巻数表記 + RHS 重複の両方を検出して block
+    def test_full_title_duplicate_rejected(self) -> None:
+        # タイトル全体が既存と完全一致する場合は弾く
+        title = "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves"
+        msg = check_title_template_compliance(title, self.EXISTING, self.CFG)
+        assert msg is not None
+        assert "タイトル全体が既存 live タイトルと完全重複" in msg
+
+    def test_volume_notation_with_existing_rejected(self) -> None:
+        # 巻数表記は RHS 重複とは独立して検出される
         title = "Funky Spirit Vol.2 | 3 Hours of Soulful Retro Funk Grooves"
         msg = check_title_template_compliance(title, self.EXISTING, self.CFG)
         assert msg is not None
         assert "巻数表記" in msg
-        assert "RHS が既存 live タイトルと完全重複" in msg
 
     def test_rhs_not_matching_template_rejected(self) -> None:
         title = "Bright Funk & Soul Spirit | A Cozy Funk Mix"
