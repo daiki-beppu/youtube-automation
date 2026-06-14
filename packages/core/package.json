@@ -9,12 +9,17 @@
     "./config": "./src/config/index.ts",
     "./image": "./src/image/index.ts",
     "./metadata": "./src/metadata.ts",
+    "./oauth/client": "./src/oauth/client.ts",
+    "./oauth/interactive": "./src/oauth/interactive.ts",
+    "./oauth/refresh": "./src/oauth/refresh.ts",
     "./paths": "./src/paths.ts",
     "./registry": "./src/registry.ts",
     "./skills-sync": "./skills-sync/index.ts"
   },
   "dependencies": {
     "@google/genai": "^2.7.0",
+    "google-auth-library": "10.5.0",
+    "googleapis": "^173.0.0",
     "openai": "^6.41.0",
     "zod": "^4.1.13"
   }
