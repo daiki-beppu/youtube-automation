@@ -6,7 +6,9 @@
 
 ## Decision
 
-`feat/ts-rewrite` branch で 0 ベース TS 再実装し、ある日 main に big-bang merge して Python を一掃する。package 名は `youtube-channels-automation` のまま維持し、version を `0.1.0` にリセットする。
+`feat/ts-rewrite` branch で 0 ベース TS 再実装し、ある日 main に big-bang merge して Python を一掃する。~~package 名は `youtube-channels-automation` のまま維持し~~、version を `0.1.0` にリセットする。
+
+> **⚠️ 2026-06-14 supersede (ADR-0007)**: 本 ADR の「同名維持」identity 決定は **ADR-0007 で `tayk` への rebrand に反転**した。下記 Why の「同名 + v0.x reset」と Considered Options の「新 package 名は却下」は ADR-0007 が上書きする。version reset (`0.1.0`) のみ本 ADR のまま不変。
 
 ## Why
 
@@ -18,7 +20,7 @@
 
 - **Strangler パターン (旧 epic #701 当初案)**: 同リポで Python + TS 共存。両言語同居が "island elimination" 動機と矛盾し、AI agent (takt persona 等) の "どちらで書くか" 判断混乱を生むため不採用
 - **Scope 縮小 → big-bang**: 46 CLI のうち頻度の高い 15-20 個に絞ってから書き直し。skill 整理は独立プロジェクトとして切り出し、scope 絞りは migration とは別動線で実施するため本 ADR の対象外
-- **新 package 名で `v0.1.0`** (例: `@daiki-beppu/yt-automation`): 下流の "別ツールへの乗り換え" 体験になりオーバーキル。AI-first reframe は内部哲学であって外見契約ではないため、同名維持で十分
+- **新 package 名で `v0.1.0`** (例: `@daiki-beppu/yt-automation`): ~~下流の "別ツールへの乗り換え" 体験になりオーバーキル。AI-first reframe は内部哲学であって外見契約ではないため、同名維持で十分~~ → **ADR-0007 で反転**: 下流が全 first-party + 配布方式も乗り換える以上、新名 `tayk` を採用
 - **ccusage 流の bit-equal parity-check を全 CLI に適用**: AI-first reframe + `v0.x` なら API 不安定期間を許容するため、parity 厳密化は過剰。end-to-end smoke test に格下げ
 
 ## Consequences

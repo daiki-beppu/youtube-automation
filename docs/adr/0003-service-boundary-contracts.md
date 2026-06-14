@@ -159,7 +159,7 @@ export async function uploadVideoService(
 全 input/output schema を zod で declare、TS 型は `z.infer<typeof Schema>` で導出する。JSON 入力 (config / API レスポンス) は snake_case のまま zod schema を書き、top-level `.transform(snakeToCamel)` で camelCase 出力に変換する。`.strict()` で unknown key を reject、required は `.optional()` を付けないだけで表現、cross-section 制約は `.refine()` で記述。
 
 ```typescript
-// packages/core/config/meta.ts (BEFORE: 93 LOC、interface + parseMeta + isRecord)
+// packages/core/src/config/meta.ts (BEFORE: 93 LOC、interface + parseMeta + isRecord)
 // AFTER (~30 LOC):
 import { z } from "zod";
 export const ChannelMeta = z.object({
@@ -197,7 +197,9 @@ export type ChannelMeta = z.infer<typeof ChannelMeta>;
 
 ADR 0002 の canonical template を Phase 1 規約に合わせて以下へ更新する。**新規 service issue の acceptance criteria に本テンプレ準拠を明記する**:
 
-### `packages/core/<feature>/schema.ts`
+> **📁 配置規約 (2026-06-14)**: core feature の canonical 配置は **`packages/core/src/<feature>/`**、CLI command は **`packages/cli/src/commands/<feature>/`**（いずれも `src/` あり）。少数派の `src` なし実装 (skills-sync / internal) は #984 で `src/` 配下へ移送する。本 ADR 内に残る `src` なしのパス例は `src/` 付きで読み替える。
+
+### `packages/core/src/<feature>/schema.ts`
 
 ```typescript
 import { z } from "zod";
@@ -219,7 +221,7 @@ export type FeatureInput = z.infer<typeof FeatureInput>;
 export type FeatureOutput = z.infer<typeof FeatureOutput>;
 ```
 
-### `packages/core/<feature>/service.ts`
+### `packages/core/src/<feature>/service.ts`
 
 ```typescript
 import { type Result, ok, err } from "../result.ts";
@@ -243,7 +245,7 @@ export async function featureService(
 }
 ```
 
-### `packages/cli/commands/<feature>/cli.ts` (citty + 引数 parse → service)
+### `packages/cli/src/commands/<feature>/cli.ts` (citty + 引数 parse → service)
 
 ```typescript
 import { defineCommand } from "citty";
@@ -272,7 +274,7 @@ export default defineCommand({
 });
 ```
 
-### 将来 `packages/mcp/tools/<feature>.ts`
+### 将来 `packages/mcp/src/tools/<feature>.ts`
 
 ```typescript
 import { featureService, FeatureInput, FeatureOutput } from "@youtube-automation/core/<feature>";
