@@ -121,7 +121,7 @@ def _render_analytics(_ctx: Context) -> dict:
             "scan_recent": 50,
             "min_views": 10000,
             "freshness_days": 3,
-            "analyze_thumbnails": True,
+            "gemini_thumbnail_analysis": False,
         }
     }
 

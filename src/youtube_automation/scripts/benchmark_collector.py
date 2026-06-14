@@ -557,6 +557,38 @@ class BenchmarkCollector:
                 return thumbnails[key]["url"]
         return ""
 
+    def download_thumbnails(self, data: dict, *, force: bool = False) -> None:
+        """サムネイル画像を docs/benchmarks/thumbnails/ にダウンロードする。
+
+        Args:
+            data: collect_all() の結果
+            force: True なら既存ファイルも再ダウンロード
+        """
+        thumbnails_dir = self.benchmarks_dir / "thumbnails"
+        thumbnails_dir.mkdir(parents=True, exist_ok=True)
+
+        downloaded = 0
+        skipped = 0
+        for channel in data.get("channels", []):
+            slug = channel["slug"]
+            for video in channel.get("videos", []):
+                url = video.get("thumbnail_url")
+                if not url:
+                    continue
+
+                dest = thumbnails_dir / f"{slug}_{video['video_id']}.jpg"
+                if dest.exists() and not force:
+                    skipped += 1
+                    continue
+
+                try:
+                    urllib.request.urlretrieve(url, dest)
+                    downloaded += 1
+                except Exception as e:
+                    logger.warning("サムネイルDL失敗 [%s]: %s", video["title"][:30], e)
+
+        logger.info("サムネイルDL: %d 件（スキップ: %d 件）→ %s", downloaded, skipped, thumbnails_dir)
+
 
 class BenchmarkThumbnailAnalyzer:
     """ベンチマークサムネイルの Gemini 分析"""
@@ -564,7 +596,7 @@ class BenchmarkThumbnailAnalyzer:
     def __init__(self, benchmarks_dir: Path):
         self.benchmarks_dir = benchmarks_dir
         cfg = load_skill_config("benchmark").get("thumbnail_analysis", {})
-        self.model = cfg.get("model", "gemini-2.5-pro")
+        self.model = cfg.get("model", "gemini-2.5-flash")
         self.delay_sec = float(cfg.get("delay_sec", 5))
         self.prompt = cfg.get("prompt", "").strip()
 
@@ -635,6 +667,15 @@ class BenchmarkThumbnailAnalyzer:
                         text = re.sub(r"\s*```$", "", text)
                         video["thumbnail_analysis"] = json.loads(text)
                         logger.info("サムネイル分析完了: %s", video["title"][:40])
+                        from youtube_automation.utils.cost_tracker import log_generation
+
+                        log_generation(
+                            "analysis",
+                            self.model,
+                            quantity=1,
+                            unit="call",
+                            metadata={"video_id": video["video_id"], "channel_slug": slug},
+                        )
                     except json.JSONDecodeError as e:
                         logger.warning("サムネイル分析JSONパース失敗 [%s]: %s", video["title"][:30], e)
                         video["thumbnail_analysis"] = {"raw": response.text[:500] if "response" in dir() else str(e)}
@@ -1241,9 +1282,11 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
             "`/benchmark`（uv run yt-benchmark-collect）を再実行してください。"
         )
 
-    if collector.benchmark_config.get("analyze_thumbnails", True):
+    collector.download_thumbnails(data, force=True)
+
+    if collector.benchmark_config.get("gemini_thumbnail_analysis", False):
         analyzer = BenchmarkThumbnailAnalyzer(collector.benchmarks_dir)
-        data = analyzer.analyze_thumbnails(data, keep=False)
+        data = analyzer.analyze_thumbnails(data, keep=True)
 
     collector.save_json(data)
     reporter = BenchmarkReportGenerator(collector.config, collector.benchmarks_dir, collector.today)
@@ -1256,8 +1299,9 @@ def main():
     parser = argparse.ArgumentParser(description="競合チャンネルのベンチマークデータ収集・分析")
     parser.add_argument("--force", action="store_true", help="鮮度に関わらず全チャンネル更新")
     parser.add_argument("--json-only", action="store_true", help="JSON のみ出力（Markdown 生成スキップ）")
-    parser.add_argument("--no-thumbnails", action="store_true", help="サムネイル分析をスキップ")
-    parser.add_argument("--keep-thumbnails", action="store_true", help="サムネイル画像を保持")
+    parser.add_argument("--no-thumbnails", action="store_true", help="サムネイルDL・分析をスキップ")
+    parser.add_argument("--keep-thumbnails", action="store_true", help="（非推奨: サムネイルは常に保持されます）")
+    parser.add_argument("-y", "--yes", action="store_true", help="確認プロンプトをスキップ")
     parser.add_argument("--channel", type=str, default=None, help="単一チャンネルの slug を指定")
     parser.add_argument(
         "--playlists",
@@ -1324,10 +1368,35 @@ def main():
         print()
         return
 
+    if args.keep_thumbnails:
+        logger.info("--keep-thumbnails: サムネイルは常に保持されるようになりました（このフラグは不要）")
+
+    analyze_thumbnails = collector.benchmark_config.get("gemini_thumbnail_analysis", False)
+    scan_recent = collector.benchmark_config.get("scan_recent", 50)
+    num_channels = len(collector.config.analytics.benchmark.channels)
+
     print("\n=== Benchmark Collector ===")
-    print(f"対象チャンネル: {len(collector.config.analytics.benchmark.channels)}件")
-    print(f"鮮度基準: {collector.benchmark_config.get('freshness_days', 3)}日")
+    print(f"  対象チャンネル: {num_channels} 件")
+    print(f"  走査プール: {scan_recent} 本/ch")
+    print(f"  鮮度基準: {collector.benchmark_config.get('freshness_days', 3)} 日")
+    if args.no_thumbnails:
+        print("  サムネイル分析: OFF（--no-thumbnails）")
+    elif analyze_thumbnails:
+        model = collector.benchmark_config.get("thumbnail_analysis", {}).get("model", "gemini-2.5-flash")
+        print(f"  サムネイル分析: Gemini ({model}) — Vertex AI 課金が発生します")
+    else:
+        print("  サムネイル分析: ON（エージェント — 追加課金なし）")
     print()
+
+    if not args.yes and not args.force:
+        try:
+            answer = input("続行しますか？ [Y/n] ").strip().lower()
+            if answer and answer != "y":
+                print("キャンセルしました")
+                sys.exit(0)
+        except (EOFError, KeyboardInterrupt):
+            print("\nキャンセルしました")
+            sys.exit(0)
 
     # 認証
     collector.initialize()
@@ -1347,12 +1416,15 @@ def main():
         print("[ERROR] データ収集に失敗しました")
         sys.exit(1)
 
-    # サムネイル分析
-    analyze_thumbnails = collector.benchmark_config.get("analyze_thumbnails", True)
+    # サムネイルDL（常時、--no-thumbnails でスキップ）
+    if not args.no_thumbnails:
+        collector.download_thumbnails(data, force=args.force)
+
+    # Gemini 分析（明示的に ON にした場合のみ）
     if analyze_thumbnails and not args.no_thumbnails:
         print("サムネイル分析中（Gemini API）...")
         analyzer = BenchmarkThumbnailAnalyzer(collector.benchmarks_dir)
-        data = analyzer.analyze_thumbnails(data, keep=args.keep_thumbnails)
+        data = analyzer.analyze_thumbnails(data, keep=True)
 
     # JSON 保存
     json_path = collector.save_json(data)
