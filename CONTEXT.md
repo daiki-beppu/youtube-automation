@@ -43,6 +43,10 @@ _Avoid_: thin client, thin wrapper (同一概念。canonical は adapter)
 **registry**:
 feature 名 → {description, schema, service, deps} の data map。**core が所有**し (`packages/core/src/registry.ts`)、CLI / MCP は import して各自のプロトコルへ変換する (ADR-0004)。cli ↔ mcp は相互 import しない。
 
+**DepsMap**:
+service が要求しうる重い依存の型対応表。`config` (ChannelConfig) / `yt` (YouTube Data API client) / `ytAnalytics` (YouTube Analytics API client) を持つ。各 service は `deps` 配列で必要なキーだけを宣言し、`Pick<DepsMap, D>` で compile-time 検査される (ADR-0004 §2)。CLI adapter の `resolveDeps()` が entry.deps を見て lazy に構築する (#993)。
+_Avoid_: dependency injection container (DepsMap は DI container ではなく typed data map)
+
 **tracer**:
 アーキテクチャ規約を確定させるために最初に end-to-end で通す垂直スライス。本プロジェクトでは `tayk skills list` (旧 `yt-skills list`、#732/#842) が該当。
 _Avoid_: PoC (PoC は撤退判定用の別物 #730)
