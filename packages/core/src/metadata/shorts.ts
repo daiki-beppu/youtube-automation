@@ -54,9 +54,9 @@ export const buildShortDescription = (
   config: ChannelConfig,
   { collectionName, ccVideoUrl }: ShortDescriptionOptions
 ): string => {
-  const durationPhrase = formatShortDurationPhrase(config.audio);
+  const durationPhrase = formatShortDurationPhrase(config.publishing.audio);
   const parts = [
-    `${collectionName} (${durationPhrase}) | ${config.meta.channelName}`,
+    `${collectionName} (${durationPhrase}) | ${config.identity.meta.channelName}`,
     "",
   ];
   if (ccVideoUrl) {
@@ -88,11 +88,11 @@ export const buildShortLocalizations = (
   config: ChannelConfig,
   { collectionName, theme, ccVideoUrl }: ShortLocalizationsOptions
 ): Record<string, LocalizedText> => {
-  if (Object.keys(config.localizations.data).length === 0) {
+  if (Object.keys(config.engagement.localizations.data).length === 0) {
     return {};
   }
   const loc = rawLocalizations(config);
-  const { channelName, tagline: defaultTagline } = config.meta;
+  const { channelName, tagline: defaultTagline } = config.identity.meta;
   const result: Record<string, LocalizedText> = {};
 
   for (const lang of loc.supported_languages ?? []) {
