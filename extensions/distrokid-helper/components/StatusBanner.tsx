@@ -19,9 +19,5 @@ export function StatusBanner({ phase, message }: StatusBannerProps) {
   if (phase === null) {
     return null;
   }
-  return (
-    <div className={`rounded border px-3 py-2 text-sm ${PHASE_STYLE[phase]}`}>
-      {message}
-    </div>
-  );
+  return <div className={`rounded border px-3 py-2 text-sm ${PHASE_STYLE[phase]}`}>{message}</div>;
 }

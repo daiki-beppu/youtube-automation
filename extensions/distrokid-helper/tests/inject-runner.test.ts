@@ -38,9 +38,7 @@ function makePayload(trackCount: number, withCover: boolean): ReleasePayload {
         filename: `track-0${i + 1}.mp3`,
         asset_path: `/distrokid/assets/track-0${i + 1}.mp3`,
       })),
-      cover: withCover
-        ? { filename: "main.png", asset_path: "/distrokid/assets/main.png" }
-        : null,
+      cover: withCover ? { filename: "main.png", asset_path: "/distrokid/assets/main.png" } : null,
       release_date: "2026-07-01",
     },
   };
@@ -54,9 +52,7 @@ interface ChannelCall {
 
 // fake InjectChannel。送信を記録し、stopped フラグと「fetch 中に発火する hook」を
 // テスト側から制御できるようにする（fetch 中の停止 race を再現するため）。
-function makeChannel(options?: {
-  onFetch?: (assetPath: string) => void;
-}): {
+function makeChannel(options?: { onFetch?: (assetPath: string) => void }): {
   channel: InjectChannel;
   calls: ChannelCall[];
   fetched: string[];

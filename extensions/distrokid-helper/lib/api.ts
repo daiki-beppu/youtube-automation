@@ -69,11 +69,7 @@ export async function fetchCollectionRelease(
 // fetch は popup（chrome-extension:// origin）で行う必要がある（asset-transfer.ts 参照）。
 // assetPath は接頭辞 "/distrokid/assets/" または "/collections/<id>/distrokid/assets/" 込みのため
 // baseUrl と連結するだけでよい（dir mode の collection-scoped asset_path も同形式）。
-export async function fetchAsset(
-  baseUrl: string,
-  assetPath: string,
-  filename: string,
-): Promise<SerializedAsset> {
+export async function fetchAsset(baseUrl: string, assetPath: string, filename: string): Promise<SerializedAsset> {
   const url = `${normalizeBaseUrl(baseUrl)}${assetPath}`;
   const response = await fetch(url, { method: "GET" });
 

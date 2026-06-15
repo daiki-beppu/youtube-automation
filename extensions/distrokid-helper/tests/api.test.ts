@@ -12,12 +12,7 @@
 //     （filename / mimeType / base64）を返す。content へは直列化して転送する（CORS 回避）。
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import {
-  fetchRelease,
-  fetchCollectionRelease,
-  fetchAsset,
-  ReleaseUnavailableError,
-} from "../lib/api";
+import { fetchRelease, fetchCollectionRelease, fetchAsset, ReleaseUnavailableError } from "../lib/api";
 import { decodeAsset } from "../lib/asset-transfer";
 import type { ReleasePayload } from "../lib/types";
 
@@ -92,10 +87,7 @@ describe("fetchRelease", () => {
 
     // Then
     expect(result).toEqual(SAMPLE_PAYLOAD);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:7873/distrokid/release.json",
-      expect.anything(),
-    );
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:7873/distrokid/release.json", expect.anything());
   });
 
   it("baseUrl 末尾スラッシュを正規化し二重スラッシュを作らない", async () => {
@@ -106,10 +98,7 @@ describe("fetchRelease", () => {
     await fetchRelease("http://localhost:7873/");
 
     // Then
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:7873/distrokid/release.json",
-      expect.anything(),
-    );
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:7873/distrokid/release.json", expect.anything());
   });
 
   it("404 のとき ReleaseUnavailableError を throw する（要件 #16: 無効チャンネルのガイダンス）", async () => {
@@ -117,9 +106,7 @@ describe("fetchRelease", () => {
     fetchMock.mockResolvedValue(jsonResponse(404, {}));
 
     // When / Then
-    await expect(fetchRelease("http://localhost:7873")).rejects.toBeInstanceOf(
-      ReleaseUnavailableError,
-    );
+    await expect(fetchRelease("http://localhost:7873")).rejects.toBeInstanceOf(ReleaseUnavailableError);
   });
 
   it("404 以外の非 OK では汎用 Error を throw する", async () => {
@@ -139,11 +126,7 @@ describe("fetchCollectionRelease", () => {
     fetchMock.mockResolvedValue(jsonResponse(200, SAMPLE_PAYLOAD));
 
     // When
-    const result = await fetchCollectionRelease(
-      "http://localhost:7873",
-      "20260526-sg-col",
-      "disc1",
-    );
+    const result = await fetchCollectionRelease("http://localhost:7873", "20260526-sg-col", "disc1");
 
     // Then: collection-scoped パスへ要求する。
     expect(result).toEqual(SAMPLE_PAYLOAD);
@@ -158,9 +141,9 @@ describe("fetchCollectionRelease", () => {
     fetchMock.mockResolvedValue(jsonResponse(404, {}));
 
     // When / Then
-    await expect(
-      fetchCollectionRelease("http://localhost:7873", "col-id", "disc1"),
-    ).rejects.toBeInstanceOf(ReleaseUnavailableError);
+    await expect(fetchCollectionRelease("http://localhost:7873", "col-id", "disc1")).rejects.toBeInstanceOf(
+      ReleaseUnavailableError,
+    );
   });
 
   it("404 以外の非 OK では汎用 Error を throw する", async () => {
@@ -168,11 +151,7 @@ describe("fetchCollectionRelease", () => {
     fetchMock.mockResolvedValue(jsonResponse(500, {}));
 
     // When / Then
-    const promise = fetchCollectionRelease(
-      "http://localhost:7873",
-      "col-id",
-      "disc1",
-    );
+    const promise = fetchCollectionRelease("http://localhost:7873", "col-id", "disc1");
     await expect(promise).rejects.toThrow();
     await expect(promise).rejects.not.toBeInstanceOf(ReleaseUnavailableError);
   });
@@ -185,11 +164,7 @@ describe("fetchAsset", () => {
     fetchMock.mockResolvedValue(blobResponse(200, blob));
 
     // When
-    const asset = await fetchAsset(
-      "http://localhost:7873",
-      "/distrokid/assets/track-01.mp3",
-      "track-01.mp3",
-    );
+    const asset = await fetchAsset("http://localhost:7873", "/distrokid/assets/track-01.mp3", "track-01.mp3");
 
     // Then: 転送用に直列化されている（File ではなく base64）
     expect(asset.filename).toBe("track-01.mp3");
@@ -210,17 +185,10 @@ describe("fetchAsset", () => {
     fetchMock.mockResolvedValue(blobResponse(200, blob));
 
     // When
-    await fetchAsset(
-      "http://localhost:7873/",
-      "/distrokid/assets/main.png",
-      "main.png",
-    );
+    await fetchAsset("http://localhost:7873/", "/distrokid/assets/main.png", "main.png");
 
     // Then: 末尾スラッシュ正規化 + asset_path 連結（二重スラッシュ無し）
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:7873/distrokid/assets/main.png",
-      expect.anything(),
-    );
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:7873/distrokid/assets/main.png", expect.anything());
   });
 
   it("非 OK では Error を throw する", async () => {
@@ -229,8 +197,6 @@ describe("fetchAsset", () => {
     fetchMock.mockResolvedValue(blobResponse(404, blob));
 
     // When / Then
-    await expect(
-      fetchAsset("http://localhost:7873", "/distrokid/assets/missing.mp3", "missing.mp3"),
-    ).rejects.toThrow();
+    await expect(fetchAsset("http://localhost:7873", "/distrokid/assets/missing.mp3", "missing.mp3")).rejects.toThrow();
   });
 });

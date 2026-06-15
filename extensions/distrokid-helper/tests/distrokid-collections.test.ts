@@ -61,12 +61,7 @@ afterEach(() => {
 describe("distrokidReleaseRoute", () => {
   it("Given collection_id と disc When 組み立てる Then 正しいパスを返す", () => {
     // ルートの形式は `/collections/<id>/distrokid/<disc>/release.json` (#934 契約)。
-    expect(
-      distrokidReleaseRoute(
-        "20260526-soulful-grooves-coding-focus-collection",
-        "disc1-coding-focus-vol1",
-      ),
-    ).toBe(
+    expect(distrokidReleaseRoute("20260526-soulful-grooves-coding-focus-collection", "disc1-coding-focus-vol1")).toBe(
       "/collections/20260526-soulful-grooves-coding-focus-collection/distrokid/disc1-coding-focus-vol1/release.json",
     );
   });
@@ -83,9 +78,7 @@ describe("distrokidReleaseRoute", () => {
 describe("fetchDistrokidCollections", () => {
   it("200 のとき DistrokidCollectionSummary[] を返す", async () => {
     // Given
-    fetchMock.mockResolvedValue(
-      jsonResponse(200, [DISC_UNRELEASED, DISC_RELEASED]),
-    );
+    fetchMock.mockResolvedValue(jsonResponse(200, [DISC_UNRELEASED, DISC_RELEASED]));
 
     // When
     const result = await fetchDistrokidCollections(BASE_URL);
@@ -93,9 +86,7 @@ describe("fetchDistrokidCollections", () => {
     // Then
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual(DISC_UNRELEASED);
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}/distrokid/collections`,
-    );
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/distrokid/collections`);
   });
 
   it("空配列 JSON のとき 0 件の配列を返す（0 件 = 未配信 disc なしの正常ケース）", async () => {
@@ -122,9 +113,7 @@ describe("fetchDistrokidCollections", () => {
     fetchMock.mockResolvedValue(jsonResponse(500, {}));
 
     // When / Then
-    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow(
-      "HTTP 500",
-    );
+    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow("HTTP 500");
   });
 
   it("配列でない JSON のとき throw する", async () => {
@@ -132,9 +121,7 @@ describe("fetchDistrokidCollections", () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { error: "not an array" }));
 
     // When / Then
-    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow(
-      "配列ではない JSON が返りました。",
-    );
+    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow("配列ではない JSON が返りました。");
   });
 });
 
