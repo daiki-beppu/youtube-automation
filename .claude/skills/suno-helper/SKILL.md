@@ -55,7 +55,11 @@ capture フラグが無いと:
 
 collection 単体パスを直接渡す single file mode は playlist phase がスキップされるため本 skill では使わない。dir mode で読まれるのは **`-collection` suffix を持つ dir のみ**。それ以外（例: `01-master` や雑多ファイル）は無視される。
 
-確認: 起動後に `curl http://localhost:7873/collections` が JSON array を返せば dir mode で起動できている（404 が返るのは single file mode で起動してしまった状態）。各 collection の `"mapped"` フィールドが `true` / `false` を返していれば capture フラグも有効。
+起動後の確認（**3 点すべてパスすること**）:
+
+1. `curl -s http://localhost:7873/collections | python3 -m json.tool | head -20` が JSON array を返す（404 なら single file mode で起動してしまっている）
+2. 各 collection に `"mapped": true/false` フィールドがある（全件 `"mapped"` キー自体が無い → capture フラグ忘れ）
+3. 各 collection に `"playlist_name": "<prefix> | <theme>"` フィールドがある（`null` → **下流 venv のパッケージが古い**。`uv lock --upgrade-package youtube-channels-automation && uv sync` でサーバーを再起動する）
 
 ### Step 2. Chrome の popup を開く
 
@@ -136,8 +140,11 @@ popup 上部に進捗が出る:
 - **誤って single file mode で起動すると playlist phase がスキップされる**。`/collections` 404 が返り、popup 側で derivedPlaylistName が undefined になり playlist phase に分岐しない。Step 1 の `curl /collections` 確認を必ず通すこと。
 - **Custom Mode + Instrumental 設定を毎回確認**。Suno が UI 状態を覚えていないことがあり、Lyrics 欄が消えていると Step 5 開始直後に ERROR で止まる。
 - **Cmd+P を手動で押す必要はない**。拡張は実際の keydown を press_key 経由で送る実装。dispatchEvent では Suno listener に届かない（isTrusted=false）ため、user 側で打鍵してはいけない（衝突する）。
-- **dir 名規約は `<YYYYMMDD>-<channel>-<theme>-collection`**。dir 名から theme が抽出され `extractPlaylistName(id, theme)` で playlist 名が組まれる。独自規約で切ると playlist 名が壊れる。
+- **dir 名規約は `<YYYYMMDD>-<channel>-<theme>-collection`**。サーバーが `--playlist-capture-prefix` と dir 名から `playlist_name`（`<prefix> | <theme>`）を算出し、拡張はその値をそのまま使う。独自規約で切ると playlist 名が壊れる。
 - **7873 / 7874 を並走させる場合は明示的に port を分ける**。両方を 7873 で立てると後者が起動失敗するので、必ず `--port` を指定して popup の URL も書き換える。
+- **下流チャンネルの venv が古いとサーバーの `playlist_name` が `null` になる**。automation リポに機能追加した後は下流で `uv lock --upgrade-package youtube-channels-automation && uv sync` を実行し、サーバーを再起動する。Step 1 の確認 3 で検出できる。
+- **auto-capture 後にコレクションが消えない場合**: (1) サーバーが起動しているか、(2) `suno-playlists.json` にエントリが書き込まれたか、(3) Suno の playlist 名が `<prefix> | <theme>` 形式になっているか（旧バグで `soulful | grooves-theme` のように壊れている場合は Suno 側で Edit Playlist Details からリネームする）。
+- **Suno が UI/URL を変更した場合の対処**: auto-capture は `https://suno.com/me/playlists` を開いて `a[href^="/playlist/"]` をスクレイプする。Suno の URL 変更やセレクタ変更で 0 件になったら、(1) DevTools で `document.querySelectorAll('a[href^="/playlist/"]').length` を確認、(2) 0 件なら `background.ts` の `SUNO_ME_URL` や `shared/playlist-scrape.ts` の `PLAYLIST_ANCHOR_SELECTOR` を修正する。
 
 ## Rules
 
