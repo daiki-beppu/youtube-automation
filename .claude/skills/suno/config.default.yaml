@@ -13,7 +13,50 @@ genre_line: ""
 exclude_styles: "heavy metal, aggressive, EDM, dubstep, techno, industrial, white noise, orchestral, rain sounds, vinyl crackle, ambient noise"
 
 # Style Influence (0-100、高いほどジャンル指定が強く反映される)
-style_influence: 85
+style_influence: 95
+
+# Weirdness (0-100、高いほど予測不能な展開が増える)
+weirdness: 10
+
+# 歌詞構造の自動タグ付け ([Verse], [Chorus] 等を AI が自動挿入)
+auto_lyrics_structure: true
+
+# Style 欄の文字数上限 (Suno UI の制約に合わせる)
+style_char_limit: 120
+
+# Style テキストに含めてはならないアーティスト名 (Suno ポリシー / ベストプラクティス)
+# 著名アーティスト名を Style に入れると生成がブロックされるか品質が低下する
+banned_artists:
+  - Drake
+  - Taylor Swift
+  - The Weeknd
+  - Beyonce
+  - Kanye West
+  - Eminem
+  - Rihanna
+  - Ed Sheeran
+  - Ariana Grande
+  - Justin Bieber
+  - Billie Eilish
+  - Post Malone
+  - Dua Lipa
+  - Bad Bunny
+  - Travis Scott
+  - BTS
+  - Adele
+  - Bruno Mars
+  - Lady Gaga
+  - Coldplay
+  - Imagine Dragons
+  - The Beatles
+  - Pink Floyd
+  - Led Zeppelin
+  - Radiohead
+  - Daft Punk
+  - Aphex Twin
+  - Boards of Canada
+  - Nujabes
+  - J Dilla
 
 # Model (V5 推奨)
 model: V5
