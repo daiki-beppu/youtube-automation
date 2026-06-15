@@ -31,6 +31,16 @@ _Avoid_: 重大バグ (範囲が曖昧)
 マイルストーンゲート所属のバッジ。**[T1]** = dogfood ブロッカー (全完了で M1) / **[T2]** = cutover ブロッカー (合格は smoke のみ) / **[T3]** = port せず削除。「どのゲートに属すか」を表す。
 _Avoid_: 優先度, priority (Tier は priority ではなくゲート所属)
 
+## 設定・データ形式
+
+**config format**:
+`packages/core` が読み書きするファイルはすべて JSON。YAML パーサー依存を持たない。takt / CI / lefthook 等の外部ツール所有ファイルは各ツールの規約に従う (YAML 等)。
+_Avoid_: YAML / JSONC / JSON5 を core が読み書きするファイルに使うこと
+
+**skill config**:
+チャンネル固有のスキル挙動パラメータ。`config/skills/<skill>.json` のフルファイル 1 本。default + override の deep merge は行わず、zod schema の `.default()` が省略キーを補完する。
+_Avoid_: config.default.yaml, deep merge (Python 版の旧方式)
+
 ## アーキテクチャ
 
 **service**:
