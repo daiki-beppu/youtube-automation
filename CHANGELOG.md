@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(doctor)`: `yt-doctor` に ffmpeg/ffprobe の存在チェックを追加し、新規カテゴリ `system` を導入した。動画パイプラインの中核依存が doctor で事前検証されておらず、未インストール環境では動画処理段で初めて `FileNotFoundError` になっていた問題を解消。`shutil.which` で検出し、見つからない場合は `brew install ffmpeg` / `apt-get install -y ffmpeg` のインストール手順を案内する。
+
 ### Fixed
 
 - `fix(benchmark)`: ベンチマーク収集のサムネイル分析で Gemini 2.5 Pro（Vertex AI）をデフォルトで全動画に呼び出しており、2チャンネル分の初回収集で ¥6,000 の課金が発生していた問題を修正した。サムネイル分析の実行主体を Gemini API からエージェントの画像読み取り機能（Read ツール）に移行した（追加課金なし）。設定キーを `analyze_thumbnails` → `gemini_thumbnail_analysis`（既定 `false`）にリネームし、明示的に Gemini を使う場合もデフォルトモデルを Pro → Flash に変更（コスト 1/10〜1/20）。あわせて実行前のコストプレビュー表示、Gemini 呼び出しの cost_tracker 記録（`"analysis"` カテゴリ新設）、`-y` 確認スキップフラグを追加した。

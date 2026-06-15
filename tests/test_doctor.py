@@ -270,13 +270,13 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 11 api + 1 channel + 2 data + 1 upload = 15
-        assert len(payload["checks"]) == 15
+        # 2 system + 11 api + 1 channel + 2 data + 1 upload = 17
+        assert len(payload["checks"]) == 17
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
             assert "category" in c
-            assert c["category"] in ("api", "channel", "data", "upload")
+            assert c["category"] in ("system", "api", "channel", "data", "upload")
 
     def test_human_output(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
@@ -757,11 +757,11 @@ class TestUploadRequiredScopes:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_15_checks(self, monkeypatch, tmp_path):
-        """11 api + 1 channel + 2 data + 1 upload = 計 15 件."""
+    def test_returns_17_checks(self, monkeypatch, tmp_path):
+        """2 system + 11 api + 1 channel + 2 data + 1 upload = 計 17 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 15
+        assert len(results) == 17
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -780,17 +780,20 @@ class TestRunAllChecksExtended:
         assert "benchmark_data" in ids
         assert "upload_ready" in ids
 
-    def test_category_order_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
-        """runway 順序: api → channel → data → upload."""
+    def test_category_order_system_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
+        """runway 順序: system → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         categories = [r.category for r in results]
 
+        last_system = max(i for i, c in enumerate(categories) if c == "system")
+        first_api = next(i for i, c in enumerate(categories) if c == "api")
         last_api = max(i for i, c in enumerate(categories) if c == "api")
         first_channel = next(i for i, c in enumerate(categories) if c == "channel")
         first_data = next(i for i, c in enumerate(categories) if c == "data")
         first_upload = next(i for i, c in enumerate(categories) if c == "upload")
 
+        assert last_system < first_api
         assert last_api < first_channel
         assert first_channel < first_data
         assert first_data < first_upload
@@ -825,13 +828,14 @@ class TestRunAllChecksExtended:
 
 
 class TestRenderTableCategories:
-    def test_all_four_category_labels_in_output(self, monkeypatch, tmp_path):
-        """render_table 出力に api / channel / data / upload のカテゴリラベルが含まれる."""
+    def test_all_five_category_labels_in_output(self, monkeypatch, tmp_path):
+        """render_table 出力に system / api / channel / data / upload のカテゴリラベルが含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
         lower = output.lower()
+        assert "system" in lower
         assert "api" in lower
         assert "channel" in lower
         assert "data" in lower
@@ -849,18 +853,20 @@ class TestRenderTableCategories:
         assert "upload_ready" in output
 
     def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):
-        """出力内でのカテゴリ出現順: api → channel → data → upload."""
+        """出力内でのカテゴリ出現順: system → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
 
         # 各 check id の出現位置で順序を確認する（category label の形式に依存しない）
+        pos_ffmpeg = output.find("ffmpeg")
         pos_gcloud = output.find("gcloud")
         pos_channel_config = output.find("channel_config")
         pos_analytics = output.find("analytics_report")
         pos_upload_ready = output.find("upload_ready")
 
+        assert pos_ffmpeg < pos_gcloud
         assert pos_gcloud < pos_channel_config
         assert pos_channel_config < pos_analytics
         assert pos_analytics < pos_upload_ready
