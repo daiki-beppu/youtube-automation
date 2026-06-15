@@ -1,25 +1,36 @@
 # automation リポジトリの takt 設定
 # provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
 draft_pr: false
-base_branch: main
+base_branch: feat/ts-rewrite  # cutover まで ts-rewrite 向け (元: main)
 
-# 全 persona を Claude/opus に固定する（本リポジトリは品質側に振り、Codex への依存を切る）。
-# - planner / 各 reviewer はグローバル設定でもともと claude/opus
-# - coder はグローバル設定では codex 継承だが、本リポジトリでは Claude/opus に統一
-# rate limit や保守判断で Codex 継承へ戻したい場合は、`coder:` ブロックを削除すれば global の codex に戻る。
+# 全 persona を claude-terminal/opus に統一。
+# claude (SDK) だと reviewer が "Timed out waiting for Claude terminal session id" で落ちるため、
+# 全ペルソナを claude-terminal に揃える。
 persona_providers:
   planner:
-    provider: claude
+    provider: claude-terminal
     model: opus
   coder:
-    provider: claude
+    provider: claude-terminal
     model: opus
   architecture-reviewer:
-    provider: claude
+    provider: claude-terminal
     model: opus
   ai-antipattern-reviewer:
-    provider: claude
+    provider: claude-terminal
+    model: opus
+  pure-review:
+    provider: claude-terminal
+    model: opus
+  pure-reviewer:
+    provider: claude-terminal
+    model: opus
+  coding-review:
+    provider: claude-terminal
+    model: opus
+  coding-reviewer:
+    provider: claude-terminal
     model: opus
   supervisor:
-    provider: claude
+    provider: claude-terminal
     model: opus
