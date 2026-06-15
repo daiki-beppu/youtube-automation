@@ -140,3 +140,8 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

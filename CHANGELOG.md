@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `fix(suno-helper)`: auto-capture が Suno の URL 構造変更（`/me` → `/me/playlists`）に追従していなかったため、playlist mapping が `suno-playlists.json` に書き込まれず処理済みコレクションがドロップダウンに残り続けていた問題を修正した。併せて `captureFromTab` で SPA 未描画の空結果もリトライ対象にした。
 - `fix(suno-helper)`: overlay パネルのコンテンツが画面外にはみ出してスクロールできなかった問題を修正した。`max-height: calc(100vh - 120px)` + `overflow-y: auto` を追加。
+- `fix(suno-helper)`: マルチワード prefix（例: `soulful-grooves`）のチャンネルで playlist 名の境界分割が壊れ、Suno に `soulful | grooves-wah-groove` のような誤った playlist 名で作成されていた問題を修正した。サーバー側で `derive_playlist_name` を使って正しい `<prefix> | <theme>` を算出し、`/collections` API の `playlist_name` フィールドとして返すようにした。拡張はサーバーの値を優先使用し、旧サーバーでは `extractPlaylistName` fallback で後方互換を維持する。
+- `docs(suno-helper)`: SKILL.md にサーバー起動後の 3 点確認（mapped / playlist_name / dir mode）、下流 venv 更新手順、Suno URL/DOM 変更時のトラブルシュート手順を追加した。
 - `fix(suno-helper)`: SKILL.md のサーバー起動コマンドに `--playlist-capture-root` / `--playlist-capture-prefix` フラグが欠落しており、auto-mapping（mapped 全件 false）と手動 playlist sync（POST 404）が機能しなかった問題を修正した。
 - `fix(benchmark)`: ベンチマーク収集のサムネイル分析で Gemini 2.5 Pro（Vertex AI）をデフォルトで全動画に呼び出しており、2チャンネル分の初回収集で ¥6,000 の課金が発生していた問題を修正した。サムネイル分析の実行主体を Gemini API からエージェントの画像読み取り機能（Read ツール）に移行した（追加課金なし）。設定キーを `analyze_thumbnails` → `gemini_thumbnail_analysis`（既定 `false`）にリネームし、明示的に Gemini を使う場合もデフォルトモデルを Pro → Flash に変更（コスト 1/10〜1/20）。あわせて実行前のコストプレビュー表示、Gemini 呼び出しの cost_tracker 記録（`"analysis"` カテゴリ新設）、`-y` 確認スキップフラグを追加した。
 

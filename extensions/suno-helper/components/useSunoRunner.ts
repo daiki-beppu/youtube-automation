@@ -110,16 +110,15 @@ export function useSunoRunner(): RunnerState {
   const [resumeDismissed, setResumeDismissed] = useState(false);
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
-  // collection id は server 契約上 `<date>-<channel>-<theme>-collection` 形式。channel が
-  // 複数 word (例: `soulful-grooves`) を含む場合があり id 単体では境界判定不能なため、
-  // `/collections` の `name` field (theme) を渡して逆向きに境界を確定する。
-  // 既知の server 仕様: `name` は現在 dir 名 parts[2] をそのまま返すため末尾 `-collection`
-  // を含む。extractPlaylistName 側の `endsWith("-" + theme)` 照合を通すため、ここで剥がす
-  // (server 側の修正は別 issue、剥がし処理は冪等なので将来 server 修正後も無害)。
+  // サーバーが playlist_name を返す場合はそれを優先する（prefix を使った正確な境界分割）。
+  // 旧サーバー（playlist_name 未返却）は extractPlaylistName fallback で後方互換を維持する。
   const derivedPlaylistName = useMemo(() => {
     const selected = collections.find((c) => c.id === selectedCollectionId);
     if (!selected) {
       return undefined;
+    }
+    if (selected.playlist_name) {
+      return selected.playlist_name;
     }
     const theme = selected.name.replace(/-collection$/, "");
     return extractPlaylistName(selected.id, theme);
