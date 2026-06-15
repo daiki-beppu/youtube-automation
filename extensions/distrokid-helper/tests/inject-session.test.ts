@@ -59,8 +59,7 @@ function makeInjector(): { injector: Injector; calls: InjectorCall[] } {
     injectStaticFields: async () => {
       calls.push({ kind: "static" });
     },
-    injectTrackFile: (trackIndex, file) =>
-      calls.push({ kind: "trackFile", trackIndex, fileName: file.name }),
+    injectTrackFile: (trackIndex, file) => calls.push({ kind: "trackFile", trackIndex, fileName: file.name }),
     injectCover: (file) => calls.push({ kind: "cover", fileName: file.name }),
     injectAiDisclosure: async () => {
       calls.push({ kind: "ai" });

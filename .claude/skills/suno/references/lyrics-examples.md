@@ -126,3 +126,75 @@ lyrics_generation:
 ```
 
 `template_reference` は `references/lyrics-examples.md`（このファイル）内のどの例をベースにするかの識別子。
+
+## ひらがな歌詞ガイド（日本語ボーカル）
+
+Suno は漢字の読みを頻繁に誤る（例: 「雨」→「あめ」ではなく「う」と読む）。
+`lyrics_guidelines.language: ja` の場合は**ひらがな表記を基本**とし、カタカナは外来語のみに限定する。
+
+### 例: ひらがな歌詞
+
+```
+[Verse 1]
+あさのひかりが まどからさして
+つめたいゆかに あしあとのこす
+きのうのことは もうわすれたの
+コーヒーのかおり ゆげがのぼる
+
+[Chorus]
+あるいていこう あるいていこう
+どこまでもつづく このみちを
+
+[Verse 2]
+ゆうやけぞらに とりがとんでく
+かぜにふかれて かみがゆれてる
+なにもいわずに てをつないだら
+せかいがすこし やさしくなった
+
+[Chorus]
+あるいていこう あるいていこう
+どこまでもつづく このみちを
+
+[Bridge]
+まよったときは たちどまって
+そらをみあげて いきをすって
+
+[Outro]
+あるいていこう...
+```
+
+**NG 例（漢字混じり）:**
+```
+朝の光が 窓から差して  ← Suno が「あさ」を「ちょう」と読む可能性
+冷たい床に 足跡残す    ← 「ゆか」を「しょう」と読む可能性
+```
+
+## Mixing Notes / Instrument Notes（インストモード）
+
+インストモードでも Lyrics 欄に Mixing Notes と Instrument Notes を記述することで、
+Suno のミキシングと楽器バランスを誘導できる。`[Instrumental]` タグの前に配置する。
+
+### 例: Mixing Notes 付きインスト歌詞
+
+```
+[Mixing Notes]
+Keep the bass prominent and warm
+Piano sits behind the bass, gentle and distant
+Light vinyl texture, no crackling
+
+[Instrument Notes]
+Lead: felt-damped upright piano
+Bass: deep fretless bass, front of mix
+Rhythm: brushed jazz drums, sparse
+Texture: warm tape saturation
+
+[Instrumental]
+
+[Extended Outro]
+```
+
+**注意**:
+- `[Mixing Notes]` と `[Instrument Notes]` は Suno の公式タグではないが、Lyrics 欄に自然言語で書くと Suno が参考にする
+- `auto_lyrics_structure: true` の場合、`yt-generate-suno` が `[Instrumental]` と `[Extended Outro]` を自動付加する
+- Mixing Notes はバランスの指示（何が前面、何が背面）に集中する
+- Instrument Notes は Quality Rules の楽器形容詞ルールに従って記述する

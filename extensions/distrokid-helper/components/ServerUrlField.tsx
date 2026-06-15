@@ -6,12 +6,7 @@ export interface ServerUrlFieldProps {
 }
 
 // サーバー URL 入力 + データ取得ボタン。
-export function ServerUrlField({
-  value,
-  disabled,
-  onChange,
-  onFetch,
-}: ServerUrlFieldProps) {
+export function ServerUrlField({ value, disabled, onChange, onFetch }: ServerUrlFieldProps) {
   return (
     <div className="flex flex-col gap-2">
       <label className="text-xs font-medium text-gray-600" htmlFor="server-url">

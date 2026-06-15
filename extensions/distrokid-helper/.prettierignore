@@ -1,0 +1,8 @@
+# 生成物・依存（フォーマット対象外）
+.output/
+.wxt/
+dist/
+node_modules/
+test-results/
+playwright-report/
+pnpm-lock.yaml

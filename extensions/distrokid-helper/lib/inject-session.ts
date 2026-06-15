@@ -47,9 +47,7 @@ export class InjectSession {
   track(trackIndex: number, asset: SerializedAsset): void {
     const { tracks } = this.requirePayload().release;
     if (trackIndex < 0 || trackIndex >= tracks.length) {
-      throw new Error(
-        `trackIndex が範囲外です: ${trackIndex}（tracks=${tracks.length}）`,
-      );
+      throw new Error(`trackIndex が範囲外です: ${trackIndex}（tracks=${tracks.length}）`);
     }
     this.report(PHASES.INJECTING, `曲ファイルを注入中: ${asset.filename}`);
     this.injector.injectTrackFile(trackIndex, decodeAsset(asset));

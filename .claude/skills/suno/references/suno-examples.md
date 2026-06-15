@@ -71,3 +71,22 @@ no rain sound effects, no white noise, no ambient noise
 ```
 rain sounds, vinyl crackle, white noise, ambient noise
 ```
+
+## Instrument Adjective Pairs (Bad/Good)
+
+楽器名だけでは Suno の生成が不安定になる。必ず音響的な形容詞を付けること（`config/skills/suno.yaml::banned_adjective_free_instruments` に該当する楽器名は `yt-generate-suno` が警告する）。
+
+| Bad (vague) | Good (descriptive) |
+|---|---|
+| guitar | fingerpicked acoustic guitar |
+| piano | felt-damped upright piano |
+| bass | deep fretless bass |
+| drums | brushed jazz drums |
+| synth | warm analog synth pad |
+| strings | lush chamber strings |
+| trumpet | muted jazz trumpet |
+| flute | breathy wooden flute |
+| organ | vintage Hammond organ |
+| cello | bowed solo cello |
+
+> **原則**: 楽器名に最低 1 つの修飾語（音色・奏法・素材・時代）を付ける。Style 欄で楽器を裸で書くと Suno が汎用音色を選択し、意図した音像から外れる。

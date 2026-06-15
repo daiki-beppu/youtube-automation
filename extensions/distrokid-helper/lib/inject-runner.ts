@@ -32,10 +32,7 @@ export interface InjectChannel {
 
 // 注入を逐次実行する。停止要求はループ境界と各 send 直前で確認し、確認後は以降の送信を
 // 打ち切る（return）。fetch 中の停止に備えて send 直前で再チェックするのが停止 race 修正の核。
-export async function runInjection(
-  payload: ReleasePayload,
-  channel: InjectChannel,
-): Promise<void> {
+export async function runInjection(payload: ReleasePayload, channel: InjectChannel): Promise<void> {
   const { release } = payload;
   await channel.start(payload);
 
@@ -60,10 +57,7 @@ export async function runInjection(
   }
   if (release.cover !== null) {
     channel.setMessage(`アセットを取得中: ${release.cover.filename}`);
-    const asset = await channel.fetchAsset(
-      release.cover.asset_path,
-      release.cover.filename,
-    );
+    const asset = await channel.fetchAsset(release.cover.asset_path, release.cover.filename);
     // track ループと同様、fetch 中の停止に備えて send 直前に再チェックする。
     if (channel.isStopped()) {
       return;

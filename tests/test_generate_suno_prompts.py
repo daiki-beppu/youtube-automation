@@ -564,11 +564,14 @@ def test_build_prompt_entries_name_combines_jp_and_en(channel_dir, tmp_path):
 
 
 def test_build_prompt_entries_instrumental_has_empty_lyrics(channel_dir, tmp_path):
-    """Given instrumental モード
+    """Given instrumental モード + auto_lyrics_structure: false
     When lyrics を読む
     Then 空文字（キーは常に存在し、None ではない）。
+
+    auto_lyrics_structure が true (default) の場合は [Instrumental] + [Extended Outro] が
+    自動付加されるため、空文字を期待するテストでは明示的に false にする。
     """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", auto_lyrics_structure=False)
     patterns_path = _write_minimal_patterns(tmp_path)
 
     entries = build_prompt_entries(patterns_path)
@@ -608,11 +611,11 @@ def test_build_prompt_entries_style_excludes_exclude_styles(channel_dir, tmp_pat
 
 
 def test_build_prompt_entries_vocal_includes_rstripped_lyrics(channel_dir, tmp_path):
-    """Given vocal モード + 末尾改行付き lyrics
+    """Given vocal モード + 末尾改行付き lyrics + auto_lyrics_structure: false
     When lyrics を読む
     Then rstrip された歌詞本文が入る。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
 
     entries = build_prompt_entries(patterns_path)
@@ -1105,7 +1108,7 @@ def test_md_shows_default_style_influence_but_json_omits_it(channel_dir, tmp_pat
 
     Given channel override が genre_line のみ (advanced 無し)
     When MD と JSON を生成
-    Then MD は merged の Style Influence (default 85%) を表示するが、JSON entry は
+    Then MD は merged の Style Influence (default 95%) を表示するが、JSON entry は
          style_influence キーを持たない (既存 MD 出力は無改修)。
     """
     _write_suno_override(channel_dir, genre_line="lo-fi jazz")
@@ -1114,7 +1117,7 @@ def test_md_shows_default_style_influence_but_json_omits_it(channel_dir, tmp_pat
     md = generate(patterns_path)
     entries = build_prompt_entries(patterns_path)
 
-    assert "| Style Influence | 85% |" in md
+    assert "| Style Influence | 95% |" in md
     assert "style_influence" not in entries[0]
 
 

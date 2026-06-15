@@ -40,10 +40,7 @@ function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
 }
 
 // 取得済み blob を転送用に直列化する（popup 側で実行）。
-export async function encodeAsset(
-  filename: string,
-  blob: Blob,
-): Promise<SerializedAsset> {
+export async function encodeAsset(filename: string, blob: Blob): Promise<SerializedAsset> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   return { filename, mimeType: blob.type, base64: bytesToBase64(bytes) };
 }

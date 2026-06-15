@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -34,7 +35,7 @@ class CheckResult:
     id: str
     status: str  # ok / warn / fail / unknown
     message: str
-    category: str = "api"  # api / channel / data / upload
+    category: str = "api"  # system / api / channel / data / upload
     next_action: Optional[dict] = None
 
 
@@ -106,6 +107,47 @@ def _check_data_files(
 
 
 # --- checks ---
+
+
+def check_ffmpeg() -> CheckResult:
+    path = shutil.which("ffmpeg")
+    if not path:
+        return CheckResult(
+            id="ffmpeg",
+            status="fail",
+            category="system",
+            message="ffmpeg が見つからない",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "macOS: `brew install ffmpeg` / "
+                    "Ubuntu/Debian: `sudo apt-get install -y ffmpeg` / "
+                    "その他: https://ffmpeg.org/download.html を参照"
+                ),
+            },
+        )
+    return CheckResult(id="ffmpeg", status="ok", category="system", message=f"ffmpeg found: {path}")
+
+
+def check_ffprobe() -> CheckResult:
+    path = shutil.which("ffprobe")
+    if not path:
+        return CheckResult(
+            id="ffprobe",
+            status="fail",
+            category="system",
+            message="ffprobe が見つからない",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "ffprobe は通常 ffmpeg に同梱されます。"
+                    "macOS: `brew install ffmpeg` / "
+                    "Ubuntu/Debian: `sudo apt-get install -y ffmpeg` / "
+                    "その他: https://ffmpeg.org/download.html を参照"
+                ),
+            },
+        )
+    return CheckResult(id="ffprobe", status="ok", category="system", message=f"ffprobe found: {path}")
 
 
 def check_gcloud() -> CheckResult:
@@ -655,6 +697,8 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
 
 def run_all_checks(channel_dir: Path) -> list[CheckResult]:
     return [
+        check_ffmpeg(),
+        check_ffprobe(),
         check_gcloud(),
         check_gcloud_account(),
         check_gcp_project(channel_dir),

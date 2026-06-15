@@ -79,6 +79,10 @@ jobs:
           cache-dependency-path: extensions/distrokid-helper/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Format check
+        run: pnpm format:check
       - name: Typecheck
         run: pnpm compile
       - name: Build
