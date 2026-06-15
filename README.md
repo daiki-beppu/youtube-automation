@@ -247,4 +247,4 @@ uv run ruff check .
 
 ## License
 
-[MIT](LICENSE)
+This project is **source-available**. You may view and study the code for educational and personal purposes, but redistribution, commercial use, and modification are prohibited without prior written permission. See [LICENSE](LICENSE) for full terms.
