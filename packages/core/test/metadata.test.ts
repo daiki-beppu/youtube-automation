@@ -277,21 +277,21 @@ describe("buildTimestampsText", () => {
 describe("formatShortDurationPhrase", () => {
   test("falls back to 'Full collection' when target_duration_min is null", () => {
     const config = loadFrom(minimalSections());
-    expect(formatShortDurationPhrase(config.audio)).toBe("Full collection");
+    expect(formatShortDurationPhrase(config.publishing.audio)).toBe("Full collection");
   });
 
   test("renders a singular hour for 60 minutes", () => {
     const sections = minimalSections();
     sections["audio.json"] = { audio: { target_duration_min: 60 } };
     const config = loadFrom(sections);
-    expect(formatShortDurationPhrase(config.audio)).toBe("1 hour");
+    expect(formatShortDurationPhrase(config.publishing.audio)).toBe("1 hour");
   });
 
   test("renders plural hours for a multi-hour duration", () => {
     const sections = minimalSections();
     sections["audio.json"] = { audio: { target_duration_min: 120 } };
     const config = loadFrom(sections);
-    expect(formatShortDurationPhrase(config.audio)).toBe("2 hours");
+    expect(formatShortDurationPhrase(config.publishing.audio)).toBe("2 hours");
   });
 
   // Python `round()` は round-half-to-even。30 分の奇数倍（.5 境界）で
@@ -307,7 +307,7 @@ describe("formatShortDurationPhrase", () => {
       const sections = minimalSections();
       sections["audio.json"] = { audio: { target_duration_min: targetMin } };
       const config = loadFrom(sections);
-      expect(formatShortDurationPhrase(config.audio)).toBe(expected);
+      expect(formatShortDurationPhrase(config.publishing.audio)).toBe(expected);
     }
   );
 });
@@ -684,7 +684,7 @@ describe("tagsForCollection (re-exported through metadata)", () => {
   test("returns base + channel + matched theme tags", () => {
     const config = loadFrom(minimalSections());
 
-    const tags = tagsForCollection(config.content.tags, "battle royale");
+    const tags = tagsForCollection(config.publishing.content.tags, "battle royale");
 
     // base tags + lowercased channel name + the matched "battle" theme tags
     expect(tags).toContain("chiptune music");

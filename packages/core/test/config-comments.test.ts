@@ -65,12 +65,12 @@ describe("comments — defaults", () => {
     const config = load(minimalSections());
 
     // Then the section is disabled with codex generator + documented defaults
-    expect(config.comments.enabled).toBe(false);
-    expect(config.comments.rules).toEqual([]);
-    expect(config.comments.generator.provider).toBe("codex");
-    expect(config.comments.maxRepliesPerRun).toBe(20);
-    expect(config.comments.generator.maxLength).toBe(280);
-    expect(config.comments.generator.requestsPerMinute).toBe(30);
+    expect(config.engagement.comments.enabled).toBe(false);
+    expect(config.engagement.comments.rules).toEqual([]);
+    expect(config.engagement.comments.generator.provider).toBe("codex");
+    expect(config.engagement.comments.maxRepliesPerRun).toBe(20);
+    expect(config.engagement.comments.generator.maxLength).toBe(280);
+    expect(config.engagement.comments.generator.requestsPerMinute).toBe(30);
   });
 
   test("comments with no generator block defaults to codex", () => {
@@ -79,7 +79,7 @@ describe("comments — defaults", () => {
     sections["comments.json"] = { comments: { enabled: true, rules: [] } };
 
     // Then the generator defaults to codex/skip
-    const { generator } = load(sections).comments;
+    const { generator } = load(sections).engagement.comments;
     expect(generator.provider).toBe("codex");
     expect(generator.fallbackOnError).toBe("skip");
   });
@@ -118,7 +118,7 @@ describe("comments — full configuration", () => {
     };
 
     // Then every field is mapped through (snake JSON → camel field)
-    const { comments } = load(sections);
+    const { comments } = load(sections).engagement;
     expect(comments.enabled).toBe(true);
     expect(comments.maxRepliesPerRun).toBe(5);
     expect(comments.delayBetweenRepliesSec).toBe(1);
@@ -150,7 +150,7 @@ describe("comments.generator — validation", () => {
     };
 
     // Then it loads with model null and documented defaults
-    const { generator } = load(sections).comments;
+    const { generator } = load(sections).engagement.comments;
     expect(generator.provider).toBe("codex");
     expect(generator.model).toBeNull();
     expect(generator.fallbackOnError).toBe("skip");
@@ -230,7 +230,7 @@ describe("comments.rules — validation", () => {
     };
 
     // Then the scope defaults to 'any' (backward-compatible)
-    expect(load(sections).comments.rules[0]?.scope).toBe("any");
+    expect(load(sections).engagement.comments.rules[0]?.scope).toBe("any");
   });
 
   test("reads explicit rule scope overrides (#524)", () => {
@@ -247,7 +247,7 @@ describe("comments.rules — validation", () => {
     };
 
     // Then both scopes are preserved
-    const { rules } = load(sections).comments;
+    const { rules } = load(sections).engagement.comments;
     expect(rules[0]?.scope).toBe("top_level");
     expect(rules[1]?.scope).toBe("reply");
   });

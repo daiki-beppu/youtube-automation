@@ -49,8 +49,8 @@ describe("youtube.api synthetic-media flags", () => {
     const config = load(minimalSections());
 
     // Then the upload-time defaults preserve current behaviour
-    expect(config.youtube.api.containsSyntheticMedia).toBe(true);
-    expect(config.youtube.api.selfDeclaredMadeForKids).toBe(false);
+    expect(config.publishing.youtube.api.containsSyntheticMedia).toBe(true);
+    expect(config.publishing.youtube.api.selfDeclaredMadeForKids).toBe(false);
   });
 
   test("can be overridden from youtube.json", () => {
@@ -64,8 +64,8 @@ describe("youtube.api synthetic-media flags", () => {
 
     // Then both flags flow through to the api section
     const config = load(sections);
-    expect(config.youtube.api.containsSyntheticMedia).toBe(false);
-    expect(config.youtube.api.selfDeclaredMadeForKids).toBe(true);
+    expect(config.publishing.youtube.api.containsSyntheticMedia).toBe(false);
+    expect(config.publishing.youtube.api.selfDeclaredMadeForKids).toBe(true);
   });
 });
 
@@ -83,7 +83,7 @@ describe("youtube.musicEngine", () => {
     const config = load(sections);
 
     // Then the value is preserved verbatim and a warning was emitted
-    expect(config.youtube.musicEngine).toBe("fairlight");
+    expect(config.publishing.youtube.musicEngine).toBe("fairlight");
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
@@ -97,12 +97,12 @@ describe("youtube.overlays", () => {
     const config = load(minimalSections());
 
     // Then overlays is disabled but nested structure is still safe to read
-    expect(config.youtube.overlays.enabled).toBe(false);
-    expect(config.youtube.overlays.audioVisualizer.enabled).toBe(false);
-    expect(config.youtube.overlays.subscribePopup.enabled).toBe(false);
-    expect(config.youtube.overlays.encoder.codec).toBe("libx264");
-    expect(config.youtube.overlays.encoder.framerate).toBe(24);
-    expect(config.youtube.overlays.audioVisualizer.opacity).toBe(0.85);
+    expect(config.publishing.youtube.overlays.enabled).toBe(false);
+    expect(config.publishing.youtube.overlays.audioVisualizer.enabled).toBe(false);
+    expect(config.publishing.youtube.overlays.subscribePopup.enabled).toBe(false);
+    expect(config.publishing.youtube.overlays.encoder.codec).toBe("libx264");
+    expect(config.publishing.youtube.overlays.encoder.framerate).toBe(24);
+    expect(config.publishing.youtube.overlays.audioVisualizer.opacity).toBe(0.85);
   });
 
   test("full override flows every nested field through", () => {
@@ -140,7 +140,7 @@ describe("youtube.overlays", () => {
     };
 
     // Then nested fields are mapped (snake JSON → camel field) without loss
-    const ov = load(sections).youtube.overlays;
+    const ov = load(sections).publishing.youtube.overlays;
     expect(ov.enabled).toBe(true);
     expect(ov.audioVisualizer.size).toBe("1920x240");
     expect(ov.audioVisualizer.winSize).toBe(4096);
@@ -185,12 +185,12 @@ describe("shorts", () => {
     const config = load(minimalSections());
 
     // Then shorts collapses to the opt-out defaults
-    expect(config.shorts.enabled).toBe(false);
-    expect(config.shorts.publishTime).toBe("08:00");
-    expect(config.shorts.minHoursBetweenShortsPerCollection).toBe(24);
-    expect(config.shorts.mode).toBe("auto");
-    expect(config.shorts.collection.defaultCount).toBe(3);
-    expect(config.shorts.release.languages).toEqual(["jp", "en"]);
+    expect(config.publishing.shorts.enabled).toBe(false);
+    expect(config.publishing.shorts.publishTime).toBe("08:00");
+    expect(config.publishing.shorts.minHoursBetweenShortsPerCollection).toBe(24);
+    expect(config.publishing.shorts.mode).toBe("auto");
+    expect(config.publishing.shorts.collection.defaultCount).toBe(3);
+    expect(config.publishing.shorts.release.languages).toEqual(["jp", "en"]);
   });
 
   test("full override flows every field through", () => {
@@ -208,7 +208,7 @@ describe("shorts", () => {
     };
 
     // Then all fields land in the shorts section
-    const { shorts } = load(sections);
+    const { shorts } = load(sections).publishing;
     expect(shorts.enabled).toBe(true);
     expect(shorts.publishTime).toBe("09:30");
     expect(shorts.minHoursBetweenShortsPerCollection).toBe(12);
@@ -229,9 +229,9 @@ describe("audio", () => {
     const config = load(minimalSections());
 
     // Then optional durations stay null and chapterMax uses the documented 100
-    expect(config.audio.targetDurationMin).toBeNull();
-    expect(config.audio.targetDurationMax).toBeNull();
-    expect(config.audio.chapterMax).toBe(100);
+    expect(config.publishing.audio.targetDurationMin).toBeNull();
+    expect(config.publishing.audio.targetDurationMax).toBeNull();
+    expect(config.publishing.audio.chapterMax).toBe(100);
   });
 
   test("reads overrides from audio.json", () => {
@@ -242,7 +242,7 @@ describe("audio", () => {
     };
 
     // Then values flow through
-    const { audio } = load(sections);
+    const { audio } = load(sections).publishing;
     expect(audio.targetDurationMin).toBe(120);
     expect(audio.chapterMax).toBe(50);
   });
@@ -256,8 +256,8 @@ describe("analytics", () => {
     const config = load(minimalSections());
 
     // Then both collections are empty
-    expect(config.analytics.collectionFilterKeywords).toEqual([]);
-    expect(config.analytics.benchmark.channels).toEqual([]);
+    expect(config.integrations.analytics.collectionFilterKeywords).toEqual([]);
+    expect(config.integrations.analytics.benchmark.channels).toEqual([]);
   });
 
   test("reads keywords and benchmark channels", () => {
@@ -269,7 +269,7 @@ describe("analytics", () => {
     };
 
     // Then both flow through verbatim
-    const { analytics } = load(sections);
+    const { analytics } = load(sections).integrations;
     expect(analytics.collectionFilterKeywords).toEqual([
       "collection",
       "complete",
@@ -295,7 +295,7 @@ describe("playlists", () => {
 
     // Then it expands to the canonical dict shape
     const config = load(sections);
-    expect(config.playlists.items.main).toEqual({
+    expect(config.engagement.playlists.items.main).toEqual({
       auto_add: true,
       playlist_id: "PL_X",
       title: null,
@@ -316,7 +316,7 @@ describe("playlists", () => {
     };
 
     // Then the entry is preserved as-is
-    const entry = load(sections).playlists.items.battle;
+    const entry = load(sections).engagement.playlists.items.battle;
     expect(entry).toEqual({
       auto_add_themes: ["fight"],
       playlist_id: "PL_B",
@@ -351,8 +351,8 @@ describe("workflow.wfNext.approvalGates", () => {
     const config = load(minimalSections());
 
     // Then both approval gates are off
-    expect(config.workflow.wfNext.approvalGates.audio).toBe(false);
-    expect(config.workflow.wfNext.approvalGates.upload).toBe(false);
+    expect(config.publishing.workflow.wfNext.approvalGates.audio).toBe(false);
+    expect(config.publishing.workflow.wfNext.approvalGates.upload).toBe(false);
   });
 
   test("read explicit and partial gate overrides", () => {
@@ -363,7 +363,7 @@ describe("workflow.wfNext.approvalGates", () => {
     };
 
     // Then audio is on and the unspecified upload defaults off
-    const gates = load(sections).workflow.wfNext.approvalGates;
+    const gates = load(sections).publishing.workflow.wfNext.approvalGates;
     expect(gates.audio).toBe(true);
     expect(gates.upload).toBe(false);
   });
@@ -376,7 +376,7 @@ describe("workflow.wfNext.approvalGates", () => {
     };
 
     // Then it is ignored and shorts.publish_time keeps its default
-    expect(load(sections).shorts.publishTime).toBe("08:00");
+    expect(load(sections).publishing.shorts.publishTime).toBe("08:00");
   });
 
   test("rejects a non-object workflow section", () => {
@@ -406,12 +406,12 @@ describe("pinnedComment", () => {
     const config = load(minimalSections());
 
     // Then the opt-in section collapses to its disabled default
-    expect(config.pinnedComment.enabled).toBe(false);
-    expect(config.pinnedComment.templates).toEqual({});
-    expect(config.pinnedComment.historyFile).toBe(
+    expect(config.engagement.pinnedComment.enabled).toBe(false);
+    expect(config.engagement.pinnedComment.templates).toEqual({});
+    expect(config.engagement.pinnedComment.historyFile).toBe(
       "pinned_comment_history.json"
     );
-    expect(config.pinnedComment.defaultLanguage).toBe("en");
+    expect(config.engagement.pinnedComment.defaultLanguage).toBe("en");
   });
 
   test("reads enabled config with templates", () => {
@@ -428,7 +428,7 @@ describe("pinnedComment", () => {
     };
 
     // Then the fields are mapped to camelCase
-    const pc = load(sections).pinnedComment;
+    const pc = load(sections).engagement.pinnedComment;
     expect(pc.enabled).toBe(true);
     expect(pc.historyFile).toBe("pins.json");
     expect(pc.delayBetweenPostsSec).toBe(1.5);
@@ -465,9 +465,9 @@ describe("distrokid", () => {
     const config = load(minimalSections());
 
     // Then the opt-in section is disabled with blank profile fields
-    expect(config.distrokid.enabled).toBe(false);
-    expect(config.distrokid.profile.artistName).toBe("");
-    expect(config.distrokid.profile.trackType).toBe("");
+    expect(config.integrations.distrokid.enabled).toBe(false);
+    expect(config.integrations.distrokid.profile.artistName).toBe("");
+    expect(config.integrations.distrokid.profile.trackType).toBe("");
   });
 
   test("loads an enabled profile through to camelCase fields", () => {
@@ -478,7 +478,7 @@ describe("distrokid", () => {
     };
 
     // Then all six profile fields are mapped
-    const dk = load(sections).distrokid;
+    const dk = load(sections).integrations.distrokid;
     expect(dk.enabled).toBe(true);
     expect(dk.profile.artistName).toBe("City Nights");
     expect(dk.profile.language).toBe("English");
@@ -507,7 +507,7 @@ describe("distrokid", () => {
     };
 
     // Then it loads without validating the profile
-    const dk = load(sections).distrokid;
+    const dk = load(sections).integrations.distrokid;
     expect(dk.enabled).toBe(false);
     expect(dk.profile.artistName).toBe("x");
   });
@@ -544,10 +544,10 @@ describe("localizations", () => {
     const config = load(minimalSections());
 
     // Then exists=false and supported languages fall back to the api language
-    expect(config.localizations.exists).toBe(false);
-    expect(config.localizations.data).toEqual({});
-    expect(config.localizations.supportedLanguages).toEqual(["ja"]);
-    expect(config.localizations.defaultLanguage).toBe("");
+    expect(config.engagement.localizations.exists).toBe(false);
+    expect(config.engagement.localizations.data).toEqual({});
+    expect(config.engagement.localizations.supportedLanguages).toEqual(["ja"]);
+    expect(config.engagement.localizations.defaultLanguage).toBe("");
   });
 
   test("reads supported + default languages when present", () => {
@@ -564,9 +564,9 @@ describe("localizations", () => {
     });
 
     // Then exists=true and both language lists are read
-    expect(config.localizations.exists).toBe(true);
-    expect(config.localizations.supportedLanguages).toEqual(["ja", "en"]);
-    expect(config.localizations.defaultLanguage).toBe("ja");
+    expect(config.engagement.localizations.exists).toBe(true);
+    expect(config.engagement.localizations.supportedLanguages).toEqual(["ja", "en"]);
+    expect(config.engagement.localizations.defaultLanguage).toBe("ja");
   });
 
   test("preserves the raw snake_case passthrough map in data verbatim", () => {
@@ -587,9 +587,9 @@ describe("localizations", () => {
     // Then `data` carries the JSON through untouched — the snake_case keys are
     // NOT folded to camelCase (the passthrough map bypasses snakeToCamel, so a
     // regression that wrapped it would surface here, not only downstream).
-    expect(config.localizations.data).toEqual(localizations);
+    expect(config.engagement.localizations.data).toEqual(localizations);
     const langs = (
-      config.localizations.data as { languages: typeof localizations.languages }
+      config.engagement.localizations.data as { languages: typeof localizations.languages }
     ).languages;
     expect(langs.en.short_title_template).toBe("{theme} #Shorts");
   });

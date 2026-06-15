@@ -164,12 +164,12 @@ const build = (channelRoot: string): ChannelConfig => {
 
   const localizations = loadLocalizations(
     channelRoot,
-    parsed.youtube.api.language
+    parsed.publishing.youtube.api.language
   );
 
   // cross-file: content_model.languages ⊆ localizations.supported_languages（存在時）。
   if (localizations.exists) {
-    const unknownLangs = parsed.youtube.contentModel.languages.filter(
+    const unknownLangs = parsed.publishing.youtube.contentModel.languages.filter(
       (lang) => !localizations.supportedLanguages.includes(lang)
     );
     if (unknownLangs.length > 0) {
@@ -179,7 +179,11 @@ const build = (channelRoot: string): ChannelConfig => {
     }
   }
 
-  return { ...parsed, localizations };
+  // localizations は engagement バケットへ注入する（トップレベルには置かない、#827）。
+  return {
+    ...parsed,
+    engagement: { ...parsed.engagement, localizations },
+  };
 };
 
 /** `config/channel/*.json` を glob ロードし `ChannelConfig` を返す（シングルトン）。 */

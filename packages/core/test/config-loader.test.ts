@@ -50,34 +50,39 @@ describe("loadConfig — minimal sections", () => {
     // When the config is loaded
     const config = loadConfig();
 
-    // Then meta is read straight from channel.*
-    expect(config.meta.channelName).toBe("Test Channel");
-    expect(config.meta.channelShort).toBe("TC");
-    expect(config.meta.youtubeHandle).toBe("@testchannel");
-    expect(config.meta.channelUrl).toBe("https://youtube.com/@testchannel");
-    expect(config.meta.tagline).toBe("Test tagline");
+    // Then meta is read straight from channel.* (identity bucket)
+    expect(config.identity.meta.channelName).toBe("Test Channel");
+    expect(config.identity.meta.channelShort).toBe("TC");
+    expect(config.identity.meta.youtubeHandle).toBe("@testchannel");
+    expect(config.identity.meta.channelUrl).toBe(
+      "https://youtube.com/@testchannel"
+    );
+    expect(config.identity.meta.tagline).toBe("Test tagline");
 
-    // And content + youtube carry the parsed + defaulted values
-    expect(config.content.genre.primary).toBe("chiptune");
-    expect(config.content.tags.base).toEqual(["chiptune music", "8-bit"]);
-    expect(config.youtube.api.language).toBe("ja");
+    // And content + youtube carry the parsed + defaulted values (publishing)
+    expect(config.publishing.content.genre.primary).toBe("chiptune");
+    expect(config.publishing.content.tags.base).toEqual([
+      "chiptune music",
+      "8-bit",
+    ]);
+    expect(config.publishing.youtube.api.language).toBe("ja");
     // suno is the default engine
-    expect(config.youtube.musicEngine).toBe("suno");
+    expect(config.publishing.youtube.musicEngine).toBe("suno");
     // release is the default content model
-    expect(config.youtube.contentModel.type).toBe("release");
+    expect(config.publishing.youtube.contentModel.type).toBe("release");
     // content_model.languages falls back to [api.language] when unspecified
-    expect(config.youtube.contentModel.languages).toEqual(["ja"]);
+    expect(config.publishing.youtube.contentModel.languages).toEqual(["ja"]);
 
     // And optional sections collapse to their disabled/empty defaults
-    expect(config.localizations.exists).toBe(false);
-    expect(config.localizations.supportedLanguages).toEqual(["ja"]);
-    expect(config.analytics.collectionFilterKeywords).toEqual([]);
-    expect(config.playlists.items).toEqual({});
-    expect(config.audio.targetDurationMin).toBeNull();
-    expect(config.comments.enabled).toBe(false);
-    expect(config.pinnedComment.enabled).toBe(false);
-    expect(config.shorts.enabled).toBe(false);
-    expect(config.distrokid.enabled).toBe(false);
+    expect(config.engagement.localizations.exists).toBe(false);
+    expect(config.engagement.localizations.supportedLanguages).toEqual(["ja"]);
+    expect(config.integrations.analytics.collectionFilterKeywords).toEqual([]);
+    expect(config.engagement.playlists.items).toEqual({});
+    expect(config.publishing.audio.targetDurationMin).toBeNull();
+    expect(config.engagement.comments.enabled).toBe(false);
+    expect(config.engagement.pinnedComment.enabled).toBe(false);
+    expect(config.publishing.shorts.enabled).toBe(false);
+    expect(config.integrations.distrokid.enabled).toBe(false);
   });
 });
 
@@ -211,7 +216,7 @@ describe("loadConfig — singleton semantics", () => {
     reset();
     const third = loadConfig();
     expect(third).not.toBe(first);
-    expect(third.meta.channelName).toBe("Changed");
+    expect(third.identity.meta.channelName).toBe("Changed");
   });
 });
 
@@ -267,20 +272,24 @@ describe("loadConfig — tests/fixtures/sample_channel", () => {
     const config = loadConfig();
 
     // Then the cross-section values match the fixture on disk
-    expect(config.meta.channelName).toBe("Test Channel");
-    expect(config.meta.branding.description).toBe(
+    expect(config.identity.meta.channelName).toBe("Test Channel");
+    expect(config.identity.meta.branding.description).toBe(
       "Test channel description for sync."
     );
-    expect(config.youtube.api.language).toBe("ja");
+    expect(config.publishing.youtube.api.language).toBe("ja");
     // musicEngine is unset in the fixture, so it falls back to the default
-    expect(config.youtube.musicEngine).toBe("suno");
-    expect(config.youtube.contentModel.type).toBe("collection");
-    expect(config.localizations.exists).toBe(true);
-    expect(config.localizations.supportedLanguages).toEqual(["ja", "en", "de"]);
-    expect(config.shorts.enabled).toBe(true);
-    expect(config.comments.enabled).toBe(false);
-    expect(config.pinnedComment.enabled).toBe(true);
-    expect(config.playlists.items.main).toEqual({
+    expect(config.publishing.youtube.musicEngine).toBe("suno");
+    expect(config.publishing.youtube.contentModel.type).toBe("collection");
+    expect(config.engagement.localizations.exists).toBe(true);
+    expect(config.engagement.localizations.supportedLanguages).toEqual([
+      "ja",
+      "en",
+      "de",
+    ]);
+    expect(config.publishing.shorts.enabled).toBe(true);
+    expect(config.engagement.comments.enabled).toBe(false);
+    expect(config.engagement.pinnedComment.enabled).toBe(true);
+    expect(config.engagement.playlists.items.main).toEqual({
       auto_add: true,
       playlist_id: "PLtest123",
       title: null,

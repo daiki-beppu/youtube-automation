@@ -63,7 +63,7 @@ export const validateScenePhrases = (
   }
 
   const bestForLine = metadataString(
-    config.content.descriptions.metadata,
+    config.publishing.content.descriptions.metadata,
     "best_for",
     "Study, Focus, Late Night"
   );
@@ -126,7 +126,7 @@ export const generateCompleteCollectionTitle = (
   options: CompleteCollectionTitleOptions
 ): string => {
   const title = formatTitleTemplate(
-    config.content.title.template,
+    config.publishing.content.title.template,
     {
       activities: options.activities,
       activity: options.activity,
@@ -134,7 +134,7 @@ export const generateCompleteCollectionTitle = (
       duration_short: options.durationShort,
       scene_emoji: options.sceneEmoji,
       scene_phrase: options.scenePhrase,
-      style: titleCase(config.content.genre.style),
+      style: titleCase(config.publishing.content.genre.style),
       theme: options.theme,
     },
     "content.json: title.template"
@@ -168,7 +168,7 @@ export const buildCompleteCollectionDescription = (
   options: CompleteDescriptionOptions
 ): string => {
   const { sectionHeaders, timestampBody, title, usageLines } = options;
-  const { descriptions } = config.content;
+  const { descriptions } = config.publishing.content;
 
   const parts: string[] = [`🎵 ${title}`, ""];
   if (timestampBody) {
@@ -179,7 +179,7 @@ export const buildCompleteCollectionDescription = (
     .map((item) => `• ${item}`)
     .join("\n");
   const channelLinkHeader = pyFormat(sectionHeaders.channelLinkTemplate, {
-    channel_name: config.meta.channelName,
+    channel_name: config.identity.meta.channelName,
   });
 
   parts.push(
@@ -193,8 +193,8 @@ export const buildCompleteCollectionDescription = (
     `${sectionHeaders.perfectFor}\n${perfectForLines}`,
     "",
     channelLinkHeader,
-    config.meta.ctaSubscribe,
-    config.meta.tagline,
+    config.identity.meta.ctaSubscribe,
+    config.identity.meta.tagline,
     "",
     hashtagLine(descriptions)
   );
@@ -232,7 +232,7 @@ export const generateLocalizations = (
 ): Record<string, LocalizedText> => {
   const { sceneEmoji, scenePhrases, sectionHeaders, timestampBody } = options;
   const loc = rawLocalizations(config);
-  const { metadata } = config.content.descriptions;
+  const { metadata } = config.publishing.content.descriptions;
   const genreLine = metadataString(metadata, "genre", "Jazz");
   const vibeLine = metadataString(metadata, "vibe", "Rainy night, Cozy");
   const bestForLine = metadataString(
@@ -265,12 +265,12 @@ export const generateLocalizations = (
     );
 
     const openingPoem = descData.opening_poem ?? "";
-    const cta = descData.cta_subscribe ?? config.meta.ctaSubscribe;
-    const tagline = descData.tagline ?? config.meta.tagline;
+    const cta = descData.cta_subscribe ?? config.identity.meta.ctaSubscribe;
+    const tagline = descData.tagline ?? config.identity.meta.tagline;
     const hashtags =
-      descData.hashtags ?? hashtagLine(config.content.descriptions);
+      descData.hashtags ?? hashtagLine(config.publishing.content.descriptions);
     const channelLinkHeader = pyFormat(sectionHeaders.channelLinkTemplate, {
-      channel_name: config.meta.channelName,
+      channel_name: config.identity.meta.channelName,
     });
 
     const descParts: string[] = [];

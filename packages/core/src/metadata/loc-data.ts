@@ -1,6 +1,6 @@
 // `config/localizations.json` の raw 構造への型付きアクセサ。
 //
-// Python 版は `config.localizations.data`（dict そのもの）を `.get(...)` で読んでいた。
+// Python 版は `config.engagement.localizations.data`（dict そのもの）を `.get(...)` で読んでいた。
 // TS でも parse 済みの `Localizations.data`（raw JSON）を直接読むため、metadata 生成が
 // 参照するキー群だけを構造として宣言する。
 
@@ -30,4 +30,4 @@ export interface RawLocalizations {
 }
 
 export const rawLocalizations = (config: ChannelConfig): RawLocalizations =>
-  config.localizations.data as RawLocalizations;
+  config.engagement.localizations.data as RawLocalizations;

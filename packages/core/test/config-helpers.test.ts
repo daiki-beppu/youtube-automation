@@ -60,7 +60,7 @@ describe("tagsDefault", () => {
     const config = load(minimalSections());
 
     // Then the default list ends with the lowercased channel name
-    expect(tagsDefault(config.content.tags)).toEqual([
+    expect(tagsDefault(config.publishing.content.tags)).toEqual([
       "chiptune music",
       "8-bit",
       "test channel",
@@ -78,7 +78,7 @@ describe("tagsForCollection", () => {
     const config = load(sections);
 
     // When building tags for a battle-themed collection name
-    const tags = tagsForCollection(config.content.tags, "Epic Battle BGM");
+    const tags = tagsForCollection(config.publishing.content.tags, "Epic Battle BGM");
 
     // Then default + channel-specific + the matched theme tags are present
     expect(tags).toContain("ch-tag");
@@ -101,7 +101,7 @@ describe("renderOpening", () => {
     const config = load(minimalSections());
 
     // Then style is title-cased and placeholders are interpolated
-    expect(renderOpening(config.content.descriptions)).toBe(
+    expect(renderOpening(config.publishing.content.descriptions)).toBe(
       "8-Bit chiptune for RPG"
     );
   });
@@ -117,7 +117,7 @@ describe("hashtagLine", () => {
     const config = load(sections);
 
     // Then they render as a space-joined line
-    expect(hashtagLine(config.content.descriptions)).toBe(
+    expect(hashtagLine(config.publishing.content.descriptions)).toBe(
       "#ChiptuneMusic #8bit"
     );
   });
@@ -137,10 +137,10 @@ describe("activityForTheme — legacy theme_activities", () => {
     const config = load(sections);
 
     // Then a battle-themed name resolves to Gaming, others to the default
-    expect(activityForTheme(config.content.title, "Epic Battle Scene")).toBe(
+    expect(activityForTheme(config.publishing.content.title, "Epic Battle Scene")).toBe(
       "Gaming"
     );
-    expect(activityForTheme(config.content.title, "Ocean Waves")).toBe("Chill");
+    expect(activityForTheme(config.publishing.content.title, "Ocean Waves")).toBe("Chill");
   });
 });
 
@@ -173,7 +173,7 @@ describe("activityForTheme — theme_scenes longest-match (#80)", () => {
     const config = load(withScenes());
 
     // Then an exact "campus-cafe" hits its own entry, not the shorter cafe
-    expect(activityForTheme(config.content.title, "campus-cafe")).toBe(
+    expect(activityForTheme(config.publishing.content.title, "campus-cafe")).toBe(
       "Study · Work · Late Night"
     );
   });
@@ -183,7 +183,7 @@ describe("activityForTheme — theme_scenes longest-match (#80)", () => {
     const config = load(withScenes());
 
     // Then the longest key wins (campus-cafe over cafe)
-    expect(activityForTheme(config.content.title, "nice-campus-cafe-mix")).toBe(
+    expect(activityForTheme(config.publishing.content.title, "nice-campus-cafe-mix")).toBe(
       "Study · Work · Late Night"
     );
   });
@@ -193,7 +193,7 @@ describe("activityForTheme — theme_scenes longest-match (#80)", () => {
     const config = load(withScenes());
 
     // Then the shorter cafe entry is used
-    expect(activityForTheme(config.content.title, "after-midnight-cafe")).toBe(
+    expect(activityForTheme(config.publishing.content.title, "after-midnight-cafe")).toBe(
       "Study · Work · Reading"
     );
   });
@@ -220,7 +220,7 @@ describe("sceneForTheme", () => {
     const config = load(sections);
 
     // Then the longest match returns its scene phrase
-    expect(sceneForTheme(config.content.title, "nice-campus-cafe-mix")).toBe(
+    expect(sceneForTheme(config.publishing.content.title, "nice-campus-cafe-mix")).toBe(
       "Campus Cafe"
     );
   });
@@ -230,7 +230,7 @@ describe("sceneForTheme", () => {
     const config = load(minimalSections());
 
     // Then scene resolution yields an empty string (caller decides fallback)
-    expect(sceneForTheme(config.content.title, "battle")).toBe("");
+    expect(sceneForTheme(config.publishing.content.title, "battle")).toBe("");
   });
 });
 
@@ -242,7 +242,7 @@ describe("brandingAsApiDict", () => {
     const config = load(minimalSections());
 
     // Then the api dict is empty (unset keys omitted)
-    expect(brandingAsApiDict(config.meta.branding)).toEqual({});
+    expect(brandingAsApiDict(config.identity.meta.branding)).toEqual({});
   });
 
   test("emits only the set keys, including made_for_kids=false", () => {
@@ -256,7 +256,7 @@ describe("brandingAsApiDict", () => {
     const config = load(sections);
 
     // Then only the provided keys appear; made_for_kids=false is NOT dropped
-    expect(brandingAsApiDict(config.meta.branding)).toEqual({
+    expect(brandingAsApiDict(config.identity.meta.branding)).toEqual({
       description: "desc",
       keywords: ["a", "b"],
       made_for_kids: false,
