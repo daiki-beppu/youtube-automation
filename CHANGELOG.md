@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `feat(suno)`: 1 pattern = 1 scene 原則を SKILL.md に追加し、`(Variation N)` 機械的接尾辞による曲タイトル生成を回避。各曲が固有の `name_jp` / `name_en` を持つ YAML 設計を強制する NG/OK 例付き。
+- `feat(video-description)`: Benchmark 概要欄 TTP セクションを構造転写テーブル（7 項目）に拡充し、テンプレ使い回し禁止ルール・冒頭フックのコレクション固有化を追加。
+
 ### Added
 
 - `feat(suno)`: プロンプト設計を suno-bgm ベースの品質ルール集に刷新した（#904, #899）。Style text の 5 要素順序検証（ジャンル → 音響特性 → キー楽器 → リズム/ベース → テンポ）、120 文字制限の警告、禁止アーティスト名チェック（`banned_artists` 約 30 名）、`auto_lyrics_structure` による歌詞構造の自動補強（`[Instrumental]` / `[Extended Outro]` 自動付加）を `yt-generate-suno` に追加。`style_influence` を 85 → 95 に引き上げ、`weirdness: 10` / `style_char_limit: 120` を新設。楽曲ごとの固有タイトル自動生成仕様（`name_en`: 2-4 word scene/mood title、`name_jp`: 5-15 文字の日本語訳）を SKILL.md に追記。`references/suno-examples.md` に楽器形容詞 Bad/Good ペア 10 組、`references/lyrics-examples.md` にひらがな歌詞ガイドと Mixing Notes 例を追加。
