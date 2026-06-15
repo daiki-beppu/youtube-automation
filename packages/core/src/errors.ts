@@ -12,8 +12,7 @@
 /* eslint-disable max-classes-per-file */
 import { z } from "zod";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+import { isRecord } from "../internal/guards.ts";
 
 const parseJson = (text: string): unknown => {
   try {

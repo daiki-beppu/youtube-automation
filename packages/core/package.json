@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./analytics/channel": "./src/analytics/channel/index.ts",
     "./config": "./src/config/index.ts",
     "./image": "./src/image/index.ts",
     "./metadata": "./src/metadata.ts",
