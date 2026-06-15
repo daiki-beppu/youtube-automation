@@ -1665,6 +1665,11 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "google-api-python-client", specifier = ">=2,<3" },
@@ -1685,3 +1690,6 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13,<1" },
 ]
 provides-extras = ["dev", "veo"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]

@@ -41,6 +41,7 @@ from youtube_automation.scripts.collection_serve import (
     build_collections_index,
     create_server,
     derive_collection_slug,
+    derive_playlist_name,
     normalize_suno_title,
     read_mapped_slugs,
     write_suno_playlists,
@@ -162,6 +163,39 @@ def test_derive_collection_slug_matches_normalize_suno_title_for_same_theme():
 # ---------------------------------------------------------------------------
 # #976: prefix の空白/ハイフン無差別マッチと複数トークンチャンネル名の slug 導出
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# derive_playlist_name: collection dir 名 → `<prefix> | <theme>` の playlist 名
+# ---------------------------------------------------------------------------
+
+
+def test_derive_playlist_name_single_word_prefix():
+    assert derive_playlist_name("20260601-df365-morning-mode-collection", "df365") == "df365 | morning-mode"
+
+
+def test_derive_playlist_name_multi_word_prefix():
+    """マルチワード prefix でも正しい境界で分割される。"""
+    assert (
+        derive_playlist_name("20260601-soulful-grooves-wah-groove-collection", "soulful-grooves")
+        == "soulful-grooves | wah-groove"
+    )
+
+
+def test_derive_playlist_name_without_date():
+    assert derive_playlist_name("df365-morning-mode-collection", "df365") == "df365 | morning-mode"
+
+
+def test_derive_playlist_name_without_collection_suffix():
+    assert derive_playlist_name("20260601-rjn-dawn-cloud-fold", "rjn") == "rjn | dawn-cloud-fold"
+
+
+def test_derive_playlist_name_matches_normalize_roundtrip():
+    """derive_playlist_name の出力を normalize_suno_title に通すと derive_collection_slug と同じ slug になる。"""
+    pname = derive_playlist_name("20260601-soulful-grooves-horn-stab-master-collection", "soulful-grooves")
+    slug_from_name = normalize_suno_title(pname, "soulful-grooves")
+    slug_from_id = derive_collection_slug("20260601-soulful-grooves-horn-stab-master-collection", "soulful-grooves")
+    assert slug_from_name == slug_from_id == "soulful-grooves-horn-stab-master"
 
 
 def test_normalize_suno_title_matches_space_separated_prefix_against_hyphen_prefix():
@@ -579,6 +613,45 @@ def test_build_collections_index_defaults_to_unmapped_when_prefix_absent(tmp_pat
     rows = build_collections_index(planning)
 
     assert all(r["mapped"] is False for r in rows)
+
+
+def test_build_collections_index_returns_playlist_name_with_prefix(tmp_path):
+    """Given prefix 付きで build_collections_index を呼ぶ
+    When 結果を取得
+    Then playlist_name にサーバー側で導出した正しい playlist 名が含まれる。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-rjn-dawn-fold-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+
+    rows = {r["id"]: r for r in build_collections_index(planning, prefix="rjn")}
+
+    assert rows["20260601-rjn-dawn-fold-collection"]["playlist_name"] == "rjn | dawn-fold"
+
+
+def test_build_collections_index_returns_playlist_name_multi_word_prefix(tmp_path):
+    """Given マルチワード prefix で build_collections_index を呼ぶ
+    Then playlist_name が正しい境界で分割される。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning, "20260601-soulful-grooves-wah-groove-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}]
+    )
+
+    rows = {r["id"]: r for r in build_collections_index(planning, prefix="soulful-grooves")}
+
+    assert rows["20260601-soulful-grooves-wah-groove-collection"]["playlist_name"] == "soulful-grooves | wah-groove"
+
+
+def test_build_collections_index_playlist_name_none_without_prefix(tmp_path):
+    """Given prefix なし（後方互換）
+    Then playlist_name は None。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-rjn-dawn-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+
+    rows = build_collections_index(planning)
+
+    assert all(r["playlist_name"] is None for r in rows)
 
 
 # ---------------------------------------------------------------------------

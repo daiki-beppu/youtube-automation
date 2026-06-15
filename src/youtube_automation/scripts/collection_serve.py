@@ -152,6 +152,32 @@ def derive_collection_slug(collection_id: str, prefix: str) -> str | None:
     return f"{prefix.lower()}-{theme_slug}"
 
 
+def derive_playlist_name(collection_id: str, prefix: str) -> str | None:
+    """collection dir 名から `<prefix> | <theme>` 形式の Suno playlist 名を導出する。
+
+    `derive_collection_slug` と同じ prefix 剥がしロジックを使い、マルチワード prefix
+    （例: `soulful-grooves`）でも正しく `soulful-grooves | wah-groove` を返す。
+    prefix 未指定や theme 空は None。
+    """
+    name = collection_id
+    if name.endswith(_COLLECTION_DIR_SUFFIX):
+        name = name[: -len(_COLLECTION_DIR_SUFFIX)]
+    parts = name.split("-", 1)
+    if len(parts) == 2 and parts[0].isdigit():
+        name = parts[1]
+    prefix_match = re.match(rf"^{_prefix_pattern(prefix)}-", name, re.IGNORECASE)
+    if prefix_match is not None:
+        theme = name[prefix_match.end() :]
+    elif "-" in name:
+        theme = name.split("-", 1)[1]
+    else:
+        return None
+    theme = theme.strip()
+    if not theme:
+        return None
+    return f"{prefix.lower()} | {theme}"
+
+
 def _playlists_list_to_dict(data: list) -> dict:
     """旧 wf-batch list スキーマ `[{slug, suno_url, suno_title, captured_at}]` を dict へ写像する（#976）。
 
@@ -424,7 +450,7 @@ def build_collections_index(
     mapped_slugs: set[str] | None = None,
     prefix: str | None = None,
 ) -> list[dict]:
-    """各 collection を `{id, name, has_prompts, pattern_count, mapped}` に写像する（#816 dir mode / #893）.
+    """各 collection を index entry に写像する（#816 dir mode / #893）.
 
     - id   = ディレクトリ名（拡張から個別 fetch する際のホワイトリスト key）
     - name = `CollectionPaths.collection_name`（日付＋チャンネル接頭辞を除去した表示名）
@@ -432,6 +458,8 @@ def build_collections_index(
     - pattern_count = json があれば entries 数、無ければ None
     - mapped = `derive_collection_slug(id, prefix)` が `mapped_slugs` に含まれるか（#893 要件 B）。
       prefix 未指定（後方互換・旧運用）は常に False（素通し全件表示）。
+    - playlist_name = `derive_playlist_name(id, prefix)` で導出した Suno playlist 名（`<prefix> | <theme>`）。
+      prefix 未指定時は None（拡張は従来の extractPlaylistName fallback を使う）。
     """
     slugs = mapped_slugs or set()
     index: list[dict] = []
@@ -441,6 +469,7 @@ def build_collections_index(
         pattern_count = len(json.loads(prompts_path.read_text(encoding="utf-8"))) if has_prompts else None
         slug = derive_collection_slug(coll.name, prefix) if prefix else None
         mapped = slug is not None and slug in slugs
+        playlist_name = derive_playlist_name(coll.name, prefix) if prefix else None
         index.append(
             {
                 "id": coll.name,
@@ -448,6 +477,7 @@ def build_collections_index(
                 "has_prompts": has_prompts,
                 "pattern_count": pattern_count,
                 "mapped": mapped,
+                "playlist_name": playlist_name,
             }
         )
     return index
