@@ -1,21 +1,62 @@
-MIT License
+Source-Available License
 
-Copyright (c) 2026 daiki-beppu
+Copyright (c) 2026 daiki-beppu. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software and associated documentation files (the "Software") are made
+available for viewing and reference purposes only, subject to the following
+conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. PERMITTED USES
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+   (a) You may view, read, and study the source code of the Software for
+       educational and personal learning purposes.
+   (b) You may reference the Software as part of a portfolio, resume, or
+       similar professional presentation by the copyright holder.
+   (c) You may use the Software for personal, non-commercial purposes.
+
+2. RESTRICTIONS
+
+   Unless you have obtained prior written permission from the copyright holder,
+   you may NOT:
+
+   (a) Copy, reproduce, distribute, republish, or otherwise make the Software
+       (in whole or in part) available to any third party.
+   (b) Modify, adapt, translate, or create derivative works based on the
+       Software.
+   (c) Use the Software, or any portion thereof, for commercial purposes,
+       including but not limited to selling, licensing, or incorporating the
+       Software into a product or service offered for sale.
+   (d) Sublicense, lease, lend, or otherwise transfer rights to the Software
+       to any third party.
+   (e) Remove, alter, or obscure any copyright notice, attribution, or credit
+       contained in the Software.
+
+3. ATTRIBUTION
+
+   Any permitted use of the Software must retain all original copyright
+   notices, this license text, and any other attribution or credit information
+   included in the Software.
+
+4. PRIOR VERSIONS
+
+   Copies of the Software obtained under a previous license (e.g., MIT License)
+   prior to the adoption of this license remain governed by the terms of that
+   previous license as of the date of acquisition. This license applies to all
+   versions of the Software from the commit in which this license was
+   introduced, and to all subsequent versions.
+
+5. COMMERCIAL LICENSING
+
+   If you wish to use the Software for commercial purposes or under terms not
+   permitted by this license, please contact the copyright holder to discuss
+   a separate licensing arrangement.
+
+6. DISCLAIMER OF WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+   OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
