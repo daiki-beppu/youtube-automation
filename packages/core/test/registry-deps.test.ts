@@ -25,7 +25,7 @@ import { z } from "zod";
 // or googleapis client, so fakes are injected directly (the AC: no reset() /
 // loadConfig() needed for a service test).
 const fakeConfig = {
-  meta: { channelName: "Fake Channel" },
+  identity: { meta: { channelName: "Fake Channel" } },
 } as unknown as ChannelConfig;
 const fakeYt = { videos: {} } as unknown as YouTubeClient;
 const fakeYtAnalytics = { reports: {} } as unknown as YouTubeAnalyticsClient;
@@ -42,7 +42,7 @@ describe("DepsMap — type shape", () => {
     };
 
     // Then each key is reachable with its declared type at runtime.
-    expect(deps.config.meta.channelName).toBe("Fake Channel");
+    expect(deps.config.identity.meta.channelName).toBe("Fake Channel");
     expect(typeof deps.yt.videos).toBe("object");
     expect(typeof deps.ytAnalytics.reports).toBe("object");
   });
@@ -74,7 +74,7 @@ describe("RegistryEntry — declared deps reach run, typed", () => {
     run: (input, deps) =>
       Promise.resolve(
         ok({
-          channelName: deps.config.meta.channelName,
+          channelName: deps.config.identity.meta.channelName,
           echoed: input.value,
           hasVideos: typeof deps.yt.videos === "object",
         })

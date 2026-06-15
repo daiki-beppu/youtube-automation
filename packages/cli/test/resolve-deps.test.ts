@@ -143,7 +143,7 @@ describe("resolveDeps — config", () => {
 
     // Then the loaded ChannelConfig is returned (cross-section value matches the
     // fixture on disk), and only the requested key is present.
-    expect(deps.config.meta.channelName).toBe("Test Channel");
+    expect(deps.config.identity.meta.channelName).toBe("Test Channel");
     expect("yt" in deps).toBe(false);
     expect("ytAnalytics" in deps).toBe(false);
   });
