@@ -277,7 +277,9 @@ describe("buildTimestampsText", () => {
 describe("formatShortDurationPhrase", () => {
   test("falls back to 'Full collection' when target_duration_min is null", () => {
     const config = loadFrom(minimalSections());
-    expect(formatShortDurationPhrase(config.publishing.audio)).toBe("Full collection");
+    expect(formatShortDurationPhrase(config.publishing.audio)).toBe(
+      "Full collection"
+    );
   });
 
   test("renders a singular hour for 60 minutes", () => {
@@ -684,7 +686,10 @@ describe("tagsForCollection (re-exported through metadata)", () => {
   test("returns base + channel + matched theme tags", () => {
     const config = loadFrom(minimalSections());
 
-    const tags = tagsForCollection(config.publishing.content.tags, "battle royale");
+    const tags = tagsForCollection(
+      config.publishing.content.tags,
+      "battle royale"
+    );
 
     // base tags + lowercased channel name + the matched "battle" theme tags
     expect(tags).toContain("chiptune music");

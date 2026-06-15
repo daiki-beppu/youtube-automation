@@ -98,11 +98,17 @@ describe("youtube.overlays", () => {
 
     // Then overlays is disabled but nested structure is still safe to read
     expect(config.publishing.youtube.overlays.enabled).toBe(false);
-    expect(config.publishing.youtube.overlays.audioVisualizer.enabled).toBe(false);
-    expect(config.publishing.youtube.overlays.subscribePopup.enabled).toBe(false);
+    expect(config.publishing.youtube.overlays.audioVisualizer.enabled).toBe(
+      false
+    );
+    expect(config.publishing.youtube.overlays.subscribePopup.enabled).toBe(
+      false
+    );
     expect(config.publishing.youtube.overlays.encoder.codec).toBe("libx264");
     expect(config.publishing.youtube.overlays.encoder.framerate).toBe(24);
-    expect(config.publishing.youtube.overlays.audioVisualizer.opacity).toBe(0.85);
+    expect(config.publishing.youtube.overlays.audioVisualizer.opacity).toBe(
+      0.85
+    );
   });
 
   test("full override flows every nested field through", () => {
@@ -187,7 +193,9 @@ describe("shorts", () => {
     // Then shorts collapses to the opt-out defaults
     expect(config.publishing.shorts.enabled).toBe(false);
     expect(config.publishing.shorts.publishTime).toBe("08:00");
-    expect(config.publishing.shorts.minHoursBetweenShortsPerCollection).toBe(24);
+    expect(config.publishing.shorts.minHoursBetweenShortsPerCollection).toBe(
+      24
+    );
     expect(config.publishing.shorts.mode).toBe("auto");
     expect(config.publishing.shorts.collection.defaultCount).toBe(3);
     expect(config.publishing.shorts.release.languages).toEqual(["jp", "en"]);
@@ -565,7 +573,10 @@ describe("localizations", () => {
 
     // Then exists=true and both language lists are read
     expect(config.engagement.localizations.exists).toBe(true);
-    expect(config.engagement.localizations.supportedLanguages).toEqual(["ja", "en"]);
+    expect(config.engagement.localizations.supportedLanguages).toEqual([
+      "ja",
+      "en",
+    ]);
     expect(config.engagement.localizations.defaultLanguage).toBe("ja");
   });
 
@@ -589,7 +600,9 @@ describe("localizations", () => {
     // regression that wrapped it would surface here, not only downstream).
     expect(config.engagement.localizations.data).toEqual(localizations);
     const langs = (
-      config.engagement.localizations.data as { languages: typeof localizations.languages }
+      config.engagement.localizations.data as {
+        languages: typeof localizations.languages;
+      }
     ).languages;
     expect(langs.en.short_title_template).toBe("{theme} #Shorts");
   });

@@ -48,7 +48,9 @@ export const ChannelConfigSchema = z
     const themeKeys = new Set(
       Object.keys(config.publishing.content.tags.themes)
     );
-    const unknownScenes = Object.keys(config.publishing.content.title.themeScenes)
+    const unknownScenes = Object.keys(
+      config.publishing.content.title.themeScenes
+    )
       .filter((key) => !themeKeys.has(key))
       .toSorted();
     if (unknownScenes.length > 0) {
