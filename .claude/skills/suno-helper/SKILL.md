@@ -30,7 +30,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 | 役割 | コマンド |
 |---|---|
-| サーバー起動（必須: dir mode） | `uv run yt-collection-serve "$CHANNEL_DIR/collections/planning"` |
+| サーバー起動（必須: dir mode + capture） | `uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --playlist-capture-root "$CHANNEL_DIR" --playlist-capture-prefix <PREFIX>` |
 | ポート変更（並走時） | 末尾に `--port 7874` |
 | 拡張をリロード | chrome://extensions → suno-helper の再読み込みアイコン |
 | Suno タブ | https://suno.com/create にアクセス、Custom Mode |
@@ -39,11 +39,23 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 ### Step 1. サーバーを起動する
 
-**必ず dir mode**（`collections/planning` を path に渡す）で起動する。collection 単体パスを直接渡す single file mode は playlist phase（全件完了後の clip 一括 playlist 化）がスキップされるため本 skill では使わない。
+**必ず dir mode + capture フラグ付き**で起動する。
 
-dir mode で読まれるのは **`-collection` suffix を持つ dir のみ**。それ以外（例: `01-master` や雑多ファイル）は無視される。
+```bash
+uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
+  --playlist-capture-root "$CHANNEL_DIR" \
+  --playlist-capture-prefix <PREFIX>
+```
 
-確認: 起動後に `curl http://localhost:7873/collections` が JSON array を返せば dir mode で起動できている（404 が返るのは single file mode で起動してしまった状態）。
+`<PREFIX>` はコレクションディレクトリ名の channel 部分。dir 名 `<YYYYMMDD>-<channel>-<theme>-collection` の `<channel>` を指定する。例: `df365`（deepfocus365）、`rjn`、`soulful-grooves`。
+
+capture フラグが無いと:
+- popup のコレクション一覧で `mapped` が全件 false になり、処理済み collection が非表示にならない
+- POST `/suno/playlists`（playlist 自動保存）が 404 になる
+
+collection 単体パスを直接渡す single file mode は playlist phase がスキップされるため本 skill では使わない。dir mode で読まれるのは **`-collection` suffix を持つ dir のみ**。それ以外（例: `01-master` や雑多ファイル）は無視される。
+
+確認: 起動後に `curl http://localhost:7873/collections` が JSON array を返せば dir mode で起動できている（404 が返るのは single file mode で起動してしまった状態）。各 collection の `"mapped"` フィールドが `true` / `false` を返していれば capture フラグも有効。
 
 ### Step 2. Chrome の popup を開く
 
@@ -120,6 +132,7 @@ popup 上部に進捗が出る:
 
 ## Gotchas
 
+- **capture フラグ無しで起動すると mapped が全件 false、POST `/suno/playlists` が 404 になる**。`--playlist-capture-root "$CHANNEL_DIR"` と `--playlist-capture-prefix <PREFIX>` を必ず両方付けること。片方だけ指定すると ConfigError で起動自体が失敗する（fail-loud）。
 - **誤って single file mode で起動すると playlist phase がスキップされる**。`/collections` 404 が返り、popup 側で derivedPlaylistName が undefined になり playlist phase に分岐しない。Step 1 の `curl /collections` 確認を必ず通すこと。
 - **Custom Mode + Instrumental 設定を毎回確認**。Suno が UI 状態を覚えていないことがあり、Lyrics 欄が消えていると Step 5 開始直後に ERROR で止まる。
 - **Cmd+P を手動で押す必要はない**。拡張は実際の keydown を press_key 経由で送る実装。dispatchEvent では Suno listener に届かない（isTrusted=false）ため、user 側で打鍵してはいけない（衝突する）。
