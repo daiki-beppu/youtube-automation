@@ -39,7 +39,9 @@ ADR 0001 で確定した「Python → TS(bun) big-bang 移行」は `packages/co
 
 新規 feature `<feature>` (例: `skills-sync`, `errors`, `secrets`) を `packages/core` に追加するときは、以下の 3 ファイルから始める:
 
-### `packages/core/<feature>/schema.ts`
+> **📁 配置規約 (2026-06-14) / template は ADR-0003 が上書き**: 本節のテンプレは ADR-0003 の Canonical Template が最新版で上書きしている。配置は **`src/` あり**が canonical — core feature は **`packages/core/src/<feature>/`**、CLI command は **`packages/cli/src/commands/<feature>/`**。skills-sync / internal の `src` なし実装は #984 で移送する。
+
+### `packages/core/src/<feature>/schema.ts`
 
 ```typescript
 import { z } from "zod";
@@ -56,7 +58,7 @@ export type FeatureInput = z.infer<typeof FeatureInputSchema>;
 export type FeatureOutput = z.infer<typeof FeatureOutputSchema>;
 ```
 
-### `packages/core/<feature>/service.ts`
+### `packages/core/src/<feature>/service.ts`
 
 ```typescript
 import { FeatureInputSchema, FeatureOutputSchema } from "./schema.ts";
@@ -70,7 +72,7 @@ export async function featureService(input: FeatureInput): Promise<FeatureOutput
 }
 ```
 
-### `packages/cli/<feature>/cli.ts` (thin wrapper)
+### `packages/cli/src/commands/<feature>/cli.ts` (thin wrapper)
 
 ```typescript
 import { featureService, FeatureInputSchema } from "@youtube-automation/core/<feature>";
@@ -84,7 +86,7 @@ export async function runFeatureCli(argv: string[]): Promise<void> {
 }
 ```
 
-### 将来 `packages/mcp/tools/<feature>.ts` (今 epic では未実装)
+### 将来 `packages/mcp/src/tools/<feature>.ts` (今 epic では未実装)
 
 ```typescript
 import { z } from "zod";

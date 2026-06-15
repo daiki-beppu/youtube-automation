@@ -1,5 +1,5 @@
 #!/bin/bash
-# generate_videos.sh v13 — Master video generator
+# generate_videos.sh v14 — Master video generator
 # Static image + master audio → MP4 (macOS optimized)
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 # v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
@@ -12,6 +12,13 @@
 #          既存 stream copy 経路 (v12.1) を完全に維持する
 #        - COLLECTION_NAME 抽出 regex を `^[0-9]+-[a-z]+-` →
 #          `^[0-9]+-[a-z0-9]+-` に修正 (数字を含む slug を許容)
+# v14:   映像エフェクト (#648) をループ・ベイク化して高速化 + 設定を config 駆動化
+#        - effect ON は「1 周期だけ fx_baked.mp4 に焼く → -stream_loop -1 -c:v copy」へ刷新し
+#          モード C/D の全尺再エンコード(8-15分)を ~1-2分へ短縮。継ぎ目は closed GOP の stream copy で無損失
+#        - 周期固定: particles=36s / bokeh=60s(整数周期化) / gradient=72s(speed=0 で静的化)
+#        - 静止画/ループのエンコード値・effect・shrink を config/skills/videoup.yaml から取得
+#          (新規 env override は追加しない。キー欠落時は現行の固定値へフォールバック=無回帰)
+#        - shrink.enabled で生成後の容量最適化 re-encode を opt-in 追加
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -57,6 +64,59 @@ COLLECTION_DIR="$(cd "$COLLECTION_DIR" && pwd)"
 MASTER_DIR="${COLLECTION_DIR}/01-master"
 ASSETS_DIR="${COLLECTION_DIR}/10-assets"
 
+# ─── Config (config/skills/videoup.yaml) reader ──────────
+# 設定は env override ではなく config ファイル駆動（既存 audio.target_video_duration_min と同流儀）。
+# 2-level flat YAML を awk で読む（jq 非依存）。キー欠落時は fallback（=現行固定値）へ落ちる。
+resolve_videoup_yaml() {
+    local dir="$COLLECTION_DIR"
+    for _ in 1 2 3 4 5 6; do
+        if [[ -f "$dir/config/skills/videoup.yaml" ]]; then
+            echo "$dir/config/skills/videoup.yaml"; return
+        fi
+        local parent; parent="$(dirname "$dir")"
+        [[ "$parent" == "$dir" ]] && break
+        dir="$parent"
+    done
+}
+VIDEOUP_YAML="$(resolve_videoup_yaml)"
+
+yaml_get() {
+    # $1=section $2=key $3=fallback  （`section:` 配下の `  key: value` を拾う）
+    local section="$1" key="$2" fallback="$3" val
+    if [[ -z "$VIDEOUP_YAML" || ! -f "$VIDEOUP_YAML" ]]; then
+        echo "$fallback"; return
+    fi
+    val="$(awk -v section="$section" -v key="$key" '
+        /^[^[:space:]#]/ { in_section = ($0 ~ ("^" section ":[[:space:]]*$")) ? 1 : 0; next }
+        in_section && $0 ~ ("^[[:space:]]+" key ":") {
+            line = $0
+            sub(/^[[:space:]]+[^:]+:[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*$/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            print line
+            exit
+        }
+    ' "$VIDEOUP_YAML")"
+    # 周囲のクォートを除去
+    val="${val%\"}"; val="${val#\"}"
+    val="${val%\'}"; val="${val#\'}"
+    if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
+}
+
+stat_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+
+# effect の 1 ループ周期（秒）。filter を整数周期に揃えてあるので定数で持つ。
+effect_period() {
+    case "$EFFECT" in
+        particles) echo 36 ;;
+        bokeh)     echo 60 ;;
+        gradient)  echo 72 ;;
+        *)         echo 0  ;;
+    esac
+}
+_gcd() { local a=$1 b=$2 t; while [[ $b -ne 0 ]]; do t=$b; b=$((a % b)); a=$t; done; echo "$a"; }
+_lcm() { local a=$1 b=$2; if [[ $a -le 0 || $b -le 0 ]]; then echo 0; else echo $(( a / $(_gcd "$a" "$b") * b )); fi; }
+
 # ─── Auto-detect Collection Name ─────────────────────────
 # 旧: `^[0-9]+-[a-z]+-` だと `20260101-r2d2-foo` のような数字混じり slug が
 # 後ろの `-collection` 除去だけで残ってしまうため、`[a-z0-9]+` に緩めて
@@ -101,13 +161,23 @@ LOOP_TARGET_HEIGHT="1080"
 LOOP_TARGET_PIX_FMT="yuv420p"
 LOOP_TARGET_FRAME_RATE="24/1"
 LOOP_OUTPUT_FRAME_RATE="24"
-LOOP_MAX_BITRATE="6000k"
-LOOP_BUFSIZE="12000k"
+LOOP_MAX_BITRATE="$(yaml_get video loop_maxrate 6000k)"
+LOOP_BUFSIZE="$(yaml_get video loop_bufsize 12000k)"
+# 静止画(effect 無し)のエンコード値も config 駆動（fallback=現行値）
+STILL_FPS="$(yaml_get video still_fps 1)"
+STILL_CRF="$(yaml_get video still_crf 28)"
+STILL_GOP="$(yaml_get video still_gop 300)"
+# effect ベイクの内部定数（静止画 effect は 24fps で焼く / ベイク尺の上限ガード）
+STILL_EFFECT_FPS=24
+STILL_EFFECT_CRF=24
+BAKE_MAX_LEN=900
 
 # ─── Video Effects (#648) ────────────────────────────────
 # VIDEOUP_EFFECT / VIDEOUP_EFFECT_INTENSITY を読み取り、ffmpeg filtergraph を構築する
-EFFECT="${VIDEOUP_EFFECT:-none}"
-EFFECT_INTENSITY="${VIDEOUP_EFFECT_INTENSITY:-subtle}"
+# config を一次ソースに（effect.type / effect.intensity）。
+# 既存 VIDEOUP_EFFECT / VIDEOUP_EFFECT_INTENSITY env は #648 互換の legacy fallback としてのみ残す。
+EFFECT="$(yaml_get effect type "${VIDEOUP_EFFECT:-none}")"
+EFFECT_INTENSITY="$(yaml_get effect intensity "${VIDEOUP_EFFECT_INTENSITY:-subtle}")"
 
 # 値検証
 case "$EFFECT" in
@@ -153,7 +223,8 @@ crop=1920:1080:0:'mod(t*30,1080)'[fx];\
 [bg][fx]overlay=0:0:format=auto,format=yuv420p[vout]"
             ;;
         bokeh)
-            # ボケ: 色付きドットを巨大スケール + gblur で円形ぼかし → ゆっくり揺れる動き
+            # ボケ: 色付きドットを巨大スケール + gblur で円形ぼかし → 60s 周期でゆっくり揺れる
+            # overlay の sin/cos は 2*PI*t/60 で x/y とも 60s 周期に揃え、ベイクの継ぎ目をシームレスにする
             # noise alls は 0-100 範囲制約があるため上限内に収める
             echo "[${input_label}]format=yuv420p,setsar=1[bg];\
 color=c=0xffe8b0:s=240x135:r=24:d=1,format=yuv420p,\
@@ -162,12 +233,13 @@ geq=lum='if(gt(lum(X,Y),240),255,0)':a='if(gt(lum(X,Y),240),${EFFECT_ALPHA}*255,
 loop=loop=-1:size=1:start=0,\
 scale=1920:1080:flags=lanczos,\
 gblur=sigma=18[fx];\
-[bg][fx]overlay='40*sin(t/3)':'30*cos(t/4)':format=auto,format=yuv420p[vout]"
+[bg][fx]overlay='40*sin(2*PI*t/60)':'30*cos(2*PI*t/60)':format=auto,format=yuv420p[vout]"
             ;;
         gradient)
-            # グラデーション流れ: カラーグラデーションを上下にゆっくり流す
+            # グラデーション流れ: 静的グラデーション(speed=0)を crop で上下に流す → 72s 周期でシームレス
+            # speed=0 で色回転を止めて motion を crop の mod(t*15,1080)=72s 周期だけに限定し、ベイクの継ぎ目を消す
             echo "[${input_label}]format=yuv420p,setsar=1[bg];\
-gradients=s=1920x2160:c0=0x1a3a8a:c1=0xff8a3a:r=24:duration=120:type=linear,\
+gradients=s=1920x2160:c0=0x1a3a8a:c1=0xff8a3a:r=24:speed=0:type=linear,\
 crop=1920:1080:0:'mod(t*15,1080)',\
 format=yuva420p,\
 geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${EFFECT_ALPHA}*255'[fx];\
@@ -330,7 +402,7 @@ fi
 
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v13 — ${COLLECTION_NAME}"
+echo "  generate_videos.sh v14 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
@@ -350,48 +422,14 @@ fi
 duration="$(get_duration "$MASTER_AUDIO")"
 
 # ─── target_video_duration_min 解決 (#545) ──────────────
-# env > channel override (config/skills/videoup.yaml) > 未設定
+# env (VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN, 既存) >
+#   config/skills/videoup.yaml::audio.target_video_duration_min > 未設定
 # 未設定なら従来動作 (音声尺 = 動画尺)。設定時は音声側にも -stream_loop -1 を
 # 適用し -t target_video_duration_sec で動画長を強制する。
 # master 尺 ≥ target のときは現状動作維持 (master 尺が支配)。
-read_skill_config_target_video_duration_min() {
-    # channel root を COLLECTION_DIR から最大 5 階層上まで探索
-    # （`config/skills/videoup.yaml` を持つディレクトリを channel root とみなす）
-    local dir="$COLLECTION_DIR"
-    local override=""
-    for _ in 1 2 3 4 5; do
-        if [[ -f "$dir/config/skills/videoup.yaml" ]]; then
-            override="$dir/config/skills/videoup.yaml"
-            break
-        fi
-        local parent
-        parent="$(dirname "$dir")"
-        if [[ "$parent" == "$dir" ]]; then
-            break
-        fi
-        dir="$parent"
-    done
-    if [[ -z "$override" || ! -f "$override" ]]; then
-        return 0
-    fi
-    # flat 抽出: audio: ブロック配下の `target_video_duration_min:` 行を拾う。
-    # コメント行は除外。値はクォート無し数値前提 (`60` / `120` / `90.0` 等)。
-    awk '
-        /^[[:space:]]*#/ { next }
-        /^audio:[[:space:]]*$/ { in_audio = 1; next }
-        /^[^[:space:]#]/ { in_audio = 0 }
-        in_audio && /target_video_duration_min:[[:space:]]*[0-9]+(\.[0-9]+)?/ {
-            sub(/.*target_video_duration_min:[[:space:]]*/, "")
-            sub(/[[:space:]]*(#.*)?$/, "")
-            print
-            exit
-        }
-    ' "$override"
-}
-
 TARGET_VIDEO_DURATION_MIN="${VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN:-}"
 if [[ -z "$TARGET_VIDEO_DURATION_MIN" ]]; then
-    TARGET_VIDEO_DURATION_MIN="$(read_skill_config_target_video_duration_min)"
+    TARGET_VIDEO_DURATION_MIN="$(yaml_get audio target_video_duration_min "")"
 fi
 
 AUDIO_INPUT_OPTS=()
@@ -419,7 +457,7 @@ trap 'rm -f "$PROGRESS_FILE"' EXIT
 # Veo / ffmpeg 双方で「生成中 → 保存 → 後処理」のステップ感を共通化する。
 # ffmpeg 経路は (1) 入力正規化 (loop モードのみ) → (2) マスター動画生成
 # の 2 ステップ構成。静止画モードは (1) を skip。
-if [[ -n "$LOOP_VIDEO" ]]; then
+if [[ -n "$LOOP_VIDEO" || "$EFFECT" != "none" ]]; then
     FF_TOTAL_STEPS=2
 else
     FF_TOTAL_STEPS=1
@@ -535,55 +573,119 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         -loglevel error \
         -progress "$PROGRESS_FILE" \
         "$MASTER_OUTPUT" &
-elif [[ -n "$LOOP_VIDEO" ]]; then
-    # ループ動画背景モード: loop.mp4 を無限ループで背景に使用
-    # 戦略: ソースを 1 度だけ yuv420p / 1920x1080 に正規化キャッシュし、
-    # 以降のマスター動画生成は -c:v copy で stream copy する（音声のみエンコード）
-    loop_specs="$(ffprobe -v error -select_streams v:0 \
-        -show_entries stream=width,height,pix_fmt,r_frame_rate -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
-    # csv=p=0 出力は "width,height,pix_fmt,r_frame_rate" の順
-    loop_w="$(echo "$loop_specs" | cut -d, -f1)"
-    loop_h="$(echo "$loop_specs" | cut -d, -f2)"
-    loop_pix="$(echo "$loop_specs" | cut -d, -f3)"
-    loop_fps="$(echo "$loop_specs" | cut -d, -f4)"
-    loop_bitrate_bps="$(video_bitrate_bps "$LOOP_VIDEO")"
-    max_bitrate_bps="$(bitrate_to_bps "$LOOP_MAX_BITRATE")"
+else
+    # ── 非 overlay 経路（v14: effect をループ・ベイク化） ─────────────
+    # 最終形を「シームレスな短尺ループクリップを -stream_loop -1 -c:v copy で連結」に寄せる。
+    #   - loop.mp4 あり        → 1 度だけ正規化して LOOP_SOURCE を得る
+    #   - effect != none かつ可 → 1 周期だけ fx_baked.mp4 に焼き、それを stream copy
+    #   - どちらでもない        → 静止画 1fps（従来 mode A）
+    # effect ベイク不能（短尺/過大尺）は従来の全尺再エンコードへフォールバックする。
 
-    if [[ "$loop_w" == "$LOOP_TARGET_WIDTH" && "$loop_h" == "$LOOP_TARGET_HEIGHT" && "$loop_pix" == "$LOOP_TARGET_PIX_FMT" && "$loop_fps" == "$LOOP_TARGET_FRAME_RATE" \
-          && ( -z "$loop_bitrate_bps" || "$loop_bitrate_bps" -le "$max_bitrate_bps" ) ]]; then
-        # 既に正規化済み: そのまま使う
-        LOOP_SOURCE="$LOOP_VIDEO"
-    else
-        # 正規化キャッシュを使用
-        LOOP_SOURCE="${ASSETS_DIR}/loop_normalized.mp4"
-        normalized_bitrate_bps=""
-        if [[ -f "$LOOP_SOURCE" ]]; then
-            normalized_bitrate_bps="$(video_bitrate_bps "$LOOP_SOURCE")"
-        fi
-        if [[ ! -f "$LOOP_SOURCE" || "$LOOP_VIDEO" -nt "$LOOP_SOURCE" || ( -n "$normalized_bitrate_bps" && "$normalized_bitrate_bps" -gt "$max_bitrate_bps" ) ]]; then
-            echo "  [Step 1/${FF_TOTAL_STEPS}] Normalizing loop source (1 回だけ実行) → loop_normalized.mp4"
-            if [[ -n "$loop_bitrate_bps" && "$loop_bitrate_bps" -gt "$max_bitrate_bps" ]]; then
-                echo "  Loop bitrate exceeds ${LOOP_MAX_BITRATE}; re-encoding with maxrate guard"
+    # 1) loop.mp4 正規化（あれば LOOP_SOURCE を確定。無ければ空のまま）
+    LOOP_SOURCE=""
+    if [[ -n "$LOOP_VIDEO" ]]; then
+        loop_specs="$(ffprobe -v error -select_streams v:0 \
+            -show_entries stream=width,height,pix_fmt,r_frame_rate -of csv=p=0 "$LOOP_VIDEO" 2>/dev/null)"
+        # csv=p=0 出力は "width,height,pix_fmt,r_frame_rate" の順
+        loop_w="$(echo "$loop_specs" | cut -d, -f1)"
+        loop_h="$(echo "$loop_specs" | cut -d, -f2)"
+        loop_pix="$(echo "$loop_specs" | cut -d, -f3)"
+        loop_fps="$(echo "$loop_specs" | cut -d, -f4)"
+        loop_bitrate_bps="$(video_bitrate_bps "$LOOP_VIDEO")"
+        max_bitrate_bps="$(bitrate_to_bps "$LOOP_MAX_BITRATE")"
+
+        if [[ "$loop_w" == "$LOOP_TARGET_WIDTH" && "$loop_h" == "$LOOP_TARGET_HEIGHT" && "$loop_pix" == "$LOOP_TARGET_PIX_FMT" && "$loop_fps" == "$LOOP_TARGET_FRAME_RATE" \
+              && ( -z "$loop_bitrate_bps" || "$loop_bitrate_bps" -le "$max_bitrate_bps" ) ]]; then
+            # 既に正規化済み: そのまま使う
+            LOOP_SOURCE="$LOOP_VIDEO"
+        else
+            # 正規化キャッシュを使用
+            LOOP_SOURCE="${ASSETS_DIR}/loop_normalized.mp4"
+            normalized_bitrate_bps=""
+            if [[ -f "$LOOP_SOURCE" ]]; then
+                normalized_bitrate_bps="$(video_bitrate_bps "$LOOP_SOURCE")"
             fi
-            ffmpeg -y -i "$LOOP_VIDEO" \
-                -c:v libx264 -preset slow -crf 22 -maxrate "$LOOP_MAX_BITRATE" -bufsize "$LOOP_BUFSIZE" -profile:v high -pix_fmt yuv420p \
-                -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
-                -r "$LOOP_OUTPUT_FRAME_RATE" \
-                -an -movflags +faststart \
-                -loglevel error \
-                "$LOOP_SOURCE"
-            if [[ $? -ne 0 || ! -f "$LOOP_SOURCE" ]]; then
-                echo "  ERROR: loop_normalized.mp4 の生成に失敗"
-                exit 1
+            if [[ ! -f "$LOOP_SOURCE" || "$LOOP_VIDEO" -nt "$LOOP_SOURCE" || ( -n "$normalized_bitrate_bps" && "$normalized_bitrate_bps" -gt "$max_bitrate_bps" ) ]]; then
+                echo "  [Step 1/${FF_TOTAL_STEPS}] Normalizing loop source (1 回だけ実行) → loop_normalized.mp4"
+                if [[ -n "$loop_bitrate_bps" && "$loop_bitrate_bps" -gt "$max_bitrate_bps" ]]; then
+                    echo "  Loop bitrate exceeds ${LOOP_MAX_BITRATE}; re-encoding with maxrate guard"
+                fi
+                ffmpeg -y -i "$LOOP_VIDEO" \
+                    -c:v libx264 -preset slow -crf 22 -maxrate "$LOOP_MAX_BITRATE" -bufsize "$LOOP_BUFSIZE" -profile:v high -pix_fmt yuv420p \
+                    -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
+                    -r "$LOOP_OUTPUT_FRAME_RATE" \
+                    -an -movflags +faststart \
+                    -loglevel error \
+                    "$LOOP_SOURCE"
+                if [[ $? -ne 0 || ! -f "$LOOP_SOURCE" ]]; then
+                    echo "  ERROR: loop_normalized.mp4 の生成に失敗"
+                    exit 1
+                fi
             fi
         fi
     fi
 
-    if [[ "$EFFECT" == "none" ]]; then
-        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
-        # Stream copy 経路: ビデオは完全無損失（ビット単位コピー）、音声は AUDIO_OUT_OPTS に従う
+    # 2) effect ベイク（可能なら 1 周期だけ焼いて STREAM_SOURCE にする）
+    #    継ぎ目シームレス条件: bake_len が effect 周期の倍数、かつ（loop 背景なら）loop 尺の倍数。
+    #    → 静止画背景は bake_len=period、loop 背景は lcm(round(loop_dur), period)。
+    STREAM_SOURCE=""
+    if [[ "$EFFECT" != "none" ]]; then
+        period="$(effect_period)"
+        if [[ -n "$LOOP_SOURCE" ]]; then
+            loop_dur_raw="$(get_duration "$LOOP_SOURCE")"
+            loop_dur_int="$(awk "BEGIN{printf \"%d\", (${loop_dur_raw:-0})+0.5}")"
+            [[ "${loop_dur_int:-0}" -lt 1 ]] && loop_dur_int=1
+            bake_len="$(_lcm "$loop_dur_int" "$period")"
+            bake_filter="$EFFECT_FILTER_LOOP"
+            bake_input=(-stream_loop -1 -i "$LOOP_SOURCE")
+            bake_crf=22
+            bake_src_file="$LOOP_SOURCE"
+        else
+            bake_len="$period"
+            bake_filter="$EFFECT_FILTER_STATIC"
+            bake_input=(-framerate "$STILL_EFFECT_FPS" -loop 1 -i "$THUMBNAIL")
+            bake_crf="$STILL_EFFECT_CRF"
+            bake_src_file="$THUMBNAIL"
+        fi
+        if [[ "${bake_len:-0}" -le 0 ]] || awk "BEGIN{exit !(${bake_len:-0} >= ${video_duration:-0})}" || [[ "${bake_len:-0}" -gt "$BAKE_MAX_LEN" ]]; then
+            echo "  Effect bake skip (bake_len=${bake_len}s, video=${video_duration%.*}s) — 全尺再エンコードにフォールバック"
+        else
+            FX_BAKED="${ASSETS_DIR}/fx_baked.mp4"
+            FX_STAMP="${ASSETS_DIR}/fx_baked.params"
+            want_stamp="${EFFECT}|${EFFECT_INTENSITY}|${bake_len}|$(stat_mtime "$bake_src_file")|${LOOP_MAX_BITRATE}"
+            have_stamp=""
+            [[ -f "$FX_STAMP" ]] && have_stamp="$(cat "$FX_STAMP" 2>/dev/null)"
+            if [[ -f "$FX_BAKED" && "$have_stamp" == "$want_stamp" ]]; then
+                echo "  [Step 1/${FF_TOTAL_STEPS}] Effect loop cache hit (${bake_len}s, ${EFFECT}) → fx_baked.mp4 再利用"
+            else
+                echo "  [Step 1/${FF_TOTAL_STEPS}] Baking ${EFFECT} effect loop (${bake_len}s, 1 回だけ) → fx_baked.mp4"
+                ffmpeg -y "${bake_input[@]}" \
+                    -filter_complex "$bake_filter" \
+                    -map "[vout]" \
+                    -c:v libx264 -preset medium -crf "$bake_crf" -maxrate "$LOOP_MAX_BITRATE" -bufsize "$LOOP_BUFSIZE" -pix_fmt yuv420p \
+                    -r "$LOOP_OUTPUT_FRAME_RATE" \
+                    -t "$bake_len" \
+                    -an -movflags +faststart \
+                    -loglevel error \
+                    "$FX_BAKED"
+                if [[ $? -ne 0 || ! -f "$FX_BAKED" ]]; then
+                    echo "  ERROR: fx_baked.mp4 の生成に失敗"
+                    exit 1
+                fi
+                printf '%s' "$want_stamp" > "$FX_STAMP"
+            fi
+            STREAM_SOURCE="$FX_BAKED"
+        fi
+    elif [[ -n "$LOOP_SOURCE" ]]; then
+        STREAM_SOURCE="$LOOP_SOURCE"
+    fi
+
+    # 3) 最終マスター動画生成
+    if [[ -n "$STREAM_SOURCE" ]]; then
+        # Stream copy 経路（effect ベイク / loop 背景 共通）: ビデオは完全無損失（ビット単位コピー）。
         # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
-        ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
+        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
+        ffmpeg -y -stream_loop -1 -i "$STREAM_SOURCE" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -map 0:v:0 -map 1:a:0 \
             -c:v copy \
@@ -594,10 +696,9 @@ elif [[ -n "$LOOP_VIDEO" ]]; then
             -loglevel error \
             -progress "$PROGRESS_FILE" \
             "$MASTER_OUTPUT" &
-    else
-        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (loop + ${EFFECT} effect)"
-        # エフェクト有効: ループ素材を libx264 で再エンコードしながら filtergraph をオーバーレイ (#648)
-        # 容量増を抑えるため CRF 22 / preset medium / maxrate ガードを共通定数と揃える
+    elif [[ "$EFFECT" != "none" && -n "$LOOP_SOURCE" ]]; then
+        # フォールバック: loop + effect を全尺再エンコード（従来 mode C）
+        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (loop + ${EFFECT} effect, full encode fallback)"
         ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -filter_complex "$EFFECT_FILTER_LOOP" \
@@ -611,20 +712,15 @@ elif [[ -n "$LOOP_VIDEO" ]]; then
             -loglevel error \
             -progress "$PROGRESS_FILE" \
             "$MASTER_OUTPUT" &
-    fi
-else
-    if [[ "$EFFECT" == "none" ]]; then
-        echo "  [Step 1/1] Generating master video (still image)"
-        # 静止画背景モード（従来）
-        # I-frame を 5 分間隔（1fps なので 300 フレーム）に間引き、変化のないフレームを P-frame で
-        # 圧縮することで master.mp4 を大幅に小型化する（#579）。keyint=1 全 I-frame 化は容量が膨らむため廃止。
-        # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
-        ffmpeg -y -framerate 1 -loop 1 -i "$THUMBNAIL" \
+    elif [[ "$EFFECT" != "none" ]]; then
+        # フォールバック: 静止画 + effect を全尺再エンコード（従来 mode D）
+        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image + ${EFFECT} effect, full encode fallback)"
+        ffmpeg -y -framerate "$STILL_EFFECT_FPS" -loop 1 -i "$THUMBNAIL" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
-            -c:v libx264 -tune stillimage -preset medium -crf 28 -pix_fmt yuv420p \
-            -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
-            -g 300 \
-            -r 1 \
+            -filter_complex "$EFFECT_FILTER_STATIC" \
+            -map "[vout]" -map 1:a:0 \
+            -c:v libx264 -preset medium -crf "$STILL_EFFECT_CRF" -pix_fmt yuv420p \
+            -r "$STILL_EFFECT_FPS" \
             "${AUDIO_OUT_OPTS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
@@ -633,15 +729,15 @@ else
             -progress "$PROGRESS_FILE" \
             "$MASTER_OUTPUT" &
     else
-        echo "  [Step 1/1] Generating master video (still image + ${EFFECT} effect)"
-        # エフェクト有効: 静止画背景を 24fps で再エンコードしながら filtergraph をオーバーレイ (#648)
-        # 静止画モードは映像が動かないため、エフェクトを目立たせるには 24fps で書き出す必要がある
-        ffmpeg -y -framerate 24 -loop 1 -i "$THUMBNAIL" \
+        # 静止画背景モード（従来 mode A）。エンコード値は config 駆動（fallback=現行値）。
+        # I-frame を STILL_GOP フレーム間隔に間引き、変化のないフレームを P-frame で圧縮して小型化（#579）。
+        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image)"
+        ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$THUMBNAIL" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
-            -filter_complex "$EFFECT_FILTER_STATIC" \
-            -map "[vout]" -map 1:a:0 \
-            -c:v libx264 -preset medium -crf 24 -pix_fmt yuv420p \
-            -r 24 \
+            -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
+            -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
+            -g "$STILL_GOP" \
+            -r "$STILL_FPS" \
             "${AUDIO_OUT_OPTS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
@@ -711,6 +807,38 @@ fi
 if [[ $exit_code -ne 0 ]]; then
     echo "  ERROR: FFmpeg failed with exit code $exit_code"
     exit $exit_code
+fi
+
+# ─── 生成後の容量最適化パス (opt-in, config 駆動) ──────────
+# shrink.enabled = true かつ maxrate or crf 指定時のみ、出力を 2 パス目で再エンコードして置換する。
+# 注意: 全尺を再エンコードするため stream copy の速度メリットは相殺される（長尺で数分〜十数分）。
+#       本来は loop_maxrate を下げて上流で容量制御するのが推奨。これは容量最小化したい最終版向け。
+SHRINK_ENABLED="$(yaml_get shrink enabled false)"
+SHRINK_MAXRATE="$(yaml_get shrink maxrate "")"
+SHRINK_CRF="$(yaml_get shrink crf "")"
+if [[ "$SHRINK_ENABLED" == "true" && ( -n "$SHRINK_MAXRATE" || -n "$SHRINK_CRF" ) ]]; then
+    echo ""
+    echo "  [shrink] 生成後の容量最適化パスを実行します（全尺を再エンコード: 長尺は数分〜十数分）"
+    echo "           ※ stream copy の速度メリットは相殺されます。容量最小化したい最終版向け。"
+    shrink_tmp="${MASTER_OUTPUT%.mp4}.shrink.mp4"
+    if [[ -n "$SHRINK_CRF" ]]; then
+        shrink_venc=(-c:v libx264 -preset medium -crf "$SHRINK_CRF" -pix_fmt yuv420p)
+        echo "           target: crf=${SHRINK_CRF}"
+    else
+        shrink_maxrate_bps="$(bitrate_to_bps "$SHRINK_MAXRATE")"
+        shrink_buf="$(awk "BEGIN{printf \"%dk\", (${shrink_maxrate_bps:-0}/1000)*2}")"
+        shrink_venc=(-c:v libx264 -preset medium -b:v 0 -maxrate "$SHRINK_MAXRATE" -bufsize "$shrink_buf" -pix_fmt yuv420p)
+        echo "           target: maxrate=${SHRINK_MAXRATE} (bufsize=${shrink_buf})"
+    fi
+    before_size="$(ls -lh "$MASTER_OUTPUT" | awk '{print $5}')"
+    if ffmpeg -y -i "$MASTER_OUTPUT" "${shrink_venc[@]}" -c:a copy -movflags +faststart -loglevel error "$shrink_tmp" && [[ -f "$shrink_tmp" ]]; then
+        mv "$shrink_tmp" "$MASTER_OUTPUT"
+        after_size="$(ls -lh "$MASTER_OUTPUT" | awk '{print $5}')"
+        echo "  [shrink] 完了: ${before_size} → ${after_size}"
+    else
+        echo "  [shrink] WARN: 再エンコードに失敗。元ファイルを保持します"
+        rm -f "$shrink_tmp"
+    fi
 fi
 
 size="$(ls -lh "$MASTER_OUTPUT" | awk '{print $5}')"

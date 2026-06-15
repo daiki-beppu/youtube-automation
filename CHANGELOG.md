@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(benchmark)`: ベンチマーク収集のサムネイル分析で Gemini 2.5 Pro（Vertex AI）をデフォルトで全動画に呼び出しており、2チャンネル分の初回収集で ¥6,000 の課金が発生していた問題を修正した。サムネイル分析の実行主体を Gemini API からエージェントの画像読み取り機能（Read ツール）に移行した（追加課金なし）。設定キーを `analyze_thumbnails` → `gemini_thumbnail_analysis`（既定 `false`）にリネームし、明示的に Gemini を使う場合もデフォルトモデルを Pro → Flash に変更（コスト 1/10〜1/20）。あわせて実行前のコストプレビュー表示、Gemini 呼び出しの cost_tracker 記録（`"analysis"` カテゴリ新設）、`-y` 確認スキップフラグを追加した。
+
 ### Changed
 
+- `perf(videoup)`: 映像エフェクト (#648) をループ・ベイク方式へ刷新し、エフェクト有効時の動画書き出しを高速化した（generate_videos.sh v14）。従来はエフェクト ON でモード C（loop.mp4 + effect）/ モード D（静止画 + effect）ともに 2 時間尺を libx264 で全フレーム再エンコードしており 8〜15 分かかっていたが、エフェクト込みで 1 周期分だけ `10-assets/fx_baked.mp4` に焼き、あとは `-stream_loop -1 -c:v copy` で連結する方式へ変更して約 1〜2 分に短縮した（継ぎ目は closed GOP の stream copy で原理的に無損失）。これに伴いエフェクトの周期を整数固定にした: particles=36s（既存の `mod(t*30,1080)` のまま）/ bokeh=60s（overlay の揺れを `40*sin(2*PI*t/60)` / `30*cos(2*PI*t/60)` に整数周期化）/ gradient=72s（`gradients` を `speed=0` で静的化し、`crop` の `mod(t*15,1080)`=72s 周期だけに motion を限定）。背景が loop.mp4 のときは `lcm(round(loop 尺), 周期)` の長さを焼いて背景・エフェクト双方の継ぎ目を揃える。ベイク尺 ≥ 動画尺、または上限 `BAKE_MAX_LEN=900s` 超のときは従来の全尺再エンコードへ自動フォールバックし、短尺動画でも破綻しない。`fx_baked.params`（effect / intensity / 周期 / 元画像 mtime / maxrate）でキャッシュし、サムネ差し替え時のみ再ベイク（10〜40 秒）するためサムネ試行錯誤が軽い。あわせて静止画の fps/CRF/GOP・loop のビットレート上限/bufsize・effect の種別/強度・生成後の容量最適化（shrink）を **`config/skills/videoup.yaml` から取得する config 駆動**へ統一した（新規 env override は追加せず、`yaml_get` の 2-level flat YAML reader で読み、キー欠落時は現行固定値へフォールバック=無回帰。既存 `VIDEOUP_EFFECT` / `VIDEOUP_EFFECT_INTENSITY` env と `VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN` env は legacy fallback として存置）。新設の `shrink.enabled` + `maxrate`/`crf` を指定すると生成済み出力を 2 パス目で再エンコードして容量を絞れるが、全尺再エンコードのため stream copy の速度メリットは相殺される（最終版向け。上流の `loop_maxrate` 低減での容量制御を推奨、ファイル削除は `/live-clean` が担当）。SKILL.md に videoup.yaml スキーマ・所要時間目安・shrink/`/live-clean` 相互参照を追記。
 - `refactor(ts-rewrite/core)`: config 15 section を zod boundary parse 化し、手動 `_build_*` / `REQUIRED_KEYS_BY_SECTION` を撤廃した（#825）。`snakeToCamel` 共用ヘルパを `packages/core/internal/case.ts` に新設し、各 section を `z.object().strict().transform(snakeToCamel)` で統一。`loader.ts` は `ChannelConfig.parse(merged)` 1 行に簡素化
 - `perf(suno-helper)`: Balanced プリセットを増速した（#970、#948 後追い）。`maxInflightRequests` 5 → 10（`MAX_INFLIGHT_REQUESTS` 参照、#816 実機検証の Suno 実上限）、`interCreateDelayMs` 10000 → 6000（jitter ±3000 は維持し bot 検知の固定間隔シグナルを避ける）。従来の保守値は「Remix disabled プロキシによる in-flight 過大カウント + 1 失敗で全停止」時代のリスク対策であり、#948 で API status ベースの正確な計数と自動リトライ / スキップ継続が入った後は失敗 1 回のコストが小さく、定常速度（キュー容量 × 排出速度）を律速する cap を実上限まで開放するのがリスク対効果で最良。キュー飽和後の定常スループットはほぼ 2 倍になる見込み。suno-helper skill のプリセット表も更新。
 

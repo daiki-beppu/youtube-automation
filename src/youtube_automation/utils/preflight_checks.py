@@ -106,8 +106,8 @@ def check_title_template_compliance(
     if vol_hit:
         issues.append(f"巻数表記を検出: {vol_hit!r}（コレクション名の公開タイトル流用を疑ってください）")
 
-    if _has_duplicate_rhs(rhs, existing_titles, separator):
-        issues.append(f"RHS が既存 live タイトルと完全重複: {rhs!r}")
+    if _has_duplicate_full_title(normalized, existing_titles):
+        issues.append(f"タイトル全体が既存 live タイトルと完全重複: {normalized!r}")
 
     if core_vocabulary and not _contains_any_vocab(lhs, core_vocabulary):
         issues.append(f"LHS に鋳型語彙 {list(core_vocabulary)} が含まれません: {lhs!r}")
@@ -123,15 +123,10 @@ def _first_pattern_hit(text: str, patterns: Sequence[str] | Collection[str]) -> 
     return None
 
 
-def _has_duplicate_rhs(rhs: str, existing_titles: Collection[str], separator: str) -> bool:
-    if not rhs:
+def _has_duplicate_full_title(title: str, existing_titles: Collection[str]) -> bool:
+    if not title:
         return False
-    for other in existing_titles:
-        other_parts = str(other).split(separator)
-        other_rhs = other_parts[-1].strip() if len(other_parts) >= 2 else ""
-        if other_rhs and other_rhs == rhs:
-            return True
-    return False
+    return any(title == str(other).strip() for other in existing_titles)
 
 
 def _contains_any_vocab(text: str, vocabulary: Collection[str]) -> bool:

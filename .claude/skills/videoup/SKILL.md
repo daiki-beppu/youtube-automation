@@ -74,9 +74,42 @@ $ARGUMENTS
 - master 尺 ≥ `target_video_duration_min × 60` のときは無視され従来動作になる (master 尺が支配)
 - 音声 loop seam の crossfade は本機能のスコープ外 (将来拡張)
 
-## 映像エフェクト (#648)
+## 設定: config/skills/videoup.yaml (v14)
 
-ループ動画背景・静止画背景のどちらでも、画面に **光の粒子**・**ボケ**・**グラデーション流れ** などのエフェクトを重ねられる。動画編集ソフトの「画面を彩るレイヤー効果」を ffmpeg filtergraph だけで再現する MVP 機構。
+`generate_videos.sh` のチューニング値は **すべて下流チャンネルの `config/skills/videoup.yaml` から取得**する（新規 env override は追加しない config 駆動）。**全キー省略可**で、省略時は現行の固定値にフォールバックする（=無回帰）。
+
+```yaml
+audio:
+  target_video_duration_min: 120   # 短尺 master を動画尺へ loop 伸長（#545, 既存 env 優先）
+video:
+  still_fps: 1            # 静止画(effect 無し)の fps（既定 1）
+  still_crf: 28           # 静止画(effect 無し)の CRF（既定 28、高画質寄りは 26）
+  still_gop: 300          # 静止画 GOP フレーム間隔（既定 300 = 1fps で 5 分）
+  loop_maxrate: "6000k"   # loop 正規化 / effect ベイクの maxrate（既定 6000k、容量重視は 4000-4500k）
+  loop_bufsize: "12000k"  # 同上 bufsize（既定 12000k）
+effect:
+  type: none             # none | particles | bokeh | gradient（旧 VIDEOUP_EFFECT の config 版）
+  intensity: subtle       # subtle | medium | strong
+shrink:
+  enabled: false         # 生成後の容量最適化 re-encode（下記）
+  maxrate: ""            # 例 "2500k"。enabled かつ maxrate or crf 指定で発火
+  crf: ""               # maxrate と排他（どちらか一方）
+```
+
+- **最終ファイルサイズ ≒ ベイク/正規化ビットレート × 尺**。容量を絞りたいときは `loop_maxrate` を下げるのが最も効く（YouTube 側で再トランスコードされるため、source を 4000-4500k へ下げても最終画質はほぼ不変）。
+- `effect.type` / `effect.intensity` は config が一次ソース。既存の `VIDEOUP_EFFECT` / `VIDEOUP_EFFECT_INTENSITY` env は #648 互換の legacy fallback としてのみ残る。
+
+### 生成後の容量最適化（shrink, opt-in）
+
+`shrink.enabled: true` かつ `shrink.maxrate` か `shrink.crf` を指定すると、生成済み出力を 2 パス目で再エンコードして置換する。
+
+- **トレードオフ**: 全尺を再エンコードするため、effect ベイク / stream copy の速度メリットは相殺される（長尺で数分〜十数分）。**容量を最小化したい最終版のみ**に使う。
+- 本来は `loop_maxrate` を下げて上流で容量制御するのが推奨。
+- アップロード確認後にファイルを消すディスク運用は `/live-clean` が担当。
+
+## 映像エフェクト (#648 / v14 でループ・ベイク化)
+
+ループ動画背景・静止画背景のどちらでも、画面に **光の粒子**・**ボケ**・**グラデーション流れ** などのエフェクトを重ねられる。動画編集ソフトの「画面を彩るレイヤー効果」を ffmpeg filtergraph だけで再現する機構。**v14 でエフェクト込み 1 周期だけを焼いて stream copy する「ループ・ベイク」方式に刷新し、エフェクト有効時も高速になった**。
 
 ### エフェクト一覧
 
@@ -87,28 +120,30 @@ $ARGUMENTS
 | `bokeh` | ボケ（柔らかな円形グラデーションがゆらぐ） | カフェ系・暖色系ジャズ・ロウソク系のサムネ |
 | `gradient` | グラデーション流れ（半透明のカラーグラデーションが上下にうごく） | ローファイヒップホップ・シティポップ・夜の街並み |
 
-強度は `VIDEOUP_EFFECT_INTENSITY` で `subtle` / `medium` / `strong` から選ぶ（デフォルト `subtle`）。BGM 視聴の邪魔をしないよう **subtle 推奨**。`strong` は短時間のテイスター動画やショート向け。
+強度は `effect.intensity` で `subtle` / `medium` / `strong` から選ぶ（デフォルト `subtle`）。BGM 視聴の邪魔をしないよう **subtle 推奨**。`strong` は短時間のテイスター動画やショート向け。
 
 ### 使い方
 
-```bash
-# 例 1: ループ動画背景に「光の粒子（控えめ）」を重ねる
-VIDEOUP_EFFECT=particles VIDEOUP_EFFECT_INTENSITY=subtle \
-  bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh"
+`config/skills/videoup.yaml` に書くだけ（env 指定は不要）:
 
-# 例 2: 静止画背景に「ボケ（中程度）」を重ねる
-VIDEOUP_EFFECT=bokeh VIDEOUP_EFFECT_INTENSITY=medium \
-  bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
-  collections/planning/20260601-001-lofi-jazz-collection
+```yaml
+# config/skills/videoup.yaml
+effect:
+  type: particles      # particles | bokeh | gradient
+  intensity: subtle    # subtle | medium | strong
 ```
+
+あとは通常どおり `generate_videos.sh` を回すと自動でエフェクトが乗る。既存の `VIDEOUP_EFFECT=... bash .../generate_videos.sh` env 指定も legacy fallback として動く。
 
 ### 挙動と注意点
 
-- **エフェクト有効時はループモードでも stream copy ではなく libx264 再エンコードに切り替わる**。ファイルサイズは数% 増えるが、CRF 22 / `LOOP_MAX_BITRATE` ガードで肥大化を抑える
-- 静止画モードもエフェクト有効時は 24fps で書き出すため、ファイルサイズが従来（1fps）より大きくなる。**長尺の場合は静止画 + エフェクトより、ループ動画 + エフェクトを推奨**
-- 不正な値（例: `VIDEOUP_EFFECT=sparkle`）は **fail-loud で停止**。ffmpeg が走り始める前にエラーとなる
+- **v14: エフェクト有効時も高速**。エフェクト込みで 1 周期分だけ `fx_baked.mp4` に焼き、あとは `-stream_loop -1 -c:v copy` で連結する。従来の全尺再エンコード（loop/静止画ともに 8〜15 分）が **約 1〜2 分**になり、継ぎ目は closed GOP の stream copy で原理的に無損失
+- エフェクト周期は整数固定: **particles=36s / bokeh=60s / gradient=72s**。背景が `loop.mp4` のときは `lcm(loop 尺, 周期)` の長さを焼いて背景・エフェクト双方の継ぎ目を揃える
+- ベイク尺が動画尺以上、または上限（`BAKE_MAX_LEN=900s`）超のときは従来の全尺再エンコードへ **自動フォールバック**する（短尺動画など）
+- `fx_baked.mp4` は `fx_baked.params`（effect / intensity / 周期 / 元画像 mtime / maxrate）でキャッシュ。サムネ差し替え時のみ再ベイク（10〜40 秒）するので「画像差し替え→再生成」が軽い
+- ファイルサイズは `loop_maxrate`（既定 6000k）で制御。stream copy 出力のサイズはベイクのビットレート × 尺で決まる。容量を絞るなら `loop_maxrate` を 4000-4500k へ
+- 不正な値（例: `effect.type: sparkle`）は **fail-loud で停止**。ffmpeg が走り始める前にエラーとなる
 - 値検証は bash で完結しているため、`set -e` を使わずとも安全
-- エフェクトをチャンネルデフォルトにしたい場合は、当面はチャンネル側ラッパースクリプトや shell alias で `export VIDEOUP_EFFECT=...` を呼ぶ運用とする（skill-config 化は follow-up）
 
 ### 動作確認
 
@@ -171,7 +206,7 @@ VIDEOUP_EFFECT=bokeh VIDEOUP_EFFECT_INTENSITY=medium \
 
 ## 長時間処理の取り扱い
 
-`generate_videos.sh` は ffmpeg を走らせるため **1〜10 分程度**（コレクション尺次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（stream copy / 静止画 1fps）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
 
 spawn 例:
 

@@ -19,7 +19,7 @@ description: "Use when 競合チャンネルのベンチマークデータを最
 
 ## 取得データ（拡充版）
 
-| 基本データ (YouTube API) | 派生指標 (自動算出) | サムネイル分析 (Gemini) |
+| 基本データ (YouTube API) | 派生指標 (自動算出) | サムネイル分析 (エージェント) |
 |---|---|---|
 | 再生数・高評価・コメント数 | 日次再生数 (views/日数) | 構図・配色 |
 | タイトル・タグ・説明文 | エンゲージメント率 (ER%) | テキスト配置 |
@@ -27,19 +27,18 @@ description: "Use when 競合チャンネルのベンチマークデータを最
 
 ## 実行フロー
 
-### Step 1: スクリプト実行
+### Step 1: データ収集
 
 ```bash
 # チャンネルディレクトリから実行（鮮度チェック → 古いもののみ更新）
-uv run yt-benchmark-collect
+uv run yt-benchmark-collect -y
 
 # オプション
-uv run yt-benchmark-collect --force            # 全チャンネル強制更新
-uv run yt-benchmark-collect --no-thumbnails    # サムネイル分析スキップ（高速）
-uv run yt-benchmark-collect --keep-thumbnails  # サムネイル画像を保持
-uv run yt-benchmark-collect --json-only        # JSON のみ（Markdown スキップ）
-uv run yt-benchmark-collect --channel <slug>   # 単一チャンネル指定
-uv run yt-benchmark-collect -v                 # 詳細ログ
+uv run yt-benchmark-collect --force -y       # 全チャンネル強制更新
+uv run yt-benchmark-collect --no-thumbnails  # サムネイルDLスキップ（高速）
+uv run yt-benchmark-collect --json-only      # JSON のみ（Markdown スキップ）
+uv run yt-benchmark-collect --channel <slug> # 単一チャンネル指定
+uv run yt-benchmark-collect -v               # 詳細ログ
 ```
 
 スクリプトが自動で以下を実行:
@@ -47,14 +46,27 @@ uv run yt-benchmark-collect -v                 # 詳細ログ
 2. `docs/benchmarks/*.md` の更新日時で鮮度チェック（`freshness_days` 日以上前なら更新）
 3. YouTube Data API で**直近 `scan_recent` 本（既定 50）** を走査し、**`min_views` 以上（既定 10,000）** の動画だけを抽出
 4. 派生指標算出（日次再生数・ER%・投稿間隔トレンド）
-5. サムネイルDL → Gemini API で構図・配色・テキスト配置を分析
+5. サムネイル画像を `docs/benchmarks/thumbnails/` にダウンロード
 6. `data/benchmark_YYYYMMDD.json` に中間データ保存
 7. `docs/benchmarks/*.md`（個別 + common-patterns + README）を自動生成
    - 該当動画が 0 件のチャンネルは「該当動画なし」注記付きの空レポートになる
 
-### Step 2: 結果確認・戦略的評価
+### Step 2: サムネイル分析（エージェント）
 
-スクリプト完了後、Claude が以下を実施:
+スクリプト完了後、エージェントが以下を実施:
+
+1. 各チャンネルのレポート（`docs/benchmarks/{slug}.md`）を読み、再生数上位 5 本の動画を特定
+2. 該当動画のサムネイル画像を `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg` から Read ツールで読み込み
+3. 各サムネイルを以下の観点で分析:
+   - **構図**: レイアウト・焦点・キャラクター配置
+   - **配色**: 支配色・全体のムード/トーン
+   - **テキスト配置**: タイトルテキストの位置・スタイル
+   - **キャラ活動**: キャラクターの動作（いなければ 'none'）
+   - **雰囲気**: 全体のムード・ライティング・環境効果
+   - **強み**: 効果的な要素のリスト
+4. 分析結果を `docs/benchmarks/{slug}.md` の末尾に `## サムネイル分析` セクションとして追記
+
+### Step 3: 結果確認・戦略的評価
 
 1. 生成された `docs/benchmarks/*.md` を Read ツールで確認
 2. 高パフォーマンス動画のパターンを分析
@@ -94,16 +106,20 @@ uv run yt-benchmark-collect -v                 # 詳細ログ
 | `scan_recent` | 50 | チャンネルあたりの走査プール本数（直近 N 投稿） |
 | `min_views` | 10000 | ベンチマーク対象の視聴数しきい値 |
 | `freshness_days` | 3 | レポート更新間隔（日） |
-| `analyze_thumbnails` | true | Gemini によるサムネイル分析を実行するか |
-| `thumbnail_analysis.model` | gemini-2.5-pro | サムネイル分析モデル |
+| `gemini_thumbnail_analysis` | false | Gemini API によるサムネイル分析（Vertex AI 課金あり、通常は不要） |
+| `thumbnail_analysis.model` | gemini-2.5-flash | Gemini 分析モデル（`gemini_thumbnail_analysis: true` 時のみ） |
 | `thumbnail_analysis.delay_sec` | 5 | API レート制限対策の待機秒数 |
 | `thumbnail_analysis.prompt` | 汎用プロンプト | ジャンル/世界観に合わせて上書き推奨 |
+
+## コストに関する注意
+
+- **YouTube Data API**: 無料枠内（10,000 units/day）。1チャンネルあたり約 4 ユニット
+- **サムネイル分析**: デフォルトではエージェントが実行（追加コストなし）
+- **Gemini サムネイル分析** (`gemini_thumbnail_analysis: true`): Vertex AI 課金が発生する。10チャンネル × 各 20 本 = 200 回の API 呼び出しで数千円になる可能性があるため、通常は OFF のままにすること
 
 ## 注意事項
 
 - OAuth 認証は `auth/token.json` を使用
-- YouTube API: 1チャンネルあたり約 4 ユニット（channels 1 + playlistItems 1 + videos 約 2）
-- Gemini サムネイル分析: 5秒間隔でレート制限回避（`--no-thumbnails` でスキップ可）
 - `common-patterns.md` の手書きパターン分析は「運用ベンチマーク」セクションより上に維持される
 
 ## 関連ファイル
