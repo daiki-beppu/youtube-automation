@@ -45,6 +45,9 @@ export interface CollectionSummary {
   // 既に config/suno-playlists.json にマッピング済みか (#893 追加要件 B)。
   // optional・後方互換: prefix 未設定の旧サーバーは返さず undefined（全件表示の従来挙動）。
   mapped?: boolean;
+  // サーバーが prefix を使って導出した Suno playlist 名 `<prefix> | <theme>`。
+  // マルチワード prefix でも正しい境界分割を保証する。未設定時は extractPlaylistName fallback。
+  playlist_name?: string;
 }
 
 /** Suno `/me` から捕捉した 1 playlist (#893)。POST /suno/playlists の body 要素。 */
