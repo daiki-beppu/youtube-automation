@@ -138,7 +138,14 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
         </button>
       </div>
       {/* 最小化中は panel を display:none + pointer-events:none で Suno UI 操作を邪魔しない (要件4)。 */}
-      <div style={{ pointerEvents: minimized ? "none" : "auto", display: minimized ? "none" : "block" }}>
+      <div
+        className="overflow-y-auto"
+        style={{
+          pointerEvents: minimized ? "none" : "auto",
+          display: minimized ? "none" : "block",
+          maxHeight: "calc(100vh - 120px)",
+        }}
+      >
         <App />
       </div>
     </div>
