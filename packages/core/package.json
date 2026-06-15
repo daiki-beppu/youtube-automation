@@ -14,7 +14,7 @@
     "./oauth/refresh": "./src/oauth/refresh.ts",
     "./paths": "./src/paths.ts",
     "./registry": "./src/registry.ts",
-    "./skills-sync": "./skills-sync/index.ts"
+    "./skills-sync": "./src/skills-sync/index.ts"
   },
   "dependencies": {
     "@google/genai": "^2.7.0",

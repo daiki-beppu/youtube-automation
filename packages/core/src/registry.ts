@@ -1,12 +1,14 @@
 import type { z } from "zod";
 
+import type { ChannelConfig } from "./config/index.ts";
+import type { ServiceError } from "./errors.ts";
+import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
+import type { Result } from "./result.ts";
 import {
   listSkillsService,
   SkillListInputSchema,
   SkillListOutputSchema,
-} from "../skills-sync/index.ts";
-import type { ServiceError } from "./errors.ts";
-import type { Result } from "./result.ts";
+} from "./skills-sync/index.ts";
 
 // ADR-0004: core feature registry。feature 名 → {description, schema, deps, run} の
 // data registry を core が所有し、packages/cli (citty defineCommand) と packages/mcp
@@ -17,9 +19,17 @@ import type { Result } from "./result.ts";
 //   - CLI adapter: subcommand 階層 (`yt skills list`)
 //   - MCP adapter: underscore (`skills_list`)
 
-// service が要求しうる重い依存の対応表。#826 (oauth) で client factory が入ったら
-// interface へ拡張する (例: `youtube: youtube_v3.Youtube`)。
-export type DepsMap = Record<never, never>;
+// service が要求しうる重い依存の型対応表 (#993)。各 service は deps 配列で必要な key
+// だけを宣言し、Pick<DepsMap, D> で run の第 2 引数を compile-time に確定させる。
+//   - config:      ChannelConfig (#961 前倒し。service は loadConfig() を内部呼びしない)
+//   - yt:          YouTube Data API v3 client
+//   - ytAnalytics: YouTube Analytics API v2 client (最小権限: analytics service は yt に触れない)
+// 個別 client を載せるのは最小権限の原則。token ではなく構築済み client を注入する。
+export interface DepsMap {
+  config: ChannelConfig;
+  yt: YouTubeClient;
+  ytAnalytics: YouTubeAnalyticsClient;
+}
 
 // registry entry の契約。deps に宣言した key だけが run の第 2 引数に渡る
 // (宣言漏れ・過多は compile error — ADR-0004 §2)。

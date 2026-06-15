@@ -2,11 +2,12 @@ import { REGISTRY } from "@youtube-automation/core/registry";
 import type { SkillListOutput } from "@youtube-automation/core/skills-sync";
 import { defineCommand } from "citty";
 
+import { resolveDeps } from "../../../lib/resolve-deps.ts";
 import { emitResult } from "../../../lib/run-command.ts";
 
 // ADR-0004 §4: CLI flags は per-command 手書き (positional / alias / UX は schema に
-// 乗らないため)。service 呼び出しは core registry entry 経由、出力整形と exit code は
-// lib/run-command.ts の共通 helper に集約する。
+// 乗らないため)。service 呼び出しは core registry entry 経由、entry.deps の解決は
+// lib/resolve-deps.ts、出力整形と exit code は lib/run-command.ts の共通 helper に集約する。
 
 const skillsListEntry = REGISTRY["skills.list"];
 
@@ -33,7 +34,8 @@ const listCommand = defineCommand({
     const input = skillsListEntry.inputSchema.parse({
       skillsDir: args["skills-dir"],
     });
-    const result = await skillsListEntry.run(input, {});
+    const deps = await resolveDeps(skillsListEntry.deps);
+    const result = await skillsListEntry.run(input, deps);
     emitResult(result, { json: args.json, renderText });
   },
 });
