@@ -66,11 +66,7 @@
       <input id="artwork" name="artwork" type="file" />
 
       <!-- トラック数 select（#888）。change で track 行 + credit 欄を再生成する。 -->
-      <select
-        id="howManySongsOnThisAlbum"
-        name="howmanysongs"
-        onchange="changedSongCount()"
-      >
+      <select id="howManySongsOnThisAlbum" name="howmanysongs" onchange="changedSongCount()">
         <option value="1">1曲（シングル）</option>
         <option value="2">2曲</option>
         <option value="3">3曲</option>
@@ -87,31 +83,56 @@
 
       <!-- 配信先ストア（実 DOM 準拠 #923）。実配信先は id^="chk"、upsell は id なし。初期は unchecked（クリア済み最悪状態再現）。 -->
       <label><input type="checkbox" name="store" id="chkspotify" value="spotify" class="distroStore" />Spotify</label>
-      <label><input type="checkbox" name="store" id="chkapplemusic" value="applemusic" class="distroStore" />Apple Music</label>
+      <label
+        ><input type="checkbox" name="store" id="chkapplemusic" value="applemusic" class="distroStore" />Apple
+        Music</label
+      >
       <label><input type="checkbox" name="store" id="chkitunes" value="itunes" class="distroStore" />iTunes</label>
-      <label><input type="checkbox" name="store" id="chkgoogle" value="google" class="distroStore" />YouTube Music</label>
+      <label
+        ><input type="checkbox" name="store" id="chkgoogle" value="google" class="distroStore" />YouTube Music</label
+      >
       <label><input type="checkbox" name="store" id="chksnap" value="snap" class="distroStore" />Snapchat</label>
       <label><input type="checkbox" name="store" id="chkroblox" value="roblox" class="distroStore" />Roblox</label>
       <label><input type="checkbox" name="store" id="chktiktok" value="tiktok" class="distroStore" />TikTok</label>
       <!-- upsell（id なし）: Discovery Pack（shazam）/ Audiomack -->
-      <label><input type="checkbox" name="store" value="shazam" class="distroStore" />ディスカバリーパック（24.75ドル／年）</label>
-      <label><input type="checkbox" name="store" value="audiomack" class="distroStore js-audiomackExtraCheckbox" />Audiomack（無料）</label>
+      <label
+        ><input
+          type="checkbox"
+          name="store"
+          value="shazam"
+          class="distroStore"
+        />ディスカバリーパック（24.75ドル／年）</label
+      >
+      <label
+        ><input
+          type="checkbox"
+          name="store"
+          value="audiomack"
+          class="distroStore js-audiomackExtraCheckbox"
+        />Audiomack（無料）</label
+      >
 
       <!-- オプション (upsell) extras checkbox 群（#919）。フィル時に強制 uncheck で \$0 保証。 -->
-      <label
-        ><input type="checkbox" name="extras" />レガシーパック（49ドル）</label
-      >
-      <label
-        ><input type="checkbox" name="extras" />ストアマキシマイザー（7.95ドル／年）</label
-      >
+      <label><input type="checkbox" name="extras" />レガシーパック（49ドル）</label>
+      <label><input type="checkbox" name="extras" />ストアマキシマイザー（7.95ドル／年）</label>
 
       <!-- 重要事項 checkbox（#923）。required 4 個は常時可視。conditional は ストア連動で可視化。 -->
-      <label><input type="checkbox" class="areyousure" id="areyousurepromoservices" />再生回数増加サービスを利用しません</label>
+      <label
+        ><input
+          type="checkbox"
+          class="areyousure"
+          id="areyousurepromoservices"
+        />再生回数増加サービスを利用しません</label
+      >
       <label><input type="checkbox" class="areyousure" id="areyousurerecorded" />自己レコーディングです</label>
       <label><input type="checkbox" class="areyousure" id="areyousureotherartist" />他アーティスト名は使いません</label>
       <!-- conditional: areyousureyoutube (hidden initially, shown when chkgoogle checked) -->
-      <label id="label-areyousureyoutube" hidden><input type="checkbox" class="areyousure" id="areyousureyoutube" />YouTube Music 配信同意</label>
-      <label id="label-areyousuresnap" hidden><input type="checkbox" class="areyousure" id="areyousuresnap" />Snapchat 配信同意</label>
+      <label id="label-areyousureyoutube" hidden
+        ><input type="checkbox" class="areyousure" id="areyousureyoutube" />YouTube Music 配信同意</label
+      >
+      <label id="label-areyousuresnap" hidden
+        ><input type="checkbox" class="areyousure" id="areyousuresnap" />Snapchat 配信同意</label
+      >
 
       <!-- DistroKid 利用規約同意 checkbox（#919）。フィル時に強制 check。 -->
       <label
@@ -120,9 +141,7 @@
       >
 
       <button id="continue" type="button">続ける</button>
-      <button id="doneButton" type="button" class="distroDoneButtonWithAPI btn info">
-        続ける
-      </button>
+      <button id="doneButton" type="button" class="distroDoneButtonWithAPI btn info">続ける</button>
     </form>
 
     <script>
@@ -146,19 +165,11 @@
             '<input name="songwriter_real_name_middle' + n + '" type="text" />',
             '<input name="songwriter_real_name_last' + n + '" type="text" />',
             '<input id="js-track-upload-' + n + '" name="file" type="file" />',
-            '<label><input type="radio" name="previouslyReleased_' +
-              uuid +
-              '" value="0" checked /> いいえ</label>',
-            '<label><input type="radio" name="previouslyReleased_' +
-              uuid +
-              '" value="1" /> はい</label>',
+            '<label><input type="radio" name="previouslyReleased_' + uuid + '" value="0" checked /> いいえ</label>',
+            '<label><input type="radio" name="previouslyReleased_' + uuid + '" value="1" /> はい</label>',
             '<div class="ai-credits-gate-row">',
-            '<label><input type="radio" name="ai_gate_' +
-              uuid +
-              '" value="0" checked /> いいえ</label>',
-            '<label><input type="radio" name="ai_gate_' +
-              uuid +
-              '" value="1" /> はい</label>',
+            '<label><input type="radio" name="ai_gate_' + uuid + '" value="0" checked /> いいえ</label>',
+            '<label><input type="radio" name="ai_gate_' + uuid + '" value="1" /> はい</label>',
             "</div>",
           ].join("");
           tracks.appendChild(fs);
@@ -209,45 +220,30 @@
 
       // 曲数変更（#888）: track 行 + credit 欄を再生成し、album 時のみアルバム名欄を表示する。
       function changedSongCount() {
-        const count = parseInt(
-          document.getElementById("howManySongsOnThisAlbum").value,
-          10,
-        );
+        const count = parseInt(document.getElementById("howManySongsOnThisAlbum").value, 10);
         document.getElementById("albumTitleInput").hidden = count <= 1;
         renderTracks(count);
         renderCredits(count);
       }
 
       // Apple Music「クレジットを追加」トリガー: 全 credit-input-container を visible 化する。
-      document
-        .querySelector(".requirements-item-title")
-        .addEventListener("click", () => {
-          document
-            .querySelectorAll(".credit-input-container")
-            .forEach((c) => {
-              c.hidden = false;
-            });
+      document.querySelector(".requirements-item-title").addEventListener("click", () => {
+        document.querySelectorAll(".credit-input-container").forEach((c) => {
+          c.hidden = false;
         });
+      });
 
       // ai_gate「はい」click で SweetAlert2 modal を mount する。曲数 > 1 のとき apply-all を含める。
       function buildAiModal(uuid) {
-        const album =
-          parseInt(
-            document.getElementById("howManySongsOnThisAlbum").value,
-            10,
-          ) > 1;
+        const album = parseInt(document.getElementById("howManySongsOnThisAlbum").value, 10) > 1;
         const modal = document.createElement("div");
         modal.className = "ai-credits-swal-modal";
         modal.setAttribute("role", "dialog");
         modal.innerHTML = [
           '<div class="swal2-content"><div class="ai-credits-swal-html">',
           '<div id="ai-details-1" class="ai-credits-details">',
-          '<label><input type="checkbox" class="distroAiLyrics" name="ai_lyrics_' +
-            uuid +
-            '" /> 歌詞</label>',
-          '<label><input type="checkbox" class="distroAiMusic" name="ai_music_' +
-            uuid +
-            '" /> 作曲</label>',
+          '<label><input type="checkbox" class="distroAiLyrics" name="ai_lyrics_' + uuid + '" /> 歌詞</label>',
+          '<label><input type="checkbox" class="distroAiMusic" name="ai_music_' + uuid + '" /> 作曲</label>',
           // 録音範囲 radio は name=null、class + track + value で紐付ける（#888）。
           '<label><input type="radio" class="distroAiRecordingScope" track="1" value="full" /> 音声すべて</label>',
           '<label><input type="radio" class="distroAiRecordingScope" track="1" value="partial" /> 音声の一部</label>',
@@ -259,9 +255,7 @@
             '" value="instruments" /> 楽器</label>',
           // persona は full check で dynamic inject される（初期は空）。
           '<div id="ai-artist-questions-1"></div>',
-          album
-            ? '<label><input type="checkbox" id="ai-apply-all-1" /> すべての曲に適用</label>'
-            : "",
+          album ? '<label><input type="checkbox" id="ai-apply-all-1" /> すべての曲に適用</label>' : "",
           "</div></div></div>",
           '<div class="swal2-actions">',
           '<button type="button" class="swal2-cancel ai-modal-btn-cancel">キャンセル</button>',
@@ -270,84 +264,68 @@
         ].join("");
 
         // 録音範囲 full を check すると persona radio を #ai-artist-questions-1 に dynamic inject する（#888）。
-        modal
-          .querySelector('.distroAiRecordingScope[value="full"]')
-          .addEventListener("change", (e) => {
-            if (!e.target.checked) return;
-            const q = modal.querySelector("#ai-artist-questions-1");
-            if (q.querySelector('[name^="ai_artist_persona_"]')) return;
-            q.innerHTML = [
-              '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
-                uuid +
-                '_0" value="0" /> 人間</label>',
-              '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
-                uuid +
-                '_0" value="1" /> AIペルソナ</label>',
-            ].join("");
-          });
+        modal.querySelector('.distroAiRecordingScope[value="full"]').addEventListener("change", (e) => {
+          if (!e.target.checked) return;
+          const q = modal.querySelector("#ai-artist-questions-1");
+          if (q.querySelector('[name^="ai_artist_persona_"]')) return;
+          q.innerHTML = [
+            '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
+              uuid +
+              '_0" value="0" /> 人間</label>',
+            '<label><input type="radio" class="distroAiArtistPersona" name="ai_artist_persona_' +
+              uuid +
+              '_0" value="1" /> AIペルソナ</label>',
+          ].join("");
+        });
 
         // 録音範囲 partial を check すると種別 radio を visible 化する（#888）。
-        modal
-          .querySelector('.distroAiRecordingScope[value="partial"]')
-          .addEventListener("change", (e) => {
-            if (!e.target.checked) return;
-            modal
-              .querySelectorAll(".partial-type")
-              .forEach((el) => (el.hidden = false));
-          });
+        modal.querySelector('.distroAiRecordingScope[value="partial"]').addEventListener("change", (e) => {
+          if (!e.target.checked) return;
+          modal.querySelectorAll(".partial-type").forEach((el) => (el.hidden = false));
+        });
 
         // 保存: modal を閉じ、apply-all なら全 track の ai_gate「はい」を checked にする。
-        modal
-          .querySelector(".ai-modal-btn-save")
-          .addEventListener("click", () => {
-            const applyAll = modal.querySelector("#ai-apply-all-1");
-            if (applyAll && applyAll.checked) {
-              document
-                .querySelectorAll(
-                  'input[type="radio"][name^="ai_gate_"][value="1"]',
-                )
-                .forEach((yes) => {
-                  yes.checked = true;
-                });
-            }
-            modal.remove();
-          });
-        modal
-          .querySelector(".ai-modal-btn-cancel")
-          .addEventListener("click", () => modal.remove());
+        modal.querySelector(".ai-modal-btn-save").addEventListener("click", () => {
+          const applyAll = modal.querySelector("#ai-apply-all-1");
+          if (applyAll && applyAll.checked) {
+            document.querySelectorAll('input[type="radio"][name^="ai_gate_"][value="1"]').forEach((yes) => {
+              yes.checked = true;
+            });
+          }
+          modal.remove();
+        });
+        modal.querySelector(".ai-modal-btn-cancel").addEventListener("click", () => modal.remove());
         return modal;
       }
 
       // 各 track の ai_gate「はい」に modal mount 配線を張る（行再生成のたびに呼ぶ）。
       function wireGates() {
-        document
-          .querySelectorAll('input[type="radio"][name^="ai_gate_"][value="1"]')
-          .forEach((radio) => {
-            radio.addEventListener("click", (e) => {
-              if (document.querySelector(".ai-credits-swal-modal")) return;
-              const name = e.target.getAttribute("name"); // ai_gate_<uuid>
-              const uuid = name.slice("ai_gate_".length);
-              document.body.appendChild(buildAiModal(uuid));
-            });
+        document.querySelectorAll('input[type="radio"][name^="ai_gate_"][value="1"]').forEach((radio) => {
+          radio.addEventListener("click", (e) => {
+            if (document.querySelector(".ai-credits-swal-modal")) return;
+            const name = e.target.getAttribute("name"); // ai_gate_<uuid>
+            const uuid = name.slice("ai_gate_".length);
+            document.body.appendChild(buildAiModal(uuid));
           });
+        });
       }
 
       // 初期描画（既定は 1 曲 = シングル）。
       changedSongCount();
 
       // chkapplemusic check/uncheck で credit section の visibility を連動する（#923）。
-      document.querySelector('#chkapplemusic').addEventListener('change', function() {
-        document.querySelector('.requirements-item').hidden = !this.checked;
+      document.querySelector("#chkapplemusic").addEventListener("change", function () {
+        document.querySelector(".requirements-item").hidden = !this.checked;
       });
 
       // chkgoogle check で areyousureyoutube を visible 化
-      document.querySelector('#chkgoogle').addEventListener('change', function() {
-        document.querySelector('#label-areyousureyoutube').hidden = !this.checked;
+      document.querySelector("#chkgoogle").addEventListener("change", function () {
+        document.querySelector("#label-areyousureyoutube").hidden = !this.checked;
       });
 
       // chksnap check で areyousuresnap を visible 化
-      document.querySelector('#chksnap').addEventListener('change', function() {
-        document.querySelector('#label-areyousuresnap').hidden = !this.checked;
+      document.querySelector("#chksnap").addEventListener("change", function () {
+        document.querySelector("#label-areyousuresnap").hidden = !this.checked;
       });
     </script>
   </body>

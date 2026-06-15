@@ -22,9 +22,7 @@ void _trackAssetIsNonNull;
 describe("PHASES（PROGRESS フェーズ契約）", () => {
   it("注入フローのフェーズを過不足なく定義する", () => {
     // Given / When / Then: content と popup が解釈を共有するフェーズ集合
-    expect(new Set(Object.keys(PHASES))).toEqual(
-      new Set(["INJECTING", "DONE", "ERROR", "STOPPED"]),
-    );
+    expect(new Set(Object.keys(PHASES))).toEqual(new Set(["INJECTING", "DONE", "ERROR", "STOPPED"]));
   });
 
   it("フェーズ値はすべて一意な文字列である", () => {

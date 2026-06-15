@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
-import {
-  fetchAsset,
-  fetchCollectionRelease,
-  fetchRelease,
-  ReleaseUnavailableError,
-} from "@/lib/api";
+import { fetchAsset, fetchCollectionRelease, fetchRelease, ReleaseUnavailableError } from "@/lib/api";
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
 import { runInjection } from "@/lib/inject-runner";
@@ -34,9 +29,7 @@ export function App() {
   const [message, setMessage] = useState("");
 
   // dir mode 用コレクション一覧（#934）。空配列 = 単一 mode か 0 件。
-  const [collections, setCollections] = useState<DistrokidCollectionSummary[]>(
-    [],
-  );
+  const [collections, setCollections] = useState<DistrokidCollectionSummary[]>([]);
   // 全 disc が配信済みで filter 後 0 件になった場合のフラグ（#934）。
   const [allReleased, setAllReleased] = useState(false);
   // 選択中 disc の index（collections 配列の index）。-1 = 未選択（単一 mode）。
@@ -55,29 +48,26 @@ export function App() {
   // 失敗（404 等 = 単一 mode）: collections を空のままにして従来動作へ fallback。
   // setState は次レンダーまで反映されないため、同一ハンドラ内で一覧を使う caller は
   // 戻り値を直接参照する（stale closure 回避、#934）。
-  const loadCollections = useCallback(
-    async (baseUrl: string): Promise<DistrokidCollectionSummary[]> => {
-      try {
-        const fetched = await fetchDistrokidCollections(baseUrl);
-        const list = excludeReleasedDiscs(fetched);
-        setCollections(list);
-        setAllReleased(fetched.length > 0 && list.length === 0);
-        // 未配信 disc があれば先頭を初期選択する。
-        setSelectedIndex(list.length > 0 ? 0 : -1);
-        isDirModeRef.current = true;
-        return list;
-      } catch {
-        // 単一ファイル mode サーバーは /distrokid/collections が 404。
-        // ドロップダウンを出さず従来の単一 mode へ fallback する（後方互換）。
-        setCollections([]);
-        setAllReleased(false);
-        setSelectedIndex(-1);
-        isDirModeRef.current = false;
-        return [];
-      }
-    },
-    [],
-  );
+  const loadCollections = useCallback(async (baseUrl: string): Promise<DistrokidCollectionSummary[]> => {
+    try {
+      const fetched = await fetchDistrokidCollections(baseUrl);
+      const list = excludeReleasedDiscs(fetched);
+      setCollections(list);
+      setAllReleased(fetched.length > 0 && list.length === 0);
+      // 未配信 disc があれば先頭を初期選択する。
+      setSelectedIndex(list.length > 0 ? 0 : -1);
+      isDirModeRef.current = true;
+      return list;
+    } catch {
+      // 単一ファイル mode サーバーは /distrokid/collections が 404。
+      // ドロップダウンを出さず従来の単一 mode へ fallback する（後方互換）。
+      setCollections([]);
+      setAllReleased(false);
+      setSelectedIndex(-1);
+      isDirModeRef.current = false;
+      return [];
+    }
+  }, []);
 
   useEffect(() => {
     // 永続化済みサーバー URL を復元し、URL があれば collection 一覧も試行する。
@@ -127,11 +117,7 @@ export function App() {
         // 再取得後も同じ disc が残っていれば選択を維持し、消えていれば先頭にする。
         const prev = collections[selectedIndex];
         const keptIndex = prev
-          ? list.findIndex(
-              (item) =>
-                item.collection_id === prev.collection_id &&
-                item.disc === prev.disc,
-            )
+          ? list.findIndex((item) => item.collection_id === prev.collection_id && item.disc === prev.disc)
           : -1;
         const effectiveIndex = keptIndex >= 0 ? keptIndex : 0;
         setSelectedIndex(effectiveIndex);
@@ -142,11 +128,7 @@ export function App() {
           disc: selected.disc,
           album_title: selected.album_title,
         };
-        result = await fetchCollectionRelease(
-          serverUrl,
-          selected.collection_id,
-          selected.disc,
-        );
+        result = await fetchCollectionRelease(serverUrl, selected.collection_id, selected.disc);
       } else {
         // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
         payloadSourceRef.current = null;
@@ -193,11 +175,9 @@ export function App() {
       // 停止境界の制御フローは runInjection に抽出し、ここでは transport を束ねて渡す（#871）。
       const tabId = await activeTabId();
       await runInjection(payload, {
-        fetchAsset: (assetPath, filename) =>
-          fetchAsset(serverUrl, assetPath, filename),
+        fetchAsset: (assetPath, filename) => fetchAsset(serverUrl, assetPath, filename),
         start: (p) => sendMessage("injectStart", { payload: p }, tabId),
-        track: (trackIndex, asset) =>
-          sendMessage("injectTrack", { trackIndex, asset }, tabId),
+        track: (trackIndex, asset) => sendMessage("injectTrack", { trackIndex, asset }, tabId),
         cover: (asset) => sendMessage("injectCover", { asset }, tabId),
         finish: () => sendMessage("injectFinish", undefined, tabId),
         setMessage,
@@ -244,12 +224,7 @@ export function App() {
     <main className="flex flex-col gap-3 p-4">
       <h1 className="text-base font-bold text-gray-900">DistroKid Helper</h1>
 
-      <ServerUrlField
-        value={serverUrl}
-        disabled={busy}
-        onChange={setServerUrl}
-        onFetch={handleFetch}
-      />
+      <ServerUrlField value={serverUrl} disabled={busy} onChange={setServerUrl} onFetch={handleFetch} />
 
       {/* dir mode: 未配信 disc 一覧のドロップダウン (#934)。suno-helper App.tsx 55-69 行の構造を踏襲。 */}
       {collections.length > 0 && (
@@ -270,9 +245,7 @@ export function App() {
       )}
 
       {/* dir mode で全 disc が配信済みの場合（#934）。suno-helper の allMapped パターンを踏襲。 */}
-      {allReleased && (
-        <p className="text-xs text-gray-600">未配信の disc はありません。</p>
-      )}
+      {allReleased && <p className="text-xs text-gray-600">未配信の disc はありません。</p>}
 
       {payload !== null && <ReleaseReview payload={payload} />}
 
