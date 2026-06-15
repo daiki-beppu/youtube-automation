@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(ts-rewrite/core)`: Per-video metrics（views / likes / comments / shares 等 8 指標）を YouTube Analytics API から収集する analytics video service を ADR-0003 準拠で実装した（#829）
 - `feat(suno)`: プロンプト設計を suno-bgm ベースの品質ルール集に刷新した（#904, #899）。Style text の 5 要素順序検証（ジャンル → 音響特性 → キー楽器 → リズム/ベース → テンポ）、120 文字制限の警告、禁止アーティスト名チェック（`banned_artists` 約 30 名）、`auto_lyrics_structure` による歌詞構造の自動補強（`[Instrumental]` / `[Extended Outro]` 自動付加）を `yt-generate-suno` に追加。`style_influence` を 85 → 95 に引き上げ、`weirdness: 10` / `style_char_limit: 120` を新設。楽曲ごとの固有タイトル自動生成仕様（`name_en`: 2-4 word scene/mood title、`name_jp`: 5-15 文字の日本語訳）を SKILL.md に追記。`references/suno-examples.md` に楽器形容詞 Bad/Good ペア 10 組、`references/lyrics-examples.md` にひらがな歌詞ガイドと Mixing Notes 例を追加。
 - `feat(doctor)`: `yt-doctor` に ffmpeg/ffprobe の存在チェックを追加し、新規カテゴリ `system` を導入した。動画パイプラインの中核依存が doctor で事前検証されておらず、未インストール環境では動画処理段で初めて `FileNotFoundError` になっていた問題を解消。`shutil.which` で検出し、見つからない場合は `brew install ffmpeg` / `apt-get install -y ffmpeg` のインストール手順を案内する。
 
