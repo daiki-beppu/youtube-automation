@@ -76,6 +76,78 @@ describe("captureFromTab: content script 応答までリトライする", () => 
     ).rejects.toThrow("capturePlaylists timed out");
     expect(sendCapture).not.toHaveBeenCalled();
   });
+
+  it("Given 最初の N 回 [] → その後 非空 resolve When capture Then SPA 描画待ちリトライ後に scrape 結果を返す", async () => {
+    const sendCapture = vi
+      .fn<(tabId: number) => Promise<CapturedPlaylist[]>>()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(ITEMS);
+
+    const result = await captureFromTab(99, {
+      sendCapture,
+      sleep: noSleep,
+      now: () => 0,
+      timeoutMs: 1000,
+      pollMs: 10,
+    });
+
+    expect(result).toEqual(ITEMS);
+    expect(sendCapture).toHaveBeenCalledTimes(3);
+  });
+
+  it("Given reject → [] → reject → 非空 resolve When capture Then 混在リトライ後に結果を返す", async () => {
+    const sendCapture = vi
+      .fn<(tabId: number) => Promise<CapturedPlaylist[]>>()
+      .mockRejectedValueOnce(new Error("no content script"))
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("no content script"))
+      .mockResolvedValueOnce(ITEMS);
+
+    const result = await captureFromTab(99, {
+      sendCapture,
+      sleep: noSleep,
+      now: () => 0,
+      timeoutMs: 1000,
+      pollMs: 10,
+    });
+
+    expect(result).toEqual(ITEMS);
+    expect(sendCapture).toHaveBeenCalledTimes(4);
+  });
+
+  it("Given deadline 超過まで [] 継続 When capture Then 空配列を返す（fail-soft、throw しない）", async () => {
+    const sendCapture = vi
+      .fn<(tabId: number) => Promise<CapturedPlaylist[]>>()
+      .mockResolvedValue([]);
+
+    const result = await captureFromTab(1, {
+      sendCapture,
+      sleep: noSleep,
+      now: steppingNow([0, 0, 200]),
+      timeoutMs: 100,
+      pollMs: 10,
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it("Given reject と [] が混在して deadline 超過 When capture Then 空応答があったため [] を返す（throw しない）", async () => {
+    const sendCapture = vi
+      .fn<(tabId: number) => Promise<CapturedPlaylist[]>>()
+      .mockRejectedValueOnce(new Error("no content script"))
+      .mockResolvedValueOnce([]);
+
+    const result = await captureFromTab(1, {
+      sendCapture,
+      sleep: noSleep,
+      now: steppingNow([0, 0, 0, 200]),
+      timeoutMs: 100,
+      pollMs: 10,
+    });
+
+    expect(result).toEqual([]);
+  });
 });
 
 // AutoCaptureDeps の各メソッドを typed mock で構築する。各 fn は vi.fn のため
