@@ -1,5 +1,4 @@
 // image モジュール内部で共有する小さなガード（公開 API ではない）。
+// 実体は共用の internal/guards.ts に集約済み（DRY）。ここは image 内 import の barrel。
 
-/** plain object（非 null の object）かを判定する型ガード。 */
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+export { isRecord } from "../../internal/guards.ts";
