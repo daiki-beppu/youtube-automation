@@ -543,6 +543,7 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
         "has_prompts": True,
         "pattern_count": 1,
         "mapped": False,
+        "playlist_name": None,
     }
     assert by_id["20260602-clm-bbb-collection"]["has_prompts"] is False
     assert by_id["20260602-clm-bbb-collection"]["pattern_count"] is None
