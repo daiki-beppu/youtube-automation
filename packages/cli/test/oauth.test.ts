@@ -26,6 +26,7 @@ import { join } from "node:path";
 import { reset } from "@youtube-automation/core/config";
 
 import {
+  getYouTubeAnalyticsClient,
   getYouTubeClient,
   isExpired,
   SCOPES,
@@ -159,6 +160,51 @@ describe("getYouTubeClient happy path", () => {
     // refresh / interactive flow ran)
     expect(client).toBeDefined();
     expect(typeof client.videos).toBe("object");
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    spawnSpy.mockRestore();
+  });
+});
+
+// --- getYouTubeAnalyticsClient happy path --------------------------------
+//
+// Symmetric to getYouTubeClient (#993 AC): the same env -> secrets -> token read
+// dance builds the Analytics API v2 client instead of the Data API v3 one. The
+// network-free happy path (env-supplied secrets + a still-valid stored token)
+// must build the client without consulting op or running any refresh /
+// interactive round trip. The refresh / interactive branches are not re-tested
+// here: both helpers share the one token-resolution dance, already covered by
+// the getYouTubeClient cases above.
+
+describe("getYouTubeAnalyticsClient happy path", () => {
+  test("builds an analytics client from a still-valid stored token without spawning op", async () => {
+    // Given client secrets supplied via env and a non-expired token on disk
+    const dir = makeChannelDir();
+    process.env.CHANNEL_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = JSON.stringify({
+      installed: { client_id: "cid", client_secret: "cs" },
+    });
+    mkdirSync(join(dir, "auth"), { recursive: true });
+    writeFileSync(
+      join(dir, "auth", "token.json"),
+      JSON.stringify({
+        access_token: "valid-access",
+        expiry_date: 4_102_444_800_000,
+        refresh_token: "r",
+      }),
+      "utf-8"
+    );
+    reset();
+    const spawnSpy = spyOn(Bun, "spawn");
+
+    // When fetching the analytics client while the stored token is still valid
+    const client = await getYouTubeAnalyticsClient();
+
+    // Then a youtubeAnalytics_v2 client is returned (exposing `reports`) via the
+    // pure build path, and op was never consulted (env supplied the secrets, the
+    // token was still valid so no refresh / interactive flow ran)
+    expect(client).toBeDefined();
+    expect(typeof client.reports).toBe("object");
     expect(spawnSpy).not.toHaveBeenCalled();
 
     spawnSpy.mockRestore();

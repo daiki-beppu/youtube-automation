@@ -9,8 +9,14 @@
 import { join } from "node:path";
 
 import { channelDir } from "@youtube-automation/core/config";
-import { buildYouTubeClient } from "@youtube-automation/core/oauth/client";
-import type { YouTubeClient } from "@youtube-automation/core/oauth/client";
+import {
+  buildYouTubeAnalyticsClient,
+  buildYouTubeClient,
+} from "@youtube-automation/core/oauth/client";
+import type {
+  YouTubeAnalyticsClient,
+  YouTubeClient,
+} from "@youtube-automation/core/oauth/client";
 import { interactiveAuthService } from "@youtube-automation/core/oauth/interactive";
 import { refreshTokenService } from "@youtube-automation/core/oauth/refresh";
 
@@ -92,23 +98,29 @@ const ensureFresh = async (
 };
 
 /**
- * 構築済み YouTube Data API クライアントを返す。
+ * 有効な token.json 文字列を解決して返す（OAuth dance 本体）。
  *
  * env → secrets で client_secrets を解決し、token.json を読む。token が無ければ
- * interactive 認証、期限切れなら refresh し、いずれも 0o600 で書き戻してからクライアント
- * を構築する。service の失敗は `r.error`（ServiceError）を throw する。
+ * interactive 認証、期限切れなら refresh し、いずれも 0o600 で書き戻す。service の失敗は
+ * `r.error`（ServiceError）を throw する。Data / Analytics 両クライアントはこの 1 回の
+ * dance が返す同一 token から構築され、認証往復は 1 度に閉じる（#993）。
  */
-export const getYouTubeClient = async (
+export const resolveTokenJson = async (
   deps: GetYouTubeClientDeps = defaultDeps
-): Promise<YouTubeClient> => {
+): Promise<string> => {
   const clientSecretsJson = await resolveClientSecretsJson();
   const path = tokenJsonPath();
   const stored = await obtainToken(path, clientSecretsJson, deps.interactive);
-  const tokenJson = await ensureFresh(
-    path,
-    clientSecretsJson,
-    stored,
-    deps.refresh
-  );
-  return buildYouTubeClient(tokenJson);
+  return ensureFresh(path, clientSecretsJson, stored, deps.refresh);
 };
+
+/** 構築済み YouTube Data API v3 クライアントを返す（token dance → client build）。 */
+export const getYouTubeClient = async (
+  deps: GetYouTubeClientDeps = defaultDeps
+): Promise<YouTubeClient> => buildYouTubeClient(await resolveTokenJson(deps));
+
+/** 構築済み YouTube Analytics API v2 クライアントを返す（Data 版と同一 dance を共有）。 */
+export const getYouTubeAnalyticsClient = async (
+  deps: GetYouTubeClientDeps = defaultDeps
+): Promise<YouTubeAnalyticsClient> =>
+  buildYouTubeAnalyticsClient(await resolveTokenJson(deps));

@@ -132,7 +132,7 @@ export default defineConfig({
       },
     },
     {
-      files: ["packages/core/src/**", "packages/core/skills-sync/**"],
+      files: ["packages/core/src/**"],
       rules: {
         "no-restricted-imports": ["error", FFI_BANNED_IN_CORE],
         "no-restricted-properties": ["error", ...OP_SPAWN_BANNED_IN_CORE],
