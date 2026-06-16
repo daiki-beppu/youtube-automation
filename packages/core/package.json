@@ -17,13 +17,15 @@
     "./oauth/refresh": "./src/oauth/refresh.ts",
     "./paths": "./src/paths.ts",
     "./registry": "./src/registry.ts",
-    "./skills-sync": "./src/skills-sync/index.ts"
+    "./skills-sync": "./src/skills-sync/index.ts",
+    "./upload": "./src/upload/index.ts"
   },
   "dependencies": {
     "@google/genai": "^2.7.0",
     "google-auth-library": "10.5.0",
     "googleapis": "^173.0.0",
     "openai": "^6.41.0",
+    "sharp": "^0.34.0",
     "zod": "^4.1.13"
   }
 }

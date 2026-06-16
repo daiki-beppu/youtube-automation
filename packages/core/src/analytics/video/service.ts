@@ -11,11 +11,7 @@
 //   deps.youtubeAnalytics.reports.query(params) -> { data: { columnHeaders?, rows? } }
 //   429 時は gaxios 形状 { response: { status: 429, headers: { "retry-after" } } } で reject。
 
-import {
-  QuotaExhaustedError,
-  toServiceError,
-  YouTubeAPIError,
-} from "../../errors.ts";
+import { classifyGaxiosError, toServiceError } from "../../errors.ts";
 import type { ServiceError } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
 import { err, ok } from "../../result.ts";
@@ -42,43 +38,13 @@ export interface VideoAnalyticsDeps {
   sleep?: SleepMs;
 }
 
-// fromGaxiosError / QuotaExhaustedError の message に載せる操作名。
+// classifyGaxiosError / QuotaExhaustedError の message に載せる操作名。
 const QUERY_CONTEXT = "youtubeAnalytics.reports.query";
 
 /** Analytics クエリで参照する最小の列ヘッダ形状。 */
 interface ColumnHeader {
   readonly name?: string | null;
 }
-
-// gaxios 形状のエラーから Retry-After 秒を読む。ヘッダ欠落・空文字列・非数値は undefined を返す
-// （QuotaExhaustedError.retryAfterSeconds は省略可。外部入力の欠落値は undefined が正しい契約）。
-const retryAfterSecondsFrom = (error: unknown): number | undefined => {
-  const headers = (
-    error as { response?: { headers?: Record<string, unknown> } }
-  )?.response?.headers;
-  const raw = headers?.["retry-after"];
-  // 空文字列・空白のみは「ヒントなし」。Number("") === 0 を「0 秒で再試行可」と
-  // 誤読しないよう undefined に倒す（ヘッダ欠落 undefined → Number(undefined)=NaN と同じ扱い）。
-  if (typeof raw === "string" && raw.trim() === "") {
-    return undefined;
-  }
-  const seconds = Number(raw);
-  return Number.isFinite(seconds) ? seconds : undefined;
-};
-
-// reports.query の失敗を分類する。429 は QuotaExhaustedError へ昇格して withRetry に retry を
-// 抑止させ（ADR-0003: quota は Result で caller へ）、それ以外は YouTubeAPIError に変換して
-// withRetry の一時エラー retry に委ねる。
-const toQueryError = (error: unknown): Error => {
-  const apiError = YouTubeAPIError.fromGaxiosError(error, QUERY_CONTEXT);
-  if (apiError.statusCode === 429) {
-    return new QuotaExhaustedError(
-      apiError.message,
-      retryAfterSecondsFrom(error)
-    );
-  }
-  return apiError;
-};
 
 // channelId を必須の ids フィルタにエンコードし、videoId 指定時のみ video== フィルタを足す。
 const buildQueryParams = (request: CollectVideoAnalyticsInput) => ({
@@ -101,7 +67,7 @@ const runVideoQuery = async (
   try {
     return await deps.youtubeAnalytics.reports.query(buildQueryParams(request));
   } catch (error) {
-    throw toQueryError(error);
+    throw classifyGaxiosError(error, QUERY_CONTEXT);
   }
 };
 
