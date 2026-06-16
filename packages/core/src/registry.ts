@@ -8,6 +8,9 @@ import {
   listSkillsService,
   SkillListInputSchema,
   SkillListOutputSchema,
+  SkillSyncInputSchema,
+  SkillSyncOutputSchema,
+  syncAssetService,
 } from "./skills-sync/index.ts";
 
 // ADR-0004: core feature registry。feature 名 → {description, schema, deps, run} の
@@ -64,6 +67,13 @@ export const REGISTRY = {
     inputSchema: SkillListInputSchema,
     outputSchema: SkillListOutputSchema,
     run: listSkillsService,
+  }),
+  "skills.sync": defineRegistryEntry({
+    deps: [],
+    description: "同梱資産 (skills / CLAUDE.md) を対象リポジトリへ配布する",
+    inputSchema: SkillSyncInputSchema,
+    outputSchema: SkillSyncOutputSchema,
+    run: syncAssetService,
   }),
 } as const;
 
