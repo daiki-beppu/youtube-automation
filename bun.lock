@@ -20,8 +20,7 @@
       "name": "@youtube-automation/cli",
       "version": "0.1.0-alpha.0",
       "bin": {
-        "yt": "./bin/yt.ts",
-        "yt-skills": "./bin/yt-skills.ts",
+        "tayk": "./bin/tayk.ts",
       },
       "dependencies": {
         "@youtube-automation/core": "workspace:*",
@@ -36,6 +35,7 @@
         "google-auth-library": "10.5.0",
         "googleapis": "^173.0.0",
         "openai": "^6.41.0",
+        "yaml": "^2.9.0",
         "zod": "^4.1.13",
       },
     },
