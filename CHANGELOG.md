@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(doctor)`: `yt-doctor accounts` サブコマンドを追加。全チャンネルリポの `auth/client_secrets.json` をスキャンし、GCP プロジェクト・OAuth クライアント ID・トークン有無の対応表を一覧表示する。`--json` で機械可読出力、`--search-root` で探索ルート指定が可能。
+- `docs(adr)`: ADR-0010 全チャンネルを単一 GCP プロジェクトに統合。Billing 枠上限 (5/5) 解消とオペレーションコスト削減のため、チャンネルごとの GCP プロジェクト分離から `yt-channels-automation` への一本化を決定。
+
 ### Changed
 
 - `feat(suno)`: 1 pattern = 1 scene 原則を SKILL.md に追加し、`(Variation N)` 機械的接尾辞による曲タイトル生成を回避。各曲が固有の `name_jp` / `name_en` を持つ YAML 設計を強制する NG/OK 例付き。
