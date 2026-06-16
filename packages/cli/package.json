@@ -1,0 +1,25 @@
+{
+  "name": "@youtube-automation/cli",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "yt command line entry point for the youtube-channels-automation TS rewrite (ADR-0004 citty dispatcher).",
+  "bin": {
+    "yt": "./bin/yt.ts"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "src",
+    "_skills",
+    "_claude_md"
+  ],
+  "type": "module",
+  "scripts": {
+    "prepack": "bun run scripts/bundle-symlinks.ts materialize",
+    "postpack": "bun run scripts/bundle-symlinks.ts restore"
+  },
+  "dependencies": {
+    "@youtube-automation/core": "workspace:*",
+    "citty": "^0.2.2"
+  }
+}

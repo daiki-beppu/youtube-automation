@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/ts-rewrite]
   pull_request:
-    branches: [main]
+    branches: [main, feat/ts-rewrite]
 
 jobs:
   lint:
@@ -47,7 +47,7 @@ jobs:
           changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           echo "Changed files:"
           echo "$changed"
-          if ! echo "$changed" | grep -qE '^(src/youtube_automation/|\.claude/skills/|\.claude/CLAUDE\.template\.md$|pyproject\.toml$)'; then
+          if ! echo "$changed" | grep -qE '^(src/youtube_automation/|\.claude/skills/|\.claude/CLAUDE\.template\.md$|pyproject\.toml$|packages/|package\.json$)'; then
             echo "No significant code changes, skipping CHANGELOG check"
             exit 0
           fi
@@ -56,3 +56,56 @@ jobs:
             exit 1
           fi
           echo "CHANGELOG.md updated"
+
+  ts-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+
+  ts-format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run format:check
+
+  ts-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+
+  ts-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun test
+
+  ts-knip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run knip
+
+# ts-audit (vulnerability scan) は scanner provider (socket.dev 等) の設定とセットで
+# 後日別 issue で再導入する。bun pm scan は外部 scanner 必須でゼロ config で動かない

@@ -3,6 +3,7 @@
 // content script で `browser.tabs.*` を呼べないため、background が送信元と同一タブの runner content へ中継する
 // （中継ロジックは entrypoints/background.ts + lib/overlay-relay.ts）。
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
@@ -13,6 +14,7 @@ import {
   fetchPrompts,
   pickInitialCollectionId,
   type PromptEntry,
+  resolveCompatibilityWarning,
 } from "../../shared/api";
 import { type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
@@ -47,6 +49,7 @@ interface RunnerState {
   itemStates: ItemState[];
   status: string;
   isError: boolean;
+  compatibilityWarning: string;
   canRun: boolean;
   isRunning: boolean;
   // collection 選択時の playlist 名 (#854)。display only（単一ファイル mode は undefined）。
@@ -86,6 +89,7 @@ export function useSunoRunner(): RunnerState {
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
+  const [compatibilityWarning, setCompatibilityWarning] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   // popup 再 open 時に content snapshot から復元する playlist 名 (#854)。
   // 選択由来 (derivedPlaylistName) が無い実行中復元ケースで display only に使う。
@@ -267,6 +271,8 @@ export function useSunoRunner(): RunnerState {
     }
     await serverUrlItem.setValue(trimmed);
     report("取得中…");
+    const extensionVersion = browser.runtime.getManifest().version;
+    setCompatibilityWarning(await resolveCompatibilityWarning(trimmed, extensionVersion));
     try {
       // collection を選択している場合は dir mode の個別配信、未選択なら単一ファイル mode へ fallback。
       const data = selectedCollectionId
@@ -379,6 +385,7 @@ export function useSunoRunner(): RunnerState {
     itemStates,
     status,
     isError,
+    compatibilityWarning,
     canRun: entries.length > 0 && !isRunning,
     isRunning,
     playlistName,

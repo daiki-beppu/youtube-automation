@@ -117,9 +117,7 @@ describe("captureFromTab: content script 応答までリトライする", () => 
   });
 
   it("Given deadline 超過まで [] 継続 When capture Then 空配列を返す（fail-soft、throw しない）", async () => {
-    const sendCapture = vi
-      .fn<(tabId: number) => Promise<CapturedPlaylist[]>>()
-      .mockResolvedValue([]);
+    const sendCapture = vi.fn<(tabId: number) => Promise<CapturedPlaylist[]>>().mockResolvedValue([]);
 
     const result = await captureFromTab(1, {
       sendCapture,

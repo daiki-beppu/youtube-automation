@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from youtube_automation import __version__
 from youtube_automation.scripts.distrokid_release import (
     DISTROKID_ASSETS_PREFIX,
     DISTROKID_COLLECTION_ASSETS_PREFIX,
@@ -47,6 +48,8 @@ from youtube_automation.utils.distrokid_spec import find_disc_entry, read_collec
 from youtube_automation.utils.exceptions import ConfigError
 
 DEFAULT_PORT = 7873
+VERSION_ROUTE = "/version"
+MIN_EXTENSION_VERSION = "0.1.0"
 _EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
 # overlay 化（#892/#895）で content script の fetch が page origin になったため、
 # helper 拡張がホストされる web origin をデフォルト許可する（#896）。完全一致のみ。
@@ -512,6 +515,14 @@ def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     return origin in _DEFAULT_ALLOWED_WEB_ORIGINS
 
 
+def build_version_payload() -> dict[str, str]:
+    """拡張の互換確認用 version payload を返す（#1023）."""
+    return {
+        "version": __version__.split("+", 1)[0],
+        "min_extension_version": MIN_EXTENSION_VERSION,
+    }
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -652,6 +663,10 @@ def create_server(
             self.send_error(404, "Not Found")
 
         def do_GET(self) -> None:  # noqa: N802
+            if self.path == VERSION_ROUTE:
+                body = json.dumps(build_version_payload()).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
             if dir_mode:
                 self._serve_dir_mode()
                 return

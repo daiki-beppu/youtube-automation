@@ -1,0 +1,33 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [],
+      "project": [],
+      "ignoreDependencies": ["takt"]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts", "src/cli/*.ts", "bin/*.ts", "*/index.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "*/*.ts"]
+    }
+  },
+  "ignore": [
+    ".worktrees/**",
+    ".claude/worktrees/**",
+    "src/youtube_automation/**",
+    "tests/**",
+    "extensions/**",
+    "examples/**",
+    "docs/**",
+    "poc/**"
+  ],
+  "ignoreBinaries": [
+    "lefthook",
+    "uv",
+    "nix",
+    "gh",
+    "compile",
+    "build",
+    "playwright"
+  ]
+}

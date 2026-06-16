@@ -26,6 +26,10 @@ export const COLLECTIONS_ROUTE = "/collections";
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PLAYLISTS_ROUTE。 */
 export const PLAYLISTS_CAPTURE_ROUTE = "/suno/playlists";
 
+/** yt-collection-serve の互換確認サブパス（#1023）。
+ * SSOT: src/youtube_automation/scripts/collection_serve.py VERSION_ROUTE。 */
+export const VERSION_ROUTE = "/version";
+
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
   return `${COLLECTIONS_ROUTE}/${id}${PROMPTS_ROUTE}`;

@@ -1,0 +1,36 @@
+{
+  "name": "youtube-channels-automation",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "YouTube channel automation toolkit (TS rewrite, see ADR 0001)",
+  "workspaces": [
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt --write",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsc -b --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "knip": "knip-bun",
+    "ci": "bun run lint && bun run format:check && bun run typecheck && bun run test && bun run knip"
+  },
+  "dependencies": {
+    "takt": "^0.43.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "knip": "^6.15.0",
+    "oxfmt": "^0.53.0",
+    "oxlint": "^1.68.0",
+    "typescript": "^6.0.3",
+    "ultracite": "^7.8.1"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "packageManager": "bun@1.3.13"
+}
