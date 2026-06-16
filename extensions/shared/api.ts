@@ -10,6 +10,7 @@ import {
   DISTROKID_RELEASES_ROUTE,
   PLAYLISTS_CAPTURE_ROUTE,
   PROMPTS_ROUTE,
+  VERSION_ROUTE,
 } from "./constants";
 
 /** `/suno/prompts.json` が返す 1 パターンのスキーマ (#692 サーバー契約)。 */
@@ -62,6 +63,74 @@ export interface CapturedPlaylistsResult {
   path: string;
 }
 
+/** GET /version の wire スキーマ（#1023）。 */
+export interface ServerVersionInfo {
+  version: string;
+  min_extension_version: string;
+}
+
+export type CompatibilityResult =
+  | {
+      status: "compatible" | "incompatible";
+      serverVersion: string;
+      minExtensionVersion: string;
+      extensionVersion: string;
+    }
+  | {
+      status: "skipped";
+      reason: "version-endpoint-unavailable";
+    }
+  | {
+      status: "error";
+      message: string;
+    };
+
+export function formatCompatibilityWarning(
+  compatibility: CompatibilityResult,
+): string {
+  if (compatibility.status !== "incompatible") {
+    return "";
+  }
+  return `拡張を更新してください（拡張 ${compatibility.extensionVersion} / 必要 ${compatibility.minExtensionVersion} / サーバー ${compatibility.serverVersion}）。`;
+}
+
+export async function resolveCompatibilityWarning(
+  baseUrl: string,
+  extensionVersion: string,
+): Promise<string> {
+  const compatibility = await checkServerCompatibility(baseUrl, extensionVersion);
+  return formatCompatibilityWarning(compatibility);
+}
+
+const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "");
+}
+
+function assertSemver(value: unknown, field: string): string {
+  if (typeof value !== "string" || !SEMVER_PATTERN.test(value)) {
+    throw new Error(`${field} must be semver`);
+  }
+  return value;
+}
+
+function compareSemver(left: string, right: string): number {
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
+  for (let i = 0; i < leftParts.length; i += 1) {
+    const diff = leftParts[i] - rightParts[i];
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
+function messageFromError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * prompts.json 系エンドポイントの共通 fetch 本体 (#816)。
  * 非 2xx / 空配列 / 非配列で throw する fail-loud 契約。
@@ -81,6 +150,54 @@ async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
 /** prompts.json を取得して PromptEntry[] を返す。不正な応答は fail-loud で throw。 */
 export async function fetchPrompts(baseUrl: string): Promise<PromptEntry[]> {
   return fetchPromptArray(`${baseUrl}${PROMPTS_ROUTE}`);
+}
+
+/** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
+export async function fetchServerVersion(
+  baseUrl: string,
+): Promise<ServerVersionInfo> {
+  const resp = await fetch(`${normalizeBaseUrl(baseUrl)}${VERSION_ROUTE}`);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  const data: unknown = await resp.json();
+  if (typeof data !== "object" || data === null) {
+    throw new Error("version response must be object");
+  }
+  const record = data as Record<string, unknown>;
+  const minExtensionVersion = assertSemver(
+    record.min_extension_version,
+    "min_extension_version",
+  );
+  return {
+    version: assertSemver(record.version, "version"),
+    min_extension_version: minExtensionVersion,
+  };
+}
+
+/** 拡張 version がサーバーの最低要求を満たすか確認する（#1023）。 */
+export async function checkServerCompatibility(
+  baseUrl: string,
+  extensionVersion: string,
+): Promise<CompatibilityResult> {
+  try {
+    const info = await fetchServerVersion(baseUrl);
+    const result = {
+      serverVersion: info.version,
+      minExtensionVersion: info.min_extension_version,
+      extensionVersion,
+    };
+    if (compareSemver(extensionVersion, info.min_extension_version) < 0) {
+      return { status: "incompatible", ...result };
+    }
+    return { status: "compatible", ...result };
+  } catch (error) {
+    const message = messageFromError(error);
+    if (message === "HTTP 404") {
+      return { status: "skipped", reason: "version-endpoint-unavailable" };
+    }
+    return { status: "error", message };
+  }
 }
 
 /**

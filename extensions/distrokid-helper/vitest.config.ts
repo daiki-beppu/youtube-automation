@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 // unit テスト（tests/*.test.ts）専用。E2E（tests/e2e）は Playwright が担う。
 //
@@ -8,6 +9,11 @@ import { defineConfig } from "vitest/config";
 //
 // 既定環境は node。DOM 注入テストはファイル先頭の `// @vitest-environment jsdom` で個別指定する。
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+    },
+  },
   test: {
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.ts"],

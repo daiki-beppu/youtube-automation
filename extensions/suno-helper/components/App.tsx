@@ -18,6 +18,7 @@ export function App() {
     itemStates,
     status,
     isError,
+    compatibilityWarning,
     canRun,
     isRunning,
     playlistName,
@@ -108,6 +109,12 @@ export function App() {
               閉じる
             </button>
           </div>
+        </div>
+      )}
+
+      {compatibilityWarning && (
+        <div className="rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs text-amber-900">
+          {compatibilityWarning}
         </div>
       )}
 
