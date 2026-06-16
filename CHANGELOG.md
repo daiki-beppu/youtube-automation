@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(ts-rewrite/core)`: resumable upload + thumbnail 圧縮 + metadata update を 1 atomic service に集約した `uploadVideoService` を ADR-0003 準拠で実装した（#837）
 - `feat(ts-rewrite/core)`: Per-video metrics（views / likes / comments / shares 等 8 指標）を YouTube Analytics API から収集する analytics video service を ADR-0003 準拠で実装した（#829）
 - `feat(doctor)`: `yt-doctor accounts` サブコマンドを追加。全チャンネルリポの `auth/client_secrets.json` をスキャンし、GCP プロジェクト・OAuth クライアント ID・トークン有無の対応表を一覧表示する。`--json` で機械可読出力、`--search-root` で探索ルート指定が可能。
 - `docs(adr)`: ADR-0010 全チャンネルを単一 GCP プロジェクトに統合。Billing 枠上限 (5/5) 解消とオペレーションコスト削減のため、チャンネルごとの GCP プロジェクト分離から `yt-channels-automation` への一本化を決定。
