@@ -27,6 +27,7 @@
     "packages/*/src/**/*.ts",
     "packages/*/lib/**/*.ts",
     "packages/*/bin/**/*.ts",
+    "packages/*/scripts/**/*.ts",
     "packages/*/test/**/*.ts",
     "oxlint.config.ts",
     "oxfmt.config.ts"
