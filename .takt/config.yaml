@@ -3,34 +3,34 @@
 draft_pr: false
 base_branch: feat/ts-rewrite  # cutover まで ts-rewrite 向け (元: main)
 
-# 全 persona を claude-terminal/opus に統一。
-# claude (SDK) だと reviewer が "Timed out waiting for Claude terminal session id" で落ちるため、
-# 全ペルソナを claude-terminal に揃える。
+# 全 persona を claude/opus に統一。
+# claude -p の制約解除に伴い claude-terminal → claude に変更 (2026-06-16)。
+# claude-terminal は takt-worktrees の transcript 解決に非互換があったため。
 persona_providers:
   planner:
-    provider: claude-terminal
+    provider: claude
     model: opus
   coder:
-    provider: claude-terminal
+    provider: claude
     model: opus
   architecture-reviewer:
-    provider: claude-terminal
+    provider: claude
     model: opus
   ai-antipattern-reviewer:
-    provider: claude-terminal
+    provider: claude
     model: opus
   pure-review:
-    provider: claude-terminal
+    provider: claude
     model: opus
   pure-reviewer:
-    provider: claude-terminal
+    provider: claude
     model: opus
   coding-review:
-    provider: claude-terminal
+    provider: claude
     model: opus
   coding-reviewer:
-    provider: claude-terminal
+    provider: claude
     model: opus
   supervisor:
-    provider: claude-terminal
+    provider: claude
     model: opus
