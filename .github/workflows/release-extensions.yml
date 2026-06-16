@@ -1,15 +1,11 @@
 name: Release Extensions
 
-# tag push 時に拡張をビルドして zip を生成し、GitHub Release に添付する。
+# tag push 時に各 Chrome 拡張をビルドして zip を生成し、単一の GitHub Release に添付する。
 # tag 命名は拡張バージョン用の `ext-v*`（Python 本体の release タグと分離する）。
 on:
   push:
     tags:
       - "ext-v*"
-
-defaults:
-  run:
-    working-directory: extensions/suno-helper
 
 permissions:
   contents: write
@@ -26,12 +22,38 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: extensions/suno-helper/pnpm-lock.yaml
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build and zip
-        run: pnpm zip
-      - name: Attach zip to Release
+          cache-dependency-path: |
+            extensions/suno-helper/pnpm-lock.yaml
+            extensions/distrokid-helper/pnpm-lock.yaml
+      - name: Build and zip suno-helper
+        working-directory: extensions/suno-helper
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm zip
+      - name: Build and zip distrokid-helper
+        working-directory: extensions/distrokid-helper
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm zip
+      - name: Attach zips to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: extensions/suno-helper/.output/*.zip
+          files: |
+            extensions/suno-helper/.output/*.zip
+            extensions/distrokid-helper/.output/*.zip
+          body: |
+            ## 収録拡張
+
+            - **Suno Helper** — `suno-helper-*.zip`
+            - **DistroKid Helper** — `distrokid-helper-*.zip`
+
+            ## 初回インストール
+
+            1. 目的の拡張の zip（`*.zip`）をダウンロードして任意のフォルダに展開する。
+            2. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON にする。
+            3. **パッケージ化されていない拡張機能を読み込む**（Load unpacked）をクリックし、展開したフォルダを選択する。
+
+            ## 更新
+
+            1. 新しい zip をダウンロードして展開し、既存の展開フォルダを置き換える。
+            2. `chrome://extensions` を開き、対象拡張の **リロード**（更新アイコン）をクリックする。
