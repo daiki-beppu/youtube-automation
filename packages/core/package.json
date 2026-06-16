@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./analytics/channel": "./src/analytics/channel/index.ts",
+    "./analytics/traffic-source": "./src/analytics/traffic-source/index.ts",
     "./analytics/video": "./src/analytics/video/index.ts",
     "./analytics/video-daily": "./src/analytics/video-daily/index.ts",
     "./config": "./src/config/index.ts",
