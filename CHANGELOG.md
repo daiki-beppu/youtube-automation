@@ -161,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration
 
+- `#775`: Python `yt-generate-suno` 相当の導線は TS dispatcher の `tayk generate-suno <collection-dir> [--json]` に移行する。per-CLI bin は追加せず、core registry entry `suno.generate` 経由で `suno-prompts.md` / `suno-prompts.json` を生成する。
 - `#698`: `yt-suno-serve` を実行しているスクリプト・運用手順は `yt-collection-serve` に置き換える。配信 URL は `http://localhost:<PORT>/prompts.json` → `http://localhost:<PORT>/suno/prompts.json` に変わる（suno-helper 拡張は本リリースで追従済み）
 
 ### Security
