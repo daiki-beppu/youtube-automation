@@ -10,11 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(ts-rewrite/core)`: Per-video metrics（views / likes / comments / shares 等 8 指標）を YouTube Analytics API から収集する analytics video service を ADR-0003 準拠で実装した（#829）
+- `feat(doctor)`: `yt-doctor accounts` サブコマンドを追加。全チャンネルリポの `auth/client_secrets.json` をスキャンし、GCP プロジェクト・OAuth クライアント ID・トークン有無の対応表を一覧表示する。`--json` で機械可読出力、`--search-root` で探索ルート指定が可能。
+- `docs(adr)`: ADR-0010 全チャンネルを単一 GCP プロジェクトに統合。Billing 枠上限 (5/5) 解消とオペレーションコスト削減のため、チャンネルごとの GCP プロジェクト分離から `yt-channels-automation` への一本化を決定。
+
+### Changed
+
+- `feat(suno)`: 1 pattern = 1 scene 原則を SKILL.md に追加し、`(Variation N)` 機械的接尾辞による曲タイトル生成を回避。各曲が固有の `name_jp` / `name_en` を持つ YAML 設計を強制する NG/OK 例付き。
+- `feat(video-description)`: Benchmark 概要欄 TTP セクションを構造転写テーブル（7 項目）に拡充し、テンプレ使い回し禁止ルール・冒頭フックのコレクション固有化を追加。
+
+### Added
+
 - `feat(suno)`: プロンプト設計を suno-bgm ベースの品質ルール集に刷新した（#904, #899）。Style text の 5 要素順序検証（ジャンル → 音響特性 → キー楽器 → リズム/ベース → テンポ）、120 文字制限の警告、禁止アーティスト名チェック（`banned_artists` 約 30 名）、`auto_lyrics_structure` による歌詞構造の自動補強（`[Instrumental]` / `[Extended Outro]` 自動付加）を `yt-generate-suno` に追加。`style_influence` を 85 → 95 に引き上げ、`weirdness: 10` / `style_char_limit: 120` を新設。楽曲ごとの固有タイトル自動生成仕様（`name_en`: 2-4 word scene/mood title、`name_jp`: 5-15 文字の日本語訳）を SKILL.md に追記。`references/suno-examples.md` に楽器形容詞 Bad/Good ペア 10 組、`references/lyrics-examples.md` にひらがな歌詞ガイドと Mixing Notes 例を追加。
 - `feat(doctor)`: `yt-doctor` に ffmpeg/ffprobe の存在チェックを追加し、新規カテゴリ `system` を導入した。動画パイプラインの中核依存が doctor で事前検証されておらず、未インストール環境では動画処理段で初めて `FileNotFoundError` になっていた問題を解消。`shutil.which` で検出し、見つからない場合は `brew install ffmpeg` / `apt-get install -y ffmpeg` のインストール手順を案内する。
 
 ### Fixed
 
+- `fix(suno-helper)`: auto-capture が Suno の URL 構造変更（`/me` → `/me/playlists`）に追従していなかったため、playlist mapping が `suno-playlists.json` に書き込まれず処理済みコレクションがドロップダウンに残り続けていた問題を修正した。併せて `captureFromTab` で SPA 未描画の空結果もリトライ対象にした。
+- `fix(suno-helper)`: overlay パネルのコンテンツが画面外にはみ出してスクロールできなかった問題を修正した。`max-height: calc(100vh - 120px)` + `overflow-y: auto` を追加。
+- `fix(suno-helper)`: マルチワード prefix（例: `soulful-grooves`）のチャンネルで playlist 名の境界分割が壊れ、Suno に `soulful | grooves-wah-groove` のような誤った playlist 名で作成されていた問題を修正した。サーバー側で `derive_playlist_name` を使って正しい `<prefix> | <theme>` を算出し、`/collections` API の `playlist_name` フィールドとして返すようにした。拡張はサーバーの値を優先使用し、旧サーバーでは `extractPlaylistName` fallback で後方互換を維持する。
+- `docs(suno-helper)`: SKILL.md にサーバー起動後の 3 点確認（mapped / playlist_name / dir mode）、下流 venv 更新手順、Suno URL/DOM 変更時のトラブルシュート手順を追加した。
 - `fix(suno-helper)`: SKILL.md のサーバー起動コマンドに `--playlist-capture-root` / `--playlist-capture-prefix` フラグが欠落しており、auto-mapping（mapped 全件 false）と手動 playlist sync（POST 404）が機能しなかった問題を修正した。
 - `fix(benchmark)`: ベンチマーク収集のサムネイル分析で Gemini 2.5 Pro（Vertex AI）をデフォルトで全動画に呼び出しており、2チャンネル分の初回収集で ¥6,000 の課金が発生していた問題を修正した。サムネイル分析の実行主体を Gemini API からエージェントの画像読み取り機能（Read ツール）に移行した（追加課金なし）。設定キーを `analyze_thumbnails` → `gemini_thumbnail_analysis`（既定 `false`）にリネームし、明示的に Gemini を使う場合もデフォルトモデルを Pro → Flash に変更（コスト 1/10〜1/20）。あわせて実行前のコストプレビュー表示、Gemini 呼び出しの cost_tracker 記録（`"analysis"` カテゴリ新設）、`-y` 確認スキップフラグを追加した。
 

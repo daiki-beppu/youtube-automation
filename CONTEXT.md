@@ -61,6 +61,12 @@ _Avoid_: dependency injection container (DepsMap は DI container ではなく t
 アーキテクチャ規約を確定させるために最初に end-to-end で通す垂直スライス。本プロジェクトでは `tayk skills list` (旧 `yt-skills list`、#732/#842) が該当。
 _Avoid_: PoC (PoC は撤退判定用の別物 #730)
 
+## 動画生成
+
+**renderer**:
+collection の映像を生成するバックエンド。`"remotion"`（React コンポーネント → Chromium フレームキャプチャ → ffmpeg エンコード）と `"ffmpeg"`（ffmpeg CLI 直接実行）の 2 種。`config/skills/videoup.json` の `renderer` key で切り替える (ADR-0010)。
+_Avoid_: encoder, transcoder (renderer は映像合成 + エンコードの全工程を指す。エンコードだけではない)
+
 ## コンテンツ制作
 
 **collection**:

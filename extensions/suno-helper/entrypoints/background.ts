@@ -9,8 +9,9 @@ import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
 import { serverUrlItem } from "../lib/storage";
 
-// 自動 capture で開く Suno `/me` の URL（追加要件 A）。
-const SUNO_ME_URL = "https://suno.com/me";
+// 自動 capture で開く Suno playlists ページの URL（追加要件 A）。
+// Suno の URL 構造変更（/me → /me/playlists）に追従。
+const SUNO_ME_URL = "https://suno.com/me/playlists";
 // bg `/me` tab の content script が capturePlaylists に応答するまでの poll 上限と間隔。
 // tab 生成直後は content script 未注入で sendMessage が reject されるためリトライする。
 const CAPTURE_TAB_TIMEOUT_MS = 15000;

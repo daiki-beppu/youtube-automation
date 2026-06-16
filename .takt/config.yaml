@@ -1,16 +1,11 @@
 # automation リポジトリの takt 設定
 # provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
 draft_pr: false
-# Phase 1B-3 (#727 epic) の retrofit / 新規 service は packages/{core,cli}/ への作業で、
-# これらは feat/ts-rewrite branch にしか存在しない。main を base にすると takt が作成する
-# worktree に packages/ が存在せず作業不可能。Phase 3 完了で feat/ts-rewrite を main に merge
-# する際に `base_branch: main` へ戻す。
-base_branch: feat/ts-rewrite
+base_branch: feat/ts-rewrite  # cutover まで ts-rewrite 向け (元: main)
 
-# 全 persona を Claude/opus に固定する（本リポジトリは品質側に振り、Codex への依存を切る）。
-# - planner / 各 reviewer はグローバル設定でもともと claude/opus
-# - coder はグローバル設定では codex 継承だが、本リポジトリでは Claude/opus に統一
-# rate limit や保守判断で Codex 継承へ戻したい場合は、`coder:` ブロックを削除すれば global の codex に戻る。
+# 全 persona を claude/opus に統一。
+# claude -p の制約解除に伴い claude-terminal → claude に変更 (2026-06-16)。
+# claude-terminal は takt-worktrees の transcript 解決に非互換があったため。
 persona_providers:
   planner:
     provider: claude
@@ -22,6 +17,18 @@ persona_providers:
     provider: claude
     model: opus
   ai-antipattern-reviewer:
+    provider: claude
+    model: opus
+  pure-review:
+    provider: claude
+    model: opus
+  pure-reviewer:
+    provider: claude
+    model: opus
+  coding-review:
+    provider: claude
+    model: opus
+  coding-reviewer:
     provider: claude
     model: opus
   supervisor:
