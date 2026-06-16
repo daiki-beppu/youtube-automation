@@ -98,7 +98,10 @@ export async function resolveCompatibilityWarning(
   baseUrl: string,
   extensionVersion: string,
 ): Promise<string> {
-  const compatibility = await checkServerCompatibility(baseUrl, extensionVersion);
+  const compatibility = await checkServerCompatibility(
+    baseUrl,
+    extensionVersion,
+  );
   return formatCompatibilityWarning(compatibility);
 }
 
