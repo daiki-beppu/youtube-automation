@@ -780,11 +780,87 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
     return "\n".join(lines)
 
 
+def _find_channel_dirs(search_root: Path) -> list[Path]:
+    """search_root 直下のディレクトリで auth/client_secrets.json を持つものを返す。"""
+    dirs: list[Path] = []
+    if not search_root.is_dir():
+        return dirs
+    for child in sorted(search_root.iterdir()):
+        if child.is_dir() and (child / "auth" / "client_secrets.json").exists():
+            dirs.append(child)
+    return dirs
+
+
+def _extract_oauth_info(channel_dir: Path) -> dict:
+    """client_secrets.json から GCP プロジェクト・クライアント ID を抽出する。"""
+    cs_path = channel_dir / "auth" / "client_secrets.json"
+    info: dict = {"channel": channel_dir.name, "path": str(channel_dir)}
+    try:
+        data = json.loads(cs_path.read_text(encoding="utf-8"))
+        installed = data.get("installed") or data.get("web") or {}
+        info["project_id"] = installed.get("project_id", "?")
+        info["client_id"] = installed.get("client_id", "?")
+    except (json.JSONDecodeError, OSError):
+        info["project_id"] = "read error"
+        info["client_id"] = "read error"
+    info["has_token"] = (channel_dir / "auth" / "token.json").exists()
+    return info
+
+
+def run_accounts(search_root: Path, as_json: bool) -> int:
+    """全チャンネルの GCP プロジェクト + OAuth クライアント対応表を表示する。"""
+    channel_dirs = _find_channel_dirs(search_root)
+    if not channel_dirs:
+        print(f"チャンネルが見つかりません: {search_root}")
+        return 1
+
+    rows = [_extract_oauth_info(d) for d in channel_dirs]
+
+    if as_json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"search_root: {search_root}")
+    print()
+    header = f"{'Channel':<24} {'GCP Project':<28} {'OAuth Client ID':<20} {'Token'}"
+    print(header)
+    print("-" * len(header))
+    for r in rows:
+        client_short = r["client_id"][:16] + "..." if len(r["client_id"]) > 16 else r["client_id"]
+        token_icon = "✓" if r["has_token"] else "✗"
+        print(f"{r['channel']:<24} {r['project_id']:<28} {client_short:<20} {token_icon}")
+
+    projects = {r["project_id"] for r in rows if r["project_id"] not in ("?", "read error")}
+    print()
+    print(f"projects: {len(projects)}  channels: {len(rows)}")
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="yt-doctor", description="API 設定の状態診断")
+    sub = parser.add_subparsers(dest="command")
+
+    # default (no subcommand): 従来の診断
     parser.add_argument("--json", action="store_true", help="JSON 出力 (AI 用)")
     parser.add_argument("--target", help="対象 channel dir (既定: CHANNEL_DIR env → CWD)")
+
+    # accounts subcommand
+    accounts_parser = sub.add_parser("accounts", help="全チャンネルの GCP/OAuth 対応表")
+    accounts_parser.add_argument("--json", action="store_true", help="JSON 出力")
+    accounts_parser.add_argument(
+        "--search-root",
+        help="チャンネルリポ群の親ディレクトリ (既定: CHANNEL_DIR の親 → CWD の親)",
+    )
+
     args = parser.parse_args(argv)
+
+    if args.command == "accounts":
+        if args.search_root:
+            root = Path(args.search_root).resolve()
+        else:
+            channel_dir = resolve_channel_dir(None)
+            root = channel_dir.parent
+        return run_accounts(root, args.json)
 
     channel_dir = resolve_channel_dir(args.target)
     results = run_all_checks(channel_dir)
