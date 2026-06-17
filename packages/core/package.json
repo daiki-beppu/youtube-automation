@@ -18,6 +18,7 @@
     "./oauth/interactive": "./src/oauth/interactive.ts",
     "./oauth/refresh": "./src/oauth/refresh.ts",
     "./paths": "./src/paths.ts",
+    "./playlists": "./src/playlists/index.ts",
     "./registry": "./src/registry.ts",
     "./suno-prompts": "./src/suno-prompts/index.ts",
     "./skills-sync": "./src/skills-sync/index.ts",

@@ -3,6 +3,26 @@ import type { z } from "zod";
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
+import {
+  playlistAssignService,
+  PlaylistAssignInputSchema,
+  PlaylistAssignOutputSchema,
+  playlistCleanDeletedService,
+  PlaylistCleanDeletedInputSchema,
+  PlaylistCleanDeletedOutputSchema,
+  playlistCreateService,
+  PlaylistCreateInputSchema,
+  PlaylistCreateOutputSchema,
+  playlistInitService,
+  PlaylistInitInputSchema,
+  PlaylistInitOutputSchema,
+  playlistStatusService,
+  PlaylistStatusInputSchema,
+  PlaylistStatusOutputSchema,
+  playlistSyncService,
+  PlaylistSyncInputSchema,
+  PlaylistSyncOutputSchema,
+} from "./playlists/index.ts";
 import type { Result } from "./result.ts";
 import {
   listSkillsService,
@@ -67,6 +87,49 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "playlists.assign": defineRegistryEntry({
+    deps: ["config", "yt"],
+    description: "動画を設定に一致する playlist へ追加する",
+    inputSchema: PlaylistAssignInputSchema,
+    outputSchema: PlaylistAssignOutputSchema,
+    run: playlistAssignService,
+  }),
+  "playlists.cleanDeleted": defineRegistryEntry({
+    deps: ["config", "yt"],
+    description: "Deleted video / Private video の playlist item を削除する",
+    inputSchema: PlaylistCleanDeletedInputSchema,
+    outputSchema: PlaylistCleanDeletedOutputSchema,
+    run: playlistCleanDeletedService,
+  }),
+  "playlists.create": defineRegistryEntry({
+    deps: ["config", "channelDir", "yt"],
+    description: "playlist_id 未設定の playlist を YouTube に作成する",
+    inputSchema: PlaylistCreateInputSchema,
+    outputSchema: PlaylistCreateOutputSchema,
+    run: playlistCreateService,
+  }),
+  "playlists.init": defineRegistryEntry({
+    deps: ["config", "channelDir", "yt"],
+    description: "playlist_id 未設定の playlist を初期化する",
+    inputSchema: PlaylistInitInputSchema,
+    outputSchema: PlaylistInitOutputSchema,
+    run: playlistInitService,
+  }),
+  "playlists.status": defineRegistryEntry({
+    deps: ["config", "yt"],
+    description:
+      "config/channel/playlists.json の playlist 状態と動画数を表示する",
+    inputSchema: PlaylistStatusInputSchema,
+    outputSchema: PlaylistStatusOutputSchema,
+    run: playlistStatusService,
+  }),
+  "playlists.sync": defineRegistryEntry({
+    deps: ["config", "channelDir", "yt"],
+    description: "collections/live 配下の既存動画を playlist へ一括追加する",
+    inputSchema: PlaylistSyncInputSchema,
+    outputSchema: PlaylistSyncOutputSchema,
+    run: playlistSyncService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",
