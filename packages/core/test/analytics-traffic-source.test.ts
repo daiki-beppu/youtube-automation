@@ -205,12 +205,26 @@ describe("collectTrafficSourceService success", () => {
     ).toBe(0);
   });
 
-  test("aggregates duplicate traffic source rows before calculating derived metrics", async () => {
+  test("uses the API averageViewDuration instead of recalculating from watched minutes", async () => {
+    const { client } = makeAnalyticsClient(() =>
+      queryResponse(columns, [["YT_SEARCH", 120, 1000, 321]])
+    );
+
+    const value = expectOk(
+      await collectTrafficSourceService(baseInput, makeDeps(client))
+    );
+
+    expect(
+      findMetric(value.metrics, "YT_SEARCH", "averageViewDuration")?.value
+    ).toBe(321);
+  });
+
+  test("aggregates duplicate traffic source rows with a views-weighted average duration", async () => {
     const { client } = makeAnalyticsClient(() =>
       queryResponse(columns, [
-        ["YT_SEARCH", 100, 300, 180],
+        ["YT_SEARCH", 100, 100, 30],
         ["BROWSE", 50, 150, 180],
-        ["YT_SEARCH", 50, 300, 360],
+        ["YT_SEARCH", 50, 900, 90],
       ])
     );
 
@@ -222,10 +236,10 @@ describe("collectTrafficSourceService success", () => {
     expect(findMetric(value.metrics, "YT_SEARCH", "views")?.value).toBe(150);
     expect(
       findMetric(value.metrics, "YT_SEARCH", "estimatedMinutesWatched")?.value
-    ).toBe(600);
+    ).toBe(1000);
     expect(
       findMetric(value.metrics, "YT_SEARCH", "averageViewDuration")?.value
-    ).toBe(240);
+    ).toBe(50);
     expect(
       findMetric(value.metrics, "YT_SEARCH", "viewSharePercent")?.value
     ).toBe(75);

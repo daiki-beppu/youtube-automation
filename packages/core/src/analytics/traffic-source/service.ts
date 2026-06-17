@@ -1,16 +1,15 @@
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { isRecord } from "../../../internal/guards.ts";
-import {
-  QuotaExhaustedError,
-  toServiceError,
-  YouTubeAPIError,
-} from "../../errors.ts";
+import { toServiceError } from "../../errors.ts";
 import type { ServiceError } from "../../errors.ts";
 import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
-import { defaultShouldRetry, withRetry } from "../../retry.ts";
+import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import {
+  shouldRetryAnalyticsQuery,
+  toAnalyticsQueryError,
+} from "../query-error.ts";
 import {
   TRAFFIC_SOURCE_API_METRICS,
   TRAFFIC_SOURCE_VIEWS_METRIC,
@@ -24,7 +23,6 @@ const VIDEO_FILTER_PREFIX = "video==";
 const TRAFFIC_SOURCE_DIMENSION = "insightTrafficSourceType";
 const SORT_BY_VIEWS_DESC = "-views";
 const VIEW_SHARE_METRIC = "viewSharePercent";
-const HTTP_SERVER_ERROR_MIN = 500;
 
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
@@ -36,6 +34,7 @@ interface MetricColumn {
   readonly metric: (typeof TRAFFIC_SOURCE_API_METRICS)[number];
 }
 interface AggregatedTrafficSource {
+  readonly averageViewDurationWeightedSum: number;
   readonly estimatedMinutesWatched: number;
   readonly trafficSourceType: string;
   readonly views: number;
@@ -44,54 +43,6 @@ interface TrafficSourceDeps {
   readonly sleep?: SleepMs;
   readonly youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics;
 }
-
-const parseRetryAfterSeconds = (error: unknown): number | undefined => {
-  if (
-    !(
-      isRecord(error) &&
-      isRecord(error.response) &&
-      isRecord(error.response.headers)
-    )
-  ) {
-    return undefined;
-  }
-  const raw = error.response.headers["retry-after"];
-  if (typeof raw !== "string") {
-    return undefined;
-  }
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return undefined;
-  }
-  const seconds = Number(trimmed);
-  return Number.isFinite(seconds) ? seconds : undefined;
-};
-
-const toQueryError = (error: unknown): YouTubeAPIError => {
-  if (error instanceof YouTubeAPIError) {
-    return error;
-  }
-  const apiError = YouTubeAPIError.fromGaxiosError(error, QUERY_CONTEXT);
-  if (apiError.statusCode === 429) {
-    return new QuotaExhaustedError(
-      apiError.message,
-      parseRetryAfterSeconds(error)
-    );
-  }
-  return apiError;
-};
-
-const shouldRetryQuery = (error: unknown): boolean => {
-  if (!defaultShouldRetry(error)) {
-    return false;
-  }
-  if (!(error instanceof YouTubeAPIError)) {
-    return false;
-  }
-  return (
-    error.statusCode === undefined || error.statusCode >= HTTP_SERVER_ERROR_MIN
-  );
-};
 
 const buildQueryParams = (input: TrafficSourceAnalyticsInput): QueryParams => ({
   dimensions: TRAFFIC_SOURCE_DIMENSION,
@@ -113,7 +64,7 @@ const queryTrafficSourceReport = async (
     const response = await client.reports.query(params);
     return response.data;
   } catch (error) {
-    throw toQueryError(error);
+    throw toAnalyticsQueryError(error, QUERY_CONTEXT);
   }
 };
 
@@ -164,7 +115,7 @@ const metricRecordsForRow = (
   const averageViewDuration =
     source.views === 0
       ? 0
-      : roundOneDecimal((source.estimatedMinutesWatched * 60) / source.views);
+      : roundOneDecimal(source.averageViewDurationWeightedSum / source.views);
   const viewSharePercent =
     totalViews === 0 ? 0 : roundOneDecimal((source.views / totalViews) * 100);
   return [
@@ -204,25 +155,35 @@ const aggregateTrafficSources = (
       TRAFFIC_SOURCE_DIMENSION
     );
     const previous = aggregated.get(trafficSourceType) ?? {
+      averageViewDurationWeightedSum: 0,
       estimatedMinutesWatched: 0,
       trafficSourceType,
       views: 0,
     };
     const {
+      averageViewDurationWeightedSum: previousAverageViewDurationWeightedSum,
       estimatedMinutesWatched: previousEstimatedMinutesWatched,
       views: previousViews,
     } = previous;
+    let averageViewDurationWeightedSum = previousAverageViewDurationWeightedSum;
     let views = previousViews;
     let estimatedMinutesWatched = previousEstimatedMinutesWatched;
+    let rowViews = 0;
+    let rowAverageViewDuration = 0;
     for (const column of metricColumns) {
       const value = readNumberCell(row, column.index, column.metric);
       if (column.metric === TRAFFIC_SOURCE_VIEWS_METRIC) {
+        rowViews = value;
         views += value;
       } else if (column.metric === "estimatedMinutesWatched") {
         estimatedMinutesWatched += value;
+      } else if (column.metric === "averageViewDuration") {
+        rowAverageViewDuration = value;
       }
     }
+    averageViewDurationWeightedSum += rowAverageViewDuration * rowViews;
     aggregated.set(trafficSourceType, {
+      averageViewDurationWeightedSum,
       estimatedMinutesWatched,
       trafficSourceType,
       views,
@@ -273,7 +234,7 @@ export const collectTrafficSourceService = async (
     const params = buildQueryParams(request);
     const data = await withRetry(
       () => queryTrafficSourceReport(deps.youtubeAnalytics, params),
-      { shouldRetry: shouldRetryQuery, sleep: deps.sleep }
+      { shouldRetry: shouldRetryAnalyticsQuery, sleep: deps.sleep }
     );
     return ok(
       TrafficSourceAnalyticsOutput.parse({
