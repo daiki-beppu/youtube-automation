@@ -25,7 +25,6 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-from youtube_automation.scripts.collection_serve import find_distrokid_discs
 from youtube_automation.scripts.distrokid_release import (
     build_release_payload,
 )
@@ -37,6 +36,7 @@ from youtube_automation.utils.distrokid_prepare import (
     DISTROKID_DIRNAME,
     INDIVIDUAL_MUSIC_DIRNAME,
     build_draft_spec,
+    find_distrokid_discs,
     format_total_duration,
     render_metadata_md,
     render_readme_md,

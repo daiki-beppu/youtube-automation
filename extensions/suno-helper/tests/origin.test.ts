@@ -1,5 +1,5 @@
 // origin allowlist は yt-collection-serve の CORS 判定
-// (`collection_serve.py::is_origin_allowed`) と対の契約。サーバー側 SSOT の
+// TS collection-serve service と対の契約。サーバー側 SSOT の
 // 各分岐を拡張側でも同じ真偽値で再現することを保証する。
 //   - allowOrigin=null  → `chrome-extension://` scheme + helper サイト origin を許可（#896）
 //   - allowOrigin 指定時 → その値との完全一致のみ許可

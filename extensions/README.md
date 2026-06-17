@@ -8,7 +8,7 @@
 extensions/
   shared/                 # 複数拡張で再利用する共通コード（relative import）
     constants.ts          # storage key / 配信ルート / phase 値（サーバー契約 SSOT。メッセージ種別は各拡張の lib/messaging.ts）
-    origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
+    origin.ts             # CORS origin allowlist（TS collection-serve と対の契約）
     api.ts                # yt-collection-serve client + PromptEntry 型
     dom.ts                # Suno UI 注入の純関数群（注入 / 完了検知 / reCAPTCHA 検知）
   suno-helper/            # Suno Custom Mode 自動投入拡張（WXT プロジェクト）

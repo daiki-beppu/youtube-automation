@@ -1,5 +1,5 @@
 // origin allowlist は yt-collection-serve の CORS 判定
-// (`collection_serve.py::is_origin_allowed`) と対の契約。サーバー側 SSOT の
+// TS collection-serve service と対の契約。サーバー側 SSOT の
 // 各分岐を拡張側でも同じ真偽値で再現する。
 //
 // NOTE: これは「実行時消費者を持たない契約パリティ用ミラー」である。
@@ -12,7 +12,7 @@ const EXTENSION_ORIGIN_SCHEME = "chrome-extension://";
 
 // overlay 化（#892/#895）で content script の fetch が page origin になったため、
 // helper 拡張がホストされる web origin をデフォルト許可する（#896）。完全一致のみ。
-// サーバー側 SSOT `collection_serve.py::_DEFAULT_ALLOWED_WEB_ORIGINS` と同値。
+// サーバー側 collection-serve CORS allowlist と同値。
 const DEFAULT_ALLOWED_WEB_ORIGINS = new Set([
   "https://suno.com",
   "https://www.suno.com",

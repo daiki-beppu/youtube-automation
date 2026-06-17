@@ -321,7 +321,7 @@ uv run yt-generate-suno <collection-path>
 `suno-prompts.json` を Chrome 拡張（`extensions/suno-helper/`）が読み取り、連続実行する。
 
 1. **拡張をビルドしてロード**（初回のみ）: `pnpm install && pnpm build` → Chrome で `chrome://extensions` → `.output/chrome-mv3/` を選択
-2. **サーバー起動**: `uv run yt-collection-serve collections/planning/<theme>` → `http://localhost:7873/suno/prompts.json` で配信
+2. **サーバー起動**: `tayk collection-serve collections/planning/<theme>` → `http://localhost:7873/suno/prompts.json` で配信
 3. **Suno を開く**: Chrome で Custom Mode 画面（ボーカルは **Instrumental OFF**）
 4. **取得 → 連続実行**: 拡張ポップアップでデータ取得 → 全パターンを連続実行。スキップされた entry は再実行ボタンで再投入可能
 
@@ -371,4 +371,4 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 - 次工程（ブラウザ自動生成 + playlist 一括追加）: `/suno-helper`
 - 後工程（DL + マスター化）: `/masterup`
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
-- サーバー CLI: `src/youtube_automation/scripts/collection_serve.py`
+- サーバー CLI: `packages/cli/src/commands/collection-serve/cli.ts`

@@ -1,7 +1,7 @@
 // asset（曲 / ジャケット）を popup ↔ content 間で受け渡すための直列化。
 //
 // なぜ popup 側で fetch するのか:
-//   #896 で yt-collection-serve（collection_serve.py の is_origin_allowed）が
+//   #896 で tayk collection-serve が
 //   デフォルトで distrokid.com origin も許可するようになったが、distrokid-helper 本体を
 //   content script fetch へ書き換えるのは #896 のスコープ外（別 issue）。現状は fetch を
 //   拡張コンテキスト（popup, `chrome-extension://` origin）で行い、

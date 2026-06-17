@@ -1,7 +1,7 @@
 // overlay ⇄ content script ⇄ server 間の契約文字列を 1 箇所に集約する。
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
-// サーバー側 (`/suno/prompts.json`) と整合しなくなる。
-// SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
+// サーバー側 (`/suno/prompts.json`) と整合しなくなる。このファイルを
+// extension と TS collection-serve の共有 SSOT とする。
 import type { PromptEntry } from "./api";
 
 /** chrome.storage.local に保存するサーバー URL の key。 */
@@ -18,16 +18,13 @@ export const OVERLAY_STATE_KEY = "sunoOverlayState";
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
 
-/** yt-collection-serve dir mode の collection 列挙サブパス (#816)。
- * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
+/** yt-collection-serve dir mode の collection 列挙サブパス (#816)。 */
 export const COLLECTIONS_ROUTE = "/collections";
 
-/** yt-collection-serve の Suno playlist capture サブパス (#893、POST)。
- * SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PLAYLISTS_ROUTE。 */
+/** yt-collection-serve の Suno playlist capture サブパス (#893、POST)。 */
 export const PLAYLISTS_CAPTURE_ROUTE = "/suno/playlists";
 
-/** yt-collection-serve の互換確認サブパス（#1023）。
- * SSOT: src/youtube_automation/scripts/collection_serve.py VERSION_ROUTE。 */
+/** yt-collection-serve の互換確認サブパス（#1023）。 */
 export const VERSION_ROUTE = "/version";
 
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
@@ -191,12 +188,16 @@ export interface ObservedClip {
   status: string;
 }
 
-/** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
- * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_COLLECTIONS_ROUTE。 */
+/** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。 */
 export const DISTROKID_COLLECTIONS_ROUTE = "/distrokid/collections";
 
-/** yt-collection-serve の DistroKid 配信済み記録 POST サブパス（#934）。
- * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_RELEASES_ROUTE。 */
+/** yt-collection-serve single mode の DistroKid release payload 配信サブパス。 */
+export const DISTROKID_RELEASE_ROUTE = "/distrokid/release.json";
+
+/** yt-collection-serve single mode の DistroKid asset 配信サブパス prefix。 */
+export const DISTROKID_ASSETS_PREFIX = "/distrokid/assets/";
+
+/** yt-collection-serve の DistroKid 配信済み記録 POST サブパス（#934）。 */
 export const DISTROKID_RELEASES_ROUTE = "/distrokid/releases";
 
 /** 個別 collection の release.json 配信サブパスを組み立てる（#934）。

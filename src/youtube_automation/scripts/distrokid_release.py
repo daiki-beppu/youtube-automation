@@ -3,7 +3,7 @@
 `yt-collection-serve` の `/distrokid/release.json` / `/distrokid/assets/<path>`
 エンドポイントが参照する純データロジック。`config.distrokid.profile`（静的）と
 `collections/planning/<theme>/` の動的データ（アルバム名 / 曲ファイル / ジャケット /
-リリース日）をマージする。HTTP / CORS は collection_serve.py の責務。
+リリース日）をマージする。HTTP / CORS は TS collection-serve service の責務。
 """
 
 from __future__ import annotations

@@ -1,5 +1,10 @@
 import type { z } from "zod";
 
+import {
+  collectionServeService,
+  CollectionServeInputSchema,
+  CollectionServeOutputSchema,
+} from "./collection-serve/index.ts";
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
@@ -67,6 +72,14 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "collection.serve": defineRegistryEntry({
+    deps: ["config"],
+    description:
+      "Suno / DistroKid helper に collection artifact を配信する HTTP server を起動する",
+    inputSchema: CollectionServeInputSchema,
+    outputSchema: CollectionServeOutputSchema,
+    run: collectionServeService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",

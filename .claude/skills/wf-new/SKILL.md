@@ -162,7 +162,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
    ```
 
    音楽エンジンに応じた次ステップ案内:
-   - **Suno**: 「`/suno-helper` を実行してください。`yt-collection-serve` で `suno-prompts.json` を配信 → suno-helper Chrome 拡張で Suno タブに連続注入 → 全件完了で playlist 一括追加まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
+   - **Suno**: 「`/suno-helper` を実行してください。`tayk collection-serve` で `suno-prompts.json` を配信 → suno-helper Chrome 拡張で Suno タブに連続注入 → 全件完了で playlist 一括追加まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
    - **Lyria**: 「`/wf-next` を実行すると Lyria 3 API が呼ばれ、コレクション尺に応じてセグメントが生成されます → ミキシング+マスタリング後に再度 `/wf-next`」
 
 **重要**: `/suno-helper` / `/wf-next` への自動接続はしない（`/suno-helper` は Chrome + Suno ログイン + 拡張ロードの physical 準備、`/wf-next` は次フェーズ進行の意思決定をそれぞれ user に委ねる）。ユーザーが手動で呼ぶ。

@@ -1,13 +1,13 @@
 ---
 name: distrokid-prep
-description: "Use when コレクションの楽曲を DistroKid 配信用に準備したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成）。『DistroKid 準備』『配信準備』『アルバム化』『distrokid-prep』で発動。アップロード自体（yt-collection-serve + distrokid-helper 拡張）は対象外"
+description: "Use when コレクションの楽曲を DistroKid 配信用に準備したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成）。『DistroKid 準備』『配信準備』『アルバム化』『distrokid-prep』で発動。アップロード自体（collection-serve service + distrokid-helper 拡張）は対象外"
 ---
 
 ## Overview
 
 コレクションの楽曲（`02-Individual-music/*.mp3`）を DistroKid 配信向けに整備し、`30-distrokid/` 以下に成果物一式を生成します。
 
-- **spec.json** — 分割計画・メタデータの機械可読 JSON。**`yt-collection-serve` が直接読む SSOT**（#941）。`build` が canonical パス `30-distrokid/spec.json` へ atomic write する。LLM がタイトルユニーク化・アルバム名決定を担当
+- **spec.json** — 分割計画・メタデータの機械可読 JSON。**collection-serve service が直接読む SSOT**（#941）。`build` が canonical パス `30-distrokid/spec.json` へ atomic write する。LLM がタイトルユニーク化・アルバム名決定を担当
 - **disc 分割 + mp3 コピー** — 1 アルバム 35 曲上限を考慮して均等分割し、各 disc ディレクトリへ mp3 をコピー
 - **metadata.md** — DistroKid Web フォーム転記用の人間向けドキュメント（各 disc に生成）。`serve` の読み取り優先は spec.json であり、metadata.md は拡張が使えないときの手動フォールバック用
 - **README.md** — アップロード手順書（`30-distrokid/README.md`）
@@ -238,7 +238,7 @@ verify のサマリーをユーザーに提示して完了を確認する。
 
 verify が green になったら:
 
-1. `yt-collection-serve <collections-root> --playlist-capture-root <channel-dir> --port 7874` を起動
+1. `tayk collection-serve <collections-root> --distrokid-state-root <channel-dir> --port 7874` を起動
 2. Chrome 拡張 **distrokid-helper** を使って `30-distrokid/README.md` の手順に従い DistroKid Web フォームへ転記・アップロードを行う
 
 DistroKid 申請後の DSP リンク（Spotify / Apple Music）到着は通常 1〜2 週間かかる。

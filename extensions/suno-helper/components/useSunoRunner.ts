@@ -285,7 +285,7 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       setEntries([]);
       setItemStates([]);
-      report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
+      report(`取得失敗: ${message}\ntayk collection-serve が起動しているか確認してください。`, true);
     }
   }, [url, selectedCollectionId, report]);
 

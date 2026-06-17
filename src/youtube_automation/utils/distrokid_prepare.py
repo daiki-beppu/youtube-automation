@@ -8,7 +8,6 @@
   で生成した metadata.md を読み戻せること（ラウンドトリップ検証）。
 - `scripts.distrokid_release.kebab_to_title` / `build_release_payload` で
   verify サブコマンドが読む側と同一コードパスで検証できること。
-- `scripts.collection_serve.find_distrokid_discs` で disc 列挙が可能なこと。
 """
 
 from __future__ import annotations
@@ -37,8 +36,6 @@ from youtube_automation.utils.distrokid_spec import (  # noqa: F401  re-export (
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.time_utils import format_duration_mss
 
-# 30-distrokid ディレクトリ名。collection_serve.py の _DISTROKID_DIRNAME と対称。
-# 既存 private 定数を public 化するリファクタは行わないため自モジュールで定義する（#936）。
 DISTROKID_DIRNAME = "30-distrokid"
 
 # 02-Individual-music ディレクトリ名。CollectionPaths.music_dir と対称。
@@ -58,6 +55,18 @@ _DISC_SLUG_RE = re.compile(r"^disc\d+-[a-z0-9][a-z0-9-]*$")
 
 # ファイル名先頭の連番プレフィックス（例: "01-" "123-"）
 _TRACK_PREFIX_RE = re.compile(r"^\d+-")
+
+
+def find_distrokid_discs(collection_dir: Path) -> list[str]:
+    """コレクション配下の mp3 を含む DistroKid disc 名をソート済みで返す（#934）."""
+    distrokid_dir = collection_dir / DISTROKID_DIRNAME
+    if not distrokid_dir.is_dir():
+        return []
+    return [
+        disc_dir.name
+        for disc_dir in sorted(distrokid_dir.iterdir())
+        if disc_dir.is_dir() and any(disc_dir.glob("*.mp3"))
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -20,7 +20,7 @@ import {
 
 // 無効チャンネル（distrokid.enabled=false / 未配置）時のガイダンス（要件 #16）。
 const UNAVAILABLE_GUIDANCE =
-  "このチャンネルでは distrokid 連携が無効です。config/channel/distrokid.json を enabled:true にして yt-collection-serve を再起動してください。";
+  "このチャンネルでは distrokid 連携が無効です。config/channel/distrokid.json を enabled:true にして tayk collection-serve を再起動してください。";
 
 export function App() {
   const [serverUrl, setServerUrl] = useState("");

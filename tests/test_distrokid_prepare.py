@@ -733,7 +733,7 @@ class TestBuildIntegration:
     def test_find_distrokid_discs_returns_spec_order(self, tmp_path, monkeypatch):
         """find_distrokid_discs が spec 順（disc1 → disc2）で列挙する."""
         from youtube_automation.scripts import distrokid_prepare as dp_script
-        from youtube_automation.scripts.collection_serve import find_distrokid_discs
+        from youtube_automation.utils.distrokid_prepare import find_distrokid_discs
 
         collection = _make_collection(tmp_path, n_tracks=4)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME

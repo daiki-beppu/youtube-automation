@@ -1,5 +1,5 @@
 // Suno playlist capture のクライアント契約テスト (#893)。
-//   - constants.ts: PLAYLISTS_CAPTURE_ROUTE が `/suno/playlists` (サーバー契約と対の SSOT)
+//   - constants.ts: PLAYLISTS_CAPTURE_ROUTE が `/suno/playlists` (TS server と共有する SSOT)
 //   - shared/api.ts: postCapturedPlaylists(baseUrl, items) の POST 組み立て / fail-loud
 //   - shared/api.ts: CollectionSummary.mapped は optional（後方互換）
 //   - shared/api.ts: excludeMappedCollections は mapped===true を除外する純関数（追加要件 B）
@@ -28,11 +28,11 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// PLAYLISTS_CAPTURE_ROUTE: サーバー (SUNO_PLAYLISTS_ROUTE) と対の契約文字列
+// PLAYLISTS_CAPTURE_ROUTE: TS server が直接 import する契約文字列
 // ---------------------------------------------------------------------------
 
 describe("constants PLAYLISTS_CAPTURE_ROUTE: SSOT 契約", () => {
-  it("Given 定数 When 値を読む Then `/suno/playlists` である（サーバー SUNO_PLAYLISTS_ROUTE と一致）", () => {
+  it("Given 定数 When 値を読む Then `/suno/playlists` である", () => {
     expect(PLAYLISTS_CAPTURE_ROUTE).toBe("/suno/playlists");
   });
 });

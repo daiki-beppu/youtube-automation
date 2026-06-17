@@ -118,11 +118,22 @@ function assertSemver(value: unknown, field: string): string {
   return value;
 }
 
+function semverParts(value: string): readonly [number, number, number] {
+  const parts = value.split(".").map(Number);
+  if (parts.length !== 3) {
+    throw new Error(`${value} must be semver`);
+  }
+  return [parts[0]!, parts[1]!, parts[2]!];
+}
+
 function compareSemver(left: string, right: string): number {
-  const leftParts = left.split(".").map(Number);
-  const rightParts = right.split(".").map(Number);
-  for (let i = 0; i < leftParts.length; i += 1) {
-    const diff = leftParts[i] - rightParts[i];
+  const [leftMajor, leftMinor, leftPatch] = semverParts(left);
+  const [rightMajor, rightMinor, rightPatch] = semverParts(right);
+  for (const diff of [
+    leftMajor - rightMajor,
+    leftMinor - rightMinor,
+    leftPatch - rightPatch,
+  ]) {
     if (diff !== 0) {
       return diff;
     }
@@ -279,7 +290,8 @@ export function extractPlaylistName(
   }
   const datePlusChannel = stripped.slice(0, -themeSuffix.length);
   const parts = datePlusChannel.split("-");
-  if (parts.length < 2 || !/^\d{8}$/.test(parts[0])) {
+  const datePart = parts[0];
+  if (parts.length < 2 || datePart === undefined || !/^\d{8}$/.test(datePart)) {
     throw new Error(`不正な collection id 形式: ${collectionId}`);
   }
   const channel = parts.slice(1).join("-");

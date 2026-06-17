@@ -1,7 +1,7 @@
 // overlay ⇄ content script ⇄ server 間の契約文字列を固定する回帰テスト。
 // 旧実装 `extensions/suno-helper/constants.js` の値を WXT 移行後も不変に保つ。
-// これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
-// サーバー側 (`/suno/prompts.json`) と整合しなくなる。
+// これらは packages/core の collection-serve と共有する互換契約であり、変更すると
+// サーバー側 route と整合しなくなる。
 import { describe, expect, it } from "vitest";
 
 import {
@@ -29,7 +29,7 @@ describe("shared/constants: サーバー互換の契約値", () => {
   });
 
   it("Given 移行後の定数 When PROMPTS_ROUTE を読む Then #698 のサブパス分離後ルートである", () => {
-    // SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
+    // SSOT: extensions/shared/constants.ts の route 定数を TS server が直接 import する。
     expect(PROMPTS_ROUTE).toBe("/suno/prompts.json");
   });
 
@@ -72,7 +72,7 @@ describe("shared/constants: 進捗フェーズ (PHASE)", () => {
 
 describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
   it("Given COLLECTIONS_ROUTE When 読む Then サーバーの列挙サブパスである", () => {
-    // SSOT: src/youtube_automation/scripts/collection_serve.py の dir mode ルート。
+    // SSOT: extensions/shared/constants.ts の dir mode ルート。
     expect(COLLECTIONS_ROUTE).toBe("/collections");
   });
 

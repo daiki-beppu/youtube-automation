@@ -7,7 +7,7 @@ issue #692 受け入れ基準: 「`.claude/skills/suno/SKILL.md` に新フロー
 全テストが pass してしまうため、ドキュメント契約をこのテストで機械的に担保し再発を防ぐ。
 
 検証する契約:
-1. Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
+    1. Chrome 拡張 + `tayk collection-serve` の自動投入フロー（Step 3）が記載されている。
 2. 拡張が使えない／壊れたとき向けの手コピペ fallback 節が記載されている。
 3. 自動投入が読む配信元 `suno-prompts.json` への言及がある。
 """
@@ -20,10 +20,27 @@ from pathlib import Path
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
+SUNO_HELPER_SKILL_MD = (
+    _REPO_ROOT / ".claude" / "skills" / "suno-helper" / "SKILL.md"
+)
+WF_NEW_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
+PLAYLIST_CAPTURE_DOC = _REPO_ROOT / "docs" / "tasks" / "suno-playlist-capture.md"
 
 
 def _read() -> str:
     return SKILL_MD.read_text(encoding="utf-8")
+
+
+def _read_suno_helper() -> str:
+    return SUNO_HELPER_SKILL_MD.read_text(encoding="utf-8")
+
+
+def _read_wf_new() -> str:
+    return WF_NEW_SKILL_MD.read_text(encoding="utf-8")
+
+
+def _read_playlist_capture_doc() -> str:
+    return PLAYLIST_CAPTURE_DOC.read_text(encoding="utf-8")
 
 
 def test_skill_md_exists() -> None:
@@ -34,19 +51,58 @@ def test_skill_md_exists() -> None:
     assert SKILL_MD.exists(), f"{SKILL_MD} が存在しません"
 
 
+def test_suno_helper_skill_uses_tayk_collection_serve() -> None:
+    """Given suno-helper SKILL.md
+    When 本文を読む
+    Then #776 の単一 `tayk` dispatcher 名だけを案内している。
+    """
+    assert SUNO_HELPER_SKILL_MD.exists(), f"{SUNO_HELPER_SKILL_MD} が存在しません"
+    text = _read_suno_helper()
+    assert "tayk collection-serve" in text, "suno-helper SKILL.md に現行コマンド名がない"
+    assert "yt-collection-serve" not in text, (
+        "suno-helper SKILL.md に旧 per-CLI 名 `yt-collection-serve` が残っている"
+    )
+
+
+def test_wf_new_skill_uses_tayk_collection_serve() -> None:
+    """Given wf-new SKILL.md
+    When Suno 次工程の案内を読む
+    Then #776 の単一 `tayk` dispatcher 名だけを案内している。
+    """
+    assert WF_NEW_SKILL_MD.exists(), f"{WF_NEW_SKILL_MD} が存在しません"
+    text = _read_wf_new()
+    assert "tayk collection-serve" in text, "wf-new SKILL.md に現行コマンド名がない"
+    assert "yt-collection-serve" not in text, (
+        "wf-new SKILL.md に旧 per-CLI 名 `yt-collection-serve` が残っている"
+    )
+
+
+def test_playlist_capture_doc_requires_root_and_prefix_pair() -> None:
+    """Given playlist capture 仕様
+    When 起動契約を読む
+    Then root/prefix の同時指定だけで capture が有効化されることを明記している。
+    """
+    assert PLAYLIST_CAPTURE_DOC.exists(), f"{PLAYLIST_CAPTURE_DOC} が存在しません"
+    text = _read_playlist_capture_doc()
+    assert "--playlist-capture-root` と `--playlist-capture-prefix` の両方" in text
+    assert "片方だけ指定は起動時の schema validation" in text
+    assert "`--playlist-capture-root` 指定時のみ" not in text
+
+
 def test_skill_md_documents_auto_inject_flow() -> None:
     """Given suno SKILL.md
     When 本文を読む
-    Then Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
+    Then Chrome 拡張 + `tayk collection-serve` の自動投入フロー（Step 3）が記載されている。
 
-    #698: CLI を `yt-suno-serve` → `yt-collection-serve` に rename したため、
-    起動コマンド契約（machine-coupled）を新名に追従する。旧名が残っていないことも検証する。
+    #776: collection-serve は単一 `tayk` dispatcher の subcommand に移行したため、
+    起動コマンド契約（machine-coupled）を新名に追従する。旧 per-CLI 名が残っていないことも検証する。
     PR #886: 旧 `Step 2.5` 表記は整数並びへ採番し直し、Step 3 タイトルに `/suno-helper` を露出。
     """
     text = _read()
-    for token in ("Step 3", "yt-collection-serve", "suno-helper", "連続実行"):
+    for token in ("Step 3", "tayk collection-serve", "suno-helper", "連続実行"):
         assert token in text, f"SKILL.md に新フローの記載がない（`{token}` 不在）"
     assert "yt-suno-serve" not in text, "SKILL.md に旧 CLI 名 `yt-suno-serve` が残っている（#698 で廃止）"
+    assert "yt-collection-serve" not in text, "SKILL.md に旧 per-CLI 名 `yt-collection-serve` が残っている（#776 で廃止）"
     assert "Step 2.5" not in text, "SKILL.md に旧 `Step 2.5` 表記が残っている（PR #886 で整数並びへ採番し直し）"
 
 
