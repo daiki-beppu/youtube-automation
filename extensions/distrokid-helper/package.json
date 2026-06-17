@@ -13,9 +13,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "lint": "cd .. && eslint -c distrokid-helper/eslint.config.js distrokid-helper",
+    "lint": "cd .. && eslint -c distrokid-helper/eslint.config.js distrokid-helper shared",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check . ../shared"
   },
   "dependencies": {
     "@webext-core/messaging": "^2.1.0",
