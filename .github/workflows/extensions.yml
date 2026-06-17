@@ -87,6 +87,23 @@ jobs:
         run: pnpm compile
       - name: Build
         run: pnpm build
+      - name: Verify generated manifest permissions (least-privilege)
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const manifest = JSON.parse(
+              readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
+            );
+            const expected = ["storage", "activeTab"];
+            const actual = manifest.permissions ?? [];
+            const same =
+              actual.length === expected.length &&
+              expected.every((p) => actual.includes(p));
+            if (!same) {
+              console.error("生成 manifest の permissions が最小権限と不一致:", actual);
+              process.exit(1);
+            }
+          '
       - name: Unit tests (Vitest)
         run: pnpm test
       - name: Install Playwright browser
