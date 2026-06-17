@@ -1,36 +1,6 @@
 # automation リポジトリの takt 設定
-# provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承
+# provider / model / language / persona_providers はグローバル設定 (~/.takt/config.yaml) を継承する。
+# グローバルは Codex + Opus ハイブリッド構成（doer/planner 系のみ codex、レビュー系・supervisor は opus）。
+# このリポジトリ固有の上書きは draft_pr / base_branch のみ。
 draft_pr: false
 base_branch: feat/ts-rewrite  # cutover まで ts-rewrite 向け (元: main)
-
-# 全 persona を claude/opus に統一。
-# claude -p の制約解除に伴い claude-terminal → claude に変更 (2026-06-16)。
-# claude-terminal は takt-worktrees の transcript 解決に非互換があったため。
-persona_providers:
-  planner:
-    provider: claude
-    model: opus
-  coder:
-    provider: claude
-    model: opus
-  architecture-reviewer:
-    provider: claude
-    model: opus
-  ai-antipattern-reviewer:
-    provider: claude
-    model: opus
-  pure-review:
-    provider: claude
-    model: opus
-  pure-reviewer:
-    provider: claude
-    model: opus
-  coding-review:
-    provider: claude
-    model: opus
-  coding-reviewer:
-    provider: claude
-    model: opus
-  supervisor:
-    provider: claude
-    model: opus

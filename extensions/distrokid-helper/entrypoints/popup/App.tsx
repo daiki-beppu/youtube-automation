@@ -13,6 +13,7 @@ import {
   fetchDistrokidCollections,
   excludeReleasedDiscs,
   recordDistrokidRelease,
+  resolveCompatibilityWarning,
   type DistrokidCollectionSummary,
   type DistrokidReleaseRecord,
 } from "../../../shared/api";
@@ -27,6 +28,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase | null>(null);
   const [message, setMessage] = useState("");
+  const [compatibilityWarning, setCompatibilityWarning] = useState("");
 
   // dir mode 用コレクション一覧（#934）。空配列 = 単一 mode か 0 件。
   const [collections, setCollections] = useState<DistrokidCollectionSummary[]>([]);
@@ -98,11 +100,14 @@ export function App() {
     setPhase(null);
     setMessage("");
     await serverUrlItem.setValue(serverUrl);
+    const trimmedServerUrl = serverUrl.trim();
+    const extensionVersion = browser.runtime.getManifest().version;
+    setCompatibilityWarning(await resolveCompatibilityWarning(trimmedServerUrl, extensionVersion));
 
     // URL 変更時に collection 一覧を再取得する（blur 後の最初のデータ取得で最新化）。
     // state の collections/selectedIndex はこのレンダーの closure では古いままなので、
     // 戻り値の最新一覧を直接使う（stale closure 回避、#934）。
-    const list = await loadCollections(serverUrl.trim());
+    const list = await loadCollections(trimmedServerUrl);
 
     try {
       let result: ReleasePayload;
@@ -225,6 +230,12 @@ export function App() {
       <h1 className="text-base font-bold text-gray-900">DistroKid Helper</h1>
 
       <ServerUrlField value={serverUrl} disabled={busy} onChange={setServerUrl} onFetch={handleFetch} />
+
+      {compatibilityWarning && (
+        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {compatibilityWarning}
+        </div>
+      )}
 
       {/* dir mode: 未配信 disc 一覧のドロップダウン (#934)。suno-helper App.tsx 55-69 行の構造を踏襲。 */}
       {collections.length > 0 && (

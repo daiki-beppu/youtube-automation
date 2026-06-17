@@ -9,15 +9,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type CollectionSummary,
   type PromptEntry,
+  checkServerCompatibility,
   fetchCollections,
   fetchCollectionPrompts,
   fetchPrompts,
+  fetchServerVersion,
+  formatCompatibilityWarning,
   pickInitialCollectionId,
+  resolveCompatibilityWarning,
 } from "../../shared/api";
 
 const BASE_URL = "http://localhost:7873";
 const PROMPTS_URL = `${BASE_URL}/suno/prompts.json`;
 const COLLECTIONS_URL = `${BASE_URL}/collections`;
+const VERSION_URL = `${BASE_URL}/version`;
 
 function mockFetch(impl: () => Partial<Response>) {
   const fn = vi.fn(async () => impl() as Response);
@@ -316,5 +321,172 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
 
   it("Given 空配列 When 初期値を選ぶ Then null を返す", () => {
     expect(pickInitialCollectionId([])).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// /version compatibility (#1023): popup 初回 fetch 前に server / extension 互換を確認する。
+//   - fetch 先は `${baseUrl}/version`（末尾 slash は正規化）
+//   - 200 は `{version, min_extension_version}` の semver envelope
+//   - 404 は旧サーバーとして skip（データ取得を妨げない）
+//   - min_extension_version > extensionVersion は incompatible
+// ---------------------------------------------------------------------------
+
+describe("shared/api fetchServerVersion: 配信元 URL とレスポンス契約", () => {
+  it("Given baseUrl When fetch する Then `/version` サブパスへ要求する", async () => {
+    const fetchFn = mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.1.0" }),
+    }));
+
+    await fetchServerVersion(BASE_URL);
+
+    expect(fetchFn).toHaveBeenCalledWith(VERSION_URL);
+  });
+
+  it("Given baseUrl 末尾 slash When fetch する Then 二重 slash を作らない", async () => {
+    const fetchFn = mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.1.0" }),
+    }));
+
+    await fetchServerVersion(`${BASE_URL}/`);
+
+    expect(fetchFn).toHaveBeenCalledWith(VERSION_URL);
+  });
+
+  it("Given semver envelope When fetch する Then ServerVersionInfo を返す", async () => {
+    const payload = { version: "5.5.7", min_extension_version: "0.1.0" };
+    mockFetch(() => ({ ok: true, status: 200, json: async () => payload }));
+
+    await expect(fetchServerVersion(BASE_URL)).resolves.toEqual(payload);
+  });
+
+  it("Given response envelope の流用で min_extension_version が無い When fetch する Then throw する", async () => {
+    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ data: { version: "5.5.7" } }) }));
+
+    await expect(fetchServerVersion(BASE_URL)).rejects.toThrow(/min_extension_version/);
+  });
+});
+
+describe("shared/api checkServerCompatibility: semver 判定", () => {
+  it("Given 拡張 version が最低要求と同じ When check Then compatible を返す", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.1.0" }),
+    }));
+
+    await expect(checkServerCompatibility(BASE_URL, "0.1.0")).resolves.toEqual({
+      status: "compatible",
+      serverVersion: "5.5.7",
+      minExtensionVersion: "0.1.0",
+      extensionVersion: "0.1.0",
+    });
+  });
+
+  it("Given 拡張 version が最低要求より新しい When check Then compatible を返す", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.1.0" }),
+    }));
+
+    await expect(checkServerCompatibility(BASE_URL, "0.1.1")).resolves.toMatchObject({ status: "compatible" });
+  });
+
+  it("Given 拡張 version が最低要求より古い When check Then incompatible を返す", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.2.0" }),
+    }));
+
+    await expect(checkServerCompatibility(BASE_URL, "0.1.9")).resolves.toEqual({
+      status: "incompatible",
+      serverVersion: "5.5.7",
+      minExtensionVersion: "0.2.0",
+      extensionVersion: "0.1.9",
+    });
+  });
+
+  it("Given major が上がった拡張 version When check Then compatible を返す", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.9.9" }),
+    }));
+
+    await expect(checkServerCompatibility(BASE_URL, "1.0.0")).resolves.toMatchObject({ status: "compatible" });
+  });
+
+  it("Given 旧サーバーが 404 を返す When check Then skipped を返してデータ取得を妨げない", async () => {
+    mockFetch(() => ({ ok: false, status: 404, json: async () => ({}) }));
+
+    await expect(checkServerCompatibility(BASE_URL, "0.1.0")).resolves.toEqual({
+      status: "skipped",
+      reason: "version-endpoint-unavailable",
+    });
+  });
+
+  it("Given /version が 500 を返す When check Then error result を返して 404 skip と区別する", async () => {
+    mockFetch(() => ({ ok: false, status: 500, json: async () => ({}) }));
+
+    await expect(checkServerCompatibility(BASE_URL, "0.1.0")).resolves.toEqual({
+      status: "error",
+      message: "HTTP 500",
+    });
+  });
+});
+
+describe("shared/api formatCompatibilityWarning: popup 表示文", () => {
+  it("Given incompatible result When format Then popup 用の更新警告文を返す", () => {
+    const result = formatCompatibilityWarning({
+      status: "incompatible",
+      serverVersion: "5.5.7",
+      minExtensionVersion: "0.2.0",
+      extensionVersion: "0.1.9",
+    });
+
+    expect(result).toBe("拡張を更新してください（拡張 0.1.9 / 必要 0.2.0 / サーバー 5.5.7）。");
+  });
+
+  it("Given incompatible 以外の result When format Then バナーを表示しない空文字を返す", () => {
+    expect(
+      formatCompatibilityWarning({
+        status: "compatible",
+        serverVersion: "5.5.7",
+        minExtensionVersion: "0.1.0",
+        extensionVersion: "0.1.0",
+      }),
+    ).toBe("");
+    expect(formatCompatibilityWarning({ status: "skipped", reason: "version-endpoint-unavailable" })).toBe("");
+    expect(formatCompatibilityWarning({ status: "error", message: "HTTP 500" })).toBe("");
+  });
+});
+
+describe("shared/api resolveCompatibilityWarning: popup warning state", () => {
+  it("Given incompatible /version When resolve Then popup 用の更新警告文を返す", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.2.0" }),
+    }));
+
+    await expect(resolveCompatibilityWarning(BASE_URL, "0.1.9")).resolves.toBe(
+      "拡張を更新してください（拡張 0.1.9 / 必要 0.2.0 / サーバー 5.5.7）。",
+    );
+  });
+
+  it("Given compatible /version When resolve Then バナーを表示しない空文字を返す", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: "5.5.7", min_extension_version: "0.1.0" }),
+    }));
+
+    await expect(resolveCompatibilityWarning(BASE_URL, "0.1.0")).resolves.toBe("");
   });
 });

@@ -12,6 +12,7 @@
 //     （filename / mimeType / base64）を返す。content へは直列化して転送する（CORS 回避）。
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { checkServerCompatibility, resolveCompatibilityWarning } from "../../shared/api";
 import { fetchRelease, fetchCollectionRelease, fetchAsset, ReleaseUnavailableError } from "../lib/api";
 import { decodeAsset } from "../lib/asset-transfer";
 import type { ReleasePayload } from "../lib/types";
@@ -198,5 +199,46 @@ describe("fetchAsset", () => {
 
     // When / Then
     await expect(fetchAsset("http://localhost:7873", "/distrokid/assets/missing.mp3", "missing.mp3")).rejects.toThrow();
+  });
+});
+
+describe("shared compatibility API", () => {
+  it("DistroKid helper から shared /version 互換チェックを呼び出せる", async () => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(200, { version: "5.5.7", min_extension_version: "0.1.0" }));
+
+    // When
+    const result = await checkServerCompatibility("http://localhost:7873/", "0.1.0");
+
+    // Then
+    expect(result).toEqual({
+      status: "compatible",
+      serverVersion: "5.5.7",
+      minExtensionVersion: "0.1.0",
+      extensionVersion: "0.1.0",
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:7873/version");
+  });
+
+  it("DistroKid helper でも旧サーバーの /version 404 は skip として扱う", async () => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(404, {}));
+
+    // When / Then
+    await expect(checkServerCompatibility("http://localhost:7873", "0.1.0")).resolves.toEqual({
+      status: "skipped",
+      reason: "version-endpoint-unavailable",
+    });
+  });
+
+  it("DistroKid helper でも incompatible /version は popup 用の更新警告文に変換できる", async () => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(200, { version: "5.5.7", min_extension_version: "0.2.0" }));
+
+    // When
+    const result = await resolveCompatibilityWarning("http://localhost:7873", "0.1.9");
+
+    // Then
+    expect(result).toBe("拡張を更新してください（拡張 0.1.9 / 必要 0.2.0 / サーバー 5.5.7）。");
   });
 });
