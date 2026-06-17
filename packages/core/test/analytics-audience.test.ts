@@ -18,6 +18,7 @@ interface QueryResponse {
 }
 
 type QueryBehavior = (params: Record<string, unknown>) => QueryResponse;
+type Sleep = (ms: number) => Promise<void>;
 
 const makeAnalyticsClient = (behavior: QueryBehavior) => {
   const calls: Record<string, unknown>[] = [];
@@ -32,8 +33,13 @@ const makeAnalyticsClient = (behavior: QueryBehavior) => {
   return { calls, client };
 };
 
-const makeDeps = (client: unknown): AudienceDeps =>
-  ({ youtubeAnalytics: client }) as unknown as AudienceDeps;
+const noSleep: Sleep = () => Promise.resolve();
+
+const makeDeps = (client: unknown, sleep?: Sleep): AudienceDeps =>
+  ({
+    youtubeAnalytics: client,
+    ...(sleep === undefined ? {} : { sleep }),
+  }) as unknown as AudienceDeps;
 
 const queryResponse = (
   columns: readonly string[],
@@ -54,11 +60,32 @@ const gaxiosQuotaError = (): Error =>
     },
   });
 
+const gaxiosQuotaErrorWithRetryAfter = (retryAfter: string): Error =>
+  Object.assign(new Error("quota exceeded"), {
+    response: {
+      data: { error: { errors: [{ reason: "quotaExceeded" }] } },
+      headers: { "retry-after": retryAfter },
+      status: 429,
+    },
+  });
+
+const gaxiosStatusError = (status: number): Error =>
+  Object.assign(new Error(`analytics api failed with ${status}`), {
+    response: { status },
+  });
+
+const gaxiosUnknownStatusError = (): Error =>
+  Object.assign(new Error("analytics api failed with unknown status"), {
+    response: {},
+  });
+
 const baseInput: AudienceInput = {
-  channelId: "UC_test_channel",
+  channelId: "UCabcdefghijklmnopqrstuv",
   endDate: "2026-06-14",
   startDate: "2026-06-01",
 };
+
+const validVideoId = "dQw4w9WgXcQ";
 
 const audienceResponses = (params: Record<string, unknown>): QueryResponse => {
   switch (params.dimensions) {
@@ -119,7 +146,7 @@ const expectOk = (result: AudienceResult) => {
 
 describe("AudienceAnalyticsInput schema", () => {
   test("parses channel-wide input with an optional videoId", () => {
-    const input = { ...baseInput, videoId: "vidA" };
+    const input = { ...baseInput, videoId: validVideoId };
 
     expect(AudienceAnalyticsInput.parse(input)).toEqual(input);
   });
@@ -142,6 +169,44 @@ describe("AudienceAnalyticsInput schema", () => {
     ).toThrow();
     expect(() =>
       AudienceAnalyticsInput.parse({ ...baseInput, videoId: "" })
+    ).toThrow();
+  });
+
+  test("rejects channel identifiers containing separators or whitespace", () => {
+    for (const channelId of [
+      "UCabcdefghijklmnopqrstu,",
+      "UCabcdefghijklmnopqrstu;",
+      "UCabcdefghijklmnopqrstu=",
+      "UCabcdefghij klmnopqrstuv",
+    ]) {
+      expect(() =>
+        AudienceAnalyticsInput.parse({ ...baseInput, channelId })
+      ).toThrow();
+    }
+  });
+
+  test("rejects video identifiers containing separators, whitespace, or a non-YouTube shape", () => {
+    for (const videoId of [
+      "dQw4w9WgXc,",
+      "dQw4w9WgXc;",
+      "dQw4w9WgXc=",
+      "dQw4w9W XcQ",
+      "too-short",
+      "too-long-video-id",
+    ]) {
+      expect(() =>
+        AudienceAnalyticsInput.parse({ ...baseInput, videoId })
+      ).toThrow();
+    }
+  });
+
+  test("rejects an input whose startDate is after endDate", () => {
+    expect(() =>
+      AudienceAnalyticsInput.parse({
+        ...baseInput,
+        endDate: "2026-06-01",
+        startDate: "2026-06-14",
+      })
     ).toThrow();
   });
 });
@@ -296,7 +361,7 @@ describe("collectAudienceService success", () => {
     );
     expect(subscribedStatusCall.sort).toBe("-views");
     for (const call of calls) {
-      expect(call.ids).toBe("channel==UC_test_channel");
+      expect(call.ids).toBe("channel==UCabcdefghijklmnopqrstuv");
       expect(call.startDate).toBe("2026-06-01");
       expect(call.endDate).toBe("2026-06-14");
       expect(call.filters).toBeUndefined();
@@ -368,20 +433,114 @@ describe("collectAudienceService success", () => {
     const { calls, client } = makeAnalyticsClient(audienceResponses);
 
     const result = await collectAudienceService(
-      { ...baseInput, videoId: "vidA" },
+      { ...baseInput, videoId: validVideoId },
       makeDeps(client)
     );
 
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(3);
     for (const call of calls) {
-      expect(call.ids).toBe("channel==UC_test_channel");
-      expect(call.filters).toBe("video==vidA");
+      expect(call.ids).toBe("channel==UCabcdefghijklmnopqrstuv");
+      expect(call.filters).toBe(`video==${validVideoId}`);
     }
   });
 });
 
 describe("collectAudienceService error paths", () => {
+  test("returns a validation ServiceError for an unsafe channelId without querying", async () => {
+    const { calls, client } = makeAnalyticsClient(audienceResponses);
+
+    const result = await collectAudienceService(
+      { ...baseInput, channelId: `${baseInput.channelId},mine==true` },
+      makeDeps(client)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected a validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("returns a validation ServiceError for an unsafe videoId without querying", async () => {
+    const { calls, client } = makeAnalyticsClient(audienceResponses);
+
+    const result = await collectAudienceService(
+      { ...baseInput, videoId: `${validVideoId};country==JP` },
+      makeDeps(client)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected a validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("returns a validation ServiceError for an inverted date range without querying", async () => {
+    const { calls, client } = makeAnalyticsClient(audienceResponses);
+
+    const result = await collectAudienceService(
+      { ...baseInput, endDate: "2026-06-01", startDate: "2026-06-14" },
+      makeDeps(client)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected a validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("retries a 500 query error and returns success when the retry succeeds", async () => {
+    let attempts = 0;
+    const { calls, client } = makeAnalyticsClient((params) => {
+      if (params.dimensions === "ageGroup,gender" && attempts === 0) {
+        attempts += 1;
+        throw gaxiosStatusError(500);
+      }
+      return audienceResponses(params);
+    });
+
+    const result = await collectAudienceService(
+      baseInput,
+      makeDeps(client, noSleep)
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(4);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
+  });
+
+  test("does not retry a 403 query error and returns an API ServiceError", async () => {
+    const { calls, client } = makeAnalyticsClient(() => {
+      throw gaxiosStatusError(403);
+    });
+
+    const result = await collectAudienceService(
+      baseInput,
+      makeDeps(client, noSleep)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected an api failure");
+    }
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain === "api") {
+      expect(result.error.httpStatus).toBe(403);
+    }
+    expect(calls).toHaveLength(1);
+  });
+
   test("returns a quota ServiceError for a 429 without retrying", async () => {
     const { calls, client } = makeAnalyticsClient(() => {
       throw gaxiosQuotaError();
@@ -398,6 +557,61 @@ describe("collectAudienceService error paths", () => {
       expect(result.error.retryAfterSeconds).toBe(90);
     }
     expect(calls).toHaveLength(1);
+  });
+
+  test("leaves retryAfterSeconds undefined when a 429 Retry-After header is empty", async () => {
+    const { calls, client } = makeAnalyticsClient(() => {
+      throw gaxiosQuotaErrorWithRetryAfter("");
+    });
+
+    const result = await collectAudienceService(baseInput, makeDeps(client));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected a quota failure");
+    }
+    expect(result.error.domain).toBe("quota");
+    if (result.error.domain === "quota") {
+      expect(result.error.retryAfterSeconds).toBeUndefined();
+    }
+    expect(calls).toHaveLength(1);
+  });
+
+  test("leaves retryAfterSeconds undefined when a 429 Retry-After header is blank", async () => {
+    const { calls, client } = makeAnalyticsClient(() => {
+      throw gaxiosQuotaErrorWithRetryAfter("   ");
+    });
+
+    const result = await collectAudienceService(baseInput, makeDeps(client));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected a quota failure");
+    }
+    expect(result.error.domain).toBe("quota");
+    if (result.error.domain === "quota") {
+      expect(result.error.retryAfterSeconds).toBeUndefined();
+    }
+    expect(calls).toHaveLength(1);
+  });
+
+  test("retries an API error whose status is unknown", async () => {
+    let attempts = 0;
+    const { calls, client } = makeAnalyticsClient((params) => {
+      if (params.dimensions === "ageGroup,gender" && attempts === 0) {
+        attempts += 1;
+        throw gaxiosUnknownStatusError();
+      }
+      return audienceResponses(params);
+    });
+
+    const result = await collectAudienceService(
+      baseInput,
+      makeDeps(client, noSleep)
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(4);
   });
 
   test("validates input before making an API request", async () => {

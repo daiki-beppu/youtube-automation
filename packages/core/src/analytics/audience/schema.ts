@@ -15,9 +15,11 @@ export const AUDIENCE_SUBSCRIBED_STATUS_METRICS = [
   "viewSharePercent",
 ] as const;
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/u, "must be a YYYY-MM-DD date");
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
+const YOUTUBE_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/u;
+const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/u;
+
+const isoDate = z.string().regex(ISO_DATE, "must be a YYYY-MM-DD date");
 const AUDIENCE_SEGMENTS = [
   "ageGroup",
   "gender",
@@ -52,12 +54,21 @@ const METRICS_BY_SEGMENT: Record<AudienceSegment, readonly string[]> = {
 
 export const AudienceAnalyticsInput = z
   .object({
-    channelId: z.string().min(1),
+    channelId: z
+      .string()
+      .regex(YOUTUBE_CHANNEL_ID, "must be a valid YouTube channel ID"),
     endDate: isoDate,
     startDate: isoDate,
-    videoId: z.string().min(1).optional(),
+    videoId: z
+      .string()
+      .regex(YOUTUBE_VIDEO_ID, "must be a valid YouTube video ID")
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine((input) => input.startDate <= input.endDate, {
+    message: "startDate must be on or before endDate",
+    path: ["startDate"],
+  });
 export type AudienceAnalyticsInput = z.infer<typeof AudienceAnalyticsInput>;
 
 const audienceMetricRecord = z

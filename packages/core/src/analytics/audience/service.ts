@@ -10,6 +10,7 @@ import type { ServiceError } from "../../errors.ts";
 import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
 import { defaultShouldRetry, withRetry } from "../../retry.ts";
+import type { SleepMs } from "../../retry.ts";
 import {
   AUDIENCE_COUNTRY_METRICS,
   AUDIENCE_DEMOGRAPHIC_METRICS,
@@ -33,6 +34,10 @@ type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
 type ColumnHeaders = NonNullable<QueryResponse["columnHeaders"]>;
 type AudienceQueryParams = readonly [QueryParams, QueryParams, QueryParams];
+interface AudienceAnalyticsDeps {
+  readonly sleep?: SleepMs;
+  readonly youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics;
+}
 type DemographicMetricRecord =
   | {
       readonly ageGroup: string;
@@ -73,7 +78,14 @@ const parseRetryAfterSeconds = (error: unknown): number | undefined => {
   ) {
     return undefined;
   }
-  const seconds = Number(error.response.headers["retry-after"]);
+  const raw = error.response.headers["retry-after"];
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return undefined;
+  }
+  if (!/^\d+$/u.test(raw)) {
+    return undefined;
+  }
+  const seconds = Number(raw);
   return Number.isFinite(seconds) ? seconds : undefined;
 };
 
@@ -327,32 +339,34 @@ const reshapeSubscribedStatus = (
 
 const runAudienceQueries = async (
   client: youtubeAnalytics_v2.Youtubeanalytics,
-  paramsList: AudienceQueryParams
+  paramsList: AudienceQueryParams,
+  sleep: SleepMs | undefined
 ): Promise<readonly [QueryResponse, QueryResponse, QueryResponse]> => {
   const demographics = await withRetry(
     () => queryAudienceReport(client, paramsList[0]),
-    { shouldRetry: shouldRetryQuery }
+    { shouldRetry: shouldRetryQuery, sleep }
   );
   const country = await withRetry(
     () => queryAudienceReport(client, paramsList[1]),
-    { shouldRetry: shouldRetryQuery }
+    { shouldRetry: shouldRetryQuery, sleep }
   );
   const subscribedStatus = await withRetry(
     () => queryAudienceReport(client, paramsList[2]),
-    { shouldRetry: shouldRetryQuery }
+    { shouldRetry: shouldRetryQuery, sleep }
   );
   return [demographics, country, subscribedStatus];
 };
 
 export const collectAudienceService = async (
   input: AudienceAnalyticsInput,
-  deps: { youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics }
+  deps: AudienceAnalyticsDeps
 ): Promise<Result<AudienceAnalyticsOutput, ServiceError>> => {
   try {
     const request = AudienceAnalyticsInput.parse(input);
     const [demographics, country, subscribedStatus] = await runAudienceQueries(
       deps.youtubeAnalytics,
-      buildAudienceQueries(request)
+      buildAudienceQueries(request),
+      deps.sleep
     );
     return ok(
       AudienceAnalyticsOutput.parse({
