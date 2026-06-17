@@ -7,7 +7,16 @@
 //
 // MCP 到着時は env token + refresh のみの別 adapter を作る（interactive flow を持たない）。
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { channelDir, loadConfig } from "@youtube-automation/core/config";
+import type { ImageGenerationConfig } from "@youtube-automation/core/image";
+import {
+  getProvider,
+  parseImageGenerationConfig,
+  parseImageGenerationConfigYaml,
+} from "@youtube-automation/core/image";
 import {
   buildYouTubeAnalyticsClient,
   buildYouTubeClient,
@@ -16,10 +25,22 @@ import type { DepsMap } from "@youtube-automation/core/registry";
 
 import { resolveTokenJson } from "./oauth.ts";
 
+const THUMBNAIL_SKILL_CONFIG_PATH = ["config", "skills", "thumbnail.yaml"];
+
+const loadThumbnailSkillConfig = (root: string): ImageGenerationConfig => {
+  const path = join(root, ...THUMBNAIL_SKILL_CONFIG_PATH);
+  if (!existsSync(path)) {
+    return parseImageGenerationConfig({});
+  }
+  const text = readFileSync(path, "utf-8");
+  return parseImageGenerationConfigYaml(text);
+};
+
 /**
  * entry.deps を見て、要求された依存だけを lazy に構築した DepsMap slice を返す。
  *
  * - `config`      → loadConfig()（singleton loader の起動はここだけ）
+ * - `imageProvider` → config/skills/thumbnail.yaml から Gemini / OpenAI provider を構築
  * - `yt` /
  *   `ytAnalytics` → 同一 token（resolveTokenJson の 1 回 dance）から該当 client を構築
  * - 空 deps       → 副作用ゼロで `{}` を返す
@@ -36,6 +57,12 @@ export const resolveDeps = async <D extends keyof DepsMap>(
 
   if (requested.has("channelDir")) {
     resolved.channelDir = channelDir();
+  }
+
+  if (requested.has("imageProvider")) {
+    const root = channelDir();
+    const config = loadThumbnailSkillConfig(root);
+    resolved.imageProvider = getProvider(config);
   }
 
   const needsYt = requested.has("yt");

@@ -26,6 +26,7 @@ export {
   OPENAI_SUPPORTED_ASPECT_RATIOS,
   type OpenAIConfig,
   parseImageGenerationConfig,
+  parseImageGenerationConfigYaml,
 } from "./config.ts";
 export { GeminiImageProvider, type GeminiProviderDeps } from "./gemini.ts";
 export { OpenAIImageProvider, type OpenAIProviderDeps } from "./openai.ts";

@@ -9,6 +9,8 @@
 // provider 値（"codex" / "gemini_cli" を含む）は `config:` prefix Error で fail fast する。
 // 入力キーは snake_case（既存 config パーサと同様）、出力は camelCase。
 
+import { parse as parseYaml } from "yaml";
+
 import { isRecord } from "./internal.ts";
 
 // サポートする provider 識別子。`getProvider` の dispatch キーと一致させる。
@@ -147,3 +149,7 @@ export const parseImageGenerationConfig = (
       `許容値: ${JSON.stringify(SUPPORTED_PROVIDERS)}`
   );
 };
+
+export const parseImageGenerationConfigYaml = (
+  text: string
+): ImageGenerationConfig => parseImageGenerationConfig(parseYaml(text));

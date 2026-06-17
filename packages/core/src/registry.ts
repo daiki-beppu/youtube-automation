@@ -2,6 +2,12 @@ import type { z } from "zod";
 
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
+import type { ImageProvider } from "./image/index.ts";
+import {
+  GenerateImageInput,
+  GenerateImageOutput,
+  generateImageService,
+} from "./image/index.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
 import type { Result } from "./result.ts";
 import {
@@ -30,12 +36,14 @@ import {
 // service が要求しうる重い依存の型対応表 (#993)。各 service は deps 配列で必要な key
 // だけを宣言し、Pick<DepsMap, D> で run の第 2 引数を compile-time に確定させる。
 //   - config:      ChannelConfig (#961 前倒し。service は loadConfig() を内部呼びしない)
+//   - imageProvider: Gemini / OpenAI image provider
 //   - yt:          YouTube Data API v3 client
 //   - ytAnalytics: YouTube Analytics API v2 client (最小権限: analytics service は yt に触れない)
 // 個別 client を載せるのは最小権限の原則。token ではなく構築済み client を注入する。
 export interface DepsMap {
   channelDir: string;
   config: ChannelConfig;
+  imageProvider: ImageProvider;
   yt: YouTubeClient;
   ytAnalytics: YouTubeAnalyticsClient;
 }
@@ -67,6 +75,14 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "image.generate": defineRegistryEntry({
+    deps: ["imageProvider"],
+    description: "Gemini / OpenAI provider で画像を生成して保存する",
+    inputSchema: GenerateImageInput,
+    outputSchema: GenerateImageOutput,
+    run: (input, deps) =>
+      generateImageService(input, { provider: deps.imageProvider }),
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",

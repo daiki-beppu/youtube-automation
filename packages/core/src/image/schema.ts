@@ -1,11 +1,13 @@
 // 画像生成サービス境界の入力 / 出力 schema（ADR-0003 §8: zod を source of truth）。
 //
-// 入力はチャンネル config / API レスポンス由来の JSON ではなく、呼び出し側が
-// 組み立てる in-process な値オブジェクトのため、snake_case → camelCase の
-// `.transform()` は不要で camelCase のまま declare する。型は `z.infer` で導出し
-// 並書の `interface` は持たない。`.strict()` で未知キーを reject（fail fast）。
+// registry / CLI から入る raw input は snake_case、provider が consume する内部 shape は
+// camelCase。境界 schema で正規化し、service 内の再 parse では正規化済み shape も受ける。
+// 型は `z.infer` で導出し、並書の `interface` は持たない。`.strict()` で未知キーを reject
+//（fail fast）。
 
 import { z } from "zod";
+
+import { snakeToCamel } from "../../internal/case.ts";
 
 /**
  * 1 件分の画像生成リクエスト。
@@ -16,7 +18,7 @@ import { z } from "zod";
  * - `imageSize`: Provider 固有の解像度ヒント（Gemini は "1K"/"2K"/"4K" 等）
  * - `references`: 参照画像パス（省略・空なら参照なしモード）
  */
-export const GenerateImageInput = z
+const GenerateImageInputCamel = z
   .object({
     aspectRatio: z.string(),
     imageSize: z.string(),
@@ -25,6 +27,24 @@ export const GenerateImageInput = z
     references: z.array(z.string()).optional(),
   })
   .strict();
+
+const GenerateImageInputSnake = z
+  .object({
+    aspect_ratio: z.string(),
+    image_size: z.string(),
+    output_path: z.string(),
+    prompt: z.string(),
+    references: z.array(z.string()).optional(),
+  })
+  .strict()
+  .transform(
+    (input): z.infer<typeof GenerateImageInputCamel> => snakeToCamel(input)
+  );
+
+export const GenerateImageInput = z.union([
+  GenerateImageInputSnake,
+  GenerateImageInputCamel,
+]);
 export type GenerateImageInput = z.infer<typeof GenerateImageInput>;
 
 /**

@@ -1,0 +1,127 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+import { REGISTRY } from "@youtube-automation/core/registry";
+
+import { referencesFromArg } from "../src/commands/generate-image/cli.ts";
+
+const repoRoot = resolve(import.meta.dir, "..", "..", "..");
+const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
+const tmpDirs: string[] = [];
+
+const makeTempDir = (prefix: string): string => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  const realDir = realpathSync(dir);
+  tmpDirs.push(realDir);
+  return realDir;
+};
+
+afterEach(() => {
+  while (tmpDirs.length > 0) {
+    const dir = tmpDirs.pop();
+    if (dir !== undefined) {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  }
+});
+
+const runTayk = (
+  options: { env: Record<string, string | undefined> },
+  ...argv: string[]
+) => {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(options.env)) {
+    if (value === undefined) {
+      Reflect.deleteProperty(env, key);
+    } else {
+      env[key] = value;
+    }
+  }
+
+  return Bun.spawnSync(["bun", taykBin, ...argv], {
+    cwd: repoRoot,
+    env,
+  });
+};
+
+const writeOpenAIChannel = (): string => {
+  const channelDir = makeTempDir("cli-image-channel-");
+  mkdirSync(join(channelDir, "config", "skills"), { recursive: true });
+  writeFileSync(
+    join(channelDir, "config", "skills", "thumbnail.yaml"),
+    ["image_generation:", "  provider: openai"].join("\n"),
+    "utf-8"
+  );
+  return channelDir;
+};
+
+describe("core registry — image.generate entry visible from cli package", () => {
+  test("should expose the registry entry consumed by the CLI adapter", () => {
+    const registry = REGISTRY as Record<
+      string,
+      { deps: readonly string[]; description: string }
+    >;
+    const entry = registry["image.generate"];
+
+    expect(entry).toBeDefined();
+    if (entry === undefined) {
+      throw new Error("image.generate registry entry is required");
+    }
+    expect(entry.deps).toEqual(["imageProvider"]);
+    expect(entry.description.length).toBeGreaterThan(0);
+  });
+});
+
+describe("tayk generate-image — smoke", () => {
+  test("wraps a single reference argument into the service input array", () => {
+    expect(referencesFromArg("ref.png")).toEqual(["ref.png"]);
+  });
+
+  test("keeps multiple reference arguments as the service input array", () => {
+    expect(referencesFromArg(["a.png", "b.png"])).toEqual(["a.png", "b.png"]);
+  });
+
+  test("rejects invalid reference argument values before service execution", () => {
+    expect(() => referencesFromArg([123])).toThrow(
+      "validation: --reference は文字列で指定してください"
+    );
+  });
+
+  test("formats provider config errors through the command helper", () => {
+    // Given an OpenAI-backed channel config and a request ratio OpenAI rejects
+    const channelDir = writeOpenAIChannel();
+
+    // When the dispatcher invokes the generate-image subcommand
+    const proc = runTayk(
+      { env: { CHANNEL_DIR: channelDir, OPENAI_API_KEY: undefined } },
+      "generate-image",
+      "--prompt",
+      "a square cafe thumbnail",
+      "--output",
+      join(channelDir, "out.png"),
+      "--aspect-ratio",
+      "1:1",
+      "--json"
+    );
+
+    // Then the command reaches the shared Result -> exit-code helper without
+    // creating a per-CLI bin or making an external API request.
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toStartWith("[config] ");
+    expect(proc.stderr.toString()).toContain("aspect_ratio");
+    expect(proc.stderr.toString()).not.toContain("at ");
+  });
+});

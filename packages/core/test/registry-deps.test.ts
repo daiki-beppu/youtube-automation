@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { ok } from "@youtube-automation/core";
 import type { ChannelConfig } from "@youtube-automation/core/config";
+import type { ImageProvider } from "@youtube-automation/core/image";
 import type {
   YouTubeAnalyticsClient,
   YouTubeClient,
@@ -15,18 +16,25 @@ const fakeConfig = {
 const fakeYt = { videos: {} } as unknown as YouTubeClient;
 const fakeYtAnalytics = { reports: {} } as unknown as YouTubeAnalyticsClient;
 const fakeChannelDir = "/tmp/fake-channel";
+const fakeImageProvider = {
+  generate: () => Promise.resolve(new Uint8Array([1])),
+  name: "fake",
+  supportedAspectRatios: [],
+} satisfies ImageProvider;
 
 describe("DepsMap — type shape", () => {
-  test("maps config / channelDir / yt / ytAnalytics to their declared types", () => {
+  test("maps config / channelDir / imageProvider / yt / ytAnalytics to their declared types", () => {
     const deps: DepsMap = {
       channelDir: fakeChannelDir,
       config: fakeConfig,
+      imageProvider: fakeImageProvider,
       yt: fakeYt,
       ytAnalytics: fakeYtAnalytics,
     };
 
     expect(deps.channelDir).toBe(fakeChannelDir);
     expect(deps.config.identity.meta.channelName).toBe("Fake Channel");
+    expect(deps.imageProvider.name).toBe("fake");
     expect(typeof deps.yt.videos).toBe("object");
     expect(typeof deps.ytAnalytics.reports).toBe("object");
   });

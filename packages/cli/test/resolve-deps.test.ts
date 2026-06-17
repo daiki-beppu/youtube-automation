@@ -159,6 +159,34 @@ describe("resolveDeps — channelDir", () => {
   });
 });
 
+// --- imageProvider -------------------------------------------------------
+
+describe("resolveDeps — imageProvider", () => {
+  test("builds the configured image provider from thumbnail skill config without auth", async () => {
+    const dir = makeChannelDir();
+    mkdirSync(join(dir, "config", "skills"), { recursive: true });
+    writeFileSync(
+      join(dir, "config", "skills", "thumbnail.yaml"),
+      ["image_generation:", "  provider: openai"].join("\n"),
+      "utf-8"
+    );
+    process.env.CHANNEL_DIR = dir;
+    reset();
+    const spawnSpy = spyOn(Bun, "spawn");
+
+    const deps = await resolveDeps(["imageProvider"]);
+
+    expect(deps.imageProvider).toBeDefined();
+    expect(deps.imageProvider.name).toBe("openai");
+    expect("config" in deps).toBe(false);
+    expect("yt" in deps).toBe(false);
+    expect("ytAnalytics" in deps).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    spawnSpy.mockRestore();
+  });
+});
+
 // --- yt (network-free) ---------------------------------------------------
 
 describe("resolveDeps — yt", () => {
