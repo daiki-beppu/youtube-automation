@@ -2,6 +2,11 @@ import type { z } from "zod";
 
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
+import {
+  ExtractThumbnailFeaturesInput,
+  extractThumbnailFeaturesService,
+  ThumbnailFeatures,
+} from "./image/index.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
 import type { Result } from "./result.ts";
 import {
@@ -67,6 +72,13 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "image.thumbnail.features": defineRegistryEntry({
+    deps: [],
+    description: "サムネイル画像から色・輝度・コントラスト特徴量を抽出する",
+    inputSchema: ExtractThumbnailFeaturesInput,
+    outputSchema: ThumbnailFeatures,
+    run: extractThumbnailFeaturesService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",

@@ -4,6 +4,8 @@
 // 公開 API:
 // - generateImageService(input, deps): ADR-0003 Result 境界（ImageProvider.generate をラップ）
 // - GenerateImageInput / GenerateImageOutput: service 境界の zod schema（+ z.infer 型）
+// - extractThumbnailFeaturesService(input): サムネイル特徴量抽出の Result 境界
+// - ExtractThumbnailFeaturesInput / ThumbnailFeatures: thumbnail features 境界の zod schema（+ z.infer 型）
 // - getProvider(config): ImageGenerationConfig から ImageProvider 実装にディスパッチ
 // - parseImageGenerationConfig(raw): skill-config から ImageGenerationConfig を構築
 // - ImageProvider / ImageGenerationRequest / PersistImage: 抽象契約（1-attempt、#959。
@@ -31,6 +33,11 @@ export { GeminiImageProvider, type GeminiProviderDeps } from "./gemini.ts";
 export { OpenAIImageProvider, type OpenAIProviderDeps } from "./openai.ts";
 export { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
 export { generateImageService } from "./service.ts";
+export {
+  ExtractThumbnailFeaturesInput,
+  extractThumbnailFeaturesService,
+  ThumbnailFeatures,
+} from "./thumbnail-features.ts";
 
 /**
  * `ImageGenerationConfig` から対応する provider 実装を返す。
