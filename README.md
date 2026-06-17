@@ -221,7 +221,7 @@ uv run ruff check .
 
 ### CLI commands
 
-インストール後に利用できる主な entry points:
+インストール後に利用できる主な CLI commands:
 
 | Command | Description |
 |---------|-------------|
@@ -229,7 +229,7 @@ uv run ruff check .
 | `yt-analytics` | Analytics データ収集 |
 | `yt-generate-image` | Gemini / OpenAI で画像生成（サムネイル兼用） |
 | `yt-generate-lyria-master` | Lyria 3 で N セグメント生成 + クロスフェード結合してマスター音源を作成 |
-| `yt-generate-master` | 個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を作成 |
+| `tayk generate-master` | 個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を作成 |
 | `yt-generate-suno` | Suno プロンプト生成 |
 | `yt-generate-loop-video` | Veo ループ動画生成 |
 | `yt-init-collection` | 新規コレクションの雛形作成 |
@@ -241,7 +241,7 @@ uv run ruff check .
 | `yt-channel-status` | チャンネル最新状況 |
 | `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
 
-完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
+Python entry point の完全な一覧は `pyproject.toml` の `[project.scripts]`、TS dispatcher の subcommand は `tayk --help` を参照してください。
 
 > **`yt-video-analyze` の動画公開範囲制約**: Gemini API は YouTube URL を直接受け取って動画本体を解析しますが、対象動画は **Public または Unlisted** である必要があります。Private 動画は API 側で取得できず解析できません。
 

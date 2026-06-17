@@ -445,7 +445,7 @@ class TestFinalizeMasterFailure:
         assert (collection / "01-master" / "master.mp3").read_bytes() == _ORIGINAL_MASTER_BYTES
 
     def test_returns_rc1_when_master_mp3_missing(self, tmp_path, monkeypatch):
-        # Given: 01-master/master.mp3 が存在しない (yt-generate-master 未実行)
+        # Given: 01-master/master.mp3 が存在しない (`tayk generate-master` 未実行)
         collection = _setup_collection(tmp_path, n_rain=1)
         (collection / "01-master" / "master.mp3").unlink()
         monkeypatch.setattr(finalize_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")

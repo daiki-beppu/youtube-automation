@@ -323,7 +323,7 @@ def test_target_video_duration_env_overrides_channel_override(tmp_path: Path) ->
 
 
 def test_detects_lyria_master_wav(tmp_path: Path) -> None:
-    """#507: `/lyria` (yt-generate-master) 出力の `master.wav` を検出できる."""
+    """#507: `/lyria` (`tayk generate-master`) 出力の `master.wav` を検出できる."""
     result, ffmpeg_log = _run_generate_videos(
         tmp_path,
         "1920,1080,yuv420p,24/1",
@@ -338,7 +338,7 @@ def test_detects_lyria_master_wav(tmp_path: Path) -> None:
 
 
 def test_detects_masterup_master_mp3(tmp_path: Path) -> None:
-    """#507: `/masterup` (yt-generate-master) 出力の `master.mp3` を検出できる."""
+    """#507: `/masterup` (`tayk generate-master`) 出力の `master.mp3` を検出できる."""
     result, ffmpeg_log = _run_generate_videos(
         tmp_path,
         "1920,1080,yuv420p,24/1",

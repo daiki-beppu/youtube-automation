@@ -63,7 +63,7 @@ _DEFAULT_LAYERS_GLOB = "rain_*.wav"
 _MASTER_FILENAME = "master.mp3"
 _MASTER_TMP_FILENAME = "master.tmp.mp3"
 
-# skill-config のスキル名。既存 yt-generate-master と同じ namespace を共有する。
+# skill-config のスキル名。`tayk generate-master` と同じ namespace を共有する。
 _SKILL_NAME = "masterup"
 
 
@@ -368,7 +368,7 @@ def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
       2. `rain_layer.*` (deprecated alias / DeprecationWarning)
       3. 組み込み defaults
 
-    `audio.bitrate` は既存 yt-generate-master とも共有する skill-config の
+    `audio.bitrate` は `tayk generate-master` とも共有する skill-config の
     トップレベル audio セクションを優先し、`audio.finalize.bitrate` が
     明示指定されていればそれで上書きする。
     """

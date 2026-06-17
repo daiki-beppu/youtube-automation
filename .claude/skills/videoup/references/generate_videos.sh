@@ -142,7 +142,7 @@ done
 
 # 検出順:
 #   1. `master-mix.{wav,m4a,aac,mp3,flac}` — DAW バウンス・手動配置 (優先)
-#   2. `master.{wav,m4a,aac,mp3,flac}` — `/lyria` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
+#   2. `master.{wav,m4a,aac,mp3,flac}` — `/lyria` / `/masterup` (`tayk generate-master`) の自動生成出力 (#507)
 # 拡張子は wav 優先、なければ m4a / aac / mp3 / flac の順
 MASTER_AUDIO=""
 for basename in master-mix master; do

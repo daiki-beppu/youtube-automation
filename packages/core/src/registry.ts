@@ -2,6 +2,11 @@ import type { z } from "zod";
 
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
+import {
+  generateMasterService,
+  GenerateMasterInputSchema,
+  GenerateMasterOutputSchema,
+} from "./generate-master/index.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
 import type { Result } from "./result.ts";
 import {
@@ -67,6 +72,14 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "master.generate": defineRegistryEntry({
+    deps: ["channelDir"],
+    description:
+      "Suno DL 済み音源をクロスフェード結合して master 音源を生成する",
+    inputSchema: GenerateMasterInputSchema,
+    outputSchema: GenerateMasterOutputSchema,
+    run: generateMasterService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",

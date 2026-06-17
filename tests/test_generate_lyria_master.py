@@ -79,49 +79,47 @@ def _patch_lyria_generate(monkeypatch, *, payload: bytes | None = b"FAKE_MP3", c
     return log
 
 
-def _patch_ffmpeg(monkeypatch, *, segment_size: int = 1024):
-    """ffmpeg subprocess を mock し、`_save_audio_as_wav` の出力ファイルを実体化する。
+def _patch_subprocess(
+    monkeypatch,
+    *,
+    segment_size: int = 1024,
+    tayk_log: list | None = None,
+):
+    """subprocess を mock し、ffmpeg と `tayk generate-master` の出力を実体化する。
 
     `_save_audio_as_wav` は `subprocess.run([..., "-i", tmp, ..., str(path)], check=True)` を呼ぶ。
     mock 内で path にダミーバイトを書き込んで「ffmpeg が WAV を出力した」状態を再現する。
     """
+    log = tayk_log if tayk_log is not None else []
 
     def fake_run(cmd, **kwargs):
-        # cmd[-1] が出力 path、cmd[-3] (Lyria CLI からの呼び出し時) も検査用に保持
         if cmd[0] == "ffmpeg":
             out = Path(cmd[-1])
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(b"\x00" * segment_size)
-        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        if cmd[:2] == ["tayk", "generate-master"]:
+            log.append({"cmd": cmd, "kwargs": kwargs})
+            collection = Path(cmd[2])
+            master = collection / "01-master" / "master.wav"
+            master.parent.mkdir(parents=True, exist_ok=True)
+            master.write_bytes(b"\x00" * segment_size)
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        raise AssertionError(f"unexpected subprocess command: {cmd}")
 
     monkeypatch.setattr(generate_lyria_master.subprocess, "run", fake_run)
+    return log
 
 
-def _patch_skill_configs(monkeypatch, *, lyria: dict | None = None, masterup: dict | None = None):
+def _patch_skill_configs(monkeypatch, *, lyria: dict | None = None):
     lyria_cfg = lyria if lyria is not None else {"model": "lyria-3-pro-preview", "duration_padding_min": 3}
-    masterup_cfg = masterup if masterup is not None else {"audio": {"crossfade_duration": 1.0, "bitrate": "192k"}}
 
     def fake_load(skill, *, use_cache=True):  # noqa: ARG001
         if skill == "lyria":
             return lyria_cfg
-        if skill == "masterup":
-            return masterup_cfg
         raise AssertionError(f"unexpected skill: {skill}")
 
     monkeypatch.setattr(generate_lyria_master, "load_skill_config", fake_load)
-
-
-def _patch_generate_master(monkeypatch, *, return_path: Path | None = None):
-    """`generate_master.generate_master` を差し替えて呼び出し引数を記録する。"""
-    captured: dict = {}
-
-    def fake_generate(collection_dir, crossfade, bitrate, **kwargs):
-        captured["args"] = (collection_dir, crossfade, bitrate)
-        captured["kwargs"] = kwargs
-        return return_path or (Path(collection_dir) / "01-master" / "master.wav")
-
-    monkeypatch.setattr(generate_lyria_master.generate_master, "generate_master", fake_generate)
-    return captured
 
 
 def _patch_load_config(monkeypatch, *, target_duration_min: float | None = None):
@@ -138,10 +136,9 @@ class TestGenerateSegments:
     def test_generates_n_segments_named_correctly(self, tmp_path, monkeypatch, capsys):
         collection = _make_collection(tmp_path / "coll")
         call_log = _patch_lyria_generate(monkeypatch)
-        _patch_ffmpeg(monkeypatch)
+        tayk_log = _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch)
         _patch_load_config(monkeypatch, target_duration_min=None)  # CLI で渡す
-        master_capture = _patch_generate_master(monkeypatch)
 
         monkeypatch.setattr(
             "sys.argv",
@@ -173,10 +170,13 @@ class TestGenerateSegments:
         for i in range(1, 5):
             assert (music_dir / f"{i:02d}_rain-glass.wav").exists()
 
-        # 結合段に渡る crossfade / bitrate は skill-config の値
-        assert master_capture["args"][0] == collection
-        assert master_capture["args"][1] == 1.0
-        assert master_capture["args"][2] == "192k"
+        # 結合段は TS dispatcher に委譲される
+        assert tayk_log == [
+            {
+                "cmd": ["tayk", "generate-master", str(collection)],
+                "kwargs": {"check": False},
+            }
+        ]
 
         out = capsys.readouterr().out
         assert "Segments   : 4" in out
@@ -187,10 +187,9 @@ class TestGenerateSegments:
         (collection / "02-Individual-music" / "01_resume.wav").write_bytes(b"existing")
 
         call_log = _patch_lyria_generate(monkeypatch)
-        _patch_ffmpeg(monkeypatch)
+        _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch)
         _patch_load_config(monkeypatch, target_duration_min=None)
-        _patch_generate_master(monkeypatch)
 
         monkeypatch.setattr(
             "sys.argv",
@@ -219,10 +218,9 @@ class TestGenerateSegments:
 
     def test_retries_on_none_and_succeeds(self, tmp_path, monkeypatch):
         collection = _make_collection(tmp_path / "coll")
-        _patch_ffmpeg(monkeypatch)
+        _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch)
         _patch_load_config(monkeypatch, target_duration_min=None)
-        _patch_generate_master(monkeypatch)
         # time.sleep を無効化（リトライ待機を省略）
         monkeypatch.setattr(generate_lyria_master.time, "sleep", lambda _s: None)
 
@@ -260,10 +258,9 @@ class TestGenerateSegments:
     def test_max_retries_exceeded_returns_1(self, tmp_path, monkeypatch, capsys):
         collection = _make_collection(tmp_path / "coll")
         _patch_lyria_generate(monkeypatch, payload=None)  # 常に None
-        _patch_ffmpeg(monkeypatch)
+        _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch)
         _patch_load_config(monkeypatch, target_duration_min=None)
-        _patch_generate_master(monkeypatch)
         monkeypatch.setattr(generate_lyria_master.time, "sleep", lambda _s: None)
 
         monkeypatch.setattr(
@@ -293,19 +290,17 @@ class TestGenerateSegments:
 
 
 class TestMasterCombineDelegation:
-    """セグメント揃ったら generate_master.generate_master が skill-config 由来の引数で呼ばれる。"""
+    """セグメント揃ったら `tayk generate-master` に結合を委譲する。"""
 
-    def test_invokes_generate_master_with_skill_config_values(self, tmp_path, monkeypatch):
+    def test_invokes_tayk_generate_master_after_segments_complete(self, tmp_path, monkeypatch):
         collection = _make_collection(tmp_path / "coll")
         _patch_lyria_generate(monkeypatch)
-        _patch_ffmpeg(monkeypatch)
+        tayk_log = _patch_subprocess(monkeypatch)
         _patch_skill_configs(
             monkeypatch,
             lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0},
-            masterup={"audio": {"crossfade_duration": 2.5, "bitrate": "256k"}},
         )
         _patch_load_config(monkeypatch, target_duration_min=None)
-        capture = _patch_generate_master(monkeypatch)
 
         monkeypatch.setattr(
             "sys.argv",
@@ -324,7 +319,17 @@ class TestMasterCombineDelegation:
 
         rc = generate_lyria_master.main()
         assert rc == 0
-        assert capture["args"] == (collection, 2.5, "256k")
+        assert tayk_log == [
+            {
+                "cmd": ["tayk", "generate-master", str(collection)],
+                "kwargs": {"check": False},
+            }
+        ]
+
+    def test_legacy_python_generate_master_implementation_is_absent(self):
+        repo_root = Path(__file__).parents[1]
+        legacy = repo_root / "src/youtube_automation/scripts/generate_master.py"
+        assert not legacy.exists()
 
 
 class TestCli:
@@ -334,10 +339,9 @@ class TestCli:
         # --target-duration 省略時は channel config の audio.target_duration_min を使う
         collection = _make_collection(tmp_path / "coll")
         call_log = _patch_lyria_generate(monkeypatch)
-        _patch_ffmpeg(monkeypatch)
+        _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
         _patch_load_config(monkeypatch, target_duration_min=6)  # 6 * 60 / 184 = 1.95 → 2
-        _patch_generate_master(monkeypatch)
 
         monkeypatch.setattr(
             "sys.argv",
@@ -360,10 +364,9 @@ class TestCli:
         # --target-duration も channel config も無ければ ValidationError で exit 1
         collection = _make_collection(tmp_path / "coll")
         _patch_lyria_generate(monkeypatch)
-        _patch_ffmpeg(monkeypatch)
+        _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch)
         _patch_load_config(monkeypatch, target_duration_min=None)
-        _patch_generate_master(monkeypatch)
 
         monkeypatch.setattr(
             "sys.argv",
@@ -393,10 +396,9 @@ class TestCli:
         ref_path.write_bytes(b"\x89PNG\r\n\x1a\n")
 
         call_log = _patch_lyria_generate(monkeypatch)
-        _patch_ffmpeg(monkeypatch)
+        _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
         _patch_load_config(monkeypatch, target_duration_min=None)
-        _patch_generate_master(monkeypatch)
 
         monkeypatch.setattr(
             "sys.argv",
@@ -436,10 +438,9 @@ class TestCli:
     def test_missing_reference_image_raises(self, tmp_path, monkeypatch, capsys):
         collection = _make_collection(tmp_path / "coll")
         _patch_lyria_generate(monkeypatch)
-        _patch_ffmpeg(monkeypatch)
+        _patch_subprocess(monkeypatch)
         _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
         _patch_load_config(monkeypatch, target_duration_min=2)
-        _patch_generate_master(monkeypatch)
 
         monkeypatch.setattr(
             "sys.argv",

@@ -5,21 +5,21 @@
 
 audio:
   # トラック間クロスフェード秒数
-  # yt-generate-master の ffmpeg acrossfade と metadata_generator.py の
+  # tayk generate-master の ffmpeg acrossfade と metadata_generator.py の
   # タイムスタンプ計算の両方がこの値を参照する。
   crossfade_duration: 1.0
 
-  # マスター音源のビットレート (yt-generate-master と yt-finalize-master で共有)。
+  # マスター音源のビットレート (tayk generate-master と yt-finalize-master で共有)。
   # `audio.finalize.bitrate` が明示指定されていればそちらが yt-finalize-master の出力に勝つ。
   bitrate: "192k"
 
   # CLI フラグ (`--loop` / `--target-duration`) が両方未指定のときに
-  # `yt-generate-master --target-duration MIN` 相当のデフォルト値として使われる。
+  # `tayk generate-master --target-duration MIN` 相当のデフォルト値として使われる。
   # 同梱デフォルトでは未設定 (= 1 ループで終了)。チャンネル側で opt-in する。
   # target_duration_min: 120
 
   # CLI フラグ (`--shuffle` / `--shuffle-seed`) のいずれも未指定のときに
-  # `yt-generate-master --shuffle` 相当のデフォルトとして採用される。
+  # `tayk generate-master --shuffle` 相当のデフォルトとして採用される。
   # Suno で同一プロンプトから生成した類似イントロ群が連続するのを避けたいときに有効化する。
   # 同梱デフォルトでは未設定 (= シャッフルしない)。チャンネル側で opt-in する。
   # shuffle: true
@@ -30,7 +30,7 @@ audio:
   # shuffle_seed: 42
 
   # CLI フラグ (`--pin-first` / `--pin-first-count`) のいずれも未指定のときに
-  # `yt-generate-master --pin-first-count N` 相当のデフォルトとして採用される。
+  # `tayk generate-master --pin-first-count N` 相当のデフォルトとして採用される。
   # ソート済み先頭 N 件を順序固定し、`audio.shuffle: true` と併用すると残りだけ
   # シャッフルされる。Suno で retention に強い 1 曲を冒頭に置きたい運用向け。
   # 既定 0 = 固定なし。

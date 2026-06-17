@@ -1,6 +1,6 @@
 ---
 name: videoup
-description: "Use when コレクションの音声ファイルが揃い、動画生成が必要なとき。マスター音源生成（yt-generate-master）とマスター動画生成（generate_videos.sh）の実行案内。動画変換、音声から動画への変換、generate_videos、MP3→MP4、videoup など、動画ファイル生成に関わる場面で必ず使用すること"
+description: "Use when コレクションの音声ファイルが揃い、動画生成が必要なとき。マスター音源生成（tayk generate-master）とマスター動画生成（generate_videos.sh）の実行案内。動画変換、音声から動画への変換、generate_videos、MP3→MP4、videoup など、動画ファイル生成に関わる場面で必ず使用すること"
 ---
 
 ## Overview
@@ -12,15 +12,15 @@ description: "Use when コレクションの音声ファイルが揃い、動画
 
 | スクリプト | 役割 | 場所 |
 |-----------|------|------|
-| `yt-generate-master` | 個別 MP3 → クロスフェード結合 → マスター MP3 | Python CLI (skill-config `masterup` 参照) |
+| `tayk generate-master` | 個別 MP3 → クロスフェード結合 → マスター MP3 | TS dispatcher (skill-config `masterup` 参照) |
 | `generate_videos.sh` | 音声 + サムネイル → MP4 動画 | `.claude/skills/videoup/references/generate_videos.sh` |
 
 ## Quick Reference
 
 | コマンド | 説明 |
 |---------|------|
-| `yt-generate-master` | CWD のコレクションでマスター音源生成 |
-| `yt-generate-master <path>` | 指定コレクションでマスター音源生成 |
+| `tayk generate-master` | CWD のコレクションでマスター音源生成 |
+| `tayk generate-master <path>` | 指定コレクションでマスター音源生成 |
 | `bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh"` | CWD のコレクションで全動画生成（コレクションディレクトリ内で実行） |
 | `bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" <path>` | 指定コレクションで全動画生成 |
 
@@ -51,14 +51,14 @@ $ARGUMENTS
 スクリプトはコレクションのディレクトリ構造から以下を自動検出します:
 
 - **コレクション名**: ディレクトリ名から（`YYYYMMDD-xxx-theme-collection` → `Theme-Name`）
-- **マスター音声**: `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`yt-generate-master`）の自動生成出力（#507）
+- **マスター音声**: `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`tayk generate-master`）の自動生成出力（#507）
 - **サムネイル**: `10-assets/main.png` 優先、`thumbnail.jpg` フォールバック
 - **個別音楽**: `02-Individual-music/*.mp3`（アルファベット順）
 
 ### 重要
 
 - **スクリプトを毎回生成しない** — `.claude/skills/` 配下の共有スクリプトを使用
-- ユーザーが DAW でミックスした `master-mix.{wav,m4a}` がある場合、`yt-generate-master` は不要
+- ユーザーが DAW でミックスした `master-mix.{wav,m4a}` がある場合、`tayk generate-master` は不要
 - `set -e` は使用しない（明示的エラーハンドリング）
 
 ### opt-in: 短尺 master の動画長指定再生 (#545)

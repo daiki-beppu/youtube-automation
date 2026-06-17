@@ -7,7 +7,7 @@ description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成し
 
 Vertex AI Lyria 3 REST API (`interactions` エンドポイント) を使い、`config/skills/lyria.yaml` のスタイル定義とユーザー指定テーマからプロンプトを組み立て、Lyria 3 API を呼んでマスター音源を生成する。
 
-Lyria 3 Pro は **1 リクエストあたり最大約 184 秒（~3 分）** までのオーディオを返す。本スキルは `config/channel/audio.json` の `audio.target_duration_min` から必要セグメント数 N を自動算出し、`yt-generate-lyria-master` CLI 経由で N セグメント生成 → クロスフェード結合まで一気通貫で実行する（`generate_master.generate_master()` の WAV 経路を再利用）。
+Lyria 3 Pro は **1 リクエストあたり最大約 184 秒（~3 分）** までのオーディオを返す。本スキルは `config/channel/audio.json` の `audio.target_duration_min` から必要セグメント数 N を自動算出し、`yt-generate-lyria-master` CLI 経由で N セグメント生成 → `tayk generate-master` によるクロスフェード結合まで一気通貫で実行する。
 
 ## 前提
 
@@ -168,7 +168,7 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 1. `audio.target_duration_min` + skill-config `duration_padding_min` から必要セグメント数 N を自動算出（`ceil((target + padding) * 60 / 184)`）
 2. `lyria_client.generate_music()` を N 回呼び、レスポンスを `02-Individual-music/{NN}_{name}.wav` に PCM s16le 48 kHz stereo で保存（既存ファイルは skip = resume 可能）
 3. 失敗時は `--max-retries` 回までリトライ
-4. 全セグメント揃ったら `generate_master.generate_master()` 経由でクロスフェード結合し `01-master/master.wav` を出力（`masterup.audio.crossfade_duration` を参照）
+4. 全セグメント揃ったら `tayk generate-master` 経由でクロスフェード結合し `01-master/master.wav` を出力（`masterup.audio.crossfade_duration` を参照）
 
 ```bash
 uv run yt-generate-lyria-master \
