@@ -96,8 +96,7 @@ def test_lifecycle_skills_do_not_use_legacy_command_prefixes(
 
     assert not offenders, (
         f"{skill_name} に {forbidden_fragment!r} が残っています。"
-        " `bunx tayk <cmd>` 形式へ置換してください:\n  "
-        + "\n  ".join(offenders)
+        " `bunx tayk <cmd>` 形式へ置換してください:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -119,6 +118,5 @@ def test_lifecycle_skills_do_not_keep_rewritten_legacy_command_names(
 
     assert not offenders, (
         f"{skill_name} に legacy command {legacy_command!r} が残っています。"
-        " `bunx tayk <cmd>` 形式へ統一してください:\n  "
-        + "\n  ".join(offenders)
+        " `bunx tayk <cmd>` 形式へ統一してください:\n  " + "\n  ".join(offenders)
     )
