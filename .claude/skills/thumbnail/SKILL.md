@@ -49,7 +49,7 @@ OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"`
 
 ## codex 経由の生成
 
-`image_generation.provider: codex` のチャンネルでは、`yt-generate-image` ではなく `codex-image.sh` を正規の生成経路として使う。`ImageProvider` API 実装は持たないため、`yt-generate-image` に誤配線した場合は明示エラーでこの shell 経路へ誘導される。
+`image_generation.provider: codex` のチャンネルでは、`bunx tayk generate-image` ではなく `codex-image.sh` を正規の生成経路として使う。`ImageProvider` API 実装は持たないため、`bunx tayk generate-image` に誤配線した場合は明示エラーでこの shell 経路へ誘導される。
 
 前提:
 - codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
@@ -84,7 +84,7 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 - 失敗時 wrapper は `agent_message (最終)` と codex stderr の末尾 30 行を診断 dump するので、これを見て prompt 短縮 or 参照画像見直しに切り替える
 
 この経路のスコープ:
-- `yt-generate-image` の API 呼び出しは使わない
+- `bunx tayk generate-image` の API 呼び出しは使わない
 - `ImageProvider` 実装は持たない
 - wrapper 自体のリトライなし
 - GCP 課金なし。ChatGPT サブスクの fair-use 対象で、`cost_per_image_usd` は通常 `null`
@@ -93,11 +93,8 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 ## Channel Adaptation
 
 **すべての設定は `config/skills/thumbnail.yaml` から読み取る。**
-スキル内にチャンネル固有のハードコードはしない。読み込みは以下のコマンドで確認できる:
-
-```bash
-uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('thumbnail'), indent=2, ensure_ascii=False))"
-```
+スキル内にチャンネル固有のハードコードはしない。作業前に Read tool で
+`config/skills/thumbnail.yaml` を開き、チャンネル側の上書き設定を確認する。
 
 実行前に以下を確認:
 
@@ -128,7 +125,7 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 参照画像を渡してスタイルを維持する方式。
 
 ```bash
-uv run yt-generate-image \
+bunx tayk generate-image \
   --prompt "<prompt_prefix を含むプロンプト>" \
   --reference <channel_dir>/<reference_images.default> \
   --output <collection-path>/10-assets/main-v1.jpg -y
@@ -144,7 +141,7 @@ uv run yt-generate-image \
 参照画像なしでプロンプトのみで生成する方式（フォールバック）。
 
 ```bash
-uv run yt-generate-image \
+bunx tayk generate-image \
   --prompt "<完全なプロンプト>" \
   --output <collection-path>/10-assets/main-v1.jpg -y
 ```
@@ -169,7 +166,7 @@ uv run yt-generate-image \
 
 #### プリフライト
 
-`generation_mode: "single_step"` で `--reference` を指定せずに `yt-generate-image` を起動するとエラー中断する。次の対処が必要:
+`generation_mode: "single_step"` で `--reference` を指定せずに `bunx tayk generate-image` を起動するとエラー中断する。次の対処が必要:
 
 1. **skill-config に `reference_images.default` が未設定** → `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` にベンチマークサムネのパス（文字列 1 件 or list 複数件）を設定
 2. **設定はあるが CLI 引数に展開していない** → `--reference <path>` で渡す。list なら `--reference A --reference B --reference C` のように複数指定
@@ -197,32 +194,18 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
 
 #### 生成コマンド
 
-`reference_images.default` と stock (#364 PR-B) を Python ワンライナーで合成し、`--reference` 引数を組み立てる。stock 採用ログは stderr の `[INFO] stock 採用: ...` で確認できる。
+`config/skills/thumbnail.yaml` を Read tool で開き、`reference_images.default` と stock (#364 PR-B) を確認して `--reference` 引数を組み立てる。stock 採用ログは stderr の `[INFO] stock 採用: ...` で確認できる。
 
 ```bash
 THEME="<theme-slug>"   # 例: tavern / library / jazz-bar
 
-REFS=$(uv run python3 -c "
-from youtube_automation.utils.config import channel_dir
-from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.image_provider.composition import normalize_reference_default
-from youtube_automation.utils.stock import resolve_stock_refs
-
-cfg = load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {})
-ref_cfg = cfg.get('reference_images', {}) if isinstance(cfg, dict) else {}
-ch = channel_dir()
-defaults = [str(ch / p) for p in normalize_reference_default(ref_cfg.get('default'))]
-stock = [str(p) for p in resolve_stock_refs(ch, stock_refs_config=ref_cfg.get('stock', {}), theme='$THEME')]
-for p in defaults + stock:
-    print(p)
-")
-
 REF_ARGS=()
-while IFS= read -r p; do
-  [ -n "$p" ] && REF_ARGS+=(--reference "$p")
-done <<< "$REFS"
+# Read した reference_images.default の各パスを追加する。
+REF_ARGS+=(--reference "<path-from-reference_images.default>")
+# reference_images.stock.enabled が true の場合は assets/stock/$THEME/ から採用する画像も追加する。
+REF_ARGS+=(--reference "assets/stock/$THEME/<stock-image>")
 
-uv run yt-generate-image "${REF_ARGS[@]}" \
+bunx tayk generate-image "${REF_ARGS[@]}" \
   --max-attempts 3 \
   --prompt "<diff_prompt_template を置換したプロンプト>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y
@@ -253,10 +236,7 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 
 コレクション着手時は、本章上部のプロンプト構築や生成コマンドへ進む**前**に必ずここを通す。1 項目でも欠けると TTP モードの再現性が落ちる。
 
-- [ ] `reference_images.default` が設定済みで、直近の高再生ベンチマークサムネを指している
-  ```bash
-  uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {}).get('reference_images', {}).get('default'), ensure_ascii=False, indent=2))"
-  ```
+- [ ] Read tool で `config/skills/thumbnail.yaml` を開き、`image_generation.gemini.reference_images.default` が設定済みで、直近の高再生ベンチマークサムネを指している
 - [ ] `image_generation.gemini.generation_mode` が `generation_mode: "single_step"` になっている。`two_phase` / `diff_from_reference` を使うなら理由を明示する
 - [ ] `diff_prompt_template` に参照と重複する要素（レイアウト・固定オブジェクト・テキスト配置・既知の色味）を書いていない。差分のみを記述する
 - [ ] `diff_prompt_template` に `${ip_safety_clause}` 相当の除外句（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を含めている (#569)。参照元ベンチマークサムネに署名・サイン・透かし・チャンネルロゴ等の識別マークがある場合は特に必須
@@ -275,7 +255,7 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 main.png が存在しない場合のみ:
 1. テーマに合わせてプロンプトを構築（`references/prompting.md` の原則と `references/sample-prompts.md` のテンプレートを参照）
 2. 参照画像モードなら `reference_images` から適切な画像を選択
-3. 生成: `yt-generate-image --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.jpg -y`
+3. 生成: `bunx tayk generate-image --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.jpg -y`
 4. `open` でプレビュー → ユーザー承認 → `cp main-v1.jpg main.png`
 
 #### Phase 2: テキストオーバーレイ（thumbnail.jpg）
@@ -288,7 +268,7 @@ main.png が存在しない場合のみ:
 
 **未定義の場合（フォールバック）:** `references/sample-prompts.md` の「Two-Phase モードのテキストオーバーレイ・フォールバックプロンプト」を使用する。
 
-3. 生成: `yt-generate-image --reference 10-assets/main.png --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
+3. 生成: `bunx tayk generate-image --reference 10-assets/main.png --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
 
 ## 品質チェック
@@ -296,10 +276,10 @@ main.png が存在しない場合のみ:
 生成直後の自動セルフチェック（#489）:
 
 ```bash
-uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.jpg --json
+bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.jpg --json
 ```
 
-`yt-thumbnail-check` は Gemini Vision で `collection-ideate.yaml` の `objects.fixed` と
+`bunx tayk thumbnail-check` は Gemini Vision で `collection-ideate.yaml` の `objects.fixed` と
 `self_check.no_logo_guard` から YES/NO チェックリストを組み立て、画像に対する合否を
 JSON で返す（終了コード 0=合格 / 1=不合格）。手作業チェックの前段スクリーニングとして、
 TTP 構図逸脱（wet_runway 不在・矩形ロゴ混入・テキスト burned-in 等）を機械的に検出する。
@@ -373,7 +353,7 @@ Phase 2 生成後:
 
 ```bash
 THEME="<theme-slug>"   # 例: tavern / library / jazz-bar
-uv run yt-stock-archive \
+bunx tayk stock-archive \
   10-assets/main-v*.jpg 10-assets/thumbnail-v*.jpg \
   --theme "$THEME" \
   --source-collection "$(pwd)" \
@@ -403,9 +383,9 @@ stock の操作 CLI:
 
 | CLI | 用途 |
 |---|---|
-| `yt-stock-list [--theme T] [--source-role R] [--limit N] [--format table\|json]` | stock 一覧（新しい順） |
-| `yt-stock-preview [--theme T] [--limit N]` | macOS `open` でプレビュー起動 |
-| `yt-stock-prune [--retention-days N] [--max-per-theme N] [--dry-run]` | 古い画像 / 上限超過分を削除（config 既定値あり） |
+| `bunx tayk stock-list [--theme T] [--source-role R] [--limit N] [--format table\|json]` | stock 一覧（新しい順） |
+| `bunx tayk stock-preview [--theme T] [--limit N]` | macOS `open` でプレビュー起動 |
+| `bunx tayk stock-prune [--retention-days N] [--max-per-theme N] [--dry-run]` | 古い画像 / 上限超過分を削除（config 既定値あり） |
 
 `config/skills/thumbnail.yaml` の `image_generation.stock`:
 
@@ -413,8 +393,8 @@ stock の操作 CLI:
 image_generation:
   stock:
     enabled: true          # false で退避を無効化（unlink のみ）
-    retention_days: 90     # yt-stock-prune の保持日数
-    max_per_theme: 50      # yt-stock-prune の上限
+    retention_days: 90     # stock-prune の保持日数
+    max_per_theme: 50      # stock-prune の上限
 ```
 
 ### stock 再利用（参照画像プールへの自動合成）
@@ -442,12 +422,12 @@ image_generation:
 
 ## 長時間処理の取り扱い
 
-`yt-generate-image` は Gemini / OpenAI への API 同期呼び出しで **10〜30 秒** ブロックする。`--max-attempts N` でローテーション生成する場合は `N × 10〜30 秒` かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`bunx tayk generate-image` は Gemini / OpenAI への API 同期呼び出しで **10〜30 秒** ブロックする。`--max-attempts N` でローテーション生成する場合は `N × 10〜30 秒` かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
 
 spawn 例:
 
 ```bash
-uv run yt-generate-image \
+bunx tayk generate-image \
   --reference <ref> --prompt "<prompt>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y \
   > /tmp/thumbnail-$(date +%s).log 2>&1
