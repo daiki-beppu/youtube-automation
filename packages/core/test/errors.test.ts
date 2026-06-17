@@ -16,6 +16,12 @@ import {
 import type { Result } from "@youtube-automation/core";
 import { z } from "zod";
 
+// classifyGaxiosError is an internal cross-feature classifier (shared by the
+// upload / analytics service boundaries), intentionally NOT re-exported from the
+// public barrel, so it is imported by its source path — the same convention the
+// other internal-symbol tests use (e.g. analytics-channel.test.ts).
+import { classifyGaxiosError } from "../src/errors.ts";
+
 // Builds a gaxios-shaped error: a real Error (so `error instanceof Error`
 // holds and `.message` is read for the wrapped message) with a `response`
 // carrying `status` and parsed/raw `data`, mirroring the Google API client
@@ -199,6 +205,45 @@ describe("QuotaExhaustedError", () => {
     const error = new QuotaExhaustedError("quota gone");
     // Then the hint is absent
     expect(error.retryAfterSeconds).toBeUndefined();
+  });
+});
+
+describe("classifyGaxiosError", () => {
+  test("promotes a 429 to QuotaExhaustedError carrying the Retry-After hint", () => {
+    // Given a gaxios-shaped 429 with a Retry-After header
+    const raw = gaxiosError("rate limited", {
+      headers: { "retry-after": "45" },
+      status: 429,
+    });
+    // When classifying it for a named operation
+    const error = classifyGaxiosError(raw, "videos.insert");
+    // Then it is promoted to a QuotaExhaustedError (so withRetry stops retrying)
+    // carrying the parsed Retry-After hint and a context-prefixed message
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect(error.statusCode).toBe(429);
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(45);
+    expect(error.message).toBe("videos.insert: rate limited");
+  });
+
+  test("leaves the Retry-After hint undefined when the header is absent", () => {
+    // Given a 429 with no Retry-After header
+    const raw = gaxiosError("rate limited", { status: 429 });
+    // When classifying it
+    const error = classifyGaxiosError(raw, "videos.insert");
+    // Then it is still a quota error, but with no usable retry hint
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+  });
+
+  test("leaves a non-429 as a plain YouTubeAPIError for the retry path", () => {
+    // Given a gaxios-shaped 500
+    const raw = gaxiosError("internal error", { status: 500 });
+    // When classifying it
+    const error = classifyGaxiosError(raw, "videos.insert");
+    // Then it stays a retryable YouTubeAPIError, not a quota error
+    expect(error).toBeInstanceOf(YouTubeAPIError);
+    expect(error).not.toBeInstanceOf(QuotaExhaustedError);
+    expect(error.statusCode).toBe(500);
   });
 });
 

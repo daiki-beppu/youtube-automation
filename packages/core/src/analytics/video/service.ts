@@ -42,7 +42,7 @@ export interface VideoAnalyticsDeps {
   sleep?: SleepMs;
 }
 
-// fromGaxiosError / QuotaExhaustedError の message に載せる操作名。
+// toAnalyticsQueryError / QuotaExhaustedError の message に載せる操作名。
 const QUERY_CONTEXT = "youtubeAnalytics.reports.query";
 
 /** Analytics クエリで参照する最小の列ヘッダ形状。 */

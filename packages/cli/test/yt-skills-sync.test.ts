@@ -9,27 +9,20 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-// Importing core by its package name + ADR-0004 registry subpath from the *cli*
-// package is the real cli→core `workspace:*` resolution under test. The
-// skills.sync entry lands in the registry as part of #742.
 import { REGISTRY } from "@youtube-automation/core/registry";
 
-// Repo root is three levels up from packages/cli/test/.
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 
-// `bunx yt ...` 相当の e2e。citty dispatcher (bin/yt.ts) を実プロセスで起動する。
-// runYt は repoRoot を cwd にする (既存 yt-skills.test.ts と同じ)。runYtIn は
-// --asset all のデフォルト target (cwd 相対) を temp ディレクトリで検証するため、
-// 任意の cwd で起動する変種。
-const runYt = (...argv: string[]) =>
-  Bun.spawnSync(["bun", "packages/cli/bin/yt.ts", ...argv], { cwd: repoRoot });
+const runTayk = (...argv: string[]) =>
+  Bun.spawnSync(["bun", "packages/cli/bin/tayk.ts", ...argv], {
+    cwd: repoRoot,
+  });
 
-const runYtIn = (cwd: string, ...argv: string[]) =>
-  Bun.spawnSync(["bun", join(repoRoot, "packages/cli/bin/yt.ts"), ...argv], {
+const runTaykIn = (cwd: string, ...argv: string[]) =>
+  Bun.spawnSync(["bun", join(repoRoot, "packages/cli/bin/tayk.ts"), ...argv], {
     cwd,
   });
 
-// Per-test temp dirs, torn down after each case.
 const tmpDirs: string[] = [];
 const makeTmp = (prefix: string): string => {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -48,17 +41,13 @@ afterEach(() => {
 
 describe("core registry — skills.sync entry (ADR-0004 contract)", () => {
   test("declares no deps and a human-readable description", () => {
-    // Given the registry entry
     const entry = REGISTRY["skills.sync"];
 
-    // Then deps is the empty declaration and the description lives in core next
-    // to the schema (locality).
     expect(entry.deps).toEqual([]);
     expect(entry.description.length).toBeGreaterThan(0);
   });
 
   test("inputSchema parses an asset + target and run returns an ok Result", async () => {
-    // Given an input parsed through the entry's own schema (target → a temp dir)
     const tmp = makeTmp("cli-skills-sync-");
     const target = join(tmp, ".claude", "skills");
     const input = REGISTRY["skills.sync"].inputSchema.parse({
@@ -66,10 +55,8 @@ describe("core registry — skills.sync entry (ADR-0004 contract)", () => {
       target,
     });
 
-    // When the entry runs (deps-free, so {} is the full slice)
     const result = await REGISTRY["skills.sync"].run(input, {});
 
-    // Then it succeeds and the payload matches the outputSchema contract.
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.asset).toBe("skills");
@@ -79,14 +66,12 @@ describe("core registry — skills.sync entry (ADR-0004 contract)", () => {
   });
 });
 
-describe("yt skills sync --asset skills --target <dir>", () => {
+describe("tayk skills sync --asset skills --target <dir>", () => {
   test("exits 0, copies skills, and creates the .agents/skills symlink", () => {
-    // Given a standard-layout target under a temp dir
-    const tmp = makeTmp("yt-skills-sync-");
+    const tmp = makeTmp("tayk-skills-sync-");
     const target = join(tmp, ".claude", "skills");
 
-    // When `yt skills sync --asset skills --target <dir>` runs
-    const proc = runYt(
+    const proc = runTayk(
       "skills",
       "sync",
       "--asset",
@@ -95,8 +80,6 @@ describe("yt skills sync --asset skills --target <dir>", () => {
       target
     );
 
-    // Then it exits cleanly, the skills land in the target, and the Codex
-    // discovery mirror is a relative symlink to ../.claude/skills.
     expect(proc.exitCode).toBe(0);
     expect(existsSync(target)).toBe(true);
     const link = join(tmp, ".agents", "skills");
@@ -105,12 +88,10 @@ describe("yt skills sync --asset skills --target <dir>", () => {
   });
 
   test("--json prints a parseable SkillSyncOutput payload", () => {
-    // Given the same sync with --json
-    const tmp = makeTmp("yt-skills-sync-");
+    const tmp = makeTmp("tayk-skills-sync-");
     const target = join(tmp, ".claude", "skills");
 
-    // When run with --json
-    const proc = runYt(
+    const proc = runTayk(
       "skills",
       "sync",
       "--asset",
@@ -120,7 +101,6 @@ describe("yt skills sync --asset skills --target <dir>", () => {
       "--json"
     );
 
-    // Then stdout is the service output as JSON, with no cli reshaping.
     expect(proc.exitCode).toBe(0);
     const parsed = JSON.parse(proc.stdout.toString()) as {
       agentsSkillsLink: string | null;
@@ -134,14 +114,12 @@ describe("yt skills sync --asset skills --target <dir>", () => {
   });
 });
 
-describe("yt skills sync --asset claude-md --target <file>", () => {
+describe("tayk skills sync --asset claude-md --target <file>", () => {
   test("exits 0 and writes the CLAUDE.md file (AC#5)", () => {
-    // Given a target file path under a temp dir
-    const tmp = makeTmp("yt-claude-md-sync-");
+    const tmp = makeTmp("tayk-claude-md-sync-");
     const target = join(tmp, ".claude", "CLAUDE.md");
 
-    // When `yt skills sync --asset claude-md --target <file>` runs
-    const proc = runYt(
+    const proc = runTayk(
       "skills",
       "sync",
       "--asset",
@@ -150,41 +128,37 @@ describe("yt skills sync --asset claude-md --target <file>", () => {
       target
     );
 
-    // Then it exits cleanly and the template is written to the target path.
     expect(proc.exitCode).toBe(0);
     expect(existsSync(target)).toBe(true);
   });
 });
 
-describe("yt skills sync --asset all — guard against --target", () => {
+describe("tayk skills sync --asset all — guard against --target", () => {
   test("exits 2 with a stderr message and writes nothing", () => {
-    // Given `--asset all` combined with `--target` (ambiguous: per-asset default
-    // targets differ, so a single target would silently misplace an asset).
-    const tmp = makeTmp("yt-skills-sync-");
+    const tmp = makeTmp("tayk-skills-sync-");
     const target = join(tmp, "x");
 
-    // When run
-    const proc = runYt("skills", "sync", "--asset", "all", "--target", target);
+    const proc = runTayk(
+      "skills",
+      "sync",
+      "--asset",
+      "all",
+      "--target",
+      target
+    );
 
-    // Then it is a usage error (exit 2) with a non-empty stderr, and the target
-    // is never created (the guard fires before any write).
     expect(proc.exitCode).toBe(2);
     expect(proc.stderr.toString().length).toBeGreaterThan(0);
     expect(existsSync(target)).toBe(false);
   });
 });
 
-describe("yt skills sync — default asset 'all' resolves per-asset default targets", () => {
+describe("tayk skills sync — default asset 'all' resolves per-asset default targets", () => {
   test("bare `skills sync` syncs both skills and claude-md under the working dir", () => {
-    // Given a temp working dir (so the cwd-relative default targets are safe to
-    // write). `yt skills sync` with no flags defaults asset to 'all'.
-    const cwd = makeTmp("yt-skills-sync-all-");
+    const cwd = makeTmp("tayk-skills-sync-all-");
 
-    // When run from that working dir
-    const proc = runYtIn(cwd, "skills", "sync");
+    const proc = runTaykIn(cwd, "skills", "sync");
 
-    // Then both assets reach their per-asset defaults: skills → .claude/skills
-    // (+ the .agents/skills mirror) and claude-md → .claude/CLAUDE.md.
     expect(proc.exitCode).toBe(0);
     expect(existsSync(join(cwd, ".claude", "skills"))).toBe(true);
     expect(existsSync(join(cwd, ".claude", "CLAUDE.md"))).toBe(true);
@@ -194,11 +168,10 @@ describe("yt skills sync — default asset 'all' resolves per-asset default targ
   });
 });
 
-describe("yt skills sync — usage errors", () => {
+describe("tayk skills sync — usage errors", () => {
   test("an unknown --asset exits non-zero", () => {
-    // Given an asset value outside { all, skills, claude-md }
-    const tmp = makeTmp("yt-skills-sync-");
-    const proc = runYt(
+    const tmp = makeTmp("tayk-skills-sync-");
+    const proc = runTayk(
       "skills",
       "sync",
       "--asset",
@@ -207,7 +180,6 @@ describe("yt skills sync — usage errors", () => {
       join(tmp, "x")
     );
 
-    // Then the process fails (usage / validation error → non-zero exit).
     expect(proc.exitCode).not.toBe(0);
   });
 });

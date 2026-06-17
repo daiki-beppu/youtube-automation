@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  QuotaExhaustedError,
-  YouTubeAPIError,
-} from "@youtube-automation/core";
+import { QuotaExhaustedError, YouTubeAPIError } from "@youtube-automation/core";
 
 import {
   parseRetryAfterSeconds,

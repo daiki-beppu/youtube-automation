@@ -554,7 +554,9 @@ describe("shouldRetryAnalyticsQuery", () => {
     // Given the normalizer produced a 503 YouTubeAPIError
     // Then the failure is treated as transient and retried
     expect(
-      shouldRetryAnalyticsQuery(new YouTubeAPIError("boom", { statusCode: 503 }))
+      shouldRetryAnalyticsQuery(
+        new YouTubeAPIError("boom", { statusCode: 503 })
+      )
     ).toBe(true);
   });
 
@@ -562,7 +564,9 @@ describe("shouldRetryAnalyticsQuery", () => {
     // Given the lowest 5xx status (HTTP_SERVER_ERROR_MIN)
     // Then it is still transient
     expect(
-      shouldRetryAnalyticsQuery(new YouTubeAPIError("boom", { statusCode: 500 }))
+      shouldRetryAnalyticsQuery(
+        new YouTubeAPIError("boom", { statusCode: 500 })
+      )
     ).toBe(true);
   });
 
