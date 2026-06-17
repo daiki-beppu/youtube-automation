@@ -16,8 +16,8 @@ import {
   listSkillsService,
   SkillListInputSchema,
   SkillListOutputSchema,
-} from "@youtube-automation/core/skills-sync";
-import type { SkillListInput } from "@youtube-automation/core/skills-sync";
+} from "@tayk/core/skills-sync";
+import type { SkillListInput } from "@tayk/core/skills-sync";
 
 // Repo root is three levels up from packages/core/test/.
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");

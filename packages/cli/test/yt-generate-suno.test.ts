@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { REGISTRY } from "@youtube-automation/core/registry";
+import { REGISTRY } from "@tayk/core/registry";
 
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");

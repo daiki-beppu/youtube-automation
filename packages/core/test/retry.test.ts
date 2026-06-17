@@ -10,11 +10,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import {
-  defaultShouldRetry,
-  QuotaExhaustedError,
-  withRetry,
-} from "@youtube-automation/core";
+import { defaultShouldRetry, QuotaExhaustedError, withRetry } from "@tayk/core";
 
 // Records every injected sleep so no test waits on real timers.
 const makeSleepRecorder = () => {

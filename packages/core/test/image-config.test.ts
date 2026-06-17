@@ -19,8 +19,8 @@ import {
   getProvider,
   OPENAI_SUPPORTED_ASPECT_RATIOS,
   parseImageGenerationConfig,
-} from "@youtube-automation/core/image";
-import type { ImageGenerationConfig } from "@youtube-automation/core/image";
+} from "@tayk/core/image";
+import type { ImageGenerationConfig } from "@tayk/core/image";
 
 // --- shared aspect-ratio constants -----------------------------------------
 // (RETRY_MAX / RETRY_BACKOFF were promoted into the withRetry defaults in

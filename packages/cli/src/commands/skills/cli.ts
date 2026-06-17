@@ -1,11 +1,8 @@
 import process from "node:process";
 
-import { REGISTRY } from "@youtube-automation/core/registry";
-import { SYNC_ASSETS } from "@youtube-automation/core/skills-sync";
-import type {
-  SkillListOutput,
-  SkillSyncOutput,
-} from "@youtube-automation/core/skills-sync";
+import { REGISTRY } from "@tayk/core/registry";
+import { SYNC_ASSETS } from "@tayk/core/skills-sync";
+import type { SkillListOutput, SkillSyncOutput } from "@tayk/core/skills-sync";
 import { defineCommand } from "citty";
 
 import { resolveDeps } from "../../../lib/resolve-deps.ts";

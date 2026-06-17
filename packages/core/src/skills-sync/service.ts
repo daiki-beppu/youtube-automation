@@ -28,27 +28,23 @@ import type {
   SkillSyncOutput,
 } from "./schema.ts";
 
-// 同梱 skills resource の既定パス。import.meta 基点で packages/cli/_skills を解決する
-// (packages/core/src/skills-sync/service.ts → ../../../cli/_skills)。_skills は .claude/skills への symlink。
-const DEFAULT_SKILLS_DIR = resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "..",
-  "cli",
-  "_skills"
-);
+const CLI_DIST_DIRNAME = "dist";
+const SKILLS_ASSET_DIRNAME = "_skills";
+const CLAUDE_MD_ASSET_DIRNAME = "_claude_md";
+const CLAUDE_TEMPLATE_FILENAME = "CLAUDE.template.md";
 
-// 同梱 CLAUDE.md テンプレートの既定パス (#742)。_skills と同じく import.meta 基点で
-// packages/cli/_claude_md/CLAUDE.template.md を解決する。_claude_md は .claude/CLAUDE.template.md への symlink。
-const CLAUDE_MD_SOURCE = resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "..",
-  "cli",
-  "_claude_md",
-  "CLAUDE.template.md"
+const resolveCliAssetPath = (...segments: string[]): string => {
+  const cliDir =
+    basename(import.meta.dirname) === CLI_DIST_DIRNAME
+      ? dirname(import.meta.dirname)
+      : resolve(import.meta.dirname, "..", "..", "..", "cli");
+  return resolve(cliDir, ...segments);
+};
+
+const DEFAULT_SKILLS_DIR = resolveCliAssetPath(SKILLS_ASSET_DIRNAME);
+const CLAUDE_MD_SOURCE = resolveCliAssetPath(
+  CLAUDE_MD_ASSET_DIRNAME,
+  CLAUDE_TEMPLATE_FILENAME
 );
 
 // 配布レイアウトの契約パスセグメント。複数箇所で参照するため 1 箇所で定義する。

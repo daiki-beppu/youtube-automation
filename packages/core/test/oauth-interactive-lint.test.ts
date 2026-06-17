@@ -42,7 +42,7 @@ test("oxlint errors when a packages/mcp file imports the interactive OAuth servi
   writeFileSync(
     fixtureFile,
     [
-      'import { interactiveAuthService } from "@youtube-automation/core/oauth/interactive";',
+      'import { interactiveAuthService } from "@tayk/core/oauth/interactive";',
       "",
       "export const handler = interactiveAuthService;",
       "",

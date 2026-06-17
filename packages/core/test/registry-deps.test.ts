@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { ok } from "@youtube-automation/core";
-import type { ChannelConfig } from "@youtube-automation/core/config";
+import { ok } from "@tayk/core";
+import type { ChannelConfig } from "@tayk/core/config";
 import type {
   YouTubeAnalyticsClient,
   YouTubeClient,
-} from "@youtube-automation/core/oauth/client";
-import type { DepsMap, RegistryEntry } from "@youtube-automation/core/registry";
+} from "@tayk/core/oauth/client";
+import type { DepsMap, RegistryEntry } from "@tayk/core/registry";
 import { z } from "zod";
 
 const fakeConfig = {

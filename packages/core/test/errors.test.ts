@@ -12,8 +12,8 @@ import {
   ServiceError,
   toServiceError,
   YouTubeAPIError,
-} from "@youtube-automation/core";
-import type { Result } from "@youtube-automation/core";
+} from "@tayk/core";
+import type { Result } from "@tayk/core";
 import { z } from "zod";
 
 // classifyGaxiosError is an internal cross-feature classifier (shared by the

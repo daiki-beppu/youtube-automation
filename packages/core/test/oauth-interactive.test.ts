@@ -93,7 +93,7 @@ describe("exchangeCode", () => {
 
 // Guards the public oauth surface against re-leaking implementation internals
 // (ADR-0003 §7 public-API minimization). The package.json subpath
-// "@youtube-automation/core/oauth/interactive" maps to interactive.ts, so this
+// "@tayk/core/oauth/interactive" maps to interactive.ts, so this
 // module's own exports ARE the public surface. buildAuthUrl / exchangeCode now
 // live in interactive-internal.ts (relative-only); re-exporting them here would
 // expose internals again.

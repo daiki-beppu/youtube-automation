@@ -1,25 +1,25 @@
 {
-  "name": "@youtube-automation/cli",
+  "name": "tayk",
   "version": "0.1.0-alpha.0",
-  "private": true,
   "description": "tayk command line entry point for the youtube-channels-automation TS rewrite (ADR-0004 citty dispatcher).",
   "bin": {
-    "tayk": "./bin/tayk.ts"
+    "tayk": "./dist/cli.js"
   },
   "files": [
-    "bin",
-    "lib",
-    "src",
+    "dist",
     "_skills",
     "_claude_md"
   ],
   "type": "module",
   "scripts": {
-    "prepack": "bun run scripts/bundle-symlinks.ts materialize",
+    "build": "bun build ./bin/tayk.ts --target=bun --outfile=dist/cli.js --external sharp --banner '#!/usr/bin/env bun'",
+    "prepack": "bun run build && bun run scripts/bundle-symlinks.ts materialize",
     "postpack": "bun run scripts/bundle-symlinks.ts restore"
   },
-  "dependencies": {
-    "@youtube-automation/core": "workspace:*",
+  "devDependencies": {
     "citty": "^0.2.2"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.34.0"
   }
 }

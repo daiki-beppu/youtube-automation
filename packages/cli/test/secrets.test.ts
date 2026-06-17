@@ -5,11 +5,11 @@ import { join } from "node:path";
 
 // `reset()` clears the channelDir singleton between cases so a per-test
 // CHANNEL_DIR actually takes effect (channelDir() memoizes its first resolve).
-import { reset } from "@youtube-automation/core/config";
+import { reset } from "@tayk/core/config";
 
 // Relative import of the cli's own module (#822 move target). The acceptance
 // criteria require cli callsites to reach secrets via the relative path, not a
-// re-export from @youtube-automation/core. `ConfigError` was retired in #821
+// re-export from @tayk/core. `ConfigError` was retired in #821
 // (5 名前タグ class 撤廃) — the `config:` prefix on plain Error is now the
 // single source of domain truth, routed by toServiceError.
 import {

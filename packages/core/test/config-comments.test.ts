@@ -8,7 +8,7 @@ import {
   test,
 } from "bun:test";
 
-import { loadConfig, reset } from "@youtube-automation/core/config";
+import { loadConfig, reset } from "@tayk/core/config";
 
 import {
   cleanupChannels,

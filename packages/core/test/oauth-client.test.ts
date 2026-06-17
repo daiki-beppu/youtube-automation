@@ -15,7 +15,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildYouTubeAnalyticsClient,
   buildYouTubeClient,
-} from "@youtube-automation/core/oauth/client";
+} from "@tayk/core/oauth/client";
 
 // A placeholder google-auth-library Credentials object. `expiry_date` sits in the
 // year 2100 so nothing here is treated as expired; the factory must not care.

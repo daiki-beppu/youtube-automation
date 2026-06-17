@@ -18,7 +18,7 @@ import { join, resolve } from "node:path";
 
 // reset() clears the channelDir / config singletons between cases so a per-test
 // CHANNEL_DIR actually takes effect (both memoize their first resolve).
-import { reset } from "@youtube-automation/core/config";
+import { reset } from "@tayk/core/config";
 
 import { resolveDeps } from "../lib/resolve-deps.ts";
 

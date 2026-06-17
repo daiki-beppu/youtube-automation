@@ -58,22 +58,23 @@ git ls-remote --heads origin "release/v*"
 ### 6. CI が green（推奨、必須ではない）
 
 ```bash
-gh run list --branch main --limit 1 --json status,conclusion
+main_sha=$(git rev-parse origin/main)
+gh run list --branch main --commit "${main_sha}" --limit 5 --json status,conclusion,headSha
 # → status=completed, conclusion=success
 ```
 
 main の最新コミットで CI が落ちている場合は警告し、ユーザーに続行可否を確認。
 
-### 7. uv が利用可能（必須）
+### 7. bun が利用可能（必須）
 
-`pyproject.toml::version` の bump 後に `uv lock` を実行して `uv.lock` を同期するため、`uv` が PATH 上にあることを確認する。
+`packages/cli/package.json::version` の bump 後に `bun install --lockfile-only` を実行して `bun.lock` を同期するため、`bun` が PATH 上にあることを確認する。
 
 ```bash
-which uv
+which bun
 # → /etc/profiles/... など何らかの path が返ること
 ```
 
-入っていない場合は `nix develop`（devShell）または `direnv exec . uv lock` 経由で呼び出すか、`uv` をインストールしてから prepare を実行する。`uv.lock` の同期は SKILL.md Phase 1-5 で必須化されている（#515 の再発防止策）。
+入っていない場合は `nix develop`（devShell）または `direnv exec . bun install --lockfile-only` 経由で呼び出すか、`bun` をインストールしてから prepare を実行する。`bun.lock` の同期は SKILL.md Phase 1-5 で必須化されている。
 
 ---
 
@@ -85,7 +86,7 @@ which uv
 
 **対応**: `./changelog-promotion.md` の「Unreleased 内容が累積している場合の対応」セクション参照。「v<VER> リリースに累積で含まれる」として全体昇格する。
 
-### ケース B: pyproject.toml::version が既に bump 済み
+### ケース B: packages/cli/package.json::version が既に bump 済み
 
 ローカルで手で bump して push し忘れたケース、または前回 prepare が中途半端に終わったケース。
 
@@ -93,17 +94,19 @@ which uv
 - 一致 → bump 不要、CHANGELOG 昇格と PR 作成のみ実施
 - 不一致 → どちらが正しいかユーザーに確認
 
-### ケース C: uv.lock が pyproject.toml と既に乖離している
+### ケース C: bun.lock が package metadata と既に乖離している
 
-main 時点で既に `pyproject.toml::version` と `uv.lock::youtube-channels-automation.version` が食い違っているケース（#515 の既往）。
+main 時点で既に `package.json::name` と `bun.lock` root workspace name、または `packages/cli/package.json::version` と `bun.lock` CLI workspace version が食い違っているケース。
 
 ```bash
-pyproject_ver=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/version = "(.+)"/\1/')
-lock_ver=$(grep -A1 'name = "youtube-channels-automation"' uv.lock | grep '^version' | head -1 | sed -E 's/version = "(.+)"/\1/')
-echo "pyproject=${pyproject_ver} lock=${lock_ver}"
+package_name=$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).name)')
+lock_name=$(grep -A2 '^    "": {' bun.lock | grep '"name":' | head -1 | sed -E 's/.*"name": "([^"]+)".*/\1/')
+package_ver=$(bun -e 'console.log(JSON.parse(await Bun.file("packages/cli/package.json").text()).version)')
+lock_ver=$(grep -A4 '^    "packages/cli": {' bun.lock | grep '"version":' | head -1 | sed -E 's/.*"version": "([^"]+)".*/\1/')
+echo "root=${package_name}/${lock_name} cli=${package_ver}/${lock_ver}"
 ```
 
-**対応**: prepare の Phase 1-5 で必ず `uv lock` が走るため、リリース PR の bump 結果として同じ commit に lock 同期差分が乗る。事前に hotfix を入れる必要はないが、CHANGELOG に「`uv.lock` を v<VER> に同期」と明示しておくとレビューしやすい。
+**対応**: prepare の Phase 1-5 で必ず `bun install --lockfile-only` が走るため、リリース PR の bump 結果として同じ commit に lock 同期差分が乗る。事前に hotfix を入れる必要はないが、CHANGELOG に「`bun.lock` を v<VER> に同期」と明示しておくとレビューしやすい。
 
 ### ケース D: rebase が必要
 
@@ -135,12 +138,12 @@ prepare 完了直前にユーザーへ提示するサマリ:
 PR: https://github.com/daiki-beppu/youtube-automation/pull/NNN
 
 変更内容:
-- pyproject.toml::version → X.Y.Z
-- uv.lock::youtube-channels-automation.version → X.Y.Z（`uv lock` 実行）
+- packages/cli/package.json::version → X.Y.Z
+- bun.lock workspace metadata → X.Y.Z（`bun install --lockfile-only` 実行）
 - CHANGELOG.md [Unreleased] → [X.Y.Z] - YYYY-MM-DD 昇格
 
 次のステップ:
 1. PR をレビュー → マージ
-2. マージ後、`/automation-release` を再実行 → publish フェーズ（tag + GitHub Release）
-3. 各チャンネルリポジトリで `/automation-update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
+2. マージ後、`/automation-release` を再実行 → publish フェーズ（tag + GitHub Release + npm alpha publish）
+3. 各チャンネルリポジトリで `bunx tayk <cmd>` を使って追従
 ```

@@ -23,7 +23,7 @@ import { join } from "node:path";
 
 // reset() clears the channelDir singleton between cases so a per-test
 // CHANNEL_DIR actually takes effect (channelDir() memoizes its first resolve).
-import { reset } from "@youtube-automation/core/config";
+import { reset } from "@tayk/core/config";
 
 import {
   getYouTubeAnalyticsClient,

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { QuotaExhaustedError } from "@youtube-automation/core";
+import { QuotaExhaustedError } from "@tayk/core";
 import {
   TrafficSourceAnalyticsInput,
   TrafficSourceAnalyticsOutput,
   collectTrafficSourceService,
-} from "@youtube-automation/core/analytics/traffic-source";
+} from "@tayk/core/analytics/traffic-source";
 
 type TrafficSourceInput = Parameters<typeof collectTrafficSourceService>[0];
 type TrafficSourceDeps = Parameters<typeof collectTrafficSourceService>[1];

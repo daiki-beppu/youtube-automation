@@ -21,7 +21,7 @@ import {
   sceneForTheme,
   tagsDefault,
   tagsForCollection,
-} from "@youtube-automation/core/config";
+} from "@tayk/core/config";
 
 import {
   cleanupChannels,

@@ -1,6 +1,5 @@
 // Skeleton entry for the core package. Real domain logic is migrated in later #727 issues.
-export const greeting = (): string =>
-  "youtube-channels-automation core (TS rewrite skeleton)";
+export const greeting = (): string => "tayk core (TS rewrite skeleton)";
 
 export {
   AutomationError,

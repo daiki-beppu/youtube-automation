@@ -26,7 +26,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { collectVideoAnalyticsService } from "@youtube-automation/core/analytics/video";
+import { collectVideoAnalyticsService } from "@tayk/core/analytics/video";
 
 // Derive input / deps shapes from the service signature so the test does not
 // hard-code the exported type names (oauth-refresh.test.ts:25-26).

@@ -34,8 +34,8 @@ import {
   test,
 } from "bun:test";
 
-import { loadConfig, reset } from "@youtube-automation/core/config";
-import type { ChannelConfig } from "@youtube-automation/core/config";
+import { loadConfig, reset } from "@tayk/core/config";
+import type { ChannelConfig } from "@tayk/core/config";
 import {
   buildCompleteCollectionDescription,
   buildShortDescription,
@@ -51,7 +51,7 @@ import {
   referencedPlaceholders,
   tagsForCollection,
   validateScenePhrases,
-} from "@youtube-automation/core/metadata";
+} from "@tayk/core/metadata";
 
 import {
   cleanupChannels,

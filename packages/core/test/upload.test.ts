@@ -41,7 +41,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { uploadVideoService } from "@youtube-automation/core/upload";
+import { uploadVideoService } from "@tayk/core/upload";
 
 // Derive input / deps shapes from the service signature so the test does not
 // hard-code the exported type names (analytics-video.test.ts:33-36).

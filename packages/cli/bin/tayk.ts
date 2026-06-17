@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { defineCommand, runMain } from "citty";
 
 import { generateSunoCommand } from "../src/commands/generate-suno/cli.ts";

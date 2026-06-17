@@ -8,17 +8,17 @@
 
 import { join } from "node:path";
 
-import { channelDir } from "@youtube-automation/core/config";
+import { channelDir } from "@tayk/core/config";
 import {
   buildYouTubeAnalyticsClient,
   buildYouTubeClient,
-} from "@youtube-automation/core/oauth/client";
+} from "@tayk/core/oauth/client";
 import type {
   YouTubeAnalyticsClient,
   YouTubeClient,
-} from "@youtube-automation/core/oauth/client";
-import { interactiveAuthService } from "@youtube-automation/core/oauth/interactive";
-import { refreshTokenService } from "@youtube-automation/core/oauth/refresh";
+} from "@tayk/core/oauth/client";
+import { interactiveAuthService } from "@tayk/core/oauth/interactive";
+import { refreshTokenService } from "@tayk/core/oauth/refresh";
 
 import { resolveClientSecretsJson } from "./secrets.ts";
 import { readTokenJson, writeTokenJson } from "./token.ts";

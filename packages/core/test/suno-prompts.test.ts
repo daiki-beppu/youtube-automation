@@ -11,16 +11,16 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { REGISTRY } from "@youtube-automation/core/registry";
-import * as sunoPromptsPublicApi from "@youtube-automation/core/suno-prompts";
+import { REGISTRY } from "@tayk/core/registry";
+import * as sunoPromptsPublicApi from "@tayk/core/suno-prompts";
 import {
   generateSunoPromptsService,
   GenerateSunoInputSchema,
-} from "@youtube-automation/core/suno-prompts";
+} from "@tayk/core/suno-prompts";
 import type {
   GenerateSunoInput,
   GenerateSunoOutput,
-} from "@youtube-automation/core/suno-prompts";
+} from "@tayk/core/suno-prompts";
 
 const tmpDirs: string[] = [];
 

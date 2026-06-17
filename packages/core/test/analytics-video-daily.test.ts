@@ -13,10 +13,10 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { QuotaExhaustedError } from "@youtube-automation/core";
-import { collectVideoDailyAnalyticsService } from "@youtube-automation/core/analytics/video-daily";
-import type { CollectVideoDailyAnalyticsInput } from "@youtube-automation/core/analytics/video-daily";
-import type { YouTubeAnalyticsClient } from "@youtube-automation/core/oauth/client";
+import { QuotaExhaustedError } from "@tayk/core";
+import { collectVideoDailyAnalyticsService } from "@tayk/core/analytics/video-daily";
+import type { CollectVideoDailyAnalyticsInput } from "@tayk/core/analytics/video-daily";
+import type { YouTubeAnalyticsClient } from "@tayk/core/oauth/client";
 
 // --- fakes ----------------------------------------------------------------
 

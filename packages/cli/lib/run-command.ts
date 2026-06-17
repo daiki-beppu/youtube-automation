@@ -1,6 +1,6 @@
 import process from "node:process";
 
-import type { Result, ServiceError } from "@youtube-automation/core";
+import type { Result, ServiceError } from "@tayk/core";
 
 // ADR-0004 §4: Result→exit-code の CLI 側終端を 1 箇所に集約する共通 helper。
 // 各 command が独自に exit code を決めない。

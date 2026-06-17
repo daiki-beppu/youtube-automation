@@ -4,7 +4,7 @@ import {
   AudienceAnalyticsInput,
   AudienceAnalyticsOutput,
   collectAudienceService,
-} from "@youtube-automation/core/analytics/audience";
+} from "@tayk/core/analytics/audience";
 
 type AudienceInput = Parameters<typeof collectAudienceService>[0];
 type AudienceDeps = Parameters<typeof collectAudienceService>[1];
