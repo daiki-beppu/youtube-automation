@@ -195,6 +195,6 @@ Texture: warm tape saturation
 
 **注意**:
 - `[Mixing Notes]` と `[Instrument Notes]` は Suno の公式タグではないが、Lyrics 欄に自然言語で書くと Suno が参考にする
-- `auto_lyrics_structure: true` の場合、`yt-generate-suno` が `[Instrumental]` と `[Extended Outro]` を自動付加する
+- `auto_lyrics_structure: true` の場合、`bunx tayk generate-suno` が `[Instrumental]` と `[Extended Outro]` を自動付加する
 - Mixing Notes はバランスの指示（何が前面、何が背面）に集中する
 - Instrument Notes は Quality Rules の楽器形容詞ルールに従って記述する

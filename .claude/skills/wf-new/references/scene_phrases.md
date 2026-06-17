@@ -1,4 +1,4 @@
-# `yt-populate-scene-phrases` リファレンス
+# `bunx tayk populate-scene-phrases` リファレンス
 
 コレクションの `workflow-state.json.scene_phrases` を多言語翻訳で投入する CLI。
 
@@ -11,7 +11,7 @@
 ## Usage
 
 ```bash
-uv run yt-populate-scene-phrases <collection-dir-name> [options]
+bunx tayk populate-scene-phrases <collection-dir-name> [options]
 ```
 
 `<collection-dir-name>` は `collections/planning/` または `collections/live/` 配下のディレクトリ名（例: `20260322-rjn-city-collection`）。
@@ -37,13 +37,13 @@ uv run yt-populate-scene-phrases <collection-dir-name> [options]
 ## 出力例
 
 ```bash
-$ uv run yt-populate-scene-phrases 20260322-rjn-city-collection
+$ bunx tayk populate-scene-phrases 20260322-rjn-city-collection
 INFO: Gemini 翻訳リクエスト: model=gemini-2.5-pro, langs=['ja', 'ko', 'es', ...]
 ✅ 20260322-rjn-city-collection: scene_phrases に 16 言語を書き込みました
 ```
 
 ```bash
-$ uv run yt-populate-scene-phrases 20260322-rjn-city-collection --dry-run
+$ bunx tayk populate-scene-phrases 20260322-rjn-city-collection --dry-run
 {
   "en": "Late-night neon city, jazz between rain and streetlights",
   "ja": "深夜のネオン街、雨と街灯の間に流れるジャズ",
@@ -64,6 +64,6 @@ $ uv run yt-populate-scene-phrases 20260322-rjn-city-collection --dry-run
 
 ## 関連
 
-- 検証: `yt-metadata-audit` が `scene_phrases` の `en` + `supported_languages` 完全性を検証する
+- 検証: `bunx tayk metadata-audit` が `scene_phrases` の `en` + `supported_languages` 完全性を検証する
 - メタデータ生成: `metadata_generator.py::_load_scene_phrases` が `workflow-state.json` から読み込んでタイトル・localizations を生成する
 - アップロード時 preflight: `youtube_auto_uploader.py` が `scene_phrases` の言語欠落を検出すると upload が中断する
