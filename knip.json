@@ -3,8 +3,7 @@
   "workspaces": {
     ".": {
       "entry": [],
-      "project": [],
-      "ignoreDependencies": ["takt"]
+      "project": []
     },
     "packages/*": {
       "entry": ["src/index.ts", "src/cli/*.ts", "bin/*.ts", "*/index.ts"],
