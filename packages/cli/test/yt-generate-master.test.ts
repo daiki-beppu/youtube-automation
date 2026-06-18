@@ -87,38 +87,32 @@ describe("core registry - master.generate entry visible from cli package", () =>
 });
 
 describe("tayk generate-master - smoke", () => {
-  test(
-    "should generate a master file through the dispatcher and print JSON output",
-    () => {
-      const { channelDir, collectionDir } = writeFixture();
+  test("should generate a master file through the dispatcher and print JSON output", () => {
+    const { channelDir, collectionDir } = writeFixture();
 
-      const proc = runTayk(
-        { env: { CHANNEL_DIR: channelDir } },
-        "generate-master",
-        collectionDir,
-        "--json"
-      );
+    const proc = runTayk(
+      { env: { CHANNEL_DIR: channelDir } },
+      "generate-master",
+      collectionDir,
+      "--json"
+    );
 
-      expect(proc.exitCode).toBe(0);
-      const parsed = JSON.parse(proc.stdout.toString()) as {
-        audioExt: string;
-        copied: boolean;
-        inputCount: number;
-        outputPath: string;
-      };
-      expect(parsed).toMatchObject({
-        audioExt: "mp3",
-        copied: true,
-        inputCount: 1,
-        outputPath: join(collectionDir, "01-master", "master.mp3"),
-      });
-      expect(existsSync(parsed.outputPath)).toBe(true);
-      expect(readFileSync(parsed.outputPath, "utf-8")).toBe(
-        "single-track-bytes"
-      );
-    },
-    10_000
-  );
+    expect(proc.exitCode).toBe(0);
+    const parsed = JSON.parse(proc.stdout.toString()) as {
+      audioExt: string;
+      copied: boolean;
+      inputCount: number;
+      outputPath: string;
+    };
+    expect(parsed).toMatchObject({
+      audioExt: "mp3",
+      copied: true,
+      inputCount: 1,
+      outputPath: join(collectionDir, "01-master", "master.mp3"),
+    });
+    expect(existsSync(parsed.outputPath)).toBe(true);
+    expect(readFileSync(parsed.outputPath, "utf-8")).toBe("single-track-bytes");
+  }, 10_000);
 
   test("should accept a collection path relative to CHANNEL_DIR", () => {
     const { channelDir, collectionDir } = writeFixture();
