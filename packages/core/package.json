@@ -11,6 +11,7 @@
     "./analytics/traffic-source": "./src/analytics/traffic-source/index.ts",
     "./analytics/video": "./src/analytics/video/index.ts",
     "./analytics/video-daily": "./src/analytics/video-daily/index.ts",
+    "./channel-init": "./src/channel-init/index.ts",
     "./config": "./src/config/index.ts",
     "./image": "./src/image/index.ts",
     "./metadata": "./src/metadata.ts",

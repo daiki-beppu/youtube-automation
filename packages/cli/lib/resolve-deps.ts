@@ -25,7 +25,8 @@ import { resolveTokenJson } from "./oauth.ts";
  * - 空 deps       → 副作用ゼロで `{}` を返す
  */
 export const resolveDeps = async <D extends keyof DepsMap>(
-  deps: readonly D[]
+  deps: readonly D[],
+  overrides?: Partial<Pick<DepsMap, "channelDir">>
 ): Promise<Pick<DepsMap, D>> => {
   const requested = new Set<keyof DepsMap>(deps);
   const resolved: Partial<DepsMap> = {};
@@ -35,7 +36,7 @@ export const resolveDeps = async <D extends keyof DepsMap>(
   }
 
   if (requested.has("channelDir")) {
-    resolved.channelDir = channelDir();
+    resolved.channelDir = overrides?.channelDir ?? channelDir();
   }
 
   const needsYt = requested.has("yt");

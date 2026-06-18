@@ -157,6 +157,26 @@ describe("resolveDeps — channelDir", () => {
 
     spawnSpy.mockRestore();
   });
+
+  test("uses an explicit channelDir override without consulting CHANNEL_DIR", async () => {
+    const envDir = makeChannelDir();
+    const overrideDir = makeChannelDir();
+    process.env.CHANNEL_DIR = envDir;
+    reset();
+    const spawnSpy = spyOn(Bun, "spawn");
+
+    const deps = await resolveDeps(["channelDir"], {
+      channelDir: overrideDir,
+    });
+
+    expect(deps.channelDir).toBe(overrideDir);
+    expect("config" in deps).toBe(false);
+    expect("yt" in deps).toBe(false);
+    expect("ytAnalytics" in deps).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    spawnSpy.mockRestore();
+  });
 });
 
 // --- yt (network-free) ---------------------------------------------------

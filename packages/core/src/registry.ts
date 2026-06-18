@@ -1,5 +1,10 @@
 import type { z } from "zod";
 
+import {
+  channelInitService,
+  ChannelInitInputSchema,
+  ChannelInitOutputSchema,
+} from "./channel-init/index.ts";
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
@@ -67,6 +72,14 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "channel.init": defineRegistryEntry({
+    deps: ["channelDir"],
+    description:
+      "チャンネルリポジトリの正準ディレクトリと config/channel/*.json を初期化する",
+    inputSchema: ChannelInitInputSchema,
+    outputSchema: ChannelInitOutputSchema,
+    run: channelInitService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",

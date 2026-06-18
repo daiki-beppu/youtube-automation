@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(ts-rewrite/core)`: `channel.init` service と `tayk channel-init` を追加し、正準ディレクトリの `.gitkeep` と `config/channel/*.json` 7 ファイルを plan→apply 3-phase で scaffold できるようにした（#1072）。
 - `feat(ts-rewrite/core)`: Traffic source 内訳（search / browse / external / suggested 等）を期間集計する `collectTrafficSourceService` を ADR-0003 準拠で実装した（#832）。`packages/core/src/analytics/traffic-source/`（schema / service / index）を新設し、Python `utils/traffic_source_analytics.py` Mixin を翻訳せず TS で新規記述。あわせて analytics 共通のエラー分類を `analytics/query-error.ts`（`toAnalyticsQueryError` / `shouldRetryAnalyticsQuery`）へ集約し、video / channel / video-daily / traffic-source の各 service から参照する。quota（429）は `withRetry` で retry せず `domain: "quota"` の Result で返す
 - `feat(ts-rewrite/core)`: resumable upload + thumbnail 圧縮 + metadata update を 1 atomic service に集約した `uploadVideoService` を ADR-0003 準拠で実装した（#837）
 - `feat(ts-rewrite/core)`: Per-video metrics（views / likes / comments / shares 等 8 指標）を YouTube Analytics API から収集する analytics video service を ADR-0003 準拠で実装した（#829）
