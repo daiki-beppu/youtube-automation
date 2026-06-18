@@ -183,6 +183,10 @@ export const resolveReferencePaths = (
     if (!existsSync(absolute)) {
       throw new Error(`validation: references が存在しません: ${reference}`);
     }
+    assertNoSymlinkInExistingPath("references", rootRealPath, absolute);
+    if (isSymlink(absolute)) {
+      throw new Error("validation: references に symlink は指定できません");
+    }
     const real = realpathSync(absolute);
     assertUnderRoot("references", rootRealPath, real);
     const stat = statSync(real);

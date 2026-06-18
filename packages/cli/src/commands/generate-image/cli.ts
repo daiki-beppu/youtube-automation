@@ -7,7 +7,6 @@ import { resolveDeps } from "../../../lib/resolve-deps.ts";
 import { emitResult } from "../../../lib/run-command.ts";
 
 const generateImageEntry = REGISTRY["image.generate"];
-const DEFAULT_IMAGE_SIZE = "2K";
 type GenerateImageEntry = typeof generateImageEntry;
 type ResolveGenerateImageDeps = (
   entryDeps: GenerateImageEntry["deps"]
@@ -34,12 +33,10 @@ export const createGenerateImageCommand = (
   return defineCommand({
     args: {
       "aspect-ratio": {
-        default: "16:9",
         description: "生成画像のアスペクト比",
         type: "string",
       },
       "image-size": {
-        default: DEFAULT_IMAGE_SIZE,
         description: "Provider に渡す解像度ヒント",
         type: "string",
       },

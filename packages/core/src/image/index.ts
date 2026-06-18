@@ -4,7 +4,7 @@
 // 公開 API:
 // - generateImageService(input, deps): ADR-0003 Result 境界（ImageProvider.generate をラップ）
 // - GenerateImageInput / GenerateImageOutput: service 境界の zod schema（+ z.infer 型）
-// - getProvider(config): ImageGenerationConfig から ImageProvider 実装にディスパッチ
+// - createImageProvider(config, deps): ImageGenerationConfig から ImageProvider 実装にディスパッチ
 // - parseImageGenerationConfig(raw): skill-config から ImageGenerationConfig を構築
 // - ImageProvider / ImageGenerationRequest / PersistImage: 抽象契約（1-attempt、#959。
 //   リトライは core root の withRetry を service が所有する）
@@ -13,7 +13,14 @@
 import type { ImageProvider } from "./base.ts";
 import type { ImageGenerationConfig } from "./config.ts";
 import { GeminiImageProvider } from "./gemini.ts";
+import type { GeminiProviderDeps } from "./gemini.ts";
 import { OpenAIImageProvider } from "./openai.ts";
+import type { OpenAIProviderDeps } from "./openai.ts";
+
+export interface ImageProviderFactoryDeps {
+  readonly createGeminiClient?: GeminiProviderDeps["createClient"];
+  readonly createOpenAIClient?: OpenAIProviderDeps["createClient"];
+}
 
 export {
   type ImageGenerationRequest,
@@ -27,8 +34,6 @@ export {
   type OpenAIConfig,
   parseImageGenerationConfig,
 } from "./config.ts";
-export { GeminiImageProvider, type GeminiProviderDeps } from "./gemini.ts";
-export { OpenAIImageProvider, type OpenAIProviderDeps } from "./openai.ts";
 export { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
 export { generateImageService } from "./service.ts";
 
@@ -37,12 +42,25 @@ export { generateImageService } from "./service.ts";
  *
  * `provider` が {gemini, openai} 以外（手組みの不正値など）なら `config:` prefix Error で fail fast。
  */
-export const getProvider = (config: ImageGenerationConfig): ImageProvider => {
+export const createImageProvider = (
+  config: ImageGenerationConfig,
+  deps: ImageProviderFactoryDeps = {}
+): ImageProvider => {
   if (config.provider === "gemini") {
-    return new GeminiImageProvider(config.gemini);
+    return new GeminiImageProvider(
+      config.gemini,
+      deps.createGeminiClient === undefined
+        ? undefined
+        : { createClient: deps.createGeminiClient }
+    );
   }
   if (config.provider === "openai") {
-    return new OpenAIImageProvider(config.openai);
+    return new OpenAIImageProvider(
+      config.openai,
+      deps.createOpenAIClient === undefined
+        ? undefined
+        : { createClient: deps.createOpenAIClient }
+    );
   }
   const { provider } = config as { provider: string };
   throw new Error(`config: 未対応の provider=${JSON.stringify(provider)}`);

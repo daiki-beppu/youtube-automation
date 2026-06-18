@@ -116,9 +116,10 @@ export class GeminiImageProvider implements ImageProvider {
     const references = req.references ?? [];
     // req.imageSize が空のときのみ config の既定解像度に委ねる（Python と同じ挙動）。
     const imageSize = req.imageSize || this.config.imageSize;
+    const aspectRatio = req.aspectRatio || "16:9";
     const params = {
       config: {
-        imageConfig: { aspectRatio: req.aspectRatio, imageSize },
+        imageConfig: { aspectRatio, imageSize },
         responseModalities: ["IMAGE", "TEXT"],
       },
       contents: buildContents(req.prompt, references),

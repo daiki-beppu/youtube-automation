@@ -34,11 +34,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  generateImageService,
-  OpenAIImageProvider,
-} from "@youtube-automation/core/image";
+import { generateImageService } from "@youtube-automation/core/image";
 import type { GenerateImageInput } from "@youtube-automation/core/image";
+
+import { OpenAIImageProvider } from "../src/image/openai.ts";
 
 type OpenAIDeps = NonNullable<
   ConstructorParameters<typeof OpenAIImageProvider>[1]
@@ -154,10 +153,10 @@ const openaiConfig = {
 
 const request = (
   outputPath: string,
-  aspectRatio: string,
+  aspectRatio?: string,
   references?: string[]
 ): GenerateImageInput => ({
-  aspectRatio,
+  ...(aspectRatio === undefined ? {} : { aspectRatio }),
   imageSize: "",
   outputPath,
   prompt: "warm acoustic cafe afternoon",
@@ -301,6 +300,27 @@ describe("generateImageService (openai) success", () => {
     expect(params.model).toBe("gpt-image-2");
     expect(params.n).toBe(1);
     expect(recorders.sleeps).toEqual([]);
+  });
+
+  test("uses the configured aspect ratio when the request omits aspectRatio", async () => {
+    const original = new Uint8Array([0xff, 0xd8, 0xff, 5, 6, 7]);
+    const base64 = Buffer.from(original).toString("base64");
+    const { client, generateCalls } = makeOpenAIClient({
+      generate: [() => imageResponse(base64)],
+    });
+    const recorders = makeRecorders();
+    const provider = new OpenAIImageProvider(
+      { ...openaiConfig, aspectRatio: "9:16" },
+      makeDeps(client, recorders)
+    );
+
+    const bytes = await provider.generate(
+      request("collections/planning/demo/config-ratio.png")
+    );
+
+    expect([...bytes]).toEqual([...original]);
+    expect(generateCalls).toHaveLength(1);
+    expect(generateCalls[0]).toMatchObject({ size: "1024x1536" });
   });
 
   test("maps 9:16 → 1024x1536 for the portrait request", async () => {

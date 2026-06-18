@@ -147,6 +147,59 @@ describe("tayk generate-image — smoke", () => {
     }
   });
 
+  test("omits aspect and image size from service input when flags are omitted", async () => {
+    const channelDir = makeTempDir("cli-image-defaults-");
+    const registryEntry = REGISTRY["image.generate"];
+    const inputs: unknown[] = [];
+    const entry = {
+      ...registryEntry,
+      run: ((input) => {
+        inputs.push(input);
+        return Promise.resolve(
+          ok({
+            savedPath: join(channelDir, "collections/planning/demo/main.png"),
+          })
+        );
+      }) as typeof registryEntry.run,
+    };
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+    const command = createGenerateImageCommand({
+      entry,
+      resolveDeps: () =>
+        Promise.resolve({
+          channelDir,
+          imageProvider: {
+            generate: () => Promise.resolve(new Uint8Array([1])),
+            name: "fake",
+            supportedAspectRatios: [],
+          },
+        }),
+    });
+
+    try {
+      await command.run?.({
+        args: {
+          json: false,
+          output: "collections/planning/demo/main.png",
+          prompt: "a square cafe thumbnail",
+          reference: undefined,
+        },
+      } as never);
+
+      expect(inputs).toEqual([
+        {
+          outputPath: "collections/planning/demo/main.png",
+          prompt: "a square cafe thumbnail",
+          references: undefined,
+        },
+      ]);
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+  });
+
   test("formats provider config errors through the command helper", () => {
     const channelDir = writeOpenAIChannel();
 

@@ -261,6 +261,33 @@ describe("resolveDeps — imageProvider", () => {
 
     spawnSpy.mockRestore();
   });
+
+  test("uses thumbnail config defaults when generate-image flags are omitted", async () => {
+    const dir = makeChannelDir();
+    mkdirSync(join(dir, "config", "skills"), { recursive: true });
+    writeFileSync(
+      join(dir, "config", "skills", "thumbnail.yaml"),
+      [
+        "image_generation:",
+        "  provider: openai",
+        "  openai:",
+        "    aspect_ratio: '9:16'",
+      ].join("\n"),
+      "utf-8"
+    );
+    process.env.CHANNEL_DIR = dir;
+    process.env.OPENAI_API_KEY = "env-openai-key";
+    reset();
+
+    const deps = await resolveDeps(["imageProvider"]);
+    await deps.imageProvider.generate({
+      outputPath: "collections/planning/demo/main.png",
+      prompt: "a square cafe thumbnail",
+    });
+
+    expect(openAiGenerateCalls).toHaveLength(1);
+    expect(openAiGenerateCalls[0]).toMatchObject({ size: "1024x1536" });
+  });
 });
 
 // --- yt (network-free) ---------------------------------------------------

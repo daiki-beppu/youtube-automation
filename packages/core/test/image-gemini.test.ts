@@ -33,11 +33,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  GeminiImageProvider,
-  generateImageService,
-} from "@youtube-automation/core/image";
+import { generateImageService } from "@youtube-automation/core/image";
 import type { GenerateImageInput } from "@youtube-automation/core/image";
+
+import { GeminiImageProvider } from "../src/image/gemini.ts";
 
 // Constructor deps type, derived from the provider itself so the test does not
 // hard-code an exported name for the injection bag.
@@ -272,6 +271,26 @@ describe("generateImageService (gemini) success", () => {
     const params = calls[0] as { model?: unknown };
     expect(params.model).toBe("gemini-3.1-flash-image-preview");
     expect(JSON.stringify(calls[0])).toContain("16:9");
+  });
+
+  test("uses the configured image size when the request omits imageSize", async () => {
+    const base64 = Buffer.from(new Uint8Array([1, 2, 3])).toString("base64");
+    const { calls, client } = makeGeminiClient([() => imageResponse(base64)]);
+    const provider = new GeminiImageProvider(
+      { ...geminiConfig, imageSize: "4K" },
+      makeDeps(client)
+    );
+
+    await provider.generate({
+      aspectRatio: "16:9",
+      outputPath: "collections/planning/demo/config-size.png",
+      prompt: "a calm lo-fi study room at night",
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      config: { imageConfig: { aspectRatio: "16:9", imageSize: "4K" } },
+    });
   });
 
   test("inlines reference image bytes as base64 into the request", async () => {

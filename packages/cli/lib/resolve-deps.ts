@@ -13,11 +13,10 @@ import { join } from "node:path";
 import { channelDir, loadConfig } from "@youtube-automation/core/config";
 import type {
   ImageGenerationConfig,
-  OpenAIProviderDeps,
+  ImageProviderFactoryDeps,
 } from "@youtube-automation/core/image";
 import {
-  getProvider,
-  OpenAIImageProvider,
+  createImageProvider,
   parseImageGenerationConfig,
 } from "@youtube-automation/core/image";
 import {
@@ -41,25 +40,22 @@ const loadThumbnailSkillConfig = (root: string): ImageGenerationConfig => {
   return parseImageGenerationConfig(parseYaml(text));
 };
 
-const createOpenAIClientFromSecret: OpenAIProviderDeps["createClient"] =
-  async () => {
-    const apiKey = await resolveSecret("OPENAI_API_KEY");
-    const { default: OpenAI } = await import("openai");
-    return new OpenAI({ apiKey }) as unknown as Awaited<
-      ReturnType<OpenAIProviderDeps["createClient"]>
-    >;
-  };
+const createOpenAIClientFromSecret: NonNullable<
+  ImageProviderFactoryDeps["createOpenAIClient"]
+> = async () => {
+  const apiKey = await resolveSecret("OPENAI_API_KEY");
+  const { default: OpenAI } = await import("openai");
+  return new OpenAI({ apiKey }) as Awaited<
+    ReturnType<NonNullable<ImageProviderFactoryDeps["createOpenAIClient"]>>
+  >;
+};
 
 const buildImageProvider = (
   config: ImageGenerationConfig
-): DepsMap["imageProvider"] => {
-  if (config.provider !== "openai") {
-    return getProvider(config);
-  }
-  return new OpenAIImageProvider(config.openai, {
-    createClient: createOpenAIClientFromSecret,
+): DepsMap["imageProvider"] =>
+  createImageProvider(config, {
+    createOpenAIClient: createOpenAIClientFromSecret,
   });
-};
 
 /**
  * entry.deps を見て、要求された依存だけを lazy に構築した DepsMap slice を返す。

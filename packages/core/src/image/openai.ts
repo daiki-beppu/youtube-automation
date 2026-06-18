@@ -90,11 +90,12 @@ export class OpenAIImageProvider implements ImageProvider {
   }
 
   async generate(req: ImageGenerationRequest): Promise<Uint8Array> {
-    const size = ASPECT_RATIO_TO_SIZE[req.aspectRatio];
+    const aspectRatio = req.aspectRatio || this.config.aspectRatio;
+    const size = ASPECT_RATIO_TO_SIZE[aspectRatio];
     if (size === undefined) {
       // 未対応比率は client 生成・SDK 呼び出し前に fail fast（リトライしない）。
       throw new Error(
-        `config: OpenAI image_generation の aspect_ratio=${JSON.stringify(req.aspectRatio)} は未対応。` +
+        `config: OpenAI image_generation の aspect_ratio=${JSON.stringify(aspectRatio)} は未対応。` +
           `許容値: ${JSON.stringify(Object.keys(ASPECT_RATIO_TO_SIZE))}`
       );
     }

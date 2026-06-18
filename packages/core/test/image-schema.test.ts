@@ -276,6 +276,62 @@ describe("generateImageService path validation", () => {
     rmSync(outside, { force: true, recursive: true });
   });
 
+  test("rejects reference symlinks that resolve to disallowed dirs inside the channel root", async () => {
+    const channelDir = makeChannel();
+    mkdirSync(join(channelDir, "config"), { recursive: true });
+    writeFileSync(join(channelDir, "config", "secret.png"), pngBytes);
+    symlinkSync(
+      join(channelDir, "config", "secret.png"),
+      join(channelDir, "references", "linked.png")
+    );
+
+    const { calls, result } = await callService(channelDir, {
+      references: ["references/linked.png"],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(calls).toBe(0);
+    rmSync(channelDir, { force: true, recursive: true });
+  });
+
+  test("returns io error when persist fails after a single provider execution", async () => {
+    const channelDir = makeChannel();
+    let calls = 0;
+    const provider: ImageProvider = {
+      generate: () => {
+        calls += 1;
+        return Promise.resolve(pngBytes);
+      },
+      name: "fake",
+      supportedAspectRatios: [],
+    };
+
+    const result = await generateImageService(
+      {
+        aspectRatio: "16:9",
+        imageSize: "2K",
+        outputPath: "collections/planning/demo/main.png",
+        prompt: "a quiet desk with warm window light",
+      },
+      {
+        channelDir,
+        persist: () => {
+          throw new Error("disk full");
+        },
+        provider,
+        sleep: () => Promise.resolve(),
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected persist failure");
+    }
+    expect(result.error.domain).toBe("io");
+    expect(calls).toBe(1);
+    rmSync(channelDir, { force: true, recursive: true });
+  });
+
   test("rejects reference files larger than 10 MiB", async () => {
     const channelDir = makeChannel();
     const bytes = new Uint8Array(10 * 1024 * 1024 + 1);

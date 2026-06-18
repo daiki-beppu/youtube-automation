@@ -11,7 +11,7 @@
 
 import { isRecord } from "./internal.ts";
 
-// サポートする provider 識別子。`getProvider` の dispatch キーと一致させる。
+// サポートする provider 識別子。`createImageProvider` の dispatch キーと一致させる。
 const SUPPORTED_PROVIDERS = ["gemini", "openai"] as const;
 
 /** OpenAI が受理するアスペクト比（16:9 と 9:16 のみ）。 */

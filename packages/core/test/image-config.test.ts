@@ -5,7 +5,7 @@
 // Signature contract (test-first spec the draft implements), from plan §6/§7:
 //   OPENAI_SUPPORTED_ASPECT_RATIOS = ["16:9", "9:16"]
 //   parseImageGenerationConfig(raw: unknown): ImageGenerationConfig
-//   getProvider(config: ImageGenerationConfig, deps?): ImageProvider
+//   createImageProvider(config: ImageGenerationConfig, deps?): ImageProvider
 //
 // Scope note (plan §4-D): legacy `gemini_image:` namespace, `gemini_cli`/`codex`
 // providers, `thinking`, and `replace_model` are intentionally NOT ported, so an
@@ -16,7 +16,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  getProvider,
+  createImageProvider,
   OPENAI_SUPPORTED_ASPECT_RATIOS,
   parseImageGenerationConfig,
 } from "@youtube-automation/core/image";
@@ -177,16 +177,16 @@ describe("parseImageGenerationConfig fail-fast", () => {
   });
 });
 
-// --- getProvider dispatch -------------------------------------------------
+// --- createImageProvider dispatch -----------------------------------------
 
-describe("getProvider dispatch", () => {
+describe("createImageProvider dispatch", () => {
   test("returns a gemini provider with no aspect-ratio restriction", () => {
     // Given a parsed gemini config
     const config = parseImageGenerationConfig({
       image_generation: { provider: "gemini" },
     });
     // When dispatching to a provider
-    const provider = getProvider(config);
+    const provider = createImageProvider(config);
     // Then the gemini provider exposes its identifier and an empty (unrestricted)
     // aspect-ratio set (gemini.py:27-29)
     expect(provider.name).toBe("gemini");
@@ -199,7 +199,7 @@ describe("getProvider dispatch", () => {
       image_generation: { provider: "openai" },
     });
     // When dispatching to a provider
-    const provider = getProvider(config);
+    const provider = createImageProvider(config);
     // Then the openai provider advertises its restricted ratios (openai.py:43-44)
     expect(provider.name).toBe("openai");
     expect([...provider.supportedAspectRatios]).toEqual(["16:9", "9:16"]);
@@ -209,7 +209,7 @@ describe("getProvider dispatch", () => {
     // Given a hand-rolled config carrying an unsupported provider (__init__.py:75)
     const bogus = { provider: "codex" } as unknown as ImageGenerationConfig;
     // When dispatching it
-    // Then getProvider raises a config:-prefixed Error rather than returning undefined
-    expect(() => getProvider(bogus)).toThrow(/^config:/u);
+    // Then createImageProvider raises a config:-prefixed Error rather than returning undefined
+    expect(() => createImageProvider(bogus)).toThrow(/^config:/u);
   });
 });

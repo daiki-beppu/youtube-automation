@@ -13,14 +13,14 @@ import { snakeToCamel } from "../../internal/case.ts";
  *
  * - `prompt`: 生成プロンプト
  * - `outputPath`: 出力先（拡張子 .png なら PNG、.jpg なら JPEG として保存）
- * - `aspectRatio`: "16:9" / "9:16" / "1:1" など。OpenAI は 16:9 / 9:16 のみ受理
- * - `imageSize`: Provider 固有の解像度ヒント（Gemini は "1K"/"2K"/"4K" 等）
+ * - `aspectRatio`: "16:9" / "9:16" / "1:1" など。省略時は provider config に委ねる
+ * - `imageSize`: Provider 固有の解像度ヒント。省略時は provider config に委ねる
  * - `references`: 参照画像パス（省略・空なら参照なしモード）
  */
 export const GenerateImageRequest = z
   .object({
-    aspectRatio: z.string(),
-    imageSize: z.string(),
+    aspectRatio: z.string().optional(),
+    imageSize: z.string().optional(),
     outputPath: z.string(),
     prompt: z.string(),
     references: z.array(z.string()).readonly().optional(),
@@ -30,8 +30,8 @@ export type GenerateImageRequest = z.infer<typeof GenerateImageRequest>;
 
 export const GenerateImageInput = z
   .object({
-    aspect_ratio: z.string(),
-    image_size: z.string(),
+    aspect_ratio: z.string().optional(),
+    image_size: z.string().optional(),
     output_path: z.string(),
     prompt: z.string(),
     references: z.array(z.string()).optional(),
