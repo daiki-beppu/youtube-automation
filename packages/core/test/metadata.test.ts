@@ -1,5 +1,4 @@
-// Tests for packages/core/src/metadata.ts — the TS port of the pure
-// generation helpers from Python `utils/metadata_generator.py`.
+// Tests for the metadata internals and the canonical metadata service.
 //
 // Per plan §2, only the *pure* surface is ported: title/description/localization
 // /shorts/track-string generation. The audio-analysis (afinfo), workflow-state
@@ -22,7 +21,9 @@
 //   generateCompleteCollectionTitle(config, {...}) -> string
 //   buildCompleteCollectionDescription(config, {...}) -> string
 //   generateLocalizations(config, {...}) -> record
-//   tagsForCollection(tags, name) -> string[]  (re-exported through metadata)
+//   tagsForCollection(tags, name) -> string[]  (config helper)
+//   generateVideoMetadataService(input)
+//     -> Result<{title, description, tags, localizations}, ServiceError>
 
 import {
   afterAll,
@@ -34,25 +35,35 @@ import {
   test,
 } from "bun:test";
 
-import { loadConfig, reset } from "@youtube-automation/core/config";
+import {
+  loadConfig,
+  reset,
+  tagsForCollection,
+} from "@youtube-automation/core/config";
 import type { ChannelConfig } from "@youtube-automation/core/config";
+import { generateVideoMetadataService } from "@youtube-automation/core/metadata";
+
 import {
   buildCompleteCollectionDescription,
+  formatSceneTitleViolations,
+  generateCompleteCollectionTitle,
+  generateLocalizations,
+  validateScenePhrases,
+} from "../src/metadata/internals/collection.ts";
+import {
+  formatTitleTemplate,
+  referencedPlaceholders,
+} from "../src/metadata/internals/format.ts";
+import {
   buildShortDescription,
   buildShortLocalizations,
+  formatShortDurationPhrase,
+} from "../src/metadata/internals/shorts.ts";
+import {
   buildTimestampsText,
   cleanTrackTitle,
   extractPatternKey,
-  formatSceneTitleViolations,
-  formatShortDurationPhrase,
-  formatTitleTemplate,
-  generateCompleteCollectionTitle,
-  generateLocalizations,
-  referencedPlaceholders,
-  tagsForCollection,
-  validateScenePhrases,
-} from "@youtube-automation/core/metadata";
-
+} from "../src/metadata/internals/tracks.ts";
 import {
   cleanupChannels,
   minimalSections,
@@ -680,9 +691,117 @@ describe("generateLocalizations", () => {
   });
 });
 
-// --- tags re-export --------------------------------------------------------
+// --- generateVideoMetadataService -----------------------------------------
 
-describe("tagsForCollection (re-exported through metadata)", () => {
+const serviceInput = (config: ChannelConfig) => ({
+  collectionName: "battle royale",
+  config,
+  description: {
+    sectionHeaders: {
+      channelLinkTemplate: "🔗 {channel_name}:",
+      perfectFor: "🎮 Perfect for:",
+      usageAttribution: "📝 Usage & Attribution:",
+    },
+    usageLines: ["• Original AI composition", "• Free for personal use"],
+  },
+  localizations: {
+    scenePhrases: {
+      de: "Stiller Regen",
+      en: "Quiet Rain",
+      ja: "静かな雨",
+    },
+    sectionHeaders: {
+      channelLinkTemplate: "🔗 {channel_name}:",
+      trackList: "🎶 Tracklist",
+      usageAttribution: "📝 Usage",
+    },
+  },
+  timestamps: {
+    themeInline: { prefix: "── ", suffix: " ──" },
+    themeNames: { a: "Morning" },
+    tracks: [
+      { patternKey: "a", timestamp: "0:00", title: "Song A" },
+      { patternKey: "a", timestamp: "2:00", title: "Song B" },
+    ],
+  },
+  title: {
+    activities: "Study, Focus",
+    activity: "Study",
+    durationDisplay: "2 hours",
+    durationShort: "2h",
+    sceneEmoji: "",
+    scenePhrase: "Quiet Rain",
+    theme: "Village",
+  },
+});
+
+describe("generateVideoMetadataService", () => {
+  test("returns title, description, tags and localizations atomically", async () => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(serviceInput(config));
+
+    if (!result.ok) {
+      throw new Error(JSON.stringify(result.error));
+    }
+    expect(result.value.title).toBe("Village - Study");
+    expect(result.value.description).toContain("🎵 Village - Study");
+    expect(result.value.description).toContain("0:00 Song A\n2:00 Song B");
+    expect(result.value.tags).toContain("chiptune music");
+    expect(result.value.tags).toContain("battle music");
+    expect(Object.keys(result.value.localizations).toSorted()).toEqual([
+      "de",
+      "en",
+      "ja",
+    ]);
+    expect(result.value.localizations.en?.title).toBe(
+      "Quiet Rain Study, Focus"
+    );
+    expect(result.value.localizations.en?.description).toContain("0:00 Song A");
+  });
+
+  test("rejects a Result envelope at the request root", async () => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+    const invalidInput = {
+      ok: true,
+      value: serviceInput(config),
+    } as unknown as Parameters<typeof generateVideoMetadataService>[0];
+
+    const result = await generateVideoMetadataService(invalidInput);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected validation error");
+    }
+    expect(result.error.domain).toBe("validation");
+  });
+
+  test("converts an internals validation failure to a service error result", async () => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+    const input = serviceInput(config);
+
+    const result = await generateVideoMetadataService({
+      ...input,
+      localizations: {
+        ...input.localizations,
+        scenePhrases: {
+          ...input.localizations.scenePhrases,
+          en: "x".repeat(120),
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected validation error");
+    }
+    expect(result.error.domain).toBe("validation");
+  });
+});
+
+// --- tags helper -----------------------------------------------------------
+
+describe("tagsForCollection", () => {
   test("returns base + channel + matched theme tags", () => {
     const config = loadFrom(minimalSections());
 

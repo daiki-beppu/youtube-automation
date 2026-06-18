@@ -13,7 +13,7 @@
     "./analytics/video-daily": "./src/analytics/video-daily/index.ts",
     "./config": "./src/config/index.ts",
     "./image": "./src/image/index.ts",
-    "./metadata": "./src/metadata.ts",
+    "./metadata": "./src/metadata/index.ts",
     "./oauth/client": "./src/oauth/client.ts",
     "./oauth/interactive": "./src/oauth/interactive.ts",
     "./oauth/refresh": "./src/oauth/refresh.ts",

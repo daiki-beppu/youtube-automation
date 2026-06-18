@@ -5,7 +5,7 @@
 // afinfo / workflow-state.json への I/O は呼び出し側の責務とし、ここでは解析済みの
 // トラック列とテーマ表示名・装飾を引数で受け取る純関数として移植する。
 
-import { titleCase } from "../config/content.ts";
+import { titleCase } from "../../config/content.ts";
 
 export type PatternKey = "a" | "b" | "c" | "d";
 

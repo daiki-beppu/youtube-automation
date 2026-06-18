@@ -5,8 +5,8 @@
 // section_headers / usage_lines / duration / tracks など workflow-state / skill_config
 // 由来の値は引数で受け取り、ここでは fs I/O・subprocess を持たない純関数に保つ。
 
-import type { ChannelConfig } from "../config/config.ts";
-import { hashtagLine, renderOpening, titleCase } from "../config/content.ts";
+import type { ChannelConfig } from "../../config/config.ts";
+import { hashtagLine, renderOpening, titleCase } from "../../config/content.ts";
 import {
   codepointLength,
   DESCRIPTION_CODEPOINT_LIMIT,

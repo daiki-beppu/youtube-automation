@@ -4,7 +4,7 @@
 // TS でも parse 済みの `Localizations.data`（raw JSON）を直接読むため、metadata 生成が
 // 参照するキー群だけを構造として宣言する。
 
-import type { ChannelConfig } from "../config/config.ts";
+import type { ChannelConfig } from "../../config/config.ts";
 
 /** 言語別 `description` ブロック（全キー optional）。 */
 interface RawLangDescription {

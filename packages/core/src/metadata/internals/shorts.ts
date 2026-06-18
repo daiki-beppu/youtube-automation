@@ -4,8 +4,8 @@
 //
 // description / localizations は複数経路から呼ばれるため単一の事実源にする。
 
-import type { Audio } from "../config/audio.ts";
-import type { ChannelConfig } from "../config/config.ts";
+import type { Audio } from "../../config/audio.ts";
+import type { ChannelConfig } from "../../config/config.ts";
 import {
   DESCRIPTION_CODEPOINT_LIMIT,
   pyFormat,
