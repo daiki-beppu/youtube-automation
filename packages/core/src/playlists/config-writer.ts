@@ -1,5 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import type { ChannelConfig } from "../config/index.ts";
 import { PLAYLISTS_CONFIG_PATH } from "./schema.ts";
@@ -7,6 +7,23 @@ import type { PlaylistOperation } from "./types.ts";
 
 const playlistsConfigFile = (channelDir: string): string =>
   join(channelDir, PLAYLISTS_CONFIG_PATH);
+
+const atomicWriteFile = async (
+  path: string,
+  content: string
+): Promise<void> => {
+  const tempPath = join(
+    dirname(path),
+    `.${basename(path)}.${process.pid}.${Date.now()}.tmp`
+  );
+  try {
+    await writeFile(tempPath, content, "utf-8");
+    await rename(tempPath, path);
+  } catch (error) {
+    await rm(tempPath, { force: true, recursive: true });
+    throw error;
+  }
+};
 
 export const writePlaylistId = async (
   channelDir: string,
@@ -36,7 +53,7 @@ export const writePlaylistId = async (
       [key]: { ...nextEntry, playlist_id: playlistId },
     },
   };
-  await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, "utf-8");
+  await atomicWriteFile(path, `${JSON.stringify(next, null, 2)}\n`);
 };
 
 export const withCreatedPlaylistIds = (

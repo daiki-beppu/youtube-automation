@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -437,6 +437,46 @@ describe("playlists.create", () => {
     ) as { playlists: Record<string, { playlist_id?: string }> };
     expect(written.playlists.all?.playlist_id).toBe("PL_ALL");
     expect(written.playlists.focus?.playlist_id).toBe("PL_FOCUS");
+  });
+
+  test("preserves existing playlists config when atomic temp write fails", async () => {
+    const channelDir = makeTempChannel({
+      playlists: {
+        focus: { title: "Focus Sessions" },
+      },
+    });
+    const configPath = join(channelDir, "config", "channel", "playlists.json");
+    const originalConfig = readFileSync(configPath, "utf-8");
+    const nowSpy = spyOn(Date, "now").mockReturnValue(123_456);
+    mkdirSync(
+      join(
+        channelDir,
+        "config",
+        "channel",
+        `.playlists.json.${process.pid}.123456.tmp`
+      )
+    );
+    const config = makeConfig({
+      focus: { title: "Focus Sessions" },
+    });
+    const { playlistInsertCalls, yt } = makeYouTube({ playlistId: "PL_FOCUS" });
+
+    try {
+      const result = await REGISTRY["playlists.create"].run(
+        REGISTRY["playlists.create"].inputSchema.parse({ dry_run: false }),
+        makeChannelDeps(channelDir, config, yt)
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("expected io error");
+      }
+      expect(result.error.domain).toBe("io");
+      expect(playlistInsertCalls).toHaveLength(1);
+      expect(readFileSync(configPath, "utf-8")).toBe(originalConfig);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   test("rejects create targets without a non-empty title before calling playlists.insert", async () => {

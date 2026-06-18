@@ -254,6 +254,44 @@ describe("tayk playlist - smoke", () => {
     }
   });
 
+  test("should pass status through the registry execution path and stdout", async () => {
+    const runSpy = spyOn(REGISTRY["playlists.status"], "run").mockResolvedValue(
+      {
+        ok: true,
+        value: {
+          playlists: [
+            {
+              dryRun: false,
+              key: "all",
+              playlistId: "PL_ALL",
+              title: "All Videos",
+              videoCount: 2,
+            },
+          ],
+        },
+      }
+    );
+    const stdoutSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+    const exitSpy = spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`unexpected exit ${String(code)}`);
+    });
+
+    try {
+      await playlistSubCommand("status").run?.({
+        args: { json: false },
+      });
+      expect(runSpy.mock.calls[0]?.[0]).toEqual({});
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        "all: All Videos [PL_ALL] - 2 video(s)\n"
+      );
+      expect(exitSpy).not.toHaveBeenCalled();
+    } finally {
+      stdoutSpy.mockRestore();
+      exitSpy.mockRestore();
+      runSpy.mockRestore();
+    }
+  });
+
   test("should not resolve YouTube deps for create dry-run", async () => {
     const { command, resolvedDeps } = createRecordingPlaylistCommand();
     const create = command.subCommands?.create;
