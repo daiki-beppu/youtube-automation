@@ -19,7 +19,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { channelDir } from "@youtube-automation/core/config";
+import { channelDir } from "@tayk/core/config";
 // 具体キーを保持して既知名の参照を `string` 型に確定させつつ、`satisfies` で
 // 値の型 (URI 文字列) を担保する。
 /** 登録済みシークレット名と 1Password 参照 URI のテーブル (Python `_SECRET_REFS` の移植)。 */

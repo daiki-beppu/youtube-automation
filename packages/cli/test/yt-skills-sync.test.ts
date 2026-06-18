@@ -7,21 +7,11 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
-import { REGISTRY } from "@youtube-automation/core/registry";
+import { REGISTRY } from "@tayk/core/registry";
 
-const repoRoot = resolve(import.meta.dir, "..", "..", "..");
-
-const runTayk = (...argv: string[]) =>
-  Bun.spawnSync(["bun", "packages/cli/bin/tayk.ts", ...argv], {
-    cwd: repoRoot,
-  });
-
-const runTaykIn = (cwd: string, ...argv: string[]) =>
-  Bun.spawnSync(["bun", join(repoRoot, "packages/cli/bin/tayk.ts"), ...argv], {
-    cwd,
-  });
+import { expectExitCode, expectNonZeroExit, runTayk } from "./run-tayk.ts";
 
 const tmpDirs: string[] = [];
 const makeTmp = (prefix: string): string => {
@@ -72,6 +62,7 @@ describe("tayk skills sync --asset skills --target <dir>", () => {
     const target = join(tmp, ".claude", "skills");
 
     const proc = runTayk(
+      {},
       "skills",
       "sync",
       "--asset",
@@ -80,7 +71,7 @@ describe("tayk skills sync --asset skills --target <dir>", () => {
       target
     );
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     expect(existsSync(target)).toBe(true);
     const link = join(tmp, ".agents", "skills");
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
@@ -92,6 +83,7 @@ describe("tayk skills sync --asset skills --target <dir>", () => {
     const target = join(tmp, ".claude", "skills");
 
     const proc = runTayk(
+      {},
       "skills",
       "sync",
       "--asset",
@@ -101,7 +93,7 @@ describe("tayk skills sync --asset skills --target <dir>", () => {
       "--json"
     );
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     const parsed = JSON.parse(proc.stdout.toString()) as {
       agentsSkillsLink: string | null;
       asset: string;
@@ -120,6 +112,7 @@ describe("tayk skills sync --asset claude-md --target <file>", () => {
     const target = join(tmp, ".claude", "CLAUDE.md");
 
     const proc = runTayk(
+      {},
       "skills",
       "sync",
       "--asset",
@@ -128,7 +121,7 @@ describe("tayk skills sync --asset claude-md --target <file>", () => {
       target
     );
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     expect(existsSync(target)).toBe(true);
   });
 });
@@ -139,6 +132,7 @@ describe("tayk skills sync --asset all — guard against --target", () => {
     const target = join(tmp, "x");
 
     const proc = runTayk(
+      {},
       "skills",
       "sync",
       "--asset",
@@ -147,7 +141,7 @@ describe("tayk skills sync --asset all — guard against --target", () => {
       target
     );
 
-    expect(proc.exitCode).toBe(2);
+    expectExitCode(proc, 2);
     expect(proc.stderr.toString().length).toBeGreaterThan(0);
     expect(existsSync(target)).toBe(false);
   });
@@ -157,9 +151,9 @@ describe("tayk skills sync — default asset 'all' resolves per-asset default ta
   test("bare `skills sync` syncs both skills and claude-md under the working dir", () => {
     const cwd = makeTmp("tayk-skills-sync-all-");
 
-    const proc = runTaykIn(cwd, "skills", "sync");
+    const proc = runTayk({ cwd }, "skills", "sync");
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     expect(existsSync(join(cwd, ".claude", "skills"))).toBe(true);
     expect(existsSync(join(cwd, ".claude", "CLAUDE.md"))).toBe(true);
     expect(lstatSync(join(cwd, ".agents", "skills")).isSymbolicLink()).toBe(
@@ -172,6 +166,7 @@ describe("tayk skills sync — usage errors", () => {
   test("an unknown --asset exits non-zero", () => {
     const tmp = makeTmp("tayk-skills-sync-");
     const proc = runTayk(
+      {},
       "skills",
       "sync",
       "--asset",
@@ -180,6 +175,6 @@ describe("tayk skills sync — usage errors", () => {
       join(tmp, "x")
     );
 
-    expect(proc.exitCode).not.toBe(0);
+    expectNonZeroExit(proc);
   });
 });

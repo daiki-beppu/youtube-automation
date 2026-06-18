@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 // Imported by the published package name + "./config" subpath so the test
 // exercises the core `exports` map. A missing/broken subpath export fails
 // resolution here, not in tsc.
-import { channelDir, loadConfig, reset } from "@youtube-automation/core/config";
+import { channelDir, loadConfig, reset } from "@tayk/core/config";
 
 import {
   cleanupChannels,

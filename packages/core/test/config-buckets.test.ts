@@ -25,7 +25,7 @@ import {
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { loadConfig, reset } from "@youtube-automation/core/config";
+import { loadConfig, reset } from "@tayk/core/config";
 
 import {
   cleanupChannels,

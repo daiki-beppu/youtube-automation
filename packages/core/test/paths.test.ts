@@ -21,10 +21,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  CollectionPaths,
-  resolveCollectionDir,
-} from "@youtube-automation/core/paths";
+import { CollectionPaths, resolveCollectionDir } from "@tayk/core/paths";
 
 const tempRoots: string[] = [];
 

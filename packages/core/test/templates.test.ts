@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { loadTemplate } from "@youtube-automation/core/metadata";
+import { loadTemplate } from "@tayk/core/metadata";
 
 describe("loadTemplate", () => {
   test("loads the complete-collection template with its format placeholders", () => {

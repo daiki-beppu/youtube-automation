@@ -7,12 +7,12 @@
 //
 // MCP 到着時は env token + refresh のみの別 adapter を作る（interactive flow を持たない）。
 
-import { channelDir, loadConfig } from "@youtube-automation/core/config";
+import { channelDir, loadConfig } from "@tayk/core/config";
 import {
   buildYouTubeAnalyticsClient,
   buildYouTubeClient,
-} from "@youtube-automation/core/oauth/client";
-import type { DepsMap } from "@youtube-automation/core/registry";
+} from "@tayk/core/oauth/client";
+import type { DepsMap } from "@tayk/core/registry";
 
 import { resolveTokenJson } from "./oauth.ts";
 

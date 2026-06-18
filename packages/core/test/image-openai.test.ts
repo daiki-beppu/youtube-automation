@@ -28,11 +28,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  generateImageService,
-  OpenAIImageProvider,
-} from "@youtube-automation/core/image";
-import type { GenerateImageInput } from "@youtube-automation/core/image";
+import { generateImageService, OpenAIImageProvider } from "@tayk/core/image";
+import type { GenerateImageInput } from "@tayk/core/image";
 
 type OpenAIDeps = NonNullable<
   ConstructorParameters<typeof OpenAIImageProvider>[1]

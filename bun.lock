@@ -17,19 +17,18 @@
       },
     },
     "packages/cli": {
-      "name": "@youtube-automation/cli",
+      "name": "tayk",
       "version": "0.1.0-alpha.0",
       "bin": {
-        "yt": "./bin/yt.ts",
-        "yt-skills": "./bin/yt-skills.ts",
+        "tayk": "./bin/tayk.ts",
       },
       "dependencies": {
-        "@youtube-automation/core": "workspace:*",
+        "@tayk/core": "workspace:*",
         "citty": "^0.2.2",
       },
     },
     "packages/core": {
-      "name": "@youtube-automation/core",
+      "name": "@tayk/core",
       "version": "0.1.0-alpha.0",
       "dependencies": {
         "@google/genai": "^2.7.0",
@@ -401,6 +400,8 @@
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.1", "", {}, "sha512-oOAWABowe8EAbMyWKM0tYDKi8Yaox52D+HWZhAIJqQXbqe0xI/GV7FhLWqlEKreMkfDjshR5FKgi3mnle0h6Eg=="],
 
+    "@tayk/core": ["@tayk/core@workspace:packages/core"],
+
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.2", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
@@ -408,10 +409,6 @@
     "@types/node": ["@types/node@25.9.1", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-xfrlY7UD5rMJk3ZVJP8BNzS28J36YJg+xp+LPXV1TdWxr8uMH5A860QNxYDGQe/ylDSgjxE52Q9VnO7p75tJxg=="],
 
     "@types/retry": ["@types/retry@0.12.0", "", {}, "sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA=="],
-
-    "@youtube-automation/cli": ["@youtube-automation/cli@workspace:packages/cli"],
-
-    "@youtube-automation/core": ["@youtube-automation/core@workspace:packages/core"],
 
     "accepts": ["accepts@2.0.0", "", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
 
@@ -824,6 +821,8 @@
     "stubborn-utils": ["stubborn-utils@1.0.2", "", {}, "sha512-zOh9jPYI+xrNOyisSelgym4tolKTJCQd5GBhK0+0xJvcYDcwlOoxF/rnFKQ2KRZknXSG9jWAp66fwP6AxN9STg=="],
 
     "takt": ["takt@0.43.0", "", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.119", "@openai/codex-sdk": "^0.125.0", "@opencode-ai/sdk": "^1.14.24", "@opentelemetry/api": "^1.9.1", "@opentelemetry/sdk-node": "^0.217.0", "ajv": "^6.12.6", "chalk": "^5.3.0", "commander": "^12.1.0", "faceted-prompting": "^0.1.0", "traced-config": "^0.3.0", "update-notifier": "^7.3.1", "wanakana": "^5.3.1", "yaml": "^2.8.3", "zod": "^4.3.6" }, "bin": { "takt": "bin/takt", "takt-cli": "dist/app/cli/index.js", "takt-dev": "bin/takt" } }, "sha512-41dJCyZWhzTbaAOepHyeLw/eXY0aL8e2+Xai/bKlgrT7rY3Mqip0KyldzKcJxCOTO+oY8xuVLkeR/o5LTYSRSw=="],
+
+    "tayk": ["tayk@workspace:packages/cli"],
 
     "tinyexec": ["tinyexec@1.2.4", "", {}, "sha512-SHf/r48b7vOrjve9PxJo3MN5v5yuyjHvdUcrQffT3WXMUfnGmHDVbC4k3sHJaJTgZCwpUplIaAo5ANtMyp3YHg=="],
 

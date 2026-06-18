@@ -1,8 +1,8 @@
 import process from "node:process";
 
-import { err, toServiceError } from "@youtube-automation/core";
-import { REGISTRY } from "@youtube-automation/core/registry";
-import type { GenerateSunoOutput } from "@youtube-automation/core/suno-prompts";
+import { err, toServiceError } from "@tayk/core";
+import { REGISTRY } from "@tayk/core/registry";
+import type { GenerateSunoOutput } from "@tayk/core/suno-prompts";
 import { defineCommand } from "citty";
 
 import { resolveDeps } from "../../../lib/resolve-deps.ts";

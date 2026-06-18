@@ -27,11 +27,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  GeminiImageProvider,
-  generateImageService,
-} from "@youtube-automation/core/image";
-import type { GenerateImageInput } from "@youtube-automation/core/image";
+import { GeminiImageProvider, generateImageService } from "@tayk/core/image";
+import type { GenerateImageInput } from "@tayk/core/image";
 
 // Constructor deps type, derived from the provider itself so the test does not
 // hard-code an exported name for the injection bag.

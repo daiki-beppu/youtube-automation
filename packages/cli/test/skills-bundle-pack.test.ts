@@ -1,5 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -33,13 +40,42 @@ const makeTmp = (prefix: string): string => {
   return dir;
 };
 
-// Pack the CLI package into `destination` (runs prepack/postpack, which
-// materialize the bundled symlinks into real files and restore the links
-// afterward) and return the tarball's entry paths.
+const makePackWorkspace = (): string => {
+  const workspace = makeTmp("cli-pack-workspace-");
+  const packageDir = join(workspace, "packages", "cli");
+  const coreDir = join(workspace, "packages", "core");
+  mkdirSync(coreDir, { recursive: true });
+  writeFileSync(
+    join(workspace, "package.json"),
+    JSON.stringify({ private: true, workspaces: ["packages/*"] }, null, 2)
+  );
+  cpSync(join(repoRoot, "bun.lock"), join(workspace, "bun.lock"));
+  cpSync(
+    join(repoRoot, "packages", "core", "package.json"),
+    join(coreDir, "package.json")
+  );
+  cpSync(cliDir, packageDir, {
+    dereference: false,
+    filter: (source) => !source.includes(`${cliDir}/test`),
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  cpSync(join(repoRoot, ".claude"), join(workspace, ".claude"), {
+    dereference: true,
+    recursive: true,
+  });
+  return packageDir;
+};
+
+// Pack an isolated copy of the CLI package into `destination`. The package's
+// real prepack/postpack scripts still run, but they materialize the copy's
+// `_skills` / `_claude_md` links instead of replacing the shared worktree paths
+// that other parallel tests read.
 const packEntries = (destination: string): string[] => {
+  const packageDir = makePackWorkspace();
   const pack = Bun.spawnSync(
     ["bun", "pm", "pack", "--destination", destination, "--quiet"],
-    { cwd: cliDir }
+    { cwd: packageDir }
   );
   if (pack.exitCode !== 0) {
     throw new Error(`bun pm pack failed: ${pack.stderr.toString()}`);
@@ -59,11 +95,6 @@ const packEntries = (destination: string): string[] => {
 };
 
 afterAll(() => {
-  // bun's postpack restores the symlinks; re-run restore defensively so the
-  // working tree is clean even if pack aborted mid-run (restore is idempotent).
-  Bun.spawnSync(["bun", "run", "scripts/bundle-symlinks.ts", "restore"], {
-    cwd: cliDir,
-  });
   while (tmpDirs.length > 0) {
     const dir = tmpDirs.pop();
     if (dir !== undefined) {

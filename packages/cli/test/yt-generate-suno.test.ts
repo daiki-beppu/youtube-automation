@@ -9,12 +9,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
-import { REGISTRY } from "@youtube-automation/core/registry";
+import { REGISTRY } from "@tayk/core/registry";
 
-const repoRoot = resolve(import.meta.dir, "..", "..", "..");
-const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
+import { expectExitCode, runTayk } from "./run-tayk.ts";
+
 const tmpDirs: string[] = [];
 
 const makeTempDir = (prefix: string): string => {
@@ -32,30 +32,6 @@ afterEach(() => {
     }
   }
 });
-
-const runTayk = (
-  options: { cwd?: string; env: Record<string, string | undefined> },
-  ...argv: string[]
-) => {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      env[key] = value;
-    }
-  }
-  for (const [key, value] of Object.entries(options.env)) {
-    if (value === undefined) {
-      Reflect.deleteProperty(env, key);
-    } else {
-      env[key] = value;
-    }
-  }
-
-  return Bun.spawnSync(["bun", taykBin, ...argv], {
-    cwd: options.cwd ?? repoRoot,
-    env,
-  });
-};
 
 const writeFixture = (): { channelDir: string; collectionDir: string } => {
   const channelDir = makeTempDir("cli-suno-channel-");
@@ -146,7 +122,7 @@ describe("tayk generate-suno — smoke", () => {
       "--json"
     );
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     const parsed = JSON.parse(proc.stdout.toString()) as {
       entryCount: number;
       jsonPath: string;
@@ -177,7 +153,7 @@ describe("tayk generate-suno — smoke", () => {
       "--json"
     );
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     const parsed = JSON.parse(proc.stdout.toString()) as {
       jsonPath: string;
     };
@@ -196,7 +172,7 @@ describe("tayk generate-suno — smoke", () => {
       "--json"
     );
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     const parsed = JSON.parse(proc.stdout.toString()) as {
       jsonPath: string;
     };
@@ -213,7 +189,7 @@ describe("tayk generate-suno — smoke", () => {
       "--json"
     );
 
-    expect(proc.exitCode).toBe(1);
+    expectExitCode(proc, 1);
     expect(proc.stderr.toString()).toStartWith("[config] ");
     expect(proc.stderr.toString()).toContain("CHANNEL_DIR");
     expect(proc.stderr.toString()).not.toContain("at ");
@@ -222,7 +198,7 @@ describe("tayk generate-suno — smoke", () => {
   test("should list generate-suno in dispatcher help", () => {
     const proc = runTayk({ env: {} }, "--help");
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     expect(proc.stdout.toString()).toContain("generate-suno");
   });
 
@@ -235,7 +211,7 @@ describe("tayk generate-suno — smoke", () => {
       collectionDir
     );
 
-    expect(proc.exitCode).toBe(0);
+    expectExitCode(proc, 0);
     const stdout = proc.stdout.toString();
     expect(stdout).toContain("generated: 1");
     expect(stdout).toContain("[WARN]");

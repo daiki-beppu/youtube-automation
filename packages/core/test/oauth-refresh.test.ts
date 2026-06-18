@@ -18,7 +18,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { refreshTokenService } from "@youtube-automation/core/oauth/refresh";
+import { refreshTokenService } from "@tayk/core/oauth/refresh";
 
 // Derive the deps bag type from the service itself (image-gemini.test.ts:38-40)
 // so the test does not hard-code the injection shape's exported name.

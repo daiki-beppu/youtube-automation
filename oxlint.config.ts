@@ -50,23 +50,23 @@ const OP_SPAWN_BANNED_IN_CORE = [
 // ADR 0003 §5 / Enforcement: interactiveAuthService は browser open + local server を
 // 起動する CLI 専用 service。MCP サーバプロセスは browser を開けず boot 時に hang する
 // ため、packages/mcp/** からの `**/oauth/interactive*` import を path-based で error 化
-// する (CLI は許可)。subpath import (@youtube-automation/core/oauth/interactive) と相対
+// する (CLI は許可)。subpath import (@tayk/core/oauth/interactive) と相対
 // import の両方を捕捉する。
 const INTERACTIVE_OAUTH_BANNED_IN_MCP = "**/oauth/interactive*";
 
 // ADR 0004: cli と mcp は互いに独立 (依存方向は core ← cli / core ← mcp のみ)。
-// registry は @youtube-automation/core/registry を使い、相互 import を禁止する。
+// registry は @tayk/core/registry を使い、相互 import を禁止する。
 const ADR0004_MUTUAL_BAN_MESSAGE =
-  "ADR 0004: cli と mcp は互いに独立。共有したいものは packages/core (例: @youtube-automation/core/registry) に置いてください。";
+  "ADR 0004: cli と mcp は互いに独立。共有したいものは packages/core (例: @tayk/core/registry) に置いてください。";
 
 const MCP_BANNED_IN_CLI = {
   message: ADR0004_MUTUAL_BAN_MESSAGE,
-  name: "@youtube-automation/mcp",
+  name: "@tayk/mcp",
 };
 
 const CLI_BANNED_IN_MCP = {
   message: ADR0004_MUTUAL_BAN_MESSAGE,
-  name: "@youtube-automation/cli",
+  name: "tayk",
 };
 
 const FFI_BANNED_IN_CORE = {
@@ -106,7 +106,7 @@ export default defineConfig({
             ],
             patterns: [
               ...HEAVY_DEPS_BANNED_IN_THIN_CLIENTS.patterns,
-              "@youtube-automation/mcp/*",
+              "@tayk/mcp/*",
             ],
           },
         ],
@@ -124,7 +124,7 @@ export default defineConfig({
             ],
             patterns: [
               ...HEAVY_DEPS_BANNED_IN_THIN_CLIENTS.patterns,
-              "@youtube-automation/cli/*",
+              "tayk/*",
               INTERACTIVE_OAUTH_BANNED_IN_MCP,
             ],
           },

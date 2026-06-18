@@ -21,12 +21,12 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { QuotaExhaustedError, YouTubeAPIError } from "@youtube-automation/core";
+import { QuotaExhaustedError, YouTubeAPIError } from "@tayk/core";
 import {
   ChannelAnalyticsInput,
   ChannelAnalyticsOutput,
   collectChannelAnalyticsService,
-} from "@youtube-automation/core/analytics/channel";
+} from "@tayk/core/analytics/channel";
 
 // shouldRetryAnalyticsQuery is a private analytics helper, not part of the
 // package public exports. The retry-permit truth table is pinned through a
