@@ -12,24 +12,16 @@ type GenerateImageEntry = typeof generateImageEntry;
 type ResolveGenerateImageDeps = (
   entryDeps: GenerateImageEntry["deps"]
 ) => Promise<Parameters<GenerateImageEntry["run"]>[1]>;
-type EmitResult = typeof emitResult;
 
 const renderText = (output: GenerateImageOutput): string =>
   `saved: ${output.savedPath}`;
 
-export const referencesFromArg = (value: unknown): string[] | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value === "string") {
-    return [value];
-  }
-  throw new Error("validation: --reference は文字列で指定してください");
-};
+export const referencesFromArg = (
+  value: string | undefined
+): string[] | undefined => (value === undefined ? undefined : [value]);
 
 export const createGenerateImageCommand = (
   deps: {
-    emitResult?: EmitResult;
     entry?: GenerateImageEntry;
     resolveDeps?: ResolveGenerateImageDeps;
   } = {}
@@ -38,7 +30,6 @@ export const createGenerateImageCommand = (
   const resolveCommandDeps =
     deps.resolveDeps ??
     ((entryDeps: GenerateImageEntry["deps"]) => resolveDeps(entryDeps));
-  const emitCommandResult = deps.emitResult ?? emitResult;
 
   return defineCommand({
     args: {
@@ -92,7 +83,7 @@ export const createGenerateImageCommand = (
           return err(toServiceError(error));
         }
       })();
-      emitCommandResult(result, {
+      emitResult(result, {
         json: args.json === true,
         renderText,
       });

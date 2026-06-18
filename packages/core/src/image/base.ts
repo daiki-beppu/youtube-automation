@@ -7,13 +7,9 @@
 // 値のみを `Request` に保持し、API 固有の `size` 文字列・`quality` 等は Provider
 // 実装側で `aspectRatio` から導出する。
 
-export interface ImageGenerationRequest {
-  readonly aspectRatio: string;
-  readonly imageSize: string;
-  readonly outputPath: string;
-  readonly prompt: string;
-  readonly references?: readonly string[];
-}
+import type { GenerateImageRequest } from "./schema.ts";
+
+export type ImageGenerationRequest = GenerateImageRequest;
 
 /**
  * 画像生成プロバイダーの最小契約。

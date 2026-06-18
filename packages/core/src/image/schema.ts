@@ -23,7 +23,7 @@ export const GenerateImageRequest = z
     imageSize: z.string(),
     outputPath: z.string(),
     prompt: z.string(),
-    references: z.array(z.string()).optional(),
+    references: z.array(z.string()).readonly().optional(),
   })
   .strict();
 export type GenerateImageRequest = z.infer<typeof GenerateImageRequest>;

@@ -85,7 +85,7 @@ export const resolveDeps = async <D extends keyof DepsMap>(
   }
 
   if (requested.has("imageProvider")) {
-    const root = channelDir();
+    const root = resolved.channelDir ?? channelDir();
     const config = loadThumbnailSkillConfig(root);
     resolved.imageProvider = buildImageProvider(config);
   }

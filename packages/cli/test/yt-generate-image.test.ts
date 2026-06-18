@@ -94,10 +94,9 @@ describe("tayk generate-image — smoke", () => {
     expect(referencesFromArg("ref.png")).toEqual(["ref.png"]);
   });
 
-  test("rejects invalid reference argument values before service execution", () => {
-    expect(() => referencesFromArg([123])).toThrow(
-      "validation: --reference は文字列で指定してください"
-    );
+  test("leaves omitted reference arguments undefined", () => {
+    const args: { reference?: string } = {};
+    expect(referencesFromArg(args.reference)).toBeUndefined();
   });
 
   test("prints the success result from the CLI adapter", async () => {
