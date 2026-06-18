@@ -22,10 +22,14 @@ import type { Result } from "../result.ts";
 import { defaultShouldRetry, withRetry } from "../retry.ts";
 import type { SleepMs } from "../retry.ts";
 import { isContentPolicyError } from "./base.ts";
-import type { ImageProvider, PersistImage } from "./base.ts";
+import type {
+  ImageGenerationRequest,
+  ImageProvider,
+  PersistImage,
+} from "./base.ts";
 import { defaultPersist, defaultSleep } from "./io.ts";
 import { resolveOutputPath, resolveReferencePaths } from "./paths.ts";
-import { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
+import { GenerateImageOutput, GenerateImageRequest } from "./schema.ts";
 
 /**
  * 画像を 1 枚生成して保存し、保存先を `Result` で返す。
@@ -37,7 +41,7 @@ import { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
  * エラーになる。
  */
 export const generateImageService = async (
-  input: GenerateImageInput,
+  input: ImageGenerationRequest,
   deps: {
     channelDir: string;
     persist?: PersistImage;
@@ -46,7 +50,7 @@ export const generateImageService = async (
   }
 ): Promise<Result<GenerateImageOutput, ServiceError>> => {
   try {
-    const request = GenerateImageInput.parse(input);
+    const request = GenerateImageRequest.parse(input);
     const safeRequest = {
       ...request,
       outputPath: resolveOutputPath(deps.channelDir, request.outputPath),

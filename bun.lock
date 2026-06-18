@@ -25,6 +25,7 @@
       "dependencies": {
         "@youtube-automation/core": "workspace:*",
         "citty": "^0.2.2",
+        "openai": "^6.41.0",
         "yaml": "^2.9.0",
       },
     },

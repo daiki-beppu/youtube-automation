@@ -13,7 +13,7 @@ import { ok } from "@youtube-automation/core";
 import { REGISTRY } from "@youtube-automation/core/registry";
 
 import {
-  generateImageCommand,
+  createGenerateImageCommand,
   referencesFromArg,
 } from "../src/commands/generate-image/cli.ts";
 
@@ -102,27 +102,34 @@ describe("tayk generate-image — smoke", () => {
 
   test("prints the success result from the CLI adapter", async () => {
     const channelDir = makeTempDir("cli-image-success-");
-    const entry = REGISTRY["image.generate"];
-    const originalRun = entry.run;
-    const originalChannelDir = process.env.CHANNEL_DIR;
-    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
-      () => true
-    );
-
-    try {
-      process.env.CHANNEL_DIR = channelDir;
-      (
-        entry as unknown as {
-          run: typeof originalRun;
-        }
-      ).run = () =>
+    const registryEntry = REGISTRY["image.generate"];
+    const entry = {
+      ...registryEntry,
+      run: (() =>
         Promise.resolve(
           ok({
             savedPath: join(channelDir, "collections/planning/demo/main.png"),
           })
-        );
+        )) as typeof registryEntry.run,
+    };
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+    const command = createGenerateImageCommand({
+      entry,
+      resolveDeps: () =>
+        Promise.resolve({
+          channelDir,
+          imageProvider: {
+            generate: () => Promise.resolve(new Uint8Array([1])),
+            name: "fake",
+            supportedAspectRatios: [],
+          },
+        }),
+    });
 
-      await generateImageCommand.run?.({
+    try {
+      await command.run?.({
         args: {
           "aspect-ratio": "16:9",
           "image-size": "2K",
@@ -137,16 +144,6 @@ describe("tayk generate-image — smoke", () => {
         `saved: ${join(channelDir, "collections/planning/demo/main.png")}\n`
       );
     } finally {
-      (
-        entry as unknown as {
-          run: typeof originalRun;
-        }
-      ).run = originalRun;
-      if (originalChannelDir === undefined) {
-        Reflect.deleteProperty(process.env, "CHANNEL_DIR");
-      } else {
-        process.env.CHANNEL_DIR = originalChannelDir;
-      }
       stdoutSpy.mockRestore();
     }
   });

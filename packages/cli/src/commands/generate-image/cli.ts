@@ -8,6 +8,11 @@ import { emitResult } from "../../../lib/run-command.ts";
 
 const generateImageEntry = REGISTRY["image.generate"];
 const DEFAULT_IMAGE_SIZE = "2K";
+type GenerateImageEntry = typeof generateImageEntry;
+type ResolveGenerateImageDeps = (
+  entryDeps: GenerateImageEntry["deps"]
+) => Promise<Parameters<GenerateImageEntry["run"]>[1]>;
+type EmitResult = typeof emitResult;
 
 const renderText = (output: GenerateImageOutput): string =>
   `saved: ${output.savedPath}`;
@@ -22,61 +27,77 @@ export const referencesFromArg = (value: unknown): string[] | undefined => {
   throw new Error("validation: --reference は文字列で指定してください");
 };
 
-export const generateImageCommand = defineCommand({
-  args: {
-    "aspect-ratio": {
-      default: "16:9",
-      description: "生成画像のアスペクト比",
-      type: "string",
+export const createGenerateImageCommand = (
+  deps: {
+    emitResult?: EmitResult;
+    entry?: GenerateImageEntry;
+    resolveDeps?: ResolveGenerateImageDeps;
+  } = {}
+) => {
+  const entry = deps.entry ?? generateImageEntry;
+  const resolveCommandDeps =
+    deps.resolveDeps ??
+    ((entryDeps: GenerateImageEntry["deps"]) => resolveDeps(entryDeps));
+  const emitCommandResult = deps.emitResult ?? emitResult;
+
+  return defineCommand({
+    args: {
+      "aspect-ratio": {
+        default: "16:9",
+        description: "生成画像のアスペクト比",
+        type: "string",
+      },
+      "image-size": {
+        default: DEFAULT_IMAGE_SIZE,
+        description: "Provider に渡す解像度ヒント",
+        type: "string",
+      },
+      json: {
+        default: false,
+        description: "JSON で出力する",
+        type: "boolean",
+      },
+      output: {
+        description: "画像の保存先パス",
+        required: true,
+        type: "string",
+      },
+      prompt: {
+        description: "画像生成プロンプト",
+        required: true,
+        type: "string",
+      },
+      reference: {
+        description: "参照画像パス",
+        type: "string",
+      },
     },
-    "image-size": {
-      default: DEFAULT_IMAGE_SIZE,
-      description: "Provider に渡す解像度ヒント",
-      type: "string",
+    meta: {
+      description: entry.description,
+      name: "generate-image",
     },
-    json: {
-      default: false,
-      description: "JSON で出力する",
-      type: "boolean",
+    async run({ args }) {
+      const result = await (async () => {
+        try {
+          const input = entry.inputSchema.parse({
+            aspect_ratio: args["aspect-ratio"],
+            image_size: args["image-size"],
+            output_path: args.output,
+            prompt: args.prompt,
+            references: referencesFromArg(args.reference),
+          });
+          const entryDeps = await resolveCommandDeps(entry.deps);
+          return await entry.run(input, entryDeps);
+        } catch (error) {
+          return err(toServiceError(error));
+        }
+      })();
+      emitCommandResult(result, {
+        json: args.json === true,
+        renderText,
+      });
     },
-    output: {
-      description: "画像の保存先パス",
-      required: true,
-      type: "string",
-    },
-    prompt: {
-      description: "画像生成プロンプト",
-      required: true,
-      type: "string",
-    },
-    reference: {
-      description: "参照画像パス",
-      type: "string",
-    },
-  },
-  meta: {
-    description: generateImageEntry.description,
-    name: "generate-image",
-  },
-  async run({ args }) {
-    const result = await (async () => {
-      try {
-        const input = generateImageEntry.inputSchema.parse({
-          aspect_ratio: args["aspect-ratio"],
-          image_size: args["image-size"],
-          output_path: args.output,
-          prompt: args.prompt,
-          references: referencesFromArg(args.reference),
-        });
-        const deps = await resolveDeps(generateImageEntry.deps);
-        return await generateImageEntry.run(input, deps);
-      } catch (error) {
-        return err(toServiceError(error));
-      }
-    })();
-    emitResult(result, {
-      json: args.json === true,
-      renderText,
-    });
-  },
-});
+  });
+};
+
+export const generateImageCommand = createGenerateImageCommand();

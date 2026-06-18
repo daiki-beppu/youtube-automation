@@ -48,8 +48,15 @@ const inlineImageBytes = (part: unknown): Uint8Array | null => {
   return null;
 };
 
-const referenceMime = (path: string): string =>
-  /\.jpe?g$/iu.test(path) ? "image/jpeg" : "image/png";
+const referenceMime = (path: string): string => {
+  if (/\.jpe?g$/iu.test(path)) {
+    return "image/jpeg";
+  }
+  if (/\.webp$/iu.test(path)) {
+    return "image/webp";
+  }
+  return "image/png";
+};
 
 // 参照画像を base64 inlineData Part に変換し、末尾に prompt を付ける（参照なしは [prompt]）。
 const buildContents = (

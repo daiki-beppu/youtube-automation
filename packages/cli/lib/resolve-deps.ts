@@ -11,9 +11,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { channelDir, loadConfig } from "@youtube-automation/core/config";
-import type { ImageGenerationConfig } from "@youtube-automation/core/image";
+import type {
+  ImageGenerationConfig,
+  OpenAIProviderDeps,
+} from "@youtube-automation/core/image";
 import {
   getProvider,
+  OpenAIImageProvider,
   parseImageGenerationConfig,
 } from "@youtube-automation/core/image";
 import {
@@ -24,6 +28,7 @@ import type { DepsMap } from "@youtube-automation/core/registry";
 import { parse as parseYaml } from "yaml";
 
 import { resolveTokenJson } from "./oauth.ts";
+import { resolveSecret } from "./secrets.ts";
 
 const THUMBNAIL_SKILL_CONFIG_PATH = ["config", "skills", "thumbnail.yaml"];
 
@@ -34,6 +39,26 @@ const loadThumbnailSkillConfig = (root: string): ImageGenerationConfig => {
   }
   const text = readFileSync(path, "utf-8");
   return parseImageGenerationConfig(parseYaml(text));
+};
+
+const createOpenAIClientFromSecret: OpenAIProviderDeps["createClient"] =
+  async () => {
+    const apiKey = await resolveSecret("OPENAI_API_KEY");
+    const { default: OpenAI } = await import("openai");
+    return new OpenAI({ apiKey }) as unknown as Awaited<
+      ReturnType<OpenAIProviderDeps["createClient"]>
+    >;
+  };
+
+const buildImageProvider = (
+  config: ImageGenerationConfig
+): DepsMap["imageProvider"] => {
+  if (config.provider !== "openai") {
+    return getProvider(config);
+  }
+  return new OpenAIImageProvider(config.openai, {
+    createClient: createOpenAIClientFromSecret,
+  });
 };
 
 /**
@@ -62,7 +87,7 @@ export const resolveDeps = async <D extends keyof DepsMap>(
   if (requested.has("imageProvider")) {
     const root = channelDir();
     const config = loadThumbnailSkillConfig(root);
-    resolved.imageProvider = getProvider(config);
+    resolved.imageProvider = buildImageProvider(config);
   }
 
   const needsYt = requested.has("yt");

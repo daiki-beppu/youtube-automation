@@ -15,7 +15,7 @@ import {
   GenerateImageInput,
 } from "@youtube-automation/core/image";
 import type {
-  GenerateImageInput as ParsedGenerateImageInput,
+  ImageGenerationRequest,
   ImageProvider,
 } from "@youtube-automation/core/image";
 
@@ -54,6 +54,17 @@ describe("GenerateImageInput schema", () => {
 
     expect(() => GenerateImageInput.parse(input)).toThrow();
   });
+
+  test("rejects camelCase input at the public registry boundary", () => {
+    expect(() =>
+      GenerateImageInput.parse({
+        aspectRatio: "16:9",
+        imageSize: "2K",
+        outputPath: "collections/planning/demo/main.png",
+        prompt: "a quiet desk with warm window light",
+      })
+    ).toThrow();
+  });
 });
 
 describe("generateImageService input normalization", () => {
@@ -64,7 +75,7 @@ describe("generateImageService input normalization", () => {
       join(channelDir, "references", "a.png"),
       new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     );
-    const seen: ParsedGenerateImageInput[] = [];
+    const seen: ImageGenerationRequest[] = [];
     const provider: ImageProvider = {
       generate: (request) => {
         seen.push(request);
@@ -75,7 +86,7 @@ describe("generateImageService input normalization", () => {
     };
 
     const result = await generateImageService(
-      rawInput() as unknown as ParsedGenerateImageInput,
+      GenerateImageInput.parse(rawInput()),
       {
         channelDir,
         persist: (outputPath) => Promise.resolve(outputPath),
@@ -112,13 +123,14 @@ describe("generateImageService path validation", () => {
       recursive: true,
     });
     mkdirSync(join(channelDir, "references"), { recursive: true });
+    mkdirSync(join(channelDir, "assets"), { recursive: true });
     writeFileSync(join(channelDir, "references", "ok.png"), pngBytes);
     return channelDir;
   };
 
   const callService = async (
     channelDir: string,
-    input: Partial<ParsedGenerateImageInput>
+    input: Partial<ImageGenerationRequest>
   ) => {
     let calls = 0;
     const provider: ImageProvider = {
@@ -171,12 +183,11 @@ describe("generateImageService path validation", () => {
     rmSync(channelDir, { force: true, recursive: true });
   });
 
-  test("rejects reference files that are not images", async () => {
+  test("rejects invalid output extensions before provider execution", async () => {
     const channelDir = makeChannel();
-    writeFileSync(join(channelDir, "references", "secret.png"), "not image");
 
     const { calls, result } = await callService(channelDir, {
-      references: ["references/secret.png"],
+      outputPath: "collections/planning/demo/main.gif",
     });
 
     expect(result.ok).toBe(false);
@@ -200,5 +211,83 @@ describe("generateImageService path validation", () => {
     expect(calls).toBe(0);
     rmSync(channelDir, { force: true, recursive: true });
     rmSync(outside, { force: true, recursive: true });
+  });
+
+  test.each([
+    {
+      input: { references: ["/tmp/secret.png"] },
+      name: "absolute reference paths",
+    },
+    {
+      input: { references: ["references/../secret.png"] },
+      name: "reference traversal paths",
+    },
+    {
+      input: { references: ["tmp/secret.png"] },
+      name: "references outside allowed directories",
+    },
+    {
+      input: { references: ["references/secret.gif"] },
+      name: "reference extensions outside the allowlist",
+    },
+    {
+      input: { references: ["references/missing.png"] },
+      name: "missing reference files",
+    },
+  ])("rejects $name before provider execution", async ({ input }) => {
+    const channelDir = makeChannel();
+
+    const { calls, result } = await callService(channelDir, input);
+
+    expect(result.ok).toBe(false);
+    expect(calls).toBe(0);
+    rmSync(channelDir, { force: true, recursive: true });
+  });
+
+  test("rejects reference files that are not images", async () => {
+    const channelDir = makeChannel();
+    writeFileSync(join(channelDir, "references", "secret.png"), "not image");
+
+    const { calls, result } = await callService(channelDir, {
+      references: ["references/secret.png"],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(calls).toBe(0);
+    rmSync(channelDir, { force: true, recursive: true });
+  });
+
+  test("rejects reference symlinks that resolve outside the channel root", async () => {
+    const channelDir = makeChannel();
+    const outside = mkdtempSync(join(tmpdir(), "image-ref-outside-"));
+    writeFileSync(join(outside, "secret.png"), pngBytes);
+    symlinkSync(
+      join(outside, "secret.png"),
+      join(channelDir, "references", "linked.png")
+    );
+
+    const { calls, result } = await callService(channelDir, {
+      references: ["references/linked.png"],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(calls).toBe(0);
+    rmSync(channelDir, { force: true, recursive: true });
+    rmSync(outside, { force: true, recursive: true });
+  });
+
+  test("rejects reference files larger than 10 MiB", async () => {
+    const channelDir = makeChannel();
+    const bytes = new Uint8Array(10 * 1024 * 1024 + 1);
+    bytes.set(pngBytes, 0);
+    writeFileSync(join(channelDir, "references", "large.png"), bytes);
+
+    const { calls, result } = await callService(channelDir, {
+      references: ["references/large.png"],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(calls).toBe(0);
+    rmSync(channelDir, { force: true, recursive: true });
   });
 });

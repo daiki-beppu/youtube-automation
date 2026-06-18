@@ -7,11 +7,13 @@
 // 値のみを `Request` に保持し、API 固有の `size` 文字列・`quality` 等は Provider
 // 実装側で `aspectRatio` から導出する。
 
-// 1 件分の画像生成リクエストは service 境界の入力 schema を単一の真実とする
-// （ADR-0003 §8: zod を source of truth）。provider はその検証済みの値を受け取る。
-import type { GenerateImageInput } from "./schema.ts";
-
-export type ImageGenerationRequest = GenerateImageInput;
+export interface ImageGenerationRequest {
+  readonly aspectRatio: string;
+  readonly imageSize: string;
+  readonly outputPath: string;
+  readonly prompt: string;
+  readonly references?: readonly string[];
+}
 
 /**
  * 画像生成プロバイダーの最小契約。

@@ -14,7 +14,6 @@ import {
   sep,
 } from "node:path";
 
-const OUTPUT_DIRS = ["branding", "collections"] as const;
 const REFERENCE_DIRS = ["assets", "collections", "references"] as const;
 const OUTPUT_EXTENSIONS = new Set([".jpg", ".jpeg", ".png"]);
 const REFERENCE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
@@ -151,7 +150,6 @@ export const resolveOutputPath = (
   outputPath: string
 ): string => {
   assertRelativePath("output_path", outputPath);
-  assertAllowedDir("output_path", outputPath, OUTPUT_DIRS);
   assertAllowedExtension("output_path", outputPath, OUTPUT_EXTENSIONS);
 
   const rootRealPath = realpathSync(channelDir);

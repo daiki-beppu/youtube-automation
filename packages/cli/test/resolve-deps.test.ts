@@ -11,7 +11,15 @@
 // one Bun.spawn becomes a countable proof that yt + ytAnalytics resolved the
 // token together rather than each running its own dance.
 
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -24,9 +32,46 @@ import { resolveDeps } from "../lib/resolve-deps.ts";
 
 // --- env harness ---------------------------------------------------------
 
-const managedKeys = ["CHANNEL_DIR", "CLIENT_SECRETS_JSON"] as const;
+const managedKeys = [
+  "CHANNEL_DIR",
+  "CLIENT_SECRETS_JSON",
+  "OPENAI_API_KEY",
+] as const;
 let savedEnv: Record<string, string | undefined> = {};
 const tmpDirs: string[] = [];
+const openAiConstructorApiKeys: string[] = [];
+const openAiGenerateCalls: unknown[] = [];
+
+mock.module("openai", () => ({
+  default: class FakeOpenAI {
+    readonly images = {
+      edit: (params: unknown) => {
+        openAiGenerateCalls.push(params);
+        return Promise.resolve({
+          data: [
+            {
+              b64_json: Buffer.from(new Uint8Array([1, 2])).toString("base64"),
+            },
+          ],
+        });
+      },
+      generate: (params: unknown) => {
+        openAiGenerateCalls.push(params);
+        return Promise.resolve({
+          data: [
+            {
+              b64_json: Buffer.from(new Uint8Array([1, 2])).toString("base64"),
+            },
+          ],
+        });
+      },
+    };
+
+    constructor(options: { apiKey: string }) {
+      openAiConstructorApiKeys.push(options.apiKey);
+    }
+  },
+}));
 
 beforeEach(() => {
   savedEnv = {};
@@ -34,6 +79,8 @@ beforeEach(() => {
     savedEnv[key] = process.env[key];
     Reflect.deleteProperty(process.env, key);
   }
+  openAiConstructorApiKeys.length = 0;
+  openAiGenerateCalls.length = 0;
   reset();
 });
 
@@ -181,6 +228,35 @@ describe("resolveDeps — imageProvider", () => {
     expect("config" in deps).toBe(false);
     expect("yt" in deps).toBe(false);
     expect("ytAnalytics" in deps).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    spawnSpy.mockRestore();
+  });
+
+  test("injects the CLI secret resolver into the OpenAI image provider", async () => {
+    const dir = makeChannelDir();
+    mkdirSync(join(dir, "config", "skills"), { recursive: true });
+    writeFileSync(
+      join(dir, "config", "skills", "thumbnail.yaml"),
+      ["image_generation:", "  provider: openai"].join("\n"),
+      "utf-8"
+    );
+    process.env.CHANNEL_DIR = dir;
+    process.env.OPENAI_API_KEY = "env-openai-key";
+    reset();
+    const spawnSpy = spyOn(Bun, "spawn");
+
+    const deps = await resolveDeps(["imageProvider"]);
+    const bytes = await deps.imageProvider.generate({
+      aspectRatio: "16:9",
+      imageSize: "2K",
+      outputPath: "collections/planning/demo/main.png",
+      prompt: "a square cafe thumbnail",
+    });
+
+    expect([...bytes]).toEqual([1, 2]);
+    expect(openAiConstructorApiKeys).toEqual(["env-openai-key"]);
+    expect(openAiGenerateCalls).toHaveLength(1);
     expect(spawnSpy).not.toHaveBeenCalled();
 
     spawnSpy.mockRestore();
