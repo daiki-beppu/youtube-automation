@@ -21,10 +21,6 @@
   "dependencies": {
     "takt": "^0.43.0"
   },
-  "overrides": {
-    "@opentelemetry/core": "2.8.0",
-    "protobufjs": "8.6.4"
-  },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "knip": "^6.15.0",
@@ -32,6 +28,10 @@
     "oxlint": "^1.68.0",
     "typescript": "^6.0.3",
     "ultracite": "^7.8.1"
+  },
+  "overrides": {
+    "@opentelemetry/core": "2.8.0",
+    "protobufjs": "8.6.4"
   },
   "engines": {
     "bun": ">=1.3.0"

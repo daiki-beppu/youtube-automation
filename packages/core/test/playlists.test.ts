@@ -837,6 +837,31 @@ describe("playlists.assign", () => {
     expect(playlistItemInsertCalls).toHaveLength(0);
   });
 
+  test("dry-run skips matched playlists without playlist_id", async () => {
+    const config = makeConfig({
+      all: { auto_add: true, title: "All Videos" },
+    });
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } =
+      makeYouTube();
+
+    const result = await REGISTRY["playlists.assign"].run(
+      REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: true,
+        theme: "focus",
+        video_id: "video_123",
+      }),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(result.value.assigned).toEqual([]);
+    expect(playlistItemListCalls).toHaveLength(0);
+    expect(playlistItemInsertCalls).toHaveLength(0);
+  });
+
   test("inserts non-all playlist matches at the head", async () => {
     const config = makeConfig({
       focus: {
@@ -1417,15 +1442,7 @@ describe("playlists.init", () => {
     }
     expect(result.value.synced).toEqual([
       {
-        assigned: [
-          {
-            alreadyPresent: false,
-            dryRun: true,
-            inserted: false,
-            key: "focus",
-            title: "Focus Sessions",
-          },
-        ],
+        assigned: [],
         collectionName: "20260617-focus",
         theme: "focus",
         videoId: "video_live",

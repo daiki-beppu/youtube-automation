@@ -51,14 +51,10 @@ import {
   listPlaylistItems,
 } from "./youtube.ts";
 
-const flatMapSequential = async <T, U>(
-  items: readonly T[],
-  callback: (item: T) => Promise<readonly U[]>
-): Promise<U[]> =>
-  items.reduce<Promise<U[]>>(
-    async (previous, item) => [...(await previous), ...(await callback(item))],
-    Promise.resolve([])
-  );
+const appendAll = <T>(items: readonly T[], additions: readonly T[]): T[] => [
+  ...items,
+  ...additions,
+];
 
 const assignToPlaylist = async (
   client: PlaylistClient,
@@ -102,6 +98,7 @@ const assignResolvedVideo = async (
   if (input.dryRun) {
     return PlaylistAssignOutputSchema.parse({
       assigned: playlists.flatMap((playlist) =>
+        playlist.playlistId !== undefined &&
         matchesAssignment(playlist, input.theme, activities)
           ? [
               {
@@ -116,15 +113,17 @@ const assignResolvedVideo = async (
   }
 
   const client = youtubeClient(deps.yt);
-  const assigned = await flatMapSequential(playlists, async (playlist) => {
+  let assigned: PlaylistAssignOutput["assigned"] = [];
+  for (const playlist of playlists) {
     const assignment = await assignToPlaylist(
       client,
       playlist,
       input,
       activities
     );
-    return assignment === null ? [] : [assignment];
-  });
+    assigned =
+      assignment === null ? assigned : appendAll(assigned, [assignment]);
+  }
 
   return PlaylistAssignOutputSchema.parse({ assigned });
 };
@@ -192,10 +191,9 @@ const cleanDeletedPlaylistOperation = async (
     return [{ itemId: item.id, title }];
   });
   if (!input.dryRun) {
-    await removedItems.reduce<Promise<void>>(async (previous, item) => {
-      await previous;
+    for (const item of removedItems) {
       await deletePlaylistItem(client, item.itemId);
-    }, Promise.resolve());
+    }
   }
   return [
     {
@@ -252,26 +250,17 @@ const createPlaylists = async (
 ): Promise<PlaylistCreateOutput> => {
   const playlists = playlistEntries(deps.config);
   assertCreateTargetsHaveTitles(playlists);
-  const operations = await playlists.reduce<
-    Promise<{
-      created: PlaylistCreateOutput["created"];
-      skipped: PlaylistCreateOutput["skipped"];
-    }>
-  >(
-    async (previous, playlist) => {
-      const accumulated = await previous;
-      const operation = await createPlaylistOperation(deps, input, playlist);
-      return {
-        created: [...accumulated.created, ...operation.created],
-        skipped: [...accumulated.skipped, ...operation.skipped],
-      };
-    },
-    Promise.resolve({ created: [], skipped: [] })
-  );
+  let created: PlaylistCreateOutput["created"] = [];
+  let skipped: PlaylistCreateOutput["skipped"] = [];
+  for (const playlist of playlists) {
+    const operation = await createPlaylistOperation(deps, input, playlist);
+    created = appendAll(created, operation.created);
+    skipped = appendAll(skipped, operation.skipped);
+  }
 
   return PlaylistCreateOutputSchema.parse({
-    created: operations.created,
-    skipped: operations.skipped,
+    created,
+    skipped,
   });
 };
 
@@ -279,10 +268,13 @@ const syncExistingVideos = async (
   deps: PlaylistChannelDeps,
   input: PlaylistSyncInput
 ): Promise<PlaylistSyncOutput> => {
-  const synced = await flatMapSequential(
-    await liveCollectionDirs(deps.channelDir),
-    (collectionDir) => syncCollection(deps, input, collectionDir)
-  );
+  let synced: PlaylistSyncOutput["synced"] = [];
+  for (const collectionDir of await liveCollectionDirs(deps.channelDir)) {
+    synced = appendAll(
+      synced,
+      await syncCollection(deps, input, collectionDir)
+    );
+  }
   return PlaylistSyncOutputSchema.parse({ synced });
 };
 
@@ -291,10 +283,13 @@ const cleanDeleted = async (
   input: PlaylistCleanDeletedInput
 ): Promise<PlaylistCleanDeletedOutput> => {
   const client = youtubeClient(deps.yt);
-  const cleaned = await flatMapSequential(
-    playlistEntries(deps.config),
-    (playlist) => cleanDeletedPlaylistOperation(client, input, playlist)
-  );
+  let cleaned: PlaylistCleanDeletedOutput["cleaned"] = [];
+  for (const playlist of playlistEntries(deps.config)) {
+    cleaned = appendAll(
+      cleaned,
+      await cleanDeletedPlaylistOperation(client, input, playlist)
+    );
+  }
 
   return PlaylistCleanDeletedOutputSchema.parse({ cleaned });
 };
@@ -305,10 +300,12 @@ export const playlistStatusService = async (
 ): Promise<Result<PlaylistStatusOutput, ServiceError>> => {
   try {
     const client = youtubeClient(deps.yt);
-    const playlists = await flatMapSequential(
-      playlistEntries(deps.config),
-      async (playlist) => [await statusPlaylistOperation(client, playlist)]
-    );
+    let playlists: PlaylistStatusOutput["playlists"] = [];
+    for (const playlist of playlistEntries(deps.config)) {
+      playlists = appendAll(playlists, [
+        await statusPlaylistOperation(client, playlist),
+      ]);
+    }
     return ok(PlaylistStatusOutputSchema.parse({ playlists }));
   } catch (error) {
     return err(toServiceError(error));

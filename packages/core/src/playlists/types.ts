@@ -6,7 +6,7 @@ export const ALL_PLAYLIST_KEY = "all" as const;
 
 export interface PlaylistCoreDeps {
   config: ChannelConfig;
-  yt?: YouTubeClient;
+  yt: YouTubeClient;
 }
 
 export interface PlaylistChannelDeps extends PlaylistCoreDeps {
