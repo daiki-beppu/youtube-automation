@@ -23,7 +23,13 @@
 // `inlineData.data` and returns the raw bytes, mirroring the OpenAI b64 path.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -99,11 +105,16 @@ const makeRecorders = () => {
 const makeDeps = (client: unknown): GeminiDeps =>
   ({ createClient: () => client }) as unknown as GeminiDeps;
 
+let workdir: string;
+
+const channelPath = (path: string): string => join(realpathSync(workdir), path);
+
 // Service deps bundling the provider with the fake sleep/persist recorders.
 const serviceDeps = (
   provider: GeminiImageProvider,
   recorders: ReturnType<typeof makeRecorders>
 ) => ({
+  channelDir: workdir,
   persist: recorders.persist,
   provider,
   sleep: recorders.sleep,
@@ -120,10 +131,6 @@ const baseRequest = (outputPath: string): GenerateImageInput => ({
   outputPath,
   prompt: "a calm lo-fi study room at night",
 });
-
-// --- temp dir for reference-image fixtures -------------------------------
-
-let workdir: string;
 
 beforeAll(() => {
   workdir = mkdtempSync(join(tmpdir(), "img-gemini-"));
@@ -157,7 +164,9 @@ describe("GeminiImageProvider 1-attempt contract", () => {
     const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
 
     // When calling the provider directly
-    const bytes = await provider.generate(baseRequest(join(workdir, "u.png")));
+    const bytes = await provider.generate(
+      baseRequest("collections/planning/demo/u.png")
+    );
 
     // Then the decoded bytes come back from a single SDK call — no retry, no
     // persistence side effect inside the provider
@@ -176,7 +185,7 @@ describe("GeminiImageProvider 1-attempt contract", () => {
     // Then it throws once without retrying internally; the message carries no
     // domain prefix so the service-side withRetry treats it as retryable
     await expect(
-      provider.generate(baseRequest(join(workdir, "miss-unit.png")))
+      provider.generate(baseRequest("collections/planning/demo/miss-unit.png"))
     ).rejects.toThrow("gemini が画像なしレスポンスを返しました");
     expect(calls).toHaveLength(1);
   });
@@ -194,7 +203,9 @@ describe("GeminiImageProvider 1-attempt contract", () => {
     // When calling the provider directly
     let caught: unknown;
     try {
-      await provider.generate(baseRequest(join(workdir, "safety-unit.png")));
+      await provider.generate(
+        baseRequest("collections/planning/demo/safety-unit.png")
+      );
     } catch (error) {
       caught = error;
     }
@@ -216,7 +227,7 @@ describe("generateImageService (gemini) success", () => {
     const { client } = makeGeminiClient([() => imageResponse(base64)]);
     const recorders = makeRecorders();
     const provider = new GeminiImageProvider(geminiConfig, makeDeps(client));
-    const outputPath = join(workdir, "out.png");
+    const outputPath = "collections/planning/demo/out.png";
 
     // When generating through the service boundary
     const r = await generateImageService(
@@ -230,14 +241,14 @@ describe("generateImageService (gemini) success", () => {
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
     }
-    expect(r.value.savedPath).toBe(outputPath);
+    expect(r.value.savedPath).toBe(channelPath(outputPath));
     expect(recorders.persisted).toHaveLength(1);
     const [persisted] = recorders.persisted;
     if (!persisted) {
       throw new Error("expected a persisted image");
     }
     expect([...persisted.bytes]).toEqual([...original]);
-    expect(persisted.path).toBe(outputPath);
+    expect(persisted.path).toBe(channelPath(outputPath));
     expect(recorders.sleeps).toEqual([]);
   });
 
@@ -250,7 +261,7 @@ describe("generateImageService (gemini) success", () => {
 
     // When generating with aspect ratio 16:9 through the service
     const r = await generateImageService(
-      baseRequest(join(workdir, "fwd.png")),
+      baseRequest("collections/planning/demo/fwd.png"),
       serviceDeps(provider, recorders)
     );
 
@@ -265,9 +276,12 @@ describe("generateImageService (gemini) success", () => {
 
   test("inlines reference image bytes as base64 into the request", async () => {
     // Given a reference image on disk and a successful response
-    const refBytes = new Uint8Array([0x10, 0x20, 0x30, 0x40]);
-    const refPath = join(workdir, "ref.png");
-    writeFileSync(refPath, refBytes);
+    const refBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    const refPath = "collections/planning/demo/ref.png";
+    mkdirSync(channelPath("collections/planning/demo"), { recursive: true });
+    writeFileSync(channelPath(refPath), refBytes);
     const base64 = Buffer.from(new Uint8Array([9, 9, 9])).toString("base64");
     const { calls, client } = makeGeminiClient([() => imageResponse(base64)]);
     const recorders = makeRecorders();
@@ -275,7 +289,10 @@ describe("generateImageService (gemini) success", () => {
 
     // When generating with a reference image (gemini.py:45-51)
     const r = await generateImageService(
-      { ...baseRequest(join(workdir, "ref-out.png")), references: [refPath] },
+      {
+        ...baseRequest("collections/planning/demo/ref-out.png"),
+        references: [refPath],
+      },
       serviceDeps(provider, recorders)
     );
 
@@ -299,7 +316,7 @@ describe("generateImageService (gemini) retry", () => {
 
     // When generating through the service
     const r = await generateImageService(
-      baseRequest(join(workdir, "miss.png")),
+      baseRequest("collections/planning/demo/miss.png"),
       serviceDeps(provider, recorders)
     );
 
@@ -333,7 +350,7 @@ describe("generateImageService (gemini) retry", () => {
 
     // When generating through the service
     const r = await generateImageService(
-      baseRequest(join(workdir, "late.png")),
+      baseRequest("collections/planning/demo/late.png"),
       serviceDeps(provider, recorders)
     );
 
@@ -359,7 +376,7 @@ describe("generateImageService (gemini) content policy", () => {
 
     // When generating through the service
     const r = await generateImageService(
-      baseRequest(join(workdir, "safety.png")),
+      baseRequest("collections/planning/demo/safety.png"),
       serviceDeps(provider, recorders)
     );
 
@@ -385,7 +402,7 @@ describe("generateImageService (gemini) content policy", () => {
 
     // When generating through the service
     const r = await generateImageService(
-      baseRequest(join(workdir, "recite.png")),
+      baseRequest("collections/planning/demo/recite.png"),
       serviceDeps(provider, recorders)
     );
 
@@ -408,7 +425,7 @@ describe("generateImageService input validation", () => {
 
     // When the input carries an unexpected key the `.strict()` schema rejects
     const malformed = {
-      ...baseRequest(join(workdir, "bad.png")),
+      ...baseRequest("collections/planning/demo/bad.png"),
       unexpected: true,
     } as unknown as GenerateImageInput;
     const r = await generateImageService(

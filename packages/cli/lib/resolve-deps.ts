@@ -15,13 +15,13 @@ import type { ImageGenerationConfig } from "@youtube-automation/core/image";
 import {
   getProvider,
   parseImageGenerationConfig,
-  parseImageGenerationConfigYaml,
 } from "@youtube-automation/core/image";
 import {
   buildYouTubeAnalyticsClient,
   buildYouTubeClient,
 } from "@youtube-automation/core/oauth/client";
 import type { DepsMap } from "@youtube-automation/core/registry";
+import { parse as parseYaml } from "yaml";
 
 import { resolveTokenJson } from "./oauth.ts";
 
@@ -33,7 +33,7 @@ const loadThumbnailSkillConfig = (root: string): ImageGenerationConfig => {
     return parseImageGenerationConfig({});
   }
   const text = readFileSync(path, "utf-8");
-  return parseImageGenerationConfigYaml(text);
+  return parseImageGenerationConfig(parseYaml(text));
 };
 
 /**

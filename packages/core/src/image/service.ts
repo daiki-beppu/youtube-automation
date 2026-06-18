@@ -24,6 +24,7 @@ import type { SleepMs } from "../retry.ts";
 import { isContentPolicyError } from "./base.ts";
 import type { ImageProvider, PersistImage } from "./base.ts";
 import { defaultPersist, defaultSleep } from "./io.ts";
+import { resolveOutputPath, resolveReferencePaths } from "./paths.ts";
 import { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
 
 /**
@@ -37,18 +38,28 @@ import { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
  */
 export const generateImageService = async (
   input: GenerateImageInput,
-  deps: { persist?: PersistImage; provider: ImageProvider; sleep?: SleepMs }
+  deps: {
+    channelDir: string;
+    persist?: PersistImage;
+    provider: ImageProvider;
+    sleep?: SleepMs;
+  }
 ): Promise<Result<GenerateImageOutput, ServiceError>> => {
   try {
     const request = GenerateImageInput.parse(input);
-    const bytes = await withRetry(() => deps.provider.generate(request), {
+    const safeRequest = {
+      ...request,
+      outputPath: resolveOutputPath(deps.channelDir, request.outputPath),
+      references: resolveReferencePaths(deps.channelDir, request.references),
+    };
+    const bytes = await withRetry(() => deps.provider.generate(safeRequest), {
       // SAFETY / RECITATION はリトライしても通らないため non-retryable に倒す。
       shouldRetry: (error) =>
         defaultShouldRetry(error) && !isContentPolicyError(error),
       sleep: deps.sleep ?? defaultSleep,
     });
     const savedPath = await (deps.persist ?? defaultPersist)(
-      request.outputPath,
+      safeRequest.outputPath,
       bytes
     );
     return ok(GenerateImageOutput.parse({ savedPath }));

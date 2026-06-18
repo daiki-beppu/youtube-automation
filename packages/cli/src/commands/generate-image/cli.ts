@@ -19,9 +19,6 @@ export const referencesFromArg = (value: unknown): string[] | undefined => {
   if (typeof value === "string") {
     return [value];
   }
-  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-    return value;
-  }
   throw new Error("validation: --reference は文字列で指定してください");
 };
 
@@ -53,7 +50,7 @@ export const generateImageCommand = defineCommand({
       type: "string",
     },
     reference: {
-      description: "参照画像パス。複数指定可",
+      description: "参照画像パス",
       type: "string",
     },
   },

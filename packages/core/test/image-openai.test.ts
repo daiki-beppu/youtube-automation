@@ -24,7 +24,13 @@
 // and rejects unmapped ratios with a `config:`-prefixed Error WITHOUT retrying.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -124,11 +130,16 @@ const makeDeps = (
     },
   }) as unknown as OpenAIDeps;
 
+let workdir: string;
+
+const channelPath = (path: string): string => join(realpathSync(workdir), path);
+
 // Service deps bundling the provider with the fake sleep/persist recorders.
 const serviceDeps = (
   provider: OpenAIImageProvider,
   recorders: ReturnType<typeof makeRecorders>
 ) => ({
+  channelDir: workdir,
   persist: recorders.persist,
   provider,
   sleep: recorders.sleep,
@@ -152,8 +163,6 @@ const request = (
   prompt: "warm acoustic cafe afternoon",
   ...(references ? { references } : {}),
 });
-
-let workdir: string;
 
 beforeAll(() => {
   workdir = mkdtempSync(join(tmpdir(), "img-openai-"));
@@ -194,7 +203,7 @@ describe("OpenAIImageProvider 1-attempt contract", () => {
 
     // When calling the provider directly
     const bytes = await provider.generate(
-      request(join(workdir, "unit.png"), "16:9")
+      request("collections/planning/demo/unit.png", "16:9")
     );
 
     // Then the decoded bytes come back from a single SDK call — no retry, no
@@ -218,7 +227,9 @@ describe("OpenAIImageProvider 1-attempt contract", () => {
     // Then it throws once without retrying internally; the message carries no
     // domain prefix so the service-side withRetry treats it as retryable
     await expect(
-      provider.generate(request(join(workdir, "empty-unit.png"), "16:9"))
+      provider.generate(
+        request("collections/planning/demo/empty-unit.png", "16:9")
+      )
     ).rejects.toThrow("openai が画像なしレスポンスを返しました");
     expect(generateCalls).toHaveLength(1);
   });
@@ -237,7 +248,9 @@ describe("OpenAIImageProvider 1-attempt contract", () => {
     // When calling the provider directly with 1:1
     // Then it fails fast: config:-prefixed throw, no client, no SDK call
     await expect(
-      provider.generate(request(join(workdir, "square-unit.png"), "1:1"))
+      provider.generate(
+        request("collections/planning/demo/square-unit.png", "1:1")
+      )
     ).rejects.toThrow(/^config:/u);
     expect(recorders.clientCreatedCount()).toBe(0);
     expect(generateCalls).toHaveLength(0);
@@ -259,7 +272,7 @@ describe("generateImageService (openai) success", () => {
       openaiConfig,
       makeDeps(client, recorders)
     );
-    const outputPath = join(workdir, "wide.png");
+    const outputPath = "collections/planning/demo/wide.png";
 
     // When generating at 16:9 through the service
     const r = await generateImageService(
@@ -273,7 +286,7 @@ describe("generateImageService (openai) success", () => {
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
     }
-    expect(r.value.savedPath).toBe(outputPath);
+    expect(r.value.savedPath).toBe(channelPath(outputPath));
     const [persisted] = recorders.persisted;
     if (!persisted) {
       throw new Error("expected a persisted image");
@@ -304,7 +317,7 @@ describe("generateImageService (openai) success", () => {
 
     // When generating at 9:16 through the service
     const r = await generateImageService(
-      request(join(workdir, "tall.png"), "9:16"),
+      request("collections/planning/demo/tall.png", "9:16"),
       serviceDeps(provider, recorders)
     );
 
@@ -329,7 +342,7 @@ describe("generateImageService (openai) success", () => {
 
     // When generating through the service
     const r = await generateImageService(
-      request(join(workdir, "first.png"), "16:9"),
+      request("collections/planning/demo/first.png", "16:9"),
       serviceDeps(provider, recorders)
     );
 
@@ -344,8 +357,12 @@ describe("generateImageService (openai) success", () => {
 
   test("uses images.edit (not generate) when references are supplied", async () => {
     // Given a reference image on disk (openai.py:86-96)
-    const refPath = join(workdir, "ref.png");
-    writeFileSync(refPath, new Uint8Array([0x50, 0x4b]));
+    const refPath = "collections/planning/demo/ref.png";
+    mkdirSync(channelPath("collections/planning/demo"), { recursive: true });
+    writeFileSync(
+      channelPath(refPath),
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    );
     const base64 = Buffer.from(new Uint8Array([8, 8])).toString("base64");
     const { client, editCalls, generateCalls } = makeOpenAIClient({
       edit: [() => imageResponse(base64)],
@@ -358,7 +375,7 @@ describe("generateImageService (openai) success", () => {
 
     // When generating with a reference image through the service
     const r = await generateImageService(
-      request(join(workdir, "edit-out.png"), "16:9", [refPath]),
+      request("collections/planning/demo/edit-out.png", "16:9", [refPath]),
       serviceDeps(provider, recorders)
     );
 
@@ -385,7 +402,7 @@ describe("generateImageService (openai) aspect-ratio guard", () => {
 
     // When generating at an unsupported ratio through the service
     const r = await generateImageService(
-      request(join(workdir, "square.png"), "1:1"),
+      request("collections/planning/demo/square.png", "1:1"),
       serviceDeps(provider, recorders)
     );
 
@@ -420,7 +437,7 @@ describe("generateImageService (openai) retry", () => {
 
     // When generating through the service
     const r = await generateImageService(
-      request(join(workdir, "empty.png"), "16:9"),
+      request("collections/planning/demo/empty.png", "16:9"),
       serviceDeps(provider, recorders)
     );
 
@@ -455,7 +472,7 @@ describe("generateImageService (openai) retry", () => {
 
     // When generating through the service
     const r = await generateImageService(
-      request(join(workdir, "retry-ok.png"), "16:9"),
+      request("collections/planning/demo/retry-ok.png", "16:9"),
       serviceDeps(provider, recorders)
     );
 

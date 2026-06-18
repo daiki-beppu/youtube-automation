@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@youtube-automation/core": "workspace:*",
-    "citty": "^0.2.2"
+    "citty": "^0.2.2",
+    "yaml": "^2.9.0"
   }
 }

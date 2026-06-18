@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -9,9 +9,13 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { ok } from "@youtube-automation/core";
 import { REGISTRY } from "@youtube-automation/core/registry";
 
-import { referencesFromArg } from "../src/commands/generate-image/cli.ts";
+import {
+  generateImageCommand,
+  referencesFromArg,
+} from "../src/commands/generate-image/cli.ts";
 
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
@@ -80,7 +84,7 @@ describe("core registry — image.generate entry visible from cli package", () =
     if (entry === undefined) {
       throw new Error("image.generate registry entry is required");
     }
-    expect(entry.deps).toEqual(["imageProvider"]);
+    expect(entry.deps).toEqual(["channelDir", "imageProvider"]);
     expect(entry.description.length).toBeGreaterThan(0);
   });
 });
@@ -90,14 +94,61 @@ describe("tayk generate-image — smoke", () => {
     expect(referencesFromArg("ref.png")).toEqual(["ref.png"]);
   });
 
-  test("keeps multiple reference arguments as the service input array", () => {
-    expect(referencesFromArg(["a.png", "b.png"])).toEqual(["a.png", "b.png"]);
-  });
-
   test("rejects invalid reference argument values before service execution", () => {
     expect(() => referencesFromArg([123])).toThrow(
       "validation: --reference は文字列で指定してください"
     );
+  });
+
+  test("prints the success result from the CLI adapter", async () => {
+    const channelDir = makeTempDir("cli-image-success-");
+    const entry = REGISTRY["image.generate"];
+    const originalRun = entry.run;
+    const originalChannelDir = process.env.CHANNEL_DIR;
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
+
+    try {
+      process.env.CHANNEL_DIR = channelDir;
+      (
+        entry as unknown as {
+          run: typeof originalRun;
+        }
+      ).run = () =>
+        Promise.resolve(
+          ok({
+            savedPath: join(channelDir, "collections/planning/demo/main.png"),
+          })
+        );
+
+      await generateImageCommand.run?.({
+        args: {
+          "aspect-ratio": "16:9",
+          "image-size": "2K",
+          json: false,
+          output: "collections/planning/demo/main.png",
+          prompt: "a square cafe thumbnail",
+          reference: undefined,
+        },
+      } as never);
+
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        `saved: ${join(channelDir, "collections/planning/demo/main.png")}\n`
+      );
+    } finally {
+      (
+        entry as unknown as {
+          run: typeof originalRun;
+        }
+      ).run = originalRun;
+      if (originalChannelDir === undefined) {
+        Reflect.deleteProperty(process.env, "CHANNEL_DIR");
+      } else {
+        process.env.CHANNEL_DIR = originalChannelDir;
+      }
+      stdoutSpy.mockRestore();
+    }
   });
 
   test("formats provider config errors through the command helper", () => {
@@ -109,7 +160,7 @@ describe("tayk generate-image — smoke", () => {
       "--prompt",
       "a square cafe thumbnail",
       "--output",
-      join(channelDir, "out.png"),
+      "collections/planning/demo/out.png",
       "--aspect-ratio",
       "1:1",
       "--json"

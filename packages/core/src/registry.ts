@@ -76,12 +76,15 @@ const defineRegistryEntry = <
 
 export const REGISTRY = {
   "image.generate": defineRegistryEntry({
-    deps: ["imageProvider"],
+    deps: ["channelDir", "imageProvider"],
     description: "Gemini / OpenAI provider で画像を生成して保存する",
     inputSchema: GenerateImageInput,
     outputSchema: GenerateImageOutput,
     run: (input, deps) =>
-      generateImageService(input, { provider: deps.imageProvider }),
+      generateImageService(input, {
+        channelDir: deps.channelDir,
+        provider: deps.imageProvider,
+      }),
   }),
   "skills.list": defineRegistryEntry({
     deps: [],
