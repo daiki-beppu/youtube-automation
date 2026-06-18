@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { join, resolve } from "node:path";
 
 import type { ChannelConfig } from "@youtube-automation/core/config";
 import type { YouTubeClient } from "@youtube-automation/core/oauth/client";
@@ -10,6 +11,15 @@ import {
   playlistAssignRawInput,
   renderStatusText,
 } from "../src/commands/playlist/cli.ts";
+
+const repoRoot = resolve(import.meta.dir, "..", "..", "..");
+const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
+
+const runTayk = (...argv: string[]) =>
+  Bun.spawnSync(["bun", taykBin, ...argv], {
+    cwd: repoRoot,
+    env: process.env,
+  });
 
 interface TestCommand {
   args?: Record<string, unknown>;
@@ -104,6 +114,19 @@ describe("core registry - playlist entries visible from cli package", () => {
 });
 
 describe("tayk playlist - smoke", () => {
+  test("should reach playlist help through the tayk dispatcher", () => {
+    const proc = runTayk("playlist", "--help");
+
+    expect(proc.exitCode).toBe(0);
+    const stdout = proc.stdout.toString();
+    expect(stdout).toContain("status");
+    expect(stdout).toContain("create");
+    expect(stdout).toContain("assign");
+    expect(stdout).toContain("sync");
+    expect(stdout).toContain("clean-deleted");
+    expect(stdout).toContain("init");
+  });
+
   test("should expose playlist operations from the command adapter", () => {
     const command = createPlaylistCommand() as TestCommand;
 

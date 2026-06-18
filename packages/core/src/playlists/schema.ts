@@ -8,13 +8,13 @@ const DeletedVideoTitles = ["Deleted video", "Private video"] as const;
 export const DELETED_VIDEO_TITLES = new Set<string>(DeletedVideoTitles);
 
 const DryRunSnakeInput = z
-  .object({ dry_run: z.boolean().default(false) })
+  .object({ dry_run: z.boolean() })
   .strict()
   .transform(snakeToCamel);
 
 const AssignSnakeInput = z
   .object({
-    dry_run: z.boolean().default(false),
+    dry_run: z.boolean(),
     theme: z.string().min(1),
     video_id: z.string().min(1),
   })

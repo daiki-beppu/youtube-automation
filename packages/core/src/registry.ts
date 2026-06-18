@@ -68,6 +68,7 @@ export interface RegistryEntry<
   D extends keyof DepsMap = never,
 > {
   readonly deps: readonly D[];
+  readonly depsForInput?: (input: z.output<I>) => readonly (keyof DepsMap)[];
   readonly description: string;
   readonly inputSchema: I;
   readonly outputSchema: O;
@@ -89,6 +90,7 @@ const defineRegistryEntry = <
 export const REGISTRY = {
   "playlists.assign": defineRegistryEntry({
     deps: ["config", "yt"],
+    depsForInput: (input) => (input.dryRun ? ["config"] : ["config", "yt"]),
     description: "動画を設定に一致する playlist へ追加する",
     inputSchema: PlaylistAssignInputSchema,
     outputSchema: PlaylistAssignOutputSchema,
@@ -103,6 +105,8 @@ export const REGISTRY = {
   }),
   "playlists.create": defineRegistryEntry({
     deps: ["config", "channelDir", "yt"],
+    depsForInput: (input) =>
+      input.dryRun ? ["config", "channelDir"] : ["config", "channelDir", "yt"],
     description: "playlist_id 未設定の playlist を YouTube に作成する",
     inputSchema: PlaylistCreateInputSchema,
     outputSchema: PlaylistCreateOutputSchema,
@@ -110,6 +114,8 @@ export const REGISTRY = {
   }),
   "playlists.init": defineRegistryEntry({
     deps: ["config", "channelDir", "yt"],
+    depsForInput: (input) =>
+      input.dryRun ? ["config", "channelDir"] : ["config", "channelDir", "yt"],
     description: "playlist_id 未設定の playlist を初期化する",
     inputSchema: PlaylistInitInputSchema,
     outputSchema: PlaylistInitOutputSchema,
@@ -125,6 +131,8 @@ export const REGISTRY = {
   }),
   "playlists.sync": defineRegistryEntry({
     deps: ["config", "channelDir", "yt"],
+    depsForInput: (input) =>
+      input.dryRun ? ["config", "channelDir"] : ["config", "channelDir", "yt"],
     description: "collections/live 配下の既存動画を playlist へ一括追加する",
     inputSchema: PlaylistSyncInputSchema,
     outputSchema: PlaylistSyncOutputSchema,

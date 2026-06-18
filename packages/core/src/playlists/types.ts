@@ -4,7 +4,7 @@ import type { PlaylistAssignOutput, PlaylistCreateOutput } from "./schema.ts";
 
 export interface PlaylistCoreDeps {
   config: ChannelConfig;
-  yt: YouTubeClient;
+  yt?: YouTubeClient;
 }
 
 export interface PlaylistChannelDeps extends PlaylistCoreDeps {
@@ -75,8 +75,14 @@ export interface PlaylistClient {
 export type PlaylistOperation = PlaylistCreateOutput["created"][number];
 export type PlaylistAssignment = PlaylistAssignOutput["assigned"][number];
 
-export const youtubeClient = (yt: YouTubeClient): PlaylistClient =>
-  yt as unknown as PlaylistClient;
+export const youtubeClient = (
+  yt: YouTubeClient | undefined
+): PlaylistClient => {
+  if (yt === undefined) {
+    throw new Error("auth: YouTube client dependency is required");
+  }
+  return yt as unknown as PlaylistClient;
+};
 
 const stringArray = (value: unknown): readonly string[] =>
   Array.isArray(value)

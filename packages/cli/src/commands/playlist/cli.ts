@@ -30,6 +30,7 @@ interface PlaylistCommandDeps {
 
 interface PlaylistRegistryEntry<I, O, D extends keyof DepsMap> {
   deps: readonly D[];
+  depsForInput?: (input: I) => readonly (keyof DepsMap)[];
   inputSchema: { parse: (rawInput: unknown) => I };
   run: (input: I, deps: Pick<DepsMap, D>) => Promise<Result<O, ServiceError>>;
 }
@@ -38,33 +39,17 @@ const defaultDeps: PlaylistCommandDeps = {
   resolveDeps: (deps) => resolveDeps(deps),
 };
 
-const hasDryRun = (input: unknown): input is { dryRun: boolean } =>
-  typeof input === "object" &&
-  input !== null &&
-  "dryRun" in input &&
-  typeof input.dryRun === "boolean";
-
-const depsForInput = <D extends keyof DepsMap>(
-  deps: readonly D[],
-  input: unknown,
-  options?: { omitYouTubeOnDryRun?: boolean }
-): readonly D[] =>
-  options?.omitYouTubeOnDryRun === true && hasDryRun(input) && input.dryRun
-    ? deps.filter((dep) => dep !== "yt")
-    : deps;
-
 const runPlaylistEntry = async <I, O, D extends keyof DepsMap>(
   entry: PlaylistRegistryEntry<I, O, D>,
   rawInput: unknown,
-  commandDeps: PlaylistCommandDeps,
-  options?: { omitYouTubeOnDryRun?: boolean }
+  commandDeps: PlaylistCommandDeps
 ): Promise<Result<O, ServiceError>> => {
   try {
     const input = entry.inputSchema.parse(rawInput);
     const resolvedDeps = await commandDeps.resolveDeps(
-      depsForInput(entry.deps, input, options)
+      entry.depsForInput?.(input) ?? entry.deps
     );
-    return await entry.run(input, resolvedDeps as Pick<DepsMap, D>);
+    return await entry.run(input, resolvedDeps);
   } catch (error) {
     return err(toServiceError(error));
   }
@@ -193,8 +178,7 @@ const createCommand = (commandDeps: PlaylistCommandDeps) =>
       const result = await runPlaylistEntry(
         createEntry,
         { dry_run: args["dry-run"] },
-        commandDeps,
-        { omitYouTubeOnDryRun: true }
+        commandDeps
       );
       emitPlaylistResult(result, {
         json: args.json,
@@ -228,8 +212,7 @@ const assignCommand = (commandDeps: PlaylistCommandDeps) =>
       const result = await runPlaylistEntry(
         assignEntry,
         playlistAssignRawInput(args),
-        commandDeps,
-        { omitYouTubeOnDryRun: true }
+        commandDeps
       );
       emitPlaylistResult(result, {
         json: args.json,
@@ -253,8 +236,7 @@ const syncCommand = (commandDeps: PlaylistCommandDeps) =>
       const result = await runPlaylistEntry(
         syncEntry,
         { dry_run: args["dry-run"] },
-        commandDeps,
-        { omitYouTubeOnDryRun: true }
+        commandDeps
       );
       emitPlaylistResult(result, {
         json: args.json,
@@ -302,8 +284,7 @@ const initCommand = (commandDeps: PlaylistCommandDeps) =>
       const result = await runPlaylistEntry(
         initEntry,
         { dry_run: args["dry-run"] },
-        commandDeps,
-        { omitYouTubeOnDryRun: true }
+        commandDeps
       );
       emitPlaylistResult(result, {
         json: args.json,

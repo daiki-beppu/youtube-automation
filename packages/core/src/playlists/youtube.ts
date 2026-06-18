@@ -70,9 +70,7 @@ const playlistDescription = (
 ): string => {
   const rawDescription =
     config.engagement.playlists.items[playlist.key]?.description;
-  return typeof rawDescription === "string"
-    ? rawDescription
-    : `Auto-managed playlist for ${playlist.title}`;
+  return typeof rawDescription === "string" ? rawDescription : "";
 };
 
 export const createPlaylist = async (

@@ -52,7 +52,7 @@ import {
 } from "./youtube.ts";
 
 const assignToPlaylist = async (
-  client: PlaylistClient,
+  client: PlaylistClient | undefined,
   playlist: PlaylistRecord,
   input: PlaylistAssignInput,
   activities: readonly string[]
@@ -69,6 +69,9 @@ const assignToPlaylist = async (
   }
   if (playlist.playlistId === undefined) {
     return null;
+  }
+  if (client === undefined) {
+    throw new Error("auth: YouTube client dependency is required");
   }
   const items = await listPlaylistItems(client, playlist.playlistId);
   const alreadyPresent = hasVideo(items, input.videoId);
@@ -87,7 +90,7 @@ const assignResolvedVideo = async (
   input: PlaylistAssignInput,
   activityOverride?: string
 ): Promise<PlaylistAssignOutput> => {
-  const client = youtubeClient(deps.yt);
+  const client = input.dryRun ? undefined : youtubeClient(deps.yt);
   const activities =
     activityOverride === undefined
       ? activitiesForTheme(deps.config, input.theme)
@@ -125,7 +128,6 @@ const createPlaylists = async (
   deps: PlaylistChannelDeps,
   input: PlaylistCreateInput
 ): Promise<PlaylistCreateOutput> => {
-  const client = youtubeClient(deps.yt);
   const playlists = playlistEntries(deps.config);
   assertCreateTargetsHaveTitles(playlists);
   let created: PlaylistCreateOutput["created"] = [];
@@ -148,6 +150,7 @@ const createPlaylists = async (
       );
       continue;
     }
+    const client = youtubeClient(deps.yt);
     const playlistId = await createPlaylist(client, deps.config, playlist);
     await writePlaylistId(deps.channelDir, playlist.key, playlistId);
     created = created.toSpliced(created.length, 0, {

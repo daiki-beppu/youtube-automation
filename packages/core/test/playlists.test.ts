@@ -265,6 +265,35 @@ describe("playlists registry entries", () => {
       expect(entry.deps).not.toContain("ytAnalytics");
     }
   });
+
+  test("declares dry-run deps in the core registry contract", () => {
+    expect(
+      REGISTRY["playlists.assign"].depsForInput?.({
+        dryRun: true,
+        theme: "focus",
+        videoId: "video_123",
+      })
+    ).toEqual(["config"]);
+    expect(
+      REGISTRY["playlists.assign"].depsForInput?.({
+        dryRun: false,
+        theme: "focus",
+        videoId: "video_123",
+      })
+    ).toEqual(["config", "yt"]);
+    expect(
+      REGISTRY["playlists.create"].depsForInput?.({ dryRun: true })
+    ).toEqual(["config", "channelDir"]);
+    expect(
+      REGISTRY["playlists.create"].depsForInput?.({ dryRun: false })
+    ).toEqual(["config", "channelDir", "yt"]);
+    expect(REGISTRY["playlists.sync"].depsForInput?.({ dryRun: true })).toEqual(
+      ["config", "channelDir"]
+    );
+    expect(REGISTRY["playlists.init"].depsForInput?.({ dryRun: true })).toEqual(
+      ["config", "channelDir"]
+    );
+  });
 });
 
 describe("playlists schemas", () => {
@@ -313,6 +342,20 @@ describe("playlists schemas", () => {
     });
 
     expect(input).toEqual({ dryRun: true });
+  });
+
+  test("requires dry_run for mutating operations at the registry boundary", () => {
+    const cases = [
+      ["playlists.create", {}],
+      ["playlists.assign", { theme: "focus", video_id: "video_123" }],
+      ["playlists.cleanDeleted", {}],
+      ["playlists.sync", {}],
+      ["playlists.init", {}],
+    ] as const;
+
+    for (const [key, input] of cases) {
+      expect(() => REGISTRY[key].inputSchema.parse(input)).toThrow();
+    }
   });
 });
 
@@ -372,7 +415,7 @@ describe("playlists.create", () => {
     expect(playlistInsertCalls).toHaveLength(1);
     expect(playlistInsertCalls[0]?.requestBody).toEqual({
       snippet: {
-        description: "Auto-managed playlist for Focus Sessions",
+        description: "",
         title: "Focus Sessions",
       },
       status: { privacyStatus: "public" },
@@ -768,6 +811,7 @@ describe("playlists.assign", () => {
 
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
         theme: "focus",
         video_id: "video_456",
       }),
@@ -796,6 +840,7 @@ describe("playlists.assign", () => {
 
     const ocean = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
         theme: "Deep Ocean Waves",
         video_id: "video_ocean",
       }),
@@ -803,6 +848,7 @@ describe("playlists.assign", () => {
     );
     const forest = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
         theme: "FOREST Ambience",
         video_id: "video_forest",
       }),
@@ -837,6 +883,7 @@ describe("playlists.assign", () => {
 
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
         theme: "focus",
         video_id: "video_429",
       }),
@@ -865,6 +912,7 @@ describe("playlists.assign", () => {
 
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
         theme: "focus",
         video_id: "video_403",
       }),
@@ -894,6 +942,7 @@ describe("playlists.assign", () => {
 
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
         theme: "focus",
         video_id: "video_403",
       }),
@@ -926,6 +975,7 @@ describe("playlists.assign", () => {
 
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
         theme: "focus",
         video_id: "video_403",
       }),
