@@ -1,7 +1,11 @@
 /* eslint-disable no-restricted-properties -- #772 requires ffmpeg/ffprobe subprocess execution inside the core service boundary. */
 import { join } from "node:path";
 
-import { MASTER_OUTPUT_BASENAME, MASTER_OUTPUT_DIR } from "./schema.ts";
+import {
+  MASTER_OUTPUT_BASENAME,
+  MASTER_OUTPUT_DIR,
+  MAX_MASTER_LOOP_COUNT,
+} from "./schema.ts";
 import type { SupportedAudioExtension } from "./schema.ts";
 import type { ResolvedMasteringOptions } from "./types.ts";
 
@@ -54,6 +58,36 @@ const expandedDurationSeconds = (
   loopCount * singleLoopSeconds -
   Math.max(loopCount * trackCount - 1, 0) * crossfadeSeconds;
 
+const resolveLoopCountForTarget = (
+  singleLoopSeconds: number,
+  trackCount: number,
+  targetSeconds: number,
+  crossfadeSeconds: number
+): number => {
+  const firstLoopSeconds = expandedDurationSeconds(
+    singleLoopSeconds,
+    trackCount,
+    1,
+    crossfadeSeconds
+  );
+  if (firstLoopSeconds >= targetSeconds) {
+    return 1;
+  }
+  const additionalLoopSeconds =
+    singleLoopSeconds - trackCount * crossfadeSeconds;
+  if (additionalLoopSeconds <= 0) {
+    throw new Error("validation: crossfade duration prevents loop expansion");
+  }
+  const loopCount =
+    1 + Math.ceil((targetSeconds - firstLoopSeconds) / additionalLoopSeconds);
+  if (loopCount > MAX_MASTER_LOOP_COUNT) {
+    throw new Error(
+      `validation: resolved loop count ${loopCount} exceeds max ${MAX_MASTER_LOOP_COUNT}`
+    );
+  }
+  return loopCount;
+};
+
 export const resolveLoopCount = async (
   files: readonly string[],
   options: Pick<
@@ -73,29 +107,12 @@ export const resolveLoopCount = async (
       0
     );
     const targetSeconds = options.targetDuration * 60;
-    const firstLoopSeconds = expandedDurationSeconds(
+    return resolveLoopCountForTarget(
       singleLoopSeconds,
       files.length,
-      1,
+      targetSeconds,
       options.crossfadeSeconds
     );
-    const additionalLoopSeconds =
-      singleLoopSeconds - files.length * options.crossfadeSeconds;
-    if (firstLoopSeconds < targetSeconds && additionalLoopSeconds <= 0) {
-      throw new Error("validation: crossfade duration prevents loop expansion");
-    }
-    let loopCount = 1;
-    while (
-      expandedDurationSeconds(
-        singleLoopSeconds,
-        files.length,
-        loopCount,
-        options.crossfadeSeconds
-      ) < targetSeconds
-    ) {
-      loopCount += 1;
-    }
-    return loopCount;
   }
   return 1;
 };

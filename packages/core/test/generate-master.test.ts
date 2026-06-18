@@ -48,10 +48,17 @@ const makeCollection = (channelDir: string, name = "test"): string => {
   return collectionDir;
 };
 
-const writeMasterupOverride = (channelDir: string, yaml: string): void => {
+const writeMasterupOverride = (
+  channelDir: string,
+  config: Record<string, unknown>
+): void => {
   const configDir = join(channelDir, "config", "skills");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "masterup.yaml"), yaml, "utf-8");
+  writeFileSync(
+    join(configDir, "masterup.json"),
+    `${JSON.stringify(config, null, 2)}\n`,
+    "utf-8"
+  );
 };
 
 const writeTrack = (
@@ -77,9 +84,9 @@ const generateOk = async (
   return result.value;
 };
 
-const fakeProc = (stdout = "") =>
+const fakeProc = (stdout = "", exitCode = 0) =>
   ({
-    exited: Promise.resolve(0),
+    exited: Promise.resolve(exitCode),
     stderr: new ReadableStream({
       start(controller) {
         controller.close();
@@ -232,10 +239,9 @@ describe("generateMasterService - file generation", () => {
   test("should build an acrossfade command for sorted tracks and looped order", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
-    writeMasterupOverride(
-      channelDir,
-      ["audio:", "  crossfade_duration: 2", '  bitrate: "256k"'].join("\n")
-    );
+    writeMasterupOverride(channelDir, {
+      audio: { bitrate: "256k", crossfade_duration: 2 },
+    });
     const first = writeTrack(collectionDir, "01-opening.mp3", "first");
     const second = writeTrack(collectionDir, "02-middle.mp3", "second");
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/ffmpeg");
@@ -276,6 +282,39 @@ describe("generateMasterService - file generation", () => {
       loops: 3,
       segmentCount: 6,
     });
+  });
+
+  test("should match the legacy Python ffmpeg argv contract", async () => {
+    const channelDir = makeTempDir("master-channel-");
+    const collectionDir = makeCollection(channelDir);
+    writeMasterupOverride(channelDir, {
+      audio: { bitrate: "256k", crossfade_duration: 2 },
+    });
+    const first = writeTrack(collectionDir, "01-opening.mp3", "first");
+    const second = writeTrack(collectionDir, "02-middle.mp3", "second");
+    const outputPath = join(collectionDir, "01-master", "master.mp3");
+    spyOn(Bun, "which").mockReturnValue("/usr/bin/ffmpeg");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(fakeProc());
+
+    await generateOk({ collection: collectionDir }, channelDir);
+
+    expect(spawnSpy.mock.calls[0]?.[0]).toEqual([
+      "ffmpeg",
+      "-y",
+      "-i",
+      first,
+      "-i",
+      second,
+      "-filter_complex",
+      "[0:a][1:a]acrossfade=d=2:c1=tri:c2=tri[aout]",
+      "-map",
+      "[aout]",
+      "-c:a",
+      "libmp3lame",
+      "-b:a",
+      "256k",
+      outputPath,
+    ]);
   });
 
   test("should shuffle tracks deterministically when shuffle and seed are set", async () => {
@@ -319,10 +358,9 @@ describe("generateMasterService - file generation", () => {
   test("should use skill config shuffle and shuffle_seed when CLI shuffle is omitted", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
-    writeMasterupOverride(
-      channelDir,
-      ["audio:", "  shuffle: true", "  shuffle_seed: 42"].join("\n")
-    );
+    writeMasterupOverride(channelDir, {
+      audio: { shuffle: true, shuffle_seed: 42 },
+    });
     const first = writeTrack(collectionDir, "01-opening.mp3", "first");
     const second = writeTrack(collectionDir, "02-middle.mp3", "second");
     const third = writeTrack(collectionDir, "03-ending.mp3", "third");
@@ -340,10 +378,7 @@ describe("generateMasterService - file generation", () => {
   test("should not enable shuffle from skill config shuffle_seed alone", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
-    writeMasterupOverride(
-      channelDir,
-      ["audio:", "  shuffle_seed: 42"].join("\n")
-    );
+    writeMasterupOverride(channelDir, { audio: { shuffle_seed: 42 } });
     const first = writeTrack(collectionDir, "01-opening.mp3", "first");
     const second = writeTrack(collectionDir, "02-middle.mp3", "second");
     const third = writeTrack(collectionDir, "03-ending.mp3", "third");
@@ -425,10 +460,7 @@ describe("generateMasterService - file generation", () => {
   test("should use skill config pin_first_count when CLI pin flags are omitted", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
-    writeMasterupOverride(
-      channelDir,
-      ["audio:", "  pin_first_count: 1"].join("\n")
-    );
+    writeMasterupOverride(channelDir, { audio: { pin_first_count: 1 } });
     const first = writeTrack(collectionDir, "01-opening.mp3", "first");
     const second = writeTrack(collectionDir, "02-middle.mp3", "second");
     const third = writeTrack(collectionDir, "03-bridge.mp3", "third");
@@ -449,10 +481,9 @@ describe("generateMasterService - file generation", () => {
   test("should use target_duration and ffprobe durations to calculate loop count", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
-    writeMasterupOverride(
-      channelDir,
-      ["audio:", "  crossfade_duration: 1"].join("\n")
-    );
+    writeMasterupOverride(channelDir, {
+      audio: { crossfade_duration: 1 },
+    });
     writeTrack(collectionDir, "01-opening.wav", "first");
     writeTrack(collectionDir, "02-middle.wav", "second");
     spyOn(Bun, "which").mockImplementation((name: string) =>
@@ -490,13 +521,87 @@ describe("generateMasterService - file generation", () => {
     });
   });
 
+  test("should reject target_duration above the bounded maximum", () => {
+    expect(() =>
+      GenerateMasterInputSchema.parse({
+        collection: "collections/planning/test",
+        target_duration: 1441,
+      })
+    ).toThrow();
+  });
+
+  test("should surface ffprobe failures as validation errors", async () => {
+    const channelDir = makeTempDir("master-channel-");
+    const collectionDir = makeCollection(channelDir);
+    writeTrack(collectionDir, "01-opening.wav", "first");
+    writeTrack(collectionDir, "02-middle.wav", "second");
+    spyOn(Bun, "which").mockImplementation((name: string) =>
+      name === "ffprobe" ? `/usr/bin/${name}` : null
+    );
+    spyOn(Bun, "spawn").mockImplementation(() => fakeProc("", 1));
+
+    const result = await generateMasterService(
+      { collection: collectionDir, targetDuration: 1 },
+      { channelDir }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("ffprobe failed");
+    }
+  });
+
+  test("should surface ffmpeg failures as io errors", async () => {
+    const channelDir = makeTempDir("master-channel-");
+    const collectionDir = makeCollection(channelDir);
+    writeTrack(collectionDir, "01-opening.mp3", "first");
+    writeTrack(collectionDir, "02-middle.mp3", "second");
+    spyOn(Bun, "which").mockReturnValue("/usr/bin/ffmpeg");
+    spyOn(Bun, "spawn").mockReturnValue(fakeProc("", 1));
+
+    const result = await generateMasterService(
+      { collection: collectionDir },
+      { channelDir }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("io");
+      expect(result.error.message).toContain("ffmpeg failed");
+    }
+  });
+
+  test("should reject loop expansion above the segment limit before spawning ffmpeg", async () => {
+    const channelDir = makeTempDir("master-channel-");
+    const collectionDir = makeCollection(channelDir);
+    for (let index = 1; index <= 11; index += 1) {
+      writeTrack(
+        collectionDir,
+        `${String(index).padStart(2, "0")}-track.mp3`,
+        `track-${index}`
+      );
+    }
+    spyOn(Bun, "which").mockReturnValue("/usr/bin/ffmpeg");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(fakeProc());
+
+    const result = await generateMasterService(
+      { collection: collectionDir, loop: 1000 },
+      { channelDir }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("segment count");
+    }
+    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
   test("should use skill config target_duration_min when CLI loop and target are omitted", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
-    writeMasterupOverride(
-      channelDir,
-      ["audio:", "  target_duration_min: 1"].join("\n")
-    );
+    writeMasterupOverride(channelDir, { audio: { target_duration_min: 1 } });
     writeTrack(collectionDir, "01-opening.wav", "first");
     writeTrack(collectionDir, "02-middle.wav", "second");
     spyOn(Bun, "which").mockImplementation((name: string) =>
@@ -523,10 +628,9 @@ describe("generateMasterService - file generation", () => {
   test("should keep increasing loops until expanded crossfades meet target duration", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
-    writeMasterupOverride(
-      channelDir,
-      ["audio:", "  crossfade_duration: 1"].join("\n")
-    );
+    writeMasterupOverride(channelDir, {
+      audio: { crossfade_duration: 1 },
+    });
     writeTrack(collectionDir, "01-opening.mp3", "first");
     writeTrack(collectionDir, "02-middle.mp3", "second");
     writeTrack(collectionDir, "03-ending.mp3", "third");

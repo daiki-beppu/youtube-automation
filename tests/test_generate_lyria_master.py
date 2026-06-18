@@ -84,6 +84,7 @@ def _patch_subprocess(
     *,
     segment_size: int = 1024,
     tayk_log: list | None = None,
+    tayk_returncode: int = 0,
 ):
     """subprocess を mock し、ffmpeg と `tayk generate-master` の出力を実体化する。
 
@@ -91,6 +92,8 @@ def _patch_subprocess(
     mock 内で path にダミーバイトを書き込んで「ffmpeg が WAV を出力した」状態を再現する。
     """
     log = tayk_log if tayk_log is not None else []
+    bun = "/usr/bin/bun"
+    monkeypatch.setattr(generate_lyria_master.shutil, "which", lambda name: bun if name == "bun" else None)
 
     def fake_run(cmd, **kwargs):
         if cmd[0] == "ffmpeg":
@@ -98,9 +101,11 @@ def _patch_subprocess(
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(b"\x00" * segment_size)
             return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
-        if cmd[:2] == ["tayk", "generate-master"]:
+        if len(cmd) >= 4 and cmd[0] == bun and cmd[2] == "generate-master":
             log.append({"cmd": cmd, "kwargs": kwargs})
-            collection = Path(cmd[2])
+            if tayk_returncode != 0:
+                return SimpleNamespace(returncode=tayk_returncode, stdout=b"", stderr=b"")
+            collection = Path(cmd[3])
             master = collection / "01-master" / "master.wav"
             master.parent.mkdir(parents=True, exist_ok=True)
             master.write_bytes(b"\x00" * segment_size)
@@ -128,6 +133,11 @@ def _patch_load_config(monkeypatch, *, target_duration_min: float | None = None)
     cfg_ns = SimpleNamespace(audio=audio_ns)
 
     monkeypatch.setattr(generate_lyria_master, "load_config", lambda: cfg_ns)
+
+
+def _tayk_bin() -> str:
+    repo_root = Path(generate_lyria_master.__file__).resolve().parents[3]
+    return str(repo_root / "packages" / "cli" / "bin" / "tayk.ts")
 
 
 class TestGenerateSegments:
@@ -173,7 +183,12 @@ class TestGenerateSegments:
         # 結合段は TS dispatcher に委譲される
         assert tayk_log == [
             {
-                "cmd": ["tayk", "generate-master", str(collection)],
+                "cmd": [
+                    "/usr/bin/bun",
+                    _tayk_bin(),
+                    "generate-master",
+                    str(collection),
+                ],
                 "kwargs": {"check": False},
             }
         ]
@@ -321,10 +336,48 @@ class TestMasterCombineDelegation:
         assert rc == 0
         assert tayk_log == [
             {
-                "cmd": ["tayk", "generate-master", str(collection)],
+                "cmd": [
+                    "/usr/bin/bun",
+                    _tayk_bin(),
+                    "generate-master",
+                    str(collection),
+                ],
                 "kwargs": {"check": False},
             }
         ]
+
+    def test_tayk_generate_master_failure_returns_1_and_keeps_segments(self, tmp_path, monkeypatch, capsys):
+        collection = _make_collection(tmp_path / "coll")
+        _patch_lyria_generate(monkeypatch)
+        _patch_subprocess(monkeypatch, tayk_returncode=1)
+        _patch_skill_configs(
+            monkeypatch,
+            lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0},
+        )
+        _patch_load_config(monkeypatch, target_duration_min=None)
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "delegate",
+                "--target-duration",
+                "2",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        rc = generate_lyria_master.main()
+
+        assert rc == 1
+        assert (collection / "02-Individual-music" / "01_delegate.wav").exists()
+        assert not (collection / "01-master" / "master.wav").exists()
+        err = capsys.readouterr().err
+        assert "tayk generate-master failed with exit code 1" in err
 
     def test_legacy_python_generate_master_implementation_is_absent(self):
         repo_root = Path(__file__).parents[1]

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import shutil
 import subprocess
 import sys
 import time
@@ -302,8 +303,15 @@ def _resolve_model(args_model: str | None, lyria_cfg: dict) -> str:
 
 def _run_generate_master(collection_dir: Path) -> Path:
     """TS `master.generate` service 経由でクロスフェード結合する。"""
+    repo_root = Path(__file__).resolve().parents[3]
+    tayk_bin = repo_root / "packages" / "cli" / "bin" / "tayk.ts"
+    if not tayk_bin.exists():
+        raise ValidationError(f"tayk dispatcher が見つかりません: {tayk_bin}")
+    bun = shutil.which("bun")
+    if bun is None:
+        raise ValidationError("bun が見つかりません。tayk generate-master を実行できません")
     result = subprocess.run(
-        ["tayk", "generate-master", str(collection_dir)],
+        [bun, str(tayk_bin), "generate-master", str(collection_dir)],
         check=False,
     )
     if result.returncode != 0:

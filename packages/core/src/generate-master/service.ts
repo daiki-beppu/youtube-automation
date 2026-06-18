@@ -1,8 +1,6 @@
 import { copyFile, mkdir, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
-import { parse as parseYaml } from "yaml";
-
 import { toServiceError } from "../errors.ts";
 import type { ServiceError } from "../errors.ts";
 import { err, ok } from "../result.ts";
@@ -19,6 +17,7 @@ import {
   GenerateMasterOutputSchema,
   MASTER_CONFIG_RELATIVE_PATH,
   MASTER_OUTPUT_DIR,
+  MAX_MASTER_SEGMENT_COUNT,
   MasterupConfigSchema,
 } from "./schema.ts";
 import type {
@@ -38,7 +37,7 @@ const readMasterupConfig = async (
     const text = await readFile(join(channelDir, MASTER_CONFIG_RELATIVE_PATH), {
       encoding: "utf-8",
     });
-    const parsed = parseYaml(text);
+    const parsed = JSON.parse(text) as unknown;
     return MasterupConfigSchema.parse(parsed ?? {});
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
@@ -125,6 +124,12 @@ export const generateMasterService = async (
     const pinned = applyPinFirst(tracks.files, resolvedOptions);
     const ordered = shuffleTracks(pinned, resolvedOptions);
     const loops = await resolveLoopCount(ordered, resolvedOptions);
+    const segmentCount = loops * ordered.length;
+    if (segmentCount > MAX_MASTER_SEGMENT_COUNT) {
+      throw new Error(
+        `validation: generated segment count ${segmentCount} exceeds max ${MAX_MASTER_SEGMENT_COUNT}`
+      );
+    }
     const expanded = Array.from({ length: loops }, () => ordered).flat();
     const outputPath = masterOutputPath(options.collectionDir, tracks.audioExt);
     await mkdir(join(options.collectionDir, MASTER_OUTPUT_DIR), {
@@ -153,7 +158,7 @@ export const generateMasterService = async (
         inputCount: tracks.files.length,
         loops,
         outputPath,
-        segmentCount: expanded.length,
+        segmentCount,
         shuffleSeed,
       })
     );

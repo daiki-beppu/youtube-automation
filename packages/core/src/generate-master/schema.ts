@@ -2,33 +2,44 @@ import { z } from "zod";
 
 import { snakeToCamel } from "../../internal/case.ts";
 
-export const MASTER_CONFIG_RELATIVE_PATH = "config/skills/masterup.yaml";
+export const MASTER_CONFIG_RELATIVE_PATH = "config/skills/masterup.json";
 export const MASTER_SOURCE_DIR = "02-Individual-music";
 export const MASTER_OUTPUT_DIR = "01-master";
 export const MASTER_OUTPUT_BASENAME = "master";
 export const SUPPORTED_AUDIO_EXTENSIONS = ["mp3", "wav"] as const;
+export const MAX_MASTER_LOOP_COUNT = 1000;
+export const MAX_MASTER_SEGMENT_COUNT = 10_000;
+export const MAX_MASTER_TARGET_DURATION_MIN = 24 * 60;
 
 const GenerateMasterSnakeInputSchema = z
   .object({
     collection: z.string(),
-    loop: z.number().int().positive().optional(),
+    loop: z.number().int().positive().max(MAX_MASTER_LOOP_COUNT).optional(),
     pin_first: z.array(z.string()).min(1).optional(),
     pin_first_count: z.number().int().nonnegative().optional(),
     shuffle: z.boolean().optional(),
     shuffle_seed: z.number().int().optional(),
-    target_duration: z.number().positive().optional(),
+    target_duration: z
+      .number()
+      .positive()
+      .max(MAX_MASTER_TARGET_DURATION_MIN)
+      .optional(),
   })
   .strict();
 
 const GenerateMasterCamelInputSchema = z
   .object({
     collection: z.string(),
-    loop: z.number().int().positive().optional(),
+    loop: z.number().int().positive().max(MAX_MASTER_LOOP_COUNT).optional(),
     pinFirst: z.array(z.string()).min(1).optional(),
     pinFirstCount: z.number().int().nonnegative().optional(),
     shuffle: z.boolean().optional(),
     shuffleSeed: z.number().int().optional(),
-    targetDuration: z.number().positive().optional(),
+    targetDuration: z
+      .number()
+      .positive()
+      .max(MAX_MASTER_TARGET_DURATION_MIN)
+      .optional(),
   })
   .strict();
 
@@ -80,7 +91,12 @@ const MasterupAudioConfigSchema = z
     pin_first_count: z.number().int().nonnegative().optional(),
     shuffle: z.boolean().optional(),
     shuffle_seed: z.number().int().optional(),
-    target_duration_min: z.number().int().positive().optional(),
+    target_duration_min: z
+      .number()
+      .int()
+      .positive()
+      .max(MAX_MASTER_TARGET_DURATION_MIN)
+      .optional(),
     target_video_duration_min: z.number().positive().optional(),
   })
   .strict();

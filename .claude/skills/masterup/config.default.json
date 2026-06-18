@@ -1,0 +1,10 @@
+{
+  "audio": {
+    "bitrate": "192k",
+    "crossfade_duration": 1.0,
+    "pin_first_count": 0
+  },
+  "suno_download": {
+    "cdn_url_template": "https://cdn1.suno.ai/{song_id}.mp3"
+  }
+}

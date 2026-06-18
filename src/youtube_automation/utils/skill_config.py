@@ -1,7 +1,7 @@
 """skill-config ローダー
 
-各スキル (.claude/skills/<skill>/config.default.yaml) のデフォルト値と、
-チャンネルリポジトリ側 (config/skills/<skill>.yaml) の上書きをマージして返す。
+各スキル (.claude/skills/<skill>/config.default.json|yaml) のデフォルト値と、
+チャンネルリポジトリ側 (config/skills/<skill>.json|yaml) の上書きをマージして返す。
 
 使い方:
 
@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
@@ -31,33 +32,39 @@ _cache: dict[str, dict[str, Any]] = {}
 
 
 def _default_path(skill: str) -> Path:
-    """パッケージ同梱の default.yaml を解決する。
+    """パッケージ同梱の default config を解決する。
 
-    wheel インストール時は youtube_automation/_skills/<skill>/config.default.yaml、
-    editable install 時はソースツリーの .claude/skills/<skill>/config.default.yaml。
+    wheel インストール時は youtube_automation/_skills/<skill>/config.default.{json,yaml}、
+    editable install 時はソースツリーの .claude/skills/<skill>/config.default.{json,yaml}。
     """
-    try:
-        resource = files("youtube_automation").joinpath("_skills", skill, "config.default.yaml")
-        with as_file(resource) as p:
-            path = Path(p)
-            if path.exists():
-                return path
-    except (ModuleNotFoundError, FileNotFoundError):
-        pass
+    for filename in ("config.default.json", "config.default.yaml"):
+        try:
+            resource = files("youtube_automation").joinpath("_skills", skill, filename)
+            with as_file(resource) as p:
+                path = Path(p)
+                if path.exists():
+                    return path
+        except (ModuleNotFoundError, FileNotFoundError):
+            pass
 
-    src_fallback = Path(__file__).resolve().parents[3] / ".claude" / "skills" / skill / "config.default.yaml"
-    if src_fallback.exists():
-        return src_fallback
+        src_fallback = Path(__file__).resolve().parents[3] / ".claude" / "skills" / skill / filename
+        if src_fallback.exists():
+            return src_fallback
 
     raise ConfigError(
-        f"スキル '{skill}' の config.default.yaml が見つかりません "
+        f"スキル '{skill}' の config.default.json または config.default.yaml が見つかりません "
         "(wheel が壊れているか editable install のソースツリーから実行してください)"
     )
 
 
-def _channel_override_path(skill: str) -> Path:
-    """チャンネルリポジトリ側の上書き config パスを返す (存在チェックは呼び出し側)。"""
-    return channel_dir() / "config" / "skills" / f"{skill}.yaml"
+def _channel_override_path(skill: str) -> Path | None:
+    """チャンネルリポジトリ側の上書き config パスを返す。"""
+    config_dir = channel_dir() / "config" / "skills"
+    for filename in (f"{skill}.json", f"{skill}.yaml"):
+        path = config_dir / filename
+        if path.exists():
+            return path
+    return None
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -82,6 +89,16 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def _load_config_file(path: Path) -> dict[str, Any]:
+    if path.suffix == ".json":
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ConfigError(f"skill-config の root は dict である必要があります: {path}")
+        return data
+    return _load_yaml(path)
+
+
 def load_skill_config(skill: str, *, use_cache: bool = True) -> dict[str, Any]:
     """skill-config を読み込んで返す (default + channel override のマージ結果)。
 
@@ -98,11 +115,11 @@ def load_skill_config(skill: str, *, use_cache: bool = True) -> dict[str, Any]:
     if use_cache and skill in _cache:
         return _cache[skill]
 
-    defaults = _load_yaml(_default_path(skill))
+    defaults = _load_config_file(_default_path(skill))
 
     override_path = _channel_override_path(skill)
-    if override_path.exists():
-        override = _load_yaml(override_path)
+    if override_path is not None:
+        override = _load_config_file(override_path)
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults
@@ -119,9 +136,9 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     検出したいケースで使う。override ファイルが無ければ空 dict。
     """
     path = _channel_override_path(skill)
-    if not path.exists():
+    if path is None:
         return {}
-    return _load_yaml(path)
+    return _load_config_file(path)
 
 
 THUMBNAIL_MODE_PARALLEL = "parallel"
