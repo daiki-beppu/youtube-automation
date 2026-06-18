@@ -101,10 +101,8 @@ describe("tayk generate-image — smoke", () => {
   });
 
   test("formats provider config errors through the command helper", () => {
-    // Given an OpenAI-backed channel config and a request ratio OpenAI rejects
     const channelDir = writeOpenAIChannel();
 
-    // When the dispatcher invokes the generate-image subcommand
     const proc = runTayk(
       { env: { CHANNEL_DIR: channelDir, OPENAI_API_KEY: undefined } },
       "generate-image",
@@ -117,8 +115,6 @@ describe("tayk generate-image — smoke", () => {
       "--json"
     );
 
-    // Then the command reaches the shared Result -> exit-code helper without
-    // creating a per-CLI bin or making an external API request.
     expect(proc.exitCode).toBe(1);
     expect(proc.stderr.toString()).toStartWith("[config] ");
     expect(proc.stderr.toString()).toContain("aspect_ratio");
