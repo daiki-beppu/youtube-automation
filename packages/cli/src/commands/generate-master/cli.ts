@@ -1,3 +1,4 @@
+import { existsSync, statSync } from "node:fs";
 import process from "node:process";
 
 import { err, toServiceError } from "@youtube-automation/core";
@@ -17,7 +18,7 @@ const VALUE_FLAGS = new Set([
   "--target-duration",
 ]);
 
-const BOOLEAN_FLAGS = new Set(["--json", "--shuffle"]);
+const BOOLEAN_FLAGS = new Set(["--json", "--quiet", "--shuffle"]);
 
 const renderText = (output: GenerateMasterOutput): string =>
   [
@@ -45,6 +46,14 @@ const appendPinFirst = (
   value: string
 ): readonly string[] => [...current, value];
 
+const isExistingDirectory = (value: string): boolean => {
+  try {
+    return existsSync(value) && statSync(value).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
 const isValueFlagAssignment = (token: string): boolean => {
   const [flag] = token.split("=");
   return (
@@ -67,8 +76,18 @@ const parseRawArgs = (
       if (value === undefined || value.startsWith("--")) {
         throw new Error(`validation: missing value for ${token}`);
       }
-      pinFirst = appendPinFirst(pinFirst, value);
-      index += 1;
+      for (index += 1; index < argv.length; index += 1) {
+        const pinToken = argv[index];
+        if (pinToken === undefined || pinToken.startsWith("--")) {
+          index -= 1;
+          break;
+        }
+        if (collection === undefined && isExistingDirectory(pinToken)) {
+          collection = pinToken;
+          continue;
+        }
+        pinFirst = appendPinFirst(pinFirst, pinToken);
+      }
       continue;
     }
     if (token.startsWith("--pin-first=")) {
@@ -131,6 +150,11 @@ export const generateMasterCommand = defineCommand({
       required: false,
       type: "string",
     },
+    quiet: {
+      default: false,
+      description: "通常出力を抑制する",
+      type: "boolean",
+    },
     shuffle: {
       default: false,
       description: "入力トラックを seed 付きで並べ替える",
@@ -180,6 +204,9 @@ export const generateMasterCommand = defineCommand({
         return err(toServiceError(error));
       }
     })();
+    if (args.quiet === true && result.ok && args.json !== true) {
+      return;
+    }
     emitResult(result, { json: args.json === true, renderText });
   },
 });

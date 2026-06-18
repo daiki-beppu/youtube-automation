@@ -41,6 +41,7 @@ import {
 export interface DepsMap {
   channelDir: string;
   config: ChannelConfig;
+  masterupDefaultConfigPath: string;
   yt: YouTubeClient;
   ytAnalytics: YouTubeAnalyticsClient;
 }
@@ -73,7 +74,7 @@ const defineRegistryEntry = <
 
 export const REGISTRY = {
   "master.generate": defineRegistryEntry({
-    deps: ["channelDir"],
+    deps: ["channelDir", "masterupDefaultConfigPath"],
     description:
       "Suno DL 済み音源をクロスフェード結合して master 音源を生成する",
     inputSchema: GenerateMasterInputSchema,

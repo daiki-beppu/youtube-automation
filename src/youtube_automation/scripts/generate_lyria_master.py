@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import shutil
 import subprocess
 import sys
@@ -60,6 +61,7 @@ _WAV_CHANNELS = 2
 _SKILL_LYRIA = "lyria"
 _KEY_DURATION_PADDING_MIN = "duration_padding_min"
 _KEY_MODEL = "model"
+_SEGMENT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _resolve_segment_count(target_min: float, padding_min: float) -> int:
@@ -113,6 +115,12 @@ def _save_audio_as_wav(data: bytes, path: Path) -> None:
 def _segment_path(music_dir: Path, index: int, name: str) -> Path:
     """`02-Individual-music/{NN}_{name}.wav` のパスを構築する (1-origin、ゼロ埋め 2 桁)。"""
     return music_dir / f"{index:02d}_{name}.wav"
+
+
+def _validate_segment_name(name: str) -> str:
+    if not _SEGMENT_NAME_RE.fullmatch(name):
+        raise ValidationError("--name は英数字で始まるファイル名 slug を指定してください (使用可能: A-Z a-z 0-9 . _ -)")
+    return name
 
 
 def _generate_one_segment(
@@ -305,27 +313,24 @@ def _run_generate_master(collection_dir: Path) -> Path:
     """TS `master.generate` service 経由でクロスフェード結合する。"""
     tayk = shutil.which("tayk")
     if tayk is not None:
-        cmd = [tayk, "generate-master", str(collection_dir)]
+        cmd = [tayk, "generate-master", "--loop", "1", str(collection_dir)]
     else:
         repo_root = Path(__file__).resolve().parents[3]
         tayk_bin = repo_root / "packages" / "cli" / "bin" / "tayk.ts"
         if not tayk_bin.exists():
             raise ValidationError(
-                "tayk が PATH に見つからず、source checkout の dispatcher も見つかりません: "
-                f"{tayk_bin}"
+                f"tayk が PATH に見つからず、source checkout の dispatcher も見つかりません: {tayk_bin}"
             )
         bun = shutil.which("bun")
         if bun is None:
             raise ValidationError("bun が見つかりません。tayk generate-master を実行できません")
-        cmd = [bun, str(tayk_bin), "generate-master", str(collection_dir)]
+        cmd = [bun, str(tayk_bin), "generate-master", "--loop", "1", str(collection_dir)]
     result = subprocess.run(
         cmd,
         check=False,
     )
     if result.returncode != 0:
-        raise ValidationError(
-            f"tayk generate-master failed with exit code {result.returncode}"
-        )
+        raise ValidationError(f"tayk generate-master failed with exit code {result.returncode}")
     return collection_dir / "01-master" / "master.wav"
 
 
@@ -351,6 +356,7 @@ def main() -> int:
         padding_min = _resolve_padding_min(args.padding_min, lyria_cfg)
         n = _resolve_segment_count(target_min, padding_min)
         model = _resolve_model(args.model, lyria_cfg)
+        segment_name = _validate_segment_name(args.name)
         reference_image = _resolve_reference_image(args.reference_image, collection_dir)
 
         print()
@@ -372,7 +378,7 @@ def main() -> int:
         print()
 
         for i in range(1, n + 1):
-            seg_path = _segment_path(music_dir, i, args.name)
+            seg_path = _segment_path(music_dir, i, segment_name)
             ok = _generate_one_segment(
                 index=i,
                 seg_path=seg_path,

@@ -140,7 +140,7 @@ const codecArgs = (
   bitrate: string
 ): readonly string[] => {
   if (audioExt === "mp3") {
-    return ["-c:a", "libmp3lame", "-b:a", bitrate];
+    return ["-c:a", "libmp3lame", "-b:a", bitrate, "-q:a", "0"];
   }
   return ["-c:a", "pcm_s16le"];
 };
@@ -174,6 +174,8 @@ export const runFfmpeg = async (
     "[aout]",
     ...codecArgs(options.audioExt, options.bitrate),
     outputPath,
+    "-loglevel",
+    "error",
   ];
   const proc = Bun.spawn(argv);
   const exitCode = await proc.exited;

@@ -110,14 +110,14 @@ def _patch_subprocess(
             log.append({"cmd": cmd, "kwargs": kwargs})
             if tayk_returncode != 0:
                 return SimpleNamespace(returncode=tayk_returncode, stdout=b"", stderr=b"")
-            collection = Path(cmd[3])
+            collection = Path(cmd[-1])
             master = collection / "01-master" / "master.wav"
             master.parent.mkdir(parents=True, exist_ok=True)
             master.write_bytes(b"\x00" * segment_size)
             return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
         if installed_tayk is not None and len(cmd) >= 3 and cmd[0] == installed_tayk and cmd[1] == "generate-master":
             log.append({"cmd": cmd, "kwargs": kwargs})
-            collection = Path(cmd[2])
+            collection = Path(cmd[-1])
             master = collection / "01-master" / "master.wav"
             master.parent.mkdir(parents=True, exist_ok=True)
             master.write_bytes(b"\x00" * segment_size)
@@ -199,6 +199,8 @@ class TestGenerateSegments:
                     "/usr/bin/bun",
                     _tayk_bin(),
                     "generate-master",
+                    "--loop",
+                    "1",
                     str(collection),
                 ],
                 "kwargs": {"check": False},
@@ -352,6 +354,8 @@ class TestMasterCombineDelegation:
                     "/usr/bin/bun",
                     _tayk_bin(),
                     "generate-master",
+                    "--loop",
+                    "1",
                     str(collection),
                 ],
                 "kwargs": {"check": False},
@@ -400,7 +404,7 @@ class TestMasterCombineDelegation:
         assert output == collection / "01-master" / "master.wav"
         assert tayk_log == [
             {
-                "cmd": ["/usr/local/bin/tayk", "generate-master", str(collection)],
+                "cmd": ["/usr/local/bin/tayk", "generate-master", "--loop", "1", str(collection)],
                 "kwargs": {"check": False},
             }
         ]
@@ -408,6 +412,34 @@ class TestMasterCombineDelegation:
 
 class TestCli:
     """CLI 引数バリデーションと到達経路。"""
+
+    def test_rejects_name_that_would_escape_music_dir(self, tmp_path, monkeypatch, capsys):
+        collection = _make_collection(tmp_path / "coll")
+        _patch_lyria_generate(monkeypatch)
+        _patch_subprocess(monkeypatch)
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
+        _patch_load_config(monkeypatch, target_duration_min=None)
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "../escape",
+                "--target-duration",
+                "2",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        rc = generate_lyria_master.main()
+
+        assert rc == 1
+        assert not (collection / "escape.wav").exists()
+        assert "ERROR: --name" in capsys.readouterr().err
 
     def test_falls_back_to_channel_audio_config(self, tmp_path, monkeypatch):
         # --target-duration 省略時は channel config の audio.target_duration_min を使う

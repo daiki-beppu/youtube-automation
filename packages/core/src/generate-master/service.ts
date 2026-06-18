@@ -29,16 +29,6 @@ import type { ResolvedMasteringOptions } from "./types.ts";
 
 const DEFAULT_CROSSFADE_SECONDS = 1;
 const DEFAULT_BITRATE = "192k";
-const MASTER_DEFAULT_CONFIG_PATH = join(
-  import.meta.dirname,
-  "..",
-  "..",
-  "..",
-  "cli",
-  "_skills",
-  "masterup",
-  "config.default.json"
-);
 
 const deepMerge = (
   base: Record<string, unknown>,
@@ -75,9 +65,10 @@ const readJsonObject = async (
 };
 
 const readMasterupConfig = async (
-  channelDir: string
+  channelDir: string,
+  defaultConfigPath: string
 ): Promise<MasterupConfig> => {
-  const defaults = await readJsonObject(MASTER_DEFAULT_CONFIG_PATH);
+  const defaults = await readJsonObject(defaultConfigPath);
   try {
     const override = await readJsonObject(
       join(channelDir, MASTER_CONFIG_RELATIVE_PATH)
@@ -136,11 +127,14 @@ const resolvePinFirstCount = (
 
 const resolveOptions = async (
   input: GenerateMasterInput,
-  deps: { channelDir: string }
+  deps: { channelDir: string; masterupDefaultConfigPath: string }
 ): Promise<ResolvedMasteringOptions> => {
   const request = GenerateMasterInputSchema.parse(input);
   const channelDir = await realpath(deps.channelDir);
-  const config = await readMasterupConfig(channelDir);
+  const config = await readMasterupConfig(
+    channelDir,
+    deps.masterupDefaultConfigPath
+  );
   const { audio } = config;
   const shuffle = resolveShuffle(request, config);
   return {
@@ -158,7 +152,7 @@ const resolveOptions = async (
 
 export const generateMasterService = async (
   input: GenerateMasterInput,
-  deps: { channelDir: string }
+  deps: { channelDir: string; masterupDefaultConfigPath: string }
 ): Promise<Result<GenerateMasterOutput, ServiceError>> => {
   try {
     const options = await resolveOptions(input, deps);

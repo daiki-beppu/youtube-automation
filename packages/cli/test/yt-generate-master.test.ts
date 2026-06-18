@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -58,7 +59,8 @@ const runTayk = (
 };
 
 const writeFixture = (
-  collectionName = "test"
+  collectionName = "test",
+  tracks: readonly string[] = ["01-opening.mp3"]
 ): { channelDir: string; collectionDir: string } => {
   const channelDir = makeTempDir("cli-master-channel-");
   const collectionDir = join(
@@ -69,52 +71,148 @@ const writeFixture = (
   );
   mkdirSync(join(collectionDir, "01-master"), { recursive: true });
   mkdirSync(join(collectionDir, "02-Individual-music"), { recursive: true });
+  for (const track of tracks) {
+    writeFileSync(
+      join(collectionDir, "02-Individual-music", track),
+      track === "01-opening.mp3" ? "single-track-bytes" : `${track}-bytes`,
+      "utf-8"
+    );
+  }
+  return { channelDir, collectionDir };
+};
+
+const writeFakeFfmpegBin = (): string => {
+  const binDir = makeTempDir("cli-master-bin-");
+  const ffmpegPath = join(binDir, "ffmpeg");
   writeFileSync(
-    join(collectionDir, "02-Individual-music", "01-opening.mp3"),
-    "single-track-bytes",
+    ffmpegPath,
+    [
+      "#!/bin/sh",
+      "out=''",
+      "prev=''",
+      'for arg in "$@"; do',
+      '  if [ "$arg" = \'-loglevel\' ]; then out="$prev"; break; fi',
+      '  prev="$arg"',
+      '  out="$arg"',
+      "done",
+      "printf 'joined-track-bytes' > \"$out\"",
+      "exit 0",
+      "",
+    ].join("\n"),
     "utf-8"
   );
-  return { channelDir, collectionDir };
+  chmodSync(ffmpegPath, 0o755);
+  return binDir;
+};
+
+const cliTest = (name: string, fn: () => void): void => {
+  test(name, fn, 15_000);
 };
 
 describe("core registry - master.generate entry visible from cli package", () => {
   test("should expose the registry entry consumed by the CLI adapter", () => {
     const entry = REGISTRY["master.generate"];
 
-    expect(entry.deps).toEqual(["channelDir"]);
+    expect(entry.deps).toEqual(["channelDir", "masterupDefaultConfigPath"]);
     expect(entry.description.length).toBeGreaterThan(0);
   });
 });
 
 describe("tayk generate-master - smoke", () => {
-  test("should generate a master file through the dispatcher and print JSON output", () => {
+  cliTest(
+    "should generate a master file through the dispatcher and print JSON output",
+    () => {
+      const { channelDir, collectionDir } = writeFixture();
+
+      const proc = runTayk(
+        { env: { CHANNEL_DIR: channelDir } },
+        "generate-master",
+        collectionDir,
+        "--json"
+      );
+
+      expect(proc.exitCode).toBe(0);
+      const parsed = JSON.parse(proc.stdout.toString()) as {
+        audioExt: string;
+        copied: boolean;
+        inputCount: number;
+        outputPath: string;
+      };
+      expect(parsed).toMatchObject({
+        audioExt: "mp3",
+        copied: true,
+        inputCount: 1,
+        outputPath: join(collectionDir, "01-master", "master.mp3"),
+      });
+      expect(existsSync(parsed.outputPath)).toBe(true);
+      expect(readFileSync(parsed.outputPath, "utf-8")).toBe(
+        "single-track-bytes"
+      );
+    }
+  );
+
+  cliTest(
+    "should generate a multi-track master through ffmpeg from the dispatcher",
+    () => {
+      const { channelDir, collectionDir } = writeFixture("test", [
+        "01-opening.mp3",
+        "02-middle.mp3",
+      ]);
+      const fakeBin = writeFakeFfmpegBin();
+
+      const proc = runTayk(
+        {
+          env: {
+            CHANNEL_DIR: channelDir,
+            PATH: `${fakeBin}:${process.env.PATH}`,
+          },
+        },
+        "generate-master",
+        collectionDir,
+        "--loop",
+        "2",
+        "--json"
+      );
+
+      expect(proc.exitCode).toBe(0);
+      const parsed = JSON.parse(proc.stdout.toString()) as {
+        copied: boolean;
+        inputCount: number;
+        loops: number;
+        outputPath: string;
+        segmentCount: number;
+      };
+      expect(parsed).toMatchObject({
+        copied: false,
+        inputCount: 2,
+        loops: 2,
+        outputPath: join(collectionDir, "01-master", "master.mp3"),
+        segmentCount: 4,
+      });
+      expect(readFileSync(parsed.outputPath, "utf-8")).toBe(
+        "joined-track-bytes"
+      );
+    }
+  );
+
+  cliTest("should suppress text output when quiet is set", () => {
     const { channelDir, collectionDir } = writeFixture();
 
     const proc = runTayk(
       { env: { CHANNEL_DIR: channelDir } },
       "generate-master",
       collectionDir,
-      "--json"
+      "--quiet"
     );
 
     expect(proc.exitCode).toBe(0);
-    const parsed = JSON.parse(proc.stdout.toString()) as {
-      audioExt: string;
-      copied: boolean;
-      inputCount: number;
-      outputPath: string;
-    };
-    expect(parsed).toMatchObject({
-      audioExt: "mp3",
-      copied: true,
-      inputCount: 1,
-      outputPath: join(collectionDir, "01-master", "master.mp3"),
-    });
-    expect(existsSync(parsed.outputPath)).toBe(true);
-    expect(readFileSync(parsed.outputPath, "utf-8")).toBe("single-track-bytes");
-  }, 10_000);
+    expect(proc.stdout.toString()).toBe("");
+    expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
+      true
+    );
+  });
 
-  test("should accept a collection path relative to CHANNEL_DIR", () => {
+  cliTest("should accept a collection path relative to CHANNEL_DIR", () => {
     const { channelDir, collectionDir } = writeFixture();
     const relativeCollectionDir = collectionDir.slice(channelDir.length + 1);
 
@@ -135,7 +233,7 @@ describe("tayk generate-master - smoke", () => {
     expect(existsSync(parsed.outputPath)).toBe(true);
   });
 
-  test("should use CWD when collection path is omitted", () => {
+  cliTest("should use CWD when collection path is omitted", () => {
     const { channelDir, collectionDir } = writeFixture();
 
     const proc = runTayk(
@@ -154,7 +252,7 @@ describe("tayk generate-master - smoke", () => {
     expect(existsSync(parsed.outputPath)).toBe(true);
   });
 
-  test("should accept generate-master as the collection positional", () => {
+  cliTest("should accept generate-master as the collection positional", () => {
     const { channelDir, collectionDir } = writeFixture("generate-master");
     const relativeCollectionDir = collectionDir.slice(channelDir.length + 1);
 
@@ -175,20 +273,23 @@ describe("tayk generate-master - smoke", () => {
     expect(existsSync(parsed.outputPath)).toBe(true);
   });
 
-  test("should format dependency resolution errors through the command helper", () => {
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: undefined } },
-      "generate-master",
-      "--json"
-    );
+  cliTest(
+    "should format dependency resolution errors through the command helper",
+    () => {
+      const proc = runTayk(
+        { env: { CHANNEL_DIR: undefined } },
+        "generate-master",
+        "--json"
+      );
 
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toStartWith("[config] ");
-    expect(proc.stderr.toString()).toContain("CHANNEL_DIR");
-    expect(proc.stderr.toString()).not.toContain("at ");
-  });
+      expect(proc.exitCode).toBe(1);
+      expect(proc.stderr.toString()).toStartWith("[config] ");
+      expect(proc.stderr.toString()).toContain("CHANNEL_DIR");
+      expect(proc.stderr.toString()).not.toContain("at ");
+    }
+  );
 
-  test("should reject unknown generate-master flags", () => {
+  cliTest("should reject unknown generate-master flags", () => {
     const { channelDir, collectionDir } = writeFixture();
 
     const proc = runTayk(
@@ -208,7 +309,7 @@ describe("tayk generate-master - smoke", () => {
     );
   });
 
-  test("should reject extra positional arguments", () => {
+  cliTest("should reject extra positional arguments", () => {
     const { channelDir, collectionDir } = writeFixture();
     const otherCollection = join(
       channelDir,
@@ -235,57 +336,85 @@ describe("tayk generate-master - smoke", () => {
     );
   });
 
-  test("should list generate-master in dispatcher help", () => {
+  cliTest("should list generate-master in dispatcher help", () => {
     const proc = runTayk({ env: {} }, "--help");
 
     expect(proc.exitCode).toBe(0);
     expect(proc.stdout.toString()).toContain("generate-master");
   });
 
-  test("should pass mastering flags through to validation instead of treating them as paths", () => {
-    const { channelDir, collectionDir } = writeFixture();
+  cliTest(
+    "should pass mastering flags through to validation instead of treating them as paths",
+    () => {
+      const { channelDir, collectionDir } = writeFixture();
 
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-master",
-      collectionDir,
-      "--loop",
-      "2",
-      "--target-duration",
-      "30",
-      "--json"
-    );
+      const proc = runTayk(
+        { env: { CHANNEL_DIR: channelDir } },
+        "generate-master",
+        collectionDir,
+        "--loop",
+        "2",
+        "--target-duration",
+        "30",
+        "--json"
+      );
 
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toStartWith("[validation] ");
-    expect(proc.stderr.toString()).toContain("target_duration");
-    expect(proc.stderr.toString()).not.toContain("No such file");
-  });
+      expect(proc.exitCode).toBe(1);
+      expect(proc.stderr.toString()).toStartWith("[validation] ");
+      expect(proc.stderr.toString()).toContain("target_duration");
+      expect(proc.stderr.toString()).not.toContain("No such file");
+    }
+  );
 
-  test("should accept equals-form value flags before schema validation", () => {
-    const { channelDir, collectionDir } = writeFixture();
+  cliTest(
+    "should accept equals-form value flags before schema validation",
+    () => {
+      const { channelDir, collectionDir } = writeFixture();
 
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-master",
-      collectionDir,
-      "--loop=1",
-      "--target-duration=1",
-      "--json"
-    );
+      const proc = runTayk(
+        { env: { CHANNEL_DIR: channelDir } },
+        "generate-master",
+        collectionDir,
+        "--loop=1",
+        "--target-duration=1",
+        "--json"
+      );
 
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toStartWith("[validation] ");
-    expect(proc.stderr.toString()).toContain(
-      "loop and target_duration cannot be used together"
-    );
-    expect(proc.stderr.toString()).not.toContain("unknown option");
-    expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
-      false
-    );
-  });
+      expect(proc.exitCode).toBe(1);
+      expect(proc.stderr.toString()).toStartWith("[validation] ");
+      expect(proc.stderr.toString()).toContain(
+        "loop and target_duration cannot be used together"
+      );
+      expect(proc.stderr.toString()).not.toContain("unknown option");
+      expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
+        false
+      );
+    }
+  );
 
-  test("should pass repeated pin-first values without treating them as collection paths", () => {
+  cliTest(
+    "should pass repeated pin-first values without treating them as collection paths",
+    () => {
+      const { channelDir, collectionDir } = writeFixture();
+
+      const proc = runTayk(
+        { cwd: collectionDir, env: { CHANNEL_DIR: channelDir } },
+        "generate-master",
+        "--pin-first",
+        "01-opening.mp3",
+        "--pin-first",
+        "missing.mp3",
+        "--json"
+      );
+
+      expect(proc.exitCode).toBe(1);
+      expect(proc.stderr.toString()).toStartWith("[validation] ");
+      expect(proc.stderr.toString()).toContain("missing.mp3");
+      expect(proc.stderr.toString()).not.toContain("No such file");
+    }
+  );
+
+  cliTest("should accept multiple pin-first values after one flag", () => {
     const { channelDir, collectionDir } = writeFixture();
 
     const proc = runTayk(
@@ -293,7 +422,6 @@ describe("tayk generate-master - smoke", () => {
       "generate-master",
       "--pin-first",
       "01-opening.mp3",
-      "--pin-first",
       "missing.mp3",
       "--json"
     );
@@ -301,10 +429,11 @@ describe("tayk generate-master - smoke", () => {
     expect(proc.exitCode).toBe(1);
     expect(proc.stderr.toString()).toStartWith("[validation] ");
     expect(proc.stderr.toString()).toContain("missing.mp3");
+    expect(proc.stderr.toString()).not.toContain("unexpected argument");
     expect(proc.stderr.toString()).not.toContain("No such file");
   });
 
-  test("should keep collection positional separate from pin-first", () => {
+  cliTest("should keep collection positional separate from pin-first", () => {
     const { channelDir, collectionDir } = writeFixture();
 
     const proc = runTayk(
@@ -323,41 +452,47 @@ describe("tayk generate-master - smoke", () => {
     expect(proc.stderr.toString()).not.toContain("No such file");
   });
 
-  test("should reject missing value for value flags before generating output", () => {
-    const { channelDir, collectionDir } = writeFixture();
+  cliTest(
+    "should reject missing value for value flags before generating output",
+    () => {
+      const { channelDir, collectionDir } = writeFixture();
 
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-master",
-      collectionDir,
-      "--loop",
-      "--json"
-    );
+      const proc = runTayk(
+        { env: { CHANNEL_DIR: channelDir } },
+        "generate-master",
+        collectionDir,
+        "--loop",
+        "--json"
+      );
 
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toStartWith("[validation] ");
-    expect(proc.stderr.toString()).toContain("missing value for --loop");
-    expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
-      false
-    );
-  });
+      expect(proc.exitCode).toBe(1);
+      expect(proc.stderr.toString()).toStartWith("[validation] ");
+      expect(proc.stderr.toString()).toContain("missing value for --loop");
+      expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
+        false
+      );
+    }
+  );
 
-  test("should reject missing value for pin-first before generating output", () => {
-    const { channelDir, collectionDir } = writeFixture();
+  cliTest(
+    "should reject missing value for pin-first before generating output",
+    () => {
+      const { channelDir, collectionDir } = writeFixture();
 
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-master",
-      collectionDir,
-      "--pin-first",
-      "--json"
-    );
+      const proc = runTayk(
+        { env: { CHANNEL_DIR: channelDir } },
+        "generate-master",
+        collectionDir,
+        "--pin-first",
+        "--json"
+      );
 
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toStartWith("[validation] ");
-    expect(proc.stderr.toString()).toContain("missing value for --pin-first");
-    expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
-      false
-    );
-  });
+      expect(proc.exitCode).toBe(1);
+      expect(proc.stderr.toString()).toStartWith("[validation] ");
+      expect(proc.stderr.toString()).toContain("missing value for --pin-first");
+      expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
+        false
+      );
+    }
+  );
 });

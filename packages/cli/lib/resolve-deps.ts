@@ -7,6 +7,8 @@
 //
 // MCP 到着時は env token + refresh のみの別 adapter を作る（interactive flow を持たない）。
 
+import { join } from "node:path";
+
 import { channelDir, loadConfig } from "@youtube-automation/core/config";
 import {
   buildYouTubeAnalyticsClient,
@@ -15,6 +17,14 @@ import {
 import type { DepsMap } from "@youtube-automation/core/registry";
 
 import { resolveTokenJson } from "./oauth.ts";
+
+const MASTERUP_DEFAULT_CONFIG_PATH = join(
+  import.meta.dirname,
+  "..",
+  "_skills",
+  "masterup",
+  "config.default.json"
+);
 
 /**
  * entry.deps を見て、要求された依存だけを lazy に構築した DepsMap slice を返す。
@@ -36,6 +46,10 @@ export const resolveDeps = async <D extends keyof DepsMap>(
 
   if (requested.has("channelDir")) {
     resolved.channelDir = channelDir();
+  }
+
+  if (requested.has("masterupDefaultConfigPath")) {
+    resolved.masterupDefaultConfigPath = MASTERUP_DEFAULT_CONFIG_PATH;
   }
 
   const needsYt = requested.has("yt");

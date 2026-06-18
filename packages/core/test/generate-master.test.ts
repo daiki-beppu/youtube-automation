@@ -23,6 +23,14 @@ import type {
 import { REGISTRY } from "@youtube-automation/core/registry";
 
 const tmpDirs: string[] = [];
+const repoRoot = join(import.meta.dir, "..", "..", "..");
+const masterupDefaultConfigPath = join(
+  repoRoot,
+  ".claude",
+  "skills",
+  "masterup",
+  "config.default.json"
+);
 
 const makeTempDir = (prefix: string): string => {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -75,7 +83,10 @@ const generateOk = async (
   input: GenerateMasterInput,
   channelDir: string
 ): Promise<GenerateMasterOutput> => {
-  const result = await generateMasterService(input, { channelDir });
+  const result = await generateMasterService(input, {
+    channelDir,
+    masterupDefaultConfigPath,
+  });
   if (!result.ok) {
     throw new Error(
       `expected an ok Result, got error: ${JSON.stringify(result.error)}`
@@ -124,10 +135,10 @@ describe("generate-master public API - exports map", () => {
 });
 
 describe("master.generate registry deps - contract", () => {
-  test("should require only channelDir from adapters", () => {
+  test("should require channelDir and default masterup config from adapters", () => {
     const entry = REGISTRY["master.generate"];
 
-    expect(entry.deps).toEqual(["channelDir"]);
+    expect(entry.deps).toEqual(["channelDir", "masterupDefaultConfigPath"]);
     expect(entry.description.length).toBeGreaterThan(0);
   });
 });
@@ -226,7 +237,7 @@ describe("generateMasterService - file generation", () => {
 
     const result = await generateMasterService(
       { collection: collectionDir },
-      { channelDir }
+      { channelDir, masterupDefaultConfigPath }
     );
 
     expect(result.ok).toBe(false);
@@ -272,6 +283,8 @@ describe("generateMasterService - file generation", () => {
         second,
         "-b:a",
         "256k",
+        "-q:a",
+        "0",
       ])
     );
     expect(argv?.join(" ")).toContain("acrossfade=d=2");
@@ -330,7 +343,11 @@ describe("generateMasterService - file generation", () => {
       "libmp3lame",
       "-b:a",
       "256k",
+      "-q:a",
+      "0",
       outputPath,
+      "-loglevel",
+      "error",
     ]);
   });
 
@@ -559,7 +576,7 @@ describe("generateMasterService - file generation", () => {
 
     const result = await generateMasterService(
       { collection: collectionDir, targetDuration: 1 },
-      { channelDir }
+      { channelDir, masterupDefaultConfigPath }
     );
 
     expect(result.ok).toBe(false);
@@ -579,7 +596,7 @@ describe("generateMasterService - file generation", () => {
 
     const result = await generateMasterService(
       { collection: collectionDir },
-      { channelDir }
+      { channelDir, masterupDefaultConfigPath }
     );
 
     expect(result.ok).toBe(false);
@@ -604,7 +621,7 @@ describe("generateMasterService - file generation", () => {
 
     const result = await generateMasterService(
       { collection: collectionDir, loop: 1000 },
-      { channelDir }
+      { channelDir, masterupDefaultConfigPath }
     );
 
     expect(result.ok).toBe(false);
@@ -678,7 +695,7 @@ describe("generateMasterService - file generation", () => {
 
     const result = await generateMasterService(
       { collection: collectionDir, pinFirst: ["missing.mp3"] },
-      { channelDir }
+      { channelDir, masterupDefaultConfigPath }
     );
 
     expect(result.ok).toBe(false);

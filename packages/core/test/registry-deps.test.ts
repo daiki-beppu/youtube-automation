@@ -15,18 +15,21 @@ const fakeConfig = {
 const fakeYt = { videos: {} } as unknown as YouTubeClient;
 const fakeYtAnalytics = { reports: {} } as unknown as YouTubeAnalyticsClient;
 const fakeChannelDir = "/tmp/fake-channel";
+const fakeMasterupDefaultConfigPath = "/tmp/config.default.json";
 
 describe("DepsMap — type shape", () => {
   test("maps config / channelDir / yt / ytAnalytics to their declared types", () => {
     const deps: DepsMap = {
       channelDir: fakeChannelDir,
       config: fakeConfig,
+      masterupDefaultConfigPath: fakeMasterupDefaultConfigPath,
       yt: fakeYt,
       ytAnalytics: fakeYtAnalytics,
     };
 
     expect(deps.channelDir).toBe(fakeChannelDir);
     expect(deps.config.identity.meta.channelName).toBe("Fake Channel");
+    expect(deps.masterupDefaultConfigPath).toBe(fakeMasterupDefaultConfigPath);
     expect(typeof deps.yt.videos).toBe("object");
     expect(typeof deps.ytAnalytics.reports).toBe("object");
   });
