@@ -1,0 +1,9 @@
+{
+  "audio": {
+    "bitrate": "256k",
+    "crossfade_duration": 2.5
+  },
+  "suno_download": {
+    "cdn_url_template": "https://verify.example/{song_id}.mp3"
+  }
+}

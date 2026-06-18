@@ -1,0 +1,34 @@
+{
+  "config": {
+    "ambientLayers": {
+      "dirname": "ambient",
+      "fadeinCurve": "log",
+      "fadeinS": 1.5,
+      "glob": "amb_*.wav",
+      "layers": {
+        "amb_001.wav": {
+          "fadeinS": 2,
+          "volumeDb": -10
+        }
+      },
+      "volumeDb": -22.5
+    },
+    "loudnorm": {
+      "I": -16,
+      "LRA": 8,
+      "TP": -2,
+      "enabled": true,
+      "mode": "linear"
+    },
+    "mix": {
+      "duration": "longest",
+      "normalize": 1
+    },
+    "output": {
+      "bitrate": "320k",
+      "codec": "aac",
+      "sampleRate": 48000
+    }
+  },
+  "warnings": []
+}

@@ -1,0 +1,29 @@
+{
+  "config": {
+    "ambientLayers": {
+      "dirname": "rain_layers",
+      "fadeinCurve": "tri",
+      "fadeinS": 0.5,
+      "glob": "rain_*.wav",
+      "layers": {},
+      "volumeDb": -10
+    },
+    "loudnorm": {
+      "I": -14,
+      "LRA": 11,
+      "TP": -1.5,
+      "enabled": true,
+      "mode": "linear"
+    },
+    "mix": {
+      "duration": "first",
+      "normalize": 0
+    },
+    "output": {
+      "bitrate": "192k",
+      "codec": "libmp3lame",
+      "sampleRate": null
+    }
+  },
+  "warnings": []
+}

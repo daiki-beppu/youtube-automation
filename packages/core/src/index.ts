@@ -17,3 +17,4 @@ export {
   type SleepMs,
   withRetry,
 } from "./retry.ts";
+export { finalizeMasterService } from "./finalize-master/index.ts";

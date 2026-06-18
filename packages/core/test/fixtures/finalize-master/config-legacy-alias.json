@@ -1,0 +1,31 @@
+{
+  "config": {
+    "ambientLayers": {
+      "dirname": "rain_layers",
+      "fadeinCurve": "tri",
+      "fadeinS": 0.75,
+      "glob": "rain_*.wav",
+      "layers": {},
+      "volumeDb": -25.5
+    },
+    "loudnorm": {
+      "I": -16.5,
+      "LRA": 9.5,
+      "TP": -2.5,
+      "enabled": true,
+      "mode": "linear"
+    },
+    "mix": {
+      "duration": "first",
+      "normalize": 0
+    },
+    "output": {
+      "bitrate": "192k",
+      "codec": "libmp3lame",
+      "sampleRate": null
+    }
+  },
+  "warnings": [
+    "config: `rain_layer` is deprecated; use `audio.finalize.ambient_layers` and `audio.finalize.loudnorm`."
+  ]
+}

@@ -1,0 +1,1 @@
+[1:a]aloop=loop=-1:size=2147483647,volume=-3.5dB,afade=t=in:st=0:d=2:curve=tri[r0];[2:a]aloop=loop=-1:size=2147483647,volume=-19dB,afade=t=in:st=0:d=0.5:curve=tri[r1];[r0][r1]amix=inputs=2:normalize=0[rainmix];[0:a][rainmix]amix=inputs=2:duration=first:normalize=0[mixed];[mixed]loudnorm=I=-14:LRA=11:TP=-1.5:print_format=json[aout]

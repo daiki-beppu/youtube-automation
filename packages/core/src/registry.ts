@@ -2,6 +2,11 @@ import type { z } from "zod";
 
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
+import {
+  finalizeMasterService,
+  FinalizeMasterInputSchema,
+  FinalizeMasterOutputSchema,
+} from "./finalize-master/index.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
 import type { Result } from "./result.ts";
 import {
@@ -67,6 +72,14 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "finalize.master": defineRegistryEntry({
+    deps: ["channelDir"],
+    description:
+      "01-master/master.mp3 に ambient layer mix と loudnorm を適用する",
+    inputSchema: FinalizeMasterInputSchema,
+    outputSchema: FinalizeMasterOutputSchema,
+    run: finalizeMasterService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",
