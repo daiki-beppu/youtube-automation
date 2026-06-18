@@ -1,5 +1,6 @@
 import type { ChannelConfig } from "../config/index.ts";
 import { classifyGaxiosError, YouTubeAPIError } from "../errors.ts";
+import { ALL_PLAYLIST_KEY } from "./types.ts";
 import type { PlaylistClient, PlaylistItem, PlaylistRecord } from "./types.ts";
 
 export const listPlaylistItems = async (
@@ -37,15 +38,13 @@ export const hasVideo = (
 
 export const insertVideoIntoPlaylist = async (
   client: PlaylistClient,
-  playlist: PlaylistRecord,
+  playlistId: string,
+  playlistKey: string,
   videoId: string
 ): Promise<void> => {
-  if (playlist.playlistId === undefined) {
-    throw new Error(`config: playlist ${playlist.key} is missing playlist_id`);
-  }
   const snippet = {
-    playlistId: playlist.playlistId,
-    ...(playlist.key === "all" ? {} : { position: 0 }),
+    playlistId,
+    ...(playlistKey === ALL_PLAYLIST_KEY ? {} : { position: 0 }),
     resourceId: { kind: "youtube#video", videoId },
   };
   try {

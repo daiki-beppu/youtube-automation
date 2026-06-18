@@ -66,7 +66,12 @@ const assignToPlaylist = async (
   const items = await listPlaylistItems(client, playlist.playlistId);
   const alreadyPresent = hasVideo(items, input.videoId);
   if (!alreadyPresent) {
-    await insertVideoIntoPlaylist(client, playlist, input.videoId);
+    await insertVideoIntoPlaylist(
+      client,
+      playlist.playlistId,
+      playlist.key,
+      input.videoId
+    );
   }
   return {
     ...operationFor(playlist, input.dryRun),
