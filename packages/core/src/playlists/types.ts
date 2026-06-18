@@ -86,7 +86,9 @@ const stringArray = (value: unknown): readonly string[] =>
 export const playlistEntries = (config: ChannelConfig): PlaylistRecord[] =>
   Object.entries(config.engagement.playlists.items).map(([key, raw]) => {
     const playlistId =
-      typeof raw.playlist_id === "string" ? raw.playlist_id : undefined;
+      typeof raw.playlist_id === "string" && raw.playlist_id.trim().length > 0
+        ? raw.playlist_id.trim()
+        : undefined;
     const rawTitle = raw.title;
     const configuredTitle =
       typeof rawTitle === "string" && rawTitle.trim().length > 0

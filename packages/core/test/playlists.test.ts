@@ -105,6 +105,16 @@ const writeLiveWorkflow = (
   );
 };
 
+const writeInvalidLiveFile = (
+  channelDir: string,
+  name: string,
+  relativePath: string,
+  content: string
+): void => {
+  const collectionDir = makeLiveCollectionDir(channelDir, name);
+  writeFileSync(join(collectionDir, relativePath), content, "utf-8");
+};
+
 afterEach(() => {
   while (tmpDirs.length > 0) {
     const dir = tmpDirs.pop();
@@ -307,6 +317,36 @@ describe("playlists schemas", () => {
 });
 
 describe("playlists.create", () => {
+  test("treats empty playlist_id as missing and creates a playlist", async () => {
+    const channelDir = makeTempChannel({
+      playlists: { focus: { playlist_id: "", title: "Focus Sessions" } },
+    });
+    const config = makeConfig({
+      focus: { playlist_id: "", title: "Focus Sessions" },
+    });
+    const { playlistInsertCalls, yt } = makeYouTube({ playlistId: "PL_FOCUS" });
+
+    const result = await REGISTRY["playlists.create"].run(
+      REGISTRY["playlists.create"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(playlistInsertCalls).toHaveLength(1);
+    expect(result.value.created).toEqual([
+      {
+        dryRun: false,
+        key: "focus",
+        playlistId: "PL_FOCUS",
+        title: "Focus Sessions",
+      },
+    ]);
+    expect(result.value.skipped).toEqual([]);
+  });
+
   test("creates only entries missing playlist_id and writes the new id back", async () => {
     const channelDir = makeTempChannel({
       playlists: {
@@ -556,6 +596,32 @@ describe("playlists.create", () => {
 });
 
 describe("playlists.assign", () => {
+  test("does not call playlistItems with an empty configured playlist_id", async () => {
+    const config = makeConfig({
+      all: { auto_add: true, playlist_id: "", title: "All Videos" },
+    });
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } = makeYouTube({
+      listResponses: { "": [] },
+    });
+
+    const result = await REGISTRY["playlists.assign"].run(
+      REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
+        theme: "focus",
+        video_id: "video_123",
+      }),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(result.value.assigned).toEqual([]);
+    expect(playlistItemListCalls).toHaveLength(0);
+    expect(playlistItemInsertCalls).toHaveLength(0);
+  });
+
   test("adds a video to auto and activity-matched playlists without duplicating existing items", async () => {
     const config = makeConfig({
       all: { auto_add: true, playlist_id: "PL_ALL", title: "All Videos" },
@@ -989,6 +1055,70 @@ describe("playlists.sync", () => {
     expect(result.value.synced[0]?.videoId).toBe("video_valid");
     expect(playlistItemInsertCalls).toHaveLength(2);
   });
+
+  test("stops on malformed workflow-state.json before inserting playlist items", async () => {
+    const channelDir = makeTempChannel({ playlists: {} });
+    writeInvalidLiveFile(
+      channelDir,
+      "bad-workflow",
+      "workflow-state.json",
+      "{"
+    );
+    const config = makeConfig({
+      all: { auto_add: true, playlist_id: "PL_ALL", title: "All Videos" },
+    });
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } = makeYouTube({
+      listResponses: { PL_ALL: [] },
+    });
+
+    const result = await REGISTRY["playlists.sync"].run(
+      REGISTRY["playlists.sync"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected io error");
+    }
+    expect(result.error.domain).toBe("io");
+    expect(playlistItemListCalls).toHaveLength(0);
+    expect(playlistItemInsertCalls).toHaveLength(0);
+  });
+
+  test("stops on malformed upload_tracking.json before inserting playlist items", async () => {
+    const channelDir = makeTempChannel({ playlists: {} });
+    const collectionDir = makeLiveCollectionDir(channelDir, "bad-tracking");
+    mkdirSync(join(collectionDir, "20-documentation"), { recursive: true });
+    writeFileSync(
+      join(collectionDir, "workflow-state.json"),
+      JSON.stringify({ theme: "focus" }, null, 2),
+      "utf-8"
+    );
+    writeFileSync(
+      join(collectionDir, "20-documentation", "upload_tracking.json"),
+      "{",
+      "utf-8"
+    );
+    const config = makeConfig({
+      all: { auto_add: true, playlist_id: "PL_ALL", title: "All Videos" },
+    });
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } = makeYouTube({
+      listResponses: { PL_ALL: [] },
+    });
+
+    const result = await REGISTRY["playlists.sync"].run(
+      REGISTRY["playlists.sync"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected io error");
+    }
+    expect(result.error.domain).toBe("io");
+    expect(playlistItemListCalls).toHaveLength(0);
+    expect(playlistItemInsertCalls).toHaveLength(0);
+  });
 });
 
 describe("playlists.init", () => {
@@ -1222,6 +1352,53 @@ describe("playlists.init", () => {
     ) as { playlists: Record<string, { playlist_id?: string }> };
     expect(written.playlists.focus?.playlist_id).toBeUndefined();
   });
+
+  test("stops on malformed workflow-state.json after persisting created playlist id", async () => {
+    const channelDir = makeTempChannel({
+      playlists: {
+        focus: { auto_add_activities: ["Deep Work"], title: "Focus Sessions" },
+      },
+    });
+    writeInvalidLiveFile(
+      channelDir,
+      "bad-workflow",
+      "workflow-state.json",
+      "{"
+    );
+    const config = makeConfig({
+      focus: { auto_add_activities: ["Deep Work"], title: "Focus Sessions" },
+    });
+    const {
+      playlistInsertCalls,
+      playlistItemInsertCalls,
+      playlistItemListCalls,
+      yt,
+    } = makeYouTube({
+      playlistId: "PL_FOCUS",
+    });
+
+    const result = await REGISTRY["playlists.init"].run(
+      REGISTRY["playlists.init"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected io error");
+    }
+    expect(result.error.domain).toBe("io");
+    expect(playlistInsertCalls).toHaveLength(1);
+    expect(playlistItemListCalls).toHaveLength(0);
+    expect(playlistItemInsertCalls).toHaveLength(0);
+
+    const written = JSON.parse(
+      readFileSync(
+        join(channelDir, "config", "channel", "playlists.json"),
+        "utf-8"
+      )
+    ) as { playlists: Record<string, { playlist_id?: string }> };
+    expect(written.playlists.focus?.playlist_id).toBe("PL_FOCUS");
+  });
 });
 
 describe("playlists.cleanDeleted", () => {
@@ -1320,6 +1497,33 @@ describe("playlists.cleanDeleted", () => {
 });
 
 describe("playlists.status", () => {
+  test("treats empty playlist_id as missing and does not call playlistItems.list", async () => {
+    const config = makeConfig({
+      all: { playlist_id: "", title: "All Videos" },
+    });
+    const { playlistItemListCalls, yt } = makeYouTube({
+      listResponses: { "": [] },
+    });
+
+    const result = await REGISTRY["playlists.status"].run(
+      REGISTRY["playlists.status"].inputSchema.parse({}),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(result.value.playlists).toEqual([
+      {
+        dryRun: false,
+        key: "all",
+        title: "All Videos",
+      },
+    ]);
+    expect(playlistItemListCalls).toHaveLength(0);
+  });
+
   test("includes video counts for playlists with playlist_id", async () => {
     const config = makeConfig({
       all: { playlist_id: "PL_ALL", title: "All Videos" },
@@ -1376,5 +1580,39 @@ describe("playlists.status", () => {
         playlistId: "PL_ALL",
       },
     ]);
+  });
+
+  test("maps playlistItems.list failures to api service error", async () => {
+    const config = makeConfig({
+      all: { playlist_id: "PL_ALL", title: "All Videos" },
+    });
+    const { playlistItemListCalls, yt } = makeYouTube({
+      listError: gaxiosError(403, "forbidden"),
+    });
+
+    const result = await REGISTRY["playlists.status"].run(
+      REGISTRY["playlists.status"].inputSchema.parse({}),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected api error");
+    }
+    expect(playlistItemListCalls).toEqual([
+      {
+        maxResults: 50,
+        pageToken: undefined,
+        part: "snippet,contentDetails",
+        playlistId: "PL_ALL",
+      },
+    ]);
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain !== "api") {
+      throw new Error(`expected api, got ${result.error.domain}`);
+    }
+    expect(result.error.httpStatus).toBe(403);
+    expect(result.error.reason).toBe("forbidden");
+    expect(result.error.message).toBe("playlistItems.list: HTTP 403");
   });
 });

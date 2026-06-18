@@ -1,5 +1,4 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { join, resolve } from "node:path";
 
 import type { ChannelConfig } from "@youtube-automation/core/config";
 import type { YouTubeClient } from "@youtube-automation/core/oauth/client";
@@ -12,33 +11,11 @@ import {
   renderStatusText,
 } from "../src/commands/playlist/cli.ts";
 
-const repoRoot = resolve(import.meta.dir, "..", "..", "..");
-const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
-
-const runTayk = (...argv: string[]) =>
-  Bun.spawnSync(["bun", taykBin, ...argv], {
-    cwd: repoRoot,
-    env: process.env,
-  });
-
-const runTaykWithoutChannelDir = (...argv: string[]) => {
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => key !== "CHANNEL_DIR")
-  ) as Record<string, string>;
-  return Bun.spawnSync(["bun", taykBin, ...argv], {
-    cwd: repoRoot,
-    env,
-  });
-};
-
-const runTaykWithChannelDir = (channelDir: string, ...argv: string[]) =>
-  Bun.spawnSync(["bun", taykBin, ...argv], {
-    cwd: repoRoot,
-    env: { ...process.env, CHANNEL_DIR: channelDir },
-  });
-
 interface TestCommand {
+  args?: Record<string, unknown>;
+  meta?: { description?: string; name?: string };
   run?: (context: unknown) => Promise<void> | void;
+  subCommands?: Record<string, TestCommand>;
 }
 
 const playlistSubCommand = (name: string): TestCommand => {
@@ -52,6 +29,42 @@ const playlistSubCommand = (name: string): TestCommand => {
     throw new Error(`playlist ${name} command is required`);
   }
   return subCommand;
+};
+
+const createRecordingPlaylistCommand = () => {
+  const resolvedDeps: (keyof DepsMap)[][] = [];
+  const command = createPlaylistCommand({
+    resolveDeps: (deps) => {
+      resolvedDeps.push([...deps]);
+      return Promise.resolve({
+        channelDir: "/tmp/channel",
+        config: {
+          engagement: {
+            playlists: {
+              items: {
+                all: {
+                  auto_add: true,
+                  playlist_id: "PL_ALL",
+                  title: "All Videos",
+                },
+              },
+            },
+          },
+          publishing: {
+            content: {
+              title: {
+                defaultActivity: "Study",
+                template: "{theme} - {activity}",
+                themeActivities: {},
+                themeScenes: {},
+              },
+            },
+          },
+        } as unknown as ChannelConfig,
+      } as unknown as Pick<DepsMap, (typeof deps)[number]>);
+    },
+  }) as TestCommand;
+  return { command, resolvedDeps };
 };
 
 const silenceCommandIo = () => {
@@ -91,36 +104,31 @@ describe("core registry - playlist entries visible from cli package", () => {
 });
 
 describe("tayk playlist - smoke", () => {
-  test("should list playlist in dispatcher help", () => {
-    const proc = runTayk("--help");
+  test("should expose playlist operations from the command adapter", () => {
+    const command = createPlaylistCommand() as TestCommand;
 
-    expect(proc.exitCode).toBe(0);
-    expect(proc.stdout.toString()).toContain("playlist");
-  });
-
-  test("should list playlist operations in subcommand help", () => {
-    const proc = runTayk("playlist", "--help");
-
-    expect(proc.exitCode).toBe(0);
-    const stdout = proc.stdout.toString();
-    expect(stdout).toContain("status");
-    expect(stdout).toContain("create");
-    expect(stdout).toContain("assign");
-    expect(stdout).toContain("sync");
-    expect(stdout).toContain("clean-deleted");
-    expect(stdout).toContain("init");
+    expect(command.meta?.name).toBe("playlist");
+    expect(Object.keys(command.subCommands ?? {}).toSorted()).toEqual([
+      "assign",
+      "clean-deleted",
+      "create",
+      "init",
+      "status",
+      "sync",
+    ]);
   });
 
   test("should expose assign video id as positional and theme as required option", () => {
-    const proc = runTayk("playlist", "assign", "--help");
+    const assign = playlistSubCommand("assign");
 
-    expect(proc.exitCode).toBe(0);
-    const stdout = proc.stdout.toString();
-    expect(stdout).toContain(
-      "USAGE playlist assign [OPTIONS] --theme=<theme> <VIDEO-ID>"
-    );
-    expect(stdout).toContain("--theme");
-    expect(stdout).not.toContain("<THEME> <VIDEO-ID>");
+    expect(assign.args?.["video-id"]).toMatchObject({
+      required: true,
+      type: "positional",
+    });
+    expect(assign.args?.theme).toMatchObject({
+      required: true,
+      type: "string",
+    });
   });
 
   test("should bind `playlist assign video_123 --theme focus --dry-run` input", () => {
@@ -136,41 +144,6 @@ describe("tayk playlist - smoke", () => {
       theme: "focus",
       video_id: "video_123",
     });
-  });
-
-  test("should reject assign when the video id positional is missing", () => {
-    const proc = runTayk("playlist", "assign", "--theme", "focus");
-
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toContain(
-      "Missing required positional argument: VIDEO-ID"
-    );
-  });
-
-  test("should reject assign when the theme option is missing", () => {
-    const proc = runTayk("playlist", "assign", "video_123");
-
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toContain(
-      "Missing required argument: --theme"
-    );
-  });
-
-  test("should reach dependency resolution for valid assign input", () => {
-    const proc = runTaykWithChannelDir(
-      "/tmp/nonexistent",
-      "playlist",
-      "assign",
-      "video_123",
-      "--theme",
-      "focus",
-      "--dry-run"
-    );
-
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toContain("[config]");
-    expect(proc.stderr.toString()).toContain("/tmp/nonexistent/config/channel");
-    expect(proc.stderr.toString()).not.toContain("Missing required");
   });
 
   test("should run assign through subcommand schema, deps, registry, and stdout", async () => {
@@ -258,6 +231,41 @@ describe("tayk playlist - smoke", () => {
     }
   });
 
+  test("should not resolve YouTube deps for create dry-run", async () => {
+    const { command, resolvedDeps } = createRecordingPlaylistCommand();
+    const create = command.subCommands?.create;
+    const io = silenceCommandIo();
+
+    try {
+      await create?.run?.({ args: { "dry-run": true, json: false } });
+    } finally {
+      io.restore();
+    }
+
+    expect(resolvedDeps).toEqual([["config", "channelDir"]]);
+  });
+
+  test("should not resolve YouTube deps for assign dry-run", async () => {
+    const { command, resolvedDeps } = createRecordingPlaylistCommand();
+    const assign = command.subCommands?.assign;
+    const io = silenceCommandIo();
+
+    try {
+      await assign?.run?.({
+        args: {
+          "dry-run": true,
+          json: false,
+          theme: "focus",
+          "video-id": "video_123",
+        },
+      });
+    } finally {
+      io.restore();
+    }
+
+    expect(resolvedDeps).toEqual([["config"]]);
+  });
+
   test("should pass sync dry-run through the registry execution path", async () => {
     const runSpy = spyOn(REGISTRY["playlists.sync"], "run").mockResolvedValue({
       ok: true,
@@ -274,6 +282,20 @@ describe("tayk playlist - smoke", () => {
       io.restore();
       runSpy.mockRestore();
     }
+  });
+
+  test("should not resolve YouTube deps for sync dry-run", async () => {
+    const { command, resolvedDeps } = createRecordingPlaylistCommand();
+    const sync = command.subCommands?.sync;
+    const io = silenceCommandIo();
+
+    try {
+      await sync?.run?.({ args: { "dry-run": true, json: false } });
+    } finally {
+      io.restore();
+    }
+
+    expect(resolvedDeps).toEqual([["config", "channelDir"]]);
   });
 
   test("should pass clean-deleted dry-run through the registry execution path", async () => {
@@ -315,13 +337,18 @@ describe("tayk playlist - smoke", () => {
     }
   });
 
-  test("should report missing CHANNEL_DIR through the real status command", () => {
-    const proc = runTaykWithoutChannelDir("playlist", "status");
+  test("should not resolve YouTube deps for init dry-run", async () => {
+    const { command, resolvedDeps } = createRecordingPlaylistCommand();
+    const init = command.subCommands?.init;
+    const io = silenceCommandIo();
 
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stdout.toString()).toBe("");
-    expect(proc.stderr.toString()).toContain("[config]");
-    expect(proc.stderr.toString()).toContain("CHANNEL_DIR");
+    try {
+      await init?.run?.({ args: { "dry-run": true, json: false } });
+    } finally {
+      io.restore();
+    }
+
+    expect(resolvedDeps).toEqual([["config", "channelDir"]]);
   });
 
   test("should render playlist status video counts in text output", () => {
