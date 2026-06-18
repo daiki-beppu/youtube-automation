@@ -32,7 +32,7 @@ description: "Use when まだコレクションディレクトリが存在せず
 
 テーマはこの段階では不要。企画の結果でテーマが決定される。
 
-データ収集は `/analytics-collect`（`yt-analytics` のラッパー）が担当するため、workflow からは呼び出さない。必要に応じてユーザー側で cron / launchd に登録する運用。
+データ収集は `/analytics-collect`（`bunx tayk analytics` のラッパー）が担当するため、workflow からは呼び出さない。必要に応じてユーザー側で cron / launchd に登録する運用。
 
 ### Phase 1: 企画（自動実行 + ユーザー選択で一時停止）
 
@@ -59,7 +59,7 @@ Step 1（企画）を自動実行中...
 以下の Python スクリプトを実行してコレクションディレクトリと workflow-state.json を自動生成する:
 
 ```bash
-uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria>
+bunx tayk init-collection "<Collection Name>" "<theme-slug>" --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria>
 ```
 
 - `<Collection Name>`: 企画で決定したコレクション表示名
@@ -80,7 +80,7 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 多言語タイトル生成で必須となる `workflow-state.json.scene_phrases` を投入する:
 
 ```bash
-uv run yt-populate-scene-phrases <collection-dir-name>
+bunx tayk populate-scene-phrases <collection-dir-name>
 ```
 
 - `<collection-dir-name>`: 2a で作成された `YYYYMMDD-<short>-<theme>-collection` のディレクトリ名
@@ -117,7 +117,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
    - それ以外のモード: `/thumbnail <theme>` を Agent で実行（テキストオーバーレイ生成。`/thumbnail` の品質チェック節で同等 QA が走る）
 4. **音楽素材生成**: Agent ツールで音楽エンジンに応じたスキルを実行:
    - Suno: `/suno <theme>` を Skill ツールで実行（プロンプト生成のみ。実際の楽曲生成は `/suno-helper` で連続実行する）
-     - **`/suno` 呼び出し前提条件チェック**（#571）: `config/skills/suno.yaml::genre_line` を読み、空のときは `config/channel/analytics.json::benchmark.channels[].slug` 全件について `data/video_analysis/<slug>/*.json` の存在を確認する。**両方とも未充足**（`genre_line` 空 AND 全 slug で分析結果不在）であれば `/suno` を起動せず、`uv run yt-video-analyze --source benchmark --channel <slug> --top 5` を先行実行するようユーザーに案内して Phase 2c を一旦停止する（`data/benchmark_*.json` が無ければさらにその前段で `/benchmark` を案内）。AI が `genre_line` を手書きで埋めて続行することは禁止
+     - **`/suno` 呼び出し前提条件チェック**（#571）: `config/skills/suno.yaml::genre_line` を読み、空のときは `config/channel/analytics.json::benchmark.channels[].slug` 全件について `data/video_analysis/<slug>/*.json` の存在を確認する。**両方とも未充足**（`genre_line` 空 AND 全 slug で分析結果不在）であれば `/suno` を起動せず、`bunx tayk video-analyze --source benchmark --channel <slug> --top 5` を先行実行するようユーザーに案内して Phase 2c を一旦停止する（`data/benchmark_*.json` が無ければさらにその前段で `/benchmark` を案内）。AI が `genre_line` を手書きで埋めて続行することは禁止
    - Lyria: `/lyria <theme>` を Skill ツールで実行（プロンプト設計のみ。Lyria 3 API 呼び出しは `/wf-next` で実行）
 5. `workflow-state.json` を更新:
    - `assets.music_prompts`: `true`
@@ -162,7 +162,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
    ```
 
    音楽エンジンに応じた次ステップ案内:
-   - **Suno**: 「`/suno-helper` を実行してください。`yt-collection-serve` で `suno-prompts.json` を配信 → suno-helper Chrome 拡張で Suno タブに連続注入 → 全件完了で playlist 一括追加まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
+   - **Suno**: 「`/suno-helper` を実行してください。`bunx tayk collection-serve` で `suno-prompts.json` を配信 → suno-helper Chrome 拡張で Suno タブに連続注入 → 全件完了で playlist 一括追加まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
    - **Lyria**: 「`/wf-next` を実行すると Lyria 3 API が呼ばれ、コレクション尺に応じてセグメントが生成されます → ミキシング+マスタリング後に再度 `/wf-next`」
 
 **重要**: `/suno-helper` / `/wf-next` への自動接続はしない（`/suno-helper` は Chrome + Suno ログイン + 拡張ロードの physical 準備、`/wf-next` は次フェーズ進行の意思決定をそれぞれ user に委ねる）。ユーザーが手動で呼ぶ。

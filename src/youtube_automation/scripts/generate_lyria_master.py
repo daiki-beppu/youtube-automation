@@ -303,15 +303,23 @@ def _resolve_model(args_model: str | None, lyria_cfg: dict) -> str:
 
 def _run_generate_master(collection_dir: Path) -> Path:
     """TS `master.generate` service 経由でクロスフェード結合する。"""
-    repo_root = Path(__file__).resolve().parents[3]
-    tayk_bin = repo_root / "packages" / "cli" / "bin" / "tayk.ts"
-    if not tayk_bin.exists():
-        raise ValidationError(f"tayk dispatcher が見つかりません: {tayk_bin}")
-    bun = shutil.which("bun")
-    if bun is None:
-        raise ValidationError("bun が見つかりません。tayk generate-master を実行できません")
+    tayk = shutil.which("tayk")
+    if tayk is not None:
+        cmd = [tayk, "generate-master", str(collection_dir)]
+    else:
+        repo_root = Path(__file__).resolve().parents[3]
+        tayk_bin = repo_root / "packages" / "cli" / "bin" / "tayk.ts"
+        if not tayk_bin.exists():
+            raise ValidationError(
+                "tayk が PATH に見つからず、source checkout の dispatcher も見つかりません: "
+                f"{tayk_bin}"
+            )
+        bun = shutil.which("bun")
+        if bun is None:
+            raise ValidationError("bun が見つかりません。tayk generate-master を実行できません")
+        cmd = [bun, str(tayk_bin), "generate-master", str(collection_dir)]
     result = subprocess.run(
-        [bun, str(tayk_bin), "generate-master", str(collection_dir)],
+        cmd,
         check=False,
     )
     if result.returncode != 0:

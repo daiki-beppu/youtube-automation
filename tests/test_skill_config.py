@@ -68,6 +68,64 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
+def test_json_default_is_loaded_for_masterup(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("masterup", use_cache=False)
+
+    assert cfg["audio"]["bitrate"] == "192k"
+    assert cfg["audio"]["crossfade_duration"] == 1.0
+
+
+def test_json_channel_override_is_merged(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override_path = channel_dir / "config" / "skills" / "masterup.json"
+    override_path.write_text(
+        '{"audio": {"bitrate": "256k", "target_duration_min": 60}}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("masterup", use_cache=False)
+
+    assert cfg["audio"]["bitrate"] == "256k"
+    assert cfg["audio"]["crossfade_duration"] == 1.0
+    assert cfg["audio"]["target_duration_min"] == 60
+
+
+def test_json_override_takes_priority_over_yaml(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    config_dir = channel_dir / "config" / "skills"
+    (config_dir / "masterup.json").write_text(
+        '{"audio": {"bitrate": "256k"}}\n',
+        encoding="utf-8",
+    )
+    (config_dir / "masterup.yaml").write_text(
+        yaml.safe_dump({"audio": {"bitrate": "320k"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("masterup", use_cache=False)
+
+    assert cfg["audio"]["bitrate"] == "256k"
+
+
+def test_invalid_json_raises_config_error(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override_path = channel_dir / "config" / "skills" / "masterup.json"
+    override_path.write_text("[]\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="root"):
+        skill_config.load_skill_config("masterup", use_cache=False)
+
+
 def test_cache_reset(tmp_path, monkeypatch):
     """reset でキャッシュがクリアされ、再度ロードされること"""
     channel_dir = tmp_path / "ch"

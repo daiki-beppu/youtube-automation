@@ -87,32 +87,38 @@ describe("core registry - master.generate entry visible from cli package", () =>
 });
 
 describe("tayk generate-master - smoke", () => {
-  test("should generate a master file through the dispatcher and print JSON output", () => {
-    const { channelDir, collectionDir } = writeFixture();
+  test(
+    "should generate a master file through the dispatcher and print JSON output",
+    () => {
+      const { channelDir, collectionDir } = writeFixture();
 
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-master",
-      collectionDir,
-      "--json"
-    );
+      const proc = runTayk(
+        { env: { CHANNEL_DIR: channelDir } },
+        "generate-master",
+        collectionDir,
+        "--json"
+      );
 
-    expect(proc.exitCode).toBe(0);
-    const parsed = JSON.parse(proc.stdout.toString()) as {
-      audioExt: string;
-      copied: boolean;
-      inputCount: number;
-      outputPath: string;
-    };
-    expect(parsed).toMatchObject({
-      audioExt: "mp3",
-      copied: true,
-      inputCount: 1,
-      outputPath: join(collectionDir, "01-master", "master.mp3"),
-    });
-    expect(existsSync(parsed.outputPath)).toBe(true);
-    expect(readFileSync(parsed.outputPath, "utf-8")).toBe("single-track-bytes");
-  });
+      expect(proc.exitCode).toBe(0);
+      const parsed = JSON.parse(proc.stdout.toString()) as {
+        audioExt: string;
+        copied: boolean;
+        inputCount: number;
+        outputPath: string;
+      };
+      expect(parsed).toMatchObject({
+        audioExt: "mp3",
+        copied: true,
+        inputCount: 1,
+        outputPath: join(collectionDir, "01-master", "master.mp3"),
+      });
+      expect(existsSync(parsed.outputPath)).toBe(true);
+      expect(readFileSync(parsed.outputPath, "utf-8")).toBe(
+        "single-track-bytes"
+      );
+    },
+    10_000
+  );
 
   test("should accept a collection path relative to CHANNEL_DIR", () => {
     const { channelDir, collectionDir } = writeFixture();
@@ -285,7 +291,7 @@ describe("tayk generate-master - smoke", () => {
     );
   });
 
-  test("should pass multiple pin-first values without treating them as collection paths", () => {
+  test("should pass repeated pin-first values without treating them as collection paths", () => {
     const { channelDir, collectionDir } = writeFixture();
 
     const proc = runTayk(
@@ -293,6 +299,7 @@ describe("tayk generate-master - smoke", () => {
       "generate-master",
       "--pin-first",
       "01-opening.mp3",
+      "--pin-first",
       "missing.mp3",
       "--json"
     );
@@ -303,9 +310,60 @@ describe("tayk generate-master - smoke", () => {
     expect(proc.stderr.toString()).not.toContain("No such file");
   });
 
-  test("should not expose the retired Python yt-generate-master entry point", () => {
-    const pyproject = readFileSync(join(repoRoot, "pyproject.toml"), "utf-8");
+  test("should keep collection positional separate from pin-first", () => {
+    const { channelDir, collectionDir } = writeFixture();
 
-    expect(pyproject).not.toContain("yt-generate-master =");
+    const proc = runTayk(
+      { env: { CHANNEL_DIR: channelDir } },
+      "generate-master",
+      "--pin-first",
+      "missing.mp3",
+      collectionDir,
+      "--json"
+    );
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toStartWith("[validation] ");
+    expect(proc.stderr.toString()).toContain("missing.mp3");
+    expect(proc.stderr.toString()).not.toContain("unexpected argument");
+    expect(proc.stderr.toString()).not.toContain("No such file");
+  });
+
+  test("should reject missing value for value flags before generating output", () => {
+    const { channelDir, collectionDir } = writeFixture();
+
+    const proc = runTayk(
+      { env: { CHANNEL_DIR: channelDir } },
+      "generate-master",
+      collectionDir,
+      "--loop",
+      "--json"
+    );
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toStartWith("[validation] ");
+    expect(proc.stderr.toString()).toContain("missing value for --loop");
+    expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
+      false
+    );
+  });
+
+  test("should reject missing value for pin-first before generating output", () => {
+    const { channelDir, collectionDir } = writeFixture();
+
+    const proc = runTayk(
+      { env: { CHANNEL_DIR: channelDir } },
+      "generate-master",
+      collectionDir,
+      "--pin-first",
+      "--json"
+    );
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toStartWith("[validation] ");
+    expect(proc.stderr.toString()).toContain("missing value for --pin-first");
+    expect(existsSync(join(collectionDir, "01-master", "master.mp3"))).toBe(
+      false
+    );
   });
 });

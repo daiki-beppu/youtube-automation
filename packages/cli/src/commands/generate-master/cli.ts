@@ -42,8 +42,8 @@ const commandArgv = (): readonly string[] => {
 
 const appendPinFirst = (
   current: readonly string[],
-  values: readonly string[]
-): readonly string[] => [...current, ...values];
+  value: string
+): readonly string[] => [...current, value];
 
 const isValueFlagAssignment = (token: string): boolean => {
   const [flag] = token.split("=");
@@ -63,20 +63,16 @@ const parseRawArgs = (
       continue;
     }
     if (token === "--pin-first") {
-      const start = index + 1;
-      const nextFlagOffset = argv
-        .slice(start)
-        .findIndex((value) => value.startsWith("--"));
-      const end = nextFlagOffset === -1 ? argv.length : start + nextFlagOffset;
-      if (end === start) {
+      const value = argv[index + 1];
+      if (value === undefined || value.startsWith("--")) {
         throw new Error(`validation: missing value for ${token}`);
       }
-      pinFirst = appendPinFirst(pinFirst, argv.slice(start, end));
-      index = end - 1;
+      pinFirst = appendPinFirst(pinFirst, value);
+      index += 1;
       continue;
     }
     if (token.startsWith("--pin-first=")) {
-      pinFirst = appendPinFirst(pinFirst, [token.slice("--pin-first=".length)]);
+      pinFirst = appendPinFirst(pinFirst, token.slice("--pin-first=".length));
       continue;
     }
     if (isValueFlagAssignment(token)) {

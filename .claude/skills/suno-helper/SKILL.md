@@ -1,11 +1,11 @@
 ---
 name: suno-helper
-description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加したいとき。yt-collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加）を回す operator 手順。`/suno` でプロンプトが揃った後、または既存 collection の途中再開で使用する"
+description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加したいとき。collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加）を回す operator 手順。`/suno` でプロンプトが揃った後、または既存 collection の途中再開で使用する"
 ---
 
 ## Overview
 
-`<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `yt-collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化まで進める。
+`<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化まで進める。
 
 このスキルはプロンプト生成（`/suno`）の **次工程** であり、Suno DL + マスター化（`/masterup`）の **前工程** にあたる。
 
@@ -30,7 +30,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 | 役割 | コマンド |
 |---|---|
-| サーバー起動（必須: dir mode + capture） | `uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --playlist-capture-root "$CHANNEL_DIR" --playlist-capture-prefix <PREFIX>` |
+| サーバー起動（必須: dir mode + capture） | `bunx tayk collection-serve "$CHANNEL_DIR/collections/planning" --playlist-capture-root "$CHANNEL_DIR" --playlist-capture-prefix <PREFIX>` |
 | ポート変更（並走時） | 末尾に `--port 7874` |
 | 拡張をリロード | chrome://extensions → suno-helper の再読み込みアイコン |
 | Suno タブ | https://suno.com/create にアクセス、Custom Mode |
@@ -42,7 +42,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 **必ず dir mode + capture フラグ付き**で起動する。
 
 ```bash
-uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
+bunx tayk collection-serve "$CHANNEL_DIR/collections/planning" \
   --playlist-capture-root "$CHANNEL_DIR" \
   --playlist-capture-prefix <PREFIX>
 ```

@@ -85,6 +85,7 @@ def _patch_subprocess(
     segment_size: int = 1024,
     tayk_log: list | None = None,
     tayk_returncode: int = 0,
+    installed_tayk: str | None = None,
 ):
     """subprocess を mock し、ffmpeg と `tayk generate-master` の出力を実体化する。
 
@@ -93,7 +94,11 @@ def _patch_subprocess(
     """
     log = tayk_log if tayk_log is not None else []
     bun = "/usr/bin/bun"
-    monkeypatch.setattr(generate_lyria_master.shutil, "which", lambda name: bun if name == "bun" else None)
+    monkeypatch.setattr(
+        generate_lyria_master.shutil,
+        "which",
+        lambda name: installed_tayk if name == "tayk" else (bun if name == "bun" else None),
+    )
 
     def fake_run(cmd, **kwargs):
         if cmd[0] == "ffmpeg":
@@ -106,6 +111,13 @@ def _patch_subprocess(
             if tayk_returncode != 0:
                 return SimpleNamespace(returncode=tayk_returncode, stdout=b"", stderr=b"")
             collection = Path(cmd[3])
+            master = collection / "01-master" / "master.wav"
+            master.parent.mkdir(parents=True, exist_ok=True)
+            master.write_bytes(b"\x00" * segment_size)
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        if installed_tayk is not None and len(cmd) >= 3 and cmd[0] == installed_tayk and cmd[1] == "generate-master":
+            log.append({"cmd": cmd, "kwargs": kwargs})
+            collection = Path(cmd[2])
             master = collection / "01-master" / "master.wav"
             master.parent.mkdir(parents=True, exist_ok=True)
             master.write_bytes(b"\x00" * segment_size)
@@ -379,10 +391,19 @@ class TestMasterCombineDelegation:
         err = capsys.readouterr().err
         assert "tayk generate-master failed with exit code 1" in err
 
-    def test_legacy_python_generate_master_implementation_is_absent(self):
-        repo_root = Path(__file__).parents[1]
-        legacy = repo_root / "src/youtube_automation/scripts/generate_master.py"
-        assert not legacy.exists()
+    def test_generate_master_prefers_installed_tayk(self, tmp_path, monkeypatch):
+        collection = _make_collection(tmp_path / "coll")
+        tayk_log = _patch_subprocess(monkeypatch, installed_tayk="/usr/local/bin/tayk")
+
+        output = generate_lyria_master._run_generate_master(collection)
+
+        assert output == collection / "01-master" / "master.wav"
+        assert tayk_log == [
+            {
+                "cmd": ["/usr/local/bin/tayk", "generate-master", str(collection)],
+                "kwargs": {"check": False},
+            }
+        ]
 
 
 class TestCli:

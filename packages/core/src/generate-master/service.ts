@@ -29,19 +29,63 @@ import type { ResolvedMasteringOptions } from "./types.ts";
 
 const DEFAULT_CROSSFADE_SECONDS = 1;
 const DEFAULT_BITRATE = "192k";
+const MASTER_DEFAULT_CONFIG_PATH = join(
+  import.meta.dirname,
+  "..",
+  "..",
+  "..",
+  "cli",
+  "_skills",
+  "masterup",
+  "config.default.json"
+);
+
+const deepMerge = (
+  base: Record<string, unknown>,
+  override: Record<string, unknown>
+): Record<string, unknown> => {
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const baseValue = merged[key];
+    merged[key] =
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      baseValue !== null &&
+      typeof baseValue === "object" &&
+      !Array.isArray(baseValue)
+        ? deepMerge(
+            baseValue as Record<string, unknown>,
+            value as Record<string, unknown>
+          )
+        : value;
+  }
+  return merged;
+};
+
+const readJsonObject = async (
+  path: string
+): Promise<Record<string, unknown>> => {
+  const text = await readFile(path, { encoding: "utf-8" });
+  const parsed = JSON.parse(text) as unknown;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`config: masterup config root must be an object: ${path}`);
+  }
+  return parsed as Record<string, unknown>;
+};
 
 const readMasterupConfig = async (
   channelDir: string
 ): Promise<MasterupConfig> => {
+  const defaults = await readJsonObject(MASTER_DEFAULT_CONFIG_PATH);
   try {
-    const text = await readFile(join(channelDir, MASTER_CONFIG_RELATIVE_PATH), {
-      encoding: "utf-8",
-    });
-    const parsed = JSON.parse(text) as unknown;
-    return MasterupConfigSchema.parse(parsed ?? {});
+    const override = await readJsonObject(
+      join(channelDir, MASTER_CONFIG_RELATIVE_PATH)
+    );
+    return MasterupConfigSchema.parse(deepMerge(defaults, override));
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return MasterupConfigSchema.parse({});
+      return MasterupConfigSchema.parse(defaults);
     }
     throw error;
   }

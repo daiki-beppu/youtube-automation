@@ -9,7 +9,7 @@ export const MASTER_OUTPUT_BASENAME = "master";
 export const SUPPORTED_AUDIO_EXTENSIONS = ["mp3", "wav"] as const;
 export const MAX_MASTER_LOOP_COUNT = 1000;
 export const MAX_MASTER_SEGMENT_COUNT = 10_000;
-export const MAX_MASTER_TARGET_DURATION_MIN = 24 * 60;
+const MAX_MASTER_TARGET_DURATION_MIN = 24 * 60;
 
 const GenerateMasterSnakeInputSchema = z
   .object({

@@ -284,6 +284,23 @@ describe("generateMasterService - file generation", () => {
     });
   });
 
+  test("should use bundled default masterup config when channel override is absent", async () => {
+    const channelDir = makeTempDir("master-channel-");
+    const collectionDir = makeCollection(channelDir);
+    const first = writeTrack(collectionDir, "01-opening.mp3", "first");
+    const second = writeTrack(collectionDir, "02-middle.mp3", "second");
+    spyOn(Bun, "which").mockReturnValue("/usr/bin/ffmpeg");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(fakeProc());
+
+    await generateOk({ collection: collectionDir }, channelDir);
+
+    const argv = spawnSpy.mock.calls[0]?.[0];
+    expect(argv).toEqual(
+      expect.arrayContaining(["-i", first, "-i", second, "-b:a", "192k"])
+    );
+    expect(argv?.join(" ")).toContain("acrossfade=d=1");
+  });
+
   test("should match the legacy Python ffmpeg argv contract", async () => {
     const channelDir = makeTempDir("master-channel-");
     const collectionDir = makeCollection(channelDir);
