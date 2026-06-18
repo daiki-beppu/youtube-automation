@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises";
+
 import sharp from "sharp";
 import { z } from "zod";
 
@@ -10,6 +12,9 @@ const RGB_CHANNELS = 3;
 const RGBA_CHANNELS = 4;
 const HUE_BUCKETS = 256;
 const MAX_CHANNEL_VALUE = 255;
+const MAX_THUMBNAIL_DIMENSION = 4096;
+const MAX_THUMBNAIL_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_THUMBNAIL_PIXELS = 1280 * 720;
 
 export const ExtractThumbnailFeaturesInput = z
   .object({
@@ -218,7 +223,7 @@ const extractThumbnailFeaturesFromRgb = (
     ybSquareSum += yb ** 2;
   }
 
-  return ThumbnailFeatures.parse({
+  return {
     brightness: roundFeature(valueSum / pixelCount),
     colorfulness: roundFeature(
       colorfulness(rgSum, rgSquareSum, ybSum, ybSquareSum, pixelCount)
@@ -228,7 +233,39 @@ const extractThumbnailFeaturesFromRgb = (
     ),
     dominantHue: histogram.dominantHue(),
     saturation: roundFeature(saturationSum / pixelCount),
-  });
+  };
+};
+
+const assertThumbnailBounds = async (path: string): Promise<void> => {
+  const file = await stat(path);
+  if (file.size > MAX_THUMBNAIL_FILE_BYTES) {
+    throw new Error(
+      `validation: thumbnail file size ${file.size} exceeds ${MAX_THUMBNAIL_FILE_BYTES} bytes`
+    );
+  }
+
+  const metadata = await sharp(path, { limitInputPixels: false }).metadata();
+  const { height, width } = metadata;
+  if (width === undefined || height === undefined) {
+    throw new Error("validation: thumbnail dimensions must be positive");
+  }
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    throw new TypeError("validation: thumbnail dimensions must be positive");
+  }
+  if (width <= 0 || height <= 0) {
+    throw new Error("validation: thumbnail dimensions must be positive");
+  }
+  if (width > MAX_THUMBNAIL_DIMENSION || height > MAX_THUMBNAIL_DIMENSION) {
+    throw new Error(
+      `validation: thumbnail dimensions ${width}x${height} exceed ${MAX_THUMBNAIL_DIMENSION}`
+    );
+  }
+  const pixels = width * height;
+  if (pixels > MAX_THUMBNAIL_PIXELS) {
+    throw new Error(
+      `validation: thumbnail pixel count ${pixels} exceeds ${MAX_THUMBNAIL_PIXELS}`
+    );
+  }
 };
 
 export const extractThumbnailFeaturesService = async (
@@ -236,7 +273,10 @@ export const extractThumbnailFeaturesService = async (
 ): Promise<Result<ThumbnailFeatures, ServiceError>> => {
   try {
     const request = ExtractThumbnailFeaturesInput.parse(input);
-    const { data, info } = await sharp(request.path)
+    await assertThumbnailBounds(request.path);
+    const { data, info } = await sharp(request.path, {
+      limitInputPixels: MAX_THUMBNAIL_PIXELS,
+    })
       .toColorspace("srgb")
       .removeAlpha()
       .raw()

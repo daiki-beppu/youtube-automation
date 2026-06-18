@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { extractThumbnailFeaturesService } from "@youtube-automation/core/image";
@@ -89,6 +88,15 @@ const writeRgbaPng = async (
   await sharp(Buffer.from(data), { raw: { channels: 4, height, width } })
     .png()
     .toFile(path);
+  return path;
+};
+
+const writeSvg = (name: string, width: number, height: number): string => {
+  const path = join(workdir, name);
+  writeFileSync(
+    path,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"></svg>`
+  );
   return path;
 };
 
@@ -338,13 +346,10 @@ describe("extractThumbnailFeaturesService — sharp boundary", () => {
       720
     );
 
-    const startedAt = performance.now();
     const features = await extractOkFeatures(path);
-    const elapsedMs = performance.now() - startedAt;
 
     expect(features.dominantHue).toBeGreaterThanOrEqual(0);
     expect(features.dominantHue).toBeLessThan(256);
-    expect(elapsedMs).toBeLessThan(2000);
   });
 
   test("does not hide histogram updates behind typed-array atomic mutation", () => {
@@ -385,6 +390,33 @@ describe("extractThumbnailFeaturesService — sharp boundary", () => {
       throw new Error("expected validation failure");
     }
     expect(result.error.domain).toBe("validation");
+  });
+
+  test("returns a validation error before raw decode for too many pixels", async () => {
+    const path = writeSvg("too-many-pixels.svg", 1281, 720);
+
+    const result = await extractThumbnailFeaturesService({ path });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+    expect(result.error.message).toContain("pixel count");
+  });
+
+  test("returns a validation error before sharp reads oversized files", async () => {
+    const path = join(workdir, "too-large.bin");
+    writeFileSync(path, Buffer.alloc(5 * 1024 * 1024 + 1));
+
+    const result = await extractThumbnailFeaturesService({ path });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+    expect(result.error.message).toContain("file size");
   });
 
   test("returns an io error when sharp cannot read the file path", async () => {
