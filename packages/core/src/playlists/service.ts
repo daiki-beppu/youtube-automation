@@ -52,7 +52,7 @@ import {
 } from "./youtube.ts";
 
 const assignToPlaylist = async (
-  client: PlaylistClient | undefined,
+  client: PlaylistClient,
   playlist: PlaylistRecord,
   input: PlaylistAssignInput,
   activities: readonly string[]
@@ -60,18 +60,8 @@ const assignToPlaylist = async (
   if (!matchesAssignment(playlist, input.theme, activities)) {
     return null;
   }
-  if (input.dryRun) {
-    return {
-      ...operationFor(playlist, input.dryRun),
-      alreadyPresent: false,
-      inserted: false,
-    };
-  }
   if (playlist.playlistId === undefined) {
     return null;
-  }
-  if (client === undefined) {
-    throw new Error("auth: YouTube client dependency is required");
   }
   const items = await listPlaylistItems(client, playlist.playlistId);
   const alreadyPresent = hasVideo(items, input.videoId);
@@ -90,13 +80,27 @@ const assignResolvedVideo = async (
   input: PlaylistAssignInput,
   activityOverride?: string
 ): Promise<PlaylistAssignOutput> => {
-  const client = input.dryRun ? undefined : youtubeClient(deps.yt);
   const activities =
     activityOverride === undefined
       ? activitiesForTheme(deps.config, input.theme)
       : splitActivities(activityOverride);
-  let assigned: PlaylistAssignOutput["assigned"] = [];
-  for (const playlist of playlistEntries(deps.config)) {
+  const assigned: PlaylistAssignOutput["assigned"] = [];
+  const playlists = playlistEntries(deps.config);
+  if (input.dryRun) {
+    for (const playlist of playlists) {
+      if (matchesAssignment(playlist, input.theme, activities)) {
+        assigned.push({
+          ...operationFor(playlist, input.dryRun),
+          alreadyPresent: false,
+          inserted: false,
+        });
+      }
+    }
+    return PlaylistAssignOutputSchema.parse({ assigned });
+  }
+
+  const client = youtubeClient(deps.yt);
+  for (const playlist of playlists) {
     const assignment = await assignToPlaylist(
       client,
       playlist,
@@ -104,7 +108,7 @@ const assignResolvedVideo = async (
       activities
     );
     if (assignment !== null) {
-      assigned = assigned.toSpliced(assigned.length, 0, assignment);
+      assigned.push(assignment);
     }
   }
 
@@ -130,30 +134,22 @@ const createPlaylists = async (
 ): Promise<PlaylistCreateOutput> => {
   const playlists = playlistEntries(deps.config);
   assertCreateTargetsHaveTitles(playlists);
-  let created: PlaylistCreateOutput["created"] = [];
-  let skipped: PlaylistCreateOutput["skipped"] = [];
+  const created: PlaylistCreateOutput["created"] = [];
+  const skipped: PlaylistCreateOutput["skipped"] = [];
 
   for (const playlist of playlists) {
     if (playlist.playlistId !== undefined) {
-      skipped = skipped.toSpliced(
-        skipped.length,
-        0,
-        operationFor(playlist, input.dryRun)
-      );
+      skipped.push(operationFor(playlist, input.dryRun));
       continue;
     }
     if (input.dryRun) {
-      created = created.toSpliced(
-        created.length,
-        0,
-        operationFor(playlist, input.dryRun)
-      );
+      created.push(operationFor(playlist, input.dryRun));
       continue;
     }
     const client = youtubeClient(deps.yt);
     const playlistId = await createPlaylist(client, deps.config, playlist);
     await writePlaylistId(deps.channelDir, playlist.key, playlistId);
-    created = created.toSpliced(created.length, 0, {
+    created.push({
       ...operationFor(playlist, input.dryRun),
       playlistId,
     });
@@ -166,7 +162,7 @@ const syncExistingVideos = async (
   deps: PlaylistChannelDeps,
   input: PlaylistSyncInput
 ): Promise<PlaylistSyncOutput> => {
-  let synced: PlaylistSyncOutput["synced"] = [];
+  const synced: PlaylistSyncOutput["synced"] = [];
   for (const collectionDir of await liveCollectionDirs(deps.channelDir)) {
     const collection = await readSyncedCollectionInput(collectionDir);
     if (collection === undefined) {
@@ -181,7 +177,7 @@ const syncExistingVideos = async (
       },
       collection.activityOverride
     );
-    synced = synced.toSpliced(synced.length, 0, {
+    synced.push({
       assigned: output.assigned,
       collectionName: collection.collectionName,
       theme: collection.theme,
@@ -196,7 +192,7 @@ const cleanDeleted = async (
   input: PlaylistCleanDeletedInput
 ): Promise<PlaylistCleanDeletedOutput> => {
   const client = youtubeClient(deps.yt);
-  let cleaned: PlaylistCleanDeletedOutput["cleaned"] = [];
+  const cleaned: PlaylistCleanDeletedOutput["cleaned"] = [];
 
   for (const playlist of playlistEntries(deps.config)) {
     if (playlist.playlistId === undefined) {
@@ -219,7 +215,7 @@ const cleanDeleted = async (
         await deletePlaylistItem(client, item.itemId);
       }
     }
-    cleaned = cleaned.toSpliced(cleaned.length, 0, {
+    cleaned.push({
       ...operationFor(playlist, input.dryRun),
       removedItems,
     });
@@ -234,18 +230,14 @@ export const playlistStatusService = async (
 ): Promise<Result<PlaylistStatusOutput, ServiceError>> => {
   try {
     const client = youtubeClient(deps.yt);
-    let playlists: PlaylistStatusOutput["playlists"] = [];
+    const playlists: PlaylistStatusOutput["playlists"] = [];
     for (const playlist of playlistEntries(deps.config)) {
       if (playlist.playlistId === undefined) {
-        playlists = playlists.toSpliced(
-          playlists.length,
-          0,
-          operationFor(playlist, false)
-        );
+        playlists.push(operationFor(playlist, false));
         continue;
       }
       const items = await listPlaylistItems(client, playlist.playlistId);
-      playlists = playlists.toSpliced(playlists.length, 0, {
+      playlists.push({
         ...operationFor(playlist, false),
         videoCount: items.length,
       });

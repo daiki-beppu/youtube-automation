@@ -43,17 +43,11 @@ export const insertVideoIntoPlaylist = async (
   if (playlist.playlistId === undefined) {
     throw new Error(`config: playlist ${playlist.key} is missing playlist_id`);
   }
-  const snippet =
-    playlist.key === "all"
-      ? {
-          playlistId: playlist.playlistId,
-          resourceId: { kind: "youtube#video", videoId },
-        }
-      : {
-          playlistId: playlist.playlistId,
-          position: 0,
-          resourceId: { kind: "youtube#video", videoId },
-        };
+  const snippet = {
+    playlistId: playlist.playlistId,
+    ...(playlist.key === "all" ? {} : { position: 0 }),
+    resourceId: { kind: "youtube#video", videoId },
+  };
   try {
     await client.playlistItems.insert({
       part: "snippet",

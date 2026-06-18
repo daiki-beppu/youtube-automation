@@ -55,19 +55,6 @@ const runPlaylistEntry = async <I, O, D extends keyof DepsMap>(
   }
 };
 
-const emitPlaylistResult = <T>(
-  result: Result<T, ServiceError>,
-  options: {
-    json: boolean;
-    renderText: (value: T) => string;
-  }
-): void => {
-  emitResult(result, {
-    json: options.json,
-    renderText: options.renderText,
-  });
-};
-
 export const renderStatusText = (output: PlaylistStatusOutput): string =>
   output.playlists
     .map((playlist) => {
@@ -156,7 +143,7 @@ const statusCommand = (commandDeps: PlaylistCommandDeps) =>
     meta: { description: statusEntry.description, name: "status" },
     async run({ args }) {
       const result = await runPlaylistEntry(statusEntry, {}, commandDeps);
-      emitPlaylistResult(result, {
+      emitResult(result, {
         json: args.json,
         renderText: renderStatusText,
       });
@@ -180,7 +167,7 @@ const createCommand = (commandDeps: PlaylistCommandDeps) =>
         { dry_run: args["dry-run"] },
         commandDeps
       );
-      emitPlaylistResult(result, {
+      emitResult(result, {
         json: args.json,
         renderText: renderCreateText,
       });
@@ -214,7 +201,7 @@ const assignCommand = (commandDeps: PlaylistCommandDeps) =>
         playlistAssignRawInput(args),
         commandDeps
       );
-      emitPlaylistResult(result, {
+      emitResult(result, {
         json: args.json,
         renderText: renderAssignText,
       });
@@ -238,7 +225,7 @@ const syncCommand = (commandDeps: PlaylistCommandDeps) =>
         { dry_run: args["dry-run"] },
         commandDeps
       );
-      emitPlaylistResult(result, {
+      emitResult(result, {
         json: args.json,
         renderText: renderSyncText,
       });
@@ -262,7 +249,7 @@ const cleanDeletedCommand = (commandDeps: PlaylistCommandDeps) =>
         { dry_run: args["dry-run"] },
         commandDeps
       );
-      emitPlaylistResult(result, {
+      emitResult(result, {
         json: args.json,
         renderText: renderCleanDeletedText,
       });
@@ -286,7 +273,7 @@ const initCommand = (commandDeps: PlaylistCommandDeps) =>
         { dry_run: args["dry-run"] },
         commandDeps
       );
-      emitPlaylistResult(result, {
+      emitResult(result, {
         json: args.json,
         renderText: renderInitText,
       });
