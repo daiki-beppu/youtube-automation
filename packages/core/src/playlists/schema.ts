@@ -25,8 +25,6 @@ const PlaylistOperation = z
   .object({
     dryRun: z.boolean(),
     key: z.string(),
-    persistError: z.string().optional(),
-    persisted: z.boolean().optional(),
     playlistId: z.string().optional(),
     title: z.string(),
     videoCount: z.number().int().nonnegative().optional(),

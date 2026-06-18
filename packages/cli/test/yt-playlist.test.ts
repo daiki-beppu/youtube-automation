@@ -41,6 +41,32 @@ interface TestCommand {
   run?: (context: unknown) => Promise<void> | void;
 }
 
+const playlistSubCommand = (name: string): TestCommand => {
+  const command = createPlaylistCommand({
+    resolveDeps: (deps) =>
+      Promise.resolve({} as unknown as Pick<DepsMap, (typeof deps)[number]>),
+  });
+  const subCommands = command.subCommands as Record<string, TestCommand>;
+  const subCommand = subCommands[name];
+  if (subCommand === undefined) {
+    throw new Error(`playlist ${name} command is required`);
+  }
+  return subCommand;
+};
+
+const silenceCommandIo = () => {
+  const stdoutSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+  const exitSpy = spyOn(process, "exit").mockImplementation((code) => {
+    throw new Error(`unexpected exit ${String(code)}`);
+  });
+  return {
+    restore: () => {
+      stdoutSpy.mockRestore();
+      exitSpy.mockRestore();
+    },
+  };
+};
+
 describe("core registry - playlist entries visible from cli package", () => {
   test("should expose the operation entries consumed by the CLI adapter", () => {
     expect(REGISTRY["playlists.status"].deps).toEqual(["config", "yt"]);
@@ -210,6 +236,83 @@ describe("tayk playlist - smoke", () => {
 
     stdoutSpy.mockRestore();
     exitSpy.mockRestore();
+  });
+
+  test("should pass create dry-run through the registry execution path", async () => {
+    const runSpy = spyOn(REGISTRY["playlists.create"], "run").mockResolvedValue(
+      {
+        ok: true,
+        value: { created: [], skipped: [] },
+      }
+    );
+    const io = silenceCommandIo();
+
+    try {
+      await playlistSubCommand("create").run?.({
+        args: { "dry-run": true, json: false },
+      });
+      expect(runSpy.mock.calls[0]?.[0]).toEqual({ dryRun: true });
+    } finally {
+      io.restore();
+      runSpy.mockRestore();
+    }
+  });
+
+  test("should pass sync dry-run through the registry execution path", async () => {
+    const runSpy = spyOn(REGISTRY["playlists.sync"], "run").mockResolvedValue({
+      ok: true,
+      value: { synced: [] },
+    });
+    const io = silenceCommandIo();
+
+    try {
+      await playlistSubCommand("sync").run?.({
+        args: { "dry-run": true, json: false },
+      });
+      expect(runSpy.mock.calls[0]?.[0]).toEqual({ dryRun: true });
+    } finally {
+      io.restore();
+      runSpy.mockRestore();
+    }
+  });
+
+  test("should pass clean-deleted dry-run through the registry execution path", async () => {
+    const runSpy = spyOn(
+      REGISTRY["playlists.cleanDeleted"],
+      "run"
+    ).mockResolvedValue({
+      ok: true,
+      value: { cleaned: [] },
+    });
+    const io = silenceCommandIo();
+
+    try {
+      await playlistSubCommand("clean-deleted").run?.({
+        args: { "dry-run": true, json: false },
+      });
+      expect(runSpy.mock.calls[0]?.[0]).toEqual({ dryRun: true });
+    } finally {
+      io.restore();
+      runSpy.mockRestore();
+    }
+  });
+
+  test("should pass init dry-run through the registry execution path", async () => {
+    const runSpy = spyOn(REGISTRY["playlists.init"], "run").mockResolvedValue({
+      ok: true,
+      value: { created: [], skipped: [], synced: [] },
+    });
+    const io = silenceCommandIo();
+
+    try {
+      await playlistSubCommand("init").run?.({
+        args: { "dry-run": true, json: false },
+      });
+      expect(runSpy.mock.calls[0]?.[0]).toEqual({ dryRun: true });
+    } finally {
+      io.restore();
+      runSpy.mockRestore();
+    }
   });
 
   test("should report missing CHANNEL_DIR through the real status command", () => {

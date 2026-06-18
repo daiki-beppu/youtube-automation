@@ -47,6 +47,11 @@ interface DeleteCall {
   id?: string;
 }
 
+interface ListPage {
+  items: unknown[];
+  nextPageToken?: string;
+}
+
 const tmpDirs: string[] = [];
 
 const makeTempChannel = (playlistsJson: unknown): string => {
@@ -133,6 +138,7 @@ const makeYouTube = (options?: {
   deleteError?: unknown;
   insertItemError?: unknown;
   listError?: unknown;
+  listPages?: Record<string, Record<string, ListPage>>;
   listResponses?: Record<string, unknown[]>;
   playlistInsertError?: unknown;
   playlistId?: string;
@@ -163,6 +169,16 @@ const makeYouTube = (options?: {
         playlistItemListCalls.push(params);
         if (options?.listError !== undefined) {
           return Promise.reject(options.listError);
+        }
+        const pages = options?.listPages?.[params.playlistId ?? ""];
+        if (pages !== undefined) {
+          const page = pages[params.pageToken ?? ""];
+          return Promise.resolve({
+            data: {
+              items: page?.items ?? [],
+              nextPageToken: page?.nextPageToken,
+            },
+          });
         }
         const items = listResponses[params.playlistId ?? ""] ?? [];
         return Promise.resolve({ data: { items } });
@@ -467,7 +483,7 @@ describe("playlists.create", () => {
     expect(result.error.message).toBe("playlists.insert: HTTP 403");
   });
 
-  test("returns created playlist id when local config persistence fails", async () => {
+  test("returns config error when local config persistence fails", async () => {
     const channelDir = makeTempChannel({
       playlists: {},
     });
@@ -483,21 +499,15 @@ describe("playlists.create", () => {
       makeChannelDeps(channelDir, config, yt)
     );
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      throw new Error(`expected ok, got ${result.error.domain}`);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected config error");
     }
     expect(playlistInsertCalls).toHaveLength(1);
-    expect(result.value.created).toEqual([
-      {
-        dryRun: false,
-        key: "focus",
-        persistError: "config: playlists.focus must be object or string",
-        persisted: false,
-        playlistId: "PL_CREATED",
-        title: "Focus Sessions",
-      },
-    ]);
+    expect(result.error).toEqual({
+      domain: "config",
+      message: "config: playlists.focus must be object or string",
+    });
 
     const written = JSON.parse(
       readFileSync(
@@ -508,7 +518,7 @@ describe("playlists.create", () => {
     expect(written.playlists.focus?.playlist_id).toBeUndefined();
   });
 
-  test("stops creating more playlists after local config persistence fails", async () => {
+  test("stops creating more playlists when local config persistence fails", async () => {
     const channelDir = makeTempChannel({
       playlists: {
         sleep: { title: "Sleep Sessions" },
@@ -527,21 +537,12 @@ describe("playlists.create", () => {
       makeChannelDeps(channelDir, config, yt)
     );
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      throw new Error(`expected ok, got ${result.error.domain}`);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected config error");
     }
     expect(playlistInsertCalls).toHaveLength(1);
-    expect(result.value.created).toEqual([
-      {
-        dryRun: false,
-        key: "focus",
-        persistError: "config: playlists.focus must be object or string",
-        persisted: false,
-        playlistId: "PL_CREATED",
-        title: "Focus Sessions",
-      },
-    ]);
+    expect(result.error.domain).toBe("config");
 
     const written = JSON.parse(
       readFileSync(
@@ -592,6 +593,64 @@ describe("playlists.assign", () => {
       playlistId: "PL_ALL",
       resourceId: { kind: "youtube#video", videoId: "video_123" },
     });
+  });
+
+  test("uses paginated playlist items when checking existing videos", async () => {
+    const config = makeConfig({
+      all: { auto_add: true, playlist_id: "PL_ALL", title: "All Videos" },
+    });
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } = makeYouTube({
+      listPages: {
+        PL_ALL: {
+          "": {
+            items: [{ contentDetails: { videoId: "video_first_page" } }],
+            nextPageToken: "page-2",
+          },
+          "page-2": {
+            items: [{ contentDetails: { videoId: "video_123" } }],
+          },
+        },
+      },
+    });
+
+    const result = await REGISTRY["playlists.assign"].run(
+      REGISTRY["playlists.assign"].inputSchema.parse({
+        dry_run: false,
+        theme: "focus",
+        video_id: "video_123",
+      }),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(result.value.assigned).toEqual([
+      {
+        alreadyPresent: true,
+        dryRun: false,
+        inserted: false,
+        key: "all",
+        playlistId: "PL_ALL",
+        title: "All Videos",
+      },
+    ]);
+    expect(playlistItemListCalls).toEqual([
+      {
+        maxResults: 50,
+        pageToken: undefined,
+        part: "snippet,contentDetails",
+        playlistId: "PL_ALL",
+      },
+      {
+        maxResults: 50,
+        pageToken: "page-2",
+        part: "snippet,contentDetails",
+        playlistId: "PL_ALL",
+      },
+    ]);
+    expect(playlistItemInsertCalls).toHaveLength(0);
   });
 
   test("dry-run reports matched playlists without inserting playlist items", async () => {
@@ -986,7 +1045,7 @@ describe("playlists.init", () => {
     expect(written.playlists.focus?.playlist_id).toBe("PL_FOCUS");
   });
 
-  test("returns created playlist id and still syncs when persistence fails", async () => {
+  test("returns config error and does not sync when persistence fails", async () => {
     const channelDir = makeTempChannel({
       playlists: {},
     });
@@ -999,7 +1058,7 @@ describe("playlists.init", () => {
     const config = makeConfig({
       focus: { auto_add_activities: ["Deep Work"], title: "Focus Sessions" },
     });
-    const { playlistItemInsertCalls, yt } = makeYouTube({
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } = makeYouTube({
       listResponses: { PL_FOCUS: [] },
       playlistId: "PL_FOCUS",
     });
@@ -1009,31 +1068,16 @@ describe("playlists.init", () => {
       makeChannelDeps(channelDir, config, yt)
     );
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      throw new Error(`expected ok, got ${result.error.domain}`);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected config error");
     }
-    expect(result.value.created).toEqual([
-      {
-        dryRun: false,
-        key: "focus",
-        persistError: "config: playlists.focus must be object or string",
-        persisted: false,
-        playlistId: "PL_FOCUS",
-        title: "Focus Sessions",
-      },
-    ]);
-    expect(result.value.synced[0]?.assigned).toEqual([
-      {
-        alreadyPresent: false,
-        dryRun: false,
-        inserted: true,
-        key: "focus",
-        playlistId: "PL_FOCUS",
-        title: "Focus Sessions",
-      },
-    ]);
-    expect(playlistItemInsertCalls).toHaveLength(1);
+    expect(result.error).toEqual({
+      domain: "config",
+      message: "config: playlists.focus must be object or string",
+    });
+    expect(playlistItemListCalls).toHaveLength(0);
+    expect(playlistItemInsertCalls).toHaveLength(0);
   });
 
   test("returns api error and preserves written playlist id when sync fails after create", async () => {
@@ -1281,12 +1325,17 @@ describe("playlists.status", () => {
       all: { playlist_id: "PL_ALL", title: "All Videos" },
       missing: { title: "Missing Playlist" },
     });
-    const { yt } = makeYouTube({
-      listResponses: {
-        PL_ALL: [
-          { contentDetails: { videoId: "video_1" } },
-          { contentDetails: { videoId: "video_2" } },
-        ],
+    const { playlistItemListCalls, yt } = makeYouTube({
+      listPages: {
+        PL_ALL: {
+          "": {
+            items: [{ contentDetails: { videoId: "video_1" } }],
+            nextPageToken: "page-2",
+          },
+          "page-2": {
+            items: [{ contentDetails: { videoId: "video_2" } }],
+          },
+        },
       },
     });
 
@@ -1311,6 +1360,20 @@ describe("playlists.status", () => {
         dryRun: false,
         key: "missing",
         title: "Missing Playlist",
+      },
+    ]);
+    expect(playlistItemListCalls).toEqual([
+      {
+        maxResults: 50,
+        pageToken: undefined,
+        part: "snippet,contentDetails",
+        playlistId: "PL_ALL",
+      },
+      {
+        maxResults: 50,
+        pageToken: "page-2",
+        part: "snippet,contentDetails",
+        playlistId: "PL_ALL",
       },
     ]);
   });

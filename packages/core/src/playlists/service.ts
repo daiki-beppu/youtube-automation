@@ -141,23 +141,11 @@ const createPlaylists = async (
       continue;
     }
     const playlistId = await createPlaylist(client, deps.config, playlist);
-    try {
-      await writePlaylistId(deps.channelDir, playlist.key, playlistId);
-      created.push({
-        ...operationFor(playlist, input.dryRun),
-        playlistId,
-      });
-    } catch (error) {
-      const persistError =
-        error instanceof Error ? error.message : String(error);
-      created.push({
-        ...operationFor(playlist, input.dryRun),
-        persistError,
-        persisted: false,
-        playlistId,
-      });
-      return PlaylistCreateOutputSchema.parse({ created, skipped });
-    }
+    await writePlaylistId(deps.channelDir, playlist.key, playlistId);
+    created.push({
+      ...operationFor(playlist, input.dryRun),
+      playlistId,
+    });
   }
 
   return PlaylistCreateOutputSchema.parse({ created, skipped });

@@ -28,83 +28,25 @@ interface PlaylistCommandDeps {
   ) => Promise<Pick<DepsMap, D>>;
 }
 
+interface PlaylistRegistryEntry<I, O, D extends keyof DepsMap> {
+  deps: readonly D[];
+  inputSchema: { parse: (rawInput: unknown) => I };
+  run: (input: I, deps: Pick<DepsMap, D>) => Promise<Result<O, ServiceError>>;
+}
+
 const defaultDeps: PlaylistCommandDeps = {
   resolveDeps: (deps) => resolveDeps(deps),
 };
 
-const runStatus = async (
+const runPlaylistEntry = async <I, O, D extends keyof DepsMap>(
+  entry: PlaylistRegistryEntry<I, O, D>,
   rawInput: unknown,
   commandDeps: PlaylistCommandDeps
-): Promise<Result<PlaylistStatusOutput, ServiceError>> => {
+): Promise<Result<O, ServiceError>> => {
   try {
-    const input = statusEntry.inputSchema.parse(rawInput);
-    const deps = await commandDeps.resolveDeps(statusEntry.deps);
-    return await statusEntry.run(input, deps);
-  } catch (error) {
-    return err(toServiceError(error));
-  }
-};
-
-const runCreate = async (
-  rawInput: unknown,
-  commandDeps: PlaylistCommandDeps
-): Promise<Result<PlaylistCreateOutput, ServiceError>> => {
-  try {
-    const input = createEntry.inputSchema.parse(rawInput);
-    const deps = await commandDeps.resolveDeps(createEntry.deps);
-    return await createEntry.run(input, deps);
-  } catch (error) {
-    return err(toServiceError(error));
-  }
-};
-
-const runAssign = async (
-  rawInput: unknown,
-  commandDeps: PlaylistCommandDeps
-): Promise<Result<PlaylistAssignOutput, ServiceError>> => {
-  try {
-    const input = assignEntry.inputSchema.parse(rawInput);
-    const deps = await commandDeps.resolveDeps(assignEntry.deps);
-    return await assignEntry.run(input, deps);
-  } catch (error) {
-    return err(toServiceError(error));
-  }
-};
-
-const runSync = async (
-  rawInput: unknown,
-  commandDeps: PlaylistCommandDeps
-): Promise<Result<PlaylistSyncOutput, ServiceError>> => {
-  try {
-    const input = syncEntry.inputSchema.parse(rawInput);
-    const deps = await commandDeps.resolveDeps(syncEntry.deps);
-    return await syncEntry.run(input, deps);
-  } catch (error) {
-    return err(toServiceError(error));
-  }
-};
-
-const runCleanDeleted = async (
-  rawInput: unknown,
-  commandDeps: PlaylistCommandDeps
-): Promise<Result<PlaylistCleanDeletedOutput, ServiceError>> => {
-  try {
-    const input = cleanDeletedEntry.inputSchema.parse(rawInput);
-    const deps = await commandDeps.resolveDeps(cleanDeletedEntry.deps);
-    return await cleanDeletedEntry.run(input, deps);
-  } catch (error) {
-    return err(toServiceError(error));
-  }
-};
-
-const runInit = async (
-  rawInput: unknown,
-  commandDeps: PlaylistCommandDeps
-): Promise<Result<PlaylistInitOutput, ServiceError>> => {
-  try {
-    const input = initEntry.inputSchema.parse(rawInput);
-    const deps = await commandDeps.resolveDeps(initEntry.deps);
-    return await initEntry.run(input, deps);
+    const input = entry.inputSchema.parse(rawInput);
+    const deps = await commandDeps.resolveDeps(entry.deps);
+    return await entry.run(input, deps);
   } catch (error) {
     return err(toServiceError(error));
   }
@@ -141,9 +83,6 @@ const renderCreateText = (
   [
     ...output.created.map((playlist) => {
       const playlistId = playlist.playlistId ?? "(dry-run)";
-      if (playlist.persisted === false) {
-        return `created-unpersisted: ${playlist.key} [${playlistId}]`;
-      }
       return `created: ${playlist.key} [${playlistId}]`;
     }),
     ...output.skipped.map((playlist) => {
@@ -213,7 +152,7 @@ const statusCommand = (commandDeps: PlaylistCommandDeps) =>
     },
     meta: { description: statusEntry.description, name: "status" },
     async run({ args }) {
-      const result = await runStatus({}, commandDeps);
+      const result = await runPlaylistEntry(statusEntry, {}, commandDeps);
       emitPlaylistResult(result, {
         json: args.json,
         renderText: renderStatusText,
@@ -233,7 +172,11 @@ const createCommand = (commandDeps: PlaylistCommandDeps) =>
     },
     meta: { description: createEntry.description, name: "create" },
     async run({ args }) {
-      const result = await runCreate({ dry_run: args["dry-run"] }, commandDeps);
+      const result = await runPlaylistEntry(
+        createEntry,
+        { dry_run: args["dry-run"] },
+        commandDeps
+      );
       emitPlaylistResult(result, {
         json: args.json,
         renderText: renderCreateText,
@@ -263,7 +206,11 @@ const assignCommand = (commandDeps: PlaylistCommandDeps) =>
     },
     meta: { description: assignEntry.description, name: "assign" },
     async run({ args }) {
-      const result = await runAssign(playlistAssignRawInput(args), commandDeps);
+      const result = await runPlaylistEntry(
+        assignEntry,
+        playlistAssignRawInput(args),
+        commandDeps
+      );
       emitPlaylistResult(result, {
         json: args.json,
         renderText: renderAssignText,
@@ -283,7 +230,11 @@ const syncCommand = (commandDeps: PlaylistCommandDeps) =>
     },
     meta: { description: syncEntry.description, name: "sync" },
     async run({ args }) {
-      const result = await runSync({ dry_run: args["dry-run"] }, commandDeps);
+      const result = await runPlaylistEntry(
+        syncEntry,
+        { dry_run: args["dry-run"] },
+        commandDeps
+      );
       emitPlaylistResult(result, {
         json: args.json,
         renderText: renderSyncText,
@@ -303,7 +254,8 @@ const cleanDeletedCommand = (commandDeps: PlaylistCommandDeps) =>
     },
     meta: { description: cleanDeletedEntry.description, name: "clean-deleted" },
     async run({ args }) {
-      const result = await runCleanDeleted(
+      const result = await runPlaylistEntry(
+        cleanDeletedEntry,
         { dry_run: args["dry-run"] },
         commandDeps
       );
@@ -326,7 +278,11 @@ const initCommand = (commandDeps: PlaylistCommandDeps) =>
     },
     meta: { description: initEntry.description, name: "init" },
     async run({ args }) {
-      const result = await runInit({ dry_run: args["dry-run"] }, commandDeps);
+      const result = await runPlaylistEntry(
+        initEntry,
+        { dry_run: args["dry-run"] },
+        commandDeps
+      );
       emitPlaylistResult(result, {
         json: args.json,
         renderText: renderInitText,
