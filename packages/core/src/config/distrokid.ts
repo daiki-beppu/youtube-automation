@@ -1,22 +1,76 @@
-// DistroKid 配信プロファイル設定（merged の `distrokid`・optional/opt-in）。
-//
-// 形状検証 + `enabled=true` 時の条件付き必須チェックは superRefine で行い、
-// 既存テストが期待する `config:` prefix のメッセージ（`distrokid.profile は object ...`
-// / 欠落フィールド名）を保持する。
-
 import { z } from "zod";
 
 import { isPlainObject } from "./internal.ts";
 
-// distrokid.enabled === true のとき profile に必須となるフィールド（条件付き必須）。
-const REQUIRED_PROFILE_FIELDS = [
-  "artist_name",
-  "language",
-  "main_genre",
-  "songwriter",
-  "apple_music_credit",
-  "track_type",
-] as const;
+const REQUIRED_PROFILE_FIELDS = ["language", "main_genre"] as const;
+
+const AI_DISCLOSURE_DEFAULTS = {
+  apply_to_all: true,
+  artist_persona: true,
+  enabled: true,
+  lyrics: true,
+  music: true,
+  partial_audio_type: null,
+  recording_scope: "full",
+} as const;
+
+const CREDIT_DEFAULTS = {
+  performer_role: "Synthesizer",
+  producer_role: "Producer",
+} as const;
+
+const Songwriter = z
+  .object({
+    first: z.string().optional(),
+    last: z.string().optional(),
+    middle: z.string().optional(),
+  })
+  .strict();
+
+const AiDisclosure = z
+  .object({
+    apply_to_all: z.boolean().default(AI_DISCLOSURE_DEFAULTS.apply_to_all),
+    artist_persona: z.boolean().default(AI_DISCLOSURE_DEFAULTS.artist_persona),
+    enabled: z.boolean().default(AI_DISCLOSURE_DEFAULTS.enabled),
+    lyrics: z.boolean().default(AI_DISCLOSURE_DEFAULTS.lyrics),
+    music: z.boolean().default(AI_DISCLOSURE_DEFAULTS.music),
+    partial_audio_type: z
+      .enum(["vocals", "instruments"])
+      .nullable()
+      .default(AI_DISCLOSURE_DEFAULTS.partial_audio_type),
+    recording_scope: z
+      .enum(["full", "partial"])
+      .default(AI_DISCLOSURE_DEFAULTS.recording_scope),
+  })
+  .strict()
+  .superRefine((ai, ctx) => {
+    if (ai.partial_audio_type !== null && ai.recording_scope !== "partial") {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "distrokid.profile.ai_disclosure.partial_audio_type requires recording_scope=partial",
+        path: ["recording_scope"],
+      });
+    }
+  });
+
+const Credits = z
+  .object({
+    performer_role: z.string().default(CREDIT_DEFAULTS.performer_role),
+    producer_role: z.string().default(CREDIT_DEFAULTS.producer_role),
+  })
+  .strict();
+
+const Profile = z
+  .object({
+    ai_disclosure: AiDisclosure.prefault({}),
+    credits: Credits.prefault({}),
+    language: z.string().default(""),
+    main_genre: z.string().default(""),
+    songwriter: Songwriter.nullable().default(null),
+    sub_genre: z.string().optional(),
+  })
+  .strict();
 
 const DistrokidInner = z
   .object({
@@ -24,7 +78,8 @@ const DistrokidInner = z
     profile: z.unknown().prefault({}),
   })
   .superRefine((dk, ctx) => {
-    if (!isPlainObject(dk.profile)) {
+    const { profile } = dk;
+    if (!isPlainObject(profile)) {
       ctx.addIssue({
         code: "custom",
         message: "distrokid.profile は object でなければなりません",
@@ -32,10 +87,11 @@ const DistrokidInner = z
       });
       return;
     }
-    const { profile } = dk;
-    // enabled=true のときのみ profile の必須 6 フィールドを条件付き検証（Fail Fast）。
     if (dk.enabled) {
-      const missing = REQUIRED_PROFILE_FIELDS.filter((f) => !profile[f]);
+      const missing = REQUIRED_PROFILE_FIELDS.filter((field) => {
+        const value = profile[field];
+        return typeof value !== "string" || value.length === 0;
+      });
       if (missing.length > 0) {
         ctx.addIssue({
           code: "custom",
@@ -46,26 +102,32 @@ const DistrokidInner = z
     }
   });
 
-const str = (value: unknown): string =>
-  typeof value === "string" ? value : "";
-
-/** `distrokid` セクション（optional・opt-in）。 */
 export const Distrokid = z
   .object({
     distrokid: DistrokidInner.prefault({}),
   })
   .transform((o) => {
-    // superRefine の isPlainObject 検証通過済みのため、transform 到達時は常に plain object。
-    const profile = o.distrokid.profile as Record<string, unknown>;
+    const profile = Profile.parse(o.distrokid.profile);
     return {
       enabled: o.distrokid.enabled,
       profile: {
-        appleMusicCredit: str(profile.apple_music_credit),
-        artistName: str(profile.artist_name),
-        language: str(profile.language),
-        mainGenre: str(profile.main_genre),
-        songwriter: str(profile.songwriter),
-        trackType: str(profile.track_type),
+        aiDisclosure: {
+          applyToAll: profile.ai_disclosure.apply_to_all,
+          artistPersona: profile.ai_disclosure.artist_persona,
+          enabled: profile.ai_disclosure.enabled,
+          lyrics: profile.ai_disclosure.lyrics,
+          music: profile.ai_disclosure.music,
+          partialAudioType: profile.ai_disclosure.partial_audio_type,
+          recordingScope: profile.ai_disclosure.recording_scope,
+        },
+        credits: {
+          performerRole: profile.credits.performer_role,
+          producerRole: profile.credits.producer_role,
+        },
+        language: profile.language,
+        mainGenre: profile.main_genre,
+        songwriter: profile.songwriter,
+        subGenre: profile.sub_genre,
       },
     };
   });

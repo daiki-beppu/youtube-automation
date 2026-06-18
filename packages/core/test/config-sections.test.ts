@@ -458,86 +458,174 @@ describe("pinnedComment", () => {
 
 // --- distrokid (#698) ------------------------------------------------------
 
-const fullDistrokidProfile = (): Record<string, string> => ({
-  apple_music_credit: "Jane Doe",
-  artist_name: "City Nights",
+const fullDistrokidProfile = (): Record<string, unknown> => ({
+  ai_disclosure: {
+    apply_to_all: false,
+    artist_persona: false,
+    enabled: true,
+    lyrics: false,
+    music: true,
+    partial_audio_type: "vocals",
+    recording_scope: "partial",
+  },
+  credits: {
+    performer_role: "Piano",
+    producer_role: "Executive Producer",
+  },
   language: "English",
   main_genre: "Electronic",
-  songwriter: "Jane Doe",
-  track_type: "Instrumental",
+  songwriter: { first: "Jane", last: "Doe", middle: "Q" },
+  sub_genre: "Downtempo",
 });
 
 describe("distrokid", () => {
   test("defaults to disabled with empty profile when absent", () => {
-    // Given no distrokid.json
     const config = load(minimalSections());
 
-    // Then the opt-in section is disabled with blank profile fields
     expect(config.integrations.distrokid.enabled).toBe(false);
-    expect(config.integrations.distrokid.profile.artistName).toBe("");
-    expect(config.integrations.distrokid.profile.trackType).toBe("");
+    expect(config.integrations.distrokid.profile.language).toBe("");
+    expect(config.integrations.distrokid.profile.mainGenre).toBe("");
+    expect(config.integrations.distrokid.profile.songwriter).toBeNull();
+    expect(config.integrations.distrokid.profile.aiDisclosure).toEqual({
+      applyToAll: true,
+      artistPersona: true,
+      enabled: true,
+      lyrics: true,
+      music: true,
+      partialAudioType: null,
+      recordingScope: "full",
+    });
+    expect(config.integrations.distrokid.profile.credits).toEqual({
+      performerRole: "Synthesizer",
+      producerRole: "Producer",
+    });
   });
 
-  test("loads an enabled profile through to camelCase fields", () => {
-    // Given enabled distrokid with a complete profile
+  test("loads an enabled profile through to the new camelCase fields", () => {
     const sections = minimalSections();
     sections["distrokid.json"] = {
       distrokid: { enabled: true, profile: fullDistrokidProfile() },
     };
 
-    // Then all six profile fields are mapped
     const dk = load(sections).integrations.distrokid;
     expect(dk.enabled).toBe(true);
-    expect(dk.profile.artistName).toBe("City Nights");
     expect(dk.profile.language).toBe("English");
     expect(dk.profile.mainGenre).toBe("Electronic");
-    expect(dk.profile.songwriter).toBe("Jane Doe");
-    expect(dk.profile.appleMusicCredit).toBe("Jane Doe");
-    expect(dk.profile.trackType).toBe("Instrumental");
+    expect(dk.profile.subGenre).toBe("Downtempo");
+    expect(dk.profile.songwriter).toEqual({
+      first: "Jane",
+      last: "Doe",
+      middle: "Q",
+    });
+    expect(dk.profile.aiDisclosure).toEqual({
+      applyToAll: false,
+      artistPersona: false,
+      enabled: true,
+      lyrics: false,
+      music: true,
+      partialAudioType: "vocals",
+      recordingScope: "partial",
+    });
+    expect(dk.profile.credits).toEqual({
+      performerRole: "Piano",
+      producerRole: "Executive Producer",
+    });
   });
 
-  test("rejects enabled=true with a missing profile field", () => {
-    // Given enabled distrokid missing songwriter (conditional-required)
+  test("accepts enabled=true with only language and main_genre", () => {
+    const sections = minimalSections();
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: true,
+        profile: { language: "English", main_genre: "Electronic" },
+      },
+    };
+
+    const dk = load(sections).integrations.distrokid;
+    expect(dk.enabled).toBe(true);
+    expect(dk.profile.language).toBe("English");
+    expect(dk.profile.mainGenre).toBe("Electronic");
+    expect(dk.profile.songwriter).toBeNull();
+    expect(dk.profile.aiDisclosure.recordingScope).toBe("full");
+    expect(dk.profile.credits.performerRole).toBe("Synthesizer");
+  });
+
+  test("rejects enabled=true with a missing new required profile field", () => {
     const sections = minimalSections();
     const profile = fullDistrokidProfile();
-    Reflect.deleteProperty(profile, "songwriter");
+    Reflect.deleteProperty(profile, "main_genre");
     sections["distrokid.json"] = { distrokid: { enabled: true, profile } };
 
-    // When/Then the conditional validation names the missing field
-    expect(() => load(sections)).toThrow(/songwriter/u);
+    let message = "";
+    try {
+      load(sections);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain("main_genre");
+    expect(message).not.toContain("songwriter");
   });
 
   test("skips profile validation when disabled", () => {
-    // Given disabled distrokid with an incomplete profile
     const sections = minimalSections();
     sections["distrokid.json"] = {
-      distrokid: { enabled: false, profile: { artist_name: "x" } },
+      distrokid: { enabled: false, profile: { language: "English" } },
     };
 
-    // Then it loads without validating the profile
     const dk = load(sections).integrations.distrokid;
     expect(dk.enabled).toBe(false);
-    expect(dk.profile.artistName).toBe("x");
+    expect(dk.profile.language).toBe("English");
+    expect(dk.profile.mainGenre).toBe("");
+  });
+
+  test("rejects partial_audio_type unless recording_scope is partial", () => {
+    const sections = minimalSections();
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: true,
+        profile: {
+          ai_disclosure: { partial_audio_type: "vocals" },
+          language: "English",
+          main_genre: "Electronic",
+        },
+      },
+    };
+
+    expect(() => load(sections)).toThrow(/recording_scope/u);
+  });
+
+  test("rejects an unknown partial_audio_type", () => {
+    const sections = minimalSections();
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: true,
+        profile: {
+          ai_disclosure: {
+            partial_audio_type: "drums",
+            recording_scope: "partial",
+          },
+          language: "English",
+          main_genre: "Electronic",
+        },
+      },
+    };
+
+    expect(() => load(sections)).toThrow(/partial_audio_type/u);
   });
 
   test("rejects a non-object distrokid section", () => {
-    // Given distrokid declared as an array
     const sections = minimalSections();
     sections["distrokid.json"] = { distrokid: ["not", "an", "object"] };
 
-    // When/Then the section guard fires
     expect(() => load(sections)).toThrow(/^config:/u);
   });
 
   test("rejects a non-object distrokid.profile via the shared isPlainObject guard", () => {
-    // Given profile declared as an array (regression guard for the superRefine
-    // boundary check that delegates to internal.isPlainObject)
     const sections = minimalSections();
     sections["distrokid.json"] = {
       distrokid: { enabled: false, profile: ["not", "an", "object"] },
     };
 
-    // When/Then the profile guard fires with the same contextual message
     expect(() => load(sections)).toThrow(
       "distrokid.profile は object でなければなりません"
     );

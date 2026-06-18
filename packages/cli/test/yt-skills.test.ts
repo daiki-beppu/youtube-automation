@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -134,6 +134,46 @@ describe("tayk skills list — error path (run-command helper)", () => {
 });
 
 describe("tayk dispatcher — citty usage surface", () => {
+  test("does not put distrokid-migrate on the skills startup path", () => {
+    const source = readFileSync(
+      join(repoRoot, "packages/cli/bin/tayk.ts"),
+      "utf-8"
+    );
+
+    expect(source).not.toMatch(
+      /^import .*commands\/distrokid-migrate\/cli\.ts/mu
+    );
+    expect(source).toMatch(
+      /await import\(\s*"[^"]*commands\/distrokid-migrate\/cli\.ts"\s*\)/u
+    );
+  });
+
+  test("shares distrokid-migrate CLI surface through the lightweight definition", () => {
+    const taykSource = readFileSync(
+      join(repoRoot, "packages/cli/bin/tayk.ts"),
+      "utf-8"
+    );
+    const commandSource = readFileSync(
+      join(repoRoot, "packages/cli/src/commands/distrokid-migrate/cli.ts"),
+      "utf-8"
+    );
+    const definitionSource = readFileSync(
+      join(
+        repoRoot,
+        "packages/cli/src/commands/distrokid-migrate/definition.ts"
+      ),
+      "utf-8"
+    );
+
+    expect(taykSource).toContain(
+      "../src/commands/distrokid-migrate/definition.ts"
+    );
+    expect(commandSource).toContain("./definition.ts");
+    expect(taykSource).not.toMatch(/\bapply:\s*\{/u);
+    expect(commandSource).not.toMatch(/\bapply:\s*\{/u);
+    expect(definitionSource).not.toContain("@youtube-automation/core");
+  });
+
   test("`tayk --help` exits 0 and lists the skills subcommand", () => {
     const proc = runTayk("--help");
 

@@ -1,6 +1,11 @@
 import type { z } from "zod";
 
 import type { ChannelConfig } from "./config/index.ts";
+import {
+  DistrokidMigrateInputSchema,
+  DistrokidMigrateOutputSchema,
+  migrateDistrokidService,
+} from "./distrokid-migrate/index.ts";
 import type { ServiceError } from "./errors.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
 import type { Result } from "./result.ts";
@@ -67,6 +72,13 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "distrokid.migrate": defineRegistryEntry({
+    deps: [],
+    description: "DistroKid profile config を新 schema へ移行する",
+    inputSchema: DistrokidMigrateInputSchema,
+    outputSchema: DistrokidMigrateOutputSchema,
+    run: migrateDistrokidService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",
