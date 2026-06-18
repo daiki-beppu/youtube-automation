@@ -12,10 +12,6 @@ const DryRunSnakeInput = z
   .strict()
   .transform(snakeToCamel);
 
-const DryRunCamelInput = z
-  .object({ dryRun: z.boolean().default(false) })
-  .strict();
-
 const AssignSnakeInput = z
   .object({
     dry_run: z.boolean().default(false),
@@ -25,18 +21,12 @@ const AssignSnakeInput = z
   .strict()
   .transform(snakeToCamel);
 
-const AssignCamelInput = z
-  .object({
-    dryRun: z.boolean().default(false),
-    theme: z.string().min(1),
-    videoId: z.string().min(1),
-  })
-  .strict();
-
 const PlaylistOperation = z
   .object({
     dryRun: z.boolean(),
     key: z.string(),
+    persistError: z.string().optional(),
+    persisted: z.boolean().optional(),
     playlistId: z.string().optional(),
     title: z.string(),
     videoCount: z.number().int().nonnegative().optional(),
@@ -69,26 +59,11 @@ const PlaylistSyncedCollection = z
   .strict();
 
 export const PlaylistStatusInputSchema = z.object({}).strict();
-export const PlaylistCreateInputSchema = z.union([
-  DryRunSnakeInput,
-  DryRunCamelInput,
-]);
-export const PlaylistAssignInputSchema = z.union([
-  AssignSnakeInput,
-  AssignCamelInput,
-]);
-export const PlaylistCleanDeletedInputSchema = z.union([
-  DryRunSnakeInput,
-  DryRunCamelInput,
-]);
-export const PlaylistSyncInputSchema = z.union([
-  DryRunSnakeInput,
-  DryRunCamelInput,
-]);
-export const PlaylistInitInputSchema = z.union([
-  DryRunSnakeInput,
-  DryRunCamelInput,
-]);
+export const PlaylistCreateInputSchema = DryRunSnakeInput;
+export const PlaylistAssignInputSchema = AssignSnakeInput;
+export const PlaylistCleanDeletedInputSchema = DryRunSnakeInput;
+export const PlaylistSyncInputSchema = DryRunSnakeInput;
+export const PlaylistInitInputSchema = DryRunSnakeInput;
 
 export const PlaylistStatusOutputSchema = z
   .object({

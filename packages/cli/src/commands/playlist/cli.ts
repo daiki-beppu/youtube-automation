@@ -8,6 +8,7 @@ import type {
   PlaylistStatusOutput,
   PlaylistSyncOutput,
 } from "@youtube-automation/core/playlists";
+import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
 import { defineCommand } from "citty";
 
@@ -21,44 +22,101 @@ const syncEntry = REGISTRY["playlists.sync"];
 const cleanDeletedEntry = REGISTRY["playlists.cleanDeleted"];
 const initEntry = REGISTRY["playlists.init"];
 
-type PlaylistEntry =
-  | typeof assignEntry
-  | typeof cleanDeletedEntry
-  | typeof createEntry
-  | typeof initEntry
-  | typeof statusEntry
-  | typeof syncEntry;
+interface PlaylistCommandDeps {
+  resolveDeps: <D extends keyof DepsMap>(
+    deps: readonly D[]
+  ) => Promise<Pick<DepsMap, D>>;
+}
 
-type EntryOutput<E extends PlaylistEntry> =
-  Awaited<ReturnType<E["run"]>> extends Result<infer O, ServiceError>
-    ? O
-    : never;
+const defaultDeps: PlaylistCommandDeps = {
+  resolveDeps: (deps) => resolveDeps(deps),
+};
 
-const runPlaylistEntry = async <E extends PlaylistEntry>(
-  entry: E,
-  rawInput: unknown
-): Promise<Result<EntryOutput<E>, ServiceError>> => {
+const runStatus = async (
+  rawInput: unknown,
+  commandDeps: PlaylistCommandDeps
+): Promise<Result<PlaylistStatusOutput, ServiceError>> => {
   try {
-    const input = entry.inputSchema.parse(rawInput);
-    const deps = await resolveDeps(entry.deps);
-    return (await entry.run(input as never, deps as never)) as Result<
-      EntryOutput<E>,
-      ServiceError
-    >;
+    const input = statusEntry.inputSchema.parse(rawInput);
+    const deps = await commandDeps.resolveDeps(statusEntry.deps);
+    return await statusEntry.run(input, deps);
   } catch (error) {
     return err(toServiceError(error));
   }
 };
 
-const emitPlaylistEntry = async <E extends PlaylistEntry>(
-  entry: E,
+const runCreate = async (
+  rawInput: unknown,
+  commandDeps: PlaylistCommandDeps
+): Promise<Result<PlaylistCreateOutput, ServiceError>> => {
+  try {
+    const input = createEntry.inputSchema.parse(rawInput);
+    const deps = await commandDeps.resolveDeps(createEntry.deps);
+    return await createEntry.run(input, deps);
+  } catch (error) {
+    return err(toServiceError(error));
+  }
+};
+
+const runAssign = async (
+  rawInput: unknown,
+  commandDeps: PlaylistCommandDeps
+): Promise<Result<PlaylistAssignOutput, ServiceError>> => {
+  try {
+    const input = assignEntry.inputSchema.parse(rawInput);
+    const deps = await commandDeps.resolveDeps(assignEntry.deps);
+    return await assignEntry.run(input, deps);
+  } catch (error) {
+    return err(toServiceError(error));
+  }
+};
+
+const runSync = async (
+  rawInput: unknown,
+  commandDeps: PlaylistCommandDeps
+): Promise<Result<PlaylistSyncOutput, ServiceError>> => {
+  try {
+    const input = syncEntry.inputSchema.parse(rawInput);
+    const deps = await commandDeps.resolveDeps(syncEntry.deps);
+    return await syncEntry.run(input, deps);
+  } catch (error) {
+    return err(toServiceError(error));
+  }
+};
+
+const runCleanDeleted = async (
+  rawInput: unknown,
+  commandDeps: PlaylistCommandDeps
+): Promise<Result<PlaylistCleanDeletedOutput, ServiceError>> => {
+  try {
+    const input = cleanDeletedEntry.inputSchema.parse(rawInput);
+    const deps = await commandDeps.resolveDeps(cleanDeletedEntry.deps);
+    return await cleanDeletedEntry.run(input, deps);
+  } catch (error) {
+    return err(toServiceError(error));
+  }
+};
+
+const runInit = async (
+  rawInput: unknown,
+  commandDeps: PlaylistCommandDeps
+): Promise<Result<PlaylistInitOutput, ServiceError>> => {
+  try {
+    const input = initEntry.inputSchema.parse(rawInput);
+    const deps = await commandDeps.resolveDeps(initEntry.deps);
+    return await initEntry.run(input, deps);
+  } catch (error) {
+    return err(toServiceError(error));
+  }
+};
+
+const emitPlaylistResult = <T>(
+  result: Result<T, ServiceError>,
   options: {
     json: boolean;
-    rawInput: unknown;
-    renderText: (value: EntryOutput<E>) => string;
+    renderText: (value: T) => string;
   }
-): Promise<void> => {
-  const result = await runPlaylistEntry(entry, options.rawInput);
+): void => {
   emitResult(result, {
     json: options.json,
     renderText: options.renderText,
@@ -83,6 +141,9 @@ const renderCreateText = (
   [
     ...output.created.map((playlist) => {
       const playlistId = playlist.playlistId ?? "(dry-run)";
+      if (playlist.persisted === false) {
+        return `created-unpersisted: ${playlist.key} [${playlistId}]`;
+      }
       return `created: ${playlist.key} [${playlistId}]`;
     }),
     ...output.skipped.map((playlist) => {
@@ -119,9 +180,9 @@ interface PlaylistAssignCliArgs {
 }
 
 export const playlistAssignRawInput = (args: PlaylistAssignCliArgs) => ({
-  dryRun: args["dry-run"],
+  dry_run: args["dry-run"],
   theme: args.theme,
-  videoId: args["video-id"],
+  video_id: args["video-id"],
 });
 
 const renderCleanDeletedText = (output: PlaylistCleanDeletedOutput): string =>
@@ -145,136 +206,150 @@ const renderInitText = (output: PlaylistInitOutput): string =>
     .filter((line) => line.length > 0)
     .join("\n");
 
-const statusCommand = defineCommand({
-  args: {
-    json: { default: false, description: "JSON で出力する", type: "boolean" },
-  },
-  meta: { description: statusEntry.description, name: "status" },
-  async run({ args }) {
-    await emitPlaylistEntry(statusEntry, {
-      json: args.json,
-      rawInput: {},
-      renderText: renderStatusText,
-    });
-  },
-});
+const statusCommand = (commandDeps: PlaylistCommandDeps) =>
+  defineCommand({
+    args: {
+      json: { default: false, description: "JSON で出力する", type: "boolean" },
+    },
+    meta: { description: statusEntry.description, name: "status" },
+    async run({ args }) {
+      const result = await runStatus({}, commandDeps);
+      emitPlaylistResult(result, {
+        json: args.json,
+        renderText: renderStatusText,
+      });
+    },
+  });
 
-const createCommand = defineCommand({
-  args: {
-    "dry-run": {
-      default: false,
-      description: "YouTube API へ書き込まず実行内容だけ表示する",
-      type: "boolean",
+const createCommand = (commandDeps: PlaylistCommandDeps) =>
+  defineCommand({
+    args: {
+      "dry-run": {
+        default: false,
+        description: "YouTube API へ書き込まず実行内容だけ表示する",
+        type: "boolean",
+      },
+      json: { default: false, description: "JSON で出力する", type: "boolean" },
     },
-    json: { default: false, description: "JSON で出力する", type: "boolean" },
-  },
-  meta: { description: createEntry.description, name: "create" },
-  async run({ args }) {
-    await emitPlaylistEntry(createEntry, {
-      json: args.json,
-      rawInput: { dryRun: args["dry-run"] },
-      renderText: renderCreateText,
-    });
-  },
-});
+    meta: { description: createEntry.description, name: "create" },
+    async run({ args }) {
+      const result = await runCreate({ dry_run: args["dry-run"] }, commandDeps);
+      emitPlaylistResult(result, {
+        json: args.json,
+        renderText: renderCreateText,
+      });
+    },
+  });
 
-const assignCommand = defineCommand({
-  args: {
-    "dry-run": {
-      default: false,
-      description: "YouTube API へ書き込まず実行内容だけ表示する",
-      type: "boolean",
+const assignCommand = (commandDeps: PlaylistCommandDeps) =>
+  defineCommand({
+    args: {
+      "dry-run": {
+        default: false,
+        description: "YouTube API へ書き込まず実行内容だけ表示する",
+        type: "boolean",
+      },
+      json: { default: false, description: "JSON で出力する", type: "boolean" },
+      theme: {
+        description: "collection theme slug",
+        required: true,
+        type: "string",
+      },
+      "video-id": {
+        description: "追加する YouTube video id",
+        required: true,
+        type: "positional",
+      },
     },
-    json: { default: false, description: "JSON で出力する", type: "boolean" },
-    theme: {
-      description: "collection theme slug",
-      required: true,
-      type: "string",
+    meta: { description: assignEntry.description, name: "assign" },
+    async run({ args }) {
+      const result = await runAssign(playlistAssignRawInput(args), commandDeps);
+      emitPlaylistResult(result, {
+        json: args.json,
+        renderText: renderAssignText,
+      });
     },
-    "video-id": {
-      description: "追加する YouTube video id",
-      required: true,
-      type: "positional",
-    },
-  },
-  meta: { description: assignEntry.description, name: "assign" },
-  async run({ args }) {
-    await emitPlaylistEntry(assignEntry, {
-      json: args.json,
-      rawInput: playlistAssignRawInput(args),
-      renderText: renderAssignText,
-    });
-  },
-});
+  });
 
-const syncCommand = defineCommand({
-  args: {
-    "dry-run": {
-      default: false,
-      description: "YouTube API へ書き込まず実行内容だけ表示する",
-      type: "boolean",
+const syncCommand = (commandDeps: PlaylistCommandDeps) =>
+  defineCommand({
+    args: {
+      "dry-run": {
+        default: false,
+        description: "YouTube API へ書き込まず実行内容だけ表示する",
+        type: "boolean",
+      },
+      json: { default: false, description: "JSON で出力する", type: "boolean" },
     },
-    json: { default: false, description: "JSON で出力する", type: "boolean" },
-  },
-  meta: { description: syncEntry.description, name: "sync" },
-  async run({ args }) {
-    await emitPlaylistEntry(syncEntry, {
-      json: args.json,
-      rawInput: { dryRun: args["dry-run"] },
-      renderText: renderSyncText,
-    });
-  },
-});
-
-const cleanDeletedCommand = defineCommand({
-  args: {
-    "dry-run": {
-      default: false,
-      description: "YouTube API へ書き込まず実行内容だけ表示する",
-      type: "boolean",
+    meta: { description: syncEntry.description, name: "sync" },
+    async run({ args }) {
+      const result = await runSync({ dry_run: args["dry-run"] }, commandDeps);
+      emitPlaylistResult(result, {
+        json: args.json,
+        renderText: renderSyncText,
+      });
     },
-    json: { default: false, description: "JSON で出力する", type: "boolean" },
-  },
-  meta: { description: cleanDeletedEntry.description, name: "clean-deleted" },
-  async run({ args }) {
-    await emitPlaylistEntry(cleanDeletedEntry, {
-      json: args.json,
-      rawInput: { dryRun: args["dry-run"] },
-      renderText: renderCleanDeletedText,
-    });
-  },
-});
+  });
 
-const initCommand = defineCommand({
-  args: {
-    "dry-run": {
-      default: false,
-      description: "YouTube API へ書き込まず実行内容だけ表示する",
-      type: "boolean",
+const cleanDeletedCommand = (commandDeps: PlaylistCommandDeps) =>
+  defineCommand({
+    args: {
+      "dry-run": {
+        default: false,
+        description: "YouTube API へ書き込まず実行内容だけ表示する",
+        type: "boolean",
+      },
+      json: { default: false, description: "JSON で出力する", type: "boolean" },
     },
-    json: { default: false, description: "JSON で出力する", type: "boolean" },
-  },
-  meta: { description: initEntry.description, name: "init" },
-  async run({ args }) {
-    await emitPlaylistEntry(initEntry, {
-      json: args.json,
-      rawInput: { dryRun: args["dry-run"] },
-      renderText: renderInitText,
-    });
-  },
-});
+    meta: { description: cleanDeletedEntry.description, name: "clean-deleted" },
+    async run({ args }) {
+      const result = await runCleanDeleted(
+        { dry_run: args["dry-run"] },
+        commandDeps
+      );
+      emitPlaylistResult(result, {
+        json: args.json,
+        renderText: renderCleanDeletedText,
+      });
+    },
+  });
 
-export const playlistCommand = defineCommand({
-  meta: {
-    description: "YouTube playlist の作成・割り当て・整理",
-    name: "playlist",
-  },
-  subCommands: {
-    assign: assignCommand,
-    "clean-deleted": cleanDeletedCommand,
-    create: createCommand,
-    init: initCommand,
-    status: statusCommand,
-    sync: syncCommand,
-  },
-});
+const initCommand = (commandDeps: PlaylistCommandDeps) =>
+  defineCommand({
+    args: {
+      "dry-run": {
+        default: false,
+        description: "YouTube API へ書き込まず実行内容だけ表示する",
+        type: "boolean",
+      },
+      json: { default: false, description: "JSON で出力する", type: "boolean" },
+    },
+    meta: { description: initEntry.description, name: "init" },
+    async run({ args }) {
+      const result = await runInit({ dry_run: args["dry-run"] }, commandDeps);
+      emitPlaylistResult(result, {
+        json: args.json,
+        renderText: renderInitText,
+      });
+    },
+  });
+
+export const createPlaylistCommand = (deps?: PlaylistCommandDeps) => {
+  const commandDeps = deps ?? defaultDeps;
+  return defineCommand({
+    meta: {
+      description: "YouTube playlist の作成・割り当て・整理",
+      name: "playlist",
+    },
+    subCommands: {
+      assign: assignCommand(commandDeps),
+      "clean-deleted": cleanDeletedCommand(commandDeps),
+      create: createCommand(commandDeps),
+      init: initCommand(commandDeps),
+      status: statusCommand(commandDeps),
+      sync: syncCommand(commandDeps),
+    },
+  });
+};
+
+export const playlistCommand = createPlaylistCommand();

@@ -1,9 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { join, resolve } from "node:path";
 
+import type { ChannelConfig } from "@youtube-automation/core/config";
+import type { YouTubeClient } from "@youtube-automation/core/oauth/client";
+import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
 
 import {
+  createPlaylistCommand,
   playlistAssignRawInput,
   renderStatusText,
 } from "../src/commands/playlist/cli.ts";
@@ -16,6 +20,26 @@ const runTayk = (...argv: string[]) =>
     cwd: repoRoot,
     env: process.env,
   });
+
+const runTaykWithoutChannelDir = (...argv: string[]) => {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => key !== "CHANNEL_DIR")
+  ) as Record<string, string>;
+  return Bun.spawnSync(["bun", taykBin, ...argv], {
+    cwd: repoRoot,
+    env,
+  });
+};
+
+const runTaykWithChannelDir = (channelDir: string, ...argv: string[]) =>
+  Bun.spawnSync(["bun", taykBin, ...argv], {
+    cwd: repoRoot,
+    env: { ...process.env, CHANNEL_DIR: channelDir },
+  });
+
+interface TestCommand {
+  run?: (context: unknown) => Promise<void> | void;
+}
 
 describe("core registry - playlist entries visible from cli package", () => {
   test("should expose the operation entries consumed by the CLI adapter", () => {
@@ -82,10 +106,119 @@ describe("tayk playlist - smoke", () => {
         "video-id": "video_123",
       })
     ).toEqual({
-      dryRun: true,
+      dry_run: true,
       theme: "focus",
-      videoId: "video_123",
+      video_id: "video_123",
     });
+  });
+
+  test("should reject assign when the video id positional is missing", () => {
+    const proc = runTayk("playlist", "assign", "--theme", "focus");
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toContain(
+      "Missing required positional argument: VIDEO-ID"
+    );
+  });
+
+  test("should reject assign when the theme option is missing", () => {
+    const proc = runTayk("playlist", "assign", "video_123");
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toContain(
+      "Missing required argument: --theme"
+    );
+  });
+
+  test("should reach dependency resolution for valid assign input", () => {
+    const proc = runTaykWithChannelDir(
+      "/tmp/nonexistent",
+      "playlist",
+      "assign",
+      "video_123",
+      "--theme",
+      "focus",
+      "--dry-run"
+    );
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toContain("[config]");
+    expect(proc.stderr.toString()).toContain("/tmp/nonexistent/config/channel");
+    expect(proc.stderr.toString()).not.toContain("Missing required");
+  });
+
+  test("should run assign through subcommand schema, deps, registry, and stdout", async () => {
+    const seenListCalls: unknown[] = [];
+    const command = createPlaylistCommand({
+      resolveDeps: (deps) =>
+        Promise.resolve({
+          config: {
+            engagement: {
+              playlists: {
+                items: {
+                  all: {
+                    auto_add: true,
+                    playlist_id: "PL_ALL",
+                    title: "All Videos",
+                  },
+                },
+              },
+            },
+            publishing: {
+              content: {
+                title: {
+                  defaultActivity: "Study",
+                  template: "{theme} - {activity}",
+                  themeActivities: {},
+                  themeScenes: {},
+                },
+              },
+            },
+          } as unknown as ChannelConfig,
+          yt: {
+            playlistItems: {
+              list: (params: unknown) => {
+                seenListCalls.push(params);
+                return Promise.resolve({ data: { items: [] } });
+              },
+            },
+          } as unknown as YouTubeClient,
+        } as unknown as Pick<DepsMap, (typeof deps)[number]>),
+    });
+    const subCommands = command.subCommands as Record<string, TestCommand>;
+    const { assign } = subCommands;
+    if (assign === undefined) {
+      throw new Error("playlist assign command is required");
+    }
+    const stdoutSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+    const exitSpy = spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`unexpected exit ${String(code)}`);
+    });
+
+    await assign.run?.({
+      args: {
+        "dry-run": true,
+        json: false,
+        theme: "focus",
+        "video-id": "video_123",
+      },
+    });
+
+    expect(seenListCalls).toEqual([]);
+    expect(stdoutSpy).toHaveBeenCalledWith("dry-run: all\n");
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    stdoutSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  test("should report missing CHANNEL_DIR through the real status command", () => {
+    const proc = runTaykWithoutChannelDir("playlist", "status");
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stdout.toString()).toBe("");
+    expect(proc.stderr.toString()).toContain("[config]");
+    expect(proc.stderr.toString()).toContain("CHANNEL_DIR");
   });
 
   test("should render playlist status video counts in text output", () => {

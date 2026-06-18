@@ -256,6 +256,23 @@ describe("playlists schemas", () => {
     });
   });
 
+  test("rejects camelCase inputs at the registry boundary", () => {
+    const cases = [
+      ["playlists.create", { dryRun: true }],
+      [
+        "playlists.assign",
+        { dryRun: true, theme: "focus", videoId: "video_123" },
+      ],
+      ["playlists.cleanDeleted", { dryRun: true }],
+      ["playlists.sync", { dryRun: true }],
+      ["playlists.init", { dryRun: true }],
+    ] as const;
+
+    for (const [key, input] of cases) {
+      expect(() => REGISTRY[key].inputSchema.parse(input)).toThrow();
+    }
+  });
+
   test("normalizes snake_case clean-deleted input before the service boundary", () => {
     const input = REGISTRY["playlists.cleanDeleted"].inputSchema.parse({
       dry_run: true,
@@ -419,6 +436,122 @@ describe("playlists.create", () => {
     }
     expect(result.error.httpStatus).toBe(500);
   });
+
+  test("maps playlists.insert failures to api service error", async () => {
+    const channelDir = makeTempChannel({
+      playlists: { focus: { title: "Focus Sessions" } },
+    });
+    const config = makeConfig({
+      focus: { title: "Focus Sessions" },
+    });
+    const { playlistInsertCalls, yt } = makeYouTube({
+      playlistInsertError: gaxiosError(403, "forbidden"),
+    });
+
+    const result = await REGISTRY["playlists.create"].run(
+      REGISTRY["playlists.create"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected api error");
+    }
+    expect(playlistInsertCalls).toHaveLength(1);
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain !== "api") {
+      throw new Error(`expected api, got ${result.error.domain}`);
+    }
+    expect(result.error.httpStatus).toBe(403);
+    expect(result.error.reason).toBe("forbidden");
+    expect(result.error.message).toBe("playlists.insert: HTTP 403");
+  });
+
+  test("returns created playlist id when local config persistence fails", async () => {
+    const channelDir = makeTempChannel({
+      playlists: {},
+    });
+    const config = makeConfig({
+      focus: { title: "Focus Sessions" },
+    });
+    const { playlistInsertCalls, yt } = makeYouTube({
+      playlistId: "PL_CREATED",
+    });
+
+    const result = await REGISTRY["playlists.create"].run(
+      REGISTRY["playlists.create"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(playlistInsertCalls).toHaveLength(1);
+    expect(result.value.created).toEqual([
+      {
+        dryRun: false,
+        key: "focus",
+        persistError: "config: playlists.focus must be object or string",
+        persisted: false,
+        playlistId: "PL_CREATED",
+        title: "Focus Sessions",
+      },
+    ]);
+
+    const written = JSON.parse(
+      readFileSync(
+        join(channelDir, "config", "channel", "playlists.json"),
+        "utf-8"
+      )
+    ) as { playlists: Record<string, { playlist_id?: string }> };
+    expect(written.playlists.focus?.playlist_id).toBeUndefined();
+  });
+
+  test("stops creating more playlists after local config persistence fails", async () => {
+    const channelDir = makeTempChannel({
+      playlists: {
+        sleep: { title: "Sleep Sessions" },
+      },
+    });
+    const config = makeConfig({
+      focus: { title: "Focus Sessions" },
+      sleep: { title: "Sleep Sessions" },
+    });
+    const { playlistInsertCalls, yt } = makeYouTube({
+      playlistId: "PL_CREATED",
+    });
+
+    const result = await REGISTRY["playlists.create"].run(
+      REGISTRY["playlists.create"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(playlistInsertCalls).toHaveLength(1);
+    expect(result.value.created).toEqual([
+      {
+        dryRun: false,
+        key: "focus",
+        persistError: "config: playlists.focus must be object or string",
+        persisted: false,
+        playlistId: "PL_CREATED",
+        title: "Focus Sessions",
+      },
+    ]);
+
+    const written = JSON.parse(
+      readFileSync(
+        join(channelDir, "config", "channel", "playlists.json"),
+        "utf-8"
+      )
+    ) as { playlists: Record<string, { playlist_id?: string }> };
+    expect(written.playlists.focus?.playlist_id).toBeUndefined();
+    expect(written.playlists.sleep?.playlist_id).toBeUndefined();
+  });
 });
 
 describe("playlists.assign", () => {
@@ -465,7 +598,7 @@ describe("playlists.assign", () => {
     const config = makeConfig({
       all: { auto_add: true, playlist_id: "PL_ALL", title: "All Videos" },
     });
-    const { playlistItemInsertCalls, yt } = makeYouTube({
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } = makeYouTube({
       listResponses: { PL_ALL: [] },
     });
 
@@ -492,6 +625,7 @@ describe("playlists.assign", () => {
         title: "All Videos",
       },
     ]);
+    expect(playlistItemListCalls).toHaveLength(0);
     expect(playlistItemInsertCalls).toHaveLength(0);
   });
 
@@ -510,7 +644,7 @@ describe("playlists.assign", () => {
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
         theme: "focus",
-        videoId: "video_456",
+        video_id: "video_456",
       }),
       makeCoreDeps(config, yt)
     );
@@ -538,14 +672,14 @@ describe("playlists.assign", () => {
     const ocean = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
         theme: "Deep Ocean Waves",
-        videoId: "video_ocean",
+        video_id: "video_ocean",
       }),
       makeCoreDeps(config, yt)
     );
     const forest = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
         theme: "FOREST Ambience",
-        videoId: "video_forest",
+        video_id: "video_forest",
       }),
       makeCoreDeps(config, yt)
     );
@@ -579,7 +713,7 @@ describe("playlists.assign", () => {
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
         theme: "focus",
-        videoId: "video_429",
+        video_id: "video_429",
       }),
       makeCoreDeps(config, yt)
     );
@@ -607,7 +741,7 @@ describe("playlists.assign", () => {
     const result = await REGISTRY["playlists.assign"].run(
       REGISTRY["playlists.assign"].inputSchema.parse({
         theme: "focus",
-        videoId: "video_403",
+        video_id: "video_403",
       }),
       makeCoreDeps(config, yt)
     );
@@ -622,6 +756,67 @@ describe("playlists.assign", () => {
     }
     expect(result.error.httpStatus).toBe(403);
     expect(result.error.reason).toBe("forbidden");
+  });
+
+  test("maps playlistItems.insert failures to api service error", async () => {
+    const config = makeConfig({
+      all: { auto_add: true, playlist_id: "PL_ALL", title: "All Videos" },
+    });
+    const { playlistItemInsertCalls, yt } = makeYouTube({
+      insertItemError: gaxiosError(403, "forbidden"),
+      listResponses: { PL_ALL: [] },
+    });
+
+    const result = await REGISTRY["playlists.assign"].run(
+      REGISTRY["playlists.assign"].inputSchema.parse({
+        theme: "focus",
+        video_id: "video_403",
+      }),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected api error");
+    }
+    expect(playlistItemInsertCalls).toHaveLength(1);
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain !== "api") {
+      throw new Error(`expected api, got ${result.error.domain}`);
+    }
+    expect(result.error.httpStatus).toBe(403);
+    expect(result.error.reason).toBe("forbidden");
+    expect(result.error.message).toBe("playlistItems.insert: HTTP 403");
+  });
+
+  test("stops assigning after the first playlistItems.insert failure", async () => {
+    const config = makeConfig({
+      first: { auto_add: true, playlist_id: "PL_FIRST", title: "First" },
+      second: { auto_add: true, playlist_id: "PL_SECOND", title: "Second" },
+    });
+    const { playlistItemInsertCalls, playlistItemListCalls, yt } = makeYouTube({
+      insertItemError: gaxiosError(403, "forbidden"),
+      listResponses: { PL_FIRST: [], PL_SECOND: [] },
+    });
+
+    const result = await REGISTRY["playlists.assign"].run(
+      REGISTRY["playlists.assign"].inputSchema.parse({
+        theme: "focus",
+        video_id: "video_403",
+      }),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    expect(playlistItemListCalls).toEqual([
+      {
+        maxResults: 50,
+        pageToken: undefined,
+        part: "snippet,contentDetails",
+        playlistId: "PL_FIRST",
+      },
+    ]);
+    expect(playlistItemInsertCalls).toHaveLength(1);
   });
 });
 
@@ -791,6 +986,143 @@ describe("playlists.init", () => {
     expect(written.playlists.focus?.playlist_id).toBe("PL_FOCUS");
   });
 
+  test("returns created playlist id and still syncs when persistence fails", async () => {
+    const channelDir = makeTempChannel({
+      playlists: {},
+    });
+    writeLiveCollection(
+      channelDir,
+      "20260617-focus",
+      { theme: "focus" },
+      { complete_collection: { video_id: "video_live" } }
+    );
+    const config = makeConfig({
+      focus: { auto_add_activities: ["Deep Work"], title: "Focus Sessions" },
+    });
+    const { playlistItemInsertCalls, yt } = makeYouTube({
+      listResponses: { PL_FOCUS: [] },
+      playlistId: "PL_FOCUS",
+    });
+
+    const result = await REGISTRY["playlists.init"].run(
+      REGISTRY["playlists.init"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(result.value.created).toEqual([
+      {
+        dryRun: false,
+        key: "focus",
+        persistError: "config: playlists.focus must be object or string",
+        persisted: false,
+        playlistId: "PL_FOCUS",
+        title: "Focus Sessions",
+      },
+    ]);
+    expect(result.value.synced[0]?.assigned).toEqual([
+      {
+        alreadyPresent: false,
+        dryRun: false,
+        inserted: true,
+        key: "focus",
+        playlistId: "PL_FOCUS",
+        title: "Focus Sessions",
+      },
+    ]);
+    expect(playlistItemInsertCalls).toHaveLength(1);
+  });
+
+  test("returns api error and preserves written playlist id when sync fails after create", async () => {
+    const channelDir = makeTempChannel({
+      playlists: {
+        focus: { auto_add_activities: ["Deep Work"], title: "Focus Sessions" },
+      },
+    });
+    writeLiveCollection(
+      channelDir,
+      "20260617-focus",
+      { theme: "focus" },
+      { complete_collection: { video_id: "video_live" } }
+    );
+    const config = makeConfig({
+      focus: { auto_add_activities: ["Deep Work"], title: "Focus Sessions" },
+    });
+    const { playlistInsertCalls, playlistItemListCalls, yt } = makeYouTube({
+      listError: gaxiosError(403, "forbidden"),
+      playlistId: "PL_FOCUS",
+    });
+
+    const result = await REGISTRY["playlists.init"].run(
+      REGISTRY["playlists.init"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected api error");
+    }
+    expect(playlistInsertCalls).toHaveLength(1);
+    expect(playlistItemListCalls).toEqual([
+      {
+        maxResults: 50,
+        pageToken: undefined,
+        part: "snippet,contentDetails",
+        playlistId: "PL_FOCUS",
+      },
+    ]);
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain !== "api") {
+      throw new Error(`expected api, got ${result.error.domain}`);
+    }
+    expect(result.error.httpStatus).toBe(403);
+    expect(result.error.reason).toBe("forbidden");
+    expect(result.error.message).toBe("playlistItems.list: HTTP 403");
+
+    const written = JSON.parse(
+      readFileSync(
+        join(channelDir, "config", "channel", "playlists.json"),
+        "utf-8"
+      )
+    ) as { playlists: Record<string, { playlist_id?: string }> };
+    expect(written.playlists.focus?.playlist_id).toBe("PL_FOCUS");
+
+    const retryConfig = makeConfig({
+      focus: {
+        auto_add_activities: ["Deep Work"],
+        playlist_id: "PL_FOCUS",
+        title: "Focus Sessions",
+      },
+    });
+    const {
+      playlistInsertCalls: retryPlaylistInsertCalls,
+      playlistItemInsertCalls: retryPlaylistItemInsertCalls,
+      yt: retryYt,
+    } = makeYouTube({
+      listResponses: { PL_FOCUS: [] },
+      playlistId: "PL_DUPLICATE",
+    });
+
+    const retryResult = await REGISTRY["playlists.init"].run(
+      REGISTRY["playlists.init"].inputSchema.parse({ dry_run: false }),
+      makeChannelDeps(channelDir, retryConfig, retryYt)
+    );
+
+    expect(retryResult.ok).toBe(true);
+    if (!retryResult.ok) {
+      throw new Error(`expected retry ok, got ${retryResult.error.domain}`);
+    }
+    expect(retryPlaylistInsertCalls).toHaveLength(0);
+    expect(retryPlaylistItemInsertCalls[0]?.requestBody?.snippet).toEqual({
+      playlistId: "PL_FOCUS",
+      position: 0,
+      resourceId: { kind: "youtube#video", videoId: "video_live" },
+    });
+  });
+
   test("dry-run does not write created playlist ids or insert synced videos", async () => {
     const channelDir = makeTempChannel({
       playlists: {
@@ -816,6 +1148,25 @@ describe("playlists.init", () => {
     );
 
     expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected ok, got ${result.error.domain}`);
+    }
+    expect(result.value.synced).toEqual([
+      {
+        assigned: [
+          {
+            alreadyPresent: false,
+            dryRun: true,
+            inserted: false,
+            key: "focus",
+            title: "Focus Sessions",
+          },
+        ],
+        collectionName: "20260617-focus",
+        theme: "focus",
+        videoId: "video_live",
+      },
+    ]);
     expect(playlistInsertCalls).toHaveLength(0);
     expect(playlistItemInsertCalls).toHaveLength(0);
 
@@ -888,6 +1239,39 @@ describe("playlists.cleanDeleted", () => {
       },
     ]);
     expect(playlistItemDeleteCalls).toHaveLength(0);
+  });
+
+  test("maps playlistItems.delete failures to api service error", async () => {
+    const config = makeConfig({
+      all: { playlist_id: "PL_ALL", title: "All Videos" },
+    });
+    const { playlistItemDeleteCalls, yt } = makeYouTube({
+      deleteError: gaxiosError(403, "forbidden"),
+      listResponses: {
+        PL_ALL: [
+          { id: "item_deleted", snippet: { title: "Deleted video" } },
+          { id: "item_private", snippet: { title: "Private video" } },
+        ],
+      },
+    });
+
+    const result = await REGISTRY["playlists.cleanDeleted"].run(
+      REGISTRY["playlists.cleanDeleted"].inputSchema.parse({ dry_run: false }),
+      makeCoreDeps(config, yt)
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected api error");
+    }
+    expect(playlistItemDeleteCalls).toEqual([{ id: "item_deleted" }]);
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain !== "api") {
+      throw new Error(`expected api, got ${result.error.domain}`);
+    }
+    expect(result.error.httpStatus).toBe(403);
+    expect(result.error.reason).toBe("forbidden");
+    expect(result.error.message).toBe("playlistItems.delete: HTTP 403");
   });
 });
 
