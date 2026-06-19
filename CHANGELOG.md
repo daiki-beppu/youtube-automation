@@ -16,8 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(doctor)`: `yt-doctor accounts` サブコマンドを追加。全チャンネルリポの `auth/client_secrets.json` をスキャンし、GCP プロジェクト・OAuth クライアント ID・トークン有無の対応表を一覧表示する。`--json` で機械可読出力、`--search-root` で探索ルート指定が可能。
 - `docs(adr)`: ADR-0010 全チャンネルを単一 GCP プロジェクトに統合。Billing 枠上限 (5/5) 解消とオペレーションコスト削減のため、チャンネルごとの GCP プロジェクト分離から `yt-channels-automation` への一本化を決定。
 
-- `test(ts-rewrite/core)`: `generateImageService` のオーケストレーションテストを追加した（#1117）。成功パス / 入力検証エラー / content policy エラー（retry なし） / 一時エラー + retry 成功 / persist 失敗 / retry 上限超過の 6 ケースを `image-service.test.ts` でカバー
-
 ### Changed
 
 - `feat(skills)`: dogfood ライフサイクルが踏む 12 skill（wf-new / wf-next / suno / suno-helper / masterup / videoup / video-upload / thumbnail / video-description / analytics-collect / playlist / distrokid-prep）の `uv run yt-*` 呼び出しを `bunx tayk <cmd>`（ADR-0007 rebrand / ADR-0004 単一 dispatcher）へ置換した（#965）。TS 版を pin した下流でも skill 経由で Python が実行され dogfood が始まらない問題を解消する。対象 skill の `uv run` 残骸ゼロを `tests/test_lifecycle_skills_no_uv_run.py` で機械担保。lifecycle 外の skill の置換は #966 で対応予定。
