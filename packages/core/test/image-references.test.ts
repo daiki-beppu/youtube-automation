@@ -62,6 +62,9 @@ describe("readReferenceFiles", () => {
     );
     expect((error as Error).message).toContain(missingPath);
     expect((error as Error).cause).toBeInstanceOf(Error);
+    const cause = (error as Error).cause as NodeJS.ErrnoException;
+    expect(cause.message).toContain(missingPath);
+    expect(cause.code).toBe("ENOENT");
   });
 
   test("reports the second path when reading fails after an earlier success", () => {
