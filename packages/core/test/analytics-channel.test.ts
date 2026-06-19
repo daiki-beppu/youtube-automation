@@ -554,7 +554,9 @@ describe("shouldRetryAnalyticsQuery", () => {
     // Given the normalizer produced a 503 YouTubeAPIError
     // Then the failure is treated as transient and retried
     expect(
-      shouldRetryAnalyticsQuery(new YouTubeAPIError("boom", { statusCode: 503 }))
+      shouldRetryAnalyticsQuery(
+        new YouTubeAPIError("boom", { statusCode: 503 })
+      )
     ).toBe(true);
   });
 
@@ -562,7 +564,9 @@ describe("shouldRetryAnalyticsQuery", () => {
     // Given the lowest 5xx status (HTTP_SERVER_ERROR_MIN)
     // Then it is still transient
     expect(
-      shouldRetryAnalyticsQuery(new YouTubeAPIError("boom", { statusCode: 500 }))
+      shouldRetryAnalyticsQuery(
+        new YouTubeAPIError("boom", { statusCode: 500 })
+      )
     ).toBe(true);
   });
 
@@ -576,16 +580,18 @@ describe("shouldRetryAnalyticsQuery", () => {
     // Given a 403 forbidden
     // Then it is permanent and not retried
     expect(
-      shouldRetryAnalyticsQuery(new YouTubeAPIError("forbidden", { statusCode: 403 }))
+      shouldRetryAnalyticsQuery(
+        new YouTubeAPIError("forbidden", { statusCode: 403 })
+      )
     ).toBe(false);
   });
 
   test("does not retry a quota error (surfaced as a Result instead)", () => {
     // Given a 429 quota error — defaultShouldRetry gates it out (ADR-0003)
     // Then it is not retried
-    expect(shouldRetryAnalyticsQuery(new QuotaExhaustedError("quota exceeded"))).toBe(
-      false
-    );
+    expect(
+      shouldRetryAnalyticsQuery(new QuotaExhaustedError("quota exceeded"))
+    ).toBe(false);
   });
 
   test("does not retry a value the normalizer never emits (defensive guard)", () => {

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `refactor(ts-rewrite/core)`: ADR-0003 の service 境界 frame（try/catch → Result 変換）を `createService` ヘルパ（`service-frame.ts`）に抽出し、対象 10 service（analytics 5 + image / skills-sync 2 / suno-prompts / upload）を移行した（#1109）。新規 service は core function + schemas だけ書けば frame を正しく適用できるようになり、手書き frame のレビュー負荷と誤実装 fail mode を除去。
+- `refactor(ts-rewrite/core)`: analytics 5 service の共通クエリ実行を `analytics/query.ts::executeQuery` に、列ヘッダー解決を `analytics/columns.ts` に集約し、各 service の try/catch/ok/err ボイラープレートを `service.ts::createService` ラッパーで除去した（#1110）。`column-helpers.ts` → `columns.ts` リネーム、`analytics/query.ts` / `service.ts` 新設。テスト追加: `analytics-query.test.ts` / `service.test.ts`
 - `feat(ts-rewrite/core)`: Audience analytics の demographics / country / subscribedStatus 3 クエリを並列開始するよう変更した（#1115）。失敗時は開始済み retry が settled になるまで待ってから Result へ変換し、service 戻り後に API retry が残らないようにした。
 - `refactor(ts-rewrite/core)`: analytics service の列ヘッダー解決とセル読み取り処理を `analytics/column-helpers.ts` に共通化し、channel / audience / traffic-source の重複実装を整理した（#1113）。
 - `refactor(ts-rewrite/core)`: analytics のエラー分類ロジックを `errors.ts` に統合した（#1108）。`analytics/query-error.ts` と `audience/service.ts` 内の重複実装（`toAnalyticsQueryError` / `shouldRetryAnalyticsQuery` / `parseRetryAfterSeconds`）を削除し、`classifyGaxiosError` / `shouldRetryApiQuery` / RFC 7231 準拠の `parseRetryAfterSeconds` に一本化。ネットワークエラーの retry 漏れも修正。
