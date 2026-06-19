@@ -47,10 +47,10 @@ export const readNonEmptyStringCell = (
   columnName: string,
   context: string
 ): string => {
-  const value = readStringCell(row, index, columnName, context);
-  if (value.length === 0) {
+  const value = row[index];
+  if (typeof value !== "string" || value.length === 0) {
     throw new TypeError(
-      `${context}: response has an empty "${columnName}" value`
+      `${context}: response has an invalid "${columnName}" value`
     );
   }
   return value;
