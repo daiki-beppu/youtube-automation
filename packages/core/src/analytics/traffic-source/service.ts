@@ -1,6 +1,10 @@
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { toServiceError } from "../../errors.ts";
+import {
+  classifyGaxiosError,
+  shouldRetryApiQuery,
+  toServiceError,
+} from "../../errors.ts";
 import type { ServiceError } from "../../errors.ts";
 import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
@@ -12,10 +16,6 @@ import {
   requireHeaders,
   resolveColumnIndex,
 } from "../column-helpers.ts";
-import {
-  shouldRetryAnalyticsQuery,
-  toAnalyticsQueryError,
-} from "../query-error.ts";
 import {
   TRAFFIC_SOURCE_API_METRICS,
   TRAFFIC_SOURCE_VIEWS_METRIC,
@@ -69,7 +69,7 @@ const queryTrafficSourceReport = async (
     const response = await client.reports.query(params);
     return response.data;
   } catch (error) {
-    throw toAnalyticsQueryError(error, QUERY_CONTEXT);
+    throw classifyGaxiosError(error, QUERY_CONTEXT);
   }
 };
 
@@ -205,7 +205,7 @@ export const collectTrafficSourceService = async (
     const params = buildQueryParams(request);
     const data = await withRetry(
       () => queryTrafficSourceReport(deps.youtubeAnalytics, params),
-      { shouldRetry: shouldRetryAnalyticsQuery, sleep: deps.sleep }
+      { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
     );
     return ok(
       TrafficSourceAnalyticsOutput.parse({

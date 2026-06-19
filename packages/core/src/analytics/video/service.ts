@@ -11,17 +11,17 @@
 //   deps.youtubeAnalytics.reports.query(params) -> { data: { columnHeaders?, rows? } }
 //   429 時は gaxios 形状 { response: { status: 429, headers: { "retry-after" } } } で reject。
 
-import { toServiceError } from "../../errors.ts";
+import {
+  classifyGaxiosError,
+  shouldRetryApiQuery,
+  toServiceError,
+} from "../../errors.ts";
 import type { ServiceError } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
 import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
-import {
-  shouldRetryAnalyticsQuery,
-  toAnalyticsQueryError,
-} from "../query-error.ts";
 import {
   CollectVideoAnalyticsInput,
   CollectVideoAnalyticsOutput,
@@ -42,7 +42,7 @@ export interface VideoAnalyticsDeps {
   sleep?: SleepMs;
 }
 
-// toAnalyticsQueryError / QuotaExhaustedError の message に載せる操作名。
+// classifyGaxiosError / QuotaExhaustedError の message に載せる操作名。
 const QUERY_CONTEXT = "youtubeAnalytics.reports.query";
 
 /** Analytics クエリで参照する最小の列ヘッダ形状。 */
@@ -71,7 +71,7 @@ const runVideoQuery = async (
   try {
     return await deps.youtubeAnalytics.reports.query(buildQueryParams(request));
   } catch (error) {
-    throw toAnalyticsQueryError(error, QUERY_CONTEXT);
+    throw classifyGaxiosError(error, QUERY_CONTEXT);
   }
 };
 
@@ -131,7 +131,7 @@ export const collectVideoAnalyticsService = async (
   try {
     const request = CollectVideoAnalyticsInput.parse(input);
     const response = await withRetry(() => runVideoQuery(deps, request), {
-      shouldRetry: shouldRetryAnalyticsQuery,
+      shouldRetry: shouldRetryApiQuery,
       sleep: deps.sleep,
     });
     const metrics = meltVideoRows(

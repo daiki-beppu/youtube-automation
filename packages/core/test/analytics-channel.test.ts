@@ -28,10 +28,10 @@ import {
   collectChannelAnalyticsService,
 } from "@youtube-automation/core/analytics/channel";
 
-// shouldRetryAnalyticsQuery is a private analytics helper, not part of the
+// shouldRetryApiQuery is an internal cross-feature helper, not part of the
 // package public exports. The retry-permit truth table is pinned through a
 // relative import (oauth-interactive.test.ts:20 pattern).
-import { shouldRetryAnalyticsQuery } from "../src/analytics/query-error.ts";
+import { shouldRetryApiQuery } from "../src/errors.ts";
 
 // Derive the input / deps shapes from the service itself (oauth-refresh.test.ts:25-26)
 // so the test pins behavior, not the exported name of the injection bag.
@@ -420,7 +420,7 @@ describe("collectChannelAnalyticsService api error path", () => {
     await collectChannelAnalyticsService(baseInput, makeDeps(client));
 
     // Then a permanent client error is not retried — only 5xx / unknown-status
-    // failures are transient per shouldRetryAnalyticsQuery (plan §4-2, load-bearing)
+    // failures are transient per shouldRetryApiQuery (plan §4-2, load-bearing)
     expect(calls).toHaveLength(1);
   });
 });
@@ -543,20 +543,18 @@ describe("ChannelAnalyticsOutput schema", () => {
 });
 
 // --- retry-permit predicate -----------------------------------------------
-// Pins shouldRetryAnalyticsQuery's truth table directly. The service's quota/403 paths
+// Pins shouldRetryApiQuery's truth table directly. The service's quota/403 paths
 // only assert the *negative* branch (calls === 1); without this, the
 // retry-permit branch (5xx / unknown-status → retry, load-bearing per
 // service.ts:83-94) is unexercised and a regression making 5xx non-retryable
 // would pass silently. Pure predicate calls — no real sleep / API.
 
-describe("shouldRetryAnalyticsQuery", () => {
+describe("shouldRetryApiQuery", () => {
   test("retries a transient 5xx server error", () => {
     // Given the normalizer produced a 503 YouTubeAPIError
     // Then the failure is treated as transient and retried
     expect(
-      shouldRetryAnalyticsQuery(
-        new YouTubeAPIError("boom", { statusCode: 503 })
-      )
+      shouldRetryApiQuery(new YouTubeAPIError("boom", { statusCode: 503 }))
     ).toBe(true);
   });
 
@@ -564,39 +562,33 @@ describe("shouldRetryAnalyticsQuery", () => {
     // Given the lowest 5xx status (HTTP_SERVER_ERROR_MIN)
     // Then it is still transient
     expect(
-      shouldRetryAnalyticsQuery(
-        new YouTubeAPIError("boom", { statusCode: 500 })
-      )
+      shouldRetryApiQuery(new YouTubeAPIError("boom", { statusCode: 500 }))
     ).toBe(true);
   });
 
   test("retries when the status is unknown (network drop normalized without a status)", () => {
     // Given a YouTubeAPIError carrying no statusCode
     // Then it is treated as a transient failure
-    expect(shouldRetryAnalyticsQuery(new YouTubeAPIError("boom"))).toBe(true);
+    expect(shouldRetryApiQuery(new YouTubeAPIError("boom"))).toBe(true);
   });
 
   test("does not retry a permanent 4xx client error", () => {
     // Given a 403 forbidden
     // Then it is permanent and not retried
     expect(
-      shouldRetryAnalyticsQuery(
-        new YouTubeAPIError("forbidden", { statusCode: 403 })
-      )
+      shouldRetryApiQuery(new YouTubeAPIError("forbidden", { statusCode: 403 }))
     ).toBe(false);
   });
 
   test("does not retry a quota error (surfaced as a Result instead)", () => {
     // Given a 429 quota error — defaultShouldRetry gates it out (ADR-0003)
     // Then it is not retried
-    expect(
-      shouldRetryAnalyticsQuery(new QuotaExhaustedError("quota exceeded"))
-    ).toBe(false);
+    expect(shouldRetryApiQuery(new QuotaExhaustedError("quota exceeded"))).toBe(
+      false
+    );
   });
 
-  test("does not retry a value the normalizer never emits (defensive guard)", () => {
-    // Given a raw Error that is not a YouTubeAPIError — unreachable because
-    // queryDailyReport normalizes everything, but the guard must hold
-    expect(shouldRetryAnalyticsQuery(new Error("transient blip"))).toBe(false);
+  test("retries a raw transient error", () => {
+    expect(shouldRetryApiQuery(new Error("transient blip"))).toBe(true);
   });
 });

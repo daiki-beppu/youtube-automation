@@ -16,11 +16,11 @@ import {
 import type { Result } from "@youtube-automation/core";
 import { z } from "zod";
 
-// classifyGaxiosError is an internal cross-feature classifier (shared by the
-// upload / analytics service boundaries), intentionally NOT re-exported from the
-// public barrel, so it is imported by its source path — the same convention the
-// other internal-symbol tests use (e.g. analytics-channel.test.ts).
-import { classifyGaxiosError } from "../src/errors.ts";
+// classifyGaxiosError / shouldRetryApiQuery are internal cross-feature helpers
+// shared by service boundaries, intentionally NOT re-exported from the public
+// barrel, so they are imported by source path — the same convention the other
+// internal-symbol tests use (e.g. analytics-channel.test.ts).
+import { classifyGaxiosError, shouldRetryApiQuery } from "../src/errors.ts";
 
 // Builds a gaxios-shaped error: a real Error (so `error instanceof Error`
 // holds and `.message` is read for the wrapped message) with a `response`
@@ -225,6 +225,46 @@ describe("classifyGaxiosError", () => {
     expect(error.message).toBe("videos.insert: rate limited");
   });
 
+  test("reads the Retry-After header regardless of casing", () => {
+    const raw = gaxiosError("rate limited", {
+      headers: { "Retry-After": "120" },
+      status: 429,
+    });
+    const error = classifyGaxiosError(raw, "videos.insert");
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(120);
+  });
+
+  test("trims a Retry-After header before parsing integer seconds", () => {
+    const raw = gaxiosError("rate limited", {
+      headers: { "retry-after": "  60  " },
+      status: 429,
+    });
+    const error = classifyGaxiosError(raw, "videos.insert");
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(60);
+  });
+
+  test("ignores a fractional Retry-After header", () => {
+    const raw = gaxiosError("rate limited", {
+      headers: { "retry-after": "1.5" },
+      status: 429,
+    });
+    const error = classifyGaxiosError(raw, "videos.insert");
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+  });
+
+  test("ignores a non-string Retry-After header", () => {
+    const raw = gaxiosError("rate limited", {
+      headers: { "retry-after": 30 },
+      status: 429,
+    });
+    const error = classifyGaxiosError(raw, "videos.insert");
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+  });
+
   test("leaves the Retry-After hint undefined when the header is absent", () => {
     // Given a 429 with no Retry-After header
     const raw = gaxiosError("rate limited", { status: 429 });
@@ -244,6 +284,55 @@ describe("classifyGaxiosError", () => {
     expect(error).toBeInstanceOf(YouTubeAPIError);
     expect(error).not.toBeInstanceOf(QuotaExhaustedError);
     expect(error.statusCode).toBe(500);
+  });
+
+  test("preserves an existing typed YouTubeAPIError", () => {
+    const normalized = new YouTubeAPIError("already normalized", {
+      reason: "backendError",
+      statusCode: 503,
+    });
+    const error = classifyGaxiosError(normalized, "videos.insert");
+    expect(error).toBe(normalized);
+  });
+
+  test("preserves an existing typed QuotaExhaustedError", () => {
+    const normalized = new QuotaExhaustedError("quota exceeded", 900);
+    const error = classifyGaxiosError(normalized, "videos.insert");
+    expect(error).toBe(normalized);
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(900);
+  });
+});
+
+describe("shouldRetryApiQuery", () => {
+  test("does not retry quota errors", () => {
+    const error = new QuotaExhaustedError("quota exceeded");
+    expect(shouldRetryApiQuery(error)).toBe(false);
+  });
+
+  test("does not retry permanent 4xx API errors", () => {
+    const error = new YouTubeAPIError("forbidden", { statusCode: 403 });
+    expect(shouldRetryApiQuery(error)).toBe(false);
+  });
+
+  test("retries server-side 5xx API errors", () => {
+    const error = new YouTubeAPIError("server error", { statusCode: 500 });
+    expect(shouldRetryApiQuery(error)).toBe(true);
+  });
+
+  test("retries normalized API errors with unknown status", () => {
+    const error = new YouTubeAPIError("network drop");
+    expect(shouldRetryApiQuery(error)).toBe(true);
+  });
+
+  test("retries raw transient errors", () => {
+    const error = new Error("raw failure");
+    expect(shouldRetryApiQuery(error)).toBe(true);
+  });
+
+  test("does not retry domain-prefixed permanent errors", () => {
+    const error = new Error("validation: bad input");
+    expect(shouldRetryApiQuery(error)).toBe(false);
   });
 });
 

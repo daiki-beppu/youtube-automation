@@ -1,15 +1,14 @@
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { isRecord } from "../../../internal/guards.ts";
 import {
-  QuotaExhaustedError,
+  classifyGaxiosError,
+  shouldRetryApiQuery,
   toServiceError,
-  YouTubeAPIError,
 } from "../../errors.ts";
 import type { ServiceError } from "../../errors.ts";
 import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
-import { defaultShouldRetry, withRetry } from "../../retry.ts";
+import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
 import {
   readCoercedNumberCell,
@@ -34,7 +33,6 @@ const SUBSCRIBED_STATUS_DIMENSION = "subscribedStatus";
 const VIEWER_PERCENTAGE_METRIC = "viewerPercentage";
 const VIEWS_METRIC = "views";
 const VIEW_SHARE_PERCENT_METRIC = "viewSharePercent";
-const HTTP_SERVER_ERROR_MIN = 500;
 
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
@@ -73,54 +71,6 @@ type AudienceMetricRecord =
   | CountryMetricRecord
   | SubscribedStatusMetricRecord;
 
-const parseRetryAfterSeconds = (error: unknown): number | undefined => {
-  if (
-    !(
-      isRecord(error) &&
-      isRecord(error.response) &&
-      isRecord(error.response.headers)
-    )
-  ) {
-    return undefined;
-  }
-  const raw = error.response.headers["retry-after"];
-  if (typeof raw !== "string" || raw.trim() === "") {
-    return undefined;
-  }
-  if (!/^\d+$/u.test(raw)) {
-    return undefined;
-  }
-  const seconds = Number(raw);
-  return Number.isFinite(seconds) ? seconds : undefined;
-};
-
-const toQueryError = (error: unknown): YouTubeAPIError => {
-  if (error instanceof YouTubeAPIError) {
-    return error;
-  }
-  const apiError = YouTubeAPIError.fromGaxiosError(error, QUERY_CONTEXT);
-  if (apiError.statusCode === 429) {
-    return new QuotaExhaustedError(
-      apiError.message,
-      parseRetryAfterSeconds(error)
-    );
-  }
-  return apiError;
-};
-
-const shouldRetryQuery = (error: unknown): boolean => {
-  if (!defaultShouldRetry(error)) {
-    return false;
-  }
-  if (error instanceof YouTubeAPIError) {
-    return (
-      error.statusCode === undefined ||
-      error.statusCode >= HTTP_SERVER_ERROR_MIN
-    );
-  }
-  return true;
-};
-
 const queryAudienceReport = async (
   client: youtubeAnalytics_v2.Youtubeanalytics,
   params: QueryParams
@@ -129,7 +79,7 @@ const queryAudienceReport = async (
     const response = await client.reports.query(params);
     return response.data;
   } catch (error) {
-    throw toQueryError(error);
+    throw classifyGaxiosError(error, QUERY_CONTEXT);
   }
 };
 
@@ -372,7 +322,7 @@ const runAudienceQueries = async (
   paramsList: AudienceQueryParams,
   sleep: SleepMs | undefined
 ): Promise<readonly [QueryResponse, QueryResponse, QueryResponse]> => {
-  const retryOpts = { shouldRetry: shouldRetryQuery, sleep };
+  const retryOpts = { shouldRetry: shouldRetryApiQuery, sleep };
   const [demographics, country, subscribedStatus] = await Promise.allSettled([
     withRetry(() => queryAudienceReport(client, paramsList[0]), retryOpts),
     withRetry(() => queryAudienceReport(client, paramsList[1]), retryOpts),
