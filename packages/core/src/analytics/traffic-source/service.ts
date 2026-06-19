@@ -3,13 +3,10 @@ import type { youtubeAnalytics_v2 } from "googleapis";
 import {
   classifyGaxiosError,
   shouldRetryApiQuery,
-  toServiceError,
 } from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import { createService } from "../../service-frame.ts";
 import {
   readNonEmptyStringCell,
   readNumberCell,
@@ -196,23 +193,17 @@ const reshapeToLongFormat = (
   );
 };
 
-export const collectTrafficSourceService = async (
-  input: TrafficSourceAnalyticsInput,
-  deps: TrafficSourceDeps
-): Promise<Result<TrafficSourceAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = TrafficSourceAnalyticsInput.parse(input);
+export const collectTrafficSourceService = createService(
+  TrafficSourceAnalyticsInput,
+  TrafficSourceAnalyticsOutput,
+  async (request, deps: TrafficSourceDeps) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
       () => queryTrafficSourceReport(deps.youtubeAnalytics, params),
       { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
     );
-    return ok(
-      TrafficSourceAnalyticsOutput.parse({
-        metrics: reshapeToLongFormat(data),
-      })
-    );
-  } catch (error) {
-    return err(toServiceError(error));
+    return {
+      metrics: reshapeToLongFormat(data),
+    };
   }
-};
+);

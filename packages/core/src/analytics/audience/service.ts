@@ -3,13 +3,10 @@ import type { youtubeAnalytics_v2 } from "googleapis";
 import {
   classifyGaxiosError,
   shouldRetryApiQuery,
-  toServiceError,
 } from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import { createService } from "../../service-frame.ts";
 import {
   readCoercedNumberCell,
   readStringCell,
@@ -335,27 +332,21 @@ const runAudienceQueries = async (
   ];
 };
 
-export const collectAudienceService = async (
-  input: AudienceAnalyticsInput,
-  deps: AudienceAnalyticsDeps
-): Promise<Result<AudienceAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = AudienceAnalyticsInput.parse(input);
+export const collectAudienceService = createService(
+  AudienceAnalyticsInput,
+  AudienceAnalyticsOutput,
+  async (request, deps: AudienceAnalyticsDeps) => {
     const [demographics, country, subscribedStatus] = await runAudienceQueries(
       deps.youtubeAnalytics,
       buildAudienceQueries(request),
       deps.sleep
     );
-    return ok(
-      AudienceAnalyticsOutput.parse({
-        metrics: [
-          ...reshapeDemographics(demographics),
-          ...reshapeCountry(country),
-          ...reshapeSubscribedStatus(subscribedStatus),
-        ],
-      })
-    );
-  } catch (error) {
-    return err(toServiceError(error));
+    return {
+      metrics: [
+        ...reshapeDemographics(demographics),
+        ...reshapeCountry(country),
+        ...reshapeSubscribedStatus(subscribedStatus),
+      ],
+    };
   }
-};
+);

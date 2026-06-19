@@ -19,6 +19,7 @@
     "./oauth/refresh": "./src/oauth/refresh.ts",
     "./paths": "./src/paths.ts",
     "./registry": "./src/registry.ts",
+    "./service-frame": "./src/service-frame.ts",
     "./suno-prompts": "./src/suno-prompts/index.ts",
     "./skills-sync": "./src/skills-sync/index.ts",
     "./upload": "./src/upload/index.ts"

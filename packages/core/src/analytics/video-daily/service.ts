@@ -22,14 +22,11 @@ import type { youtubeAnalytics_v2 } from "googleapis";
 import {
   classifyGaxiosError,
   shouldRetryApiQuery,
-  toServiceError,
 } from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import { createService } from "../../service-frame.ts";
 import {
   readNumberCell,
   readStringCell,
@@ -104,12 +101,13 @@ const mapRows = (data: QueryResponse): VideoDailyRecord[] => {
  * 入力は `.strict()` schema で先に検証してから API を呼ぶため、不正入力（未知キー /
  * 非 YYYY-MM-DD）は API へ到達せず validation エラーになる。
  */
-export const collectVideoDailyAnalyticsService = async (
-  input: CollectVideoDailyAnalyticsInput,
-  deps: { sleep?: SleepMs; ytAnalytics: YouTubeAnalyticsClient }
-): Promise<Result<CollectVideoDailyAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = CollectVideoDailyAnalyticsInput.parse(input);
+export const collectVideoDailyAnalyticsService = createService(
+  CollectVideoDailyAnalyticsInput,
+  CollectVideoDailyAnalyticsOutput,
+  async (
+    request,
+    deps: { sleep?: SleepMs; ytAnalytics: YouTubeAnalyticsClient }
+  ) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
       async () => {
@@ -122,12 +120,8 @@ export const collectVideoDailyAnalyticsService = async (
       },
       { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
     );
-    return ok(
-      CollectVideoDailyAnalyticsOutput.parse({
-        metrics: mapRows(data),
-      })
-    );
-  } catch (error) {
-    return err(toServiceError(error));
+    return {
+      metrics: mapRows(data),
+    };
   }
-};
+);

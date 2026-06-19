@@ -15,12 +15,9 @@
 // deps（`createClient`）で保持し、service は構築済み provider を `deps` で受け取る
 // （ADR-0003 §7 / DI seam そのまま）。
 
-import { toServiceError } from "../errors.ts";
-import type { ServiceError } from "../errors.ts";
-import { err, ok } from "../result.ts";
-import type { Result } from "../result.ts";
 import { defaultShouldRetry, withRetry } from "../retry.ts";
 import type { SleepMs } from "../retry.ts";
+import { createService } from "../service-frame.ts";
 import { isContentPolicyError } from "./base.ts";
 import type { ImageProvider, PersistImage } from "./base.ts";
 import { defaultPersist, defaultSleep } from "./io.ts";
@@ -35,12 +32,13 @@ import { GenerateImageInput, GenerateImageOutput } from "./schema.ts";
  * 検証してから provider を呼ぶため、不正入力は provider に到達せず validation
  * エラーになる。
  */
-export const generateImageService = async (
-  input: GenerateImageInput,
-  deps: { persist?: PersistImage; provider: ImageProvider; sleep?: SleepMs }
-): Promise<Result<GenerateImageOutput, ServiceError>> => {
-  try {
-    const request = GenerateImageInput.parse(input);
+export const generateImageService = createService(
+  GenerateImageInput,
+  GenerateImageOutput,
+  async (
+    request,
+    deps: { persist?: PersistImage; provider: ImageProvider; sleep?: SleepMs }
+  ) => {
     const bytes = await withRetry(() => deps.provider.generate(request), {
       // SAFETY / RECITATION はリトライしても通らないため non-retryable に倒す。
       shouldRetry: (error) =>
@@ -51,8 +49,6 @@ export const generateImageService = async (
       request.outputPath,
       bytes
     );
-    return ok(GenerateImageOutput.parse({ savedPath }));
-  } catch (error) {
-    return err(toServiceError(error));
+    return { savedPath };
   }
-};
+);

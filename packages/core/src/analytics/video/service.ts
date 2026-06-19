@@ -14,14 +14,11 @@
 import {
   classifyGaxiosError,
   shouldRetryApiQuery,
-  toServiceError,
 } from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import { createService } from "../../service-frame.ts";
 import {
   CollectVideoAnalyticsInput,
   CollectVideoAnalyticsOutput,
@@ -111,8 +108,8 @@ const meltVideoRows = (
   return rows.flatMap((row) =>
     metricPlan.map((plan) => ({
       metric: plan.metric,
-      value: row[plan.index],
-      videoId: row[videoIndex],
+      value: row[plan.index] as number,
+      videoId: row[videoIndex] as string,
     }))
   );
 };
@@ -124,12 +121,10 @@ const meltVideoRows = (
  * validation エラーになる。`deps.youtubeAnalytics` は構築済みクライアントを注入する seam
  * （ADR-0003 §7）。
  */
-export const collectVideoAnalyticsService = async (
-  input: CollectVideoAnalyticsInput,
-  deps: VideoAnalyticsDeps
-): Promise<Result<CollectVideoAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = CollectVideoAnalyticsInput.parse(input);
+export const collectVideoAnalyticsService = createService(
+  CollectVideoAnalyticsInput,
+  CollectVideoAnalyticsOutput,
+  async (request, deps: VideoAnalyticsDeps) => {
     const response = await withRetry(() => runVideoQuery(deps, request), {
       shouldRetry: shouldRetryApiQuery,
       sleep: deps.sleep,
@@ -138,8 +133,6 @@ export const collectVideoAnalyticsService = async (
       response.data.columnHeaders ?? [],
       response.data.rows ?? []
     );
-    return ok(CollectVideoAnalyticsOutput.parse({ metrics }));
-  } catch (error) {
-    return err(toServiceError(error));
+    return { metrics };
   }
-};
+);
