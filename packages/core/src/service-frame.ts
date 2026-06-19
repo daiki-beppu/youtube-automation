@@ -10,6 +10,16 @@ type ServiceResult<O extends z.ZodType> = Promise<
   Result<z.output<O>, ServiceError>
 >;
 
+const resolveDeps = <D>(deps: D | undefined, defaultDeps: D | undefined): D => {
+  if (deps !== undefined) {
+    return deps;
+  }
+  if (defaultDeps !== undefined) {
+    return defaultDeps;
+  }
+  return {} as D;
+};
+
 export function createService<I extends z.ZodType, O extends z.ZodType>(
   inputSchema: I,
   outputSchema: O,
@@ -23,12 +33,19 @@ export function createService<I extends z.ZodType, O extends z.ZodType, D>(
 export function createService<I extends z.ZodType, O extends z.ZodType, D>(
   inputSchema: I,
   outputSchema: O,
-  execute: (input: z.output<I>, deps: D) => Promise<z.input<O>>
+  execute: (input: z.output<I>, deps: D) => Promise<z.input<O>>,
+  defaultDeps: D
+): (input: z.input<I>, deps?: D) => ServiceResult<O>;
+export function createService<I extends z.ZodType, O extends z.ZodType, D>(
+  inputSchema: I,
+  outputSchema: O,
+  execute: (input: z.output<I>, deps: D) => Promise<z.input<O>>,
+  defaultDeps?: D
 ) {
   return async (input: z.input<I>, deps?: D): ServiceResult<O> => {
     try {
       const parsed = inputSchema.parse(input);
-      const resolvedDeps = deps === undefined ? ({} as D) : deps;
+      const resolvedDeps = resolveDeps(deps, defaultDeps);
       const raw = await execute(parsed, resolvedDeps);
       return ok(outputSchema.parse(raw));
     } catch (error) {

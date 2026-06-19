@@ -20,6 +20,8 @@ import { describe, expect, test } from "bun:test";
 
 import { refreshTokenService } from "@youtube-automation/core/oauth/refresh";
 
+import { OAuthTokenOutput } from "../src/oauth/schema.ts";
+
 // Derive the deps bag type from the service itself (image-gemini.test.ts:38-40)
 // so the test does not hard-code the injection shape's exported name.
 type RefreshDeps = NonNullable<Parameters<typeof refreshTokenService>[1]>;
@@ -155,5 +157,21 @@ describe("refreshTokenService input validation", () => {
       throw new Error("expected validation failure");
     }
     expect(r.error.domain).toBe("validation");
+  });
+});
+
+describe("OAuthTokenOutput", () => {
+  test("rejects unknown output keys at the service boundary", () => {
+    // Given the shared OAuth token output shape
+    const output = {
+      tokenJson: JSON.stringify({ access_token: "x" }),
+      unexpected: true,
+    };
+
+    // When parsing an output with a contract-breaking key
+    const parsed = OAuthTokenOutput.safeParse(output);
+
+    // Then the strict output schema rejects it
+    expect(parsed.success).toBe(false);
   });
 });

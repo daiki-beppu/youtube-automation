@@ -80,6 +80,25 @@ describe("createService", () => {
     expect(observedDeps).toEqual({});
   });
 
+  test("uses explicit default deps when deps are omitted", async () => {
+    const service = createService(
+      InputSchema,
+      OutputSchema,
+      (input, deps: { factor: number }) =>
+        Promise.resolve({
+          doubled: input.value * deps.factor,
+        }),
+      { factor: 3 }
+    );
+
+    const result = await service({ value: 7 });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ doubled: 21 });
+    }
+  });
+
   test("returns validation error when output parsing fails", async () => {
     const service = createService(InputSchema, OutputSchema, () =>
       Promise.resolve({

@@ -4,41 +4,58 @@
 // server process at boot. oxlint enforces this with a path-based
 // no-restricted-imports rule (CLI is allowed, MCP is not).
 //
-// We verify the rule fires by linting a throwaway fixture placed in a
-// packages/mcp tier that is excluded from both the tsc include globs and the
-// tsconfig-coverage test glob (`__fixtures__`, not src/lib/bin/test), then
-// deleting the whole tree so a committed, intentionally-violating file never
-// trips the repo-wide `bun run lint`. Spawning the linter mirrors the existing
-// tsconfig-coverage.test.ts approach of shelling out to the toolchain.
+// We verify the rule fires by linting a throwaway fixture inside a temp repo
+// root. The real worktree must not grow or delete packages/mcp while the full
+// test suite is running in parallel.
 
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // Repo root is three levels up from packages/core/test/.
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const fixtureRel = "packages/mcp/__fixtures__/imports-interactive.ts";
-const mcpDir = join(repoRoot, "packages", "mcp");
-const fixtureDir = join(mcpDir, "__fixtures__");
-const fixtureFile = join(repoRoot, fixtureRel);
 
-// Snapshot whether a real packages/mcp already exists BEFORE the test runs. The
-// cleanup must only remove what the test materialized: if the package is absent
-// today we remove the whole tree we created, but once a real packages/mcp lands
-// we delete just the throwaway __fixtures__ dir so we never blow away a real
-// package (the rmSync footgun this test previously had).
-const mcpPreexisted = existsSync(mcpDir);
+const tmpRoots: string[] = [];
+const makeTempRepo = (): string => {
+  const root = mkdtempSync(join(tmpdir(), "oauth-interactive-lint-"));
+  tmpRoots.push(root);
+  copyFileSync(
+    join(repoRoot, "oxlint.config.ts"),
+    join(root, "oxlint.config.ts")
+  );
+  symlinkSync(
+    join(repoRoot, "node_modules"),
+    join(root, "node_modules"),
+    "dir"
+  );
+  return root;
+};
 
 afterEach(() => {
-  rmSync(mcpPreexisted ? fixtureDir : mcpDir, {
-    force: true,
-    recursive: true,
-  });
+  while (tmpRoots.length > 0) {
+    const root = tmpRoots.pop();
+    if (root !== undefined) {
+      rmSync(root, { force: true, recursive: true });
+    }
+  }
 });
 
 test("oxlint errors when a packages/mcp file imports the interactive OAuth service", () => {
   // Given an mcp-tier file importing the CLI-only interactive service
-  mkdirSync(fixtureDir, { recursive: true });
+  const tempRepo = makeTempRepo();
+  const fixtureFile = join(tempRepo, fixtureRel);
+  mkdirSync(join(tempRepo, "packages", "mcp", "__fixtures__"), {
+    recursive: true,
+  });
   writeFileSync(
     fixtureFile,
     [
@@ -50,10 +67,9 @@ test("oxlint errors when a packages/mcp file imports the interactive OAuth servi
     "utf-8"
   );
 
-  // When linting just that file with the repo oxlint config (auto-discovered
-  // from the repo root cwd)
+  // When linting just that file with the copied oxlint config
   const proc = Bun.spawnSync(["bun", "x", "oxlint", fixtureRel], {
-    cwd: repoRoot,
+    cwd: tempRepo,
   });
 
   // Then oxlint fails and reports a restricted-import violation naming interactive

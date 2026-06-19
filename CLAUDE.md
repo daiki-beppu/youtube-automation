@@ -142,7 +142,7 @@ Python → TypeScript 書き換え（ADR-0001）の TS コードは `packages/` 
 
 #### コマンド追加手順
 
-1. `packages/core/src/<domain>/service.ts` に service 関数を作成。`Result<Output, ServiceError>` を返す。入力は zod schema で `.parse()` する
+1. `packages/core/src/<domain>/service.ts` に `createService(InputSchema, OutputSchema, async (...) => rawOutput)` で service 関数を作成
 2. `packages/core/src/<domain>/schema.ts` に入出力の zod schema を定義
 3. `packages/core/src/<domain>/index.ts` で public API を re-export
 4. `packages/core/src/registry.ts` に service entry を登録（`deps` / `run` を定義）
@@ -153,10 +153,10 @@ Python → TypeScript 書き換え（ADR-0001）の TS コードは `packages/` 
 
 #### service 境界契約（ADR-0003）
 
-- service 関数は `async (input, deps) => Result<Output, ServiceError>` のシグネチャ
+- service 関数は `createService(InputSchema, OutputSchema, async (input, deps) => rawOutput)` で定義し、公開面は `Promise<Result<Output, ServiceError>>` を返す
 - `deps` で外部依存を注入（YouTube API client, sleep, persist 等）— テスト時に fake に差し替え可能
-- core 内部は throw OK。境界の `try/catch` で `toServiceError` に集約
-- retry は `withRetry` に委譲。quota は retry せず `err(domain: "quota")` で返す
+- core 内部は throw OK。入力検証・出力検証・`toServiceError` 変換は `createService` 境界に集約し、service 作者は `ok` / `err` / `toServiceError` frame を手書きしない
+- retry は `withRetry` に委譲。quota は retry せず `domain: "quota"` の service error で返す
 
 #### 検証コマンド
 
@@ -172,7 +172,7 @@ bun run ci                 # 上記すべて一括
 #### エラーハンドリング
 
 - `packages/core/src/errors.ts` のドメインエラーを使用: `YouTubeAPIError`, `QuotaExhaustedError`, `toServiceError`
-- `Result` 型（`ok(value)` / `err(serviceError)`）で caller にエラーを伝搬。throw しない
+- service は `createService` 経由の `Result` 型で caller にエラーを伝搬。throw しない
 - service error の `domain` フィールド: `"validation"` / `"quota"` / `"api"` / `"auth"` / `"io"` / `"config"`
 
 ### extensions（Chrome 拡張開発）

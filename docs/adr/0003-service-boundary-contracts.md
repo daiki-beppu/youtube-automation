@@ -18,7 +18,7 @@ S5-S8 自律 loop で 6 child (#732 / #734-#738) を merge した結果、以下
 
 ### 1. service 関数は `Promise<Result<T, ServiceError>>` を返す
 
-core 内部関数は throw OK。各 `packages/core/<feature>/service.ts` の export 境界で try/catch して `Result` に変換し、CLI/MCP は `if (!r.ok)` で discriminate する。
+core 内部関数は throw OK。各 `packages/core/<feature>/service.ts` の export 境界は `createService` で定義し、入力検証・出力検証・`Result` 変換を共通化する。CLI/MCP は `if (!r.ok)` で discriminate する。
 
 ```typescript
 // packages/core/result.ts (20 LOC、依存ゼロ)
@@ -224,25 +224,19 @@ export type FeatureOutput = z.infer<typeof FeatureOutput>;
 ### `packages/core/src/<feature>/service.ts`
 
 ```typescript
-import { type Result, ok, err } from "../result.ts";
-import { type ServiceError } from "../errors.ts";
-import { toServiceError } from "../errors.ts";
+import { createService } from "../service-frame.ts";
 import { FeatureInput, FeatureOutput } from "./schema.ts";
 import type { youtube_v3 } from "googleapis";
 
-export async function featureService(
-  input: FeatureInput,
-  deps: { youtube: youtube_v3.Youtube }
-): Promise<Result<FeatureOutput, ServiceError>> {
-  try {
-    const parsed = FeatureInput.parse(input);
+export const featureService = createService(
+  FeatureInput,
+  FeatureOutput,
+  async (input, deps: { youtube: youtube_v3.Youtube }) => {
     // 重い依存 (googleapis 経由) はここでのみ使う
     const raw = await deps.youtube.someApi.list({ ... });
-    return ok(FeatureOutput.parse(transform(raw.data)));
-  } catch (e) {
-    return err(toServiceError(e));
+    return transform(raw.data);
   }
-}
+);
 ```
 
 ### `packages/cli/src/commands/<feature>/cli.ts` (citty + 引数 parse → service)
@@ -311,8 +305,8 @@ export const featureTool = {
 
 ### Review (子 issue PR self-review チェック)
 
-- [ ] service export が `Promise<Result<T, ServiceError>>` を返しているか (throw 漏れなし)
-- [ ] `toServiceError` を境界で必ず呼んでいるか
+- [ ] service export が `createService(InputSchema, OutputSchema, async (...) => rawOutput)` で定義され、公開面が `Promise<Result<T, ServiceError>>` を返しているか (throw 漏れなし)
+- [ ] service 作者が `ok` / `err` / `toServiceError` frame を手書きせず、境界変換を `createService` に集約しているか
 - [ ] schema を zod で declare し `z.infer` で型を導出しているか (`interface` 並書なし)
 - [ ] 入力 JSON 形式 (snake_case) を schema で受け、camelCase は `.transform()` で導出しているか
 - [ ] `isRecord` / 手書き `parseX` を新規に書いていないか
