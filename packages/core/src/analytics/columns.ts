@@ -4,8 +4,12 @@ type ColumnHeaders = NonNullable<
   youtubeAnalytics_v2.Schema$QueryResponse["columnHeaders"]
 >;
 
+interface ColumnHeader {
+  readonly name?: string | null;
+}
+
 export const resolveColumnIndex = (
-  headers: ColumnHeaders,
+  headers: readonly ColumnHeader[],
   name: string,
   context: string
 ): number => {

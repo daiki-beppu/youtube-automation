@@ -16,10 +16,10 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import { withRetry } from "../../retry.ts";
-import { createService } from "../../service-frame.ts";
-import { requireHeaders, resolveColumnIndex } from "../column-helpers.ts";
+import { createService } from "../../service.ts";
+import { requireHeaders, resolveColumnIndex } from "../columns.ts";
+import { executeQuery, shouldRetryAnalyticsQuery } from "../query.ts";
 import {
   CHANNEL_METRICS,
   ChannelAnalyticsInput,
@@ -35,6 +35,9 @@ const VIDEO_FILTER_PREFIX = "video==";
 type ChannelMetricRecord = ChannelAnalyticsOutput["metrics"][number];
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
+interface ChannelAnalyticsDeps {
+  readonly youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics;
+}
 
 const buildQueryParams = (input: ChannelAnalyticsInput): QueryParams => ({
   dimensions: DAY_DIMENSION,
@@ -47,21 +50,6 @@ const buildQueryParams = (input: ChannelAnalyticsInput): QueryParams => ({
   metrics: CHANNEL_METRICS.join(","),
   startDate: input.startDate,
 });
-
-// query を 1 回実行し、gaxios エラーを payload 付き throw 型へ翻訳して返す。withRetry の
-// `shouldRetry` と境界の `toServiceError` の双方が statusCode で分類できるよう、生の
-// gaxios エラーを内側で domain エラーへ変換してから rethrow する。
-const queryDailyReport = async (
-  client: youtubeAnalytics_v2.Youtubeanalytics,
-  params: QueryParams
-): Promise<QueryResponse> => {
-  try {
-    const response = await client.reports.query(params);
-    return response.data;
-  } catch (error) {
-    throw classifyGaxiosError(error, QUERY_CONTEXT);
-  }
-};
 
 const reshapeToLongFormat = (data: QueryResponse): ChannelMetricRecord[] => {
   // データ無しの期間は API が `rows` を省く（v2.d.ts contract）→ 空配列で ok。
@@ -94,14 +82,11 @@ const reshapeToLongFormat = (data: QueryResponse): ChannelMetricRecord[] => {
 export const collectChannelAnalyticsService = createService(
   ChannelAnalyticsInput,
   ChannelAnalyticsOutput,
-  async (
-    request,
-    deps: { youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics }
-  ) => {
+  async (request, deps: ChannelAnalyticsDeps) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
-      () => queryDailyReport(deps.youtubeAnalytics, params),
-      { shouldRetry: shouldRetryApiQuery }
+      () => executeQuery(deps.youtubeAnalytics, params, QUERY_CONTEXT),
+      { shouldRetry: shouldRetryAnalyticsQuery }
     );
     return { metrics: reshapeToLongFormat(data) };
   }

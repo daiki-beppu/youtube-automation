@@ -1,15 +1,15 @@
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
-import { createService } from "../../service-frame.ts";
+import { createService } from "../../service.ts";
 import {
   readCoercedNumberCell,
   readStringCell,
   requireHeaders,
   resolveColumnIndex,
-} from "../column-helpers.ts";
+} from "../columns.ts";
+import { executeQuery, shouldRetryAnalyticsQuery } from "../query.ts";
 import {
   AUDIENCE_COUNTRY_METRICS,
   AUDIENCE_DEMOGRAPHIC_METRICS,
@@ -64,18 +64,6 @@ type AudienceMetricRecord =
   | DemographicMetricRecord
   | CountryMetricRecord
   | SubscribedStatusMetricRecord;
-
-const queryAudienceReport = async (
-  client: youtubeAnalytics_v2.Youtubeanalytics,
-  params: QueryParams
-): Promise<QueryResponse> => {
-  try {
-    const response = await client.reports.query(params);
-    return response.data;
-  } catch (error) {
-    throw classifyGaxiosError(error, QUERY_CONTEXT);
-  }
-};
 
 const baseQueryParams = (input: AudienceAnalyticsInput): QueryParams => ({
   endDate: input.endDate,
@@ -316,11 +304,20 @@ const runAudienceQueries = async (
   paramsList: AudienceQueryParams,
   sleep: SleepMs | undefined
 ): Promise<readonly [QueryResponse, QueryResponse, QueryResponse]> => {
-  const retryOpts = { shouldRetry: shouldRetryApiQuery, sleep };
+  const retryOpts = { shouldRetry: shouldRetryAnalyticsQuery, sleep };
   const [demographics, country, subscribedStatus] = await Promise.allSettled([
-    withRetry(() => queryAudienceReport(client, paramsList[0]), retryOpts),
-    withRetry(() => queryAudienceReport(client, paramsList[1]), retryOpts),
-    withRetry(() => queryAudienceReport(client, paramsList[2]), retryOpts),
+    withRetry(
+      () => executeQuery(client, paramsList[0], QUERY_CONTEXT),
+      retryOpts
+    ),
+    withRetry(
+      () => executeQuery(client, paramsList[1], QUERY_CONTEXT),
+      retryOpts
+    ),
+    withRetry(
+      () => executeQuery(client, paramsList[2], QUERY_CONTEXT),
+      retryOpts
+    ),
   ]);
   return [
     unwrapSettledQuery(demographics),

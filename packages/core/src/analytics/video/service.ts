@@ -10,11 +10,12 @@
 //   deps.youtubeAnalytics.reports.query(params) -> { data: { columnHeaders?, rows? } }
 //   429 時は gaxios 形状 { response: { status: 429, headers: { "retry-after" } } } で reject。
 
-import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
-import { createService } from "../../service-frame.ts";
+import { createService } from "../../service.ts";
+import { resolveColumnIndex } from "../columns.ts";
+import { executeQuery, shouldRetryAnalyticsQuery } from "../query.ts";
 import {
   CollectVideoAnalyticsInput,
   CollectVideoAnalyticsOutput,
@@ -35,10 +36,7 @@ export interface VideoAnalyticsDeps {
   sleep?: SleepMs;
 }
 
-// classifyGaxiosError / QuotaExhaustedError の message に載せる操作名。
 const QUERY_CONTEXT = "youtubeAnalytics.reports.query";
-
-/** Analytics クエリで参照する最小の列ヘッダ形状。 */
 interface ColumnHeader {
   readonly name?: string | null;
 }
@@ -55,19 +53,6 @@ const buildQueryParams = (request: CollectVideoAnalyticsInput) => ({
     : { filters: `video==${request.videoId}` }),
 });
 
-// reports.query を 1 回実行し、失敗を domain エラーへ分類して投げ直す（withRetry に渡す
-// 1-attempt 単位）。分類だけを担い、retry 可否は withRetry / defaultShouldRetry に委ねる。
-const runVideoQuery = async (
-  deps: VideoAnalyticsDeps,
-  request: CollectVideoAnalyticsInput
-) => {
-  try {
-    return await deps.youtubeAnalytics.reports.query(buildQueryParams(request));
-  } catch (error) {
-    throw classifyGaxiosError(error, QUERY_CONTEXT);
-  }
-};
-
 // 行を long/tidy melt（1 レコード = 1 (video, metric)）へ展開する。列は columnHeaders[].name
 // で解決するため位置非依存。行が無い場合は空配列（API が rows を返さない = データなし）。
 const meltVideoRows = (
@@ -78,26 +63,13 @@ const meltVideoRows = (
     return [];
   }
 
-  const indexByName = new Map<string, number>();
-  for (const [index, header] of columnHeaders.entries()) {
-    if (typeof header.name === "string") {
-      indexByName.set(header.name, index);
-    }
-  }
-
-  const columnIndex = (name: string): number => {
-    const index = indexByName.get(name);
-    if (index === undefined) {
-      throw new Error(
-        `${QUERY_CONTEXT}: response is missing the "${name}" column`
-      );
-    }
-    return index;
-  };
-
-  const videoIndex = columnIndex(VIDEO_DIMENSION);
+  const videoIndex = resolveColumnIndex(
+    columnHeaders,
+    VIDEO_DIMENSION,
+    QUERY_CONTEXT
+  );
   const metricPlan = METRIC_COLUMNS.map((column) => ({
-    index: columnIndex(column.apiName),
+    index: resolveColumnIndex(columnHeaders, column.apiName, QUERY_CONTEXT),
     metric: column.outName,
   }));
 
@@ -121,14 +93,16 @@ export const collectVideoAnalyticsService = createService(
   CollectVideoAnalyticsInput,
   CollectVideoAnalyticsOutput,
   async (request, deps: VideoAnalyticsDeps) => {
-    const response = await withRetry(() => runVideoQuery(deps, request), {
-      shouldRetry: shouldRetryApiQuery,
-      sleep: deps.sleep,
-    });
-    const metrics = meltVideoRows(
-      response.data.columnHeaders ?? [],
-      response.data.rows ?? []
+    const params = buildQueryParams(request);
+    const data = await withRetry(
+      () => executeQuery(deps.youtubeAnalytics, params, QUERY_CONTEXT),
+      {
+        shouldRetry: shouldRetryAnalyticsQuery,
+        sleep: deps.sleep,
+      }
     );
-    return { metrics };
+    return {
+      metrics: meltVideoRows(data.columnHeaders ?? [], data.rows ?? []),
+    };
   }
 );

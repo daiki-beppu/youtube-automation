@@ -326,6 +326,9 @@ describe("collectVideoDailyAnalyticsService quota error", () => {
   });
 
   test("converts a raw gaxios 429 into a quota ServiceError without retrying", async () => {
+    // Given a realistic Gaxios-shaped 429 (status + Retry-After header), NOT a
+    // pre-built QuotaExhaustedError — this exercises fromGaxiosError +
+    // classifyGaxiosError, the real production conversion chain.
     const { mock, queryCalls } = makeMockYtAnalytics(() => {
       throw gaxiosError("rate limit exceeded", {
         data: { error: { errors: [{ reason: "quotaExceeded" }] } },

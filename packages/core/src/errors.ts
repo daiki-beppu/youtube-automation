@@ -141,34 +141,26 @@ export const defaultShouldRetry = (error: unknown): boolean => {
   return !NON_RETRYABLE_PREFIXES.some((prefix) => message.startsWith(prefix));
 };
 
-const findHeader = (
-  headers: Record<string, unknown>,
-  headerName: string
-): unknown | undefined => {
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === headerName) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
-const parseRetryAfterSeconds = (error: unknown): number | undefined => {
-  if (
-    !(
-      isRecord(error) &&
-      isRecord(error.response) &&
-      isRecord(error.response.headers)
-    )
-  ) {
-    return undefined;
-  }
-  const raw = findHeader(error.response.headers, RETRY_AFTER_HEADER);
+/**
+ * Read the Retry-After hint (in seconds) off a Gaxios-shaped error.
+ *
+ * A missing header, an empty/blank string, or a non-numeric value all yield
+ * undefined: `Number("")` is 0 and must not be misread as "retry in 0 seconds".
+ */
+const retryAfterSecondsFrom = (error: unknown): number | undefined => {
+  const headers = (
+    error as { response?: { headers?: Record<string, unknown> } }
+  )?.response?.headers;
+  const raw = headers
+    ? Object.entries(headers).find(
+        ([key]) => key.toLowerCase() === "retry-after"
+      )?.[1]
+    : undefined;
   if (typeof raw !== "string") {
     return undefined;
   }
   const trimmed = raw.trim();
-  if (!RETRY_AFTER_SECONDS_PATTERN.test(trimmed)) {
+  if (trimmed.length === 0) {
     return undefined;
   }
   const seconds = Number(trimmed);
@@ -197,7 +189,7 @@ export const classifyGaxiosError = (
   if (apiError.statusCode === 429) {
     return new QuotaExhaustedError(
       apiError.message,
-      parseRetryAfterSeconds(error)
+      retryAfterSecondsFrom(error)
     );
   }
   return apiError;
