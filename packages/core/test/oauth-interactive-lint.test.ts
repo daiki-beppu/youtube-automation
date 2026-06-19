@@ -52,7 +52,7 @@ test("oxlint errors when a packages/mcp file imports the interactive OAuth servi
 
   // When linting just that file with the repo oxlint config (auto-discovered
   // from the repo root cwd)
-  const proc = Bun.spawnSync(["bun", "x", "oxlint", fixtureRel], {
+  const proc = Bun.spawnSync(["bun", "run", "lint", "--", fixtureRel], {
     cwd: repoRoot,
   });
 
