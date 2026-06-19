@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `feat(ts-rewrite/core)`: Audience analytics の demographics / country / subscribedStatus 3 クエリを並列開始するよう変更した（#1115）。失敗時は開始済み retry が settled になるまで待ってから Result へ変換し、service 戻り後に API retry が残らないようにした。
+- `refactor(ts-rewrite/core)`: analytics service の列ヘッダー解決とセル読み取り処理を `analytics/column-helpers.ts` に共通化し、channel / audience / traffic-source の重複実装を整理した（#1113）。
 - `feat(skills)`: dogfood ライフサイクルが踏む 12 skill（wf-new / wf-next / suno / suno-helper / masterup / videoup / video-upload / thumbnail / video-description / analytics-collect / playlist / distrokid-prep）の `uv run yt-*` 呼び出しを `bunx tayk <cmd>`（ADR-0007 rebrand / ADR-0004 単一 dispatcher）へ置換した（#965）。TS 版を pin した下流でも skill 経由で Python が実行され dogfood が始まらない問題を解消する。対象 skill の `uv run` 残骸ゼロを `tests/test_lifecycle_skills_no_uv_run.py` で機械担保。lifecycle 外の skill の置換は #966 で対応予定。
 - `feat(suno)`: 1 pattern = 1 scene 原則を SKILL.md に追加し、`(Variation N)` 機械的接尾辞による曲タイトル生成を回避。各曲が固有の `name_jp` / `name_en` を持つ YAML 設計を強制する NG/OK 例付き。
 - `feat(video-description)`: Benchmark 概要欄 TTP セクションを構造転写テーブル（7 項目）に拡充し、テンプレ使い回し禁止ルール・冒頭フックのコレクション固有化を追加。
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(ts-rewrite/core)`: `readReferenceFiles` の参照画像読み込み失敗時エラーに対象パスを含め、元の filesystem error を `cause` に保持するよう修正した（#1121）。
 - `fix(suno-helper)`: auto-capture が Suno の URL 構造変更（`/me` → `/me/playlists`）に追従していなかったため、playlist mapping が `suno-playlists.json` に書き込まれず処理済みコレクションがドロップダウンに残り続けていた問題を修正した。併せて `captureFromTab` で SPA 未描画の空結果もリトライ対象にした。
 - `fix(suno-helper)`: overlay パネルのコンテンツが画面外にはみ出してスクロールできなかった問題を修正した。`max-height: calc(100vh - 120px)` + `overflow-y: auto` を追加。
 - `fix(suno-helper)`: マルチワード prefix（例: `soulful-grooves`）のチャンネルで playlist 名の境界分割が壊れ、Suno に `soulful | grooves-wah-groove` のような誤った playlist 名で作成されていた問題を修正した。サーバー側で `derive_playlist_name` を使って正しい `<prefix> | <theme>` を算出し、`/collections` API の `playlist_name` フィールドとして返すようにした。拡張はサーバーの値を優先使用し、旧サーバーでは `extractPlaylistName` fallback で後方互換を維持する。

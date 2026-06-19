@@ -131,6 +131,50 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 - `skills` asset を標準レイアウト（`.claude/skills`）へ sync すると、下流リポにも `.agents/skills -> ../.claude/skills` の相対 symlink を併設する（Codex CLI 探索パス規約）。既存の正しい symlink は冪等にスキップし、張り直しは `--force`、symlink 非対応環境では警告のみで sync は継続する（`_ops.py::_ensure_agents_skills_symlink`）
 - バージョン bump は `pyproject.toml::version` のみを更新する（`src/youtube_automation/__init__.py::__version__` は `importlib.metadata` 経由で動的に読み込むため触らない）。リリース運用全体は `/automation-release` スキルで一気通貫に実行する
 
+### TS レイヤー（packages/）
+
+Python → TypeScript 書き換え（ADR-0001）の TS コードは `packages/` に配置する。runtime は Bun、型チェックは `tsc -b --noEmit`、lint は oxlint、formatter は oxfmt、dead code 検出は knip。
+
+#### パッケージ構成
+
+- `packages/core/` — ドメインロジック（analytics, config, image, oauth, upload, metadata, suno-prompts, skills-sync）。`@youtube-automation/core` として export
+- `packages/cli/` — CLI コマンド（`tayk` エントリポイント）。core の service を呼び出す adapter 層
+
+#### コマンド追加手順
+
+1. `packages/core/src/<domain>/service.ts` に service 関数を作成。`Result<Output, ServiceError>` を返す。入力は zod schema で `.parse()` する
+2. `packages/core/src/<domain>/schema.ts` に入出力の zod schema を定義
+3. `packages/core/src/<domain>/index.ts` で public API を re-export
+4. `packages/core/src/registry.ts` に service entry を登録（`deps` / `run` を定義）
+5. `packages/cli/src/commands/<name>/cli.ts` に CLI adapter を作成
+6. `packages/cli/bin/tayk.ts` で command を import し、`subCommands` に登録
+7. service のテストは `packages/core/test/<name>.test.ts` に配置。DI seam（`deps`）経由で fake を注入
+8. CLI adapter の smoke test は `packages/cli/test/<command>.test.ts` に配置。dispatcher 経由で args / output / exit code / error path / deps 解決を検証
+
+#### service 境界契約（ADR-0003）
+
+- service 関数は `async (input, deps) => Result<Output, ServiceError>` のシグネチャ
+- `deps` で外部依存を注入（YouTube API client, sleep, persist 等）— テスト時に fake に差し替え可能
+- core 内部は throw OK。境界の `try/catch` で `toServiceError` に集約
+- retry は `withRetry` に委譲。quota は retry せず `err(domain: "quota")` で返す
+
+#### 検証コマンド
+
+```bash
+bun run typecheck          # tsc -b --noEmit
+bun test                   # bun test（全パッケージ）
+bun run lint               # oxlint
+bun run format:check       # oxfmt
+bun run knip               # dead code 検出
+bun run ci                 # 上記すべて一括
+```
+
+#### エラーハンドリング
+
+- `packages/core/src/errors.ts` のドメインエラーを使用: `YouTubeAPIError`, `QuotaExhaustedError`, `toServiceError`
+- `Result` 型（`ok(value)` / `err(serviceError)`）で caller にエラーを伝搬。throw しない
+- service error の `domain` フィールド: `"validation"` / `"quota"` / `"api"` / `"auth"` / `"io"` / `"config"`
+
 ### extensions（Chrome 拡張開発）
 
 `extensions/` 配下の Chrome 拡張は **WXT + React + TypeScript + Tailwind CSS** スタックで開発する（Python 本体とは独立した Node ツールチェーン）。詳細は `extensions/README.md`。
