@@ -147,7 +147,9 @@ Python → TypeScript 書き換え（ADR-0001）の TS コードは `packages/` 
 3. `packages/core/src/<domain>/index.ts` で public API を re-export
 4. `packages/core/src/registry.ts` に service entry を登録（`deps` / `run` を定義）
 5. `packages/cli/src/commands/<name>/cli.ts` に CLI adapter を作成
-6. テストは `packages/core/test/<name>.test.ts` に配置。DI seam（`deps`）経由で fake を注入
+6. `packages/cli/bin/tayk.ts` で command を import し、`subCommands` に登録
+7. service のテストは `packages/core/test/<name>.test.ts` に配置。DI seam（`deps`）経由で fake を注入
+8. CLI adapter の smoke test は `packages/cli/test/<command>.test.ts` に配置。dispatcher 経由で args / output / exit code / error path / deps 解決を検証
 
 #### service 境界契約（ADR-0003）
 
