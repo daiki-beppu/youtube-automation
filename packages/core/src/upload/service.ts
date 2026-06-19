@@ -5,8 +5,8 @@
 //
 // リトライ・バックオフは service が所有し、共通 `withRetry`（#959）に委譲する。quota（429）は
 // ADR-0003 の retry 規約に従い retry せず、`domain: "quota"` + `retryAfterSeconds` の Result で
-// caller へ返す。5xx 等の一時エラーは `withRetry` の既定予算（3 回）で再試行する。境界の
-// try/catch で `toServiceError` に集約し、CLI/MCP は `if (!r.ok)` で discriminate する。
+// caller へ返す。5xx 等の一時エラーは `withRetry` の既定予算（3 回）で再試行する。
+// 入力 / 出力検証と `ServiceError` 変換は `createService` が担う。
 //
 // seam contract（テストの fake と一致させる契約）:
 //   deps.youtube.videos.insert(params) -> { data: { id?: string } }

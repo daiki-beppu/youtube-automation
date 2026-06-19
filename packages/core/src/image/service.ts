@@ -4,8 +4,8 @@
 // 契約（成功は画像 bytes、失敗は throw）に縮退済みで、`withRetry` が一時エラーを
 // 既定の 10/30/60 秒バックオフで再試行する。コンテンツポリシー（SAFETY / RECITATION）
 // と `config:` 等のドメインエラー・quota は retry しても通らないため即 rethrow される。
-// core 内部（provider）は throw OK。境界の try/catch で `toServiceError` 経由に集約し、
-// CLI/MCP は `if (!r.ok)` で discriminate する。マッピング:
+// core 内部（provider）は throw OK。入力 / 出力検証と `ServiceError` 変換は
+// `createService` が担う。マッピング:
 //   - schema 違反（未知キー等）       → err(domain "validation")  (zod ZodError)
 //   - 生成 + 保存成功                  → ok({ savedPath })
 //   - 未 prefix の provider throw（画像なし / SAFETY 等）→ err(domain "io")

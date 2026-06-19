@@ -60,8 +60,8 @@ const DEFAULT_TARGETS = {
 const AGENTS_SKILLS_LINK_TARGET = `../${CLAUDE_DIR}/${SKILLS_DIRNAME}`;
 
 // 1 skill = 1 ディレクトリ。非ディレクトリは除外し、Python `sorted(...)` と同じ
-// code-point 昇順で返す。内部は throw OK で、境界の try/catch で `toServiceError`
-// 経由の `Result` に集約する (ADR-0003 §1)。マッピング:
+// code-point 昇順で返す。内部は throw OK で、入力 / 出力検証と `ServiceError`
+// 変換は `createService` が担う (ADR-0003 §1)。マッピング:
 //   - schema 違反 (skillsDir 非文字列 / 未知キー) → err(domain "validation")  (ZodError)
 //   - 存在しない source (readdir ENOENT)           → err(domain "io")          (未 prefix Error)
 export const listSkillsService = createService(
@@ -208,7 +208,7 @@ const syncClaudeMdAsset = async (
 };
 
 // 同梱資産 (skills / claude-md) を対象リポジトリへ配布する (#742)。"all" は CLI sugar の
-// ため schema enum で弾かれ validation error になる。境界の try/catch で Result に集約する。
+// ため schema enum で弾かれ validation error になる。境界変換は `createService` に集約する。
 export const syncAssetService = createService(
   SkillSyncInputSchema,
   SkillSyncOutputSchema,
