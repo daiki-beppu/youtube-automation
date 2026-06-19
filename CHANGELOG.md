@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(ts-rewrite/core)`: `uploadVideoService` の予約公開時刻正規化で、不正な timezone offset（例: `+25:99`）を UTC 変換対象にしないよう修正した（#1120）。
+- `fix(ts-rewrite/core)`: `readReferenceFiles` の参照画像読み込み失敗時エラーに対象パスを含め、元の filesystem error を `cause` に保持するよう修正した（#1121）。
 - `fix(suno-helper)`: auto-capture が Suno の URL 構造変更（`/me` → `/me/playlists`）に追従していなかったため、playlist mapping が `suno-playlists.json` に書き込まれず処理済みコレクションがドロップダウンに残り続けていた問題を修正した。併せて `captureFromTab` で SPA 未描画の空結果もリトライ対象にした。
 - `fix(suno-helper)`: overlay パネルのコンテンツが画面外にはみ出してスクロールできなかった問題を修正した。`max-height: calc(100vh - 120px)` + `overflow-y: auto` を追加。
 - `fix(suno-helper)`: マルチワード prefix（例: `soulful-grooves`）のチャンネルで playlist 名の境界分割が壊れ、Suno に `soulful | grooves-wah-groove` のような誤った playlist 名で作成されていた問題を修正した。サーバー側で `derive_playlist_name` を使って正しい `<prefix> | <theme>` を算出し、`/collections` API の `playlist_name` フィールドとして返すようにした。拡張はサーバーの値を優先使用し、旧サーバーでは `extractPlaylistName` fallback で後方互換を維持する。
