@@ -6,28 +6,14 @@
       "project": [],
       "ignoreDependencies": ["takt"]
     },
-    "packages/*": {
-      "entry": ["src/index.ts", "src/cli/*.ts", "bin/*.ts", "*/index.ts"],
+    "packages/cli": {
+      "entry": ["src/commands/*/cli.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "*/*.ts"]
+    },
+    "packages/core": {
       "project": ["src/**/*.ts", "test/**/*.ts", "*/*.ts"]
     }
   },
-  "ignore": [
-    ".worktrees/**",
-    ".claude/worktrees/**",
-    "src/youtube_automation/**",
-    "tests/**",
-    "extensions/**",
-    "examples/**",
-    "docs/**",
-    "poc/**"
-  ],
-  "ignoreBinaries": [
-    "lefthook",
-    "uv",
-    "nix",
-    "gh",
-    "compile",
-    "build",
-    "playwright"
-  ]
+  "ignore": ["extensions/**"],
+  "ignoreBinaries": ["compile", "build", "playwright"]
 }
