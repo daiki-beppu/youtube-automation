@@ -64,7 +64,6 @@ const videoDailyColumnHeaders = [
 
 describe("collectVideoDailyAnalyticsService success", () => {
   test("returns ok Result with one metrics record per API row", async () => {
-    // Given a mock returning sample Analytics API rows (video, day, views)
     const { mock } = makeMockYtAnalytics(() => ({
       data: {
         columnHeaders: videoDailyColumnHeaders,
@@ -75,14 +74,10 @@ describe("collectVideoDailyAnalyticsService success", () => {
         ],
       },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the result is ok with one metrics record per row, mapped by header
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -106,18 +101,13 @@ describe("collectVideoDailyAnalyticsService success", () => {
   });
 
   test("passes the fixed query contract for channel-wide collection", async () => {
-    // Given a mock we can inspect for the query parameters
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
       data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
-
-    // When collecting without a videoIds filter
     await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the Analytics query uses the video×day contract and no filter
     expect(queryCalls).toHaveLength(1);
     const params = queryCalls[0] as Record<string, unknown>;
     expect(params.dimensions).toBe("video,day");
@@ -130,21 +120,16 @@ describe("collectVideoDailyAnalyticsService success", () => {
   });
 
   test("preserves a numeric zero views value", async () => {
-    // Given a row whose views cell is the API's numeric zero value
     const { mock } = makeMockYtAnalytics(() => ({
       data: {
         columnHeaders: videoDailyColumnHeaders,
         rows: [["vid1", "2025-01-01", 0]],
       },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the zero metric is preserved as a numeric 0
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -157,21 +142,16 @@ describe("collectVideoDailyAnalyticsService success", () => {
   });
 
   test("normalizes null views values to 0", async () => {
-    // Given a row whose views cell is the API's null zero-value representation
     const { mock } = makeMockYtAnalytics(() => ({
       data: {
         columnHeaders: videoDailyColumnHeaders,
         rows: [["vid1", "2025-01-01", null]],
       },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the API's null zero-value representation is normalized to numeric 0
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -182,21 +162,16 @@ describe("collectVideoDailyAnalyticsService success", () => {
   });
 
   test("maps rows by columnHeaders when API column order changes", async () => {
-    // Given a response whose day and video columns are not in request order
     const { mock } = makeMockYtAnalytics(() => ({
       data: {
         columnHeaders: [{ name: "day" }, { name: "video" }, { name: "views" }],
         rows: [["2025-01-01", "vid1", 100]],
       },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then each output field uses the matching header, not the original index
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -211,21 +186,16 @@ describe("collectVideoDailyAnalyticsService success", () => {
 
 describe("collectVideoDailyAnalyticsService malformed API response", () => {
   test("returns io error when the views column header is missing", async () => {
-    // Given rows with columnHeaders that omit the required views metric
     const { mock } = makeMockYtAnalytics(() => ({
       data: {
         columnHeaders: [{ name: "video" }, { name: "day" }],
         rows: [["vid1", "2025-01-01", 100]],
       },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the boundary returns a fail-fast mapping error
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -235,18 +205,13 @@ describe("collectVideoDailyAnalyticsService malformed API response", () => {
   });
 
   test("returns io error when rows are present without columnHeaders", async () => {
-    // Given rows but no columnHeaders to define the response contract
     const { mock } = makeMockYtAnalytics(() => ({
       data: { rows: [["vid1", "2025-01-01", 100]] },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the boundary returns a fail-fast mapping error
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -256,21 +221,16 @@ describe("collectVideoDailyAnalyticsService malformed API response", () => {
   });
 
   test("returns io error when a row is missing the views cell", async () => {
-    // Given columnHeaders that require views but a row whose views cell is absent
     const { mock } = makeMockYtAnalytics(() => ({
       data: {
         columnHeaders: videoDailyColumnHeaders,
         rows: [["vid1", "2025-01-01"]],
       },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the boundary returns a fail-fast mapping error
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -284,21 +244,16 @@ describe("collectVideoDailyAnalyticsService malformed API response", () => {
 
 describe("collectVideoDailyAnalyticsService with videoIds filter", () => {
   test("passes filters param when videoIds is provided", async () => {
-    // Given a mock we can inspect for query params
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
       data: {
         columnHeaders: videoDailyColumnHeaders,
         rows: [["vid1", "2025-01-01", 50]],
       },
     }));
-
-    // When calling with specific videoIds
     const r = await collectVideoDailyAnalyticsService(
       { ...baseInput, videoIds: ["vid1", "vid2"] },
       { sleep: noSleep, ytAnalytics: mock }
     );
-
-    // Then it succeeds and the filters param was passed correctly
     expect(r.ok).toBe(true);
     expect(queryCalls).toHaveLength(1);
     const params = queryCalls[0] as Record<string, unknown>;
@@ -309,18 +264,13 @@ describe("collectVideoDailyAnalyticsService with videoIds filter", () => {
   });
 
   test("omits filters param when videoIds is an empty array", async () => {
-    // Given an explicit empty videoIds (no video restriction intended)
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
       data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
-
-    // When calling with an empty videoIds array
     const r = await collectVideoDailyAnalyticsService(
       { ...baseInput, videoIds: [] },
       { sleep: noSleep, ytAnalytics: mock }
     );
-
-    // Then no filters param is sent — an empty list is not "video==" with no ids
     expect(r.ok).toBe(true);
     const params = queryCalls[0] as Record<string, unknown>;
     expect(params.filters).toBeUndefined();
@@ -331,18 +281,13 @@ describe("collectVideoDailyAnalyticsService with videoIds filter", () => {
 
 describe("collectVideoDailyAnalyticsService quota error", () => {
   test("returns err with domain quota on QuotaExhaustedError", async () => {
-    // Given a mock that throws a QuotaExhaustedError (not retried per ADR-0003)
     const { mock } = makeMockYtAnalytics(() => {
       throw new QuotaExhaustedError("quota exceeded", 3600);
     });
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then it returns an err with domain "quota" — never throws
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -351,34 +296,24 @@ describe("collectVideoDailyAnalyticsService quota error", () => {
   });
 
   test("does not retry a quota error (single API call)", async () => {
-    // Given a quota error on every attempt
     const { mock, queryCalls } = makeMockYtAnalytics(() => {
       throw new QuotaExhaustedError("quota exceeded", 3600);
     });
-
-    // When calling the service
     await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the API was called exactly once — quota is returned, not retried
     expect(queryCalls).toHaveLength(1);
   });
 
   test("surfaces retryAfterSeconds on the quota ServiceError", async () => {
-    // Given a quota error carrying a Retry-After hint
     const { mock } = makeMockYtAnalytics(() => {
       throw new QuotaExhaustedError("quota exceeded", 1800);
     });
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the quota arm carries the resumable retry hint through the boundary
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -391,9 +326,6 @@ describe("collectVideoDailyAnalyticsService quota error", () => {
   });
 
   test("converts a raw gaxios 429 into a quota ServiceError without retrying", async () => {
-    // Given a realistic Gaxios-shaped 429 (status + Retry-After header), NOT a
-    // pre-built QuotaExhaustedError — this exercises fromGaxiosError +
-    // parseRetryAfterSeconds, the real production conversion chain.
     const { mock, queryCalls } = makeMockYtAnalytics(() => {
       throw gaxiosError("rate limit exceeded", {
         data: { error: { errors: [{ reason: "quotaExceeded" }] } },
@@ -401,15 +333,10 @@ describe("collectVideoDailyAnalyticsService quota error", () => {
         status: 429,
       });
     });
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the 429 maps to domain "quota" with the header's retry hint, and the
-    // quota arm is never retried (single API call)
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -427,7 +354,6 @@ describe("collectVideoDailyAnalyticsService quota error", () => {
 
 describe("collectVideoDailyAnalyticsService retry behavior", () => {
   test("retries a transient 5xx and succeeds on the next attempt", async () => {
-    // Given a mock that fails once with a 500 then returns data
     let attempt = 0;
     const { mock, queryCalls } = makeMockYtAnalytics(() => {
       attempt += 1;
@@ -441,14 +367,10 @@ describe("collectVideoDailyAnalyticsService retry behavior", () => {
         },
       };
     });
-
-    // When calling the service (with backoff stubbed out)
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the 5xx is retried and the second attempt's data is returned
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -460,22 +382,16 @@ describe("collectVideoDailyAnalyticsService retry behavior", () => {
   });
 
   test("does not retry a permanent 4xx and returns an api ServiceError", async () => {
-    // Given a mock that always fails with a 403 (forbidden — permanent)
     const { mock, queryCalls } = makeMockYtAnalytics(() => {
       throw gaxiosError("forbidden", {
         data: { error: { errors: [{ reason: "forbidden" }] } },
         status: 403,
       });
     });
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then it maps to domain "api" with the 403 status + reason, and is not
-    // retried (single API call)
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected failure");
@@ -493,18 +409,13 @@ describe("collectVideoDailyAnalyticsService retry behavior", () => {
 
 describe("collectVideoDailyAnalyticsService empty response", () => {
   test("returns ok with empty metrics when API returns no data rows", async () => {
-    // Given a mock returning an empty rows array
     const { mock } = makeMockYtAnalytics(() => ({
-      data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
+      data: { rows: [] },
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then it succeeds with an empty metrics array
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -513,18 +424,13 @@ describe("collectVideoDailyAnalyticsService empty response", () => {
   });
 
   test("returns ok with empty metrics when the response has no rows field", async () => {
-    // Given a mock returning a response without a rows field at all
     const { mock } = makeMockYtAnalytics(() => ({
       data: {},
     }));
-
-    // When calling the service
     const r = await collectVideoDailyAnalyticsService(baseInput, {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then it gracefully returns empty metrics
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -537,12 +443,9 @@ describe("collectVideoDailyAnalyticsService empty response", () => {
 
 describe("collectVideoDailyAnalyticsService input validation", () => {
   test("returns err with domain validation when input has extra keys", async () => {
-    // Given a valid mock that would succeed if reached
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
       data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
-
-    // When the input carries an unexpected key the `.strict()` schema rejects
     const malformed = {
       ...baseInput,
       unexpected: true,
@@ -552,9 +455,6 @@ describe("collectVideoDailyAnalyticsService input validation", () => {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then the boundary parses first: a validation ServiceError, and the API
-    // is never called
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected validation failure");
@@ -564,12 +464,9 @@ describe("collectVideoDailyAnalyticsService input validation", () => {
   });
 
   test("returns err with domain validation when date format is invalid", async () => {
-    // Given a mock that would succeed if reached
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
       data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
-
-    // When the startDate is not YYYY-MM-DD
     const badInput = {
       channelId: "UC_test",
       endDate: "2025-01-31",
@@ -580,8 +477,6 @@ describe("collectVideoDailyAnalyticsService input validation", () => {
       sleep: noSleep,
       ytAnalytics: mock,
     });
-
-    // Then it returns a validation error without calling the API
     expect(r.ok).toBe(false);
     if (r.ok) {
       throw new Error("expected validation failure");

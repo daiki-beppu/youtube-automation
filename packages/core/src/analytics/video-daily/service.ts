@@ -84,8 +84,7 @@ const buildQueryParams = (
 };
 
 const mapRows = (data: QueryResponse): VideoDailyRecord[] => {
-  // データ無しの期間は API が `rows` を省く（v2.d.ts contract）→ 空配列で ok。
-  if (!data.rows) {
+  if (!data.rows || data.rows.length === 0) {
     return [];
   }
   const headers = requireHeaders(data, QUERY_CONTEXT);
