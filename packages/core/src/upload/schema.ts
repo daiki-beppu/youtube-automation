@@ -79,9 +79,6 @@ export const UploadInput = z
   .strict();
 // 解決後（`.parse` 出力）の型。default 付きフィールドは確定値を持つ。service 内部で扱う。
 export type UploadInput = z.infer<typeof UploadInput>;
-// `.parse` 前の入力型。default 付きフィールド（resumable / categoryId 等）は省略可。
-// service の引数型として使い、呼び出し元が既定値を省略できる経路を保つ。
-export type UploadRequest = z.input<typeof UploadInput>;
 
 /**
  * アップロード結果。
