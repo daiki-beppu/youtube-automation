@@ -29,7 +29,7 @@
 // youtube_auto_uploader.py:144-198 and is asserted directly on the captured
 // insert params.
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { randomFillSync } from "node:crypto";
 import {
   mkdtempSync,
@@ -396,6 +396,75 @@ describe("uploadVideoService scheduled publish", () => {
     expect(new Date(publishAt).getTime()).toBe(
       new Date("2026-06-15T11:00:00Z").getTime()
     );
+  });
+
+  test("keeps a Z-terminated publishAt as a UTC Z instant", async () => {
+    const { client, insertCalls } = makeYouTubeClient({
+      insert: insertSuccess("vid_sched_z"),
+    });
+    const input = baseInput({
+      metadata: {
+        ...baseMetadata,
+        publishAt: "2025-06-19T06:30:00Z",
+      },
+    } as Partial<UploadInput>);
+
+    const r = await uploadVideoService(input, makeDeps(client));
+
+    expect(r.ok).toBe(true);
+    const { status } = insertBody(insertCalls);
+    expect(status.publishAt).toBe("2025-06-19T06:30:00Z");
+  });
+
+  test("keeps invalid timezone-offset publishAt values unchanged", async () => {
+    const invalidPublishAtValues = [
+      "2025-06-19T15:30:00+25:99",
+      "2025-06-19T15:30:00+24:00",
+      "2025-06-19T15:30:00+09:60",
+    ];
+    const dateParseSpy = spyOn(Date, "parse");
+
+    try {
+      for (const publishAt of invalidPublishAtValues) {
+        const { client, insertCalls } = makeYouTubeClient({
+          insert: insertSuccess("vid_sched_invalid_offset"),
+        });
+        const input = baseInput({
+          metadata: {
+            ...baseMetadata,
+            publishAt,
+          },
+        } as Partial<UploadInput>);
+
+        const r = await uploadVideoService(input, makeDeps(client));
+
+        expect(r.ok).toBe(true);
+        const { status } = insertBody(insertCalls);
+        expect(status.publishAt).toBe(publishAt);
+      }
+      expect(dateParseSpy).not.toHaveBeenCalled();
+    } finally {
+      dateParseSpy.mockRestore();
+    }
+  });
+
+  test("keeps a naive datetime publishAt unchanged", async () => {
+    const { client, insertCalls } = makeYouTubeClient({
+      insert: insertSuccess("vid_sched_naive"),
+    });
+    const publishAt = "2025-06-19T15:30:00";
+    const input = baseInput({
+      metadata: {
+        ...baseMetadata,
+        publishAt,
+      },
+    } as Partial<UploadInput>);
+
+    const r = await uploadVideoService(input, makeDeps(client));
+
+    expect(r.ok).toBe(true);
+    const { status } = insertBody(insertCalls);
+    expect(status.publishAt).toBe(publishAt);
   });
 
   test("publishes immediately (public, no publishAt) when no schedule is given", async () => {
