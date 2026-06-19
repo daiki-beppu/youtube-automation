@@ -18,6 +18,9 @@ interface QueryResponse {
 }
 
 type QueryBehavior = (params: Record<string, unknown>) => QueryResponse;
+type AsyncQueryBehavior = (
+  params: Record<string, unknown>
+) => Promise<QueryResponse>;
 type Sleep = (ms: number) => Promise<void>;
 
 const makeAnalyticsClient = (behavior: QueryBehavior) => {
@@ -27,6 +30,19 @@ const makeAnalyticsClient = (behavior: QueryBehavior) => {
       query: (params: Record<string, unknown>) => {
         calls.push(params);
         return Promise.resolve().then(() => behavior(params));
+      },
+    },
+  };
+  return { calls, client };
+};
+
+const makeAsyncAnalyticsClient = (behavior: AsyncQueryBehavior) => {
+  const calls: Record<string, unknown>[] = [];
+  const client = {
+    reports: {
+      query: (params: Record<string, unknown>) => {
+        calls.push(params);
+        return behavior(params);
       },
     },
   };
@@ -368,6 +384,107 @@ describe("collectAudienceService success", () => {
     }
   });
 
+  test("starts all independent audience queries before the first response settles", async () => {
+    const pendingResponses = new Map<
+      string,
+      (response: QueryResponse) => void
+    >();
+    const { calls, client } = makeAsyncAnalyticsClient((params) => {
+      const { promise, resolve } = Promise.withResolvers<QueryResponse>();
+      pendingResponses.set(String(params.dimensions), resolve);
+      return promise;
+    });
+
+    const resultPromise = collectAudienceService(baseInput, makeDeps(client));
+
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
+
+    for (const call of calls) {
+      const dimensions = String(call.dimensions);
+      const resolve = pendingResponses.get(dimensions);
+      if (!resolve) {
+        throw new Error(`missing pending response for ${dimensions}`);
+      }
+      resolve(audienceResponses(call));
+    }
+
+    const result = await resultPromise;
+    expect(result.ok).toBe(true);
+  });
+
+  test("waits for started audience retries before returning a failed result", async () => {
+    let countryAttempts = 0;
+    let resultSettled = false;
+    const sleepResolvers: ((value: null) => void)[] = [];
+    const sleep: Sleep = async () => {
+      const { promise, resolve } = Promise.withResolvers<null>();
+      sleepResolvers.push(resolve);
+      await promise;
+    };
+    const { calls, client } = makeAsyncAnalyticsClient((params) => {
+      switch (params.dimensions) {
+        case "ageGroup,gender": {
+          return Promise.reject(gaxiosStatusError(403));
+        }
+        case "country": {
+          if (countryAttempts === 0) {
+            countryAttempts += 1;
+            return Promise.reject(gaxiosStatusError(500));
+          }
+          countryAttempts += 1;
+          return Promise.resolve(audienceResponses(params));
+        }
+        default: {
+          return Promise.resolve(audienceResponses(params));
+        }
+      }
+    });
+
+    const resultPromise = collectAudienceService(
+      baseInput,
+      makeDeps(client, sleep)
+    );
+    void resultPromise.then(() => {
+      resultSettled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
+    expect(sleepResolvers).toHaveLength(1);
+    expect(resultSettled).toBe(false);
+    const [resolveSleep] = sleepResolvers;
+    if (!resolveSleep) {
+      throw new Error("expected the retry sleep to be pending");
+    }
+    resolveSleep(null);
+
+    const result = await resultPromise;
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected an api failure");
+    }
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain === "api") {
+      expect(result.error.httpStatus).toBe(403);
+    }
+    expect(countryAttempts).toBe(2);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+      "country",
+    ]);
+  });
+
   test("rounds country and subscriber view share percentages to one decimal place", async () => {
     const { client } = makeAnalyticsClient((params) => {
       switch (params.dimensions) {
@@ -514,9 +631,9 @@ describe("collectAudienceService error paths", () => {
     expect(calls).toHaveLength(4);
     expect(calls.map((call) => call.dimensions)).toEqual([
       "ageGroup,gender",
-      "ageGroup,gender",
       "country",
       "subscribedStatus",
+      "ageGroup,gender",
     ]);
   });
 
@@ -538,7 +655,11 @@ describe("collectAudienceService error paths", () => {
     if (result.error.domain === "api") {
       expect(result.error.httpStatus).toBe(403);
     }
-    expect(calls).toHaveLength(1);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
   });
 
   test("returns a quota ServiceError for a 429 without retrying", async () => {
@@ -556,7 +677,11 @@ describe("collectAudienceService error paths", () => {
     if (result.error.domain === "quota") {
       expect(result.error.retryAfterSeconds).toBe(90);
     }
-    expect(calls).toHaveLength(1);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
   });
 
   test("leaves retryAfterSeconds undefined when a 429 Retry-After header is empty", async () => {
@@ -574,7 +699,11 @@ describe("collectAudienceService error paths", () => {
     if (result.error.domain === "quota") {
       expect(result.error.retryAfterSeconds).toBeUndefined();
     }
-    expect(calls).toHaveLength(1);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
   });
 
   test("leaves retryAfterSeconds undefined when a 429 Retry-After header is blank", async () => {
@@ -592,7 +721,11 @@ describe("collectAudienceService error paths", () => {
     if (result.error.domain === "quota") {
       expect(result.error.retryAfterSeconds).toBeUndefined();
     }
-    expect(calls).toHaveLength(1);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
   });
 
   test("retries an API error whose status is unknown", async () => {
@@ -612,6 +745,12 @@ describe("collectAudienceService error paths", () => {
 
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(4);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+      "ageGroup,gender",
+    ]);
   });
 
   test("validates input before making an API request", async () => {
