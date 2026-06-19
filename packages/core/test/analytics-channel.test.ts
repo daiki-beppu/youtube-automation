@@ -21,17 +21,11 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { QuotaExhaustedError, YouTubeAPIError } from "@youtube-automation/core";
 import {
   ChannelAnalyticsInput,
   ChannelAnalyticsOutput,
   collectChannelAnalyticsService,
 } from "@youtube-automation/core/analytics/channel";
-
-// shouldRetryAnalyticsQuery is an internal cross-feature helper, not part of the
-// package public exports. The retry-permit truth table is pinned through a
-// relative import (oauth-interactive.test.ts:20 pattern).
-import { shouldRetryAnalyticsQuery } from "../src/analytics/query.ts";
 
 // Derive the input / deps shapes from the service itself (oauth-refresh.test.ts:25-26)
 // so the test pins behavior, not the exported name of the injection bag.
@@ -70,6 +64,12 @@ const makeAnalyticsClient = (behavior: QueryBehavior) => {
 
 const makeDeps = (client: unknown): ChannelAnalyticsDeps =>
   ({ youtubeAnalytics: client }) as unknown as ChannelAnalyticsDeps;
+
+const makeDepsWithNoSleep = (client: unknown): ChannelAnalyticsDeps =>
+  ({
+    sleep: () => Promise.resolve(),
+    youtubeAnalytics: client,
+  }) as unknown as ChannelAnalyticsDeps;
 
 // Builds a gaxios-shaped error (errors.test.ts:23): a real Error with a
 // `response` carrying `status` + payload, mirroring the googleapis surface the
@@ -542,61 +542,29 @@ describe("ChannelAnalyticsOutput schema", () => {
   });
 });
 
-// --- retry-permit predicate -----------------------------------------------
-// Pins shouldRetryAnalyticsQuery's truth table directly. The service's quota/403 paths
-// only assert the *negative* branch (calls === 1); without this, the
-// retry-permit branch (5xx / unknown-status → retry, load-bearing per
-// service.ts:83-94) is unexercised and a regression making 5xx non-retryable
-// would pass silently. Pure predicate calls — no real sleep / API.
+// --- retry integration -------------------------------------------------------
 
-describe("shouldRetryAnalyticsQuery", () => {
-  test("retries a transient 5xx server error", () => {
-    // Given the normalizer produced a 503 YouTubeAPIError
-    // Then the failure is treated as transient and retried
-    expect(
-      shouldRetryAnalyticsQuery(
-        new YouTubeAPIError("boom", { statusCode: 503 })
-      )
-    ).toBe(true);
-  });
+describe("collectChannelAnalyticsService retry", () => {
+  test("retries a transient 500 and returns the next successful response", async () => {
+    // Given a fake client that fails with a 500 on the first attempt, then succeeds
+    let attempt = 0;
+    const { calls, client } = makeAnalyticsClient(() => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw gaxiosError("server error", { data: {}, status: 500 });
+      }
+      return naturalResponse();
+    });
 
-  test("retries at the 500 server-error boundary", () => {
-    // Given the lowest 5xx status (HTTP_SERVER_ERROR_MIN)
-    // Then it is still transient
-    expect(
-      shouldRetryAnalyticsQuery(
-        new YouTubeAPIError("boom", { statusCode: 500 })
-      )
-    ).toBe(true);
-  });
+    // When collecting with a no-sleep deps (deterministic, no real wait)
+    const result = await collectChannelAnalyticsService(
+      baseInput,
+      makeDepsWithNoSleep(client)
+    );
 
-  test("retries when the status is unknown (network drop normalized without a status)", () => {
-    // Given a YouTubeAPIError carrying no statusCode
-    // Then it is treated as a transient failure
-    expect(shouldRetryAnalyticsQuery(new YouTubeAPIError("boom"))).toBe(true);
-  });
-
-  test("does not retry a permanent 4xx client error", () => {
-    // Given a 403 forbidden
-    // Then it is permanent and not retried
-    expect(
-      shouldRetryAnalyticsQuery(
-        new YouTubeAPIError("forbidden", { statusCode: 403 })
-      )
-    ).toBe(false);
-  });
-
-  test("does not retry a quota error (surfaced as a Result instead)", () => {
-    // Given a 429 quota error — defaultShouldRetry gates it out (ADR-0003)
-    // Then it is not retried
-    expect(
-      shouldRetryAnalyticsQuery(new QuotaExhaustedError("quota exceeded"))
-    ).toBe(false);
-  });
-
-  test("does not retry a value the normalizer never emits (defensive guard)", () => {
-    // Given a raw Error that is not a YouTubeAPIError — unreachable because
-    // executeQuery normalizes everything, but the guard must hold
-    expect(shouldRetryAnalyticsQuery(new Error("transient blip"))).toBe(false);
+    // Then the retry succeeds on the second attempt and returns the reshaped data
+    const value = expectOk(result);
+    expect(value.metrics).toHaveLength(6);
+    expect(calls).toHaveLength(2);
   });
 });

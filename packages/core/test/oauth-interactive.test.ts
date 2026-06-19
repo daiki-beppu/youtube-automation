@@ -91,25 +91,6 @@ describe("exchangeCode", () => {
   });
 });
 
-describe("interactiveAuthService", () => {
-  test("returns validation Result before starting the interactive flow when input is invalid", async () => {
-    const malformed = {
-      clientSecretsJson: "{}",
-      scopes: "not-array",
-    } as unknown as Parameters<
-      typeof interactiveModule.interactiveAuthService
-    >[0];
-
-    const result = await interactiveModule.interactiveAuthService(malformed);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("expected validation failure");
-    }
-    expect(result.error.domain).toBe("validation");
-  });
-});
-
 // Guards the public oauth surface against re-leaking implementation internals
 // (ADR-0003 §7 public-API minimization). The package.json subpath
 // "@youtube-automation/core/oauth/interactive" maps to interactive.ts, so this

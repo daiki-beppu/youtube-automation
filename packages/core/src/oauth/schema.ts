@@ -16,14 +16,6 @@ export const RefreshTokenInput = z
   .strict();
 export type RefreshTokenInput = z.infer<typeof RefreshTokenInput>;
 
-/** refreshTokenService / interactiveAuthService の成功出力。 */
-export const TokenJsonOutput = z
-  .object({
-    tokenJson: z.string(),
-  })
-  .strict();
-export type TokenJsonOutput = z.infer<typeof TokenJsonOutput>;
-
 /** interactiveAuthService の入力（CLI 専用・browser + local server）。 */
 export const InteractiveAuthInput = z
   .object({

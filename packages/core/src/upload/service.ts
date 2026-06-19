@@ -6,7 +6,7 @@
 // リトライ・バックオフは service が所有し、共通 `withRetry`（#959）に委譲する。quota（429）は
 // ADR-0003 の retry 規約に従い retry せず、`domain: "quota"` + `retryAfterSeconds` の Result で
 // caller へ返す。5xx 等の一時エラーは `withRetry` の既定予算（3 回）で再試行する。境界の
-// `createService` で `toServiceError` に集約し、CLI/MCP は `if (!r.ok)` で discriminate する。
+// try/catch で `toServiceError` に集約し、CLI/MCP は `if (!r.ok)` で discriminate する。
 //
 // seam contract（テストの fake と一致させる契約）:
 //   deps.youtube.videos.insert(params) -> { data: { id?: string } }
@@ -20,12 +20,15 @@ import { readFile, stat } from "node:fs/promises";
 
 import sharp from "sharp";
 
-import { classifyGaxiosError } from "../errors.ts";
+import { classifyGaxiosError, toServiceError } from "../errors.ts";
+import type { ServiceError } from "../errors.ts";
 import type { YouTubeClient } from "../oauth/client.ts";
+import { err, ok } from "../result.ts";
+import type { Result } from "../result.ts";
 import { withRetry } from "../retry.ts";
 import type { SleepMs } from "../retry.ts";
-import { createService } from "../service.ts";
 import { MAX_THUMBNAIL_BYTES, UploadInput, UploadOutput } from "./schema.ts";
+import type { UploadRequest } from "./schema.ts";
 
 /**
  * uploadVideoService の注入依存。
@@ -220,10 +223,12 @@ const trySetThumbnail = async (
  * `trySetThumbnail` のコメント参照）。insert 自体の失敗（quota / 5xx / id 欠落等）は従来どおり
  * err を返す。
  */
-export const uploadVideoService = createService(
-  UploadInput,
-  UploadOutput,
-  async (request, deps: UploadDeps) => {
+export const uploadVideoService = async (
+  input: UploadRequest,
+  deps: UploadDeps
+): Promise<Result<UploadOutput, ServiceError>> => {
+  try {
+    const request = UploadInput.parse(input);
     await assertVideoExists(request.file);
 
     const body = buildRequestBody(request.metadata);
@@ -245,6 +250,8 @@ export const uploadVideoService = createService(
         ? false
         : await trySetThumbnail(deps, videoId, request.thumbnail);
 
-    return { thumbnailSet, videoId };
+    return ok(UploadOutput.parse({ thumbnailSet, videoId }));
+  } catch (error) {
+    return err(toServiceError(error));
   }
-);
+};

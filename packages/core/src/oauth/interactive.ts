@@ -13,10 +13,13 @@ import { spawn } from "node:child_process";
 
 import { OAuth2Client } from "google-auth-library";
 
-import { createService } from "../service.ts";
+import { toServiceError } from "../errors.ts";
+import type { ServiceError } from "../errors.ts";
+import { err, ok } from "../result.ts";
+import type { Result } from "../result.ts";
 import { buildAuthUrl, exchangeCode } from "./interactive-internal.ts";
 import { parseClientSecrets } from "./internal.ts";
-import { InteractiveAuthInput, TokenJsonOutput } from "./schema.ts";
+import { InteractiveAuthInput } from "./schema.ts";
 
 // OS のブラウザを開くコマンド（pure JS では開けないため subprocess を起動する）。
 // interactive は CLI 専用で、lint が MCP からの import を遮断しているため許容する。
@@ -83,14 +86,17 @@ const runInteractiveFlow = async (
 
 /**
  * ブラウザ consent でユーザーを認証し、発行された credentials を token.json 文字列で
- * 返す（CLI 専用）。入力は `.strict()` schema で先に検証し、失敗は境界の `createService`
+ * 返す（CLI 専用）。入力は `.strict()` schema で先に検証し、失敗は境界の `toServiceError`
  * 経由で `Result` に変換する（throw しない）。
  */
-export const interactiveAuthService = createService(
-  InteractiveAuthInput,
-  TokenJsonOutput,
-  async ({ clientSecretsJson, scopes }) => {
+export const interactiveAuthService = async (
+  input: InteractiveAuthInput
+): Promise<Result<{ tokenJson: string }, ServiceError>> => {
+  try {
+    const { clientSecretsJson, scopes } = InteractiveAuthInput.parse(input);
     const tokenJson = await runInteractiveFlow(clientSecretsJson, scopes);
-    return { tokenJson };
+    return ok({ tokenJson });
+  } catch (error) {
+    return err(toServiceError(error));
   }
-);
+};

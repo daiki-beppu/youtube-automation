@@ -18,6 +18,7 @@
 import type { youtubeAnalytics_v2 } from "googleapis";
 
 import { withRetry } from "../../retry.ts";
+import type { SleepMs } from "../../retry.ts";
 import { createService } from "../../service.ts";
 import { requireHeaders, resolveColumnIndex } from "../columns.ts";
 import { executeQuery, shouldRetryAnalyticsQuery } from "../query.ts";
@@ -37,6 +38,7 @@ type ChannelMetricRecord = ChannelAnalyticsOutput["metrics"][number];
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
 interface ChannelAnalyticsDeps {
+  readonly sleep?: SleepMs;
   readonly youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics;
 }
 
@@ -87,7 +89,7 @@ export const collectChannelAnalyticsService = createService(
     const params = buildQueryParams(request);
     const data = await withRetry(
       () => executeQuery(deps.youtubeAnalytics, params, QUERY_CONTEXT),
-      { shouldRetry: shouldRetryAnalyticsQuery }
+      { shouldRetry: shouldRetryAnalyticsQuery, sleep: deps.sleep }
     );
     return { metrics: reshapeToLongFormat(data) };
   }
