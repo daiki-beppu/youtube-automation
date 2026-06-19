@@ -5,24 +5,51 @@
 // バケット構成（Issue #827）:
 //   identity     → { meta }
 //   publishing   → { audio, content, shorts, workflow, youtube }
-//   engagement   → { comments, pinnedComment, playlists }（localizations は loader 注入）
+//   engagement   → { comments, pinnedComment, playlists, localizations }
 //   integrations → { analytics, distrokid }
 //
 // content.tags.channelName は identity.meta 由来のセクション横断値のため、合成ルートで注入する。
-// cross-section 検証（title.theme_scenes ⊆ tags.themes）は superRefine で行う。
-// localizations は別ファイル（`config/localizations.json`）由来のため loader が engagement へ合成する。
+// cross-section / cross-file 検証は superRefine で行う。
 
 import { z } from "zod";
 
 import { Engagement } from "./engagement.ts";
 import { Identity } from "./identity.ts";
 import { Integrations } from "./integrations.ts";
-import type { Localizations } from "./localizations.ts";
+import { isPlainObject } from "./internal.ts";
+import { Localizations, localizationsAbsent } from "./localizations.ts";
 import { Publishing } from "./publishing.ts";
+
+const LOCALIZATIONS_KEY = "localizations";
+
+const parseLocalizations = (locRaw: unknown, fallbackLanguage: string) => {
+  if (locRaw === undefined) {
+    return localizationsAbsent(fallbackLanguage);
+  }
+
+  const localizations = Localizations.safeParse(locRaw);
+  if (localizations.success) {
+    return localizations.data;
+  }
+
+  throw new z.ZodError(
+    localizations.error.issues.map((issue) => ({
+      ...issue,
+      path: [LOCALIZATIONS_KEY, ...issue.path],
+    }))
+  );
+};
 
 const assemble = (merged: unknown) => {
   const identity = Identity.parse(merged);
   const publishing = Publishing.parse(merged);
+  const engagement = Engagement.parse(merged);
+  const locRaw = isPlainObject(merged) ? merged[LOCALIZATIONS_KEY] : undefined;
+  const localizations = parseLocalizations(
+    locRaw,
+    publishing.youtube.api.language
+  );
+
   // tags.channelName は content 単体では決まらないため meta（identity）から注入する。
   const content = {
     ...publishing.content,
@@ -32,14 +59,14 @@ const assemble = (merged: unknown) => {
     },
   };
   return {
-    engagement: Engagement.parse(merged),
+    engagement: { ...engagement, localizations },
     identity,
     integrations: Integrations.parse(merged),
     publishing: { ...publishing, content },
   };
 };
 
-/** merged config を 4 バケット ChannelConfig（localizations を除く）へ組み立てる schema。 */
+/** merged config を 4 バケット ChannelConfig へ組み立てる schema。 */
 export const ChannelConfigSchema = z
   .unknown()
   .transform(assemble)
@@ -59,17 +86,23 @@ export const ChannelConfigSchema = z
         message: `title.theme_scenes に tags.themes で定義されていないテーマキーがあります: ${JSON.stringify(unknownScenes)}`,
       });
     }
+
+    if (config.engagement.localizations.exists) {
+      const supported = new Set(
+        config.engagement.localizations.supportedLanguages
+      );
+      const unknownLangs =
+        config.publishing.youtube.contentModel.languages.filter(
+          (lang) => !supported.has(lang)
+        );
+      if (unknownLangs.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: `content_model.languages に localizations.supported_languages へ未登録の言語があります: ${JSON.stringify(unknownLangs)}`,
+        });
+      }
+    }
   });
 
-type Assembled = z.infer<typeof ChannelConfigSchema>;
-
-/**
- * チャンネル設定の合成ルート（4 バケット名前空間でアクセスする）。
- * localizations は loader が engagement バケットへ注入するため、合成スキーマの infer に
- * 後付けする（schema 単体では表現できない cross-file 値のため intersection で合成する）。
- */
-export type ChannelConfig = Omit<Assembled, "engagement"> & {
-  readonly engagement: Assembled["engagement"] & {
-    readonly localizations: Localizations;
-  };
-};
+/** チャンネル設定の合成ルート（4 バケット名前空間でアクセスする）。 */
+export type ChannelConfig = z.infer<typeof ChannelConfigSchema>;

@@ -1,7 +1,6 @@
 // engagement バケット — 視聴者接点（comments / pinnedComment / playlists / localizations）。
 //
-// localizations は `config/channel/` の外（`config/localizations.json`）由来のため、ここでは
-// 束ねず loader が読み込んで engagement バケットへ注入する（Issue #827）。
+// localizations は sidecar 由来の値として ChannelConfigSchema の assemble で engagement に合成する。
 
 import { z } from "zod";
 

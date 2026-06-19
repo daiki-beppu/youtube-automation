@@ -14,7 +14,9 @@ import { join, resolve } from "node:path";
 // exercises the core `exports` map. A missing/broken subpath export fails
 // resolution here, not in tsc.
 import { channelDir, loadConfig, reset } from "@youtube-automation/core/config";
+import { z } from "zod";
 
+import { ChannelConfigSchema } from "../src/config/config.ts";
 import {
   cleanupChannels,
   minimalSections,
@@ -24,6 +26,7 @@ import {
   setupEmptyChannel,
   writeJson,
 } from "./config-fixtures.ts";
+import type { Sections } from "./config-fixtures.ts";
 
 beforeAll(saveChannelDirEnv);
 afterAll(restoreChannelDirEnv);
@@ -38,6 +41,22 @@ afterEach(() => {
   Reflect.deleteProperty(process.env, "CHANNEL_DIR");
   cleanupChannels();
 });
+
+const mergedSchemaInput = (
+  sections: Sections,
+  localizations?: Record<string, unknown>
+): Record<string, unknown> => {
+  const merged: Record<string, unknown> = {};
+  for (const data of Object.values(sections)) {
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      Object.assign(merged, data);
+    }
+  }
+  if (localizations !== undefined) {
+    merged.localizations = localizations;
+  }
+  return merged;
+};
 
 // --- happy path: minimal required sections --------------------------------
 
@@ -130,6 +149,37 @@ describe("loadConfig — top-level merge", () => {
     // When/Then the non-object top level is rejected at merge time
     expect(() => loadConfig()).toThrow(/^config:/u);
   });
+
+  test("rejects localizations in config/channel when localizations.json exists", () => {
+    // Given localizations is declared in the channel glob and the sidecar file
+    const sections = minimalSections();
+    (sections["meta.json"] as Record<string, unknown>).localizations = {
+      supported_languages: ["ja"],
+    };
+    const dir = setupChannel(sections, {
+      languages: {},
+      supported_languages: ["ja"],
+    });
+    process.env.CHANNEL_DIR = dir;
+
+    // When/Then the pre-merge boundary rejects the ambiguous source
+    expect(() => loadConfig()).toThrow(/^config:/u);
+    expect(() => loadConfig()).toThrow(/localizations/u);
+  });
+
+  test("rejects localizations in config/channel when localizations.json is absent", () => {
+    // Given localizations is declared in the channel glob without the sidecar file
+    const sections = minimalSections();
+    (sections["meta.json"] as Record<string, unknown>).localizations = {
+      supported_languages: ["ja"],
+    };
+    const dir = setupChannel(sections);
+    process.env.CHANNEL_DIR = dir;
+
+    // When/Then the pre-merge boundary still rejects the misplaced source
+    expect(() => loadConfig()).toThrow(/^config:/u);
+    expect(() => loadConfig()).toThrow(/localizations/u);
+  });
 });
 
 // --- structural guards -----------------------------------------------------
@@ -175,6 +225,19 @@ describe("loadConfig — cross-file validation", () => {
     expect(() => loadConfig()).toThrow(/supported_languages/u);
   });
 
+  test("reports invalid localizations sidecar with its file boundary", () => {
+    // Given localizations.json has an invalid schema shape
+    const dir = setupChannel(minimalSections(), {
+      supported_languages: "ja",
+    });
+    process.env.CHANNEL_DIR = dir;
+
+    // When/Then loadConfig keeps the sidecar filename in the boundary error
+    expect(() => loadConfig()).toThrow(
+      /^config: localizations\.json: supported_languages:/u
+    );
+  });
+
   test("rejects theme_scenes keys absent from tags.themes", () => {
     // Given a title.theme_scenes key that is not a declared tags.themes key
     const sections = minimalSections();
@@ -186,6 +249,84 @@ describe("loadConfig — cross-file validation", () => {
 
     // When/Then the dangling theme key is rejected
     expect(() => loadConfig()).toThrow(/theme_scenes/u);
+  });
+});
+
+// --- ChannelConfigSchema localizations contract ----------------------------
+
+describe("ChannelConfigSchema — localizations", () => {
+  test("places raw localizations input under engagement", () => {
+    // Given merged config input already carrying the sidecar localizations JSON
+    const localizations = {
+      default_language: "ja",
+      languages: { ja: { title_template: "x" } },
+      supported_languages: ["ja", "en"],
+    };
+    const merged = mergedSchemaInput(minimalSections(), localizations);
+
+    // When the schema assembles the channel config
+    const config = ChannelConfigSchema.parse(merged);
+
+    // Then localizations is normalized by the schema into engagement
+    expect(config.engagement.localizations.exists).toBe(true);
+    expect(config.engagement.localizations.supportedLanguages).toEqual([
+      "ja",
+      "en",
+    ]);
+    expect(config).not.toHaveProperty("localizations");
+  });
+
+  test("falls back to api.language when raw localizations input is absent", () => {
+    // Given merged config input without localizations
+    const merged = mergedSchemaInput(minimalSections());
+
+    // When the schema assembles the channel config
+    const config = ChannelConfigSchema.parse(merged);
+
+    // Then the absent state is still represented inside engagement
+    expect(config.engagement.localizations.exists).toBe(false);
+    expect(config.engagement.localizations.supportedLanguages).toEqual(["ja"]);
+  });
+
+  test("rejects content_model.languages outside supported_languages", () => {
+    // Given merged config input whose content language is not localized
+    const sections = minimalSections();
+    (sections["youtube.json"] as Record<string, unknown>).content_model = {
+      languages: ["en"],
+      type: "collection",
+    };
+    const merged = mergedSchemaInput(sections, {
+      languages: {},
+      supported_languages: ["ja", "ko"],
+    });
+
+    // When/Then the schema owns the cross-file subset validation
+    expect(() => ChannelConfigSchema.parse(merged)).toThrow(
+      /content_model\.languages.*supported_languages/u
+    );
+  });
+
+  test("prefixes invalid raw localizations issues under localizations", () => {
+    // Given merged config input carrying an invalid localizations sidecar shape
+    const merged = mergedSchemaInput(minimalSections(), {
+      supported_languages: "ja",
+    });
+
+    // When the schema rejects it
+    let caught: unknown;
+    try {
+      ChannelConfigSchema.parse(merged);
+    } catch (error) {
+      caught = error;
+    }
+
+    // Then callers can identify the sidecar boundary from the issue path
+    expect(caught).toBeInstanceOf(z.ZodError);
+    const error = caught as z.ZodError;
+    expect(error.issues[0]?.path).toEqual([
+      "localizations",
+      "supported_languages",
+    ]);
   });
 });
 
