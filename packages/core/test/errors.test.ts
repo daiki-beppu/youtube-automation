@@ -275,6 +275,28 @@ describe("classifyGaxiosError", () => {
     expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
   });
 
+  test("promotes a typed YouTubeAPIError with status 429 to QuotaExhaustedError", () => {
+    // Given a service seam that already normalized the error as YouTubeAPIError
+    const typed = new YouTubeAPIError("videos.insert: quota exceeded", {
+      statusCode: 429,
+    });
+    // When classifying it at a retry boundary
+    const error = classifyGaxiosError(typed, "videos.insert");
+    // Then it still becomes quota so retry policy does not treat it as API 429
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect(error.message).toBe("videos.insert: quota exceeded");
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+  });
+
+  test("preserves an already-typed QuotaExhaustedError instance", () => {
+    // Given a quota error with a parsed retry hint
+    const quota = new QuotaExhaustedError("quota exceeded", 90);
+    // When classifying it again
+    const error = classifyGaxiosError(quota, "videos.insert");
+    // Then the payload-carrying instance is preserved
+    expect(error).toBe(quota);
+  });
+
   test("leaves a non-429 as a plain YouTubeAPIError for the retry path", () => {
     // Given a gaxios-shaped 500
     const raw = gaxiosError("internal error", { status: 500 });

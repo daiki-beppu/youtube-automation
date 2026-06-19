@@ -182,7 +182,13 @@ export const classifyGaxiosError = (
   error: unknown,
   context: string
 ): YouTubeAPIError => {
+  if (error instanceof QuotaExhaustedError) {
+    return error;
+  }
   if (error instanceof YouTubeAPIError) {
+    if (error.statusCode === 429) {
+      return new QuotaExhaustedError(error.message);
+    }
     return error;
   }
   const apiError = YouTubeAPIError.fromGaxiosError(error, context);

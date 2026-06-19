@@ -51,4 +51,31 @@ describe("createService", () => {
     }
     expect(result.error.domain).toBe("config");
   });
+
+  test("returns validation ServiceError when handler output has an invalid field type", async () => {
+    const service = createService(Input, Output, () => ({ greeting: 123 }));
+
+    const result = await service({ name: "world" }, {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected output validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+  });
+
+  test("returns validation ServiceError when handler output has an extra key", async () => {
+    const service = createService(Input, Output, () => ({
+      extra: true,
+      greeting: "hello world",
+    }));
+
+    const result = await service({ name: "world" }, {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected output validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+  });
 });

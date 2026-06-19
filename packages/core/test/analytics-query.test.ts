@@ -95,7 +95,30 @@ describe("executeQuery", () => {
     });
   });
 
-  test("preserves existing typed YouTube API errors", async () => {
+  for (const retryAfter of ["", "   ", "later"]) {
+    test(`leaves retryAfterSeconds undefined for unusable Retry-After ${JSON.stringify(retryAfter)}`, async () => {
+      const { client } = makeAnalyticsClient(() => {
+        throw gaxiosError("quota exceeded", {
+          data: { error: { errors: [{ reason: "quotaExceeded" }] } },
+          headers: { "retry-after": retryAfter },
+          status: 429,
+        });
+      });
+
+      await expect(
+        executeQuery(
+          client as unknown as QueryClient,
+          queryParams,
+          "analytics query"
+        )
+      ).rejects.toMatchObject({
+        retryAfterSeconds: undefined,
+        statusCode: 429,
+      });
+    });
+  }
+
+  test("preserves existing typed quota errors", async () => {
     const error = new QuotaExhaustedError("quota exceeded", 30);
     const { client } = makeAnalyticsClient(() => {
       throw error;
@@ -108,6 +131,35 @@ describe("executeQuery", () => {
         "analytics query"
       )
     ).rejects.toBe(error);
+  });
+
+  test("preserves existing typed non-quota YouTube API errors", async () => {
+    const error = new YouTubeAPIError("forbidden", { statusCode: 403 });
+    const { client } = makeAnalyticsClient(() => {
+      throw error;
+    });
+
+    await expect(
+      executeQuery(
+        client as unknown as QueryClient,
+        queryParams,
+        "analytics query"
+      )
+    ).rejects.toBe(error);
+  });
+
+  test("promotes existing typed 429 YouTube API errors to quota errors", async () => {
+    const { client } = makeAnalyticsClient(() => {
+      throw new YouTubeAPIError("quota exceeded", { statusCode: 429 });
+    });
+
+    await expect(
+      executeQuery(
+        client as unknown as QueryClient,
+        queryParams,
+        "analytics query"
+      )
+    ).rejects.toBeInstanceOf(QuotaExhaustedError);
   });
 
   test("normalizes non-quota gaxios errors to YouTubeAPIError", async () => {
