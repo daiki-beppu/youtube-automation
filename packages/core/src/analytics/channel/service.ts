@@ -23,6 +23,12 @@ import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import {
+  readCoercedNumberCell,
+  readStringCell,
+  requireHeaders,
+  resolveColumnIndex,
+} from "../column-helpers.ts";
+import {
   shouldRetryAnalyticsQuery,
   toAnalyticsQueryError,
 } from "../query-error.ts";
@@ -41,7 +47,6 @@ const VIDEO_FILTER_PREFIX = "video==";
 type ChannelMetricRecord = ChannelAnalyticsOutput["metrics"][number];
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
-type ColumnHeaders = NonNullable<QueryResponse["columnHeaders"]>;
 
 const buildQueryParams = (input: ChannelAnalyticsInput): QueryParams => ({
   dimensions: DAY_DIMENSION,
@@ -70,39 +75,29 @@ const queryDailyReport = async (
   }
 };
 
-// 列名で位置を引く（位置 index 決め打ちを避ける）。要求した列が欠けていれば値が
-// 黙って NaN になる前に fail fast する。
-const resolveColumnIndex = (headers: ColumnHeaders, name: string): number => {
-  const index = headers.findIndex((header) => header.name === name);
-  if (index === -1) {
-    throw new Error(
-      `${QUERY_CONTEXT}: response is missing the "${name}" column`
-    );
-  }
-  return index;
-};
-
 const reshapeToLongFormat = (data: QueryResponse): ChannelMetricRecord[] => {
   // データ無しの期間は API が `rows` を省く（v2.d.ts contract）→ 空配列で ok。
   const { rows } = data;
   if (!rows) {
     return [];
   }
-  const headers = data.columnHeaders;
-  if (!headers) {
-    throw new Error(`${QUERY_CONTEXT}: response has rows but no columnHeaders`);
-  }
-  const dayIndex = resolveColumnIndex(headers, DAY_DIMENSION);
+  const headers = requireHeaders(data, QUERY_CONTEXT);
+  const dayIndex = resolveColumnIndex(headers, DAY_DIMENSION, QUERY_CONTEXT);
   const metricColumns = CHANNEL_METRICS.map((metric) => ({
-    index: resolveColumnIndex(headers, metric),
+    index: resolveColumnIndex(headers, metric, QUERY_CONTEXT),
     metric,
   }));
   return rows.flatMap((row) => {
-    const date = String(row[dayIndex]);
+    const date = readStringCell(row, dayIndex, DAY_DIMENSION, QUERY_CONTEXT);
     return metricColumns.map((column) => ({
       date,
       metric: column.metric,
-      value: Number(row[column.index]),
+      value: readCoercedNumberCell(
+        row,
+        column.index,
+        column.metric,
+        QUERY_CONTEXT
+      ),
     }));
   });
 };

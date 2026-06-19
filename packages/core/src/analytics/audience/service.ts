@@ -12,6 +12,12 @@ import type { Result } from "../../result.ts";
 import { defaultShouldRetry, withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
 import {
+  readCoercedNumberCell,
+  readStringCell,
+  requireHeaders,
+  resolveColumnIndex,
+} from "../column-helpers.ts";
+import {
   AUDIENCE_COUNTRY_METRICS,
   AUDIENCE_DEMOGRAPHIC_METRICS,
   AUDIENCE_SUBSCRIBED_STATUS_METRICS,
@@ -32,7 +38,6 @@ const HTTP_SERVER_ERROR_MIN = 500;
 
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
-type ColumnHeaders = NonNullable<QueryResponse["columnHeaders"]>;
 type AudienceQueryParams = readonly [QueryParams, QueryParams, QueryParams];
 interface AudienceAnalyticsDeps {
   readonly sleep?: SleepMs;
@@ -166,41 +171,6 @@ const buildAudienceQueries = (
   ];
 };
 
-const resolveColumnIndex = (headers: ColumnHeaders, name: string): number => {
-  const index = headers.findIndex((header) => header.name === name);
-  if (index === -1) {
-    throw new Error(
-      `${QUERY_CONTEXT}: response is missing the "${name}" column`
-    );
-  }
-  return index;
-};
-
-const requireHeadersForRows = (data: QueryResponse): ColumnHeaders => {
-  if (!data.columnHeaders) {
-    throw new Error(`${QUERY_CONTEXT}: response has rows but no columnHeaders`);
-  }
-  return data.columnHeaders;
-};
-
-const readStringCell = (row: readonly unknown[], index: number): string => {
-  const value = row[index];
-  if (typeof value !== "string") {
-    throw new TypeError(`${QUERY_CONTEXT}: response cell is not a string`);
-  }
-  return value;
-};
-
-const readNumberCell = (row: readonly unknown[], index: number): number => {
-  const value = Number(row[index]);
-  if (!Number.isFinite(value)) {
-    throw new TypeError(
-      `${QUERY_CONTEXT}: response cell is not a finite number`
-    );
-  }
-  return value;
-};
-
 const addToTotals = (
   totals: Map<string, number>,
   key: string,
@@ -234,16 +204,33 @@ const reshapeDemographics = (data: QueryResponse): AudienceMetricRecord[] => {
   if (!data.rows) {
     return [];
   }
-  const headers = requireHeadersForRows(data);
-  const ageGroupIndex = resolveColumnIndex(headers, "ageGroup");
-  const genderIndex = resolveColumnIndex(headers, "gender");
-  const valueIndex = resolveColumnIndex(headers, VIEWER_PERCENTAGE_METRIC);
+  const headers = requireHeaders(data, QUERY_CONTEXT);
+  const ageGroupIndex = resolveColumnIndex(headers, "ageGroup", QUERY_CONTEXT);
+  const genderIndex = resolveColumnIndex(headers, "gender", QUERY_CONTEXT);
+  const valueIndex = resolveColumnIndex(
+    headers,
+    VIEWER_PERCENTAGE_METRIC,
+    QUERY_CONTEXT
+  );
   const ageGroupTotals = new Map<string, number>();
   const genderTotals = new Map<string, number>();
   for (const row of data.rows) {
-    const value = readNumberCell(row, valueIndex);
-    addToTotals(ageGroupTotals, readStringCell(row, ageGroupIndex), value);
-    addToTotals(genderTotals, readStringCell(row, genderIndex), value);
+    const value = readCoercedNumberCell(
+      row,
+      valueIndex,
+      VIEWER_PERCENTAGE_METRIC,
+      QUERY_CONTEXT
+    );
+    addToTotals(
+      ageGroupTotals,
+      readStringCell(row, ageGroupIndex, "ageGroup", QUERY_CONTEXT),
+      value
+    );
+    addToTotals(
+      genderTotals,
+      readStringCell(row, genderIndex, "gender", QUERY_CONTEXT),
+      value
+    );
   }
   return [
     ...toTotalRecords(ageGroupTotals, "ageGroup"),
@@ -267,19 +254,36 @@ const reshapeCountry = (data: QueryResponse): AudienceMetricRecord[] => {
   if (!data.rows) {
     return [];
   }
-  const headers = requireHeadersForRows(data);
-  const countryIndex = resolveColumnIndex(headers, COUNTRY_DIMENSION);
+  const headers = requireHeaders(data, QUERY_CONTEXT);
+  const countryIndex = resolveColumnIndex(
+    headers,
+    COUNTRY_DIMENSION,
+    QUERY_CONTEXT
+  );
   const metricColumns = AUDIENCE_COUNTRY_METRICS.filter(
     (metric) => metric !== VIEW_SHARE_PERCENT_METRIC
-  ).map((metric) => ({ index: resolveColumnIndex(headers, metric), metric }));
+  ).map((metric) => ({
+    index: resolveColumnIndex(headers, metric, QUERY_CONTEXT),
+    metric,
+  }));
   const records = data.rows.flatMap((row) => {
-    const country = readStringCell(row, countryIndex);
+    const country = readStringCell(
+      row,
+      countryIndex,
+      COUNTRY_DIMENSION,
+      QUERY_CONTEXT
+    );
     return metricColumns.map(
       (column): CountryMetricRecord => ({
         country,
         metric: column.metric,
         segment: COUNTRY_DIMENSION,
-        value: readNumberCell(row, column.index),
+        value: readCoercedNumberCell(
+          row,
+          column.index,
+          column.metric,
+          QUERY_CONTEXT
+        ),
       })
     );
   });
@@ -305,19 +309,36 @@ const reshapeSubscribedStatus = (
   if (!data.rows) {
     return [];
   }
-  const headers = requireHeadersForRows(data);
-  const statusIndex = resolveColumnIndex(headers, SUBSCRIBED_STATUS_DIMENSION);
+  const headers = requireHeaders(data, QUERY_CONTEXT);
+  const statusIndex = resolveColumnIndex(
+    headers,
+    SUBSCRIBED_STATUS_DIMENSION,
+    QUERY_CONTEXT
+  );
   const metricColumns = AUDIENCE_SUBSCRIBED_STATUS_METRICS.filter(
     (metric) => metric !== VIEW_SHARE_PERCENT_METRIC
-  ).map((metric) => ({ index: resolveColumnIndex(headers, metric), metric }));
+  ).map((metric) => ({
+    index: resolveColumnIndex(headers, metric, QUERY_CONTEXT),
+    metric,
+  }));
   const records = data.rows.flatMap((row) => {
-    const subscribedStatus = readStringCell(row, statusIndex);
+    const subscribedStatus = readStringCell(
+      row,
+      statusIndex,
+      SUBSCRIBED_STATUS_DIMENSION,
+      QUERY_CONTEXT
+    );
     return metricColumns.map(
       (column): SubscribedStatusMetricRecord => ({
         metric: column.metric,
         segment: SUBSCRIBED_STATUS_DIMENSION,
         subscribedStatus,
-        value: readNumberCell(row, column.index),
+        value: readCoercedNumberCell(
+          row,
+          column.index,
+          column.metric,
+          QUERY_CONTEXT
+        ),
       })
     );
   });
