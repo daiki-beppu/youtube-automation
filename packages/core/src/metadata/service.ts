@@ -11,6 +11,7 @@ import {
   generateLocalizations,
   validateScenePhrases,
 } from "./collection.ts";
+import { formatCompactDuration, formatLongDuration } from "./duration.ts";
 import { rawLocalizations } from "./loc-data.ts";
 import { GenerateMetadataInput, GenerateMetadataOutput } from "./schema.ts";
 import type {
@@ -58,45 +59,6 @@ const secondsToTimestamp = (seconds: number): string => {
   }
   const paddedMinutes = minutes.toString().padStart(2, "0");
   return `${hours}:${paddedMinutes}:${paddedSeconds}`;
-};
-
-const roundHalfToEven = (value: number): number => {
-  const floor = Math.floor(value);
-  const diff = value - floor;
-  if (diff < 0.5) {
-    return floor;
-  }
-  if (diff > 0.5) {
-    return floor + 1;
-  }
-  return floor % 2 === 0 ? floor : floor + 1;
-};
-
-const formatDurationDisplay = (seconds: number): string => {
-  const minutes = seconds / 60;
-  if (minutes < 35) {
-    const rounded = Math.max(roundHalfToEven(minutes / 5) * 5, 5);
-    return `${rounded} min`;
-  }
-  if (minutes < 75) {
-    return "1 Hour";
-  }
-  if (minutes < 105) {
-    return "1.5 Hours";
-  }
-  if (minutes < 135) {
-    return "2 Hours";
-  }
-  const roundedHalfHours = roundHalfToEven((minutes / 60) * 2) / 2;
-  return `${roundedHalfHours} Hours`;
-};
-
-const formatDurationShort = (seconds: number): string => {
-  const minutes = seconds / 60;
-  if (minutes < 35) {
-    return `${Math.max(roundHalfToEven(minutes / 5) * 5, 5)}m`;
-  }
-  return `${roundHalfToEven((minutes / 60) * 2) / 2}h`;
 };
 
 const primaryActivity = (activities: string): string => {
@@ -155,8 +117,8 @@ const buildTitle = (
   return generateCompleteCollectionTitle(config, {
     activities,
     activity: primaryActivity(activities),
-    durationDisplay: formatDurationDisplay(durationSeconds),
-    durationShort: formatDurationShort(durationSeconds),
+    durationDisplay: formatLongDuration(durationSeconds),
+    durationShort: formatCompactDuration(durationSeconds),
     sceneEmoji: "",
     scenePhrase: scenePhraseForTitle(config, request),
     theme: request.theme,
@@ -232,19 +194,19 @@ const buildMetadataOutput = (
     timestamps
   );
 
-  return GenerateMetadataOutput.parse({
+  return {
     description,
     localizations,
     tags,
     timestamps,
     title,
     violations,
-  });
+  };
 };
 
 export const generateVideoMetadataService = createService(
   GenerateMetadataInput,
   GenerateMetadataOutput,
   (request, deps: { config: ChannelConfig }) =>
-    buildMetadataOutput(deps.config, request)
+    Promise.resolve(buildMetadataOutput(deps.config, request))
 );

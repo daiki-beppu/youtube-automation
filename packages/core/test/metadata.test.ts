@@ -49,6 +49,7 @@ import {
   generateLocalizations,
   validateScenePhrases,
 } from "../src/metadata/collection.ts";
+import { roundHalfToEven } from "../src/metadata/duration.ts";
 import {
   formatTitleTemplate,
   referencedPlaceholders,
@@ -737,10 +738,10 @@ describe("generateVideoMetadataService", () => {
       { config }
     );
 
-    expect(result.ok).toBe(true);
     if (!result.ok) {
       throw new Error(result.error.message);
     }
+    expect(result.ok).toBe(true);
     expect(result.value.title).toBe("Battle Royale - Study");
     expect(result.value.timestamps).toBe("0:00 Song A\n2:00 Song B");
     expect(result.value.description).toContain("🎵 Battle Royale - Study");
@@ -870,7 +871,7 @@ describe("generateVideoMetadataService", () => {
       {
         scenePhrases: {
           de: "Stiller Regen",
-          en: "x".repeat(120),
+          en: "x".repeat(100),
           ja: "静かな雨",
         },
         theme: "Battle Royale",
@@ -879,23 +880,123 @@ describe("generateVideoMetadataService", () => {
       { config }
     );
 
-    expect(result.ok).toBe(true);
     if (!result.ok) {
       throw new Error(result.error.message);
     }
+    expect(result.ok).toBe(true);
     expect(result.value.localizations).toBeUndefined();
     expect(result.value.violations.map((violation) => violation.lang)).toEqual([
       "en",
     ]);
   });
 
-  test("returns a validation error for malformed input", async () => {
+  test.each([
+    {
+      name: "missing tracks",
+      request: { theme: "Battle Royale" },
+    },
+    {
+      name: "null tracks",
+      request: { theme: "Battle Royale", tracks: null },
+    },
+    {
+      name: "object tracks",
+      request: { theme: "Battle Royale", tracks: { title: "Song A" } },
+    },
+    {
+      name: "empty tracks",
+      request: { theme: "Battle Royale", tracks: [] },
+    },
+    {
+      name: "negative start",
+      request: {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: -1, title: "Song A" }],
+      },
+    },
+    {
+      name: "fractional duration",
+      request: {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60.5, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "descending starts",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          { durationSeconds: 60, startSeconds: 60, title: "Song A" },
+          { durationSeconds: 60, startSeconds: 0, title: "Song B" },
+        ],
+      },
+    },
+  ])(
+    "returns a validation error for malformed input: $name",
+    async ({ request }) => {
+      const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+      const result = await generateVideoMetadataService(
+        request as unknown as Parameters<
+          typeof generateVideoMetadataService
+        >[0],
+        { config }
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("expected validation failure");
+      }
+      expect(result.error.domain).toBe("validation");
+    }
+  );
+
+  test.each([
+    {
+      name: "too many tracks",
+      request: {
+        theme: "Battle Royale",
+        tracks: Array.from({ length: 101 }, (_, index) => ({
+          durationSeconds: 1,
+          startSeconds: index,
+          title: `Song ${index}`,
+        })),
+      },
+    },
+    {
+      name: "oversized theme",
+      request: {
+        theme: "x".repeat(101),
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "oversized track title",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          { durationSeconds: 60, startSeconds: 0, title: "x".repeat(201) },
+        ],
+      },
+    },
+    {
+      name: "oversized timeline",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          {
+            durationSeconds: 24 * 60 * 60 + 1,
+            startSeconds: 0,
+            title: "Song A",
+          },
+        ],
+      },
+    },
+  ])("rejects oversized metadata input: $name", async ({ request }) => {
     const config = loadFrom(minimalSections(), LOCALIZATIONS);
 
     const result = await generateVideoMetadataService(
-      { theme: "Battle Royale", unexpected: true } as unknown as Parameters<
-        typeof generateVideoMetadataService
-      >[0],
+      request as unknown as Parameters<typeof generateVideoMetadataService>[0],
       { config }
     );
 
@@ -904,6 +1005,37 @@ describe("generateVideoMetadataService", () => {
       throw new Error("expected validation failure");
     }
     expect(result.error.domain).toBe("validation");
+  });
+
+  test("maps internal title validation errors to ServiceError", async () => {
+    const sections = minimalSections();
+    (sections["content.json"] as { title: Record<string, unknown> }).title = {
+      template:
+        "{theme} {theme} {theme} {theme} {theme} {theme} {theme} {theme}",
+    };
+    const config = loadFrom(sections, LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+      { config }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+    expect(result.error.message).toMatch(/^validation:/u);
+  });
+});
+
+describe("metadata duration formatting", () => {
+  test("uses one Python-compatible half-even rounding implementation", () => {
+    expect(roundHalfToEven(2.5)).toBe(2);
+    expect(roundHalfToEven(3.5)).toBe(4);
   });
 });
 
