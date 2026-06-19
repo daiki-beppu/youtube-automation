@@ -246,7 +246,6 @@ describe("collectChannelAnalyticsService success", () => {
     // Then it is ok with no records (not an error)
     expect(value.metrics).toEqual([]);
   });
-
 });
 
 // --- API query construction contract --------------------------------------
