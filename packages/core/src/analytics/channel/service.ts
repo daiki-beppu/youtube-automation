@@ -22,7 +22,12 @@ import type { ServiceError } from "../../errors.ts";
 import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
-import { requireHeaders, resolveColumnIndex } from "../column-helpers.ts";
+import {
+  readCoercedNumberCell,
+  readStringCell,
+  requireHeaders,
+  resolveColumnIndex,
+} from "../column-helpers.ts";
 import {
   shouldRetryAnalyticsQuery,
   toAnalyticsQueryError,
@@ -83,11 +88,16 @@ const reshapeToLongFormat = (data: QueryResponse): ChannelMetricRecord[] => {
     metric,
   }));
   return rows.flatMap((row) => {
-    const date = String(row[dayIndex]);
+    const date = readStringCell(row, dayIndex, DAY_DIMENSION, QUERY_CONTEXT);
     return metricColumns.map((column) => ({
       date,
       metric: column.metric,
-      value: Number(row[column.index]),
+      value: readCoercedNumberCell(
+        row,
+        column.index,
+        column.metric,
+        QUERY_CONTEXT
+      ),
     }));
   });
 };
