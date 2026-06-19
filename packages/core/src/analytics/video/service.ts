@@ -11,10 +11,7 @@
 //   deps.youtubeAnalytics.reports.query(params) -> { data: { columnHeaders?, rows? } }
 //   429 時は gaxios 形状 { response: { status: 429, headers: { "retry-after" } } } で reject。
 
-import {
-  classifyGaxiosError,
-  shouldRetryApiQuery,
-} from "../../errors.ts";
+import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";

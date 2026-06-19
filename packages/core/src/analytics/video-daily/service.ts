@@ -19,10 +19,7 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import {
-  classifyGaxiosError,
-  shouldRetryApiQuery,
-} from "../../errors.ts";
+import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
