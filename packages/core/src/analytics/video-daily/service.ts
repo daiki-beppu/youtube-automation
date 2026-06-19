@@ -4,8 +4,9 @@
 //
 // 構築済みの YouTube Analytics クライアントを `deps` で受け取り（ADR-0003 §7 / DI
 // seam）、`reports.query` の行列を `{ date, videoId, views }`
-// レコードへ map して `Result` で返す。core 内部（query / map）は throw OK で、
-// `createService` が入力 / 出力検証と `ServiceError` 変換を担う。マッピング:
+// レコードへ map して `Result` で返す。core 内部（query / map）は throw OK。境界の
+// `createService` で `toServiceError` 経由に集約し、CLI/MCP は `if (!r.ok)` で discriminate
+// する。マッピング:
 //   - schema 違反（未知キー / 非 YYYY-MM-DD）→ err(domain "validation")（zod ZodError）
 //   - 429 quota                              → err(domain "quota" + retryAfterSeconds)
 //   - その他の API エラー（403 等）          → err(domain "api")

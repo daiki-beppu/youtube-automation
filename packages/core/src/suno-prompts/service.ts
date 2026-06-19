@@ -1,6 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
 
-import { createService } from "../service-frame.ts";
+import { createService } from "../service.ts";
 import { buildEntries } from "./builder.ts";
 import { readSunoConfig } from "./config.ts";
 import { parsePatternsYaml } from "./parser.ts";

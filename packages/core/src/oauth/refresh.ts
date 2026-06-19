@@ -14,12 +14,11 @@
 import { OAuth2Client } from "google-auth-library";
 import type { Credentials } from "google-auth-library";
 
-import { toServiceError } from "../errors.ts";
 import type { ServiceError } from "../errors.ts";
-import { err, ok } from "../result.ts";
 import type { Result } from "../result.ts";
+import { createService } from "../service.ts";
 import { parseClientSecrets } from "./internal.ts";
-import { RefreshTokenInput } from "./schema.ts";
+import { RefreshTokenInput, TokenJsonOutput } from "./schema.ts";
 
 /** refresh が必要とする OAuth2Client の最小シェイプ（注入 seam）。 */
 interface RefreshOAuthClient {
@@ -62,18 +61,20 @@ const refreshCredentials = async (
  * refresh_token を seed してから refresh する。入力は `.strict()` schema で先に検証する
  * ため、未知キーは refresh に到達せず validation エラーになる。
  */
-export const refreshTokenService = async (
-  input: RefreshTokenInput,
-  deps: RefreshDeps = defaultDeps
-): Promise<Result<{ tokenJson: string }, ServiceError>> => {
-  try {
-    const { clientSecretsJson, tokenJson } = RefreshTokenInput.parse(input);
+const refreshTokenServiceCore = createService(
+  RefreshTokenInput,
+  TokenJsonOutput,
+  async ({ clientSecretsJson, tokenJson }, deps: RefreshDeps) => {
     const { clientId, clientSecret } = parseClientSecrets(clientSecretsJson);
     const client = deps.createOAuthClient({ clientId, clientSecret });
     client.setCredentials(JSON.parse(tokenJson) as Credentials);
     const credentials = await refreshCredentials(client);
-    return ok({ tokenJson: JSON.stringify(credentials) });
-  } catch (error) {
-    return err(toServiceError(error));
+    return { tokenJson: JSON.stringify(credentials) };
   }
-};
+);
+
+export const refreshTokenService = (
+  input: RefreshTokenInput,
+  deps: RefreshDeps = defaultDeps
+): Promise<Result<{ tokenJson: string }, ServiceError>> =>
+  refreshTokenServiceCore(input, deps);

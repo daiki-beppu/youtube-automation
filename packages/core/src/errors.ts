@@ -14,7 +14,6 @@ import { z } from "zod";
 
 import { isRecord } from "../internal/guards.ts";
 
-const HTTP_SERVER_ERROR_MIN = 500;
 const RETRY_AFTER_HEADER = "retry-after";
 const RETRY_AFTER_SECONDS_PATTERN = /^\d+$/u;
 const NON_RETRYABLE_PREFIXES = ["config:", "validation:", "auth:"] as const;
@@ -199,19 +198,6 @@ export const classifyGaxiosError = (
     );
   }
   return apiError;
-};
-
-export const shouldRetryApiQuery = (error: unknown): boolean => {
-  if (!defaultShouldRetry(error)) {
-    return false;
-  }
-  if (error instanceof YouTubeAPIError) {
-    return (
-      error.statusCode === undefined ||
-      error.statusCode >= HTTP_SERVER_ERROR_MIN
-    );
-  }
-  return true;
 };
 
 // ServiceError (ADR-0003 §2): the wire-shape every service boundary emits. A

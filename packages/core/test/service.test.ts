@@ -13,7 +13,7 @@ describe("createService", () => {
       greeting: `hello ${request.name}`,
     }));
 
-    const result = await service({ name: "world" }, {});
+    const result = await service({ name: "world" });
 
     expect(result).toEqual({
       ok: true,
@@ -28,7 +28,7 @@ describe("createService", () => {
       return { greeting: `hello ${request.name}` };
     });
 
-    const result = await service({ name: "" }, {});
+    const result = await service({ name: "" });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -43,7 +43,7 @@ describe("createService", () => {
       throw new Error("config: missing setting");
     });
 
-    const result = await service({ name: "world" }, {});
+    const result = await service({ name: "world" });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -55,7 +55,7 @@ describe("createService", () => {
   test("returns validation ServiceError when handler output has an invalid field type", async () => {
     const service = createService(Input, Output, () => ({ greeting: 123 }));
 
-    const result = await service({ name: "world" }, {});
+    const result = await service({ name: "world" });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -70,7 +70,7 @@ describe("createService", () => {
       greeting: "hello world",
     }));
 
-    const result = await service({ name: "world" }, {});
+    const result = await service({ name: "world" });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
