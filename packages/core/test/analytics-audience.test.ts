@@ -389,13 +389,11 @@ describe("collectAudienceService success", () => {
       string,
       (response: QueryResponse) => void
     >();
-    const { calls, client } = makeAsyncAnalyticsClient(
-      (params) => {
-        const { promise, resolve } = Promise.withResolvers<QueryResponse>();
-        pendingResponses.set(String(params.dimensions), resolve);
-        return promise;
-      }
-    );
+    const { calls, client } = makeAsyncAnalyticsClient((params) => {
+      const { promise, resolve } = Promise.withResolvers<QueryResponse>();
+      pendingResponses.set(String(params.dimensions), resolve);
+      return promise;
+    });
 
     const resultPromise = collectAudienceService(baseInput, makeDeps(client));
 
@@ -416,6 +414,75 @@ describe("collectAudienceService success", () => {
 
     const result = await resultPromise;
     expect(result.ok).toBe(true);
+  });
+
+  test("waits for started audience retries before returning a failed result", async () => {
+    let countryAttempts = 0;
+    let resultSettled = false;
+    const sleepResolvers: ((value: null) => void)[] = [];
+    const sleep: Sleep = async () => {
+      const { promise, resolve } = Promise.withResolvers<null>();
+      sleepResolvers.push(resolve);
+      await promise;
+    };
+    const { calls, client } = makeAsyncAnalyticsClient((params) => {
+      switch (params.dimensions) {
+        case "ageGroup,gender": {
+          return Promise.reject(gaxiosStatusError(403));
+        }
+        case "country": {
+          if (countryAttempts === 0) {
+            countryAttempts += 1;
+            return Promise.reject(gaxiosStatusError(500));
+          }
+          countryAttempts += 1;
+          return Promise.resolve(audienceResponses(params));
+        }
+        default: {
+          return Promise.resolve(audienceResponses(params));
+        }
+      }
+    });
+
+    const resultPromise = collectAudienceService(
+      baseInput,
+      makeDeps(client, sleep)
+    );
+    void resultPromise.then(() => {
+      resultSettled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+    ]);
+    expect(sleepResolvers).toHaveLength(1);
+    expect(resultSettled).toBe(false);
+    const [resolveSleep] = sleepResolvers;
+    if (!resolveSleep) {
+      throw new Error("expected the retry sleep to be pending");
+    }
+    resolveSleep(null);
+
+    const result = await resultPromise;
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected an api failure");
+    }
+    expect(result.error.domain).toBe("api");
+    if (result.error.domain === "api") {
+      expect(result.error.httpStatus).toBe(403);
+    }
+    expect(countryAttempts).toBe(2);
+    expect(calls.map((call) => call.dimensions)).toEqual([
+      "ageGroup,gender",
+      "country",
+      "subscribedStatus",
+      "country",
+    ]);
   });
 
   test("rounds country and subscriber view share percentages to one decimal place", async () => {
