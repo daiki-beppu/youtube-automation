@@ -3,7 +3,7 @@
 // `VideoDailyAnalyticsMixin` を翻訳せず TS で新規記述したもの（ADR-0003）。
 //
 // 構築済みの YouTube Analytics クライアントを `deps` で受け取り（ADR-0003 §7 / DI
-// seam）、`reports.query` の行列（[video, day, views]）を `{ date, videoId, views }`
+// seam）、`reports.query` の行列を `{ date, videoId, views }`
 // レコードへ map して `Result` で返す。core 内部（query / map）は throw OK。境界の
 // try/catch で `toServiceError` 経由に集約し、CLI/MCP は `if (!r.ok)` で discriminate
 // する。マッピング:
@@ -27,6 +27,12 @@ import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
 import {
+  readNumberCell,
+  readStringCell,
+  requireHeaders,
+  resolveColumnIndex,
+} from "../column-helpers.ts";
+import {
   shouldRetryAnalyticsQuery,
   toAnalyticsQueryError,
 } from "../query-error.ts";
@@ -44,15 +50,17 @@ const CHANNEL_ID_PREFIX = "channel==";
 const VIDEO_FILTER_PREFIX = "video==";
 const VIDEO_FILTER_SEPARATOR = ",";
 
-// 行の列順は上の `dimensions=video,day` + `metrics=views` クエリ契約で固定されるため、
-// columnHeaders に頼らず位置で引く（API はこの dimension/metric 組では常にこの順で返す）。
-const VIDEO_COLUMN = 0;
-const DAY_COLUMN = 1;
-const VIEWS_COLUMN = 2;
-
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
 type VideoDailyRecord = CollectVideoDailyAnalyticsOutput["metrics"][number];
+
+const readViewsCell = (row: readonly unknown[], viewsIndex: number): number => {
+  const value = row[viewsIndex];
+  if (value === null) {
+    return 0;
+  }
+  return readNumberCell(row, viewsIndex, "views", QUERY_CONTEXT);
+};
 
 const buildQueryParams = (
   input: CollectVideoDailyAnalyticsInput
@@ -75,17 +83,19 @@ const buildQueryParams = (
   return baseParams;
 };
 
-const mapRows = (rows: QueryResponse["rows"]): VideoDailyRecord[] => {
+const mapRows = (data: QueryResponse): VideoDailyRecord[] => {
   // データ無しの期間は API が `rows` を省く（v2.d.ts contract）→ 空配列で ok。
-  if (!rows) {
+  if (!data.rows) {
     return [];
   }
-  return rows.map((row) => ({
-    date: String(row[DAY_COLUMN]),
-    videoId: String(row[VIDEO_COLUMN]),
-    // この dimension では views セルが欠落し得る（0 視聴の日）。null/undefined は
-    // 0 視聴として正規化する（NaN を生まない）。
-    views: Number(row[VIEWS_COLUMN] ?? 0),
+  const headers = requireHeaders(data, QUERY_CONTEXT);
+  const videoIndex = resolveColumnIndex(headers, "video", QUERY_CONTEXT);
+  const dayIndex = resolveColumnIndex(headers, "day", QUERY_CONTEXT);
+  const viewsIndex = resolveColumnIndex(headers, "views", QUERY_CONTEXT);
+  return data.rows.map((row) => ({
+    date: readStringCell(row, dayIndex, "day", QUERY_CONTEXT),
+    videoId: readStringCell(row, videoIndex, "video", QUERY_CONTEXT),
+    views: readViewsCell(row, viewsIndex),
   }));
 };
 
@@ -115,7 +125,7 @@ export const collectVideoDailyAnalyticsService = async (
     );
     return ok(
       CollectVideoDailyAnalyticsOutput.parse({
-        metrics: mapRows(data.rows),
+        metrics: mapRows(data),
       })
     );
   } catch (error) {

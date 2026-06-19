@@ -54,6 +54,12 @@ const baseInput: CollectVideoDailyAnalyticsInput = {
   startDate: "2025-01-01",
 };
 
+const videoDailyColumnHeaders = [
+  { name: "video" },
+  { name: "day" },
+  { name: "views" },
+];
+
 // --- success path ----------------------------------------------------------
 
 describe("collectVideoDailyAnalyticsService success", () => {
@@ -61,6 +67,7 @@ describe("collectVideoDailyAnalyticsService success", () => {
     // Given a mock returning sample Analytics API rows (video, day, views)
     const { mock } = makeMockYtAnalytics(() => ({
       data: {
+        columnHeaders: videoDailyColumnHeaders,
         rows: [
           ["vid1", "2025-01-01", 100],
           ["vid1", "2025-01-02", 150],
@@ -75,7 +82,7 @@ describe("collectVideoDailyAnalyticsService success", () => {
       ytAnalytics: mock,
     });
 
-    // Then the result is ok with one metrics record per row, mapped by position
+    // Then the result is ok with one metrics record per row, mapped by header
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -101,7 +108,7 @@ describe("collectVideoDailyAnalyticsService success", () => {
   test("passes the fixed query contract for channel-wide collection", async () => {
     // Given a mock we can inspect for the query parameters
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
-      data: { rows: [] },
+      data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
 
     // When collecting without a videoIds filter
@@ -122,10 +129,13 @@ describe("collectVideoDailyAnalyticsService success", () => {
     expect(params.filters).toBeUndefined();
   });
 
-  test("coerces an absent views value to 0", async () => {
-    // Given a row whose views cell is null (API can omit a value)
+  test("preserves a numeric zero views value", async () => {
+    // Given a row whose views cell is the API's numeric zero value
     const { mock } = makeMockYtAnalytics(() => ({
-      data: { rows: [["vid1", "2025-01-01", null]] },
+      data: {
+        columnHeaders: videoDailyColumnHeaders,
+        rows: [["vid1", "2025-01-01", 0]],
+      },
     }));
 
     // When calling the service
@@ -134,7 +144,7 @@ describe("collectVideoDailyAnalyticsService success", () => {
       ytAnalytics: mock,
     });
 
-    // Then the missing metric is normalized to a numeric 0 (not NaN/null)
+    // Then the zero metric is preserved as a numeric 0
     expect(r.ok).toBe(true);
     if (!r.ok) {
       throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
@@ -145,6 +155,129 @@ describe("collectVideoDailyAnalyticsService success", () => {
       views: 0,
     });
   });
+
+  test("normalizes null views values to 0", async () => {
+    // Given a row whose views cell is the API's null zero-value representation
+    const { mock } = makeMockYtAnalytics(() => ({
+      data: {
+        columnHeaders: videoDailyColumnHeaders,
+        rows: [["vid1", "2025-01-01", null]],
+      },
+    }));
+
+    // When calling the service
+    const r = await collectVideoDailyAnalyticsService(baseInput, {
+      sleep: noSleep,
+      ytAnalytics: mock,
+    });
+
+    // Then the API's null zero-value representation is normalized to numeric 0
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
+    }
+    expect(r.value.metrics).toEqual([
+      { date: "2025-01-01", videoId: "vid1", views: 0 },
+    ]);
+  });
+
+  test("maps rows by columnHeaders when API column order changes", async () => {
+    // Given a response whose day and video columns are not in request order
+    const { mock } = makeMockYtAnalytics(() => ({
+      data: {
+        columnHeaders: [{ name: "day" }, { name: "video" }, { name: "views" }],
+        rows: [["2025-01-01", "vid1", 100]],
+      },
+    }));
+
+    // When calling the service
+    const r = await collectVideoDailyAnalyticsService(baseInput, {
+      sleep: noSleep,
+      ytAnalytics: mock,
+    });
+
+    // Then each output field uses the matching header, not the original index
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
+    }
+    expect(r.value.metrics).toEqual([
+      { date: "2025-01-01", videoId: "vid1", views: 100 },
+    ]);
+  });
+});
+
+// --- malformed API response ------------------------------------------------
+
+describe("collectVideoDailyAnalyticsService malformed API response", () => {
+  test("returns io error when the views column header is missing", async () => {
+    // Given rows with columnHeaders that omit the required views metric
+    const { mock } = makeMockYtAnalytics(() => ({
+      data: {
+        columnHeaders: [{ name: "video" }, { name: "day" }],
+        rows: [["vid1", "2025-01-01", 100]],
+      },
+    }));
+
+    // When calling the service
+    const r = await collectVideoDailyAnalyticsService(baseInput, {
+      sleep: noSleep,
+      ytAnalytics: mock,
+    });
+
+    // Then the boundary returns a fail-fast mapping error
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected failure");
+    }
+    expect(r.error.domain).toBe("io");
+    expect(r.error.message).toContain('missing the "views" column');
+  });
+
+  test("returns io error when rows are present without columnHeaders", async () => {
+    // Given rows but no columnHeaders to define the response contract
+    const { mock } = makeMockYtAnalytics(() => ({
+      data: { rows: [["vid1", "2025-01-01", 100]] },
+    }));
+
+    // When calling the service
+    const r = await collectVideoDailyAnalyticsService(baseInput, {
+      sleep: noSleep,
+      ytAnalytics: mock,
+    });
+
+    // Then the boundary returns a fail-fast mapping error
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected failure");
+    }
+    expect(r.error.domain).toBe("io");
+    expect(r.error.message).toContain("response has rows but no columnHeaders");
+  });
+
+  test("returns io error when a row is missing the views cell", async () => {
+    // Given columnHeaders that require views but a row whose views cell is absent
+    const { mock } = makeMockYtAnalytics(() => ({
+      data: {
+        columnHeaders: videoDailyColumnHeaders,
+        rows: [["vid1", "2025-01-01"]],
+      },
+    }));
+
+    // When calling the service
+    const r = await collectVideoDailyAnalyticsService(baseInput, {
+      sleep: noSleep,
+      ytAnalytics: mock,
+    });
+
+    // Then the boundary returns a fail-fast mapping error
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected failure");
+    }
+    expect(r.error.domain).toBe("io");
+    expect(r.error.message).toContain('non-numeric "views" value');
+  });
 });
 
 // --- video filter ----------------------------------------------------------
@@ -153,7 +286,10 @@ describe("collectVideoDailyAnalyticsService with videoIds filter", () => {
   test("passes filters param when videoIds is provided", async () => {
     // Given a mock we can inspect for query params
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
-      data: { rows: [["vid1", "2025-01-01", 50]] },
+      data: {
+        columnHeaders: videoDailyColumnHeaders,
+        rows: [["vid1", "2025-01-01", 50]],
+      },
     }));
 
     // When calling with specific videoIds
@@ -175,7 +311,7 @@ describe("collectVideoDailyAnalyticsService with videoIds filter", () => {
   test("omits filters param when videoIds is an empty array", async () => {
     // Given an explicit empty videoIds (no video restriction intended)
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
-      data: { rows: [] },
+      data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
 
     // When calling with an empty videoIds array
@@ -298,7 +434,12 @@ describe("collectVideoDailyAnalyticsService retry behavior", () => {
       if (attempt === 1) {
         throw gaxiosError("server error", { data: {}, status: 500 });
       }
-      return { data: { rows: [["vid1", "2025-01-01", 42]] } };
+      return {
+        data: {
+          columnHeaders: videoDailyColumnHeaders,
+          rows: [["vid1", "2025-01-01", 42]],
+        },
+      };
     });
 
     // When calling the service (with backoff stubbed out)
@@ -354,7 +495,7 @@ describe("collectVideoDailyAnalyticsService empty response", () => {
   test("returns ok with empty metrics when API returns no data rows", async () => {
     // Given a mock returning an empty rows array
     const { mock } = makeMockYtAnalytics(() => ({
-      data: { rows: [] },
+      data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
 
     // When calling the service
@@ -398,7 +539,7 @@ describe("collectVideoDailyAnalyticsService input validation", () => {
   test("returns err with domain validation when input has extra keys", async () => {
     // Given a valid mock that would succeed if reached
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
-      data: { rows: [] },
+      data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
 
     // When the input carries an unexpected key the `.strict()` schema rejects
@@ -425,7 +566,7 @@ describe("collectVideoDailyAnalyticsService input validation", () => {
   test("returns err with domain validation when date format is invalid", async () => {
     // Given a mock that would succeed if reached
     const { mock, queryCalls } = makeMockYtAnalytics(() => ({
-      data: { rows: [] },
+      data: { columnHeaders: videoDailyColumnHeaders, rows: [] },
     }));
 
     // When the startDate is not YYYY-MM-DD
