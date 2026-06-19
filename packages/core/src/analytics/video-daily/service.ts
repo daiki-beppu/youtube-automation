@@ -19,7 +19,11 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { toServiceError } from "../../errors.ts";
+import {
+  classifyGaxiosError,
+  shouldRetryApiQuery,
+  toServiceError,
+} from "../../errors.ts";
 import type { ServiceError } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
 import { err, ok } from "../../result.ts";
@@ -32,10 +36,6 @@ import {
   requireHeaders,
   resolveColumnIndex,
 } from "../column-helpers.ts";
-import {
-  shouldRetryAnalyticsQuery,
-  toAnalyticsQueryError,
-} from "../query-error.ts";
 import {
   CollectVideoDailyAnalyticsInput,
   CollectVideoDailyAnalyticsOutput,
@@ -117,10 +117,10 @@ export const collectVideoDailyAnalyticsService = async (
           const response = await deps.ytAnalytics.reports.query(params);
           return response.data;
         } catch (error) {
-          throw toAnalyticsQueryError(error, QUERY_CONTEXT);
+          throw classifyGaxiosError(error, QUERY_CONTEXT);
         }
       },
-      { shouldRetry: shouldRetryAnalyticsQuery, sleep: deps.sleep }
+      { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
     );
     return ok(
       CollectVideoDailyAnalyticsOutput.parse({

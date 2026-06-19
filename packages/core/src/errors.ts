@@ -14,6 +14,11 @@ import { z } from "zod";
 
 import { isRecord } from "../internal/guards.ts";
 
+const HTTP_SERVER_ERROR_MIN = 500;
+const RETRY_AFTER_HEADER = "retry-after";
+const RETRY_AFTER_SECONDS_PATTERN = /^\d+$/u;
+const NON_RETRYABLE_PREFIXES = ["config:", "validation:", "auth:"] as const;
+
 const parseJson = (text: string): unknown => {
   try {
     return JSON.parse(text);
@@ -128,21 +133,45 @@ export class QuotaExhaustedError extends YouTubeAPIError {
   }
 }
 
-/**
- * Read the Retry-After hint (in seconds) off a Gaxios-shaped error.
- *
- * A missing header, an empty/blank string, or a non-numeric value all yield
- * undefined: `Number("")` is 0 and must not be misread as "retry in 0 seconds".
- */
-const retryAfterSecondsFrom = (error: unknown): number | undefined => {
-  const headers = (
-    error as { response?: { headers?: Record<string, unknown> } }
-  )?.response?.headers;
-  const raw = headers?.["retry-after"];
-  if (typeof raw === "string" && raw.trim() === "") {
+export const defaultShouldRetry = (error: unknown): boolean => {
+  if (error instanceof QuotaExhaustedError) {
+    return false;
+  }
+  const message = error instanceof Error ? error.message : "";
+  return !NON_RETRYABLE_PREFIXES.some((prefix) => message.startsWith(prefix));
+};
+
+const findHeader = (
+  headers: Record<string, unknown>,
+  headerName: string
+): unknown | undefined => {
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === headerName) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const parseRetryAfterSeconds = (error: unknown): number | undefined => {
+  if (
+    !(
+      isRecord(error) &&
+      isRecord(error.response) &&
+      isRecord(error.response.headers)
+    )
+  ) {
     return undefined;
   }
-  const seconds = Number(raw);
+  const raw = findHeader(error.response.headers, RETRY_AFTER_HEADER);
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (!RETRY_AFTER_SECONDS_PATTERN.test(trimmed)) {
+    return undefined;
+  }
+  const seconds = Number(trimmed);
   return Number.isFinite(seconds) ? seconds : undefined;
 };
 
@@ -161,14 +190,30 @@ export const classifyGaxiosError = (
   error: unknown,
   context: string
 ): YouTubeAPIError => {
+  if (error instanceof YouTubeAPIError) {
+    return error;
+  }
   const apiError = YouTubeAPIError.fromGaxiosError(error, context);
   if (apiError.statusCode === 429) {
     return new QuotaExhaustedError(
       apiError.message,
-      retryAfterSecondsFrom(error)
+      parseRetryAfterSeconds(error)
     );
   }
   return apiError;
+};
+
+export const shouldRetryApiQuery = (error: unknown): boolean => {
+  if (!defaultShouldRetry(error)) {
+    return false;
+  }
+  if (error instanceof YouTubeAPIError) {
+    return (
+      error.statusCode === undefined ||
+      error.statusCode >= HTTP_SERVER_ERROR_MIN
+    );
+  }
+  return true;
 };
 
 // ServiceError (ADR-0003 §2): the wire-shape every service boundary emits. A

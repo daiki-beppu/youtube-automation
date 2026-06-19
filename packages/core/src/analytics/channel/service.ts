@@ -17,16 +17,16 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { toServiceError } from "../../errors.ts";
+import {
+  classifyGaxiosError,
+  shouldRetryApiQuery,
+  toServiceError,
+} from "../../errors.ts";
 import type { ServiceError } from "../../errors.ts";
 import { err, ok } from "../../result.ts";
 import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import { requireHeaders, resolveColumnIndex } from "../column-helpers.ts";
-import {
-  shouldRetryAnalyticsQuery,
-  toAnalyticsQueryError,
-} from "../query-error.ts";
 import {
   CHANNEL_METRICS,
   ChannelAnalyticsInput,
@@ -66,7 +66,7 @@ const queryDailyReport = async (
     const response = await client.reports.query(params);
     return response.data;
   } catch (error) {
-    throw toAnalyticsQueryError(error, QUERY_CONTEXT);
+    throw classifyGaxiosError(error, QUERY_CONTEXT);
   }
 };
 
@@ -107,7 +107,7 @@ export const collectChannelAnalyticsService = async (
     const params = buildQueryParams(request);
     const data = await withRetry(
       () => queryDailyReport(deps.youtubeAnalytics, params),
-      { shouldRetry: shouldRetryAnalyticsQuery }
+      { shouldRetry: shouldRetryApiQuery }
     );
     return ok(
       ChannelAnalyticsOutput.parse({ metrics: reshapeToLongFormat(data) })
