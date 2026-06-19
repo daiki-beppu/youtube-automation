@@ -337,24 +337,31 @@ const reshapeSubscribedStatus = (
   ];
 };
 
+const unwrapSettledQuery = (
+  result: PromiseSettledResult<QueryResponse>
+): QueryResponse => {
+  if (result.status === "rejected") {
+    throw result.reason;
+  }
+  return result.value;
+};
+
 const runAudienceQueries = async (
   client: youtubeAnalytics_v2.Youtubeanalytics,
   paramsList: AudienceQueryParams,
   sleep: SleepMs | undefined
 ): Promise<readonly [QueryResponse, QueryResponse, QueryResponse]> => {
-  const demographics = await withRetry(
-    () => queryAudienceReport(client, paramsList[0]),
-    { shouldRetry: shouldRetryQuery, sleep }
-  );
-  const country = await withRetry(
-    () => queryAudienceReport(client, paramsList[1]),
-    { shouldRetry: shouldRetryQuery, sleep }
-  );
-  const subscribedStatus = await withRetry(
-    () => queryAudienceReport(client, paramsList[2]),
-    { shouldRetry: shouldRetryQuery, sleep }
-  );
-  return [demographics, country, subscribedStatus];
+  const retryOpts = { shouldRetry: shouldRetryQuery, sleep };
+  const [demographics, country, subscribedStatus] = await Promise.allSettled([
+    withRetry(() => queryAudienceReport(client, paramsList[0]), retryOpts),
+    withRetry(() => queryAudienceReport(client, paramsList[1]), retryOpts),
+    withRetry(() => queryAudienceReport(client, paramsList[2]), retryOpts),
+  ]);
+  return [
+    unwrapSettledQuery(demographics),
+    unwrapSettledQuery(country),
+    unwrapSettledQuery(subscribedStatus),
+  ];
 };
 
 export const collectAudienceService = async (
