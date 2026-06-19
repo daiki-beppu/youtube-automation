@@ -5,12 +5,13 @@
 import { z } from "zod";
 
 import { Comments } from "./comments.ts";
+import { parseWithIssues } from "./internal.ts";
 import { PinnedComment } from "./pinned-comment.ts";
 import { Playlists } from "./playlists.ts";
 
 /** engagement バケット: merged から視聴者接点セクションを取り出して束ねる。 */
-export const Engagement = z.unknown().transform((merged) => ({
-  comments: Comments.parse(merged),
-  pinnedComment: PinnedComment.parse(merged),
-  playlists: Playlists.parse(merged),
+export const Engagement = z.unknown().transform((merged, ctx) => ({
+  comments: parseWithIssues(Comments, merged, ctx),
+  pinnedComment: parseWithIssues(PinnedComment, merged, ctx),
+  playlists: parseWithIssues(Playlists, merged, ctx),
 }));

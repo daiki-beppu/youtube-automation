@@ -127,15 +127,20 @@ const loadLocalizationsRaw = (channelRoot: string): unknown | undefined => {
   }
 };
 
-const mergeLocalizations = (
-  merged: Record<string, unknown>,
-  localizationsRaw: unknown | undefined
-): Record<string, unknown> => {
+const assertNoChannelLocalizations = (
+  merged: Record<string, unknown>
+): void => {
   if (LOCALIZATIONS_KEY in merged) {
     throw new Error(
       `config: '${LOCALIZATIONS_KEY}' キーは config/channel/*.json ではなく config/${LOCALIZATIONS_FILENAME} に配置してください`
     );
   }
+};
+
+const mergeLocalizations = (
+  merged: Record<string, unknown>,
+  localizationsRaw: unknown | undefined
+): Record<string, unknown> => {
   if (localizationsRaw === undefined) {
     return merged;
   }
@@ -167,8 +172,10 @@ const build = (channelRoot: string): ChannelConfig => {
     );
   }
 
+  const channelConfig = loadAndMerge(files);
+  assertNoChannelLocalizations(channelConfig);
   const merged = mergeLocalizations(
-    loadAndMerge(files),
+    channelConfig,
     loadLocalizationsRaw(channelRoot)
   );
   try {

@@ -7,14 +7,13 @@ import {
   expect,
   test,
 } from "bun:test";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 // Imported by the published package name + "./config" subpath so the test
 // exercises the core `exports` map. A missing/broken subpath export fails
 // resolution here, not in tsc.
 import { channelDir, loadConfig, reset } from "@youtube-automation/core/config";
-import { z } from "zod";
 
 import { ChannelConfigSchema } from "../src/config/config.ts";
 import {
@@ -180,6 +179,22 @@ describe("loadConfig — top-level merge", () => {
     expect(() => loadConfig()).toThrow(/^config:/u);
     expect(() => loadConfig()).toThrow(/localizations/u);
   });
+
+  test("rejects localizations in config/channel before parsing malformed localizations.json", () => {
+    // Given the channel glob contains the forbidden key and the sidecar is invalid JSON
+    const sections = minimalSections();
+    (sections["meta.json"] as Record<string, unknown>).localizations = {
+      supported_languages: ["ja"],
+    };
+    const dir = setupChannel(sections);
+    writeFileSync(join(dir, "config", "localizations.json"), "{", "utf-8");
+    process.env.CHANNEL_DIR = dir;
+
+    // When/Then the source-boundary violation has priority over sidecar syntax
+    expect(() => loadConfig()).toThrow(
+      /config\/channel\/\*\.json ではなく config\/localizations\.json/u
+    );
+  });
 });
 
 // --- structural guards -----------------------------------------------------
@@ -306,24 +321,21 @@ describe("ChannelConfigSchema — localizations", () => {
     );
   });
 
-  test("prefixes invalid raw localizations issues under localizations", () => {
+  test("safeParse prefixes invalid raw localizations issues under localizations", () => {
     // Given merged config input carrying an invalid localizations sidecar shape
     const merged = mergedSchemaInput(minimalSections(), {
       supported_languages: "ja",
     });
 
-    // When the schema rejects it
-    let caught: unknown;
-    try {
-      ChannelConfigSchema.parse(merged);
-    } catch (error) {
-      caught = error;
-    }
+    // When the schema rejects it through the standard safeParse path
+    const result = ChannelConfigSchema.safeParse(merged);
 
     // Then callers can identify the sidecar boundary from the issue path
-    expect(caught).toBeInstanceOf(z.ZodError);
-    const error = caught as z.ZodError;
-    expect(error.issues[0]?.path).toEqual([
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("expected invalid localizations to fail");
+    }
+    expect(result.error.issues[0]?.path).toEqual([
       "localizations",
       "supported_languages",
     ]);

@@ -16,13 +16,17 @@ import { z } from "zod";
 import { Engagement } from "./engagement.ts";
 import { Identity } from "./identity.ts";
 import { Integrations } from "./integrations.ts";
-import { isPlainObject } from "./internal.ts";
+import { addIssues, isPlainObject } from "./internal.ts";
 import { Localizations, localizationsAbsent } from "./localizations.ts";
 import { Publishing } from "./publishing.ts";
 
 const LOCALIZATIONS_KEY = "localizations";
 
-const parseLocalizations = (locRaw: unknown, fallbackLanguage: string) => {
+const parseLocalizations = (
+  locRaw: unknown,
+  fallbackLanguage: string,
+  ctx: z.RefinementCtx
+) => {
   if (locRaw === undefined) {
     return localizationsAbsent(fallbackLanguage);
   }
@@ -32,44 +36,64 @@ const parseLocalizations = (locRaw: unknown, fallbackLanguage: string) => {
     return localizations.data;
   }
 
-  throw new z.ZodError(
-    localizations.error.issues.map((issue) => ({
-      ...issue,
-      path: [LOCALIZATIONS_KEY, ...issue.path],
-    }))
-  );
+  addIssues(ctx, localizations.error.issues, [LOCALIZATIONS_KEY]);
+  return z.NEVER;
 };
 
-const assemble = (merged: unknown) => {
-  const identity = Identity.parse(merged);
-  const publishing = Publishing.parse(merged);
-  const engagement = Engagement.parse(merged);
+const assemble = (merged: unknown, ctx: z.RefinementCtx) => {
+  const identity = Identity.safeParse(merged);
+  const publishing = Publishing.safeParse(merged);
+  const engagement = Engagement.safeParse(merged);
+  const integrations = Integrations.safeParse(merged);
+
+  if (!identity.success) {
+    addIssues(ctx, identity.error.issues);
+  }
+  if (!publishing.success) {
+    addIssues(ctx, publishing.error.issues);
+  }
+  if (!engagement.success) {
+    addIssues(ctx, engagement.error.issues);
+  }
+  if (!integrations.success) {
+    addIssues(ctx, integrations.error.issues);
+  }
+  if (
+    !identity.success ||
+    !publishing.success ||
+    !engagement.success ||
+    !integrations.success
+  ) {
+    return z.NEVER;
+  }
+
   const locRaw = isPlainObject(merged) ? merged[LOCALIZATIONS_KEY] : undefined;
   const localizations = parseLocalizations(
     locRaw,
-    publishing.youtube.api.language
+    publishing.data.youtube.api.language,
+    ctx
   );
 
   // tags.channelName は content 単体では決まらないため meta（identity）から注入する。
   const content = {
-    ...publishing.content,
+    ...publishing.data.content,
     tags: {
-      ...publishing.content.tags,
-      channelName: identity.meta.channelName,
+      ...publishing.data.content.tags,
+      channelName: identity.data.meta.channelName,
     },
   };
   return {
-    engagement: { ...engagement, localizations },
-    identity,
-    integrations: Integrations.parse(merged),
-    publishing: { ...publishing, content },
+    engagement: { ...engagement.data, localizations },
+    identity: identity.data,
+    integrations: integrations.data,
+    publishing: { ...publishing.data, content },
   };
 };
 
 /** merged config を 4 バケット ChannelConfig へ組み立てる schema。 */
 export const ChannelConfigSchema = z
   .unknown()
-  .transform(assemble)
+  .transform((merged, ctx) => assemble(merged, ctx))
   .superRefine((config, ctx) => {
     // title.theme_scenes のキー ⊆ tags.themes のキー
     const themeKeys = new Set(
