@@ -4,7 +4,10 @@ import {
   tagsForCollection,
 } from "../config/content.ts";
 import type { ChannelConfig } from "../config/index.ts";
-import { createService } from "../service-frame.ts";
+import { toServiceError } from "../errors.ts";
+import type { ServiceError } from "../errors.ts";
+import { err, ok } from "../result.ts";
+import type { Result } from "../result.ts";
 import {
   buildCompleteCollectionDescription,
   generateCompleteCollectionTitle,
@@ -54,10 +57,10 @@ const secondsToTimestamp = (seconds: number): string => {
   const minutes = Math.floor((total % 3600) / 60);
   const remainingSeconds = total % 60;
   const paddedSeconds = remainingSeconds.toString().padStart(2, "0");
-  if (hours === 0) {
-    return `${minutes}:${paddedSeconds}`;
-  }
   const paddedMinutes = minutes.toString().padStart(2, "0");
+  if (hours === 0) {
+    return `${paddedMinutes}:${paddedSeconds}`;
+  }
   return `${hours}:${paddedMinutes}:${paddedSeconds}`;
 };
 
@@ -204,9 +207,15 @@ const buildMetadataOutput = (
   };
 };
 
-export const generateVideoMetadataService = createService(
-  GenerateMetadataInput,
-  GenerateMetadataOutput,
-  (request, deps: { config: ChannelConfig }) =>
-    Promise.resolve(buildMetadataOutput(deps.config, request))
-);
+export const generateVideoMetadataService = (
+  input: GenerateMetadataInputValue,
+  deps: { config: ChannelConfig }
+): Promise<Result<GenerateMetadataOutputValue, ServiceError>> => {
+  try {
+    const request = GenerateMetadataInput.parse(input);
+    const output = buildMetadataOutput(deps.config, request);
+    return Promise.resolve(ok(GenerateMetadataOutput.parse(output)));
+  } catch (error) {
+    return Promise.resolve(err(toServiceError(error)));
+  }
+};

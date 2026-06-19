@@ -41,6 +41,10 @@ import {
   formatShortDurationPhrase,
   generateVideoMetadataService,
 } from "@youtube-automation/core/metadata";
+import type {
+  GenerateMetadataInput,
+  GenerateMetadataOutput,
+} from "@youtube-automation/core/metadata";
 
 import {
   buildCompleteCollectionDescription,
@@ -716,6 +720,21 @@ describe("generateVideoMetadataService", () => {
     ]) {
       expect(name in metadata).toBe(false);
     }
+
+    const input = {
+      theme: "Battle Royale",
+      tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+    } satisfies GenerateMetadataInput;
+    const output = {
+      description: "Description",
+      tags: ["battle music"],
+      timestamps: "00:00 Song A",
+      title: "Battle Royale - Study",
+      violations: [],
+    } satisfies GenerateMetadataOutput;
+
+    expect(input.theme).toBe("Battle Royale");
+    expect(output.timestamps).toBe("00:00 Song A");
   });
 
   test("generates title, description, tags, timestamps and localizations", async () => {
@@ -743,18 +762,45 @@ describe("generateVideoMetadataService", () => {
     }
     expect(result.ok).toBe(true);
     expect(result.value.title).toBe("Battle Royale - Study");
-    expect(result.value.timestamps).toBe("0:00 Song A\n2:00 Song B");
+    expect(result.value.timestamps).toBe("00:00 Song A\n02:00 Song B");
     expect(result.value.description).toContain("🎵 Battle Royale - Study");
-    expect(result.value.description).toContain("0:00 Song A\n2:00 Song B");
+    expect(result.value.description).toContain("00:00 Song A\n02:00 Song B");
     expect(result.value.tags).toContain("battle music");
     expect(result.value.localizations?.en?.title).toBe(
       "Quiet Rain Study, Focus"
     );
     expect(result.value.localizations?.ja?.description).toContain(
-      "0:00 Song A"
+      "00:00 Song A"
     );
     expect(result.value.violations).toEqual([]);
   });
+
+  test.each([
+    { expected: "00:00", startSeconds: 0 },
+    { expected: "00:05", startSeconds: 5 },
+    { expected: "01:00", startSeconds: 60 },
+    { expected: "59:59", startSeconds: 3599 },
+    { expected: "1:00:00", startSeconds: 3600 },
+  ])(
+    "formats facade timestamps with Python parity for $startSeconds seconds",
+    async ({ expected, startSeconds }) => {
+      const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+      const result = await generateVideoMetadataService(
+        {
+          theme: "Battle Royale",
+          tracks: [{ durationSeconds: 1, startSeconds, title: "Song A" }],
+        },
+        { config }
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.timestamps).toBe(`${expected} Song A`);
+    }
+  );
 
   test("generates localizations from config, theme and tracks without scenePhrases", async () => {
     const config = loadFrom(minimalSections(), LOCALIZATIONS);
@@ -778,7 +824,7 @@ describe("generateVideoMetadataService", () => {
       "Battle Royale Study, Focus"
     );
     expect(result.value.localizations?.ja?.description).toContain(
-      "0:00 Song A"
+      "00:00 Song A"
     );
     expect(result.value.violations).toEqual([]);
   });
@@ -931,6 +977,28 @@ describe("generateVideoMetadataService", () => {
         ],
       },
     },
+    {
+      name: "root extra key",
+      request: {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+        unexpected: true,
+      },
+    },
+    {
+      name: "track extra key",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          {
+            durationSeconds: 60,
+            startSeconds: 0,
+            title: "Song A",
+            unexpected: true,
+          },
+        ],
+      },
+    },
   ])(
     "returns a validation error for malformed input: $name",
     async ({ request }) => {
@@ -990,6 +1058,53 @@ describe("generateVideoMetadataService", () => {
             title: "Song A",
           },
         ],
+      },
+    },
+    {
+      name: "track end beyond timeline",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          {
+            durationSeconds: 2,
+            startSeconds: 24 * 60 * 60 - 1,
+            title: "Song A",
+          },
+        ],
+      },
+    },
+    {
+      name: "oversized collectionSlug",
+      request: {
+        collectionSlug: "x".repeat(201),
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "too many scenePhrase languages",
+      request: {
+        scenePhrases: Object.fromEntries(
+          Array.from({ length: 51 }, (_, index) => [`lang${index}`, "Rain"])
+        ),
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "oversized scenePhrase language key",
+      request: {
+        scenePhrases: { ["x".repeat(33)]: "Rain" },
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "oversized scenePhrase",
+      request: {
+        scenePhrases: { en: "x".repeat(101) },
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
       },
     },
   ])("rejects oversized metadata input: $name", async ({ request }) => {

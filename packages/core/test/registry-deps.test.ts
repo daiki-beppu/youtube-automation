@@ -159,7 +159,7 @@ describe("REGISTRY — metadata.generate", () => {
       throw new Error(result.error.message);
     }
     expect(result.value.title).toBe("Battle Royale - Study");
-    expect(result.value.timestamps).toBe("0:00 Song A\n2:00 Song B");
+    expect(result.value.timestamps).toBe("00:00 Song A\n02:00 Song B");
     expect(result.value.tags).toContain("battle music");
   });
 });
