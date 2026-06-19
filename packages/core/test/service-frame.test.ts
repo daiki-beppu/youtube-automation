@@ -16,12 +16,14 @@ const OutputSchema = z
   .strict();
 
 describe("createService", () => {
-  test("returns validation error when input parsing fails", async () => {
-    const service = createService(InputSchema, OutputSchema, (input) =>
-      Promise.resolve({
+  test("returns validation error when input parsing fails and does not call execute", async () => {
+    let executeCalls = 0;
+    const service = createService(InputSchema, OutputSchema, (input) => {
+      executeCalls++;
+      return Promise.resolve({
         doubled: input.value * 2,
-      })
-    );
+      });
+    });
 
     const result = await service({
       value: "not-a-number",
@@ -31,6 +33,7 @@ describe("createService", () => {
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
     }
+    expect(executeCalls).toBe(0);
   });
 
   test("returns io error when the core function throws an unprefixed error", async () => {
