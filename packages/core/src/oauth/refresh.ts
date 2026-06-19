@@ -1,11 +1,10 @@
 // 純粋な OAuth リフレッシュサービス（ADR-0003 §5）。browser も local server も使わ
 // ないため MCP / CLI 双方から利用できる。
 //
-// service は `Promise<Result<{ tokenJson }, ServiceError>>` を返し、境界 frame は
-// `createService` に集約する。google-auth-library の OAuth2Client は
-// `deps.createOAuthClient` 注入 seam 経由で到達する（image service の deps パターンと
-// 同形）。production default は実 OAuth2Client を生成し、テストは fake client を
-// 差し込んでネットワークに触れない。
+// service は `Promise<Result<{ tokenJson }, ServiceError>>` を返し、境界を越えて throw
+// しない。google-auth-library の OAuth2Client は `deps.createOAuthClient` 注入 seam 経由
+// で到達する（image service の deps パターンと同形）。production default は実 OAuth2Client
+// を生成し、テストは fake client を差し込んでネットワークに触れない。
 //
 // seam contract:
 //   deps.createOAuthClient({ clientId, clientSecret }) -> client
@@ -15,9 +14,12 @@
 import { OAuth2Client } from "google-auth-library";
 import type { Credentials } from "google-auth-library";
 
-import { createService } from "../service-frame.ts";
+import { toServiceError } from "../errors.ts";
+import type { ServiceError } from "../errors.ts";
+import { err, ok } from "../result.ts";
+import type { Result } from "../result.ts";
 import { parseClientSecrets } from "./internal.ts";
-import { OAuthTokenOutput, RefreshTokenInput } from "./schema.ts";
+import { RefreshTokenInput } from "./schema.ts";
 
 /** refresh が必要とする OAuth2Client の最小シェイプ（注入 seam）。 */
 interface RefreshOAuthClient {
@@ -40,7 +42,7 @@ const defaultDeps: RefreshDeps = {
 
 // refresh の失敗を auth ドメインへ寄せる。OAuth2Client.refreshAccessToken は grant 失効・
 // 取り消し時に invalid_grant を throw するが、message は prefix 規約に従わないため、ここで
-// `auth:` を付与してから service 境界に渡して domain "auth" に確定させる。
+// `auth:` を付与してから境界（toServiceError）に渡して domain "auth" に確定させる。
 const refreshCredentials = async (
   client: RefreshOAuthClient
 ): Promise<Credentials> => {
@@ -60,15 +62,18 @@ const refreshCredentials = async (
  * refresh_token を seed してから refresh する。入力は `.strict()` schema で先に検証する
  * ため、未知キーは refresh に到達せず validation エラーになる。
  */
-export const refreshTokenService = createService(
-  RefreshTokenInput,
-  OAuthTokenOutput,
-  async ({ clientSecretsJson, tokenJson }, deps: RefreshDeps) => {
+export const refreshTokenService = async (
+  input: RefreshTokenInput,
+  deps: RefreshDeps = defaultDeps
+): Promise<Result<{ tokenJson: string }, ServiceError>> => {
+  try {
+    const { clientSecretsJson, tokenJson } = RefreshTokenInput.parse(input);
     const { clientId, clientSecret } = parseClientSecrets(clientSecretsJson);
     const client = deps.createOAuthClient({ clientId, clientSecret });
     client.setCredentials(JSON.parse(tokenJson) as Credentials);
     const credentials = await refreshCredentials(client);
-    return { tokenJson: JSON.stringify(credentials) };
-  },
-  defaultDeps
-);
+    return ok({ tokenJson: JSON.stringify(credentials) });
+  } catch (error) {
+    return err(toServiceError(error));
+  }
+};

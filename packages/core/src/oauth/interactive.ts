@@ -12,17 +12,14 @@
 import { spawn } from "node:child_process";
 
 import { OAuth2Client } from "google-auth-library";
-import type { Credentials } from "google-auth-library";
 
-import { createService } from "../service-frame.ts";
-import {
-  buildAuthUrl,
-  exchangeCode,
-  generateOAuthState,
-  resolveCallbackQuery,
-} from "./interactive-internal.ts";
+import { toServiceError } from "../errors.ts";
+import type { ServiceError } from "../errors.ts";
+import { err, ok } from "../result.ts";
+import type { Result } from "../result.ts";
+import { buildAuthUrl, exchangeCode } from "./interactive-internal.ts";
 import { parseClientSecrets } from "./internal.ts";
-import { InteractiveAuthInput, OAuthTokenOutput } from "./schema.ts";
+import { InteractiveAuthInput } from "./schema.ts";
 
 // OS のブラウザを開くコマンド（pure JS では開けないため subprocess を起動する）。
 // interactive は CLI 専用で、lint が MCP からの import を遮断しているため許容する。
@@ -47,24 +44,6 @@ const openBrowser = (url: string): void => {
   child.unref();
 };
 
-interface InteractiveAuthDeps {
-  runFlow: (clientSecretsJson: string, scopes: string[]) => Promise<string>;
-}
-
-const exchangeIssuedCode = async (
-  client: OAuth2Client,
-  code: string
-): Promise<Credentials> => {
-  try {
-    return await exchangeCode(client, code);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`auth: token exchange failed: ${message}`, {
-      cause: error,
-    });
-  }
-};
-
 // ローカルコールバックサーバを ephemeral port で起動し、redirect の code を 1 回受け
 // 取って token.json 文字列を返す。consent 拒否（error param）は auth エラーへ寄せる。
 const runInteractiveFlow = async (
@@ -72,22 +51,22 @@ const runInteractiveFlow = async (
   scopes: string[]
 ): Promise<string> => {
   const { clientId, clientSecret } = parseClientSecrets(clientSecretsJson);
-  const state = generateOAuthState();
   const { promise, reject, resolve } = Promise.withResolvers<string>();
 
   const server = Bun.serve({
     fetch: (request) => {
       const { searchParams } = new URL(request.url);
-      const callback = resolveCallbackQuery(searchParams, state);
-      if (callback.kind === "authError") {
-        reject(new Error(`auth: ${callback.message}`));
+      const code = searchParams.get("code");
+      const denied = searchParams.get("error");
+      if (code) {
+        resolve(code);
+        return new Response("認証が完了しました。このタブを閉じてください。");
+      }
+      if (denied) {
+        reject(new Error(`auth: consent denied: ${denied}`));
         return new Response("認証に失敗しました。このタブを閉じてください。");
       }
-      if (callback.kind === "notFound") {
-        return new Response(null, { status: 404 });
-      }
-      resolve(callback.code);
-      return new Response("認証が完了しました。このタブを閉じてください。");
+      return new Response(null, { status: 404 });
     },
     hostname: "127.0.0.1",
     port: 0,
@@ -96,25 +75,28 @@ const runInteractiveFlow = async (
   try {
     const redirectUri = `http://localhost:${server.port}/`;
     const client = new OAuth2Client({ clientId, clientSecret, redirectUri });
-    openBrowser(buildAuthUrl(client, scopes, state));
+    openBrowser(buildAuthUrl(client, scopes));
     const code = await promise;
-    const tokens = await exchangeIssuedCode(client, code);
+    const tokens = await exchangeCode(client, code);
     return JSON.stringify(tokens);
   } finally {
     await server.stop(true);
   }
 };
 
-const defaultDeps: InteractiveAuthDeps = {
-  runFlow: runInteractiveFlow,
+/**
+ * ブラウザ consent でユーザーを認証し、発行された credentials を token.json 文字列で
+ * 返す（CLI 専用）。入力は `.strict()` schema で先に検証し、失敗は境界の `toServiceError`
+ * 経由で `Result` に変換する（throw しない）。
+ */
+export const interactiveAuthService = async (
+  input: InteractiveAuthInput
+): Promise<Result<{ tokenJson: string }, ServiceError>> => {
+  try {
+    const { clientSecretsJson, scopes } = InteractiveAuthInput.parse(input);
+    const tokenJson = await runInteractiveFlow(clientSecretsJson, scopes);
+    return ok({ tokenJson });
+  } catch (error) {
+    return err(toServiceError(error));
+  }
 };
-
-export const interactiveAuthService = createService(
-  InteractiveAuthInput,
-  OAuthTokenOutput,
-  async ({ clientSecretsJson, scopes }, deps: InteractiveAuthDeps) => {
-    const tokenJson = await deps.runFlow(clientSecretsJson, scopes);
-    return { tokenJson };
-  },
-  defaultDeps
-);

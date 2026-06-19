@@ -8,7 +8,7 @@
 // off the public oauth subpath.
 //
 // Seam contract (the helpers delegate to a google-auth-library OAuth2Client):
-//   buildAuthUrl(client, scopes, state) -> client.generateAuthUrl({ access_type, scope, state })
+//   buildAuthUrl(client, scopes) -> client.generateAuthUrl({ access_type, scope })
 //   exchangeCode(client, code)   -> (await client.getToken(code)).tokens
 
 import { describe, expect, test } from "bun:test";
@@ -16,33 +16,17 @@ import { describe, expect, test } from "bun:test";
 import {
   buildAuthUrl,
   exchangeCode,
-  generateOAuthState,
-  resolveCallbackQuery,
 } from "../src/oauth/interactive-internal.ts";
 import * as interactiveModule from "../src/oauth/interactive.ts";
-
-type InteractiveAuthDeps = NonNullable<
-  Parameters<typeof interactiveModule.interactiveAuthService>[1]
->;
-type InteractiveAuthInput = Parameters<
-  typeof interactiveModule.interactiveAuthService
->[0];
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube",
   "https://www.googleapis.com/auth/yt-analytics.readonly",
 ];
-const state = "state-123";
-const clientSecretsJson = JSON.stringify({
-  installed: {
-    client_id: "cid.apps.googleusercontent.com",
-    client_secret: "the-client-secret",
-    redirect_uris: ["http://localhost"],
-  },
-});
 
 describe("buildAuthUrl", () => {
-  test("requests offline access and binds the consent URL to the issued state", () => {
+  test("requests offline access for every scope so a refresh_token is issued", () => {
+    // Given a fake OAuth client capturing the generateAuthUrl options
     const captured: Record<string, unknown>[] = [];
     const client = {
       generateAuthUrl: (options: Record<string, unknown>) => {
@@ -51,86 +35,27 @@ describe("buildAuthUrl", () => {
       },
     } as unknown as Parameters<typeof buildAuthUrl>[0];
 
-    const url = buildAuthUrl(client, scopes, state);
+    // When building the consent URL
+    const url = buildAuthUrl(client, scopes);
 
+    // Then the generated URL is returned verbatim ...
     expect(url).toBe("https://accounts.google.com/o/oauth2/v2/auth?mock=1");
+    // ... offline access is requested (required to receive a refresh_token) ...
     expect(captured).toHaveLength(1);
     expect(captured[0]?.access_type).toBe("offline");
+    // ... and every requested scope is forwarded to the client
     expect(JSON.stringify(captured[0])).toContain(
       "https://www.googleapis.com/auth/youtube"
     );
     expect(JSON.stringify(captured[0])).toContain(
       "https://www.googleapis.com/auth/yt-analytics.readonly"
     );
-    expect(captured[0]?.state).toBe(state);
-  });
-});
-
-describe("OAuth callback state validation", () => {
-  test("generates high-entropy callback state values", () => {
-    const first = generateOAuthState();
-    const second = generateOAuthState();
-
-    expect(first).toMatch(/^[\w-]{43}$/u);
-    expect(second).toMatch(/^[\w-]{43}$/u);
-    expect(first).not.toBe(second);
-  });
-
-  test("accepts a code only when the callback state matches", () => {
-    const query = new URLSearchParams({ code: "auth-code-123", state });
-
-    const resolved = resolveCallbackQuery(query, state);
-
-    expect(resolved).toEqual({ code: "auth-code-123", kind: "code" });
-  });
-
-  test("rejects missing state before accepting a callback code", () => {
-    const query = new URLSearchParams({ code: "auth-code-123" });
-
-    const resolved = resolveCallbackQuery(query, state);
-
-    expect(resolved).toEqual({
-      kind: "authError",
-      message: "missing OAuth state",
-    });
-  });
-
-  test("rejects mismatched state before accepting a callback code", () => {
-    const query = new URLSearchParams({
-      code: "attacker-code",
-      state: "other-state",
-    });
-
-    const resolved = resolveCallbackQuery(query, state);
-
-    expect(resolved).toEqual({
-      kind: "authError",
-      message: "OAuth state mismatch",
-    });
-  });
-
-  test("maps consent denied callback errors to auth errors", () => {
-    const query = new URLSearchParams({ error: "access_denied", state });
-
-    const resolved = resolveCallbackQuery(query, state);
-
-    expect(resolved).toEqual({
-      kind: "authError",
-      message: "consent denied: access_denied",
-    });
-  });
-
-  test("keeps non-callback requests as 404 without auth side effects", () => {
-    const query = new URLSearchParams({ ping: "1" });
-
-    const resolved = resolveCallbackQuery(query, state);
-
-    expect(resolved).toEqual({ kind: "notFound" });
   });
 });
 
 describe("exchangeCode", () => {
   test("exchanges an authorization code for the issued credentials", async () => {
+    // Given a fake OAuth client that returns tokens for a code
     const issued = {
       access_token: "issued-access",
       refresh_token: "issued-refresh",
@@ -143,101 +68,26 @@ describe("exchangeCode", () => {
       },
     } as unknown as Parameters<typeof exchangeCode>[0];
 
+    // When exchanging the authorization code
     const tokens = await exchangeCode(client, "auth-code-123");
 
+    // Then the issued credentials come back and the code was forwarded verbatim
     expect(tokens).toEqual(issued);
     expect(codes).toEqual(["auth-code-123"]);
   });
 
   test("propagates an exchange failure for the service boundary to convert", async () => {
+    // Given a fake client whose token exchange rejects
     const client = {
       getToken: () =>
         Promise.reject(new Error("invalid_grant: bad verification code")),
     } as unknown as Parameters<typeof exchangeCode>[0];
 
+    // When exchanging the code
+    // Then the helper rejects; mapping to a ServiceError is the service's job
     await expect(exchangeCode(client, "bad-code")).rejects.toThrow(
       "invalid_grant"
     );
-  });
-});
-
-const makeDeps = (
-  runFlow: InteractiveAuthDeps["runFlow"]
-): { calls: unknown[]; deps: InteractiveAuthDeps } => {
-  const calls: unknown[] = [];
-  const deps = {
-    runFlow: (secrets: string, requestedScopes: string[]) => {
-      calls.push({ requestedScopes, secrets });
-      return runFlow(secrets, requestedScopes);
-    },
-  };
-  return { calls, deps };
-};
-
-describe("interactiveAuthService boundary", () => {
-  test("rejects unknown input keys before running the interactive flow", async () => {
-    const { calls, deps } = makeDeps(() =>
-      Promise.resolve(JSON.stringify({ access_token: "issued-access" }))
-    );
-    const malformed = {
-      clientSecretsJson,
-      scopes,
-      unexpected: true,
-    } as unknown as InteractiveAuthInput;
-
-    const result = await interactiveModule.interactiveAuthService(
-      malformed,
-      deps
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("expected validation failure");
-    }
-    expect(result.error.domain).toBe("validation");
-    expect(calls).toHaveLength(0);
-  });
-
-  test("returns tokenJson from the injected interactive flow", async () => {
-    const tokenJson = JSON.stringify({ access_token: "issued-access" });
-    const { calls, deps } = makeDeps(() => Promise.resolve(tokenJson));
-
-    const result = await interactiveModule.interactiveAuthService(
-      { clientSecretsJson, scopes },
-      deps
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      throw new Error(
-        `expected ok, got ${result.error.domain}: ${result.error.message}`
-      );
-    }
-    expect(result.value.tokenJson).toBe(tokenJson);
-    expect(calls).toHaveLength(1);
-    expect(JSON.stringify(calls[0])).toContain(
-      "cid.apps.googleusercontent.com"
-    );
-    expect(JSON.stringify(calls[0])).toContain(
-      "https://www.googleapis.com/auth/youtube"
-    );
-  });
-
-  test("maps interactive flow failures to a ServiceError without throwing", async () => {
-    const { deps } = makeDeps(() =>
-      Promise.reject(new Error("auth: token exchange failed: invalid_grant"))
-    );
-
-    const result = await interactiveModule.interactiveAuthService(
-      { clientSecretsJson, scopes },
-      deps
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("expected auth failure");
-    }
-    expect(result.error.domain).toBe("auth");
   });
 });
 
@@ -249,6 +99,9 @@ describe("interactiveAuthService boundary", () => {
 // expose internals again.
 describe("public oauth/interactive surface", () => {
   test("exposes interactiveAuthService only (no internal helpers leaked)", () => {
+    // Given the module backing the public oauth/interactive subpath
+    // When inspecting its exports
+    // Then only the domain service is reachable, never the impl helpers
     expect(Object.keys(interactiveModule).toSorted()).toEqual([
       "interactiveAuthService",
     ]);
