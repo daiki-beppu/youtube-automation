@@ -19,7 +19,7 @@ describe("createService", () => {
   test("returns validation error when input parsing fails and does not call execute", async () => {
     let executeCalls = 0;
     const service = createService(InputSchema, OutputSchema, (input) => {
-      executeCalls++;
+      executeCalls += 1;
       return Promise.resolve({
         doubled: input.value * 2,
       });
