@@ -7,12 +7,6 @@ import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
 import {
-  readNonEmptyStringCell,
-  readNumberCell,
-  requireHeaders,
-  resolveColumnIndex,
-} from "../column-helpers.ts";
-import {
   shouldRetryAnalyticsQuery,
   toAnalyticsQueryError,
 } from "../query-error.ts";
@@ -32,6 +26,7 @@ const VIEW_SHARE_METRIC = "viewSharePercent";
 
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
+type ColumnHeaders = NonNullable<QueryResponse["columnHeaders"]>;
 type TrafficSourceMetricRecord =
   TrafficSourceAnalyticsOutput["metrics"][number];
 interface MetricColumn {
@@ -71,6 +66,44 @@ const queryTrafficSourceReport = async (
   } catch (error) {
     throw toAnalyticsQueryError(error, QUERY_CONTEXT);
   }
+};
+
+const resolveColumnIndex = (headers: ColumnHeaders, name: string): number => {
+  const index = headers.findIndex((header) => header.name === name);
+  if (index === -1) {
+    throw new Error(
+      `${QUERY_CONTEXT}: response is missing the "${name}" column`
+    );
+  }
+  return index;
+};
+
+const readNumberCell = (
+  row: readonly unknown[],
+  index: number,
+  columnName: string
+): number => {
+  const value = row[index];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new TypeError(
+      `${QUERY_CONTEXT}: response has a non-numeric "${columnName}" value`
+    );
+  }
+  return value;
+};
+
+const readStringCell = (
+  row: readonly unknown[],
+  index: number,
+  columnName: string
+): string => {
+  const value = row[index];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError(
+      `${QUERY_CONTEXT}: response has an invalid "${columnName}" value`
+    );
+  }
+  return value;
 };
 
 const roundOneDecimal = (value: number): number => Math.round(value * 10) / 10;
@@ -116,11 +149,10 @@ const aggregateTrafficSources = (
 ): AggregatedTrafficSource[] => {
   const aggregated = new Map<string, AggregatedTrafficSource>();
   for (const row of rows) {
-    const trafficSourceType = readNonEmptyStringCell(
+    const trafficSourceType = readStringCell(
       row,
       trafficSourceIndex,
-      TRAFFIC_SOURCE_DIMENSION,
-      QUERY_CONTEXT
+      TRAFFIC_SOURCE_DIMENSION
     );
     const previous = aggregated.get(trafficSourceType) ?? {
       averageViewDurationWeightedSum: 0,
@@ -139,12 +171,7 @@ const aggregateTrafficSources = (
     let rowViews = 0;
     let rowAverageViewDuration = 0;
     for (const column of metricColumns) {
-      const value = readNumberCell(
-        row,
-        column.index,
-        column.metric,
-        QUERY_CONTEXT
-      );
+      const value = readNumberCell(row, column.index, column.metric);
       if (column.metric === TRAFFIC_SOURCE_VIEWS_METRIC) {
         rowViews = value;
         views += value;
@@ -172,14 +199,16 @@ const reshapeToLongFormat = (
   if (!rows) {
     return [];
   }
-  const headers = requireHeaders(data, QUERY_CONTEXT);
+  const headers = data.columnHeaders;
+  if (!headers) {
+    throw new Error(`${QUERY_CONTEXT}: response has rows but no columnHeaders`);
+  }
   const trafficSourceIndex = resolveColumnIndex(
     headers,
-    TRAFFIC_SOURCE_DIMENSION,
-    QUERY_CONTEXT
+    TRAFFIC_SOURCE_DIMENSION
   );
   const metricColumns = TRAFFIC_SOURCE_API_METRICS.map((metric) => ({
-    index: resolveColumnIndex(headers, metric, QUERY_CONTEXT),
+    index: resolveColumnIndex(headers, metric),
     metric,
   }));
   const aggregated = aggregateTrafficSources(

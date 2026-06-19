@@ -55,7 +55,7 @@ type ParsedMetadata = UploadInput["metadata"];
 // timezone offset 付き（Z / ±HH:MM）は UTC の Z 終端へ変換し、naive・解析不能はそのまま返す
 // （呼び出し側の入力を尊重する）。
 const normalizePublishAt = (value: string): string => {
-  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+  const hasTimezone = /(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u.test(value);
   if (!hasTimezone) {
     return value;
   }
