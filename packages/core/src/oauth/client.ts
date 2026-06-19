@@ -7,6 +7,7 @@
 // 文字列で throw し、空 credentials のクライアントを黙って作らない（fail fast）。各
 // domain service はここで構築したクライアントを deps で受け取る。
 
+import { OAuth2Client } from "google-auth-library";
 import type { Credentials } from "google-auth-library";
 import { google } from "googleapis";
 import type { youtube_v3, youtubeAnalytics_v2 } from "googleapis";
@@ -16,11 +17,9 @@ export type YouTubeClient = youtube_v3.Youtube;
 /** YouTube Analytics API v2 クライアントの型。 */
 export type YouTubeAnalyticsClient = youtubeAnalytics_v2.Youtubeanalytics;
 
-type GoogleApisOAuth2Client = InstanceType<typeof google.auth.OAuth2>;
-
-const authFromTokenJson = (tokenJson: string): GoogleApisOAuth2Client => {
+const authFromTokenJson = (tokenJson: string): OAuth2Client => {
   const credentials = JSON.parse(tokenJson) as Credentials;
-  const auth = new google.auth.OAuth2();
+  const auth = new OAuth2Client();
   auth.setCredentials(credentials);
   return auth;
 };
