@@ -9,7 +9,9 @@ import type {
 } from "@youtube-automation/core/image";
 
 type ProviderBehavior = Uint8Array | Error;
-const baseInput = (overrides: Partial<GenerateImageInput>): GenerateImageInput =>
+const baseInput = (
+  overrides: Partial<GenerateImageInput>
+): GenerateImageInput =>
   ({
     aspectRatio: "16:9",
     imageSize: "2K",
@@ -44,8 +46,7 @@ const fakeProvider = (behaviors: ProviderBehavior[]) => {
 const fakePersist = (): PersistImage =>
   mock((path: string) => Promise.resolve(path));
 
-const recordSleep = (): SleepMs =>
-  mock(() => Promise.resolve());
+const recordSleep = (): SleepMs => mock(() => Promise.resolve());
 
 const enospcPersist: PersistImage = () =>
   Promise.reject(
