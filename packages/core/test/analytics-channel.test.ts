@@ -257,7 +257,7 @@ describe("collectChannelAnalyticsService success", () => {
           { name: "estimatedMinutesWatched" },
           { name: "subscribersGained" },
         ],
-        rows: [[20260601, 100, 500, 5]],
+        rows: [[1, 100, 500, 5]],
       },
     }));
 
