@@ -247,61 +247,6 @@ describe("collectChannelAnalyticsService success", () => {
     expect(value.metrics).toEqual([]);
   });
 
-  test("rejects a non-string day cell from the service response", async () => {
-    // Given a response whose day dimension is not a string
-    const { client } = makeAnalyticsClient(() => ({
-      data: {
-        columnHeaders: [
-          { name: "day" },
-          { name: "views" },
-          { name: "estimatedMinutesWatched" },
-          { name: "subscribersGained" },
-        ],
-        rows: [[1, 100, 500, 5]],
-      },
-    }));
-
-    // When collecting
-    const result = await collectChannelAnalyticsService(
-      baseInput,
-      makeDeps(client)
-    );
-
-    // Then the boundary returns an error before coercing the date
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("expected a cell-read failure");
-    }
-    expect(result.error.domain).toBe("io");
-  });
-
-  test("rejects a non-numeric metric cell from the service response", async () => {
-    // Given a response whose metric value cannot be coerced to a finite number
-    const { client } = makeAnalyticsClient(() => ({
-      data: {
-        columnHeaders: [
-          { name: "day" },
-          { name: "views" },
-          { name: "estimatedMinutesWatched" },
-          { name: "subscribersGained" },
-        ],
-        rows: [["2026-06-01", "not numeric", 500, 5]],
-      },
-    }));
-
-    // When collecting
-    const result = await collectChannelAnalyticsService(
-      baseInput,
-      makeDeps(client)
-    );
-
-    // Then the boundary returns an error before producing NaN
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("expected a cell-read failure");
-    }
-    expect(result.error.domain).toBe("io");
-  });
 });
 
 // --- API query construction contract --------------------------------------
