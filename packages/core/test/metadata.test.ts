@@ -58,6 +58,7 @@ import {
   formatTitleTemplate,
   referencedPlaceholders,
 } from "../src/metadata/format.ts";
+import { GenerateMetadataInput as GenerateMetadataInputSchema } from "../src/metadata/schema.ts";
 import {
   cleanupChannels,
   minimalSections,
@@ -775,6 +776,25 @@ describe("generateVideoMetadataService", () => {
     expect(result.value.violations).toEqual([]);
   });
 
+  test("derives theme tags from theme when collectionSlug differs", async () => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        collectionSlug: "quiet-rain",
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+      { config }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.tags).toContain("battle music");
+  });
+
   test.each([
     { expected: "00:00", startSeconds: 0 },
     { expected: "00:05", startSeconds: 5 },
@@ -950,31 +970,17 @@ describe("generateVideoMetadataService", () => {
       request: { theme: "Battle Royale", tracks: { title: "Song A" } },
     },
     {
-      name: "empty tracks",
-      request: { theme: "Battle Royale", tracks: [] },
-    },
-    {
-      name: "negative start",
+      name: "missing track title",
       request: {
         theme: "Battle Royale",
-        tracks: [{ durationSeconds: 60, startSeconds: -1, title: "Song A" }],
+        tracks: [{ durationSeconds: 60, startSeconds: 0 }],
       },
     },
     {
-      name: "fractional duration",
+      name: "non-number start",
       request: {
         theme: "Battle Royale",
-        tracks: [{ durationSeconds: 60.5, startSeconds: 0, title: "Song A" }],
-      },
-    },
-    {
-      name: "descending starts",
-      request: {
-        theme: "Battle Royale",
-        tracks: [
-          { durationSeconds: 60, startSeconds: 60, title: "Song A" },
-          { durationSeconds: 60, startSeconds: 0, title: "Song B" },
-        ],
+        tracks: [{ durationSeconds: 60, startSeconds: "0", title: "Song A" }],
       },
     },
     {
@@ -983,20 +989,6 @@ describe("generateVideoMetadataService", () => {
         theme: "Battle Royale",
         tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
         unexpected: true,
-      },
-    },
-    {
-      name: "track extra key",
-      request: {
-        theme: "Battle Royale",
-        tracks: [
-          {
-            durationSeconds: 60,
-            startSeconds: 0,
-            title: "Song A",
-            unexpected: true,
-          },
-        ],
       },
     },
   ])(
@@ -1019,107 +1011,32 @@ describe("generateVideoMetadataService", () => {
     }
   );
 
-  test.each([
-    {
-      name: "too many tracks",
-      request: {
-        theme: "Battle Royale",
-        tracks: Array.from({ length: 101 }, (_, index) => ({
-          durationSeconds: 1,
-          startSeconds: index,
-          title: `Song ${index}`,
-        })),
-      },
-    },
-    {
-      name: "oversized theme",
-      request: {
-        theme: "x".repeat(101),
-        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
-      },
-    },
-    {
-      name: "oversized track title",
-      request: {
-        theme: "Battle Royale",
-        tracks: [
-          { durationSeconds: 60, startSeconds: 0, title: "x".repeat(201) },
-        ],
-      },
-    },
-    {
-      name: "oversized timeline",
-      request: {
-        theme: "Battle Royale",
-        tracks: [
-          {
-            durationSeconds: 24 * 60 * 60 + 1,
-            startSeconds: 0,
-            title: "Song A",
-          },
-        ],
-      },
-    },
-    {
-      name: "track end beyond timeline",
-      request: {
-        theme: "Battle Royale",
-        tracks: [
-          {
-            durationSeconds: 2,
-            startSeconds: 24 * 60 * 60 - 1,
-            title: "Song A",
-          },
-        ],
-      },
-    },
-    {
-      name: "oversized collectionSlug",
-      request: {
-        collectionSlug: "x".repeat(201),
-        theme: "Battle Royale",
-        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
-      },
-    },
-    {
-      name: "too many scenePhrase languages",
-      request: {
-        scenePhrases: Object.fromEntries(
-          Array.from({ length: 51 }, (_, index) => [`lang${index}`, "Rain"])
-        ),
-        theme: "Battle Royale",
-        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
-      },
-    },
-    {
-      name: "oversized scenePhrase language key",
-      request: {
-        scenePhrases: { ["x".repeat(33)]: "Rain" },
-        theme: "Battle Royale",
-        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
-      },
-    },
-    {
-      name: "oversized scenePhrase",
-      request: {
-        scenePhrases: { en: "x".repeat(101) },
-        theme: "Battle Royale",
-        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
-      },
-    },
-  ])("rejects oversized metadata input: $name", async ({ request }) => {
-    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+  test("keeps input schema aligned to the order contract without extra bounds", () => {
+    const parsed = GenerateMetadataInputSchema.parse({
+      collectionSlug: "x".repeat(201),
+      scenePhrases: { ["x".repeat(33)]: "x".repeat(101) },
+      theme: "x".repeat(101),
+      tracks: [
+        {
+          durationSeconds: 60.5,
+          startSeconds: -1,
+          title: "x".repeat(201),
+          unexpected: true,
+        },
+        {
+          durationSeconds: 24 * 60 * 60 + 1,
+          startSeconds: 0,
+          title: "Song B",
+        },
+      ],
+    });
 
-    const result = await generateVideoMetadataService(
-      request as unknown as Parameters<typeof generateVideoMetadataService>[0],
-      { config }
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("expected validation failure");
-    }
-    expect(result.error.domain).toBe("validation");
+    expect(parsed.tracks).toHaveLength(2);
+    expect(parsed.tracks[0]).toEqual({
+      durationSeconds: 60.5,
+      startSeconds: -1,
+      title: "x".repeat(201),
+    });
   });
 
   test("maps internal title validation errors to ServiceError", async () => {
