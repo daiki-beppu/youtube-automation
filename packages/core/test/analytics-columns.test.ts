@@ -7,7 +7,7 @@ import {
   readStringCell,
   requireHeaders,
   resolveColumnIndex,
-} from "../src/analytics/column-helpers.ts";
+} from "../src/analytics/columns.ts";
 
 const context = "analytics helper test";
 const headers = [{ name: "day" }, { name: "views" }];

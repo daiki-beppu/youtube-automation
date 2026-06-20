@@ -41,6 +41,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { YouTubeAPIError } from "@youtube-automation/core";
 import { uploadVideoService } from "@youtube-automation/core/upload";
 
 // Derive input / deps shapes from the service signature so the test does not
@@ -706,6 +707,38 @@ describe("uploadVideoService quota", () => {
     if (r.error.domain === "quota") {
       expect(r.error.retryAfterSeconds).toBeUndefined();
     }
+  });
+
+  test("maps a typed 429 YouTubeAPIError to quota without retrying", async () => {
+    // Given an insert seam that already normalized the failure as typed API 429
+    const { client, insertCalls, thumbnailCalls } = makeYouTubeClient({
+      insert: () => {
+        throw new YouTubeAPIError("videos.insert: quota exceeded", {
+          statusCode: 429,
+        });
+      },
+    });
+
+    // When uploading
+    const r = await uploadVideoService(
+      baseInput({ thumbnail: smallThumbPath }),
+      makeDeps(client, noSleep)
+    );
+
+    // Then it is surfaced as quota, not api/httpStatus 429
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected a quota failure");
+    }
+    expect(r.error.domain).toBe("quota");
+    if (r.error.domain === "quota") {
+      expect(r.error.httpStatus).toBe(429);
+      expect(r.error.retryAfterSeconds).toBeUndefined();
+    }
+
+    // And the typed 429 does not burn the retry budget.
+    expect(insertCalls).toHaveLength(1);
+    expect(thumbnailCalls).toEqual([]);
   });
 });
 

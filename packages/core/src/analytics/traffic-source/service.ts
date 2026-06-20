@@ -1,15 +1,15 @@
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
-import { createService } from "../../service-frame.ts";
+import { createService } from "../../service.ts";
 import {
   readNonEmptyStringCell,
   readNumberCell,
   requireHeaders,
   resolveColumnIndex,
-} from "../column-helpers.ts";
+} from "../columns.ts";
+import { executeQuery, shouldRetryAnalyticsQuery } from "../query.ts";
 import {
   TRAFFIC_SOURCE_API_METRICS,
   TRAFFIC_SOURCE_VIEWS_METRIC,
@@ -54,18 +54,6 @@ const buildQueryParams = (input: TrafficSourceAnalyticsInput): QueryParams => ({
   sort: SORT_BY_VIEWS_DESC,
   startDate: input.startDate,
 });
-
-const queryTrafficSourceReport = async (
-  client: youtubeAnalytics_v2.Youtubeanalytics,
-  params: QueryParams
-): Promise<QueryResponse> => {
-  try {
-    const response = await client.reports.query(params);
-    return response.data;
-  } catch (error) {
-    throw classifyGaxiosError(error, QUERY_CONTEXT);
-  }
-};
 
 const roundOneDecimal = (value: number): number => Math.round(value * 10) / 10;
 
@@ -196,11 +184,9 @@ export const collectTrafficSourceService = createService(
   async (request, deps: TrafficSourceDeps) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
-      () => queryTrafficSourceReport(deps.youtubeAnalytics, params),
-      { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
+      () => executeQuery(deps.youtubeAnalytics, params, QUERY_CONTEXT),
+      { shouldRetry: shouldRetryAnalyticsQuery, sleep: deps.sleep }
     );
-    return {
-      metrics: reshapeToLongFormat(data),
-    };
+    return { metrics: reshapeToLongFormat(data) };
   }
 );

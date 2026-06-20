@@ -4,8 +4,9 @@
 //
 // 構築済みの YouTube Analytics クライアントを `deps` で受け取り（ADR-0003 §7 / DI
 // seam）、`reports.query` の行列を `{ date, videoId, views }`
-// レコードへ map して `Result` で返す。core 内部（query / map）は throw OK で、
-// `createService` が入力 / 出力検証と `ServiceError` 変換を担う。マッピング:
+// レコードへ map して `Result` で返す。core 内部（query / map）は throw OK。境界の
+// `createService` で `toServiceError` 経由に集約し、CLI/MCP は `if (!r.ok)` で discriminate
+// する。マッピング:
 //   - schema 違反（未知キー / 非 YYYY-MM-DD）→ err(domain "validation")（zod ZodError）
 //   - 429 quota                              → err(domain "quota" + retryAfterSeconds)
 //   - その他の API エラー（403 等）          → err(domain "api")
@@ -18,17 +19,17 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
-import { createService } from "../../service-frame.ts";
+import { createService } from "../../service.ts";
 import {
   readNumberCell,
   readStringCell,
   requireHeaders,
   resolveColumnIndex,
-} from "../column-helpers.ts";
+} from "../columns.ts";
+import { executeQuery, shouldRetryAnalyticsQuery } from "../query.ts";
 import {
   CollectVideoDailyAnalyticsInput,
   CollectVideoDailyAnalyticsOutput,
@@ -46,6 +47,10 @@ const VIDEO_FILTER_SEPARATOR = ",";
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
 type VideoDailyRecord = CollectVideoDailyAnalyticsOutput["metrics"][number];
+interface VideoDailyAnalyticsDeps {
+  readonly sleep?: SleepMs;
+  readonly ytAnalytics: YouTubeAnalyticsClient;
+}
 
 const readViewsCell = (row: readonly unknown[], viewsIndex: number): number => {
   const value = row[viewsIndex];
@@ -100,24 +105,12 @@ const mapRows = (data: QueryResponse): VideoDailyRecord[] => {
 export const collectVideoDailyAnalyticsService = createService(
   CollectVideoDailyAnalyticsInput,
   CollectVideoDailyAnalyticsOutput,
-  async (
-    request,
-    deps: { sleep?: SleepMs; ytAnalytics: YouTubeAnalyticsClient }
-  ) => {
+  async (request, deps: VideoDailyAnalyticsDeps) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
-      async () => {
-        try {
-          const response = await deps.ytAnalytics.reports.query(params);
-          return response.data;
-        } catch (error) {
-          throw classifyGaxiosError(error, QUERY_CONTEXT);
-        }
-      },
-      { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
+      () => executeQuery(deps.ytAnalytics, params, QUERY_CONTEXT),
+      { shouldRetry: shouldRetryAnalyticsQuery, sleep: deps.sleep }
     );
-    return {
-      metrics: mapRows(data),
-    };
+    return { metrics: mapRows(data) };
   }
 );

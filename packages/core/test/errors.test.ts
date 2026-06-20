@@ -16,11 +16,11 @@ import {
 import type { Result } from "@youtube-automation/core";
 import { z } from "zod";
 
-// classifyGaxiosError / shouldRetryApiQuery are internal cross-feature helpers
-// shared by service boundaries, intentionally NOT re-exported from the public
-// barrel, so they are imported by source path — the same convention the other
-// internal-symbol tests use (e.g. analytics-channel.test.ts).
-import { classifyGaxiosError, shouldRetryApiQuery } from "../src/errors.ts";
+// classifyGaxiosError is an internal cross-feature helper shared by service
+// boundaries, intentionally NOT re-exported from the public barrel, so it is
+// imported by source path — the same convention the other internal-symbol tests
+// use (e.g. analytics-channel.test.ts).
+import { classifyGaxiosError } from "../src/errors.ts";
 
 // Builds a gaxios-shaped error: a real Error (so `error instanceof Error`
 // holds and `.message` is read for the wrapped message) with a `response`
@@ -245,14 +245,14 @@ describe("classifyGaxiosError", () => {
     expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(60);
   });
 
-  test("ignores a fractional Retry-After header", () => {
+  test("accepts a fractional Retry-After header", () => {
     const raw = gaxiosError("rate limited", {
       headers: { "retry-after": "1.5" },
       status: 429,
     });
     const error = classifyGaxiosError(raw, "videos.insert");
     expect(error).toBeInstanceOf(QuotaExhaustedError);
-    expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(1.5);
   });
 
   test("ignores a non-string Retry-After header", () => {
@@ -273,6 +273,28 @@ describe("classifyGaxiosError", () => {
     // Then it is still a quota error, but with no usable retry hint
     expect(error).toBeInstanceOf(QuotaExhaustedError);
     expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+  });
+
+  test("promotes a typed YouTubeAPIError with status 429 to QuotaExhaustedError", () => {
+    // Given a service seam that already normalized the error as YouTubeAPIError
+    const typed = new YouTubeAPIError("videos.insert: quota exceeded", {
+      statusCode: 429,
+    });
+    // When classifying it at a retry boundary
+    const error = classifyGaxiosError(typed, "videos.insert");
+    // Then it still becomes quota so retry policy does not treat it as API 429
+    expect(error).toBeInstanceOf(QuotaExhaustedError);
+    expect(error.message).toBe("videos.insert: quota exceeded");
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+  });
+
+  test("preserves an already-typed QuotaExhaustedError instance", () => {
+    // Given a quota error with a parsed retry hint
+    const quota = new QuotaExhaustedError("quota exceeded", 90);
+    // When classifying it again
+    const error = classifyGaxiosError(quota, "videos.insert");
+    // Then the payload-carrying instance is preserved
+    expect(error).toBe(quota);
   });
 
   test("leaves a non-429 as a plain YouTubeAPIError for the retry path", () => {
@@ -301,38 +323,6 @@ describe("classifyGaxiosError", () => {
     expect(error).toBe(normalized);
     expect(error).toBeInstanceOf(QuotaExhaustedError);
     expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(900);
-  });
-});
-
-describe("shouldRetryApiQuery", () => {
-  test("does not retry quota errors", () => {
-    const error = new QuotaExhaustedError("quota exceeded");
-    expect(shouldRetryApiQuery(error)).toBe(false);
-  });
-
-  test("does not retry permanent 4xx API errors", () => {
-    const error = new YouTubeAPIError("forbidden", { statusCode: 403 });
-    expect(shouldRetryApiQuery(error)).toBe(false);
-  });
-
-  test("retries server-side 5xx API errors", () => {
-    const error = new YouTubeAPIError("server error", { statusCode: 500 });
-    expect(shouldRetryApiQuery(error)).toBe(true);
-  });
-
-  test("retries normalized API errors with unknown status", () => {
-    const error = new YouTubeAPIError("network drop");
-    expect(shouldRetryApiQuery(error)).toBe(true);
-  });
-
-  test("retries raw transient errors", () => {
-    const error = new Error("raw failure");
-    expect(shouldRetryApiQuery(error)).toBe(true);
-  });
-
-  test("does not retry domain-prefixed permanent errors", () => {
-    const error = new Error("validation: bad input");
-    expect(shouldRetryApiQuery(error)).toBe(false);
   });
 });
 
