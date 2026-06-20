@@ -183,7 +183,7 @@ describe("createSkillsCommand list — in-process adapter contract", () => {
 
     await command.subCommands.list.run({
       args: { json: true, "skills-dir": "/fixtures/skills" },
-    } as never);
+    });
 
     expect(depsCalls).toEqual([[]]);
     expect(calls.runInputs).toEqual([{ skillsDir: "/fixtures/skills" }]);
@@ -210,7 +210,7 @@ describe("createSkillsCommand list — in-process adapter contract", () => {
 
     await command.subCommands.list.run({
       args: { json: false },
-    } as never);
+    });
 
     expect(emitted.calls[0]?.renderedText).toContain(
       "同梱スキル 3 件 (source: /fixtures/skills)"
@@ -241,7 +241,7 @@ describe("createSkillsCommand list — in-process adapter contract", () => {
 
     await command.subCommands.list.run({
       args: { json: true, "skills-dir": "/missing/skills" },
-    } as never);
+    });
 
     expect(depsCalls).toEqual([[]]);
     expect(calls.runInputs).toEqual([{ skillsDir: "/missing/skills" }]);

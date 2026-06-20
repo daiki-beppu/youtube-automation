@@ -125,7 +125,7 @@ describe("createGenerateSunoCommand — in-process adapter contract", () => {
 
     await command.run({
       args: { json: true, path: "/channel/collections/planning/test" },
-    } as never);
+    });
 
     expect(depsCalls).toEqual([["channelDir"]]);
     expect(calls.runInputs).toEqual([
@@ -148,7 +148,7 @@ describe("createGenerateSunoCommand — in-process adapter contract", () => {
     });
 
     currentCwd = "/channel/collections/planning/from-runtime-cwd";
-    await command.run({ args: { json: false } } as never);
+    await command.run({ args: { json: false } });
 
     expect(calls.runInputs).toEqual([
       { path: "/channel/collections/planning/from-runtime-cwd" },
@@ -166,7 +166,7 @@ describe("createGenerateSunoCommand — in-process adapter contract", () => {
       resolveDeps: () => Promise.resolve({ channelDir: "/channel" }),
     });
 
-    await command.run({ args: { path: "--json" } } as never);
+    await command.run({ args: { path: "--json" } });
 
     expect(calls.runInputs).toEqual([
       { path: "/channel/collections/planning/json-token" },
@@ -185,7 +185,7 @@ describe("createGenerateSunoCommand — in-process adapter contract", () => {
         Promise.reject(new Error("config: CHANNEL_DIR is required")),
     });
 
-    await command.run({ args: { json: true } } as never);
+    await command.run({ args: { json: true } });
 
     expect(emitted.calls).toHaveLength(1);
     expect(emitted.calls[0]?.result).toEqual({
@@ -207,7 +207,7 @@ describe("createGenerateSunoCommand — in-process adapter contract", () => {
       resolveDeps: () => Promise.resolve({ channelDir: "/channel" }),
     });
 
-    await command.run({ args: { json: false, path: "/collection" } } as never);
+    await command.run({ args: { json: false, path: "/collection" } });
 
     expect(emitted.calls[0]?.renderedText).toContain("generated: 1");
     expect(emitted.calls[0]?.renderedText).toContain(

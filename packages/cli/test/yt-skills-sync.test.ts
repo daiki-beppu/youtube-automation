@@ -166,7 +166,7 @@ describe("createSkillsCommand sync — in-process adapter contract", () => {
         json: true,
         target: "/repo/.claude/skills",
       },
-    } as never);
+    });
 
     expect(depsCalls).toEqual([[]]);
     expect(calls.runInputs).toEqual([
@@ -182,7 +182,7 @@ describe("createSkillsCommand sync — in-process adapter contract", () => {
 
     await command.subCommands.sync.run({
       args: { asset: "all", force: false, json: false },
-    } as never);
+    });
 
     expect(calls.runInputs).toEqual([
       { asset: "skills", force: false },
@@ -206,7 +206,7 @@ describe("createSkillsCommand sync — in-process adapter contract", () => {
           json: false,
           target: "/repo/custom-target",
         },
-      } as never)
+      })
     ).rejects.toThrow("exit 2");
 
     expect(exitCodes).toEqual([2]);
@@ -226,7 +226,7 @@ describe("createSkillsCommand sync — in-process adapter contract", () => {
           json: false,
           target: "/repo/custom-target",
         },
-      } as never)
+      })
     ).rejects.toThrow("exit 2");
 
     expect(exitCodes).toEqual([2]);
