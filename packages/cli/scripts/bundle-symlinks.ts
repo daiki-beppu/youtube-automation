@@ -12,7 +12,6 @@ import {
   cp,
   lstat,
   mkdir,
-  readlink,
   rm,
   symlink,
   unlink,
@@ -79,28 +78,8 @@ const removePathIfPresent = async (path: string): Promise<void> => {
   await rm(path, { force: true, recursive: true });
 };
 
-const isErrno = (error: unknown, code: string): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  (error as { code?: unknown }).code === code;
-
 const restoreSymlink = async (link: string, source: string): Promise<void> => {
   const target = relative(dirname(link), source);
-  try {
-    await symlink(target, link);
-    return;
-  } catch (error) {
-    if (!isErrno(error, "EEXIST")) {
-      throw error;
-    }
-  }
-
-  const stat = await lstatOrNull(link);
-  if (stat?.isSymbolicLink() && (await readlink(link)) === target) {
-    return;
-  }
-
-  await removePathIfPresent(link);
   await symlink(target, link);
 };
 
