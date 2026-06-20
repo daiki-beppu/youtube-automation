@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 
-import { ok } from "@youtube-automation/core";
+import { err, ok } from "@youtube-automation/core";
 import type { Result, ServiceError } from "@youtube-automation/core";
 import { REGISTRY } from "@youtube-automation/core/registry";
 import type { DepsMap, RegistryEntry } from "@youtube-automation/core/registry";
@@ -26,6 +26,7 @@ const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const runTayk = (...argv: string[]) =>
   Bun.spawnSync(["bun", join(repoRoot, "packages/cli/bin/tayk.ts"), ...argv], {
     cwd: repoRoot,
+    timeout: CLI_SMOKE_TIMEOUT_MS,
   });
 
 const listOutput: SkillListOutput = {
@@ -58,6 +59,29 @@ const makeListEntry = () => {
       calls.runInputs.push(input);
       calls.runDeps.push(deps);
       return Promise.resolve(ok(listOutput));
+    },
+  } satisfies SkillListEntry;
+
+  return { calls, entry };
+};
+
+const makeFailingListEntry = () => {
+  const calls: {
+    runDeps: EmptyDeps[];
+    runInputs: SkillListInput[];
+  } = { runDeps: [], runInputs: [] };
+
+  const entry = {
+    deps: [] as const,
+    description: "List bundled skills",
+    inputSchema: SkillListInputSchema,
+    outputSchema: SkillListOutputSchema,
+    run(input: SkillListInput, deps: EmptyDeps) {
+      calls.runInputs.push(input);
+      calls.runDeps.push(deps);
+      return Promise.resolve(
+        err({ domain: "io", message: "missing skills directory" })
+      );
     },
   } satisfies SkillListEntry;
 
@@ -193,5 +217,44 @@ describe("createSkillsCommand list — in-process adapter contract", () => {
     );
     expect(emitted.calls[0]?.renderedText).toContain("  - bravo");
     expect(emitted.calls[0]?.renderedText).toContain("  - delta");
+  });
+
+  test("forwards list entry error Results to emitResult", async () => {
+    const { calls, entry: listEntry } = makeFailingListEntry();
+    const emitted = makeEmitResult();
+    const depsCalls: (readonly never[])[] = [];
+    const command = createSkillsCommand({
+      emitResult: emitted.emitResult,
+      exit: (code: number) => {
+        throw new Error(`unexpected exit ${code}`);
+      },
+      listEntry,
+      resolveDeps: (deps: readonly never[]) => {
+        depsCalls.push([...deps]);
+        return Promise.resolve({});
+      },
+      syncEntry: makeUnusedSyncEntry(),
+      writeStderr: (message: string) => {
+        throw new Error(`unexpected stderr: ${message}`);
+      },
+    });
+
+    await command.subCommands.list.run({
+      args: { json: true, "skills-dir": "/missing/skills" },
+    } as never);
+
+    expect(depsCalls).toEqual([[]]);
+    expect(calls.runInputs).toEqual([{ skillsDir: "/missing/skills" }]);
+    expect(calls.runDeps).toEqual([{}]);
+    expect(emitted.calls).toEqual([
+      {
+        json: true,
+        renderedText: undefined,
+        result: {
+          error: { domain: "io", message: "missing skills directory" },
+          ok: false,
+        },
+      },
+    ]);
   });
 });

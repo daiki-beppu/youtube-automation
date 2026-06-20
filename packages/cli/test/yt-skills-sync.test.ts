@@ -26,6 +26,7 @@ const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const runTayk = (...argv: string[]) =>
   Bun.spawnSync(["bun", join(repoRoot, "packages/cli/bin/tayk.ts"), ...argv], {
     cwd: repoRoot,
+    timeout: CLI_SMOKE_TIMEOUT_MS,
   });
 
 type EmptyDeps = Pick<DepsMap, never>;

@@ -21,7 +21,10 @@ const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
 
 const runTayk = (...argv: string[]) =>
-  Bun.spawnSync(["bun", taykBin, ...argv], { cwd: repoRoot });
+  Bun.spawnSync(["bun", taykBin, ...argv], {
+    cwd: repoRoot,
+    timeout: CLI_SMOKE_TIMEOUT_MS,
+  });
 
 const generatedOutput: GenerateSunoOutput = {
   entryCount: 1,
