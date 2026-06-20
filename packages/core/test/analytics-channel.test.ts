@@ -68,8 +68,14 @@ const makeAnalyticsClient = (behavior: QueryBehavior) => {
   return { calls, client };
 };
 
-const makeDeps = (client: unknown): ChannelAnalyticsDeps =>
-  ({ youtubeAnalytics: client }) as unknown as ChannelAnalyticsDeps;
+const makeDeps = (
+  client: unknown,
+  sleep?: ChannelAnalyticsDeps["sleep"]
+): ChannelAnalyticsDeps =>
+  ({
+    youtubeAnalytics: client,
+    ...(sleep === undefined ? {} : { sleep }),
+  }) as unknown as ChannelAnalyticsDeps;
 
 // Builds a gaxios-shaped error (errors.test.ts:23): a real Error with a
 // `response` carrying `status` + payload, mirroring the googleapis surface the
@@ -384,6 +390,38 @@ describe("collectChannelAnalyticsService quota error path", () => {
 // --- non-quota API error path ---------------------------------------------
 
 describe("collectChannelAnalyticsService api error path", () => {
+  test("retries a transient 500 through the service with injected sleep", async () => {
+    // Given a query that fails once with a transient 500 and then succeeds
+    const sleeps: number[] = [];
+    const sleep: ChannelAnalyticsDeps["sleep"] = (ms) => {
+      sleeps.push(ms);
+      return Promise.resolve();
+    };
+    let attempts = 0;
+    const { calls, client } = makeAnalyticsClient(() => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw gaxiosError("server error", {
+          data: { error: { errors: [{ reason: "backendError" }] } },
+          status: 500,
+        });
+      }
+      return naturalResponse();
+    });
+
+    // When collecting with a no-op backoff sleep injected
+    const result = await collectChannelAnalyticsService(
+      baseInput,
+      makeDeps(client, sleep)
+    );
+
+    // Then the retry runs through the service boundary without real waiting
+    const value = expectOk(result);
+    expect(value.metrics).toHaveLength(6);
+    expect(calls).toHaveLength(2);
+    expect(sleeps).toEqual([10_000]);
+  });
+
   test("maps a 403 API error to an api ServiceError without throwing", async () => {
     // Given a fake query that rejects with a non-quota gaxios error
     const { client } = makeAnalyticsClient(() => {

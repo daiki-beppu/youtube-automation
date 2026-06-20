@@ -18,6 +18,7 @@ import type { youtubeAnalytics_v2 } from "googleapis";
 
 import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import { withRetry } from "../../retry.ts";
+import type { SleepMs } from "../../retry.ts";
 import { createService } from "../../service-frame.ts";
 import { requireHeaders, resolveColumnIndex } from "../column-helpers.ts";
 import {
@@ -35,6 +36,10 @@ const VIDEO_FILTER_PREFIX = "video==";
 type ChannelMetricRecord = ChannelAnalyticsOutput["metrics"][number];
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
+interface ChannelAnalyticsDeps {
+  readonly sleep?: SleepMs;
+  readonly youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics;
+}
 
 const buildQueryParams = (input: ChannelAnalyticsInput): QueryParams => ({
   dimensions: DAY_DIMENSION,
@@ -94,14 +99,11 @@ const reshapeToLongFormat = (data: QueryResponse): ChannelMetricRecord[] => {
 export const collectChannelAnalyticsService = createService(
   ChannelAnalyticsInput,
   ChannelAnalyticsOutput,
-  async (
-    request,
-    deps: { youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics }
-  ) => {
+  async (request, deps: ChannelAnalyticsDeps) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
       () => queryDailyReport(deps.youtubeAnalytics, params),
-      { shouldRetry: shouldRetryApiQuery }
+      { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
     );
     return { metrics: reshapeToLongFormat(data) };
   }

@@ -148,10 +148,12 @@ export function buildYouTubeClient(tokenJson: string): youtube_v3.Youtube {
 }
 
 // domain service の例
-export async function uploadVideoService(
-  input: UploadInput,
-  deps: { youtube: youtube_v3.Youtube }
-): Promise<Result<UploadOutput, ServiceError>>;
+export const uploadVideoService = createService(
+  UploadInput,
+  UploadOutput,
+  async (input, deps: { youtube: youtube_v3.Youtube }) =>
+    uploadVideo(input, deps.youtube)
+);
 ```
 
 ### 8. schema は zod に集約、`isRecord` / 手書き parseX は撤廃
