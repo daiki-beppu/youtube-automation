@@ -8,14 +8,7 @@
 // files, both assets absent). `prepack` replaces each link with a dereferenced
 // real copy; `postpack` restores the link, leaving the working tree unchanged.
 
-import {
-  cp,
-  lstat,
-  mkdir,
-  rm,
-  symlink,
-  unlink,
-} from "node:fs/promises";
+import { cp, lstat, mkdir, rm, symlink, unlink } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 
 // packages/cli/scripts → packages/cli → packages → repo root.
