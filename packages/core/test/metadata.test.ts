@@ -1,5 +1,4 @@
-// Tests for packages/core/src/metadata.ts — the TS port of the pure
-// generation helpers from Python `utils/metadata_generator.py`.
+// Tests for metadata generation helpers and the public metadata facade.
 //
 // Per plan §2, only the *pure* surface is ported: title/description/localization
 // /shorts/track-string generation. The audio-analysis (afinfo), workflow-state
@@ -9,20 +8,13 @@
 // a skill_config or running subprocesses.
 //
 // Signature contract (the test-first spec the draft implements), from plan §4-B:
-//   referencedPlaceholders(template) -> Set<string>
-//   formatTitleTemplate(template, values, context) -> string
 //   cleanTrackTitle(filename) -> string
 //   extractPatternKey(filename) -> "a"|"b"|"c"|"d"|null
 //   buildTimestampsText(tracks, themeNames, themeInline) -> string
 //   formatShortDurationPhrase(audio) -> string
 //   buildShortDescription(config, {collectionName, ccVideoUrl}) -> string
 //   buildShortLocalizations(config, {collectionName, theme, ccVideoUrl}) -> record
-//   validateScenePhrases(scenePhrases, config, sceneEmoji) -> SceneTitleViolation[]
-//   formatSceneTitleViolations(violations) -> string
-//   generateCompleteCollectionTitle(config, {...}) -> string
-//   buildCompleteCollectionDescription(config, {...}) -> string
-//   generateLocalizations(config, {...}) -> record
-//   tagsForCollection(tags, name) -> string[]  (re-exported through metadata)
+//   generateVideoMetadataService(input, {config}) -> Result<metadata, ServiceError>
 
 import {
   afterAll,
@@ -34,25 +26,38 @@ import {
   test,
 } from "bun:test";
 
-import { loadConfig, reset } from "@youtube-automation/core/config";
+import {
+  loadConfig,
+  reset,
+  tagsForCollection,
+} from "@youtube-automation/core/config";
 import type { ChannelConfig } from "@youtube-automation/core/config";
 import {
-  buildCompleteCollectionDescription,
   buildShortDescription,
   buildShortLocalizations,
   buildTimestampsText,
   cleanTrackTitle,
   extractPatternKey,
-  formatSceneTitleViolations,
   formatShortDurationPhrase,
-  formatTitleTemplate,
-  generateCompleteCollectionTitle,
-  generateLocalizations,
-  referencedPlaceholders,
-  tagsForCollection,
-  validateScenePhrases,
+  generateVideoMetadataService,
+} from "@youtube-automation/core/metadata";
+import type {
+  GenerateMetadataInput,
+  GenerateMetadataOutput,
 } from "@youtube-automation/core/metadata";
 
+import {
+  buildCompleteCollectionDescription,
+  formatSceneTitleViolations,
+  generateCompleteCollectionTitle,
+  generateLocalizations,
+  validateScenePhrases,
+} from "../src/metadata/collection.ts";
+import { roundHalfToEven } from "../src/metadata/duration.ts";
+import {
+  formatTitleTemplate,
+  referencedPlaceholders,
+} from "../src/metadata/format.ts";
 import {
   cleanupChannels,
   minimalSections,
@@ -680,9 +685,478 @@ describe("generateLocalizations", () => {
   });
 });
 
-// --- tags re-export --------------------------------------------------------
+// --- generateVideoMetadataService -----------------------------------------
 
-describe("tagsForCollection (re-exported through metadata)", () => {
+describe("generateVideoMetadataService", () => {
+  test("keeps the public metadata barrel limited to the facade and retained utilities", async () => {
+    const metadata =
+      (await import("@youtube-automation/core/metadata")) as Record<
+        string,
+        unknown
+      >;
+
+    for (const name of [
+      "buildShortDescription",
+      "buildShortLocalizations",
+      "buildTimestampsText",
+      "cleanTrackTitle",
+      "extractPatternKey",
+      "formatShortDurationPhrase",
+      "generateVideoMetadataService",
+    ]) {
+      expect(typeof metadata[name]).toBe("function");
+    }
+
+    for (const name of [
+      "GenerateMetadataInput",
+      "GenerateMetadataOutput",
+      "buildCompleteCollectionDescription",
+      "formatTitleTemplate",
+      "generateCompleteCollectionTitle",
+      "generateLocalizations",
+      "loadTemplate",
+      "referencedPlaceholders",
+      "validateScenePhrases",
+    ]) {
+      expect(name in metadata).toBe(false);
+    }
+
+    const input = {
+      theme: "Battle Royale",
+      tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+    } satisfies GenerateMetadataInput;
+    const output = {
+      description: "Description",
+      tags: ["battle music"],
+      timestamps: "00:00 Song A",
+      title: "Battle Royale - Study",
+      violations: [],
+    } satisfies GenerateMetadataOutput;
+
+    expect(input.theme).toBe("Battle Royale");
+    expect(output.timestamps).toBe("00:00 Song A");
+  });
+
+  test("generates title, description, tags, timestamps and localizations", async () => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        collectionSlug: "battle-royale",
+        scenePhrases: {
+          de: "Stiller Regen",
+          en: "Quiet Rain",
+          ja: "静かな雨",
+        },
+        theme: "Battle Royale",
+        tracks: [
+          { durationSeconds: 120, startSeconds: 0, title: "Song A" },
+          { durationSeconds: 180, startSeconds: 120, title: "Song B" },
+        ],
+      },
+      { config }
+    );
+
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.ok).toBe(true);
+    expect(result.value.title).toBe("Battle Royale - Study");
+    expect(result.value.timestamps).toBe("00:00 Song A\n02:00 Song B");
+    expect(result.value.description).toContain("🎵 Battle Royale - Study");
+    expect(result.value.description).toContain("00:00 Song A\n02:00 Song B");
+    expect(result.value.tags).toContain("battle music");
+    expect(result.value.localizations?.en?.title).toBe(
+      "Quiet Rain Study, Focus"
+    );
+    expect(result.value.localizations?.ja?.description).toContain(
+      "00:00 Song A"
+    );
+    expect(result.value.violations).toEqual([]);
+  });
+
+  test.each([
+    { expected: "00:00", startSeconds: 0 },
+    { expected: "00:05", startSeconds: 5 },
+    { expected: "01:00", startSeconds: 60 },
+    { expected: "59:59", startSeconds: 3599 },
+    { expected: "1:00:00", startSeconds: 3600 },
+  ])(
+    "formats facade timestamps with Python parity for $startSeconds seconds",
+    async ({ expected, startSeconds }) => {
+      const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+      const result = await generateVideoMetadataService(
+        {
+          theme: "Battle Royale",
+          tracks: [{ durationSeconds: 1, startSeconds, title: "Song A" }],
+        },
+        { config }
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.timestamps).toBe(`${expected} Song A`);
+    }
+  );
+
+  test("generates localizations from config, theme and tracks without scenePhrases", async () => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        theme: "Battle Royale",
+        tracks: [
+          { durationSeconds: 120, startSeconds: 0, title: "Song A" },
+          { durationSeconds: 180, startSeconds: 120, title: "Song B" },
+        ],
+      },
+      { config }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.localizations?.en?.title).toBe(
+      "Battle Royale Study, Focus"
+    );
+    expect(result.value.localizations?.ja?.description).toContain(
+      "00:00 Song A"
+    );
+    expect(result.value.violations).toEqual([]);
+  });
+
+  test.each([
+    { durationSeconds: 60, expected: "5 min|5m" },
+    { durationSeconds: 90 * 60, expected: "1.5 Hours|1.5h" },
+    { durationSeconds: 150 * 60, expected: "2.5 Hours|2.5h" },
+  ])(
+    "formats duration placeholders with Python parity for $durationSeconds seconds",
+    async ({ durationSeconds, expected }) => {
+      const sections = minimalSections();
+      (sections["content.json"] as { title: Record<string, unknown> }).title = {
+        template: "{duration_display}|{duration_short}",
+      };
+      const config = loadFrom(sections, LOCALIZATIONS);
+
+      const result = await generateVideoMetadataService(
+        {
+          theme: "Battle Royale",
+          tracks: [{ durationSeconds, startSeconds: 0, title: "Song A" }],
+        },
+        { config }
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.title).toBe(expected);
+    }
+  );
+
+  test("uses the latest timeline end for duration placeholders", async () => {
+    const sections = minimalSections();
+    (sections["content.json"] as { title: Record<string, unknown> }).title = {
+      template: "{duration_display}|{duration_short}",
+    };
+    const config = loadFrom(sections, LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        theme: "Battle Royale",
+        tracks: [
+          { durationSeconds: 60 * 60, startSeconds: 0, title: "Song A" },
+          { durationSeconds: 60 * 60, startSeconds: 30 * 60, title: "Song B" },
+        ],
+      },
+      { config }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.title).toBe("1.5 Hours|1.5h");
+  });
+
+  test("uses scenePhrases.en for a scene phrase title template", async () => {
+    const sections = minimalSections();
+    (sections["content.json"] as { title: Record<string, unknown> }).title = {
+      template: "{scene_phrase} - {activity}",
+    };
+    const config = loadFrom(sections, LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        scenePhrases: {
+          de: "Stiller Regen",
+          en: "Quiet Rain",
+          ja: "静かな雨",
+        },
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+      { config }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.title).toBe("Quiet Rain - Study");
+  });
+
+  test("returns title length violations without generating localizations", async () => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        scenePhrases: {
+          de: "Stiller Regen",
+          en: "x".repeat(100),
+          ja: "静かな雨",
+        },
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+      { config }
+    );
+
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.ok).toBe(true);
+    expect(result.value.localizations).toBeUndefined();
+    expect(result.value.violations.map((violation) => violation.lang)).toEqual([
+      "en",
+    ]);
+  });
+
+  test.each([
+    {
+      name: "missing tracks",
+      request: { theme: "Battle Royale" },
+    },
+    {
+      name: "null tracks",
+      request: { theme: "Battle Royale", tracks: null },
+    },
+    {
+      name: "object tracks",
+      request: { theme: "Battle Royale", tracks: { title: "Song A" } },
+    },
+    {
+      name: "empty tracks",
+      request: { theme: "Battle Royale", tracks: [] },
+    },
+    {
+      name: "negative start",
+      request: {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: -1, title: "Song A" }],
+      },
+    },
+    {
+      name: "fractional duration",
+      request: {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60.5, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "descending starts",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          { durationSeconds: 60, startSeconds: 60, title: "Song A" },
+          { durationSeconds: 60, startSeconds: 0, title: "Song B" },
+        ],
+      },
+    },
+    {
+      name: "root extra key",
+      request: {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+        unexpected: true,
+      },
+    },
+    {
+      name: "track extra key",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          {
+            durationSeconds: 60,
+            startSeconds: 0,
+            title: "Song A",
+            unexpected: true,
+          },
+        ],
+      },
+    },
+  ])(
+    "returns a validation error for malformed input: $name",
+    async ({ request }) => {
+      const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+      const result = await generateVideoMetadataService(
+        request as unknown as Parameters<
+          typeof generateVideoMetadataService
+        >[0],
+        { config }
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("expected validation failure");
+      }
+      expect(result.error.domain).toBe("validation");
+    }
+  );
+
+  test.each([
+    {
+      name: "too many tracks",
+      request: {
+        theme: "Battle Royale",
+        tracks: Array.from({ length: 101 }, (_, index) => ({
+          durationSeconds: 1,
+          startSeconds: index,
+          title: `Song ${index}`,
+        })),
+      },
+    },
+    {
+      name: "oversized theme",
+      request: {
+        theme: "x".repeat(101),
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "oversized track title",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          { durationSeconds: 60, startSeconds: 0, title: "x".repeat(201) },
+        ],
+      },
+    },
+    {
+      name: "oversized timeline",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          {
+            durationSeconds: 24 * 60 * 60 + 1,
+            startSeconds: 0,
+            title: "Song A",
+          },
+        ],
+      },
+    },
+    {
+      name: "track end beyond timeline",
+      request: {
+        theme: "Battle Royale",
+        tracks: [
+          {
+            durationSeconds: 2,
+            startSeconds: 24 * 60 * 60 - 1,
+            title: "Song A",
+          },
+        ],
+      },
+    },
+    {
+      name: "oversized collectionSlug",
+      request: {
+        collectionSlug: "x".repeat(201),
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "too many scenePhrase languages",
+      request: {
+        scenePhrases: Object.fromEntries(
+          Array.from({ length: 51 }, (_, index) => [`lang${index}`, "Rain"])
+        ),
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "oversized scenePhrase language key",
+      request: {
+        scenePhrases: { ["x".repeat(33)]: "Rain" },
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+    {
+      name: "oversized scenePhrase",
+      request: {
+        scenePhrases: { en: "x".repeat(101) },
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+    },
+  ])("rejects oversized metadata input: $name", async ({ request }) => {
+    const config = loadFrom(minimalSections(), LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      request as unknown as Parameters<typeof generateVideoMetadataService>[0],
+      { config }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+  });
+
+  test("maps internal title validation errors to ServiceError", async () => {
+    const sections = minimalSections();
+    (sections["content.json"] as { title: Record<string, unknown> }).title = {
+      template:
+        "{theme} {theme} {theme} {theme} {theme} {theme} {theme} {theme}",
+    };
+    const config = loadFrom(sections, LOCALIZATIONS);
+
+    const result = await generateVideoMetadataService(
+      {
+        theme: "Battle Royale",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Song A" }],
+      },
+      { config }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(result.error.domain).toBe("validation");
+    expect(result.error.message).toMatch(/^validation:/u);
+  });
+});
+
+describe("metadata duration formatting", () => {
+  test("uses one Python-compatible half-even rounding implementation", () => {
+    expect(roundHalfToEven(2.5)).toBe(2);
+    expect(roundHalfToEven(3.5)).toBe(4);
+  });
+});
+
+// --- tags helper -----------------------------------------------------------
+
+describe("tagsForCollection", () => {
   test("returns base + channel + matched theme tags", () => {
     const config = loadFrom(minimalSections());
 

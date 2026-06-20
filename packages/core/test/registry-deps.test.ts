@@ -1,13 +1,34 @@
-import { describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
 
 import { ok } from "@youtube-automation/core";
+import { loadConfig, reset } from "@youtube-automation/core/config";
 import type { ChannelConfig } from "@youtube-automation/core/config";
 import type {
   YouTubeAnalyticsClient,
   YouTubeClient,
 } from "@youtube-automation/core/oauth/client";
+import {
+  METADATA_GENERATE_REGISTRY_KEY,
+  REGISTRY,
+} from "@youtube-automation/core/registry";
 import type { DepsMap, RegistryEntry } from "@youtube-automation/core/registry";
 import { z } from "zod";
+
+import {
+  cleanupChannels,
+  minimalSections,
+  restoreChannelDirEnv,
+  saveChannelDirEnv,
+  setupChannel,
+} from "./config-fixtures.ts";
 
 const fakeConfig = {
   identity: { meta: { channelName: "Fake Channel" } },
@@ -15,6 +36,20 @@ const fakeConfig = {
 const fakeYt = { videos: {} } as unknown as YouTubeClient;
 const fakeYtAnalytics = { reports: {} } as unknown as YouTubeAnalyticsClient;
 const fakeChannelDir = "/tmp/fake-channel";
+
+beforeAll(saveChannelDirEnv);
+afterAll(restoreChannelDirEnv);
+
+beforeEach(() => {
+  Reflect.deleteProperty(process.env, "CHANNEL_DIR");
+  reset();
+});
+
+afterEach(() => {
+  reset();
+  Reflect.deleteProperty(process.env, "CHANNEL_DIR");
+  cleanupChannels();
+});
 
 describe("DepsMap — type shape", () => {
   test("maps config / channelDir / yt / ytAnalytics to their declared types", () => {
@@ -84,5 +119,47 @@ describe("RegistryEntry — declared deps reach run, typed", () => {
   test("declares exactly its required deps (no ytAnalytics)", () => {
     expect(fakeEntry.deps).toEqual(["config", "channelDir", "yt"]);
     expect(fakeEntry.deps).not.toContain("ytAnalytics");
+  });
+});
+
+describe("REGISTRY — metadata.generate", () => {
+  test("registers the metadata facade with only config dependency", () => {
+    const entry = REGISTRY[METADATA_GENERATE_REGISTRY_KEY];
+
+    expect(entry.deps).toEqual(["config"]);
+    expect(entry.description).toBe(
+      "コレクションの動画メタデータを一括生成する"
+    );
+    expect(
+      entry.inputSchema.safeParse({
+        theme: "Battle",
+        tracks: [{ durationSeconds: 60, startSeconds: 0, title: "Intro" }],
+      }).success
+    ).toBe(true);
+    expect(entry.outputSchema.safeParse({}).success).toBe(false);
+  });
+
+  test("runs the metadata facade through the registry entry", async () => {
+    const channelDir = setupChannel(minimalSections());
+    process.env.CHANNEL_DIR = channelDir;
+    const config = loadConfig();
+    const entry = REGISTRY[METADATA_GENERATE_REGISTRY_KEY];
+    const input = entry.inputSchema.parse({
+      theme: "Battle Royale",
+      tracks: [
+        { durationSeconds: 120, startSeconds: 0, title: "Song A" },
+        { durationSeconds: 180, startSeconds: 120, title: "Song B" },
+      ],
+    });
+
+    const result = await entry.run(input, { config });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.title).toBe("Battle Royale - Study");
+    expect(result.value.timestamps).toBe("00:00 Song A\n02:00 Song B");
+    expect(result.value.tags).toContain("battle music");
   });
 });
