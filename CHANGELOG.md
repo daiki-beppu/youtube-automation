@@ -9,12 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(ts-rewrite/core)`: Traffic source 内訳（search / browse / external / suggested 等）を期間集計する `collectTrafficSourceService` を ADR-0003 準拠で実装した（#832）。`packages/core/src/analytics/traffic-source/`（schema / service / index）を新設し、Python `utils/traffic_source_analytics.py` Mixin を翻訳せず TS で新規記述。あわせて analytics 共通のエラー分類を `analytics/query-error.ts`（`toAnalyticsQueryError` / `shouldRetryAnalyticsQuery`）へ集約し、video / channel / video-daily / traffic-source の各 service から参照する。quota（429）は `withRetry` で retry せず `domain: "quota"` の Result で返す
+- `feat(ts-rewrite/core)`: resumable upload + thumbnail 圧縮 + metadata update を 1 atomic service に集約した `uploadVideoService` を ADR-0003 準拠で実装した（#837）
+- `feat(ts-rewrite/core)`: Per-video metrics（views / likes / comments / shares 等 8 指標）を YouTube Analytics API から収集する analytics video service を ADR-0003 準拠で実装した（#829）
 - `feat(extensions)`: `release-extensions.yml` を統一タグ `ext-v*` で suno-helper / distrokid-helper の両 zip を単一 GitHub Release に添付するよう拡張した（#1022）。従来は suno-helper のみ添付され distrokid-helper が配布されていなかった問題を解消。あわせて `softprops/action-gh-release` の `body` に初回インストール（zip 展開 → `chrome://extensions` → Load unpacked）／更新（zip 展開 → リロード）手順テンプレを埋め込み、配布契約を `tests/test_release_extensions_workflow.py` で機械担保した。
 - `feat(doctor)`: `yt-doctor accounts` サブコマンドを追加。全チャンネルリポの `auth/client_secrets.json` をスキャンし、GCP プロジェクト・OAuth クライアント ID・トークン有無の対応表を一覧表示する。`--json` で機械可読出力、`--search-root` で探索ルート指定が可能。
 - `docs(adr)`: ADR-0010 全チャンネルを単一 GCP プロジェクトに統合。Billing 枠上限 (5/5) 解消とオペレーションコスト削減のため、チャンネルごとの GCP プロジェクト分離から `yt-channels-automation` への一本化を決定。
 
 ### Changed
 
+- `refactor(ts-rewrite/core)`: ADR-0003 の service 境界 frame（try/catch → Result 変換）を `createService` ヘルパ（`service-frame.ts`）に抽出し、対象 10 service（analytics 5 + image / skills-sync 2 / suno-prompts / upload）を移行した（#1109）。新規 service は core function + schemas だけ書けば frame を正しく適用できるようになり、手書き frame のレビュー負荷と誤実装 fail mode を除去。
+- `refactor(ts-rewrite/core)`: analytics 5 service の共通クエリ実行を `analytics/query.ts::executeQuery` に、列ヘッダー解決を `analytics/columns.ts` に集約し、各 service の try/catch/ok/err ボイラープレートを `service.ts::createService` ラッパーで除去した（#1110）。`column-helpers.ts` → `columns.ts` リネーム、`analytics/query.ts` / `service.ts` 新設。テスト追加: `analytics-query.test.ts` / `service.test.ts`
+- `feat(ts-rewrite/core)`: Audience analytics の demographics / country / subscribedStatus 3 クエリを並列開始するよう変更した（#1115）。失敗時は開始済み retry が settled になるまで待ってから Result へ変換し、service 戻り後に API retry が残らないようにした。
+- `refactor(ts-rewrite/core)`: analytics service の列ヘッダー解決とセル読み取り処理を `analytics/column-helpers.ts` に共通化し、channel / audience / traffic-source の重複実装を整理した（#1113）。
+- `refactor(ts-rewrite/core)`: analytics のエラー分類ロジックを `errors.ts` に統合した（#1108）。`analytics/query-error.ts` と `audience/service.ts` 内の重複実装（`toAnalyticsQueryError` / `shouldRetryAnalyticsQuery` / `parseRetryAfterSeconds`）を削除し、`classifyGaxiosError` / `shouldRetryApiQuery` / RFC 7231 準拠の `parseRetryAfterSeconds` に一本化。ネットワークエラーの retry 漏れも修正。
+- `feat(skills)`: dogfood ライフサイクルが踏む 12 skill（wf-new / wf-next / suno / suno-helper / masterup / videoup / video-upload / thumbnail / video-description / analytics-collect / playlist / distrokid-prep）の `uv run yt-*` 呼び出しを `bunx tayk <cmd>`（ADR-0007 rebrand / ADR-0004 単一 dispatcher）へ置換した（#965）。TS 版を pin した下流でも skill 経由で Python が実行され dogfood が始まらない問題を解消する。対象 skill の `uv run` 残骸ゼロを `tests/test_lifecycle_skills_no_uv_run.py` で機械担保。lifecycle 外の skill の置換は #966 で対応予定。
 - `feat(suno)`: 1 pattern = 1 scene 原則を SKILL.md に追加し、`(Variation N)` 機械的接尾辞による曲タイトル生成を回避。各曲が固有の `name_jp` / `name_en` を持つ YAML 設計を強制する NG/OK 例付き。
 - `feat(video-description)`: Benchmark 概要欄 TTP セクションを構造転写テーブル（7 項目）に拡充し、テンプレ使い回し禁止ルール・冒頭フックのコレクション固有化を追加。
 
@@ -25,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(ts-rewrite/core)`: `uploadVideoService` の予約公開時刻正規化で、不正な timezone offset（例: `+25:99`）を UTC 変換対象にしないよう修正した（#1120）。
+- `refactor(ts-rewrite/core)`: `collectVideoDailyAnalyticsService` の列マッピングをハードコード位置参照から `columnHeaders` ベースの動的解決（`requireHeaders` / `resolveColumnIndex`）へ移行した（#1114）。API レスポンスの列順変更に対する堅牢性を向上
+- `fix(ts-rewrite/core)`: `readReferenceFiles` の参照画像読み込み失敗時エラーに対象パスを含め、元の filesystem error を `cause` に保持するよう修正した（#1121）。
 - `fix(suno-helper)`: auto-capture が Suno の URL 構造変更（`/me` → `/me/playlists`）に追従していなかったため、playlist mapping が `suno-playlists.json` に書き込まれず処理済みコレクションがドロップダウンに残り続けていた問題を修正した。併せて `captureFromTab` で SPA 未描画の空結果もリトライ対象にした。
 - `fix(suno-helper)`: overlay パネルのコンテンツが画面外にはみ出してスクロールできなかった問題を修正した。`max-height: calc(100vh - 120px)` + `overflow-y: auto` を追加。
 - `fix(suno-helper)`: マルチワード prefix（例: `soulful-grooves`）のチャンネルで playlist 名の境界分割が壊れ、Suno に `soulful | grooves-wah-groove` のような誤った playlist 名で作成されていた問題を修正した。サーバー側で `derive_playlist_name` を使って正しい `<prefix> | <theme>` を算出し、`/collections` API の `playlist_name` フィールドとして返すようにした。拡張はサーバーの値を優先使用し、旧サーバーでは `extractPlaylistName` fallback で後方互換を維持する。
@@ -160,6 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration
 
+- `#775`: Python `yt-generate-suno` 相当の導線は TS dispatcher の `tayk generate-suno <collection-dir> [--json]` に移行する。per-CLI bin は追加せず、core registry entry `suno.generate` 経由で `suno-prompts.md` / `suno-prompts.json` を生成する。
 - `#698`: `yt-suno-serve` を実行しているスクリプト・運用手順は `yt-collection-serve` に置き換える。配信 URL は `http://localhost:<PORT>/prompts.json` → `http://localhost:<PORT>/suno/prompts.json` に変わる（suno-helper 拡張は本リリースで追従済み）
 
 ### Security

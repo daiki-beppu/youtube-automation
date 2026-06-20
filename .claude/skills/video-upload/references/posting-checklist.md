@@ -17,10 +17,10 @@
 
 ```bash
 # ドライラン（スケジュール確認）
-uv run yt-upload-collection --plan [-c NAME]
+bunx tayk upload-collection --plan [-c NAME]
 
 # Complete Collection アップロード（デフォルト動作）
-uv run yt-upload-collection [-c NAME]
+bunx tayk upload-collection [-c NAME]
 ```
 
 ## アップロード後確認

@@ -41,7 +41,7 @@ description: "Use when YouTube Analyticsデータの収集・最新化が必要�
 ## 実行コマンド
 
 ```bash
-uv run yt-analytics
+bunx tayk analytics
 ```
 
 ## 出力

@@ -2,6 +2,11 @@ import type { z } from "zod";
 
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
+import {
+  GenerateMetadataInput,
+  GenerateMetadataOutput,
+} from "./metadata/schema.ts";
+import { generateVideoMetadataService } from "./metadata/service.ts";
 import type { YouTubeAnalyticsClient, YouTubeClient } from "./oauth/client.ts";
 import type { Result } from "./result.ts";
 import {
@@ -12,6 +17,11 @@ import {
   SkillSyncOutputSchema,
   syncAssetService,
 } from "./skills-sync/index.ts";
+import {
+  generateSunoPromptsService,
+  GenerateSunoInputSchema,
+  GenerateSunoOutputSchema,
+} from "./suno-prompts/index.ts";
 
 // ADR-0004: core feature registry。feature 名 → {description, schema, deps, run} の
 // data registry を core が所有し、packages/cli (citty defineCommand) と packages/mcp
@@ -19,8 +29,9 @@ import {
 // (依存方向 core ← cli / core ← mcp は不変、cli ⇄ mcp の相互 import は oxlint で禁止)。
 //
 // naming convention: registry キーは dotted ("skills.list")。
-//   - CLI adapter: subcommand 階層 (`yt skills list`)
+//   - CLI adapter: subcommand 階層 (`tayk skills list`)
 //   - MCP adapter: underscore (`skills_list`)
+export const METADATA_GENERATE_REGISTRY_KEY = "metadata.generate";
 
 // service が要求しうる重い依存の型対応表 (#993)。各 service は deps 配列で必要な key
 // だけを宣言し、Pick<DepsMap, D> で run の第 2 引数を compile-time に確定させる。
@@ -29,6 +40,7 @@ import {
 //   - ytAnalytics: YouTube Analytics API v2 client (最小権限: analytics service は yt に触れない)
 // 個別 client を載せるのは最小権限の原則。token ではなく構築済み client を注入する。
 export interface DepsMap {
+  channelDir: string;
   config: ChannelConfig;
   yt: YouTubeClient;
   ytAnalytics: YouTubeAnalyticsClient;
@@ -61,6 +73,13 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  [METADATA_GENERATE_REGISTRY_KEY]: defineRegistryEntry({
+    deps: ["config"],
+    description: "コレクションの動画メタデータを一括生成する",
+    inputSchema: GenerateMetadataInput,
+    outputSchema: GenerateMetadataOutput,
+    run: generateVideoMetadataService,
+  }),
   "skills.list": defineRegistryEntry({
     deps: [],
     description: "同梱スキル一覧を列挙する",
@@ -74,6 +93,13 @@ export const REGISTRY = {
     inputSchema: SkillSyncInputSchema,
     outputSchema: SkillSyncOutputSchema,
     run: syncAssetService,
+  }),
+  "suno.generate": defineRegistryEntry({
+    deps: ["channelDir"],
+    description: "Suno UI 投入用 Style / Lyrics prompt を生成する",
+    inputSchema: GenerateSunoInputSchema,
+    outputSchema: GenerateSunoOutputSchema,
+    run: generateSunoPromptsService,
   }),
 } as const;
 

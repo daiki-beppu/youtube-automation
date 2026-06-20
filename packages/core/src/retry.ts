@@ -6,7 +6,9 @@
 // quota（`QuotaExhaustedError`）は ADR-0003 に従い retry せず Result で caller へ
 // 返す（`domain: "quota"` + `retryAfterSeconds`）。
 
-import { QuotaExhaustedError } from "./errors.ts";
+import { defaultShouldRetry } from "./errors.ts";
+
+export { defaultShouldRetry };
 
 /** リトライ間バックオフのスリープ注入点（ミリ秒）。 */
 export type SleepMs = (ms: number) => Promise<void>;
@@ -17,9 +19,6 @@ const DEFAULT_BACKOFF_SECONDS = [10, 30, 60] as const;
 
 // 実時間で待機する default sleep（テストは fake を注入する）。
 const realSleep: SleepMs = (ms) => Bun.sleep(ms);
-
-// retry しても通らないドメインエラーの message prefix（`toServiceError` と同じ規約）。
-const NON_RETRYABLE_PREFIXES = ["config:", "validation:", "auth:"] as const;
 
 /** `withRetry` の挙動を制御するポリシー。全フィールド省略可（既定値あり）。 */
 export interface RetryPolicy {
@@ -32,22 +31,6 @@ export interface RetryPolicy {
   /** バックオフ待機の注入点。既定は Bun.sleep ベースの実時間待機 */
   readonly sleep?: SleepMs;
 }
-
-/**
- * 既定の retryable 判定。
- *
- * - `QuotaExhaustedError` は retry しない（ADR-0003: quota は Result で caller へ）
- * - `config:` / `validation:` / `auth:` prefix のドメインエラーは retry しても
- *   通らないため即 rethrow
- * - それ以外（一時的な API エラー等）は retry する
- */
-export const defaultShouldRetry = (error: unknown): boolean => {
-  if (error instanceof QuotaExhaustedError) {
-    return false;
-  }
-  const message = error instanceof Error ? error.message : "";
-  return !NON_RETRYABLE_PREFIXES.some((prefix) => message.startsWith(prefix));
-};
 
 /**
  * `attempt` を最大 `maxAttempts` 回まで実行する共通リトライ実装。

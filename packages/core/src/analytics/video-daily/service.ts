@@ -3,9 +3,9 @@
 // `VideoDailyAnalyticsMixin` を翻訳せず TS で新規記述したもの（ADR-0003）。
 //
 // 構築済みの YouTube Analytics クライアントを `deps` で受け取り（ADR-0003 §7 / DI
-// seam）、`reports.query` の行列（[video, day, views]）を `{ date, videoId, views }`
+// seam）、`reports.query` の行列を `{ date, videoId, views }`
 // レコードへ map して `Result` で返す。core 内部（query / map）は throw OK。境界の
-// try/catch で `toServiceError` 経由に集約し、CLI/MCP は `if (!r.ok)` で discriminate
+// `createService` で `toServiceError` 経由に集約し、CLI/MCP は `if (!r.ok)` で discriminate
 // する。マッピング:
 //   - schema 違反（未知キー / 非 YYYY-MM-DD）→ err(domain "validation")（zod ZodError）
 //   - 429 quota                              → err(domain "quota" + retryAfterSeconds)
@@ -19,17 +19,17 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import {
-  QuotaExhaustedError,
-  toServiceError,
-  YouTubeAPIError,
-} from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
-import { defaultShouldRetry, withRetry } from "../../retry.ts";
+import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import { createService } from "../../service.ts";
+import {
+  readNumberCell,
+  readStringCell,
+  requireHeaders,
+  resolveColumnIndex,
+} from "../columns.ts";
+import { executeQuery, shouldRetryAnalyticsQuery } from "../query.ts";
 import {
   CollectVideoDailyAnalyticsInput,
   CollectVideoDailyAnalyticsOutput,
@@ -43,74 +43,27 @@ const SORT_BY_DAY = "day";
 const CHANNEL_ID_PREFIX = "channel==";
 const VIDEO_FILTER_PREFIX = "video==";
 const VIDEO_FILTER_SEPARATOR = ",";
-const HTTP_SERVER_ERROR_MIN = 500;
-
-// 行の列順は上の `dimensions=video,day` + `metrics=views` クエリ契約で固定されるため、
-// columnHeaders に頼らず位置で引く（API はこの dimension/metric 組では常にこの順で返す）。
-const VIDEO_COLUMN = 0;
-const DAY_COLUMN = 1;
-const VIEWS_COLUMN = 2;
 
 type QueryParams = youtubeAnalytics_v2.Params$Resource$Reports$Query;
 type QueryResponse = youtubeAnalytics_v2.Schema$QueryResponse;
 type VideoDailyRecord = CollectVideoDailyAnalyticsOutput["metrics"][number];
+interface VideoDailyAnalyticsDeps {
+  readonly sleep?: SleepMs;
+  readonly ytAnalytics: YouTubeAnalyticsClient;
+}
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-// gaxios エラーの `response.headers["retry-after"]` を秒数として取り出す。header 不在
-// （quota が日次リセットで Retry-After を返さないケース）では undefined（contract 通り）。
-const parseRetryAfterSeconds = (error: unknown): number | undefined => {
-  if (
-    !(
-      isRecord(error) &&
-      isRecord(error.response) &&
-      isRecord(error.response.headers)
-    )
-  ) {
-    return undefined;
+const readViewsCell = (row: readonly unknown[], viewsIndex: number): number => {
+  const value = row[viewsIndex];
+  if (value === null) {
+    return 0;
   }
-  const seconds = Number(error.response.headers["retry-after"]);
-  return Number.isFinite(seconds) ? seconds : undefined;
-};
-
-// API エラーを payload 付き throw 型へ正規化する。既に typed なドメインエラー
-// （下位層が投げた QuotaExhaustedError 等）はそのまま通し、再ラップで statusCode /
-// retryAfterSeconds を落とさない。raw な gaxios エラーは YouTubeAPIError へ変換し、
-// 429 のみ QuotaExhaustedError へ昇格する（`fromGaxiosError` は昇格しない契約のため）。
-const toQueryError = (error: unknown): YouTubeAPIError => {
-  if (error instanceof YouTubeAPIError) {
-    return error;
-  }
-  const apiError = YouTubeAPIError.fromGaxiosError(error, QUERY_CONTEXT);
-  if (apiError.statusCode === 429) {
-    return new QuotaExhaustedError(
-      apiError.message,
-      parseRetryAfterSeconds(error)
-    );
-  }
-  return apiError;
-};
-
-// quota（共通既定で non-retryable）と 4xx 恒久エラーは retry しない。5xx / status 不明 /
-// 非 API throw（ネットワーク断など）のみ一時障害として retry する。
-const shouldRetryQuery = (error: unknown): boolean => {
-  if (!defaultShouldRetry(error)) {
-    return false;
-  }
-  if (error instanceof YouTubeAPIError) {
-    return (
-      error.statusCode === undefined ||
-      error.statusCode >= HTTP_SERVER_ERROR_MIN
-    );
-  }
-  return true;
+  return readNumberCell(row, viewsIndex, "views", QUERY_CONTEXT);
 };
 
 const buildQueryParams = (
   input: CollectVideoDailyAnalyticsInput
 ): QueryParams => {
-  const params: QueryParams = {
+  const baseParams: QueryParams = {
     dimensions: VIDEO_DAY_DIMENSIONS,
     endDate: input.endDate,
     ids: `${CHANNEL_ID_PREFIX}${input.channelId}`,
@@ -120,22 +73,26 @@ const buildQueryParams = (
   };
   // 空配列は「絞り込みなし」と解釈する（`video==` で ids が空の filter は不正なため送らない）。
   if (input.videoIds && input.videoIds.length > 0) {
-    params.filters = `${VIDEO_FILTER_PREFIX}${input.videoIds.join(VIDEO_FILTER_SEPARATOR)}`;
+    return {
+      ...baseParams,
+      filters: `${VIDEO_FILTER_PREFIX}${input.videoIds.join(VIDEO_FILTER_SEPARATOR)}`,
+    };
   }
-  return params;
+  return baseParams;
 };
 
-const mapRows = (rows: QueryResponse["rows"]): VideoDailyRecord[] => {
-  // データ無しの期間は API が `rows` を省く（v2.d.ts contract）→ 空配列で ok。
-  if (!rows) {
+const mapRows = (data: QueryResponse): VideoDailyRecord[] => {
+  if (!data.rows || data.rows.length === 0) {
     return [];
   }
-  return rows.map((row) => ({
-    date: String(row[DAY_COLUMN]),
-    videoId: String(row[VIDEO_COLUMN]),
-    // この dimension では views セルが欠落し得る（0 視聴の日）。null/undefined は
-    // 0 視聴として正規化する（NaN を生まない）。
-    views: Number(row[VIEWS_COLUMN] ?? 0),
+  const headers = requireHeaders(data, QUERY_CONTEXT);
+  const videoIndex = resolveColumnIndex(headers, "video", QUERY_CONTEXT);
+  const dayIndex = resolveColumnIndex(headers, "day", QUERY_CONTEXT);
+  const viewsIndex = resolveColumnIndex(headers, "views", QUERY_CONTEXT);
+  return data.rows.map((row) => ({
+    date: readStringCell(row, dayIndex, "day", QUERY_CONTEXT),
+    videoId: readStringCell(row, videoIndex, "video", QUERY_CONTEXT),
+    views: readViewsCell(row, viewsIndex),
   }));
 };
 
@@ -145,30 +102,15 @@ const mapRows = (rows: QueryResponse["rows"]): VideoDailyRecord[] => {
  * 入力は `.strict()` schema で先に検証してから API を呼ぶため、不正入力（未知キー /
  * 非 YYYY-MM-DD）は API へ到達せず validation エラーになる。
  */
-export const collectVideoDailyAnalyticsService = async (
-  input: CollectVideoDailyAnalyticsInput,
-  deps: { sleep?: SleepMs; ytAnalytics: YouTubeAnalyticsClient }
-): Promise<Result<CollectVideoDailyAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = CollectVideoDailyAnalyticsInput.parse(input);
+export const collectVideoDailyAnalyticsService = createService(
+  CollectVideoDailyAnalyticsInput,
+  CollectVideoDailyAnalyticsOutput,
+  async (request, deps: VideoDailyAnalyticsDeps) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
-      async () => {
-        try {
-          const response = await deps.ytAnalytics.reports.query(params);
-          return response.data;
-        } catch (error) {
-          throw toQueryError(error);
-        }
-      },
-      { shouldRetry: shouldRetryQuery, sleep: deps.sleep }
+      () => executeQuery(deps.ytAnalytics, params, QUERY_CONTEXT),
+      { shouldRetry: shouldRetryAnalyticsQuery, sleep: deps.sleep }
     );
-    return ok(
-      CollectVideoDailyAnalyticsOutput.parse({
-        metrics: mapRows(data.rows),
-      })
-    );
-  } catch (error) {
-    return err(toServiceError(error));
+    return { metrics: mapRows(data) };
   }
-};
+);
