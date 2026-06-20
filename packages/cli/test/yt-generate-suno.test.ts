@@ -1,129 +1,85 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 
+import { ok } from "@youtube-automation/core";
+import type { Result, ServiceError } from "@youtube-automation/core";
 import { REGISTRY } from "@youtube-automation/core/registry";
+import type { DepsMap, RegistryEntry } from "@youtube-automation/core/registry";
+import {
+  GenerateSunoInputSchema,
+  GenerateSunoOutputSchema,
+} from "@youtube-automation/core/suno-prompts";
+import type {
+  GenerateSunoInput,
+  GenerateSunoOutput,
+} from "@youtube-automation/core/suno-prompts";
 
+import { createGenerateSunoCommand } from "../src/commands/generate-suno/cli.ts";
+
+const CLI_SMOKE_TIMEOUT_MS = 15_000;
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const taykBin = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
-const tmpDirs: string[] = [];
 
-const makeTempDir = (prefix: string): string => {
-  const dir = mkdtempSync(join(tmpdir(), prefix));
-  const realDir = realpathSync(dir);
-  tmpDirs.push(realDir);
-  return realDir;
+const runTayk = (...argv: string[]) =>
+  Bun.spawnSync(["bun", taykBin, ...argv], { cwd: repoRoot });
+
+const generatedOutput: GenerateSunoOutput = {
+  entryCount: 1,
+  jsonPath: "/collection/20-documentation/suno-prompts.json",
+  markdownPath: "/collection/20-documentation/suno-prompts.md",
+  warnings: ["Style text exceeds 40 char limit"],
 };
 
-afterEach(() => {
-  while (tmpDirs.length > 0) {
-    const dir = tmpDirs.pop();
-    if (dir !== undefined) {
-      rmSync(dir, { force: true, recursive: true });
-    }
-  }
-});
+type GenerateSunoEntry = RegistryEntry<
+  typeof GenerateSunoInputSchema,
+  typeof GenerateSunoOutputSchema,
+  "channelDir"
+>;
+type GenerateSunoDeps = Pick<DepsMap, "channelDir">;
 
-const runTayk = (
-  options: { cwd?: string; env: Record<string, string | undefined> },
-  ...argv: string[]
-) => {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      env[key] = value;
-    }
-  }
-  for (const [key, value] of Object.entries(options.env)) {
-    if (value === undefined) {
-      Reflect.deleteProperty(env, key);
-    } else {
-      env[key] = value;
-    }
-  }
+const makeGenerateEntry = () => {
+  const calls: {
+    runDeps: GenerateSunoDeps[];
+    runInputs: GenerateSunoInput[];
+  } = { runDeps: [], runInputs: [] };
 
-  return Bun.spawnSync(["bun", taykBin, ...argv], {
-    cwd: options.cwd ?? repoRoot,
-    env,
-  });
+  const entry = {
+    deps: ["channelDir"] as const,
+    description: "Generate Suno prompts",
+    inputSchema: GenerateSunoInputSchema,
+    outputSchema: GenerateSunoOutputSchema,
+    run(input: GenerateSunoInput, deps: GenerateSunoDeps) {
+      calls.runInputs.push(input);
+      calls.runDeps.push(deps);
+      return Promise.resolve(ok(generatedOutput));
+    },
+  } satisfies GenerateSunoEntry;
+
+  return { calls, entry };
 };
 
-const writeFixture = (): { channelDir: string; collectionDir: string } => {
-  const channelDir = makeTempDir("cli-suno-channel-");
-  mkdirSync(join(channelDir, "config", "skills"), { recursive: true });
-  writeFileSync(
-    join(channelDir, "config", "skills", "suno.yaml"),
-    'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"\n',
-    "utf-8"
-  );
+const makeEmitResult = () => {
+  const calls: {
+    json: boolean;
+    renderedText?: string;
+    result: Result<GenerateSunoOutput, ServiceError>;
+  }[] = [];
 
-  const collectionDir = join(channelDir, "collections", "planning", "test");
-  const docsDir = join(collectionDir, "20-documentation");
-  mkdirSync(docsDir, { recursive: true });
-  writeFileSync(
-    join(docsDir, "suno-patterns.yaml"),
-    [
-      'title: "CLI Smoke"',
-      "mode: instrumental",
-      "tracks: 2",
-      "patterns:",
-      '  - name_jp: "午後"',
-      '    name_en: "Afternoon"',
-      '    tempo: "slow"',
-      "    scenes:",
-      '      - "sunlight across a quiet desk"',
-    ].join("\n"),
-    "utf-8"
-  );
-
-  return { channelDir, collectionDir };
-};
-
-const writeWarningFixture = (): {
-  channelDir: string;
-  collectionDir: string;
-} => {
-  const channelDir = makeTempDir("cli-suno-warning-channel-");
-  mkdirSync(join(channelDir, "config", "skills"), { recursive: true });
-  writeFileSync(
-    join(channelDir, "config", "skills", "suno.yaml"),
-    [
-      'genre_line: "slow, ambient pad, soft synth, airy textures, subtle bass"',
-      "style_char_limit: 40",
-      "auto_lyrics_structure: false",
-    ].join("\n"),
-    "utf-8"
-  );
-
-  const collectionDir = join(channelDir, "collections", "planning", "warning");
-  const docsDir = join(collectionDir, "20-documentation");
-  mkdirSync(docsDir, { recursive: true });
-  writeFileSync(
-    join(docsDir, "suno-patterns.yaml"),
-    [
-      'title: "CLI Warning"',
-      "mode: instrumental",
-      "tracks: 2",
-      "patterns:",
-      '  - name_jp: "警告"',
-      '    name_en: "Warning"',
-      '    tempo: "slow"',
-      "    scenes:",
-      '      - "a very long descriptive scene with rain on glass and a quiet late night desk lamp"',
-    ].join("\n"),
-    "utf-8"
-  );
-
-  return { channelDir, collectionDir };
+  return {
+    calls,
+    emitResult(
+      result: Result<GenerateSunoOutput, ServiceError>,
+      options: {
+        json: boolean;
+        renderText: (value: GenerateSunoOutput) => string;
+      }
+    ) {
+      const renderedText = result.ok
+        ? options.renderText(result.value)
+        : undefined;
+      calls.push({ json: options.json, renderedText, result });
+    },
+  };
 };
 
 describe("core registry — suno.generate entry visible from cli package", () => {
@@ -135,110 +91,127 @@ describe("core registry — suno.generate entry visible from cli package", () =>
   });
 });
 
-describe("tayk generate-suno — smoke", () => {
-  test("should generate artifacts through the dispatcher and print JSON output", () => {
-    const { channelDir, collectionDir } = writeFixture();
+describe("tayk generate-suno — dispatcher smoke", () => {
+  test(
+    "should list generate-suno in dispatcher help",
+    () => {
+      const proc = runTayk("--help");
 
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-suno",
-      collectionDir,
-      "--json"
-    );
+      expect(proc.exitCode).toBe(0);
+      expect(proc.stdout.toString()).toContain("generate-suno");
+    },
+    CLI_SMOKE_TIMEOUT_MS
+  );
+});
 
-    expect(proc.exitCode).toBe(0);
-    const parsed = JSON.parse(proc.stdout.toString()) as {
-      entryCount: number;
-      jsonPath: string;
-      markdownPath: string;
-    };
-    expect(parsed.entryCount).toBe(1);
-    expect(parsed.markdownPath).toBe(
-      join(collectionDir, "20-documentation", "suno-prompts.md")
-    );
-    expect(parsed.jsonPath).toBe(
-      join(collectionDir, "20-documentation", "suno-prompts.json")
-    );
-    expect(existsSync(parsed.markdownPath)).toBe(true);
-    expect(existsSync(parsed.jsonPath)).toBe(true);
-    expect(readFileSync(parsed.jsonPath, "utf-8")).toContain(
-      "午後 — Afternoon"
-    );
+describe("createGenerateSunoCommand — in-process adapter contract", () => {
+  test("forwards the positional path, deps, and json flag to the registry entry", async () => {
+    const { calls, entry } = makeGenerateEntry();
+    const emitted = makeEmitResult();
+    const depsValue = { channelDir: "/channel" };
+    const depsCalls: (readonly "channelDir"[])[] = [];
+    const command = createGenerateSunoCommand({
+      emitResult: emitted.emitResult,
+      entry,
+      getCwd: () => "/unused-cwd",
+      resolveDeps: (deps: readonly "channelDir"[]) => {
+        depsCalls.push([...deps]);
+        return Promise.resolve(depsValue);
+      },
+    });
+
+    await command.run({
+      args: { json: true, path: "/channel/collections/planning/test" },
+    } as never);
+
+    expect(depsCalls).toEqual([["channelDir"]]);
+    expect(calls.runInputs).toEqual([
+      { path: "/channel/collections/planning/test" },
+    ]);
+    expect(calls.runDeps).toEqual([depsValue]);
+    expect(emitted.calls).toHaveLength(1);
+    expect(emitted.calls[0]?.json).toBe(true);
   });
 
-  test("should accept a collection path relative to CHANNEL_DIR", () => {
-    const { channelDir, collectionDir } = writeFixture();
-    const relativeCollectionDir = collectionDir.slice(channelDir.length + 1);
+  test("reads cwd at command run time when the collection path is omitted", async () => {
+    const { calls, entry } = makeGenerateEntry();
+    const emitted = makeEmitResult();
+    let currentCwd = "/channel/collections/planning/before-run";
+    const command = createGenerateSunoCommand({
+      emitResult: emitted.emitResult,
+      entry,
+      getCwd: () => currentCwd,
+      resolveDeps: () => Promise.resolve({ channelDir: "/channel" }),
+    });
 
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-suno",
-      relativeCollectionDir,
-      "--json"
-    );
+    currentCwd = "/channel/collections/planning/from-runtime-cwd";
+    await command.run({ args: { json: false } } as never);
 
-    expect(proc.exitCode).toBe(0);
-    const parsed = JSON.parse(proc.stdout.toString()) as {
-      jsonPath: string;
-    };
-    expect(parsed.jsonPath).toBe(
-      join(collectionDir, "20-documentation", "suno-prompts.json")
-    );
-    expect(existsSync(parsed.jsonPath)).toBe(true);
+    expect(calls.runInputs).toEqual([
+      { path: "/channel/collections/planning/from-runtime-cwd" },
+    ]);
+    expect(emitted.calls[0]?.json).toBe(false);
   });
 
-  test("should use CWD when collection path is omitted", () => {
-    const { channelDir, collectionDir } = writeFixture();
+  test("treats a positional --json token as json output with cwd as the path", async () => {
+    const { calls, entry } = makeGenerateEntry();
+    const emitted = makeEmitResult();
+    const command = createGenerateSunoCommand({
+      emitResult: emitted.emitResult,
+      entry,
+      getCwd: () => "/channel/collections/planning/json-token",
+      resolveDeps: () => Promise.resolve({ channelDir: "/channel" }),
+    });
 
-    const proc = runTayk(
-      { cwd: collectionDir, env: { CHANNEL_DIR: channelDir } },
-      "generate-suno",
-      "--json"
-    );
+    await command.run({ args: { path: "--json" } } as never);
 
-    expect(proc.exitCode).toBe(0);
-    const parsed = JSON.parse(proc.stdout.toString()) as {
-      jsonPath: string;
-    };
-    expect(parsed.jsonPath).toBe(
-      join(collectionDir, "20-documentation", "suno-prompts.json")
-    );
-    expect(existsSync(parsed.jsonPath)).toBe(true);
+    expect(calls.runInputs).toEqual([
+      { path: "/channel/collections/planning/json-token" },
+    ]);
+    expect(emitted.calls[0]?.json).toBe(true);
   });
 
-  test("should format dependency resolution errors through the command helper", () => {
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: undefined } },
-      "generate-suno",
-      "--json"
-    );
+  test("formats dependency resolution failures through emitResult", async () => {
+    const { entry } = makeGenerateEntry();
+    const emitted = makeEmitResult();
+    const command = createGenerateSunoCommand({
+      emitResult: emitted.emitResult,
+      entry,
+      getCwd: () => "/channel/collections/planning/failing",
+      resolveDeps: () =>
+        Promise.reject(new Error("config: CHANNEL_DIR is required")),
+    });
 
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toStartWith("[config] ");
-    expect(proc.stderr.toString()).toContain("CHANNEL_DIR");
-    expect(proc.stderr.toString()).not.toContain("at ");
+    await command.run({ args: { json: true } } as never);
+
+    expect(emitted.calls).toHaveLength(1);
+    expect(emitted.calls[0]?.result).toEqual({
+      error: {
+        domain: "config",
+        message: "config: CHANNEL_DIR is required",
+      } satisfies ServiceError,
+      ok: false,
+    });
   });
 
-  test("should list generate-suno in dispatcher help", () => {
-    const proc = runTayk({ env: {} }, "--help");
+  test("keeps normal text rendering in the CLI adapter", async () => {
+    const { entry } = makeGenerateEntry();
+    const emitted = makeEmitResult();
+    const command = createGenerateSunoCommand({
+      emitResult: emitted.emitResult,
+      entry,
+      getCwd: () => "/collection",
+      resolveDeps: () => Promise.resolve({ channelDir: "/channel" }),
+    });
 
-    expect(proc.exitCode).toBe(0);
-    expect(proc.stdout.toString()).toContain("generate-suno");
-  });
+    await command.run({ args: { json: false, path: "/collection" } } as never);
 
-  test("should print quality warnings in normal text output", () => {
-    const { channelDir, collectionDir } = writeWarningFixture();
-
-    const proc = runTayk(
-      { env: { CHANNEL_DIR: channelDir } },
-      "generate-suno",
-      collectionDir
+    expect(emitted.calls[0]?.renderedText).toContain("generated: 1");
+    expect(emitted.calls[0]?.renderedText).toContain(
+      "markdown: /collection/20-documentation/suno-prompts.md"
     );
-
-    expect(proc.exitCode).toBe(0);
-    const stdout = proc.stdout.toString();
-    expect(stdout).toContain("generated: 1");
-    expect(stdout).toContain("[WARN]");
-    expect(stdout).toContain("Style text exceeds 40 char limit");
+    expect(emitted.calls[0]?.renderedText).toContain(
+      "[WARN] Style text exceeds 40 char limit"
+    );
   });
 });

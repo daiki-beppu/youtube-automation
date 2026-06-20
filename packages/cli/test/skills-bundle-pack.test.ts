@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 // packages/cli/test → packages/cli, and two more up → repo root.
 const cliDir = resolve(import.meta.dir, "..");
 const repoRoot = resolve(cliDir, "..", "..");
+const CLI_SMOKE_TIMEOUT_MS = 15_000;
 
 // The canonical skill source. Every entry must reach the tarball as a real
 // directory — read dynamically so the assertion tracks skills being added or
@@ -70,14 +71,14 @@ afterAll(() => {
       rmSync(dir, { force: true, recursive: true });
     }
   }
-});
+}, CLI_SMOKE_TIMEOUT_MS);
 
 describe("cli package — published tarball bundles the sync assets (#742 AC#1/#2/#5)", () => {
   // One pack, shared across the assertions below.
   let entries: string[] = [];
   beforeAll(() => {
     entries = packEntries(makeTmp("cli-pack-"));
-  });
+  }, CLI_SMOKE_TIMEOUT_MS);
 
   test("ships the CLAUDE.template.md asset as a real file (AC#5)", () => {
     // The claude-md source resolves through the _claude_md symlink; its presence

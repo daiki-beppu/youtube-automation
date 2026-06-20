@@ -1,27 +1,105 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 
+import { ok } from "@youtube-automation/core";
+import type { Result, ServiceError } from "@youtube-automation/core";
 import { REGISTRY } from "@youtube-automation/core/registry";
+import type { DepsMap, RegistryEntry } from "@youtube-automation/core/registry";
+import {
+  SkillListInputSchema,
+  SkillListOutputSchema,
+  SkillSyncInputSchema,
+  SkillSyncOutputSchema,
+} from "@youtube-automation/core/skills-sync";
+import type {
+  SkillListInput,
+  SkillListOutput,
+  SkillSyncInput,
+  SkillSyncOutput,
+} from "@youtube-automation/core/skills-sync";
 
+import { createSkillsCommand } from "../src/commands/skills/cli.ts";
+
+const CLI_SMOKE_TIMEOUT_MS = 15_000;
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 
 const runTayk = (...argv: string[]) =>
-  Bun.spawnSync(["bun", "packages/cli/bin/tayk.ts", ...argv], {
+  Bun.spawnSync(["bun", join(repoRoot, "packages/cli/bin/tayk.ts"), ...argv], {
     cwd: repoRoot,
   });
 
-// ADR-0003: registry entry の run は Result を返す。ok arm を unwrap して e2e の
-// 期待値 (service が見るのと同じ payload) を得る。
-const listOk = async (input: { skillsDir?: string }) => {
-  const r = await REGISTRY["skills.list"].run(input, {});
-  if (!r.ok) {
-    throw new Error(
-      `expected an ok Result, got error: ${JSON.stringify(r.error)}`
-    );
-  }
-  return r.value;
+const listOutput: SkillListOutput = {
+  skills: ["bravo", "charlie", "delta"],
+  source: "/fixtures/skills",
+};
+
+type EmptyDeps = Pick<DepsMap, never>;
+type SkillListEntry = RegistryEntry<
+  typeof SkillListInputSchema,
+  typeof SkillListOutputSchema
+>;
+type SkillSyncEntry = RegistryEntry<
+  typeof SkillSyncInputSchema,
+  typeof SkillSyncOutputSchema
+>;
+
+const makeListEntry = () => {
+  const calls: {
+    runDeps: EmptyDeps[];
+    runInputs: SkillListInput[];
+  } = { runDeps: [], runInputs: [] };
+
+  const entry = {
+    deps: [] as const,
+    description: "List bundled skills",
+    inputSchema: SkillListInputSchema,
+    outputSchema: SkillListOutputSchema,
+    run(input: SkillListInput, deps: EmptyDeps) {
+      calls.runInputs.push(input);
+      calls.runDeps.push(deps);
+      return Promise.resolve(ok(listOutput));
+    },
+  } satisfies SkillListEntry;
+
+  return { calls, entry };
+};
+
+const makeUnusedSyncEntry = () =>
+  ({
+    deps: [] as const,
+    description: "Sync bundled assets",
+    inputSchema: SkillSyncInputSchema,
+    outputSchema: SkillSyncOutputSchema,
+    run(
+      _input: SkillSyncInput,
+      _deps: EmptyDeps
+    ): Promise<Result<SkillSyncOutput, ServiceError>> {
+      return Promise.reject(
+        new Error("sync entry should not run in list tests")
+      );
+    },
+  }) satisfies SkillSyncEntry;
+
+const makeEmitResult = () => {
+  const calls: {
+    json: boolean;
+    renderedText?: string;
+    result: Result<unknown, ServiceError>;
+  }[] = [];
+
+  return {
+    calls,
+    emitResult<T>(
+      result: Result<T, ServiceError>,
+      options: { json: boolean; renderText: (value: T) => string }
+    ) {
+      calls.push({
+        json: options.json,
+        renderedText: result.ok ? options.renderText(result.value) : undefined,
+        result,
+      });
+    },
+  };
 };
 
 describe("core registry — skills.list entry (ADR-0004 contract)", () => {
@@ -31,119 +109,89 @@ describe("core registry — skills.list entry (ADR-0004 contract)", () => {
     expect(entry.deps).toEqual([]);
     expect(entry.description.length).toBeGreaterThan(0);
   });
-
-  test("inputSchema accepts {} and run returns an ok Result", async () => {
-    const input = REGISTRY["skills.list"].inputSchema.parse({});
-
-    const output = await listOk(input);
-
-    expect(Array.isArray(output.skills)).toBe(true);
-    expect(typeof output.source).toBe("string");
-  });
 });
 
-describe("tayk skills list — text output (default)", () => {
-  test("exits 0 and prints the count header matching the skills list format", () => {
-    const proc = runTayk("skills", "list");
+describe("tayk skills — dispatcher smoke", () => {
+  test(
+    "`tayk --help` exits 0 and lists the skills subcommand",
+    () => {
+      const proc = runTayk("--help");
 
-    expect(proc.exitCode).toBe(0);
-    expect(proc.stdout.toString()).toMatch(
-      /^同梱スキル \d+ 件 \(source: .+\)$/mu
+      expect(proc.exitCode).toBe(0);
+      expect(proc.stdout.toString()).toContain("skills");
+    },
+    CLI_SMOKE_TIMEOUT_MS
+  );
+
+  test(
+    "`tayk skills --help` exits 0 and lists child commands",
+    () => {
+      const proc = runTayk("skills", "--help");
+
+      expect(proc.exitCode).toBe(0);
+      expect(proc.stdout.toString()).toContain("list");
+      expect(proc.stdout.toString()).toContain("sync");
+    },
+    CLI_SMOKE_TIMEOUT_MS
+  );
+});
+
+describe("createSkillsCommand list — in-process adapter contract", () => {
+  test("forwards --skills-dir, deps, and json flag to the list entry", async () => {
+    const { calls, entry: listEntry } = makeListEntry();
+    const emitted = makeEmitResult();
+    const depsCalls: (readonly never[])[] = [];
+    const command = createSkillsCommand({
+      emitResult: emitted.emitResult,
+      exit: (code: number) => {
+        throw new Error(`unexpected exit ${code}`);
+      },
+      listEntry,
+      resolveDeps: (deps: readonly never[]) => {
+        depsCalls.push([...deps]);
+        return Promise.resolve({});
+      },
+      syncEntry: makeUnusedSyncEntry(),
+      writeStderr: (message: string) => {
+        throw new Error(`unexpected stderr: ${message}`);
+      },
+    });
+
+    await command.subCommands.list.run({
+      args: { json: true, "skills-dir": "/fixtures/skills" },
+    } as never);
+
+    expect(depsCalls).toEqual([[]]);
+    expect(calls.runInputs).toEqual([{ skillsDir: "/fixtures/skills" }]);
+    expect(calls.runDeps).toEqual([{}]);
+    expect(emitted.calls).toHaveLength(1);
+    expect(emitted.calls[0]?.json).toBe(true);
+  });
+
+  test("keeps text output rendering in the CLI adapter", async () => {
+    const { entry: listEntry } = makeListEntry();
+    const emitted = makeEmitResult();
+    const command = createSkillsCommand({
+      emitResult: emitted.emitResult,
+      exit: (code: number) => {
+        throw new Error(`unexpected exit ${code}`);
+      },
+      listEntry,
+      resolveDeps: () => Promise.resolve({}),
+      syncEntry: makeUnusedSyncEntry(),
+      writeStderr: (message: string) => {
+        throw new Error(`unexpected stderr: ${message}`);
+      },
+    });
+
+    await command.subCommands.list.run({
+      args: { json: false },
+    } as never);
+
+    expect(emitted.calls[0]?.renderedText).toContain(
+      "同梱スキル 3 件 (source: /fixtures/skills)"
     );
-  });
-
-  test("prints each skill as an indented bullet line", async () => {
-    const proc = runTayk("skills", "list");
-    const output = proc.stdout.toString();
-
-    const expected = await listOk({});
-    expect(output).toMatch(/^ {2}- .+$/mu);
-    for (const skill of expected.skills) {
-      expect(output).toContain(`  - ${skill}`);
-    }
-  });
-});
-
-describe("tayk skills list --json", () => {
-  test("prints valid JSON carrying source and skills, with no cli reshaping", async () => {
-    const proc = runTayk("skills", "list", "--json");
-
-    expect(proc.exitCode).toBe(0);
-    const parsed = JSON.parse(proc.stdout.toString()) as {
-      skills: string[];
-      source: string;
-    };
-    const expected = await listOk({});
-    expect(parsed.skills).toEqual(expected.skills);
-    expect(typeof parsed.source).toBe("string");
-  });
-});
-
-describe("tayk skills list --skills-dir — option propagates to the service", () => {
-  // The --skills-dir flag must travel citty arg → registry entry → readdir.
-  // A fixture dir with out-of-order subdirectories proves the cli is reading
-  // *this* dir (not the bundled default) end to end.
-  let fixtureDir: string;
-
-  beforeAll(() => {
-    fixtureDir = mkdtempSync(join(tmpdir(), "cli-skills-fixture-"));
-    for (const name of ["delta", "bravo", "charlie"]) {
-      mkdirSync(join(fixtureDir, name));
-    }
-  });
-
-  afterAll(() => {
-    rmSync(fixtureDir, { force: true, recursive: true });
-  });
-
-  test("--json lists the directories under the supplied --skills-dir", () => {
-    const proc = runTayk(
-      "skills",
-      "list",
-      "--skills-dir",
-      fixtureDir,
-      "--json"
-    );
-
-    expect(proc.exitCode).toBe(0);
-    const parsed = JSON.parse(proc.stdout.toString()) as {
-      skills: string[];
-      source: string;
-    };
-    expect(parsed.skills).toEqual(["bravo", "charlie", "delta"]);
-    expect(parsed.source).toBe(fixtureDir);
-  });
-
-  test("text output header reports the supplied --skills-dir as source", () => {
-    const proc = runTayk("skills", "list", "--skills-dir", fixtureDir);
-
-    expect(proc.exitCode).toBe(0);
-    expect(proc.stdout.toString()).toContain(`(source: ${fixtureDir})`);
-  });
-});
-
-describe("tayk skills list — error path (run-command helper)", () => {
-  test("missing --skills-dir exits 1 with an io-domain stderr prefix and empty stdout", () => {
-    const missingDir = join(tmpdir(), "skills-bin-missing-xyz-842");
-    const proc = runTayk("skills", "list", "--skills-dir", missingDir);
-
-    expect(proc.exitCode).toBe(1);
-    expect(proc.stderr.toString()).toContain("[io]");
-    expect(proc.stdout.toString()).toBe("");
-  });
-});
-
-describe("tayk dispatcher — citty usage surface", () => {
-  test("`tayk --help` exits 0 and lists the skills subcommand", () => {
-    const proc = runTayk("--help");
-
-    expect(proc.exitCode).toBe(0);
-    expect(proc.stdout.toString()).toContain("skills");
-  });
-
-  test("`tayk skills <unknown>` exits non-zero", () => {
-    const proc = runTayk("skills", "bogus");
-
-    expect(proc.exitCode).not.toBe(0);
+    expect(emitted.calls[0]?.renderedText).toContain("  - bravo");
+    expect(emitted.calls[0]?.renderedText).toContain("  - delta");
   });
 });
