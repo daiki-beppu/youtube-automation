@@ -11,22 +11,14 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { toServiceError } from "../errors.ts";
-import type { ServiceError } from "../errors.ts";
-import { err, ok } from "../result.ts";
-import type { Result } from "../result.ts";
+import { createService } from "../service-frame.ts";
 import {
   SkillListInputSchema,
   SkillListOutputSchema,
   SkillSyncInputSchema,
   SkillSyncOutputSchema,
 } from "./schema.ts";
-import type {
-  SkillListInput,
-  SkillListOutput,
-  SkillSyncInput,
-  SkillSyncOutput,
-} from "./schema.ts";
+import type { SkillSyncOutput } from "./schema.ts";
 
 // 同梱 skills resource の既定パス。import.meta 基点で packages/cli/_skills を解決する
 // (packages/core/src/skills-sync/service.ts → ../../../cli/_skills)。_skills は .claude/skills への symlink。
@@ -68,15 +60,14 @@ const DEFAULT_TARGETS = {
 const AGENTS_SKILLS_LINK_TARGET = `../${CLAUDE_DIR}/${SKILLS_DIRNAME}`;
 
 // 1 skill = 1 ディレクトリ。非ディレクトリは除外し、Python `sorted(...)` と同じ
-// code-point 昇順で返す。内部は throw OK で、境界の try/catch で `toServiceError`
-// 経由の `Result` に集約する (ADR-0003 §1)。マッピング:
+// code-point 昇順で返す。内部は throw OK で、入力 / 出力検証と `ServiceError`
+// 変換は `createService` が担う (ADR-0003 §1)。マッピング:
 //   - schema 違反 (skillsDir 非文字列 / 未知キー) → err(domain "validation")  (ZodError)
 //   - 存在しない source (readdir ENOENT)           → err(domain "io")          (未 prefix Error)
-export const listSkillsService = async (
-  input: SkillListInput
-): Promise<Result<SkillListOutput, ServiceError>> => {
-  try {
-    const { skillsDir } = SkillListInputSchema.parse(input);
+export const listSkillsService = createService(
+  SkillListInputSchema,
+  SkillListOutputSchema,
+  async ({ skillsDir }) => {
     const source = skillsDir === undefined ? DEFAULT_SKILLS_DIR : skillsDir;
 
     const entries = await readdir(source, { withFileTypes: true });
@@ -85,11 +76,9 @@ export const listSkillsService = async (
       .map((entry) => entry.name)
       .toSorted();
 
-    return ok(SkillListOutputSchema.parse({ skills, source }));
-  } catch (error) {
-    return err(toServiceError(error));
+    return { skills, source };
   }
-};
+);
 
 const resolveSyncTarget = (
   asset: "claude-md" | "skills",
@@ -219,19 +208,14 @@ const syncClaudeMdAsset = async (
 };
 
 // 同梱資産 (skills / claude-md) を対象リポジトリへ配布する (#742)。"all" は CLI sugar の
-// ため schema enum で弾かれ validation error になる。境界の try/catch で Result に集約する。
-export const syncAssetService = async (
-  input: SkillSyncInput
-): Promise<Result<SkillSyncOutput, ServiceError>> => {
-  try {
-    const { asset, force, target } = SkillSyncInputSchema.parse(input);
+// ため schema enum で弾かれ validation error になる。境界変換は `createService` に集約する。
+export const syncAssetService = createService(
+  SkillSyncInputSchema,
+  SkillSyncOutputSchema,
+  async ({ asset, force, target }) => {
     const resolved = resolveSyncTarget(asset, target);
-    const output =
-      asset === "skills"
-        ? await syncSkillsAsset(resolved, force)
-        : await syncClaudeMdAsset(resolved, force);
-    return ok(SkillSyncOutputSchema.parse(output));
-  } catch (error) {
-    return err(toServiceError(error));
+    return asset === "skills"
+      ? await syncSkillsAsset(resolved, force)
+      : await syncClaudeMdAsset(resolved, force);
   }
-};
+);

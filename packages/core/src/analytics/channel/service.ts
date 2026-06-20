@@ -4,9 +4,8 @@
 //
 // 構築済みの YouTube Analytics クライアントを `deps` で受け取り（ADR-0003 §7 / DI
 // seam）、`reports.query` の wide な行列を `{ date, metric, value }` の LONG レコードへ
-// reshape して `Result` で返す。core 内部（query / reshape）は throw OK。境界の
-// try/catch で `toServiceError` 経由に集約し、CLI/MCP は `if (!r.ok)` で discriminate
-// する。マッピング:
+// reshape して `Result` で返す。core 内部（query / reshape）は throw OK で、
+// `createService` が入力 / 出力検証と `ServiceError` 変換を担う。マッピング:
 //   - schema 違反（未知キー / 非 YYYY-MM-DD）→ err(domain "validation")（zod ZodError）
 //   - 429 quota                              → err(domain "quota" + retryAfterSeconds)
 //   - その他の API エラー（403 等）          → err(domain "api")
@@ -17,15 +16,9 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import {
-  classifyGaxiosError,
-  shouldRetryApiQuery,
-  toServiceError,
-} from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
+import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import { withRetry } from "../../retry.ts";
+import { createService } from "../../service-frame.ts";
 import { requireHeaders, resolveColumnIndex } from "../column-helpers.ts";
 import {
   CHANNEL_METRICS,
@@ -98,21 +91,18 @@ const reshapeToLongFormat = (data: QueryResponse): ChannelMetricRecord[] => {
  * 入力は `.strict()` schema で先に検証してから API を呼ぶため、不正入力（未知キー /
  * 非 YYYY-MM-DD）は API へ到達せず validation エラーになる。
  */
-export const collectChannelAnalyticsService = async (
-  input: ChannelAnalyticsInput,
-  deps: { youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics }
-): Promise<Result<ChannelAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = ChannelAnalyticsInput.parse(input);
+export const collectChannelAnalyticsService = createService(
+  ChannelAnalyticsInput,
+  ChannelAnalyticsOutput,
+  async (
+    request,
+    deps: { youtubeAnalytics: youtubeAnalytics_v2.Youtubeanalytics }
+  ) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
       () => queryDailyReport(deps.youtubeAnalytics, params),
       { shouldRetry: shouldRetryApiQuery }
     );
-    return ok(
-      ChannelAnalyticsOutput.parse({ metrics: reshapeToLongFormat(data) })
-    );
-  } catch (error) {
-    return err(toServiceError(error));
+    return { metrics: reshapeToLongFormat(data) };
   }
-};
+);

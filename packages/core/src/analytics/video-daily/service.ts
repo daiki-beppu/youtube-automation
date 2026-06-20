@@ -4,9 +4,8 @@
 //
 // 構築済みの YouTube Analytics クライアントを `deps` で受け取り（ADR-0003 §7 / DI
 // seam）、`reports.query` の行列を `{ date, videoId, views }`
-// レコードへ map して `Result` で返す。core 内部（query / map）は throw OK。境界の
-// try/catch で `toServiceError` 経由に集約し、CLI/MCP は `if (!r.ok)` で discriminate
-// する。マッピング:
+// レコードへ map して `Result` で返す。core 内部（query / map）は throw OK で、
+// `createService` が入力 / 出力検証と `ServiceError` 変換を担う。マッピング:
 //   - schema 違反（未知キー / 非 YYYY-MM-DD）→ err(domain "validation")（zod ZodError）
 //   - 429 quota                              → err(domain "quota" + retryAfterSeconds)
 //   - その他の API エラー（403 等）          → err(domain "api")
@@ -19,17 +18,11 @@
 
 import type { youtubeAnalytics_v2 } from "googleapis";
 
-import {
-  classifyGaxiosError,
-  shouldRetryApiQuery,
-  toServiceError,
-} from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
+import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import { createService } from "../../service-frame.ts";
 import {
   readNumberCell,
   readStringCell,
@@ -104,12 +97,13 @@ const mapRows = (data: QueryResponse): VideoDailyRecord[] => {
  * 入力は `.strict()` schema で先に検証してから API を呼ぶため、不正入力（未知キー /
  * 非 YYYY-MM-DD）は API へ到達せず validation エラーになる。
  */
-export const collectVideoDailyAnalyticsService = async (
-  input: CollectVideoDailyAnalyticsInput,
-  deps: { sleep?: SleepMs; ytAnalytics: YouTubeAnalyticsClient }
-): Promise<Result<CollectVideoDailyAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = CollectVideoDailyAnalyticsInput.parse(input);
+export const collectVideoDailyAnalyticsService = createService(
+  CollectVideoDailyAnalyticsInput,
+  CollectVideoDailyAnalyticsOutput,
+  async (
+    request,
+    deps: { sleep?: SleepMs; ytAnalytics: YouTubeAnalyticsClient }
+  ) => {
     const params = buildQueryParams(request);
     const data = await withRetry(
       async () => {
@@ -122,12 +116,8 @@ export const collectVideoDailyAnalyticsService = async (
       },
       { shouldRetry: shouldRetryApiQuery, sleep: deps.sleep }
     );
-    return ok(
-      CollectVideoDailyAnalyticsOutput.parse({
-        metrics: mapRows(data),
-      })
-    );
-  } catch (error) {
-    return err(toServiceError(error));
+    return {
+      metrics: mapRows(data),
+    };
   }
-};
+);

@@ -4,24 +4,17 @@
 // Python `utils/video_analytics.py` の Mixin を翻訳せず TS で新規記述（ADR-0003 #820）。
 // リトライ・バックオフは service が所有し、共通 `withRetry`（#959）に委譲する。quota（429）は
 // ADR-0003 の retry 規約に従い retry せず、`domain: "quota"` + `retryAfterSeconds` の Result で
-// caller へ返す。境界の try/catch で `toServiceError` に集約し、CLI/MCP は `if (!r.ok)` で
-// discriminate する。
+// caller へ返す。入力 / 出力検証と `ServiceError` 変換は `createService` が担う。
 //
 // seam contract（テストの fake と一致させる契約）:
 //   deps.youtubeAnalytics.reports.query(params) -> { data: { columnHeaders?, rows? } }
 //   429 時は gaxios 形状 { response: { status: 429, headers: { "retry-after" } } } で reject。
 
-import {
-  classifyGaxiosError,
-  shouldRetryApiQuery,
-  toServiceError,
-} from "../../errors.ts";
-import type { ServiceError } from "../../errors.ts";
+import { classifyGaxiosError, shouldRetryApiQuery } from "../../errors.ts";
 import type { YouTubeAnalyticsClient } from "../../oauth/client.ts";
-import { err, ok } from "../../result.ts";
-import type { Result } from "../../result.ts";
 import { withRetry } from "../../retry.ts";
 import type { SleepMs } from "../../retry.ts";
+import { createService } from "../../service-frame.ts";
 import {
   CollectVideoAnalyticsInput,
   CollectVideoAnalyticsOutput,
@@ -111,8 +104,8 @@ const meltVideoRows = (
   return rows.flatMap((row) =>
     metricPlan.map((plan) => ({
       metric: plan.metric,
-      value: row[plan.index],
-      videoId: row[videoIndex],
+      value: row[plan.index] as number,
+      videoId: row[videoIndex] as string,
     }))
   );
 };
@@ -124,12 +117,10 @@ const meltVideoRows = (
  * validation エラーになる。`deps.youtubeAnalytics` は構築済みクライアントを注入する seam
  * （ADR-0003 §7）。
  */
-export const collectVideoAnalyticsService = async (
-  input: CollectVideoAnalyticsInput,
-  deps: VideoAnalyticsDeps
-): Promise<Result<CollectVideoAnalyticsOutput, ServiceError>> => {
-  try {
-    const request = CollectVideoAnalyticsInput.parse(input);
+export const collectVideoAnalyticsService = createService(
+  CollectVideoAnalyticsInput,
+  CollectVideoAnalyticsOutput,
+  async (request, deps: VideoAnalyticsDeps) => {
     const response = await withRetry(() => runVideoQuery(deps, request), {
       shouldRetry: shouldRetryApiQuery,
       sleep: deps.sleep,
@@ -138,8 +129,6 @@ export const collectVideoAnalyticsService = async (
       response.data.columnHeaders ?? [],
       response.data.rows ?? []
     );
-    return ok(CollectVideoAnalyticsOutput.parse({ metrics }));
-  } catch (error) {
-    return err(toServiceError(error));
+    return { metrics };
   }
-};
+);
