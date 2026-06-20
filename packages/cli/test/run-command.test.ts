@@ -85,7 +85,7 @@ describe("emitResult — CLI terminal contract", () => {
     expect(stdout).toEqual([]);
   });
 
-  test("writes successful output to stdout only", () => {
+  test("writes successful JSON output to stdout only", () => {
     const { emitResult, exitCodes, stderr, stdout } = makeEmitHarness();
 
     emitResult(ok({ path: "/tmp/result" }), {
@@ -96,5 +96,18 @@ describe("emitResult — CLI terminal contract", () => {
     expect(exitCodes).toEqual([]);
     expect(stderr).toEqual([]);
     expect(stdout).toEqual(['{"path":"/tmp/result"}\n']);
+  });
+
+  test("writes successful text output via renderText when json is false", () => {
+    const { emitResult, exitCodes, stderr, stdout } = makeEmitHarness();
+
+    emitResult(ok({ path: "/tmp/result", count: 3 }), {
+      json: false,
+      renderText: (value) => `Synced ${value.count} files to ${value.path}`,
+    });
+
+    expect(exitCodes).toEqual([]);
+    expect(stderr).toEqual([]);
+    expect(stdout).toEqual(["Synced 3 files to /tmp/result\n"]);
   });
 });

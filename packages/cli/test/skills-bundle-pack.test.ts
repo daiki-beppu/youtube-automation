@@ -21,6 +21,10 @@ import { join, relative, resolve } from "node:path";
 const sourceCliDir = resolve(import.meta.dir, "..");
 const repoRoot = resolve(sourceCliDir, "..", "..");
 const CLI_SMOKE_TIMEOUT_MS = 15_000;
+// beforeAll runs multiple subprocesses (restore + pack + tar) whose individual
+// timeouts sum to > CLI_SMOKE_TIMEOUT_MS. Give the outer harness enough room
+// so a slow CI machine doesn't hit the beforeAll deadline first (AI-ANTI-002).
+const BEFORE_ALL_TIMEOUT_MS = 30_000;
 
 // The canonical skill source. Every entry must reach the tarball as a real
 // directory — read dynamically so the assertion tracks skills being added or
@@ -142,7 +146,7 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
     restoreBundledSymlinks(isolatedPackage.cliDir);
     placeLegacyClaudeMdParentSymlink(isolatedPackage.cliDir);
     entries = packEntries(isolatedPackage.cliDir, makeTmp("cli-pack-"));
-  }, CLI_SMOKE_TIMEOUT_MS);
+  }, BEFORE_ALL_TIMEOUT_MS);
 
   test("ships the CLAUDE.template.md asset as a real file (AC#5)", () => {
     // The claude-md source resolves through the _claude_md symlink; its presence
@@ -172,9 +176,9 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
     ).toBe(true);
   });
 
-  test("restores the source asset and package asset link shape after packing", () => {
-    restoreBundledSymlinks(isolatedPackage.cliDir);
-
+  test("postpack restores the source asset and package asset link shape", () => {
+    // Assert BEFORE manually calling restoreBundledSymlinks so that a postpack
+    // failure is not silently masked by the explicit restore (AI-ANTI-001).
     expect(
       lstatSync(
         join(isolatedPackage.repoRoot, ".claude", "CLAUDE.template.md")
@@ -188,6 +192,9 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
         join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
       ).isSymbolicLink()
     ).toBe(true);
+
+    // Explicit restore for subsequent tests that depend on the symlink state.
+    restoreBundledSymlinks(isolatedPackage.cliDir);
   });
 
   test("restores idempotently when bundled asset symlinks already exist", () => {
