@@ -4,7 +4,10 @@ import {
   tagsForCollection,
 } from "../config/content.ts";
 import type { ChannelConfig } from "../config/index.ts";
-import { createService } from "../service-frame.ts";
+import { toServiceError } from "../errors.ts";
+import type { ServiceError } from "../errors.ts";
+import { err, ok } from "../result.ts";
+import type { Result } from "../result.ts";
 import {
   buildCompleteCollectionDescription,
   generateCompleteCollectionTitle,
@@ -137,6 +140,9 @@ const buildDescription = (
     usageLines: COMPLETE_COLLECTION_USAGE_LINES,
   });
 
+const collectionNameForTags = (request: GenerateMetadataInputValue): string =>
+  request.collectionSlug === undefined ? request.theme : request.collectionSlug;
+
 const scenePhrasesForLocalizations = (
   config: ChannelConfig,
   request: GenerateMetadataInputValue
@@ -181,7 +187,10 @@ const buildMetadataOutput = (
   const timestamps = buildTimestamps(request.tracks);
   const title = buildTitle(config, request);
   const description = buildDescription(config, title, timestamps);
-  const tags = tagsForCollection(config.publishing.content.tags, request.theme);
+  const tags = tagsForCollection(
+    config.publishing.content.tags,
+    collectionNameForTags(request)
+  );
   const { localizations, violations } = buildLocalizations(
     config,
     request,
@@ -198,9 +207,15 @@ const buildMetadataOutput = (
   };
 };
 
-export const generateVideoMetadataService = createService(
-  GenerateMetadataInput,
-  GenerateMetadataOutput,
-  (request, deps: { config: ChannelConfig }) =>
-    buildMetadataOutput(deps.config, request)
-);
+export const generateVideoMetadataService = (
+  input: GenerateMetadataInputValue,
+  deps: { config: ChannelConfig }
+): Promise<Result<GenerateMetadataOutputValue, ServiceError>> => {
+  try {
+    const request = GenerateMetadataInput.parse(input);
+    const output = buildMetadataOutput(deps.config, request);
+    return Promise.resolve(ok(GenerateMetadataOutput.parse(output)));
+  } catch (error) {
+    return Promise.resolve(err(toServiceError(error)));
+  }
+};
