@@ -245,14 +245,14 @@ describe("classifyGaxiosError", () => {
     expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(60);
   });
 
-  test("ignores a fractional Retry-After header", () => {
+  test("accepts a fractional Retry-After header", () => {
     const raw = gaxiosError("rate limited", {
       headers: { "retry-after": "1.5" },
       status: 429,
     });
     const error = classifyGaxiosError(raw, "videos.insert");
     expect(error).toBeInstanceOf(QuotaExhaustedError);
-    expect((error as QuotaExhaustedError).retryAfterSeconds).toBeUndefined();
+    expect((error as QuotaExhaustedError).retryAfterSeconds).toBe(1.5);
   });
 
   test("ignores a non-string Retry-After header", () => {

@@ -14,8 +14,6 @@ import { z } from "zod";
 
 import { isRecord } from "../internal/guards.ts";
 
-const RETRY_AFTER_HEADER = "retry-after";
-const RETRY_AFTER_SECONDS_PATTERN = /^\d+$/u;
 const NON_RETRYABLE_PREFIXES = ["config:", "validation:", "auth:"] as const;
 
 const parseJson = (text: string): unknown => {
