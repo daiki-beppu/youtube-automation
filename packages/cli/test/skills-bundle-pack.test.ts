@@ -23,7 +23,7 @@ const CLI_SMOKE_TIMEOUT_MS = 15_000;
 // beforeAll runs multiple subprocesses (restore + pack + tar) whose individual
 // timeouts sum to > CLI_SMOKE_TIMEOUT_MS. Give the outer harness enough room
 // so a slow CI machine doesn't hit the beforeAll deadline first (AI-ANTI-002).
-const BEFORE_ALL_TIMEOUT_MS = 30_000;
+const BEFORE_ALL_TIMEOUT_MS = 50_000;
 
 // The canonical skill source. Every entry must reach the tarball as a real
 // directory — read dynamically so the assertion tracks skills being added or

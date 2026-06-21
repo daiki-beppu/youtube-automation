@@ -167,6 +167,20 @@ describe("tayk skills sync — citty parser defaults", () => {
       { asset: "claude-md", force: false },
     ]);
   });
+
+  test("--asset skills --json --force are parsed by citty and forwarded to the sync entry", async () => {
+    const { calls, command, emitted } = makeCommand();
+
+    await runCommand(command.subCommands.sync, {
+      rawArgs: ["--asset", "skills", "--json", "--force"],
+    });
+
+    expect(calls.runInputs).toEqual([
+      { asset: "skills", force: true, target: undefined },
+    ]);
+    expect(emitted.calls).toHaveLength(1);
+    expect(emitted.calls[0]?.json).toBe(true);
+  });
 });
 
 describe("createSkillsCommand sync — in-process adapter contract", () => {
