@@ -155,6 +155,18 @@ describe("tayk skills sync — dispatcher smoke", () => {
   );
 });
 
+describe("tayk skills sync — citty parser defaults", () => {
+  test(
+    "`tayk skills sync` (no --asset) applies default 'all' via citty parser",
+    () => {
+      const proc = runTayk("skills", "sync");
+
+      expect(proc.exitCode).toBe(0);
+    },
+    CLI_SMOKE_TIMEOUT_MS
+  );
+});
+
 describe("createSkillsCommand sync — in-process adapter contract", () => {
   test("forwards an explicit asset, target, force, deps, and json flag", async () => {
     const { calls, command, depsCalls, emitted } = makeCommand();
