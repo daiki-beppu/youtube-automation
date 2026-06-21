@@ -24,3 +24,11 @@ export const InteractiveAuthInput = z
   })
   .strict();
 export type InteractiveAuthInput = z.infer<typeof InteractiveAuthInput>;
+
+/** OAuth service 共通の出力。CLI 層が token.json として永続化する文字列のみ返す。 */
+export const OAuthTokenOutput = z
+  .object({
+    tokenJson: z.string(),
+  })
+  .strict();
+export type OAuthTokenOutput = z.infer<typeof OAuthTokenOutput>;

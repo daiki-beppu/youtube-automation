@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `refactor(ts-rewrite/core)`: registry の `METADATA_GENERATE_REGISTRY_KEY` 定数を除去し、service キーをリテラル文字列でインライン化した（#1112）。public export を減らし registry データ内に閉じ込めることで、外部からの参照結合を排除。回帰テスト `registry-deps.test.ts` で定数非 export を機械担保。
+- `refactor(ts-rewrite/core)`: OAuth service（`interactiveAuthService` / `refreshTokenService`）を `createService` フレームに移行し、ADR-0003 の構造的不整合を解消した（#1139）。output schema を `oauth/schema.ts` に追加し、OAuth callback の `state` 生成・検証を追加。boundary テスト（input validation / success / failure）も追加。
 - `refactor(ts-rewrite/core)`: ADR-0003 の service 境界 frame（try/catch → Result 変換）を `createService` ヘルパ（`service-frame.ts`）に抽出し、対象 10 service（analytics 5 + image / skills-sync 2 / suno-prompts / upload）を移行した（#1109）。新規 service は core function + schemas だけ書けば frame を正しく適用できるようになり、手書き frame のレビュー負荷と誤実装 fail mode を除去。
 - `refactor(ts-rewrite/core)`: analytics 5 service の共通クエリ実行を `analytics/query.ts::executeQuery` に、列ヘッダー解決を `analytics/columns.ts` に集約し、各 service の try/catch/ok/err ボイラープレートを `service.ts::createService` ラッパーで除去した（#1110）。`column-helpers.ts` → `columns.ts` リネーム、`analytics/query.ts` / `service.ts` 新設。テスト追加: `analytics-query.test.ts` / `service.test.ts`
 - `feat(ts-rewrite/core)`: Audience analytics の demographics / country / subscribedStatus 3 クエリを並列開始するよう変更した（#1115）。失敗時は開始済み retry が settled になるまで待ってから Result へ変換し、service 戻り後に API retry が残らないようにした。
