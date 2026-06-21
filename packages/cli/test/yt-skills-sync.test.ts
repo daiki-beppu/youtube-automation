@@ -158,7 +158,11 @@ describe("tayk skills sync — dispatcher smoke", () => {
 describe("tayk skills sync — citty parser defaults", () => {
   test("sync command declares asset default 'all' so citty injects it when --asset is omitted", () => {
     const { command } = makeCommand();
-    const syncArgs = (command.subCommands.sync as { args: Record<string, { default?: unknown }> }).args;
+    const syncArgs = (
+      command.subCommands.sync as {
+        args: Record<string, { default?: unknown }>;
+      }
+    ).args;
 
     expect(syncArgs.asset?.default).toBe("all");
   });
