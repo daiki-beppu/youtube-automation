@@ -17,6 +17,7 @@ import type {
   SkillSyncInput,
   SkillSyncOutput,
 } from "@youtube-automation/core/skills-sync";
+import { runCommand } from "citty";
 
 import { createSkillsCommand } from "../src/commands/skills/cli.ts";
 
@@ -156,15 +157,15 @@ describe("tayk skills sync — dispatcher smoke", () => {
 });
 
 describe("tayk skills sync — citty parser defaults", () => {
-  test("sync command declares asset default 'all' so citty injects it when --asset is omitted", () => {
-    const { command } = makeCommand();
-    const syncArgs = (
-      command.subCommands.sync as {
-        args: Record<string, { default?: unknown }>;
-      }
-    ).args;
+  test("omitting --asset causes citty to inject default 'all' and sync all assets", async () => {
+    const { calls, command } = makeCommand();
 
-    expect(syncArgs.asset?.default).toBe("all");
+    await runCommand(command.subCommands.sync, { rawArgs: [] });
+
+    expect(calls.runInputs).toEqual([
+      { asset: "skills", force: false },
+      { asset: "claude-md", force: false },
+    ]);
   });
 });
 
