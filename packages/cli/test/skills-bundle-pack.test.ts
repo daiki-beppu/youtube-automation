@@ -174,6 +174,9 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
       // Assert BEFORE manually calling restoreBundledSymlinks so that a postpack
       // failure is not silently masked by the explicit restore (AI-ANTI-001).
       expect(
+        lstatSync(join(isolatedPackage.cliDir, "_skills")).isSymbolicLink()
+      ).toBe(true);
+      expect(
         lstatSync(
           join(isolatedPackage.repoRoot, ".claude", "CLAUDE.template.md")
         ).isFile()
