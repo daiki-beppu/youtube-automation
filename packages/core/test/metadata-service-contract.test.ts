@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
 
 import { loadConfig, reset } from "@youtube-automation/core/config";
 import { generateVideoMetadataService } from "@youtube-automation/core/metadata";
@@ -6,6 +14,8 @@ import { generateVideoMetadataService } from "@youtube-automation/core/metadata"
 import {
   cleanupChannels,
   minimalSections,
+  restoreChannelDirEnv,
+  saveChannelDirEnv,
   setupChannel,
 } from "./config-fixtures.ts";
 
@@ -14,6 +24,9 @@ const loadMinimalConfig = () => {
   process.env.CHANNEL_DIR = channelDir;
   return loadConfig();
 };
+
+beforeAll(saveChannelDirEnv);
+afterAll(restoreChannelDirEnv);
 
 beforeEach(() => {
   Reflect.deleteProperty(process.env, "CHANNEL_DIR");
