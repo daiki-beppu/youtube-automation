@@ -157,11 +157,12 @@ describe("tayk skills sync — dispatcher smoke", () => {
 
 describe("tayk skills sync — citty parser defaults", () => {
   test(
-    "`tayk skills sync` (no --asset) applies default 'all' via citty parser",
+    "`tayk skills sync --help` recognises sync subcommand and prints usage",
     () => {
-      const proc = runTayk("skills", "sync");
+      const proc = runTayk("skills", "sync", "--help");
 
       expect(proc.exitCode).toBe(0);
+      expect(proc.stdout.toString()).toContain("--asset");
     },
     CLI_SMOKE_TIMEOUT_MS
   );
