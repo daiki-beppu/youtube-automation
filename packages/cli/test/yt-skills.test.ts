@@ -17,6 +17,7 @@ import type {
   SkillSyncInput,
   SkillSyncOutput,
 } from "@youtube-automation/core/skills-sync";
+import { runCommand } from "citty";
 
 import { createSkillsCommand } from "../src/commands/skills/cli.ts";
 
@@ -256,5 +257,25 @@ describe("createSkillsCommand list — in-process adapter contract", () => {
         },
       },
     ]);
+  });
+
+  test("--json flag is parsed by citty parser via runCommand for list subcommand", async () => {
+    const { entry } = makeListEntry();
+    const emitted = makeEmitResult();
+    const command = createSkillsCommand({
+      emitResult: emitted.emitResult,
+      exit: () => {
+        throw new Error("exit");
+      },
+      listEntry: entry,
+      resolveDeps: () => Promise.resolve({}),
+      syncEntry: makeUnusedSyncEntry(),
+      writeStderr: () => {},
+    });
+
+    await runCommand(command.subCommands.list, { rawArgs: ["--json"] });
+
+    expect(emitted.calls).toHaveLength(1);
+    expect(emitted.calls[0]?.json).toBe(true);
   });
 });

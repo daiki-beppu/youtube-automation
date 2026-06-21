@@ -196,23 +196,19 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
     CLI_SMOKE_TIMEOUT_MS
   );
 
-  test(
-    "restores idempotently when bundled asset symlinks already exist",
-    () => {
-      restoreBundledSymlinks(isolatedPackage.cliDir);
-      restoreBundledSymlinks(isolatedPackage.cliDir);
+  test("restores idempotently when bundled asset symlinks already exist", () => {
+    restoreBundledSymlinks(isolatedPackage.cliDir);
+    restoreBundledSymlinks(isolatedPackage.cliDir);
 
-      expect(
-        lstatSync(join(isolatedPackage.cliDir, "_skills")).isSymbolicLink()
-      ).toBe(true);
-      expect(
-        lstatSync(
-          join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
-        ).isSymbolicLink()
-      ).toBe(true);
-    },
-    CLI_SMOKE_TIMEOUT_MS
-  );
+    expect(
+      lstatSync(join(isolatedPackage.cliDir, "_skills")).isSymbolicLink()
+    ).toBe(true);
+    expect(
+      lstatSync(
+        join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
+      ).isSymbolicLink()
+    ).toBe(true);
+  }, 35_000);
 
   test("does not mutate the source worktree bundled asset links", () => {
     expect(lstatSync(join(sourceCliDir, "_skills")).isSymbolicLink()).toBe(

@@ -13,6 +13,7 @@ import type {
   GenerateSunoInput,
   GenerateSunoOutput,
 } from "@youtube-automation/core/suno-prompts";
+import { runCommand } from "citty";
 
 import { createGenerateSunoCommand } from "../src/commands/generate-suno/cli.ts";
 
@@ -216,5 +217,23 @@ describe("createGenerateSunoCommand — in-process adapter contract", () => {
     expect(emitted.calls[0]?.renderedText).toContain(
       "[WARN] Style text exceeds 40 char limit"
     );
+  });
+
+  test("--json flag is parsed by citty parser via runCommand", async () => {
+    const { calls, entry } = makeGenerateEntry();
+    const emitted = makeEmitResult();
+    const command = createGenerateSunoCommand({
+      emitResult: emitted.emitResult,
+      entry,
+      getCwd: () => "/channel/collections/planning/parser-test",
+      resolveDeps: () => Promise.resolve({ channelDir: "/channel" }),
+    });
+
+    await runCommand(command, { rawArgs: ["--json"] });
+
+    expect(calls.runInputs).toEqual([
+      { path: "/channel/collections/planning/parser-test" },
+    ]);
+    expect(emitted.calls[0]?.json).toBe(true);
   });
 });
