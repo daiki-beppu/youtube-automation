@@ -101,7 +101,7 @@ describe("emitResult — CLI terminal contract", () => {
   test("writes successful text output via renderText when json is false", () => {
     const { emitResult, exitCodes, stderr, stdout } = makeEmitHarness();
 
-    emitResult(ok({ path: "/tmp/result", count: 3 }), {
+    emitResult(ok({ count: 3, path: "/tmp/result" }), {
       json: false,
       renderText: (value) => `Synced ${value.count} files to ${value.path}`,
     });
