@@ -51,11 +51,6 @@ const ensureRealParentDirectory = async (path: string): Promise<void> => {
   const stat = await lstatOrNull(parent);
   if (stat === null) {
     await mkdir(parent, { recursive: true });
-    return;
-  }
-  if (stat.isSymbolicLink()) {
-    await unlink(parent);
-    await mkdir(parent, { recursive: true });
   }
 };
 

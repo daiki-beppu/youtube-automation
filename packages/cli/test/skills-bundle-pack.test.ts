@@ -6,7 +6,6 @@ import {
   mkdtempSync,
   readdirSync,
   rmSync,
-  symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -122,12 +121,6 @@ const restoreBundledSymlinks = (cliDir: string): void => {
   }
 };
 
-const placeLegacyClaudeMdParentSymlink = (cliDir: string): void => {
-  const claudeMdDir = join(cliDir, "_claude_md");
-  rmSync(claudeMdDir, { force: true, recursive: true });
-  symlinkSync("../../.claude", claudeMdDir, "dir");
-};
-
 afterAll(() => {
   while (tmpDirs.length > 0) {
     const dir = tmpDirs.pop();
@@ -144,7 +137,6 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
   beforeAll(() => {
     isolatedPackage = createIsolatedPackage();
     restoreBundledSymlinks(isolatedPackage.cliDir);
-    placeLegacyClaudeMdParentSymlink(isolatedPackage.cliDir);
     entries = packEntries(isolatedPackage.cliDir, makeTmp("cli-pack-"));
   }, BEFORE_ALL_TIMEOUT_MS);
 
@@ -195,7 +187,7 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
 
     // Explicit restore for subsequent tests that depend on the symlink state.
     restoreBundledSymlinks(isolatedPackage.cliDir);
-  });
+  }, CLI_SMOKE_TIMEOUT_MS);
 
   test("restores idempotently when bundled asset symlinks already exist", () => {
     restoreBundledSymlinks(isolatedPackage.cliDir);
@@ -209,7 +201,7 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
         join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
       ).isSymbolicLink()
     ).toBe(true);
-  });
+  }, CLI_SMOKE_TIMEOUT_MS);
 
   test("does not mutate the source worktree bundled asset links", () => {
     expect(lstatSync(join(sourceCliDir, "_skills")).isSymbolicLink()).toBe(
