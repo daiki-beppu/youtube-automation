@@ -6,8 +6,10 @@ issue #82 の再発防止として、旧コード (`zh-Hans` / `zh-Hant`) を期
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 # metadata_audit.py は module-level で channel_dir() を呼ぶため、import 前に
@@ -18,7 +20,7 @@ os.environ.setdefault("CHANNEL_DIR", str(_FIXTURE))
 
 import pytest  # noqa: E402
 
-from youtube_automation.scripts.metadata_audit import audit_remote  # noqa: E402
+from youtube_automation.scripts.metadata_audit import audit_local, audit_remote  # noqa: E402
 
 _ZH_ISSUE_TOKEN = "zh codes"  # `metadata_audit.py` のエラー文言 "YT zh codes are ..." に対応
 
@@ -40,6 +42,67 @@ def _patched_yt(response: dict) -> MagicMock:
     yt = MagicMock()
     yt.videos.return_value.list.return_value.execute.return_value = response
     return yt
+
+
+def _audit_config(supported_languages: list[str]) -> SimpleNamespace:
+    return SimpleNamespace(
+        audio=SimpleNamespace(
+            chapter_max=12,
+            target_duration_min=None,
+            target_duration_max=None,
+        ),
+        content=SimpleNamespace(
+            tags=SimpleNamespace(
+                min_count=None,
+                for_collection=lambda _name: ["fallback"],
+            )
+        ),
+        localizations=SimpleNamespace(supported_languages=supported_languages),
+    )
+
+
+def _write_local_collection(tmp_path: Path, *, scene_phrases: dict[str, str], description: str) -> Path:
+    collection_dir = tmp_path / "20260622-test-collection"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "descriptions.md").write_text(
+        f"""## タイトル案
+```
+Continuous Focus Mix
+```
+
+## Complete Collection 概要欄
+```
+{description}
+```
+""",
+        encoding="utf-8",
+    )
+    (collection_dir / "workflow-state.json").write_text(
+        json.dumps({"scene_phrases": scene_phrases}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return collection_dir
+
+
+class TestAuditLocalPreflightContract:
+    def test_en_only_channel_without_timestamps_passes(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={"en": "continuous focus mix"},
+            description="A continuous BGM mix without chapter markers.",
+        )
+
+        assert audit_local(collection_dir, _audit_config(["en"])) == []
+
+    def test_scene_phrases_require_only_supported_languages(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={"ja": "連続作業用ミックス"},
+            description="A continuous BGM mix without chapter markers.",
+        )
+
+        assert audit_local(collection_dir, _audit_config(["ja"])) == []
 
 
 class TestAuditRemoteZhCodes:

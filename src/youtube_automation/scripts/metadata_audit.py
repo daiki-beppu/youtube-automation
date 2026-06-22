@@ -78,22 +78,19 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
         issues.append("missing 'Complete Collection 概要欄' section")
     else:
         ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]
-        if len(ts_lines) < 3:
-            issues.append(f"too few timestamps: {len(ts_lines)} (<3)")
-        else:
-            for msg in (
-                check_chapter_count(len(ts_lines), config.audio.chapter_max),
-                check_chapter_variation_suffix(ts_lines),
-            ):
-                if msg:
-                    issues.append(msg)
+        for msg in (
+            check_chapter_count(len(ts_lines), config.audio.chapter_max),
+            check_chapter_variation_suffix(ts_lines),
+        ):
+            if msg:
+                issues.append(msg)
 
     # workflow-state.json scene_phrases
     ws = paths.workflow_state_path
     if ws.exists():
         state = json.loads(ws.read_text(encoding="utf-8"))
         sp = state.get("scene_phrases") or {}
-        required = ["en"] + supported_langs
+        required = list(dict.fromkeys(supported_langs))
         missing = [lang for lang in required if not sp.get(lang)]
         if missing:
             issues.append(f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}")
