@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.11] - 2026-06-22
+
 ### Changed
 
 - `docs(skills)`: preflight 緩和（v5.5.10 #1158）に合わせてスキルの記述を更新。`channel-setup` の `supported_languages` 必須言語記述を推奨に変更、`wf-new` の `scene_phrases` preflight 説明を `supported_languages` 準拠に修正
@@ -1139,6 +1141,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.11]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.11
 [5.5.10]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.10
 [5.5.9]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.9
 [5.5.8]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.8
