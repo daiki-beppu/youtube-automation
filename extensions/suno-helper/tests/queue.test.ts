@@ -12,7 +12,7 @@
 //     card 自体も filter
 //   - 完了判定 = Remix btn enabled → 生成中ではない
 //   - getInFlightClipCount() = Remix btn のあるカードと明示的な生成中シグナルを持つカードの union 数
-//   - Remix btn も代替生成中シグナルも 0 件の場合、現在ビューが検出できるなら空 queue として 0
+//   - clip 候補自体が無く、現在ビューが検出できる場合だけ空 queue として 0
 //   - fail-loud (req 8): 現在ビューも検出不能なら silent に 0 を返さず throw
 //   - waitForQueueSlot(maxClips, opts) = in-flight < maxClips になるまで poll
 //
@@ -109,6 +109,30 @@ function addStatusOnlyCard(opts: { ariaBusy?: boolean; progressbar?: boolean; vi
   markBbox(select, 20, 20);
   document.body.appendChild(card);
   return card;
+}
+
+function addListCandidateWithoutCountSignal(): HTMLElement {
+  const card = document.createElement("div");
+  for (const label of ["Select clip", "Edit title"]) {
+    const button = document.createElement("button");
+    button.setAttribute("aria-label", label);
+    card.appendChild(button);
+    markBbox(button, 20, 20);
+  }
+  markBbox(card, 240, 80);
+  document.body.appendChild(card);
+  return card;
+}
+
+function addNonClipBusyArticle(): HTMLElement {
+  const article = document.createElement("article");
+  const progress = document.createElement("div");
+  progress.setAttribute("role", "progressbar");
+  article.appendChild(progress);
+  markBbox(progress, 120, 8);
+  markBbox(article, 240, 80);
+  document.body.appendChild(article);
+  return article;
 }
 
 // queueErrorWaitMs は poll (10ms) と明確に分離して buffer 待機の途中経過を pin できるよう 200ms。
@@ -321,6 +345,7 @@ describe("getInFlightClipCount: in-flight な distinct card 数", () => {
     addStatusOnlyCard({ ariaBusy: true });
     addStatusOnlyCard({ progressbar: true });
     addStatusOnlyCard({ ariaBusy: true, visible: false });
+    addNonClipBusyArticle();
 
     expect(getInFlightClipCount()).toBe(2);
   });
@@ -337,12 +362,40 @@ describe("getInFlightClipCount: in-flight な distinct card 数", () => {
     expect(() => getInFlightClipCount()).toThrow();
   });
 
-  it("Given Grid view で Remix btn も生成中シグナルも無い When 数える Then 空 queue として 0 を返す", () => {
+  it("Given Grid view で clip 候補自体が無い When 数える Then 空 queue として 0 を返す", () => {
     makeViewTrigger("Newest ▼");
     makeViewTrigger("Grid ▼");
 
     expect(getInFlightClipCount()).toBe(0);
   });
+
+  it("Given Grid view で clip 候補はあるが Remix も生成中シグナルも無い When 数える Then throw する", () => {
+    makeViewTrigger("Newest ▼");
+    makeViewTrigger("Grid ▼");
+    addStatusOnlyCard({});
+
+    expect(() => getInFlightClipCount()).toThrow();
+  });
+
+  it("Given List view の div clip 候補に Remix も生成中シグナルも無い When 数える Then throw する", () => {
+    makeViewTrigger("Newest ▼");
+    makeViewTrigger("List ▼");
+    addListCandidateWithoutCountSignal();
+
+    expect(() => getInFlightClipCount()).toThrow();
+  });
+
+  it.each(["waveform", "grid"] as const)(
+    "Given %s view で completed Remix card と signal 欠落 clip 候補が混在 When 数える Then throw する",
+    (view) => {
+      makeViewTrigger("Newest ▼");
+      makeViewTrigger(view === "waveform" ? "Waveform" : "Grid");
+      addViewVariantCard({ view, generating: false });
+      addStatusOnlyCard({});
+
+      expect(() => getInFlightClipCount()).toThrow();
+    },
+  );
 });
 
 describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {

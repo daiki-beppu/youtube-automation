@@ -790,19 +790,68 @@ function hasAlternateInFlightSignal(card: HTMLElement): boolean {
   );
 }
 
-function collectCardsFromAlternateSignals(): Set<HTMLElement> {
-  const anchors = document.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, [aria-busy="true"], [role="progressbar"]`,
+function hasClipIdentity(card: HTMLElement): boolean {
+  return (
+    card.querySelector(
+      `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}`,
+    ) !== null
   );
-  const cards = new Set<HTMLElement>();
+}
+
+function hasCountSignal(card: HTMLElement): boolean {
+  return (
+    card.querySelector(REMIX_BTN_SELECTOR) !== null ||
+    hasAlternateInFlightSignal(card)
+  );
+}
+
+function findClipCandidateRoot(anchor: HTMLElement): HTMLElement | null {
+  const article = findArticleCardRoot(anchor);
+  if (article && hasClipIdentity(article)) {
+    return article;
+  }
+
+  let current = anchor.parentElement;
+  while (current) {
+    if (isDocumentRootElement(current)) {
+      return null;
+    }
+    if (hasClipIdentity(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+interface InFlightCandidates {
+  inFlightCards: Set<HTMLElement>;
+  clipCandidates: Set<HTMLElement>;
+  uncountableCandidates: Set<HTMLElement>;
+}
+
+function collectInFlightCandidates(): InFlightCandidates {
+  const anchors = document.querySelectorAll<HTMLElement>(
+    `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}, [aria-busy="true"], [role="progressbar"]`,
+  );
+  const inFlightCards = new Set<HTMLElement>();
+  const clipCandidates = new Set<HTMLElement>();
+  const uncountableCandidates = new Set<HTMLElement>();
   for (const anchor of anchors) {
-    const card = findArticleCardRoot(anchor);
-    if (!card || !hasAlternateInFlightSignal(card)) {
+    const card = findClipCandidateRoot(anchor);
+    if (!card || !isVisible(card) || !hasClipIdentity(card)) {
       continue;
     }
-    cards.add(card);
+    clipCandidates.add(card);
+    if (!hasCountSignal(card)) {
+      uncountableCandidates.add(card);
+      continue;
+    }
+    if (hasAlternateInFlightSignal(card)) {
+      inFlightCards.add(card);
+    }
   }
-  return cards;
+  return { inFlightCards, clipCandidates, uncountableCandidates };
 }
 
 /**
@@ -830,7 +879,7 @@ export function isClipGenerating(card: HTMLElement): boolean {
  * 全 Remix btn から findCardRoot で card root を解決して重複排除し、`isClipGenerating(card)`
  * （内部で `isVisible(card)` も判定）が true な distinct card 数を返す。
  * Remix btn が無い card は、aria-busy / progressbar の明示シグナルがある場合だけ union して数える。
- * どのシグナルも無い場合は、現在ビューを検出できるときだけ空 queue として 0 を返す。
+ * clip 候補自体が無く、現在ビューを検出できる場合だけ空 queue として 0 を返す。
  */
 export function getInFlightClipCount(): number {
   const anchors =
@@ -842,15 +891,24 @@ export function getInFlightClipCount(): number {
       cards.add(card);
     }
   }
-  for (const card of collectCardsFromAlternateSignals()) {
+  const candidates = collectInFlightCandidates();
+  if (candidates.uncountableCandidates.size > 0) {
+    throw new Error(
+      "clip 候補に Remix btn も代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
+    );
+  }
+  for (const card of candidates.inFlightCards) {
     cards.add(card);
   }
   if (anchors.length === 0 && cards.size === 0) {
-    if (detectSunoViewMode() !== "unknown") {
+    if (
+      candidates.clipCandidates.size === 0 &&
+      detectSunoViewMode() !== "unknown"
+    ) {
       return 0;
     }
     throw new Error(
-      "Remix btn が 1 件も見つからず、代替の生成中シグナルも現在ビューも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
+      "Remix btn が 1 件も見つからず、clip 候補に代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
     );
   }
   return cards.size;

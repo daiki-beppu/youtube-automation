@@ -195,6 +195,27 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     expect(harness.feedPollerStop).not.toHaveBeenCalled();
   });
 
+  it("Given legacy array payload で view dropdown が検出不能 When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(2);
+
+    const result = runHandler({ data: entries });
+
+    expect(result).toEqual({ ok: true });
+    expect(harness.sendMessage).toHaveBeenCalledOnce();
+    expect(harness.sendMessage).toHaveBeenCalledWith(
+      "progress",
+      expect.objectContaining({
+        phase: PHASE.ERROR,
+        total: entries.length,
+        message: expect.stringContaining("表示ビューを検出できません"),
+      }),
+    );
+    expect(harness.feedPollerStart).not.toHaveBeenCalled();
+    expect(harness.feedPollerStop).not.toHaveBeenCalled();
+  });
+
   it("Given 状態属性のない単独 Grid button がある When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
     makeGenericButton("Grid");
     await loadContentScript();
@@ -321,6 +342,32 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       );
     },
   );
+
+  it("Given legacy array payload で supported view かつ entries がある When run を受ける Then FINISHED まで進む", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(2);
+
+    const result = runHandler({ data: entries });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 1, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.FINISHED, total: entries.length }),
+      ]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+        }),
+      ]),
+    );
+  });
 
   it.each(["Waveform", "Grid"] as const)(
     "Given %s view で Remix 0 かつ空 queue When run を受ける Then 初回 WAITING_SLOT で失敗せず FINISHED まで進む",
