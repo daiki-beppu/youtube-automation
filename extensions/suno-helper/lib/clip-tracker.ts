@@ -21,6 +21,10 @@ export interface ClipTracker {
   getInFlightCount(): number;
   /** 未終端 clip の id 一覧（active feed poll の照会対象）。 */
   getPendingIds(): string[];
+  /** この run の generate レスポンスで観測した clip id 一覧。playlist 対象の SSOT。 */
+  getSubmittedIds(): string[];
+  /** run 開始時に playlist 対象 ID だけを初期化する。status 集計は残す。 */
+  clearSubmittedIds(): void;
   /** generate / feed のいずれかを 1 度でも観測したか。false の間は DOM プロキシへ縮退する。 */
   hasObservedAnyTraffic(): boolean;
   /** generate レスポンスの累計観測回数。inject ACK の marker に使う。 */
@@ -33,6 +37,7 @@ export interface ClipTracker {
 
 export function createClipTracker(now: () => number = Date.now): ClipTracker {
   const statusById = new Map<string, string>();
+  const submittedById = new Map<string, true>();
   let submissions = 0;
   let observedGenerate = false;
   let observedFeed = false;
@@ -52,6 +57,7 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
       observedGenerate = true;
       submissions += 1;
       for (const clip of clips) {
+        submittedById.set(clip.id, true);
         upsert(clip);
       }
     },
@@ -83,6 +89,12 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
         }
       }
       return ids;
+    },
+    getSubmittedIds() {
+      return Array.from(submittedById.keys());
+    },
+    clearSubmittedIds() {
+      submittedById.clear();
     },
     hasObservedAnyTraffic() {
       return observedGenerate || observedFeed;
