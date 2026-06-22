@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.10] - 2026-06-22
+
 ### Fixed
 
 - `fix(preflight)`: en-only / チャプター無し運用を阻む 3 つのハードゲートを緩和した（#1158）。`REQUIRED_LOCALIZATION_LANGUAGES` のハードコード撤廃、タイムスタンプ ≥3 必須チェック撤廃、`scene_phrases` を `supported_languages` のみ要求に変更。Closes #867, #1157
@@ -1133,6 +1135,10 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.10]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.10
+[5.5.9]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.9
+[5.5.8]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.8
+[5.5.7]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.7
 [5.5.6]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.6
 [5.5.5]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.5
 [5.5.4]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.4
