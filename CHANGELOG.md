@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(preflight)`: en-only / チャプター無し運用を阻む 3 つのハードゲートを緩和した（#1158）。`REQUIRED_LOCALIZATION_LANGUAGES` のハードコード撤廃、タイムスタンプ ≥3 必須チェック撤廃、`scene_phrases` を `supported_languages` のみ要求に変更。Closes #867, #1157
+
 ### Changed
 
 - `refactor(ts-rewrite/core)`: ChannelConfig の出力構造を 12 フラット名前空間から 4 bucket（identity / publishing / engagement / integrations）へ再編成した（#827）。入力 JSON 形式・パース挙動・エラーメッセージは不変。Phase 2 service が統一的な bucket API で config にアクセスする基盤
