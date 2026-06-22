@@ -258,7 +258,7 @@ export async function ensureClipRowsLoadedByIds(
  * timeout という代理症状で初めて顕在化していたため、選択側で fail-loud にする。
  *
  * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は
- *   ensureClipRowsLoadedByIds が先に fail-loud throw する前提。万一 0 件で到達したら silent
+ *   row loader が先に fail-loud throw する前提。万一 0 件で到達したら silent
  *   resolve させない）(#881, #924)。
  * - 既に選択済み（Deselect clip 在）の row は idempotent に skip（click しない）。
  * - Select clip ボタンが無く、かつ未選択（Deselect も無い）row は UI 変更とみなし即 throw。

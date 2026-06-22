@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { buildFailedEntriesRunOverrides, buildResumeRunOverrides, buildRunPayload } from "../lib/run-overrides";
 import { resolveRunRange, resumeBannerRange, resumeRunRange } from "../lib/resume-state";
 import type { ResumeBanner } from "../lib/resume-state";
 
@@ -174,16 +175,83 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
   const contentSource = read("../entrypoints/content.ts");
   const runnerSource = read("../components/useSunoRunner.ts");
 
-  it("Given failed-only rerun When useSunoRunner を読む Then indices と保存済み playlist 情報を同じ run payload に渡す", () => {
-    expect(runnerSource).toMatch(
-      /void run\(\{\s*indices: failedEntries,\s*submittedClipIds: submittedClipIdsForResume,\s*playlistExpectedClipCount: playlistExpectedClipCountForResume,\s*\}\);/,
-    );
+  it("Given failed-only rerun の入力 When payload を構築する Then indices と保存済み playlist 情報が同じ戻り値に入る", () => {
+    const overrides = buildFailedEntriesRunOverrides([2, 7], {
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 2,
+    });
+
+    expect(overrides).toEqual({
+      indices: [2, 7],
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 2,
+    });
   });
 
-  it("Given playlist-only resume When useSunoRunner を読む Then resumeRunRange と保存済み playlist 情報を同じ run payload に渡す", () => {
-    expect(runnerSource).toMatch(
-      /void run\(\{\s*range: resumeRunRange\(resumeBanner\),\s*submittedClipIds: submittedClipIdsForResume,\s*playlistExpectedClipCount: playlistExpectedClipCountForResume,\s*\}\);/,
-    );
+  it("Given playlist-only resume の入力 When payload を構築する Then range と保存済み playlist 情報が同じ戻り値に入る", () => {
+    const banner = makeBanner({ failedIndex: 4, total: 4 });
+    const overrides = buildResumeRunOverrides(banner, {
+      submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
+      playlistExpectedClipCount: 4,
+    });
+
+    expect(overrides).toEqual({
+      range: { start: 4, end: 3 },
+      submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
+      playlistExpectedClipCount: 4,
+    });
+  });
+
+  it("Given resume overrides When run 送信用 payload を構築する Then entries/range と playlist resume fields が同じ戻り値に入る", () => {
+    const entries = [{ name: "pattern-1", style: "ambient", lyrics: "[Instrumental]" }];
+    const overrides = buildResumeRunOverrides(makeBanner({ failedIndex: 1, total: 3 }), {
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 2,
+    });
+
+    const payload = buildRunPayload({
+      entries,
+      playlistName: "target-playlist",
+      range: overrides.range,
+      collectionId: "collection-a",
+      overrides,
+    });
+
+    expect(payload).toEqual({
+      entries,
+      playlistName: "target-playlist",
+      range: { start: 1, end: 2 },
+      collectionId: "collection-a",
+      indices: undefined,
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 2,
+    });
+  });
+
+  it("Given failed-only overrides When run 送信用 payload を構築する Then indices と playlist resume fields が同じ戻り値に入る", () => {
+    const entries = [{ name: "pattern-1", style: "ambient", lyrics: "[Instrumental]" }];
+    const overrides = buildFailedEntriesRunOverrides([0, 2], {
+      submittedClipIds: ["clip-a", "clip-c"],
+      playlistExpectedClipCount: 2,
+    });
+
+    const payload = buildRunPayload({
+      entries,
+      playlistName: "target-playlist",
+      range: undefined,
+      collectionId: "collection-a",
+      overrides,
+    });
+
+    expect(payload).toEqual({
+      entries,
+      playlistName: "target-playlist",
+      range: undefined,
+      collectionId: "collection-a",
+      indices: [0, 2],
+      submittedClipIds: ["clip-a", "clip-c"],
+      playlistExpectedClipCount: 2,
+    });
   });
 
   it("Given 旧 ResumeState に期待件数が無い When useSunoRunner を読む Then total から期待件数を復元して渡す", () => {
