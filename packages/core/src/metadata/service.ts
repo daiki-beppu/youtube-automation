@@ -4,10 +4,7 @@ import {
   tagsForCollection,
 } from "../config/content.ts";
 import type { ChannelConfig } from "../config/index.ts";
-import { toServiceError } from "../errors.ts";
-import type { ServiceError } from "../errors.ts";
-import { err, ok } from "../result.ts";
-import type { Result } from "../result.ts";
+import { createService } from "../service.ts";
 import {
   buildCompleteCollectionDescription,
   generateCompleteCollectionTitle,
@@ -207,15 +204,9 @@ const buildMetadataOutput = (
   };
 };
 
-export const generateVideoMetadataService = (
-  input: GenerateMetadataInputValue,
-  deps: { config: ChannelConfig }
-): Promise<Result<GenerateMetadataOutputValue, ServiceError>> => {
-  try {
-    const request = GenerateMetadataInput.parse(input);
-    const output = buildMetadataOutput(deps.config, request);
-    return Promise.resolve(ok(GenerateMetadataOutput.parse(output)));
-  } catch (error) {
-    return Promise.resolve(err(toServiceError(error)));
-  }
-};
+export const generateVideoMetadataService = createService(
+  GenerateMetadataInput,
+  GenerateMetadataOutput,
+  (request: GenerateMetadataInputValue, deps: { config: ChannelConfig }) =>
+    buildMetadataOutput(deps.config, request)
+);

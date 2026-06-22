@@ -31,7 +31,6 @@ import {
 // naming convention: registry キーは dotted ("skills.list")。
 //   - CLI adapter: subcommand 階層 (`tayk skills list`)
 //   - MCP adapter: underscore (`skills_list`)
-export const METADATA_GENERATE_REGISTRY_KEY = "metadata.generate";
 
 // service が要求しうる重い依存の型対応表 (#993)。各 service は deps 配列で必要な key
 // だけを宣言し、Pick<DepsMap, D> で run の第 2 引数を compile-time に確定させる。
@@ -73,7 +72,7 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
-  [METADATA_GENERATE_REGISTRY_KEY]: defineRegistryEntry({
+  "metadata.generate": defineRegistryEntry({
     deps: ["config"],
     description: "コレクションの動画メタデータを一括生成する",
     inputSchema: GenerateMetadataInput,

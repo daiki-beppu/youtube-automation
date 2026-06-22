@@ -15,10 +15,8 @@ import type {
   YouTubeAnalyticsClient,
   YouTubeClient,
 } from "@youtube-automation/core/oauth/client";
-import {
-  METADATA_GENERATE_REGISTRY_KEY,
-  REGISTRY,
-} from "@youtube-automation/core/registry";
+import * as registryModule from "@youtube-automation/core/registry";
+import { REGISTRY } from "@youtube-automation/core/registry";
 import type { DepsMap, RegistryEntry } from "@youtube-automation/core/registry";
 import { z } from "zod";
 
@@ -123,8 +121,15 @@ describe("RegistryEntry — declared deps reach run, typed", () => {
 });
 
 describe("REGISTRY — metadata.generate", () => {
+  test("keeps service keys inside the registry data, not as public constants", () => {
+    expect(Object.keys(registryModule)).not.toContain(
+      "METADATA_GENERATE_REGISTRY_KEY"
+    );
+    expect(Object.keys(REGISTRY)).toContain("metadata.generate");
+  });
+
   test("registers the metadata facade with only config dependency", () => {
-    const entry = REGISTRY[METADATA_GENERATE_REGISTRY_KEY];
+    const entry = REGISTRY["metadata.generate"];
 
     expect(entry.deps).toEqual(["config"]);
     expect(entry.description).toBe(
@@ -143,7 +148,7 @@ describe("REGISTRY — metadata.generate", () => {
     const channelDir = setupChannel(minimalSections());
     process.env.CHANNEL_DIR = channelDir;
     const config = loadConfig();
-    const entry = REGISTRY[METADATA_GENERATE_REGISTRY_KEY];
+    const entry = REGISTRY["metadata.generate"];
     const input = entry.inputSchema.parse({
       theme: "Battle Royale",
       tracks: [
