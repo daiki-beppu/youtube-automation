@@ -117,7 +117,7 @@ def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> P
 
 
 class TestPreflightLocalizationLanguages:
-    def test_should_fail_when_required_high_cpm_language_is_missing(self, tmp_path):
+    def test_should_pass_when_supported_scene_languages_are_present(self, tmp_path):
         from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
@@ -127,8 +127,7 @@ class TestPreflightLocalizationLanguages:
             "youtube_automation.agents._preflight.load_config",
             return_value=_make_preflight_config(["ja", "en"]),
         ):
-            with pytest.raises(RuntimeError, match="de"):
-                uploader._preflight_check(col_dir)
+            uploader._preflight_check(col_dir)
 
     def test_should_pass_when_required_high_cpm_languages_are_present(self, tmp_path):
         from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader

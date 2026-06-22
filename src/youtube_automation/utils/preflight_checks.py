@@ -39,10 +39,7 @@ DEFAULT_TITLE_VOLUME_PATTERNS = (
 
 
 def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
-    """chapter 件数が上限超過なら issue 文字列、範囲内なら None.
-
-    下限 (< 3) は別途呼び出し側でチェックする。
-    """
+    """chapter 件数が上限超過なら issue 文字列、範囲内なら None."""
     if ts_count > chapter_max:
         return f"too many timestamps: {ts_count} (> chapter_max={chapter_max})"
     return None
