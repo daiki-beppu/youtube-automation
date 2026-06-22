@@ -69,8 +69,8 @@ export const createGenerateSunoCommand = ({
     async run({ args }) {
       const rawPath = typeof args.path === "string" ? args.path : undefined;
       const json = args.json === true || rawPath === "--json";
-      const cwd = getCwd();
-      const path = rawPath === "--json" ? cwd : (rawPath ?? cwd);
+      const path =
+        rawPath === undefined || rawPath === "--json" ? getCwd() : rawPath;
       const result = await (async () => {
         try {
           const input = entry.inputSchema.parse({ path });

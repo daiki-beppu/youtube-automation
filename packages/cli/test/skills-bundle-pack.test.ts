@@ -171,41 +171,43 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
   test(
     "postpack restores the source asset and package asset link shape",
     () => {
+      const packageUnderTest = createIsolatedPackage();
+      restoreBundledSymlinks(packageUnderTest.cliDir);
+      packEntries(packageUnderTest.cliDir, makeTmp("cli-pack-postpack-"));
+
       // Assert BEFORE manually calling restoreBundledSymlinks so that a postpack
       // failure is not silently masked by the explicit restore (AI-ANTI-001).
       expect(
-        lstatSync(join(isolatedPackage.cliDir, "_skills")).isSymbolicLink()
+        lstatSync(join(packageUnderTest.cliDir, "_skills")).isSymbolicLink()
       ).toBe(true);
       expect(
         lstatSync(
-          join(isolatedPackage.repoRoot, ".claude", "CLAUDE.template.md")
+          join(packageUnderTest.repoRoot, ".claude", "CLAUDE.template.md")
         ).isFile()
       ).toBe(true);
       expect(
-        lstatSync(join(isolatedPackage.cliDir, "_claude_md")).isDirectory()
+        lstatSync(join(packageUnderTest.cliDir, "_claude_md")).isDirectory()
       ).toBe(true);
       expect(
         lstatSync(
-          join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
+          join(packageUnderTest.cliDir, "_claude_md", "CLAUDE.template.md")
         ).isSymbolicLink()
       ).toBe(true);
-
-      // Explicit restore for subsequent tests that depend on the symlink state.
-      restoreBundledSymlinks(isolatedPackage.cliDir);
     },
-    CLI_SMOKE_TIMEOUT_MS
+    BEFORE_ALL_TIMEOUT_MS
   );
 
   test("restores idempotently when bundled asset symlinks already exist", () => {
-    restoreBundledSymlinks(isolatedPackage.cliDir);
-    restoreBundledSymlinks(isolatedPackage.cliDir);
+    const packageUnderTest = createIsolatedPackage();
+    restoreBundledSymlinks(packageUnderTest.cliDir);
+    restoreBundledSymlinks(packageUnderTest.cliDir);
 
     expect(
-      lstatSync(join(isolatedPackage.cliDir, "_skills")).isSymbolicLink()
+      lstatSync(join(packageUnderTest.cliDir, "_skills")).isSymbolicLink()
     ).toBe(true);
     expect(
       lstatSync(
-        join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
+        join(packageUnderTest.cliDir, "_claude_md", "CLAUDE.template.md")
       ).isSymbolicLink()
     ).toBe(true);
   }, 35_000);

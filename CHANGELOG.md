@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(doctor)`: `yt-doctor accounts` サブコマンドを追加。全チャンネルリポの `auth/client_secrets.json` をスキャンし、GCP プロジェクト・OAuth クライアント ID・トークン有無の対応表を一覧表示する。`--json` で機械可読出力、`--search-root` で探索ルート指定が可能。
 - `docs(adr)`: ADR-0010 全チャンネルを単一 GCP プロジェクトに統合。Billing 枠上限 (5/5) 解消とオペレーションコスト削減のため、チャンネルごとの GCP プロジェクト分離から `yt-channels-automation` への一本化を決定。
 
+- `refactor(ts-rewrite/cli)`: `generate-suno` の `getCwd()` を遅延評価に変更し explicit path 指定時の不要な cwd 解決を排除。`skills-bundle-pack.test.ts` の `beforeAll` 共有 fixture を各テスト独立生成に改善（#1156）
+
 ### Changed
 
 - `fix(ts-rewrite/cli)`: CLI smoke test が Bun デフォルト timeout（5000ms）に当たり REJECT される構造的問題を修正した（#1107）。subprocess smoke test に明示 timeout を設定し、重いロジック検証は `createXxxCommand()` を直接呼ぶ in-process テストに移行。subprocess テストは「dispatcher が subcommand を認識する」確認のみに限定。

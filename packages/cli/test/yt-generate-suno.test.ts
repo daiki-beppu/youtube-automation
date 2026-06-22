@@ -137,6 +137,30 @@ describe("createGenerateSunoCommand — in-process adapter contract", () => {
     expect(emitted.calls[0]?.json).toBe(true);
   });
 
+  test("does not read cwd when an explicit collection path is provided", async () => {
+    const { calls, entry } = makeGenerateEntry();
+    const emitted = makeEmitResult();
+    let getCwdCalls = 0;
+    const command = createGenerateSunoCommand({
+      emitResult: emitted.emitResult,
+      entry,
+      getCwd: () => {
+        getCwdCalls += 1;
+        return "/unused-cwd";
+      },
+      resolveDeps: () => Promise.resolve({ channelDir: "/channel" }),
+    });
+
+    await command.run({
+      args: { path: "/channel/collections/planning/explicit-path" },
+    });
+
+    expect(getCwdCalls).toBe(0);
+    expect(calls.runInputs).toEqual([
+      { path: "/channel/collections/planning/explicit-path" },
+    ]);
+  });
+
   test("reads cwd at command run time when the collection path is omitted", async () => {
     const { calls, entry } = makeGenerateEntry();
     const emitted = makeEmitResult();
