@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `docs(skills)`: preflight 緩和（v5.5.10 #1158）に合わせてスキルの記述を更新。`channel-setup` の `supported_languages` 必須言語記述を推奨に変更、`wf-new` の `scene_phrases` preflight 説明を `supported_languages` 準拠に修正
+
 ## [5.5.10] - 2026-06-22
 
 ### Fixed
