@@ -49,8 +49,9 @@ const MOCK_HTML = `<!doctype html>
 
     <script>
       // 各 Select clip ボタン: click で aria-label を Deselect clip に切替（実 Suno の選択トグル相当）。
-      document.querySelectorAll('.multi-select-button > button').forEach((b) => {
-        b.addEventListener('click', () => b.setAttribute('aria-label', 'Deselect clip'));
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[aria-label="Select clip"]');
+        if (btn) btn.setAttribute('aria-label', 'Deselect clip');
       });
       // Cmd/Ctrl+P: Add to Playlist dialog を開く。
       document.addEventListener('keydown', (e) => {
@@ -86,18 +87,23 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+    const resolveClipRowFromSelectButton = (button: HTMLElement): HTMLElement | null => {
+      const multiSelectRow = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+      return multiSelectRow ?? button.closest<HTMLElement>("article");
+    };
+
     const selectRecentClips = (count: number): HTMLElement[] => {
       const scroller = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
       if (!scroller) throw new Error("clip row が見つかりません。Suno の UI 変更の可能性があります。");
       // ボタン基点で per-clip row（closest('.multi-select-button').parentElement）を DOM 順に重複排除収集。
       // 中間ラッパで `:scope > div` が 1 row に collapse する問題を避ける（本番 selectRecentClips と同手法）。
       const buttons = scroller.querySelectorAll<HTMLElement>(
-        '.multi-select-button > button[aria-label="Select clip"], .multi-select-button > button[aria-label="Deselect clip"]',
+        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]',
       );
       const seen = new Set<HTMLElement>();
       const rows: HTMLElement[] = [];
       for (const button of Array.from(buttons)) {
-        const row = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+        const row = resolveClipRowFromSelectButton(button);
         if (!row || seen.has(row)) continue;
         seen.add(row);
         if (isVisible(row)) rows.push(row);
@@ -108,7 +114,19 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
 
     const multiSelectClips = async (rows: HTMLElement[]): Promise<void> => {
       for (const row of rows) {
-        row.querySelector<HTMLButtonElement>('.multi-select-button > button[aria-label="Select clip"]')?.click();
+        if (row.querySelector('button[aria-label="Deselect clip"]')) continue;
+        const button = row.querySelector<HTMLButtonElement>('button[aria-label="Select clip"]');
+        if (!button) throw new Error("Select clip button が見つかりません。");
+        button.click();
+      }
+      const deadline = Date.now() + 2000;
+      for (;;) {
+        const selected = rows.filter((row) => row.querySelector('button[aria-label="Deselect clip"]')).length;
+        if (selected >= rows.length) return;
+        if (Date.now() >= deadline) {
+          throw new Error(`Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`);
+        }
+        await sleep(20);
       }
     };
 
@@ -161,7 +179,7 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
     // --- フロー実行 ---
     const rows = selectRecentClips(40);
     await multiSelectClips(rows);
-    const selectedCount = document.querySelectorAll('.multi-select-button > button[aria-label="Deselect clip"]').length;
+    const selectedCount = document.querySelectorAll('button[aria-label="Deselect clip"]').length;
 
     const dialog = await openAddToPlaylistDialogViaCmdP();
     const dialogIsReal = dialog.id === "playlist-dialog";
@@ -192,25 +210,21 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
 });
 
 // 遅延ロード mock: 初期 4 row、scroll イベントで +4 row → 計 8 件選択 → Cmd+P → Create → dialog 消滅 (#924)。
-// 実 overflow scroller（overflow:auto; height:200px）+ scroll イベントで row を追加ロードし、
-// scrollTop 代入での scroll event 発火が native ブラウザで通ることを確認する。
+// `.clip-browser-list-scroller` が無い alternate view の overflow container と direct Select button row で、
+// 本番の代替 scroller 解決と direct Select/Deselect 契約を確認する。
 const LAZY_LOAD_MOCK_HTML = `<!doctype html>
 <html>
   <body>
-    <div class="clip-browser-list-scroller" style="overflow:auto;height:200px;width:400px">
-      <div class="css-emotion-list-wrapper">
+    <section id="alt-view-scroller" style="overflow:auto;height:200px;width:400px">
         ${Array.from({ length: 4 })
           .map(
             (_, i) =>
-              `<div id="clip-${i}" style="width:200px;height:60px">` +
-              `<div class="multi-select-button">` +
+              `<article id="clip-${i}" style="width:200px;height:60px">` +
               `<button aria-label="Select clip" style="width:20px;height:20px"></button>` +
-              `</div>` +
-              `</div>`,
+              `</article>`,
           )
           .join("\n")}
-      </div>
-    </div>
+    </section>
 
     <div id="playlist-dialog" role="dialog" aria-modal="true" style="display:none;width:400px;height:300px">
       <span>Add to Playlist</span>
@@ -220,32 +234,28 @@ const LAZY_LOAD_MOCK_HTML = `<!doctype html>
 
     <script>
       let extraLoaded = false;
-      const scroller = document.querySelector('.clip-browser-list-scroller');
-      const wrapper = scroller.querySelector('.css-emotion-list-wrapper');
+      const scroller = document.querySelector('#alt-view-scroller');
 
       // scroll イベントで +4 row を 1 回だけ追加ロードする（遅延ロードの写像）
       scroller.addEventListener('scroll', () => {
         if (!extraLoaded) {
           extraLoaded = true;
           for (let i = 4; i < 8; i++) {
-            const row = document.createElement('div');
+            const row = document.createElement('article');
             row.id = 'clip-' + i;
             row.style.cssText = 'width:200px;height:60px';
-            const msb = document.createElement('div');
-            msb.className = 'multi-select-button';
             const btn = document.createElement('button');
             btn.setAttribute('aria-label', 'Select clip');
             btn.style.cssText = 'width:20px;height:20px';
-            msb.appendChild(btn);
-            row.appendChild(msb);
-            wrapper.appendChild(row);
+            row.appendChild(btn);
+            scroller.appendChild(row);
           }
         }
       });
 
       // 各 Select clip ボタン: click で aria-label を Deselect clip に切替
       document.addEventListener('click', (e) => {
-        const btn = e.target.closest('.multi-select-button > button[aria-label="Select clip"]');
+        const btn = e.target.closest('button[aria-label="Select clip"]');
         if (btn) btn.setAttribute('aria-label', 'Deselect clip');
       });
 
@@ -264,7 +274,9 @@ const LAZY_LOAD_MOCK_HTML = `<!doctype html>
   </body>
 </html>`;
 
-test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cmd+P → Create → dialog 消滅 (#924)", async ({ page }) => {
+test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row → 8 件選択 → Cmd+P → Create → dialog 消滅 (#924)", async ({
+  page,
+}) => {
   await page.setContent(LAZY_LOAD_MOCK_HTML);
 
   const result = await page.evaluate(async () => {
@@ -284,14 +296,50 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+    const resolveClipRowFromSelectButton = (button: HTMLElement): HTMLElement | null => {
+      const multiSelectRow = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+      return multiSelectRow ?? button.closest<HTMLElement>("article");
+    };
+    const isScrollableClipContainer = (element: HTMLElement): boolean => {
+      if (element === document.body || element === document.documentElement) return false;
+      const overflowY = getComputedStyle(element).overflowY;
+      return (
+        overflowY === "auto" ||
+        overflowY === "scroll" ||
+        overflowY === "overlay" ||
+        element.scrollHeight > element.clientHeight
+      );
+    };
+    const resolveScrollableAncestor = (element: HTMLElement): HTMLElement | null => {
+      let current = element.parentElement;
+      while (current) {
+        if (isScrollableClipContainer(current)) return current;
+        current = current.parentElement;
+      }
+      return null;
+    };
+    const resolveClipListScroller = (): HTMLElement | null => {
+      const explicit = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
+      if (explicit) return explicit;
+      const buttons = document.querySelectorAll<HTMLElement>(
+        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]',
+      );
+      for (const button of Array.from(buttons)) {
+        const row = resolveClipRowFromSelectButton(button);
+        if (!row || !isVisible(row)) continue;
+        const scroller = resolveScrollableAncestor(row);
+        if (scroller) return scroller;
+      }
+      return null;
+    };
     const collectRows = (scroller: HTMLElement): HTMLElement[] => {
       const buttons = scroller.querySelectorAll<HTMLElement>(
-        '.multi-select-button > button[aria-label="Select clip"], .multi-select-button > button[aria-label="Deselect clip"]',
+        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]',
       );
       const seen = new Set<HTMLElement>();
       const rows: HTMLElement[] = [];
       for (const button of Array.from(buttons)) {
-        const row = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+        const row = resolveClipRowFromSelectButton(button);
         if (!row || seen.has(row)) continue;
         seen.add(row);
         if (isVisible(row)) rows.push(row);
@@ -301,7 +349,7 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
 
     // ensureClipRowsLoaded の inline 再現: 遅延ロード対応
     const ensureClipRowsLoaded = async (count: number): Promise<HTMLElement[]> => {
-      const scroller = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
+      const scroller = resolveClipListScroller();
       if (!scroller) throw new Error("scroller not found");
       let rows = collectRows(scroller);
       if (rows.length === 0) throw new Error("no rows");
@@ -330,9 +378,20 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
 
     const multiSelectClips = async (rows: HTMLElement[]): Promise<void> => {
       for (const row of rows) {
-        row.querySelector<HTMLButtonElement>('.multi-select-button > button[aria-label="Select clip"]')?.click();
+        if (row.querySelector('button[aria-label="Deselect clip"]')) continue;
+        const button = row.querySelector<HTMLButtonElement>('button[aria-label="Select clip"]');
+        if (!button) throw new Error("Select clip button が見つかりません。");
+        button.click();
       }
-      await sleep(50);
+      const deadline = Date.now() + 2000;
+      for (;;) {
+        const selected = rows.filter((row) => row.querySelector('button[aria-label="Deselect clip"]')).length;
+        if (selected >= rows.length) return;
+        if (Date.now() >= deadline) {
+          throw new Error(`Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`);
+        }
+        await sleep(20);
+      }
     };
 
     const findPlaylistDialog = (): HTMLElement | null =>
@@ -365,12 +424,14 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
     };
 
     // --- フロー実行 ---
-    const initialRowCount = collectRows(document.querySelector<HTMLElement>(".clip-browser-list-scroller")!).length;
+    const scroller = resolveClipListScroller();
+    if (!scroller) throw new Error("scroller not found before flow");
+    const initialRowCount = collectRows(scroller).length;
     const rows = await ensureClipRowsLoaded(8); // 初期 4 → scroll で +4 → 計 8
     const loadedRowCount = rows.length;
 
     await multiSelectClips(rows);
-    const selectedCount = document.querySelectorAll('.multi-select-button > button[aria-label="Deselect clip"]').length;
+    const selectedCount = document.querySelectorAll('button[aria-label="Deselect clip"]').length;
 
     const dialog = await openAddToPlaylistDialogViaCmdP();
     const dialogFound = dialog.id === "playlist-dialog";

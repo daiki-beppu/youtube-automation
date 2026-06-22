@@ -16,6 +16,8 @@ import { isVisible } from "./visibility";
 export const CLIP_LIST_SCROLLER_SELECTOR = ".clip-browser-list-scroller";
 /** 各 clip が 1 つ内包する multi-select ボタンのラッパ。clip row の構造シグナル兼 row 導出の基点 (#881)。 */
 const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
+const SELECT_CLIP_BUTTON_ANY_SELECTOR = 'button[aria-label="Select clip"]';
+const DESELECT_CLIP_BUTTON_ANY_SELECTOR = 'button[aria-label="Deselect clip"]';
 /** 未選択の clip 選択ボタン。click すると aria-label が "Deselect clip" に切り替わる（= 冪等）。 */
 export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
 /** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
@@ -68,6 +70,87 @@ function findPlaylistDialog(): HTMLElement | null {
 const CLIP_ROW_NOT_FOUND_MESSAGE =
   "clip row が見つかりません。Suno の UI 変更の可能性があります。";
 
+function resolveClipRowFromSelectButton(
+  button: HTMLElement,
+): HTMLElement | null {
+  const multiSelectRow = button.closest(
+    MULTI_SELECT_BUTTON_SELECTOR,
+  )?.parentElement;
+  if (multiSelectRow) {
+    return multiSelectRow;
+  }
+  return button.closest<HTMLElement>("article");
+}
+
+function isScrollableClipContainer(element: HTMLElement): boolean {
+  if (element === document.body || element === document.documentElement) {
+    return false;
+  }
+  const overflowY = getComputedStyle(element).overflowY;
+  if (
+    overflowY === "auto" ||
+    overflowY === "scroll" ||
+    overflowY === "overlay"
+  ) {
+    return true;
+  }
+  return element.scrollHeight > element.clientHeight;
+}
+
+function resolveScrollableAncestor(element: HTMLElement): HTMLElement | null {
+  let current = element.parentElement;
+  while (current) {
+    if (isScrollableClipContainer(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function resolveClipListScroller(): HTMLElement | null {
+  const explicit = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (explicit && collectClipRowsFromSelectButtons(explicit).length > 0) {
+    return explicit;
+  }
+
+  const buttons = document.querySelectorAll<HTMLElement>(
+    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
+  );
+  for (const button of buttons) {
+    const row = resolveClipRowFromSelectButton(button);
+    if (!row || !isVisible(row)) {
+      continue;
+    }
+    const scroller = resolveScrollableAncestor(row);
+    if (scroller && collectClipRowsFromSelectButtons(scroller).length > 0) {
+      return scroller;
+    }
+  }
+  return explicit;
+}
+
+function collectClipRowsFromSelectButtons(root: ParentNode): HTMLElement[] {
+  const buttons = root.querySelectorAll<HTMLElement>(
+    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
+  );
+  const seen = new Set<HTMLElement>();
+  const rows: HTMLElement[] = [];
+  for (const button of buttons) {
+    const row = resolveClipRowFromSelectButton(button);
+    if (!row || seen.has(row)) {
+      continue;
+    }
+    seen.add(row);
+    if (isVisible(row)) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
 /**
  * scroller 配下のロード済み clip row を DOM 順（= 直近生成が先頭）で全件収集する内部ヘルパ。
  *
@@ -85,22 +168,7 @@ const CLIP_ROW_NOT_FOUND_MESSAGE =
  * 0 件の場合は `CLIP_ROW_NOT_FOUND_MESSAGE` で throw（fail-loud、#881 維持）。
  */
 function collectLoadedClipRows(scroller: HTMLElement): HTMLElement[] {
-  const buttons = scroller.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BUTTON_SELECTOR}, ${DESELECT_CLIP_BUTTON_SELECTOR}`,
-  );
-  const seen = new Set<HTMLElement>();
-  const rows: HTMLElement[] = [];
-  for (const button of buttons) {
-    const row = button.closest(MULTI_SELECT_BUTTON_SELECTOR)?.parentElement;
-    if (!row || seen.has(row)) {
-      continue;
-    }
-    seen.add(row);
-    if (isVisible(row)) {
-      rows.push(row);
-    }
-  }
-
+  const rows = collectClipRowsFromSelectButtons(scroller);
   if (rows.length === 0) {
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
   }
@@ -145,9 +213,7 @@ export async function ensureClipRowsLoaded(
     loadSettleTimeoutMs = 3000,
   } = options;
 
-  const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR,
-  );
+  const scroller = resolveClipListScroller();
   if (!scroller) {
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
   }
@@ -222,11 +288,11 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
     );
   }
   for (const row of rows) {
-    if (row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR)) {
+    if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) {
       continue;
     }
     const button = row.querySelector<HTMLButtonElement>(
-      SELECT_CLIP_BUTTON_SELECTOR,
+      SELECT_CLIP_BUTTON_ANY_SELECTOR,
     );
     if (!button) {
       throw new Error(
@@ -246,7 +312,7 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
     );
   for (;;) {
     const selected = rows.filter((row) =>
-      row.querySelector(DESELECT_CLIP_BUTTON_SELECTOR),
+      row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR),
     ).length;
     if (selected >= rows.length) {
       return;

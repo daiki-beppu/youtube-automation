@@ -11,15 +11,16 @@
 //   - 生成中判定 = card 内 Remix btn が disabled (または aria-disabled="true")。strict isVisible() で
 //     card 自体も filter
 //   - 完了判定 = Remix btn enabled → 生成中ではない
-//   - getInFlightClipCount() = 全 Remix btn からカードルートを解決し in-flight な distinct card 数
-//   - fail-loud (req 8): Remix btn が 0 件 = DOM 構造が壊れている → silent に 0 を返さず throw
+//   - getInFlightClipCount() = Remix btn のあるカードと明示的な生成中シグナルを持つカードの union 数
+//   - Remix btn も代替生成中シグナルも 0 件の場合、現在ビューが検出できるなら空 queue として 0
+//   - fail-loud (req 8): 現在ビューも検出不能なら silent に 0 を返さず throw
 //   - waitForQueueSlot(maxClips, opts) = in-flight < maxClips になるまで poll
 //
 // 契約 (draft が実装すべき public API、shared/dom.ts):
 //   - REMIX_BTN_SELECTOR: string
 //   - findCardRoot(anchor: HTMLElement): HTMLElement
 //   - isClipGenerating(card: HTMLElement): boolean
-//   - getInFlightClipCount(): number   // Remix btn 0 件で throw
+//   - getInFlightClipCount(): number
 //   - waitForQueueSlot(maxClips: number, options: { isAborted; pollIntervalMs; timeoutMs; queueErrorWaitMs }): Promise<void>
 //
 // jsdom はレイアウトを行わず getBoundingClientRect が常に 0×0 を返すため、strict 可視判定
@@ -28,18 +29,86 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   REMIX_BTN_SELECTOR,
+  detectSunoViewMode,
   findCardRoot,
   getInFlightClipCount,
   isClipGenerating,
   waitForQueueSlot,
 } from "../../shared/dom";
-import { addClipCard, addQueueErrorDialog, buildClipCard, completeClipCard } from "./_helpers";
+import { addClipCard, addQueueErrorDialog, buildClipCard, completeClipCard, markBbox } from "./_helpers";
 
 /** card 内の Remix btn (findCardRoot の anchor) を取り出す。 */
 function remixBtnOf(card: HTMLElement): HTMLButtonElement {
   const btn = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
   if (!btn) throw new Error("test fixture 不整合: card に Remix btn がありません。");
   return btn;
+}
+
+function makeViewButton(label: string): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  markBbox(btn, 120, 32);
+  document.body.appendChild(btn);
+  return btn;
+}
+
+function makeViewTrigger(label: string): HTMLButtonElement {
+  const btn = makeViewButton(label);
+  btn.setAttribute("aria-haspopup", "listbox");
+  return btn;
+}
+
+function addViewVariantCard(opts: { view: "waveform" | "grid"; generating: boolean; visible?: boolean }): HTMLElement {
+  const card = document.createElement("article");
+  card.dataset.view = opts.view;
+
+  const actions = document.createElement("div");
+  if (opts.view === "waveform") {
+    const select = document.createElement("button");
+    select.setAttribute("aria-label", "Select clip");
+    actions.appendChild(select);
+  }
+
+  const remix = document.createElement("button");
+  remix.setAttribute("aria-label", "Remix clip");
+  remix.disabled = opts.generating;
+  actions.appendChild(remix);
+  markBbox(actions, 120, 40);
+  card.appendChild(actions);
+
+  if (opts.visible === false) {
+    card.style.display = "none";
+    markBbox(card, 0, 0);
+  } else {
+    markBbox(card, 240, 80);
+  }
+  document.body.appendChild(card);
+  return card;
+}
+
+function addStatusOnlyCard(opts: { ariaBusy?: boolean; progressbar?: boolean; visible?: boolean }): HTMLElement {
+  const card = document.createElement("article");
+  const select = document.createElement("button");
+  select.setAttribute("aria-label", "Select clip");
+  card.appendChild(select);
+  if (opts.ariaBusy === true) {
+    card.setAttribute("aria-busy", "true");
+  }
+  if (opts.progressbar === true) {
+    const progress = document.createElement("div");
+    progress.setAttribute("role", "progressbar");
+    card.appendChild(progress);
+    markBbox(progress, 120, 8);
+  }
+  if (opts.visible === false) {
+    card.style.display = "none";
+    markBbox(card, 0, 0);
+  } else {
+    markBbox(card, 240, 80);
+  }
+  markBbox(select, 20, 20);
+  document.body.appendChild(card);
+  return card;
 }
 
 // queueErrorWaitMs は poll (10ms) と明確に分離して buffer 待機の途中経過を pin できるよう 200ms。
@@ -52,6 +121,72 @@ beforeEach(() => {
 describe("REMIX_BTN_SELECTOR: 実 DOM 検証で確定した in-flight マーカー", () => {
   it('Given 定数 When 読む Then `button[aria-label="Remix clip"]` である', () => {
     expect(REMIX_BTN_SELECTOR).toBe('button[aria-label="Remix clip"]');
+  });
+});
+
+describe("detectSunoViewMode: Suno の現在ビューを検出する", () => {
+  it("Given view dropdown が List 表記を表示している When 検出する Then list を返す", () => {
+    makeViewTrigger("List ▼");
+
+    expect(detectSunoViewMode()).toBe("list");
+  });
+
+  it("Given Newest sort dropdown と Waveform view dropdown がある When 検出する Then waveform を返す", () => {
+    makeViewTrigger("Newest ▼");
+    makeViewTrigger("Waveform");
+
+    expect(detectSunoViewMode()).toBe("waveform");
+  });
+
+  it("Given view dropdown が装飾付き Waveform 表記を表示している When 検出する Then waveform を返す", () => {
+    makeViewButton("Newest");
+    makeViewTrigger("Waveform ▼");
+
+    expect(detectSunoViewMode()).toBe("waveform");
+  });
+
+  it("Given Newest sort dropdown と Grid view dropdown がある When 検出する Then grid を返す", () => {
+    makeViewTrigger("Newest ▼");
+    makeViewTrigger("Grid");
+
+    expect(detectSunoViewMode()).toBe("grid");
+  });
+
+  it("Given view dropdown が装飾付き Grid 表記を表示している When 検出する Then grid を返す", () => {
+    makeViewButton("Newest");
+    makeViewTrigger("Grid ▾");
+
+    expect(detectSunoViewMode()).toBe("grid");
+  });
+
+  it("Given menu option が複数 DOM 上にある When current trigger が無い Then unknown を返す", () => {
+    makeViewButton("List");
+    makeViewButton("Waveform");
+    makeViewButton("Grid");
+
+    expect(detectSunoViewMode()).toBe("unknown");
+  });
+
+  it("Given selected option が 1 件だけある When 検出する Then selected の view を返す", () => {
+    const option = makeViewButton("Grid");
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", "true");
+    makeViewButton("List");
+    makeViewButton("Waveform");
+
+    expect(detectSunoViewMode()).toBe("grid");
+  });
+
+  it("Given view dropdown が DOM 上に無い When 検出する Then unknown を返す", () => {
+    makeViewButton("Newest");
+
+    expect(detectSunoViewMode()).toBe("unknown");
+  });
+
+  it("Given 状態属性のない単独 Grid button がある When 検出する Then unknown を返す", () => {
+    makeViewButton("Grid");
+
+    expect(detectSunoViewMode()).toBe("unknown");
   });
 });
 
@@ -72,6 +207,32 @@ describe("findCardRoot: Remix btn から clip card root を構造的に解決す
 
     expect(findCardRoot(remixBtnOf(card1))).toBe(card1);
     expect(findCardRoot(remixBtnOf(card2))).toBe(card2);
+  });
+
+  it("Given Waveform 風 card が Select/Remix だけを持つ When 解決する Then その card root を返す", () => {
+    const card = addViewVariantCard({ view: "waveform", generating: true });
+
+    expect(findCardRoot(remixBtnOf(card))).toBe(card);
+  });
+
+  it("Given Grid 風 card が Remix だけを持つ When 解決する Then その card root を返す", () => {
+    const card = addViewVariantCard({ view: "grid", generating: true });
+
+    expect(findCardRoot(remixBtnOf(card))).toBe(card);
+  });
+
+  it("Given Grid 風 card の可視 action wrapper が Remix を持つ When 解決する Then wrapper ではなく article root を返す", () => {
+    const card = addViewVariantCard({ view: "grid", generating: true });
+
+    expect(findCardRoot(remixBtnOf(card))).toBe(card);
+    expect(findCardRoot(remixBtnOf(card))).not.toBe(remixBtnOf(card).parentElement);
+  });
+
+  it("Given Waveform 風 card の可視 action wrapper が Select/Remix を持つ When 解決する Then wrapper ではなく article root を返す", () => {
+    const card = addViewVariantCard({ view: "waveform", generating: true });
+
+    expect(findCardRoot(remixBtnOf(card))).toBe(card);
+    expect(findCardRoot(remixBtnOf(card))).not.toBe(remixBtnOf(card).parentElement);
   });
 
   it("Given anchor から祖先を辿っても 3 ボタンが揃う card root が無い When 解決する Then throw する (fail-loud)", () => {
@@ -140,9 +301,47 @@ describe("getInFlightClipCount: in-flight な distinct card 数", () => {
     expect(getInFlightClipCount()).toBe(0);
   });
 
-  it("Given Remix btn が 1 件も無い When 数える Then throw する (fail-loud, req 8: silent 0 を返さない)", () => {
-    // これが本 issue のバグ本体: selector 0 hit を silent に 0 と返すと上限まで過剰投入する。
+  it("Given Waveform 風 card が Select/Remix だけを持つ When 数える Then 生成中 card 数を返す", () => {
+    addViewVariantCard({ view: "waveform", generating: true });
+    addViewVariantCard({ view: "waveform", generating: false });
+    addViewVariantCard({ view: "waveform", generating: true, visible: false });
+
+    expect(getInFlightClipCount()).toBe(1);
+  });
+
+  it("Given Grid 風 card が Remix だけを持つ When 数える Then 生成中 card 数を返す", () => {
+    addViewVariantCard({ view: "grid", generating: true });
+    addViewVariantCard({ view: "grid", generating: true });
+    addViewVariantCard({ view: "grid", generating: false });
+
+    expect(getInFlightClipCount()).toBe(2);
+  });
+
+  it("Given Remix btn が無く明示的な生成中シグナルがある When 数える Then in-flight 数を返す", () => {
+    addStatusOnlyCard({ ariaBusy: true });
+    addStatusOnlyCard({ progressbar: true });
+    addStatusOnlyCard({ ariaBusy: true, visible: false });
+
+    expect(getInFlightClipCount()).toBe(2);
+  });
+
+  it("Given 完了 Remix card と Remix 不在の生成中 card が混在 When 数える Then union した in-flight 数を返す", () => {
+    addClipCard({ generating: false });
+    addStatusOnlyCard({ ariaBusy: true });
+    addStatusOnlyCard({ progressbar: true });
+
+    expect(getInFlightClipCount()).toBe(2);
+  });
+
+  it("Given Remix btn が無く代替生成中シグナルも無い When 数える Then throw する (fail-loud)", () => {
     expect(() => getInFlightClipCount()).toThrow();
+  });
+
+  it("Given Grid view で Remix btn も生成中シグナルも無い When 数える Then 空 queue として 0 を返す", () => {
+    makeViewTrigger("Newest ▼");
+    makeViewTrigger("Grid ▼");
+
+    expect(getInFlightClipCount()).toBe(0);
   });
 });
 
