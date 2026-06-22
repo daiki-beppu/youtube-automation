@@ -486,6 +486,56 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
     expect(scrollPositions).toContain(500);
   });
 
+  it("Given bottom jump では増えない loader When playlist 追加フロー Then 本番 API で 8 件選択して dialog close まで到達する", async () => {
+    Array.from({ length: 4 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupStepwiseLazyLoader(scroller, 4, {
+      scrollHeight: 240,
+      clientHeight: 200,
+    });
+    let submittedPlaylistName = "";
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "p" || (!e.metaKey && !e.ctrlKey)) {
+        return;
+      }
+      const { dialog, input, create } = addDialogWithForm();
+      create.addEventListener("click", () => {
+        submittedPlaylistName = input.value;
+        dialog.remove();
+      });
+    });
+
+    const pendingRows = ensureClipRowsLoaded(8, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const rows = await pendingRows;
+    for (const row of rows) {
+      const button = row.querySelector<HTMLButtonElement>(SELECT_CLIP_BUTTON_SELECTOR);
+      if (!button) {
+        throw new Error("test fixture must include Select clip button");
+      }
+      selectOnClick(button);
+    }
+
+    await multiSelectClips(rows);
+    const dialog = await openAddToPlaylistDialogViaCmdP();
+    await fillPlaylistNameAndCreate(dialog, "test-lazy-load-playlist");
+    await waitForPlaylistDialogClose({
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 1000,
+    });
+
+    expect(rows).toHaveLength(8);
+    expect(document.querySelectorAll(DESELECT_CLIP_BUTTON_SELECTOR)).toHaveLength(8);
+    expect(submittedPlaylistName).toBe("test-lazy-load-playlist");
+    expect(scrollPositions[0]).toBeGreaterThan(0);
+    expect(scrollPositions[0]).toBeLessThan(40);
+  });
+
   it("Given 末尾到達（ロードが増えない）で不足 When ensureClipRowsLoaded Then X/Y 件を含むメッセージで throw（silent slice 廃止）", async () => {
     // 3 row で末尾（scroll しても増えない）、count=5 を要求
     Array.from({ length: 3 }, () => addClipRow().row);
