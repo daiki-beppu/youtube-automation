@@ -22,6 +22,10 @@ export type RunPayload =
       collectionId?: string;
       /** 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。 */
       indices?: number[];
+      /** 再開前の run で観測済みの playlist 対象 clip ID。 */
+      submittedClipIds?: string[];
+      /** playlist 追加時に揃っているべき clip ID 件数。 */
+      playlistExpectedClipCount?: number;
     };
 
 interface ProtocolMap {

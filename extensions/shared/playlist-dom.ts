@@ -20,6 +20,10 @@ const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
 export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
 /** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
 export const DESELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Deselect clip"]`;
+const CLIP_ROW_SONG_ID_DATA_KEY = "songId";
+const CLIP_ROW_CLIP_ID_DATA_KEY = "clipId";
+const CLIP_ROW_SONG_LINK_SELECTOR = 'a[href*="/song/"]';
+const SONG_HREF_ID_RE = /\/song\/([^/?#]+)/;
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
 export const PLAYLIST_NAME_INPUT_SELECTOR =
   'input[placeholder="Playlist Name"]';
@@ -107,6 +111,70 @@ function collectLoadedClipRows(scroller: HTMLElement): HTMLElement[] {
   return rows;
 }
 
+function extractSongIdFromHref(href: string): string | null {
+  const match = SONG_HREF_ID_RE.exec(href);
+  return match ? match[1] : null;
+}
+
+function collectClipRowIds(row: HTMLElement): Set<string> {
+  const ids = new Set<string>();
+  const songId = row.dataset[CLIP_ROW_SONG_ID_DATA_KEY];
+  const clipId = row.dataset[CLIP_ROW_CLIP_ID_DATA_KEY];
+  if (songId) {
+    ids.add(songId);
+  }
+  if (clipId) {
+    ids.add(clipId);
+  }
+  for (const link of row.querySelectorAll<HTMLAnchorElement>(
+    CLIP_ROW_SONG_LINK_SELECTOR,
+  )) {
+    const id = extractSongIdFromHref(link.href);
+    if (id) {
+      ids.add(id);
+    }
+  }
+  return ids;
+}
+
+function findRowsByClipIds(
+  rows: HTMLElement[],
+  targetIds: string[],
+): HTMLElement[] {
+  const rowById = new Map<string, HTMLElement>();
+  for (const row of rows) {
+    for (const id of collectClipRowIds(row)) {
+      if (!rowById.has(id)) {
+        rowById.set(id, row);
+      }
+    }
+  }
+
+  const foundRows: HTMLElement[] = [];
+  const seenRows = new Set<HTMLElement>();
+  for (const id of targetIds) {
+    const row = rowById.get(id);
+    if (row && !seenRows.has(row)) {
+      foundRows.push(row);
+      seenRows.add(row);
+    }
+  }
+  return foundRows;
+}
+
+function listMissingClipIds(
+  rows: HTMLElement[],
+  targetIds: string[],
+): string[] {
+  const foundIds = new Set<string>();
+  for (const row of rows) {
+    for (const id of collectClipRowIds(row)) {
+      foundIds.add(id);
+    }
+  }
+  return targetIds.filter((id) => !foundIds.has(id));
+}
+
 export interface EnsureClipRowsLoadedOptions {
   /** 中断フラグ。true で即 return（throw しない。呼び出し側が aborted を再チェック）。 */
   isAborted: () => boolean;
@@ -116,29 +184,15 @@ export interface EnsureClipRowsLoadedOptions {
   loadSettleTimeoutMs?: number;
 }
 
-/**
- * 遅延ロードの clip list を底方向へスクロールし、count 件の row がロードされるまで進める (#924)。
- * 戻り値はロード済み row の先頭 count 件（DOM 順 = 直近生成が先頭）。
- * リスト末尾（追加ロードが止まる）まで進めても不足する場合は
- * 「X/Y 件」を含むメッセージで fail-loud throw する（従来の silent slice を廃止）。
- *
- * 実機検証で確認した遅延ロードの特性（#924）:
- *   - clip list（`.clip-browser-list-scroller`）は無限スクロール実装。
- *     初期ロードは 40 row のみ。`scroller.scrollTop = scroller.scrollHeight` +
- *     `scroller.dispatchEvent(new Event("scroll"))` で +20 row ずつ追加ロードされる
- *     （40→60→80→100 を実測）。
- *   - ロード済み row は unmount されない（仮想化ではない）。row は `position: static` の
- *     通常フロー配置で、画面外でも `isVisible()` を通り click 可能。
- *   - scrollTop 代入 + scroll event dispatch でロードが走ることを実機確認済み。
- *
- * fail-loud (#881): コンテナ不在または row 0 件は即 throw する（空配列を返さない）。
- * 追加ロードが止まった（リスト末尾）のに count に届かない場合も fail-loud throw する
- * （silent slice を廃止し、追加漏れを検出境界で即顕在化させる）。
- */
-export async function ensureClipRowsLoaded(
-  count: number,
+export async function ensureClipRowsLoadedByIds(
+  targetIds: string[],
   options: EnsureClipRowsLoadedOptions,
 ): Promise<HTMLElement[]> {
+  const uniqueTargetIds = Array.from(new Set(targetIds));
+  if (uniqueTargetIds.length === 0) {
+    throw new Error("playlist 対象の clip ID がありません。");
+  }
+
   const {
     isAborted,
     pollIntervalMs = 100,
@@ -152,46 +206,41 @@ export async function ensureClipRowsLoaded(
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
   }
 
-  // 初回 row 収集: 0 件なら fail-loud throw（#881 維持）
   let rows = collectLoadedClipRows(scroller);
 
   for (;;) {
-    // 中断: 現時点の先頭 count 件（不足していても）を返して即終了
+    const foundRows = findRowsByClipIds(rows, uniqueTargetIds);
     if (isAborted()) {
-      return rows.slice(0, count);
+      return foundRows;
     }
-
-    // 十分な row がロードされた: scrollTop を 0 に戻して先頭 count 件を返す
-    // （multi-select や Cmd+P 操作を初期表示位置で行うため、スクロールを元に戻す）
-    if (rows.length >= count) {
+    if (foundRows.length === uniqueTargetIds.length) {
       scroller.scrollTop = 0;
       scroller.dispatchEvent(new Event("scroll"));
-      return rows.slice(0, count);
+      return foundRows;
     }
 
-    // 不足: スクロールで追加ロードを促す
     const prevCount = rows.length;
     scroller.scrollTop = scroller.scrollHeight;
     scroller.dispatchEvent(new Event("scroll"));
 
-    // 追加 row のロードを poll で待つ
     const settleDeadline = Date.now() + loadSettleTimeoutMs;
     for (;;) {
       await sleep(pollIntervalMs);
-      if (isAborted()) {
-        // 中断: ロード待ち中でも即終了
-        rows = collectLoadedClipRows(scroller);
-        return rows.slice(0, count);
-      }
       rows = collectLoadedClipRows(scroller);
+      const nextFoundRows = findRowsByClipIds(rows, uniqueTargetIds);
+      if (isAborted()) {
+        return nextFoundRows;
+      }
+      if (nextFoundRows.length === uniqueTargetIds.length) {
+        break;
+      }
       if (rows.length > prevCount) {
-        // 追加ロードを検出: 外側ループに戻って再評価
         break;
       }
       if (Date.now() >= settleDeadline) {
-        // リスト末尾到達（追加ロードが止まった）のに不足
+        const missing = listMissingClipIds(rows, uniqueTargetIds).join(", ");
         throw new Error(
-          `clip row が ${rows.length}/${count} 件しかロードできませんでした。生成済み clip が不足しているか、Suno の UI 変更の可能性があります。`,
+          `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
         );
       }
     }
@@ -208,9 +257,9 @@ export async function ensureClipRowsLoaded(
  * を許し、0 件選択でも void resolve していた。これが後段の Add to Playlist dialog 検出
  * timeout という代理症状で初めて顕在化していたため、選択側で fail-loud にする。
  *
- * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は ensureClipRowsLoaded
- *   （内部の collectLoadedClipRows）が先に fail-loud throw する前提。万一 0 件で到達したら
- *   `0 >= 0` で silent resolve させない）(#881, #924)。
+ * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は
+ *   ensureClipRowsLoadedByIds が先に fail-loud throw する前提。万一 0 件で到達したら silent
+ *   resolve させない）(#881, #924)。
  * - 既に選択済み（Deselect clip 在）の row は idempotent に skip（click しない）。
  * - Select clip ボタンが無く、かつ未選択（Deselect も無い）row は UI 変更とみなし即 throw。
  * - 全 click 後、対象 row が deadline 内に Deselect clip へ遷移しなければ throw。

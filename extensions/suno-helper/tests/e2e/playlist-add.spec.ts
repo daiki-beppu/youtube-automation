@@ -268,7 +268,7 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
   await page.setContent(LAZY_LOAD_MOCK_HTML);
 
   const result = await page.evaluate(async () => {
-    // --- ensureClipRowsLoaded と同手法を inline 再現 ---
+    // --- ID ベース row loader と同じ DOM row 導出を inline 再現 ---
     const isVisible = (el: HTMLElement): boolean => {
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return false;
@@ -299,8 +299,8 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
       return rows;
     };
 
-    // ensureClipRowsLoaded の inline 再現: 遅延ロード対応
-    const ensureClipRowsLoaded = async (count: number): Promise<HTMLElement[]> => {
+    // 遅延ロード対応の inline 再現
+    const loadRowsByCountForE2E = async (count: number): Promise<HTMLElement[]> => {
       const scroller = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
       if (!scroller) throw new Error("scroller not found");
       let rows = collectRows(scroller);
@@ -366,7 +366,7 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
 
     // --- フロー実行 ---
     const initialRowCount = collectRows(document.querySelector<HTMLElement>(".clip-browser-list-scroller")!).length;
-    const rows = await ensureClipRowsLoaded(8); // 初期 4 → scroll で +4 → 計 8
+    const rows = await loadRowsByCountForE2E(8); // 初期 4 → scroll で +4 → 計 8
     const loadedRowCount = rows.length;
 
     await multiSelectClips(rows);
