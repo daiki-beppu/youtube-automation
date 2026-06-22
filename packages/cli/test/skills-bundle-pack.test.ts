@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 // Guards the #742 distribution contract end-to-end: `_skills` / `_claude_md` are
 // committed as symlinks into `.claude/`, and pack strips symlinks — so without
@@ -10,8 +17,13 @@ import { join, resolve } from "node:path";
 // the real package and asserts both assets land as real files.
 
 // packages/cli/test → packages/cli, and two more up → repo root.
-const cliDir = resolve(import.meta.dir, "..");
-const repoRoot = resolve(cliDir, "..", "..");
+const sourceCliDir = resolve(import.meta.dir, "..");
+const repoRoot = resolve(sourceCliDir, "..", "..");
+const CLI_SMOKE_TIMEOUT_MS = 15_000;
+// beforeAll runs multiple subprocesses (restore + pack + tar) whose individual
+// timeouts sum to > CLI_SMOKE_TIMEOUT_MS. Give the outer harness enough room
+// so a slow CI machine doesn't hit the beforeAll deadline first (AI-ANTI-002).
+const BEFORE_ALL_TIMEOUT_MS = 50_000;
 
 // The canonical skill source. Every entry must reach the tarball as a real
 // directory — read dynamically so the assertion tracks skills being added or
@@ -33,13 +45,49 @@ const makeTmp = (prefix: string): string => {
   return dir;
 };
 
+interface IsolatedPackage {
+  cliDir: string;
+  repoRoot: string;
+}
+
+const createIsolatedPackage = (): IsolatedPackage => {
+  const isolatedRepoRoot = makeTmp("cli-pack-repo-");
+  const isolatedCliDir = join(isolatedRepoRoot, "packages", "cli");
+
+  cpSync(
+    join(repoRoot, "package.json"),
+    join(isolatedRepoRoot, "package.json")
+  );
+  cpSync(join(repoRoot, "bun.lock"), join(isolatedRepoRoot, "bun.lock"));
+  cpSync(join(repoRoot, ".claude"), join(isolatedRepoRoot, ".claude"), {
+    dereference: true,
+    recursive: true,
+  });
+  mkdirSync(join(isolatedRepoRoot, "packages"), { recursive: true });
+  mkdirSync(join(isolatedRepoRoot, "packages", "core"), { recursive: true });
+  cpSync(
+    join(repoRoot, "packages", "core", "package.json"),
+    join(isolatedRepoRoot, "packages", "core", "package.json")
+  );
+  cpSync(sourceCliDir, isolatedCliDir, {
+    dereference: false,
+    filter: (source) => {
+      const path = relative(sourceCliDir, source);
+      return path !== "node_modules" && !path.startsWith("node_modules/");
+    },
+    recursive: true,
+  });
+
+  return { cliDir: isolatedCliDir, repoRoot: isolatedRepoRoot };
+};
+
 // Pack the CLI package into `destination` (runs prepack/postpack, which
 // materialize the bundled symlinks into real files and restore the links
 // afterward) and return the tarball's entry paths.
-const packEntries = (destination: string): string[] => {
+const packEntries = (cliDir: string, destination: string): string[] => {
   const pack = Bun.spawnSync(
     ["bun", "pm", "pack", "--destination", destination, "--quiet"],
-    { cwd: cliDir }
+    { cwd: cliDir, timeout: CLI_SMOKE_TIMEOUT_MS }
   );
   if (pack.exitCode !== 0) {
     throw new Error(`bun pm pack failed: ${pack.stderr.toString()}`);
@@ -48,7 +96,9 @@ const packEntries = (destination: string): string[] => {
   if (tarball === undefined) {
     throw new Error("bun pm pack produced no tarball");
   }
-  const list = Bun.spawnSync(["tar", "-tzf", join(destination, tarball)]);
+  const list = Bun.spawnSync(["tar", "-tzf", join(destination, tarball)], {
+    timeout: CLI_SMOKE_TIMEOUT_MS,
+  });
   if (list.exitCode !== 0) {
     throw new Error(`tar -tzf failed: ${list.stderr.toString()}`);
   }
@@ -58,26 +108,37 @@ const packEntries = (destination: string): string[] => {
     .filter((line) => line.length > 0);
 };
 
+const restoreBundledSymlinks = (cliDir: string): void => {
+  const restore = Bun.spawnSync(
+    ["bun", "run", "scripts/bundle-symlinks.ts", "restore"],
+    {
+      cwd: cliDir,
+      timeout: CLI_SMOKE_TIMEOUT_MS,
+    }
+  );
+  if (restore.exitCode !== 0) {
+    throw new Error(`bundle symlink restore failed: ${restore.stderr}`);
+  }
+};
+
 afterAll(() => {
-  // bun's postpack restores the symlinks; re-run restore defensively so the
-  // working tree is clean even if pack aborted mid-run (restore is idempotent).
-  Bun.spawnSync(["bun", "run", "scripts/bundle-symlinks.ts", "restore"], {
-    cwd: cliDir,
-  });
   while (tmpDirs.length > 0) {
     const dir = tmpDirs.pop();
     if (dir !== undefined) {
       rmSync(dir, { force: true, recursive: true });
     }
   }
-});
+}, CLI_SMOKE_TIMEOUT_MS);
 
 describe("cli package — published tarball bundles the sync assets (#742 AC#1/#2/#5)", () => {
   // One pack, shared across the assertions below.
+  let isolatedPackage: IsolatedPackage;
   let entries: string[] = [];
   beforeAll(() => {
-    entries = packEntries(makeTmp("cli-pack-"));
-  });
+    isolatedPackage = createIsolatedPackage();
+    restoreBundledSymlinks(isolatedPackage.cliDir);
+    entries = packEntries(isolatedPackage.cliDir, makeTmp("cli-pack-"));
+  }, BEFORE_ALL_TIMEOUT_MS);
 
   test("ships the CLAUDE.template.md asset as a real file (AC#5)", () => {
     // The claude-md source resolves through the _claude_md symlink; its presence
@@ -104,6 +165,62 @@ describe("cli package — published tarball bundles the sync assets (#742 AC#1/#
     ).toBe(true);
     expect(
       entries.some((entry) => entry.startsWith(`${PKG_PREFIX}_claude_md/`))
+    ).toBe(true);
+  });
+
+  test(
+    "postpack restores the source asset and package asset link shape",
+    () => {
+      // Assert BEFORE manually calling restoreBundledSymlinks so that a postpack
+      // failure is not silently masked by the explicit restore (AI-ANTI-001).
+      expect(
+        lstatSync(join(isolatedPackage.cliDir, "_skills")).isSymbolicLink()
+      ).toBe(true);
+      expect(
+        lstatSync(
+          join(isolatedPackage.repoRoot, ".claude", "CLAUDE.template.md")
+        ).isFile()
+      ).toBe(true);
+      expect(
+        lstatSync(join(isolatedPackage.cliDir, "_claude_md")).isDirectory()
+      ).toBe(true);
+      expect(
+        lstatSync(
+          join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
+        ).isSymbolicLink()
+      ).toBe(true);
+
+      // Explicit restore for subsequent tests that depend on the symlink state.
+      restoreBundledSymlinks(isolatedPackage.cliDir);
+    },
+    CLI_SMOKE_TIMEOUT_MS
+  );
+
+  test("restores idempotently when bundled asset symlinks already exist", () => {
+    restoreBundledSymlinks(isolatedPackage.cliDir);
+    restoreBundledSymlinks(isolatedPackage.cliDir);
+
+    expect(
+      lstatSync(join(isolatedPackage.cliDir, "_skills")).isSymbolicLink()
+    ).toBe(true);
+    expect(
+      lstatSync(
+        join(isolatedPackage.cliDir, "_claude_md", "CLAUDE.template.md")
+      ).isSymbolicLink()
+    ).toBe(true);
+  }, 35_000);
+
+  test("does not mutate the source worktree bundled asset links", () => {
+    expect(lstatSync(join(sourceCliDir, "_skills")).isSymbolicLink()).toBe(
+      true
+    );
+    expect(lstatSync(join(sourceCliDir, "_claude_md")).isDirectory()).toBe(
+      true
+    );
+    expect(
+      lstatSync(
+        join(sourceCliDir, "_claude_md", "CLAUDE.template.md")
+      ).isSymbolicLink()
     ).toBe(true);
   });
 });
