@@ -191,9 +191,8 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
   expect(result.dialogClosed).toBe(true); // Create で dialog が消えた（完了検知）
 });
 
-// 遅延ロード mock: 初期 4 row、scroll イベントで +4 row → 計 8 件選択 → Cmd+P → Create → dialog 消滅 (#924)。
-// 実 overflow scroller（overflow:auto; height:200px）+ scroll イベントで row を追加ロードし、
-// scrollTop 代入での scroll event 発火が native ブラウザで通ることを確認する。
+// 遅延ロード mock: 初期 4 row、中間 scroll event で +4 row → 計 8 件選択 → Cmd+P → Create → dialog 消滅 (#924)。
+// bottom jump だけでは増えない条件にし、ensureClipRowsLoaded の段階スクロール契約を E2E でも固定する。
 const LAZY_LOAD_MOCK_HTML = `<!doctype html>
 <html>
   <body>
@@ -220,26 +219,29 @@ const LAZY_LOAD_MOCK_HTML = `<!doctype html>
 
     <script>
       let extraLoaded = false;
+      window.__playlistScrollPositions = [];
       const scroller = document.querySelector('.clip-browser-list-scroller');
       const wrapper = scroller.querySelector('.css-emotion-list-wrapper');
 
-      // scroll イベントで +4 row を 1 回だけ追加ロードする（遅延ロードの写像）
       scroller.addEventListener('scroll', () => {
-        if (!extraLoaded) {
-          extraLoaded = true;
-          for (let i = 4; i < 8; i++) {
-            const row = document.createElement('div');
-            row.id = 'clip-' + i;
-            row.style.cssText = 'width:200px;height:60px';
-            const msb = document.createElement('div');
-            msb.className = 'multi-select-button';
-            const btn = document.createElement('button');
-            btn.setAttribute('aria-label', 'Select clip');
-            btn.style.cssText = 'width:20px;height:20px';
-            msb.appendChild(btn);
-            row.appendChild(msb);
-            wrapper.appendChild(row);
-          }
+        window.__playlistScrollPositions.push(scroller.scrollTop);
+        const maxScrollTop = scroller.scrollHeight - scroller.clientHeight;
+        if (extraLoaded || scroller.scrollTop <= 0 || scroller.scrollTop >= maxScrollTop) {
+          return;
+        }
+        extraLoaded = true;
+        for (let i = 4; i < 8; i++) {
+          const row = document.createElement('div');
+          row.id = 'clip-' + i;
+          row.style.cssText = 'width:200px;height:60px';
+          const msb = document.createElement('div');
+          msb.className = 'multi-select-button';
+          const btn = document.createElement('button');
+          btn.setAttribute('aria-label', 'Select clip');
+          btn.style.cssText = 'width:20px;height:20px';
+          msb.appendChild(btn);
+          row.appendChild(msb);
+          wrapper.appendChild(row);
         }
       });
 
@@ -269,6 +271,9 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
 
   const result = await page.evaluate(async () => {
     // --- ensureClipRowsLoaded と同手法を inline 再現 ---
+    type ScrollIntent = "probe-intermediate" | "settle-bottom";
+    const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
+
     const isVisible = (el: HTMLElement): boolean => {
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return false;
@@ -299,7 +304,28 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
       return rows;
     };
 
-    // ensureClipRowsLoaded の inline 再現: 遅延ロード対応
+    const scrollClipListTowardBottom = (scroller: HTMLElement, intent: ScrollIntent): void => {
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const currentScrollTop = Math.max(0, Math.min(scroller.scrollTop, maxScrollTop));
+      const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+      const nextScrollTop = currentScrollTop + step;
+      if (maxScrollTop === 0) {
+        scroller.scrollTop = 0;
+      } else if (nextScrollTop >= maxScrollTop && intent === "probe-intermediate") {
+        scroller.scrollTop = currentScrollTop + (maxScrollTop - currentScrollTop) / 2;
+      } else if (nextScrollTop >= maxScrollTop) {
+        scroller.scrollTop = maxScrollTop;
+      } else {
+        scroller.scrollTop = nextScrollTop;
+      }
+      scroller.dispatchEvent(new Event("scroll"));
+    };
+
+    const restoreClipListHead = (scroller: HTMLElement): void => {
+      scroller.scrollTop = 0;
+      scroller.dispatchEvent(new Event("scroll"));
+    };
+
     const ensureClipRowsLoaded = async (count: number): Promise<HTMLElement[]> => {
       const scroller = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
       if (!scroller) throw new Error("scroller not found");
@@ -308,13 +334,11 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
 
       for (;;) {
         if (rows.length >= count) {
-          scroller.scrollTop = 0;
-          scroller.dispatchEvent(new Event("scroll"));
+          restoreClipListHead(scroller);
           return rows.slice(0, count);
         }
         const prevCount = rows.length;
-        scroller.scrollTop = scroller.scrollHeight;
-        scroller.dispatchEvent(new Event("scroll"));
+        scrollClipListTowardBottom(scroller, "probe-intermediate");
 
         const deadline = Date.now() + 3000;
         for (;;) {
@@ -324,6 +348,7 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
           if (Date.now() >= deadline) {
             throw new Error(`clip row が ${rows.length}/${count} 件しかロードできませんでした。`);
           }
+          scrollClipListTowardBottom(scroller, "settle-bottom");
         }
       }
     };
@@ -386,8 +411,9 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
 
     await waitForDialogClose();
     const dialogClosed = document.getElementById("playlist-dialog") === null;
+    const scrollPositions = (window as unknown as { __playlistScrollPositions: number[] }).__playlistScrollPositions;
 
-    return { initialRowCount, loadedRowCount, selectedCount, dialogFound, dialogClosed };
+    return { initialRowCount, loadedRowCount, selectedCount, dialogFound, dialogClosed, scrollPositions };
   });
 
   expect(result.initialRowCount).toBe(4); // 初期は 4 row のみ
@@ -395,4 +421,6 @@ test("遅延ロード: 初期 4 row → scroll で +4 row → 8 件選択 → Cm
   expect(result.selectedCount).toBe(8); // 8 件すべて multi-select された
   expect(result.dialogFound).toBe(true); // Cmd+P で dialog が開いた
   expect(result.dialogClosed).toBe(true); // Create で dialog が消えた
+  expect(result.scrollPositions[0]).toBeGreaterThan(0);
+  expect(result.scrollPositions[0]).toBeLessThan(40); // 初期 maxScrollTop は 40。bottom jump ならここで落ちる
 });
