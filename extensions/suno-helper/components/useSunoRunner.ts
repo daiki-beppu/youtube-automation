@@ -26,23 +26,20 @@ import {
   type ResumeState,
   resolveRunRange,
   resumeBannerRange,
-  resumeRunRange,
-  type RunRange,
   shouldShowResumeBanner,
 } from "../lib/resume-state";
+import {
+  buildFailedEntriesRunOverrides,
+  buildRunPayload,
+  buildResumeRunOverrides,
+  type RunOverrides,
+} from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
 
 /** 実行範囲モード (#872)。all=全パターン / range=範囲指定。 */
 export type RangeMode = "all" | "range";
-
-interface RunOverrides {
-  range?: RunRange;
-  indices?: number[];
-  submittedClipIds?: string[];
-  playlistExpectedClipCount?: number;
-}
 
 interface RunnerState {
   url: string;
@@ -368,15 +365,16 @@ export function useSunoRunner(): RunnerState {
         // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
         // collectionId は ERROR 停止時の resume 紐付けに使う。単一ファイル mode（空文字）は undefined で送る (#872)。
         // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
-        await sendMessage("run", {
-          entries,
-          playlistName: derivedPlaylistName,
-          range,
-          collectionId: selectedCollectionId || undefined,
-          indices: overrides?.indices,
-          submittedClipIds: overrides?.submittedClipIds,
-          playlistExpectedClipCount: overrides?.playlistExpectedClipCount,
-        });
+        await sendMessage(
+          "run",
+          buildRunPayload({
+            entries,
+            playlistName: derivedPlaylistName,
+            range,
+            collectionId: selectedCollectionId,
+            overrides,
+          }),
+        );
         report("連続実行を開始しました。");
       } catch (err) {
         // 送信失敗時はフラグを戻して再実行可能にする（実行は始まっていない）。
@@ -401,11 +399,12 @@ export function useSunoRunner(): RunnerState {
     setRangeStart(String(prefilled.start));
     setRangeEnd(String(prefilled.end));
     setResumeDismissed(true);
-    void run({
-      range: resumeRunRange(resumeBanner),
-      submittedClipIds: submittedClipIdsForResume,
-      playlistExpectedClipCount: playlistExpectedClipCountForResume,
-    });
+    void run(
+      buildResumeRunOverrides(resumeBanner, {
+        submittedClipIds: submittedClipIdsForResume,
+        playlistExpectedClipCount: playlistExpectedClipCountForResume,
+      }),
+    );
   }, [resumeBanner, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
@@ -416,11 +415,12 @@ export function useSunoRunner(): RunnerState {
     }
     setResumeDismissed(true);
     setRestoredFailedIndices(undefined);
-    void run({
-      indices: failedEntries,
-      submittedClipIds: submittedClipIdsForResume,
-      playlistExpectedClipCount: playlistExpectedClipCountForResume,
-    });
+    void run(
+      buildFailedEntriesRunOverrides(failedEntries, {
+        submittedClipIds: submittedClipIdsForResume,
+        playlistExpectedClipCount: playlistExpectedClipCountForResume,
+      }),
+    );
   }, [failedEntries, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
 
   const stop = useCallback(async () => {
