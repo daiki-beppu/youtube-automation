@@ -294,8 +294,9 @@ export function useSunoRunner(): RunnerState {
         return { kind: "collection", collectionId: nextSelectedId };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (message === "HTTP 404") {
-          // 単一ファイル mode サーバーは `/collections` が 404。ドロップダウンを出さず単一 mode へ fallback。
+        if (message === "HTTP 404" || err instanceof TypeError) {
+          // 単一ファイル mode サーバーは `/collections` が 404。CORS ヘッダーなしの 404 は
+          // ブラウザが TypeError (Failed to fetch) として reject するため両方を捕捉する。
           applySingleFileMode();
           return { kind: "single-file" };
         }

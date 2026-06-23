@@ -351,4 +351,25 @@ describe("Suno popup compatibility check", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/collections`);
   });
+
+  it("CORS なし 404 (TypeError) で /collections が reject されても single-file mode へ fallback する", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/suno/prompts.json`);
+  });
 });
