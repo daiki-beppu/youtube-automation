@@ -135,6 +135,55 @@ function addClipRow(
   return { row, btn };
 }
 
+function addAlternateViewRows(
+  count: number,
+  opts: { selectLabel?: string } = {},
+): {
+  viewport: HTMLElement;
+  rows: HTMLElement[];
+  buttons: HTMLButtonElement[];
+} {
+  const viewport = document.createElement("section");
+  viewport.dataset.sunoClipViewport = "grid";
+  viewport.style.overflowY = "auto";
+  markBbox(viewport, 480, 360);
+  document.body.appendChild(viewport);
+
+  const rows: HTMLElement[] = [];
+  const buttons: HTMLButtonElement[] = [];
+  for (let i = 0; i < count; i++) {
+    const row = document.createElement("article");
+    row.dataset.clipOrdinal = String(i);
+    const btn = document.createElement("button");
+    btn.setAttribute("aria-label", opts.selectLabel ?? "Select clip");
+    row.appendChild(btn);
+    viewport.appendChild(row);
+    markBbox(row, 200, 60);
+    markBbox(btn, 20, 20);
+    rows.push(row);
+    buttons.push(btn);
+  }
+  return { viewport, rows, buttons };
+}
+
+function addAlternateViewRow(
+  viewport: HTMLElement,
+  index: number,
+): {
+  row: HTMLElement;
+  btn: HTMLButtonElement;
+} {
+  const row = document.createElement("article");
+  row.dataset.clipOrdinal = String(index);
+  const btn = document.createElement("button");
+  btn.setAttribute("aria-label", "Select clip");
+  row.appendChild(btn);
+  viewport.appendChild(row);
+  markBbox(row, 200, 60);
+  markBbox(btn, 20, 20);
+  return { row, btn };
+}
+
 /**
  * Add to Playlist dialog を模した `[role="dialog"]` を body に挿入する。
  *   - text: 内部見出しの textContent（判定対象。order.md の span#_r_dg_ 相当）
@@ -251,6 +300,31 @@ function setupLazyLoader(scroller: HTMLElement, batchSize: number, opts: { initi
       addClipRow();
     }
     // scrollHeight も伸ばして次回ループが進むようにする
+    _scrollHeight += batchSize * 60;
+  });
+}
+
+function setupAlternateLazyLoader(viewport: HTMLElement, batchSize: number): void {
+  let _scrollHeight = 1000;
+  Object.defineProperty(viewport, "scrollHeight", {
+    configurable: true,
+    get: () => _scrollHeight,
+  });
+
+  let _scrollTop = 0;
+  Object.defineProperty(viewport, "scrollTop", {
+    configurable: true,
+    get: () => _scrollTop,
+    set: (v: number) => {
+      _scrollTop = v;
+    },
+  });
+
+  viewport.addEventListener("scroll", () => {
+    const existing = viewport.querySelectorAll("article").length;
+    for (let i = 0; i < batchSize; i++) {
+      addAlternateViewRow(viewport, existing + i);
+    }
     _scrollHeight += batchSize * 60;
   });
 }
@@ -551,6 +625,47 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
     expect(await pending).toEqual([visible]);
   });
 
+  it("Given .clip-browser-list-scroller が無い Grid 風 container When 取得する Then Select clip button から row を解決する", async () => {
+    const { rows } = addAlternateViewRows(3);
+
+    await expect(ensureClipRowsLoaded(3, { isAborted: () => false })).resolves.toEqual(rows);
+  });
+
+  it("Given 非表示 row だけの .clip-browser-list-scroller と Grid 風 container When 取得する Then visible な Grid 側 rows を返す", async () => {
+    addClipRow({ visible: false });
+    const { rows } = addAlternateViewRows(3);
+
+    await expect(ensureClipRowsLoaded(3, { isAborted: () => false })).resolves.toEqual(rows);
+  });
+
+  it("Given .clip-browser-list-scroller が無い Grid 風 container で初期不足 When 取得する Then 代替 scroller を scroll して count 件を返す", async () => {
+    const { viewport, rows } = addAlternateViewRows(3);
+    setupAlternateLazyLoader(viewport, 2);
+
+    const pending = ensureClipRowsLoaded(5, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(5);
+    expect(result.slice(0, 3)).toEqual(rows);
+  });
+
+  it("Given Select clip button が generic parent しか持たない When 取得する Then row 不明として fail-loud で throw する", async () => {
+    const parent = document.createElement("div");
+    const btn = document.createElement("button");
+    btn.setAttribute("aria-label", "Select clip");
+    parent.appendChild(btn);
+    document.body.appendChild(parent);
+    markBbox(parent, 200, 60);
+    markBbox(btn, 20, 20);
+
+    await expect(ensureClipRowsLoaded(1, { isAborted: () => false })).rejects.toThrow(/clip row が見つかりません/);
+  });
+
   it("Given 初期不足 → 1 回の追加ロードで揃う When ensureClipRowsLoaded Then scroll イベントで row が増えてから返す", async () => {
     // 初期 2 row、count=4 → scroll 1 回で +2 row → 計 4 件で揃う
     const initial = Array.from({ length: 2 }, () => addClipRow().row);
@@ -809,6 +924,19 @@ describe("multiSelectClips: click + selected 状態への遷移を verify", () =
     await expect(multiSelectClips([selected.row])).resolves.toBeUndefined();
 
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("Given .multi-select-button wrapper が無い Grid 風 row When multiSelectClips Then Select clip button を click して selected 遷移を verify する", async () => {
+    const { rows, buttons } = addAlternateViewRows(2);
+    const clicks: string[] = [];
+    buttons[0].addEventListener("click", () => clicks.push("a"));
+    buttons[1].addEventListener("click", () => clicks.push("b"));
+    selectOnClick(buttons[0]);
+    selectOnClick(buttons[1]);
+
+    await expect(multiSelectClips(rows)).resolves.toBeUndefined();
+
+    expect(clicks).toEqual(["a", "b"]);
   });
 
   it("Given Select/Deselect どちらのボタンも無い row When multiSelectClips Then selector 不在で即 throw する（silent skip 撤廃）", async () => {

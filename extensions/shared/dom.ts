@@ -44,8 +44,17 @@ const SLIDER_MAX_STEPS = 150;
 export const REMIX_BTN_SELECTOR = 'button[aria-label="Remix clip"]';
 /** clip card root を構造的に解決するための同伴ボタン（#866）。Remix btn と合わせ 3 種が各 1 つ揃う祖先が card。 */
 const SELECT_CLIP_BTN_SELECTOR = 'button[aria-label="Select clip"]';
+const DESELECT_CLIP_BTN_SELECTOR = 'button[aria-label="Deselect clip"]';
 const EDIT_TITLE_BTN_SELECTOR = 'button[aria-label="Edit title"]';
-
+export type SunoViewMode = "list" | "waveform" | "grid" | "unknown";
+const SUNO_VIEW_LABELS: Record<
+  Exclude<SunoViewMode, "unknown">,
+  readonly string[]
+> = {
+  list: ["list"],
+  waveform: ["waveform"],
+  grid: ["grid"],
+};
 /**
  * queue 上限エラー toast の安定識別子（#847、実 DOM 検証）。testid/aria-label を持たないため
  * `[role="dialog"]` + 英語見出しテキストの substring match で識別する（多言語耐性）。
@@ -628,6 +637,117 @@ export interface WaitForQueueSlotOptions {
   stallTimeoutMs?: number;
 }
 
+export function detectSunoViewMode(): SunoViewMode {
+  const selectedModes = collectViewModesFromElements(
+    document.querySelectorAll<HTMLElement>(
+      '[aria-selected="true"], [aria-current="true"], [data-state="checked"]',
+    ),
+  );
+  const selected = singleModeOrUnknown(selectedModes);
+  if (selected !== "unknown") {
+    return selected;
+  }
+  if (selectedModes.size > 1) {
+    return "unknown";
+  }
+
+  const triggerModes = collectViewModesFromElements(
+    document.querySelectorAll<HTMLElement>(
+      'button[aria-haspopup], button[aria-expanded], [role="button"][aria-haspopup], [role="button"][aria-expanded]',
+    ),
+  );
+  const trigger = singleModeOrUnknown(triggerModes);
+  if (trigger !== "unknown") {
+    return trigger;
+  }
+  if (triggerModes.size > 1) {
+    return "unknown";
+  }
+
+  return "unknown";
+}
+
+function normalizeViewModeLabel(text: string): SunoViewMode {
+  const tokens = text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+  const matchedModes = new Set<Exclude<SunoViewMode, "unknown">>();
+  for (const [mode, expectedLabels] of Object.entries(SUNO_VIEW_LABELS)) {
+    if (expectedLabels.some((label) => tokens.includes(label))) {
+      matchedModes.add(mode as Exclude<SunoViewMode, "unknown">);
+    }
+  }
+  if (matchedModes.size === 1) {
+    return Array.from(matchedModes)[0];
+  }
+  return "unknown";
+}
+
+function collectViewModesFromElements(
+  elements: Iterable<HTMLElement>,
+): Set<SunoViewMode> {
+  const modes = new Set<SunoViewMode>();
+  for (const element of elements) {
+    if (!isVisible(element)) {
+      continue;
+    }
+    const mode = normalizeViewModeLabel(element.textContent ?? "");
+    if (mode !== "unknown") {
+      modes.add(mode);
+    }
+  }
+  return modes;
+}
+
+function singleModeOrUnknown(modes: Set<SunoViewMode>): SunoViewMode {
+  if (modes.size !== 1) {
+    return "unknown";
+  }
+  return Array.from(modes)[0];
+}
+
+function hasExactlyOneMatch(root: HTMLElement, selector: string): boolean {
+  return root.querySelectorAll(selector).length === 1;
+}
+
+function hasListCardActions(root: HTMLElement): boolean {
+  return (
+    hasExactlyOneMatch(root, SELECT_CLIP_BTN_SELECTOR) &&
+    hasExactlyOneMatch(root, REMIX_BTN_SELECTOR) &&
+    hasExactlyOneMatch(root, EDIT_TITLE_BTN_SELECTOR)
+  );
+}
+
+function hasWaveformCardActions(root: HTMLElement): boolean {
+  return (
+    hasExactlyOneMatch(root, SELECT_CLIP_BTN_SELECTOR) &&
+    hasExactlyOneMatch(root, REMIX_BTN_SELECTOR)
+  );
+}
+
+function hasGridCardActions(root: HTMLElement): boolean {
+  return hasExactlyOneMatch(root, REMIX_BTN_SELECTOR);
+}
+
+function isAlternateViewCardBoundary(root: HTMLElement): boolean {
+  return root.matches("article");
+}
+
+function isDocumentRootElement(root: HTMLElement): boolean {
+  return root === document.body || root === document.documentElement;
+}
+
+function findArticleCardRoot(anchor: HTMLElement): HTMLElement | null {
+  const article = anchor.closest<HTMLElement>("article");
+  if (article && !isDocumentRootElement(article)) {
+    return article;
+  }
+  return null;
+}
+
 /**
  * Remix btn（anchor）から clip card root を構造的に解決する（#866）。
  * 親方向へ walk し、「Select clip / Remix clip / Edit title を各 1 つずつ含む最寄り祖先」を返す。
@@ -636,20 +756,102 @@ export interface WaitForQueueSlotOptions {
  * 3 ボタンが揃う祖先が無ければ throw（fail-loud, req 8: silent に親 root を返さない）。
  */
 export function findCardRoot(anchor: HTMLElement): HTMLElement {
-  let el: HTMLElement | null = anchor;
+  let el: HTMLElement | null = anchor.parentElement;
+  let hiddenCandidate: HTMLElement | null = null;
   while (el) {
     if (
-      el.querySelectorAll(SELECT_CLIP_BTN_SELECTOR).length === 1 &&
-      el.querySelectorAll(REMIX_BTN_SELECTOR).length === 1 &&
-      el.querySelectorAll(EDIT_TITLE_BTN_SELECTOR).length === 1
+      !isDocumentRootElement(el) &&
+      (hasListCardActions(el) ||
+        (isAlternateViewCardBoundary(el) &&
+          (hasWaveformCardActions(el) || hasGridCardActions(el))))
     ) {
-      return el;
+      if (isVisible(el)) {
+        return el;
+      }
+      hiddenCandidate = el;
     }
     el = el.parentElement;
   }
+  if (hiddenCandidate) {
+    return hiddenCandidate;
+  }
   throw new Error(
-    "clip card root を解決できません。Select/Remix/Edit が各 1 つ揃う祖先が見つかりませんでした（Suno の DOM 変更の可能性）。",
+    "clip card root を解決できません。現在の Suno ビューで card root と判断できる祖先が見つかりませんでした（Suno の DOM 変更の可能性）。",
   );
+}
+
+function hasAlternateInFlightSignal(card: HTMLElement): boolean {
+  if (!isVisible(card)) {
+    return false;
+  }
+  return (
+    card.matches('[aria-busy="true"]') ||
+    card.querySelector('[aria-busy="true"], [role="progressbar"]') !== null
+  );
+}
+
+function hasClipIdentity(card: HTMLElement): boolean {
+  return (
+    card.querySelector(
+      `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}`,
+    ) !== null
+  );
+}
+
+function hasCountSignal(card: HTMLElement): boolean {
+  return (
+    card.querySelector(REMIX_BTN_SELECTOR) !== null ||
+    hasAlternateInFlightSignal(card)
+  );
+}
+
+function findClipCandidateRoot(anchor: HTMLElement): HTMLElement | null {
+  const article = findArticleCardRoot(anchor);
+  if (article && hasClipIdentity(article)) {
+    return article;
+  }
+
+  let current = anchor.parentElement;
+  while (current) {
+    if (isDocumentRootElement(current)) {
+      return null;
+    }
+    if (hasClipIdentity(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+interface InFlightCandidates {
+  inFlightCards: Set<HTMLElement>;
+  clipCandidates: Set<HTMLElement>;
+  uncountableCandidates: Set<HTMLElement>;
+}
+
+function collectInFlightCandidates(): InFlightCandidates {
+  const anchors = document.querySelectorAll<HTMLElement>(
+    `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}, [aria-busy="true"], [role="progressbar"]`,
+  );
+  const inFlightCards = new Set<HTMLElement>();
+  const clipCandidates = new Set<HTMLElement>();
+  const uncountableCandidates = new Set<HTMLElement>();
+  for (const anchor of anchors) {
+    const card = findClipCandidateRoot(anchor);
+    if (!card || !isVisible(card) || !hasClipIdentity(card)) {
+      continue;
+    }
+    clipCandidates.add(card);
+    if (!hasCountSignal(card)) {
+      uncountableCandidates.add(card);
+      continue;
+    }
+    if (hasAlternateInFlightSignal(card)) {
+      inFlightCards.add(card);
+    }
+  }
+  return { inFlightCards, clipCandidates, uncountableCandidates };
 }
 
 /**
@@ -676,22 +878,40 @@ export function isClipGenerating(card: HTMLElement): boolean {
  * 生成中（in-flight）な clip 数を数える（#866）。
  * 全 Remix btn から findCardRoot で card root を解決して重複排除し、`isClipGenerating(card)`
  * （内部で `isVisible(card)` も判定）が true な distinct card 数を返す。
- * Remix btn が 0 件 = DOM 構造が壊れている → silent に 0 を返さず throw（fail-loud, req 8）。
- * silent 0 を返すと「常に空き」と誤判定し queue 上限まで過剰投入してしまうのが本 issue のバグ本体。
+ * Remix btn が無い card は、aria-busy / progressbar の明示シグナルがある場合だけ union して数える。
+ * clip 候補自体が無く、現在ビューを検出できる場合だけ空 queue として 0 を返す。
  */
 export function getInFlightClipCount(): number {
   const anchors =
     document.querySelectorAll<HTMLButtonElement>(REMIX_BTN_SELECTOR);
-  if (anchors.length === 0) {
-    throw new Error(
-      "Remix btn が 1 件も見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
-    );
-  }
   const cards = new Set<HTMLElement>();
   for (const anchor of anchors) {
-    cards.add(findCardRoot(anchor));
+    const card = findCardRoot(anchor);
+    if (isClipGenerating(card)) {
+      cards.add(card);
+    }
   }
-  return Array.from(cards).filter(isClipGenerating).length;
+  const candidates = collectInFlightCandidates();
+  if (candidates.uncountableCandidates.size > 0) {
+    throw new Error(
+      "clip 候補に Remix btn も代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
+    );
+  }
+  for (const card of candidates.inFlightCards) {
+    cards.add(card);
+  }
+  if (anchors.length === 0 && cards.size === 0) {
+    if (
+      candidates.clipCandidates.size === 0 &&
+      detectSunoViewMode() !== "unknown"
+    ) {
+      return 0;
+    }
+    throw new Error(
+      "Remix btn が 1 件も見つからず、clip 候補に代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
+    );
+  }
+  return cards.size;
 }
 
 /**
