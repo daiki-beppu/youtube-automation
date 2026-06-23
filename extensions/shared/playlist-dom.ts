@@ -43,6 +43,9 @@ const CLIP_SELECT_VERIFY_POLL_MS = 50;
 const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 /** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924)。 */
 const CLIP_SELECT_VERIFY_MS_PER_ROW = 50;
+/** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
+const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
+type ClipListScrollIntent = "probe-intermediate" | "settle-bottom";
 
 /**
  * 可視な Add to Playlist dialog を 1 つ探す（OneTrust cookie consent dialog 除外フィルタ込み）。
@@ -175,6 +178,38 @@ function listMissingClipIds(
   return targetIds.filter((id) => !foundIds.has(id));
 }
 
+function scrollClipListTowardBottom(
+  scroller: HTMLElement,
+  intent: ClipListScrollIntent,
+): void {
+  const maxScrollTop = Math.max(
+    0,
+    scroller.scrollHeight - scroller.clientHeight,
+  );
+  const currentScrollTop = Math.max(
+    0,
+    Math.min(scroller.scrollTop, maxScrollTop),
+  );
+  const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+  const nextScrollTop = currentScrollTop + step;
+  if (maxScrollTop === 0) {
+    scroller.scrollTop = 0;
+  } else if (nextScrollTop >= maxScrollTop && intent === "probe-intermediate") {
+    scroller.scrollTop =
+      currentScrollTop + (maxScrollTop - currentScrollTop) / 2;
+  } else if (nextScrollTop >= maxScrollTop) {
+    scroller.scrollTop = maxScrollTop;
+  } else {
+    scroller.scrollTop = nextScrollTop;
+  }
+  scroller.dispatchEvent(new Event("scroll"));
+}
+
+function restoreClipListHead(scroller: HTMLElement): void {
+  scroller.scrollTop = 0;
+  scroller.dispatchEvent(new Event("scroll"));
+}
+
 export interface EnsureClipRowsLoadedOptions {
   /** 中断フラグ。true で即 return（throw しない。呼び出し側が aborted を再チェック）。 */
   isAborted: () => boolean;
@@ -214,14 +249,12 @@ export async function ensureClipRowsLoadedByIds(
       return foundRows;
     }
     if (foundRows.length === uniqueTargetIds.length) {
-      scroller.scrollTop = 0;
-      scroller.dispatchEvent(new Event("scroll"));
+      restoreClipListHead(scroller);
       return foundRows;
     }
 
     const prevCount = rows.length;
-    scroller.scrollTop = scroller.scrollHeight;
-    scroller.dispatchEvent(new Event("scroll"));
+    scrollClipListTowardBottom(scroller, "probe-intermediate");
 
     const settleDeadline = Date.now() + loadSettleTimeoutMs;
     for (;;) {
@@ -243,6 +276,82 @@ export async function ensureClipRowsLoadedByIds(
           `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
         );
       }
+      scrollClipListTowardBottom(scroller, "settle-bottom");
+    }
+  }
+}
+
+/**
+ * 遅延ロードの clip list を底方向へ段階スクロールし、count 件の row がロードされるまで進める (#924)。
+ * 戻り値はロード済み row の先頭 count 件（DOM 順 = 直近生成が先頭）。
+ * リスト末尾（追加ロードが止まる）まで進めても不足する場合は
+ * 「X/Y 件」を含むメッセージで fail-loud throw する（従来の silent slice を廃止）。
+ *
+ * 現在の Suno では bottom jump がロード条件から外れることがあるため、まず中間位置の
+ * scroll event で追加ロードを促す。増えなければ同じ待機内で末尾到達も試し、
+ * 中間位置だけに反応する loader と末尾だけに反応する loader の両方を扱う。
+ *
+ * fail-loud (#881): コンテナ不在または row 0 件は即 throw する（空配列を返さない）。
+ * 追加ロードが止まった（リスト末尾）のに count に届かない場合も fail-loud throw する
+ * （silent slice を廃止し、追加漏れを検出境界で即顕在化させる）。
+ */
+export async function ensureClipRowsLoaded(
+  count: number,
+  options: EnsureClipRowsLoadedOptions,
+): Promise<HTMLElement[]> {
+  const {
+    isAborted,
+    pollIntervalMs = 100,
+    loadSettleTimeoutMs = 3000,
+  } = options;
+
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  // 初回 row 収集: 0 件なら fail-loud throw（#881 維持）
+  let rows = collectLoadedClipRows(scroller);
+
+  for (;;) {
+    // 中断: 現時点の先頭 count 件（不足していても）を返して即終了
+    if (isAborted()) {
+      return rows.slice(0, count);
+    }
+
+    // 十分な row がロードされた: scrollTop を 0 に戻して先頭 count 件を返す
+    // （multi-select や Cmd+P 操作を初期表示位置で行うため、スクロールを元に戻す）
+    if (rows.length >= count) {
+      restoreClipListHead(scroller);
+      return rows.slice(0, count);
+    }
+
+    const prevCount = rows.length;
+    scrollClipListTowardBottom(scroller, "probe-intermediate");
+
+    // 追加 row のロードを poll で待つ
+    const settleDeadline = Date.now() + loadSettleTimeoutMs;
+    for (;;) {
+      await sleep(pollIntervalMs);
+      if (isAborted()) {
+        // 中断: ロード待ち中でも即終了
+        rows = collectLoadedClipRows(scroller);
+        return rows.slice(0, count);
+      }
+      rows = collectLoadedClipRows(scroller);
+      if (rows.length > prevCount) {
+        // 追加ロードを検出: 外側ループに戻って再評価
+        break;
+      }
+      if (Date.now() >= settleDeadline) {
+        // リスト末尾到達（追加ロードが止まった）のに不足
+        throw new Error(
+          `clip row が ${rows.length}/${count} 件しかロードできませんでした。生成済み clip が不足しているか、Suno の UI 変更の可能性があります。`,
+        );
+      }
+      scrollClipListTowardBottom(scroller, "settle-bottom");
     }
   }
 }

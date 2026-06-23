@@ -18,6 +18,7 @@
 //   - DESELECT_CLIP_BUTTON_SELECTOR: string = '.multi-select-button > button[aria-label="Deselect clip"]'
 //   - PLAYLIST_NAME_INPUT_SELECTOR: string = 'input[placeholder="Playlist Name"]'
 //   - ensureClipRowsLoadedByIds(ids, opts): Promise<HTMLElement[]>  // ID 指定 + 遅延ロード対応。scroller 不在 / row 0 件で fail-loud throw (#881)
+//   - ensureClipRowsLoaded(count, opts): Promise<HTMLElement[]>  // count 件ベース + 遅延ロード対応 (#924)
 //   - multiSelectClips(rows: HTMLElement[]): Promise<void>  // 空 rows / click 後 selected 不遷移で fail-loud (#878, #881)
 //   - openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement>
 //   - fillPlaylistNameAndCreate(dialog: HTMLElement, name: string): Promise<void>
@@ -34,6 +35,7 @@ import {
   PLAYLIST_ROW_LABEL_SELECTOR,
   SELECT_CLIP_BUTTON_SELECTOR,
   clickPlaylistRowByName,
+  ensureClipRowsLoaded,
   ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
   multiSelectClips,
@@ -217,13 +219,128 @@ describe("playlist-dom セレクタ定数: 実機 DOM 検証で確定した安�
     expect(PLAYLIST_ROW_LABEL_SELECTOR).toBe("div.ml-4.font-sans");
   });
 
-  it("Given playlist-dom exports When 読む Then count ベースの旧 helper は公開されていない", async () => {
-    const playlistDom = await import("../../shared/playlist-dom");
-    const legacyExportName = "ensure" + "ClipRowsLoaded";
-
-    expect(legacyExportName in playlistDom).toBe(false);
-  });
 });
+
+/**
+ * scroller に遅延ロード scroll イベントリスナーを取り付けるヘルパ。
+ * jsdom にはレイアウトエンジンがないため scrollHeight を Object.defineProperty で stub し、
+ * scrollTop の setter で値を保持する stub にする。
+ * scroller の scroll イベントが発火するたびに追加 row を batchSize 件 append する。
+ * これにより「scrollTop 代入 + scroll event dispatch → +N row」の遅延ロードを写像する。
+ */
+function setupLazyLoader(scroller: HTMLElement, batchSize: number, opts: { initialScrollHeight?: number } = {}): void {
+  // scrollHeight stub（初期値を与えないと 0 のまま）
+  let _scrollHeight = opts.initialScrollHeight ?? 1000;
+  Object.defineProperty(scroller, "scrollHeight", {
+    configurable: true,
+    get: () => _scrollHeight,
+  });
+
+  // scrollTop を setter で値保持（jsdom はデフォルト readonly 相当）
+  let _scrollTop = 0;
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get: () => _scrollTop,
+    set: (v: number) => {
+      _scrollTop = v;
+    },
+  });
+
+  // scroll イベントで追加 row を append
+  scroller.addEventListener("scroll", () => {
+    for (let i = 0; i < batchSize; i++) {
+      addClipRow();
+    }
+    // scrollHeight も伸ばして次回ループが進むようにする
+    _scrollHeight += batchSize * 60;
+  });
+}
+
+function setupStepwiseLazyLoader(
+  scroller: HTMLElement,
+  batchSize: number,
+  dimensions: { scrollHeight: number; clientHeight: number },
+  opts: { maxBatches?: number } = {},
+): { scrollPositions: number[] } {
+  let scrollHeight = dimensions.scrollHeight;
+  let scrollTop = 0;
+  const { clientHeight } = dimensions;
+  const scrollPositions: number[] = [];
+  const maxBatches = opts.maxBatches ?? 1;
+
+  Object.defineProperty(scroller, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(scroller, "clientHeight", {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (v: number) => {
+      scrollTop = v;
+    },
+  });
+
+  let loadedBatches = 0;
+  scroller.addEventListener("scroll", () => {
+    scrollPositions.push(scrollTop);
+    const maxScrollTop = scrollHeight - clientHeight;
+    if (loadedBatches >= maxBatches || scrollTop <= 0 || scrollTop >= maxScrollTop) {
+      return;
+    }
+    loadedBatches += 1;
+    for (let i = 0; i < batchSize; i++) {
+      addClipRow();
+    }
+    scrollHeight += batchSize * 60;
+  });
+  return { scrollPositions };
+}
+
+function setupBottomAfterIntermediateLazyLoader(
+  scroller: HTMLElement,
+  batchSize: number,
+  dimensions: { scrollHeight: number; clientHeight: number },
+): { scrollPositions: number[] } {
+  let scrollHeight = dimensions.scrollHeight;
+  let scrollTop = 0;
+  const { clientHeight } = dimensions;
+  const scrollPositions: number[] = [];
+
+  Object.defineProperty(scroller, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(scroller, "clientHeight", {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (v: number) => {
+      scrollTop = v;
+    },
+  });
+
+  let loaded = false;
+  scroller.addEventListener("scroll", () => {
+    scrollPositions.push(scrollTop);
+    const maxScrollTop = scrollHeight - clientHeight;
+    if (loaded || scrollTop < maxScrollTop) {
+      return;
+    }
+    loaded = true;
+    for (let i = 0; i < batchSize; i++) {
+      addClipRow();
+    }
+    scrollHeight += batchSize * 60;
+  });
+  return { scrollPositions };
+}
 
 describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip row 収集", () => {
   beforeEach(() => {
@@ -369,6 +486,285 @@ describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip 
     await vi.runAllTimersAsync();
 
     await expect(pending).resolves.toEqual([found]);
+  });
+});
+
+describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given 初期ロードで count 件揃っている When ensureClipRowsLoaded Then スクロールなしで先頭 count 件を返す", async () => {
+    // 5 row ロード済み、count=5 → 即返す
+    const rows = Array.from({ length: 5 }, () => addClipRow().row);
+
+    const pending = ensureClipRowsLoaded(5, { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual(rows);
+  });
+
+  it("Given 単一中間ラッパ配下に複数 per-clip div When 取得する Then 各 clip を別 row に分離する（1 row に collapse しない）", async () => {
+    // 実機 (order.md L26) は scroller 直下が単一中間ラッパで、per-clip div はその配下に並ぶ。
+    const rows = Array.from({ length: 3 }, () => addClipRow().row);
+
+    // fixture が「scroller 直下 = 単一中間ラッパ 1 件」構造であることを明示
+    const scroller = getOrCreateScroller();
+    expect(scroller.querySelectorAll(":scope > div").length).toBe(1);
+
+    const pending = ensureClipRowsLoaded(3, { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual(rows);
+    expect(new Set(result).size).toBe(3); // per-clip で 3 件（collapse なら 1 で落ちる）
+  });
+
+  it("Given 未選択・選択済み row が混在 When 取得する Then どちらも row として返す", async () => {
+    const a = addClipRow({ selectLabel: "Select clip" }).row;
+    const b = addClipRow({ selectLabel: "Deselect clip" }).row;
+    const c = addClipRow({ selectLabel: "Select clip" }).row;
+
+    const pending = ensureClipRowsLoaded(3, { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    expect(await pending).toEqual([a, b, c]);
+  });
+
+  it("Given scroller 内 5 row When count=3 Then 先頭 3 row だけ返す", async () => {
+    const rows = Array.from({ length: 5 }, () => addClipRow().row);
+
+    const pending = ensureClipRowsLoaded(3, { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    expect(await pending).toEqual(rows.slice(0, 3));
+  });
+
+  it("Given 非可視 row が混在 When 取得する Then strict isVisible で除外する", async () => {
+    const visible = addClipRow().row;
+    addClipRow({ visible: false });
+
+    const pending = ensureClipRowsLoaded(1, { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    expect(await pending).toEqual([visible]);
+  });
+
+  it("Given 初期不足 → 1 回の追加ロードで揃う When ensureClipRowsLoaded Then scroll イベントで row が増えてから返す", async () => {
+    // 初期 2 row、count=4 → scroll 1 回で +2 row → 計 4 件で揃う
+    const initial = Array.from({ length: 2 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    setupLazyLoader(scroller, 2); // scroll 1 回で +2 row
+
+    const pending = ensureClipRowsLoaded(4, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(4);
+    expect(result.slice(0, 2)).toEqual(initial); // 先頭 2 件は元の row
+  });
+
+  it("Given 複数回の追加ロードで揃う When ensureClipRowsLoaded Then 複数回スクロールして返す", async () => {
+    // 初期 1 row、count=3 → scroll 2 回で +1+1 row → 計 3 件
+    addClipRow();
+    const scroller = getOrCreateScroller();
+    setupLazyLoader(scroller, 1); // scroll 1 回で +1 row
+
+    const pending = ensureClipRowsLoaded(3, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(3);
+  });
+
+  it("Given bottom jump では増えない stepwise loader When ensureClipRowsLoaded Then 複数バッチで 23 件から 30 件までロードする", async () => {
+    Array.from({ length: 23 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupStepwiseLazyLoader(
+      scroller,
+      5,
+      {
+        scrollHeight: 1000,
+        clientHeight: 200,
+      },
+      { maxBatches: 2 },
+    );
+
+    const pending = ensureClipRowsLoaded(30, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(30);
+    expect(scrollPositions).not.toContain(1100);
+  });
+
+  it("Given 最大スクロール量が step 以下 When ensureClipRowsLoaded Then 初回から末尾に飛ばず中間 scroll event を発火する", async () => {
+    Array.from({ length: 23 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupStepwiseLazyLoader(scroller, 5, {
+      scrollHeight: 700,
+      clientHeight: 200,
+    });
+
+    const pending = ensureClipRowsLoaded(28, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(28);
+    expect(scrollPositions[0]).toBeGreaterThan(0);
+    expect(scrollPositions[0]).toBeLessThan(500);
+  });
+
+  it("Given 初回中間では増えず末尾で増える loader When ensureClipRowsLoaded Then 2 回目以降に末尾へ到達してロードする", async () => {
+    Array.from({ length: 23 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupBottomAfterIntermediateLazyLoader(scroller, 5, {
+      scrollHeight: 700,
+      clientHeight: 200,
+    });
+
+    const pending = ensureClipRowsLoaded(28, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(28);
+    expect(scrollPositions[0]).toBeGreaterThan(0);
+    expect(scrollPositions[0]).toBeLessThan(500);
+    expect(scrollPositions).toContain(500);
+  });
+
+  it("Given bottom jump では増えない loader When playlist 追加フロー Then 本番 API で 8 件選択して dialog close まで到達する", async () => {
+    Array.from({ length: 4 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupStepwiseLazyLoader(scroller, 4, {
+      scrollHeight: 240,
+      clientHeight: 200,
+    });
+    let submittedPlaylistName = "";
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "p" || (!e.metaKey && !e.ctrlKey)) {
+        return;
+      }
+      const { dialog, input, create } = addDialogWithForm();
+      create.addEventListener("click", () => {
+        submittedPlaylistName = input.value;
+        dialog.remove();
+      });
+    });
+
+    const pendingRows = ensureClipRowsLoaded(8, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const rows = await pendingRows;
+    for (const row of rows) {
+      const button = row.querySelector<HTMLButtonElement>(SELECT_CLIP_BUTTON_SELECTOR);
+      if (!button) {
+        throw new Error("test fixture must include Select clip button");
+      }
+      selectOnClick(button);
+    }
+
+    await multiSelectClips(rows);
+    const dialog = await openAddToPlaylistDialogViaCmdP();
+    await fillPlaylistNameAndCreate(dialog, "test-lazy-load-playlist");
+    await waitForPlaylistDialogClose({
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 1000,
+    });
+
+    expect(rows).toHaveLength(8);
+    expect(document.querySelectorAll(DESELECT_CLIP_BUTTON_SELECTOR)).toHaveLength(8);
+    expect(submittedPlaylistName).toBe("test-lazy-load-playlist");
+    expect(scrollPositions[0]).toBeGreaterThan(0);
+    expect(scrollPositions[0]).toBeLessThan(40);
+  });
+
+  it("Given 末尾到達（ロードが増えない）で不足 When ensureClipRowsLoaded Then X/Y 件を含むメッセージで throw（silent slice 廃止）", async () => {
+    // 3 row で末尾（scroll しても増えない）、count=5 を要求
+    Array.from({ length: 3 }, () => addClipRow().row);
+    // setupLazyLoader を使わない（scroll しても row が増えない）
+
+    const pending = ensureClipRowsLoaded(5, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 200,
+    });
+    const expectation = expect(pending).rejects.toThrow(/3\/5/);
+    await vi.advanceTimersByTimeAsync(1000);
+    await expectation;
+  });
+
+  it("Given isAborted=true When ensureClipRowsLoaded Then 即 return する（throw しない）", async () => {
+    // count には届かないが aborted=true なら throw せず現在の rows を返す
+    Array.from({ length: 2 }, () => addClipRow().row);
+
+    const pending = ensureClipRowsLoaded(10, { isAborted: () => true });
+    await vi.runAllTimersAsync();
+    // throw せず resolve する
+    const result = await pending;
+    expect(result).toHaveLength(2); // 不足でも abort なら throw しない
+  });
+
+  it("Given count 件揃った後 When ensureClipRowsLoaded Then scrollTop が 0 に戻る", async () => {
+    // count=3 ちょうど揃っている → scrollTop を 0 に戻してから返す
+    Array.from({ length: 3 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+
+    // scrollTop stub
+    let _scrollTop = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => _scrollTop,
+      set: (v: number) => {
+        _scrollTop = v;
+      },
+    });
+    // 初期状態を非ゼロにして戻ることを確認
+    _scrollTop = 500;
+
+    const pending = ensureClipRowsLoaded(3, { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    await pending;
+
+    expect(_scrollTop).toBe(0);
+  });
+
+  it("Given .clip-browser-list-scroller が存在しない When ensureClipRowsLoaded Then fail-loud で throw する", async () => {
+    // scroller 不在 = Suno の clip list コンテナ自体が変わった（#881）
+    await expect(ensureClipRowsLoaded(1, { isAborted: () => false })).rejects.toThrow(/clip row が見つかりません/);
+  });
+
+  it("Given scroller はあるが clip row が 0 件 When ensureClipRowsLoaded Then fail-loud で throw する（#881 維持）", async () => {
+    // scroller は健在だが multi-select を持つ row が 1 件も無い = selector 廃止等の UI 変更
+    getOrCreateScroller();
+
+    await expect(ensureClipRowsLoaded(1, { isAborted: () => false })).rejects.toThrow(/clip row が見つかりません/);
   });
 });
 
