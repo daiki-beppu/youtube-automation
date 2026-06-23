@@ -700,6 +700,15 @@ def _post(url: str, body, *, headers=None):
     return urllib.request.urlopen(req)
 
 
+def _assert_json_error(
+    err: urllib.error.HTTPError, *, status: int, message: str, expected_origin: str | None
+) -> None:
+    assert err.code == status
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == expected_origin
+    assert json.loads(err.read().decode("utf-8")) == {"error": message}
+
+
 def test_post_suno_playlists_writes_file_and_returns_written_and_path(tmp_path, serve_capture):
     """Given 許可 Origin からの POST /suno/playlists
     When prefix 一致 1 件を送る
@@ -757,7 +766,7 @@ def test_post_suno_playlists_without_origin_returns_403(tmp_path, serve_capture)
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload)
 
-    assert exc_info.value.code == 403
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=None)
 
 
 def test_post_suno_playlists_with_disallowed_origin_returns_403(tmp_path, serve_capture):
@@ -771,7 +780,7 @@ def test_post_suno_playlists_with_disallowed_origin_returns_403(tmp_path, serve_
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers={"Origin": "https://evil.com"})
 
-    assert exc_info.value.code == 403
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=None)
 
 
 def test_post_suno_playlists_returns_404_when_capture_disabled(serve_capture):
@@ -785,7 +794,7 @@ def test_post_suno_playlists_returns_404_when_capture_disabled(serve_capture):
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN})
 
-    assert exc_info.value.code == 404
+    _assert_json_error(exc_info.value, status=404, message="Not Found", expected_origin=_EXTENSION_ORIGIN)
 
 
 def test_post_unknown_path_returns_404(tmp_path, serve_capture):
@@ -798,7 +807,7 @@ def test_post_unknown_path_returns_404(tmp_path, serve_capture):
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}/suno/unknown", [], headers={"Origin": _EXTENSION_ORIGIN})
 
-    assert exc_info.value.code == 404
+    _assert_json_error(exc_info.value, status=404, message="Not Found", expected_origin=_EXTENSION_ORIGIN)
 
 
 def test_post_suno_playlists_non_list_body_returns_400(tmp_path, serve_capture):
@@ -811,20 +820,20 @@ def test_post_suno_playlists_non_list_body_returns_400(tmp_path, serve_capture):
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", {"title": "df365 | x"}, headers={"Origin": _EXTENSION_ORIGIN})
 
-    assert exc_info.value.code == 400
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
 
 
 def test_post_suno_playlists_invalid_json_body_returns_400(tmp_path, serve_capture):
     """Given JSON として解釈できない body
     When 許可 Origin から POST する
-    Then 400 を返す（fail-loud、silent に空書き込みしない）。
+    Then CORS 付き JSON 400 を返す（fail-loud、silent に空書き込みしない）。
     """
     base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", b"{not json", headers={"Origin": _EXTENSION_ORIGIN})
 
-    assert exc_info.value.code == 400
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
 
 
 def test_options_preflight_allows_post_method(tmp_path, serve_capture):

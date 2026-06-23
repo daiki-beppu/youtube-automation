@@ -551,7 +551,10 @@ def create_server(
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
-            origin = self.headers.get("Origin")
+            headers = getattr(self, "headers", None)
+            if headers is None:
+                return None
+            origin = headers.get("Origin")
             return origin if is_origin_allowed(origin, allow_origin) else None
 
         def _send_cors(self, origin: str | None) -> None:
@@ -579,6 +582,14 @@ def create_server(
             self._send_cors(origin)
             self.end_headers()
             self.wfile.write(body)
+
+        def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
+            resolved_message = message
+            if resolved_message is None:
+                if code not in self.responses:
+                    raise ValueError(f"Unsupported HTTP status code: {code}")
+                resolved_message = self.responses[code][0]
+            self._send_json_error(code, resolved_message)
 
         def do_OPTIONS(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)
             origin = self._allowed_origin()

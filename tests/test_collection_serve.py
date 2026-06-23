@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import json
 import re
+import socket
 import sys
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -58,6 +60,25 @@ _VERSION_ROUTE = "/version"
 def _collection_prompts_route(cid: str) -> str:
     """`GET /collections/<id>/suno/prompts.json` ルートを組み立てる（拡張側 collectionPromptsRoute と対）。"""
     return f"{_COLLECTIONS_ROUTE}/{cid}/suno/prompts.json"
+
+
+def _read_error_json(error: urllib.error.HTTPError) -> dict:
+    return json.loads(error.read().decode("utf-8"))
+
+
+def _send_raw_http_request(base: str, request: bytes) -> bytes:
+    parsed = urllib.parse.urlparse(base)
+    if parsed.hostname is None or parsed.port is None:
+        raise AssertionError(f"Invalid test server URL: {base}")
+
+    with socket.create_connection((parsed.hostname, parsed.port), timeout=5) as sock:
+        sock.sendall(request)
+        sock.shutdown(socket.SHUT_WR)
+        chunks = []
+        while chunk := sock.recv(4096):
+            chunks.append(chunk)
+
+    return b"".join(chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +396,37 @@ def test_unknown_path_returns_404(serve):
     assert exc_info.value.code == 404
 
 
+def test_unknown_path_returns_json_error_with_cors_for_allowed_origin(serve):
+    """Given 許可 Origin からの未知パス GET
+    When handler が 404 を返す
+    Then CORS 付き JSON エラーを返す。
+    """
+    base = serve([])
+    req = urllib.request.Request(f"{base}/unknown", headers={"Origin": "https://suno.com"})
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 404
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+    assert _read_error_json(err) == {"error": "Not Found"}
+
+
+def test_malformed_request_returns_400_json_without_headers(serve):
+    """Given HTTP parser がヘッダー解析前に reject するリクエスト
+    When BaseHTTPRequestHandler 内部から send_error が呼ばれる
+    Then handler が落ちずに CORS なし JSON 400 を返す。
+    """
+    base = serve([])
+
+    response = _send_raw_http_request(base, b"BADREQUEST\r\n")
+
+    assert response == b"{\"error\": \"Bad request syntax ('BADREQUEST')\"}"
+    assert b"Access-Control-Allow-Origin:" not in response
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -654,17 +706,21 @@ def test_get_collection_prompts_without_prompts_returns_404(serve_dir, tmp_path)
 def test_dir_mode_does_not_serve_single_suno_prompts_route(serve_dir, tmp_path):
     """Given dir mode サーバー
     When `GET /suno/prompts.json`（単一 mode のルート）
-    Then 404 を返す（単一 mode のルートは dir mode で生きない）。
+    Then CORS 付き JSON 404 を返す（単一 mode のルートは dir mode で生きない）。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning)
 
-    req = urllib.request.Request(f"{base}{_SUNO_PROMPTS_ROUTE}")
+    req = urllib.request.Request(f"{base}{_SUNO_PROMPTS_ROUTE}", headers={"Origin": "https://suno.com"})
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req)
 
-    assert exc_info.value.code == 404
+    err = exc_info.value
+    assert err.code == 404
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+    assert _read_error_json(err) == {"error": "Not Found"}
 
 
 def test_dir_mode_collections_sets_cors_header_for_extension_origin(serve_dir, tmp_path):
