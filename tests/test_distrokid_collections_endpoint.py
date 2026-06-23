@@ -573,6 +573,29 @@ def test_get_collection_distrokid_release_json_unknown_id_returns_404(serve_dir_
     assert exc_info.value.code == 404
 
 
+def test_get_collection_distrokid_release_json_unknown_id_cors_json_404(serve_dir_dk, tmp_path):
+    """Given 許可 Origin + 存在しない collection_id
+    When `GET /collections/<id>/distrokid/<disc>/release.json`
+    Then CORS 付き JSON 404 を返す（#1209: send_error CORS 統一）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    base = serve_dir_dk(planning)
+
+    req = urllib.request.Request(
+        f"{base}{_COLLECTIONS_ROUTE}/does-not-exist-collection/distrokid/disc1-alpha/release.json",
+        headers={"Origin": "https://www.distrokid.com"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 404
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://www.distrokid.com"
+    assert json.loads(err.read().decode("utf-8")) == {"error": "Not Found"}
+
+
 def test_get_collection_distrokid_release_json_unknown_disc_returns_404(serve_dir_dk, tmp_path):
     """Given 存在しない disc
     When `GET /collections/<id>/distrokid/<disc>/release.json`
@@ -728,6 +751,13 @@ def _post(url: str, body, *, headers: dict | None = None):
     return urllib.request.urlopen(req)
 
 
+def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str, expected_origin: str | None) -> None:
+    assert err.code == status
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == expected_origin
+    assert json.loads(err.read().decode("utf-8")) == {"error": message}
+
+
 def test_post_distrokid_releases_writes_file_and_returns_recorded(tmp_path, serve_dir_dk):
     """Given 許可 Origin からの POST /distrokid/releases（capture_root あり）
     When 有効な body を送る
@@ -791,7 +821,7 @@ def test_post_distrokid_releases_without_capture_root_returns_404(tmp_path, serv
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN})
 
-    assert exc_info.value.code == 404
+    _assert_json_error(exc_info.value, status=404, message="Not Found", expected_origin=_EXTENSION_ORIGIN)
 
 
 def test_post_distrokid_releases_without_origin_returns_403(tmp_path, serve_dir_dk):
@@ -812,7 +842,28 @@ def test_post_distrokid_releases_without_origin_returns_403(tmp_path, serve_dir_
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", payload)
 
-    assert exc_info.value.code == 403
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=None)
+
+
+def test_post_distrokid_releases_with_disallowed_origin_returns_403(tmp_path, serve_dir_dk):
+    """Given 許可リスト外 Origin からの POST
+    When POST する
+    Then CORS ヘッダー無しの JSON 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    payload = {
+        "collection_id": "20260526-abc-collection",
+        "disc": "disc1-alpha",
+        "album_title": "Alpha",
+    }
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", payload, headers={"Origin": "https://evil.com"})
+
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=None)
 
 
 def test_post_distrokid_releases_invalid_json_returns_400(tmp_path, serve_dir_dk):
@@ -828,7 +879,7 @@ def test_post_distrokid_releases_invalid_json_returns_400(tmp_path, serve_dir_dk
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", b"{not json", headers={"Origin": _EXTENSION_ORIGIN})
 
-    assert exc_info.value.code == 400
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
 
 
 def test_post_distrokid_releases_non_dict_body_returns_400(tmp_path, serve_dir_dk):
@@ -844,7 +895,7 @@ def test_post_distrokid_releases_non_dict_body_returns_400(tmp_path, serve_dir_d
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", [], headers={"Origin": _EXTENSION_ORIGIN})
 
-    assert exc_info.value.code == 400
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
 
 
 def test_post_distrokid_releases_missing_field_returns_400(tmp_path, serve_dir_dk):
@@ -864,7 +915,7 @@ def test_post_distrokid_releases_missing_field_returns_400(tmp_path, serve_dir_d
             headers={"Origin": _EXTENSION_ORIGIN},
         )
 
-    assert exc_info.value.code == 400
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
 
 
 # ---------------------------------------------------------------------------

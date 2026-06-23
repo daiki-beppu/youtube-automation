@@ -551,7 +551,10 @@ def create_server(
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
-            origin = self.headers.get("Origin")
+            headers = getattr(self, "headers", None)
+            if headers is None:
+                return None
+            origin = headers.get("Origin")
             return origin if is_origin_allowed(origin, allow_origin) else None
 
         def _send_cors(self, origin: str | None) -> None:
@@ -578,7 +581,15 @@ def create_server(
             self.send_header("Content-Length", str(len(body)))
             self._send_cors(origin)
             self.end_headers()
-            self.wfile.write(body)
+            can_write_body = self.command != "HEAD" and status >= 200 and status not in (204, 205, 304)
+            if can_write_body:
+                self.wfile.write(body)
+
+        def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
+            resolved_message = message
+            if resolved_message is None:
+                resolved_message = self.responses.get(code, ("???", "???"))[0]
+            self._send_json_error(code, resolved_message)
 
         def do_OPTIONS(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)
             origin = self._allowed_origin()
