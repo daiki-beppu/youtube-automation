@@ -120,6 +120,7 @@ async function loadContentScriptWithPlaylistRows(
     waitForCaptchaClear: vi.fn(() => Promise.resolve()),
     waitForGeneration: vi.fn(() => Promise.resolve()),
     waitForQueueSlot: vi.fn(() => Promise.resolve()),
+    detectSunoViewMode: vi.fn(() => "list"),
   }));
 
   vi.doMock("../../shared/playlist-dom", () => ({
