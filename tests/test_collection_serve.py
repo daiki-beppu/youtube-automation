@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import json
 import re
+import socket
 import sys
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -66,6 +68,25 @@ def _assert_json_404_with_cors(error: urllib.error.HTTPError, origin: str) -> No
     assert error.headers.get("Access-Control-Allow-Origin") == origin
     assert error.headers.get_content_type() == "application/json"
     assert json.loads(error.read().decode("utf-8")) == {"error": "Not Found"}
+
+
+def _read_error_json(error: urllib.error.HTTPError) -> dict:
+    return json.loads(error.read().decode("utf-8"))
+
+
+def _send_raw_http_request(base: str, request: bytes) -> bytes:
+    parsed = urllib.parse.urlparse(base)
+    if parsed.hostname is None or parsed.port is None:
+        raise AssertionError(f"Invalid test server URL: {base}")
+
+    with socket.create_connection((parsed.hostname, parsed.port), timeout=5) as sock:
+        sock.sendall(request)
+        sock.shutdown(socket.SHUT_WR)
+        chunks = []
+        while chunk := sock.recv(4096):
+            chunks.append(chunk)
+
+    return b"".join(chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +404,92 @@ def test_unknown_path_returns_404(serve):
     assert exc_info.value.code == 404
 
 
+def test_unknown_path_returns_json_error_with_cors_for_allowed_origin(serve):
+    """Given 許可 Origin からの未知パス GET
+    When handler が 404 を返す
+    Then CORS 付き JSON エラーを返す。
+    """
+    base = serve([])
+    req = urllib.request.Request(f"{base}/unknown", headers={"Origin": "https://suno.com"})
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 404
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+    assert _read_error_json(err) == {"error": "Not Found"}
+
+
+def test_malformed_request_returns_400_json_without_headers(serve):
+    """Given HTTP parser がヘッダー解析前に reject するリクエスト
+    When BaseHTTPRequestHandler 内部から send_error が呼ばれる
+    Then handler が落ちずに CORS なし JSON 400 を返す。
+    """
+    base = serve([])
+
+    response = _send_raw_http_request(base, b"BADREQUEST\r\n")
+
+    assert response == b'{"error": "Bad request syntax (\'BADREQUEST\')"}'
+    assert b"Access-Control-Allow-Origin:" not in response
+
+
+def test_head_error_returns_no_body(serve):
+    """Given HEAD リクエスト（do_HEAD 未実装のため 501）
+    When send_error override が呼ばれる
+    Then ヘッダーのみ返し body は空（HTTP/1.1 HEAD 規約 + #1209 regression guard）。
+    """
+    base = serve([])
+
+    req = urllib.request.Request(
+        f"{base}/unknown",
+        method="HEAD",
+        headers={"Origin": "https://suno.com"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 501
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+    assert err.read() == b""
+
+
+def test_send_error_unknown_status_returns_json_with_standard_fallback(tmp_path):
+    """Given 標準 HTTP status 表にない code を返す handler
+    When send_error override が呼ばれる
+    Then BaseHTTPRequestHandler と同じ fallback message を JSON + CORS で返す。
+    """
+    json_path = tmp_path / "suno-prompts.json"
+    json_path.write_text("[]", encoding="utf-8")
+    server = create_server(0, None, prompts_path=json_path, collection_dir=tmp_path, distrokid=None)
+
+    class UnknownStatusHandler(server.RequestHandlerClass):
+        def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)
+            self.send_error(599)
+
+    server.RequestHandlerClass = UnknownStatusHandler
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://localhost:{server.server_address[1]}"
+    req = urllib.request.Request(f"{base}/unknown", headers={"Origin": "https://suno.com"})
+
+    try:
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req)
+
+        err = exc_info.value
+        assert err.code == 599
+        assert err.headers.get_content_type() == "application/json"
+        assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+        assert _read_error_json(err) == {"error": "???"}
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -644,6 +751,29 @@ def test_get_collection_prompts_unknown_id_returns_404(serve_dir, tmp_path):
         urllib.request.urlopen(req)
 
     _assert_json_404_with_cors(exc_info.value, _SUNO_ORIGIN)
+
+
+def test_get_collection_prompts_unknown_id_returns_cors_json_404(serve_dir, tmp_path):
+    """Given 許可 Origin + 存在しない collection id
+    When `GET /collections/<id>/suno/prompts.json`
+    Then CORS 付き JSON 404 を返す（#1209: send_error CORS 統一）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(planning)
+
+    req = urllib.request.Request(
+        f"{base}{_collection_prompts_route('nope-collection')}",
+        headers={"Origin": "https://suno.com"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 404
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+    assert _read_error_json(err) == {"error": "Not Found"}
 
 
 def test_get_collection_prompts_without_prompts_returns_404(serve_dir, tmp_path):
