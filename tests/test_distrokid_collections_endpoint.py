@@ -573,6 +573,29 @@ def test_get_collection_distrokid_release_json_unknown_id_returns_404(serve_dir_
     assert exc_info.value.code == 404
 
 
+def test_get_collection_distrokid_release_json_unknown_id_cors_json_404(serve_dir_dk, tmp_path):
+    """Given 許可 Origin + 存在しない collection_id
+    When `GET /collections/<id>/distrokid/<disc>/release.json`
+    Then CORS 付き JSON 404 を返す（#1209: send_error CORS 統一）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    base = serve_dir_dk(planning)
+
+    req = urllib.request.Request(
+        f"{base}{_COLLECTIONS_ROUTE}/does-not-exist-collection/distrokid/disc1-alpha/release.json",
+        headers={"Origin": "https://www.distrokid.com"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 404
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://www.distrokid.com"
+    assert json.loads(err.read().decode("utf-8")) == {"error": "Not Found"}
+
+
 def test_get_collection_distrokid_release_json_unknown_disc_returns_404(serve_dir_dk, tmp_path):
     """Given 存在しない disc
     When `GET /collections/<id>/distrokid/<disc>/release.json`

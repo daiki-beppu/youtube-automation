@@ -427,6 +427,29 @@ def test_malformed_request_returns_400_json_without_headers(serve):
     assert b"Access-Control-Allow-Origin:" not in response
 
 
+def test_head_error_returns_no_body(serve):
+    """Given HEAD リクエスト（do_HEAD 未実装のため 501）
+    When send_error override が呼ばれる
+    Then ヘッダーのみ返し body は空（HTTP/1.1 HEAD 規約 + #1209 regression guard）。
+    """
+    base = serve([])
+
+    req = urllib.request.Request(
+        f"{base}/unknown",
+        method="HEAD",
+        headers={"Origin": "https://suno.com"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 501  # do_HEAD 未実装 → 501 Unsupported method
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+    # HEAD では body が空であること
+    assert err.read() == b""
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -685,6 +708,29 @@ def test_get_collection_prompts_unknown_id_returns_404(serve_dir, tmp_path):
         urllib.request.urlopen(req)
 
     assert exc_info.value.code == 404
+
+
+def test_get_collection_prompts_unknown_id_returns_cors_json_404(serve_dir, tmp_path):
+    """Given 許可 Origin + 存在しない collection id
+    When `GET /collections/<id>/suno/prompts.json`
+    Then CORS 付き JSON 404 を返す（#1209: send_error CORS 統一）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(planning)
+
+    req = urllib.request.Request(
+        f"{base}{_collection_prompts_route('nope-collection')}",
+        headers={"Origin": "https://suno.com"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    err = exc_info.value
+    assert err.code == 404
+    assert err.headers.get_content_type() == "application/json"
+    assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+    assert _read_error_json(err) == {"error": "Not Found"}
 
 
 def test_get_collection_prompts_without_prompts_returns_404(serve_dir, tmp_path):

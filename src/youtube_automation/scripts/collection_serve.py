@@ -581,7 +581,9 @@ def create_server(
             self.send_header("Content-Length", str(len(body)))
             self._send_cors(origin)
             self.end_headers()
-            self.wfile.write(body)
+            # HEAD リクエストおよび body 禁止ステータス (1xx, 204, 304) では body を書かない
+            if self.command != "HEAD" and status >= 200 and status not in (204, 304):
+                self.wfile.write(body)
 
         def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
             resolved_message = message
