@@ -52,8 +52,14 @@ const CLIP_SELECT_VERIFY_POLL_MS = 50;
 const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 /** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924)。 */
 const CLIP_SELECT_VERIFY_MS_PER_ROW = 50;
+/** clip row 内の曲タイトル表示要素。実機 DOM 調査 (2026-06-23) で確認済み。 */
+const CLIP_ROW_TITLE_SELECTOR = 'span[role="button"][aria-label^="Play "]';
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
+/** loadSettleTimeoutMs のデフォルト基準値 (ms)。 */
+const SETTLE_BASE_MS = 3000;
+/** loadSettleTimeoutMs を targetIds.length でスケールする係数 (ms/clip)。 */
+const SETTLE_PER_CLIP_MS = 200;
 type ClipListScrollIntent = "probe-intermediate" | "settle-bottom";
 
 /**
@@ -253,9 +259,14 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
   return ids;
 }
 
+export function collectClipRowTitle(row: HTMLElement): string | null {
+  return row.querySelector(CLIP_ROW_TITLE_SELECTOR)?.textContent?.trim() || null;
+}
+
 function findRowsByClipIds(
   rows: HTMLElement[],
   targetIds: string[],
+  titleFallbackMap?: Map<string, string>,
 ): HTMLElement[] {
   const rowById = new Map<string, HTMLElement>();
   for (const row of rows) {
@@ -268,19 +279,50 @@ function findRowsByClipIds(
 
   const foundRows: HTMLElement[] = [];
   const seenRows = new Set<HTMLElement>();
+  const unmatchedIds: string[] = [];
+
   for (const id of targetIds) {
     const row = rowById.get(id);
     if (row && !seenRows.has(row)) {
       foundRows.push(row);
       seenRows.add(row);
+    } else if (!row) {
+      unmatchedIds.push(id);
     }
   }
+
+  if (unmatchedIds.length > 0 && titleFallbackMap && titleFallbackMap.size > 0) {
+    const rowsByTitle = new Map<string, HTMLElement[]>();
+    for (const row of rows) {
+      const title = collectClipRowTitle(row);
+      if (title) {
+        const list = rowsByTitle.get(title) ?? [];
+        list.push(row);
+        rowsByTitle.set(title, list);
+      }
+    }
+    for (const id of unmatchedIds) {
+      const title = titleFallbackMap.get(id);
+      if (!title) continue;
+      const candidates = rowsByTitle.get(title);
+      if (!candidates) continue;
+      for (const row of candidates) {
+        if (!seenRows.has(row)) {
+          foundRows.push(row);
+          seenRows.add(row);
+          break;
+        }
+      }
+    }
+  }
+
   return foundRows;
 }
 
 function listMissingClipIds(
   rows: HTMLElement[],
   targetIds: string[],
+  titleFallbackMap?: Map<string, string>,
 ): string[] {
   const foundIds = new Set<string>();
   for (const row of rows) {
@@ -288,7 +330,19 @@ function listMissingClipIds(
       foundIds.add(id);
     }
   }
-  return targetIds.filter((id) => !foundIds.has(id));
+  const missing = targetIds.filter((id) => !foundIds.has(id));
+  if (missing.length === 0 || !titleFallbackMap || titleFallbackMap.size === 0) {
+    return missing;
+  }
+  const titleSet = new Set<string>();
+  for (const row of rows) {
+    const title = collectClipRowTitle(row);
+    if (title) titleSet.add(title);
+  }
+  return missing.filter((id) => {
+    const title = titleFallbackMap.get(id);
+    return !title || !titleSet.has(title);
+  });
 }
 
 function scrollClipListTowardBottom(
@@ -328,8 +382,10 @@ export interface EnsureClipRowsLoadedOptions {
   isAborted: () => boolean;
   /** ロード判定の poll 間隔 (ms)。既定 100。 */
   pollIntervalMs?: number;
-  /** スクロール後、追加 row のロードを待つ上限 (ms)。既定 3000。 */
+  /** スクロール後、追加 row のロードを待つ上限 (ms)。既定は targetIds.length でスケール。 */
   loadSettleTimeoutMs?: number;
+  /** clip ID → 曲タイトルの Map。ID マッチ失敗時にタイトルで row を逆引きするフォールバック。 */
+  titleFallbackMap?: Map<string, string>;
 }
 
 export async function ensureClipRowsLoadedByIds(
@@ -344,7 +400,8 @@ export async function ensureClipRowsLoadedByIds(
   const {
     isAborted,
     pollIntervalMs = 100,
-    loadSettleTimeoutMs = 3000,
+    loadSettleTimeoutMs = SETTLE_BASE_MS + uniqueTargetIds.length * SETTLE_PER_CLIP_MS,
+    titleFallbackMap,
   } = options;
 
   const scroller = document.querySelector<HTMLElement>(
@@ -354,14 +411,17 @@ export async function ensureClipRowsLoadedByIds(
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
   }
 
+  const allFound = (r: HTMLElement[]) =>
+    listMissingClipIds(r, uniqueTargetIds, titleFallbackMap).length === 0;
+
   let rows = collectLoadedClipRows(scroller);
 
   for (;;) {
-    const foundRows = findRowsByClipIds(rows, uniqueTargetIds);
+    const foundRows = findRowsByClipIds(rows, uniqueTargetIds, titleFallbackMap);
     if (isAborted()) {
       return foundRows;
     }
-    if (foundRows.length === uniqueTargetIds.length) {
+    if (allFound(rows)) {
       restoreClipListHead(scroller);
       return foundRows;
     }
@@ -373,18 +433,18 @@ export async function ensureClipRowsLoadedByIds(
     for (;;) {
       await sleep(pollIntervalMs);
       rows = collectLoadedClipRows(scroller);
-      const nextFoundRows = findRowsByClipIds(rows, uniqueTargetIds);
+      const nextFoundRows = findRowsByClipIds(rows, uniqueTargetIds, titleFallbackMap);
       if (isAborted()) {
         return nextFoundRows;
       }
-      if (nextFoundRows.length === uniqueTargetIds.length) {
+      if (allFound(rows)) {
         break;
       }
       if (rows.length > prevCount) {
         break;
       }
       if (Date.now() >= settleDeadline) {
-        const missing = listMissingClipIds(rows, uniqueTargetIds).join(", ");
+        const missing = listMissingClipIds(rows, uniqueTargetIds, titleFallbackMap).join(", ");
         throw new Error(
           `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
         );

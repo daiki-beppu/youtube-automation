@@ -242,17 +242,18 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     );
   });
 
-  it("Given 2 entries で 3 ID しか保存されていない When playlist-only resume Then expected 4, got 3 で停止する", async () => {
+  it("Given 2 entries で 3 ID しか保存されていない When playlist-only resume Then warn して ensureClipRows へ進む", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { ensureClipRowsLoadedByIdsMock, progressMessages, runHandler } = await loadContentScriptWithPlaylistRows(
+    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
       [],
       [],
     );
 
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
       data: {
         entries,
@@ -263,37 +264,30 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         playlistExpectedClipCount: entries.length * CLIPS_PER_REQUEST,
       },
     });
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledTimes(1));
 
-    expect(ensureClipRowsLoadedByIdsMock).not.toHaveBeenCalled();
-    expect(writeResumeStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        collectionId: "collection-a",
-        failedIndex: entries.length,
-        total: entries.length,
-        submittedClipIds,
-        playlistExpectedClipCount: entries.length * CLIPS_PER_REQUEST,
-      }),
+    expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledWith(
+      submittedClipIds,
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
     );
-    expect(progressMessages).toContainEqual(
-      expect.objectContaining({
-        phase: PHASE.ERROR,
-        message: "playlist 対象 clip ID 数が一致しません: expected 4, got 3",
-      }),
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("expected 4, got 3"),
     );
+    warnSpy.mockRestore();
   });
 
-  it("Given 旧 payload が期待件数なしで playlist-only resume When run Then 保存済み ID 数へ期待件数を縮めない", async () => {
+  it("Given 旧 payload が期待件数なしで playlist-only resume When run Then warn して ensureClipRows へ進む", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { ensureClipRowsLoadedByIdsMock, progressMessages, runHandler } = await loadContentScriptWithPlaylistRows(
+    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
       [],
       [],
     );
 
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
       data: {
         entries,
@@ -303,16 +297,12 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         submittedClipIds,
       },
     });
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledTimes(1));
 
-    expect(ensureClipRowsLoadedByIdsMock).not.toHaveBeenCalled();
-    expect(progressMessages).toContainEqual(
-      expect.objectContaining({
-        phase: PHASE.ERROR,
-        index: entries.length,
-        message: "playlist 対象 clip ID 数が一致しません: expected 4, got 3",
-      }),
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("expected 4, got 3"),
     );
+    warnSpy.mockRestore();
   });
 
   it("Given collection の manual range run When playlist 追加 Then range 内で生成した ID 件数だけを要求する", async () => {

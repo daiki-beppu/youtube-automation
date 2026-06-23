@@ -46,6 +46,7 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
+  collectClipRowTitle,
   ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
   multiSelectClips,
@@ -55,6 +56,27 @@ import {
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { triggerPlaylistCaptureFailSoft } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
+
+function buildTitleFallbackMap(
+  entries: PromptEntry[],
+  order: number[],
+  submittedIds: string[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (let i = 0; i < order.length; i++) {
+    const entry = entries[order[i]];
+    if (!entry) continue;
+    const title = entry.title ?? entry.name;
+    const clipBase = i * CLIPS_PER_REQUEST;
+    for (let c = 0; c < CLIPS_PER_REQUEST; c++) {
+      const clipId = submittedIds[clipBase + c];
+      if (clipId) {
+        map.set(clipId, title);
+      }
+    }
+  }
+  return map;
+}
 
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
@@ -188,15 +210,26 @@ export default defineContentScript({
       playlistName: string,
       previousSubmittedClipIds: string[],
       expectedClipCount: number,
+      entries: PromptEntry[],
+      order: number[],
     ): Promise<void> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
+      const allSubmittedIds = [...previousSubmittedClipIds, ...tracker.getSubmittedIds()];
+      const observedCount = new Set(allSubmittedIds).size;
+      if (observedCount !== expectedClipCount) {
+        console.warn(
+          `[suno-helper] bridge observation gap: expected ${expectedClipCount} clip IDs, observed ${observedCount}`,
+        );
+      }
       const submittedIds = resolvePlaylistClipIds(
         previousSubmittedClipIds,
         tracker.getSubmittedIds(),
         expectedClipCount,
       );
+      const titleFallbackMap = buildTitleFallbackMap(entries, order, submittedIds);
       const rows = await ensureClipRowsLoadedByIds(submittedIds, {
         isAborted: () => aborted,
+        titleFallbackMap,
       });
       if (aborted) {
         return; // ロード待ち中に停止された。部分状態のまま Cmd+P に進まない（呼び出し元の STOPPED guard が persist する）
@@ -413,7 +446,7 @@ export default defineContentScript({
           return;
         }
         try {
-          await addClipsToPlaylist(total, playlistName, previousSubmittedClipIds, expectedPlaylistClipCount);
+          await addClipsToPlaylist(total, playlistName, previousSubmittedClipIds, expectedPlaylistClipCount, entries, order);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           persistInterruptState(total);
@@ -504,7 +537,7 @@ export default defineContentScript({
       aborted = false;
       void (async () => {
         try {
-          await addClipsToPlaylist(0, playlistName, submittedClipIds, expectedClipCount);
+          await addClipsToPlaylist(0, playlistName, submittedClipIds, expectedClipCount, [], []);
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;

@@ -122,15 +122,20 @@ export function resolveInterruptIndex(currentIndex: number, submitted: boolean, 
   return submitted && !isNotAcknowledged ? currentIndex + 1 : currentIndex;
 }
 
-/** 再開前の観測 ID と今回 run の観測 ID を合成し、playlist 対象全件が揃っているか検証する。 */
+/** 再開前の観測 ID と今回 run の観測 ID を合成する。件数不一致は warn して続行する（部分 playlist > 完全失敗）。 */
 export function resolvePlaylistClipIds(
   previousSubmittedClipIds: string[],
   currentSubmittedClipIds: string[],
   expectedClipCount: number,
 ): string[] {
   const clipIds = Array.from(new Set([...previousSubmittedClipIds, ...currentSubmittedClipIds]));
+  if (clipIds.length === 0) {
+    throw new Error("playlist 対象の clip ID が 0 件です。bridge が clip を観測できなかった可能性があります。");
+  }
   if (clipIds.length !== expectedClipCount) {
-    throw new Error(`playlist 対象 clip ID 数が一致しません: expected ${expectedClipCount}, got ${clipIds.length}`);
+    console.warn(
+      `[suno-helper] playlist clip ID count mismatch: expected ${expectedClipCount}, got ${clipIds.length}. 部分 playlist で続行します。`,
+    );
   }
   return clipIds;
 }
