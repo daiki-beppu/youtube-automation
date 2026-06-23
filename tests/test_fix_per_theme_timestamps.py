@@ -1,4 +1,4 @@
-"""scripts.fix_per_theme_timestamps の ffprobe argv 構成検証.
+"""scripts.fix_per_theme_timestamps の ffprobe argv と音声入力契約の検証.
 
 Issue #186: `get_duration` の ffprobe argv に `"--"` sentinel が含まれている
 ことを検証する。Issue #167 で `utils/probe.py` に導入した argv-injection
@@ -52,3 +52,46 @@ def test_get_duration_keeps_sentinel_for_dash_prefixed_path(monkeypatch) -> None
 
     assert captured["cmd"][-2] == "--"
     assert captured["cmd"][-1] == "-evil.mp3"
+
+
+def test_collect_timestamp_audio_files_accepts_mp3_m4a_wav(tmp_path) -> None:
+    fix_per_theme_timestamps = _import_module()
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "03-pattern-c-night.wav").write_bytes(b"wav")
+    (music_dir / "01-pattern-a-rain.mp3").write_bytes(b"mp3")
+    (music_dir / "02-pattern-b-window.m4a").write_bytes(b"m4a")
+    (music_dir / "notes.txt").write_text("ignore", encoding="utf-8")
+
+    files = fix_per_theme_timestamps.collect_timestamp_audio_files(music_dir)
+
+    assert [p.name for p in files] == [
+        "01-pattern-a-rain.mp3",
+        "02-pattern-b-window.m4a",
+        "03-pattern-c-night.wav",
+    ]
+
+
+def test_compute_pattern_starts_uses_m4a_and_wav_inputs(tmp_path, monkeypatch) -> None:
+    fix_per_theme_timestamps = _import_module()
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "01-pattern-a-rain.m4a").write_bytes(b"m4a")
+    (music_dir / "02-pattern-b-window.wav").write_bytes(b"wav")
+
+    durations = {
+        "01-pattern-a-rain.m4a": 10.0,
+        "02-pattern-b-window.wav": 20.0,
+    }
+
+    def fake_duration(path: Path) -> float:
+        return durations[path.name]
+
+    monkeypatch.setattr(fix_per_theme_timestamps, "get_duration", fake_duration)
+
+    result = fix_per_theme_timestamps.compute_pattern_starts(
+        music_dir,
+        {"a": "Rain", "b": "Window"},
+    )
+
+    assert result == [("Rain", 0), ("Window", 7)]

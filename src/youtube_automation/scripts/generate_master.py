@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""コレクションの個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を生成する。
+"""コレクションの個別音声 (MP3 / M4A / WAV) をクロスフェード結合してマスター音源を生成する。
 
 skill-config (`masterup.audio.crossfade_duration` / `bitrate`) を参照するため、
 `metadata_generator` のタイムスタンプ計算と常に同じクロスフェード秒数で結合される。
 
-入力ファイルの拡張子に追従して出力フォーマットが決まる:
-- すべて `.mp3` → `master.mp3` (`libmp3lame -b:a {bitrate} -q:a 0`)
-- すべて `.wav` → `master.wav` (`pcm_s16le`、ビットレートは無視)
-MP3 と WAV が混在しているディレクトリは `ValidationError` で明示的に失敗させる
-(出力フォーマットを一意に決められないため)。
+入力ファイルは `.mp3` / `.m4a` / `.wav` を混在可として扱い、通常は `master.mp3`
+(`libmp3lame -b:a {bitrate} -q:a 0`) を出力する。内部呼び出しで
+`output_ext="wav"` を指定した場合のみ `master.wav` (`pcm_s16le`) を出力する。
 
 Usage:
     yt-generate-master                   # CWD がコレクションディレクトリ
@@ -53,9 +51,10 @@ _PIN_FIRST_COUNT_KEY = "pin_first_count"
 # 自動生成 seed の上限（ログ・再現用に 32-bit unsigned 範囲）。
 _AUTO_SEED_BOUND = 2**32
 
-# 対応する入力音声フォーマット。拡張子 (lower, ドットなし) → ffmpeg コーデックオプション。
-# 出力 `master.<ext>` の拡張子もここで決まる。
-_AUDIO_FORMATS: dict[str, list[str]] = {
+_INPUT_AUDIO_EXTS: tuple[str, ...] = ("mp3", "m4a", "wav")
+
+# 対応する出力音声フォーマット。拡張子 (lower, ドットなし) → ffmpeg コーデックオプション。
+_OUTPUT_AUDIO_FORMATS: dict[str, list[str]] = {
     "mp3": ["-c:a", "libmp3lame"],
     "wav": ["-c:a", "pcm_s16le"],
 }
@@ -135,29 +134,26 @@ def _spin(stop_event: threading.Event, start: float, segments: int) -> None:
         i += 1
 
 
-def _collect_audio_inputs(music_dir: Path) -> tuple[list[Path], str]:
-    """`music_dir` から `_AUDIO_FORMATS` 対応の音声ファイルを列挙し、(files, ext) を返す。
+def _collect_audio_inputs(music_dir: Path) -> list[Path]:
+    """`music_dir` から対応音声ファイルを列挙し、ファイル名順で返す。"""
+    supported_suffixes = {f".{ext}" for ext in _INPUT_AUDIO_EXTS}
+    files = sorted(
+        (p for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in supported_suffixes),
+        key=lambda p: p.name,
+    )
 
-    - すべて同一拡張子なら (sorted files, ext) を返す。
-    - 2 種類以上の拡張子が混在していれば `ValidationError` (出力 master.<ext> を一意に決められない)。
-    - 1 件も見つからなければ `ValidationError`。
-    """
-    matches_by_ext: dict[str, list[Path]] = {}
-    for ext in _AUDIO_FORMATS:
-        found = sorted(music_dir.glob(f"*.{ext}"))
-        if found:
-            matches_by_ext[ext] = found
-
-    if not matches_by_ext:
-        supported = ", ".join(f".{e}" for e in _AUDIO_FORMATS)
+    if not files:
+        supported = ", ".join(f".{e}" for e in _INPUT_AUDIO_EXTS)
         raise ValidationError(f"音声ファイル ({supported}) が見つかりません: {music_dir}")
-    if len(matches_by_ext) > 1:
-        found_labels = ", ".join(f".{e}({len(v)})" for e, v in matches_by_ext.items())
-        raise ValidationError(
-            f"音声フォーマットが混在しています (出力フォーマットを一意に決められません): {music_dir} [{found_labels}]"
-        )
-    ext, files = next(iter(matches_by_ext.items()))
-    return files, ext
+    return files
+
+
+def _resolve_output_ext(output_ext: str) -> str:
+    normalized = output_ext.lower().lstrip(".")
+    if normalized not in _OUTPUT_AUDIO_FORMATS:
+        supported = ", ".join(f".{e}" for e in _OUTPUT_AUDIO_FORMATS)
+        raise ValidationError(f"出力フォーマットは {supported} のいずれかを指定してください: {output_ext}")
+    return normalized
 
 
 def _apply_pin_first(
@@ -216,6 +212,7 @@ def generate_master(
     shuffle_seed: int | None = None,
     pin_first: list[str] | None = None,
     pin_first_count: int | None = None,
+    output_ext: str = "mp3",
     quiet: bool = False,
 ) -> Path:
     paths = CollectionPaths(collection_dir)
@@ -227,7 +224,8 @@ def generate_master(
     if not music_dir.is_dir():
         raise ValidationError(f"ディレクトリが見つかりません: {music_dir}")
 
-    files, audio_ext = _collect_audio_inputs(music_dir)
+    files = _collect_audio_inputs(music_dir)
+    audio_ext = _resolve_output_ext(output_ext)
     n = len(files)
 
     # 先頭固定を解決 (要件 1-4, 10): pin された曲は順序固定、残りを shuffle 対象とする。
@@ -263,18 +261,20 @@ def generate_master(
 
     if not quiet:
         loop_note = f" × {effective_loops} loops = {n_effective} segments" if effective_loops > 1 else ""
+        input_exts = sorted({p.suffix.lower().lstrip(".").upper() for p in files})
+        input_label = "/".join(input_exts)
         print()
         print("  yt-generate-master")
         print("  ──────────────────────────────────────────")
         print()
-        print(f"  Input : {n} {audio_ext.upper()} files{loop_note}")
+        print(f"  Input : {n} {input_label} files{loop_note}")
         print(f"  Output: {output.name}")
         print(f"  Crossfade: {crossfade:g}s (triangle curve)")
         if use_bitrate:
             print(f"  Bitrate  : {bitrate}")
         print()
 
-    if n_effective == 1:
+    if n_effective == 1 and expanded[0].suffix.lower() == f".{audio_ext}":
         shutil.copyfile(expanded[0], output)
         if not quiet:
             print("  Single file — copied directly.\n")
@@ -283,15 +283,16 @@ def generate_master(
     cmd = ["ffmpeg", "-y"]
     for f in expanded:
         cmd.extend(["-i", str(f)])
-    cmd.extend(
-        [
-            "-filter_complex",
-            build_filter(n_effective, crossfade),
-            "-map",
-            "[aout]",
-            *_AUDIO_FORMATS[audio_ext],
-        ]
-    )
+    if n_effective > 1:
+        cmd.extend(
+            [
+                "-filter_complex",
+                build_filter(n_effective, crossfade),
+                "-map",
+                "[aout]",
+            ]
+        )
+    cmd.extend(_OUTPUT_AUDIO_FORMATS[audio_ext])
     if use_bitrate:
         cmd.extend(["-b:a", bitrate, "-q:a", "0"])
     cmd.extend([str(output), "-loglevel", "error"])
@@ -342,7 +343,7 @@ def generate_master(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を生成",
+        description="個別音声 (MP3 / M4A / WAV) をクロスフェード結合してマスター音源を生成",
     )
     parser.add_argument(
         "collection",
@@ -367,7 +368,7 @@ def main() -> int:
     parser.add_argument(
         "--shuffle",
         action="store_true",
-        help="入力 MP3 リストをシャッフルしてから連結",
+        help="入力音声リストをシャッフルしてから連結",
     )
     parser.add_argument(
         "--shuffle-seed",
@@ -382,7 +383,7 @@ def main() -> int:
         nargs="+",
         metavar="FILE",
         dest="pin_first",
-        help="先頭固定する MP3 ファイル名を順番指定 (--shuffle 併用可、引数順を保持)",
+        help="先頭固定する音声ファイル名を順番指定 (--shuffle 併用可、引数順を保持)",
     )
     pin_group.add_argument(
         "--pin-first-count",

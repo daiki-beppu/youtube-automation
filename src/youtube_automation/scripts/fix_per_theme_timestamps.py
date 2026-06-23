@@ -16,7 +16,7 @@
 
 Steps per collection:
 1. Read pattern names from suno-prompts.md (## Pattern X: 日本語 — English Name)
-2. List 02-Individual-music/*.mp3 in lexicographic order
+2. List 02-Individual-music/*.{mp3,m4a,wav} in lexicographic order
 3. Extract pattern letter (a/b/c/d) from filename like 'XX-pattern-Y-...'
 4. Compute each track's master-timeline start with 3-second crossfade
 5. For each pattern, take the start time of its first track
@@ -34,6 +34,7 @@ from youtube_automation.utils.config import channel_dir
 
 CROSSFADE_SEC = 3
 COLLECTIONS_DIR = channel_dir() / "collections" / "live"
+TIMESTAMP_AUDIO_EXTS = (".mp3", ".m4a", ".wav")
 
 TARGET_COLLECTIONS = [
     "20260328-rjn-last-platform-collection",
@@ -61,7 +62,7 @@ def parse_patterns(suno_prompts_md: Path) -> dict[str, str]:
     return out
 
 
-def get_duration(mp3: Path) -> float:
+def get_duration(audio_path: Path) -> float:
     result = subprocess.run(
         [
             "ffprobe",
@@ -72,7 +73,7 @@ def get_duration(mp3: Path) -> float:
             "-of",
             "default=noprint_wrappers=1:nokey=1",
             "--",
-            str(mp3),
+            str(audio_path),
         ],
         check=True,
         capture_output=True,
@@ -90,11 +91,19 @@ def fmt_timestamp(seconds: int) -> str:
     return f"{m}:{s:02d}"
 
 
+def collect_timestamp_audio_files(music_dir: Path) -> list[Path]:
+    files = sorted(
+        p for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in TIMESTAMP_AUDIO_EXTS
+    )
+    if not files:
+        supported = ", ".join(TIMESTAMP_AUDIO_EXTS)
+        raise RuntimeError(f"no supported audio files ({supported}) in {music_dir}")
+    return files
+
+
 def compute_pattern_starts(music_dir: Path, patterns: dict[str, str]) -> list[tuple[str, int]]:
     """Return list of (pattern_name_en, start_seconds) ordered by appearance."""
-    files = sorted(p for p in music_dir.glob("*.mp3"))
-    if not files:
-        raise RuntimeError(f"no mp3 in {music_dir}")
+    files = collect_timestamp_audio_files(music_dir)
 
     cumulative = 0.0
     seen: dict[str, int] = {}  # pattern letter → first start_sec

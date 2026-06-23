@@ -396,6 +396,7 @@ def main() -> int:
             collection_dir,
             crossfade,
             bitrate,
+            output_ext="wav",
         )
         print()
         print(f"  Master audio: {master_path}")
