@@ -26,6 +26,13 @@ const CLIP_ROW_SONG_ID_DATA_KEY = "songId";
 const CLIP_ROW_CLIP_ID_DATA_KEY = "clipId";
 const CLIP_ROW_SONG_LINK_SELECTOR = 'a[href*="/song/"]';
 const SONG_HREF_ID_RE = /\/song\/([^/?#]+)/;
+/**
+ * Suno CDN 画像 URL から clip UUID を抽出する正規表現。
+ * src/data-src は `cdn2.suno.ai/image_<UUID>.jpeg` or `image_large_<UUID>.jpeg` 形式。
+ * data-songId / data-clipId / song リンクが全廃された新 DOM での唯一の clip ID ソース。
+ */
+const CLIP_IMAGE_UUID_RE =
+  /image_(?:large_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
 export const PLAYLIST_NAME_INPUT_SELECTOR =
   'input[placeholder="Playlist Name"]';
@@ -77,16 +84,36 @@ function findPlaylistDialog(): HTMLElement | null {
 const CLIP_ROW_NOT_FOUND_MESSAGE =
   "clip row が見つかりません。Suno の UI 変更の可能性があります。";
 
+/**
+ * 要素が clip card のコンテンツ（画像やリンク）を含むか判定する。
+ * bare wrapper（.multi-select-button のみを内包する中間 div）と
+ * 実 clip card を区別するための構造シグナル。Emotion class には依存しない。
+ */
+function hasClipContent(el: HTMLElement): boolean {
+  return el.querySelector("img") !== null || el.querySelector("a[href]") !== null;
+}
+
 function resolveClipRowFromSelectButton(
   button: HTMLElement,
 ): HTMLElement | null {
-  const multiSelectRow = button.closest(
-    MULTI_SELECT_BUTTON_SELECTOR,
-  )?.parentElement;
-  if (multiSelectRow) {
-    return multiSelectRow;
+  const multiSelectWrapper = button.closest(MULTI_SELECT_BUTTON_SELECTOR);
+  if (!multiSelectWrapper) {
+    return button.closest<HTMLElement>("article");
   }
-  return button.closest<HTMLElement>("article");
+  const parent = multiSelectWrapper.parentElement;
+  if (!parent) {
+    return button.closest<HTMLElement>("article");
+  }
+  // 旧 DOM: parent が clip card 本体（img / a[href] を含む）→ そのまま返す。
+  // 新 DOM: parent が bare wrapper（.multi-select-button のみ）→ 1 段上の clip card を返す。
+  if (hasClipContent(parent)) {
+    return parent;
+  }
+  const grandparent = parent.parentElement;
+  if (grandparent) {
+    return grandparent;
+  }
+  return parent;
 }
 
 function isScrollableClipContainer(element: HTMLElement): boolean {
@@ -187,6 +214,11 @@ function extractSongIdFromHref(href: string): string | null {
   return match ? match[1] : null;
 }
 
+function extractClipIdFromImageUrl(url: string): string | null {
+  const match = CLIP_IMAGE_UUID_RE.exec(url);
+  return match ? match[1] : null;
+}
+
 function collectClipRowIds(row: HTMLElement): Set<string> {
   const ids = new Set<string>();
   const songId = row.dataset[CLIP_ROW_SONG_ID_DATA_KEY];
@@ -203,6 +235,19 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
     const id = extractSongIdFromHref(link.href);
     if (id) {
       ids.add(id);
+    }
+  }
+  // 既存経路で ID が見つからなかった場合、画像 URL から UUID を抽出する。
+  // Suno が data-songId / data-clipId / song リンクを全廃した新 DOM での fallback。
+  if (ids.size === 0) {
+    for (const img of row.querySelectorAll<HTMLImageElement>("img")) {
+      const uuid =
+        extractClipIdFromImageUrl(img.src) ??
+        extractClipIdFromImageUrl(img.dataset.src ?? "");
+      if (uuid) {
+        ids.add(uuid);
+        break;
+      }
     }
   }
   return ids;
