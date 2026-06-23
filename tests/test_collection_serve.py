@@ -43,6 +43,7 @@ from youtube_automation.scripts.collection_serve import (
 from youtube_automation.utils.exceptions import ConfigError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+_SUNO_ORIGIN = "https://suno.com"
 
 # 外部 HTTP 契約: 拡張が fetch する suno サブパス（リテラルで pin する）
 _SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
@@ -58,6 +59,13 @@ _VERSION_ROUTE = "/version"
 def _collection_prompts_route(cid: str) -> str:
     """`GET /collections/<id>/suno/prompts.json` ルートを組み立てる（拡張側 collectionPromptsRoute と対）。"""
     return f"{_COLLECTIONS_ROUTE}/{cid}/suno/prompts.json"
+
+
+def _assert_json_404_with_cors(error: urllib.error.HTTPError, origin: str) -> None:
+    assert error.code == 404
+    assert error.headers.get("Access-Control-Allow-Origin") == origin
+    assert error.headers.get_content_type() == "application/json"
+    assert json.loads(error.read().decode("utf-8")) == {"error": "Not Found"}
 
 
 # ---------------------------------------------------------------------------
@@ -622,49 +630,59 @@ def test_get_collection_prompts_returns_entries(serve_dir, tmp_path):
 def test_get_collection_prompts_unknown_id_returns_404(serve_dir, tmp_path):
     """Given 存在しない collection id
     When `GET /collections/<id>/suno/prompts.json`
-    Then 404 を返す（ホワイトリスト弾き）。
+    Then CORS 付き JSON 404 を返す（ホワイトリスト弾き）。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning)
 
-    req = urllib.request.Request(f"{base}{_collection_prompts_route('nope-collection')}")
+    req = urllib.request.Request(
+        f"{base}{_collection_prompts_route('nope-collection')}",
+        headers={"Origin": _SUNO_ORIGIN},
+    )
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req)
 
-    assert exc_info.value.code == 404
+    _assert_json_404_with_cors(exc_info.value, _SUNO_ORIGIN)
 
 
 def test_get_collection_prompts_without_prompts_returns_404(serve_dir, tmp_path):
     """Given prompts json を持たない collection（has_prompts=False）
     When `GET /collections/<id>/suno/prompts.json`
-    Then 404 を返す（受け入れ条件: has_prompts true のみ実行可能）。
+    Then CORS 付き JSON 404 を返す（受け入れ条件: has_prompts true のみ実行可能）。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-empty-collection", entries=None)
     base = serve_dir(planning)
 
-    req = urllib.request.Request(f"{base}{_collection_prompts_route('20260601-clm-empty-collection')}")
+    req = urllib.request.Request(
+        f"{base}{_collection_prompts_route('20260601-clm-empty-collection')}",
+        headers={"Origin": _EXTENSION_ORIGIN},
+    )
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req)
 
-    assert exc_info.value.code == 404
+    _assert_json_404_with_cors(exc_info.value, _EXTENSION_ORIGIN)
 
 
-def test_dir_mode_does_not_serve_single_suno_prompts_route(serve_dir, tmp_path):
+@pytest.mark.parametrize("origin", [_SUNO_ORIGIN, _EXTENSION_ORIGIN])
+def test_dir_mode_does_not_serve_single_suno_prompts_route(serve_dir, tmp_path, origin):
     """Given dir mode サーバー
     When `GET /suno/prompts.json`（単一 mode のルート）
-    Then 404 を返す（単一 mode のルートは dir mode で生きない）。
+    Then CORS 付き JSON 404 を返す（単一 mode のルートは dir mode で生きない）。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning)
 
-    req = urllib.request.Request(f"{base}{_SUNO_PROMPTS_ROUTE}")
+    req = urllib.request.Request(
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
+        headers={"Origin": origin},
+    )
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req)
 
-    assert exc_info.value.code == 404
+    _assert_json_404_with_cors(exc_info.value, origin)
 
 
 def test_dir_mode_collections_sets_cors_header_for_extension_origin(serve_dir, tmp_path):
@@ -684,15 +702,19 @@ def test_dir_mode_collections_sets_cors_header_for_extension_origin(serve_dir, t
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
-def test_single_mode_collections_route_returns_404(serve):
+@pytest.mark.parametrize("origin", [_SUNO_ORIGIN, _EXTENSION_ORIGIN])
+def test_single_mode_collections_route_returns_404(serve, origin):
     """Given 単一ファイル mode サーバー（collections_root 未指定）
     When `GET /collections`
-    Then 404 を返す。popup はこの 404 を fallback トリガーに使う（dir mode 専用ルート）。
+    Then CORS 付き JSON 404 を返す。popup はこの 404 を fallback トリガーに使う（dir mode 専用ルート）。
     """
     base = serve([{"name": "A", "style": "s", "lyrics": ""}])
 
-    req = urllib.request.Request(f"{base}{_COLLECTIONS_ROUTE}")
+    req = urllib.request.Request(
+        f"{base}{_COLLECTIONS_ROUTE}",
+        headers={"Origin": origin},
+    )
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req)
 
-    assert exc_info.value.code == 404
+    _assert_json_404_with_cors(exc_info.value, origin)

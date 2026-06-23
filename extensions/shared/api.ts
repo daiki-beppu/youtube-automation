@@ -243,6 +243,17 @@ export function pickInitialCollectionId(
   return collections.find((c) => c.has_prompts)?.id ?? null;
 }
 
+export function resolvePromptCollectionId(
+  collections: CollectionSummary[],
+  selectedId: string,
+): string | null {
+  const selected = collections.find((c) => c.id === selectedId);
+  if (selected?.has_prompts) {
+    return selected.id;
+  }
+  return pickInitialCollectionId(collections);
+}
+
 /** collection id 末尾の接尾辞。剥がしてから日付・channel・theme を解釈する。 */
 const COLLECTION_SUFFIX = "-collection";
 

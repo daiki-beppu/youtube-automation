@@ -16,6 +16,7 @@ import {
   fetchServerVersion,
   formatCompatibilityWarning,
   pickInitialCollectionId,
+  resolvePromptCollectionId,
   resolveCompatibilityWarning,
 } from "../../shared/api";
 
@@ -321,6 +322,41 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
 
   it("Given 空配列 When 初期値を選ぶ Then null を返す", () => {
     expect(pickInitialCollectionId([])).toBeNull();
+  });
+});
+
+describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection の解決", () => {
+  it("Given 選択中 id が最新一覧に存在し prompts あり When 解決 Then 選択中 id を返す", () => {
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1 },
+      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+    ];
+
+    expect(resolvePromptCollectionId(collections, "c2")).toBe("c2");
+  });
+
+  it("Given 選択中 id が最新一覧に無い When 解決 Then 初期選択 id を返す", () => {
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1 },
+      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+    ];
+
+    expect(resolvePromptCollectionId(collections, "old-url-c9")).toBe("c1");
+  });
+
+  it("Given 選択中 id が prompts 無し When 解決 Then 最初の prompts あり id を返す", () => {
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", has_prompts: false, pattern_count: null },
+      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+    ];
+
+    expect(resolvePromptCollectionId(collections, "c1")).toBe("c2");
+  });
+
+  it("Given prompts あり collection が無い When 解決 Then null を返す", () => {
+    const collections: CollectionSummary[] = [{ id: "c1", name: "c1", has_prompts: false, pattern_count: null }];
+
+    expect(resolvePromptCollectionId(collections, "c1")).toBeNull();
   });
 });
 

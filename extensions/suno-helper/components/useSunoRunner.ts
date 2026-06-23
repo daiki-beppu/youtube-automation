@@ -12,8 +12,8 @@ import {
   fetchCollectionPrompts,
   fetchCollections,
   fetchPrompts,
-  pickInitialCollectionId,
   type PromptEntry,
+  resolvePromptCollectionId,
   resolveCompatibilityWarning,
 } from "../../shared/api";
 import { type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
@@ -84,8 +84,19 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
+type PromptSource =
+  | { kind: "collection"; collectionId: string | null }
+  | { kind: "single-file" };
+
+async function fetchCollectionEntries(baseUrl: string, collectionId: string | null): Promise<PromptEntry[]> {
+  if (collectionId === null) {
+    throw new Error("prompts を取得できる collection がありません。");
+  }
+  return fetchCollectionPrompts(baseUrl, collectionId);
+}
+
 export function useSunoRunner(): RunnerState {
-  const [url, setUrl] = useState("");
+  const [url, setUrlState] = useState("");
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
   // fetchCollections が非空だが全件 mapped で filter 後 0 件になったか (#893 要件 B)。placeholder 表示用。
   const [allMapped, setAllMapped] = useState(false);
@@ -239,26 +250,78 @@ export function useSunoRunner(): RunnerState {
     setResumeDismissed(true);
   }, []);
 
-  const loadCollections = useCallback(async (baseUrl: string) => {
-    try {
-      const fetched = await fetchCollections(baseUrl);
-      // 既にマッピング済み collection をドロップダウンから外す (#893 追加要件 B)。prefix 未指定の
-      // 旧サーバーは mapped を返さず全件残る（後方互換）。fetched 非空 + filter 後空 = 全件マッピング済み。
-      const list = excludeMappedCollections(fetched);
-      setCollections(list);
-      setAllMapped(fetched.length > 0 && list.length === 0);
-      setSelectedCollectionId(pickInitialCollectionId(list) ?? "");
-    } catch {
-      // 単一ファイル mode サーバーは `/collections` が 404。ドロップダウンを出さず単一 mode へ fallback。
-      setCollections([]);
-      setAllMapped(false);
-      setSelectedCollectionId("");
-    }
+  const clearLoadedRunState = useCallback(() => {
+    setEntries([]);
+    setItemStates([]);
+    setRestoredPlaylistName(undefined);
+    setRestoredFailedIndex(undefined);
+    setRestoredFailedIndices(undefined);
+    setRestoredSubmittedClipIds(undefined);
+    setRestoredPlaylistExpectedClipCount(undefined);
   }, []);
+
+  const updateUrl = useCallback(
+    (nextUrl: string) => {
+      setUrlState(nextUrl);
+      clearLoadedRunState();
+    },
+    [clearLoadedRunState],
+  );
+
+  const selectCollection = useCallback(
+    (id: string) => {
+      setSelectedCollectionId(id);
+      clearLoadedRunState();
+    },
+    [clearLoadedRunState],
+  );
+
+  const applySingleFileMode = useCallback(() => {
+    setCollections([]);
+    setAllMapped(false);
+    setSelectedCollectionId("");
+  }, []);
+
+  const syncCollections = useCallback(
+    async (baseUrl: string, currentSelectedId: string): Promise<PromptSource> => {
+      try {
+        const fetched = await fetchCollections(baseUrl);
+        // 既にマッピング済み collection をドロップダウンから外す (#893 追加要件 B)。prefix 未指定の
+        // 旧サーバーは mapped を返さず全件残る（後方互換）。fetched 非空 + filter 後空 = 全件マッピング済み。
+        const list = excludeMappedCollections(fetched);
+        const nextSelectedId = resolvePromptCollectionId(list, currentSelectedId);
+        setCollections(list);
+        setAllMapped(fetched.length > 0 && list.length === 0);
+        setSelectedCollectionId(nextSelectedId ?? "");
+        return { kind: "collection", collectionId: nextSelectedId };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === "HTTP 404") {
+          // 単一ファイル mode サーバーは `/collections` が 404。ドロップダウンを出さず単一 mode へ fallback。
+          applySingleFileMode();
+          return { kind: "single-file" };
+        }
+        throw err;
+      }
+    },
+    [applySingleFileMode],
+  );
+
+  const loadCollections = useCallback(
+    async (baseUrl: string) => {
+      try {
+        await syncCollections(baseUrl, "");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        report(`コレクション一覧取得失敗: ${message}`, true);
+      }
+    },
+    [report, syncCollections],
+  );
 
   useEffect(() => {
     void serverUrlItem.getValue().then((stored) => {
-      setUrl(stored);
+      setUrlState(stored);
       const trimmed = stored.trim();
       if (trimmed) {
         void loadCollections(trimmed);
@@ -320,10 +383,11 @@ export function useSunoRunner(): RunnerState {
     const extensionVersion = browser.runtime.getManifest().version;
     setCompatibilityWarning(await resolveCompatibilityWarning(trimmed, extensionVersion));
     try {
-      // collection を選択している場合は dir mode の個別配信、未選択なら単一ファイル mode へ fallback。
-      const data = selectedCollectionId
-        ? await fetchCollectionPrompts(trimmed, selectedCollectionId)
-        : await fetchPrompts(trimmed);
+      const promptSource = await syncCollections(trimmed, selectedCollectionId);
+      const data =
+        promptSource.kind === "single-file"
+          ? await fetchPrompts(trimmed)
+          : await fetchCollectionEntries(trimmed, promptSource.collectionId);
       setEntries(data);
       setItemStates(data.map(() => "idle"));
       report(`${data.length} パターンを取得しました。`);
@@ -333,7 +397,7 @@ export function useSunoRunner(): RunnerState {
       setItemStates([]);
       report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
     }
-  }, [url, selectedCollectionId, report]);
+  }, [url, selectedCollectionId, syncCollections, report]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -435,11 +499,11 @@ export function useSunoRunner(): RunnerState {
 
   return {
     url,
-    setUrl,
+    setUrl: updateUrl,
     collections,
     allMapped,
     selectedCollectionId,
-    selectCollection: setSelectedCollectionId,
+    selectCollection,
     entries,
     itemStates,
     status,
