@@ -8,7 +8,7 @@
 // 起こさないよう遅延生成する（純関数テスト resume-state.test.ts を壊さないため）。
 import { storage } from "wxt/utils/storage";
 
-import { RESUME_STATE_KEY } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, RESUME_STATE_KEY } from "../../shared/constants";
 
 /** ERROR 停止時に永続化する再開メタ情報 (#872)。 */
 export interface ResumeState {
@@ -29,6 +29,10 @@ export interface ResumeState {
   /** リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
    * 「失敗分のみ再実行」導線が run({indices}) へ渡す。旧 state には無い optional（後方互換）。 */
   failedIndices?: number[];
+  /** playlist 追加対象として generate response から観測済みの clip ID 一覧。 */
+  submittedClipIds?: string[];
+  /** playlist 追加時に揃っているべき clip ID 件数。 */
+  playlistExpectedClipCount?: number;
 }
 
 /** content へ渡す 0-based inclusive な実行範囲。 */
@@ -116,6 +120,27 @@ export function resumeRunRange(banner: ResumeBanner): RunRange {
  */
 export function resolveInterruptIndex(currentIndex: number, submitted: boolean, isNotAcknowledged: boolean): number {
   return submitted && !isNotAcknowledged ? currentIndex + 1 : currentIndex;
+}
+
+/** 再開前の観測 ID と今回 run の観測 ID を合成し、playlist 対象全件が揃っているか検証する。 */
+export function resolvePlaylistClipIds(
+  previousSubmittedClipIds: string[],
+  currentSubmittedClipIds: string[],
+  expectedClipCount: number,
+): string[] {
+  const clipIds = Array.from(new Set([...previousSubmittedClipIds, ...currentSubmittedClipIds]));
+  if (clipIds.length !== expectedClipCount) {
+    throw new Error(`playlist 対象 clip ID 数が一致しません: expected ${expectedClipCount}, got ${clipIds.length}`);
+  }
+  return clipIds;
+}
+
+/** 旧 ResumeState には期待件数が無いため、collection 全体の entry 数から復元して部分 playlist を防ぐ。 */
+export function resolvePlaylistExpectedClipCountForResume(
+  savedExpectedClipCount: number | undefined,
+  totalEntries: number,
+): number {
+  return savedExpectedClipCount ?? totalEntries * CLIPS_PER_REQUEST;
 }
 
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---

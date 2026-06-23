@@ -21,14 +21,19 @@ import { onMessage, sendMessage } from "../lib/messaging";
 import { DEFAULT_SPEED_PRESET_ID, readSpeedPresetId, writeSpeedPresetId } from "../lib/preset-state";
 import {
   readResumeState,
+  resolvePlaylistExpectedClipCountForResume,
   type ResumeBanner,
   type ResumeState,
   resolveRunRange,
   resumeBannerRange,
-  resumeRunRange,
-  type RunRange,
   shouldShowResumeBanner,
 } from "../lib/resume-state";
+import {
+  buildFailedEntriesRunOverrides,
+  buildRunPayload,
+  buildResumeRunOverrides,
+  type RunOverrides,
+} from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
@@ -75,7 +80,7 @@ interface RunnerState {
   fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
   // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
-  run: (overrides?: { range?: RunRange; indices?: number[] }) => Promise<void>;
+  run: (overrides?: RunOverrides) => Promise<void>;
   stop: () => Promise<void>;
 }
 
@@ -99,6 +104,10 @@ export function useSunoRunner(): RunnerState {
   const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
   // content snapshot 由来のスキップ済み失敗 index 一覧 (#948)。chrome.storage と二重化する。
   const [restoredFailedIndices, setRestoredFailedIndices] = useState<number[] | undefined>(undefined);
+  const [restoredSubmittedClipIds, setRestoredSubmittedClipIds] = useState<string[] | undefined>(undefined);
+  const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
+    undefined,
+  );
   // 実行範囲 UI の状態 (#872)。rangeStart/rangeEnd は入力欄の生文字列（1-based 表示）。
   const [rangeMode, setRangeMode] = useState<RangeMode>("all");
   const [rangeStart, setRangeStart] = useState("");
@@ -165,6 +174,41 @@ export function useSunoRunner(): RunnerState {
     }
     return restoredFailedIndices ?? [];
   }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredFailedIndices]);
+
+  const submittedClipIdsForResume = useMemo<string[]>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.submittedClipIds ?? [];
+    }
+    return restoredSubmittedClipIds ?? [];
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredSubmittedClipIds]);
+
+  const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return resolvePlaylistExpectedClipCountForResume(
+        persistedResume.playlistExpectedClipCount,
+        persistedResume.total,
+      );
+    }
+    if (restoredFailedIndex !== undefined && entries.length > 0) {
+      return resolvePlaylistExpectedClipCountForResume(restoredPlaylistExpectedClipCount, entries.length);
+    }
+    return undefined;
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeCheckedAt,
+    restoredFailedIndex,
+    restoredPlaylistExpectedClipCount,
+    entries.length,
+  ]);
 
   const report = useCallback((text: string, error = false) => {
     setStatus(text);
@@ -256,6 +300,8 @@ export function useSunoRunner(): RunnerState {
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
         setRestoredFailedIndices(restored.failedIndices);
+        setRestoredSubmittedClipIds(restored.submittedClipIds);
+        setRestoredPlaylistExpectedClipCount(restored.playlistExpectedClipCount);
         report(restored.status, restored.isError);
       } catch {
         // runner content 未注入（中継先不在）では queryProgress が到達しない。復元を諦め従来表示を維持する。
@@ -290,7 +336,7 @@ export function useSunoRunner(): RunnerState {
   }, [url, selectedCollectionId, report]);
 
   const run = useCallback(
-    async (overrides?: { range?: RunRange; indices?: number[] }) => {
+    async (overrides?: RunOverrides) => {
       // 二重実行ガード (#892 要件7)。実行中の再入（「再開」連打等）を no-op で弾く。
       if (isRunning) {
         return;
@@ -319,13 +365,16 @@ export function useSunoRunner(): RunnerState {
         // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
         // collectionId は ERROR 停止時の resume 紐付けに使う。単一ファイル mode（空文字）は undefined で送る (#872)。
         // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
-        await sendMessage("run", {
-          entries,
-          playlistName: derivedPlaylistName,
-          range,
-          collectionId: selectedCollectionId || undefined,
-          indices: overrides?.indices,
-        });
+        await sendMessage(
+          "run",
+          buildRunPayload({
+            entries,
+            playlistName: derivedPlaylistName,
+            range,
+            collectionId: selectedCollectionId,
+            overrides,
+          }),
+        );
         report("連続実行を開始しました。");
       } catch (err) {
         // 送信失敗時はフラグを戻して再実行可能にする（実行は始まっていない）。
@@ -350,8 +399,13 @@ export function useSunoRunner(): RunnerState {
     setRangeStart(String(prefilled.start));
     setRangeEnd(String(prefilled.end));
     setResumeDismissed(true);
-    void run({ range: resumeRunRange(resumeBanner) });
-  }, [resumeBanner, run]);
+    void run(
+      buildResumeRunOverrides(resumeBanner, {
+        submittedClipIds: submittedClipIdsForResume,
+        playlistExpectedClipCount: playlistExpectedClipCountForResume,
+      }),
+    );
+  }, [resumeBanner, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。
@@ -361,8 +415,13 @@ export function useSunoRunner(): RunnerState {
     }
     setResumeDismissed(true);
     setRestoredFailedIndices(undefined);
-    void run({ indices: failedEntries });
-  }, [failedEntries, run]);
+    void run(
+      buildFailedEntriesRunOverrides(failedEntries, {
+        submittedClipIds: submittedClipIdsForResume,
+        playlistExpectedClipCount: playlistExpectedClipCountForResume,
+      }),
+    );
+  }, [failedEntries, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
 
   const stop = useCallback(async () => {
     try {

@@ -15,6 +15,7 @@ import { applyProgress, initSnapshot } from "../lib/snapshot";
 import { applyJitter, readSpeedPresetId, resolveSpeedPreset } from "../lib/preset-state";
 import {
   clearResumeStateForCollection,
+  resolvePlaylistClipIds,
   resolveInterruptIndex,
   type RunRange,
   writeResumeState,
@@ -45,7 +46,7 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
-  ensureClipRowsLoaded,
+  ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
   multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
@@ -182,13 +183,19 @@ export default defineContentScript({
      * 全 clip を multi-select → Cmd+P で Add to Playlist dialog → 名前注入 → Create Playlist の一連を実行する (#854)。
      * 各ステップ間に abortableSleep を挟み、停止押下に素早く反応する。
      */
-    async function addClipsToPlaylist(entryCount: number, playlistName: string): Promise<void> {
-      emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: entryCount, message: playlistName });
-      // 直近 entry 数 × CLIPS_PER_REQUEST 件の clip を multi-select する。
-      // clip list は遅延ロード（無限スクロール）のため、初期ロード（40 件）では不足する場合がある (#924)。
-      // ensureClipRowsLoaded がスクロールで追加ロードを促し、count 件揃うまで待機する。
-      // clip row が 1 件も無ければ fail-loud throw する（#881）。
-      const rows = await ensureClipRowsLoaded(entryCount * CLIPS_PER_REQUEST, {
+    async function addClipsToPlaylist(
+      progressTotal: number,
+      playlistName: string,
+      previousSubmittedClipIds: string[],
+      expectedClipCount: number,
+    ): Promise<void> {
+      emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
+      const submittedIds = resolvePlaylistClipIds(
+        previousSubmittedClipIds,
+        tracker.getSubmittedIds(),
+        expectedClipCount,
+      );
+      const rows = await ensureClipRowsLoadedByIds(submittedIds, {
         isAborted: () => aborted,
       });
       if (aborted) {
@@ -223,10 +230,15 @@ export default defineContentScript({
       playlistName?: string;
       // 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。
       indices?: number[];
+      // 再開前の run で観測済みの playlist 対象 clip ID。
+      submittedClipIds?: string[];
+      // playlist 追加時に揃っているべき clip ID 件数。
+      playlistExpectedClipCount?: number;
     }
 
     async function runAll(entries: PromptEntry[], options: RunOptions): Promise<void> {
-      const { range, collectionId, playlistName } = options;
+      const { range, collectionId, playlistName, submittedClipIds, playlistExpectedClipCount } = options;
+      const previousSubmittedClipIds = submittedClipIds ?? [];
       // 速度プリセット (#875) を run 開始時に確定する。以降のペーシング（間隔/並列数/retry/ack）は
       // 既存定数の代わりにこの preset 値を使う。未選択でも storage fallback で Balanced になる。
       const preset = resolveSpeedPreset(await readSpeedPresetId());
@@ -237,6 +249,11 @@ export default defineContentScript({
       const endIndex = range ? range.end : total - 1;
       // 実行対象の 0-based index 列 (#948)。indices（失敗分のみ再実行）が最優先、無ければ range 由来。
       const order = options.indices ?? Array.from({ length: endIndex - startIndex + 1 }, (_, k) => startIndex + k);
+      const expectedPlaylistClipCount =
+        playlistExpectedClipCount ??
+        (order.length === 0
+          ? total * CLIPS_PER_REQUEST
+          : new Set(previousSubmittedClipIds).size + order.length * CLIPS_PER_REQUEST);
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
       const failedIndices: number[] = [];
@@ -247,12 +264,26 @@ export default defineContentScript({
       // スキップ済み failedIndices があれば一緒に永続化する (#948)。
       function persistInterruptState(interruptedIndex: number): void {
         if (collectionId) {
+          const persistedSubmittedClipIds = Array.from(
+            new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
+          );
+          currentSnapshot =
+            currentSnapshot === null
+              ? currentSnapshot
+              : {
+                  ...currentSnapshot,
+                  failedIndex: interruptedIndex,
+                  submittedClipIds: persistedSubmittedClipIds,
+                  playlistExpectedClipCount: expectedPlaylistClipCount,
+                };
           void writeResumeState({
             collectionId,
             failedIndex: interruptedIndex,
             total,
             timestamp: Date.now(),
             failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
+            submittedClipIds: persistedSubmittedClipIds,
+            playlistExpectedClipCount: expectedPlaylistClipCount,
           });
         }
       }
@@ -382,10 +413,11 @@ export default defineContentScript({
           return;
         }
         try {
-          await addClipsToPlaylist(total, playlistName);
+          await addClipsToPlaylist(total, playlistName, previousSubmittedClipIds, expectedPlaylistClipCount);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          emitProgress({ phase: PHASE.ERROR, total, message });
+          persistInterruptState(total);
+          emitProgress({ phase: PHASE.ERROR, index: total, total, message });
           return;
         }
         if (aborted) {
@@ -414,9 +446,18 @@ export default defineContentScript({
         return { ok: true } as const;
       }
       // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。range / collectionId は無し。
-      const { entries, playlistName, range, collectionId, indices } = Array.isArray(data)
-        ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined, indices: undefined }
-        : data;
+      const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } =
+        Array.isArray(data)
+          ? {
+              entries: data,
+              playlistName: undefined,
+              range: undefined,
+              collectionId: undefined,
+              indices: undefined,
+              submittedClipIds: undefined,
+              playlistExpectedClipCount: undefined,
+            }
+          : data;
       currentSnapshot = initSnapshot(entries, playlistName);
       if (detectSunoViewMode() === "unknown") {
         emitProgress({
@@ -430,10 +471,18 @@ export default defineContentScript({
       running = true;
       aborted = false;
       lastSubmittedEntryIndex = -1;
+      tracker.clearSubmittedIds();
       // run 中のみ active feed poll で clip status を追う (#948)。passive 観測が生きていれば
       // poller は stale 判定で自発的に黙る（intervalMs ごとの no-op tick のみ）。
       feedPoller.start();
-      void runAll(entries, { range, collectionId, playlistName, indices }).finally(() => {
+      void runAll(entries, {
+        range,
+        collectionId,
+        playlistName,
+        indices,
+        submittedClipIds,
+        playlistExpectedClipCount,
+      }).finally(() => {
         running = false;
         feedPoller.stop();
       });

@@ -272,4 +272,8 @@ export interface SnapshotPayload {
   // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
   // ENTRY_FAILED phase の受信ごとに蓄積され、popup の「失敗分のみ再実行」導線が消費する。
   failedIndices?: number[];
+  // playlist 追加対象として generate response から観測済みの clip ID 一覧。
+  submittedClipIds?: string[];
+  // playlist 追加時に揃っているべき clip ID 件数。
+  playlistExpectedClipCount?: number;
 }

@@ -31,6 +31,27 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
 
     expect(tracker.submissionCount()).toBe(1);
     expect(tracker.getInFlightCount()).toBe(2);
+    expect(tracker.getSubmittedIds()).toEqual(["c1", "c2"]);
+    detach();
+  });
+
+  it("Given feed に未知 clip が混ざる When 受信する Then playlist 候補 ID は generate 観測分だけを保持する", () => {
+    const tracker = createClipTracker();
+    const detach = attachBridgeListener(tracker);
+
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+      clips: [{ id: "fresh", status: "submitted" }],
+    });
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.FEED_CLIPS,
+      clips: [{ id: "leftover", status: "streaming" }],
+    });
+
+    expect(tracker.getPendingIds()).toEqual(["fresh", "leftover"]);
+    expect(tracker.getSubmittedIds()).toEqual(["fresh"]);
     detach();
   });
 

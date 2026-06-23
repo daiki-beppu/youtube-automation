@@ -22,6 +22,10 @@ const DESELECT_CLIP_BUTTON_ANY_SELECTOR = 'button[aria-label="Deselect clip"]';
 export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
 /** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
 export const DESELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Deselect clip"]`;
+const CLIP_ROW_SONG_ID_DATA_KEY = "songId";
+const CLIP_ROW_CLIP_ID_DATA_KEY = "clipId";
+const CLIP_ROW_SONG_LINK_SELECTOR = 'a[href*="/song/"]';
+const SONG_HREF_ID_RE = /\/song\/([^/?#]+)/;
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
 export const PLAYLIST_NAME_INPUT_SELECTOR =
   'input[placeholder="Playlist Name"]';
@@ -178,6 +182,70 @@ function collectLoadedClipRows(scroller: HTMLElement): HTMLElement[] {
   return rows;
 }
 
+function extractSongIdFromHref(href: string): string | null {
+  const match = SONG_HREF_ID_RE.exec(href);
+  return match ? match[1] : null;
+}
+
+function collectClipRowIds(row: HTMLElement): Set<string> {
+  const ids = new Set<string>();
+  const songId = row.dataset[CLIP_ROW_SONG_ID_DATA_KEY];
+  const clipId = row.dataset[CLIP_ROW_CLIP_ID_DATA_KEY];
+  if (songId) {
+    ids.add(songId);
+  }
+  if (clipId) {
+    ids.add(clipId);
+  }
+  for (const link of row.querySelectorAll<HTMLAnchorElement>(
+    CLIP_ROW_SONG_LINK_SELECTOR,
+  )) {
+    const id = extractSongIdFromHref(link.href);
+    if (id) {
+      ids.add(id);
+    }
+  }
+  return ids;
+}
+
+function findRowsByClipIds(
+  rows: HTMLElement[],
+  targetIds: string[],
+): HTMLElement[] {
+  const rowById = new Map<string, HTMLElement>();
+  for (const row of rows) {
+    for (const id of collectClipRowIds(row)) {
+      if (!rowById.has(id)) {
+        rowById.set(id, row);
+      }
+    }
+  }
+
+  const foundRows: HTMLElement[] = [];
+  const seenRows = new Set<HTMLElement>();
+  for (const id of targetIds) {
+    const row = rowById.get(id);
+    if (row && !seenRows.has(row)) {
+      foundRows.push(row);
+      seenRows.add(row);
+    }
+  }
+  return foundRows;
+}
+
+function listMissingClipIds(
+  rows: HTMLElement[],
+  targetIds: string[],
+): string[] {
+  const foundIds = new Set<string>();
+  for (const row of rows) {
+    for (const id of collectClipRowIds(row)) {
+      foundIds.add(id);
+    }
+  }
+  return targetIds.filter((id) => !foundIds.has(id));
+}
+
 function scrollClipListTowardBottom(
   scroller: HTMLElement,
   intent: ClipListScrollIntent,
@@ -217,6 +285,68 @@ export interface EnsureClipRowsLoadedOptions {
   pollIntervalMs?: number;
   /** スクロール後、追加 row のロードを待つ上限 (ms)。既定 3000。 */
   loadSettleTimeoutMs?: number;
+}
+
+export async function ensureClipRowsLoadedByIds(
+  targetIds: string[],
+  options: EnsureClipRowsLoadedOptions,
+): Promise<HTMLElement[]> {
+  const uniqueTargetIds = Array.from(new Set(targetIds));
+  if (uniqueTargetIds.length === 0) {
+    throw new Error("playlist 対象の clip ID がありません。");
+  }
+
+  const {
+    isAborted,
+    pollIntervalMs = 100,
+    loadSettleTimeoutMs = 3000,
+  } = options;
+
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  let rows = collectLoadedClipRows(scroller);
+
+  for (;;) {
+    const foundRows = findRowsByClipIds(rows, uniqueTargetIds);
+    if (isAborted()) {
+      return foundRows;
+    }
+    if (foundRows.length === uniqueTargetIds.length) {
+      restoreClipListHead(scroller);
+      return foundRows;
+    }
+
+    const prevCount = rows.length;
+    scrollClipListTowardBottom(scroller, "probe-intermediate");
+
+    const settleDeadline = Date.now() + loadSettleTimeoutMs;
+    for (;;) {
+      await sleep(pollIntervalMs);
+      rows = collectLoadedClipRows(scroller);
+      const nextFoundRows = findRowsByClipIds(rows, uniqueTargetIds);
+      if (isAborted()) {
+        return nextFoundRows;
+      }
+      if (nextFoundRows.length === uniqueTargetIds.length) {
+        break;
+      }
+      if (rows.length > prevCount) {
+        break;
+      }
+      if (Date.now() >= settleDeadline) {
+        const missing = listMissingClipIds(rows, uniqueTargetIds).join(", ");
+        throw new Error(
+          `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
+        );
+      }
+      scrollClipListTowardBottom(scroller, "settle-bottom");
+    }
+  }
 }
 
 /**
@@ -302,9 +432,9 @@ export async function ensureClipRowsLoaded(
  * を許し、0 件選択でも void resolve していた。これが後段の Add to Playlist dialog 検出
  * timeout という代理症状で初めて顕在化していたため、選択側で fail-loud にする。
  *
- * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は ensureClipRowsLoaded
- *   （内部の collectLoadedClipRows）が先に fail-loud throw する前提。万一 0 件で到達したら
- *   `0 >= 0` で silent resolve させない）(#881, #924)。
+ * - rows が空配列なら内部不変条件違反として即 throw（呼び出し側で row 0 件は
+ *   row loader が先に fail-loud throw する前提。万一 0 件で到達したら silent
+ *   resolve させない）(#881, #924)。
  * - 既に選択済み（Deselect clip 在）の row は idempotent に skip（click しない）。
  * - Select clip ボタンが無く、かつ未選択（Deselect も無い）row は UI 変更とみなし即 throw。
  * - 全 click 後、対象 row が deadline 内に Deselect clip へ遷移しなければ throw。
