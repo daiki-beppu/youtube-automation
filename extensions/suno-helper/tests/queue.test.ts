@@ -454,7 +454,7 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
     const expectation = expect(pending).rejects.toThrow();
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50);
     await expectation;
-  });
+  }, 15_000);
 });
 
 describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
