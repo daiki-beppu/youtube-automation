@@ -423,7 +423,7 @@ def test_malformed_request_returns_400_json_without_headers(serve):
 
     response = _send_raw_http_request(base, b"BADREQUEST\r\n")
 
-    assert response == b"{\"error\": \"Bad request syntax ('BADREQUEST')\"}"
+    assert response == b'{"error": "Bad request syntax (\'BADREQUEST\')"}'
     assert b"Access-Control-Allow-Origin:" not in response
 
 

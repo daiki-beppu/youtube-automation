@@ -700,9 +700,7 @@ def _post(url: str, body, *, headers=None):
     return urllib.request.urlopen(req)
 
 
-def _assert_json_error(
-    err: urllib.error.HTTPError, *, status: int, message: str, expected_origin: str | None
-) -> None:
+def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str, expected_origin: str | None) -> None:
     assert err.code == status
     assert err.headers.get_content_type() == "application/json"
     assert err.headers.get("Access-Control-Allow-Origin") == expected_origin
