@@ -265,6 +265,41 @@ describe("Suno popup compatibility check", () => {
     expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
   });
 
+  it("dir mode でデータ取得後に URL を変更すると再取得まで連続実行できない", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", has_prompts: true, pattern_count: 1 },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, `${BASE_URL}/changed`);
+    });
+
+    const runButton = buttonByText(container, "全パターンを連続実行");
+    expect(runButton.disabled).toBe(true);
+
+    await act(async () => {
+      runButton.click();
+    });
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
+  });
+
   it("dir mode の collection 一覧に実行可能候補が無い場合は single-file endpoint へフォールバックしない", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
