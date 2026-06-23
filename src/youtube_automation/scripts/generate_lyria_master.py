@@ -396,6 +396,7 @@ def main() -> int:
             collection_dir,
             crossfade,
             bitrate,
+            input_exts=("wav",),
             output_ext="wav",
         )
         print()

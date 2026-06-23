@@ -325,6 +325,7 @@ class TestMasterCombineDelegation:
         rc = generate_lyria_master.main()
         assert rc == 0
         assert capture["args"] == (collection, 2.5, "256k")
+        assert capture["kwargs"]["input_exts"] == ("wav",)
         assert capture["kwargs"]["output_ext"] == "wav"
 
 

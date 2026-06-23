@@ -1293,6 +1293,8 @@ class TestCliSkillConfigPinFirst:
 class TestCollectAudioInputs:
     """_collect_audio_inputs() の MP3 / M4A / WAV 入力収集。"""
 
+    INPUT_EXTS = ("mp3", "m4a", "wav")
+
     def _setup(self, tmp_path: Path) -> Path:
         music_dir = tmp_path / "02-Individual-music"
         music_dir.mkdir()
@@ -1302,21 +1304,21 @@ class TestCollectAudioInputs:
         music_dir = self._setup(tmp_path)
         (music_dir / "01-a.mp3").write_bytes(b"\x00")
         (music_dir / "02-b.mp3").write_bytes(b"\x00")
-        files = _collect_audio_inputs(music_dir)
+        files = _collect_audio_inputs(music_dir, self.INPUT_EXTS)
         assert [p.name for p in files] == ["01-a.mp3", "02-b.mp3"]
 
     def test_m4a_only(self, tmp_path):
         music_dir = self._setup(tmp_path)
         (music_dir / "01-a.m4a").write_bytes(b"\x00")
         (music_dir / "02-b.m4a").write_bytes(b"\x00")
-        files = _collect_audio_inputs(music_dir)
+        files = _collect_audio_inputs(music_dir, self.INPUT_EXTS)
         assert [p.name for p in files] == ["01-a.m4a", "02-b.m4a"]
 
     def test_wav_only(self, tmp_path):
         music_dir = self._setup(tmp_path)
         (music_dir / "01-a.wav").write_bytes(b"\x00")
         (music_dir / "02-b.wav").write_bytes(b"\x00")
-        files = _collect_audio_inputs(music_dir)
+        files = _collect_audio_inputs(music_dir, self.INPUT_EXTS)
         assert [p.name for p in files] == ["01-a.wav", "02-b.wav"]
 
     def test_mixed_formats_are_allowed_and_sorted_by_name(self, tmp_path):
@@ -1325,14 +1327,23 @@ class TestCollectAudioInputs:
         (music_dir / "01-a.mp3").write_bytes(b"\x00")
         (music_dir / "02-b.m4a").write_bytes(b"\x00")
 
-        files = _collect_audio_inputs(music_dir)
+        files = _collect_audio_inputs(music_dir, self.INPUT_EXTS)
 
         assert [p.name for p in files] == ["01-a.mp3", "02-b.m4a", "03-c.wav"]
+
+    def test_wav_only_contract_rejects_m4a_and_mp3(self, tmp_path):
+        music_dir = self._setup(tmp_path)
+        (music_dir / "01-a.wav").write_bytes(b"\x00")
+        (music_dir / "02-b.mp3").write_bytes(b"\x00")
+        (music_dir / "03-c.m4a").write_bytes(b"\x00")
+
+        with pytest.raises(ValidationError, match="許可されていない音声ファイル"):
+            _collect_audio_inputs(music_dir, ("wav",))
 
     def test_empty_raises_validation_error(self, tmp_path):
         music_dir = self._setup(tmp_path)
         with pytest.raises(ValidationError, match="見つかりません"):
-            _collect_audio_inputs(music_dir)
+            _collect_audio_inputs(music_dir, self.INPUT_EXTS)
 
 
 class TestGenerateMasterAudioInputs:
@@ -1500,3 +1511,35 @@ class TestGenerateMasterAudioInputs:
         assert cmd[idx + 1] == "pcm_s16le"
         assert "-b:a" not in cmd
         assert "-q:a" not in cmd
+
+    def test_explicit_wav_input_contract_rejects_m4a_and_mp3(self, tmp_path, monkeypatch):
+        (tmp_path / "01-master").mkdir()
+        music_dir = tmp_path / "02-Individual-music"
+        music_dir.mkdir()
+        (music_dir / "01.wav").write_bytes(b"\x00")
+        (music_dir / "02.mp3").write_bytes(b"\x00")
+        (music_dir / "03.m4a").write_bytes(b"\x00")
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with pytest.raises(ValidationError, match="許可されていない音声ファイル"):
+            run_generate_master(
+                tmp_path,
+                crossfade=1.0,
+                bitrate="192k",
+                input_exts=("wav",),
+                output_ext="wav",
+                quiet=True,
+            )
+
+    def test_unsupported_output_ext_raises_validation_error(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, ext="wav", file_count=2)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with pytest.raises(ValidationError, match="出力フォーマット"):
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                output_ext="aac",
+                quiet=True,
+            )

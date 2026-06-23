@@ -134,16 +134,37 @@ def _spin(stop_event: threading.Event, start: float, segments: int) -> None:
         i += 1
 
 
-def _collect_audio_inputs(music_dir: Path) -> list[Path]:
+def _normalize_audio_exts(input_exts: tuple[str, ...]) -> tuple[str, ...]:
+    if not input_exts:
+        supported = ", ".join(f".{e}" for e in _INPUT_AUDIO_EXTS)
+        raise ValidationError(f"入力フォーマットは {supported} のいずれかを指定してください")
+
+    normalized = tuple(ext.lower().lstrip(".") for ext in input_exts)
+    unsupported = [ext for ext in normalized if ext not in _INPUT_AUDIO_EXTS]
+    if unsupported:
+        supported = ", ".join(f".{e}" for e in _INPUT_AUDIO_EXTS)
+        raise ValidationError(f"入力フォーマットは {supported} のいずれかを指定してください: {unsupported}")
+    return tuple(dict.fromkeys(normalized))
+
+
+def _collect_audio_inputs(music_dir: Path, input_exts: tuple[str, ...]) -> list[Path]:
     """`music_dir` から対応音声ファイルを列挙し、ファイル名順で返す。"""
+    allowed_exts = _normalize_audio_exts(input_exts)
     supported_suffixes = {f".{ext}" for ext in _INPUT_AUDIO_EXTS}
-    files = sorted(
+    candidates = sorted(
         (p for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in supported_suffixes),
         key=lambda p: p.name,
     )
+    allowed_suffixes = {f".{ext}" for ext in allowed_exts}
+    rejected = [p for p in candidates if p.suffix.lower() not in allowed_suffixes]
+    if rejected:
+        allowed = ", ".join(f".{e}" for e in allowed_exts)
+        names = ", ".join(p.name for p in rejected)
+        raise ValidationError(f"この入口で許可されていない音声ファイルです ({allowed} のみ): {names}")
 
+    files = [p for p in candidates if p.suffix.lower() in allowed_suffixes]
     if not files:
-        supported = ", ".join(f".{e}" for e in _INPUT_AUDIO_EXTS)
+        supported = ", ".join(f".{e}" for e in allowed_exts)
         raise ValidationError(f"音声ファイル ({supported}) が見つかりません: {music_dir}")
     return files
 
@@ -212,6 +233,7 @@ def generate_master(
     shuffle_seed: int | None = None,
     pin_first: list[str] | None = None,
     pin_first_count: int | None = None,
+    input_exts: tuple[str, ...] = _INPUT_AUDIO_EXTS,
     output_ext: str = "mp3",
     quiet: bool = False,
 ) -> Path:
@@ -224,7 +246,7 @@ def generate_master(
     if not music_dir.is_dir():
         raise ValidationError(f"ディレクトリが見つかりません: {music_dir}")
 
-    files = _collect_audio_inputs(music_dir)
+    files = _collect_audio_inputs(music_dir, input_exts)
     audio_ext = _resolve_output_ext(output_ext)
     n = len(files)
 
