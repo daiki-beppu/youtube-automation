@@ -28,11 +28,20 @@ export type RunPayload =
       playlistExpectedClipCount?: number;
     };
 
+export interface RetryPlaylistPayload {
+  playlistName: string;
+  submittedClipIds: string[];
+  expectedClipCount: number;
+  collectionId?: string;
+}
+
 interface ProtocolMap {
   /** overlay → background → runner: 連続実行を開始する。 */
   run(payload: RunPayload): { ok: true };
   /** overlay → background → runner: 連続実行を中断する。 */
   stop(): { ok: true };
+  /** overlay → background → runner: playlist 追加のみ再実行する。entries 不要。 */
+  retryPlaylist(payload: RetryPlaylistPayload): { ok: true };
   /** runner → background → overlay: 進捗を通知する。 */
   progress(payload: ProgressPayload): void;
   /** overlay → background → runner: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */

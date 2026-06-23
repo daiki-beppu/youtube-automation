@@ -494,6 +494,39 @@ export default defineContentScript({
       return { ok: true } as const;
     });
 
+    onMessage("retryPlaylist", ({ data }) => {
+      if (running) {
+        return { ok: true } as const;
+      }
+      const { playlistName, submittedClipIds, expectedClipCount, collectionId } = data;
+      currentSnapshot = initSnapshot([], playlistName);
+      running = true;
+      aborted = false;
+      void (async () => {
+        try {
+          await addClipsToPlaylist(0, playlistName, submittedClipIds, expectedClipCount);
+          if (aborted) {
+            emitProgress({ phase: PHASE.STOPPED, total: 0 });
+            return;
+          }
+          await triggerPlaylistCaptureFailSoft(
+            () => sendMessage("requestPlaylistCapture", undefined),
+            (err) => console.warn("[suno-helper] playlist capture trigger failed:", err),
+          );
+          if (collectionId) {
+            void clearResumeStateForCollection(collectionId);
+          }
+          emitProgress({ phase: PHASE.FINISHED, total: 0 });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          emitProgress({ phase: PHASE.ERROR, total: 0, message });
+        }
+      })().finally(() => {
+        running = false;
+      });
+      return { ok: true } as const;
+    });
+
     // popup 再 open 時の進捗復元 (#852)。run 未実行は null（buildRestoreState が従来表示へフォールバック）。
     onMessage("queryProgress", () => currentSnapshot);
 

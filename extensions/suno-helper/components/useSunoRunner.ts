@@ -449,12 +449,37 @@ export function useSunoRunner(): RunnerState {
     [isRunning, entries, rangeMode, rangeStart, rangeEnd, derivedPlaylistName, selectedCollectionId, report],
   );
 
-  // バナー承認 = 1-click 自動再開 (#892 要件6)。range UI を「失敗 entry..末尾」で prefill しつつ、
-  // ローカル構築した 0-based range を引数で run へ渡してそのまま生成を再開する。React state は
-  // 次レンダ反映で closure から読めないため、prefill した state ではなく引数で range を渡す（order.md §2）。
-  // prefill 自体は再開後の UI 表示整合のために残す。run は定義後でないと参照できないためここに置く。
+  // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
+  const retryPlaylist = useCallback(async () => {
+    if (isRunning || !playlistName) {
+      return;
+    }
+    setIsRunning(true);
+    setResumeDismissed(true);
+    try {
+      await sendMessage("retryPlaylist", {
+        playlistName,
+        submittedClipIds: submittedClipIdsForResume,
+        expectedClipCount: playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length,
+        collectionId: selectedCollectionId || undefined,
+      });
+      report("playlist 追加を再実行しています…");
+    } catch (err) {
+      setIsRunning(false);
+      const message = err instanceof Error ? err.message : String(err);
+      report(formatRunError(message), true);
+    }
+  }, [isRunning, playlistName, submittedClipIdsForResume, playlistExpectedClipCountForResume, selectedCollectionId, report]);
+
+  // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
+  // entries 不要の retryPlaylist を使い、ページリロード後でも確実に playlist 追加を再実行する。
+  // それ以外（途中中断）は従来通り run で entry 生成から再開する。
   const acceptResume = useCallback(() => {
     if (!resumeBanner) {
+      return;
+    }
+    if (resumeBanner.failedIndex >= resumeBanner.total) {
+      void retryPlaylist();
       return;
     }
     const prefilled = resumeBannerRange(resumeBanner);
@@ -468,7 +493,7 @@ export function useSunoRunner(): RunnerState {
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
     );
-  }, [resumeBanner, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
+  }, [resumeBanner, retryPlaylist, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。
