@@ -31,6 +31,7 @@ import {
   GENERATE_TIMEOUT_MS,
   POLL_INTERVAL_MS,
   SETTLE_MS,
+  detectSunoViewMode,
   getInFlightClipCount,
   injectAdvancedFields,
   resolveAdvancedFields,
@@ -412,14 +413,23 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      running = true;
-      aborted = false;
-      lastSubmittedEntryIndex = -1;
       // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。range / collectionId は無し。
       const { entries, playlistName, range, collectionId, indices } = Array.isArray(data)
         ? { entries: data, playlistName: undefined, range: undefined, collectionId: undefined, indices: undefined }
         : data;
       currentSnapshot = initSnapshot(entries, playlistName);
+      if (detectSunoViewMode() === "unknown") {
+        emitProgress({
+          phase: PHASE.ERROR,
+          total: entries.length,
+          message:
+            "Suno の表示ビューを検出できません。List / Waveform / Grid のいずれかに切り替えてから再実行してください。",
+        });
+        return { ok: true } as const;
+      }
+      running = true;
+      aborted = false;
+      lastSubmittedEntryIndex = -1;
       // run 中のみ active feed poll で clip status を追う (#948)。passive 観測が生きていれば
       // poller は stale 判定で自発的に黙る（intervalMs ごとの no-op tick のみ）。
       feedPoller.start();
