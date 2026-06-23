@@ -581,16 +581,14 @@ def create_server(
             self.send_header("Content-Length", str(len(body)))
             self._send_cors(origin)
             self.end_headers()
-            # HEAD リクエストおよび body 禁止ステータス (1xx, 204, 304) では body を書かない
-            if self.command != "HEAD" and status >= 200 and status not in (204, 304):
+            can_write_body = self.command != "HEAD" and status >= 200 and status not in (204, 205, 304)
+            if can_write_body:
                 self.wfile.write(body)
 
         def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
             resolved_message = message
             if resolved_message is None:
-                if code not in self.responses:
-                    raise ValueError(f"Unsupported HTTP status code: {code}")
-                resolved_message = self.responses[code][0]
+                resolved_message = self.responses.get(code, ("???", "???"))[0]
             self._send_json_error(code, resolved_message)
 
         def do_OPTIONS(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)

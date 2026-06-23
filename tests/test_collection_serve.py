@@ -443,11 +443,43 @@ def test_head_error_returns_no_body(serve):
         urllib.request.urlopen(req)
 
     err = exc_info.value
-    assert err.code == 501  # do_HEAD 未実装 → 501 Unsupported method
+    assert err.code == 501
     assert err.headers.get_content_type() == "application/json"
     assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
-    # HEAD では body が空であること
     assert err.read() == b""
+
+
+def test_send_error_unknown_status_returns_json_with_standard_fallback(tmp_path):
+    """Given 標準 HTTP status 表にない code を返す handler
+    When send_error override が呼ばれる
+    Then BaseHTTPRequestHandler と同じ fallback message を JSON + CORS で返す。
+    """
+    json_path = tmp_path / "suno-prompts.json"
+    json_path.write_text("[]", encoding="utf-8")
+    server = create_server(0, None, prompts_path=json_path, collection_dir=tmp_path, distrokid=None)
+
+    class UnknownStatusHandler(server.RequestHandlerClass):
+        def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)
+            self.send_error(599)
+
+    server.RequestHandlerClass = UnknownStatusHandler
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://localhost:{server.server_address[1]}"
+    req = urllib.request.Request(f"{base}/unknown", headers={"Origin": "https://suno.com"})
+
+    try:
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req)
+
+        err = exc_info.value
+        assert err.code == 599
+        assert err.headers.get_content_type() == "application/json"
+        assert err.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+        assert _read_error_json(err) == {"error": "???"}
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
 
 
 # ---------------------------------------------------------------------------
