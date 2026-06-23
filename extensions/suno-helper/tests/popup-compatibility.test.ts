@@ -10,6 +10,16 @@ import { App } from "../components/App";
 const BASE_URL = "http://localhost:7873";
 const MANIFEST_VERSION = "0.1.9";
 
+const messagingMocks = vi.hoisted(() => ({
+  onMessage: vi.fn(() => () => undefined),
+  sendMessage: vi.fn(),
+}));
+
+const storageMocks = vi.hoisted(() => ({
+  getValue: vi.fn(async () => ""),
+  setValue: vi.fn(async () => undefined),
+}));
+
 vi.mock("wxt/browser", () => ({
   browser: {
     runtime: {
@@ -19,18 +29,17 @@ vi.mock("wxt/browser", () => ({
 }));
 
 vi.mock("../lib/storage", () => ({
-  serverUrlItem: {
-    getValue: vi.fn(async () => ""),
-    setValue: vi.fn(async () => undefined),
-  },
+  serverUrlItem: storageMocks,
 }));
 
-vi.mock("../lib/messaging", () => ({
-  onMessage: vi.fn(() => () => undefined),
-  sendMessage: vi.fn(async () => {
+vi.mock("../lib/messaging", () => messagingMocks);
+
+function defaultSendMessage(message: string): Promise<unknown> {
+  if (message === "queryProgress") {
     throw new Error("runner unavailable");
-  }),
-}));
+  }
+  return Promise.resolve({ ok: true });
+}
 
 vi.mock("../lib/preset-state", async () => {
   const actual = await vi.importActual<typeof import("../lib/preset-state")>("../lib/preset-state");
@@ -66,6 +75,25 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function setSelectValue(select: HTMLSelectElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+  if (!setter) {
+    throw new Error("HTMLSelectElement.value setter is unavailable");
+  }
+  setter.call(select, value);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+    candidate.textContent?.includes(text),
+  );
+  if (!button) {
+    throw new Error(`button not found: ${text}`);
+  }
+  return button;
+}
+
 async function waitFor(assertion: () => void): Promise<void> {
   for (let i = 0; i < 20; i += 1) {
     try {
@@ -92,6 +120,7 @@ describe("Suno popup compatibility check", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     fetchMock = vi.fn();
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => {
@@ -106,30 +135,13 @@ describe("Suno popup compatibility check", () => {
     container.remove();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    storageMocks.getValue.mockResolvedValue("");
+    storageMocks.setValue.mockResolvedValue(undefined);
   });
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: "0.2.0" }))
-      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
-
-    await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("button")!.click();
-    });
-
-    await waitFor(() => {
-      expect(container.textContent).toContain(`拡張を更新してください（拡張 ${MANIFEST_VERSION}`);
-      expect(container.textContent).toContain("1 パターンを取得しました。");
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/suno/prompts.json`);
-  });
-
-  it("旧サーバーの /version 404 は警告なしで prompts 取得を継続する", async () => {
-    fetchMock
       .mockResolvedValueOnce(jsonResponse(404, {}))
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
@@ -137,7 +149,29 @@ describe("Suno popup compatibility check", () => {
       setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
     });
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("button")!.click();
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(`拡張を更新してください（拡張 ${MANIFEST_VERSION}`);
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/suno/prompts.json`);
+  });
+
+  it("旧サーバーの /version 404 は警告なしで prompts 取得を継続する", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -145,6 +179,197 @@ describe("Suno popup compatibility check", () => {
     });
     expect(container.textContent).not.toContain("拡張を更新してください");
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/suno/prompts.json`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/suno/prompts.json`);
+  });
+
+  it("dir mode で URL 入力後にデータ取得すると collection endpoint の entries を run payload に渡す", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", has_prompts: true, pattern_count: 1 },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("連続実行を開始しました。");
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `${BASE_URL}/collections/20260601-clm-theme-a-collection/suno/prompts.json`,
+    );
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
+      entries,
+      playlistName: "clm | theme-a",
+      range: undefined,
+      collectionId: "20260601-clm-theme-a-collection",
+      indices: undefined,
+      submittedClipIds: undefined,
+      playlistExpectedClipCount: undefined,
+    });
+  });
+
+  it("dir mode でデータ取得後に collection を変更すると再取得まで連続実行できない", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", has_prompts: true, pattern_count: 1 },
+          { id: "20260602-clm-theme-b-collection", name: "theme-b-collection", has_prompts: true, pattern_count: 1 },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, "20260602-clm-theme-b-collection");
+    });
+
+    const runButton = buttonByText(container, "全パターンを連続実行");
+    expect(runButton.disabled).toBe(true);
+
+    await act(async () => {
+      runButton.click();
+    });
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
+  });
+
+  it("dir mode でデータ取得後に URL を変更すると再取得まで連続実行できない", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", has_prompts: true, pattern_count: 1 },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, `${BASE_URL}/changed`);
+    });
+
+    const runButton = buttonByText(container, "全パターンを連続実行");
+    expect(runButton.disabled).toBe(true);
+
+    await act(async () => {
+      runButton.click();
+    });
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
+  });
+
+  it("dir mode の collection 一覧に実行可能候補が無い場合は single-file endpoint へフォールバックしない", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(200, []));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("取得失敗: prompts を取得できる collection がありません。");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+  });
+
+  it("popup 起動時の collection 一覧同期では全件 mapped を取得失敗にしない", async () => {
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    fetchMock.mockReset();
+    storageMocks.getValue.mockResolvedValue(BASE_URL);
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, [
+        {
+          id: "20260601-clm-theme-a-collection",
+          name: "theme-a-collection",
+          has_prompts: true,
+          pattern_count: 1,
+          mapped: true,
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("未マッピング collection はありません。");
+    });
+    expect(container.textContent).not.toContain("コレクション一覧取得失敗");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/collections`);
+  });
+
+  it("CORS なし 404 (TypeError) で /collections が reject されても single-file mode へ fallback する", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/suno/prompts.json`);
   });
 });

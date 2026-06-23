@@ -690,6 +690,9 @@ def create_server(
             if self.path.startswith(DISTROKID_ASSETS_PREFIX):
                 self._serve_distrokid_asset()
                 return
+            if self.path == COLLECTIONS_ROUTE:
+                self._send_json_error(404, "Not Found")
+                return
             self.send_error(404, "Not Found")
 
         def _serve_dir_mode(self) -> None:
@@ -705,9 +708,13 @@ def create_server(
                 cid = self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)]
                 resolved = resolve_collection_prompts_path(collections_root, cid)
                 if resolved is None or not resolved.is_file():
-                    self.send_error(404, "Not Found")
+                    self._send_json_error(404, "Not Found")
                     return
                 self._send_bytes(resolved.read_bytes(), "application/json; charset=utf-8")
+                return
+
+            if self.path == SUNO_PROMPTS_ROUTE:
+                self._send_json_error(404, "Not Found")
                 return
 
             # --- dir mode DistroKid エンドポイント群（#934）---
