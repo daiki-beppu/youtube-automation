@@ -308,6 +308,92 @@ function setupAlternateLazyLoader(viewport: HTMLElement, batchSize: number): voi
   });
 }
 
+function setupStepwiseLazyLoader(
+  scroller: HTMLElement,
+  batchSize: number,
+  dimensions: { scrollHeight: number; clientHeight: number },
+  opts: { maxBatches?: number } = {},
+): { scrollPositions: number[] } {
+  let scrollHeight = dimensions.scrollHeight;
+  let scrollTop = 0;
+  const { clientHeight } = dimensions;
+  const scrollPositions: number[] = [];
+  const maxBatches = opts.maxBatches ?? 1;
+
+  Object.defineProperty(scroller, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(scroller, "clientHeight", {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (v: number) => {
+      scrollTop = v;
+    },
+  });
+
+  let loadedBatches = 0;
+  scroller.addEventListener("scroll", () => {
+    scrollPositions.push(scrollTop);
+    const maxScrollTop = scrollHeight - clientHeight;
+    if (loadedBatches >= maxBatches || scrollTop <= 0 || scrollTop >= maxScrollTop) {
+      return;
+    }
+    loadedBatches += 1;
+    for (let i = 0; i < batchSize; i++) {
+      addClipRow();
+    }
+    scrollHeight += batchSize * 60;
+  });
+  return { scrollPositions };
+}
+
+function setupBottomAfterIntermediateLazyLoader(
+  scroller: HTMLElement,
+  batchSize: number,
+  dimensions: { scrollHeight: number; clientHeight: number },
+): { scrollPositions: number[] } {
+  let scrollHeight = dimensions.scrollHeight;
+  let scrollTop = 0;
+  const { clientHeight } = dimensions;
+  const scrollPositions: number[] = [];
+
+  Object.defineProperty(scroller, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(scroller, "clientHeight", {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (v: number) => {
+      scrollTop = v;
+    },
+  });
+
+  let loaded = false;
+  scroller.addEventListener("scroll", () => {
+    scrollPositions.push(scrollTop);
+    const maxScrollTop = scrollHeight - clientHeight;
+    if (loaded || scrollTop < maxScrollTop) {
+      return;
+    }
+    loaded = true;
+    for (let i = 0; i < batchSize; i++) {
+      addClipRow();
+    }
+    scrollHeight += batchSize * 60;
+  });
+  return { scrollPositions };
+}
+
 describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -445,6 +531,124 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
     const result = await pending;
 
     expect(result).toHaveLength(3);
+  });
+
+  it("Given bottom jump では増えない stepwise loader When ensureClipRowsLoaded Then 複数バッチで 23 件から 30 件までロードする", async () => {
+    Array.from({ length: 23 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupStepwiseLazyLoader(
+      scroller,
+      5,
+      {
+        scrollHeight: 1000,
+        clientHeight: 200,
+      },
+      { maxBatches: 2 },
+    );
+
+    const pending = ensureClipRowsLoaded(30, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(30);
+    expect(scrollPositions).not.toContain(1100);
+  });
+
+  it("Given 最大スクロール量が step 以下 When ensureClipRowsLoaded Then 初回から末尾に飛ばず中間 scroll event を発火する", async () => {
+    Array.from({ length: 23 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupStepwiseLazyLoader(scroller, 5, {
+      scrollHeight: 700,
+      clientHeight: 200,
+    });
+
+    const pending = ensureClipRowsLoaded(28, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(28);
+    expect(scrollPositions[0]).toBeGreaterThan(0);
+    expect(scrollPositions[0]).toBeLessThan(500);
+  });
+
+  it("Given 初回中間では増えず末尾で増える loader When ensureClipRowsLoaded Then 2 回目以降に末尾へ到達してロードする", async () => {
+    Array.from({ length: 23 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupBottomAfterIntermediateLazyLoader(scroller, 5, {
+      scrollHeight: 700,
+      clientHeight: 200,
+    });
+
+    const pending = ensureClipRowsLoaded(28, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toHaveLength(28);
+    expect(scrollPositions[0]).toBeGreaterThan(0);
+    expect(scrollPositions[0]).toBeLessThan(500);
+    expect(scrollPositions).toContain(500);
+  });
+
+  it("Given bottom jump では増えない loader When playlist 追加フロー Then 本番 API で 8 件選択して dialog close まで到達する", async () => {
+    Array.from({ length: 4 }, () => addClipRow().row);
+    const scroller = getOrCreateScroller();
+    const { scrollPositions } = setupStepwiseLazyLoader(scroller, 4, {
+      scrollHeight: 240,
+      clientHeight: 200,
+    });
+    let submittedPlaylistName = "";
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "p" || (!e.metaKey && !e.ctrlKey)) {
+        return;
+      }
+      const { dialog, input, create } = addDialogWithForm();
+      create.addEventListener("click", () => {
+        submittedPlaylistName = input.value;
+        dialog.remove();
+      });
+    });
+
+    const pendingRows = ensureClipRowsLoaded(8, {
+      isAborted: () => false,
+      pollIntervalMs: 50,
+      loadSettleTimeoutMs: 1000,
+    });
+    await vi.runAllTimersAsync();
+    const rows = await pendingRows;
+    for (const row of rows) {
+      const button = row.querySelector<HTMLButtonElement>(SELECT_CLIP_BUTTON_SELECTOR);
+      if (!button) {
+        throw new Error("test fixture must include Select clip button");
+      }
+      selectOnClick(button);
+    }
+
+    await multiSelectClips(rows);
+    const dialog = await openAddToPlaylistDialogViaCmdP();
+    await fillPlaylistNameAndCreate(dialog, "test-lazy-load-playlist");
+    await waitForPlaylistDialogClose({
+      isAborted: () => false,
+      pollIntervalMs: 10,
+      timeoutMs: 1000,
+    });
+
+    expect(rows).toHaveLength(8);
+    expect(document.querySelectorAll(DESELECT_CLIP_BUTTON_SELECTOR)).toHaveLength(8);
+    expect(submittedPlaylistName).toBe("test-lazy-load-playlist");
+    expect(scrollPositions[0]).toBeGreaterThan(0);
+    expect(scrollPositions[0]).toBeLessThan(40);
   });
 
   it("Given 末尾到達（ロードが増えない）で不足 When ensureClipRowsLoaded Then X/Y 件を含むメッセージで throw（silent slice 廃止）", async () => {

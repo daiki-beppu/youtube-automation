@@ -41,6 +41,9 @@ const CLIP_SELECT_VERIFY_POLL_MS = 50;
 const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 /** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924)。 */
 const CLIP_SELECT_VERIFY_MS_PER_ROW = 50;
+/** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
+const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
+type ClipListScrollIntent = "probe-intermediate" | "settle-bottom";
 
 /**
  * 可視な Add to Playlist dialog を 1 つ探す（OneTrust cookie consent dialog 除外フィルタ込み）。
@@ -175,6 +178,38 @@ function collectLoadedClipRows(scroller: HTMLElement): HTMLElement[] {
   return rows;
 }
 
+function scrollClipListTowardBottom(
+  scroller: HTMLElement,
+  intent: ClipListScrollIntent,
+): void {
+  const maxScrollTop = Math.max(
+    0,
+    scroller.scrollHeight - scroller.clientHeight,
+  );
+  const currentScrollTop = Math.max(
+    0,
+    Math.min(scroller.scrollTop, maxScrollTop),
+  );
+  const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+  const nextScrollTop = currentScrollTop + step;
+  if (maxScrollTop === 0) {
+    scroller.scrollTop = 0;
+  } else if (nextScrollTop >= maxScrollTop && intent === "probe-intermediate") {
+    scroller.scrollTop =
+      currentScrollTop + (maxScrollTop - currentScrollTop) / 2;
+  } else if (nextScrollTop >= maxScrollTop) {
+    scroller.scrollTop = maxScrollTop;
+  } else {
+    scroller.scrollTop = nextScrollTop;
+  }
+  scroller.dispatchEvent(new Event("scroll"));
+}
+
+function restoreClipListHead(scroller: HTMLElement): void {
+  scroller.scrollTop = 0;
+  scroller.dispatchEvent(new Event("scroll"));
+}
+
 export interface EnsureClipRowsLoadedOptions {
   /** 中断フラグ。true で即 return（throw しない。呼び出し側が aborted を再チェック）。 */
   isAborted: () => boolean;
@@ -185,19 +220,14 @@ export interface EnsureClipRowsLoadedOptions {
 }
 
 /**
- * 遅延ロードの clip list を底方向へスクロールし、count 件の row がロードされるまで進める (#924)。
+ * 遅延ロードの clip list を底方向へ段階スクロールし、count 件の row がロードされるまで進める (#924)。
  * 戻り値はロード済み row の先頭 count 件（DOM 順 = 直近生成が先頭）。
  * リスト末尾（追加ロードが止まる）まで進めても不足する場合は
  * 「X/Y 件」を含むメッセージで fail-loud throw する（従来の silent slice を廃止）。
  *
- * 実機検証で確認した遅延ロードの特性（#924）:
- *   - clip list（`.clip-browser-list-scroller`）は無限スクロール実装。
- *     初期ロードは 40 row のみ。`scroller.scrollTop = scroller.scrollHeight` +
- *     `scroller.dispatchEvent(new Event("scroll"))` で +20 row ずつ追加ロードされる
- *     （40→60→80→100 を実測）。
- *   - ロード済み row は unmount されない（仮想化ではない）。row は `position: static` の
- *     通常フロー配置で、画面外でも `isVisible()` を通り click 可能。
- *   - scrollTop 代入 + scroll event dispatch でロードが走ることを実機確認済み。
+ * 現在の Suno では bottom jump がロード条件から外れることがあるため、まず中間位置の
+ * scroll event で追加ロードを促す。増えなければ同じ待機内で末尾到達も試し、
+ * 中間位置だけに反応する loader と末尾だけに反応する loader の両方を扱う。
  *
  * fail-loud (#881): コンテナ不在または row 0 件は即 throw する（空配列を返さない）。
  * 追加ロードが止まった（リスト末尾）のに count に届かない場合も fail-loud throw する
@@ -230,15 +260,12 @@ export async function ensureClipRowsLoaded(
     // 十分な row がロードされた: scrollTop を 0 に戻して先頭 count 件を返す
     // （multi-select や Cmd+P 操作を初期表示位置で行うため、スクロールを元に戻す）
     if (rows.length >= count) {
-      scroller.scrollTop = 0;
-      scroller.dispatchEvent(new Event("scroll"));
+      restoreClipListHead(scroller);
       return rows.slice(0, count);
     }
 
-    // 不足: スクロールで追加ロードを促す
     const prevCount = rows.length;
-    scroller.scrollTop = scroller.scrollHeight;
-    scroller.dispatchEvent(new Event("scroll"));
+    scrollClipListTowardBottom(scroller, "probe-intermediate");
 
     // 追加 row のロードを poll で待つ
     const settleDeadline = Date.now() + loadSettleTimeoutMs;
@@ -260,6 +287,7 @@ export async function ensureClipRowsLoaded(
           `clip row が ${rows.length}/${count} 件しかロードできませんでした。生成済み clip が不足しているか、Suno の UI 変更の可能性があります。`,
         );
       }
+      scrollClipListTowardBottom(scroller, "settle-bottom");
     }
   }
 }
