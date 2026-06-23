@@ -92,9 +92,7 @@ def fmt_timestamp(seconds: int) -> str:
 
 
 def collect_timestamp_audio_files(music_dir: Path) -> list[Path]:
-    files = sorted(
-        p for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in TIMESTAMP_AUDIO_EXTS
-    )
+    files = sorted(p for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in TIMESTAMP_AUDIO_EXTS)
     if not files:
         supported = ", ".join(TIMESTAMP_AUDIO_EXTS)
         raise RuntimeError(f"no supported audio files ({supported}) in {music_dir}")

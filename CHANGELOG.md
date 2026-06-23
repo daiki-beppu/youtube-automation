@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `feat(generate-master)`: m4a/wav 入力に対応。Suno 一括ダウンロードで取得した非 MP3 ファイルをマスター音源生成に直接利用可能に（#1147）
+
 ### Fixed
 
 - `fix(collection-serve)`: `send_error()` 26 箇所を CORS 付き `_send_json_error()` に統一し、suno-helper 拡張が CORS ポリシーでブロックされる問題を修正（#1209）

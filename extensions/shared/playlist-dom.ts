@@ -90,7 +90,9 @@ const CLIP_ROW_NOT_FOUND_MESSAGE =
  * 実 clip card を区別するための構造シグナル。Emotion class には依存しない。
  */
 function hasClipContent(el: HTMLElement): boolean {
-  return el.querySelector("img") !== null || el.querySelector("a[href]") !== null;
+  return (
+    el.querySelector("img") !== null || el.querySelector("a[href]") !== null
+  );
 }
 
 function resolveClipRowFromSelectButton(
