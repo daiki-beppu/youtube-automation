@@ -33,6 +33,7 @@ async function loadContentScriptWithPlaylistRows(
 
   const handlers = new Map<string, RunHandler>();
   const progressMessages: ProgressMessage[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const ensureClipRowsLoadedByIdsMock = vi.fn((_ids: string[], _options: unknown) => {
     if (playlistRowsResult instanceof Error) {
       return Promise.reject(playlistRowsResult);
