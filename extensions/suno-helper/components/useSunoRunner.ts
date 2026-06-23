@@ -84,9 +84,7 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
-type PromptSource =
-  | { kind: "collection"; collectionId: string | null }
-  | { kind: "single-file" };
+type PromptSource = { kind: "collection"; collectionId: string | null } | { kind: "single-file" };
 
 async function fetchCollectionEntries(baseUrl: string, collectionId: string | null): Promise<PromptEntry[]> {
   if (collectionId === null) {

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(suno-helper)`: dir mode で collection 切り替え・URL 変更時に前回の prompts が残留する問題を修正（#1210）。`syncCollections` で最新 collection 一覧を再取得してから prompts を fetch するフローに変更し、サーバー側 `/collections` `/suno-prompts.json` 直アクセスに JSON 404 レスポンスを返すよう修正。`resolvePromptCollectionId` を shared に新設
+
 ## [5.5.11] - 2026-06-22
 
 ### Changed
