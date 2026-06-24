@@ -48,7 +48,14 @@ class GeminiImageProvider:
                 ref_bytes = ref.read_bytes()
                 mime = "image/jpeg" if ref.suffix.lower() in (".jpg", ".jpeg") else "image/png"
                 contents.append(types.Part.from_bytes(data=ref_bytes, mime_type=mime))
-            contents.append(req.prompt)
+            variation_guard = (
+                "IMPORTANT: The reference image(s) above are for style and composition guidance ONLY. "
+                "Create an ORIGINAL image inspired by the reference — do NOT reproduce, copy, or closely "
+                "replicate the reference. Change the subject, colors, specific elements, and details "
+                "while keeping the general mood and layout style. The output must be clearly distinct "
+                "from the reference.\n\n"
+            )
+            contents.append(variation_guard + req.prompt)
         else:
             contents = [req.prompt]
 
