@@ -270,6 +270,25 @@ class TestTagsComposition:
         # Then
         assert len(meta["tags"]) <= 50
 
+    def test_tags_quoted_values_are_normalized(self, tmp_path):
+        """回帰 #1096: config のタグにダブルクォートが含まれていても除去される."""
+        from dataclasses import replace as dreplace
+
+        col = _make_collection(tmp_path, "20250907-live-8bit-battle-music", theme="battle")
+        gen = _make_generator(collection_path=col)
+        # base タグにダブルクォートを混入させる
+        quoted_base = ['"chiptune music"', '"8-bit music"', "RPG music"]
+        new_tags = dreplace(gen.config.content.tags, base=quoted_base)
+        new_content = dreplace(gen.config.content, tags=new_tags)
+        gen.config = dreplace(gen.config, content=new_content)
+
+        meta = gen.generate_shorts_metadata("https://youtu.be/abc")
+
+        # ダブルクォートが含まれないことを全タグで検証
+        for tag in meta["tags"]:
+            assert not tag.startswith('"'), f"tag starts with quote: {tag!r}"
+            assert not tag.endswith('"'), f"tag ends with quote: {tag!r}"
+
     def test_tags_order_preserved_shorts_first_then_base_then_themes(self, tmp_path):
         """plan 要件 #4-a/b/c 合成順序: ["Shorts"] + base + themes.get(theme, [])."""
         # Given

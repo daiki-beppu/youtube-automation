@@ -956,6 +956,22 @@ def test_tags_for_collection_matches_theme(tmp_path, monkeypatch):
     assert len(tags) <= 50
 
 
+def test_tags_for_collection_strips_quotes(tmp_path, monkeypatch):
+    """#1096: content.json にクォート付きタグがあっても除去されること."""
+    sections = _minimal_sections()
+    sections["content.json"]["tags"]["base"] = ['"Paris Café Jazz"', "clean tag", '"French Café"']
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+    tags = config.content.tags.for_collection("test-collection")
+
+    assert "Paris Café Jazz" in tags
+    assert "clean tag" in tags
+    assert "French Café" in tags
+    assert not any('"' in t for t in tags)
+
+
 def test_title_activity_for_theme_fallback(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["content.json"]["title"]["default_activity"] = "Chill"
