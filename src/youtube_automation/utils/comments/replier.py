@@ -431,8 +431,23 @@ class CommentReplier:
             "reply_text": reply_text,
         }
         self._history.mark_replied(comment.comment_id, metadata)
-        # 途中断絶時の二重返信を防ぐため、返信成功ごとに履歴を永続化する
-        self._history.save()
+        # insert→save 間で save が失敗すると次回実行で二重返信するため、リトライで確実に永続化 (#382)
+        for save_attempt in range(3):
+            try:
+                self._history.save()
+                break
+            except OSError as e:
+                logger.warning(
+                    "履歴保存リトライ %d/3 (comment_id=%s): %s",
+                    save_attempt + 1,
+                    comment.comment_id,
+                    e,
+                )
+        else:
+            logger.error(
+                "⚠️  履歴保存が 3 回失敗 (comment_id=%s) — 次回実行で二重返信の可能性あり",
+                comment.comment_id,
+            )
         plan.replied.append({"comment_id": comment.comment_id, **metadata})
         return True
 
