@@ -190,6 +190,70 @@ class TestReferenceImagesForwarding:
         assert len(contents) >= 2
 
 
+# ---------- Variation Guard ----------
+
+
+class TestVariationGuard:
+    """variation_guard_enabled の ON/OFF でプロンプト先頭が変わることを検証する。"""
+
+    def test_variation_guard_prepended_when_references_provided(self, tmp_path, request_factory, patched_genai_client):
+        """参照画像あり + variation_guard_enabled=True → プロンプトに guard テキストが付く。"""
+        # Given
+        ref_path = tmp_path / "ref.png"
+        ref_path.write_bytes(_png_bytes())
+        config = GeminiConfig(model="gemini-3.1-flash-image-preview", variation_guard_enabled=True)
+        provider = GeminiImageProvider(config)
+        req = request_factory(prompt="a calm ocean sunset", references=[ref_path])
+        response = _fake_response([_fake_image_part(_png_bytes())])
+
+        # When
+        with patched_genai_client(response) as client:
+            provider.generate(req)
+
+        # Then: 最後の contents 要素（プロンプト文字列）が "IMPORTANT:" で始まる
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        prompt_part = contents[-1]
+        assert isinstance(prompt_part, str)
+        assert prompt_part.startswith("IMPORTANT:")
+        assert "a calm ocean sunset" in prompt_part
+
+    def test_variation_guard_skipped_when_disabled(self, tmp_path, request_factory, patched_genai_client):
+        """参照画像あり + variation_guard_enabled=False → プロンプトそのまま。"""
+        # Given
+        ref_path = tmp_path / "ref.png"
+        ref_path.write_bytes(_png_bytes())
+        config = GeminiConfig(model="gemini-3.1-flash-image-preview", variation_guard_enabled=False)
+        provider = GeminiImageProvider(config)
+        req = request_factory(prompt="a calm ocean sunset", references=[ref_path])
+        response = _fake_response([_fake_image_part(_png_bytes())])
+
+        # When
+        with patched_genai_client(response) as client:
+            provider.generate(req)
+
+        # Then: プロンプトがそのまま（guard テキストなし）
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        prompt_part = contents[-1]
+        assert isinstance(prompt_part, str)
+        assert prompt_part == "a calm ocean sunset"
+
+    def test_no_references_no_guard_regardless_of_config(self, request_factory, patched_genai_client):
+        """参照画像なし → variation_guard_enabled の値にかかわらず guard は付かない。"""
+        # Given
+        config = GeminiConfig(model="gemini-3.1-flash-image-preview", variation_guard_enabled=True)
+        provider = GeminiImageProvider(config)
+        req = request_factory(prompt="a calm ocean sunset", references=[])
+        response = _fake_response([_fake_image_part(_png_bytes())])
+
+        # When
+        with patched_genai_client(response) as client:
+            provider.generate(req)
+
+        # Then: プロンプトがそのまま
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert contents == ["a calm ocean sunset"]
+
+
 # ---------- リトライ・エラーハンドリング ----------
 
 
