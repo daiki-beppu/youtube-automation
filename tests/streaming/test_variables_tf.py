@@ -155,7 +155,10 @@ class TestVariablesTfNullResource:
             r"condition\s*=\s*var\.stream_hours\s*>=\s*0",
             validation,
         ), "stream_hours.validation.condition が var.stream_hours >= 0 でない"
-        assert re.search(r"error_message\s*=\s*\"", validation), "stream_hours.validation.error_message が宣言されていない"
+        assert re.search(
+            r"error_message\s*=\s*\"",
+            validation,
+        ), "stream_hours.validation.error_message が宣言されていない"
 
     def test_break_hours_is_number_with_zero_default(self):
         """Given variables.tf
@@ -177,7 +180,10 @@ class TestVariablesTfNullResource:
             r"condition\s*=\s*var\.break_hours\s*>=\s*0",
             validation,
         ), "break_hours.validation.condition が var.break_hours >= 0 でない"
-        assert re.search(r"error_message\s*=\s*\"", validation), "break_hours.validation.error_message が宣言されていない"
+        assert re.search(
+            r"error_message\s*=\s*\"",
+            validation,
+        ), "break_hours.validation.error_message が宣言されていない"
 
     def test_stream_key_is_sensitive_string_with_no_default(self):
         """Given variables.tf
