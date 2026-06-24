@@ -54,6 +54,8 @@ export function phaseToStatus(
     case PHASE.ADDING_TO_PLAYLIST:
       // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
       return { text: `Playlist '${message ?? ""}' へ追加中…` };
+    case PHASE.DOWNLOADING:
+      return { text: "Suno からダウンロード中…" };
     case PHASE.FINISHED:
       // 失敗スキップ付き完走 (#948) は message に失敗一覧が載る。無ければ従来文言。
       return message

@@ -26,6 +26,14 @@ export const COLLECTIONS_ROUTE = "/collections";
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PLAYLISTS_ROUTE。 */
 export const PLAYLISTS_CAPTURE_ROUTE = "/suno/playlists";
 
+export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
+
+export const DOWNLOAD_FORMAT_KEY = "sunoDownloadFormat" as const;
+
+export const DOWNLOAD_FORMAT_DEFAULT = "mp3" as const;
+
+export type DownloadFormat = "mp3" | "m4a" | "wav";
+
 /** yt-collection-serve の互換確認サブパス（#1023）。
  * SSOT: src/youtube_automation/scripts/collection_serve.py VERSION_ROUTE。 */
 export const VERSION_ROUTE = "/version";
@@ -33,6 +41,10 @@ export const VERSION_ROUTE = "/version";
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
   return `${COLLECTIONS_ROUTE}/${id}${PROMPTS_ROUTE}`;
+}
+
+export function collectionDownloadedRoute(id: string): string {
+  return DOWNLOADED_ROUTE.replace(":id", id);
 }
 
 /** Suno 同時生成キューの上限リクエスト数 (#816、実 DOM 検証: 同時 10 リクエスト)。 */
@@ -229,6 +241,7 @@ export const SERVER_HOST_PERMISSIONS = [
 export const PHASE = {
   INJECTING: "injecting",
   GENERATING: "generating",
+  DOWNLOADING: "downloading",
   WAITING_SLOT: "waiting-slot",
   // captcha challenge の解消（自動 verify or 手動解決）待ち。即 fail-loud せず待機して自動続行する。非終了 phase。
   WAITING_CAPTCHA: "waiting-captcha",

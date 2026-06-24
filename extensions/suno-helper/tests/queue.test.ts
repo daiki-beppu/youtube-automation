@@ -207,10 +207,10 @@ describe("detectSunoViewMode: Suno の現在ビューを検出する", () => {
     expect(detectSunoViewMode()).toBe("unknown");
   });
 
-  it("Given 状態属性のない単独 Grid button がある When 検出する Then unknown を返す", () => {
+  it("Given 状態属性のない単独 Grid button がある When 検出する Then grid を返す", () => {
     makeViewButton("Grid");
 
-    expect(detectSunoViewMode()).toBe("unknown");
+    expect(detectSunoViewMode()).toBe("grid");
   });
 });
 

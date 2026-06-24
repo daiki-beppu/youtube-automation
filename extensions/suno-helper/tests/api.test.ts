@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   type CollectionSummary,
+  type DownloadedPayload,
   type PromptEntry,
   checkServerCompatibility,
   fetchCollections,
@@ -16,6 +17,7 @@ import {
   fetchServerVersion,
   formatCompatibilityWarning,
   pickInitialCollectionId,
+  postDownloaded,
   resolvePromptCollectionId,
   resolveCompatibilityWarning,
 } from "../../shared/api";
@@ -23,6 +25,7 @@ import {
 const BASE_URL = "http://localhost:7873";
 const PROMPTS_URL = `${BASE_URL}/suno/prompts.json`;
 const COLLECTIONS_URL = `${BASE_URL}/collections`;
+const DOWNLOADED_URL = `${BASE_URL}/collections/20260601-clm-aaa-collection/downloaded`;
 const VERSION_URL = `${BASE_URL}/version`;
 
 function mockFetch(impl: () => Partial<Response>) {
@@ -282,6 +285,65 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
     mockFetch(() => ({ ok: true, status: 200, json: async () => [] }));
 
     await expect(fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection")).rejects.toThrow();
+  });
+});
+
+describe("shared/api postDownloaded: POST 組み立て (#1215)", () => {
+  it("Given collectionId と payload When POST する Then `/collections/<id>/downloaded` へ JSON body で要求する", async () => {
+    const payload: DownloadedPayload = {
+      file_count: 12,
+      format: "mp3",
+      suno_playlist_url: "https://suno.com/playlist/u1",
+    };
+    const fetchFn = mockFetch(() => ({ ok: true, status: 204, json: async () => ({}) }));
+
+    await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", payload);
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(DOWNLOADED_URL);
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it.each(["mp3", "m4a", "wav"] as const)(
+    "Given format=%s When payload を型付けする Then DownloadedPayload として扱える",
+    (format) => {
+      const payload: DownloadedPayload = {
+        file_count: 1,
+        format,
+        suno_playlist_url: "https://suno.com/playlist/u1",
+      };
+
+      expect(payload.format).toBe(format);
+    },
+  );
+});
+
+describe("shared/api postDownloaded: 正常系", () => {
+  it("Given 2xx response When POST する Then void で resolve する", async () => {
+    const payload: DownloadedPayload = {
+      file_count: 2,
+      format: "wav",
+      suno_playlist_url: "https://suno.com/playlist/u2",
+    };
+    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ ignored: true }) }));
+
+    await expect(postDownloaded(BASE_URL, "20260601-clm-aaa-collection", payload)).resolves.toBeUndefined();
+  });
+});
+
+describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
+  it("Given 404 When POST する Then ステータスを含めて throw する", async () => {
+    const payload: DownloadedPayload = {
+      file_count: 2,
+      format: "m4a",
+      suno_playlist_url: "https://suno.com/playlist/u2",
+    };
+    mockFetch(() => ({ ok: false, status: 404, json: async () => ({}) }));
+
+    await expect(postDownloaded(BASE_URL, "20260601-clm-aaa-collection", payload)).rejects.toThrow(/404/);
   });
 });
 

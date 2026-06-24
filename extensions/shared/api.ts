@@ -4,10 +4,12 @@
 //   - HTTP 非 2xx で throw
 //   - 配列でない / 空配列の JSON で throw (fail-loud、silent 続行しない)
 import {
+  collectionDownloadedRoute,
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
+  type DownloadFormat,
   PLAYLISTS_CAPTURE_ROUTE,
   PROMPTS_ROUTE,
   VERSION_ROUTE,
@@ -61,6 +63,12 @@ export interface CapturedPlaylist {
 export interface CapturedPlaylistsResult {
   written: number;
   path: string;
+}
+
+export interface DownloadedPayload {
+  file_count: number;
+  format: DownloadFormat;
+  suno_playlist_url: string;
 }
 
 /** GET /version の wire スキーマ（#1023）。 */
@@ -318,6 +326,24 @@ export async function postCapturedPlaylists(
     throw new Error(`HTTP ${resp.status}`);
   }
   return (await resp.json()) as CapturedPlaylistsResult;
+}
+
+export async function postDownloaded(
+  baseUrl: string,
+  collectionId: string,
+  payload: DownloadedPayload,
+): Promise<void> {
+  const resp = await fetch(
+    `${baseUrl}${collectionDownloadedRoute(collectionId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
 }
 
 /**

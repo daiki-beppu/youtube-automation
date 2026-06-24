@@ -7,8 +7,12 @@ import { describe, expect, it } from "vitest";
 import {
   CLIPS_PER_REQUEST,
   COLLECTIONS_ROUTE,
+  collectionDownloadedRoute,
   collectionPromptsRoute,
   DEFAULT_URL,
+  DOWNLOADED_ROUTE,
+  DOWNLOAD_FORMAT_DEFAULT,
+  DOWNLOAD_FORMAT_KEY,
   INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
@@ -54,6 +58,7 @@ describe("shared/constants: 進捗フェーズ (PHASE)", () => {
     expect(PHASE).toEqual({
       INJECTING: "injecting",
       GENERATING: "generating",
+      DOWNLOADING: "downloading",
       WAITING_SLOT: "waiting-slot",
       WAITING_CAPTCHA: "waiting-captcha",
       DONE: "done",
@@ -68,6 +73,10 @@ describe("shared/constants: 進捗フェーズ (PHASE)", () => {
   it("Given PHASE When ADDING_TO_PLAYLIST を読む Then clip 一括 playlist 追加 phase の値である (#854)", () => {
     expect(PHASE.ADDING_TO_PLAYLIST).toBe("adding-to-playlist");
   });
+
+  it("Given PHASE When DOWNLOADING を読む Then Suno download 中 phase の値である (#1215)", () => {
+    expect(PHASE.DOWNLOADING).toBe("downloading");
+  });
 });
 
 describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
@@ -80,6 +89,26 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
     expect(collectionPromptsRoute("20260601-clm-aaa-collection")).toBe(
       "/collections/20260601-clm-aaa-collection/suno/prompts.json",
     );
+  });
+});
+
+describe("shared/constants: Suno download 完了記録 (#1215)", () => {
+  it("Given DOWNLOADED_ROUTE When 読む Then collection id placeholder 付きのサブパスである", () => {
+    expect(DOWNLOADED_ROUTE).toBe("/collections/:id/downloaded");
+  });
+
+  it("Given collectionDownloadedRoute(id) When 組み立てる Then `/collections/<id>/downloaded` を返す", () => {
+    expect(collectionDownloadedRoute("20260601-clm-aaa-collection")).toBe(
+      "/collections/20260601-clm-aaa-collection/downloaded",
+    );
+  });
+
+  it("Given DOWNLOAD_FORMAT_KEY When 読む Then chrome.storage.local の format key である", () => {
+    expect(DOWNLOAD_FORMAT_KEY).toBe("sunoDownloadFormat");
+  });
+
+  it("Given DOWNLOAD_FORMAT_DEFAULT When 読む Then 既定 download format は mp3 である", () => {
+    expect(DOWNLOAD_FORMAT_DEFAULT).toBe("mp3");
   });
 });
 

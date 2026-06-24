@@ -96,7 +96,9 @@ const CLIP_ROW_NOT_FOUND_MESSAGE =
  * 実 clip card を区別するための構造シグナル。Emotion class には依存しない。
  */
 function hasClipContent(el: HTMLElement): boolean {
-  return el.querySelector("img") !== null || el.querySelector("a[href]") !== null;
+  return (
+    el.querySelector("img") !== null || el.querySelector("a[href]") !== null
+  );
 }
 
 function resolveClipRowFromSelectButton(
@@ -260,7 +262,9 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
 }
 
 export function collectClipRowTitle(row: HTMLElement): string | null {
-  return row.querySelector(CLIP_ROW_TITLE_SELECTOR)?.textContent?.trim() || null;
+  return (
+    row.querySelector(CLIP_ROW_TITLE_SELECTOR)?.textContent?.trim() || null
+  );
 }
 
 function findRowsByClipIds(
@@ -291,7 +295,11 @@ function findRowsByClipIds(
     }
   }
 
-  if (unmatchedIds.length > 0 && titleFallbackMap && titleFallbackMap.size > 0) {
+  if (
+    unmatchedIds.length > 0 &&
+    titleFallbackMap &&
+    titleFallbackMap.size > 0
+  ) {
     const rowsByTitle = new Map<string, HTMLElement[]>();
     for (const row of rows) {
       const title = collectClipRowTitle(row);
@@ -331,7 +339,11 @@ function listMissingClipIds(
     }
   }
   const missing = targetIds.filter((id) => !foundIds.has(id));
-  if (missing.length === 0 || !titleFallbackMap || titleFallbackMap.size === 0) {
+  if (
+    missing.length === 0 ||
+    !titleFallbackMap ||
+    titleFallbackMap.size === 0
+  ) {
     return missing;
   }
   const titleSet = new Set<string>();
@@ -400,7 +412,8 @@ export async function ensureClipRowsLoadedByIds(
   const {
     isAborted,
     pollIntervalMs = 100,
-    loadSettleTimeoutMs = SETTLE_BASE_MS + uniqueTargetIds.length * SETTLE_PER_CLIP_MS,
+    loadSettleTimeoutMs = SETTLE_BASE_MS +
+      uniqueTargetIds.length * SETTLE_PER_CLIP_MS,
     titleFallbackMap,
   } = options;
 
@@ -417,7 +430,11 @@ export async function ensureClipRowsLoadedByIds(
   let rows = collectLoadedClipRows(scroller);
 
   for (;;) {
-    const foundRows = findRowsByClipIds(rows, uniqueTargetIds, titleFallbackMap);
+    const foundRows = findRowsByClipIds(
+      rows,
+      uniqueTargetIds,
+      titleFallbackMap,
+    );
     if (isAborted()) {
       return foundRows;
     }
@@ -433,7 +450,11 @@ export async function ensureClipRowsLoadedByIds(
     for (;;) {
       await sleep(pollIntervalMs);
       rows = collectLoadedClipRows(scroller);
-      const nextFoundRows = findRowsByClipIds(rows, uniqueTargetIds, titleFallbackMap);
+      const nextFoundRows = findRowsByClipIds(
+        rows,
+        uniqueTargetIds,
+        titleFallbackMap,
+      );
       if (isAborted()) {
         return nextFoundRows;
       }
@@ -444,7 +465,11 @@ export async function ensureClipRowsLoadedByIds(
         break;
       }
       if (Date.now() >= settleDeadline) {
-        const missing = listMissingClipIds(rows, uniqueTargetIds, titleFallbackMap).join(", ");
+        const missing = listMissingClipIds(
+          rows,
+          uniqueTargetIds,
+          titleFallbackMap,
+        ).join(", ");
         throw new Error(
           `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
         );
