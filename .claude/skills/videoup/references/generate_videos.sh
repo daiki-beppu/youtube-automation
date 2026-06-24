@@ -434,12 +434,18 @@ fi
 
 AUDIO_INPUT_OPTS=()
 AUDIO_LOOP_ACTIVE=0
+AUDIO_LOUDNORM=""
 video_duration="$duration"
 if [[ -n "$TARGET_VIDEO_DURATION_MIN" ]]; then
-    target_video_duration_sec="$(awk "BEGIN{printf \"%.2f\", $TARGET_VIDEO_DURATION_MIN * 60}")"
+    # 数値バリデーション: 整数 or 小数のみ許容
+    if ! [[ "$TARGET_VIDEO_DURATION_MIN" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "ERROR: invalid target_video_duration_min value: '${TARGET_VIDEO_DURATION_MIN}' (must be numeric)"
+        exit 1
+    fi
+    target_video_duration_sec="$(awk -v target="$TARGET_VIDEO_DURATION_MIN" 'BEGIN{printf "%.2f", target * 60}')"
     # duration が取得できない (空 / 数値でない) ケースは fail-safe で従来動作にフォールバック
     master_duration_for_compare="${duration:-0}"
-    if awk "BEGIN{exit !($target_video_duration_sec > $master_duration_for_compare)}"; then
+    if awk -v target="$target_video_duration_sec" -v master="$master_duration_for_compare" 'BEGIN{exit !(target > master)}'; then
         AUDIO_INPUT_OPTS=(-stream_loop -1)
         AUDIO_LOOP_ACTIVE=1
         video_duration="$target_video_duration_sec"
@@ -450,8 +456,12 @@ if [[ -n "$TARGET_VIDEO_DURATION_MIN" ]]; then
 fi
 
 # 音声ループ時は再エンコード必須 + loudnorm で音割れ防止 (#1057)
+# loudnorm は AUDIO_OUT_OPTS ではなく別変数に保持する。
+# overlay 経路では filter_complex に統合し、非 overlay 経路では -af で適用する。
+# (-af と filter_complex は同一ストリームに併用不可)
 if [[ "$AUDIO_LOOP_ACTIVE" -eq 1 ]]; then
-    AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000 -af "loudnorm=I=-14:TP=-1:LRA=11")
+    AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000)
+    AUDIO_LOUDNORM="loudnorm=I=-14:TP=-1:LRA=11"
     echo "  Audio    : re-encode + loudnorm (loop boundary clipping prevention)"
 fi
 
@@ -514,7 +524,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     else
         INPUTS+=(-framerate "$enc_framerate" -loop 1 -i "$THUMBNAIL")
     fi
-    INPUTS+=(-i "$MASTER_AUDIO")
+    INPUTS+=("${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO")
 
     sp_input_idx=""
     if [[ "$sp_enabled" == "true" ]]; then
@@ -566,6 +576,12 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         CURRENT_LABEL="vout"
     fi
 
+    # loudnorm を filter_complex に統合 (overlay 経路では -af 併用不可)
+    if [[ -n "$AUDIO_LOUDNORM" ]]; then
+        FILTER+="[${AUDIO_LABEL}]${AUDIO_LOUDNORM}[a_norm];"
+        AUDIO_LABEL="a_norm"
+    fi
+
     # 末尾ラベル統一: 最終 video ラベルが CURRENT_LABEL
     ffmpeg -y "${INPUTS[@]}" \
         -filter_complex "$FILTER" \
@@ -575,7 +591,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt" \
         -r "$enc_framerate" \
         "${AUDIO_OUT_OPTS[@]}" \
-        -t "$duration" \
+        -t "$video_duration" \
         -movflags +faststart \
         -shortest \
         -loglevel error \
@@ -693,11 +709,13 @@ else
         # Stream copy 経路（effect ベイク / loop 背景 共通）: ビデオは完全無損失（ビット単位コピー）。
         # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
         ffmpeg -y -stream_loop -1 -i "$STREAM_SOURCE" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -map 0:v:0 -map 1:a:0 \
             -c:v copy \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \
@@ -707,13 +725,15 @@ else
     elif [[ "$EFFECT" != "none" && -n "$LOOP_SOURCE" ]]; then
         # フォールバック: loop + effect を全尺再エンコード（従来 mode C）
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (loop + ${EFFECT} effect, full encode fallback)"
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
         ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -filter_complex "$EFFECT_FILTER_LOOP" \
             -map "[vout]" -map 1:a:0 \
             -c:v libx264 -preset medium -crf 22 -maxrate "$LOOP_MAX_BITRATE" -bufsize "$LOOP_BUFSIZE" -pix_fmt yuv420p \
             -r "$LOOP_OUTPUT_FRAME_RATE" \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \
@@ -723,13 +743,15 @@ else
     elif [[ "$EFFECT" != "none" ]]; then
         # フォールバック: 静止画 + effect を全尺再エンコード（従来 mode D）
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image + ${EFFECT} effect, full encode fallback)"
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
         ffmpeg -y -framerate "$STILL_EFFECT_FPS" -loop 1 -i "$THUMBNAIL" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -filter_complex "$EFFECT_FILTER_STATIC" \
             -map "[vout]" -map 1:a:0 \
             -c:v libx264 -preset medium -crf "$STILL_EFFECT_CRF" -pix_fmt yuv420p \
             -r "$STILL_EFFECT_FPS" \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \
@@ -740,13 +762,15 @@ else
         # 静止画背景モード（従来 mode A）。エンコード値は config 駆動（fallback=現行値）。
         # I-frame を STILL_GOP フレーム間隔に間引き、変化のないフレームを P-frame で圧縮して小型化（#579）。
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image)"
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
         ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$THUMBNAIL" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
             -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
             -g "$STILL_GOP" \
             -r "$STILL_FPS" \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \
