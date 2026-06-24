@@ -130,6 +130,14 @@ COLLECTION_NAME="$(echo "$dir_basename" \
 LOOP_VIDEO=""
 if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
+    echo "  Loop     : ${LOOP_VIDEO} (detected)"
+else
+    # loop.mp4 が存在しない場合、静止画フォールバックになることを明示 (#868)
+    echo "  Loop     : not found — 静止画モードで出力します"
+    if [[ -f "${ASSETS_DIR}/loop_raw.mp4" || -f "${ASSETS_DIR}/loop-v1.mp4" ]]; then
+        echo "  ⚠️  loop_raw.mp4 or loop-v1.mp4 が存在します — loop.mp4 が生成途中で失敗した可能性があります"
+        echo "     → yt-generate-loop-video --smooth で再生成するか、手動で loop.mp4 を配置してください"
+    fi
 fi
 
 THUMBNAIL=""
@@ -764,6 +772,7 @@ else
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image)"
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
+        echo "  ℹ️  ループ動画なし → 静止画背景で出力 (loop.mp4 を配置すればループ動画になります)"
         ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$THUMBNAIL" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
