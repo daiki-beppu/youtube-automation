@@ -450,6 +450,12 @@ class CommentReplier:
                 "⚠️  履歴保存が 3 回失敗 (comment_id=%s) — 次回実行で二重返信の可能性あり",
                 comment.comment_id,
             )
+            plan.errors.append(
+                self._error_record(
+                    comment,
+                    f"履歴保存が 3 回失敗 (comment_id={comment.comment_id}) — 次回実行で二重返信の可能性あり",
+                )
+            )
         record = {"comment_id": comment.comment_id, **metadata}
         if save_failed:
             record["save_failed"] = True
