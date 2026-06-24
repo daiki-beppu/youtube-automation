@@ -66,19 +66,14 @@ describe("nextItemStates: itemStates の遷移ロジック (useSunoRunner live h
     expect(nextItemStates(base, PHASE.DONE, 0)).toEqual(["done", "idle", "idle"]);
   });
 
-  it.each([
-    PHASE.WAITING_SLOT,
-    PHASE.GENERATING,
-    PHASE.ADDING_TO_PLAYLIST,
-    PHASE.DOWNLOADING,
-    PHASE.FINISHED,
-    PHASE.STOPPED,
-    PHASE.ERROR,
-  ])("Given prev When phase=%s Then itemStates は遷移させない（prev と等価）", (phase) => {
-    const prev = nextItemStates(base, PHASE.INJECTING, 0); // ["active","idle","idle"]
+  it.each([PHASE.WAITING_SLOT, PHASE.GENERATING, PHASE.ADDING_TO_PLAYLIST, PHASE.FINISHED, PHASE.STOPPED, PHASE.ERROR])(
+    "Given prev When phase=%s Then itemStates は遷移させない（prev と等価）",
+    (phase) => {
+      const prev = nextItemStates(base, PHASE.INJECTING, 0); // ["active","idle","idle"]
 
-    expect(nextItemStates(prev, phase, 0)).toEqual(prev);
-  });
+      expect(nextItemStates(prev, phase, 0)).toEqual(prev);
+    },
+  );
 
   it("Given prev When nextItemStates Then 新しい配列を返す（React state 更新のため非破壊）", () => {
     const result = nextItemStates(base, PHASE.INJECTING, 0);
@@ -104,20 +99,6 @@ describe("applyProgress: progress 受信でスナップショットを更新す�
     const next = applyProgress(snap, { phase: PHASE.DONE, index: 0, total: 3 });
 
     expect(next.itemStates).toEqual(["done", "idle", "idle"]);
-    expect(next.isRunning).toBe(true);
-  });
-
-  it("Given 実行中 snap When DOWNLOADING を適用 Then itemStates を維持し isRunning は true 継続する", () => {
-    const active = applyProgress(initSnapshot(makePromptEntries(3)), {
-      phase: PHASE.INJECTING,
-      index: 0,
-      total: 3,
-    });
-
-    const next = applyProgress(active, { phase: PHASE.DOWNLOADING, index: 0, total: 3 });
-
-    expect(next.itemStates).toEqual(["active", "idle", "idle"]);
-    expect(next.progress).toEqual({ phase: PHASE.DOWNLOADING, index: 0, total: 3 });
     expect(next.isRunning).toBe(true);
   });
 

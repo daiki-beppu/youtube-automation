@@ -216,24 +216,24 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     expect(harness.feedPollerStop).not.toHaveBeenCalled();
   });
 
-  it("Given 状態属性のない単独 Grid button がある When run を受ける Then ERROR progress を emit せず feed poller を開始する", async () => {
+  it("Given 状態属性のない単独 Grid button がある When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
     makeGenericButton("Grid");
     await loadContentScript();
     const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
 
-    const result = runHandler({ data: { entries: [] } });
+    const result = runHandler({ data: { entries } });
 
     expect(result).toEqual({ ok: true });
-    expect(harness.feedPollerStart).toHaveBeenCalledOnce();
-    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
-    expect(progressPayloads()).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          phase: PHASE.ERROR,
-          message: expect.stringContaining("表示ビューを検出できません"),
-        }),
-      ]),
+    expect(harness.sendMessage).toHaveBeenCalledWith(
+      "progress",
+      expect.objectContaining({
+        phase: PHASE.ERROR,
+        total: entries.length,
+        message: expect.stringContaining("表示ビューを検出できません"),
+      }),
     );
+    expect(harness.feedPollerStart).not.toHaveBeenCalled();
   });
 
   it.each(["List ▼", "Waveform", "Grid"] as const)(

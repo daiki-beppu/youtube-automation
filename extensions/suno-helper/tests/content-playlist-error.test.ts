@@ -248,7 +248,10 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
+    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      [],
+    );
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
@@ -267,7 +270,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       submittedClipIds,
       expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
     );
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("expected 4, got 3"));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("expected 4, got 3"),
+    );
     warnSpy.mockRestore();
   });
 
@@ -277,7 +282,10 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
+    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      [],
+    );
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
@@ -291,7 +299,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     });
     await vi.waitFor(() => expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledTimes(1));
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("expected 4, got 3"));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("expected 4, got 3"),
+    );
     warnSpy.mockRestore();
   });
 

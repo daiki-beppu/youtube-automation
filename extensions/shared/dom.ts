@@ -666,9 +666,7 @@ export function detectSunoViewMode(): SunoViewMode {
 
   // Suno 2025-06 以降: ビューモードボタンが ARIA 属性を持たないプレーンボタンに変更された。
   // visible な button 要素のテキストから view mode ラベルを探す fallback。
-  const plainBtnModes = collectViewModesFromElements(
-    document.querySelectorAll<HTMLElement>("button"),
-  );
+  const plainBtnModes = collectViewModesFromElements(document.querySelectorAll<HTMLElement>("button"));
   const plain = singleModeOrUnknown(plainBtnModes);
   if (plain !== "unknown") {
     return plain;
