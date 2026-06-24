@@ -176,6 +176,57 @@ class TestMainTf:
 
 
 # ============================================================================
+# main.tf — check "stream_cycle_consistency" (#1219)
+# ============================================================================
+
+
+class TestMainTfCheckStreamCycleConsistency:
+    """``main.tf`` の ``check "stream_cycle_consistency"`` ブロック（#1219）。
+
+    ``stream_hours=0, break_hours>0`` は Terraform validation を通るが、テンプレート側では
+    ``break_hours`` を無視する。``break_hours`` が deploy trigger に含まれているため、
+    unit に反映されない値変更でも deploy/restart が走る矛盾を plan 時に検出する。
+    """
+
+    def test_check_block_exists(self):
+        """Given main.tf
+        When check "stream_cycle_consistency" を探す
+        Then 定義されている（Terraform 1.5+ の check ブロック）。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'check\s+"stream_cycle_consistency"')
+        assert block is not None, 'check "stream_cycle_consistency" が存在しない'
+
+    def test_check_assert_condition_is_correct(self):
+        """Given main.tf
+        When check "stream_cycle_consistency" の assert.condition を読む
+        Then ``var.stream_hours > 0 || var.break_hours == 0`` である。
+
+        24/7 モード (stream_hours=0) では break_hours=0 であるべき。
+        サイクルモード (stream_hours>0) では break_hours は任意値。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'check\s+"stream_cycle_consistency"')
+        assert block is not None
+        assert re.search(
+            r"condition\s*=\s*var\.stream_hours\s*>\s*0\s*\|\|\s*var\.break_hours\s*==\s*0",
+            block,
+        ), 'check.stream_cycle_consistency の condition が "var.stream_hours > 0 || var.break_hours == 0" でない'
+
+    def test_check_assert_has_error_message(self):
+        """Given main.tf
+        When check "stream_cycle_consistency" の assert.error_message を読む
+        Then error_message が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'check\s+"stream_cycle_consistency"')
+        assert block is not None
+        assert re.search(r"error_message\s*=\s*\"[^\"]+\"", block), (
+            "check.stream_cycle_consistency の assert に error_message が宣言されていない"
+        )
+
+
+# ============================================================================
 # main.tf user_data (#124)
 # ============================================================================
 
