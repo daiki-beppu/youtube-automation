@@ -2,12 +2,12 @@ name: Extensions
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/1143-suno-bulk-download]
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
   pull_request:
-    branches: [main]
+    branches: [main, feat/1143-suno-bulk-download]
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
