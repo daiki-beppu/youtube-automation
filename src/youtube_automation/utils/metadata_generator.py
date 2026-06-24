@@ -356,9 +356,7 @@ class BAHMetadataGenerator:
                 continue
 
         if skipped:
-            logger.warning(
-                f"⚠️  {len(skipped)}/{len(wav_files)} トラックがスキップされました:"
-            )
+            logger.warning(f"⚠️  {len(skipped)}/{len(wav_files)} トラックがスキップされました:")
             for name, reason in skipped:
                 logger.warning(f"  - {name}: {reason}")
 
