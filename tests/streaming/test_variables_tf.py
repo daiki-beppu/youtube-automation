@@ -135,6 +135,36 @@ class TestVariablesTfNullResource:
             block,
         ), 'install_root.default が "/opt/youtube-stream" でない'
 
+    def test_stream_hours_is_number_with_zero_default(self):
+        """Given variables.tf
+        When stream_hours 変数定義を読む
+        Then type=number, default=0, description ありで宣言されている。
+
+        0 は RuntimeMaxSec を省略する 24/7 連続配信モード。
+        """
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"stream_hours"')
+        assert block is not None, 'variable "stream_hours" が存在しない'
+        assert re.search(r"type\s*=\s*number", block), "stream_hours.type が number でない"
+        assert re.search(r"default\s*=\s*0\b", block), "stream_hours.default が 0 でない"
+        assert re.search(r"description\s*=", block), "stream_hours.description が無い"
+        assert extract_block(block, r"validation") is None, "仕様外の stream_hours.validation が宣言されている"
+
+    def test_break_hours_is_number_with_zero_default(self):
+        """Given variables.tf
+        When break_hours 変数定義を読む
+        Then type=number, default=0, description ありで宣言されている。
+
+        0 は休止なしを表し、systemd unit では RestartSec=10s を使う。
+        """
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"break_hours"')
+        assert block is not None, 'variable "break_hours" が存在しない'
+        assert re.search(r"type\s*=\s*number", block), "break_hours.type が number でない"
+        assert re.search(r"default\s*=\s*0\b", block), "break_hours.default が 0 でない"
+        assert re.search(r"description\s*=", block), "break_hours.description が無い"
+        assert extract_block(block, r"validation") is None, "仕様外の break_hours.validation が宣言されている"
+
     def test_stream_key_is_sensitive_string_with_no_default(self):
         """Given variables.tf
         When stream_key 変数定義を読む

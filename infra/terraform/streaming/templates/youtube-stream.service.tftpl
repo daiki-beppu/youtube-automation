@@ -32,9 +32,15 @@ EnvironmentFile=/etc/youtube-stream.env
 ExecStart=${install_root}/bin/run-ffmpeg.sh
 SuccessExitStatus=143 SIGTERM
 TimeoutStopSec=30s
-RuntimeMaxSec=11h
+%{ if stream_hours > 0 }
+RuntimeMaxSec=${stream_hours}h
+%{ endif }
 Restart=always
-RestartSec=1h
+%{ if break_hours > 0 }
+RestartSec=${break_hours}h
+%{ else }
+RestartSec=10s
+%{ endif }
 
 [Install]
 WantedBy=multi-user.target

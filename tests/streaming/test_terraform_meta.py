@@ -364,6 +364,27 @@ class TestTfvarsExampleFirewall:
 
 
 # ============================================================================
+# terraform.tfvars.example — #1219 で stream_hours / break_hours のサンプル追記
+# ============================================================================
+
+
+class TestTfvarsExampleStreamCycle:
+    """``terraform.tfvars.example`` の #1219 配信サイクル変数の discoverability。"""
+
+    def test_stream_cycle_variables_are_documented_as_optional_examples(self):
+        """Given terraform.tfvars.example
+        When ファイル内容（raw text）を読む
+        Then stream_hours / break_hours のコメント付きサンプルが存在する。
+
+        デフォルト値 0 は variables.tf にあるため、サンプルでは任意項目として示す。
+        """
+        raw = read_file(_TFVARS_EXAMPLE)
+        assert "# stream_hours = 0" in raw, "stream_hours の任意サンプルが無い"
+        assert "# break_hours  = 0" in raw, "break_hours の任意サンプルが無い"
+        assert "24/7" in raw, "0 / 0 が 24/7 連続配信である説明が無い"
+
+
+# ============================================================================
 # ルート .gitignore
 # ============================================================================
 

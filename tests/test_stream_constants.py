@@ -34,6 +34,16 @@ def test_theoretical_bitrate_is_4_mbps():
     assert streaming.THEORETICAL_BITRATE_MBPS == 4
 
 
+def test_archive_mode_constants_are_not_public_api():
+    """Given Terraform の配信サイクル追加は Python 公開 API の変更対象外
+    When streaming 定数を引く
+    Then ARCHIVE_MODE_* の公開定数を追加していない。
+    """
+    assert not hasattr(streaming, "ARCHIVE_MODE_STREAM_HOURS")
+    assert not hasattr(streaming, "ARCHIVE_MODE_BREAK_HOURS")
+    assert not hasattr(streaming, "ARCHIVE_MODE_ARCHIVES_PER_DAY")
+
+
 def test_theoretical_hours_per_day_is_22():
     """Given order.md「1 日の配信時間: 22 時間 (11h × 2 本)」
     When THEORETICAL_HOURS_PER_DAY を引く

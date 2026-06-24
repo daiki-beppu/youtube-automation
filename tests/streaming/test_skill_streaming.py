@@ -91,6 +91,15 @@ class TestStreamingSkillSshAgent:
             "（operator が ssh-agent 登録手順を SKILL.md から辿れず terraform apply が失敗する）"
         )
 
+    def test_archive_check_requires_expected_in_skill_quick_reference(self):
+        """Given SKILL.md
+        When archive check の操作入口を読む
+        Then 24/7 デフォルトと混同しないよう --expected 2 を明示している。
+        """
+        text = read_file(_STREAMING_SKILL)
+        assert "yt-stream-archive-check --expected 2" in text
+        assert "`stream_hours=11` / `break_hours=1` 運用" in text
+
 
 # ============================================================================
 # infra/terraform/streaming/README.md — #125 新規ドキュメント
@@ -192,20 +201,28 @@ class TestStreamingReadme:
         text = read_file(_STREAMING_README)
         assert "systemctl" in text, "README に systemctl 系の動作確認コマンドが書かれていない"
 
-    def test_mentions_11h_1h_streaming_cycle(self):
+    def test_mentions_default_24_7_and_optional_11h_1h_streaming_cycle(self):
         """Given README
         When 全文を読む
-        Then 11h 配信 / 1h 休止サイクルの説明が含まれている。
+        Then デフォルト 24/7 と任意の 11h / 1h サイクルの説明が含まれている。
 
-        利用者が「なぜ 11h で勝手に止まるか」を理解できる必要がある（systemd 由来の挙動）。
+        利用者が 0 / 0 と 11 / 1 の挙動差を理解できる必要がある。
         """
         text = read_file(_STREAMING_README)
-        # 「11h」「11 時間」「RuntimeMaxSec」のいずれかでカバー
-        has_11h = "11h" in text or "11 時間" in text or "11時間" in text
-        has_runtime_max = "RuntimeMaxSec" in text
-        assert has_11h or has_runtime_max, (
-            "README に 11h サイクル / RuntimeMaxSec の説明が無い（systemd 由来の自動停止が説明されない）"
-        )
+        assert "24/7" in text, "README に 24/7 連続配信の説明が無い"
+        assert "stream_hours=0" in text, "README に stream_hours=0 の説明が無い"
+        assert "break_hours=0" in text, "README に break_hours=0 の説明が無い"
+        assert "stream_hours=11" in text, "README に 11h サイクルへ切り替える説明が無い"
+        assert "break_hours=1" in text, "README に 1h 休止へ切り替える説明が無い"
+
+    def test_archive_check_is_documented_as_archive_mode_only(self):
+        """Given README
+        When 帯域・アーカイブ監視の説明を読む
+        Then archive shortage 判定は 11/1 運用時の指標として説明されている。
+        """
+        text = read_file(_STREAMING_README)
+        assert "月次レポート内のアーカイブ件数・稼働率は `stream_hours=11` / `break_hours=1` 運用時の指標" in text
+        assert "24/7 連続配信では shortage 判定に使わない" in text
 
     def test_does_not_contain_plaintext_stream_key(self):
         """Given README

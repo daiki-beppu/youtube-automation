@@ -3,9 +3,11 @@
 #
 # 4-way 分類:
 #   ok      : active+running           （配信中、Result は問わない）
-#   idle    : activating+auto-restart+success （RuntimeMaxSec=11h 到達後の 1h 休止）
+#   idle    : activating+auto-restart+success （stream_hours > 0 の RuntimeMaxSec 到達後の計画休止）
 #   manual  : inactive+dead+success    （systemctl stop）
 #   anomaly : 上記以外                 （kill -9 / failed / Result≠success など）
+#
+# break_hours=0 の RestartSec=10s はクラッシュ時の短い再起動間隔。failed / Result≠success は anomaly。
 #
 # 状態変化チェック（連打防止）: 前回 classify 結果を $STATE_DIR/last_status に保存し、
 # anomaly 突入時と anomaly からの復帰時のみ通知する。同種類の連続は無音。

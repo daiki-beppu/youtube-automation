@@ -52,6 +52,8 @@ resource "null_resource" "deploy" {
     instance_id  = vultr_instance.this.id
     video_hash   = filemd5(var.video_path)
     ssh_host_key = local.ssh_host_public_key_sha
+    stream_hours = tostring(var.stream_hours)
+    break_hours  = tostring(var.break_hours)
     # SHA256 は不可逆なので nonsensitive() で剥がし triggers map に格納する
     # （terraform 1.5+ は sensitive 値の派生も sensitive 扱いするため必須）
     stream_key      = nonsensitive(sha256(var.stream_key))
@@ -95,6 +97,8 @@ resource "null_resource" "deploy" {
   provisioner "file" {
     content = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {
       install_root = var.install_root
+      stream_hours = var.stream_hours
+      break_hours  = var.break_hours
     })
     destination = "/etc/systemd/system/youtube-stream.service"
   }

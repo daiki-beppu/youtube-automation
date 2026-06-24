@@ -39,6 +39,18 @@ variable "install_root" {
   default     = "/opt/youtube-stream"
 }
 
+variable "stream_hours" {
+  type        = number
+  description = "1 回の配信継続時間（時間）。0 は無制限を表し、24/7 連続配信として RuntimeMaxSec を省略する"
+  default     = 0
+}
+
+variable "break_hours" {
+  type        = number
+  description = "配信終了後の休止時間（時間）。0 は休止なしを表し、クラッシュ時の再起動間隔 RestartSec=10s を使用する"
+  default     = 0
+}
+
 variable "stream_key" {
   type        = string
   description = "YouTube Live のストリームキー。TF_VAR_stream_key 経由で 1Password から注入する想定（sensitive=true は CLI 出力マスク）"
