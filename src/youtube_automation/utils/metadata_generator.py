@@ -318,42 +318,38 @@ class BAHMetadataGenerator:
         wav_files = sorted([f for f in audio_dir.iterdir() if f.suffix.lower() in AUDIO_EXTS])
 
         for wav_file in wav_files:
+            # duration 取得のみを try で囲み、track dict 構築の実装バグは素通しさせる
             try:
-                # afinfo コマンドで楽曲長を取得
                 duration = self._get_audio_duration(wav_file)
-
-                if duration <= 0:
-                    reason = "再生時間が 0 秒（ファイル破損または afinfo 解析失敗の可能性）"
-                    logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
-                    skipped.append((wav_file.name, reason))
-                    continue
-
-                # タイトル清浄化
-                title = self._clean_track_title(wav_file.stem)
-
-                # タイムスタンプ計算（2曲目以降はクロスフェード分だけ前倒し）
-                start_time = current_time
-                end_time = current_time + duration
-
-                tracks.append(
-                    {
-                        "filename": wav_file.name,
-                        "title": title,
-                        "duration": duration,
-                        "start_time": start_time,
-                        "end_time": end_time,
-                        "timestamp": self._format_timestamp(start_time),
-                        "pattern_key": _extract_pattern_key(wav_file.name),
-                    }
-                )
-
-                current_time = int(end_time - crossfade)
-
             except Exception as e:
                 reason = f"ファイル解析エラー: {e}"
                 logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
                 skipped.append((wav_file.name, reason))
                 continue
+
+            if duration <= 0:
+                reason = "再生時間が 0 秒（ファイル破損または afinfo 解析失敗の可能性）"
+                logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
+                skipped.append((wav_file.name, reason))
+                continue
+
+            title = self._clean_track_title(wav_file.stem)
+            start_time = current_time
+            end_time = current_time + duration
+
+            tracks.append(
+                {
+                    "filename": wav_file.name,
+                    "title": title,
+                    "duration": duration,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "timestamp": self._format_timestamp(start_time),
+                    "pattern_key": _extract_pattern_key(wav_file.name),
+                }
+            )
+
+            current_time = int(end_time - crossfade)
 
         if skipped:
             logger.warning(f"⚠️  {len(skipped)}/{len(wav_files)} トラックがスキップされました:")

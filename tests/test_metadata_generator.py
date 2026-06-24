@@ -1169,6 +1169,8 @@ class TestAnalyzeAudioFilesSkipDetection:
         assert tracks[0]["filename"] == "01-track-a.wav"
         assert "トラックをスキップ" in caplog.text
         assert "02-track-b.wav" in caplog.text
+        assert "再生時間が 0 秒" in caplog.text
+        assert "ファイル破損または afinfo 解析失敗" in caplog.text
 
     def test_exception_during_analysis_is_skipped_with_warning(self, gen_with_audio_dir, caplog, monkeypatch):
         gen, audio_dir = gen_with_audio_dir
@@ -1189,6 +1191,8 @@ class TestAnalyzeAudioFilesSkipDetection:
 
         assert len(tracks) == 1
         assert "トラックをスキップ" in caplog.text
+        assert "02-broken.wav" in caplog.text
+        assert "ファイル解析エラー" in caplog.text
         assert "corrupt file" in caplog.text
 
     def test_count_mismatch_warning(self, gen_with_audio_dir, caplog, monkeypatch):
