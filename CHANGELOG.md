@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(tags)`: `parse_youtube_tags()` を新設し、descriptions.md タグ分割+正規化を一元化。全 5 経路（`Tags.for_collection()` / `_descriptions_md.py` / `preflight_checks.py` / `bulk_update_descriptions_from_md.py` / Shorts タグ生成）で統一的に quote 除去（#1096）
 - `fix(veo)`: Veo 生成後に `smooth_loop()` を自動適用し、ループの継ぎ目をクロスフェードで滑らかにする。`generate_videos.sh` で音声ループ時に `loudnorm` フィルターを適用し音割れを防止（#1057）
 - `fix(videoup)`: `generate_videos.sh` で loop.mp4 不在時に静止画フォールバックを明示的にログ出力し、loop 生成失敗の痕跡（`loop_raw.mp4` / `loop-v*.mp4`）がある場合は警告を表示。静止画 + effect 経路にもループ不在ログを追加。痕跡検出を `ls | head` パイプから配列ベースのファイル存在チェックに修正（pipefail 非依存化）。テスト 3 件追加（#868）
+- `fix(suno-helper)`: Cmd+P によるプレイリスト dialog の起動を最大 3 回リトライし、大規模 collection の multi-select verify タイムアウトを 50→100ms/row に倍増して安定性を改善（#1050）
 - `fix(collection-serve)`: `send_error()` 26 箇所を CORS 付き `_send_json_error()` に統一し、suno-helper 拡張が CORS ポリシーでブロックされる問題を修正（#1209）
 - `fix(suno-helper)`: dir mode で collection 切り替え・URL 変更時に前回の prompts が残留する問題を修正（#1210）。`syncCollections` で最新 collection 一覧を再取得してから prompts を fetch するフローに変更し、サーバー側で single-file mode の `/collections` と dir mode の `/suno/prompts.json` 直アクセスに JSON 404 レスポンスを返すよう修正。`resolvePromptCollectionId` を shared に新設
 
