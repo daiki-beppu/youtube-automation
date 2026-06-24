@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `feat(streaming)`: ライブ配信のデフォルトを 24/7 連続配信に変更（ADR-0014）。Terraform 変数 `stream_hours` / `break_hours`（default=0 = 無制限）を導入し、systemd テンプレートで条件分岐。`yt-stream-archive-check` の `--expected` を必須化（#1219）
+
 ### Fixed
 
 - `fix(masterup)`: Suno CDN ダウンロードに `--fail` + `--retry 3` + 検証ステップを追加し、部分ダウンロードや破損ファイルを検出・警告するようにした。Content-Type 検証・UUID バリデーション・期待ファイル突合チェック・検証ゲート・リトライ設定の外部化も追加（#1090）

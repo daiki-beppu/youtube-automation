@@ -52,6 +52,8 @@ resource "null_resource" "deploy" {
     instance_id  = vultr_instance.this.id
     video_hash   = filemd5(var.video_path)
     ssh_host_key = local.ssh_host_public_key_sha
+    stream_hours = tostring(var.stream_hours)
+    break_hours  = tostring(var.break_hours)
     # SHA256 は不可逆なので nonsensitive() で剥がし triggers map に格納する
     # （terraform 1.5+ は sensitive 値の派生も sensitive 扱いするため必須）
     stream_key      = nonsensitive(sha256(var.stream_key))
@@ -62,6 +64,13 @@ resource "null_resource" "deploy" {
     cron_d          = filemd5("${path.module}/templates/cron.d.tftpl")
     systemd_unit    = filemd5("${path.module}/templates/youtube-stream.service.tftpl")
     run_ffmpeg_sh   = filemd5("${local.scripts_dir}/run-ffmpeg.sh")
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.stream_hours > 0 || var.break_hours == 0
+      error_message = "break_hours は stream_hours > 0 のときのみ有効です。24/7 モード (stream_hours=0) では break_hours=0 にしてください。"
+    }
   }
 
   connection {
@@ -95,6 +104,8 @@ resource "null_resource" "deploy" {
   provisioner "file" {
     content = templatefile("${path.module}/templates/youtube-stream.service.tftpl", {
       install_root = var.install_root
+      stream_hours = var.stream_hours
+      break_hours  = var.break_hours
     })
     destination = "/etc/systemd/system/youtube-stream.service"
   }

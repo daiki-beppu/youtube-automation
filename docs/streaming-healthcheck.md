@@ -1,6 +1,6 @@
 # streaming-healthcheck 運用手順書 (issue #109)
 
-`youtube-stream.service` は **11 時間配信 → 1 時間休止 → 自動再開** のサイクルで自律的に回るため、素朴な「サービス active か」チェックでは 1 時間休止中（`activating (auto-restart)`）に毎回誤検知が出る（5 分間隔 × 1h = 12 回/サイクル）。本書は 4 シナリオの期待挙動と、誤発火・通知欠損が起きた場合の確認手順を示す。
+`youtube-stream.service` はデフォルトでは **24/7 連続配信** として自律的に回る。`stream_hours=11` / `break_hours=1` のアーカイブ生成モードでは、11 時間配信 → 1 時間休止 → 自動再開のサイクルになり、素朴な「サービス active か」チェックでは休止中（`activating (auto-restart)`）に毎回誤検知が出る（5 分間隔 × 1h = 12 回/サイクル）。本書は 4 シナリオの期待挙動と、誤発火・通知欠損が起きた場合の確認手順を示す。
 
 ## 状態分類（4-way）
 
@@ -75,7 +75,7 @@ journalctl -t youtube-stream-healthcheck --since "10 minutes ago"
 
 ### シナリオ 3: `RuntimeMaxSec=11h` 到達による正常停止
 
-11 時間配信後、systemd が `RuntimeMaxSec` で SIGTERM を送り正常停止する。
+`stream_hours=11` / `break_hours=1` のアーカイブ生成モードでは、11 時間配信後に systemd が `RuntimeMaxSec` で SIGTERM を送り正常停止する。24/7 連続配信では `RuntimeMaxSec` 行が出ないため、このシナリオは発生しない。
 
 期待挙動:
 
@@ -147,11 +147,13 @@ logrotate -d /etc/logrotate.d/youtube-stream  # dry-run
 
 ## アーカイブ件数チェック（ローカル運用機側）
 
-11h+1h サイクル × 1 日 2 サイクル → アーカイブ 2 本/日が期待値。下回ったら配信トラブルの可能性がある:
+アーカイブ件数チェックは `stream_hours=11` / `break_hours=1` のアーカイブ生成モード専用。24/7 連続配信では日次アーカイブを期待しないため、 shortage 通知の対象にしない。
+
+アーカイブ生成モードでは 1 日 2 本が期待値。下回ったら配信トラブルの可能性がある:
 
 ```bash
-# 今日のアーカイブを確認
-uv run yt-stream-archive-check --date "$(date -u +%F)" --notify-on-shortage
+# 今日のアーカイブを確認（アーカイブ生成モードのみ）
+uv run yt-stream-archive-check --date "$(date -u +%F)" --expected 2 --notify-on-shortage
 
 # 1 日 1 回の cron / launchd で実行する想定（OAuth token を VPS に置かないため）
 ```

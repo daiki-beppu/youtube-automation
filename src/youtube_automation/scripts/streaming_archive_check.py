@@ -1,6 +1,7 @@
 """1 日のライブ配信アーカイブ件数を確認するコマンド。
 
-11h+1h 配信サイクルでは 1 日 2 本のアーカイブが残るのが期待値。
+24/7 連続配信では日次アーカイブを期待しない。``stream_hours=11`` /
+``break_hours=1`` のアーカイブ生成モードで期待件数を明示して使う。
 ``--expected`` を下回った場合は exit 1 + （--notify-on-shortage 時に）Discord 通知。
 
 ローカル実行を前提とする（OAuth token / Discord webhook を VPS に置かない方針）。
@@ -9,7 +10,7 @@
 
 Usage:
     yt-stream-archive-check --date 2026-05-01 --expected 2
-    yt-stream-archive-check --date 2026-05-01 --notify-on-shortage
+    yt-stream-archive-check --date 2026-05-01 --expected 2 --notify-on-shortage
 """
 
 from __future__ import annotations
@@ -28,8 +29,16 @@ from youtube_automation.utils.youtube_service import get_youtube as build_youtub
 
 logger = logging.getLogger(__name__)
 
-# 11h 配信 + 1h 休止 = 1 サイクル 12h、1 日 2 サイクル → 2 本/日
-_DEFAULT_EXPECTED = 2
+
+def _positive_int(value: str) -> int:
+    """argparse type: 正整数（1 以上）のみ受け付ける。"""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: '{value}'")
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"--expected must be >= 1, got {n}")
+    return n
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -42,9 +51,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--expected",
-        type=int,
-        default=_DEFAULT_EXPECTED,
-        help=f"期待件数 (default: {_DEFAULT_EXPECTED} = 11h+1h サイクル × 2 本/日)",
+        type=_positive_int,
+        required=True,
+        help="期待件数（1 以上）。11h+1h のアーカイブ生成モードでは 2 を指定する",
     )
     parser.add_argument(
         "--notify-on-shortage",

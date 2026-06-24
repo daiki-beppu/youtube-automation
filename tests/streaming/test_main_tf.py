@@ -176,6 +176,83 @@ class TestMainTf:
 
 
 # ============================================================================
+# main.tf — precondition "stream_cycle_consistency" (#1219)
+# ============================================================================
+
+
+class TestMainTfStreamCycleConsistencyPrecondition:
+    """``main.tf`` の ``null_resource.deploy`` 内 precondition（#1219）。
+
+    ``stream_hours=0, break_hours>0`` は Terraform validation を通るが、テンプレート側では
+    ``break_hours`` を無視する。``break_hours`` が deploy trigger に含まれているため、
+    unit に反映されない値変更でも deploy/restart が走る矛盾を plan 時にブロックする。
+
+    当初 ``check`` ブロック（warning のみ、exit 0）で実装していたが、矛盾入力を
+    確実にブロックするため ``lifecycle.precondition``（plan 時エラー）に変換した。
+    """
+
+    def test_precondition_exists_in_deploy_lifecycle(self):
+        """Given main.tf
+        When null_resource.deploy の lifecycle.precondition を探す
+        Then 定義されている。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None, 'resource "null_resource" "deploy" が存在しない'
+        lifecycle_block = extract_block(deploy_block, r"lifecycle")
+        assert lifecycle_block is not None, "null_resource.deploy に lifecycle ブロックが存在しない"
+        precondition_block = extract_block(lifecycle_block, r"precondition")
+        assert precondition_block is not None, "lifecycle 内に precondition ブロックが存在しない"
+
+    def test_precondition_condition_is_correct(self):
+        """Given main.tf
+        When null_resource.deploy の lifecycle.precondition.condition を読む
+        Then ``var.stream_hours > 0 || var.break_hours == 0`` である。
+
+        24/7 モード (stream_hours=0) では break_hours=0 であるべき。
+        サイクルモード (stream_hours>0) では break_hours は任意値。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None
+        lifecycle_block = extract_block(deploy_block, r"lifecycle")
+        assert lifecycle_block is not None
+        precondition_block = extract_block(lifecycle_block, r"precondition")
+        assert precondition_block is not None
+        assert re.search(
+            r"condition\s*=\s*var\.stream_hours\s*>\s*0\s*\|\|\s*var\.break_hours\s*==\s*0",
+            precondition_block,
+        ), 'precondition の condition が "var.stream_hours > 0 || var.break_hours == 0" でない'
+
+    def test_precondition_has_error_message(self):
+        """Given main.tf
+        When null_resource.deploy の lifecycle.precondition.error_message を読む
+        Then error_message が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None
+        lifecycle_block = extract_block(deploy_block, r"lifecycle")
+        assert lifecycle_block is not None
+        precondition_block = extract_block(lifecycle_block, r"precondition")
+        assert precondition_block is not None
+        assert re.search(r"error_message\s*=\s*\"[^\"]+\"", precondition_block), (
+            "precondition に error_message が宣言されていない"
+        )
+
+    def test_check_block_does_not_exist(self):
+        """Given main.tf
+        When check "stream_cycle_consistency" を探す
+        Then 存在しない（precondition に移行済み）。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'check\s+"stream_cycle_consistency"')
+        assert block is None, (
+            'check "stream_cycle_consistency" がまだ残っている（precondition に移行済みのため削除されているべき）'
+        )
+
+
+# ============================================================================
 # main.tf user_data (#124)
 # ============================================================================
 
@@ -298,13 +375,14 @@ class TestMainTfNullResource:
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None, 'resource "null_resource" "deploy" が存在しない'
 
-    def test_triggers_block_has_three_keys(self):
+    def test_triggers_block_has_required_keys(self):
         """Given main.tf
         When null_resource.deploy.triggers を読む
-        Then instance_id / video_hash / stream_key の 3 キーが宣言されている。
+        Then deploy 再実行に必要なキーが宣言されている。
 
         - instance_id = vultr_instance.this.id（VPS 再作成時の再 deploy）
         - video_hash = filemd5(var.video_path)（動画差分での再 deploy）
+        - stream_hours / break_hours（配信サイクル差分での再 deploy）
         - stream_key（sha256 ハッシュ。stream key 差分での再 deploy）
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
@@ -317,6 +395,12 @@ class TestMainTfNullResource:
         )
         assert re.search(r"video_hash\s*=\s*filemd5\(\s*var\.video_path\s*\)", triggers), (
             "triggers.video_hash が filemd5(var.video_path) でない"
+        )
+        assert re.search(r"stream_hours\s*=\s*tostring\(\s*var\.stream_hours\s*\)", triggers), (
+            "triggers.stream_hours が tostring(var.stream_hours) でない"
+        )
+        assert re.search(r"break_hours\s*=\s*tostring\(\s*var\.break_hours\s*\)", triggers), (
+            "triggers.break_hours が tostring(var.break_hours) でない"
         )
         assert re.search(r"\bstream_key\s*=", triggers), "triggers.stream_key が無い"
 
@@ -349,7 +433,7 @@ class TestMainTfNullResource:
         """Given main.tf
         When ``null_resource.deploy`` 内の ``provisioner "file"`` を読む
         Then ``content = templatefile("${path.module}/templates/youtube-stream.service.tftpl",``
-             ``{ install_root = var.install_root })``
+             ``{ install_root = var.install_root, stream_hours = var.stream_hours, break_hours = var.break_hours })``
              と ``destination = "/etc/systemd/system/youtube-stream.service"`` のペアが
              同一 provisioner 内に宣言されている (#212)。
 
@@ -362,7 +446,9 @@ class TestMainTfNullResource:
         content_pattern = (
             r"content\s*=\s*templatefile\(\s*"
             r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"\s*,\s*\{'
-            r"[^}]*install_root\s*=\s*var\.install_root[^}]*\}\s*\)"
+            r"[^}]*install_root\s*=\s*var\.install_root"
+            r"[^}]*stream_hours\s*=\s*var\.stream_hours"
+            r"[^}]*break_hours\s*=\s*var\.break_hours[^}]*\}\s*\)"
         )
         destination_pattern = r'destination\s*=\s*"/etc/systemd/system/youtube-stream\.service"'
         match = re.search(
@@ -377,7 +463,7 @@ class TestMainTfNullResource:
         )
         assert match or match_alt, (
             'provisioner "file" で content=templatefile("${path.module}/templates/'
-            'youtube-stream.service.tftpl", { install_root = var.install_root }) → '
+            'youtube-stream.service.tftpl", { install_root, stream_hours, break_hours }) → '
             "/etc/systemd/system/youtube-stream.service への配信が宣言されていない"
         )
 
@@ -566,7 +652,7 @@ class TestMainTfNullResource:
         - systemctl enable --now youtube-stream  （初回起動）
         - systemctl restart youtube-stream  （再 apply 時に .env 再読込）
 
-        order.md 完了条件「0600 / root 所有」「11h+1h サイクル開始」を満たす。
+        order.md 完了条件「0600 / root 所有」「配信サイクル開始」を満たす。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
