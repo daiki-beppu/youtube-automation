@@ -9,7 +9,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.comments.replier import CommentReplier
+from youtube_automation.utils.comments.replier import CommentReplier, _SAVE_MAX_RETRIES
 from youtube_automation.utils.config.comments import (
     CommentRule,
     Comments,
@@ -986,7 +986,7 @@ def test_save_fails_once_then_succeeds_logs_warning(tmp_path, caplog):
 
 
 def test_save_fails_all_3_times_logs_error_and_flags_record(tmp_path, caplog):
-    """save が 3 回とも失敗したとき、エラーログが出て plan.replied に save_failed フラグが付き plan.errors に記録される."""
+    """save 全失敗時: エラーログ + save_failed フラグ + plan.errors 記録."""
     yt = _mock_youtube(
         video_ids=["v1"],
         comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
@@ -1083,3 +1083,61 @@ def test_same_comment_id_in_two_videos_only_inserts_once_when_save_always_fails(
     assert plan.replied[0]["comment_id"] == "c_dup"
     # 2 件目は already_replied でスキップ
     assert any(row["comment_id"] == "c_dup" and row["reason"] == "already_replied" for row in plan.skipped)
+
+
+# ─── save() 呼び出し回数の厳密検証 (#382) ───────────────────────────────────
+
+
+def test_save_call_count_success_first_try(tmp_path):
+    """save 成功時: save() は 1 回だけ呼ばれる."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt, config=_make_config(delay_between_replies_sec=0.0), channel_dir=tmp_path, default_language="ja"
+    )
+
+    with patch.object(replier._history, "save", wraps=replier._history.save) as mock_save:
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert mock_save.call_count == 1
+
+
+def test_save_call_count_one_failure_then_success(tmp_path):
+    """save 1 回失敗 → 2 回目成功: save() は 2 回呼ばれる."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt, config=_make_config(delay_between_replies_sec=0.0), channel_dir=tmp_path, default_language="ja"
+    )
+
+    original_save = replier._history.save
+    effects = [OSError("disk full"), original_save]
+
+    with patch.object(replier._history, "save", side_effect=effects) as mock_save:
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert mock_save.call_count == 2
+
+
+def test_save_call_count_all_retries_exhausted(tmp_path):
+    """save 全失敗: save() は _SAVE_MAX_RETRIES 回呼ばれる."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt, config=_make_config(delay_between_replies_sec=0.0), channel_dir=tmp_path, default_language="ja"
+    )
+
+    with patch.object(replier._history, "save", side_effect=OSError("disk full")) as mock_save:
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert plan.replied[0]["save_failed"] is True
+    assert mock_save.call_count == _SAVE_MAX_RETRIES
