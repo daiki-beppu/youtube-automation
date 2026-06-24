@@ -168,7 +168,7 @@ def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
     if not m:
         return None
     raw = m.group(1).strip()
-    tags = [t.strip() for t in raw.replace("\n", ",").split(",") if t.strip()]
+    tags = [t.strip().strip('"') for t in raw.replace("\n", ",").split(",") if t.strip()]
     return tags or None
 
 

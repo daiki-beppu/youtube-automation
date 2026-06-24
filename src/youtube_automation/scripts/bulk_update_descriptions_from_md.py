@@ -73,7 +73,7 @@ def load_collection(col: str) -> dict:
     tags_raw = extract_md_section(desc_md, "タグ（YouTube タグ欄）")
     tags = []
     if tags_raw:
-        tags = [t.strip() for t in tags_raw.replace("\n", ",").split(",") if t.strip()]
+        tags = [t.strip().strip('"') for t in tags_raw.replace("\n", ",").split(",") if t.strip()]
 
     if not (description and title):
         raise RuntimeError(f"missing description or title section in {col}")
