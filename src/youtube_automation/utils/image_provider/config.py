@@ -45,6 +45,7 @@ class GeminiConfig:
 
     model: str
     image_size: str = _DEFAULT_GEMINI_IMAGE_SIZE
+    variation_guard_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,7 @@ def _build_gemini(d: dict[str, Any]) -> GeminiConfig:
     return GeminiConfig(
         model=d.get("model", _DEFAULT_GEMINI_MODEL),
         image_size=d.get("image_size", _DEFAULT_GEMINI_IMAGE_SIZE),
+        variation_guard_enabled=d.get("variation_guard_enabled", True),
     )
 
 
