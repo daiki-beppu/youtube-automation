@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/ts-rewrite]
+    branches: [main, feat/ts-rewrite, feat/1143-suno-bulk-download]
   pull_request:
-    branches: [main, feat/ts-rewrite]
+    branches: [main, feat/ts-rewrite, feat/1143-suno-bulk-download]
 
 jobs:
   lint:
