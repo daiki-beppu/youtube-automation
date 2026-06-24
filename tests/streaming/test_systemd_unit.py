@@ -61,9 +61,9 @@ class TestSystemdUnitTemplate:
                 text,
                 flags=re.DOTALL,
             )
-        restart_sec = f"RestartSec={break_hours}h" if break_hours > 0 else "RestartSec=10s"
+        restart_sec = f"RestartSec={break_hours}h" if stream_hours > 0 and break_hours > 0 else "RestartSec=10s"
         text = re.sub(
-            r"%\{\s*if break_hours > 0\s*\}\n.*?%\{\s*else\s*\}\n.*?%\{\s*endif\s*\}",
+            r"%\{\s*if stream_hours > 0 && break_hours > 0\s*\}\n.*?%\{\s*else\s*\}\n.*?%\{\s*endif\s*\}",
             restart_sec,
             text,
             flags=re.DOTALL,
@@ -190,7 +190,9 @@ class TestSystemdUnitTemplate:
              0 のとき ``RestartSec=10s`` が出力される。
         """
         text = read_file(_SYSTEMD_TFTPL)
-        assert "%{ if break_hours > 0 }" in text, "break_hours > 0 の条件分岐が無い"
+        assert "%{ if stream_hours > 0 && break_hours > 0 }" in text, (
+            "stream_hours > 0 && break_hours > 0 の条件分岐が無い"
+        )
         assert "RestartSec=${break_hours}h" in text, "RestartSec が break_hours 変数で出力されていない"
         assert "RestartSec=10s" in text, "break_hours=0 用の RestartSec=10s が無い"
         default_service = self._section(self._render_cycle_template(0, 0), "Service")
@@ -202,6 +204,25 @@ class TestSystemdUnitTemplate:
         )
         assert re.search(r"^RestartSec=1h\s*$", legacy_service, flags=re.MULTILINE), (
             "break_hours=1 で RestartSec=1h が出力されない"
+        )
+
+    def test_service_restart_sec_ignores_break_hours_when_stream_hours_zero(self):
+        """Given stream_hours=0 (24/7 モード) かつ break_hours=1
+        When テンプレートを展開する
+        Then ``RestartSec=10s`` が出力される（break_hours は無視される）。
+
+        stream_hours=0 では RuntimeMaxSec が省略されるため、RestartSec が長時間になると
+        クラッシュ時の再起動が遅延する。24/7 モードでは break_hours を無視して
+        常にクラッシュ再起動用の 10s を使う。
+        """
+        service = self._section(self._render_cycle_template(0, 1), "Service")
+        assert service is not None
+        assert re.search(r"^RestartSec=10s\s*$", service, flags=re.MULTILINE), (
+            "stream_hours=0, break_hours=1 で RestartSec=10s が出力されない（24/7 モードでは break_hours を無視すべき）"
+        )
+        assert not re.search(r"^RestartSec=1h\s*$", service, flags=re.MULTILINE), (
+            "stream_hours=0 なのに RestartSec=1h が出力されている"
+            "（RuntimeMaxSec なしで RestartSec が長時間だとクラッシュ復旧が遅延する）"
         )
 
     def test_install_section_wanted_by_multi_user(self):

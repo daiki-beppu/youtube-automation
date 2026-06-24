@@ -36,7 +36,7 @@ TimeoutStopSec=30s
 RuntimeMaxSec=${stream_hours}h
 %{ endif }
 Restart=always
-%{ if break_hours > 0 }
+%{ if stream_hours > 0 && break_hours > 0 }
 RestartSec=${break_hours}h
 %{ else }
 RestartSec=10s
