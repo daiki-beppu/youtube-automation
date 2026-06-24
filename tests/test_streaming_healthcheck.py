@@ -1468,6 +1468,32 @@ class TestStreamingArchiveCheckCli:
 
         assert e.value.code == 2
 
+    def test_expected_zero_is_rejected(self):
+        """Given --expected 0
+        When main を呼ぶ
+        Then argparse error (exit 2) で停止する（期待件数 0 は無意味）。
+        """
+        from youtube_automation.scripts import streaming_archive_check
+
+        with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "0"]):
+            with pytest.raises(SystemExit) as e:
+                streaming_archive_check.main()
+
+        assert e.value.code == 2, f"--expected 0 が argparse error で拒否されていない: exit code={e.value.code}"
+
+    def test_expected_negative_is_rejected(self):
+        """Given --expected -1
+        When main を呼ぶ
+        Then argparse error (exit 2) で停止する（負の期待件数は無意味）。
+        """
+        from youtube_automation.scripts import streaming_archive_check
+
+        with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "-1"]):
+            with pytest.raises(SystemExit) as e:
+                streaming_archive_check.main()
+
+        assert e.value.code == 2, f"--expected -1 が argparse error で拒否されていない: exit code={e.value.code}"
+
     def test_notify_on_shortage_posts_to_discord(self):
         """Given count_archives_for_date が不足を返す + --notify-on-shortage
         When main を呼ぶ

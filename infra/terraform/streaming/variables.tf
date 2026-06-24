@@ -43,12 +43,22 @@ variable "stream_hours" {
   type        = number
   description = "1 回の配信継続時間（時間）。0 は無制限を表し、24/7 連続配信として RuntimeMaxSec を省略する"
   default     = 0
+
+  validation {
+    condition     = var.stream_hours >= 0
+    error_message = "stream_hours は 0 以上を指定してください（0 = 24/7 連続配信、正数 = 配信時間（時間））。"
+  }
 }
 
 variable "break_hours" {
   type        = number
   description = "配信終了後の休止時間（時間）。0 は休止なしを表し、クラッシュ時の再起動間隔 RestartSec=10s を使用する"
   default     = 0
+
+  validation {
+    condition     = var.break_hours >= 0
+    error_message = "break_hours は 0 以上を指定してください（0 = 休止なし、正数 = 休止時間（時間））。"
+  }
 }
 
 variable "stream_key" {

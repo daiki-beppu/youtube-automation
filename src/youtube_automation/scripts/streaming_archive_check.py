@@ -30,6 +30,17 @@ from youtube_automation.utils.youtube_service import get_youtube as build_youtub
 logger = logging.getLogger(__name__)
 
 
+def _positive_int(value: str) -> int:
+    """argparse type: 正整数（1 以上）のみ受け付ける。"""
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: '{value}'")
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"--expected must be >= 1, got {n}")
+    return n
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ライブ配信アーカイブ件数を確認する")
     parser.add_argument(
@@ -40,9 +51,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--expected",
-        type=int,
+        type=_positive_int,
         required=True,
-        help="期待件数。11h+1h のアーカイブ生成モードでは 2 を指定する",
+        help="期待件数（1 以上）。11h+1h のアーカイブ生成モードでは 2 を指定する",
     )
     parser.add_argument(
         "--notify-on-shortage",

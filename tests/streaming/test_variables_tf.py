@@ -138,9 +138,10 @@ class TestVariablesTfNullResource:
     def test_stream_hours_is_number_with_zero_default(self):
         """Given variables.tf
         When stream_hours 変数定義を読む
-        Then type=number, default=0, description ありで宣言されている。
+        Then type=number, default=0, description あり、非負 validation が宣言されている。
 
         0 は RuntimeMaxSec を省略する 24/7 連続配信モード。
+        負数は > 0 分岐の else 側に入り 24/7 モードに黙って吸収されるため、非負を検証する。
         """
         text = strip_hcl_comments(read_file(_VARIABLES_TF))
         block = extract_block(text, r'variable\s+"stream_hours"')
@@ -148,14 +149,21 @@ class TestVariablesTfNullResource:
         assert re.search(r"type\s*=\s*number", block), "stream_hours.type が number でない"
         assert re.search(r"default\s*=\s*0\b", block), "stream_hours.default が 0 でない"
         assert re.search(r"description\s*=", block), "stream_hours.description が無い"
-        assert extract_block(block, r"validation") is None, "仕様外の stream_hours.validation が宣言されている"
+        validation = extract_block(block, r"validation")
+        assert validation is not None, "stream_hours.validation ブロックが存在しない（負数が 24/7 モードに吸収される）"
+        assert re.search(
+            r"condition\s*=\s*var\.stream_hours\s*>=\s*0",
+            validation,
+        ), "stream_hours.validation.condition が var.stream_hours >= 0 でない"
+        assert re.search(r"error_message\s*=\s*\"", validation), "stream_hours.validation.error_message が宣言されていない"
 
     def test_break_hours_is_number_with_zero_default(self):
         """Given variables.tf
         When break_hours 変数定義を読む
-        Then type=number, default=0, description ありで宣言されている。
+        Then type=number, default=0, description あり、非負 validation が宣言されている。
 
         0 は休止なしを表し、systemd unit では RestartSec=10s を使う。
+        負数は > 0 分岐の else 側に入り休止なしモードに黙って吸収されるため、非負を検証する。
         """
         text = strip_hcl_comments(read_file(_VARIABLES_TF))
         block = extract_block(text, r'variable\s+"break_hours"')
@@ -163,7 +171,13 @@ class TestVariablesTfNullResource:
         assert re.search(r"type\s*=\s*number", block), "break_hours.type が number でない"
         assert re.search(r"default\s*=\s*0\b", block), "break_hours.default が 0 でない"
         assert re.search(r"description\s*=", block), "break_hours.description が無い"
-        assert extract_block(block, r"validation") is None, "仕様外の break_hours.validation が宣言されている"
+        validation = extract_block(block, r"validation")
+        assert validation is not None, "break_hours.validation ブロックが存在しない（負数が休止なしモードに吸収される）"
+        assert re.search(
+            r"condition\s*=\s*var\.break_hours\s*>=\s*0",
+            validation,
+        ), "break_hours.validation.condition が var.break_hours >= 0 でない"
+        assert re.search(r"error_message\s*=\s*\"", validation), "break_hours.validation.error_message が宣言されていない"
 
     def test_stream_key_is_sensitive_string_with_no_default(self):
         """Given variables.tf
