@@ -604,16 +604,14 @@ describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => 
   });
 
   it("Given image_large_ prefix の data-src When target ID で取得する Then large prefix を除去して UUID を抽出する", async () => {
-    const list =
-      document.querySelector<HTMLElement>(".clip-browser-list-scroller") ??
-      (() => {
-        const s = document.createElement("div");
-        s.className = "clip-browser-list-scroller";
-        document.body.appendChild(s);
-        const w = document.createElement("div");
-        s.appendChild(w);
-        return s;
-      })();
+    const list = document.querySelector<HTMLElement>(".clip-browser-list-scroller") ?? (() => {
+      const s = document.createElement("div");
+      s.className = "clip-browser-list-scroller";
+      document.body.appendChild(s);
+      const w = document.createElement("div");
+      s.appendChild(w);
+      return s;
+    })();
     const wrapper = list.firstElementChild as HTMLElement;
 
     const row = document.createElement("div");
@@ -636,7 +634,10 @@ describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => 
     markBbox(row, 200, 60);
     markBbox(btn, 20, 20);
 
-    const pending = ensureClipRowsLoadedByIds(["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"], { isAborted: () => false });
+    const pending = ensureClipRowsLoadedByIds(
+      ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"],
+      { isAborted: () => false },
+    );
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -644,16 +645,14 @@ describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => 
   });
 
   it("Given image と href が両方ある row When target ID で取得する Then href 経路が優先される", async () => {
-    const list =
-      document.querySelector<HTMLElement>(".clip-browser-list-scroller") ??
-      (() => {
-        const s = document.createElement("div");
-        s.className = "clip-browser-list-scroller";
-        document.body.appendChild(s);
-        const w = document.createElement("div");
-        s.appendChild(w);
-        return s;
-      })();
+    const list = document.querySelector<HTMLElement>(".clip-browser-list-scroller") ?? (() => {
+      const s = document.createElement("div");
+      s.className = "clip-browser-list-scroller";
+      document.body.appendChild(s);
+      const w = document.createElement("div");
+      s.appendChild(w);
+      return s;
+    })();
     const wrapper = list.firstElementChild as HTMLElement;
 
     const row = document.createElement("div");

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import random as real_random
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -20,6 +22,12 @@ from youtube_automation.scripts.generate_master import (
     generate_master as run_generate_master,
 )
 from youtube_automation.utils.exceptions import ValidationError
+
+_TEST_AUDIO_CODECS = {
+    "mp3": "libmp3lame",
+    "m4a": "aac",
+    "wav": "pcm_s16le",
+}
 
 
 class TestResolveLoopCount:
@@ -1543,3 +1551,110 @@ class TestGenerateMasterAudioInputs:
                 output_ext="aac",
                 quiet=True,
             )
+
+
+def _require_audio_tools() -> tuple[str, str]:
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if ffmpeg is None:
+        pytest.fail("ffmpeg is required for generate_master integration tests")
+    if ffprobe is None:
+        pytest.fail("ffprobe is required for generate_master integration tests")
+    return ffmpeg, ffprobe
+
+
+def _write_sine_audio(ffmpeg: str, path: Path, ext: str) -> None:
+    codec = _TEST_AUDIO_CODECS[ext]
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=0.35",
+            "-ar",
+            "44100",
+            "-ac",
+            "1",
+            "-c:a",
+            codec,
+            str(path),
+            "-loglevel",
+            "error",
+        ],
+        check=True,
+    )
+
+
+def _setup_real_audio_collection(tmp_path: Path, exts: list[str]) -> Path:
+    ffmpeg, _ = _require_audio_tools()
+    (tmp_path / "01-master").mkdir()
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    for index, ext in enumerate(exts, start=1):
+        _write_sine_audio(ffmpeg, music_dir / f"{index:02d}-track.{ext}", ext)
+    return tmp_path
+
+
+def _assert_readable_mp3(ffprobe: str, path: Path) -> None:
+    assert path.exists()
+    assert path.stat().st_size > 0
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.strip() == "mp3"
+
+
+class TestGenerateMasterFFmpegIntegration:
+    """実 FFmpeg で mp3 / m4a / wav から master.mp3 を生成する。"""
+
+    def test_m4a_only_inputs_generate_readable_master_mp3(self, tmp_path):
+        _, ffprobe = _require_audio_tools()
+        collection = _setup_real_audio_collection(tmp_path, ["m4a", "m4a"])
+
+        result = run_generate_master(collection, crossfade=0.05, bitrate="128k", quiet=True)
+
+        assert result == collection / "01-master" / "master.mp3"
+        _assert_readable_mp3(ffprobe, result)
+
+    def test_wav_only_inputs_generate_readable_master_mp3(self, tmp_path):
+        _, ffprobe = _require_audio_tools()
+        collection = _setup_real_audio_collection(tmp_path, ["wav", "wav"])
+
+        result = run_generate_master(collection, crossfade=0.05, bitrate="128k", quiet=True)
+
+        assert result == collection / "01-master" / "master.mp3"
+        _assert_readable_mp3(ffprobe, result)
+
+    def test_mixed_mp3_and_m4a_inputs_generate_readable_master_mp3(self, tmp_path):
+        _, ffprobe = _require_audio_tools()
+        collection = _setup_real_audio_collection(tmp_path, ["mp3", "m4a"])
+
+        result = run_generate_master(collection, crossfade=0.05, bitrate="128k", quiet=True)
+
+        assert result == collection / "01-master" / "master.mp3"
+        _assert_readable_mp3(ffprobe, result)
+
+    def test_mp3_only_inputs_generate_readable_master_mp3(self, tmp_path):
+        _, ffprobe = _require_audio_tools()
+        collection = _setup_real_audio_collection(tmp_path, ["mp3", "mp3"])
+
+        result = run_generate_master(collection, crossfade=0.05, bitrate="128k", quiet=True)
+
+        assert result == collection / "01-master" / "master.mp3"
+        _assert_readable_mp3(ffprobe, result)
