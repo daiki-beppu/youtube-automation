@@ -46,6 +46,7 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
+  collectClipRowTitle,
   ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
   multiSelectClips,
@@ -56,7 +57,11 @@ import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { triggerPlaylistCaptureFailSoft } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
 
-function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submittedIds: string[]): Map<string, string> {
+function buildTitleFallbackMap(
+  entries: PromptEntry[],
+  order: number[],
+  submittedIds: string[],
+): Map<string, string> {
   const map = new Map<string, string>();
   for (let i = 0; i < order.length; i++) {
     const entry = entries[order[i]];
@@ -124,11 +129,6 @@ export default defineContentScript({
       }
       currentSnapshot = applyProgress(currentSnapshot, payload);
       void sendMessage("progress", payload);
-    }
-
-    function emitRetryPlaylistStopped(): void {
-      const payload: ProgressPayload = { phase: PHASE.STOPPED, total: 0 };
-      emitProgress(payload);
     }
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
@@ -446,14 +446,7 @@ export default defineContentScript({
           return;
         }
         try {
-          await addClipsToPlaylist(
-            total,
-            playlistName,
-            previousSubmittedClipIds,
-            expectedPlaylistClipCount,
-            entries,
-            order,
-          );
+          await addClipsToPlaylist(total, playlistName, previousSubmittedClipIds, expectedPlaylistClipCount, entries, order);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           persistInterruptState(total);
@@ -546,7 +539,7 @@ export default defineContentScript({
         try {
           await addClipsToPlaylist(0, playlistName, submittedClipIds, expectedClipCount, [], []);
           if (aborted) {
-            emitRetryPlaylistStopped();
+            emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
           await triggerPlaylistCaptureFailSoft(

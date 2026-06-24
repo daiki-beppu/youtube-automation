@@ -190,12 +190,16 @@ describe("resolvePlaylistClipIds: resume を跨ぐ playlist 対象 ID 解決 (#1
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const result = resolvePlaylistClipIds(["clip-a"], ["clip-b"], 4);
     expect(result).toEqual(["clip-a", "clip-b"]);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("expected 4, got 2"));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("expected 4, got 2"),
+    );
     warnSpy.mockRestore();
   });
 
   it("Given 0 件 When 解決 Then throw する", () => {
-    expect(() => resolvePlaylistClipIds([], [], 4)).toThrow("playlist 対象の clip ID が 0 件です");
+    expect(() => resolvePlaylistClipIds([], [], 4)).toThrow(
+      "playlist 対象の clip ID が 0 件です",
+    );
   });
 });
 

@@ -82,6 +82,15 @@ describe("phaseToStatus: ADDING_TO_PLAYLIST の進捗文言 (#854)", () => {
   });
 });
 
+describe("phaseToStatus: DOWNLOADING の進捗文言 (#1215)", () => {
+  it("Given DOWNLOADING When phaseToStatus Then ダウンロード中文言・error は falsy", () => {
+    const result = statusOf({ phase: PHASE.DOWNLOADING, total: 3 });
+
+    expect(result.text).toBe("Suno からダウンロード中…");
+    expect(result.error).toBeFalsy();
+  });
+});
+
 describe("phaseToStatus: INJECTING の entry 名解決", () => {
   it("Given entries を持つ snap When INJECTING index=2 Then 対応する entry 名を文言に含める", () => {
     const result = statusOf({ phase: PHASE.INJECTING, index: 2, total: 3 });
