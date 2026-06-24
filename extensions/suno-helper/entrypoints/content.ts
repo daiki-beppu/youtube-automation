@@ -126,6 +126,11 @@ export default defineContentScript({
       void sendMessage("progress", payload);
     }
 
+    function emitRetryPlaylistStopped(): void {
+      const payload: ProgressPayload = { phase: PHASE.STOPPED, total: 0 };
+      emitProgress(payload);
+    }
+
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       // attempt ごとに lastSubmittedEntryIndex を -1 にリセットする。
       // injectWithVerification が silent drop を検知して同一 entry を retry するとき、
@@ -541,7 +546,7 @@ export default defineContentScript({
         try {
           await addClipsToPlaylist(0, playlistName, submittedClipIds, expectedClipCount, [], []);
           if (aborted) {
-            emitProgress({ phase: PHASE.STOPPED, total: 0 });
+            emitRetryPlaylistStopped();
             return;
           }
           await triggerPlaylistCaptureFailSoft(

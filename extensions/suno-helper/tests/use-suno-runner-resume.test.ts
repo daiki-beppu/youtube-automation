@@ -102,14 +102,15 @@ describe("resumeRunRange: playlist phase 停止 (failedIndex=total) は空 entry
 });
 
 // #898: runAll は defineContentScript 内の closure で export を持たず unit import できないため、
-// content.ts をソーステキストとして読み、runAll 内の STOPPED resume save 構造を機械担保する。
+// content.ts をソーステキストとして読み、STOPPED 5 箇所すべてで resume save が走る構造を機械担保する
+// （ssot-dedup.test.ts の read() 手法を雛形）。実装前は失敗し、draft step の実装後に pass する。
 describe("content.ts: STOPPED phase は resume state を保存する (#898 要件1/2/3/7)", () => {
   const contentSource = read("../entrypoints/content.ts");
 
-  it("Given content.ts When PHASE.STOPPED emit を数える Then 正確に 5 箇所（漏れ・重複なし, retryPlaylist 中断を含む）", () => {
+  it("Given content.ts When PHASE.STOPPED emit を数える Then 正確に 4 箇所（漏れ・重複なし, 要件2。#948 で 5→4: queue 待ち後の中断は entry-retry の outcome=aborted 経路に統合）", () => {
     const stoppedEmits = contentSource.match(/emitProgress\(\{ phase: PHASE\.STOPPED/g) ?? [];
 
-    expect(stoppedEmits).toHaveLength(5);
+    expect(stoppedEmits).toHaveLength(4);
   });
 
   it("Given ループ内 STOPPED のうち未 click 箇所 When 直前を読む Then persistInterruptState(i) が隣接する（ループ先頭の 1 箇所, #948 で 2→1: queue 待ち後の中断は outcome=aborted 経路へ統合）", () => {

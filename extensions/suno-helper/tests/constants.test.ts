@@ -58,12 +58,12 @@ describe("shared/constants: 進捗フェーズ (PHASE)", () => {
     expect(PHASE).toEqual({
       INJECTING: "injecting",
       GENERATING: "generating",
-      DOWNLOADING: "downloading",
       WAITING_SLOT: "waiting-slot",
       WAITING_CAPTCHA: "waiting-captcha",
       DONE: "done",
       ENTRY_FAILED: "entry-failed",
       ADDING_TO_PLAYLIST: "adding-to-playlist",
+      DOWNLOADING: "downloading",
       FINISHED: "finished",
       STOPPED: "stopped",
       ERROR: "error",

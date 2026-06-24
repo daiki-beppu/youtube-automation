@@ -241,7 +241,6 @@ export const SERVER_HOST_PERMISSIONS = [
 export const PHASE = {
   INJECTING: "injecting",
   GENERATING: "generating",
-  DOWNLOADING: "downloading",
   WAITING_SLOT: "waiting-slot",
   // captcha challenge の解消（自動 verify or 手動解決）待ち。即 fail-loud せず待機して自動続行する。非終了 phase。
   WAITING_CAPTCHA: "waiting-captcha",
@@ -251,6 +250,7 @@ export const PHASE = {
   ENTRY_FAILED: "entry-failed",
   // 全 entry の生成 DONE 後、FINISHED 直前に挟む clip 一括 playlist 追加 phase (#854)。非終了 phase。
   ADDING_TO_PLAYLIST: "adding-to-playlist",
+  DOWNLOADING: "downloading",
   FINISHED: "finished",
   STOPPED: "stopped",
   ERROR: "error",
