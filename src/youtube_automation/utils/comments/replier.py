@@ -432,6 +432,7 @@ class CommentReplier:
         }
         self._history.mark_replied(comment.comment_id, metadata)
         # insert→save 間で save が失敗すると次回実行で二重返信するため、リトライで確実に永続化 (#382)
+        save_failed = False
         for save_attempt in range(3):
             try:
                 self._history.save()
@@ -444,11 +445,15 @@ class CommentReplier:
                     e,
                 )
         else:
+            save_failed = True
             logger.error(
                 "⚠️  履歴保存が 3 回失敗 (comment_id=%s) — 次回実行で二重返信の可能性あり",
                 comment.comment_id,
             )
-        plan.replied.append({"comment_id": comment.comment_id, **metadata})
+        record = {"comment_id": comment.comment_id, **metadata}
+        if save_failed:
+            record["save_failed"] = True
+        plan.replied.append(record)
         return True
 
     @staticmethod

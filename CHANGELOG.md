@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(videoup)`: `generate_videos.sh` で loop.mp4 不在時に静止画フォールバックを明示的にログ出力し、loop 生成失敗の痕跡（`loop_raw.mp4` / `loop-v*.mp4`）がある場合は警告を表示。静止画 + effect 経路にもループ不在ログを追加。痕跡検出を `ls | head` パイプから配列ベースのファイル存在チェックに修正（pipefail 非依存化）。テスト 3 件追加（#868）
 - `fix(suno-helper)`: Cmd+P によるプレイリスト dialog の起動を最大 3 回リトライし、大規模 collection の multi-select verify タイムアウトを 50→100ms/row に倍増して安定性を改善（#1050）
 - `fix(thumbnail)`: Gemini 参照画像生成時に variation guard プロンプトを自動プリペンドし、参照画像の丸パクリを抑制（#1049）
-- `fix(comments-reply)`: `comments.insert` 成功後の履歴 `save()` を最大 3 回リトライし、insert→save 間の二重返信余地を縮小（#382）
+- `fix(comments-reply)`: `comments.insert` 成功後の履歴 `save()` を最大 3 回リトライし、insert→save 間の二重返信余地を縮小。全 save 失敗時は `plan.replied` に `save_failed` フラグを付与（#382）
 - `fix(collection-serve)`: `send_error()` 26 箇所を CORS 付き `_send_json_error()` に統一し、suno-helper 拡張が CORS ポリシーでブロックされる問題を修正（#1209）
 - `fix(suno-helper)`: dir mode で collection 切り替え・URL 変更時に前回の prompts が残留する問題を修正（#1210）。`syncCollections` で最新 collection 一覧を再取得してから prompts を fetch するフローに変更し、サーバー側で single-file mode の `/collections` と dir mode の `/suno/prompts.json` 直アクセスに JSON 404 レスポンスを返すよう修正。`resolvePromptCollectionId` を shared に新設
 
