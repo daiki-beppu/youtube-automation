@@ -16,7 +16,7 @@
 
 Steps per collection:
 1. Read pattern names from suno-prompts.md (## Pattern X: 日本語 — English Name)
-2. List 02-Individual-music/*.{mp3,m4a,wav} in lexicographic order
+2. List 02-Individual-music/*.mp3 in lexicographic order
 3. Extract pattern letter (a/b/c/d) from filename like 'XX-pattern-Y-...'
 4. Compute each track's master-timeline start with 3-second crossfade
 5. For each pattern, take the start time of its first track
@@ -34,7 +34,7 @@ from youtube_automation.utils.config import channel_dir
 
 CROSSFADE_SEC = 3
 COLLECTIONS_DIR = channel_dir() / "collections" / "live"
-TIMESTAMP_AUDIO_EXTS = (".mp3", ".m4a", ".wav")
+TIMESTAMP_AUDIO_EXTS = (".mp3",)
 
 TARGET_COLLECTIONS = [
     "20260328-rjn-last-platform-collection",

@@ -177,6 +177,15 @@ def _resolve_output_ext(output_ext: str) -> str:
     return normalized
 
 
+def _remove_stale_master_outputs(master_dir: Path, current_ext: str) -> None:
+    for ext in _OUTPUT_AUDIO_FORMATS:
+        if ext == current_ext:
+            continue
+        stale = master_dir / f"master.{ext}"
+        if stale.exists():
+            stale.unlink()
+
+
 def _apply_pin_first(
     files: list[Path],
     *,
@@ -298,6 +307,7 @@ def generate_master(
 
     if n_effective == 1 and expanded[0].suffix.lower() == f".{audio_ext}":
         shutil.copyfile(expanded[0], output)
+        _remove_stale_master_outputs(master_dir, audio_ext)
         if not quiet:
             print("  Single file — copied directly.\n")
         return output
@@ -340,6 +350,8 @@ def generate_master(
 
     if result.returncode != 0:
         raise ValidationError(f"FFmpeg failed with exit code {result.returncode}")
+
+    _remove_stale_master_outputs(master_dir, audio_ext)
 
     if not quiet:
         sys.stderr.write(

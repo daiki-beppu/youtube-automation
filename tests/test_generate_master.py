@@ -186,6 +186,8 @@ class TestGenerateMasterLoops:
 
     def test_single_file_with_loop_1_uses_copy_path(self, tmp_path, monkeypatch):
         collection = self._setup_collection(tmp_path, file_count=1)
+        stale_wav = collection / "01-master" / "master.wav"
+        stale_wav.write_bytes(b"stale")
         monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
 
         with patch.object(generate_master.subprocess, "run") as mock_run:
@@ -194,6 +196,7 @@ class TestGenerateMasterLoops:
         # ffmpeg は呼ばれず、shutil.copyfile パスを通る
         mock_run.assert_not_called()
         assert (collection / "01-master" / "master.mp3").exists()
+        assert not stale_wav.exists()
 
     def test_single_file_with_loop_3_uses_ffmpeg(self, tmp_path, monkeypatch):
         collection = self._setup_collection(tmp_path, file_count=1)
@@ -1493,8 +1496,40 @@ class TestGenerateMasterAudioInputs:
         assert [Path(p).name for p in _input_files_in_cmd(captured["cmd"])] == ["01.mp3", "02.m4a"]
         assert "libmp3lame" in captured["cmd"]
 
+    def test_successful_master_mp3_generation_removes_stale_master_wav(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, ext="m4a", file_count=2)
+        stale_wav = collection / "01-master" / "master.wav"
+        stale_wav.write_bytes(b"stale")
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            result = run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
+
+        assert result == collection / "01-master" / "master.mp3"
+        assert not stale_wav.exists()
+
+    def test_failed_master_mp3_generation_keeps_stale_master_wav(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, ext="m4a", file_count=2)
+        stale_wav = collection / "01-master" / "master.wav"
+        stale_wav.write_bytes(b"stale")
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=1)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            with pytest.raises(ValidationError, match="FFmpeg failed"):
+                run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
+
+        assert stale_wav.exists()
+
     def test_explicit_wav_output_keeps_lyria_master_wav_contract(self, tmp_path, monkeypatch):
         collection = self._setup_collection(tmp_path, ext="wav", file_count=3)
+        stale_mp3 = collection / "01-master" / "master.mp3"
+        stale_mp3.write_bytes(b"stale")
         monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
 
         captured: dict = {}
@@ -1519,6 +1554,7 @@ class TestGenerateMasterAudioInputs:
         assert cmd[idx + 1] == "pcm_s16le"
         assert "-b:a" not in cmd
         assert "-q:a" not in cmd
+        assert not stale_mp3.exists()
 
     def test_explicit_wav_input_contract_rejects_m4a_and_mp3(self, tmp_path, monkeypatch):
         (tmp_path / "01-master").mkdir()
@@ -1597,7 +1633,7 @@ def _setup_real_audio_collection(tmp_path: Path, exts: list[str]) -> Path:
     return tmp_path
 
 
-def _assert_readable_mp3(ffprobe: str, path: Path) -> None:
+def _assert_audio_codec(ffprobe: str, path: Path, expected_codec: str) -> None:
     assert path.exists()
     assert path.stat().st_size > 0
     result = subprocess.run(
@@ -1617,7 +1653,15 @@ def _assert_readable_mp3(ffprobe: str, path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert result.stdout.strip() == "mp3"
+    assert result.stdout.strip() == expected_codec
+
+
+def _assert_readable_mp3(ffprobe: str, path: Path) -> None:
+    _assert_audio_codec(ffprobe, path, "mp3")
+
+
+def _assert_readable_pcm_wav(ffprobe: str, path: Path) -> None:
+    _assert_audio_codec(ffprobe, path, "pcm_s16le")
 
 
 class TestGenerateMasterFFmpegIntegration:
@@ -1658,3 +1702,19 @@ class TestGenerateMasterFFmpegIntegration:
 
         assert result == collection / "01-master" / "master.mp3"
         _assert_readable_mp3(ffprobe, result)
+
+    def test_wav_only_inputs_generate_readable_master_wav_when_requested(self, tmp_path):
+        _, ffprobe = _require_audio_tools()
+        collection = _setup_real_audio_collection(tmp_path, ["wav", "wav"])
+
+        result = run_generate_master(
+            collection,
+            crossfade=0.05,
+            bitrate="128k",
+            input_exts=("wav",),
+            output_ext="wav",
+            quiet=True,
+        )
+
+        assert result == collection / "01-master" / "master.wav"
+        _assert_readable_pcm_wav(ffprobe, result)
