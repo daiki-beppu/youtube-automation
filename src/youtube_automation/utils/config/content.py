@@ -37,7 +37,7 @@ class Tags:
             if theme in lowered:
                 tags.extend(theme_tag_list)
                 break
-        return tags[:50]
+        return [t.strip('"') for t in tags[:50]]
 
 
 @dataclass(frozen=True)

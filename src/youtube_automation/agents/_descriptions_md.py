@@ -49,7 +49,7 @@ class DescriptionsMdMixin:
             logger.warning("⚠️  descriptions.md のパースに失敗 — BAHMetadataGenerator にフォールバック")
             return None
 
-        tags = [t.strip() for t in tags_raw.replace("\n", ",").split(",") if t.strip()] if tags_raw else []
+        tags = [t.strip().strip('"') for t in tags_raw.replace("\n", ",").split(",") if t.strip()] if tags_raw else []
 
         logger.info("📄 descriptions.md からメタデータを読み込み")
         return {"title": title.strip(), "description": description.strip(), "tags": tags}
