@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `fix(masterup)`: Suno CDN ダウンロードに `--fail` + `--retry 3` + 検証ステップを追加し、部分ダウンロードや破損ファイルを検出・警告するようにした。Content-Type 検証・UUID バリデーション・期待ファイル突合チェック・検証ゲート・リトライ設定の外部化も追加（#1090）
 - `fix(metadata-generator)`: `analyze_audio_files()` でトラックがサイレントにスキップされる問題を修正。duration が 0 以下や例外発生時にスキップ理由を明示的に警告し、入力数と出力数の不一致を検出するサマリーを追加。`_get_audio_duration()` の内部 try/except を除去し例外を呼び出し元へ伝播させることで skip reason に実際のエラー詳細が含まれるよう改善（#1093）
-- `fix(tags)`: 全タグパース経路（`_descriptions_md.py` / `preflight_checks.py` / `bulk_update_descriptions_from_md.py` / `Tags.for_collection()`）でダブルクォートを自動除去し、YouTube タグ欄にそのまま貼れるようにした（#1096）
+- `fix(tags)`: タグ quote 除去を `normalize_youtube_tags()` に一元化し、全 5 経路（`Tags.for_collection()` / `_descriptions_md.py` / `preflight_checks.py` / `bulk_update_descriptions_from_md.py` / Shorts タグ生成）を統一。Shorts 経路の漏れも修正（#1096）
 - `fix(collection-serve)`: `send_error()` 26 箇所を CORS 付き `_send_json_error()` に統一し、suno-helper 拡張が CORS ポリシーでブロックされる問題を修正（#1209）
 - `fix(suno-helper)`: dir mode で collection 切り替え・URL 変更時に前回の prompts が残留する問題を修正（#1210）。`syncCollections` で最新 collection 一覧を再取得してから prompts を fetch するフローに変更し、サーバー側で single-file mode の `/collections` と dir mode の `/suno/prompts.json` 直アクセスに JSON 404 レスポンスを返すよう修正。`resolvePromptCollectionId` を shared に新設
 

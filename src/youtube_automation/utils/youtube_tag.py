@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 
+def normalize_youtube_tags(raw_tags: list[str]) -> list[str]:
+    """タグリストから先頭・末尾のダブルクォートを除去する."""
+    return [t.strip('"') for t in raw_tags]
+
+
 def youtube_tag_chars(tags: list[str]) -> int:
     """YouTube が判定する真のタグ文字数を計算する.
 

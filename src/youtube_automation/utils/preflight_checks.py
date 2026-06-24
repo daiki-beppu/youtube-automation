@@ -10,7 +10,7 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
-from youtube_automation.utils.youtube_tag import youtube_tag_chars
+from youtube_automation.utils.youtube_tag import normalize_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
 REQUIRED_LOCALIZATION_LANGUAGES = ("ja", "en", "de")
@@ -168,7 +168,7 @@ def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
     if not m:
         return None
     raw = m.group(1).strip()
-    tags = [t.strip().strip('"') for t in raw.replace("\n", ",").split(",") if t.strip()]
+    tags = normalize_youtube_tags([t.strip() for t in raw.replace("\n", ",").split(",") if t.strip()])
     return tags or None
 
 

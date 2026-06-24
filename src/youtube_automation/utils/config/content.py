@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from youtube_automation.utils.youtube_tag import normalize_youtube_tags
+
 
 @dataclass(frozen=True)
 class Genre:
@@ -37,7 +39,7 @@ class Tags:
             if theme in lowered:
                 tags.extend(theme_tag_list)
                 break
-        return [t.strip('"') for t in tags[:50]]
+        return normalize_youtube_tags(tags[:50])
 
 
 @dataclass(frozen=True)

@@ -26,6 +26,7 @@ from youtube_automation.utils.exceptions import ValidationError
 from .audio_formats import AUDIO_EXTS
 from .skill_config import load_skill_config
 from .time_utils import format_duration_display, format_duration_short, format_timestamp
+from .youtube_tag import normalize_youtube_tags
 
 logger = logging.getLogger(__name__)
 
@@ -987,7 +988,7 @@ class BAHMetadataGenerator:
         tag_list: List[str] = ["Shorts"]
         tag_list.extend(self.config.content.tags.base)
         tag_list.extend(self.config.content.tags.themes.get(theme, []))
-        tag_list = tag_list[:50]
+        tag_list = normalize_youtube_tags(tag_list[:50])
 
         localizations = build_short_localizations(
             self.config,

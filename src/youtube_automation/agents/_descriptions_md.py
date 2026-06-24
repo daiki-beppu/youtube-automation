@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.youtube_tag import normalize_youtube_tags
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,11 @@ class DescriptionsMdMixin:
             logger.warning("⚠️  descriptions.md のパースに失敗 — BAHMetadataGenerator にフォールバック")
             return None
 
-        tags = [t.strip().strip('"') for t in tags_raw.replace("\n", ",").split(",") if t.strip()] if tags_raw else []
+        tags = (
+            normalize_youtube_tags([t.strip() for t in tags_raw.replace("\n", ",").split(",") if t.strip()])
+            if tags_raw
+            else []
+        )
 
         logger.info("📄 descriptions.md からメタデータを読み込み")
         return {"title": title.strip(), "description": description.strip(), "tags": tags}
