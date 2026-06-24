@@ -130,7 +130,7 @@ COLLECTION_NAME="$(echo "$dir_basename" \
 LOOP_VIDEO=""
 if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
-    echo "  Loop     : ${LOOP_VIDEO} (detected)"
+    echo "  Loop     : $(basename "${LOOP_VIDEO}") (detected)"
 else
     echo "  Loop     : not found — 静止画モードで出力します"
     loop_artifacts=()

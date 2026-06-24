@@ -466,7 +466,6 @@ def test_static_image_with_effect_uses_filter_complex(tmp_path: Path) -> None:
 def test_loop_absent_with_loop_raw_shows_warning(tmp_path: Path) -> None:
     """loop.mp4 が無いが loop_raw.mp4 が残っていれば警告を出力する."""
     collection = _create_collection(tmp_path)
-    # loop.mp4 を消して loop_raw.mp4 を残す
     (collection / "10-assets" / "loop.mp4").unlink()
     (collection / "10-assets" / "loop_raw.mp4").write_bytes(b"fake-raw")
 
@@ -514,6 +513,45 @@ def test_loop_absent_no_artifacts_no_warning(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "生成途中の痕跡が存在します" not in result.stdout
     assert "loop_raw.mp4" not in result.stdout
+
+
+def test_loop_detected_log_shows_basename(tmp_path: Path) -> None:
+    """loop.mp4 検出時のログに basename のみ表示される (フルパスではない)."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : loop.mp4 (detected)" in result.stdout
+    assert "10-assets/loop.mp4 (detected)" not in result.stdout
+
+
+def test_loop_not_found_log(tmp_path: Path) -> None:
+    """loop.mp4 が存在しない場合は not found ログを出力する."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : not found" in result.stdout
+
+
+def test_static_image_effect_fallback_shows_no_loop_log(tmp_path: Path) -> None:
+    """静止画 + effect fallback 時に not found ログが出力される."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles"},
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : not found" in result.stdout
 
 
 def test_invalid_effect_name_fails_loud(tmp_path: Path) -> None:
