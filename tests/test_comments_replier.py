@@ -9,7 +9,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.comments.replier import CommentReplier, _SAVE_MAX_RETRIES
+from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
 from youtube_automation.utils.config.comments import (
     CommentRule,
     Comments,
