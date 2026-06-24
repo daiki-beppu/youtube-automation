@@ -229,7 +229,7 @@ uv run ruff check .
 | `yt-analytics` | Analytics データ収集 |
 | `yt-generate-image` | Gemini / OpenAI で画像生成（サムネイル兼用） |
 | `yt-generate-lyria-master` | Lyria 3 で N セグメント生成 + クロスフェード結合してマスター音源を作成 |
-| `yt-generate-master` | 個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を作成 |
+| `yt-generate-master` | 個別音声 (MP3 / M4A / WAV) をクロスフェード結合してマスター音源を作成 |
 | `yt-generate-suno` | Suno プロンプト生成 |
 | `yt-generate-loop-video` | Veo ループ動画生成 |
 | `yt-init-collection` | 新規コレクションの雛形作成 |

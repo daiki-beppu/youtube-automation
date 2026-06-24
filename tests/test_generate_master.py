@@ -218,6 +218,16 @@ class TestGenerateMasterLoops:
 class TestCli:
     """CLI 引数バリデーション。"""
 
+    def test_help_advertises_supported_input_formats(self, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", "--help"])
+
+        with pytest.raises(SystemExit) as exc:
+            generate_master.main()
+
+        assert exc.value.code == 0
+        out = capsys.readouterr().out
+        assert "MP3 / M4A / WAV" in out
+
     def test_loop_and_target_duration_mutually_exclusive(self, monkeypatch, capsys):
         monkeypatch.setattr(
             "sys.argv",

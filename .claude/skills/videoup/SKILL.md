@@ -12,7 +12,7 @@ description: "Use when コレクションの音声ファイルが揃い、動画
 
 | スクリプト | 役割 | 場所 |
 |-----------|------|------|
-| `yt-generate-master` | 個別 MP3 → クロスフェード結合 → マスター MP3 | Python CLI (skill-config `masterup` 参照) |
+| `yt-generate-master` | 個別音声 (mp3 / m4a / wav) → クロスフェード結合 → `master.mp3` | Python CLI (skill-config `masterup` 参照) |
 | `generate_videos.sh` | 音声 + サムネイル → MP4 動画 | `.claude/skills/videoup/references/generate_videos.sh` |
 
 ## Quick Reference
@@ -53,7 +53,7 @@ $ARGUMENTS
 - **コレクション名**: ディレクトリ名から（`YYYYMMDD-xxx-theme-collection` → `Theme-Name`）
 - **マスター音声**: `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`yt-generate-master`）の自動生成出力（#507）
 - **サムネイル**: `10-assets/main.png` 優先、`thumbnail.jpg` フォールバック
-- **個別音楽**: `02-Individual-music/*.mp3`（アルファベット順）
+- **個別音楽**: `02-Individual-music/*.{mp3,m4a,wav}`（アルファベット順）
 
 ### 重要
 
