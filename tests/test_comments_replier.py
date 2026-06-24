@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.comments.replier import CommentReplier
+from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
 from youtube_automation.utils.config.comments import (
     CommentRule,
     Comments,
@@ -923,3 +924,220 @@ def test_legacy_rule_generator_key_rejected_by_loader():
 
     with pytest.raises(ConfigError, match="comments.rules\\[0\\].generator"):
         _build_comments(merged)
+
+
+# ─── 履歴 save リトライのテスト (#382) ────────────────────────────────────────
+
+
+def test_save_succeeds_first_try_no_warning(tmp_path, caplog):
+    """save が初回で成功すればリトライ警告が出ない."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(delay_between_replies_sec=0.0),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert "save_failed" not in plan.replied[0]
+    assert "履歴保存リトライ" not in caplog.text
+    assert "履歴保存が 3 回失敗" not in caplog.text
+
+
+def test_save_fails_once_then_succeeds_logs_warning(tmp_path, caplog):
+    """save が 1 回失敗して 2 回目で成功したとき、リトライ警告が出るがエラーは出ない."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(delay_between_replies_sec=0.0),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    original_save = replier._history.save
+    call_count = 0
+
+    def _flaky_save():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise OSError("disk full")
+        return original_save()
+
+    with patch.object(replier._history, "save", side_effect=_flaky_save):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+            plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert "save_failed" not in plan.replied[0]
+    assert plan.errors == []
+    assert "履歴保存リトライ 1/3" in caplog.text
+    assert "履歴保存が 3 回失敗" not in caplog.text
+
+
+def test_save_fails_all_3_times_logs_error_and_flags_record(tmp_path, caplog):
+    """save 全失敗時: エラーログ + save_failed フラグ + plan.errors 記録."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(delay_between_replies_sec=0.0),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    with patch.object(replier._history, "save", side_effect=OSError("disk full")):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+            plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert plan.replied[0]["save_failed"] is True
+    assert plan.replied[0]["comment_id"] == "c1"
+    # plan.errors に記録されている（CLI の exit code に反映）
+    assert len(plan.errors) == 1
+    assert "履歴保存が 3 回失敗" in plan.errors[0]["error"]
+    assert plan.errors[0]["comment_id"] == "c1"
+    # 3 回分のリトライ警告 + 最終エラー
+    assert caplog.text.count("履歴保存リトライ") == 3
+    assert "履歴保存が 3 回失敗" in caplog.text
+    # ログレベル検証: WARNING 3 件 + ERROR 1 件
+    replier_records = [r for r in caplog.records if r.name == "youtube_automation.utils.comments.replier"]
+    warning_records = [r for r in replier_records if r.levelno == logging.WARNING]
+    error_records = [r for r in replier_records if r.levelno == logging.ERROR]
+    assert len(warning_records) == 3
+    assert len(error_records) == 1
+
+
+def test_save_fails_once_then_succeeds_log_levels(tmp_path, caplog):
+    """部分失敗（1 回失敗 → 2 回目成功）: WARNING 1 件、ERROR 0 件."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(delay_between_replies_sec=0.0),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    original_save = replier._history.save
+    call_count = 0
+
+    def _flaky_save():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise OSError("disk full")
+        return original_save()
+
+    with patch.object(replier._history, "save", side_effect=_flaky_save):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+            plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert plan.errors == []
+    replier_records = [r for r in caplog.records if r.name == "youtube_automation.utils.comments.replier"]
+    warning_records = [r for r in replier_records if r.levelno == logging.WARNING]
+    error_records = [r for r in replier_records if r.levelno == logging.ERROR]
+    assert len(warning_records) == 1
+    assert len(error_records) == 0
+
+
+def test_same_comment_id_in_two_videos_only_inserts_once_when_save_always_fails(tmp_path):
+    """save が全失敗しても mark_replied() のメモリ記録で同一実行内の二重返信を防ぐ."""
+    # 同じ comment_id "c_dup" が 2 つの video に出現する fixture
+    yt = _mock_youtube(
+        video_ids=["v1", "v2"],
+        comments_by_video={
+            "v1": [{"comment_id": "c_dup", "text": "こんにちは！", "author": "Alice"}],
+            "v2": [{"comment_id": "c_dup", "text": "こんにちは！", "author": "Alice"}],
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(delay_between_replies_sec=0.0),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    with patch.object(replier._history, "save", side_effect=OSError("disk full")):
+        plan = replier.run(dry_run=False)
+
+    # insert は 1 回だけ（v1 の c_dup に対して）
+    assert yt._insert_mock.execute.call_count == 1
+    # replied に 1 件（v1 の c_dup）
+    assert len(plan.replied) == 1
+    assert plan.replied[0]["comment_id"] == "c_dup"
+    # 2 件目は already_replied でスキップ
+    assert any(row["comment_id"] == "c_dup" and row["reason"] == "already_replied" for row in plan.skipped)
+
+
+# ─── save() 呼び出し回数の厳密検証 (#382) ───────────────────────────────────
+
+
+def test_save_call_count_success_first_try(tmp_path):
+    """save 成功時: save() は 1 回だけ呼ばれる."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt, config=_make_config(delay_between_replies_sec=0.0), channel_dir=tmp_path, default_language="ja"
+    )
+
+    with patch.object(replier._history, "save", wraps=replier._history.save) as mock_save:
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert mock_save.call_count == 1
+
+
+def test_save_call_count_one_failure_then_success(tmp_path):
+    """save 1 回失敗 → 2 回目成功: save() は 2 回呼ばれる."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt, config=_make_config(delay_between_replies_sec=0.0), channel_dir=tmp_path, default_language="ja"
+    )
+
+    original_save = replier._history.save
+    effects = [OSError("disk full"), original_save]
+
+    with patch.object(replier._history, "save", side_effect=effects) as mock_save:
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert mock_save.call_count == 2
+
+
+def test_save_call_count_all_retries_exhausted(tmp_path):
+    """save 全失敗: save() は _SAVE_MAX_RETRIES 回呼ばれる."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "A"}]},
+    )
+    replier = CommentReplier(
+        yt, config=_make_config(delay_between_replies_sec=0.0), channel_dir=tmp_path, default_language="ja"
+    )
+
+    with patch.object(replier._history, "save", side_effect=OSError("disk full")) as mock_save:
+        plan = replier.run(dry_run=False)
+
+    assert len(plan.replied) == 1
+    assert plan.replied[0]["save_failed"] is True
+    assert mock_save.call_count == _SAVE_MAX_RETRIES
