@@ -148,8 +148,45 @@ $ARGUMENTS
 3. ファイル名: 連番 + タイトルから生成（例: `01-pattern-a-arrival.mp3`）
 
 ```bash
-curl -L -o "02-Individual-music/{filename}.mp3" "https://cdn1.suno.ai/{song_id}.mp3"
+curl -fSL --retry 3 --retry-delay 2 \
+  -w '\n[DL] %{filename_effective}: HTTP %{http_code}, %{size_download} bytes, %{speed_download} B/s\n' \
+  -o "02-Individual-music/{filename}.mp3" \
+  "https://cdn1.suno.ai/{song_id}.mp3"
 ```
+
+**各フラグの意味**:
+- `-f` (`--fail`): HTTP 4xx/5xx でゼロバイトファイルを残さず即座に失敗扱いにする
+- `-S`: `-f` と組み合わせてエラー詳細を stderr に出力
+- `--retry 3 --retry-delay 2`: 一時的な CDN エラー時に 2 秒間隔で最大 3 回リトライ
+- `-w`: ダウンロード結果（HTTP status, サイズ, 速度）をログ出力
+
+**ダウンロード後の検証（全曲完了後に一括実行）**:
+
+```bash
+failed=()
+for f in 02-Individual-music/*.mp3; do
+  size=$(stat -f%z "$f" 2>/dev/null || echo 0)
+  if [ "$size" -lt 10000 ]; then
+    echo "⚠️  $f: サイズが異常に小さい (${size} bytes) — 部分ダウンロードの可能性"
+    failed+=("$f")
+    continue
+  fi
+  duration=$(afinfo "$f" 2>/dev/null | grep "estimated duration" | awk '{print $3}')
+  if [ -z "$duration" ] || [ "$(echo "$duration < 5" | bc)" -eq 1 ]; then
+    echo "⚠️  $f: 再生時間が異常 (${duration:-N/A} 秒) — ファイル破損の可能性"
+    failed+=("$f")
+  fi
+done
+if [ ${#failed[@]} -gt 0 ]; then
+  echo "❌ ${#failed[@]} ファイルの検証に失敗:"
+  printf '  - %s\n' "${failed[@]}"
+  echo "→ 手動で Suno UI から再ダウンロードするか、Song ID を確認して curl を再実行してください"
+else
+  echo "✅ 全ファイル検証 OK"
+fi
+```
+
+**検証が失敗した場合**: 該当ファイルを削除し、curl を再実行する。3 回リトライしても失敗する場合は CDN 障害の可能性が高いため、手動で Suno UI からダウンロードして `02-Individual-music/` に配置するフォールバックに切り替える。
 
 **注意**: CDN URL は public だが永続性は不明。生成後なるべく早めにダウンロードすること。1ファイル約2-3MB。
 
@@ -157,6 +194,7 @@ curl -L -o "02-Individual-music/{filename}.mp3" "https://cdn1.suno.ai/{song_id}.
 
 - ダウンロード成功した曲リスト（タイトル・Song ID・再生時間）
 - 合計ファイル数とサイズ
+- 検証結果サマリー（全件 OK / 失敗件数と対象ファイル）
 - `02-Individual-music/` のファイル一覧
 
 ### Step 5: マスター音源生成（CLI）
