@@ -45,6 +45,8 @@ const CLIP_SELECT_VERIFY_POLL_MS = 50;
 const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 /** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924 → #1050 で 50→100 に倍増)。 */
 const CLIP_SELECT_VERIFY_MS_PER_ROW = 100;
+/** Cmd+P 発火の最大リトライ回数 (#1050)。dialog が開かない場合に再発火する。 */
+const CMD_P_MAX_RETRIES = 3;
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
 type ClipListScrollIntent = "probe-intermediate" | "settle-bottom";
@@ -489,9 +491,6 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
  * 出現した dialog を返す (#854)。cookie consent dialog は findPlaylistDialog の除外フィルタで拾わない。
  * 上限まで待っても出なければ throw（silent に続行しない）。
  */
-/** Cmd+P 発火の最大リトライ回数 (#1050)。dialog が開かない場合に再発火する。 */
-const CMD_P_MAX_RETRIES = 3;
-
 export async function openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement> {
   const isMac = navigator.platform.toLowerCase().includes("mac");
 
