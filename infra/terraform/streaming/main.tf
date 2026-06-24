@@ -5,13 +5,6 @@ locals {
   ssh_host_public_key_sha = sha256(local.ssh_host_public_key)
 }
 
-check "stream_cycle_consistency" {
-  assert {
-    condition     = var.stream_hours > 0 || var.break_hours == 0
-    error_message = "break_hours は stream_hours > 0 のときのみ有効です。24/7 モード (stream_hours=0) では break_hours=0 にしてください。"
-  }
-}
-
 resource "tls_private_key" "ssh_host" {
   algorithm = local.ssh_host_key_algorithm
 }
@@ -71,6 +64,13 @@ resource "null_resource" "deploy" {
     cron_d          = filemd5("${path.module}/templates/cron.d.tftpl")
     systemd_unit    = filemd5("${path.module}/templates/youtube-stream.service.tftpl")
     run_ffmpeg_sh   = filemd5("${local.scripts_dir}/run-ffmpeg.sh")
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.stream_hours > 0 || var.break_hours == 0
+      error_message = "break_hours は stream_hours > 0 のときのみ有効です。24/7 モード (stream_hours=0) では break_hours=0 にしてください。"
+    }
   }
 
   connection {

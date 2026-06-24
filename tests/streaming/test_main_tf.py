@@ -176,53 +176,79 @@ class TestMainTf:
 
 
 # ============================================================================
-# main.tf — check "stream_cycle_consistency" (#1219)
+# main.tf — precondition "stream_cycle_consistency" (#1219)
 # ============================================================================
 
 
-class TestMainTfCheckStreamCycleConsistency:
-    """``main.tf`` の ``check "stream_cycle_consistency"`` ブロック（#1219）。
+class TestMainTfStreamCycleConsistencyPrecondition:
+    """``main.tf`` の ``null_resource.deploy`` 内 precondition（#1219）。
 
     ``stream_hours=0, break_hours>0`` は Terraform validation を通るが、テンプレート側では
     ``break_hours`` を無視する。``break_hours`` が deploy trigger に含まれているため、
-    unit に反映されない値変更でも deploy/restart が走る矛盾を plan 時に検出する。
+    unit に反映されない値変更でも deploy/restart が走る矛盾を plan 時にブロックする。
+
+    当初 ``check`` ブロック（warning のみ、exit 0）で実装していたが、矛盾入力を
+    確実にブロックするため ``lifecycle.precondition``（plan 時エラー）に変換した。
     """
 
-    def test_check_block_exists(self):
+    def test_precondition_exists_in_deploy_lifecycle(self):
         """Given main.tf
-        When check "stream_cycle_consistency" を探す
-        Then 定義されている（Terraform 1.5+ の check ブロック）。
+        When null_resource.deploy の lifecycle.precondition を探す
+        Then 定義されている。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = extract_block(text, r'check\s+"stream_cycle_consistency"')
-        assert block is not None, 'check "stream_cycle_consistency" が存在しない'
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None, 'resource "null_resource" "deploy" が存在しない'
+        lifecycle_block = extract_block(deploy_block, r"lifecycle")
+        assert lifecycle_block is not None, "null_resource.deploy に lifecycle ブロックが存在しない"
+        precondition_block = extract_block(lifecycle_block, r"precondition")
+        assert precondition_block is not None, "lifecycle 内に precondition ブロックが存在しない"
 
-    def test_check_assert_condition_is_correct(self):
+    def test_precondition_condition_is_correct(self):
         """Given main.tf
-        When check "stream_cycle_consistency" の assert.condition を読む
+        When null_resource.deploy の lifecycle.precondition.condition を読む
         Then ``var.stream_hours > 0 || var.break_hours == 0`` である。
 
         24/7 モード (stream_hours=0) では break_hours=0 であるべき。
         サイクルモード (stream_hours>0) では break_hours は任意値。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
-        block = extract_block(text, r'check\s+"stream_cycle_consistency"')
-        assert block is not None
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None
+        lifecycle_block = extract_block(deploy_block, r"lifecycle")
+        assert lifecycle_block is not None
+        precondition_block = extract_block(lifecycle_block, r"precondition")
+        assert precondition_block is not None
         assert re.search(
             r"condition\s*=\s*var\.stream_hours\s*>\s*0\s*\|\|\s*var\.break_hours\s*==\s*0",
-            block,
-        ), 'check.stream_cycle_consistency の condition が "var.stream_hours > 0 || var.break_hours == 0" でない'
+            precondition_block,
+        ), 'precondition の condition が "var.stream_hours > 0 || var.break_hours == 0" でない'
 
-    def test_check_assert_has_error_message(self):
+    def test_precondition_has_error_message(self):
         """Given main.tf
-        When check "stream_cycle_consistency" の assert.error_message を読む
+        When null_resource.deploy の lifecycle.precondition.error_message を読む
         Then error_message が宣言されている。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None
+        lifecycle_block = extract_block(deploy_block, r"lifecycle")
+        assert lifecycle_block is not None
+        precondition_block = extract_block(lifecycle_block, r"precondition")
+        assert precondition_block is not None
+        assert re.search(r"error_message\s*=\s*\"[^\"]+\"", precondition_block), (
+            "precondition に error_message が宣言されていない"
+        )
+
+    def test_check_block_does_not_exist(self):
+        """Given main.tf
+        When check "stream_cycle_consistency" を探す
+        Then 存在しない（precondition に移行済み）。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'check\s+"stream_cycle_consistency"')
-        assert block is not None
-        assert re.search(r"error_message\s*=\s*\"[^\"]+\"", block), (
-            "check.stream_cycle_consistency の assert に error_message が宣言されていない"
+        assert block is None, (
+            'check "stream_cycle_consistency" がまだ残っている（precondition に移行済みのため削除されているべき）'
         )
 
 
