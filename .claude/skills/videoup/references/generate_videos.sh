@@ -433,6 +433,7 @@ if [[ -z "$TARGET_VIDEO_DURATION_MIN" ]]; then
 fi
 
 AUDIO_INPUT_OPTS=()
+AUDIO_LOOP_ACTIVE=0
 video_duration="$duration"
 if [[ -n "$TARGET_VIDEO_DURATION_MIN" ]]; then
     target_video_duration_sec="$(awk "BEGIN{printf \"%.2f\", $TARGET_VIDEO_DURATION_MIN * 60}")"
@@ -440,11 +441,18 @@ if [[ -n "$TARGET_VIDEO_DURATION_MIN" ]]; then
     master_duration_for_compare="${duration:-0}"
     if awk "BEGIN{exit !($target_video_duration_sec > $master_duration_for_compare)}"; then
         AUDIO_INPUT_OPTS=(-stream_loop -1)
+        AUDIO_LOOP_ACTIVE=1
         video_duration="$target_video_duration_sec"
         echo "  Target   : ${TARGET_VIDEO_DURATION_MIN} min ($(format_duration "$video_duration")) — audio loop enabled"
     else
         echo "  Target   : ${TARGET_VIDEO_DURATION_MIN} min ignored (master ≥ target; master 尺が支配)"
     fi
+fi
+
+# 音声ループ時は再エンコード必須 + loudnorm で音割れ防止 (#1057)
+if [[ "$AUDIO_LOOP_ACTIVE" -eq 1 ]]; then
+    AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000 -af "loudnorm=I=-14:TP=-1:LRA=11")
+    echo "  Audio    : re-encode + loudnorm (loop boundary clipping prevention)"
 fi
 
 echo "  Duration : $(format_duration "$video_duration")"
