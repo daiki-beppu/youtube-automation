@@ -46,7 +46,6 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
-  collectClipRowTitle,
   ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
   multiSelectClips,

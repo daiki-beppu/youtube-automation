@@ -66,7 +66,7 @@ describe("nextItemStates: itemStates の遷移ロジック (useSunoRunner live h
     expect(nextItemStates(base, PHASE.DONE, 0)).toEqual(["done", "idle", "idle"]);
   });
 
-  it.each([PHASE.WAITING_SLOT, PHASE.GENERATING, PHASE.ADDING_TO_PLAYLIST, PHASE.FINISHED, PHASE.STOPPED, PHASE.ERROR])(
+  it.each([PHASE.WAITING_SLOT, PHASE.GENERATING, PHASE.ADDING_TO_PLAYLIST, PHASE.DOWNLOADING, PHASE.FINISHED, PHASE.STOPPED, PHASE.ERROR])(
     "Given prev When phase=%s Then itemStates は遷移させない（prev と等価）",
     (phase) => {
       const prev = nextItemStates(base, PHASE.INJECTING, 0); // ["active","idle","idle"]
