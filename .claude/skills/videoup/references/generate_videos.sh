@@ -133,8 +133,12 @@ if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     echo "  Loop     : ${LOOP_VIDEO} (detected)"
 else
     echo "  Loop     : not found — 静止画モードで出力します"
-    if ls "${ASSETS_DIR}"/loop-v*.mp4 "${ASSETS_DIR}"/loop_raw.mp4 2>/dev/null | head -1 > /dev/null; then
-        echo "  ⚠️  loop_raw.mp4 or loop-v*.mp4 が存在します — loop.mp4 が生成途中で失敗した可能性があります"
+    loop_artifacts=()
+    for f in "${ASSETS_DIR}"/loop_raw.mp4 "${ASSETS_DIR}"/loop-v*.mp4; do
+        [[ -f "$f" ]] && loop_artifacts+=("$f")
+    done
+    if [[ ${#loop_artifacts[@]} -gt 0 ]]; then
+        echo "  ⚠️  生成途中の痕跡が存在します: ${loop_artifacts[*]##*/}"
         echo "     → yt-generate-loop-video で再生成するか、手動で loop.mp4 を配置してください"
     fi
 fi

@@ -460,6 +460,62 @@ def test_static_image_with_effect_uses_filter_complex(tmp_path: Path) -> None:
     assert "scale=1920:1080:force_original_aspect_ratio=decrease" in final_cmd
 
 
+# ─── Loop artifact warning (#868) ────────────────────────
+
+
+def test_loop_absent_with_loop_raw_shows_warning(tmp_path: Path) -> None:
+    """loop.mp4 が無いが loop_raw.mp4 が残っていれば警告を出力する."""
+    collection = _create_collection(tmp_path)
+    # loop.mp4 を消して loop_raw.mp4 を残す
+    (collection / "10-assets" / "loop.mp4").unlink()
+    (collection / "10-assets" / "loop_raw.mp4").write_bytes(b"fake-raw")
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "生成途中の痕跡が存在します" in result.stdout
+    assert "loop_raw.mp4" in result.stdout
+
+
+def test_loop_absent_with_loop_version_shows_warning(tmp_path: Path) -> None:
+    """loop.mp4 が無いが loop-v*.mp4 が残っていれば警告を出力する."""
+    collection = _create_collection(tmp_path)
+    (collection / "10-assets" / "loop.mp4").unlink()
+    (collection / "10-assets" / "loop-v1.mp4").write_bytes(b"fake-v1")
+    (collection / "10-assets" / "loop-v2.mp4").write_bytes(b"fake-v2")
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "生成途中の痕跡が存在します" in result.stdout
+    assert "loop-v1.mp4" in result.stdout
+    assert "loop-v2.mp4" in result.stdout
+
+
+def test_loop_absent_no_artifacts_no_warning(tmp_path: Path) -> None:
+    """loop.mp4 も痕跡ファイルも無い場合は警告を出さない."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "生成途中の痕跡が存在します" not in result.stdout
+    assert "loop_raw.mp4" not in result.stdout
+
+
 def test_invalid_effect_name_fails_loud(tmp_path: Path) -> None:
     """未知のエフェクト名は fail-loud で停止する。"""
     result, _ = _run_generate_videos(
