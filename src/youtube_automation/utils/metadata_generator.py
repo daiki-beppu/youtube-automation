@@ -310,6 +310,7 @@ class BAHMetadataGenerator:
             return []
 
         tracks = []
+        skipped: list[tuple[str, str]] = []
         current_time = 0
         crossfade = self._crossfade_sec
 
@@ -321,31 +322,51 @@ class BAHMetadataGenerator:
                 # afinfo コマンドで楽曲長を取得
                 duration = self._get_audio_duration(wav_file)
 
-                if duration > 0:
-                    # タイトル清浄化
-                    title = self._clean_track_title(wav_file.stem)
+                if duration <= 0:
+                    reason = "再生時間が 0 秒（ファイル破損または afinfo 解析失敗の可能性）"
+                    logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
+                    skipped.append((wav_file.name, reason))
+                    continue
 
-                    # タイムスタンプ計算（2曲目以降はクロスフェード分だけ前倒し）
-                    start_time = current_time
-                    end_time = current_time + duration
+                # タイトル清浄化
+                title = self._clean_track_title(wav_file.stem)
 
-                    tracks.append(
-                        {
-                            "filename": wav_file.name,
-                            "title": title,
-                            "duration": duration,
-                            "start_time": start_time,
-                            "end_time": end_time,
-                            "timestamp": self._format_timestamp(start_time),
-                            "pattern_key": _extract_pattern_key(wav_file.name),
-                        }
-                    )
+                # タイムスタンプ計算（2曲目以降はクロスフェード分だけ前倒し）
+                start_time = current_time
+                end_time = current_time + duration
 
-                    current_time = int(end_time - crossfade)
+                tracks.append(
+                    {
+                        "filename": wav_file.name,
+                        "title": title,
+                        "duration": duration,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "timestamp": self._format_timestamp(start_time),
+                        "pattern_key": _extract_pattern_key(wav_file.name),
+                    }
+                )
+
+                current_time = int(end_time - crossfade)
 
             except Exception as e:
-                logger.warning(f"ファイル解析エラー {wav_file.name}: {e}")
+                reason = f"ファイル解析エラー: {e}"
+                logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
+                skipped.append((wav_file.name, reason))
                 continue
+
+        if skipped:
+            logger.warning(
+                f"⚠️  {len(skipped)}/{len(wav_files)} トラックがスキップされました:"
+            )
+            for name, reason in skipped:
+                logger.warning(f"  - {name}: {reason}")
+
+        if len(tracks) != len(wav_files):
+            logger.warning(
+                f"⚠️  入力 {len(wav_files)} ファイル → 出力 {len(tracks)} タイムスタンプ"
+                f"（{len(wav_files) - len(tracks)} 件欠落）"
+            )
 
         self.tracks = tracks
         # LLM がリネームした表示名が workflow-state.json に永続化されていれば再ロード時にも反映する

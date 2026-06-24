@@ -1133,3 +1133,93 @@ class TestTitleTemplateUnknownPlaceholder:
         msg = str(exc.value)
         assert "adjective" in msg
         assert lang in msg
+
+
+# ===========================================================================
+# analyze_audio_files スキップ検出テスト (#1093)
+# ===========================================================================
+
+
+class TestAnalyzeAudioFilesSkipDetection:
+    """トラックがスキップされた場合に警告ログが出力されることを検証する。"""
+
+    @pytest.fixture
+    def gen_with_audio_dir(self, tmp_path):
+        gen = _make_generator()
+        collection = tmp_path / "collection"
+        audio_dir = collection / "02-Individual-music"
+        audio_dir.mkdir(parents=True)
+        gen.collection_path = collection
+        return gen, audio_dir
+
+    def test_zero_duration_track_is_skipped_with_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-track-a.wav").write_bytes(b"\x00" * 100)
+        (audio_dir / "02-track-b.wav").write_bytes(b"\x00" * 100)
+
+        durations = {"01-track-a.wav": 120, "02-track-b.wav": 0}
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda f: durations[f.name])
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-track-a.wav"
+        assert "トラックをスキップ" in caplog.text
+        assert "02-track-b.wav" in caplog.text
+
+    def test_exception_during_analysis_is_skipped_with_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-good.wav").write_bytes(b"\x00" * 100)
+        (audio_dir / "02-broken.wav").write_bytes(b"\x00" * 100)
+
+        def mock_duration(f):
+            if f.name == "02-broken.wav":
+                raise RuntimeError("corrupt file")
+            return 180
+
+        monkeypatch.setattr(gen, "_get_audio_duration", mock_duration)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert "トラックをスキップ" in caplog.text
+        assert "corrupt file" in caplog.text
+
+    def test_count_mismatch_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        for i in range(5):
+            (audio_dir / f"{i:02d}-track.wav").write_bytes(b"\x00" * 100)
+
+        durations = {f"{i:02d}-track.wav": (120 if i != 2 else 0) for i in range(5)}
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda f: durations[f.name])
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            gen.analyze_audio_files()
+
+        assert "入力 5 ファイル" in caplog.text
+        assert "4 タイムスタンプ" in caplog.text
+        assert "1 件欠落" in caplog.text
+
+    def test_all_tracks_ok_no_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        for i in range(3):
+            (audio_dir / f"{i:02d}-track.wav").write_bytes(b"\x00" * 100)
+
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda f: 120)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 3
+        assert "スキップ" not in caplog.text
+        assert "欠落" not in caplog.text
