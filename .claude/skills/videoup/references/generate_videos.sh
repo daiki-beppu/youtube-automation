@@ -130,6 +130,17 @@ COLLECTION_NAME="$(echo "$dir_basename" \
 LOOP_VIDEO=""
 if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
+    echo "  Loop     : $(basename "${LOOP_VIDEO}") (detected)"
+else
+    echo "  Loop     : not found — 静止画モードで出力します"
+    loop_artifacts=()
+    for f in "${ASSETS_DIR}"/loop_raw.mp4 "${ASSETS_DIR}"/loop-v*.mp4; do
+        [[ -f "$f" ]] && loop_artifacts+=("$f")
+    done
+    if [[ ${#loop_artifacts[@]} -gt 0 ]]; then
+        echo "  ⚠️  生成途中の痕跡が存在します: ${loop_artifacts[*]##*/}"
+        echo "     → yt-generate-loop-video で再生成するか、手動で loop.mp4 を配置してください"
+    fi
 fi
 
 THUMBNAIL=""
@@ -742,6 +753,7 @@ else
             "$MASTER_OUTPUT" &
     elif [[ "$EFFECT" != "none" ]]; then
         # フォールバック: 静止画 + effect を全尺再エンコード（従来 mode D）
+        echo "  ℹ️  ループ動画なし → 静止画 + ${EFFECT} effect で出力 (loop.mp4 を配置すればループ動画になります)"
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image + ${EFFECT} effect, full encode fallback)"
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
@@ -764,6 +776,7 @@ else
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image)"
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
+        echo "  ℹ️  ループ動画なし → 静止画背景で出力 (loop.mp4 を配置すればループ動画になります)"
         ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$THUMBNAIL" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
