@@ -1177,14 +1177,24 @@ class TestAnalyzeAudioFilesSkipDetection:
         (audio_dir / "01-good.wav").write_bytes(b"\x00" * 100)
         (audio_dir / "02-broken.wav").write_bytes(b"\x00" * 100)
 
-        def mock_duration(f):
-            if f.name == "02-broken.wav":
-                import subprocess
+        import subprocess as _subprocess
 
-                raise subprocess.CalledProcessError(1, "afinfo", "corrupt file")
-            return 180
+        _original_run = _subprocess.run
 
-        monkeypatch.setattr(gen, "_get_audio_duration", mock_duration)
+        def mock_subprocess_run(cmd, **kwargs):
+            # afinfo 呼び出しのみインターセプトする
+            if cmd and cmd[0] == "afinfo":
+                filepath = cmd[1] if len(cmd) > 1 else ""
+                if "02-broken.wav" in filepath:
+                    raise _subprocess.CalledProcessError(1, "afinfo", "corrupt file")
+                # 正常なファイルには afinfo 成功を模擬
+                result = _subprocess.CompletedProcess(
+                    cmd, 0, stdout="estimated duration: 180.0 seconds\n", stderr=""
+                )
+                return result
+            return _original_run(cmd, **kwargs)
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
 
         import logging
 

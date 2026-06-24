@@ -376,25 +376,28 @@ class BAHMetadataGenerator:
 
         Returns:
             int: 長さ（秒）
+
+        Raises:
+            subprocess.CalledProcessError: afinfo が非ゼロ終了した場合
+            subprocess.TimeoutExpired: afinfo がタイムアウトした場合
+            ValueError: duration 文字列の数値変換に失敗した場合
+            IndexError: afinfo 出力のパースに失敗した場合
         """
-        try:
-            result = subprocess.run(
-                ["afinfo", str(wav_file)],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=30,
-            )
+        result = subprocess.run(
+            ["afinfo", str(wav_file)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
 
-            # "estimated duration: XXX.XXX seconds" を抽出
-            for line in result.stdout.split("\n"):
-                if "estimated duration" in line:
-                    duration_str = line.split(":")[1].strip().split()[0]
-                    return int(float(duration_str))
+        # "estimated duration: XXX.XXX seconds" を抽出
+        for line in result.stdout.split("\n"):
+            if "estimated duration" in line:
+                duration_str = line.split(":")[1].strip().split()[0]
+                return int(float(duration_str))
 
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError) as e:
-            logger.warning(f"afinfo エラー {wav_file.name}: {e}")
-
+        logger.warning(f"afinfo 出力に 'estimated duration' が見つかりません: {wav_file.name}")
         return 0
 
     def _clean_track_title(self, filename: str) -> str:
