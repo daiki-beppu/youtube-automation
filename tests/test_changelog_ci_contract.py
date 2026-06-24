@@ -18,7 +18,7 @@ _PATH_FILTER_PATTERN = (
     "|pyproject\\.toml$|packages/|package\\.json$)"
 )
 # CI トリガーで CI を回す対象 branch。#790 cutover で feat/ts-rewrite を外す。
-_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite"]
+_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite", "feat/1143-suno-bulk-download"]
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
