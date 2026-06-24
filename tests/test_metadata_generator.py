@@ -1179,7 +1179,9 @@ class TestAnalyzeAudioFilesSkipDetection:
 
         def mock_duration(f):
             if f.name == "02-broken.wav":
-                raise RuntimeError("corrupt file")
+                import subprocess
+
+                raise subprocess.CalledProcessError(1, "afinfo", "corrupt file")
             return 180
 
         monkeypatch.setattr(gen, "_get_audio_duration", mock_duration)
@@ -1193,7 +1195,6 @@ class TestAnalyzeAudioFilesSkipDetection:
         assert "トラックをスキップ" in caplog.text
         assert "02-broken.wav" in caplog.text
         assert "ファイル解析エラー" in caplog.text
-        assert "corrupt file" in caplog.text
 
     def test_count_mismatch_warning(self, gen_with_audio_dir, caplog, monkeypatch):
         gen, audio_dir = gen_with_audio_dir

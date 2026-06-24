@@ -318,10 +318,9 @@ class BAHMetadataGenerator:
         wav_files = sorted([f for f in audio_dir.iterdir() if f.suffix.lower() in AUDIO_EXTS])
 
         for wav_file in wav_files:
-            # duration 取得のみを try で囲み、track dict 構築の実装バグは素通しさせる
             try:
                 duration = self._get_audio_duration(wav_file)
-            except Exception as e:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError, OSError) as e:
                 reason = f"ファイル解析エラー: {e}"
                 logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
                 skipped.append((wav_file.name, reason))
