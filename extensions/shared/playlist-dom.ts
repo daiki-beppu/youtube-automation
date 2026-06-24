@@ -43,8 +43,8 @@ const PLAYLIST_ROW_APPEAR_TIMEOUT_MS = 5000;
 /** multi-select click 後、対象 row が selected 状態（aria-label="Deselect clip"）へ遷移したかを verify する poll 間隔と上限 (ms)。 */
 const CLIP_SELECT_VERIFY_POLL_MS = 50;
 const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
-/** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924)。 */
-const CLIP_SELECT_VERIFY_MS_PER_ROW = 50;
+/** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924 → #1050 で 50→100 に倍増)。 */
+const CLIP_SELECT_VERIFY_MS_PER_ROW = 100;
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
 type ClipListScrollIntent = "probe-intermediate" | "settle-bottom";
@@ -489,30 +489,45 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
  * 出現した dialog を返す (#854)。cookie consent dialog は findPlaylistDialog の除外フィルタで拾わない。
  * 上限まで待っても出なければ throw（silent に続行しない）。
  */
+/** Cmd+P 発火の最大リトライ回数 (#1050)。dialog が開かない場合に再発火する。 */
+const CMD_P_MAX_RETRIES = 3;
+
 export async function openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement> {
   const isMac = navigator.platform.toLowerCase().includes("mac");
-  document.dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "p",
-      metaKey: isMac,
-      ctrlKey: !isMac,
-      bubbles: true,
-    }),
-  );
 
-  const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
-  for (;;) {
-    const dialog = findPlaylistDialog();
-    if (dialog) {
-      return dialog;
+  for (let attempt = 0; attempt < CMD_P_MAX_RETRIES; attempt++) {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "p",
+        metaKey: isMac,
+        ctrlKey: !isMac,
+        bubbles: true,
+      }),
+    );
+
+    const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
+    for (;;) {
+      const dialog = findPlaylistDialog();
+      if (dialog) {
+        return dialog;
+      }
+      if (Date.now() >= deadline) {
+        break;
+      }
+      await sleep(DIALOG_OPEN_POLL_MS);
     }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        "Add to Playlist dialog を検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。",
+
+    if (attempt < CMD_P_MAX_RETRIES - 1) {
+      console.warn(
+        `[suno-helper] Cmd+P attempt ${attempt + 1}/${CMD_P_MAX_RETRIES} failed — retrying after 500ms`,
       );
+      await sleep(500);
     }
-    await sleep(DIALOG_OPEN_POLL_MS);
   }
+
+  throw new Error(
+    `Add to Playlist dialog を ${CMD_P_MAX_RETRIES} 回試行しても検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`,
+  );
 }
 
 /**
