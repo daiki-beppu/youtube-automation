@@ -8,6 +8,15 @@ def normalize_youtube_tags(raw_tags: list[str]) -> list[str]:
     return [t.strip('"') for t in raw_tags]
 
 
+def parse_youtube_tags(raw: str) -> list[str]:
+    """descriptions.md のタグ欄テキストからタグリストを生成する.
+
+    改行・カンマ混在の生テキストを分割し、空要素を除去した上で
+    ``normalize_youtube_tags`` でダブルクォートを除去して返す。
+    """
+    return normalize_youtube_tags([t.strip() for t in raw.replace("\n", ",").split(",") if t.strip()])
+
+
 def youtube_tag_chars(tags: list[str]) -> int:
     """YouTube が判定する真のタグ文字数を計算する.
 
