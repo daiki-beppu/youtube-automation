@@ -132,11 +132,10 @@ if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
     echo "  Loop     : ${LOOP_VIDEO} (detected)"
 else
-    # loop.mp4 が存在しない場合、静止画フォールバックになることを明示 (#868)
     echo "  Loop     : not found — 静止画モードで出力します"
-    if [[ -f "${ASSETS_DIR}/loop_raw.mp4" || -f "${ASSETS_DIR}/loop-v1.mp4" ]]; then
-        echo "  ⚠️  loop_raw.mp4 or loop-v1.mp4 が存在します — loop.mp4 が生成途中で失敗した可能性があります"
-        echo "     → yt-generate-loop-video --smooth で再生成するか、手動で loop.mp4 を配置してください"
+    if ls "${ASSETS_DIR}"/loop-v*.mp4 "${ASSETS_DIR}"/loop_raw.mp4 2>/dev/null | head -1 > /dev/null; then
+        echo "  ⚠️  loop_raw.mp4 or loop-v*.mp4 が存在します — loop.mp4 が生成途中で失敗した可能性があります"
+        echo "     → yt-generate-loop-video で再生成するか、手動で loop.mp4 を配置してください"
     fi
 fi
 
@@ -750,6 +749,7 @@ else
             "$MASTER_OUTPUT" &
     elif [[ "$EFFECT" != "none" ]]; then
         # フォールバック: 静止画 + effect を全尺再エンコード（従来 mode D）
+        echo "  ℹ️  ループ動画なし → 静止画 + ${EFFECT} effect で出力 (loop.mp4 を配置すればループ動画になります)"
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image + ${EFFECT} effect, full encode fallback)"
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
