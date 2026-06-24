@@ -1188,9 +1188,7 @@ class TestAnalyzeAudioFilesSkipDetection:
                 if "02-broken.wav" in filepath:
                     raise _subprocess.CalledProcessError(1, "afinfo", "corrupt file")
                 # 正常なファイルには afinfo 成功を模擬
-                result = _subprocess.CompletedProcess(
-                    cmd, 0, stdout="estimated duration: 180.0 seconds\n", stderr=""
-                )
+                result = _subprocess.CompletedProcess(cmd, 0, stdout="estimated duration: 180.0 seconds\n", stderr="")
                 return result
             return _original_run(cmd, **kwargs)
 
