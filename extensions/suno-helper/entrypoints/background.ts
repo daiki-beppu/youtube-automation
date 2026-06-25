@@ -84,6 +84,56 @@ export default defineBackground(() => {
     });
   });
 
+  // runner → background: Download all 開始通知 (#1146)。content script は chrome.downloads API に
+  // アクセスできないため、background が chrome.downloads.onChanged を監視して完了を中継する。
+  // ダウンロード監視は startDownload 受信時に listener を登録し、完了時に自動解除する。
+  onMessage("startDownload", ({ data, sender }) => {
+    const tabId = relayTabId(sender);
+    if (tabId === null) {
+      console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
+      return;
+    }
+    const { format } = data;
+    console.info(`[suno-helper] Download all 監視を開始します (format=${format})`);
+
+    // Suno の ZIP ダウンロードは "Download all" click 直後に開始される。
+    // chrome.downloads.onChanged で state=complete を待ち、ファイル名パターン (.zip) で照合する。
+    const listener = (delta: chrome.downloads.DownloadDelta): void => {
+      if (!delta.state || delta.state.current !== "complete") {
+        return;
+      }
+      // 完了したダウンロードの詳細を取得してファイル名を確認する
+      chrome.downloads.search({ id: delta.id }, (results) => {
+        if (!results || results.length === 0) {
+          return;
+        }
+        const item = results[0];
+        const filename = item.filename ?? "";
+        // Suno の ZIP ダウンロードは .zip 拡張子を持つ（playlist 名がファイル名に含まれる）
+        if (!filename.toLowerCase().endsWith(".zip")) {
+          return;
+        }
+        console.info(`[suno-helper] ZIP ダウンロード完了: ${filename} (id=${delta.id})`);
+        // listener を解除して以降のダウンロードイベントを無視する
+        chrome.downloads.onChanged.removeListener(listener);
+        // content script へダウンロード完了を中継する
+        sendMessage("downloadComplete", { downloadId: delta.id, filename }, tabId).catch(
+          (err: unknown) => {
+            console.warn("[suno-helper] downloadComplete 中継失敗:", err);
+          },
+        );
+      });
+    };
+    chrome.downloads.onChanged.addListener(listener);
+
+    // 安全弁: 10 分以内にダウンロードが完了しなければ listener を解除する（メモリリーク防止）
+    const DOWNLOAD_WATCH_TIMEOUT_MS = 600000;
+    setTimeout(() => {
+      chrome.downloads.onChanged.removeListener(listener);
+      console.warn("[suno-helper] Download all 監視タイムアウト（10 分）。listener を解除しました。");
+    }, DOWNLOAD_WATCH_TIMEOUT_MS);
+  });
+
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する
   // （content↔content 直送不可のため）。tab を持たない送信元は転送先が無いため no-op。
   onMessage("progress", ({ data, sender }) => {

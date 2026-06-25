@@ -1,6 +1,7 @@
 // Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import type { PromptEntry } from "../../shared/api";
+import { postDownloaded } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
@@ -25,6 +26,7 @@ import { runEntryWithRetry } from "../lib/entry-retry";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
 import { attachBridgeListener, createFeedPoller, requestSliderSet } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
+import { triggerDownloadAll } from "../lib/download";
 import {
   abortableSleep,
   CAPTCHA_WAIT_TIMEOUT_MS,
@@ -56,6 +58,7 @@ import {
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { triggerPlaylistCaptureFailSoft } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { downloadFormatItem, serverUrlItem } from "../lib/storage";
 
 function buildTitleFallbackMap(
   entries: PromptEntry[],
@@ -130,6 +133,42 @@ export default defineContentScript({
       currentSnapshot = applyProgress(currentSnapshot, payload);
       void sendMessage("progress", payload);
     }
+
+    // --- Download all 完了待ち (#1146) ---
+    // background から downloadComplete メッセージを受信するための resolver。
+    // startDownload → triggerDownloadAll → waitForDownloadComplete の流れで使う。
+    let downloadCompleteResolver: ((value: { downloadId: number; filename: string } | null) => void) | null = null;
+
+    /** background からの downloadComplete メッセージを待つ。タイムアウトまたは abort で null を返す。 */
+    function waitForDownloadComplete(isAborted: () => boolean): Promise<{ downloadId: number; filename: string } | null> {
+      const DOWNLOAD_COMPLETE_TIMEOUT_MS = 600000; // 10 分
+      return new Promise((resolve) => {
+        downloadCompleteResolver = resolve;
+        const deadline = Date.now() + DOWNLOAD_COMPLETE_TIMEOUT_MS;
+        const tick = (): void => {
+          if (downloadCompleteResolver === null) {
+            // 既に resolve 済み（downloadComplete メッセージ受信済み）
+            return;
+          }
+          if (isAborted() || Date.now() >= deadline) {
+            downloadCompleteResolver = null;
+            resolve(null);
+            return;
+          }
+          setTimeout(tick, 1000);
+        };
+        tick();
+      });
+    }
+
+    // background → content: ダウンロード完了通知の受信ハンドラ (#1146)。
+    onMessage("downloadComplete", ({ data }) => {
+      if (downloadCompleteResolver) {
+        const resolver = downloadCompleteResolver;
+        downloadCompleteResolver = null;
+        resolver(data);
+      }
+    });
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       // attempt ごとに lastSubmittedEntryIndex を -1 にリセットする。
@@ -465,6 +504,81 @@ export default defineContentScript({
           () => sendMessage("requestPlaylistCapture", undefined),
           (err) => console.warn("[suno-helper] playlist capture trigger failed:", err),
         );
+
+        // --- DOWNLOADING phase (#1146) ---
+        // playlist 追加完了後、Suno の "Download all" 機能で ZIP ダウンロードを開始する。
+        // 1. file_count:0 で postDownloaded を呼び playlist URL を記録する
+        // 2. DOM 操作で Download all を起動し、背景で chrome.downloads 完了を待つ
+        // 3. 完了したら file_count:N で postDownloaded を呼び downloaded 状態にする
+        if (collectionId && !aborted) {
+          try {
+            const format = await downloadFormatItem.getValue();
+            const baseUrl = (await serverUrlItem.getValue()).trim();
+            // Suno playlist URL を構成する（playlist 名から逆算）
+            const sunoPlaylistUrl = `https://suno.com/me/playlists`;
+
+            // Step 1: playlist URL 記録（file_count: 0 = ダウンロード開始前の中間状態）
+            try {
+              await postDownloaded(baseUrl, collectionId, {
+                file_count: 0,
+                format: format as "mp3" | "m4a" | "wav",
+                suno_playlist_url: sunoPlaylistUrl,
+              });
+            } catch (err) {
+              console.warn("[suno-helper] postDownloaded (pre-download) failed:", err);
+              // fail-soft: 記録失敗でもダウンロード自体は進める
+            }
+
+            if (aborted) {
+              persistInterruptState(total);
+              emitProgress({ phase: PHASE.STOPPED, total });
+              return;
+            }
+
+            // Step 2: DOWNLOADING phase に遷移し、DOM 操作で Download all を起動
+            emitProgress({ phase: PHASE.DOWNLOADING, total, message: `${format.toUpperCase()} 形式` });
+
+            // background に chrome.downloads 監視を依頼する
+            void sendMessage("startDownload", { collectionId, format });
+
+            // Download all の DOM 操作を実行（More menu → Download all → 形式選択 → 確認）
+            await triggerDownloadAll(format);
+
+            // Step 3: chrome.downloads の完了通知を待つ。
+            // background が downloadComplete メッセージを送ってくるのを poll する。
+            // タイムアウトは 10 分（大きな ZIP の場合を考慮）。
+            const downloadResult = await waitForDownloadComplete(() => aborted);
+
+            if (aborted) {
+              persistInterruptState(total);
+              emitProgress({ phase: PHASE.STOPPED, total });
+              return;
+            }
+
+            // Step 4: ダウンロード完了を server に通知する
+            if (downloadResult) {
+              try {
+                await postDownloaded(baseUrl, collectionId, {
+                  file_count: total,
+                  format: format as "mp3" | "m4a" | "wav",
+                  suno_playlist_url: sunoPlaylistUrl,
+                });
+              } catch (err) {
+                console.warn("[suno-helper] postDownloaded (post-download) failed:", err);
+                // fail-soft: 通知失敗でも FINISHED へ進む
+              }
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`[suno-helper] Download all failed: ${message}`);
+            emitProgress({
+              phase: PHASE.DOWNLOADING,
+              total,
+              message: `ダウンロード失敗（手動でダウンロードしてください）: ${message}`,
+            });
+            // fail-soft: ダウンロード失敗は FINISHED を妨げない
+          }
+        }
       }
       // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
       if (collectionId) {

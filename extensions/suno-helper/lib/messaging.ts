@@ -35,6 +35,12 @@ export interface RetryPlaylistPayload {
   collectionId?: string;
 }
 
+/** runner → background: ダウンロード完了を通知するペイロード (#1146)。 */
+export interface DownloadCompletePayload {
+  downloadId: number;
+  filename: string;
+}
+
 interface ProtocolMap {
   /** overlay → background → runner: 連続実行を開始する。 */
   run(payload: RunPayload): { ok: true };
@@ -54,6 +60,11 @@ interface ProtocolMap {
   /** runner → background: 連続実行の playlist 化完了時に、bg `/me` tab で capture → POST する自動 trigger を要求する (#893)。
    *  background 側は fail soft（scrape / POST 失敗は warning log のみ）。 */
   requestPlaylistCapture(): void;
+  /** runner → background: Download all 開始を通知し、background の chrome.downloads 監視を起動する (#1146)。
+   *  content script は chrome.downloads API にアクセスできないため background に委譲する。 */
+  startDownload(payload: { collectionId: string; format: string }): void;
+  /** background → runner: chrome.downloads の完了通知を content へ中継する (#1146)。 */
+  downloadComplete(payload: DownloadCompletePayload): void;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();
