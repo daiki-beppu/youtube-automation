@@ -225,6 +225,34 @@ class TestSystemdUnitTemplate:
             "（RuntimeMaxSec なしで RestartSec が長時間だとクラッシュ復旧が遅延する）"
         )
 
+    def test_service_custom_cycle_values(self):
+        """Given stream_hours=8, break_hours=2
+        When テンプレートを展開する
+        Then RuntimeMaxSec=8h, RestartSec=2h が出力される。
+        """
+        service = self._section(self._render_cycle_template(8, 2), "Service")
+        assert service is not None
+        assert re.search(r"^RuntimeMaxSec=8h\s*$", service, flags=re.MULTILINE), (
+            "stream_hours=8 で RuntimeMaxSec=8h が出力されない"
+        )
+        assert re.search(r"^RestartSec=2h\s*$", service, flags=re.MULTILINE), (
+            "break_hours=2 で RestartSec=2h が出力されない"
+        )
+
+    def test_service_custom_cycle_no_break(self):
+        """Given stream_hours=6, break_hours=0
+        When テンプレートを展開する
+        Then RuntimeMaxSec=6h が出力され、RestartSec=10s（クラッシュ再起動）になる。
+        """
+        service = self._section(self._render_cycle_template(6, 0), "Service")
+        assert service is not None
+        assert re.search(r"^RuntimeMaxSec=6h\s*$", service, flags=re.MULTILINE), (
+            "stream_hours=6 で RuntimeMaxSec=6h が出力されない"
+        )
+        assert re.search(r"^RestartSec=10s\s*$", service, flags=re.MULTILINE), (
+            "stream_hours=6, break_hours=0 で RestartSec=10s が出力されない"
+        )
+
     def test_install_section_wanted_by_multi_user(self):
         """Given .tftpl
         When [Install] セクションを読む
