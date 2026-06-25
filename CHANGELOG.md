@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.12] - 2026-06-25
+
+### Changed
+
+- `feat(streaming)`: ライブ配信のデフォルトを 24/7 連続配信に変更（ADR-0014）。Terraform 変数 `stream_hours` / `break_hours`（default=0 = 無制限）を導入し、systemd テンプレートで条件分岐。`yt-stream-archive-check` の `--expected` を必須化（#1219）
+- `refactor(streaming)`: Python streaming 定数を 24/7 デフォルトに更新。`THEORETICAL_HOURS_PER_DAY=24`、`ARCHIVES_EXPECTED=False` を導入し、稼働率計算・月次レポートを `ARCHIVES_EXPECTED` で分岐（#1220）
+
 ### Fixed
 
+- `fix(masterup)`: Suno CDN ダウンロードに `--fail` + `--retry 3` + 検証ステップを追加し、部分ダウンロードや破損ファイルを検出・警告するようにした。Content-Type 検証・UUID バリデーション・期待ファイル突合チェック・検証ゲート・リトライ設定の外部化も追加（#1090）
+- `fix(metadata-generator)`: `analyze_audio_files()` でトラックがサイレントにスキップされる問題を修正。duration が 0 以下や例外発生時にスキップ理由を明示的に警告し、入力数と出力数の不一致を検出するサマリーを追加。`_get_audio_duration()` の内部 try/except を除去し例外を呼び出し元へ伝播させることで skip reason に実際のエラー詳細が含まれるよう改善（#1093）
+- `fix(tags)`: `parse_youtube_tags()` を新設し、descriptions.md タグ分割+正規化を一元化。全 5 経路（`Tags.for_collection()` / `_descriptions_md.py` / `preflight_checks.py` / `bulk_update_descriptions_from_md.py` / Shorts タグ生成）で統一的に quote 除去（#1096）
+- `fix(veo)`: Veo 生成後に `smooth_loop()` を自動適用し、ループの継ぎ目をクロスフェードで滑らかにする。`generate_videos.sh` で音声ループ時に `loudnorm` フィルターを適用し音割れを防止（#1057）
+- `fix(videoup)`: `generate_videos.sh` で loop.mp4 不在時に静止画フォールバックを明示的にログ出力し、loop 生成失敗の痕跡（`loop_raw.mp4` / `loop-v*.mp4`）がある場合は警告を表示。静止画 + effect 経路にもループ不在ログを追加。痕跡検出を `ls | head` パイプから配列ベースのファイル存在チェックに修正（pipefail 非依存化）。テスト 3 件追加（#868）
+- `fix(suno-helper)`: Cmd+P によるプレイリスト dialog の起動を最大 3 回リトライし、大規模 collection の multi-select verify タイムアウトを 50→100ms/row に倍増して安定性を改善（#1050）
+- `fix(thumbnail)`: Gemini 参照画像生成時に variation guard プロンプトを自動プリペンドし、参照画像の丸パクリを抑制（#1049）
+- `fix(comments-reply)`: `comments.insert` 成功後の履歴 `save()` を最大 3 回リトライし、insert→save 間の二重返信余地を縮小。全 save 失敗時は `plan.replied` に `save_failed` フラグを付与（#382）
 - `fix(collection-serve)`: `send_error()` 26 箇所を CORS 付き `_send_json_error()` に統一し、suno-helper 拡張が CORS ポリシーでブロックされる問題を修正（#1209）
 - `fix(suno-helper)`: dir mode で collection 切り替え・URL 変更時に前回の prompts が残留する問題を修正（#1210）。`syncCollections` で最新 collection 一覧を再取得してから prompts を fetch するフローに変更し、サーバー側で single-file mode の `/collections` と dir mode の `/suno/prompts.json` 直アクセスに JSON 404 レスポンスを返すよう修正。`resolvePromptCollectionId` を shared に新設
 
@@ -1159,6 +1174,8 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 [5.5.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.1
 [5.5.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.0
 [5.4.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.4.0
+[5.5.12]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.12
+[5.5.11]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.11
 [5.3.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.3.0
 [5.2.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.2.0
 [5.1.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.1.1

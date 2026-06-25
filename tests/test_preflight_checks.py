@@ -230,6 +230,15 @@ class TestExtractDescriptionsMdTags:
         )
         assert extract_descriptions_md_tags(p) == ["lofi beats", "jazz", "study"]
 
+    def test_strips_double_quotes_from_tags(self, tmp_path: Path) -> None:
+        """ダブルクォートで囲まれたタグから引用符を除去する (#1096)."""
+        p = tmp_path / "descriptions.md"
+        p.write_text(
+            '## タグ（YouTube タグ欄）\n```\n"lofi beats", "jazz", "study music"\n```\n',
+            encoding="utf-8",
+        )
+        assert extract_descriptions_md_tags(p) == ["lofi beats", "jazz", "study music"]
+
     def test_returns_none_for_empty_section(self, tmp_path: Path) -> None:
         p = tmp_path / "descriptions.md"
         p.write_text("## タグ（YouTube タグ欄）\n```\n\n```\n", encoding="utf-8")

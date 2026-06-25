@@ -73,6 +73,11 @@ audio:
 suno_download:
   cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"
 
+  # curl の --retry / --retry-delay に渡す値。
+  # CDN が一時的に 5xx を返す場合やネットワーク不安定時に調整する。
+  retry_count: 3
+  retry_delay_seconds: 2
+
 # 雨音レイヤー設定 (DEPRECATED, #512)
 # `audio.finalize.ambient_layers` へ移行してください。
 # 旧 `rain_layer` namespace は後方互換 alias として読み続けますが、

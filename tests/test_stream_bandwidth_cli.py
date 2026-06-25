@@ -145,6 +145,30 @@ def test_report_mode_calls_notify_with_formatted_text():
     assert "2026-04" in content
 
 
+def test_report_mode_skips_youtube_archive_count_when_archives_are_not_expected():
+    """Given ARCHIVES_EXPECTED=False
+    When --report を実行
+    Then YouTube API 境界とアーカイブ計数を呼ばずにレポートする。
+    """
+    bw = {"2026-04-15": {"incoming_bytes": 1024**3 * 200, "outgoing_bytes": 0}}
+    mocks = _patch_all(bandwidth=bw)
+    enters = _enter(mocks)
+    try:
+        rc = stream_bandwidth.main(["--report", "--month", "2026-04", "--instance-id", "VULTR_X"])
+    finally:
+        _exit(mocks)
+
+    assert rc == 0
+    count_archives_mock = enters[2]
+    notify_mock = enters[4]
+    get_youtube_mock = enters[5]
+    count_archives_mock.assert_not_called()
+    get_youtube_mock.assert_not_called()
+    content = notify_mock.call_args.kwargs["content"]
+    assert "アーカイブ数ベース判定なし" in content
+    assert "アーカイブ件数: 実測" not in content
+
+
 def test_report_mode_emits_na_when_previous_month_has_no_data():
     """Given 前月キーを持たない fixture
     When --report --month 2026-04

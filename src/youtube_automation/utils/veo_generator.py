@@ -280,18 +280,21 @@ def _finalize_generated_video(
 ) -> None:
     """保存済み動画の後処理と課金ログ出力を行う。
 
-    compression が有効なら libx264 再エンコードで音声除去も同時に行うため
-    `strip_audio` の stream copy パスを skip し、ffmpeg 起動を 1 回に集約する。
+    smooth_loop で末尾ノイズ除去 + クロスフェード結合を行い、シームレスな
+    ループを生成する。compression 設定があれば smooth_loop が同一 crf/preset で
+    再エンコードするため compress_loop は不要（ffmpeg 起動 1 回に集約）。
+    smooth_loop が失敗した場合は従来の compress/strip_audio にフォールバック。
     """
-    print(f"  {progress_fmt.format_step(3, 3, '後処理（圧縮 / 音声除去）')}")
-    if compression and compression.get("enabled", True):
-        compress_loop(
-            output_path,
-            crf=int(compression.get("crf", 22)),
-            preset=str(compression.get("preset", "slow")),
-        )
-    else:
-        strip_audio(output_path)
+    print(f"  {progress_fmt.format_step(3, 3, '後処理（スムースループ / 圧縮 / 音声除去）')}")
+    crf = int(compression.get("crf", 22)) if compression and compression.get("enabled", True) else 18
+    preset = str(compression.get("preset", "slow")) if compression and compression.get("enabled", True) else "slow"
+    smoothed = smooth_loop(output_path, crossfade_sec=0.5, trim_tail_sec=1.0, crf=crf, preset=preset)
+    if not smoothed:
+        print("  [Warn]   smooth_loop 失敗 → compress/strip_audio にフォールバック")
+        if compression and compression.get("enabled", True):
+            compress_loop(output_path, crf=crf, preset=preset)
+        else:
+            strip_audio(output_path)
     size_mb = output_path.stat().st_size / (1024 * 1024)
     print(f"  [Done]   完成 → {output_path} ({size_mb:.1f} MB)")
 

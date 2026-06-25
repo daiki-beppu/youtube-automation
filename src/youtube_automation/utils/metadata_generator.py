@@ -26,6 +26,7 @@ from youtube_automation.utils.exceptions import ValidationError
 from .audio_formats import AUDIO_EXTS
 from .skill_config import load_skill_config
 from .time_utils import format_duration_display, format_duration_short, format_timestamp
+from .youtube_tag import normalize_youtube_tags
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +311,7 @@ class BAHMetadataGenerator:
             return []
 
         tracks = []
+        skipped: list[tuple[str, str]] = []
         current_time = 0
         crossfade = self._crossfade_sec
 
@@ -318,34 +320,47 @@ class BAHMetadataGenerator:
 
         for wav_file in wav_files:
             try:
-                # afinfo コマンドで楽曲長を取得
                 duration = self._get_audio_duration(wav_file)
-
-                if duration > 0:
-                    # タイトル清浄化
-                    title = self._clean_track_title(wav_file.stem)
-
-                    # タイムスタンプ計算（2曲目以降はクロスフェード分だけ前倒し）
-                    start_time = current_time
-                    end_time = current_time + duration
-
-                    tracks.append(
-                        {
-                            "filename": wav_file.name,
-                            "title": title,
-                            "duration": duration,
-                            "start_time": start_time,
-                            "end_time": end_time,
-                            "timestamp": self._format_timestamp(start_time),
-                            "pattern_key": _extract_pattern_key(wav_file.name),
-                        }
-                    )
-
-                    current_time = int(end_time - crossfade)
-
-            except Exception as e:
-                logger.warning(f"ファイル解析エラー {wav_file.name}: {e}")
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError, OSError) as e:
+                reason = f"ファイル解析エラー: {e}"
+                logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
+                skipped.append((wav_file.name, reason))
                 continue
+
+            if duration <= 0:
+                reason = "再生時間が 0 秒（ファイル破損または afinfo 解析失敗の可能性）"
+                logger.warning(f"トラックをスキップ: {wav_file.name} — {reason}")
+                skipped.append((wav_file.name, reason))
+                continue
+
+            title = self._clean_track_title(wav_file.stem)
+            start_time = current_time
+            end_time = current_time + duration
+
+            tracks.append(
+                {
+                    "filename": wav_file.name,
+                    "title": title,
+                    "duration": duration,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "timestamp": self._format_timestamp(start_time),
+                    "pattern_key": _extract_pattern_key(wav_file.name),
+                }
+            )
+
+            current_time = int(end_time - crossfade)
+
+        if skipped:
+            logger.warning(f"⚠️  {len(skipped)}/{len(wav_files)} トラックがスキップされました:")
+            for name, reason in skipped:
+                logger.warning(f"  - {name}: {reason}")
+
+        if len(tracks) != len(wav_files):
+            logger.warning(
+                f"⚠️  入力 {len(wav_files)} ファイル → 出力 {len(tracks)} タイムスタンプ"
+                f"（{len(wav_files) - len(tracks)} 件欠落）"
+            )
 
         self.tracks = tracks
         # LLM がリネームした表示名が workflow-state.json に永続化されていれば再ロード時にも反映する
@@ -362,25 +377,28 @@ class BAHMetadataGenerator:
 
         Returns:
             int: 長さ（秒）
+
+        Raises:
+            subprocess.CalledProcessError: afinfo が非ゼロ終了した場合
+            subprocess.TimeoutExpired: afinfo がタイムアウトした場合
+            ValueError: duration 文字列の数値変換に失敗した場合
+            IndexError: afinfo 出力のパースに失敗した場合
         """
-        try:
-            result = subprocess.run(
-                ["afinfo", str(wav_file)],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=30,
-            )
+        result = subprocess.run(
+            ["afinfo", str(wav_file)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
 
-            # "estimated duration: XXX.XXX seconds" を抽出
-            for line in result.stdout.split("\n"):
-                if "estimated duration" in line:
-                    duration_str = line.split(":")[1].strip().split()[0]
-                    return int(float(duration_str))
+        # "estimated duration: XXX.XXX seconds" を抽出
+        for line in result.stdout.split("\n"):
+            if "estimated duration" in line:
+                duration_str = line.split(":")[1].strip().split()[0]
+                return int(float(duration_str))
 
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError) as e:
-            logger.warning(f"afinfo エラー {wav_file.name}: {e}")
-
+        logger.warning(f"afinfo 出力に 'estimated duration' が見つかりません: {wav_file.name}")
         return 0
 
     def _clean_track_title(self, filename: str) -> str:
@@ -970,7 +988,7 @@ class BAHMetadataGenerator:
         tag_list: List[str] = ["Shorts"]
         tag_list.extend(self.config.content.tags.base)
         tag_list.extend(self.config.content.tags.themes.get(theme, []))
-        tag_list = tag_list[:50]
+        tag_list = normalize_youtube_tags(tag_list[:50])
 
         localizations = build_short_localizations(
             self.config,

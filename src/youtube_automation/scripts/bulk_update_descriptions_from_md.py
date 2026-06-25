@@ -25,6 +25,7 @@ import time
 
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
 
 def discover_collections() -> list[str]:
@@ -73,7 +74,7 @@ def load_collection(col: str) -> dict:
     tags_raw = extract_md_section(desc_md, "タグ（YouTube タグ欄）")
     tags = []
     if tags_raw:
-        tags = [t.strip() for t in tags_raw.replace("\n", ",").split(",") if t.strip()]
+        tags = parse_youtube_tags(tags_raw)
 
     if not (description and title):
         raise RuntimeError(f"missing description or title section in {col}")

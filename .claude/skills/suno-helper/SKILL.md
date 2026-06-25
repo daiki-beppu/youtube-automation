@@ -1,13 +1,13 @@
 ---
 name: suno-helper
-description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加したいとき。yt-collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加）を回す operator 手順。`/suno` でプロンプトが揃った後、または既存 collection の途中再開で使用する"
+description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。yt-collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加 → ZIP 一括 DL）を回す operator 手順。`/suno` でプロンプトが揃った後、または既存 collection の途中再開で使用する"
 ---
 
 ## Overview
 
-`<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `yt-collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化まで進める。
+`<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `yt-collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化 → ZIP 一括ダウンロードまで進める。
 
-このスキルはプロンプト生成（`/suno`）の **次工程** であり、Suno DL + マスター化（`/masterup`）の **前工程** にあたる。
+このスキルはプロンプト生成（`/suno`）の **次工程** であり、マスター化（`/masterup`）の **前工程** にあたる。suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 1 タブで完結させるため、`/masterup` の DL ステップ（Step 2-3）は原則スキップされる。
 
 ## When to Use
 
@@ -112,9 +112,12 @@ popup 上部に進捗が出る:
 | `waiting-slot` | Suno のキュー上限 (10 clip) に達した。空きスロット待ち（最大 5 分）|
 | `done` | 当該 entry 完了、次へ進む |
 | `adding-to-playlist` | 全 entry 完了、clip を一括 playlist 化中 |
-| `finished` | 完了 |
+| `downloading` | playlist 追加完了後、全 clip を ZIP 一括ダウンロード中 |
+| `finished` | 完了（DL 含む） |
 | `stopped` | user が停止ボタンで中断 |
 | `error` | 失敗（赤色で停止）|
+
+**phase 遷移の詳細**: `done`（最終 entry）→ `adding-to-playlist` → `downloading` → `finished`。playlist 追加完了直後に `postDownloaded(file_count: 0)` を呼んで playlist URL のみをサーバーに記録し、ZIP ダウンロード完了後に `postDownloaded(file_count: N)` で実ファイル数を報告する。
 
 ### Step 7. 完了確認
 
@@ -122,7 +125,9 @@ popup 上部に進捗が出る:
 
 1. Suno 側で対象 playlist に collection の全 clip が紐付いている
 2. clip 数 = collection の entry 数（数が合わなければ resume で残りを回す）
-3. clip 名が Suno デフォルトの自動生成名のまま（リネーム / DL は次工程 `/masterup`）
+3. ZIP ダウンロードが完了し、Chrome のダウンロードフォルダに ZIP ファイルが存在する
+4. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
+5. `workflow-state.json` の `assets.music_downloaded` が `true` になっている（DL 完了時）
 
 ### Step 8. 中断時
 
@@ -133,6 +138,61 @@ popup 上部に進捗が出る:
   - `reCAPTCHA を検知しました。手動で解決してから再開してください。`
   - `Clip multi-select verification failed: expected N selected, got M`
   - `中断: Add to Playlist dialog を検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`
+
+## 一括ダウンロード機能
+
+### ダウンロードフロー
+
+playlist 追加完了後、拡張は以下の手順で ZIP 一括ダウンロードを実行する:
+
+1. 全 clip を multi-select（生成完了後の clip 行をすべて選択）
+2. 任意の行の "More menu contents" ボタンをクリック
+3. コンテキストメニューから "Download all" をクリック
+4. フォーマット選択モーダルが表示される（M4A / MP3 / WAV）
+5. `chrome.storage` キー `sunoDownloadFormat` から設定値を読み取り（デフォルト: `"mp3"`）、該当フォーマットを選択
+6. `chrome.downloads` API 経由で ZIP ダウンロードが開始
+
+### フォーマット設定
+
+ダウンロードフォーマットは `chrome.storage` キー `sunoDownloadFormat` で設定する。
+
+| 値 | 説明 |
+|---|---|
+| `"mp3"` | MP3 形式（デフォルト） |
+| `"m4a"` | M4A (AAC) 形式 |
+| `"wav"` | WAV (非圧縮) 形式 |
+
+popup UI からも設定可能。設定は `chrome.storage.local` に永続化される。
+
+### POST エンドポイント
+
+ダウンロード状態はサーバーの `POST /collections/<id>/downloaded` エンドポイントに報告される。
+
+| 呼び出しタイミング | payload | 目的 |
+|---|---|---|
+| playlist 追加完了直後 | `{ file_count: 0, format: "<fmt>", suno_playlist_url: "<url>" }` | playlist URL のみ記録 |
+| ZIP ダウンロード完了後 | `{ file_count: N, format: "<fmt>", suno_playlist_url: "<url>" }` | DL 完了をマーク |
+
+このエンドポイントは冪等（idempotent）であり、同じ payload で複数回呼んでも問題ない。
+
+### playlist_name の構築
+
+拡張はコレクションメタデータから `${PREFIX} | ${name}` 形式で playlist 名を構築する。これはサーバー側の `playlist_name` 算出ロジックと同じ規約。
+
+### DOWNLOADING phase のエラーハンドリング
+
+ダウンロードが途中で失敗した場合（ネットワーク断、Chrome のダウンロードキャンセル等）、拡張はリトライを試みる。POST エンドポイントが冪等なため、再送しても安全。リトライ不能な場合は `error` phase に遷移し、ユーザーに手動ダウンロードへのフォールバックを促す。
+
+### 状態管理の変更点
+
+| 項目 | 旧（DL 機能なし） | 新（DL 機能あり） |
+|---|---|---|
+| playlist URL の記録先 | `suno-playlists.json` | `workflow-state.json` の `planning.music.suno_playlist_url` |
+| DL 完了判定（primary） | N/A | `02-Individual-music/` にファイルが存在するか（ファイルシステム） |
+| DL 完了判定（secondary） | N/A | `workflow-state.json` の `assets.music_downloaded` |
+| `suno-playlists.json` | 新規コレクションでも使用 | **新規コレクションでは使用しない**（レガシー互換で残存） |
+
+新規コレクションでは `suno-playlists.json` は参照されない。playlist URL は `workflow-state.json` に一元管理される。
 
 ## Gotchas
 
@@ -157,7 +217,9 @@ popup 上部に進捗が出る:
 ## Cross References
 
 - 前工程（プロンプト生成）: `/suno`
-- 後工程（DL + マスター化）: `/masterup`
+- 後工程（マスター化）: `/masterup`（DL は本スキルが完了済みのため Step 2-3 スキップ）
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
 - サーバー CLI: `src/youtube_automation/scripts/collection_serve.py`
+- POST downloaded エンドポイント: `src/youtube_automation/scripts/collection_serve.py`
 - preset 定義: `extensions/shared/constants.ts::SPEED_PRESETS`
+- DL フォーマット storage key: `extensions/shared/constants.ts::sunoDownloadFormat`

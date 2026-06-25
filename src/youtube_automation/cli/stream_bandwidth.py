@@ -26,6 +26,7 @@ from youtube_automation.utils.notification import notify
 from youtube_automation.utils.probe import probe_bitrate
 from youtube_automation.utils.secrets import get_secret
 from youtube_automation.utils.streaming import (
+    ARCHIVES_EXPECTED,
     MONTHLY_QUOTA_GB,
     THEORETICAL_BITRATE_MBPS,
     THRESHOLD_RATIO,
@@ -121,6 +122,13 @@ def _resolve_bandwidth(args: argparse.Namespace) -> dict[str, dict[str, int]]:
     return fetch_bandwidth(instance_id=instance_id, api_key=api_key)
 
 
+def _resolve_report_archives(args: argparse.Namespace, *, year: int, month: int) -> int | None:
+    """レポート用のアーカイブ実測値を取得する。"""
+    if not ARCHIVES_EXPECTED:
+        return None
+    return count_archives(get_youtube(), channel_id=args.channel_id, year=year, month=month)
+
+
 def _run_report(args: argparse.Namespace) -> int:
     """`--report` モード。"""
     if args.month:
@@ -138,7 +146,7 @@ def _run_report(args: argparse.Namespace) -> int:
         # (0 GB と区別できない場合は N/A の方が誤読を招きにくい)
         previous_usage_gb = None
 
-    archives = count_archives(get_youtube(), channel_id=args.channel_id, year=target_year, month=target_month)
+    archives = _resolve_report_archives(args, year=target_year, month=target_month)
     days_in_month = calendar.monthrange(target_year, target_month)[1]
     text = format_monthly_report(
         year=target_year,

@@ -34,6 +34,9 @@ _HELD_FOR_REVIEW = "heldForReview"
 _COMMENTS_DISABLED_API_REASON = "commentsDisabled"
 _COMMENTS_DISABLED_SKIP_REASON = "comments_disabled"
 
+# 履歴 save リトライ回数（insert→save 間の永続化失敗を許容するリトライ上限）
+_SAVE_MAX_RETRIES = 3
+
 # videos.list の id 上限（1 リクエストあたり 50 件）
 _VIDEOS_LIST_CHUNK = 50
 _PRIVACY_STATUS_PRIVATE = "private"
@@ -400,6 +403,13 @@ class CommentReplier:
         video_title: str,
         plan: ReplyPlan,
     ) -> bool:
+        """YouTube に返信を投稿し履歴を永続化する.
+
+        Returns:
+            True: YouTube への insert が成功した（save 全失敗でも True — 投稿済み返信は
+            取り消せないため replied カウントを減らさない。save 失敗は plan.errors で通知）。
+            False: insert 自体が失敗した。
+        """
         try:
             self._youtube.comments().insert(
                 part="snippet",
@@ -431,9 +441,38 @@ class CommentReplier:
             "reply_text": reply_text,
         }
         self._history.mark_replied(comment.comment_id, metadata)
-        # 途中断絶時の二重返信を防ぐため、返信成功ごとに履歴を永続化する
-        self._history.save()
-        plan.replied.append({"comment_id": comment.comment_id, **metadata})
+        # insert→save 間で save が失敗すると次回実行で二重返信するため、リトライで確実に永続化 (#382)
+        save_failed = False
+        for save_attempt in range(_SAVE_MAX_RETRIES):
+            try:
+                self._history.save()
+                break
+            except OSError as e:
+                logger.warning(
+                    "履歴保存リトライ %d/%d (comment_id=%s): %s",
+                    save_attempt + 1,
+                    _SAVE_MAX_RETRIES,
+                    comment.comment_id,
+                    e,
+                )
+        else:
+            save_failed = True
+            logger.error(
+                "履歴保存が %d 回失敗 (comment_id=%s) — 次回実行で二重返信の可能性あり",
+                _SAVE_MAX_RETRIES,
+                comment.comment_id,
+            )
+            plan.errors.append(
+                self._error_record(
+                    comment,
+                    f"履歴保存が {_SAVE_MAX_RETRIES} 回失敗"
+                    f" (comment_id={comment.comment_id}) — 次回実行で二重返信の可能性あり",
+                )
+            )
+        record = {"comment_id": comment.comment_id, **metadata}
+        if save_failed:
+            record["save_failed"] = True
+        plan.replied.append(record)
         return True
 
     @staticmethod

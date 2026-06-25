@@ -627,6 +627,27 @@ class TestLoadCollection:
         with pytest.raises(RuntimeError, match="missing description or title section"):
             mod.load_collection("alpha")
 
+    def test_should_strip_double_quotes_from_tags(self, tmp_path, monkeypatch):
+        """ダブルクォートで囲まれたタグから引用符を除去する (#1096)."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(
+            ch,
+            "alpha",
+            video_id="V_ALPHA",
+            tags=['"lofi beats"', '"jazz"', '"study music"'],
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+
+        # When
+        result = mod.load_collection("alpha")
+
+        # Then
+        assert result["tags"] == ["lofi beats", "jazz", "study music"]
+
 
 # ---------------------------------------------------------------------------
 # 5. extract_md_section
