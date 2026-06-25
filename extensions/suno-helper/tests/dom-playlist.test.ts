@@ -185,6 +185,76 @@ function addAlternateViewRow(
 }
 
 /**
+ * Grid view (#1237) の per-card 要素を `.clip-browser-list-scroller` 配下に挿入する。
+ * 実機 DOM:
+ *   .clip-browser-list-scroller > wrapper > gridContainer > per-card × N
+ *   各 per-card > nested divs > button[aria-label="Select clip"]
+ *                              > img[src*="cdn2.suno.ai/image_{UUID}"]
+ */
+function addGridViewCard(
+  gridContainer: HTMLElement,
+  clipId: string,
+  opts: { selectLabel?: string; visible?: boolean } = {},
+): { row: HTMLElement; btn: HTMLButtonElement } {
+  const { selectLabel = "Select clip", visible = true } = opts;
+  const card = document.createElement("div");
+  const inner1 = document.createElement("div");
+  const inner2 = document.createElement("div");
+  const inner3 = document.createElement("div");
+
+  const btn = document.createElement("button");
+  btn.setAttribute("aria-label", selectLabel);
+
+  const img = document.createElement("img");
+  img.src = `https://cdn2.suno.ai/image_${clipId}.jpeg`;
+
+  const titleDiv = document.createElement("div");
+  titleDiv.textContent = `Track ${clipId}`;
+
+  inner3.append(btn, img, titleDiv);
+  inner2.appendChild(inner3);
+  inner1.appendChild(inner2);
+  card.appendChild(inner1);
+  gridContainer.appendChild(card);
+
+  if (visible === false) {
+    card.style.display = "none";
+    markBbox(card, 0, 0);
+  } else {
+    markBbox(card, 200, 200);
+  }
+  markBbox(btn, 20, 20);
+  return { row: card, btn };
+}
+
+function addGridViewRows(
+  count: number,
+  opts: { selectLabel?: string } = {},
+): {
+  scroller: HTMLElement;
+  gridContainer: HTMLElement;
+  rows: HTMLElement[];
+  buttons: HTMLButtonElement[];
+} {
+  const scroller = getOrCreateScroller();
+  const wrapper = getOrCreateClipList();
+  const gridContainer = document.createElement("div");
+  wrapper.appendChild(gridContainer);
+
+  const rows: HTMLElement[] = [];
+  const buttons: HTMLButtonElement[] = [];
+  for (let i = 0; i < count; i++) {
+    const padded = String(i).padStart(8, "0");
+    const { row, btn } = addGridViewCard(gridContainer, `${padded}-0000-0000-0000-000000000000`, {
+      selectLabel: opts.selectLabel,
+    });
+    rows.push(row);
+    buttons.push(btn);
+  }
+  return { scroller, gridContainer, rows, buttons };
+}
+
+/**
  * Add to Playlist dialog を模した `[role="dialog"]` を body に挿入する。
  *   - text: 内部見出しの textContent（判定対象。order.md の span#_r_dg_ 相当）
  *   - ariaLabel / id: cookie 除外フィルタ検証用（"Privacy Preference Center" / "ot-..."）
@@ -1366,5 +1436,79 @@ describe("clickPlaylistRowByName: dialog 内 list の新規 row を click して
 
     expect(observedTarget).not.toBe(wrapper);
     expect((observedTarget as HTMLElement | null)?.textContent).toBe("x");
+  });
+});
+
+describe("grid view (#1237): .multi-select-button / a[href*='/song/'] 不在の DOM でも playlist 追加フローが動作する", () => {
+  describe("ensureClipRowsLoaded: grid view per-card 解決", () => {
+    it("Given grid view DOM When ensureClipRowsLoaded Then sibling cardinality heuristic で per-card を row として返す", async () => {
+      const { rows } = addGridViewRows(3);
+      await expect(ensureClipRowsLoaded(3, { isAborted: () => false })).resolves.toEqual(rows);
+    });
+
+    it("Given grid view で一部 card が非表示 When ensureClipRowsLoaded Then strict isVisible で除外する", async () => {
+      const { gridContainer, rows } = addGridViewRows(2);
+      addGridViewCard(gridContainer, "hidden-uuid", { visible: false });
+      await expect(ensureClipRowsLoaded(2, { isAborted: () => false })).resolves.toEqual(rows);
+    });
+  });
+
+  describe("ensureClipRowsLoadedByIds: grid view image UUID 抽出", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("Given grid view DOM with img[src*='cdn2.suno.ai/image_'] When target ID で取得する Then UUID を抽出して row を返す", async () => {
+      const id0 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+      const id1 = "b2c3d4e5-f6a7-8901-bcde-f12345678901";
+      const id2 = "c3d4e5f6-a7b8-9012-cdef-123456789012";
+      const scroller = getOrCreateScroller();
+      const wrapper = getOrCreateClipList();
+      const gridContainer = document.createElement("div");
+      wrapper.appendChild(gridContainer);
+      const card0 = addGridViewCard(gridContainer, id0);
+      addGridViewCard(gridContainer, id1);
+      const card2 = addGridViewCard(gridContainer, id2);
+
+      const pending = ensureClipRowsLoadedByIds([id0, id2], {
+        isAborted: () => false,
+      });
+      await vi.runAllTimersAsync();
+      expect(await pending).toEqual([card0.row, card2.row]);
+    });
+
+    it("Given grid view row に data-songId も存在する When target ID で取得する Then data-songId を優先し image fallback は走らない", async () => {
+      const scroller = getOrCreateScroller();
+      const wrapper = getOrCreateClipList();
+      const gridContainer = document.createElement("div");
+      wrapper.appendChild(gridContainer);
+      const card0 = addGridViewCard(gridContainer, "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+      const card1 = addGridViewCard(gridContainer, "b2c3d4e5-f6a7-8901-bcde-f12345678901");
+      card0.row.dataset.songId = "primary-id";
+
+      const pending = ensureClipRowsLoadedByIds(["primary-id"], {
+        isAborted: () => false,
+      });
+      await vi.runAllTimersAsync();
+      expect(await pending).toEqual([card0.row]);
+    });
+  });
+
+  describe("multiSelectClips: grid view click + verify", () => {
+    it("Given grid view per-card rows When multiSelectClips Then Select clip button を click して selected 遷移を verify する", async () => {
+      const { rows, buttons } = addGridViewRows(2);
+      const clicks: string[] = [];
+      buttons[0].addEventListener("click", () => clicks.push("a"));
+      buttons[1].addEventListener("click", () => clicks.push("b"));
+      selectOnClick(buttons[0]);
+      selectOnClick(buttons[1]);
+
+      await expect(multiSelectClips(rows)).resolves.toBeUndefined();
+      expect(clicks).toEqual(["a", "b"]);
+    });
   });
 });
