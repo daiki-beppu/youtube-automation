@@ -16,38 +16,30 @@
 
 import { sleep } from "../../shared/dom";
 
-// --- DOM セレクタ SSOT ---
+// --- DOM セレクタ SSOT (2026-06-25 実測) ---
 // Suno の DOM は頻繁に変わるため、セレクタを 1 箇所に集約する。
-// TODO: 実 DOM 検証で確定したセレクタに更新すること。
 
-/** More menu ボタン（三点リーダー / ellipsis）。multi-select 時は各 clip row に出現する。
- * aria-label の "More" 部分一致 + button 要素で識別する。
- * TODO: Suno UI の実 DOM で aria-label を検証し更新 */
-const MORE_BUTTON_SELECTOR = 'button[aria-label*="More"]';
+/** More menu ボタン。各 clip row に出現する三点リーダー。
+ * aria-label="More options" で完全一致（"More from Suno" 等を除外）。 */
+const MORE_BUTTON_SELECTOR = 'button[aria-label="More options"]';
 
-/** context menu の role=menu コンテナ。More ボタン click 後に出現する。 */
-const CONTEXT_MENU_SELECTOR = '[role="menu"], [role="listbox"]';
+/** context menu コンテナ。More ボタン click 後に body 末尾へポータル描画される。
+ * role="menu" は付かず data-context-menu 属性で識別する。 */
+const CONTEXT_MENU_SELECTOR = 'div[data-context-menu="true"]';
 
-/** "Download all" menu item。context menu 内の menu item をテキストで識別する。
- * TODO: Suno UI の実 DOM でテキストを検証。大文字小文字 / 表記ゆれに注意 */
+/** "Download all" menu item。context menu 内の button を aria-label で識別する。 */
 const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
 
-/** 形式選択モーダル。Download all click 後に出現する dialog / modal。 */
-const FORMAT_MODAL_SELECTOR = '[role="dialog"]';
+/** 形式選択モーダル。Download all click 後に出現する。
+ * div.modal-class.modal-overlay で識別（OneTrust cookie dialog の [role="dialog"] と区別）。 */
+const FORMAT_MODAL_SELECTOR = 'div.modal-class.modal-overlay';
 
-/** 形式選択モーダル内のラジオボタン / オプション要素。
- * input[type="radio"] または label / button で形式テキスト (mp3/m4a/wav) を含む要素。
- * TODO: Suno UI の実 DOM で確定。radio か button か、テキスト位置を検証 */
-const FORMAT_OPTION_SELECTORS = [
-  'input[type="radio"]',
-  'label',
-  'button[role="radio"]',
-  '[role="radio"]',
-] as const;
+/** 形式選択モーダル内のフォーマットボタン。
+ * button.flex.w-full で M4A / MP3 / WAV のテキストを含む（radio ではなく通常ボタン）。 */
+const FORMAT_OPTION_SELECTOR = 'button.flex.w-full';
 
-/** ダウンロード確認ボタン。形式選択後に click する。
- * TODO: Suno UI の実 DOM でテキスト / aria-label を検証 */
-const DOWNLOAD_CONFIRM_BUTTON_TEXT = /^download$/i;
+/** ダウンロード確認ボタン。hxc-btn-variant-primary クラスで確実に識別できる。 */
+const DOWNLOAD_CONFIRM_SELECTOR = 'button.hxc-btn-variant-primary';
 
 // --- poll / timeout 定数 ---
 const MENU_APPEAR_POLL_MS = 100;
@@ -100,23 +92,20 @@ function findElementByTextContent<T extends HTMLElement>(
 
 /**
  * context menu 内から "Download all" menu item が出現するまで poll する。
- * menu container が先に見つかった後、その中の menu item を探す。
+ * Suno は data-context-menu="true" ポータルを body 末尾に描画する。
+ * 内部の button[aria-label="Download all"] または テキスト照合で探す。
  */
 async function waitForDownloadMenuItem(timeoutMs: number, pollMs: number): Promise<HTMLElement> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    // menu container を探す
-    const menus = document.querySelectorAll<HTMLElement>(CONTEXT_MENU_SELECTOR);
-    for (const menu of menus) {
-      // menu item / li / button / a をテキストで探す
-      const item = findElementByTextContent<HTMLElement>(
-        menu,
-        '[role="menuitem"], li, button, a',
-        DOWNLOAD_MENU_ITEM_TEXT,
-      );
-      if (item) {
-        return item;
-      }
+    const menu = document.querySelector<HTMLElement>(CONTEXT_MENU_SELECTOR);
+    if (menu) {
+      // aria-label で直接探す（最も安定）
+      const byLabel = menu.querySelector<HTMLElement>('button[aria-label="Download all"]');
+      if (byLabel) return byLabel;
+      // フォールバック: テキスト照合
+      const byText = findElementByTextContent<HTMLElement>(menu, 'button', DOWNLOAD_MENU_ITEM_TEXT);
+      if (byText) return byText;
     }
     await sleep(pollMs);
   }
@@ -127,36 +116,19 @@ async function waitForDownloadMenuItem(timeoutMs: number, pollMs: number): Promi
 
 /**
  * 形式選択モーダル内で指定形式のオプションを探して click する。
- * mp3 / m4a / wav のテキストを含むラジオ / ラベル / ボタン要素を対象とする。
+ * Suno は button.flex.w-full で M4A / MP3 / WAV の選択肢を描画する（radio ではない）。
+ * 選択済み: bg-foreground-primary、未選択: bg-background-glass-thin。
  */
 function selectFormatInModal(modal: HTMLElement, format: string): void {
-  const formatPattern = new RegExp(`\\b${format}\\b`, "i");
-
-  for (const selector of FORMAT_OPTION_SELECTORS) {
-    const candidates = modal.querySelectorAll<HTMLElement>(selector);
-    for (const el of candidates) {
-      // input[type="radio"] の場合は隣接 label のテキストも確認する
-      if (el instanceof HTMLInputElement && el.type === "radio") {
-        const label = el.labels?.[0] ?? el.closest("label");
-        if (label?.textContent && formatPattern.test(label.textContent)) {
-          el.click();
-          return;
-        }
-        // value 属性で形式を持っている場合
-        if (el.value && formatPattern.test(el.value)) {
-          el.click();
-          return;
-        }
-        continue;
-      }
-      // label / button / [role="radio"] の場合はテキストで識別
-      if (el.textContent && formatPattern.test(el.textContent)) {
-        el.click();
-        return;
-      }
+  const formatPattern = new RegExp(`^${format}$`, "i");
+  const candidates = modal.querySelectorAll<HTMLButtonElement>(FORMAT_OPTION_SELECTOR);
+  for (const btn of candidates) {
+    if (btn.disabled) continue;
+    if (btn.textContent && formatPattern.test(btn.textContent.trim())) {
+      btn.click();
+      return;
     }
   }
-
   throw new Error(
     `形式 "${format}" に対応するオプションがモーダル内に見つかりませんでした。` +
       "Suno の UI 変更の可能性があります。",
@@ -165,13 +137,10 @@ function selectFormatInModal(modal: HTMLElement, format: string): void {
 
 /**
  * 形式選択モーダル内のダウンロード確認ボタンを探して click する。
+ * Suno は hxc-btn-variant-primary クラスの大ボタン (テキスト "Download") を使う。
  */
 function clickDownloadConfirm(modal: HTMLElement): void {
-  const btn = findElementByTextContent<HTMLButtonElement>(
-    modal,
-    "button",
-    DOWNLOAD_CONFIRM_BUTTON_TEXT,
-  );
+  const btn = modal.querySelector<HTMLButtonElement>(DOWNLOAD_CONFIRM_SELECTOR);
   if (!btn) {
     throw new Error(
       "ダウンロード確認ボタンが見つかりませんでした。Suno の UI 変更の可能性があります。",
@@ -196,12 +165,7 @@ export function defaultDownloadDeps(): TriggerDownloadAllDeps {
     findMoreButton: () => document.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR),
     waitForDownloadMenuItem: (timeoutMs, pollMs) => waitForDownloadMenuItem(timeoutMs, pollMs),
     waitForFormatModal: (timeoutMs, pollMs) =>
-      waitForElement<HTMLElement>(FORMAT_MODAL_SELECTOR, timeoutMs, pollMs, (el) => {
-        // OneTrust cookie dialog を除外（playlist-dom.ts と同じフィルタ）
-        if (el.id.startsWith("ot-")) return false;
-        // "Download" をテキストに含む dialog を探す
-        return !!findElementByTextContent(el, "h2, h3, [role='heading']", /download/i);
-      }),
+      waitForElement<HTMLElement>(FORMAT_MODAL_SELECTOR, timeoutMs, pollMs),
     selectFormat: selectFormatInModal,
     clickConfirm: clickDownloadConfirm,
     sleep,
