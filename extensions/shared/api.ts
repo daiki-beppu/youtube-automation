@@ -394,3 +394,30 @@ export async function recordDistrokidRelease(
     throw new Error(`HTTP ${resp.status}`);
   }
 }
+
+/** POST /collections/:id/downloaded の body (#1215)。ダウンロード完了通知ペイロード。 */
+export interface DownloadedPayload {
+  file_count: number;
+  format: "mp3" | "m4a" | "wav";
+  suno_playlist_url: string;
+}
+
+/**
+ * ダウンロード完了をサーバーに通知する (#1215)。POST /collections/:id/downloaded。
+ * 非 2xx は fail-loud で throw する。
+ */
+export async function postDownloaded(
+  baseUrl: string,
+  collectionId: string,
+  payload: DownloadedPayload,
+): Promise<void> {
+  const url = `${baseUrl}/collections/${encodeURIComponent(collectionId)}/downloaded`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
+  }
+}

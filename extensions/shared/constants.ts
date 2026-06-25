@@ -15,6 +15,17 @@ export const RESUME_STATE_KEY = "sunoResumeState";
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
+/** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
+ * SSOT: src/youtube_automation/scripts/collection_serve.py DOWNLOADED_ROUTE。 */
+export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
+
+/** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
+ * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
+export const DOWNLOAD_FORMAT_KEY = "sunoDownloadFormat" as const;
+
+/** Suno ダウンロード形式のデフォルト値 (#1215)。 */
+export const DOWNLOAD_FORMAT_DEFAULT = "mp3" as const;
+
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
 
@@ -236,6 +247,8 @@ export const PHASE = {
   // entry 単位の失敗 (#948)。リトライ上限まで失敗した entry をスキップして次へ進むときに emit する。
   // 非終了 phase（run 全体は継続する）。失敗 index は snapshot の failedIndices に蓄積される。
   ENTRY_FAILED: "entry-failed",
+  // 全 entry の生成 DONE 後、playlist 追加完了後に Suno playlist を一括ダウンロードする phase (#1215)。非終了 phase。
+  DOWNLOADING: "downloading",
   // 全 entry の生成 DONE 後、FINISHED 直前に挟む clip 一括 playlist 追加 phase (#854)。非終了 phase。
   ADDING_TO_PLAYLIST: "adding-to-playlist",
   FINISHED: "finished",
