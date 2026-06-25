@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.12] - 2026-06-25
+
 ### Changed
 
 - `feat(streaming)`: ライブ配信のデフォルトを 24/7 連続配信に変更（ADR-0014）。Terraform 変数 `stream_hours` / `break_hours`（default=0 = 無制限）を導入し、systemd テンプレートで条件分岐。`yt-stream-archive-check` の `--expected` を必須化（#1219）
@@ -1172,6 +1174,8 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 [5.5.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.1
 [5.5.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.0
 [5.4.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.4.0
+[5.5.12]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.12
+[5.5.11]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.11
 [5.3.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.3.0
 [5.2.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.2.0
 [5.1.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.1.1
