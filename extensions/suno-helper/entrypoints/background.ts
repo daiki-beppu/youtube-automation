@@ -64,6 +64,9 @@ export default defineBackground(() => {
   // のため requireRelayTab が fail-loud で throw する（握りつぶさない）。
   onMessage("run", ({ data, sender }) => sendMessage("run", data, requireRelayTab(sender, "run")));
   onMessage("stop", ({ sender }) => sendMessage("stop", undefined, requireRelayTab(sender, "stop")));
+  onMessage("retryPlaylist", ({ data, sender }) =>
+    sendMessage("retryPlaylist", data, requireRelayTab(sender, "retryPlaylist")),
+  );
   onMessage("queryProgress", ({ sender }) =>
     sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
   );
