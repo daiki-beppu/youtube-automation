@@ -64,8 +64,8 @@ export function App() {
             className="rounded border border-gray-300 px-2 py-1"
           >
             {collections.map((c) => (
-              <option key={c.id} value={c.id} disabled={!c.has_prompts}>
-                {c.has_prompts ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
+              <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
+                {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
               </option>
             ))}
           </select>

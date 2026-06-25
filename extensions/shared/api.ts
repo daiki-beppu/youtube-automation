@@ -37,18 +37,20 @@ export interface PromptEntry {
   vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
-/** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。 */
+/** collection の状態 (#1216)。サーバーがファイルシステムから動的に判定する。
+ * - `needs_prompts`: suno-prompts.json が未作成
+ * - `ready`: prompts 存在・ダウンロード未完了
+ * - `downloaded`: 02-Individual-music/ に pattern_count 以上の音声ファイルがある */
+export type CollectionStatus = "needs_prompts" | "ready" | "downloaded";
+
+/** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。
+ * #1216 BREAKING: has_prompts / mapped / playlist_name を廃止し status / downloaded_count に置換。 */
 export interface CollectionSummary {
   id: string;
   name: string;
-  has_prompts: boolean;
+  status: CollectionStatus;
   pattern_count: number | null;
-  // 既に config/suno-playlists.json にマッピング済みか (#893 追加要件 B)。
-  // optional・後方互換: prefix 未設定の旧サーバーは返さず undefined（全件表示の従来挙動）。
-  mapped?: boolean;
-  // サーバーが prefix を使って導出した Suno playlist 名 `<prefix> | <theme>`。
-  // マルチワード prefix でも正しい境界分割を保証する。未設定時は extractPlaylistName fallback。
-  playlist_name?: string;
+  downloaded_count: number;
 }
 
 /** Suno `/me` から捕捉した 1 playlist (#893)。POST /suno/playlists の body 要素。 */
@@ -235,12 +237,15 @@ export async function fetchCollectionPrompts(
 
 /**
  * ドロップダウンの初期選択 id を決める (#816)。
- * 最初の `has_prompts===true` な entry の id。実行可能な選択肢が無ければ null。
+ * 最初の `status !== "needs_prompts"` な entry の id。実行可能な選択肢が無ければ null。
+ * #1216: has_prompts → status ベースに移行。
  */
 export function pickInitialCollectionId(
   collections: CollectionSummary[],
 ): string | null {
-  return collections.find((c) => c.has_prompts)?.id ?? null;
+  return (
+    collections.find((c) => c.status !== "needs_prompts")?.id ?? null
+  );
 }
 
 export function resolvePromptCollectionId(
@@ -248,7 +253,7 @@ export function resolvePromptCollectionId(
   selectedId: string,
 ): string | null {
   const selected = collections.find((c) => c.id === selectedId);
-  if (selected?.has_prompts) {
+  if (selected && selected.status !== "needs_prompts") {
     return selected.id;
   }
   return pickInitialCollectionId(collections);
@@ -321,13 +326,14 @@ export async function postCapturedPlaylists(
 }
 
 /**
- * 既にマッピング済み (mapped===true) の collection を除外する純関数 (#893 追加要件 B)。
- * mapped 未設定（prefix 未指定の旧運用）は除外対象にしないため全件残す（後方互換）。
+ * @deprecated #1216: mapped フィールド廃止に伴い恒等関数化。次回 breaking で削除予定。
+ * 既にマッピング済み (mapped===true) の collection を除外していたが、
+ * CollectionSummary から mapped が削除されたため全件素通しになる。
  */
 export function excludeMappedCollections(
   collections: CollectionSummary[],
 ): CollectionSummary[] {
-  return collections.filter((c) => c.mapped !== true);
+  return collections;
 }
 
 /** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */

@@ -132,15 +132,11 @@ export function useSunoRunner(): RunnerState {
   const [resumeDismissed, setResumeDismissed] = useState(false);
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
-  // サーバーが playlist_name を返す場合はそれを優先する（prefix を使った正確な境界分割）。
-  // 旧サーバー（playlist_name 未返却）は extractPlaylistName fallback で後方互換を維持する。
+  // #1216: playlist_name フィールド廃止に伴い extractPlaylistName のみで導出する。
   const derivedPlaylistName = useMemo(() => {
     const selected = collections.find((c) => c.id === selectedCollectionId);
     if (!selected) {
       return undefined;
-    }
-    if (selected.playlist_name) {
-      return selected.playlist_name;
     }
     const theme = selected.name.replace(/-collection$/, "");
     return extractPlaylistName(selected.id, theme);

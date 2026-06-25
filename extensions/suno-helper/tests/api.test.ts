@@ -191,8 +191,8 @@ describe("shared/api fetchPrompts: 異常系 (fail-loud)", () => {
 // ---------------------------------------------------------------------------
 
 const SAMPLE_COLLECTIONS: CollectionSummary[] = [
-  { id: "20260601-clm-aaa-collection", name: "aaa-collection", has_prompts: true, pattern_count: 12 },
-  { id: "20260602-clm-bbb-collection", name: "bbb-collection", has_prompts: false, pattern_count: null },
+  { id: "20260601-clm-aaa-collection", name: "aaa-collection", status: "ready", pattern_count: 12, downloaded_count: 0 },
+  { id: "20260602-clm-bbb-collection", name: "bbb-collection", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
 ];
 
 describe("shared/api fetchCollections: 配信元 URL の組み立て", () => {
@@ -215,7 +215,7 @@ describe("shared/api fetchCollections: 正常系", () => {
     expect(result[0]).toMatchObject({
       id: expect.any(String),
       name: expect.any(String),
-      has_prompts: expect.any(Boolean),
+      status: expect.any(String),
     });
   });
 
@@ -287,34 +287,34 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
 
 // ---------------------------------------------------------------------------
 // pickInitialCollectionId (#816): ドロップダウン初期選択ロジック（純関数）
-//   - 初期値は最初の has_prompts===true な entry の id
-//   - has_prompts が無い / 空配列 のときは null（選択不可）
+//   - 初期値は最初の status !== "needs_prompts" な entry の id (#1216)
+//   - 全て needs_prompts / 空配列 のときは null（選択不可）
 // React テスト基盤を増やさず、選択ルールを純関数として担保する。
 // ---------------------------------------------------------------------------
 
 describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
-  it("Given 全て has_prompts=true When 初期値を選ぶ Then 先頭の id を返す", () => {
+  it("Given 全て ready/downloaded When 初期値を選ぶ Then 先頭の id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1 },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 2 },
     ];
 
     expect(pickInitialCollectionId(collections)).toBe("c1");
   });
 
-  it("Given 先頭が has_prompts=false When 初期値を選ぶ Then 最初の has_prompts=true な id を返す", () => {
+  it("Given 先頭が needs_prompts When 初期値を選ぶ Then 最初の ready/downloaded な id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: false, pattern_count: null },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
     ];
 
     expect(pickInitialCollectionId(collections)).toBe("c2");
   });
 
-  it("Given どれも has_prompts=false When 初期値を選ぶ Then null を返す (実行可能な選択肢なし)", () => {
+  it("Given 全て needs_prompts When 初期値を選ぶ Then null を返す (実行可能な選択肢なし)", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: false, pattern_count: null },
-      { id: "c2", name: "c2", has_prompts: false, pattern_count: null },
+      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
     ];
 
     expect(pickInitialCollectionId(collections)).toBeNull();
@@ -328,8 +328,8 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
 describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection の解決", () => {
   it("Given 選択中 id が最新一覧に存在し prompts あり When 解決 Then 選択中 id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1 },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
     ];
 
     expect(resolvePromptCollectionId(collections, "c2")).toBe("c2");
@@ -337,24 +337,24 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
 
   it("Given 選択中 id が最新一覧に無い When 解決 Then 初期選択 id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1 },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
     ];
 
     expect(resolvePromptCollectionId(collections, "old-url-c9")).toBe("c1");
   });
 
-  it("Given 選択中 id が prompts 無し When 解決 Then 最初の prompts あり id を返す", () => {
+  it("Given 選択中 id が needs_prompts When 解決 Then 最初の ready/downloaded id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: false, pattern_count: null },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2 },
+      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
     ];
 
     expect(resolvePromptCollectionId(collections, "c1")).toBe("c2");
   });
 
   it("Given prompts あり collection が無い When 解決 Then null を返す", () => {
-    const collections: CollectionSummary[] = [{ id: "c1", name: "c1", has_prompts: false, pattern_count: null }];
+    const collections: CollectionSummary[] = [{ id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 }];
 
     expect(resolvePromptCollectionId(collections, "c1")).toBeNull();
   });
