@@ -745,11 +745,7 @@ def create_server(
             # POST /collections/<id>/downloaded: dir mode のみ（#1216）。
             _downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
             _downloaded_suffix = "/downloaded"
-            if (
-                dir_mode
-                and self.path.startswith(_downloaded_prefix)
-                and self.path.endswith(_downloaded_suffix)
-            ):
+            if dir_mode and self.path.startswith(_downloaded_prefix) and self.path.endswith(_downloaded_suffix):
                 if origin is None:
                     self.send_error(403, "Forbidden")
                     return
@@ -780,9 +776,7 @@ def create_server(
                     self.send_error(400, "Bad Request")
                     return
                 coll_dir = collections_root / cid
-                _update_workflow_state_downloaded(
-                    coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url
-                )
+                _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
                 resp_body = json.dumps({"ok": True, "collection_id": cid}).encode("utf-8")
                 self._send_bytes(resp_body, "application/json; charset=utf-8")
                 return
