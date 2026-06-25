@@ -154,6 +154,19 @@ async function loadContentScriptWithPlaylistRows(
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
+  vi.doMock("../lib/storage", () => ({
+    serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
+    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
+  }));
+
+  vi.doMock("../lib/download", () => ({
+    triggerDownloadAll: vi.fn(() => Promise.resolve()),
+  }));
+
+  vi.doMock("../../shared/api", () => ({
+    postDownloaded: vi.fn(() => Promise.resolve()),
+  }));
+
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
 

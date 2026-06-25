@@ -68,6 +68,19 @@ vi.mock("../lib/bridge-listener", () => ({
   requestSliderSet: harness.requestSliderSet,
 }));
 
+vi.mock("../lib/storage", () => ({
+  serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
+  downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
+}));
+
+vi.mock("../lib/download", () => ({
+  triggerDownloadAll: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("../../shared/api", () => ({
+  postDownloaded: vi.fn(() => Promise.resolve()),
+}));
+
 async function loadContentScript(): Promise<void> {
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
   const content = await import("../entrypoints/content");
