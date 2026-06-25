@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `refactor(shared)`: CollectionSummary を boolean fields (`has_prompts` / `mapped`) から status enum (`needs_prompts` | `ready` | `downloaded`) に置換。`downloaded_count` フィールド追加、`playlist_name` 廃止。POST `/collections/<id>/downloaded` エンドポイント新設（#1216）**BREAKING**
+- `feat(serve)`: POST `/collections/<id>/downloaded` に冪等更新ロジックを追加（playlist URL 記録 + DL 完了マーク）(#1145)
+- `deprecate`: `read_mapped_slugs()` / `write_suno_playlists()` / `normalize_suno_title()` / `POST /suno/playlists` を deprecated 化 (#1145)
 
 ## [5.5.12] - 2026-06-25
 

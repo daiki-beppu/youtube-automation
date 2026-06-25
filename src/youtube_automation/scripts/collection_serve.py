@@ -110,9 +110,10 @@ def _prefix_pattern(prefix: str) -> str:
 def normalize_suno_title(title: str, prefix: str) -> str | None:
     """`<prefix> | <theme>` を `<prefix>-<theme-slug>` に正規化する（#893 要件3）。
 
-    .. deprecated:: #1216
-        build_collections_index から mapped / playlist_name が廃止されたため、
-        write_suno_playlists の内部利用を除き呼び出し元は残らない。次回 breaking で削除予定。
+    .. deprecated:: #1145
+        slug matching による status 判定は status enum に置換された。
+        write_suno_playlists の内部利用を除き呼び出し元は残らない。
+        後方互換のために残置。次回 breaking で削除予定。
 
     prefix はパイプ直前トークンと完全一致する必要がある（部分一致は弾く）。大小無視、
     区切りの空白/ハイフンは無差別（`Soulful Grooves |` も prefix `soulful-grooves` に
@@ -230,9 +231,10 @@ def _read_playlists_json(target: Path) -> dict:
 def read_mapped_slugs(root: Path) -> set[str]:
     """既存 `<root>/config/suno-playlists.json` の slug 集合を返す（#893 要件 B）。
 
-    .. deprecated:: #1216
-        build_collections_index から mapped 判定が廃止されたため、
-        GET /collections ハンドラからの呼び出しは無くなった。次回 breaking で削除予定。
+    .. deprecated:: #1145
+        status enum が mapped / playlist_name を置換したため、
+        GET /collections ハンドラからの呼び出しは無くなった。
+        後方互換のために残置。次回 breaking で削除予定。
 
     不在・破損は空集合（fail-loud せず「未マッピング」として扱う）。
     """
@@ -388,6 +390,11 @@ def build_distrokid_collections_index(
 
 def write_suno_playlists(root: Path, payload: list[dict], *, prefix: str) -> int:
     """capture した playlist を `<root>/config/suno-playlists.json` へ atomic merge write する（#893 要件4）。
+
+    .. deprecated:: #1145
+        新規コレクションは POST ``/collections/<id>/downloaded`` で playlist URL を
+        workflow-state.json に記録する。本関数は旧 ``POST /suno/playlists`` の内部実装
+        として後方互換のために残置する。次回 breaking で削除予定。
 
     prefix 不一致 item は skip、同 slug は captured_at 後勝ちで上書き、既存 JSON 破損は
     空 dict 扱いで再作成する。`tempfile.mkstemp` → `os.replace` で中間 temp を残さず
@@ -683,6 +690,9 @@ def create_server(
             origin = self._allowed_origin()
 
             # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
+            # .. deprecated:: #1145
+            #     新規コレクションは POST /collections/<id>/downloaded を使用する。
+            #     本ルートは旧 playlist capture の後方互換として残置。次回 breaking で削除予定。
             if self.path == SUNO_PLAYLISTS_ROUTE:
                 if capture_root is None:
                     self.send_error(404, "Not Found")

@@ -1076,3 +1076,86 @@ def test_post_downloaded_zero_file_count_does_not_set_music_downloaded(serve_dir
     ws = json.loads(ws_path.read_text(encoding="utf-8"))
     assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
     assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
+
+
+def test_post_downloaded_idempotent_two_calls(serve_dir, tmp_path):
+    """Given 冪等 2-call パターン（1st: file_count=0、2nd: file_count=N）
+    When 同じ collection に対して POST を 2 回送る
+    Then 1st で playlist URL のみ記録、2nd で music_downloaded=true が追加され、
+         既存キーが壊れない（冪等）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
+
+    # 1st call: file_count=0 → playlist URL のみ記録
+    payload_1 = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    with _post(url, payload_1, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
+        assert resp.status == 200
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
+    assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
+
+    # 2nd call: file_count=8 → music_downloaded=true、playlist URL は維持
+    payload_2 = {"file_count": 8, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    with _post(url, payload_2, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
+        assert resp.status == 200
+
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
+    assert ws["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_idempotent_repeated_calls_do_not_break(serve_dir, tmp_path):
+    """Given 同じ payload で POST を 3 回繰り返す
+    When 冪等な繰り返し呼び出し
+    Then 毎回 200 を返し、workflow-state.json の内容は一貫して正しい。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
+    payload = {"file_count": 5, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/xyz"}
+
+    for _ in range(3):
+        with _post(url, payload, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
+            assert resp.status == 200
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/xyz"
+    assert ws["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_preserves_existing_workflow_state(serve_dir, tmp_path):
+    """Given 既存の workflow-state.json に別のキーがある状態
+    When POST /collections/<id>/downloaded を送る
+    Then 既存キーが保持されつつ新しいキーが追加される（deep merge）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws_path.write_text(
+        json.dumps({"planning": {"thumbnail": {"approved": True}}, "meta": {"version": 1}}),
+        encoding="utf-8",
+    )
+    base = serve_dir(planning)
+    payload = {"file_count": 3, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/merge"}
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN},
+    ) as resp:
+        assert resp.status == 200
+
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    # 既存キーが保持されている
+    assert ws["planning"]["thumbnail"]["approved"] is True
+    assert ws["meta"]["version"] == 1
+    # 新しいキーが追加されている
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/merge"
+    assert ws["assets"]["music_downloaded"] is True
