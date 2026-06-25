@@ -41,6 +41,12 @@ export interface DownloadCompletePayload {
   filename: string;
 }
 
+/** overlay → runner: ダウンロードのみ再実行するペイロード (#1251)。 */
+export interface RetryDownloadPayload {
+  collectionId: string;
+  submittedClipIds: string[];
+}
+
 interface ProtocolMap {
   /** overlay → background → runner: 連続実行を開始する。 */
   run(payload: RunPayload): { ok: true };
@@ -68,6 +74,8 @@ interface ProtocolMap {
   /** content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
    *  content script は chrome.debugger API にアクセスできないため background に委譲する。 */
   sendTrustedCmdP(payload: { isMac: boolean }): void;
+  /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */
+  retryDownload(payload: RetryDownloadPayload): { ok: true };
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();

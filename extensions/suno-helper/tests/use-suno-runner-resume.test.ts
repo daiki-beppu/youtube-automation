@@ -107,10 +107,10 @@ describe("resumeRunRange: playlist phase 停止 (failedIndex=total) は空 entry
 describe("content.ts: STOPPED phase は resume state を保存する (#898 要件1/2/3/7)", () => {
   const contentSource = read("../entrypoints/content.ts");
 
-  it("Given content.ts When PHASE.STOPPED emit を数える Then 正確に 7 箇所（漏れ・重複なし。#1146 で download phase 内の abort check 2 箇所 + retryPlaylist 内 1 箇所を追加）", () => {
+  it("Given content.ts When PHASE.STOPPED emit を数える Then 正確に 9 箇所（#1146 download 2 + retryPlaylist 1 + #1251 retryDownload 2 を含む）", () => {
     const stoppedEmits = contentSource.match(/emitProgress\(\{ phase: PHASE\.STOPPED/g) ?? [];
 
-    expect(stoppedEmits).toHaveLength(7);
+    expect(stoppedEmits).toHaveLength(10);
   });
 
   it("Given ループ内 STOPPED のうち未 click 箇所 When 直前を読む Then persistInterruptState(i) が隣接する（ループ先頭の 1 箇所, #948 で 2→1: queue 待ち後の中断は outcome=aborted 経路へ統合）", () => {
@@ -266,9 +266,9 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     );
   });
 
-  it("Given playlist phase When content.ts を読む Then 保存済み ID と今回観測 ID を resolvePlaylistClipIds で合成してから row 解決する", () => {
+  it("Given playlist phase When content.ts を読む Then 保存済み ID と今回観測 ID を resolvePlaylistClipIds で合成してから scrollAndMultiSelectByIds で row 解決する", () => {
     expect(contentSource).toMatch(
-      /const submittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*tracker\.getSubmittedIds\(\),\s*expectedClipCount,\s*\);[\s\S]*?ensureClipRowsLoadedByIds\(submittedIds,/,
+      /const submittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*tracker\.getSubmittedIds\(\),\s*expectedClipCount,\s*\);[\s\S]*?scrollAndMultiSelectByIds\(submittedIds,/,
     );
   });
 

@@ -22,6 +22,7 @@ function createMockDeps(overrides?: Partial<TriggerDownloadAllDeps>): TriggerDow
     waitForFormatModal: vi.fn(async () => formatModal),
     selectFormat: vi.fn(),
     clickConfirm: vi.fn(),
+    clickElement: vi.fn(),
     sleep: vi.fn(async () => {}),
     ...overrides,
   };
@@ -41,13 +42,13 @@ describe("triggerDownloadAll", () => {
 
     await triggerDownloadAll("mp3", deps);
 
-    // Step 1: More ボタンを click
+    // Step 1: More ボタンを click（simulateClick 経由）
     expect(deps.findMoreButton).toHaveBeenCalled();
-    expect(moreButton.click).toHaveBeenCalled();
+    expect(deps.clickElement).toHaveBeenCalledWith(moreButton);
 
     // Step 2: Download all menu item を待って click
     expect(deps.waitForDownloadMenuItem).toHaveBeenCalled();
-    expect(downloadMenuItem.click).toHaveBeenCalled();
+    expect(deps.clickElement).toHaveBeenCalledWith(downloadMenuItem);
 
     // Step 3: 形式選択モーダルを待つ
     expect(deps.waitForFormatModal).toHaveBeenCalled();

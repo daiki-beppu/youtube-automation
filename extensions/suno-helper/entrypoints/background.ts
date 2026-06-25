@@ -67,6 +67,9 @@ export default defineBackground(() => {
   onMessage("retryPlaylist", ({ data, sender }) =>
     sendMessage("retryPlaylist", data, requireRelayTab(sender, "retryPlaylist")),
   );
+  onMessage("retryDownload", ({ data, sender }) =>
+    sendMessage("retryDownload", data, requireRelayTab(sender, "retryDownload")),
+  );
   onMessage("queryProgress", ({ sender }) =>
     sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
   );

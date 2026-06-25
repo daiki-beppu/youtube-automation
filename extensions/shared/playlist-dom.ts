@@ -60,6 +60,10 @@ const CMD_P_MAX_RETRIES = 3;
 const CLIP_ROW_TITLE_SELECTOR = 'span[role="button"][aria-label^="Play "]';
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
+/** scrollAndMultiSelectByIds: 各スクロールステップ後に仮想 DOM が描画されるのを待つ猶予 (ms)。 */
+const VIRTUAL_SCROLL_RENDER_WAIT_MS = 200;
+/** scrollAndMultiSelectByIds: 全スクロール後に未発見 ID がある場合の再スキャン上限回数。 */
+const VIRTUAL_SCROLL_RETRY_PASSES = 2;
 /** loadSettleTimeoutMs のデフォルト基準値 (ms)。 */
 const SETTLE_BASE_MS = 3000;
 /** loadSettleTimeoutMs を targetIds.length でスケールする係数 (ms/clip)。 */
@@ -651,6 +655,128 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
     }
     await sleep(CLIP_SELECT_VERIFY_POLL_MS);
   }
+}
+
+export interface ScrollAndMultiSelectOptions {
+  isAborted: () => boolean;
+  titleFallbackMap?: Map<string, string>;
+  renderWaitMs?: number;
+}
+
+/**
+ * 仮想スクロール対応の clip multi-select (#1251)。
+ *
+ * Suno のクリップリストは仮想スクロールを使い、ビューポート内の 15-25 行だけ DOM に存在する。
+ * 旧 `ensureClipRowsLoadedByIds` + `multiSelectClips` は全 target row が同時に DOM に揃う
+ * ことを前提としていたが、仮想化ではそれが不可能。
+ *
+ * この関数はリストをトップからボトムまでスクロールしながら、各ビューポートで target ID に
+ * マッチする row を発見次第 Select click する。Suno は選択状態を内部 state で保持するため、
+ * row がスクロールアウトしても選択は維持される。
+ */
+export async function scrollAndMultiSelectByIds(
+  targetIds: string[],
+  options: ScrollAndMultiSelectOptions,
+): Promise<number> {
+  const uniqueTargetIds = new Set(targetIds);
+  if (uniqueTargetIds.size === 0) {
+    throw new Error("playlist 対象の clip ID がありません。");
+  }
+
+  const {
+    isAborted,
+    titleFallbackMap,
+    renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+  } = options;
+
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  const foundIds = new Set<string>();
+  const titleMatchedIds = new Set<string>();
+
+  function selectMatchingRows(): void {
+    const buttons = scroller!.querySelectorAll<HTMLElement>(
+      `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
+    );
+    const seen = new Set<HTMLElement>();
+    for (const button of buttons) {
+      const row = resolveClipRowFromSelectButton(button);
+      if (!row || seen.has(row) || !isVisible(row)) continue;
+      seen.add(row);
+
+      const rowIds = collectClipRowIds(row);
+      let matched = false;
+      for (const id of rowIds) {
+        if (uniqueTargetIds.has(id)) {
+          foundIds.add(id);
+          matched = true;
+        }
+      }
+      if (!matched && titleFallbackMap && titleFallbackMap.size > 0) {
+        const title = collectClipRowTitle(row);
+        if (title) {
+          for (const [id, t] of titleFallbackMap) {
+            if (t === title && uniqueTargetIds.has(id) && !foundIds.has(id) && !titleMatchedIds.has(id)) {
+              titleMatchedIds.add(id);
+              matched = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!matched) continue;
+
+      if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) continue;
+      const selectBtn = row.querySelector<HTMLButtonElement>(
+        SELECT_CLIP_BUTTON_ANY_SELECTOR,
+      );
+      if (selectBtn) selectBtn.click();
+    }
+  }
+
+  const allFound = () =>
+    foundIds.size + titleMatchedIds.size >= uniqueTargetIds.size;
+
+  for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event("scroll"));
+    await sleep(renderWaitMs);
+
+    const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+
+    for (let pos = 0; pos <= maxScroll; pos += step) {
+      if (isAborted()) return foundIds.size + titleMatchedIds.size;
+
+      scroller.scrollTop = Math.min(pos, maxScroll);
+      scroller.dispatchEvent(new Event("scroll"));
+      await sleep(renderWaitMs);
+
+      selectMatchingRows();
+
+      if (allFound()) break;
+    }
+
+    if (allFound()) break;
+  }
+
+  restoreClipListHead(scroller);
+
+  if (!allFound()) {
+    const missing = [...uniqueTargetIds]
+      .filter((id) => !foundIds.has(id) && !titleMatchedIds.has(id))
+      .join(", ");
+    throw new Error(
+      `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
+    );
+  }
+
+  return foundIds.size + titleMatchedIds.size;
 }
 
 /**

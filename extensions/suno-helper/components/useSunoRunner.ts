@@ -77,6 +77,10 @@ interface RunnerState {
   failedEntries: number[];
   // 失敗分のみ再実行 (#948)。run({indices: failedEntries}) を 1-click で投げる。
   rerunFailed: () => void;
+  // playlist / download 単独再実行 (#1251)。失敗フォールバック用。
+  retryPlaylist: () => Promise<void>;
+  retryDownload: () => Promise<void>;
+  hasSubmittedClipIds: boolean;
   fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
   // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
@@ -498,6 +502,25 @@ export function useSunoRunner(): RunnerState {
     );
   }, [resumeBanner, retryPlaylist, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
 
+  // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
+  const retryDownload = useCallback(async () => {
+    if (isRunning || !selectedCollectionId) {
+      return;
+    }
+    setIsRunning(true);
+    try {
+      await sendMessage("retryDownload", {
+        collectionId: selectedCollectionId,
+        submittedClipIds: submittedClipIdsForResume,
+      });
+      report("ダウンロードを再実行しています…");
+    } catch (err) {
+      setIsRunning(false);
+      const message = err instanceof Error ? err.message : String(err);
+      report(formatRunError(message), true);
+    }
+  }, [isRunning, selectedCollectionId, submittedClipIdsForResume, report]);
+
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。
   const rerunFailed = useCallback(() => {
@@ -552,6 +575,9 @@ export function useSunoRunner(): RunnerState {
     dismissResume,
     failedEntries,
     rerunFailed,
+    retryPlaylist,
+    retryDownload,
+    hasSubmittedClipIds: submittedClipIdsForResume.length > 0,
     fetchData,
     run,
     stop,

@@ -14,7 +14,7 @@
 // shared/dom.ts の waitForElement / click 系パターンと shared/playlist-dom.ts の
 // multi-step DOM 操作パターンを踏襲する。
 
-import { sleep } from "../../shared/dom";
+import { simulateClick, sleep } from "../../shared/dom";
 
 // --- DOM セレクタ SSOT (2026-06-25 実測) ---
 // Suno の DOM は頻繁に変わるため、セレクタを 1 箇所に集約する。
@@ -149,6 +149,7 @@ export interface TriggerDownloadAllDeps {
   waitForFormatModal: (timeoutMs: number, pollMs: number) => Promise<HTMLElement>;
   selectFormat: (modal: HTMLElement, format: string) => void;
   clickConfirm: (modal: HTMLElement) => void;
+  clickElement: (el: HTMLElement) => void;
   sleep: (ms: number) => Promise<void>;
 }
 
@@ -160,6 +161,7 @@ export function defaultDownloadDeps(): TriggerDownloadAllDeps {
     waitForFormatModal: (timeoutMs, pollMs) => waitForElement<HTMLElement>(FORMAT_MODAL_SELECTOR, timeoutMs, pollMs),
     selectFormat: selectFormatInModal,
     clickConfirm: clickDownloadConfirm,
+    clickElement: simulateClick,
     sleep,
   };
 }
@@ -184,12 +186,12 @@ export async function triggerDownloadAll(
         "clip が multi-select されているか確認してください。",
     );
   }
-  moreBtn.click();
+  deps.clickElement(moreBtn);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
   // Step 2: context menu 内の "Download all" を待って click
   const downloadItem = await deps.waitForDownloadMenuItem(MENU_APPEAR_TIMEOUT_MS, MENU_APPEAR_POLL_MS);
-  downloadItem.click();
+  deps.clickElement(downloadItem);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
   // Step 3: 形式選択モーダルを待つ

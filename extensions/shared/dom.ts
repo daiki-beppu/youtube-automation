@@ -999,3 +999,20 @@ export async function waitForQueueSlot(
     await sleep(options.pollIntervalMs);
   }
 }
+
+/**
+ * pointer + mouse イベントシーケンスで要素をクリックする。
+ * Suno 2026-06: 一部ボタン（More options 等）は click イベントだけでは反応せず
+ * pointerdown → mousedown → pointerup → mouseup → click の完全シーケンスが必要。
+ */
+export function simulateClick(el: HTMLElement): void {
+  const rect = el.getBoundingClientRect();
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  const shared = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 };
+  el.dispatchEvent(new PointerEvent("pointerdown", { ...shared, pointerId: 1 }));
+  el.dispatchEvent(new MouseEvent("mousedown", shared));
+  el.dispatchEvent(new PointerEvent("pointerup", { ...shared, pointerId: 1 }));
+  el.dispatchEvent(new MouseEvent("mouseup", shared));
+  el.dispatchEvent(new MouseEvent("click", shared));
+}

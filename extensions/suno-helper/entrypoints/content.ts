@@ -48,10 +48,9 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
-  ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
-  multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
+  scrollAndMultiSelectByIds,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
@@ -263,14 +262,13 @@ export default defineContentScript({
         expectedClipCount,
       );
       const titleFallbackMap = buildTitleFallbackMap(entries, order, submittedIds);
-      const rows = await ensureClipRowsLoadedByIds(submittedIds, {
+      await scrollAndMultiSelectByIds(submittedIds, {
         isAborted: () => aborted,
         titleFallbackMap,
       });
       if (aborted) {
-        return; // ロード待ち中に停止された。部分状態のまま Cmd+P に進まない（呼び出し元の STOPPED guard が persist する）
+        return;
       }
-      await multiSelectClips(rows);
       await abortableSleep(SETTLE_MS, () => aborted);
 
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -667,6 +665,74 @@ export default defineContentScript({
             () => sendMessage("requestPlaylistCapture", undefined),
             (err) => console.warn("[suno-helper] playlist capture trigger failed:", err),
           );
+          if (collectionId) {
+            void clearResumeStateForCollection(collectionId);
+          }
+          emitProgress({ phase: PHASE.FINISHED, total: 0 });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          emitProgress({ phase: PHASE.ERROR, total: 0, message });
+        }
+      })().finally(() => {
+        running = false;
+      });
+      return { ok: true } as const;
+    });
+
+    onMessage("retryDownload", ({ data }) => {
+      if (running) {
+        return { ok: true } as const;
+      }
+      const { collectionId, submittedClipIds } = data;
+      currentSnapshot = initSnapshot([], undefined);
+      running = true;
+      aborted = false;
+      void (async () => {
+        try {
+          const total = submittedClipIds.length || 0;
+          if (submittedClipIds.length > 0) {
+            emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total, message: "clip を選択中…" });
+            await scrollAndMultiSelectByIds(submittedClipIds, { isAborted: () => aborted });
+            if (aborted) {
+              emitProgress({ phase: PHASE.STOPPED, total: 0 });
+              return;
+            }
+          }
+          const format = await downloadFormatItem.getValue();
+          const baseUrl = (await serverUrlItem.getValue()).trim();
+          const sunoPlaylistUrl = `https://suno.com/me/playlists`;
+          try {
+            await postDownloaded(baseUrl, collectionId, {
+              file_count: 0,
+              format: format as "mp3" | "m4a" | "wav",
+              suno_playlist_url: sunoPlaylistUrl,
+            });
+          } catch (err) {
+            console.warn("[suno-helper] retryDownload postDownloaded (pre) failed:", err);
+          }
+          if (aborted) {
+            emitProgress({ phase: PHASE.STOPPED, total: 0 });
+            return;
+          }
+          emitProgress({ phase: PHASE.DOWNLOADING, total, message: `${format.toUpperCase()} 形式` });
+          void sendMessage("startDownload", { collectionId, format });
+          await triggerDownloadAll(format);
+          const downloadResult = await waitForDownloadComplete(() => aborted);
+          if (aborted) {
+            emitProgress({ phase: PHASE.STOPPED, total: 0 });
+            return;
+          }
+          if (downloadResult) {
+            try {
+              await postDownloaded(baseUrl, collectionId, {
+                file_count: total,
+                format: format as "mp3" | "m4a" | "wav",
+                suno_playlist_url: sunoPlaylistUrl,
+              });
+            } catch (err) {
+              console.warn("[suno-helper] retryDownload postDownloaded (post) failed:", err);
+            }
+          }
           if (collectionId) {
             void clearResumeStateForCollection(collectionId);
           }

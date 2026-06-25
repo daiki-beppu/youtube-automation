@@ -34,11 +34,11 @@ async function loadContentScriptWithPlaylistRows(
   const handlers = new Map<string, RunHandler>();
   const progressMessages: ProgressMessage[] = [];
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const ensureClipRowsLoadedByIdsMock = vi.fn((_ids: string[], _options: unknown) => {
+  const scrollAndMultiSelectByIdsMock = vi.fn((_ids: string[], _options: unknown) => {
     if (playlistRowsResult instanceof Error) {
       return Promise.reject(playlistRowsResult);
     }
-    return Promise.resolve(playlistRowsResult);
+    return Promise.resolve(playlistRowsResult instanceof Array ? playlistRowsResult.length : 0);
   });
 
   vi.doMock("../lib/messaging", () => ({
@@ -125,10 +125,9 @@ async function loadContentScriptWithPlaylistRows(
 
   vi.doMock("../../shared/playlist-dom", () => ({
     clickPlaylistRowByName: vi.fn(() => Promise.resolve()),
-    ensureClipRowsLoadedByIds: ensureClipRowsLoadedByIdsMock,
     fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
-    multiSelectClips: vi.fn(() => Promise.resolve()),
     openAddToPlaylistDialogViaCmdP: vi.fn(() => Promise.resolve({} as HTMLElement)),
+    scrollAndMultiSelectByIds: scrollAndMultiSelectByIdsMock,
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
   }));
 
@@ -174,7 +173,7 @@ async function loadContentScriptWithPlaylistRows(
   if (!runHandler) {
     throw new Error("run message handler was not registered");
   }
-  return { ensureClipRowsLoadedByIdsMock, progressMessages, runHandler };
+  return { scrollAndMultiSelectByIdsMock, progressMessages, runHandler };
 }
 
 describe("content.ts playlist 追加失敗時の resume state", () => {
@@ -261,7 +260,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
@@ -274,9 +273,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         playlistExpectedClipCount: entries.length * CLIPS_PER_REQUEST,
       },
     });
-    await vi.waitFor(() => expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
 
-    expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledWith(
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       submittedClipIds,
       expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
     );
@@ -284,13 +283,13 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     warnSpy.mockRestore();
   });
 
-  it("Given 旧 payload が期待件数なしで playlist-only resume When run Then warn して ensureClipRows へ進む", async () => {
+  it("Given 旧 payload が期待件数なしで playlist-only resume When run Then warn して scrollAndMultiSelect へ進む", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
@@ -302,7 +301,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         submittedClipIds,
       },
     });
-    await vi.waitFor(() => expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("expected 4, got 3"));
     warnSpy.mockRestore();
@@ -323,7 +322,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       (_, index) => `range-clip-${index + 1}`,
     );
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { ensureClipRowsLoadedByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
       currentSubmittedClipIds,
       rows,
     );
@@ -336,9 +335,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         range,
       },
     });
-    await vi.waitFor(() => expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
 
-    expect(ensureClipRowsLoadedByIdsMock).toHaveBeenCalledWith(
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       currentSubmittedClipIds,
       expect.objectContaining({ isAborted: expect.any(Function) }),
     );
