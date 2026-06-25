@@ -26,6 +26,10 @@ const CLIP_ROW_SONG_ID_DATA_KEY = "songId";
 const CLIP_ROW_CLIP_ID_DATA_KEY = "clipId";
 const CLIP_ROW_SONG_LINK_SELECTOR = 'a[href*="/song/"]';
 const SONG_HREF_ID_RE = /\/song\/([^/?#]+)/;
+const GRID_IMAGE_SRC_SELECTOR = 'img[src*="cdn2.suno.ai/image_"]';
+const GRID_IMAGE_UUID_RE = /\/image_([0-9a-f-]{36})/;
+const GRID_CARD_MAX_ANCESTOR_DEPTH = 10;
+const GRID_CARD_MIN_SIBLINGS = 2;
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
 export const PLAYLIST_NAME_INPUT_SELECTOR =
   'input[placeholder="Playlist Name"]';
@@ -88,7 +92,42 @@ function resolveClipRowFromSelectButton(
   if (multiSelectRow) {
     return multiSelectRow;
   }
-  return button.closest<HTMLElement>("article");
+  const articleRow = button.closest<HTMLElement>("article");
+  if (articleRow) {
+    return articleRow;
+  }
+  return resolveGridCardFromSelectButton(button);
+}
+
+function resolveGridCardFromSelectButton(
+  button: HTMLElement,
+): HTMLElement | null {
+  let candidate: HTMLElement | null = button.parentElement;
+  for (
+    let depth = 0;
+    candidate && depth < GRID_CARD_MAX_ANCESTOR_DEPTH;
+    depth++
+  ) {
+    const parent = candidate.parentElement;
+    if (!parent) {
+      break;
+    }
+    const siblings = Array.from(parent.children);
+    if (
+      siblings.length >= GRID_CARD_MIN_SIBLINGS &&
+      siblings.every(
+        (sibling) =>
+          sibling.querySelectorAll(SELECT_CLIP_BUTTON_ANY_SELECTOR).length +
+            sibling.querySelectorAll(DESELECT_CLIP_BUTTON_ANY_SELECTOR)
+              .length ===
+          1,
+      )
+    ) {
+      return candidate;
+    }
+    candidate = parent;
+  }
+  return null;
 }
 
 function isScrollableClipContainer(element: HTMLElement): boolean {
@@ -205,6 +244,16 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
     const id = extractSongIdFromHref(link.href);
     if (id) {
       ids.add(id);
+    }
+  }
+  if (ids.size === 0) {
+    for (const img of row.querySelectorAll<HTMLImageElement>(
+      GRID_IMAGE_SRC_SELECTOR,
+    )) {
+      const match = GRID_IMAGE_UUID_RE.exec(img.src);
+      if (match) {
+        ids.add(match[1]);
+      }
     }
   }
   return ids;
