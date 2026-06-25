@@ -107,66 +107,40 @@ describe("shared/api postCapturedPlaylists: 異常系 (fail-loud)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// CollectionSummary.mapped: optional フィールド（後方互換）
+// CollectionSummary: status enum 化 (#1216)
+// mapped / has_prompts は廃止 → status: "needs_prompts" | "ready" | "downloaded"
 // ---------------------------------------------------------------------------
 
-describe("shared/api CollectionSummary.mapped: optional 契約（追加要件 B）", () => {
-  it("Given mapped 付き collection When fetchCollections する Then mapped を保持して返す", async () => {
+describe("shared/api CollectionSummary.status: #1216 新スキーマ", () => {
+  it("Given status 付き collection When fetchCollections する Then status を保持して返す", async () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1, mapped: true },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2, mapped: false },
+      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 2 },
     ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => collections }));
 
     const result = await fetchCollections(BASE_URL);
 
-    expect(result[0].mapped).toBe(true);
-    expect(result[1].mapped).toBe(false);
-  });
-
-  it("Given mapped 無し collection（prefix 未設定の旧サーバー）When fetchCollections する Then mapped は undefined（throw しない）", async () => {
-    const collections = [{ id: "c1", name: "c1", has_prompts: true, pattern_count: 1 }];
-    mockFetch(() => ({ ok: true, status: 200, json: async () => collections }));
-
-    const result = await fetchCollections(BASE_URL);
-
-    expect(result[0].mapped).toBeUndefined();
+    expect(result[0].status).toBe("ready");
+    expect(result[1].status).toBe("downloaded");
   });
 });
 
 // ---------------------------------------------------------------------------
-// excludeMappedCollections: mapped===true を除外する純関数（追加要件 B）
+// excludeMappedCollections: #1216 で恒等関数化（deprecated）
 // ---------------------------------------------------------------------------
 
-describe("shared/api excludeMappedCollections: 未マッピングのみ残す", () => {
-  it("Given mapped と未 mapped 混在 When フィルタする Then mapped===true を除外する", () => {
+describe("shared/api excludeMappedCollections: deprecated 恒等関数 (#1216)", () => {
+  it("Given collection 配列 When フィルタする Then 全件素通しで返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1, mapped: true },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2, mapped: false },
-      { id: "c3", name: "c3", has_prompts: true, pattern_count: 3, mapped: true },
+      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 2 },
+      { id: "c3", name: "c3", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
     ];
 
     const result = excludeMappedCollections(collections);
 
-    expect(result.map((c) => c.id)).toEqual(["c2"]);
-  });
-
-  it("Given 全件 mapped===true When フィルタする Then 空配列を返す（ドロップダウンに出ない）", () => {
-    const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1, mapped: true },
-      { id: "c2", name: "c2", has_prompts: true, pattern_count: 2, mapped: true },
-    ];
-
-    expect(excludeMappedCollections(collections)).toEqual([]);
-  });
-
-  it("Given mapped 未設定（prefix 未指定の旧運用）When フィルタする Then 全件残す（後方互換）", () => {
-    const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", has_prompts: true, pattern_count: 1 },
-      { id: "c2", name: "c2", has_prompts: false, pattern_count: null },
-    ];
-
-    expect(excludeMappedCollections(collections)).toEqual(collections);
+    expect(result).toEqual(collections);
   });
 
   it("Given 空配列 When フィルタする Then 空配列を返す", () => {
