@@ -117,11 +117,9 @@ export default defineBackground(() => {
         // listener を解除して以降のダウンロードイベントを無視する
         chrome.downloads.onChanged.removeListener(listener);
         // content script へダウンロード完了を中継する
-        sendMessage("downloadComplete", { downloadId: delta.id, filename }, tabId).catch(
-          (err: unknown) => {
-            console.warn("[suno-helper] downloadComplete 中継失敗:", err);
-          },
-        );
+        sendMessage("downloadComplete", { downloadId: delta.id, filename }, tabId).catch((err: unknown) => {
+          console.warn("[suno-helper] downloadComplete 中継失敗:", err);
+        });
       });
     };
     chrome.downloads.onChanged.addListener(listener);

@@ -465,7 +465,14 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [isRunning, playlistName, submittedClipIdsForResume, playlistExpectedClipCountForResume, selectedCollectionId, report]);
+  }, [
+    isRunning,
+    playlistName,
+    submittedClipIdsForResume,
+    playlistExpectedClipCountForResume,
+    selectedCollectionId,
+    report,
+  ]);
 
   // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
   // entries 不要の retryPlaylist を使い、ページリロード後でも確実に playlist 追加を再実行する。

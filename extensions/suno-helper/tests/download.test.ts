@@ -67,9 +67,7 @@ describe("triggerDownloadAll", () => {
       findMoreButton: vi.fn(() => null),
     });
 
-    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(
-      /More メニューボタン.*見つかりませんでした/,
-    );
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/More メニューボタン.*見つかりませんでした/);
   });
 
   it("format 引数が selectFormat に正しく渡される (wav)", async () => {
@@ -91,9 +89,7 @@ describe("triggerDownloadAll", () => {
       }),
     });
 
-    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(
-      /Download all menu item/,
-    );
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/Download all menu item/);
     // selectFormat / clickConfirm は呼ばれない
     expect(deps.selectFormat).not.toHaveBeenCalled();
     expect(deps.clickConfirm).not.toHaveBeenCalled();
@@ -106,9 +102,7 @@ describe("triggerDownloadAll", () => {
       }),
     });
 
-    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(
-      /format modal timed out/,
-    );
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/format modal timed out/);
     expect(deps.selectFormat).not.toHaveBeenCalled();
   });
 
@@ -119,9 +113,7 @@ describe("triggerDownloadAll", () => {
       }),
     });
 
-    await expect(triggerDownloadAll("flac", deps)).rejects.toThrow(
-      /形式 "flac"/,
-    );
+    await expect(triggerDownloadAll("flac", deps)).rejects.toThrow(/形式 "flac"/);
     expect(deps.clickConfirm).not.toHaveBeenCalled();
   });
 });

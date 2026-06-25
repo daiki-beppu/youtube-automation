@@ -59,11 +59,7 @@ import { triggerPlaylistCaptureFailSoft } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { downloadFormatItem, serverUrlItem } from "../lib/storage";
 
-function buildTitleFallbackMap(
-  entries: PromptEntry[],
-  order: number[],
-  submittedIds: string[],
-): Map<string, string> {
+function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submittedIds: string[]): Map<string, string> {
   const map = new Map<string, string>();
   for (let i = 0; i < order.length; i++) {
     const entry = entries[order[i]];
@@ -139,7 +135,9 @@ export default defineContentScript({
     let downloadCompleteResolver: ((value: { downloadId: number; filename: string } | null) => void) | null = null;
 
     /** background からの downloadComplete メッセージを待つ。タイムアウトまたは abort で null を返す。 */
-    function waitForDownloadComplete(isAborted: () => boolean): Promise<{ downloadId: number; filename: string } | null> {
+    function waitForDownloadComplete(
+      isAborted: () => boolean,
+    ): Promise<{ downloadId: number; filename: string } | null> {
       const DOWNLOAD_COMPLETE_TIMEOUT_MS = 600000; // 10 分
       return new Promise((resolve) => {
         downloadCompleteResolver = resolve;
@@ -484,7 +482,14 @@ export default defineContentScript({
           return;
         }
         try {
-          await addClipsToPlaylist(total, playlistName, previousSubmittedClipIds, expectedPlaylistClipCount, entries, order);
+          await addClipsToPlaylist(
+            total,
+            playlistName,
+            previousSubmittedClipIds,
+            expectedPlaylistClipCount,
+            entries,
+            order,
+          );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           persistInterruptState(total);

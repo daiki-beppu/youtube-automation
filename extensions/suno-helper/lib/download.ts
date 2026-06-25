@@ -32,14 +32,14 @@ const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
 
 /** 形式選択モーダル。Download all click 後に出現する。
  * div.modal-class.modal-overlay で識別（OneTrust cookie dialog の [role="dialog"] と区別）。 */
-const FORMAT_MODAL_SELECTOR = 'div.modal-class.modal-overlay';
+const FORMAT_MODAL_SELECTOR = "div.modal-class.modal-overlay";
 
 /** 形式選択モーダル内のフォーマットボタン。
  * button.flex.w-full で M4A / MP3 / WAV のテキストを含む（radio ではなく通常ボタン）。 */
-const FORMAT_OPTION_SELECTOR = 'button.flex.w-full';
+const FORMAT_OPTION_SELECTOR = "button.flex.w-full";
 
 /** ダウンロード確認ボタン。hxc-btn-variant-primary クラスで確実に識別できる。 */
-const DOWNLOAD_CONFIRM_SELECTOR = 'button.hxc-btn-variant-primary';
+const DOWNLOAD_CONFIRM_SELECTOR = "button.hxc-btn-variant-primary";
 
 // --- poll / timeout 定数 ---
 const MENU_APPEAR_POLL_MS = 100;
@@ -67,9 +67,7 @@ async function waitForElement<T extends HTMLElement>(
     }
     await sleep(pollMs);
   }
-  throw new Error(
-    `waitForElement timed out: selector="${selector}" (${timeoutMs}ms)`,
-  );
+  throw new Error(`waitForElement timed out: selector="${selector}" (${timeoutMs}ms)`);
 }
 
 /**
@@ -104,14 +102,12 @@ async function waitForDownloadMenuItem(timeoutMs: number, pollMs: number): Promi
       const byLabel = menu.querySelector<HTMLElement>('button[aria-label="Download all"]');
       if (byLabel) return byLabel;
       // フォールバック: テキスト照合
-      const byText = findElementByTextContent<HTMLElement>(menu, 'button', DOWNLOAD_MENU_ITEM_TEXT);
+      const byText = findElementByTextContent<HTMLElement>(menu, "button", DOWNLOAD_MENU_ITEM_TEXT);
       if (byText) return byText;
     }
     await sleep(pollMs);
   }
-  throw new Error(
-    `"Download all" menu item が見つかりませんでした (${timeoutMs}ms)`,
-  );
+  throw new Error(`"Download all" menu item が見つかりませんでした (${timeoutMs}ms)`);
 }
 
 /**
@@ -130,8 +126,7 @@ function selectFormatInModal(modal: HTMLElement, format: string): void {
     }
   }
   throw new Error(
-    `形式 "${format}" に対応するオプションがモーダル内に見つかりませんでした。` +
-      "Suno の UI 変更の可能性があります。",
+    `形式 "${format}" に対応するオプションがモーダル内に見つかりませんでした。` + "Suno の UI 変更の可能性があります。",
   );
 }
 
@@ -142,9 +137,7 @@ function selectFormatInModal(modal: HTMLElement, format: string): void {
 function clickDownloadConfirm(modal: HTMLElement): void {
   const btn = modal.querySelector<HTMLButtonElement>(DOWNLOAD_CONFIRM_SELECTOR);
   if (!btn) {
-    throw new Error(
-      "ダウンロード確認ボタンが見つかりませんでした。Suno の UI 変更の可能性があります。",
-    );
+    throw new Error("ダウンロード確認ボタンが見つかりませんでした。Suno の UI 変更の可能性があります。");
   }
   btn.click();
 }
@@ -164,8 +157,7 @@ export function defaultDownloadDeps(): TriggerDownloadAllDeps {
   return {
     findMoreButton: () => document.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR),
     waitForDownloadMenuItem: (timeoutMs, pollMs) => waitForDownloadMenuItem(timeoutMs, pollMs),
-    waitForFormatModal: (timeoutMs, pollMs) =>
-      waitForElement<HTMLElement>(FORMAT_MODAL_SELECTOR, timeoutMs, pollMs),
+    waitForFormatModal: (timeoutMs, pollMs) => waitForElement<HTMLElement>(FORMAT_MODAL_SELECTOR, timeoutMs, pollMs),
     selectFormat: selectFormatInModal,
     clickConfirm: clickDownloadConfirm,
     sleep,

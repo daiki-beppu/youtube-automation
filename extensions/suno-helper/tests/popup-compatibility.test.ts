@@ -189,7 +189,13 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
         jsonResponse(200, [
-          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", status: "ready", pattern_count: 1, downloaded_count: 0 },
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
@@ -234,8 +240,20 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
         jsonResponse(200, [
-          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", status: "ready", pattern_count: 1, downloaded_count: 0 },
-          { id: "20260602-clm-theme-b-collection", name: "theme-b-collection", status: "ready", pattern_count: 1, downloaded_count: 0 },
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+          {
+            id: "20260602-clm-theme-b-collection",
+            name: "theme-b-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
@@ -270,7 +288,13 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
         jsonResponse(200, [
-          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", status: "ready", pattern_count: 1, downloaded_count: 0 },
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));

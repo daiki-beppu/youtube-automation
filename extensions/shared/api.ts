@@ -243,9 +243,7 @@ export async function fetchCollectionPrompts(
 export function pickInitialCollectionId(
   collections: CollectionSummary[],
 ): string | null {
-  return (
-    collections.find((c) => c.status !== "needs_prompts")?.id ?? null
-  );
+  return collections.find((c) => c.status !== "needs_prompts")?.id ?? null;
 }
 
 export function resolvePromptCollectionId(

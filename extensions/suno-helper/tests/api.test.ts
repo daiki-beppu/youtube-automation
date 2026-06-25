@@ -191,8 +191,20 @@ describe("shared/api fetchPrompts: 異常系 (fail-loud)", () => {
 // ---------------------------------------------------------------------------
 
 const SAMPLE_COLLECTIONS: CollectionSummary[] = [
-  { id: "20260601-clm-aaa-collection", name: "aaa-collection", status: "ready", pattern_count: 12, downloaded_count: 0 },
-  { id: "20260602-clm-bbb-collection", name: "bbb-collection", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+  {
+    id: "20260601-clm-aaa-collection",
+    name: "aaa-collection",
+    status: "ready",
+    pattern_count: 12,
+    downloaded_count: 0,
+  },
+  {
+    id: "20260602-clm-bbb-collection",
+    name: "bbb-collection",
+    status: "needs_prompts",
+    pattern_count: null,
+    downloaded_count: 0,
+  },
 ];
 
 describe("shared/api fetchCollections: 配信元 URL の組み立て", () => {
@@ -354,7 +366,9 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
   });
 
   it("Given prompts あり collection が無い When 解決 Then null を返す", () => {
-    const collections: CollectionSummary[] = [{ id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 }];
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+    ];
 
     expect(resolvePromptCollectionId(collections, "c1")).toBeNull();
   });
