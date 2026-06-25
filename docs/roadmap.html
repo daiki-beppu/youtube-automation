@@ -225,7 +225,20 @@
   }
 
   .lane-detail ul { list-style: none; padding: 0; }
+  .lane-detail li { margin-bottom: 0.3rem; }
   .lane-detail li::before { content: '›'; margin-right: 0.4rem; color: var(--text-muted); }
+
+  .benefit {
+    display: block;
+    margin-top: 0.15rem;
+    margin-left: 1rem;
+    color: var(--accent-green);
+    font-size: 0.8rem;
+  }
+
+  .benefit::before {
+    content: '→ ';
+  }
 
   .cutover-banner {
     margin-left: 160px;
@@ -499,8 +512,10 @@
         </div>
         <div class="lane-detail">
           <ul>
-            <li>既知の不具合を全件修正 — 切替後は修正できなくなるため</li>
-            <li>ライブ配信関連の残作業も並行して消化</li>
+            <li>既知の不具合を全件修正 — 切替後は修正できなくなるため
+              <span class="benefit">制作中に起きていた細かいエラーや中断がなくなり、安定した運用に</span></li>
+            <li>ライブ配信関連の残作業も並行して消化
+              <span class="benefit">24/7 配信がより安定し、配信停止リスクが低減</span></li>
           </ul>
         </div>
       </div>
@@ -512,9 +527,12 @@
         </div>
         <div class="lane-detail">
           <ul>
-            <li>Suno 連携: グリッド表示の不具合修正（〜7月前半まで）</li>
-            <li>Suno 連携: 楽曲の一括ダウンロード機能を追加（〜7月前半まで）</li>
-            <li>DistroKid 連携の安定化</li>
+            <li>Suno 連携: グリッド表示の不具合修正（〜7月前半まで）
+              <span class="benefit">Suno の新 UI でもプレイリスト追加が正常に動作するように</span></li>
+            <li>Suno 連携: 楽曲の一括ダウンロード機能を追加（〜7月前半まで）
+              <span class="benefit">Suno で生成した楽曲を手動でダウンロードする手間がゼロに</span></li>
+            <li>DistroKid 連携の安定化
+              <span class="benefit">音楽配信サービスへの登録作業がより確実に完了</span></li>
           </ul>
         </div>
       </div>
@@ -542,12 +560,18 @@
         </div>
         <div class="lane-detail">
           <ul>
-            <li>自動化の中核エンジンを刷新</li>
-            <li>コマンドラインツール <code>tayk</code> の完成</li>
-            <li>AI エージェントが直接操作できる仕組み（MCP）の構築</li>
-            <li>60 以上あるスキルを 5 つに整理統合</li>
-            <li>動画の自動生成エンジンを Remotion に切替</li>
-            <li>分析データの保存基盤を構築</li>
+            <li>自動化の中核エンジンを刷新
+              <span class="benefit">処理速度が向上し、エラー発生率が大幅に低下</span></li>
+            <li>コマンドラインツール <code>tayk</code> の完成
+              <span class="benefit">1 コマンドで導入・更新が完結（<code>bunx tayk</code>）</span></li>
+            <li>AI エージェントが直接操作できる仕組み（MCP）の構築
+              <span class="benefit">Claude が自動化ツールを直接呼び出せるように。より賢い自動判断が可能に</span></li>
+            <li>60 以上あるスキルを 5 つに整理統合
+              <span class="benefit">「どのスキルを使えばいいか分からない」問題が解消。迷わず制作に集中できる</span></li>
+            <li>動画の自動生成エンジンを Remotion に切替
+              <span class="benefit">テキストアニメーションやトランジションなど、表現力のある動画を自動生成</span></li>
+            <li>分析データの保存基盤を構築
+              <span class="benefit">過去の分析結果が蓄積され、トレンド比較や長期的な改善判断が可能に</span></li>
           </ul>
         </div>
       </div>
@@ -571,9 +595,12 @@
         </div>
         <div class="lane-detail">
           <ul>
-            <li>自社チャンネル 2 つで実際にコレクションを制作して検証</li>
-            <li>重大な問題がないことを確認</li>
-            <li>現行版から次世代版への切替を実行</li>
+            <li>自社チャンネル 2 つで実際にコレクションを制作して検証
+              <span class="benefit">実際の制作フローで問題がないことを確認してからリリース</span></li>
+            <li>重大な問題がないことを確認
+              <span class="benefit">誤公開・データ破壊・認証エラーの 3 種のみをブロック基準に</span></li>
+            <li>現行版から次世代版への切替を実行
+              <span class="benefit">全ユーザーが同じタイミングで新しい体験に移行</span></li>
           </ul>
         </div>
       </div>
@@ -618,8 +645,10 @@
         </div>
         <div class="lane-detail">
           <ul>
-            <li>YouTube Studio でのコミュニティ投稿を自動入力する拡張</li>
-            <li>テキスト・画像・スケジュール設定を一括操作</li>
+            <li>YouTube Studio でのコミュニティ投稿を自動入力する拡張
+              <span class="benefit">動画公開のたびに手作業で投稿していた作業が自動化。投稿忘れも防止</span></li>
+            <li>テキスト・画像・スケジュール設定を一括操作
+              <span class="benefit">複数チャンネルの投稿も一度に準備でき、運用時間を大幅に短縮</span></li>
           </ul>
         </div>
       </div>
@@ -631,8 +660,10 @@
         </div>
         <div class="lane-detail">
           <ul>
-            <li>全チャンネルの再生数・登録者数を一画面で確認</li>
-            <li>動画ごとのパフォーマンス詳細表示</li>
+            <li>全チャンネルの再生数・登録者数を一画面で確認
+              <span class="benefit">YouTube Studio を複数タブで開き回る必要がなくなる</span></li>
+            <li>動画ごとのパフォーマンス詳細表示
+              <span class="benefit">どの動画が伸びているか一目で把握。次の企画判断がデータで裏付けられる</span></li>
           </ul>
         </div>
       </div>
@@ -656,9 +687,12 @@
         </div>
         <div class="lane-detail">
           <ul>
-            <li>ユーザーからのフィードバックを反映</li>
-            <li>自動化機能の追加・改善</li>
-            <li>次期ロードマップを検討</li>
+            <li>ユーザーからのフィードバックを反映
+              <span class="benefit">実際に使ってみて困ったことを優先的に改善</span></li>
+            <li>自動化機能の追加・改善
+              <span class="benefit">日々の運用で感じる「ここも自動化したい」に応える</span></li>
+            <li>次期ロードマップを検討
+              <span class="benefit">ユーザーの声をもとに、次に作るべきものを一緒に決める</span></li>
           </ul>
         </div>
       </div>
