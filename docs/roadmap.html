@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tayk 開発ロードマップ</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent-blue: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-purple: #bc8cff;
+    --accent-red: #f85149;
+    --accent-cyan: #39d2c0;
+    --lane-a: #58a6ff;
+    --lane-b: #d29922;
+    --lane-c: #3fb950;
+    --lane-d: #bc8cff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+  header h1 span { color: var(--accent-blue); }
+  header .subtitle { color: var(--text-muted); font-size: 0.95rem; }
+  header .meta { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.3rem; }
+
+  /* ── View toggle ── */
+  .view-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 2.5rem;
+  }
+
+  .view-btn {
+    padding: 0.5rem 1.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: all 0.15s ease;
+  }
+
+  .view-btn:first-child { border-radius: 8px 0 0 8px; }
+  .view-btn:last-child { border-radius: 0 8px 8px 0; }
+
+  .view-btn.active {
+    background: var(--accent-blue);
+    color: var(--bg);
+    border-color: var(--accent-blue);
+    font-weight: 600;
+  }
+
+  .view-btn:not(.active):hover {
+    background: rgba(88, 166, 255, 0.1);
+    color: var(--text);
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 2rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* ════════════════════════════════════════
+     Timeline View
+     ════════════════════════════════════════ */
+  .timeline-view { display: block; }
+  .timeline-view.hidden { display: none; }
+
+  .timeline { position: relative; }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 140px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .phase { position: relative; margin-bottom: 3rem; }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .phase-month {
+    width: 120px;
+    text-align: right;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .phase-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 3px solid var(--accent-blue);
+    background: var(--bg);
+    flex-shrink: 0;
+    z-index: 1;
+    position: relative;
+  }
+
+  .phase-dot.milestone {
+    background: var(--accent-blue);
+    box-shadow: 0 0 12px rgba(88, 166, 255, 0.4);
+  }
+
+  .phase-title { font-size: 1.2rem; font-weight: 600; }
+
+  .phase-tag {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  .tag-prep { background: rgba(210, 153, 34, 0.2); color: var(--accent-orange); }
+  .tag-ship { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
+  .tag-grow { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+  .tag-stable { background: rgba(188, 140, 255, 0.2); color: var(--accent-purple); }
+
+  .lanes {
+    margin-left: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .lane {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    border-left: 3px solid;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .lane:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .lane-a { border-left-color: var(--lane-a); }
+  .lane-b { border-left-color: var(--lane-b); }
+  .lane-c { border-left-color: var(--lane-c); }
+  .lane-d { border-left-color: var(--lane-d); }
+
+  .lane-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .lane-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    color: var(--bg);
+  }
+
+  .label-a { background: var(--lane-a); }
+  .label-b { background: var(--lane-b); }
+  .label-c { background: var(--lane-c); }
+  .label-d { background: var(--lane-d); }
+
+  .lane-name { font-weight: 600; font-size: 0.95rem; }
+
+  .lane-detail {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-left: calc(0.7rem * 2 + 0.45rem * 2 + 0.6rem);
+  }
+
+  .lane-detail ul { list-style: none; padding: 0; }
+  .lane-detail li::before { content: '›'; margin-right: 0.4rem; color: var(--text-muted); }
+
+  .cutover-banner {
+    margin-left: 160px;
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(188, 140, 255, 0.1));
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .cutover-banner h3 { color: var(--accent-blue); font-size: 1rem; margin-bottom: 0.75rem; }
+
+  .cutover-items {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 2rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .cutover-items li { list-style: none; }
+  .cutover-items li::before { content: '✓'; margin-right: 0.4rem; color: var(--accent-green); font-weight: 700; }
+
+  .callout {
+    margin-left: 160px;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .callout-warn {
+    background: rgba(248, 81, 73, 0.08);
+    border: 1px solid rgba(248, 81, 73, 0.25);
+  }
+
+  .callout-info {
+    background: rgba(88, 166, 255, 0.08);
+    border: 1px solid rgba(88, 166, 255, 0.25);
+  }
+
+  .callout strong.red { color: var(--accent-red); }
+  .callout strong.blue { color: var(--accent-blue); }
+
+  .divider {
+    margin-left: 140px;
+    border: none;
+    border-top: 2px dashed var(--accent-blue);
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.4;
+  }
+
+  /* ════════════════════════════════════════
+     Gantt Chart View
+     ════════════════════════════════════════ */
+  .gantt-view { display: none; }
+  .gantt-view.visible { display: block; }
+
+  .gantt-container {
+    overflow-x: auto;
+    margin-top: 1rem;
+  }
+
+  .gantt {
+    min-width: 800px;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .gantt th {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    text-align: center;
+    color: var(--text-muted);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+  }
+
+  .gantt th:first-child {
+    text-align: left;
+    width: 260px;
+    min-width: 260px;
+  }
+
+  .gantt th.month-header {
+    border-left: 1px solid var(--border);
+  }
+
+  .gantt th.current-month {
+    color: var(--accent-blue);
+    border-bottom-color: var(--accent-blue);
+  }
+
+  .gantt td {
+    padding: 0.5rem;
+    border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+    vertical-align: middle;
+    position: relative;
+  }
+
+  .gantt td:first-child {
+    font-size: 0.85rem;
+    padding-right: 1rem;
+  }
+
+  .gantt td:not(:first-child) {
+    border-left: 1px solid rgba(48, 54, 61, 0.3);
+  }
+
+  .gantt-row-group td {
+    padding-top: 1.2rem;
+    padding-bottom: 0.4rem;
+    border-bottom: none;
+  }
+
+  .gantt-group-label {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .gantt-group-tag {
+    font-size: 0.65rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+
+  .gantt-task-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 1rem;
+  }
+
+  .gantt-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .gantt-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .gantt-bar-cell {
+    padding: 0.5rem 0.25rem;
+  }
+
+  .gantt-bar {
+    height: 24px;
+    border-radius: 4px;
+    opacity: 0.85;
+    position: relative;
+    transition: opacity 0.15s ease;
+  }
+
+  .gantt-bar:hover {
+    opacity: 1;
+  }
+
+  .gantt-bar-full { width: 100%; }
+  .gantt-bar-left { width: 100%; border-radius: 4px 0 0 4px; }
+  .gantt-bar-right { width: 100%; border-radius: 0 4px 4px 0; }
+  .gantt-bar-mid { width: 100%; border-radius: 0; }
+
+  .bar-a { background: var(--lane-a); }
+  .bar-b { background: var(--lane-b); }
+  .bar-c { background: var(--lane-c); }
+  .bar-d { background: var(--lane-d); }
+  .bar-cyan { background: var(--accent-cyan); }
+
+  .gantt-milestone {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: var(--accent-blue);
+    box-shadow: 0 0 8px rgba(88, 166, 255, 0.5);
+  }
+
+  .gantt-milestone-label {
+    font-size: 0.75rem;
+    color: var(--accent-blue);
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .half-left, .half-right {
+    display: inline-block;
+    width: 50%;
+    height: 24px;
+    vertical-align: top;
+  }
+
+  /* ── Footer ── */
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    body { padding: 1rem; }
+    .timeline::before { left: 20px; }
+    .phase-month { width: 0; font-size: 0; }
+    .lanes, .cutover-banner, .callout { margin-left: 40px; }
+    .phase-header { gap: 0.5rem; }
+    .cutover-items { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>tayk</span> 開発ロードマップ</h1>
+  <p class="subtitle">YouTube 自動化ツールの次世代版への移行計画</p>
+  <p class="meta">最終更新: 2026-06-25 &middot; ADR-0015</p>
+</header>
+
+<!-- View Toggle -->
+<div class="view-toggle">
+  <button class="view-btn active" onclick="showView('timeline')">タイムライン</button>
+  <button class="view-btn" onclick="showView('gantt')">ガントチャート</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--lane-a)"></div>次世代版の開発</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--lane-b)"></div>現行版の品質改善</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--lane-c)"></div>ブラウザ拡張</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--lane-d)"></div>ダッシュボード</div>
+</div>
+
+<!-- ════════════════════════════════════════
+     Timeline View
+     ════════════════════════════════════════ -->
+<div class="timeline-view" id="timeline-view">
+<div class="timeline">
+
+  <!-- ===== 6月（進行中） ===== -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-month">2026年 6月</div>
+      <div class="phase-dot"></div>
+      <div class="phase-title">先行着手</div>
+      <span class="phase-tag tag-prep">進行中</span>
+    </div>
+
+    <div class="lanes">
+      <div class="lane lane-b">
+        <div class="lane-header">
+          <span class="lane-label label-b">B</span>
+          <span class="lane-name">現行版の品質改善（17件）</span>
+        </div>
+        <div class="lane-detail">
+          <ul>
+            <li>既知の不具合を全件修正 — 切替後は修正できなくなるため</li>
+            <li>ライブ配信関連の残作業も並行して消化</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="lane lane-c">
+        <div class="lane-header">
+          <span class="lane-label label-c">C</span>
+          <span class="lane-name">ブラウザ拡張の修正</span>
+        </div>
+        <div class="lane-detail">
+          <ul>
+            <li>Suno 連携: グリッド表示の不具合修正（〜7月前半まで）</li>
+            <li>Suno 連携: 楽曲の一括ダウンロード機能を追加（〜7月前半まで）</li>
+            <li>DistroKid 連携の安定化</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 7月 ===== -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-month">2026年 7月</div>
+      <div class="phase-dot"></div>
+      <div class="phase-title">告知 + 開発加速</div>
+      <span class="phase-tag tag-prep">準備</span>
+    </div>
+
+    <div class="callout callout-info">
+      <strong class="blue">📢 移行告知を公開</strong> — 現在お使いのユーザーの皆さまへ「8月中に現行版は提供終了します」とご案内。移行ガイドを同時公開
+    </div>
+
+    <div class="lanes">
+      <div class="lane lane-a">
+        <div class="lane-header">
+          <span class="lane-label label-a">A</span>
+          <span class="lane-name">次世代版（tayk）の開発追い込み</span>
+        </div>
+        <div class="lane-detail">
+          <ul>
+            <li>自動化の中核エンジンを刷新</li>
+            <li>コマンドラインツール <code>tayk</code> の完成</li>
+            <li>AI エージェントが直接操作できる仕組み（MCP）の構築</li>
+            <li>60 以上あるスキルを 5 つに整理統合</li>
+            <li>動画の自動生成エンジンを Remotion に切替</li>
+            <li>分析データの保存基盤を構築</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 8月 ===== -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-month">2026年 8月</div>
+      <div class="phase-dot milestone"></div>
+      <div class="phase-title">検証 + 切替</div>
+      <span class="phase-tag tag-ship">出荷</span>
+    </div>
+
+    <div class="lanes">
+      <div class="lane lane-a">
+        <div class="lane-header">
+          <span class="lane-label label-a">A</span>
+          <span class="lane-name">実環境での検証 → 正式リリース</span>
+        </div>
+        <div class="lane-detail">
+          <ul>
+            <li>自社チャンネル 2 つで実際にコレクションを制作して検証</li>
+            <li>重大な問題がないことを確認</li>
+            <li>現行版から次世代版への切替を実行</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+
+    <hr class="divider">
+
+    <div class="cutover-banner">
+      <h3>🚀 tayk v0.1.0 — 次世代版リリース</h3>
+      <ul class="cutover-items">
+        <li>自動化の中核エンジン</li>
+        <li>コマンドラインツール（<code>tayk</code>）</li>
+        <li>AI 連携インターフェース（MCP）</li>
+        <li>統合スキル 5 本</li>
+        <li>Remotion 動画生成</li>
+        <li>分析データ保存基盤</li>
+        <li>移行ガイド</li>
+        <li>既存の制作フロー（/wf-new）を維持</li>
+      </ul>
+    </div>
+
+    <div class="callout callout-warn">
+      <strong class="red">⚠ 重要な変更</strong> — 現行版（Python）は完全に削除されます。旧コマンド（<code>yt-*</code>）は使用不可に。バックアップ版の提供はありません
+    </div>
+  </div>
+
+  <!-- ===== 9月 ===== -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-month">2026年 9月</div>
+      <div class="phase-dot"></div>
+      <div class="phase-title">新機能の追加</div>
+      <span class="phase-tag tag-grow">拡張</span>
+    </div>
+
+    <div class="lanes">
+      <div class="lane lane-c">
+        <div class="lane-header">
+          <span class="lane-label label-c">C'</span>
+          <span class="lane-name">コミュニティ投稿の自動化</span>
+        </div>
+        <div class="lane-detail">
+          <ul>
+            <li>YouTube Studio でのコミュニティ投稿を自動入力する拡張</li>
+            <li>テキスト・画像・スケジュール設定を一括操作</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="lane lane-d">
+        <div class="lane-header">
+          <span class="lane-label label-d">D</span>
+          <span class="lane-name">分析ダッシュボード</span>
+        </div>
+        <div class="lane-detail">
+          <ul>
+            <li>全チャンネルの再生数・登録者数を一画面で確認</li>
+            <li>動画ごとのパフォーマンス詳細表示</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 10月〜 ===== -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-month">2026年 10月〜</div>
+      <div class="phase-dot"></div>
+      <div class="phase-title">運用改善</div>
+      <span class="phase-tag tag-stable">安定化</span>
+    </div>
+
+    <div class="lanes">
+      <div class="lane lane-a" style="border-left-color: var(--accent-cyan);">
+        <div class="lane-header">
+          <span class="lane-label" style="background: var(--accent-cyan);">→</span>
+          <span class="lane-name">安定化 + 次の計画</span>
+        </div>
+        <div class="lane-detail">
+          <ul>
+            <li>ユーザーからのフィードバックを反映</li>
+            <li>自動化機能の追加・改善</li>
+            <li>次期ロードマップを検討</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ════════════════════════════════════════
+     Gantt Chart View
+     ════════════════════════════════════════ -->
+<div class="gantt-view" id="gantt-view">
+<div class="gantt-container">
+<table class="gantt">
+  <thead>
+    <tr>
+      <th></th>
+      <th class="month-header current-month" colspan="2">6月</th>
+      <th class="month-header" colspan="2">7月</th>
+      <th class="month-header" colspan="2">8月</th>
+      <th class="month-header" colspan="2">9月</th>
+      <th class="month-header" colspan="2">10月〜</th>
+    </tr>
+    <tr>
+      <th></th>
+      <th>前半</th><th>後半</th>
+      <th>前半</th><th>後半</th>
+      <th>前半</th><th>後半</th>
+      <th>前半</th><th>後半</th>
+      <th>前半</th><th>後半</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Group: 先行着手 -->
+    <tr class="gantt-row-group">
+      <td colspan="11">
+        <div class="gantt-group-label">
+          先行着手
+          <span class="gantt-group-tag tag-prep">進行中</span>
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--accent-blue)"></div><span class="gantt-label">移行告知の公開</span></div></td>
+      <td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-full" title="7月前半: 移行告知公開"></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+    </tr>
+
+    <!-- Group: 現行版の品質改善 -->
+    <tr class="gantt-row-group">
+      <td colspan="11">
+        <div class="gantt-group-label">
+          <div class="gantt-dot" style="background:var(--lane-b)"></div>
+          現行版の品質改善
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-b)"></div><span class="gantt-label">不具合 17 件の修正</span></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-b gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-b gantt-bar-right"></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+    </tr>
+
+    <!-- Group: ブラウザ拡張 -->
+    <tr class="gantt-row-group">
+      <td colspan="11">
+        <div class="gantt-group-label">
+          <div class="gantt-dot" style="background:var(--lane-c)"></div>
+          ブラウザ拡張
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-c)"></div><span class="gantt-label">Suno 連携の修正 + DL 機能</span></div></td>
+      <td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-c gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-c gantt-bar-right"></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+    </tr>
+
+    <!-- Group: 次世代版の開発 -->
+    <tr class="gantt-row-group">
+      <td colspan="11">
+        <div class="gantt-group-label">
+          <div class="gantt-dot" style="background:var(--lane-a)"></div>
+          次世代版の開発（tayk）
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-a)"></div><span class="gantt-label">中核エンジン + AI 連携</span></div></td>
+      <td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-mid"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-right"></div></td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-a)"></div><span class="gantt-label">スキル統合（60+ → 5本）</span></div></td>
+      <td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-mid"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-right"></div></td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-a)"></div><span class="gantt-label">動画生成エンジン切替</span></div></td>
+      <td></td><td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-right"></div></td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-a)"></div><span class="gantt-label">実環境での検証</span></div></td>
+      <td></td><td></td><td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-a gantt-bar-right"></div></td>
+      <td></td><td></td><td></td><td></td>
+    </tr>
+
+    <!-- Milestone -->
+    <tr>
+      <td><div class="gantt-task-name"><span class="gantt-milestone-label">🚀 tayk v0.1.0 リリース</span></div></td>
+      <td></td><td></td><td></td><td></td><td></td>
+      <td class="gantt-bar-cell" style="text-align:center; position:relative;"><div class="gantt-milestone"></div></td>
+      <td></td><td></td><td></td><td></td>
+    </tr>
+
+    <!-- Group: 新機能 -->
+    <tr class="gantt-row-group">
+      <td colspan="11">
+        <div class="gantt-group-label">
+          <div class="gantt-dot" style="background:var(--lane-c)"></div>
+          新機能
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-c)"></div><span class="gantt-label">コミュニティ投稿の自動化</span></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-c gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-c gantt-bar-right"></div></td>
+      <td></td><td></td>
+    </tr>
+
+    <!-- Group: ダッシュボード -->
+    <tr class="gantt-row-group">
+      <td colspan="11">
+        <div class="gantt-group-label">
+          <div class="gantt-dot" style="background:var(--lane-d)"></div>
+          分析ダッシュボード
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--lane-d)"></div><span class="gantt-label">全チャンネル一覧 + 詳細画面</span></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-d gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-d gantt-bar-right"></div></td>
+      <td></td><td></td>
+    </tr>
+
+    <!-- Group: 安定化 -->
+    <tr class="gantt-row-group">
+      <td colspan="11">
+        <div class="gantt-group-label">
+          運用改善
+          <span class="gantt-group-tag tag-stable">安定化</span>
+        </div>
+      </td>
+    </tr>
+
+    <tr>
+      <td><div class="gantt-task-name"><div class="gantt-dot" style="background:var(--accent-cyan)"></div><span class="gantt-label">フィードバック反映 + 次期計画</span></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-cyan gantt-bar-left"></div></td>
+      <td class="gantt-bar-cell"><div class="gantt-bar bar-cyan gantt-bar-right"></div></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+<footer>
+  <p>tayk — YouTube チャンネル運営自動化ツールキット</p>
+  <p>ADR-0015: 開発ロードマップ &middot; 決定日: 2026-06-25</p>
+</footer>
+
+<script>
+function showView(view) {
+  const tl = document.getElementById('timeline-view');
+  const gt = document.getElementById('gantt-view');
+  const btns = document.querySelectorAll('.view-btn');
+
+  if (view === 'gantt') {
+    tl.classList.add('hidden');
+    gt.classList.add('visible');
+    btns[0].classList.remove('active');
+    btns[1].classList.add('active');
+  } else {
+    tl.classList.remove('hidden');
+    gt.classList.remove('visible');
+    btns[1].classList.remove('active');
+    btns[0].classList.add('active');
+  }
+}
+</script>
+
+</body>
+</html>
