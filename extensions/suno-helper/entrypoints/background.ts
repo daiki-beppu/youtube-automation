@@ -132,6 +132,43 @@ export default defineBackground(() => {
     }, DOWNLOAD_WATCH_TIMEOUT_MS);
   });
 
+  // content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
+  // content script は chrome.debugger API にアクセスできないため background に委譲する。
+  // attach → rawKeyDown + keyUp → detach を一瞬で行い、デバッグバーの表示時間を最小化する。
+  onMessage("sendTrustedCmdP", async ({ data, sender }) => {
+    const tabId = relayTabId(sender);
+    if (tabId === null) {
+      console.warn("[suno-helper] sendTrustedCmdP: 送信元タブが特定できません");
+      return;
+    }
+    const { isMac } = data;
+    const modifiers = isMac ? 4 : 2; // 4=Meta, 2=Ctrl
+    const target: chrome.debugger.Debuggee = { tabId };
+    try {
+      await chrome.debugger.attach(target, "1.3");
+      try {
+        await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", {
+          type: "rawKeyDown",
+          modifiers,
+          key: "p",
+          windowsVirtualKeyCode: 80,
+          nativeVirtualKeyCode: 80,
+        });
+        await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", {
+          type: "keyUp",
+          modifiers,
+          key: "p",
+          windowsVirtualKeyCode: 80,
+          nativeVirtualKeyCode: 80,
+        });
+      } finally {
+        await chrome.debugger.detach(target);
+      }
+    } catch (err) {
+      console.warn("[suno-helper] sendTrustedCmdP failed:", err);
+    }
+  });
+
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する
   // （content↔content 直送不可のため）。tab を持たない送信元は転送先が無いため no-op。
   onMessage("progress", ({ data, sender }) => {

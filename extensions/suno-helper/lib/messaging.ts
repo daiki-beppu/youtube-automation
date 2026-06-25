@@ -65,6 +65,9 @@ interface ProtocolMap {
   startDownload(payload: { collectionId: string; format: string }): void;
   /** background → runner: chrome.downloads の完了通知を content へ中継する (#1146)。 */
   downloadComplete(payload: DownloadCompletePayload): void;
+  /** content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
+   *  content script は chrome.debugger API にアクセスできないため background に委譲する。 */
+  sendTrustedCmdP(payload: { isMac: boolean }): void;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();

@@ -273,7 +273,10 @@ export default defineContentScript({
       await multiSelectClips(rows);
       await abortableSleep(SETTLE_MS, () => aborted);
 
-      const dialog = await openAddToPlaylistDialogViaCmdP();
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      const dialog = await openAddToPlaylistDialogViaCmdP(async () => {
+        await sendMessage("sendTrustedCmdP", { isMac });
+      });
       await abortableSleep(SETTLE_MS, () => aborted);
 
       await fillPlaylistNameAndCreate(dialog, playlistName);

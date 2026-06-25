@@ -651,6 +651,19 @@ export function detectSunoViewMode(): SunoViewMode {
     return "unknown";
   }
 
+  // Suno 2026-06: ビューモードボタンが data-context-menu-trigger 属性のみのプレーンボタンに変更。
+  // 現在選択中のビューモードボタンだけがこの属性を持ち、テキストがモード名と一致する。
+  const contextMenuModes = collectViewModesFromElements(
+    document.querySelectorAll<HTMLElement>("button[data-context-menu-trigger]"),
+  );
+  const contextMenu = singleModeOrUnknown(contextMenuModes);
+  if (contextMenu !== "unknown") {
+    return contextMenu;
+  }
+  if (contextMenuModes.size > 1) {
+    return "unknown";
+  }
+
   const triggerModes = collectViewModesFromElements(
     document.querySelectorAll<HTMLElement>(
       'button[aria-haspopup], button[aria-expanded], [role="button"][aria-haspopup], [role="button"][aria-expanded]',

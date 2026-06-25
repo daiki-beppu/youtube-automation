@@ -658,18 +658,23 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
  * 出現した dialog を返す (#854)。cookie consent dialog は findPlaylistDialog の除外フィルタで拾わない。
  * 上限まで待っても出なければ throw（silent に続行しない）。
  */
-export async function openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement> {
-  const isMac = navigator.platform.toLowerCase().includes("mac");
-
+export async function openAddToPlaylistDialogViaCmdP(
+  dispatchCmdP?: () => Promise<void>,
+): Promise<HTMLElement> {
   for (let attempt = 0; attempt < CMD_P_MAX_RETRIES; attempt++) {
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "p",
-        metaKey: isMac,
-        ctrlKey: !isMac,
-        bubbles: true,
-      }),
-    );
+    if (dispatchCmdP) {
+      await dispatchCmdP();
+    } else {
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "p",
+          metaKey: isMac,
+          ctrlKey: !isMac,
+          bubbles: true,
+        }),
+      );
+    }
 
     const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
     for (;;) {
