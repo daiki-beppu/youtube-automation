@@ -15,8 +15,8 @@ THRESHOLD_RATIO: float = 0.80
 # 想定ビットレート (Mbps)。映像 + 音声 (192 kbps) の合算想定値。
 THEORETICAL_BITRATE_MBPS: int = 4
 
-# 1 日あたりの想定配信時間 (時間)。11h × 2 本 (1h 休止) = 22h。
-THEORETICAL_HOURS_PER_DAY: int = 22
+# 1 日あたりの想定配信時間 (時間)。24/7 連続配信。
+THEORETICAL_HOURS_PER_DAY: int = 24
 
-# 1 ヶ月あたりの想定アーカイブ件数 (本)。22h ÷ 11h × 30 日 ≈ 60 本。
-THEORETICAL_ARCHIVES_PER_MONTH: int = 60
+# 24/7 連続配信では YouTube ライブアーカイブ生成を期待しない。
+ARCHIVES_EXPECTED: bool = False

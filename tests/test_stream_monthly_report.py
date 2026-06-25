@@ -4,12 +4,13 @@
 
 整形対象:
 - 月間帯域消費量 (GB) と前月比
-- 11h+1h サイクル稼働率 (理論 91.7% に対する実測)
-- アーカイブ件数 (理論 60 本)
-- back-calc Mbps: usage_gb × 8 × 1024 / (archives × 11h × 3600)
+- 24/7 連続配信稼働率 (理論 100%)
+- アーカイブ数ベース判定なし (24/7 デフォルト)
 """
 
 from __future__ import annotations
+
+import pytest
 
 from youtube_automation.utils.streaming import monthly_report
 
@@ -95,13 +96,13 @@ def test_format_monthly_report_handles_no_previous_month():
         days_in_month=30,
     )
     assert "1200" in text
-    assert ("N/A" in text) or ("-" in text) or ("なし" in text)
+    assert "前月比: N/A (前月データなし)" in text
 
 
-def test_format_monthly_report_includes_uptime_actual_and_theoretical():
-    """Given archives=45, days_in_month=30 (理論 60 本)
+def test_format_monthly_report_skips_archive_based_actual_uptime():
+    """Given ARCHIVES_EXPECTED=False
     When format_monthly_report を呼ぶ
-    Then 実測稼働率 75% と理論 91.7% (or 0.917) の両方を含む。
+    Then 実測稼働率 N/A と理論 100.0% の両方を含む。
     """
     text = monthly_report.format_monthly_report(
         year=2026,
@@ -111,27 +112,24 @@ def test_format_monthly_report_includes_uptime_actual_and_theoretical():
         archives=45,
         days_in_month=30,
     )
-    # 実測 = 45 / 60 = 0.75 → 75%
-    assert "75" in text
-    # 理論 = 22/24 ≈ 91.7% → "91.7" あるいは小数で 0.91 系
-    assert ("91.7" in text) or ("91.6" in text)
+    assert "稼働率 (24/7 連続配信): 実測 N/A / 理論 100.0%" in text
 
 
-def test_format_monthly_report_includes_archive_count_actual_and_theoretical():
-    """Given archives=58 (理論 60)
+def test_format_monthly_report_skips_archive_count_line_when_archives_are_not_expected():
+    """Given ARCHIVES_EXPECTED=False
     When format_monthly_report を呼ぶ
-    Then "58" と "60" の両方を含む (実測 vs 理論)。
+    Then 実測アーカイブ件数には依存しない。
     """
     text = monthly_report.format_monthly_report(
         year=2026,
         month=4,
         usage_gb=1188.0,
         previous_usage_gb=1100.0,
-        archives=58,
+        archives=None,
         days_in_month=30,
     )
-    assert "58" in text
-    assert "60" in text
+    assert "アーカイブ数ベース判定なし" in text
+    assert "アーカイブ件数: 実測" not in text
 
 
 def test_format_monthly_report_includes_quota_percentage():
@@ -166,3 +164,56 @@ def test_format_monthly_report_returns_str():
     )
     assert isinstance(text, str)
     assert len(text) > 0
+
+
+def test_format_monthly_report_archives_expected_true_includes_uptime_and_count(
+    monkeypatch,
+):
+    """Given ARCHIVES_EXPECTED=True, archives=45, days_in_month=30
+    When format_monthly_report を呼ぶ
+    Then 実測稼働率と理論稼働率が数値で表示され、アーカイブ件数行を含む。
+    """
+    import youtube_automation.utils.streaming as streaming_pkg
+    import youtube_automation.utils.streaming.cycle_uptime as cycle_mod
+
+    monkeypatch.setattr(streaming_pkg, "ARCHIVES_EXPECTED", True)
+    monkeypatch.setattr(cycle_mod, "ARCHIVES_EXPECTED", True)
+
+    text = monthly_report.format_monthly_report(
+        year=2026,
+        month=6,
+        usage_gb=1500.0,
+        previous_usage_gb=1400.0,
+        archives=45,
+        days_in_month=30,
+    )
+    # 実測稼働率が N/A ではなく数値 (%) で表示される
+    assert "実測 N/A" not in text
+    assert "実測" in text
+    assert "理論 100.0%" in text
+    # アーカイブ件数行が含まれる
+    assert "アーカイブ件数: 実測 45 本 / 理論 60 本" in text
+
+
+def test_format_monthly_report_archives_expected_true_archives_none_raises(
+    monkeypatch,
+):
+    """Given ARCHIVES_EXPECTED=True, archives=None
+    When format_monthly_report を呼ぶ
+    Then ValueError が送出される。
+    """
+    import youtube_automation.utils.streaming as streaming_pkg
+    import youtube_automation.utils.streaming.cycle_uptime as cycle_mod
+
+    monkeypatch.setattr(streaming_pkg, "ARCHIVES_EXPECTED", True)
+    monkeypatch.setattr(cycle_mod, "ARCHIVES_EXPECTED", True)
+
+    with pytest.raises(ValueError, match="archives is required"):
+        monthly_report.format_monthly_report(
+            year=2026,
+            month=6,
+            usage_gb=1500.0,
+            previous_usage_gb=1400.0,
+            archives=None,
+            days_in_month=30,
+        )

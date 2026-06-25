@@ -1,8 +1,8 @@
 """utils/streaming/__init__.py の定数集中をテストする。
 
 計画 §「定数集中」: MONTHLY_QUOTA_GB / THRESHOLD_RATIO / THEORETICAL_BITRATE_MBPS /
-THEORETICAL_HOURS_PER_DAY / THEORETICAL_ARCHIVES_PER_MONTH を package __init__ に集約し、
-CLI / レポート / テストで重複定義しないこと。
+THEORETICAL_HOURS_PER_DAY / ARCHIVES_EXPECTED を package __init__ に集約し、CLI / レポート /
+テストで重複定義しないこと。
 """
 
 from __future__ import annotations
@@ -44,17 +44,17 @@ def test_archive_mode_constants_are_not_public_api():
     assert not hasattr(streaming, "ARCHIVE_MODE_ARCHIVES_PER_DAY")
 
 
-def test_theoretical_hours_per_day_is_22():
-    """Given order.md「1 日の配信時間: 22 時間 (11h × 2 本)」
+def test_theoretical_hours_per_day_is_24():
+    """Given ADR-0014「デフォルトを 24/7 連続配信にする」
     When THEORETICAL_HOURS_PER_DAY を引く
-    Then 22 で固定されている。
+    Then 24 で固定されている。
     """
-    assert streaming.THEORETICAL_HOURS_PER_DAY == 22
+    assert streaming.THEORETICAL_HOURS_PER_DAY == 24
 
 
-def test_theoretical_archives_per_month_is_60():
-    """Given order.md「アーカイブ件数 (理論値 60 本/月)」
-    When THEORETICAL_ARCHIVES_PER_MONTH を引く
-    Then 60 で固定されている。
+def test_archives_expected_is_false():
+    """Given ADR-0014「アーカイブは生成されなくなる」
+    When ARCHIVES_EXPECTED を引く
+    Then False で固定されている。
     """
-    assert streaming.THEORETICAL_ARCHIVES_PER_MONTH == 60
+    assert streaming.ARCHIVES_EXPECTED is False

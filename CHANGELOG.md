@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `feat(streaming)`: ライブ配信のデフォルトを 24/7 連続配信に変更（ADR-0014）。Terraform 変数 `stream_hours` / `break_hours`（default=0 = 無制限）を導入し、systemd テンプレートで条件分岐。`yt-stream-archive-check` の `--expected` を必須化（#1219）
+- `refactor(streaming)`: Python streaming 定数を 24/7 デフォルトに更新。`THEORETICAL_HOURS_PER_DAY=24`、`ARCHIVES_EXPECTED=False` を導入し、稼働率計算・月次レポートを `ARCHIVES_EXPECTED` で分岐（#1220）
 
 ### Fixed
 
