@@ -39,8 +39,6 @@ def _format_archive_count(archives: int | None, theoretical_archives: int | None
     """アーカイブ件数の表示行を返す。"""
     if theoretical_archives is None:
         return "アーカイブ数ベース判定なし"
-    if archives is None:
-        raise ValueError("archives is required when archive-based reporting is enabled")
     return f"アーカイブ件数: 実測 {archives} 本 / 理論 {theoretical_archives} 本"
 
 

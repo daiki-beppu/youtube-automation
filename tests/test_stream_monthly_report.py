@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from youtube_automation.utils.streaming import monthly_report
 
 
@@ -162,3 +164,56 @@ def test_format_monthly_report_returns_str():
     )
     assert isinstance(text, str)
     assert len(text) > 0
+
+
+def test_format_monthly_report_archives_expected_true_includes_uptime_and_count(
+    monkeypatch,
+):
+    """Given ARCHIVES_EXPECTED=True, archives=45, days_in_month=30
+    When format_monthly_report を呼ぶ
+    Then 実測稼働率と理論稼働率が数値で表示され、アーカイブ件数行を含む。
+    """
+    import youtube_automation.utils.streaming as streaming_pkg
+    import youtube_automation.utils.streaming.cycle_uptime as cycle_mod
+
+    monkeypatch.setattr(streaming_pkg, "ARCHIVES_EXPECTED", True)
+    monkeypatch.setattr(cycle_mod, "ARCHIVES_EXPECTED", True)
+
+    text = monthly_report.format_monthly_report(
+        year=2026,
+        month=6,
+        usage_gb=1500.0,
+        previous_usage_gb=1400.0,
+        archives=45,
+        days_in_month=30,
+    )
+    # 実測稼働率が N/A ではなく数値 (%) で表示される
+    assert "実測 N/A" not in text
+    assert "実測" in text
+    assert "理論 100.0%" in text
+    # アーカイブ件数行が含まれる
+    assert "アーカイブ件数: 実測 45 本 / 理論 60 本" in text
+
+
+def test_format_monthly_report_archives_expected_true_archives_none_raises(
+    monkeypatch,
+):
+    """Given ARCHIVES_EXPECTED=True, archives=None
+    When format_monthly_report を呼ぶ
+    Then ValueError が送出される。
+    """
+    import youtube_automation.utils.streaming as streaming_pkg
+    import youtube_automation.utils.streaming.cycle_uptime as cycle_mod
+
+    monkeypatch.setattr(streaming_pkg, "ARCHIVES_EXPECTED", True)
+    monkeypatch.setattr(cycle_mod, "ARCHIVES_EXPECTED", True)
+
+    with pytest.raises(ValueError, match="archives is required"):
+        monthly_report.format_monthly_report(
+            year=2026,
+            month=6,
+            usage_gb=1500.0,
+            previous_usage_gb=1400.0,
+            archives=None,
+            days_in_month=30,
+        )

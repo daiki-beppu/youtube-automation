@@ -9,7 +9,7 @@ from __future__ import annotations
 from youtube_automation.utils.streaming import ARCHIVES_EXPECTED, THEORETICAL_HOURS_PER_DAY
 
 _HOURS_PER_DAY = 24
-_ARCHIVES_PER_DAY = 2  # 11h × 2 本 = 22h
+_ARCHIVES_PER_DAY = 2  # ARCHIVES_EXPECTED=True 時の 1 日あたり理論アーカイブ本数
 
 
 def theoretical_uptime_ratio() -> float:
