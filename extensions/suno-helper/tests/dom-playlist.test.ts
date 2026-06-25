@@ -1466,7 +1466,7 @@ describe("grid view (#1237): .multi-select-button / a[href*='/song/'] 不在の 
       const id0 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
       const id1 = "b2c3d4e5-f6a7-8901-bcde-f12345678901";
       const id2 = "c3d4e5f6-a7b8-9012-cdef-123456789012";
-      const scroller = getOrCreateScroller();
+      getOrCreateScroller();
       const wrapper = getOrCreateClipList();
       const gridContainer = document.createElement("div");
       wrapper.appendChild(gridContainer);
@@ -1482,12 +1482,12 @@ describe("grid view (#1237): .multi-select-button / a[href*='/song/'] 不在の 
     });
 
     it("Given grid view row に data-songId も存在する When target ID で取得する Then data-songId を優先し image fallback は走らない", async () => {
-      const scroller = getOrCreateScroller();
+      getOrCreateScroller();
       const wrapper = getOrCreateClipList();
       const gridContainer = document.createElement("div");
       wrapper.appendChild(gridContainer);
       const card0 = addGridViewCard(gridContainer, "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
-      const card1 = addGridViewCard(gridContainer, "b2c3d4e5-f6a7-8901-bcde-f12345678901");
+      addGridViewCard(gridContainer, "b2c3d4e5-f6a7-8901-bcde-f12345678901");
       card0.row.dataset.songId = "primary-id";
 
       const pending = ensureClipRowsLoadedByIds(["primary-id"], {
