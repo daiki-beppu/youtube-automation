@@ -33,6 +33,8 @@ const SONG_HREF_ID_RE = /\/song\/([^/?#]+)/;
  */
 const CLIP_IMAGE_UUID_RE =
   /image_(?:large_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+const GRID_CARD_MAX_ANCESTOR_DEPTH = 10;
+const GRID_CARD_MIN_SIBLINGS = 2;
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
 export const PLAYLIST_NAME_INPUT_SELECTOR =
   'input[placeholder="Playlist Name"]';
@@ -50,8 +52,10 @@ const PLAYLIST_ROW_APPEAR_TIMEOUT_MS = 5000;
 /** multi-select click 後、対象 row が selected 状態（aria-label="Deselect clip"）へ遷移したかを verify する poll 間隔と上限 (ms)。 */
 const CLIP_SELECT_VERIFY_POLL_MS = 50;
 const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
-/** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924)。 */
-const CLIP_SELECT_VERIFY_MS_PER_ROW = 50;
+/** verify deadline を row 数でスケールする際の 1 row あたりの猶予 (ms/row、#924 → #1050 で 50→100 に倍増)。 */
+const CLIP_SELECT_VERIFY_MS_PER_ROW = 100;
+/** Cmd+P 発火の最大リトライ回数 (#1050)。dialog が開かない場合に再発火する。 */
+const CMD_P_MAX_RETRIES = 3;
 /** clip row 内の曲タイトル表示要素。実機 DOM 調査 (2026-06-23) で確認済み。 */
 const CLIP_ROW_TITLE_SELECTOR = 'span[role="button"][aria-label^="Play "]';
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
@@ -106,7 +110,11 @@ function resolveClipRowFromSelectButton(
 ): HTMLElement | null {
   const multiSelectWrapper = button.closest(MULTI_SELECT_BUTTON_SELECTOR);
   if (!multiSelectWrapper) {
-    return button.closest<HTMLElement>("article");
+    const articleRow = button.closest<HTMLElement>("article");
+    if (articleRow) {
+      return articleRow;
+    }
+    return resolveGridCardFromSelectButton(button);
   }
   const parent = multiSelectWrapper.parentElement;
   if (!parent) {
@@ -122,6 +130,37 @@ function resolveClipRowFromSelectButton(
     return grandparent;
   }
   return parent;
+}
+
+function resolveGridCardFromSelectButton(
+  button: HTMLElement,
+): HTMLElement | null {
+  let candidate: HTMLElement | null = button.parentElement;
+  for (
+    let depth = 0;
+    candidate && depth < GRID_CARD_MAX_ANCESTOR_DEPTH;
+    depth++
+  ) {
+    const parent = candidate.parentElement;
+    if (!parent) {
+      break;
+    }
+    const siblings = Array.from(parent.children);
+    if (
+      siblings.length >= GRID_CARD_MIN_SIBLINGS &&
+      siblings.every(
+        (sibling) =>
+          sibling.querySelectorAll(SELECT_CLIP_BUTTON_ANY_SELECTOR).length +
+            sibling.querySelectorAll(DESELECT_CLIP_BUTTON_ANY_SELECTOR)
+              .length ===
+          1,
+      )
+    ) {
+      return candidate;
+    }
+    candidate = parent;
+  }
+  return null;
 }
 
 function isScrollableClipContainer(element: HTMLElement): boolean {
@@ -621,28 +660,40 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
  */
 export async function openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement> {
   const isMac = navigator.platform.toLowerCase().includes("mac");
-  document.dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "p",
-      metaKey: isMac,
-      ctrlKey: !isMac,
-      bubbles: true,
-    }),
-  );
 
-  const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
-  for (;;) {
-    const dialog = findPlaylistDialog();
-    if (dialog) {
-      return dialog;
+  for (let attempt = 0; attempt < CMD_P_MAX_RETRIES; attempt++) {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "p",
+        metaKey: isMac,
+        ctrlKey: !isMac,
+        bubbles: true,
+      }),
+    );
+
+    const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
+    for (;;) {
+      const dialog = findPlaylistDialog();
+      if (dialog) {
+        return dialog;
+      }
+      if (Date.now() >= deadline) {
+        break;
+      }
+      await sleep(DIALOG_OPEN_POLL_MS);
     }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        "Add to Playlist dialog を検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。",
+
+    if (attempt < CMD_P_MAX_RETRIES - 1) {
+      console.warn(
+        `[suno-helper] Cmd+P attempt ${attempt + 1}/${CMD_P_MAX_RETRIES} failed — retrying after 500ms`,
       );
+      await sleep(500);
     }
-    await sleep(DIALOG_OPEN_POLL_MS);
   }
+
+  throw new Error(
+    `Add to Playlist dialog を ${CMD_P_MAX_RETRIES} 回試行しても検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`,
+  );
 }
 
 /**
