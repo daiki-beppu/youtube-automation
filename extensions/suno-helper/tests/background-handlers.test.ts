@@ -4,13 +4,11 @@
 // background 版の defineBackground + chrome API stub を構築する。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Handler = (msg: { data: Record<string, any>; sender: Record<string, any> }) => unknown;
+type Handler = (msg: { data: Record<string, unknown>; sender: Record<string, unknown> }) => unknown;
 
 interface SentMessage {
   type: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any;
+  data: unknown;
   tabId?: number;
 }
 
@@ -20,7 +18,7 @@ interface DownloadDelta {
 }
 
 async function loadBackground(opts?: {
-  searchResults?: Array<{ filename: string }>;
+  searchResults?: Array<{ filename: string; startTime?: string }>;
   debuggerAttachError?: Error;
   debuggerSendCommandError?: Error;
 }) {
@@ -61,8 +59,12 @@ async function loadBackground(opts?: {
         removedDownloadListeners.push(fn);
       }),
     },
-    search: vi.fn((query: { id: number }, cb: (results: Array<{ filename: string }>) => void) => {
-      cb(opts?.searchResults ?? [{ filename: `suno-playlist-${query.id}.zip` }]);
+    search: vi.fn((query: { id: number }, cb: (results: Array<{ filename: string; startTime: string }>) => void) => {
+      const defaults = [{ filename: `suno-playlist-${query.id}.zip`, startTime: new Date().toISOString() }];
+      const results = opts?.searchResults
+        ? opts.searchResults.map((r) => ({ startTime: new Date().toISOString(), ...r }))
+        : defaults;
+      cb(results);
     }),
   };
 
@@ -180,7 +182,7 @@ describe('background onMessage("startDownload"): 非 .zip ダウンロードは�
 
   it("Given .mp3 ダウンロード完了 When listener 発火 Then downloadComplete を送信しない", async () => {
     const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground({
-      searchResults: [{ filename: "track.mp3" }],
+      searchResults: [{ filename: "track.mp3", startTime: new Date().toISOString() }],
     });
 
     handlers.get("startDownload")!({
@@ -224,6 +226,43 @@ describe('background onMessage("startDownload"): タイムアウトで listener 
 
     expect(removedDownloadListeners).toHaveLength(1);
     expect(removedDownloadListeners[0]).toBe(downloadListeners[0]);
+  });
+});
+
+describe('background onMessage("startDownload"): 成功時にタイムアウトが発火しない (#1217)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("Given .zip 完了後 When 10 分経過 Then タイムアウト warn は出ない", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { handlers, downloadListeners, removedDownloadListeners } = await loadBackground();
+
+    handlers.get("startDownload")!({
+      data: { format: "mp3", collectionId: "coll-1" },
+      sender: { tab: { id: 42 } },
+    });
+
+    const listener = downloadListeners[0];
+    // .zip ダウンロード完了で listener が解除される
+    listener({ id: 1, state: { current: "complete" } });
+    expect(removedDownloadListeners).toHaveLength(1);
+
+    // 10 分を advance — timeout は clearTimeout 済みなので発火しない
+    vi.advanceTimersByTime(600000);
+
+    // タイムアウト warn が出ていないことを確認
+    const timeoutWarns = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === "string" && args[0].includes("タイムアウト"),
+    );
+    expect(timeoutWarns).toHaveLength(0);
+
+    warnSpy.mockRestore();
   });
 });
 

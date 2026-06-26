@@ -1341,3 +1341,137 @@ def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
     music_dir = coll / "02-Individual-music"
     names = sorted(f.name for f in music_dir.iterdir())
     assert names == ["01a-Song A.mp3", "01b-Song A.mp3", "02a-Song B.mp3", "02b-Song B.mp3"]
+
+
+# ---------------------------------------------------------------------------
+# Payload validation (#1217): file_count / format / download_path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_file_count", [True, False, "5", 3.14, -1])
+def test_post_downloaded_invalid_file_count_returns_400(serve_dir, tmp_path, bad_file_count):
+    """Given file_count が int 以外 / bool / 負数
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    payload = {"file_count": bad_file_count, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code == 400
+
+
+@pytest.mark.parametrize("bad_format", ["flac", "ogg", "aac", ""])
+def test_post_downloaded_invalid_format_returns_400(serve_dir, tmp_path, bad_format):
+    """Given format が mp3/m4a/wav 以外
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    payload = {"file_count": 1, "format": bad_format, "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code == 400
+
+
+def test_post_downloaded_relative_download_path_returns_400(serve_dir, tmp_path):
+    """Given download_path が相対パス
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す（パストラバーサル防御 #1217）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    payload = {
+        "file_count": 4,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": "../../../etc/passwd",
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code == 400
+
+
+def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
+    """ZIP 内の単一ファイルがサイズ上限を超える場合、展開しない (#1217)。"""
+    import youtube_automation.scripts.collection_serve as cs
+
+    # テスト用に上限を 10 bytes に下げる（実際の 500MB は CI で生成不可）。
+    monkeypatch.setattr(cs, "_ZIP_MAX_SINGLE_FILE", 10)
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+    zip_path = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("huge.mp3", b"x" * 100)  # 100 bytes > limit of 10
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result is False
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists() or len(list(music_dir.iterdir())) == 0
+
+
+def test_extract_too_many_entries_rejected(tmp_path):
+    """ZIP 内の entry 数が 1000 を超える場合、展開しない (#1217)。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+    zip_path = tmp_path / "many.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for i in range(1001):
+            zf.writestr(f"track_{i:04d}.mp3", b"x")
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result is False
+
+
+def test_post_downloaded_extraction_failure_does_not_set_music_downloaded(serve_dir, tmp_path):
+    """Given download_path が存在しない ZIP を指す
+    When POST /collections/<id>/downloaded を送る
+    Then extraction 失敗時は music_downloaded を設定しない (#1217)。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    # 存在しない ZIP パスを指定
+    nonexistent = str(tmp_path / "does_not_exist.zip")
+    payload = {
+        "file_count": 5,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": nonexistent,
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN},
+    ) as resp:
+        assert resp.status == 200
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    # playlist URL は記録されるが music_downloaded は設定されない
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
+    assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})

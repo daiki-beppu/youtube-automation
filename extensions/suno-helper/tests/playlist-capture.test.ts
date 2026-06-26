@@ -2,13 +2,12 @@
 //   - constants.ts: PLAYLISTS_CAPTURE_ROUTE が `/suno/playlists` (サーバー契約と対の SSOT)
 //   - shared/api.ts: postCapturedPlaylists(baseUrl, items) の POST 組み立て / fail-loud
 //   - shared/api.ts: CollectionSummary.mapped は optional（後方互換）
-//   - shared/api.ts: excludeMappedCollections は mapped===true を除外する純関数（追加要件 B）
+//   (excludeMappedCollections は #1217 で削除)
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   type CapturedPlaylist,
   type CollectionSummary,
-  excludeMappedCollections,
   fetchCollections,
   postCapturedPlaylists,
 } from "../../shared/api";
@@ -126,24 +125,4 @@ describe("shared/api CollectionSummary.status: #1216 新スキーマ", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// excludeMappedCollections: #1216 で恒等関数化（deprecated）
-// ---------------------------------------------------------------------------
-
-describe("shared/api excludeMappedCollections: deprecated 恒等関数 (#1216)", () => {
-  it("Given collection 配列 When フィルタする Then 全件素通しで返す", () => {
-    const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 2 },
-      { id: "c3", name: "c3", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
-    ];
-
-    const result = excludeMappedCollections(collections);
-
-    expect(result).toEqual(collections);
-  });
-
-  it("Given 空配列 When フィルタする Then 空配列を返す", () => {
-    expect(excludeMappedCollections([])).toEqual([]);
-  });
-});
+// excludeMappedCollections は #1217 で削除（#1216 で恒等関数化 → 不要コード削除）。

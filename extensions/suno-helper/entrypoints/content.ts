@@ -202,13 +202,28 @@ export default defineContentScript({
 
         // Step 2: DOWNLOADING phase に遷移し、DOM 操作で Download all を起動
         emitProgress({ phase: PHASE.DOWNLOADING, total, message: `${format.toUpperCase()} 形式` });
-        void sendMessage("startDownload", { collectionId, format });
+        // background の download 監視 listener 登録を待ってから DOM click する (#1217)。
+        await sendMessage("startDownload", { collectionId, format });
         await triggerDownloadAll(format);
 
         // Step 3: chrome.downloads の完了通知を待つ
         const downloadResult = await waitForDownloadComplete(isAborted);
 
         if (isAborted()) return;
+
+        // タイムアウトでダウンロード結果が null の場合 (#1217)。
+        if (!downloadResult) {
+          if (!opts.failSoft) {
+            throw new Error("Download all がタイムアウトしました");
+          }
+          console.warn("[suno-helper] Download all タイムアウト（手動でダウンロードしてください）");
+          emitProgress({
+            phase: PHASE.DOWNLOADING,
+            total,
+            message: "ダウンロードタイムアウト（手動でダウンロードしてください）",
+          });
+          return;
+        }
 
         // Step 4: ダウンロード完了を server に通知する
         if (downloadResult) {
@@ -220,6 +235,8 @@ export default defineContentScript({
               download_path: downloadResult.filename,
             });
           } catch (err) {
+            // failSoft=false (retryDownload) ではエラーを伝搬させて ERROR phase へ遷移する (#1217)。
+            if (!opts.failSoft) throw err;
             console.warn("[suno-helper] postDownloaded (post-download) failed:", err);
           }
         }

@@ -99,8 +99,12 @@ export default defineBackground(() => {
     const { format } = data;
     console.info(`[suno-helper] Download all 監視を開始します (format=${format})`);
 
+    // 監視開始時刻を記録し、これ以前に開始されたダウンロードを除外する (#1217)。
+    const monitorStartedAt = Date.now();
+
     // Suno の ZIP ダウンロードは "Download all" click 直後に開始される。
     // chrome.downloads.onChanged で state=complete を待ち、ファイル名パターン (.zip) で照合する。
+    // 安全弁 timeout の ID を保持し、成功時に clearTimeout する (#1217)。
     const listener = (delta: chrome.downloads.DownloadDelta): void => {
       if (!delta.state || delta.state.current !== "complete") {
         return;
@@ -116,9 +120,17 @@ export default defineBackground(() => {
         if (!filename.toLowerCase().endsWith(".zip")) {
           return;
         }
+        // 監視開始前に開始されたダウンロードは無関係なので無視する (#1217)。
+        // item.startTime は ISO 8601 文字列。5 秒のマージンを設ける（ブラウザ内部時刻の微小ズレ対策）。
+        const downloadStartMs = new Date(item.startTime).getTime();
+        if (downloadStartMs < monitorStartedAt - 5000) {
+          return;
+        }
         console.info(`[suno-helper] ZIP ダウンロード完了: ${filename} (id=${delta.id})`);
         // listener を解除して以降のダウンロードイベントを無視する
         chrome.downloads.onChanged.removeListener(listener);
+        // 安全弁タイムアウトをキャンセルして spurious warning を防ぐ (#1217)。
+        clearTimeout(watchTimeoutId);
         // content script へダウンロード完了を中継する
         sendMessage("downloadComplete", { downloadId: delta.id, filename }, tabId).catch((err: unknown) => {
           console.warn("[suno-helper] downloadComplete 中継失敗:", err);
@@ -129,7 +141,9 @@ export default defineBackground(() => {
 
     // 安全弁: 10 分以内にダウンロードが完了しなければ listener を解除する（メモリリーク防止）
     const DOWNLOAD_WATCH_TIMEOUT_MS = 600000;
-    setTimeout(() => {
+    // listener closure が watchTimeoutId を非同期参照するため、宣言順を addListener の後に置く。
+    // listener が発火するのはダウンロードイベント（非同期）なので初期化前アクセスは起きない。
+    const watchTimeoutId = setTimeout(() => {
       chrome.downloads.onChanged.removeListener(listener);
       console.warn("[suno-helper] Download all 監視タイムアウト（10 分）。listener を解除しました。");
     }, DOWNLOAD_WATCH_TIMEOUT_MS);

@@ -465,6 +465,12 @@ def find_collection_dirs(root: Path) -> list[Path]:
 
 
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
+_VALID_DOWNLOAD_FORMATS = frozenset({"mp3", "m4a", "wav"})
+
+# ZIP bomb protection limits (#1217).
+_ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
+_ZIP_MAX_SINGLE_FILE = 500 * 1024 * 1024  # 500 MB
+_ZIP_MAX_ENTRIES = 1000
 
 
 def _count_audio_files(music_dir: Path) -> int:
@@ -605,15 +611,16 @@ def _update_workflow_state_downloaded(
 def _extract_and_rename_music(
     coll_dir: Path,
     download_path: str,
-) -> None:
+) -> bool:
     """ZIP を展開し suno-prompts.json の曲順でリネームして 02-Individual-music/ へ配置する (#1256).
 
     fail-soft: 展開失敗しても例外を上げない（呼び出し元の POST レスポンスに影響しない）。
+    Returns True on success, False on failure.
     """
     zip_path = Path(download_path)
     if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
         print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
-        return
+        return False
 
     prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
     name_to_index: dict[str, int] = {}
@@ -635,7 +642,29 @@ def _extract_and_rename_music(
     tmp_dir = tempfile.mkdtemp(prefix="suno-extract-")
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(tmp_dir)
+            # ZIP bomb protection (#1217): reject oversized or excessive entries.
+            infos = zf.infolist()
+            if len(infos) > _ZIP_MAX_ENTRIES:
+                print(f"[yt-collection-serve] ZIP entry 数が上限超過 ({len(infos)} > {_ZIP_MAX_ENTRIES}): skip")
+                return False
+            total_size = 0
+            for info in infos:
+                if info.file_size > _ZIP_MAX_SINGLE_FILE:
+                    print(
+                        f"[yt-collection-serve] ZIP 内ファイルがサイズ上限超過"
+                        f" ({info.filename}: {info.file_size} bytes): skip"
+                    )
+                    return False
+                total_size += info.file_size
+            if total_size > _ZIP_MAX_TOTAL_SIZE:
+                print(f"[yt-collection-serve] ZIP 総展開サイズが上限超過 ({total_size} bytes): skip")
+                return False
+            # Only extract audio files (#1217).
+            audio_infos = [
+                info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
+            ]
+            for info in audio_infos:
+                zf.extract(info, tmp_dir)
 
         for extracted in Path(tmp_dir).iterdir():
             if not extracted.is_file():
@@ -659,8 +688,10 @@ def _extract_and_rename_music(
 
         placed = sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
         print(f"[yt-collection-serve] 展開完了: {placed} files → {music_dir}")
+        return True
     except Exception as exc:
         print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
+        return False
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -850,11 +881,29 @@ def create_server(
                 if file_count is None or not fmt or not suno_playlist_url:
                     self.send_error(400, "Bad Request")
                     return
+                # Validate file_count is a non-negative integer (not bool) (#1217).
+                if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
+                    self.send_error(400, "Bad Request")
+                    return
+                # Validate format is a known audio format (#1217).
+                if fmt not in _VALID_DOWNLOAD_FORMATS:
+                    self.send_error(400, "Bad Request")
+                    return
                 coll_dir = collections_root / cid
-                _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
                 download_path = payload.get("download_path")
                 if download_path:
-                    _extract_and_rename_music(coll_dir, download_path)
+                    # Validate download_path: must be an absolute path (#1217).
+                    dp = Path(download_path)
+                    if not dp.is_absolute():
+                        self.send_error(400, "Bad Request")
+                        return
+                    resolved_dp = dp.resolve()
+                    extracted_ok = _extract_and_rename_music(coll_dir, str(resolved_dp))
+                    if not extracted_ok:
+                        # Extraction failed: do not mark as downloaded (#1217).
+                        file_count = 0
+                # Update workflow state AFTER extraction (#1217).
+                _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
                 resp_body = json.dumps({"ok": True, "collection_id": cid}).encode("utf-8")
                 self._send_bytes(resp_body, "application/json; charset=utf-8")
                 return

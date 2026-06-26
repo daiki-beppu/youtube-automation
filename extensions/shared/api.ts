@@ -324,17 +324,6 @@ export async function postCapturedPlaylists(
   return (await resp.json()) as CapturedPlaylistsResult;
 }
 
-/**
- * @deprecated #1216: mapped フィールド廃止に伴い恒等関数化。次回 breaking で削除予定。
- * 既にマッピング済み (mapped===true) の collection を除外していたが、
- * CollectionSummary から mapped が削除されたため全件素通しになる。
- */
-export function excludeMappedCollections(
-  collections: CollectionSummary[],
-): CollectionSummary[] {
-  return collections;
-}
-
 /** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */
 export interface DistrokidCollectionSummary {
   collection_id: string;
