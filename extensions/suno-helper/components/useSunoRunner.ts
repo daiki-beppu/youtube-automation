@@ -80,7 +80,6 @@ interface RunnerState {
   // playlist / download 単独再実行 (#1251)。失敗フォールバック用。
   retryPlaylist: () => Promise<void>;
   retryDownload: () => Promise<void>;
-  hasSubmittedClipIds: boolean;
   fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
   // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
@@ -577,7 +576,6 @@ export function useSunoRunner(): RunnerState {
     rerunFailed,
     retryPlaylist,
     retryDownload,
-    hasSubmittedClipIds: submittedClipIdsForResume.length > 0,
     fetchData,
     run,
     stop,

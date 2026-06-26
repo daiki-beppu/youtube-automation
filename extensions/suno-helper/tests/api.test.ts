@@ -16,6 +16,7 @@ import {
   fetchServerVersion,
   formatCompatibilityWarning,
   pickInitialCollectionId,
+  postDownloaded,
   resolvePromptCollectionId,
   resolveCompatibilityWarning,
 } from "../../shared/api";
@@ -538,5 +539,63 @@ describe("shared/api resolveCompatibilityWarning: popup warning state", () => {
     }));
 
     await expect(resolveCompatibilityWarning(BASE_URL, "0.1.0")).resolves.toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// postDownloaded (#1215): POST /collections/:id/downloaded
+//   - fetch 先は `${baseUrl}/collections/<id>/downloaded`（id は URL エンコード）
+//   - HTTP 2xx で resolve
+//   - HTTP 非 2xx で throw（fail-loud）
+// ---------------------------------------------------------------------------
+
+describe("shared/api postDownloaded: 正常系", () => {
+  it("Given 200 応答 When postDownloaded Then resolve する", async () => {
+    const fetchFn = mockFetch(() => ({ ok: true, status: 200, json: async () => ({}) }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 5,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/me/playlists",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${BASE_URL}/collections/20260601-clm-aaa-collection/downloaded`,
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
+  it("Given HTTP 500 When postDownloaded Then ステータスを含めて throw する", async () => {
+    mockFetch(() => ({ ok: false, status: 500, statusText: "Internal Server Error", json: async () => ({}) }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 0,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/me/playlists",
+      }),
+    ).rejects.toThrow(/POST downloaded failed: 500/);
+  });
+});
+
+describe("shared/api postDownloaded: collectionId の URL エンコード", () => {
+  it("Given 特殊文字を含む collectionId When postDownloaded Then URL エンコードされる", async () => {
+    const fetchFn = mockFetch(() => ({ ok: true, status: 200, json: async () => ({}) }));
+
+    await postDownloaded(BASE_URL, "coll with spaces/slash", {
+      file_count: 0,
+      format: "wav",
+      suno_playlist_url: "https://suno.com/me/playlists",
+    });
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${BASE_URL}/collections/coll%20with%20spaces%2Fslash/downloaded`,
+      expect.anything(),
+    );
   });
 });

@@ -16,7 +16,7 @@ export const RESUME_STATE_KEY = "sunoResumeState";
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
- * SSOT: src/youtube_automation/scripts/collection_serve.py DOWNLOADED_ROUTE。 */
+ * Python 側は collection_serve.py の do_POST 内でインライン prefix/suffix マッチで処理する。 */
 export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
 
 /** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
@@ -249,7 +249,7 @@ export const PHASE = {
   ENTRY_FAILED: "entry-failed",
   // 全 entry の生成 DONE 後、playlist 追加完了後に Suno playlist を一括ダウンロードする phase (#1215)。非終了 phase。
   DOWNLOADING: "downloading",
-  // 全 entry の生成 DONE 後、FINISHED 直前に挟む clip 一括 playlist 追加 phase (#854)。非終了 phase。
+  // 全 entry の生成 DONE 後の clip 一括 playlist 追加 phase (#854)。ADDING_TO_PLAYLIST → DOWNLOADING → FINISHED の順。非終了 phase。
   ADDING_TO_PLAYLIST: "adding-to-playlist",
   FINISHED: "finished",
   STOPPED: "stopped",

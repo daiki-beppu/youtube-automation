@@ -166,6 +166,75 @@ export default defineContentScript({
       }
     });
 
+    /**
+     * Download all の共通フロー (#1146)。runAll と retryDownload の DRY 統合。
+     * 1. file_count:0 で postDownloaded を呼び playlist URL を記録
+     * 2. DOWNLOADING phase に遷移し DOM で Download all を起動
+     * 3. chrome.downloads 完了を待ち file_count:N で postDownloaded
+     *
+     * isAborted() が true になった場合は即 return（emit/persist は caller が行う）。
+     * failSoft=true: 外側 catch でダウンロード失敗を warning 表示して FINISHED へ進む（runAll 用）。
+     * failSoft=false: エラーは re-throw（retryDownload 用、caller が ERROR phase を emit する）。
+     */
+    async function executeDownloadFlow(
+      collectionId: string,
+      total: number,
+      isAborted: () => boolean,
+      opts: { failSoft: boolean },
+    ): Promise<void> {
+      try {
+        const format = await downloadFormatItem.getValue();
+        const baseUrl = (await serverUrlItem.getValue()).trim();
+        const sunoPlaylistUrl = `https://suno.com/me/playlists`;
+
+        // Step 1: playlist URL 記録（file_count: 0 = ダウンロード開始前の中間状態）
+        try {
+          await postDownloaded(baseUrl, collectionId, {
+            file_count: 0,
+            format,
+            suno_playlist_url: sunoPlaylistUrl,
+          });
+        } catch (err) {
+          console.warn("[suno-helper] postDownloaded (pre-download) failed:", err);
+        }
+
+        if (isAborted()) return;
+
+        // Step 2: DOWNLOADING phase に遷移し、DOM 操作で Download all を起動
+        emitProgress({ phase: PHASE.DOWNLOADING, total, message: `${format.toUpperCase()} 形式` });
+        void sendMessage("startDownload", { collectionId, format });
+        await triggerDownloadAll(format);
+
+        // Step 3: chrome.downloads の完了通知を待つ
+        const downloadResult = await waitForDownloadComplete(isAborted);
+
+        if (isAborted()) return;
+
+        // Step 4: ダウンロード完了を server に通知する
+        if (downloadResult) {
+          try {
+            await postDownloaded(baseUrl, collectionId, {
+              file_count: total,
+              format,
+              suno_playlist_url: sunoPlaylistUrl,
+              download_path: downloadResult.filename,
+            });
+          } catch (err) {
+            console.warn("[suno-helper] postDownloaded (post-download) failed:", err);
+          }
+        }
+      } catch (err) {
+        if (!opts.failSoft) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[suno-helper] Download all failed: ${message}`);
+        emitProgress({
+          phase: PHASE.DOWNLOADING,
+          total,
+          message: `ダウンロード失敗（手動でダウンロードしてください）: ${message}`,
+        });
+      }
+    }
+
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       // attempt ごとに lastSubmittedEntryIndex を -1 にリセットする。
       // injectWithVerification が silent drop を検知して同一 entry を retry するとき、
@@ -511,78 +580,12 @@ export default defineContentScript({
         );
 
         // --- DOWNLOADING phase (#1146) ---
-        // playlist 追加完了後、Suno の "Download all" 機能で ZIP ダウンロードを開始する。
-        // 1. file_count:0 で postDownloaded を呼び playlist URL を記録する
-        // 2. DOM 操作で Download all を起動し、背景で chrome.downloads 完了を待つ
-        // 3. 完了したら file_count:N で postDownloaded を呼び downloaded 状態にする
         if (collectionId && !aborted) {
-          try {
-            const format = await downloadFormatItem.getValue();
-            const baseUrl = (await serverUrlItem.getValue()).trim();
-            // Suno playlist URL を構成する（playlist 名から逆算）
-            const sunoPlaylistUrl = `https://suno.com/me/playlists`;
-
-            // Step 1: playlist URL 記録（file_count: 0 = ダウンロード開始前の中間状態）
-            try {
-              await postDownloaded(baseUrl, collectionId, {
-                file_count: 0,
-                format: format as "mp3" | "m4a" | "wav",
-                suno_playlist_url: sunoPlaylistUrl,
-              });
-            } catch (err) {
-              console.warn("[suno-helper] postDownloaded (pre-download) failed:", err);
-              // fail-soft: 記録失敗でもダウンロード自体は進める
-            }
-
-            if (aborted) {
-              persistInterruptState(total);
-              emitProgress({ phase: PHASE.STOPPED, total });
-              return;
-            }
-
-            // Step 2: DOWNLOADING phase に遷移し、DOM 操作で Download all を起動
-            emitProgress({ phase: PHASE.DOWNLOADING, total, message: `${format.toUpperCase()} 形式` });
-
-            // background に chrome.downloads 監視を依頼する
-            void sendMessage("startDownload", { collectionId, format });
-
-            // Download all の DOM 操作を実行（More menu → Download all → 形式選択 → 確認）
-            await triggerDownloadAll(format);
-
-            // Step 3: chrome.downloads の完了通知を待つ。
-            // background が downloadComplete メッセージを送ってくるのを poll する。
-            // タイムアウトは 10 分（大きな ZIP の場合を考慮）。
-            const downloadResult = await waitForDownloadComplete(() => aborted);
-
-            if (aborted) {
-              persistInterruptState(total);
-              emitProgress({ phase: PHASE.STOPPED, total });
-              return;
-            }
-
-            // Step 4: ダウンロード完了を server に通知する
-            if (downloadResult) {
-              try {
-                await postDownloaded(baseUrl, collectionId, {
-                  file_count: total,
-                  format: format as "mp3" | "m4a" | "wav",
-                  suno_playlist_url: sunoPlaylistUrl,
-                  download_path: downloadResult.filename,
-                });
-              } catch (err) {
-                console.warn("[suno-helper] postDownloaded (post-download) failed:", err);
-                // fail-soft: 通知失敗でも FINISHED へ進む
-              }
-            }
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.warn(`[suno-helper] Download all failed: ${message}`);
-            emitProgress({
-              phase: PHASE.DOWNLOADING,
-              total,
-              message: `ダウンロード失敗（手動でダウンロードしてください）: ${message}`,
-            });
-            // fail-soft: ダウンロード失敗は FINISHED を妨げない
+          await executeDownloadFlow(collectionId, total, () => aborted, { failSoft: true });
+          if (aborted) {
+            persistInterruptState(total);
+            emitProgress({ phase: PHASE.STOPPED, total });
+            return;
           }
         }
       }
@@ -699,41 +702,10 @@ export default defineContentScript({
               return;
             }
           }
-          const format = await downloadFormatItem.getValue();
-          const baseUrl = (await serverUrlItem.getValue()).trim();
-          const sunoPlaylistUrl = `https://suno.com/me/playlists`;
-          try {
-            await postDownloaded(baseUrl, collectionId, {
-              file_count: 0,
-              format: format as "mp3" | "m4a" | "wav",
-              suno_playlist_url: sunoPlaylistUrl,
-            });
-          } catch (err) {
-            console.warn("[suno-helper] retryDownload postDownloaded (pre) failed:", err);
-          }
+          await executeDownloadFlow(collectionId, total, () => aborted, { failSoft: false });
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
-          }
-          emitProgress({ phase: PHASE.DOWNLOADING, total, message: `${format.toUpperCase()} 形式` });
-          void sendMessage("startDownload", { collectionId, format });
-          await triggerDownloadAll(format);
-          const downloadResult = await waitForDownloadComplete(() => aborted);
-          if (aborted) {
-            emitProgress({ phase: PHASE.STOPPED, total: 0 });
-            return;
-          }
-          if (downloadResult) {
-            try {
-              await postDownloaded(baseUrl, collectionId, {
-                file_count: total,
-                format: format as "mp3" | "m4a" | "wav",
-                suno_playlist_url: sunoPlaylistUrl,
-                download_path: downloadResult.filename,
-              });
-            } catch (err) {
-              console.warn("[suno-helper] retryDownload postDownloaded (post) failed:", err);
-            }
           }
           if (collectionId) {
             void clearResumeStateForCollection(collectionId);

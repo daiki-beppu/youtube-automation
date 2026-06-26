@@ -9,7 +9,10 @@ export const serverUrlItem = storage.defineItem<string>(`local:${STORAGE_KEY}`, 
   fallback: DEFAULT_URL,
 });
 
+/** Suno ダウンロード形式の union 型 (#1215)。postDownloaded の payload と一致させる。 */
+export type DownloadFormat = "mp3" | "m4a" | "wav";
+
 /** Suno ダウンロード形式の型付き storage item (#1215)。未設定時は "mp3" を返す。 */
-export const downloadFormatItem = storage.defineItem<string>(`local:${DOWNLOAD_FORMAT_KEY}`, {
+export const downloadFormatItem = storage.defineItem<DownloadFormat>(`local:${DOWNLOAD_FORMAT_KEY}`, {
   fallback: DOWNLOAD_FORMAT_DEFAULT,
 });

@@ -6,6 +6,7 @@
 import {
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
+  DOWNLOADED_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
   PLAYLISTS_CAPTURE_ROUTE,
@@ -416,7 +417,7 @@ export async function postDownloaded(
   collectionId: string,
   payload: DownloadedPayload,
 ): Promise<void> {
-  const url = `${baseUrl}/collections/${encodeURIComponent(collectionId)}/downloaded`;
+  const url = `${baseUrl}${DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(collectionId))}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

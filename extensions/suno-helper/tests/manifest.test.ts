@@ -18,11 +18,11 @@ const EXPECTED_PERMISSIONS = ["storage", "activeTab", "tabs", "downloads", "debu
 const FORBIDDEN_PERMISSIONS = ["history", "bookmarks", "cookies", "webNavigation"];
 
 describe("lib/manifest: 最小権限契約", () => {
-  it("Given MANIFEST_PERMISSIONS When 中身を読む Then storage / activeTab / tabs / downloads である", () => {
+  it("Given MANIFEST_PERMISSIONS When 中身を読む Then storage / activeTab / tabs / downloads / debugger である", () => {
     expect(new Set(MANIFEST_PERMISSIONS)).toEqual(new Set(EXPECTED_PERMISSIONS));
   });
 
-  it("Given MANIFEST_PERMISSIONS When 重複の有無を見る Then 4 件ちょうどである", () => {
+  it("Given MANIFEST_PERMISSIONS When 重複の有無を見る Then 5 件ちょうどである", () => {
     expect(MANIFEST_PERMISSIONS).toHaveLength(EXPECTED_PERMISSIONS.length);
   });
 

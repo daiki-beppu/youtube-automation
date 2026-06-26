@@ -515,9 +515,10 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
 # - `find_collection_dirs(root: Path) -> list[Path]`
 #       root 直下の `*-collection` ディレクトリのみを名前昇順で返す。
 # - `build_collections_index(root: Path) -> list[dict]`
-#       各 collection を `{id, name, has_prompts, pattern_count}` に写像する。
+#       各 collection を `{id, name, status, pattern_count, downloaded_count}` に写像する。
 #       id=ディレクトリ名 / name=CollectionPaths.collection_name /
-#       has_prompts=docs json の存在 / pattern_count=entries 数 or None。
+#       status="needs_prompts"|"ready"|"downloaded" / pattern_count=entries 数 or None /
+#       downloaded_count=02-Individual-music/ 内の音声ファイル数。
 # - `resolve_collection_prompts_path(root: Path, cid: str) -> Path | None`
 #       cid が既知の collection dir 名のとき docs json パスを返す。
 #       未知 id / トラバーサル文字列は None（fail-loud せずホワイトリスト弾き）。
