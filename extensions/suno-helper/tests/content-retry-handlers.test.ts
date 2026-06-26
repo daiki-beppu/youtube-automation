@@ -12,8 +12,7 @@ interface ProgressMessage {
   message?: string;
 }
 
-// biome-ignore lint: handler types are intentionally loose for test flexibility
-type Handler = (message: { data: any }) => unknown;
+type Handler = (message: { data: Record<string, unknown> }) => unknown;
 
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
 
@@ -63,7 +62,7 @@ async function loadContentScript(overrides?: {
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn((_entries: unknown[], _playlistName?: string) => ({
+    initSnapshot: vi.fn(() => ({
       entries: [],
       itemStates: [],
       isRunning: true,
