@@ -567,6 +567,7 @@ export default defineContentScript({
                   file_count: total,
                   format: format as "mp3" | "m4a" | "wav",
                   suno_playlist_url: sunoPlaylistUrl,
+                  download_path: downloadResult.filename,
                 });
               } catch (err) {
                 console.warn("[suno-helper] postDownloaded (post-download) failed:", err);
@@ -728,6 +729,7 @@ export default defineContentScript({
                 file_count: total,
                 format: format as "mp3" | "m4a" | "wav",
                 suno_playlist_url: sunoPlaylistUrl,
+                download_path: downloadResult.filename,
               });
             } catch (err) {
               console.warn("[suno-helper] retryDownload postDownloaded (post) failed:", err);

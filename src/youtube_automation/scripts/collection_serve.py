@@ -20,7 +20,9 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -600,6 +602,69 @@ def _update_workflow_state_downloaded(
         raise
 
 
+def _extract_and_rename_music(
+    coll_dir: Path,
+    download_path: str,
+) -> None:
+    """ZIP を展開し suno-prompts.json の曲順でリネームして 02-Individual-music/ へ配置する (#1256).
+
+    fail-soft: 展開失敗しても例外を上げない（呼び出し元の POST レスポンスに影響しない）。
+    """
+    zip_path = Path(download_path)
+    if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
+        print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
+        return
+
+    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+    name_to_index: dict[str, int] = {}
+    if prompts_path.is_file():
+        try:
+            prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
+            for i, entry in enumerate(prompts, 1):
+                full_name = entry.get("name", "")
+                parts = full_name.split(" — ", 1)
+                english_name = parts[1] if len(parts) == 2 else full_name
+                name_to_index[english_name] = i
+                name_to_index[full_name] = i
+        except (json.JSONDecodeError, OSError, TypeError):
+            pass
+
+    music_dir = CollectionPaths(coll_dir).music_dir
+    music_dir.mkdir(parents=True, exist_ok=True)
+
+    tmp_dir = tempfile.mkdtemp(prefix="suno-extract-")
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(tmp_dir)
+
+        for extracted in Path(tmp_dir).iterdir():
+            if not extracted.is_file():
+                continue
+            ext = extracted.suffix.lower()
+            if ext not in _AUDIO_EXTENSIONS:
+                continue
+            stem = extracted.stem
+            if stem.endswith("_1"):
+                lookup = stem[:-2]
+                variant = "b"
+            else:
+                lookup = stem
+                variant = "a"
+            track_num = name_to_index.get(lookup)
+            if track_num is not None:
+                new_name = f"{track_num:02d}{variant}-{lookup}{ext}"
+            else:
+                new_name = extracted.name
+            shutil.move(str(extracted), str(music_dir / new_name))
+
+        placed = sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
+        print(f"[yt-collection-serve] 展開完了: {placed} files → {music_dir}")
+    except Exception as exc:
+        print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def build_version_payload() -> dict[str, str]:
     """拡張の互換確認用 version payload を返す（#1023）."""
     return {
@@ -787,6 +852,9 @@ def create_server(
                     return
                 coll_dir = collections_root / cid
                 _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
+                download_path = payload.get("download_path")
+                if download_path and file_count > 0:
+                    _extract_and_rename_music(coll_dir, download_path)
                 resp_body = json.dumps({"ok": True, "collection_id": cid}).encode("utf-8")
                 self._send_bytes(resp_body, "application/json; charset=utf-8")
                 return

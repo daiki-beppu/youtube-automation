@@ -29,11 +29,13 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
+    _extract_and_rename_music,
     build_collections_index,
     create_server,
     find_collection_dirs,
@@ -1159,3 +1161,182 @@ def test_post_downloaded_preserves_existing_workflow_state(serve_dir, tmp_path):
     # 新しいキーが追加されている
     assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/merge"
     assert ws["assets"]["music_downloaded"] is True
+
+
+# ---------------------------------------------------------------------------
+# _extract_and_rename_music (#1256): ZIP 展開 + 曲順リネーム
+# ---------------------------------------------------------------------------
+
+
+def _make_zip(path: Path, files: dict[str, bytes]) -> Path:
+    """指定ファイル名→バイト内容の dict から ZIP を作る。"""
+    with zipfile.ZipFile(path, "w") as zf:
+        for name, data in files.items():
+            zf.writestr(name, data)
+    return path
+
+
+def test_extract_and_rename_happy_path(tmp_path):
+    """ZIP 内の mp3 が suno-prompts.json の曲順でリネームされて 02-Individual-music/ に配置される。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "螺旋の降下 — Spiral Descent", "style": "s", "lyrics": ""},
+            {"name": "最初の回転 — First Revolution", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {
+            "Spiral Descent.mp3": b"audio-a",
+            "Spiral Descent_1.mp3": b"audio-b",
+            "First Revolution.mp3": b"audio-a2",
+            "First Revolution_1.mp3": b"audio-b2",
+        },
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == [
+        "01a-Spiral Descent.mp3",
+        "01b-Spiral Descent.mp3",
+        "02a-First Revolution.mp3",
+        "02b-First Revolution.mp3",
+    ]
+
+
+def test_extract_without_prompts(tmp_path):
+    """suno-prompts.json が無い場合、元ファイル名のまま配置される。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=None)
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"Track A.mp3": b"a", "Track B.mp3": b"b"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == ["Track A.mp3", "Track B.mp3"]
+
+
+def test_extract_invalid_zip_path(tmp_path):
+    """存在しない ZIP パス → fail-soft（例外なし、ファイル生成なし）。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+
+    _extract_and_rename_music(coll, str(tmp_path / "nonexistent.zip"))
+
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists()
+
+
+def test_extract_non_zip_file(tmp_path):
+    """ZIP でないファイル → fail-soft。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+    not_zip = tmp_path / "fake.zip"
+    not_zip.write_text("this is not a zip")
+
+    _extract_and_rename_music(coll, str(not_zip))
+
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists()
+
+
+def test_extract_variant_detection(tmp_path):
+    """_1 サフィックスが正しく take B として扱われる。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — My Song", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"My Song.mp3": b"take-a", "My Song_1.mp3": b"take-b"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    assert (music_dir / "01a-My Song.mp3").read_bytes() == b"take-a"
+    assert (music_dir / "01b-My Song.mp3").read_bytes() == b"take-b"
+
+
+def test_extract_unmatched_files(tmp_path):
+    """prompts にマッチしないファイルは番号 prefix なしで配置される。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — Known", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"Known.mp3": b"matched", "Unknown.mp3": b"unmatched"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == ["01a-Known.mp3", "Unknown.mp3"]
+
+
+def test_extract_skips_non_audio_files(tmp_path):
+    """ZIP 内の非音声ファイル（画像等）はスキップされる。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — Track", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"Track.mp3": b"audio", "cover.jpg": b"image"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = [f.name for f in music_dir.iterdir()]
+    assert names == ["01a-Track.mp3"]
+
+
+def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
+    """POST /downloaded に download_path を含めると ZIP 展開 + リネームが実行される。"""
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+            {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(
+        tmp_path / "test.zip",
+        {
+            "Song A.mp3": b"a1",
+            "Song A_1.mp3": b"a2",
+            "Song B.mp3": b"b1",
+            "Song B_1.mp3": b"b2",
+        },
+    )
+    base = serve_dir(planning)
+    payload = {
+        "file_count": 4,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/test",
+        "download_path": str(zip_path),
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN},
+    ) as resp:
+        assert resp.status == 200
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == ["01a-Song A.mp3", "01b-Song A.mp3", "02a-Song B.mp3", "02b-Song B.mp3"]

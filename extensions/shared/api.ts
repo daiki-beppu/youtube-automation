@@ -404,6 +404,7 @@ export interface DownloadedPayload {
   file_count: number;
   format: "mp3" | "m4a" | "wav";
   suno_playlist_url: string;
+  download_path?: string;
 }
 
 /**
