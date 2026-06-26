@@ -16,10 +16,7 @@ type Handler = (message: { data: Record<string, unknown> }) => unknown;
 
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
 
-async function loadContentScript(overrides?: {
-  addClipsToPlaylistError?: Error;
-  triggerDownloadAllError?: Error;
-}) {
+async function loadContentScript(overrides?: { addClipsToPlaylistError?: Error; triggerDownloadAllError?: Error }) {
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
 
@@ -211,9 +208,7 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
       },
     });
 
-    await vi.waitFor(() =>
-      expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })),
-    );
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
   });
 });

@@ -1693,7 +1693,13 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
     Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
     let st = 0;
-    Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => st, set: (v: number) => { st = v; } });
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
 
     const pending = scrollAndMultiSelectByIds([idA, idB], {
       isAborted: () => false,
@@ -1721,7 +1727,13 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
     Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
     let st = 0;
-    Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => st, set: (v: number) => { st = v; } });
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
 
     const titleFallbackMap = new Map([[targetId, "Dawn Cloud"]]);
     const pending = scrollAndMultiSelectByIds([targetId], {
@@ -1742,7 +1754,13 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
     Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
     let st = 0;
-    Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => st, set: (v: number) => { st = v; } });
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
 
     const pending = scrollAndMultiSelectByIds([idA, "ffffffff-1111-2222-3333-444444444444"], {
       isAborted: () => true,
@@ -1758,9 +1776,9 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
   it("Given 空の targetIds When scrollAndMultiSelectByIds Then throw する", async () => {
     getOrCreateScroller();
 
-    await expect(
-      scrollAndMultiSelectByIds([], { isAborted: () => false }),
-    ).rejects.toThrow(/playlist 対象の clip ID がありません/);
+    await expect(scrollAndMultiSelectByIds([], { isAborted: () => false })).rejects.toThrow(
+      /playlist 対象の clip ID がありません/,
+    );
   });
 
   it("Given ID が見つからない When scrollAndMultiSelectByIds Then missing ID を含むエラーで throw する", async () => {
@@ -1771,7 +1789,13 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
     Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
     let st = 0;
-    Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => st, set: (v: number) => { st = v; } });
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
 
     const pending = scrollAndMultiSelectByIds([missingId], {
       isAborted: () => false,
