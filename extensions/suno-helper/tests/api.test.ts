@@ -17,6 +17,7 @@ import {
   formatCompatibilityWarning,
   pickInitialCollectionId,
   postDownloaded,
+  resetServeTokenCache,
   resolvePromptCollectionId,
   resolveCompatibilityWarning,
 } from "../../shared/api";
@@ -34,6 +35,7 @@ function mockFetch(impl: () => Partial<Response>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetServeTokenCache();
 });
 
 describe("shared/api fetchPrompts: 配信元 URL の組み立て", () => {
@@ -549,9 +551,20 @@ describe("shared/api resolveCompatibilityWarning: popup warning state", () => {
 //   - HTTP 非 2xx で throw（fail-loud）
 // ---------------------------------------------------------------------------
 
+function mockFetchForDownloaded(postResponse: () => Partial<Response>) {
+  const fn = vi.fn(async (url: string) => {
+    if (typeof url === "string" && url.includes("/auth/token")) {
+      return { ok: true, status: 200, json: async () => ({ token: "test-token" }) } as Response;
+    }
+    return postResponse() as Response;
+  });
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
 describe("shared/api postDownloaded: 正常系", () => {
   it("Given 200 応答 When postDownloaded Then resolve する", async () => {
-    const fetchFn = mockFetch(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
     await expect(
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
@@ -561,7 +574,7 @@ describe("shared/api postDownloaded: 正常系", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(fetchFn).toHaveBeenCalledWith(
       `${BASE_URL}/collections/20260601-clm-aaa-collection/downloaded`,
       expect.objectContaining({ method: "POST" }),
@@ -569,7 +582,7 @@ describe("shared/api postDownloaded: 正常系", () => {
   });
 
   it("Given download_path 付き payload When postDownloaded Then request body に download_path が含まれる", async () => {
-    const fetchFn = mockFetch(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
       file_count: 5,
@@ -578,16 +591,38 @@ describe("shared/api postDownloaded: 正常系", () => {
       download_path: "/Users/test/Downloads/test.zip",
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-    const call = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
-    const body = JSON.parse(call[1].body as string);
+    const postCall = fetchFn.mock.calls.find(
+      (c) => typeof c[0] === "string" && c[0].includes("/downloaded"),
+    ) as unknown as [string, RequestInit];
+    const body = JSON.parse(postCall[1].body as string);
     expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
+  });
+
+  it("Given postDownloaded When ヘッダーを確認 Then X-Serve-Token が含まれる", async () => {
+    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+
+    await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+      file_count: 5,
+      format: "mp3",
+      suno_playlist_url: "https://suno.com/me/playlists",
+    });
+
+    const postCall = fetchFn.mock.calls.find(
+      (c) => typeof c[0] === "string" && c[0].includes("/downloaded"),
+    ) as unknown as [string, RequestInit];
+    const headers = postCall[1].headers as Record<string, string>;
+    expect(headers["X-Serve-Token"]).toBe("test-token");
   });
 });
 
 describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
   it("Given HTTP 500 When postDownloaded Then ステータスを含めて throw する", async () => {
-    mockFetch(() => ({ ok: false, status: 500, statusText: "Internal Server Error", json: async () => ({}) }));
+    mockFetchForDownloaded(() => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({}),
+    }));
 
     await expect(
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
@@ -601,7 +636,7 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
 
 describe("shared/api postDownloaded: collectionId の URL エンコード", () => {
   it("Given 特殊文字を含む collectionId When postDownloaded Then URL エンコードされる", async () => {
-    const fetchFn = mockFetch(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
     await postDownloaded(BASE_URL, "coll with spaces/slash", {
       file_count: 0,

@@ -401,15 +401,31 @@ export interface DownloadedPayload {
  * ダウンロード完了をサーバーに通知する (#1215)。POST /collections/:id/downloaded。
  * 非 2xx は fail-loud で throw する。
  */
+let _cachedServeToken: string | null = null;
+
+async function fetchServeToken(baseUrl: string): Promise<string> {
+  if (_cachedServeToken) return _cachedServeToken;
+  const res = await fetch(`${baseUrl}/auth/token`);
+  if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
+  const data = (await res.json()) as { token: string };
+  _cachedServeToken = data.token;
+  return _cachedServeToken;
+}
+
+export function resetServeTokenCache(): void {
+  _cachedServeToken = null;
+}
+
 export async function postDownloaded(
   baseUrl: string,
   collectionId: string,
   payload: DownloadedPayload,
 ): Promise<void> {
+  const token = await fetchServeToken(baseUrl);
   const url = `${baseUrl}${DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(collectionId))}`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Serve-Token": token },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
