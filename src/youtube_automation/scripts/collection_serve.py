@@ -853,7 +853,7 @@ def create_server(
                 coll_dir = collections_root / cid
                 _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
                 download_path = payload.get("download_path")
-                if download_path and file_count > 0:
+                if download_path:
                     _extract_and_rename_music(coll_dir, download_path)
                 resp_body = json.dumps({"ok": True, "collection_id": cid}).encode("utf-8")
                 self._send_bytes(resp_body, "application/json; charset=utf-8")
