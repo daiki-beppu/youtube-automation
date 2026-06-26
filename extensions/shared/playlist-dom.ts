@@ -721,7 +721,12 @@ export async function scrollAndMultiSelectByIds(
         const title = collectClipRowTitle(row);
         if (title) {
           for (const [id, t] of titleFallbackMap) {
-            if (t === title && uniqueTargetIds.has(id) && !foundIds.has(id) && !titleMatchedIds.has(id)) {
+            if (
+              t === title &&
+              uniqueTargetIds.has(id) &&
+              !foundIds.has(id) &&
+              !titleMatchedIds.has(id)
+            ) {
               titleMatchedIds.add(id);
               matched = true;
               break;

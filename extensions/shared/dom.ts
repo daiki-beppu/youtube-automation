@@ -1009,8 +1009,16 @@ export function simulateClick(el: HTMLElement): void {
   const rect = el.getBoundingClientRect();
   const x = rect.x + rect.width / 2;
   const y = rect.y + rect.height / 2;
-  const shared = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 };
-  el.dispatchEvent(new PointerEvent("pointerdown", { ...shared, pointerId: 1 }));
+  const shared = {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+  };
+  el.dispatchEvent(
+    new PointerEvent("pointerdown", { ...shared, pointerId: 1 }),
+  );
   el.dispatchEvent(new MouseEvent("mousedown", shared));
   el.dispatchEvent(new PointerEvent("pointerup", { ...shared, pointerId: 1 }));
   el.dispatchEvent(new MouseEvent("mouseup", shared));
