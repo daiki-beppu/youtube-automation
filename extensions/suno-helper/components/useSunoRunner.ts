@@ -7,7 +7,6 @@ import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
-  excludeMappedCollections,
   extractPlaylistName,
   fetchCollectionPrompts,
   fetchCollections,
@@ -45,9 +44,6 @@ interface RunnerState {
   url: string;
   setUrl: (url: string) => void;
   collections: CollectionSummary[];
-  // fetchCollections は collection を返したが全て mapped 済みで filter 後 0 件になった状態 (#893 要件 B)。
-  // App が「未マッピング collection はありません」の placeholder を出すための表示フラグ。
-  allMapped: boolean;
   selectedCollectionId: string;
   selectCollection: (id: string) => void;
   entries: PromptEntry[];
@@ -99,8 +95,6 @@ async function fetchCollectionEntries(baseUrl: string, collectionId: string | nu
 export function useSunoRunner(): RunnerState {
   const [url, setUrlState] = useState("");
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  // fetchCollections が非空だが全件 mapped で filter 後 0 件になったか (#893 要件 B)。placeholder 表示用。
-  const [allMapped, setAllMapped] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
@@ -275,7 +269,6 @@ export function useSunoRunner(): RunnerState {
 
   const applySingleFileMode = useCallback(() => {
     setCollections([]);
-    setAllMapped(false);
     setSelectedCollectionId("");
   }, []);
 
@@ -283,12 +276,8 @@ export function useSunoRunner(): RunnerState {
     async (baseUrl: string, currentSelectedId: string): Promise<PromptSource> => {
       try {
         const fetched = await fetchCollections(baseUrl);
-        // 既にマッピング済み collection をドロップダウンから外す (#893 追加要件 B)。prefix 未指定の
-        // 旧サーバーは mapped を返さず全件残る（後方互換）。fetched 非空 + filter 後空 = 全件マッピング済み。
-        const list = excludeMappedCollections(fetched);
-        const nextSelectedId = resolvePromptCollectionId(list, currentSelectedId);
-        setCollections(list);
-        setAllMapped(fetched.length > 0 && list.length === 0);
+        const nextSelectedId = resolvePromptCollectionId(fetched, currentSelectedId);
+        setCollections(fetched);
         setSelectedCollectionId(nextSelectedId ?? "");
         return { kind: "collection", collectionId: nextSelectedId };
       } catch (err) {
@@ -550,7 +539,6 @@ export function useSunoRunner(): RunnerState {
     url,
     setUrl: updateUrl,
     collections,
-    allMapped,
     selectedCollectionId,
     selectCollection,
     entries,

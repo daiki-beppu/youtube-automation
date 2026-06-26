@@ -11,7 +11,6 @@ export function App() {
     url,
     setUrl,
     collections,
-    allMapped,
     selectedCollectionId,
     selectCollection,
     entries,
@@ -73,9 +72,6 @@ export function App() {
           </select>
         </label>
       )}
-
-      {/* 全 collection が既にマッピング済みで filter 後 0 件のとき (#893 要件 B)。 */}
-      {allMapped && <p className="text-xs text-gray-600">未マッピング collection はありません。</p>}
 
       {playlistName && (
         <p className="text-xs text-gray-600">

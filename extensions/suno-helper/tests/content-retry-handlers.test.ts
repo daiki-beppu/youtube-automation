@@ -245,6 +245,37 @@ describe('content onMessage("retryPlaylist"): throw→ERROR', () => {
 
 // retryDownload ----------------------------------------------------------------
 
+describe('content onMessage("retryDownload"): 正常完了', () => {
+  beforeEach(() => {
+    clearResumeStateMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given collectionId 付き When retryDownload Then FINISHED phase を emit し resume state を消去する", async () => {
+    const { handlers, progressMessages } = await loadContentScript();
+
+    const clipIds = ["clip-1", "clip-2"];
+    handlers.get("retryDownload")!({
+      data: { collectionId: "coll-1", submittedClipIds: clipIds },
+    });
+
+    // async フロー（scrollAndMultiSelectByIds → executeDownloadFlow → waitForDownloadComplete）
+    // が downloadCompleteResolver を設定するのを待つ。
+    await new Promise((r) => setTimeout(r, 0));
+
+    // background からの downloadComplete 通知を simulate して waitForDownloadComplete を解決する
+    handlers.get("downloadComplete")!({
+      data: { downloadId: 1, filename: "test-playlist.zip" },
+    });
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
+  });
+});
+
 describe('content onMessage("retryDownload"): running ガード', () => {
   beforeEach(() => {
     clearResumeStateMock.mockReset();
