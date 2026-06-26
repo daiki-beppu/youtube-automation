@@ -18,7 +18,7 @@ interface DownloadDelta {
 }
 
 async function loadBackground(opts?: {
-  searchResults?: Array<{ filename: string; startTime?: string }>;
+  searchResults?: Array<{ filename: string; startTime?: string; url?: string }>;
   debuggerAttachError?: Error;
   debuggerSendCommandError?: Error;
 }) {
@@ -59,13 +59,25 @@ async function loadBackground(opts?: {
         removedDownloadListeners.push(fn);
       }),
     },
-    search: vi.fn((query: { id: number }, cb: (results: Array<{ filename: string; startTime: string }>) => void) => {
-      const defaults = [{ filename: `suno-playlist-${query.id}.zip`, startTime: new Date().toISOString() }];
-      const results = opts?.searchResults
-        ? opts.searchResults.map((r) => ({ startTime: new Date().toISOString(), ...r }))
-        : defaults;
-      cb(results);
-    }),
+    search: vi.fn(
+      (query: { id: number }, cb: (results: Array<{ filename: string; startTime: string; url: string }>) => void) => {
+        const defaults = [
+          {
+            filename: `suno-playlist-${query.id}.zip`,
+            startTime: new Date().toISOString(),
+            url: "https://suno.com/api/download/zip",
+          },
+        ];
+        const results = opts?.searchResults
+          ? opts.searchResults.map((r) => ({
+              startTime: new Date().toISOString(),
+              url: "https://suno.com/api/download/zip",
+              ...r,
+            }))
+          : defaults;
+        cb(results);
+      },
+    ),
   };
 
   // chrome.debugger stub

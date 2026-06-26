@@ -48,9 +48,6 @@ const MODAL_APPEAR_POLL_MS = 200;
 const MODAL_APPEAR_TIMEOUT_MS = 10000;
 const SETTLE_AFTER_CLICK_MS = 500;
 
-/**
- * 指定セレクタの要素が DOM に出現するまで poll する。timeout で throw (fail-loud)。
- */
 async function waitForElement<T extends HTMLElement>(
   selector: string,
   timeoutMs: number,
@@ -70,10 +67,6 @@ async function waitForElement<T extends HTMLElement>(
   throw new Error(`waitForElement timed out: selector="${selector}" (${timeoutMs}ms)`);
 }
 
-/**
- * DOM 内のすべての要素を走査し、textContent が正規表現にマッチするものを返す。
- * menu item / button など testid を持たない要素の識別に使う。
- */
 function findElementByTextContent<T extends HTMLElement>(
   parent: HTMLElement | Document,
   tagOrSelector: string,

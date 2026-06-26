@@ -699,7 +699,7 @@ export async function scrollAndMultiSelectByIds(
   const foundIds = new Set<string>();
   const titleMatchedIds = new Set<string>();
 
-  function selectMatchingRows(): void {
+  async function selectMatchingRows(): Promise<void> {
     const buttons = scroller!.querySelectorAll<HTMLElement>(
       `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
     );
@@ -740,7 +740,26 @@ export async function scrollAndMultiSelectByIds(
       const selectBtn = row.querySelector<HTMLButtonElement>(
         SELECT_CLIP_BUTTON_ANY_SELECTOR,
       );
-      if (selectBtn) selectBtn.click();
+      if (selectBtn) {
+        selectBtn.click();
+        // Verify selection actually took effect (#1217 AI-NEW-1217-001).
+        // Suno's React state update may not be synchronous; brief poll.
+        let verified = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await sleep(50);
+          if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) {
+            verified = true;
+            break;
+          }
+          // Retry click if first attempt didn't take
+          if (attempt < 2) selectBtn.click();
+        }
+        if (!verified) {
+          console.warn(
+            `[suno-helper] clip row selection verification failed for row, continuing`,
+          );
+        }
+      }
     }
   }
 
@@ -762,7 +781,7 @@ export async function scrollAndMultiSelectByIds(
       scroller.dispatchEvent(new Event("scroll"));
       await sleep(renderWaitMs);
 
-      selectMatchingRows();
+      await selectMatchingRows();
 
       if (allFound()) break;
     }

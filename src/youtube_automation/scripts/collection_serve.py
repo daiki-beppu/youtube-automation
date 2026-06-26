@@ -22,6 +22,8 @@ import os
 import re
 import shutil
 import tempfile
+import urllib.parse
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -611,16 +613,16 @@ def _update_workflow_state_downloaded(
 def _extract_and_rename_music(
     coll_dir: Path,
     download_path: str,
-) -> bool:
+) -> int:
     """ZIP を展開し suno-prompts.json の曲順でリネームして 02-Individual-music/ へ配置する (#1256).
 
     fail-soft: 展開失敗しても例外を上げない（呼び出し元の POST レスポンスに影響しない）。
-    Returns True on success, False on failure.
+    Returns the number of placed audio files (0 on any failure).
     """
     zip_path = Path(download_path)
     if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
         print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
-        return False
+        return 0
 
     prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
     name_to_index: dict[str, int] = {}
@@ -646,7 +648,7 @@ def _extract_and_rename_music(
             infos = zf.infolist()
             if len(infos) > _ZIP_MAX_ENTRIES:
                 print(f"[yt-collection-serve] ZIP entry 数が上限超過 ({len(infos)} > {_ZIP_MAX_ENTRIES}): skip")
-                return False
+                return 0
             total_size = 0
             for info in infos:
                 if info.file_size > _ZIP_MAX_SINGLE_FILE:
@@ -654,11 +656,11 @@ def _extract_and_rename_music(
                         f"[yt-collection-serve] ZIP 内ファイルがサイズ上限超過"
                         f" ({info.filename}: {info.file_size} bytes): skip"
                     )
-                    return False
+                    return 0
                 total_size += info.file_size
             if total_size > _ZIP_MAX_TOTAL_SIZE:
                 print(f"[yt-collection-serve] ZIP 総展開サイズが上限超過 ({total_size} bytes): skip")
-                return False
+                return 0
             # Only extract audio files (#1217).
             audio_infos = [
                 info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
@@ -688,10 +690,10 @@ def _extract_and_rename_music(
 
         placed = sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
         print(f"[yt-collection-serve] 展開完了: {placed} files → {music_dir}")
-        return True
+        return placed
     except Exception as exc:
         print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
-        return False
+        return 0
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -729,6 +731,7 @@ def create_server(
     dir_mode = collections_root is not None
     distrokid_enabled = distrokid is not None and distrokid.enabled
     capture_root, capture_prefix = playlist_capture if playlist_capture is not None else (None, None)
+    serve_token = str(uuid.uuid4())
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
@@ -777,7 +780,7 @@ def create_server(
             self.send_response(204)
             self._send_cors(origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Serve-Token")
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
@@ -855,7 +858,14 @@ def create_server(
                 if origin is None:
                     self.send_error(403, "Forbidden")
                     return
+                # Token auth: require X-Serve-Token header (#1217).
+                req_token = self.headers.get("X-Serve-Token")
+                if req_token != serve_token:
+                    self.send_error(403, "Forbidden")
+                    return
                 cid = self.path[len(_downloaded_prefix) : -len(_downloaded_suffix)]
+                # URL-decode cid to handle percent-encoded collection ids (#1217).
+                cid = urllib.parse.unquote(cid)
                 # パストラバーサル防御: ".." を含む id を reject する（#1216）。
                 if ".." in cid:
                     self.send_error(404, "Not Found")
@@ -865,7 +875,11 @@ def create_server(
                 if cid not in known_ids:
                     self.send_error(404, "Not Found")
                     return
+                # Body size guard: reject oversized payloads (#1217).
                 length = int(self.headers.get("Content-Length", 0) or 0)
+                if length > 10240:
+                    self.send_error(413, "Payload Too Large")
+                    return
                 raw = self.rfile.read(length) if length else b""
                 try:
                     payload = json.loads(raw.decode("utf-8"))
@@ -889,8 +903,16 @@ def create_server(
                 if fmt not in _VALID_DOWNLOAD_FORMATS:
                     self.send_error(400, "Bad Request")
                     return
-                coll_dir = collections_root / cid
+                # Validate download_path type if present (#1217).
                 download_path = payload.get("download_path")
+                if download_path is not None and not isinstance(download_path, str):
+                    self.send_error(400, "Bad Request")
+                    return
+                # Validate suno_playlist_url type (#1217).
+                if not isinstance(suno_playlist_url, str):
+                    self.send_error(400, "Bad Request")
+                    return
+                coll_dir = collections_root / cid
                 if download_path:
                     # Validate download_path: must be an absolute path (#1217).
                     dp = Path(download_path)
@@ -898,13 +920,15 @@ def create_server(
                         self.send_error(400, "Bad Request")
                         return
                     resolved_dp = dp.resolve()
-                    extracted_ok = _extract_and_rename_music(coll_dir, str(resolved_dp))
-                    if not extracted_ok:
-                        # Extraction failed: do not mark as downloaded (#1217).
-                        file_count = 0
+                    placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp))
+                    if placed_count == 0:
+                        # Extraction failed: return 500 and do not mark as downloaded (#1217).
+                        self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
+                        return
+                    file_count = placed_count
                 # Update workflow state AFTER extraction (#1217).
                 _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
-                resp_body = json.dumps({"ok": True, "collection_id": cid}).encode("utf-8")
+                resp_body = json.dumps({"ok": True, "collection_id": cid, "placed_count": file_count}).encode("utf-8")
                 self._send_bytes(resp_body, "application/json; charset=utf-8")
                 return
 
@@ -920,6 +944,10 @@ def create_server(
         def do_GET(self) -> None:  # noqa: N802
             if self.path == VERSION_ROUTE:
                 body = json.dumps(build_version_payload()).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+            if self.path == "/auth/token":
+                body = json.dumps({"token": serve_token}).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if dir_mode:
@@ -1205,6 +1233,9 @@ def main() -> None:
             f"  playlist capture enabled: POST {SUNO_PLAYLISTS_ROUTE} "
             f"-> {playlists_output_path(capture_root)} (prefix='{capture_prefix}')"
         )
+    # Print the serve token for /downloaded endpoint auth (#1217).
+    # The token is generated inside create_server; retrieve it via the /auth/token endpoint.
+    print(f"  serve token: GET http://localhost:{port}/auth/token")
     print("Press Ctrl-C to stop.")
     try:
         server.serve_forever()

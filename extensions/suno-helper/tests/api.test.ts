@@ -567,6 +567,22 @@ describe("shared/api postDownloaded: 正常系", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("Given download_path 付き payload When postDownloaded Then request body に download_path が含まれる", async () => {
+    const fetchFn = mockFetch(() => ({ ok: true, status: 200, json: async () => ({}) }));
+
+    await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+      file_count: 5,
+      format: "mp3",
+      suno_playlist_url: "https://suno.com/me/playlists",
+      download_path: "/Users/test/Downloads/test.zip",
+    });
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const call = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
+  });
 });
 
 describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {

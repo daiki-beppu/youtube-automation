@@ -927,6 +927,12 @@ def _post(url: str, body, *, headers=None):
     return urllib.request.urlopen(req)
 
 
+def _fetch_token(base: str) -> str:
+    """GET /auth/token からサーバートークンを取得する。"""
+    with urllib.request.urlopen(f"{base}/auth/token") as resp:
+        return json.loads(resp.read().decode("utf-8"))["token"]
+
+
 def test_post_downloaded_updates_workflow_state(serve_dir, tmp_path):
     """Given dir mode サーバー + 既知 collection
     When POST /collections/<id>/downloaded を送る
@@ -939,12 +945,13 @@ def test_post_downloaded_updates_workflow_state(serve_dir, tmp_path):
         entries=[{"name": "A", "style": "s", "lyrics": ""}],
     )
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": 5, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
         payload,
-        headers={"Origin": _EXTENSION_ORIGIN},
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
         result = json.loads(resp.read().decode("utf-8"))
@@ -967,13 +974,14 @@ def test_post_downloaded_unknown_collection_returns_404(serve_dir, tmp_path):
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(
             f"{base}{_COLLECTIONS_ROUTE}/nope-collection/downloaded",
             payload,
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
         )
 
     assert exc_info.value.code == 404
@@ -988,13 +996,14 @@ def test_post_downloaded_traversal_returns_404(serve_dir, tmp_path, malicious_id
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(
             f"{base}{_COLLECTIONS_ROUTE}/{malicious_id}/downloaded",
             payload,
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
         )
 
     assert exc_info.value.code == 404
@@ -1027,12 +1036,13 @@ def test_post_downloaded_invalid_json_returns_400(serve_dir, tmp_path):
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(
             f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
             b"{not json",
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
         )
 
     assert exc_info.value.code == 400
@@ -1046,13 +1056,14 @@ def test_post_downloaded_missing_fields_returns_400(serve_dir, tmp_path):
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": 1}  # format と suno_playlist_url が欠落
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(
             f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
             payload,
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
         )
 
     assert exc_info.value.code == 400
@@ -1066,12 +1077,13 @@ def test_post_downloaded_zero_file_count_does_not_set_music_downloaded(serve_dir
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
         payload,
-        headers={"Origin": _EXTENSION_ORIGIN},
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
 
@@ -1090,11 +1102,13 @@ def test_post_downloaded_idempotent_two_calls(serve_dir, tmp_path):
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
+    auth_headers = {"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token}
 
     # 1st call: file_count=0 → playlist URL のみ記録
     payload_1 = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
-    with _post(url, payload_1, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
+    with _post(url, payload_1, headers=auth_headers) as resp:
         assert resp.status == 200
 
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
@@ -1104,7 +1118,7 @@ def test_post_downloaded_idempotent_two_calls(serve_dir, tmp_path):
 
     # 2nd call: file_count=8 → music_downloaded=true、playlist URL は維持
     payload_2 = {"file_count": 8, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
-    with _post(url, payload_2, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
+    with _post(url, payload_2, headers=auth_headers) as resp:
         assert resp.status == 200
 
     ws = json.loads(ws_path.read_text(encoding="utf-8"))
@@ -1120,11 +1134,12 @@ def test_post_downloaded_idempotent_repeated_calls_do_not_break(serve_dir, tmp_p
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
     payload = {"file_count": 5, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/xyz"}
 
     for _ in range(3):
-        with _post(url, payload, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
+        with _post(url, payload, headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token}) as resp:
             assert resp.status == 200
 
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
@@ -1146,12 +1161,13 @@ def test_post_downloaded_preserves_existing_workflow_state(serve_dir, tmp_path):
         encoding="utf-8",
     )
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": 3, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/merge"}
 
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
         payload,
-        headers={"Origin": _EXTENSION_ORIGIN},
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
 
@@ -1324,6 +1340,7 @@ def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
         },
     )
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {
         "file_count": 4,
         "format": "mp3",
@@ -1334,7 +1351,7 @@ def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
         payload,
-        headers={"Origin": _EXTENSION_ORIGIN},
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
 
@@ -1357,13 +1374,14 @@ def test_post_downloaded_invalid_file_count_returns_400(serve_dir, tmp_path, bad
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": bad_file_count, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(
             f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
             payload,
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
         )
 
     assert exc_info.value.code == 400
@@ -1378,13 +1396,14 @@ def test_post_downloaded_invalid_format_returns_400(serve_dir, tmp_path, bad_for
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {"file_count": 1, "format": bad_format, "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(
             f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
             payload,
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
         )
 
     assert exc_info.value.code == 400
@@ -1398,6 +1417,7 @@ def test_post_downloaded_relative_download_path_returns_400(serve_dir, tmp_path)
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     payload = {
         "file_count": 4,
         "format": "mp3",
@@ -1409,7 +1429,7 @@ def test_post_downloaded_relative_download_path_returns_400(serve_dir, tmp_path)
         _post(
             f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
             payload,
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
         )
 
     assert exc_info.value.code == 400
@@ -1428,7 +1448,7 @@ def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
 
     result = _extract_and_rename_music(coll, str(zip_path))
 
-    assert result is False
+    assert result == 0
     music_dir = coll / "02-Individual-music"
     assert not music_dir.exists() or len(list(music_dir.iterdir())) == 0
 
@@ -1443,17 +1463,18 @@ def test_extract_too_many_entries_rejected(tmp_path):
 
     result = _extract_and_rename_music(coll, str(zip_path))
 
-    assert result is False
+    assert result == 0
 
 
 def test_post_downloaded_extraction_failure_does_not_set_music_downloaded(serve_dir, tmp_path):
     """Given download_path が存在しない ZIP を指す
     When POST /collections/<id>/downloaded を送る
-    Then extraction 失敗時は music_downloaded を設定しない (#1217)。
+    Then extraction 失敗時は 500 を返し workflow-state.json を更新しない (#1217)。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
+    token = _fetch_token(base)
     # 存在しない ZIP パスを指定
     nonexistent = str(tmp_path / "does_not_exist.zip")
     payload = {
@@ -1463,15 +1484,193 @@ def test_post_downloaded_extraction_failure_does_not_set_music_downloaded(serve_
         "download_path": nonexistent,
     }
 
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    # workflow-state.json should not exist since the request failed before updating
+    assert not ws_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Token auth (#1217): /auth/token + X-Serve-Token validation
+# ---------------------------------------------------------------------------
+
+
+def test_get_auth_token_returns_uuid(serve_dir, tmp_path):
+    """Given dir mode サーバー
+    When GET /auth/token を送る
+    Then UUID 形式の token を含む JSON を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+
+    with urllib.request.urlopen(f"{base}/auth/token") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert "token" in body
+    # UUID v4 format: 8-4-4-4-12 hex digits
+    assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", body["token"])
+
+
+def test_post_downloaded_missing_token_returns_403(serve_dir, tmp_path):
+    """Given Origin はあるが X-Serve-Token ヘッダが無い
+    When POST /collections/<id>/downloaded を送る
+    Then 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code == 403
+
+
+def test_post_downloaded_wrong_token_returns_403(serve_dir, tmp_path):
+    """Given 不正な X-Serve-Token ヘッダ
+    When POST /collections/<id>/downloaded を送る
+    Then 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": "wrong-token"},
+        )
+
+    assert exc_info.value.code == 403
+
+
+def test_post_downloaded_valid_token_succeeds(serve_dir, tmp_path):
+    """Given 正しい X-Serve-Token を GET /auth/token から取得
+    When POST /collections/<id>/downloaded を送る
+    Then 200 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    token = _fetch_token(base)
+    payload = {"file_count": 3, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
         payload,
-        headers={"Origin": _EXTENSION_ORIGIN},
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
 
-    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
-    ws = json.loads(ws_path.read_text(encoding="utf-8"))
-    # playlist URL は記録されるが music_downloaded は設定されない
-    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
-    assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
+
+# ---------------------------------------------------------------------------
+# Body size / type validation (#1217)
+# ---------------------------------------------------------------------------
+
+
+def test_post_downloaded_oversized_body_returns_413(serve_dir, tmp_path):
+    """Given Content-Length > 10KB
+    When POST /collections/<id>/downloaded を送る
+    Then 413 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    token = _fetch_token(base)
+    # Create a body larger than 10KB
+    oversized = b"x" * 10241
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            oversized,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 413
+
+
+# ---------------------------------------------------------------------------
+# ZIP extraction edge cases (#1217)
+# ---------------------------------------------------------------------------
+
+
+def test_post_downloaded_empty_zip_returns_500(serve_dir, tmp_path):
+    """Given download_path が音声ファイルを含まない ZIP を指す
+    When POST /collections/<id>/downloaded を送る
+    Then placed_count == 0 で 500 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    # ZIP with only non-audio files
+    zip_path = _make_zip(tmp_path / "no-audio.zip", {"readme.txt": b"hello", "notes.doc": b"world"})
+    base = serve_dir(planning)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+
+
+def test_post_downloaded_success_includes_placed_count(serve_dir, tmp_path):
+    """Given 有効な ZIP を download_path に指定
+    When POST /collections/<id>/downloaded を送る
+    Then レスポンスに placed_count が含まれる。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "valid.zip",
+        {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"},
+    )
+    base = serve_dir(planning)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
+
+    assert result["ok"] is True
+    assert result["placed_count"] == 2

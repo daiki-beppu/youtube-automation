@@ -185,6 +185,9 @@ export default defineContentScript({
       try {
         const format = await downloadFormatItem.getValue();
         const baseUrl = (await serverUrlItem.getValue()).trim();
+        // Suno の playlist 一覧ページ URL を記録する。個別 playlist の URL はダウンロード時点では
+        // 取得できないため、汎用 URL を使う（ADR-0012 参照）。playlist 特定は suno-playlists.json
+        // の capture フローが担う。
         const sunoPlaylistUrl = `https://suno.com/me/playlists`;
 
         // Step 1: playlist URL 記録（file_count: 0 = ダウンロード開始前の中間状態）
@@ -195,6 +198,8 @@ export default defineContentScript({
             suno_playlist_url: sunoPlaylistUrl,
           });
         } catch (err) {
+          // failSoft=false (retryDownload) では pre-download 通知の失敗もエラー伝搬する (#1217 QA-1217-02).
+          if (!opts.failSoft) throw err;
           console.warn("[suno-helper] postDownloaded (pre-download) failed:", err);
         }
 
@@ -204,10 +209,12 @@ export default defineContentScript({
         emitProgress({ phase: PHASE.DOWNLOADING, total, message: `${format.toUpperCase()} 形式` });
         // background の download 監視 listener 登録を待ってから DOM click する (#1217)。
         await sendMessage("startDownload", { collectionId, format });
+        // Register download completion listener BEFORE triggering DOM click to avoid race (#1217 ARCH-001).
+        const downloadPromise = waitForDownloadComplete(isAborted);
         await triggerDownloadAll(format);
 
-        // Step 3: chrome.downloads の完了通知を待つ
-        const downloadResult = await waitForDownloadComplete(isAborted);
+        // Step 3: wait for the already-registered promise
+        const downloadResult = await downloadPromise;
 
         if (isAborted()) return;
 
@@ -597,6 +604,9 @@ export default defineContentScript({
         );
 
         // --- DOWNLOADING phase (#1146) ---
+        // failSoft: true — 通常 run ではダウンロード失敗を warning 扱いで FINISHED へ進む。
+        // 通常 run の主目的は playlist 作成であり、ダウンロードはベストエフォート。
+        // ダウンロード失敗時はユーザーが手動 DL または retryDownload で再試行する。
         if (collectionId && !aborted) {
           await executeDownloadFlow(collectionId, total, () => aborted, { failSoft: true });
           if (aborted) {
@@ -689,6 +699,8 @@ export default defineContentScript({
           if (collectionId) {
             void clearResumeStateForCollection(collectionId);
           }
+          // retryPlaylist は playlist 再試行専用。ダウンロードは retryDownload が担う。
+          // popup に分離した retry ボタン（playlist / download）が各責務を呼び分ける (#1217)。
           emitProgress({ phase: PHASE.FINISHED, total: 0 });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

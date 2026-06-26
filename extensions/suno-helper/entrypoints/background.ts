@@ -116,6 +116,11 @@ export default defineBackground(() => {
         }
         const item = results[0];
         const filename = item.filename ?? "";
+        // Suno CDN domain check: reject downloads not originating from Suno (#1217 SEC-002).
+        const downloadUrl = item.url ?? "";
+        if (!downloadUrl.includes("suno.com") && !downloadUrl.includes("sunocdn.")) {
+          return;
+        }
         // Suno の ZIP ダウンロードは .zip 拡張子を持つ（playlist 名がファイル名に含まれる）
         if (!filename.toLowerCase().endsWith(".zip")) {
           return;
