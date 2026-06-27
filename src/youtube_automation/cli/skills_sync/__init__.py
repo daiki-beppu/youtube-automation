@@ -146,6 +146,13 @@ def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = N
     return sorted(p.name for p in root.iterdir())
 
 
+def bundled_skill_names() -> list[str]:
+    """`yt-skills sync --asset skills` が配布する skill 名一覧を返す。"""
+    spec = _ASSET_SPECS["skills"]
+    root = _asset_root("skills")
+    return _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     if args.asset == "all":
         # 全 asset を巡回。dir asset → file asset の順で人間が読みやすい並び。
@@ -185,7 +192,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     return args.func(args)
 
 
-__all__ = ["build_parser", "main"]
+__all__ = ["build_parser", "bundled_skill_names", "main"]
 
 
 if __name__ == "__main__":

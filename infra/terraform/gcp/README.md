@@ -8,7 +8,7 @@
 
 | シナリオ | 推奨 |
 | --- | --- |
-| **初回 1 チャンネルだけ立ち上げ** | bootstrap.sh (or `/onboard` skill) — 手数最少 |
+| **初回 1 チャンネルだけ立ち上げ** | bootstrap.sh (or `/setup` skill) — 手数最少 |
 | **2 つ目以降のチャンネル開設** | **terraform** — workspace で並列管理可能 |
 | **別 PC への引っ越し / 再構築** | **terraform** — tfstate + tfvars を持ち運べば replay 可能 |
 | **GCP 側のドリフト検出** | **terraform** — `terraform plan` で差分が出る |
@@ -16,7 +16,7 @@
 
 初回 1 チャンネル限定なら bootstrap.sh の方が tfvars 編集の手間が無い分シンプル。複数管理・継続運用を見据えるなら terraform に切り替える価値がある。
 
-`/onboard` skill (AI 主導の wizard) は内部で bootstrap.sh を呼ぶ前提だが、AI に tfvars 編集 + `gcp-terraform-apply.sh` を Bash で叩かせれば terraform ルートも自動化可能。
+`/setup` skill (AI 主導の wizard) は内部で bootstrap.sh を呼ぶ前提だが、AI に tfvars 編集 + `gcp-terraform-apply.sh` を Bash で叩かせれば terraform ルートも自動化可能。
 
 ## 管理するリソース
 
