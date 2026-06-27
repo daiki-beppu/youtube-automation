@@ -20,21 +20,31 @@ async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
   triggerDownloadAllError?: Error;
   postDownloadedError?: Error;
+  postDownloadedRejectOnCall?: number;
 }) {
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
 
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
+  const sentMessages: Array<{ type: string; payload: unknown }> = [];
+  let postDownloadedCallCount = 0;
 
   vi.doMock("../lib/messaging", () => ({
     onMessage: vi.fn((type: string, handler: Handler) => {
       handlers.set(type, handler);
       return vi.fn();
     }),
-    sendMessage: vi.fn((type: string, payload?: ProgressMessage) => {
+    sendMessage: vi.fn((type: string, payload?: unknown) => {
+      sentMessages.push({ type, payload });
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
+      }
+      if (type === "postDownloaded" && overrides?.postDownloadedError) {
+        postDownloadedCallCount += 1;
+        if ((overrides.postDownloadedRejectOnCall ?? 1) === postDownloadedCallCount) {
+          return Promise.reject(overrides.postDownloadedError);
+        }
       }
       return Promise.resolve();
     }),
@@ -119,7 +129,7 @@ async function loadContentScript(overrides?: {
   }));
 
   vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => []),
+    scrapePlaylistsFromMe: vi.fn(() => [{ title: "test-playlist", url: "https://suno.com/playlist/test" }]),
   }));
 
   vi.doMock("../lib/auto-capture", () => ({
@@ -151,16 +161,12 @@ async function loadContentScript(overrides?: {
       : vi.fn(() => Promise.resolve()),
   }));
 
-  vi.doMock("../../shared/api", () => ({
-    postDownloaded: overrides?.postDownloadedError
-      ? vi.fn(() => Promise.reject(overrides.postDownloadedError))
-      : vi.fn(() => Promise.resolve()),
-  }));
+  vi.doMock("../../shared/api", () => ({}));
 
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
 
-  return { handlers, progressMessages };
+  return { handlers, progressMessages, sentMessages };
 }
 
 // retryPlaylist ----------------------------------------------------------------
@@ -261,24 +267,34 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
   });
 
   it("Given collectionId 付き When retryDownload Then FINISHED phase を emit し resume state を消去する", async () => {
-    const { handlers, progressMessages } = await loadContentScript();
+    const { handlers, progressMessages, sentMessages } = await loadContentScript();
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", submittedClipIds: clipIds },
+      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: clipIds },
     });
 
-    // async フロー（scrollAndMultiSelectByIds → executeDownloadFlow → waitForDownloadComplete）
+    // async フロー（scrollAndMultiSelectByIds → performDownload → waitForDownloadComplete）
     // が downloadCompleteResolver を設定するのを待つ。
     await new Promise((r) => setTimeout(r, 0));
 
     // background からの downloadComplete 通知を simulate して waitForDownloadComplete を解決する
     handlers.get("downloadComplete")!({
-      data: { downloadId: 1, filename: "test-playlist.zip" },
+      data: { filename: "/Users/test/Downloads/test-playlist.zip" },
     });
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
+    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    expect(downloadedPosts).toHaveLength(2);
+    expect(downloadedPosts[1].payload).toMatchObject({
+      body: {
+        file_count: clipIds.length,
+        expected_file_count: clipIds.length,
+        suno_playlist_url: "https://suno.com/playlist/test",
+        download_path: "/Users/test/Downloads/test-playlist.zip",
+      },
+    });
   });
 });
 
@@ -300,12 +316,12 @@ describe('content onMessage("retryDownload"): running ガード', () => {
     // 最初の retryDownload を投入
     const retryHandler = handlers.get("retryDownload")!;
     retryHandler({
-      data: { collectionId: "coll-1", submittedClipIds: [] },
+      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
     });
 
     // running=true の間に再度呼ぶ → running ガードで即 ok
     const result = retryHandler({
-      data: { collectionId: "coll-2", submittedClipIds: [] },
+      data: { collectionId: "coll-2", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
     });
     expect(result).toEqual({ ok: true });
   });
@@ -321,12 +337,12 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
   });
 
   it("Given triggerDownloadAll が throw When retryDownload Then ERROR phase を emit する", async () => {
-    const { handlers, progressMessages } = await loadContentScript({
+    const { handlers, progressMessages, sentMessages } = await loadContentScript({
       triggerDownloadAllError: new Error("download trigger failed"),
     });
 
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", submittedClipIds: [] },
+      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
     });
 
     await vi.waitFor(() =>
@@ -337,6 +353,7 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
         }),
       ),
     );
+    expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(true);
   });
 });
 
@@ -349,23 +366,24 @@ describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#12
     vi.unstubAllGlobals();
   });
 
-  it("Given postDownloaded が reject When retryDownload Then ERROR phase を emit する", async () => {
+  it("Given 2 回目の postDownloaded が reject When retryDownload Then ERROR phase を emit する", async () => {
     const { handlers, progressMessages } = await loadContentScript({
       postDownloadedError: new Error("POST downloaded failed: 403 Forbidden"),
+      postDownloadedRejectOnCall: 2,
     });
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", submittedClipIds: clipIds },
+      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: clipIds },
     });
 
-    // async フロー（scrollAndMultiSelectByIds → executeDownloadFlow → waitForDownloadComplete）
+    // async フロー（scrollAndMultiSelectByIds → performDownload → waitForDownloadComplete）
     // が downloadCompleteResolver を設定するのを待つ。
     await new Promise((r) => setTimeout(r, 0));
 
     // background からの downloadComplete 通知を simulate
     handlers.get("downloadComplete")!({
-      data: { downloadId: 1, filename: "test-playlist.zip" },
+      data: { filename: "test-playlist.zip" },
     });
 
     await vi.waitFor(() =>

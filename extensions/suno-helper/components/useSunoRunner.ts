@@ -129,13 +129,13 @@ export function useSunoRunner(): RunnerState {
   const [resumeDismissed, setResumeDismissed] = useState(false);
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
-  // #1216: playlist_name フィールド廃止に伴い extractPlaylistName のみで導出する。
-  // NOTE: multi-word channel 名では name の先頭トークン分割が不正確になる既知の制限事項。
-  // playlist_name 廃止(#1216)に伴い、server 側で明示フィールドを返す対応が必要（future work）。
   const derivedPlaylistName = useMemo(() => {
     const selected = collections.find((c) => c.id === selectedCollectionId);
     if (!selected) {
       return undefined;
+    }
+    if (selected.playlist_name) {
+      return selected.playlist_name;
     }
     const theme = selected.name.replace(/-collection$/, "");
     return extractPlaylistName(selected.id, theme);
@@ -494,13 +494,14 @@ export function useSunoRunner(): RunnerState {
 
   // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
   const retryDownload = useCallback(async () => {
-    if (isRunning || !selectedCollectionId) {
+    if (isRunning || !selectedCollectionId || !playlistName) {
       return;
     }
     setIsRunning(true);
     try {
       await sendMessage("retryDownload", {
         collectionId: selectedCollectionId,
+        playlistName,
         submittedClipIds: submittedClipIdsForResume,
       });
       report("ダウンロードを再実行しています…");
@@ -509,7 +510,7 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [isRunning, selectedCollectionId, submittedClipIdsForResume, report]);
+  }, [isRunning, selectedCollectionId, playlistName, submittedClipIdsForResume, report]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。

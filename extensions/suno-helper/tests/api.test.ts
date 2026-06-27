@@ -17,7 +17,6 @@ import {
   formatCompatibilityWarning,
   pickInitialCollectionId,
   postDownloaded,
-  resetServeTokenCache,
   resolvePromptCollectionId,
   resolveCompatibilityWarning,
 } from "../../shared/api";
@@ -35,7 +34,6 @@ function mockFetch(impl: () => Partial<Response>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  resetServeTokenCache();
 });
 
 describe("shared/api fetchPrompts: 配信元 URL の組み立て", () => {
@@ -570,7 +568,7 @@ describe("shared/api postDownloaded: 正常系", () => {
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
         file_count: 5,
         format: "mp3",
-        suno_playlist_url: "https://suno.com/me/playlists",
+        suno_playlist_url: "https://suno.com/playlist/test",
       }),
     ).resolves.toBeUndefined();
 
@@ -586,8 +584,9 @@ describe("shared/api postDownloaded: 正常系", () => {
 
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
       file_count: 5,
+      expected_file_count: 5,
       format: "mp3",
-      suno_playlist_url: "https://suno.com/me/playlists",
+      suno_playlist_url: "https://suno.com/playlist/test",
       download_path: "/Users/test/Downloads/test.zip",
     });
 
@@ -596,6 +595,7 @@ describe("shared/api postDownloaded: 正常系", () => {
     ) as unknown as [string, RequestInit];
     const body = JSON.parse(postCall[1].body as string);
     expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
+    expect(body.expected_file_count).toBe(5);
   });
 
   it("Given postDownloaded When ヘッダーを確認 Then X-Serve-Token が含まれる", async () => {
@@ -604,7 +604,7 @@ describe("shared/api postDownloaded: 正常系", () => {
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
       file_count: 5,
       format: "mp3",
-      suno_playlist_url: "https://suno.com/me/playlists",
+      suno_playlist_url: "https://suno.com/playlist/test",
     });
 
     const postCall = fetchFn.mock.calls.find(
@@ -628,7 +628,7 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
         file_count: 0,
         format: "mp3",
-        suno_playlist_url: "https://suno.com/me/playlists",
+        suno_playlist_url: "https://suno.com/playlist/test",
       }),
     ).rejects.toThrow(/POST downloaded failed: 500/);
   });
@@ -659,7 +659,7 @@ describe("shared/api postDownloaded: 403 retry (#1217 ARCH-1217-002)", () => {
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
         file_count: 5,
         format: "mp3",
-        suno_playlist_url: "https://suno.com/me/playlists",
+        suno_playlist_url: "https://suno.com/playlist/test",
       }),
     ).resolves.toBeUndefined();
 
@@ -682,7 +682,7 @@ describe("shared/api postDownloaded: collectionId の URL エンコード", () =
     await postDownloaded(BASE_URL, "coll with spaces/slash", {
       file_count: 0,
       format: "wav",
-      suno_playlist_url: "https://suno.com/me/playlists",
+      suno_playlist_url: "https://suno.com/playlist/test",
     });
 
     expect(fetchFn).toHaveBeenCalledWith(

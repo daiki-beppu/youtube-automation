@@ -45,10 +45,11 @@ export interface PromptEntry {
 export type CollectionStatus = "needs_prompts" | "ready" | "downloaded";
 
 /** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。
- * #1216 BREAKING: has_prompts / mapped / playlist_name を廃止し status / downloaded_count に置換。 */
+ * #1216 BREAKING: has_prompts / mapped を廃止し status / downloaded_count に置換。 */
 export interface CollectionSummary {
   id: string;
   name: string;
+  playlist_name?: string | null;
   status: CollectionStatus;
   pattern_count: number | null;
   downloaded_count: number;
@@ -392,6 +393,7 @@ export async function recordDistrokidRelease(
 /** POST /collections/:id/downloaded の body (#1215)。ダウンロード完了通知ペイロード。 */
 export interface DownloadedPayload {
   file_count: number;
+  expected_file_count?: number;
   format: "mp3" | "m4a" | "wav";
   suno_playlist_url: string;
   download_path?: string;
@@ -401,11 +403,7 @@ export interface DownloadedPayload {
  * ダウンロード完了をサーバーに通知する (#1215)。POST /collections/:id/downloaded。
  * 非 2xx は fail-loud で throw する。
  */
-const _serveTokenCache = new Map<string, string>();
-
 async function fetchServeToken(baseUrl: string): Promise<string> {
-  const cached = _serveTokenCache.get(baseUrl);
-  if (cached) return cached;
   const res = await fetch(`${baseUrl}/auth/token`);
   if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
   const data: unknown = await res.json();
@@ -419,12 +417,7 @@ async function fetchServeToken(baseUrl: string): Promise<string> {
     throw new Error("/auth/token returned invalid response");
   }
   const token = (data as Record<string, string>).token;
-  _serveTokenCache.set(baseUrl, token);
   return token;
-}
-
-export function resetServeTokenCache(): void {
-  _serveTokenCache.clear();
 }
 
 export async function postDownloaded(
@@ -441,7 +434,6 @@ export async function postDownloaded(
   });
   // 403 retry: token may be stale after server restart
   if (res.status === 403) {
-    _serveTokenCache.delete(baseUrl);
     const freshToken = await fetchServeToken(baseUrl);
     res = await fetch(url, {
       method: "POST",

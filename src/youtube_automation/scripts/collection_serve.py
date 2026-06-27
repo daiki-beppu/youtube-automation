@@ -496,7 +496,7 @@ def _determine_status(has_prompts: bool, pattern_count: int | None, downloaded_c
     return "ready"
 
 
-def build_collections_index(root: Path) -> list[dict]:
+def build_collections_index(root: Path, playlist_prefix: str | None = None) -> list[dict]:
     """各 collection を index entry に写像する（#816 dir mode / #1216 BREAKING）.
 
     - id   = ディレクトリ名（拡張から個別 fetch する際のホワイトリスト key）
@@ -505,7 +505,7 @@ def build_collections_index(root: Path) -> list[dict]:
     - pattern_count = json があれば entries 数、無ければ None
     - downloaded_count = ``02-Individual-music/`` 内の音声ファイル数
 
-    #1216 BREAKING: mapped_slugs / prefix 引数を廃止。mapped / has_prompts / playlist_name を廃止。
+    #1216 BREAKING: mapped_slugs を廃止。mapped / has_prompts を廃止。
     """
     index: list[dict] = []
     for coll in find_collection_dirs(root):
@@ -515,15 +515,16 @@ def build_collections_index(root: Path) -> list[dict]:
         music_dir = CollectionPaths(coll).music_dir
         downloaded_count = _count_audio_files(music_dir)
         status = _determine_status(has_prompts, pattern_count, downloaded_count)
-        index.append(
-            {
-                "id": coll.name,
-                "name": CollectionPaths(coll).collection_name,
-                "status": status,
-                "pattern_count": pattern_count,
-                "downloaded_count": downloaded_count,
-            }
-        )
+        entry = {
+            "id": coll.name,
+            "name": CollectionPaths(coll).collection_name,
+            "status": status,
+            "pattern_count": pattern_count,
+            "downloaded_count": downloaded_count,
+        }
+        if playlist_prefix is not None:
+            entry["playlist_name"] = derive_playlist_name(coll.name, playlist_prefix)
+        index.append(entry)
     return index
 
 
@@ -859,7 +860,12 @@ def create_server(
             _downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
             _downloaded_suffix = "/downloaded"
             if dir_mode and self.path.startswith(_downloaded_prefix) and self.path.endswith(_downloaded_suffix):
-                if origin is None:
+                if (
+                    allow_origin is None
+                    or origin is None
+                    or origin != allow_origin
+                    or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)
+                ):
                     self.send_error(403, "Forbidden")
                     return
                 # Token auth: require X-Serve-Token header (#1217).
@@ -903,6 +909,14 @@ def create_server(
                 if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
                     self.send_error(400, "Bad Request")
                     return
+                expected_file_count = payload.get("expected_file_count")
+                if expected_file_count is not None and (
+                    not isinstance(expected_file_count, int)
+                    or isinstance(expected_file_count, bool)
+                    or expected_file_count < 0
+                ):
+                    self.send_error(400, "Bad Request")
+                    return
                 # Validate format is a known audio format (#1217).
                 if fmt not in _VALID_DOWNLOAD_FORMATS:
                     self.send_error(400, "Bad Request")
@@ -917,6 +931,7 @@ def create_server(
                     self.send_error(400, "Bad Request")
                     return
                 coll_dir = collections_root / cid
+                placed_count_for_response = file_count
                 if download_path:
                     # Validate download_path: must be an absolute path (#1217).
                     dp = Path(download_path)
@@ -929,10 +944,32 @@ def create_server(
                         # Extraction failed: return 500 and do not mark as downloaded (#1217).
                         self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
                         return
-                    file_count = placed_count
+                    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+                    pattern_count = 0
+                    if prompts_path.is_file():
+                        try:
+                            prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
+                            if isinstance(prompts_data, list):
+                                pattern_count = len(prompts_data)
+                        except (json.JSONDecodeError, OSError):
+                            pattern_count = 0
+                    expected_count = (
+                        expected_file_count if expected_file_count is not None else max(file_count, pattern_count)
+                    )
+                    if placed_count < expected_count:
+                        self._send_json_error(
+                            500,
+                            "ZIP extraction incomplete: "
+                            f"expected at least {expected_count} audio files, placed {placed_count}",
+                        )
+                        return
+                    placed_count_for_response = placed_count
+                    file_count = placed_count if pattern_count == 0 or placed_count >= pattern_count else 0
                 # Update workflow state AFTER extraction (#1217).
                 _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
-                resp_body = json.dumps({"ok": True, "collection_id": cid, "placed_count": file_count}).encode("utf-8")
+                resp_body = json.dumps(
+                    {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
+                ).encode("utf-8")
                 self._send_bytes(resp_body, "application/json; charset=utf-8")
                 return
 
@@ -951,8 +988,13 @@ def create_server(
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if self.path == "/auth/token":
-                origin = self.headers.get("Origin", "")
-                if origin and not origin.startswith(_EXTENSION_ORIGIN_SCHEME):
+                origin = self.headers.get("Origin")
+                if (
+                    allow_origin is None
+                    or origin is None
+                    or origin != allow_origin
+                    or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)
+                ):
                     self.send_error(403, "Forbidden")
                     return
                 body = json.dumps({"token": serve_token}).encode("utf-8")
@@ -977,7 +1019,7 @@ def create_server(
 
         def _serve_dir_mode(self) -> None:
             if self.path == COLLECTIONS_ROUTE:
-                index = build_collections_index(collections_root)
+                index = build_collections_index(collections_root, capture_prefix)
                 body = json.dumps(index).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return

@@ -3,7 +3,7 @@
 // （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
-import type { CapturedPlaylist, PromptEntry } from "../../shared/api";
+import type { CapturedPlaylist, DownloadedPayload, PromptEntry } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
@@ -37,13 +37,18 @@ export interface RetryPlaylistPayload {
 
 /** runner → background: ダウンロード完了を通知するペイロード (#1146)。 */
 export interface DownloadCompletePayload {
-  downloadId: number;
   filename: string;
+}
+
+/** background → runner: ダウンロード失敗を通知するペイロード (#1217)。 */
+export interface DownloadFailedPayload {
+  message: string;
 }
 
 /** overlay → runner: ダウンロードのみ再実行するペイロード (#1251)。 */
 export interface RetryDownloadPayload {
   collectionId: string;
+  playlistName: string;
   submittedClipIds: string[];
 }
 
@@ -63,17 +68,20 @@ interface ProtocolMap {
   /** runner content: 自身の document（Suno `/me`）から playlist を scrape して返す (#893)。
    *  overlay → background → runner の手動 Capture と、background が開く bg `/me` tab への自動 capture が共用する。 */
   capturePlaylists(): CapturedPlaylist[];
-  /** runner → background: 連続実行の playlist 化完了時に、bg `/me` tab で capture → POST する自動 trigger を要求する (#893)。
-   *  background 側は fail soft（scrape / POST 失敗は warning log のみ）。 */
-  requestPlaylistCapture(): void;
   /** runner → background: Download all 開始を通知し、background の chrome.downloads 監視を起動する (#1146)。
    *  content script は chrome.downloads API にアクセスできないため background に委譲する。 */
-  startDownload(payload: { collectionId: string; format: string }): void;
+  startDownload(payload: { format: string }): void;
+  /** runner → background: Download all 起動前後の失敗時に chrome.downloads watcher を解除する (#1217)。 */
+  cancelDownload(): void;
   /** background → runner: chrome.downloads の完了通知を content へ中継する (#1146)。 */
   downloadComplete(payload: DownloadCompletePayload): void;
+  /** background → runner: chrome.downloads の失敗通知を content へ中継する (#1217)。 */
+  downloadFailed(payload: DownloadFailedPayload): void;
   /** content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
    *  content script は chrome.debugger API にアクセスできないため background に委譲する。 */
   sendTrustedCmdP(payload: { isMac: boolean }): void;
+  /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。 */
+  postDownloaded(payload: { baseUrl: string; collectionId: string; body: DownloadedPayload }): void;
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */
   retryDownload(payload: RetryDownloadPayload): { ok: true };
 }

@@ -14,6 +14,7 @@ interface RunPayload {
   playlistExpectedClipCount?: number;
 }
 
+type Handler = (message: { data: Record<string, unknown> }) => unknown;
 type RunHandler = (message: { data: RunPayload }) => { ok: true };
 
 const writeResumeStateMock = vi.fn<(state: ResumeState) => Promise<void>>();
@@ -31,8 +32,9 @@ async function loadContentScriptWithPlaylistRows(
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
 
-  const handlers = new Map<string, RunHandler>();
+  const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
+  const sentMessages: Array<{ type: string; payload: unknown }> = [];
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const scrollAndMultiSelectByIdsMock = vi.fn((_ids: string[], _options: unknown) => {
     if (playlistRowsResult instanceof Error) {
@@ -42,10 +44,11 @@ async function loadContentScriptWithPlaylistRows(
   });
 
   vi.doMock("../lib/messaging", () => ({
-    onMessage: vi.fn((type: string, handler: RunHandler) => {
+    onMessage: vi.fn((type: string, handler: Handler) => {
       handlers.set(type, handler);
     }),
-    sendMessage: vi.fn((type: string, payload?: ProgressMessage) => {
+    sendMessage: vi.fn((type: string, payload?: unknown) => {
+      sentMessages.push({ type, payload });
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
       }
@@ -132,7 +135,10 @@ async function loadContentScriptWithPlaylistRows(
   }));
 
   vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => []),
+    scrapePlaylistsFromMe: vi.fn(() => [
+      { title: "vj | regression", url: "https://suno.com/playlist/regression" },
+      { title: "vj | manual range", url: "https://suno.com/playlist/manual-range" },
+    ]),
   }));
 
   vi.doMock("../lib/auto-capture", () => ({
@@ -169,11 +175,11 @@ async function loadContentScriptWithPlaylistRows(
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
 
-  const runHandler = handlers.get("run");
+  const runHandler = handlers.get("run") as RunHandler | undefined;
   if (!runHandler) {
     throw new Error("run message handler was not registered");
   }
-  return { scrollAndMultiSelectByIdsMock, progressMessages, runHandler };
+  return { handlers, scrollAndMultiSelectByIdsMock, progressMessages, runHandler, sentMessages };
 }
 
 describe("content.ts playlist 追加失敗時の resume state", () => {
@@ -322,10 +328,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       (_, index) => `range-clip-${index + 1}`,
     );
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-    );
+    const { handlers, scrollAndMultiSelectByIdsMock, runHandler, sentMessages } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
 
     runHandler({
       data: {
@@ -336,11 +340,30 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
     await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/manual-range.zip" },
+    });
+    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(2));
 
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       currentSubmittedClipIds,
       expect.objectContaining({ isAborted: expect.any(Function) }),
     );
-    expect(writeResumeStateMock).not.toHaveBeenCalled();
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "collection-a",
+        failedIndex: entries.length,
+        submittedClipIds: currentSubmittedClipIds,
+        playlistExpectedClipCount: currentSubmittedClipIds.length,
+      }),
+    );
+    expect(sentMessages.filter((m) => m.type === "postDownloaded")[1].payload).toMatchObject({
+      body: {
+        file_count: currentSubmittedClipIds.length,
+        expected_file_count: currentSubmittedClipIds.length,
+        download_path: "/Users/test/Downloads/manual-range.zip",
+      },
+    });
   });
 });

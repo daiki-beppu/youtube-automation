@@ -66,7 +66,7 @@ export default defineContentScript({
       }
     }
 
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const observedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       let url = "";
       try {
         url = resolveRequestUrl(input);
@@ -85,6 +85,8 @@ export default defineContentScript({
       }
       return res;
     };
+    Object.assign(observedFetch, originalFetch);
+    window.fetch = observedFetch as typeof fetch;
 
     /** content script からの active feed poll 要求に応える。token 未捕捉・失敗は clips: null。 */
     async function handleFeedPoll(requestId: number, ids: string[]): Promise<void> {

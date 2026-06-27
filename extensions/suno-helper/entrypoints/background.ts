@@ -2,44 +2,14 @@
 // 拡張ライフサイクルのログ、action クリック中継、および overlay ⇄ runner の content↔content 中継を担う。
 // overlay (content script) は `browser.tabs.*` を呼べないため、overlay の no-tabId メッセージを受けて
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
-import { postCapturedPlaylists } from "../../shared/api";
+import { postDownloaded } from "../../shared/api";
 import { describeRelayFailure } from "../components/runner-errors";
-import { autoCapturePlaylists, captureFromTab } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
-import { serverUrlItem } from "../lib/storage";
-
-// 自動 capture で開く Suno playlists ページの URL（追加要件 A）。
-// Suno の URL 構造変更（/me → /me/playlists）に追従。
-const SUNO_ME_URL = "https://suno.com/me/playlists";
-// bg `/me` tab の content script が capturePlaylists に応答するまでの poll 上限と間隔。
-// tab 生成直後は content script 未注入で sendMessage が reject されるためリトライする。
-const CAPTURE_TAB_TIMEOUT_MS = 15000;
-const CAPTURE_TAB_POLL_MS = 300;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** lib/auto-capture の orchestration に実 collaborator（browser tab / messaging / storage / api）を配線する。 */
-function runAutoCapture(): Promise<void> {
-  return autoCapturePlaylists({
-    getServerUrl: () => serverUrlItem.getValue(),
-    createMeTab: () => browser.tabs.create({ url: SUNO_ME_URL, active: false }),
-    removeTab: (tabId) => browser.tabs.remove(tabId),
-    capture: (tabId) =>
-      captureFromTab(tabId, {
-        sendCapture: (id) => sendMessage("capturePlaylists", undefined, id),
-        sleep,
-        now: Date.now,
-        timeoutMs: CAPTURE_TAB_TIMEOUT_MS,
-        pollMs: CAPTURE_TAB_POLL_MS,
-      }),
-    post: (baseUrl, items) => postCapturedPlaylists(baseUrl, items),
-  });
-}
 
 export default defineBackground(() => {
+  let activeDownloadWatcher: { tabId: number; cleanup: () => void } | null = null;
+
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);
   });
@@ -79,14 +49,6 @@ export default defineBackground(() => {
     sendMessage("capturePlaylists", undefined, requireRelayTab(sender, "capturePlaylists")),
   );
 
-  // runner → background: 連続実行完了時の自動 capture trigger (#893 追加要件 A)。
-  // bg `/me` tab を開いて scrape→POST→close する。fail soft（失敗は warning のみ、runner の FINISHED は妨げない）。
-  onMessage("requestPlaylistCapture", () => {
-    void runAutoCapture().catch((err) => {
-      console.warn("[suno-helper] auto playlist capture failed:", err);
-    });
-  });
-
   // runner → background: Download all 開始通知 (#1146)。content script は chrome.downloads API に
   // アクセスできないため、background が chrome.downloads.onChanged を監視して完了を中継する。
   // ダウンロード監視は startDownload 受信時に listener を登録し、完了時に自動解除する。
@@ -97,6 +59,16 @@ export default defineBackground(() => {
       return;
     }
     const { format } = data;
+    if (activeDownloadWatcher !== null) {
+      sendMessage(
+        "downloadFailed",
+        { message: "別の Download all 監視が進行中です。完了後に再実行してください。" },
+        tabId,
+      ).catch((err: unknown) => {
+        console.warn("[suno-helper] downloadFailed 中継失敗:", err);
+      });
+      return;
+    }
     console.info(`[suno-helper] Download all 監視を開始します (format=${format})`);
 
     // 監視開始時刻を記録し、これ以前に開始されたダウンロードを除外する (#1217)。
@@ -105,14 +77,50 @@ export default defineBackground(() => {
     // Suno の ZIP ダウンロードは "Download all" click 直後に開始される。
     // chrome.downloads.onChanged で state=complete を待ち、ファイル名パターン (.zip) で照合する。
     // 安全弁 timeout の ID を保持し、成功時に clearTimeout する (#1217)。
-    const listener = (delta: chrome.downloads.DownloadDelta): void => {
-      if (delta.state?.current === "interrupted") {
-        console.warn(`[suno-helper] ZIP ダウンロード中断: id=${delta.id}`);
-        chrome.downloads.onChanged.removeListener(listener);
-        clearTimeout(watchTimeoutId);
-        return;
+    const notifyDownloadFailed = (message: string): void => {
+      sendMessage("downloadFailed", { message }, tabId).catch((err: unknown) => {
+        console.warn("[suno-helper] downloadFailed 中継失敗:", err);
+      });
+    };
+
+    const isSunoZipStartedAfterMonitor = (item: chrome.downloads.DownloadItem): boolean => {
+      const filename = item.filename ?? "";
+      if (!filename.toLowerCase().endsWith(".zip")) {
+        return false;
       }
-      if (!delta.state || delta.state.current !== "complete") {
+      const downloadUrl = item.url ?? "";
+      let isSunoUrl = false;
+      try {
+        const hostname = new URL(downloadUrl).hostname;
+        isSunoUrl =
+          hostname === "suno.com" ||
+          hostname.endsWith(".suno.com") ||
+          hostname === "sunocdn.com" ||
+          hostname.endsWith(".sunocdn.com");
+      } catch {
+        return false;
+      }
+      if (!isSunoUrl) {
+        return false;
+      }
+      const downloadStartMs = new Date(item.startTime).getTime();
+      return Number.isFinite(downloadStartMs) && downloadStartMs >= monitorStartedAt - 5000;
+    };
+
+    const watchTimeout: { id?: ReturnType<typeof setTimeout> } = {};
+    const cleanupWatcher = (): void => {
+      chrome.downloads.onChanged.removeListener(listener);
+      if (watchTimeout.id !== undefined) {
+        clearTimeout(watchTimeout.id);
+      }
+      if (activeDownloadWatcher?.cleanup === cleanupWatcher) {
+        activeDownloadWatcher = null;
+      }
+    };
+
+    const listener = (delta: chrome.downloads.DownloadDelta): void => {
+      const state = delta.state?.current;
+      if (state !== "complete" && state !== "interrupted") {
         return;
       }
       // 完了したダウンロードの詳細を取得してファイル名を確認する
@@ -122,53 +130,43 @@ export default defineBackground(() => {
         }
         const item = results[0];
         const filename = item.filename ?? "";
-        // Suno CDN domain check: reject downloads not originating from Suno (#1217 SEC-002).
-        const downloadUrl = item.url ?? "";
-        let isSunoUrl = false;
-        try {
-          const hostname = new URL(downloadUrl).hostname;
-          isSunoUrl =
-            hostname === "suno.com" ||
-            hostname.endsWith(".suno.com") ||
-            hostname === "sunocdn.com" ||
-            hostname.endsWith(".sunocdn.com");
-        } catch {
-          // invalid URL — not from Suno
-        }
-        if (!isSunoUrl) {
+        if (!isSunoZipStartedAfterMonitor(item)) {
           return;
         }
-        // Suno の ZIP ダウンロードは .zip 拡張子を持つ（playlist 名がファイル名に含まれる）
-        if (!filename.toLowerCase().endsWith(".zip")) {
-          return;
-        }
-        // 監視開始前に開始されたダウンロードは無関係なので無視する (#1217)。
-        // item.startTime は ISO 8601 文字列。5 秒のマージンを設ける（ブラウザ内部時刻の微小ズレ対策）。
-        const downloadStartMs = new Date(item.startTime).getTime();
-        if (downloadStartMs < monitorStartedAt - 5000) {
+        if (state === "interrupted") {
+          const message = `ZIP ダウンロードが中断されました: ${filename} (id=${delta.id})`;
+          console.warn(`[suno-helper] ${message}`);
+          cleanupWatcher();
+          notifyDownloadFailed(message);
           return;
         }
         console.info(`[suno-helper] ZIP ダウンロード完了: ${filename} (id=${delta.id})`);
         // listener を解除して以降のダウンロードイベントを無視する
-        chrome.downloads.onChanged.removeListener(listener);
-        // 安全弁タイムアウトをキャンセルして spurious warning を防ぐ (#1217)。
-        clearTimeout(watchTimeoutId);
+        cleanupWatcher();
         // content script へダウンロード完了を中継する
-        sendMessage("downloadComplete", { downloadId: delta.id, filename }, tabId).catch((err: unknown) => {
+        sendMessage("downloadComplete", { filename }, tabId).catch((err: unknown) => {
           console.warn("[suno-helper] downloadComplete 中継失敗:", err);
         });
       });
     };
     chrome.downloads.onChanged.addListener(listener);
+    activeDownloadWatcher = { tabId, cleanup: cleanupWatcher };
 
     // 安全弁: 10 分以内にダウンロードが完了しなければ listener を解除する（メモリリーク防止）
     const DOWNLOAD_WATCH_TIMEOUT_MS = 600000;
-    // listener closure が watchTimeoutId を非同期参照するため、宣言順を addListener の後に置く。
-    // listener が発火するのはダウンロードイベント（非同期）なので初期化前アクセスは起きない。
-    const watchTimeoutId = setTimeout(() => {
-      chrome.downloads.onChanged.removeListener(listener);
-      console.warn("[suno-helper] Download all 監視タイムアウト（10 分）。listener を解除しました。");
+    watchTimeout.id = setTimeout(() => {
+      const message = "Download all 監視タイムアウト（10 分）。listener を解除しました。";
+      console.warn(`[suno-helper] ${message}`);
+      cleanupWatcher();
+      notifyDownloadFailed(message);
     }, DOWNLOAD_WATCH_TIMEOUT_MS);
+  });
+
+  onMessage("cancelDownload", ({ sender }) => {
+    const tabId = relayTabId(sender);
+    if (activeDownloadWatcher && (tabId === null || activeDownloadWatcher.tabId === tabId)) {
+      activeDownloadWatcher.cleanup();
+    }
   });
 
   // content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
@@ -177,8 +175,7 @@ export default defineBackground(() => {
   onMessage("sendTrustedCmdP", async ({ data, sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
-      console.warn("[suno-helper] sendTrustedCmdP: 送信元タブが特定できません");
-      return;
+      throw new Error("sendTrustedCmdP: 送信元タブが特定できません");
     }
     const { isMac } = data;
     const modifiers = isMac ? 4 : 2; // 4=Meta, 2=Ctrl
@@ -205,8 +202,13 @@ export default defineBackground(() => {
       }
     } catch (err) {
       console.warn("[suno-helper] sendTrustedCmdP failed:", err);
+      throw err;
     }
   });
+
+  // runner → background: content script から localhost server へ直接 token 取得しないよう、
+  // token fetch と POST /downloaded は background の extension origin から実行する。
+  onMessage("postDownloaded", ({ data }) => postDownloaded(data.baseUrl, data.collectionId, data.body));
 
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する
   // （content↔content 直送不可のため）。tab を持たない送信元は転送先が無いため no-op。
