@@ -704,7 +704,7 @@ class TestCLIPull:
         assert before == after  # not modified
         assert "dry-run" in capsys.readouterr().out
 
-    def test_apply_writes_youtube_channel_only(self, tmp_path, monkeypatch, capsys):
+    def test_apply_writes_channel_id_and_youtube_channel_only(self, tmp_path, monkeypatch, capsys):
         _prepare_channel_dir(tmp_path, monkeypatch)
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="pulled desc")]}
@@ -720,11 +720,34 @@ class TestCLIPull:
 
         # youtube_channel is updated
         assert after_data["youtube_channel"]["description"] == "pulled desc"
-        # other sections untouched
+        assert after_data["channel"]["channel_id"] == "UCfixture"
+        before_channel = dict(before_data["channel"])
+        after_channel = dict(after_data["channel"])
+        after_channel.pop("channel_id")
+        assert after_channel == before_channel
+        # sections other than channel / youtube_channel are untouched
         for key in before_data:
-            if key == "youtube_channel":
+            if key in ("channel", "youtube_channel"):
                 continue
             assert after_data[key] == before_data[key]
+
+    def test_channel_id_only_apply_preserves_local_branding(self, tmp_path, monkeypatch, capsys):
+        _prepare_channel_dir(tmp_path, monkeypatch)
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="remote desc")]}
+        config_path = tmp_path / "config" / "channel" / "meta.json"
+        before_data = json.loads(config_path.read_text(encoding="utf-8"))
+
+        with patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        ):
+            rc = channel_settings_cli.main(["pull", "--channel-id-only", "--apply"])
+        assert rc == 0
+        after_data = json.loads(config_path.read_text(encoding="utf-8"))
+
+        assert after_data["channel"]["channel_id"] == "UCfixture"
+        assert after_data["youtube_channel"] == before_data["youtube_channel"]
 
 
 def _prepare_channel_dir(tmp_path: Path, monkeypatch) -> None:
