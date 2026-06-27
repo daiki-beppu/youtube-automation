@@ -1,19 +1,3 @@
-// Suno の "Download all" 機能を DOM 操作で起動するヘルパモジュール (#1146)。
-// 全 clip が multi-select された状態で、任意の clip row の "More" メニューから
-// "Download all" を選び、形式選択モーダルで指定形式を選んで ZIP ダウンロードを開始する。
-//
-// DOM 操作フロー:
-//   1. multi-selected な clip row の "More menu contents" ボタン（三点リーダー）を click
-//   2. context menu が表示されるのを待機
-//   3. "Download all" menu item を click
-//   4. 形式選択モーダル（M4A / MP3 / WAV）が表示されるのを待機
-//   5. chrome.storage の設定形式に対応するラジオボタンを選択
-//   6. Download / 確認ボタンを click → ZIP ダウンロード開始
-//
-// セレクタは Suno UI の実 DOM に依存するため、壊れたら TODO コメントの指示に従って更新する。
-// shared/dom.ts の waitForElement / click 系パターンと shared/playlist-dom.ts の
-// multi-step DOM 操作パターンを踏襲する。
-
 import { simulateClick, sleep } from "../../shared/dom";
 
 // --- DOM セレクタ SSOT (2026-06-25 実測) ---

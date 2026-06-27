@@ -1319,6 +1319,46 @@ def test_extract_skips_non_audio_files(tmp_path):
     assert names == ["01a-Track.mp3"]
 
 
+def test_extract_existing_audio_plus_empty_zip_returns_zero(tmp_path):
+    """既存の音声ファイルがある状態で空 ZIP を展開すると moved_count=0 を返す (#1217 QA-1217-01)。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — Existing", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    (music_dir / "01a-Existing.mp3").write_bytes(b"pre-existing")
+    # ZIP with no audio files
+    zip_path = _make_zip(tmp_path / "empty-audio.zip", {"readme.txt": b"not audio"})
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 0
+
+
+def test_extract_title_based_matching(tmp_path):
+    """entry.title でもマッチする (#1217 CODING-1217-03)。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "夜明け — Dawn Chorus", "title": "Custom Dawn Title", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(
+        tmp_path / "title-match.zip",
+        {"Custom Dawn Title.mp3": b"audio-by-title"},
+    )
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 1
+    music_dir = coll / "02-Individual-music"
+    names = [f.name for f in music_dir.iterdir()]
+    assert names == ["01a-Custom Dawn Title.mp3"]
+
+
 def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
     """POST /downloaded に download_path を含めると ZIP 展開 + リネームが実行される。"""
     planning = tmp_path / "planning"
@@ -1521,6 +1561,40 @@ def test_get_auth_token_returns_uuid(serve_dir, tmp_path):
     assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", body["token"])
 
 
+def test_get_auth_token_web_origin_returns_403(serve_dir, tmp_path):
+    """Given web origin (https://suno.com) からの GET /auth/token
+    When Origin ヘッダ付きでリクエストする
+    Then 403 を返す（token は background script のみに公開・#1217 SEC-001）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    req = urllib.request.Request(
+        f"{base}/auth/token",
+        headers={"Origin": "https://suno.com"},
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 403
+
+
+def test_get_auth_token_no_origin_returns_200(serve_dir, tmp_path):
+    """Given Origin ヘッダ無し（background script の fetch）の GET /auth/token
+    When リクエストする
+    Then 200 を返す（background script はアクセス可能・#1217 SEC-001）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+
+    with urllib.request.urlopen(f"{base}/auth/token") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+        assert "token" in body
+
+
 def test_post_downloaded_missing_token_returns_403(serve_dir, tmp_path):
     """Given Origin はあるが X-Serve-Token ヘッダが無い
     When POST /collections/<id>/downloaded を送る
@@ -1674,3 +1748,39 @@ def test_post_downloaded_success_includes_placed_count(serve_dir, tmp_path):
 
     assert result["ok"] is True
     assert result["placed_count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Payload type validation (#1217 TEST-1217-003): non-string download_path / suno_playlist_url
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("download_path", ["/tmp"]),
+        ("download_path", {"a": 1}),
+        ("suno_playlist_url", ["url"]),
+        ("suno_playlist_url", {}),
+    ],
+)
+def test_post_downloaded_payload_type_validation(serve_dir, tmp_path, field, bad_value):
+    """Given download_path or suno_playlist_url が非文字列型
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す（#1217 型バリデーション）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    token = _fetch_token(base)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    payload[field] = bad_value
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400

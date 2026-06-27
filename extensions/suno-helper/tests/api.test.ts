@@ -634,6 +634,47 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
   });
 });
 
+describe("shared/api postDownloaded: 403 retry (#1217 ARCH-1217-002)", () => {
+  it("Given 初回 POST が 403 When postDownloaded Then token を再取得してリトライし成功する", async () => {
+    let postCallCount = 0;
+    const fn = vi.fn(async (url: string) => {
+      if (typeof url === "string" && url.includes("/auth/token")) {
+        // 2 回目の token fetch は別のトークンを返す
+        const callIndex = fn.mock.calls.filter(
+          (c) => typeof c[0] === "string" && (c[0] as string).includes("/auth/token"),
+        ).length;
+        const token = callIndex <= 1 ? "stale-token" : "fresh-token";
+        return { ok: true, status: 200, json: async () => ({ token }) } as Response;
+      }
+      // POST: 1 回目は 403, 2 回目は 200
+      postCallCount++;
+      if (postCallCount === 1) {
+        return { ok: false, status: 403, statusText: "Forbidden", json: async () => ({}) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal("fetch", fn);
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 5,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/me/playlists",
+      }),
+    ).resolves.toBeUndefined();
+
+    // token fetch 2 回 + POST 2 回 = 4 回
+    expect(fn).toHaveBeenCalledTimes(4);
+    // 2 回目の POST は fresh-token を使用
+    const postCalls = fn.mock.calls.filter(
+      (c) => typeof c[0] === "string" && (c[0] as string).includes("/downloaded"),
+    ) as unknown as Array<[string, RequestInit]>;
+    expect(postCalls).toHaveLength(2);
+    const retryHeaders = postCalls[1][1].headers as Record<string, string>;
+    expect(retryHeaders["X-Serve-Token"]).toBe("fresh-token");
+  });
+});
+
 describe("shared/api postDownloaded: collectionId の URL エンコード", () => {
   it("Given 特殊文字を含む collectionId When postDownloaded Then URL エンコードされる", async () => {
     const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));

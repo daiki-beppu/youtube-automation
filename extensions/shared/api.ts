@@ -401,19 +401,30 @@ export interface DownloadedPayload {
  * ダウンロード完了をサーバーに通知する (#1215)。POST /collections/:id/downloaded。
  * 非 2xx は fail-loud で throw する。
  */
-let _cachedServeToken: string | null = null;
+const _serveTokenCache = new Map<string, string>();
 
 async function fetchServeToken(baseUrl: string): Promise<string> {
-  if (_cachedServeToken) return _cachedServeToken;
+  const cached = _serveTokenCache.get(baseUrl);
+  if (cached) return cached;
   const res = await fetch(`${baseUrl}/auth/token`);
   if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
-  const data = (await res.json()) as { token: string };
-  _cachedServeToken = data.token;
-  return _cachedServeToken;
+  const data: unknown = await res.json();
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("token" in data) ||
+    typeof (data as Record<string, unknown>).token !== "string" ||
+    !(data as Record<string, unknown>).token
+  ) {
+    throw new Error("/auth/token returned invalid response");
+  }
+  const token = (data as Record<string, string>).token;
+  _serveTokenCache.set(baseUrl, token);
+  return token;
 }
 
 export function resetServeTokenCache(): void {
-  _cachedServeToken = null;
+  _serveTokenCache.clear();
 }
 
 export async function postDownloaded(
@@ -423,11 +434,24 @@ export async function postDownloaded(
 ): Promise<void> {
   const token = await fetchServeToken(baseUrl);
   const url = `${baseUrl}${DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(collectionId))}`;
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Serve-Token": token },
     body: JSON.stringify(payload),
   });
+  // 403 retry: token may be stale after server restart
+  if (res.status === 403) {
+    _serveTokenCache.delete(baseUrl);
+    const freshToken = await fetchServeToken(baseUrl);
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Serve-Token": freshToken,
+      },
+      body: JSON.stringify(payload),
+    });
+  }
   if (!res.ok) {
     throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
   }

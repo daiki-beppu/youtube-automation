@@ -16,7 +16,11 @@ type Handler = (message: { data: Record<string, unknown> }) => unknown;
 
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
 
-async function loadContentScript(overrides?: { addClipsToPlaylistError?: Error; triggerDownloadAllError?: Error }) {
+async function loadContentScript(overrides?: {
+  addClipsToPlaylistError?: Error;
+  triggerDownloadAllError?: Error;
+  postDownloadedError?: Error;
+}) {
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
 
@@ -148,7 +152,9 @@ async function loadContentScript(overrides?: { addClipsToPlaylistError?: Error; 
   }));
 
   vi.doMock("../../shared/api", () => ({
-    postDownloaded: vi.fn(() => Promise.resolve()),
+    postDownloaded: overrides?.postDownloadedError
+      ? vi.fn(() => Promise.reject(overrides.postDownloadedError))
+      : vi.fn(() => Promise.resolve()),
   }));
 
   const content = await import("../entrypoints/content");
@@ -328,6 +334,45 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
         expect.objectContaining({
           phase: PHASE.ERROR,
           message: expect.stringContaining("download trigger failed"),
+        }),
+      ),
+    );
+  });
+});
+
+describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#1217 TEST-1217-001)', () => {
+  beforeEach(() => {
+    clearResumeStateMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given postDownloaded が reject When retryDownload Then ERROR phase を emit する", async () => {
+    const { handlers, progressMessages } = await loadContentScript({
+      postDownloadedError: new Error("POST downloaded failed: 403 Forbidden"),
+    });
+
+    const clipIds = ["clip-1", "clip-2"];
+    handlers.get("retryDownload")!({
+      data: { collectionId: "coll-1", submittedClipIds: clipIds },
+    });
+
+    // async フロー（scrollAndMultiSelectByIds → executeDownloadFlow → waitForDownloadComplete）
+    // が downloadCompleteResolver を設定するのを待つ。
+    await new Promise((r) => setTimeout(r, 0));
+
+    // background からの downloadComplete 通知を simulate
+    handlers.get("downloadComplete")!({
+      data: { downloadId: 1, filename: "test-playlist.zip" },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          message: expect.stringContaining("403"),
         }),
       ),
     );

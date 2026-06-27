@@ -130,6 +130,8 @@ export function useSunoRunner(): RunnerState {
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
   // #1216: playlist_name フィールド廃止に伴い extractPlaylistName のみで導出する。
+  // NOTE: multi-word channel 名では name の先頭トークン分割が不正確になる既知の制限事項。
+  // playlist_name 廃止(#1216)に伴い、server 側で明示フィールドを返す対応が必要（future work）。
   const derivedPlaylistName = useMemo(() => {
     const selected = collections.find((c) => c.id === selectedCollectionId);
     if (!selected) {

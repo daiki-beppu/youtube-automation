@@ -635,6 +635,9 @@ def _extract_and_rename_music(
                 english_name = parts[1] if len(parts) == 2 else full_name
                 name_to_index[english_name] = i
                 name_to_index[full_name] = i
+                title = entry.get("title")
+                if title and title not in name_to_index:
+                    name_to_index[title] = i
         except (json.JSONDecodeError, OSError, TypeError):
             pass
 
@@ -668,6 +671,7 @@ def _extract_and_rename_music(
             for info in audio_infos:
                 zf.extract(info, tmp_dir)
 
+        moved_count = 0
         for extracted in Path(tmp_dir).iterdir():
             if not extracted.is_file():
                 continue
@@ -687,10 +691,10 @@ def _extract_and_rename_music(
             else:
                 new_name = extracted.name
             shutil.move(str(extracted), str(music_dir / new_name))
+            moved_count += 1
 
-        placed = sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
-        print(f"[yt-collection-serve] 展開完了: {placed} files → {music_dir}")
-        return placed
+        print(f"[yt-collection-serve] 展開完了: {moved_count} files → {music_dir}")
+        return moved_count
     except Exception as exc:
         print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
         return 0
@@ -947,6 +951,10 @@ def create_server(
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if self.path == "/auth/token":
+                origin = self.headers.get("Origin", "")
+                if origin and not origin.startswith(_EXTENSION_ORIGIN_SCHEME):
+                    self.send_error(403, "Forbidden")
+                    return
                 body = json.dumps({"token": serve_token}).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return

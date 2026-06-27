@@ -604,9 +604,9 @@ export default defineContentScript({
         );
 
         // --- DOWNLOADING phase (#1146) ---
-        // failSoft: true — 通常 run ではダウンロード失敗を warning 扱いで FINISHED へ進む。
+        // failSoft: true — normal run では download は best-effort。失敗しても FINISHED に進み、
+        // ユーザーは popup の retryDownload で個別にリトライできる（ADR-0012）。
         // 通常 run の主目的は playlist 作成であり、ダウンロードはベストエフォート。
-        // ダウンロード失敗時はユーザーが手動 DL または retryDownload で再試行する。
         if (collectionId && !aborted) {
           await executeDownloadFlow(collectionId, total, () => aborted, { failSoft: true });
           if (aborted) {

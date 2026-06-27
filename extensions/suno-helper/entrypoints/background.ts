@@ -106,6 +106,12 @@ export default defineBackground(() => {
     // chrome.downloads.onChanged で state=complete を待ち、ファイル名パターン (.zip) で照合する。
     // 安全弁 timeout の ID を保持し、成功時に clearTimeout する (#1217)。
     const listener = (delta: chrome.downloads.DownloadDelta): void => {
+      if (delta.state?.current === "interrupted") {
+        console.warn(`[suno-helper] ZIP ダウンロード中断: id=${delta.id}`);
+        chrome.downloads.onChanged.removeListener(listener);
+        clearTimeout(watchTimeoutId);
+        return;
+      }
       if (!delta.state || delta.state.current !== "complete") {
         return;
       }
@@ -118,7 +124,18 @@ export default defineBackground(() => {
         const filename = item.filename ?? "";
         // Suno CDN domain check: reject downloads not originating from Suno (#1217 SEC-002).
         const downloadUrl = item.url ?? "";
-        if (!downloadUrl.includes("suno.com") && !downloadUrl.includes("sunocdn.")) {
+        let isSunoUrl = false;
+        try {
+          const hostname = new URL(downloadUrl).hostname;
+          isSunoUrl =
+            hostname === "suno.com" ||
+            hostname.endsWith(".suno.com") ||
+            hostname === "sunocdn.com" ||
+            hostname.endsWith(".sunocdn.com");
+        } catch {
+          // invalid URL — not from Suno
+        }
+        if (!isSunoUrl) {
           return;
         }
         // Suno の ZIP ダウンロードは .zip 拡張子を持つ（playlist 名がファイル名に含まれる）
