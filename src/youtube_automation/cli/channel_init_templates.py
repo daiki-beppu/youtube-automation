@@ -163,19 +163,14 @@ def _template_literal(value: str) -> str:
 
 def _render_language_template(lang: str, ctx: ChannelInitContext) -> dict[str, str]:
     genre_label = _template_literal(ctx.genre)
-    if lang == "ja":
-        return {
-            "title_template": f"{{scene_phrase}} | {genre_label} BGM ({{activities}})",
-            "description_opening": f"{ctx.style}の{ctx.genre}音楽。",
-        }
-    if lang == "de":
-        return {
-            "title_template": f"{{scene_phrase}} | {genre_label} BGM ({{activities}})",
-            "description_opening": f"{ctx.style} {ctx.genre} Musik.",
-        }
+    title_template = f"{{scene_phrase}} | {genre_label} BGM ({{activities}})"
+    openings: dict[str, str] = {
+        "ja": f"{ctx.style}の{ctx.genre}音楽。",
+        "de": f"{ctx.style} {ctx.genre} Musik.",
+    }
     return {
-        "title_template": f"{{scene_phrase}} | {genre_label} BGM ({{activities}})",
-        "description_opening": f"{ctx.style} {ctx.genre} music.",
+        "title_template": title_template,
+        "description_opening": openings.get(lang, f"{ctx.style} {ctx.genre} music."),
     }
 
 

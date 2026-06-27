@@ -3,4 +3,12 @@
 # グローバルは Codex + Opus ハイブリッド構成（doer/planner 系のみ codex、レビュー系・supervisor は opus）。
 # このリポジトリ固有の上書きは draft_pr / base_branch のみ。
 draft_pr: false
-base_branch: feat/1143-suno-bulk-download  # #1143 統合 PR (元: feat/ts-rewrite)
+base_branch: main
+
+# Codex usage limit のため一時的に全 persona を claude に変更
+provider: claude
+persona_providers:
+  coder:
+    provider: claude
+  planner:
+    provider: claude

@@ -329,6 +329,25 @@ def test_branding_args_are_written_to_meta_json(tmp_path):
     assert branding["default_language"] == "en"
 
 
+# ===================== Case: --core-message が meta.json に反映 =====================
+
+
+def test_core_message_arg_is_written_to_meta_json(tmp_path):
+    # Given: --core-message を明示指定
+    extra = ["--core-message", "Your daily dose of ambient focus"]
+
+    # When: main を実行
+    rc = main(_required_args(tmp_path, extra=extra))
+
+    # Then: meta.json の channel.core_message / channel.tagline に反映される
+    assert rc == 0
+    meta = _read_json(_channel_dir(tmp_path) / "meta.json")
+    assert meta["channel"]["core_message"] == "Your daily dose of ambient focus"
+    assert meta["channel"]["tagline"] == "Your daily dose of ambient focus"
+    # cta_subscribe は genre から導出される（--genre 省略時は "TBD"）
+    assert "TBD" in meta["channel"]["cta_subscribe"]
+
+
 def test_audio_duration_args_are_written_to_audio_json(tmp_path, monkeypatch):
     # Given: 動画尺の初期値（分）を指定
     extra = ["--target-duration-min", "90", "--target-duration-max", "180"]

@@ -731,6 +731,23 @@ class TestCLIPull:
                 continue
             assert after_data[key] == before_data[key]
 
+    def test_channel_id_only_dry_run_does_not_modify_meta_json(self, tmp_path, monkeypatch, capsys):
+        _prepare_channel_dir(tmp_path, monkeypatch)
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
+        config_path = tmp_path / "config" / "channel" / "meta.json"
+        before = config_path.read_text(encoding="utf-8")
+
+        with patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        ):
+            rc = channel_settings_cli.main(["pull", "--channel-id-only"])
+        assert rc == 0
+        after = config_path.read_text(encoding="utf-8")
+        assert before == after  # meta.json unchanged
+        assert "dry-run" in capsys.readouterr().out
+
     def test_channel_id_only_apply_preserves_local_branding(self, tmp_path, monkeypatch, capsys):
         _prepare_channel_dir(tmp_path, monkeypatch)
         youtube = MagicMock()

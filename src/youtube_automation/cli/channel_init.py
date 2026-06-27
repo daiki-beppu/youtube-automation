@@ -317,7 +317,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="LANG",
         help='localizations の supported_languages。複数回指定可 (default: "ja", "en", "de")',
     )
-    parser.add_argument("--force", action="store_true", help="既存ファイルを上書きする")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="既存ファイルを上書きする（.env は機密保護のため常に保持）",
+    )
     return parser
 
 

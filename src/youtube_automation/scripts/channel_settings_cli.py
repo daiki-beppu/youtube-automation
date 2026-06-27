@@ -141,7 +141,7 @@ def _cmd_pull(args: argparse.Namespace) -> int:
             print("✋ dry-run. re-run with --apply to write channel.channel_id.")
             return 0
         config_path = _channel_dir() / "config" / "channel" / "meta.json"
-        _write_channel_id(config_path, channel_id)
+        _write_channel_settings(config_path, channel_id)
         print(f"📝 wrote channel.channel_id → {config_path}")
         return 0
 
@@ -169,21 +169,16 @@ def _cmd_pull(args: argparse.Namespace) -> int:
     return 0
 
 
-def _write_channel_settings(path: Path, channel_id: str, youtube_channel: dict[str, Any]) -> None:
-    """config/channel/meta.json の channel_id と youtube_channel セクションを差し替える。"""
+def _write_channel_settings(
+    path: Path,
+    channel_id: str,
+    youtube_channel: dict[str, Any] | None = None,
+) -> None:
+    """config/channel/meta.json の channel_id（と任意で youtube_channel）を差し替える。"""
     data = json.loads(path.read_text(encoding="utf-8"))
     _set_channel_id(data, channel_id)
-    data["youtube_channel"] = youtube_channel
-    path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-
-
-def _write_channel_id(path: Path, channel_id: str) -> None:
-    """config/channel/meta.json の channel.channel_id だけを差し替える。"""
-    data = json.loads(path.read_text(encoding="utf-8"))
-    _set_channel_id(data, channel_id)
+    if youtube_channel is not None:
+        data["youtube_channel"] = youtube_channel
     path.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
