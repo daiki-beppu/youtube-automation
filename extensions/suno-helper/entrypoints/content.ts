@@ -25,6 +25,7 @@ import { runEntryWithRetry } from "../lib/entry-retry";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
 import { attachBridgeListener, createFeedPoller, requestSliderSet } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
+import { triggerDownloadAll } from "../lib/download";
 import {
   abortableSleep,
   CAPTCHA_WAIT_TIMEOUT_MS,
@@ -46,15 +47,31 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
-  ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
-  multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
+  scrollAndMultiSelectByIds,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
-import { triggerPlaylistCaptureFailSoft } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { downloadFormatItem, serverUrlItem } from "../lib/storage";
+
+function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submittedIds: string[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (let i = 0; i < order.length; i++) {
+    const entry = entries[order[i]];
+    if (!entry) continue;
+    const title = entry.title ?? entry.name;
+    const clipBase = i * CLIPS_PER_REQUEST;
+    for (let c = 0; c < CLIPS_PER_REQUEST; c++) {
+      const clipId = submittedIds[clipBase + c];
+      if (clipId) {
+        map.set(clipId, title);
+      }
+    }
+  }
+  return map;
+}
 
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
@@ -107,6 +124,159 @@ export default defineContentScript({
       }
       currentSnapshot = applyProgress(currentSnapshot, payload);
       void sendMessage("progress", payload);
+    }
+
+    // --- Download all 完了待ち (#1146) ---
+    // background から downloadComplete メッセージを受信するための resolver。
+    // startDownload → triggerDownloadAll → waitForDownloadComplete の流れで使う。
+    type DownloadResult = { ok: true; filename: string } | { ok: false; message: string };
+
+    let downloadCompleteResolver: ((value: DownloadResult | null) => void) | null = null;
+
+    /** background からの downloadComplete メッセージを待つ。タイムアウトまたは abort で null を返す。 */
+    function waitForDownloadComplete(isAborted: () => boolean): Promise<DownloadResult | null> {
+      const DOWNLOAD_COMPLETE_TIMEOUT_MS = 600000; // 10 分
+      return new Promise((resolve) => {
+        downloadCompleteResolver = resolve;
+        const deadline = Date.now() + DOWNLOAD_COMPLETE_TIMEOUT_MS;
+        const tick = (): void => {
+          if (downloadCompleteResolver === null) {
+            // 既に resolve 済み（downloadComplete メッセージ受信済み）
+            return;
+          }
+          if (isAborted() || Date.now() >= deadline) {
+            downloadCompleteResolver = null;
+            resolve(null);
+            return;
+          }
+          setTimeout(tick, 1000);
+        };
+        tick();
+      });
+    }
+
+    // background → content: ダウンロード完了通知の受信ハンドラ (#1146)。
+    onMessage("downloadComplete", ({ data }) => {
+      if (downloadCompleteResolver) {
+        const resolver = downloadCompleteResolver;
+        downloadCompleteResolver = null;
+        resolver({ ok: true, filename: data.filename });
+      }
+    });
+
+    onMessage("downloadFailed", ({ data }) => {
+      if (downloadCompleteResolver) {
+        const resolver = downloadCompleteResolver;
+        downloadCompleteResolver = null;
+        resolver({ ok: false, message: data.message });
+      }
+    });
+
+    function resolvePlaylistUrl(playlistName: string): string {
+      const item = scrapePlaylistsFromMe(globalThis.document as Document).find(
+        (playlist) => playlist.title === playlistName,
+      );
+      if (!item) {
+        throw new Error(`playlist URL を解決できません: ${playlistName}`);
+      }
+      return item.url;
+    }
+
+    /**
+     * Download all の低レベル副作用本体 (#1146/#1217)。
+     * 1. file_count:0 で postDownloaded を呼び playlist URL を記録
+     * 2. DOWNLOADING phase に遷移し DOM で Download all を起動
+     * 3. chrome.downloads 完了を待ち file_count:N で postDownloaded
+     */
+    async function performDownload(
+      collectionId: string,
+      progressTotal: number,
+      expectedFileCount: number,
+      sunoPlaylistUrl: string,
+      isAborted: () => boolean,
+    ): Promise<void> {
+      const format = await downloadFormatItem.getValue();
+      const baseUrl = (await serverUrlItem.getValue()).trim();
+
+      await sendMessage("postDownloaded", {
+        baseUrl,
+        collectionId,
+        body: {
+          file_count: 0,
+          format,
+          suno_playlist_url: sunoPlaylistUrl,
+        },
+      });
+
+      if (isAborted()) return;
+
+      emitProgress({ phase: PHASE.DOWNLOADING, total: progressTotal, message: `${format.toUpperCase()} 形式` });
+      await sendMessage("startDownload", { format });
+      const downloadPromise = waitForDownloadComplete(isAborted);
+      try {
+        await triggerDownloadAll(format);
+      } catch (err) {
+        downloadCompleteResolver = null;
+        await sendMessage("cancelDownload", undefined).catch((cancelErr: unknown) => {
+          console.warn("[suno-helper] cancelDownload 中継失敗:", cancelErr);
+        });
+        throw err;
+      }
+
+      const downloadResult = await downloadPromise;
+
+      if (isAborted()) return;
+
+      if (!downloadResult) {
+        throw new Error("Download all がタイムアウトしました");
+      }
+      if (!downloadResult.ok) {
+        throw new Error(downloadResult.message);
+      }
+
+      await sendMessage("postDownloaded", {
+        baseUrl,
+        collectionId,
+        body: {
+          file_count: expectedFileCount,
+          expected_file_count: expectedFileCount,
+          format,
+          suno_playlist_url: sunoPlaylistUrl,
+          download_path: downloadResult.filename,
+        },
+      });
+    }
+
+    async function downloadBestEffort(
+      collectionId: string,
+      progressTotal: number,
+      expectedFileCount: number,
+      sunoPlaylistUrl: string,
+      isAborted: () => boolean,
+    ): Promise<boolean> {
+      try {
+        await performDownload(collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl, isAborted);
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[suno-helper] Download all failed: ${message}`);
+        emitProgress({
+          phase: PHASE.DOWNLOADING,
+          total: progressTotal,
+          message: `ダウンロード失敗（手動でダウンロードしてください）: ${message}`,
+        });
+        return false;
+      }
+    }
+
+    async function downloadStrict(
+      collectionId: string,
+      progressTotal: number,
+      expectedFileCount: number,
+      sunoPlaylistUrl: string,
+      isAborted: () => boolean,
+    ): Promise<void> {
+      await performDownload(collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl, isAborted);
     }
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
@@ -188,23 +358,36 @@ export default defineContentScript({
       playlistName: string,
       previousSubmittedClipIds: string[],
       expectedClipCount: number,
+      entries: PromptEntry[],
+      order: number[],
     ): Promise<void> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
+      const allSubmittedIds = [...previousSubmittedClipIds, ...tracker.getSubmittedIds()];
+      const observedCount = new Set(allSubmittedIds).size;
+      if (observedCount !== expectedClipCount) {
+        console.warn(
+          `[suno-helper] bridge observation gap: expected ${expectedClipCount} clip IDs, observed ${observedCount}`,
+        );
+      }
       const submittedIds = resolvePlaylistClipIds(
         previousSubmittedClipIds,
         tracker.getSubmittedIds(),
         expectedClipCount,
       );
-      const rows = await ensureClipRowsLoadedByIds(submittedIds, {
+      const titleFallbackMap = buildTitleFallbackMap(entries, order, submittedIds);
+      await scrollAndMultiSelectByIds(submittedIds, {
         isAborted: () => aborted,
+        titleFallbackMap,
       });
       if (aborted) {
-        return; // ロード待ち中に停止された。部分状態のまま Cmd+P に進まない（呼び出し元の STOPPED guard が persist する）
+        return;
       }
-      await multiSelectClips(rows);
       await abortableSleep(SETTLE_MS, () => aborted);
 
-      const dialog = await openAddToPlaylistDialogViaCmdP();
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      const dialog = await openAddToPlaylistDialogViaCmdP(async () => {
+        await sendMessage("sendTrustedCmdP", { isMac });
+      });
       await abortableSleep(SETTLE_MS, () => aborted);
 
       await fillPlaylistNameAndCreate(dialog, playlistName);
@@ -257,6 +440,7 @@ export default defineContentScript({
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
       const failedIndices: number[] = [];
+      let keepResumeStateForDownloadRetry = false;
       // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
       // そのまま流用し (要件3)、中断 index を載せる。collectionId が無い単一ファイル mode は
@@ -413,7 +597,14 @@ export default defineContentScript({
           return;
         }
         try {
-          await addClipsToPlaylist(total, playlistName, previousSubmittedClipIds, expectedPlaylistClipCount);
+          await addClipsToPlaylist(
+            total,
+            playlistName,
+            previousSubmittedClipIds,
+            expectedPlaylistClipCount,
+            entries,
+            order,
+          );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           persistInterruptState(total);
@@ -425,16 +616,28 @@ export default defineContentScript({
           emitProgress({ phase: PHASE.STOPPED, total });
           return;
         }
-        // playlist 化完了直後、FINISHED 直前に capture を自動 trigger する (#893 追加要件 A)。
-        // bg tab で `/me` を開閉し scrape→POST する実処理は background が担う。fail soft:
-        // 送信失敗は warning のみで FINISHED へ進める（capture はベストエフォート）。
-        await triggerPlaylistCaptureFailSoft(
-          () => sendMessage("requestPlaylistCapture", undefined),
-          (err) => console.warn("[suno-helper] playlist capture trigger failed:", err),
-        );
+
+        // --- DOWNLOADING phase (#1146) ---
+        if (collectionId && !aborted) {
+          persistInterruptState(total);
+          const sunoPlaylistUrl = resolvePlaylistUrl(playlistName);
+          const downloaded = await downloadBestEffort(
+            collectionId,
+            total,
+            expectedPlaylistClipCount,
+            sunoPlaylistUrl,
+            () => aborted,
+          );
+          keepResumeStateForDownloadRetry = !downloaded;
+          if (aborted) {
+            persistInterruptState(total);
+            emitProgress({ phase: PHASE.STOPPED, total });
+            return;
+          }
+        }
       }
       // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
-      if (collectionId) {
+      if (collectionId && !keepResumeStateForDownloadRetry) {
         void clearResumeStateForCollection(collectionId);
       }
       emitProgress({ phase: PHASE.FINISHED, total });
@@ -491,6 +694,77 @@ export default defineContentScript({
 
     onMessage("stop", () => {
       aborted = true;
+      return { ok: true } as const;
+    });
+
+    onMessage("retryPlaylist", ({ data }) => {
+      if (running) {
+        return { ok: true } as const;
+      }
+      const { playlistName, submittedClipIds, expectedClipCount, collectionId } = data;
+      currentSnapshot = initSnapshot([], playlistName);
+      running = true;
+      aborted = false;
+      void (async () => {
+        try {
+          await addClipsToPlaylist(0, playlistName, submittedClipIds, expectedClipCount, [], []);
+          if (aborted) {
+            emitProgress({ phase: PHASE.STOPPED, total: 0 });
+            return;
+          }
+          if (collectionId) {
+            void clearResumeStateForCollection(collectionId);
+          }
+          // retryPlaylist は playlist 再試行専用。ダウンロードは retryDownload が担う。
+          // popup に分離した retry ボタン（playlist / download）が各責務を呼び分ける (#1217)。
+          emitProgress({ phase: PHASE.FINISHED, total: 0 });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          emitProgress({ phase: PHASE.ERROR, total: 0, message });
+        }
+      })().finally(() => {
+        running = false;
+      });
+      return { ok: true } as const;
+    });
+
+    onMessage("retryDownload", ({ data }) => {
+      if (running) {
+        return { ok: true } as const;
+      }
+      const { collectionId, playlistName, submittedClipIds } = data;
+      currentSnapshot = initSnapshot([], undefined);
+      running = true;
+      aborted = false;
+      void (async () => {
+        try {
+          const total = submittedClipIds.length || 0;
+          if (submittedClipIds.length === 0) {
+            throw new Error("retryDownload に必要な clip ID がありません");
+          }
+          emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total, message: "clip を選択中…" });
+          await scrollAndMultiSelectByIds(submittedClipIds, { isAborted: () => aborted });
+          if (aborted) {
+            emitProgress({ phase: PHASE.STOPPED, total: 0 });
+            return;
+          }
+          const sunoPlaylistUrl = resolvePlaylistUrl(playlistName);
+          await downloadStrict(collectionId, total, total, sunoPlaylistUrl, () => aborted);
+          if (aborted) {
+            emitProgress({ phase: PHASE.STOPPED, total: 0 });
+            return;
+          }
+          if (collectionId) {
+            void clearResumeStateForCollection(collectionId);
+          }
+          emitProgress({ phase: PHASE.FINISHED, total: 0 });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          emitProgress({ phase: PHASE.ERROR, total: 0, message });
+        }
+      })().finally(() => {
+        running = false;
+      });
       return { ok: true } as const;
     });
 

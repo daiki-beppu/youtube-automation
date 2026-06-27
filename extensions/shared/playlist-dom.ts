@@ -26,8 +26,13 @@ const CLIP_ROW_SONG_ID_DATA_KEY = "songId";
 const CLIP_ROW_CLIP_ID_DATA_KEY = "clipId";
 const CLIP_ROW_SONG_LINK_SELECTOR = 'a[href*="/song/"]';
 const SONG_HREF_ID_RE = /\/song\/([^/?#]+)/;
-const GRID_IMAGE_SRC_SELECTOR = 'img[src*="cdn2.suno.ai/image_"]';
-const GRID_IMAGE_UUID_RE = /\/image_([0-9a-f-]{36})/;
+/**
+ * Suno CDN 画像 URL から clip UUID を抽出する正規表現。
+ * src/data-src は `cdn2.suno.ai/image_<UUID>.jpeg` or `image_large_<UUID>.jpeg` 形式。
+ * data-songId / data-clipId / song リンクが全廃された新 DOM での唯一の clip ID ソース。
+ */
+const CLIP_IMAGE_UUID_RE =
+  /image_(?:large_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 const GRID_CARD_MAX_ANCESTOR_DEPTH = 10;
 const GRID_CARD_MIN_SIBLINGS = 2;
 /** Add to Playlist dialog 内の playlist 名入力欄。 */
@@ -51,8 +56,18 @@ const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 const CLIP_SELECT_VERIFY_MS_PER_ROW = 100;
 /** Cmd+P 発火の最大リトライ回数 (#1050)。dialog が開かない場合に再発火する。 */
 const CMD_P_MAX_RETRIES = 3;
+/** clip row 内の曲タイトル表示要素。実機 DOM 調査 (2026-06-23) で確認済み。 */
+const CLIP_ROW_TITLE_SELECTOR = 'span[role="button"][aria-label^="Play "]';
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
+/** scrollAndMultiSelectByIds: 各スクロールステップ後に仮想 DOM が描画されるのを待つ猶予 (ms)。 */
+const VIRTUAL_SCROLL_RENDER_WAIT_MS = 200;
+/** scrollAndMultiSelectByIds: 全スクロール後に未発見 ID がある場合の再スキャン上限回数。 */
+const VIRTUAL_SCROLL_RETRY_PASSES = 2;
+/** loadSettleTimeoutMs のデフォルト基準値 (ms)。 */
+const SETTLE_BASE_MS = 3000;
+/** loadSettleTimeoutMs を targetIds.length でスケールする係数 (ms/clip)。 */
+const SETTLE_PER_CLIP_MS = 200;
 type ClipListScrollIntent = "probe-intermediate" | "settle-bottom";
 
 /**
@@ -83,20 +98,42 @@ function findPlaylistDialog(): HTMLElement | null {
 const CLIP_ROW_NOT_FOUND_MESSAGE =
   "clip row が見つかりません。Suno の UI 変更の可能性があります。";
 
+/**
+ * 要素が clip card のコンテンツ（画像やリンク）を含むか判定する。
+ * bare wrapper（.multi-select-button のみを内包する中間 div）と
+ * 実 clip card を区別するための構造シグナル。Emotion class には依存しない。
+ */
+function hasClipContent(el: HTMLElement): boolean {
+  return (
+    el.querySelector("img") !== null || el.querySelector("a[href]") !== null
+  );
+}
+
 function resolveClipRowFromSelectButton(
   button: HTMLElement,
 ): HTMLElement | null {
-  const multiSelectRow = button.closest(
-    MULTI_SELECT_BUTTON_SELECTOR,
-  )?.parentElement;
-  if (multiSelectRow) {
-    return multiSelectRow;
+  const multiSelectWrapper = button.closest(MULTI_SELECT_BUTTON_SELECTOR);
+  if (!multiSelectWrapper) {
+    const articleRow = button.closest<HTMLElement>("article");
+    if (articleRow) {
+      return articleRow;
+    }
+    return resolveGridCardFromSelectButton(button);
   }
-  const articleRow = button.closest<HTMLElement>("article");
-  if (articleRow) {
-    return articleRow;
+  const parent = multiSelectWrapper.parentElement;
+  if (!parent) {
+    return button.closest<HTMLElement>("article");
   }
-  return resolveGridCardFromSelectButton(button);
+  // 旧 DOM: parent が clip card 本体（img / a[href] を含む）→ そのまま返す。
+  // 新 DOM: parent が bare wrapper（.multi-select-button のみ）→ 1 段上の clip card を返す。
+  if (hasClipContent(parent)) {
+    return parent;
+  }
+  const grandparent = parent.parentElement;
+  if (grandparent) {
+    return grandparent;
+  }
+  return parent;
 }
 
 function resolveGridCardFromSelectButton(
@@ -228,6 +265,11 @@ function extractSongIdFromHref(href: string): string | null {
   return match ? match[1] : null;
 }
 
+function extractClipIdFromImageUrl(url: string): string | null {
+  const match = CLIP_IMAGE_UUID_RE.exec(url);
+  return match ? match[1] : null;
+}
+
 function collectClipRowIds(row: HTMLElement): Set<string> {
   const ids = new Set<string>();
   const songId = row.dataset[CLIP_ROW_SONG_ID_DATA_KEY];
@@ -246,22 +288,32 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
       ids.add(id);
     }
   }
+  // 既存経路で ID が見つからなかった場合、画像 URL から UUID を抽出する。
+  // Suno が data-songId / data-clipId / song リンクを全廃した新 DOM での fallback。
   if (ids.size === 0) {
-    for (const img of row.querySelectorAll<HTMLImageElement>(
-      GRID_IMAGE_SRC_SELECTOR,
-    )) {
-      const match = GRID_IMAGE_UUID_RE.exec(img.src);
-      if (match) {
-        ids.add(match[1]);
+    for (const img of row.querySelectorAll<HTMLImageElement>("img")) {
+      const uuid =
+        extractClipIdFromImageUrl(img.src) ??
+        extractClipIdFromImageUrl(img.dataset.src ?? "");
+      if (uuid) {
+        ids.add(uuid);
+        break;
       }
     }
   }
   return ids;
 }
 
+export function collectClipRowTitle(row: HTMLElement): string | null {
+  return (
+    row.querySelector(CLIP_ROW_TITLE_SELECTOR)?.textContent?.trim() || null
+  );
+}
+
 function findRowsByClipIds(
   rows: HTMLElement[],
   targetIds: string[],
+  titleFallbackMap?: Map<string, string>,
 ): HTMLElement[] {
   const rowById = new Map<string, HTMLElement>();
   for (const row of rows) {
@@ -274,19 +326,54 @@ function findRowsByClipIds(
 
   const foundRows: HTMLElement[] = [];
   const seenRows = new Set<HTMLElement>();
+  const unmatchedIds: string[] = [];
+
   for (const id of targetIds) {
     const row = rowById.get(id);
     if (row && !seenRows.has(row)) {
       foundRows.push(row);
       seenRows.add(row);
+    } else if (!row) {
+      unmatchedIds.push(id);
     }
   }
+
+  if (
+    unmatchedIds.length > 0 &&
+    titleFallbackMap &&
+    titleFallbackMap.size > 0
+  ) {
+    const rowsByTitle = new Map<string, HTMLElement[]>();
+    for (const row of rows) {
+      const title = collectClipRowTitle(row);
+      if (title) {
+        const list = rowsByTitle.get(title) ?? [];
+        list.push(row);
+        rowsByTitle.set(title, list);
+      }
+    }
+    for (const id of unmatchedIds) {
+      const title = titleFallbackMap.get(id);
+      if (!title) continue;
+      const candidates = rowsByTitle.get(title);
+      if (!candidates) continue;
+      for (const row of candidates) {
+        if (!seenRows.has(row)) {
+          foundRows.push(row);
+          seenRows.add(row);
+          break;
+        }
+      }
+    }
+  }
+
   return foundRows;
 }
 
 function listMissingClipIds(
   rows: HTMLElement[],
   targetIds: string[],
+  titleFallbackMap?: Map<string, string>,
 ): string[] {
   const foundIds = new Set<string>();
   for (const row of rows) {
@@ -294,7 +381,23 @@ function listMissingClipIds(
       foundIds.add(id);
     }
   }
-  return targetIds.filter((id) => !foundIds.has(id));
+  const missing = targetIds.filter((id) => !foundIds.has(id));
+  if (
+    missing.length === 0 ||
+    !titleFallbackMap ||
+    titleFallbackMap.size === 0
+  ) {
+    return missing;
+  }
+  const titleSet = new Set<string>();
+  for (const row of rows) {
+    const title = collectClipRowTitle(row);
+    if (title) titleSet.add(title);
+  }
+  return missing.filter((id) => {
+    const title = titleFallbackMap.get(id);
+    return !title || !titleSet.has(title);
+  });
 }
 
 function scrollClipListTowardBottom(
@@ -334,8 +437,10 @@ export interface EnsureClipRowsLoadedOptions {
   isAborted: () => boolean;
   /** ロード判定の poll 間隔 (ms)。既定 100。 */
   pollIntervalMs?: number;
-  /** スクロール後、追加 row のロードを待つ上限 (ms)。既定 3000。 */
+  /** スクロール後、追加 row のロードを待つ上限 (ms)。既定は targetIds.length でスケール。 */
   loadSettleTimeoutMs?: number;
+  /** clip ID → 曲タイトルの Map。ID マッチ失敗時にタイトルで row を逆引きするフォールバック。 */
+  titleFallbackMap?: Map<string, string>;
 }
 
 export async function ensureClipRowsLoadedByIds(
@@ -350,7 +455,9 @@ export async function ensureClipRowsLoadedByIds(
   const {
     isAborted,
     pollIntervalMs = 100,
-    loadSettleTimeoutMs = 3000,
+    loadSettleTimeoutMs = SETTLE_BASE_MS +
+      uniqueTargetIds.length * SETTLE_PER_CLIP_MS,
+    titleFallbackMap,
   } = options;
 
   const scroller = document.querySelector<HTMLElement>(
@@ -360,14 +467,21 @@ export async function ensureClipRowsLoadedByIds(
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
   }
 
+  const allFound = (r: HTMLElement[]) =>
+    listMissingClipIds(r, uniqueTargetIds, titleFallbackMap).length === 0;
+
   let rows = collectLoadedClipRows(scroller);
 
   for (;;) {
-    const foundRows = findRowsByClipIds(rows, uniqueTargetIds);
+    const foundRows = findRowsByClipIds(
+      rows,
+      uniqueTargetIds,
+      titleFallbackMap,
+    );
     if (isAborted()) {
       return foundRows;
     }
-    if (foundRows.length === uniqueTargetIds.length) {
+    if (allFound(rows)) {
       restoreClipListHead(scroller);
       return foundRows;
     }
@@ -379,18 +493,26 @@ export async function ensureClipRowsLoadedByIds(
     for (;;) {
       await sleep(pollIntervalMs);
       rows = collectLoadedClipRows(scroller);
-      const nextFoundRows = findRowsByClipIds(rows, uniqueTargetIds);
+      const nextFoundRows = findRowsByClipIds(
+        rows,
+        uniqueTargetIds,
+        titleFallbackMap,
+      );
       if (isAborted()) {
         return nextFoundRows;
       }
-      if (nextFoundRows.length === uniqueTargetIds.length) {
+      if (allFound(rows)) {
         break;
       }
       if (rows.length > prevCount) {
         break;
       }
       if (Date.now() >= settleDeadline) {
-        const missing = listMissingClipIds(rows, uniqueTargetIds).join(", ");
+        const missing = listMissingClipIds(
+          rows,
+          uniqueTargetIds,
+          titleFallbackMap,
+        ).join(", ");
         throw new Error(
           `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
         );
@@ -535,23 +657,174 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
   }
 }
 
+export interface ScrollAndMultiSelectOptions {
+  isAborted: () => boolean;
+  titleFallbackMap?: Map<string, string>;
+  renderWaitMs?: number;
+}
+
+/**
+ * 仮想スクロール対応の clip multi-select (#1251)。
+ *
+ * Suno のクリップリストは仮想スクロールを使い、ビューポート内の 15-25 行だけ DOM に存在する。
+ * 旧 `ensureClipRowsLoadedByIds` + `multiSelectClips` は全 target row が同時に DOM に揃う
+ * ことを前提としていたが、仮想化ではそれが不可能。
+ *
+ * この関数はリストをトップからボトムまでスクロールしながら、各ビューポートで target ID に
+ * マッチする row を発見次第 Select click する。Suno は選択状態を内部 state で保持するため、
+ * row がスクロールアウトしても選択は維持される。
+ */
+export async function scrollAndMultiSelectByIds(
+  targetIds: string[],
+  options: ScrollAndMultiSelectOptions,
+): Promise<number> {
+  const uniqueTargetIds = new Set(targetIds);
+  if (uniqueTargetIds.size === 0) {
+    throw new Error("playlist 対象の clip ID がありません。");
+  }
+
+  const {
+    isAborted,
+    titleFallbackMap,
+    renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+  } = options;
+
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  const foundIds = new Set<string>();
+  const titleMatchedIds = new Set<string>();
+
+  async function selectMatchingRows(): Promise<void> {
+    const buttons = scroller!.querySelectorAll<HTMLElement>(
+      `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
+    );
+    const seen = new Set<HTMLElement>();
+    for (const button of buttons) {
+      const row = resolveClipRowFromSelectButton(button);
+      if (!row || seen.has(row) || !isVisible(row)) continue;
+      seen.add(row);
+
+      const rowIds = collectClipRowIds(row);
+      let matched = false;
+      for (const id of rowIds) {
+        if (uniqueTargetIds.has(id)) {
+          foundIds.add(id);
+          matched = true;
+        }
+      }
+      if (!matched && titleFallbackMap && titleFallbackMap.size > 0) {
+        const title = collectClipRowTitle(row);
+        if (title) {
+          for (const [id, t] of titleFallbackMap) {
+            if (
+              t === title &&
+              uniqueTargetIds.has(id) &&
+              !foundIds.has(id) &&
+              !titleMatchedIds.has(id)
+            ) {
+              titleMatchedIds.add(id);
+              matched = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!matched) continue;
+
+      if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) continue;
+      const selectBtn = row.querySelector<HTMLButtonElement>(
+        SELECT_CLIP_BUTTON_ANY_SELECTOR,
+      );
+      if (selectBtn) {
+        selectBtn.click();
+        // Verify selection actually took effect (#1217 AI-NEW-1217-001).
+        // Suno's React state update may not be synchronous; brief poll.
+        let verified = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await sleep(50);
+          if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) {
+            verified = true;
+            break;
+          }
+          // Retry click if first attempt didn't take
+          if (attempt < 2) selectBtn.click();
+        }
+        if (!verified) {
+          console.warn(
+            `[suno-helper] clip row selection verification failed for row, continuing`,
+          );
+        }
+      }
+    }
+  }
+
+  const allFound = () =>
+    foundIds.size + titleMatchedIds.size >= uniqueTargetIds.size;
+
+  for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event("scroll"));
+    await sleep(renderWaitMs);
+
+    const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+
+    for (let pos = 0; pos <= maxScroll; pos += step) {
+      if (isAborted()) return foundIds.size + titleMatchedIds.size;
+
+      scroller.scrollTop = Math.min(pos, maxScroll);
+      scroller.dispatchEvent(new Event("scroll"));
+      await sleep(renderWaitMs);
+
+      await selectMatchingRows();
+
+      if (allFound()) break;
+    }
+
+    if (allFound()) break;
+  }
+
+  restoreClipListHead(scroller);
+
+  if (!allFound()) {
+    const missing = [...uniqueTargetIds]
+      .filter((id) => !foundIds.has(id) && !titleMatchedIds.has(id))
+      .join(", ");
+    throw new Error(
+      `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
+    );
+  }
+
+  return foundIds.size + titleMatchedIds.size;
+}
+
 /**
  * Cmd+P (Mac=metaKey / 他=ctrlKey) を document に dispatch して Add to Playlist dialog を開き、
  * 出現した dialog を返す (#854)。cookie consent dialog は findPlaylistDialog の除外フィルタで拾わない。
  * 上限まで待っても出なければ throw（silent に続行しない）。
  */
-export async function openAddToPlaylistDialogViaCmdP(): Promise<HTMLElement> {
-  const isMac = navigator.platform.toLowerCase().includes("mac");
-
+export async function openAddToPlaylistDialogViaCmdP(
+  dispatchCmdP?: () => Promise<void>,
+): Promise<HTMLElement> {
   for (let attempt = 0; attempt < CMD_P_MAX_RETRIES; attempt++) {
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "p",
-        metaKey: isMac,
-        ctrlKey: !isMac,
-        bubbles: true,
-      }),
-    );
+    if (dispatchCmdP) {
+      await dispatchCmdP();
+    } else {
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "p",
+          metaKey: isMac,
+          ctrlKey: !isMac,
+          bubbles: true,
+        }),
+      );
+    }
 
     const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
     for (;;) {

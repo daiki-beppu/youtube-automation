@@ -6,6 +6,7 @@
 import {
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
+  DOWNLOADED_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
   PLAYLISTS_CAPTURE_ROUTE,
@@ -37,18 +38,21 @@ export interface PromptEntry {
   vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
-/** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。 */
+/** collection の状態 (#1216)。サーバーがファイルシステムから動的に判定する。
+ * - `needs_prompts`: suno-prompts.json が未作成
+ * - `ready`: prompts 存在・ダウンロード未完了
+ * - `downloaded`: 02-Individual-music/ に pattern_count 以上の音声ファイルがある */
+export type CollectionStatus = "needs_prompts" | "ready" | "downloaded";
+
+/** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。
+ * #1216 BREAKING: has_prompts / mapped を廃止し status / downloaded_count に置換。 */
 export interface CollectionSummary {
   id: string;
   name: string;
-  has_prompts: boolean;
+  playlist_name?: string | null;
+  status: CollectionStatus;
   pattern_count: number | null;
-  // 既に config/suno-playlists.json にマッピング済みか (#893 追加要件 B)。
-  // optional・後方互換: prefix 未設定の旧サーバーは返さず undefined（全件表示の従来挙動）。
-  mapped?: boolean;
-  // サーバーが prefix を使って導出した Suno playlist 名 `<prefix> | <theme>`。
-  // マルチワード prefix でも正しい境界分割を保証する。未設定時は extractPlaylistName fallback。
-  playlist_name?: string;
+  downloaded_count: number;
 }
 
 /** Suno `/me` から捕捉した 1 playlist (#893)。POST /suno/playlists の body 要素。 */
@@ -235,12 +239,13 @@ export async function fetchCollectionPrompts(
 
 /**
  * ドロップダウンの初期選択 id を決める (#816)。
- * 最初の `has_prompts===true` な entry の id。実行可能な選択肢が無ければ null。
+ * 最初の `status !== "needs_prompts"` な entry の id。実行可能な選択肢が無ければ null。
+ * #1216: has_prompts → status ベースに移行。
  */
 export function pickInitialCollectionId(
   collections: CollectionSummary[],
 ): string | null {
-  return collections.find((c) => c.has_prompts)?.id ?? null;
+  return collections.find((c) => c.status !== "needs_prompts")?.id ?? null;
 }
 
 export function resolvePromptCollectionId(
@@ -248,7 +253,7 @@ export function resolvePromptCollectionId(
   selectedId: string,
 ): string | null {
   const selected = collections.find((c) => c.id === selectedId);
-  if (selected?.has_prompts) {
+  if (selected && selected.status !== "needs_prompts") {
     return selected.id;
   }
   return pickInitialCollectionId(collections);
@@ -320,16 +325,6 @@ export async function postCapturedPlaylists(
   return (await resp.json()) as CapturedPlaylistsResult;
 }
 
-/**
- * 既にマッピング済み (mapped===true) の collection を除外する純関数 (#893 追加要件 B)。
- * mapped 未設定（prefix 未指定の旧運用）は除外対象にしないため全件残す（後方互換）。
- */
-export function excludeMappedCollections(
-  collections: CollectionSummary[],
-): CollectionSummary[] {
-  return collections.filter((c) => c.mapped !== true);
-}
-
 /** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */
 export interface DistrokidCollectionSummary {
   collection_id: string;
@@ -392,5 +387,64 @@ export async function recordDistrokidRelease(
   });
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
+  }
+}
+
+/** POST /collections/:id/downloaded の body (#1215)。ダウンロード完了通知ペイロード。 */
+export interface DownloadedPayload {
+  file_count: number;
+  expected_file_count?: number;
+  format: "mp3" | "m4a" | "wav";
+  suno_playlist_url: string;
+  download_path?: string;
+}
+
+/**
+ * ダウンロード完了をサーバーに通知する (#1215)。POST /collections/:id/downloaded。
+ * 非 2xx は fail-loud で throw する。
+ */
+async function fetchServeToken(baseUrl: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/auth/token`);
+  if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
+  const data: unknown = await res.json();
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("token" in data) ||
+    typeof (data as Record<string, unknown>).token !== "string" ||
+    !(data as Record<string, unknown>).token
+  ) {
+    throw new Error("/auth/token returned invalid response");
+  }
+  const token = (data as Record<string, string>).token;
+  return token;
+}
+
+export async function postDownloaded(
+  baseUrl: string,
+  collectionId: string,
+  payload: DownloadedPayload,
+): Promise<void> {
+  const token = await fetchServeToken(baseUrl);
+  const url = `${baseUrl}${DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(collectionId))}`;
+  let res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Serve-Token": token },
+    body: JSON.stringify(payload),
+  });
+  // 403 retry: token may be stale after server restart
+  if (res.status === 403) {
+    const freshToken = await fetchServeToken(baseUrl);
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Serve-Token": freshToken,
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+  if (!res.ok) {
+    throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
   }
 }

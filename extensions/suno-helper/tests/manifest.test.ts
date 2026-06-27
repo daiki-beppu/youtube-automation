@@ -3,30 +3,39 @@
 // 権限宣言を import 可能な単一定数 `MANIFEST_PERMISSIONS` (lib/manifest.ts) に切り出し、
 // wxt.config.ts はその定数を参照する。これにより未使用権限の混入を機械的に防ぐ。
 //
-// 契約 (#893 で `tabs` を追加): chrome.storage.local + activeTab + tabs。
-// `tabs` は自動 POST trigger（background が `https://suno.com/me` を bg tab で開閉し
-// playlist を scrape → POST する、追加要件 A）で `browser.tabs.create / remove` を呼ぶために必要。
+// 契約 (#893 で `tabs`、#1146 で `downloads`、#1251 で `debugger` を追加):
+//   storage / activeTab / tabs / downloads / debugger。
+// `tabs` は自動 POST trigger、`downloads` は Suno playlist の ZIP ダウンロード監視、
+// `debugger` は trusted Cmd+P dispatch に必要。
 // それ以外の広域権限（history / bookmarks / cookies 等）は引き続き混入させない。
 import { describe, expect, it } from "vitest";
 
 import { MANIFEST_PERMISSIONS } from "../lib/manifest";
 import wxtConfig from "../wxt.config";
 
-const EXPECTED_PERMISSIONS = ["storage", "activeTab", "tabs"];
-// `tabs` 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
+const EXPECTED_PERMISSIONS = ["storage", "activeTab", "tabs", "downloads", "debugger"];
+// `tabs` / `downloads` 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
 const FORBIDDEN_PERMISSIONS = ["history", "bookmarks", "cookies", "webNavigation"];
 
 describe("lib/manifest: 最小権限契約", () => {
-  it("Given MANIFEST_PERMISSIONS When 中身を読む Then storage / activeTab / tabs である", () => {
+  it("Given MANIFEST_PERMISSIONS When 中身を読む Then storage / activeTab / tabs / downloads / debugger である", () => {
     expect(new Set(MANIFEST_PERMISSIONS)).toEqual(new Set(EXPECTED_PERMISSIONS));
   });
 
-  it("Given MANIFEST_PERMISSIONS When 重複の有無を見る Then 3 件ちょうどである", () => {
+  it("Given MANIFEST_PERMISSIONS When 重複の有無を見る Then 5 件ちょうどである", () => {
     expect(MANIFEST_PERMISSIONS).toHaveLength(EXPECTED_PERMISSIONS.length);
   });
 
   it("Given MANIFEST_PERMISSIONS When 自動 POST trigger 用権限を確認する Then `tabs` を含む", () => {
     expect(MANIFEST_PERMISSIONS).toContain("tabs");
+  });
+
+  it("Given MANIFEST_PERMISSIONS When ダウンロード監視用権限を確認する Then `downloads` を含む (#1146)", () => {
+    expect(MANIFEST_PERMISSIONS).toContain("downloads");
+  });
+
+  it("Given MANIFEST_PERMISSIONS When trusted Cmd+P 用権限を確認する Then `debugger` を含む (#1251)", () => {
+    expect(MANIFEST_PERMISSIONS).toContain("debugger");
   });
 
   it("Given MANIFEST_PERMISSIONS When 過剰権限を探す Then 広域権限を含まない", () => {

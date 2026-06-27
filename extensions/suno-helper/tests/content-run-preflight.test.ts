@@ -68,6 +68,19 @@ vi.mock("../lib/bridge-listener", () => ({
   requestSliderSet: harness.requestSliderSet,
 }));
 
+vi.mock("../lib/storage", () => ({
+  serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
+  downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
+}));
+
+vi.mock("../lib/download", () => ({
+  triggerDownloadAll: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("../../shared/api", () => ({
+  postDownloaded: vi.fn(() => Promise.resolve()),
+}));
+
 async function loadContentScript(): Promise<void> {
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
   const content = await import("../entrypoints/content");
@@ -216,8 +229,8 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     expect(harness.feedPollerStop).not.toHaveBeenCalled();
   });
 
-  it("Given 状態属性のない単独 Grid button がある When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
-    makeGenericButton("Grid");
+  it("Given view mode に一致しない単独 button がある When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
+    makeGenericButton("Settings");
     await loadContentScript();
     const runHandler = getRunHandler();
     const entries = makePromptEntries(1);

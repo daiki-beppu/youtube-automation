@@ -7,7 +7,6 @@ import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
-  excludeMappedCollections,
   extractPlaylistName,
   fetchCollectionPrompts,
   fetchCollections,
@@ -45,9 +44,6 @@ interface RunnerState {
   url: string;
   setUrl: (url: string) => void;
   collections: CollectionSummary[];
-  // fetchCollections は collection を返したが全て mapped 済みで filter 後 0 件になった状態 (#893 要件 B)。
-  // App が「未マッピング collection はありません」の placeholder を出すための表示フラグ。
-  allMapped: boolean;
   selectedCollectionId: string;
   selectCollection: (id: string) => void;
   entries: PromptEntry[];
@@ -77,6 +73,9 @@ interface RunnerState {
   failedEntries: number[];
   // 失敗分のみ再実行 (#948)。run({indices: failedEntries}) を 1-click で投げる。
   rerunFailed: () => void;
+  // playlist / download 単独再実行 (#1251)。失敗フォールバック用。
+  retryPlaylist: () => Promise<void>;
+  retryDownload: () => Promise<void>;
   fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
   // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
@@ -96,8 +95,6 @@ async function fetchCollectionEntries(baseUrl: string, collectionId: string | nu
 export function useSunoRunner(): RunnerState {
   const [url, setUrlState] = useState("");
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  // fetchCollections が非空だが全件 mapped で filter 後 0 件になったか (#893 要件 B)。placeholder 表示用。
-  const [allMapped, setAllMapped] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
@@ -132,8 +129,6 @@ export function useSunoRunner(): RunnerState {
   const [resumeDismissed, setResumeDismissed] = useState(false);
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
-  // サーバーが playlist_name を返す場合はそれを優先する（prefix を使った正確な境界分割）。
-  // 旧サーバー（playlist_name 未返却）は extractPlaylistName fallback で後方互換を維持する。
   const derivedPlaylistName = useMemo(() => {
     const selected = collections.find((c) => c.id === selectedCollectionId);
     if (!selected) {
@@ -276,7 +271,6 @@ export function useSunoRunner(): RunnerState {
 
   const applySingleFileMode = useCallback(() => {
     setCollections([]);
-    setAllMapped(false);
     setSelectedCollectionId("");
   }, []);
 
@@ -284,12 +278,8 @@ export function useSunoRunner(): RunnerState {
     async (baseUrl: string, currentSelectedId: string): Promise<PromptSource> => {
       try {
         const fetched = await fetchCollections(baseUrl);
-        // 既にマッピング済み collection をドロップダウンから外す (#893 追加要件 B)。prefix 未指定の
-        // 旧サーバーは mapped を返さず全件残る（後方互換）。fetched 非空 + filter 後空 = 全件マッピング済み。
-        const list = excludeMappedCollections(fetched);
-        const nextSelectedId = resolvePromptCollectionId(list, currentSelectedId);
-        setCollections(list);
-        setAllMapped(fetched.length > 0 && list.length === 0);
+        const nextSelectedId = resolvePromptCollectionId(fetched, currentSelectedId);
+        setCollections(fetched);
         setSelectedCollectionId(nextSelectedId ?? "");
         return { kind: "collection", collectionId: nextSelectedId };
       } catch (err) {
@@ -449,12 +439,44 @@ export function useSunoRunner(): RunnerState {
     [isRunning, entries, rangeMode, rangeStart, rangeEnd, derivedPlaylistName, selectedCollectionId, report],
   );
 
-  // バナー承認 = 1-click 自動再開 (#892 要件6)。range UI を「失敗 entry..末尾」で prefill しつつ、
-  // ローカル構築した 0-based range を引数で run へ渡してそのまま生成を再開する。React state は
-  // 次レンダ反映で closure から読めないため、prefill した state ではなく引数で range を渡す（order.md §2）。
-  // prefill 自体は再開後の UI 表示整合のために残す。run は定義後でないと参照できないためここに置く。
+  // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
+  const retryPlaylist = useCallback(async () => {
+    if (isRunning || !playlistName) {
+      return;
+    }
+    setIsRunning(true);
+    setResumeDismissed(true);
+    try {
+      await sendMessage("retryPlaylist", {
+        playlistName,
+        submittedClipIds: submittedClipIdsForResume,
+        expectedClipCount: playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length,
+        collectionId: selectedCollectionId || undefined,
+      });
+      report("playlist 追加を再実行しています…");
+    } catch (err) {
+      setIsRunning(false);
+      const message = err instanceof Error ? err.message : String(err);
+      report(formatRunError(message), true);
+    }
+  }, [
+    isRunning,
+    playlistName,
+    submittedClipIdsForResume,
+    playlistExpectedClipCountForResume,
+    selectedCollectionId,
+    report,
+  ]);
+
+  // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
+  // entries 不要の retryPlaylist を使い、ページリロード後でも確実に playlist 追加を再実行する。
+  // それ以外（途中中断）は従来通り run で entry 生成から再開する。
   const acceptResume = useCallback(() => {
     if (!resumeBanner) {
+      return;
+    }
+    if (resumeBanner.failedIndex >= resumeBanner.total) {
+      void retryPlaylist();
       return;
     }
     const prefilled = resumeBannerRange(resumeBanner);
@@ -468,7 +490,27 @@ export function useSunoRunner(): RunnerState {
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
     );
-  }, [resumeBanner, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
+  }, [resumeBanner, retryPlaylist, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
+
+  // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
+  const retryDownload = useCallback(async () => {
+    if (isRunning || !selectedCollectionId || !playlistName) {
+      return;
+    }
+    setIsRunning(true);
+    try {
+      await sendMessage("retryDownload", {
+        collectionId: selectedCollectionId,
+        playlistName,
+        submittedClipIds: submittedClipIdsForResume,
+      });
+      report("ダウンロードを再実行しています…");
+    } catch (err) {
+      setIsRunning(false);
+      const message = err instanceof Error ? err.message : String(err);
+      report(formatRunError(message), true);
+    }
+  }, [isRunning, selectedCollectionId, playlistName, submittedClipIdsForResume, report]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。
@@ -500,7 +542,6 @@ export function useSunoRunner(): RunnerState {
     url,
     setUrl: updateUrl,
     collections,
-    allMapped,
     selectedCollectionId,
     selectCollection,
     entries,
@@ -524,6 +565,8 @@ export function useSunoRunner(): RunnerState {
     dismissResume,
     failedEntries,
     rerunFailed,
+    retryPlaylist,
+    retryDownload,
     fetchData,
     run,
     stop,

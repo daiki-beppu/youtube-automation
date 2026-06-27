@@ -20,7 +20,11 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import tempfile
+import urllib.parse
+import uuid
+import zipfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -109,6 +113,11 @@ def _prefix_pattern(prefix: str) -> str:
 
 def normalize_suno_title(title: str, prefix: str) -> str | None:
     """`<prefix> | <theme>` を `<prefix>-<theme-slug>` に正規化する（#893 要件3）。
+
+    .. deprecated:: #1145
+        slug matching による status 判定は status enum に置換された。
+        write_suno_playlists の内部利用を除き呼び出し元は残らない。
+        後方互換のために残置。次回 breaking で削除予定。
 
     prefix はパイプ直前トークンと完全一致する必要がある（部分一致は弾く）。大小無視、
     区切りの空白/ハイフンは無差別（`Soulful Grooves |` も prefix `soulful-grooves` に
@@ -225,6 +234,11 @@ def _read_playlists_json(target: Path) -> dict:
 
 def read_mapped_slugs(root: Path) -> set[str]:
     """既存 `<root>/config/suno-playlists.json` の slug 集合を返す（#893 要件 B）。
+
+    .. deprecated:: #1145
+        status enum が mapped / playlist_name を置換したため、
+        GET /collections ハンドラからの呼び出しは無くなった。
+        後方互換のために残置。次回 breaking で削除予定。
 
     不在・破損は空集合（fail-loud せず「未マッピング」として扱う）。
     """
@@ -381,6 +395,11 @@ def build_distrokid_collections_index(
 def write_suno_playlists(root: Path, payload: list[dict], *, prefix: str) -> int:
     """capture した playlist を `<root>/config/suno-playlists.json` へ atomic merge write する（#893 要件4）。
 
+    .. deprecated:: #1145
+        新規コレクションは POST ``/collections/<id>/downloaded`` で playlist URL を
+        workflow-state.json に記録する。本関数は旧 ``POST /suno/playlists`` の内部実装
+        として後方互換のために残置する。次回 breaking で削除予定。
+
     prefix 不一致 item は skip、同 slug は captured_at 後勝ちで上書き、既存 JSON 破損は
     空 dict 扱いで再作成する。`tempfile.mkstemp` → `os.replace` で中間 temp を残さず
     書き込み、実際に書いた件数を返す。
@@ -447,42 +466,65 @@ def find_collection_dirs(root: Path) -> list[Path]:
     return sorted(dirs, key=lambda p: p.name)
 
 
-def build_collections_index(
-    root: Path,
-    *,
-    mapped_slugs: set[str] | None = None,
-    prefix: str | None = None,
-) -> list[dict]:
-    """各 collection を index entry に写像する（#816 dir mode / #893）.
+_AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
+_VALID_DOWNLOAD_FORMATS = frozenset({"mp3", "m4a", "wav"})
+
+# ZIP bomb protection limits (#1217).
+_ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
+_ZIP_MAX_SINGLE_FILE = 500 * 1024 * 1024  # 500 MB
+_ZIP_MAX_ENTRIES = 1000
+
+
+def _count_audio_files(music_dir: Path) -> int:
+    """02-Individual-music/ 内の音声ファイル（mp3/m4a/wav）件数を返す。不在は 0。"""
+    if not music_dir.is_dir():
+        return 0
+    return sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
+
+
+def _determine_status(has_prompts: bool, pattern_count: int | None, downloaded_count: int) -> str:
+    """collection の status を判定する（#1216）.
+
+    - ``needs_prompts``: suno-prompts.json が無い
+    - ``downloaded``: prompts が有り、02-Individual-music/ の音声ファイル数 >= pattern_count
+    - ``ready``: prompts が有り、ダウンロード未完了
+    """
+    if not has_prompts:
+        return "needs_prompts"
+    if pattern_count is not None and downloaded_count >= pattern_count:
+        return "downloaded"
+    return "ready"
+
+
+def build_collections_index(root: Path, playlist_prefix: str | None = None) -> list[dict]:
+    """各 collection を index entry に写像する（#816 dir mode / #1216 BREAKING）.
 
     - id   = ディレクトリ名（拡張から個別 fetch する際のホワイトリスト key）
-    - name = `CollectionPaths.collection_name`（日付＋チャンネル接頭辞を除去した表示名）
-    - has_prompts   = `<dir>/20-documentation/suno-prompts.json` の存在
+    - name = ``CollectionPaths.collection_name``（日付＋チャンネル接頭辞を除去した表示名）
+    - status = ``needs_prompts`` | ``ready`` | ``downloaded``（ファイルシステムから動的判定）
     - pattern_count = json があれば entries 数、無ければ None
-    - mapped = `derive_collection_slug(id, prefix)` が `mapped_slugs` に含まれるか（#893 要件 B）。
-      prefix 未指定（後方互換・旧運用）は常に False（素通し全件表示）。
-    - playlist_name = `derive_playlist_name(id, prefix)` で導出した Suno playlist 名（`<prefix> | <theme>`）。
-      prefix 未指定時は None（拡張は従来の extractPlaylistName fallback を使う）。
+    - downloaded_count = ``02-Individual-music/`` 内の音声ファイル数
+
+    #1216 BREAKING: mapped_slugs を廃止。mapped / has_prompts を廃止。
     """
-    slugs = mapped_slugs or set()
     index: list[dict] = []
     for coll in find_collection_dirs(root):
         prompts_path = coll / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
         has_prompts = prompts_path.is_file()
         pattern_count = len(json.loads(prompts_path.read_text(encoding="utf-8"))) if has_prompts else None
-        slug = derive_collection_slug(coll.name, prefix) if prefix else None
-        mapped = slug is not None and slug in slugs
-        playlist_name = derive_playlist_name(coll.name, prefix) if prefix else None
-        index.append(
-            {
-                "id": coll.name,
-                "name": CollectionPaths(coll).collection_name,
-                "has_prompts": has_prompts,
-                "pattern_count": pattern_count,
-                "mapped": mapped,
-                "playlist_name": playlist_name,
-            }
-        )
+        music_dir = CollectionPaths(coll).music_dir
+        downloaded_count = _count_audio_files(music_dir)
+        status = _determine_status(has_prompts, pattern_count, downloaded_count)
+        entry = {
+            "id": coll.name,
+            "name": CollectionPaths(coll).collection_name,
+            "status": status,
+            "pattern_count": pattern_count,
+            "downloaded_count": downloaded_count,
+        }
+        if playlist_prefix is not None:
+            entry["playlist_name"] = derive_playlist_name(coll.name, playlist_prefix)
+        index.append(entry)
     return index
 
 
@@ -513,6 +555,152 @@ def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     if origin.startswith(_EXTENSION_ORIGIN_SCHEME):
         return True
     return origin in _DEFAULT_ALLOWED_WEB_ORIGINS
+
+
+def _update_workflow_state_downloaded(
+    coll_dir: Path,
+    *,
+    file_count: int,
+    suno_playlist_url: str,
+) -> None:
+    """workflow-state.json を更新する（POST /collections/<id>/downloaded、#1216）.
+
+    - ``planning.music.suno_playlist_url`` = suno_playlist_url
+    - file_count > 0 → ``assets.music_downloaded`` = true
+
+    atomic write（tempfile + os.replace）で中間 temp を残さない。
+    """
+    ws_path = CollectionPaths(coll_dir).workflow_state_path
+    data: dict = {}
+    if ws_path.is_file():
+        try:
+            data = json.loads(ws_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    # planning.music.suno_playlist_url
+    planning = data.setdefault("planning", {})
+    if not isinstance(planning, dict):
+        planning = {}
+        data["planning"] = planning
+    music = planning.setdefault("music", {})
+    if not isinstance(music, dict):
+        music = {}
+        planning["music"] = music
+    music["suno_playlist_url"] = suno_playlist_url
+
+    # assets.music_downloaded
+    if file_count > 0:
+        assets = data.setdefault("assets", {})
+        if not isinstance(assets, dict):
+            assets = {}
+            data["assets"] = assets
+        assets["music_downloaded"] = True
+
+    ws_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(ws_path.parent), prefix=".workflow-state-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, ws_path)
+    except BaseException:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
+
+
+def _extract_and_rename_music(
+    coll_dir: Path,
+    download_path: str,
+) -> int:
+    """ZIP を展開し suno-prompts.json の曲順でリネームして 02-Individual-music/ へ配置する (#1256).
+
+    fail-soft: 展開失敗しても例外を上げない（呼び出し元の POST レスポンスに影響しない）。
+    Returns the number of placed audio files (0 on any failure).
+    """
+    zip_path = Path(download_path)
+    if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
+        print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
+        return 0
+
+    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+    name_to_index: dict[str, int] = {}
+    if prompts_path.is_file():
+        try:
+            prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
+            for i, entry in enumerate(prompts, 1):
+                full_name = entry.get("name", "")
+                parts = full_name.split(" — ", 1)
+                english_name = parts[1] if len(parts) == 2 else full_name
+                name_to_index[english_name] = i
+                name_to_index[full_name] = i
+                title = entry.get("title")
+                if title and title not in name_to_index:
+                    name_to_index[title] = i
+        except (json.JSONDecodeError, OSError, TypeError):
+            pass
+
+    music_dir = CollectionPaths(coll_dir).music_dir
+    music_dir.mkdir(parents=True, exist_ok=True)
+
+    tmp_dir = tempfile.mkdtemp(prefix="suno-extract-")
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            # ZIP bomb protection (#1217): reject oversized or excessive entries.
+            infos = zf.infolist()
+            if len(infos) > _ZIP_MAX_ENTRIES:
+                print(f"[yt-collection-serve] ZIP entry 数が上限超過 ({len(infos)} > {_ZIP_MAX_ENTRIES}): skip")
+                return 0
+            total_size = 0
+            for info in infos:
+                if info.file_size > _ZIP_MAX_SINGLE_FILE:
+                    print(
+                        f"[yt-collection-serve] ZIP 内ファイルがサイズ上限超過"
+                        f" ({info.filename}: {info.file_size} bytes): skip"
+                    )
+                    return 0
+                total_size += info.file_size
+            if total_size > _ZIP_MAX_TOTAL_SIZE:
+                print(f"[yt-collection-serve] ZIP 総展開サイズが上限超過 ({total_size} bytes): skip")
+                return 0
+            # Only extract audio files (#1217).
+            audio_infos = [
+                info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
+            ]
+            for info in audio_infos:
+                zf.extract(info, tmp_dir)
+
+        moved_count = 0
+        for extracted in Path(tmp_dir).iterdir():
+            if not extracted.is_file():
+                continue
+            ext = extracted.suffix.lower()
+            if ext not in _AUDIO_EXTENSIONS:
+                continue
+            stem = extracted.stem
+            if stem.endswith("_1"):
+                lookup = stem[:-2]
+                variant = "b"
+            else:
+                lookup = stem
+                variant = "a"
+            track_num = name_to_index.get(lookup)
+            if track_num is not None:
+                new_name = f"{track_num:02d}{variant}-{lookup}{ext}"
+            else:
+                new_name = extracted.name
+            shutil.move(str(extracted), str(music_dir / new_name))
+            moved_count += 1
+
+        print(f"[yt-collection-serve] 展開完了: {moved_count} files → {music_dir}")
+        return moved_count
+    except Exception as exc:
+        print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
+        return 0
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def build_version_payload() -> dict[str, str]:
@@ -548,6 +736,7 @@ def create_server(
     dir_mode = collections_root is not None
     distrokid_enabled = distrokid is not None and distrokid.enabled
     capture_root, capture_prefix = playlist_capture if playlist_capture is not None else (None, None)
+    serve_token = str(uuid.uuid4())
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
@@ -596,7 +785,7 @@ def create_server(
             self.send_response(204)
             self._send_cors(origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Serve-Token")
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
@@ -605,6 +794,9 @@ def create_server(
             origin = self._allowed_origin()
 
             # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
+            # .. deprecated:: #1145
+            #     新規コレクションは POST /collections/<id>/downloaded を使用する。
+            #     本ルートは旧 playlist capture の後方互換として残置。次回 breaking で削除予定。
             if self.path == SUNO_PLAYLISTS_ROUTE:
                 if capture_root is None:
                     self.send_error(404, "Not Found")
@@ -664,6 +856,123 @@ def create_server(
                 self._send_bytes(resp_body, "application/json; charset=utf-8")
                 return
 
+            # POST /collections/<id>/downloaded: dir mode のみ（#1216）。
+            _downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
+            _downloaded_suffix = "/downloaded"
+            if dir_mode and self.path.startswith(_downloaded_prefix) and self.path.endswith(_downloaded_suffix):
+                if (
+                    allow_origin is None
+                    or origin is None
+                    or origin != allow_origin
+                    or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)
+                ):
+                    self.send_error(403, "Forbidden")
+                    return
+                # Token auth: require X-Serve-Token header (#1217).
+                req_token = self.headers.get("X-Serve-Token")
+                if req_token != serve_token:
+                    self.send_error(403, "Forbidden")
+                    return
+                cid = self.path[len(_downloaded_prefix) : -len(_downloaded_suffix)]
+                # URL-decode cid to handle percent-encoded collection ids (#1217).
+                cid = urllib.parse.unquote(cid)
+                # パストラバーサル防御: ".." を含む id を reject する（#1216）。
+                if ".." in cid:
+                    self.send_error(404, "Not Found")
+                    return
+                # ホワイトリスト検証: find_collection_dirs の既知 id に含まれるか。
+                known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
+                if cid not in known_ids:
+                    self.send_error(404, "Not Found")
+                    return
+                # Body size guard: reject oversized payloads (#1217).
+                length = int(self.headers.get("Content-Length", 0) or 0)
+                if length > 10240:
+                    self.send_error(413, "Payload Too Large")
+                    return
+                raw = self.rfile.read(length) if length else b""
+                try:
+                    payload = json.loads(raw.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    self.send_error(400, "Bad Request")
+                    return
+                if not isinstance(payload, dict):
+                    self.send_error(400, "Bad Request")
+                    return
+                file_count = payload.get("file_count")
+                fmt = payload.get("format")
+                suno_playlist_url = payload.get("suno_playlist_url")
+                if file_count is None or not fmt or not suno_playlist_url:
+                    self.send_error(400, "Bad Request")
+                    return
+                # Validate file_count is a non-negative integer (not bool) (#1217).
+                if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
+                    self.send_error(400, "Bad Request")
+                    return
+                expected_file_count = payload.get("expected_file_count")
+                if expected_file_count is not None and (
+                    not isinstance(expected_file_count, int)
+                    or isinstance(expected_file_count, bool)
+                    or expected_file_count < 0
+                ):
+                    self.send_error(400, "Bad Request")
+                    return
+                # Validate format is a known audio format (#1217).
+                if fmt not in _VALID_DOWNLOAD_FORMATS:
+                    self.send_error(400, "Bad Request")
+                    return
+                # Validate download_path type if present (#1217).
+                download_path = payload.get("download_path")
+                if download_path is not None and not isinstance(download_path, str):
+                    self.send_error(400, "Bad Request")
+                    return
+                # Validate suno_playlist_url type (#1217).
+                if not isinstance(suno_playlist_url, str):
+                    self.send_error(400, "Bad Request")
+                    return
+                coll_dir = collections_root / cid
+                placed_count_for_response = file_count
+                if download_path:
+                    # Validate download_path: must be an absolute path (#1217).
+                    dp = Path(download_path)
+                    if not dp.is_absolute():
+                        self.send_error(400, "Bad Request")
+                        return
+                    resolved_dp = dp.resolve()
+                    placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp))
+                    if placed_count == 0:
+                        # Extraction failed: return 500 and do not mark as downloaded (#1217).
+                        self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
+                        return
+                    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+                    pattern_count = 0
+                    if prompts_path.is_file():
+                        try:
+                            prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
+                            if isinstance(prompts_data, list):
+                                pattern_count = len(prompts_data)
+                        except (json.JSONDecodeError, OSError):
+                            pattern_count = 0
+                    expected_count = (
+                        expected_file_count if expected_file_count is not None else max(file_count, pattern_count)
+                    )
+                    if placed_count < expected_count:
+                        self._send_json_error(
+                            500,
+                            "ZIP extraction incomplete: "
+                            f"expected at least {expected_count} audio files, placed {placed_count}",
+                        )
+                        return
+                    placed_count_for_response = placed_count
+                    file_count = placed_count if pattern_count == 0 or placed_count >= pattern_count else 0
+                # Update workflow state AFTER extraction (#1217).
+                _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
+                resp_body = json.dumps(
+                    {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
+                ).encode("utf-8")
+                self._send_bytes(resp_body, "application/json; charset=utf-8")
+                return
+
             # その他のパスは 404。POST は定義済みルートのみハンドルする。
             if capture_root is None:
                 self.send_error(404, "Not Found")
@@ -676,6 +985,19 @@ def create_server(
         def do_GET(self) -> None:  # noqa: N802
             if self.path == VERSION_ROUTE:
                 body = json.dumps(build_version_payload()).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+            if self.path == "/auth/token":
+                origin = self.headers.get("Origin")
+                if (
+                    allow_origin is None
+                    or origin is None
+                    or origin != allow_origin
+                    or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)
+                ):
+                    self.send_error(403, "Forbidden")
+                    return
+                body = json.dumps({"token": serve_token}).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if dir_mode:
@@ -697,9 +1019,7 @@ def create_server(
 
         def _serve_dir_mode(self) -> None:
             if self.path == COLLECTIONS_ROUTE:
-                # capture 有効時のみ mapped 判定を付与する（#893 要件 B）。prefix 無は全件 mapped=False。
-                mapped_slugs = read_mapped_slugs(capture_root) if capture_root is not None else None
-                index = build_collections_index(collections_root, mapped_slugs=mapped_slugs, prefix=capture_prefix)
+                index = build_collections_index(collections_root, capture_prefix)
                 body = json.dumps(index).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
@@ -963,6 +1283,9 @@ def main() -> None:
             f"  playlist capture enabled: POST {SUNO_PLAYLISTS_ROUTE} "
             f"-> {playlists_output_path(capture_root)} (prefix='{capture_prefix}')"
         )
+    # Print the serve token for /downloaded endpoint auth (#1217).
+    # The token is generated inside create_server; retrieve it via the /auth/token endpoint.
+    print(f"  serve token: GET http://localhost:{port}/auth/token")
     print("Press Ctrl-C to stop.")
     try:
         server.serve_forever()

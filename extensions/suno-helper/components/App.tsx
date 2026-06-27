@@ -11,7 +11,6 @@ export function App() {
     url,
     setUrl,
     collections,
-    allMapped,
     selectedCollectionId,
     selectCollection,
     entries,
@@ -35,6 +34,8 @@ export function App() {
     dismissResume,
     failedEntries,
     rerunFailed,
+    retryPlaylist,
+    retryDownload,
     fetchData,
     run,
     stop,
@@ -64,16 +65,13 @@ export function App() {
             className="rounded border border-gray-300 px-2 py-1"
           >
             {collections.map((c) => (
-              <option key={c.id} value={c.id} disabled={!c.has_prompts}>
-                {c.has_prompts ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
+              <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
+                {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
               </option>
             ))}
           </select>
         </label>
       )}
-
-      {/* 全 collection が既にマッピング済みで filter 後 0 件のとき (#893 要件 B)。 */}
-      {allMapped && <p className="text-xs text-gray-600">未マッピング collection はありません。</p>}
 
       {playlistName && (
         <p className="text-xs text-gray-600">
@@ -222,6 +220,26 @@ export function App() {
           停止
         </button>
       </div>
+
+      {!isRunning && playlistName && selectedCollectionId && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void retryPlaylist()}
+            className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+          >
+            Playlist から再開
+          </button>
+          <button
+            type="button"
+            onClick={() => void retryDownload()}
+            disabled={!selectedCollectionId}
+            className="flex-1 rounded border border-green-500 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
+          >
+            Download から再開
+          </button>
+        </div>
+      )}
 
       <PatternList entries={entries} itemStates={itemStates} />
 

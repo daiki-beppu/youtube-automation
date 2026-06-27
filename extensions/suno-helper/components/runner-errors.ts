@@ -51,6 +51,8 @@ export function phaseToStatus(
     case PHASE.ENTRY_FAILED:
       // entry 単位の失敗スキップ (#948)。run 全体は継続するため error フラグは立てない（status は黄信号扱い）。
       return { text: `[${n}/${total}] 失敗のためスキップ: ${message ?? ""}` };
+    case PHASE.DOWNLOADING:
+      return { text: `ダウンロード中…${message ? `（${message}）` : ""}` };
     case PHASE.ADDING_TO_PLAYLIST:
       // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
       return { text: `Playlist '${message ?? ""}' へ追加中…` };

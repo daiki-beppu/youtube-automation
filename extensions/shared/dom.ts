@@ -651,6 +651,19 @@ export function detectSunoViewMode(): SunoViewMode {
     return "unknown";
   }
 
+  // Suno 2026-06: ビューモードボタンが data-context-menu-trigger 属性のみのプレーンボタンに変更。
+  // 現在選択中のビューモードボタンだけがこの属性を持ち、テキストがモード名と一致する。
+  const contextMenuModes = collectViewModesFromElements(
+    document.querySelectorAll<HTMLElement>("button[data-context-menu-trigger]"),
+  );
+  const contextMenu = singleModeOrUnknown(contextMenuModes);
+  if (contextMenu !== "unknown") {
+    return contextMenu;
+  }
+  if (contextMenuModes.size > 1) {
+    return "unknown";
+  }
+
   const triggerModes = collectViewModesFromElements(
     document.querySelectorAll<HTMLElement>(
       'button[aria-haspopup], button[aria-expanded], [role="button"][aria-haspopup], [role="button"][aria-expanded]',
@@ -662,6 +675,16 @@ export function detectSunoViewMode(): SunoViewMode {
   }
   if (triggerModes.size > 1) {
     return "unknown";
+  }
+
+  // Suno 2025-06 以降: ビューモードボタンが ARIA 属性を持たないプレーンボタンに変更された。
+  // visible な button 要素のテキストから view mode ラベルを探す fallback。
+  const plainBtnModes = collectViewModesFromElements(
+    document.querySelectorAll<HTMLElement>("button"),
+  );
+  const plain = singleModeOrUnknown(plainBtnModes);
+  if (plain !== "unknown") {
+    return plain;
   }
 
   return "unknown";
@@ -975,4 +998,29 @@ export async function waitForQueueSlot(
     }
     await sleep(options.pollIntervalMs);
   }
+}
+
+/**
+ * pointer + mouse イベントシーケンスで要素をクリックする。
+ * Suno 2026-06: 一部ボタン（More options 等）は click イベントだけでは反応せず
+ * pointerdown → mousedown → pointerup → mouseup → click の完全シーケンスが必要。
+ */
+export function simulateClick(el: HTMLElement): void {
+  const rect = el.getBoundingClientRect();
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  const shared = {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+  };
+  el.dispatchEvent(
+    new PointerEvent("pointerdown", { ...shared, pointerId: 1 }),
+  );
+  el.dispatchEvent(new MouseEvent("mousedown", shared));
+  el.dispatchEvent(new PointerEvent("pointerup", { ...shared, pointerId: 1 }));
+  el.dispatchEvent(new MouseEvent("mouseup", shared));
+  el.dispatchEvent(new MouseEvent("click", shared));
 }

@@ -570,88 +570,27 @@ def _make_collection(planning: Path, dir_name: str, entries=None) -> Path:
     return coll
 
 
-def test_build_collections_index_marks_mapped_true_for_captured_slug(tmp_path):
-    """Given derive_collection_slug が mapped_slugs に含まれる collection
-    When build_collections_index(prefix=, mapped_slugs=) を呼ぶ
-    Then その entry の mapped が True になる。
-    """
-    planning = tmp_path / "planning"
-    _make_collection(
-        planning, "20260601-rjn-graphite-hour-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}]
-    )
-
-    rows = {r["id"]: r for r in build_collections_index(planning, mapped_slugs={"rjn-graphite-hour"}, prefix="rjn")}
-
-    assert rows["20260601-rjn-graphite-hour-collection"]["mapped"] is True
-
-
-def test_build_collections_index_marks_mapped_false_for_uncaptured_slug(tmp_path):
-    """Given derive_collection_slug が mapped_slugs に含まれない collection
-    When build_collections_index(prefix=, mapped_slugs=) を呼ぶ
-    Then その entry の mapped が False になる。
-    """
-    planning = tmp_path / "planning"
-    _make_collection(
-        planning, "20260602-rjn-other-theme-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}]
-    )
-
-    rows = {r["id"]: r for r in build_collections_index(planning, mapped_slugs={"rjn-graphite-hour"}, prefix="rjn")}
-
-    assert rows["20260602-rjn-other-theme-collection"]["mapped"] is False
-
-
-def test_build_collections_index_defaults_to_unmapped_when_prefix_absent(tmp_path):
-    """Given prefix を渡さないデフォルト呼び出し（後方互換）
+def test_build_collections_index_returns_status_and_downloaded_count(tmp_path):
+    """Given prompts 有り collection
     When build_collections_index を呼ぶ
-    Then 全 entry の mapped が False になる（mapped_slugs があっても prefix 無は素通し）。
+    Then status / downloaded_count を含む entry を返す（#1216）。
+
+    #1216: mapped / mapped_slugs / prefix / playlist_name は廃止。
     """
     planning = tmp_path / "planning"
     _make_collection(
         planning, "20260601-rjn-graphite-hour-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}]
     )
 
-    rows = build_collections_index(planning)
+    rows = {r["id"]: r for r in build_collections_index(planning)}
 
-    assert all(r["mapped"] is False for r in rows)
-
-
-def test_build_collections_index_returns_playlist_name_with_prefix(tmp_path):
-    """Given prefix 付きで build_collections_index を呼ぶ
-    When 結果を取得
-    Then playlist_name にサーバー側で導出した正しい playlist 名が含まれる。
-    """
-    planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-rjn-dawn-fold-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
-
-    rows = {r["id"]: r for r in build_collections_index(planning, prefix="rjn")}
-
-    assert rows["20260601-rjn-dawn-fold-collection"]["playlist_name"] == "rjn | dawn-fold"
-
-
-def test_build_collections_index_returns_playlist_name_multi_word_prefix(tmp_path):
-    """Given マルチワード prefix で build_collections_index を呼ぶ
-    Then playlist_name が正しい境界で分割される。
-    """
-    planning = tmp_path / "planning"
-    _make_collection(
-        planning, "20260601-soulful-grooves-wah-groove-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}]
-    )
-
-    rows = {r["id"]: r for r in build_collections_index(planning, prefix="soulful-grooves")}
-
-    assert rows["20260601-soulful-grooves-wah-groove-collection"]["playlist_name"] == "soulful-grooves | wah-groove"
-
-
-def test_build_collections_index_playlist_name_none_without_prefix(tmp_path):
-    """Given prefix なし（後方互換）
-    Then playlist_name は None。
-    """
-    planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-rjn-dawn-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
-
-    rows = build_collections_index(planning)
-
-    assert all(r["playlist_name"] is None for r in rows)
+    row = rows["20260601-rjn-graphite-hour-collection"]
+    assert row["status"] == "ready"
+    assert row["downloaded_count"] == 0
+    # mapped / playlist_name は廃止済み
+    assert "mapped" not in row
+    assert "playlist_name" not in row
+    assert "has_prompts" not in row
 
 
 # ---------------------------------------------------------------------------

@@ -58,6 +58,12 @@ function makeViewTrigger(label: string): HTMLButtonElement {
   return btn;
 }
 
+function makeViewContextMenuTrigger(label: string): HTMLButtonElement {
+  const btn = makeViewButton(label);
+  btn.setAttribute("data-context-menu-trigger", "true");
+  return btn;
+}
+
 function addViewVariantCard(opts: { view: "waveform" | "grid"; generating: boolean; visible?: boolean }): HTMLElement {
   const card = document.createElement("article");
   card.dataset.view = opts.view;
@@ -207,10 +213,33 @@ describe("detectSunoViewMode: Suno の現在ビューを検出する", () => {
     expect(detectSunoViewMode()).toBe("unknown");
   });
 
-  it("Given 状態属性のない単独 Grid button がある When 検出する Then unknown を返す", () => {
+  it("Given 状態属性のない単独 Grid button がある When 検出する Then plain-button fallback で grid を返す", () => {
     makeViewButton("Grid");
 
-    expect(detectSunoViewMode()).toBe("unknown");
+    expect(detectSunoViewMode()).toBe("grid");
+  });
+
+  it("Given 3 つの plain button + Grid に data-context-menu-trigger がある When 検出する Then grid を返す (#1251)", () => {
+    makeViewButton("List");
+    makeViewButton("Waveform");
+    makeViewContextMenuTrigger("Grid");
+
+    expect(detectSunoViewMode()).toBe("grid");
+  });
+
+  it("Given data-context-menu-trigger が Waveform にある When 検出する Then waveform を返す (#1251)", () => {
+    makeViewButton("Newest");
+    makeViewContextMenuTrigger("Waveform");
+
+    expect(detectSunoViewMode()).toBe("waveform");
+  });
+
+  it("Given aria-selected と data-context-menu-trigger が異なるモードを指す When 検出する Then aria-selected が優先される (#1251)", () => {
+    const ariaBtn = makeViewButton("List");
+    ariaBtn.setAttribute("aria-selected", "true");
+    makeViewContextMenuTrigger("Grid");
+
+    expect(detectSunoViewMode()).toBe("list");
   });
 });
 

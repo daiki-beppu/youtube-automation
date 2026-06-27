@@ -85,7 +85,13 @@ export async function readOverlayState(): Promise<OverlayState | null> {
   return overlayStateItem().getValue();
 }
 
-/** overlay state を書き込む（既存があれば上書き）。 */
+/** overlay state を書き込む（既存があれば上書き）。
+ *  拡張更新後の invalidated context では storage アクセスが失敗するため、
+ *  書き込み失敗は warning のみで握りつぶす（位置が保存されないだけで機能は継続する）。 */
 export async function writeOverlayState(state: OverlayState): Promise<void> {
-  await overlayStateItem().setValue(state);
+  try {
+    await overlayStateItem().setValue(state);
+  } catch (err) {
+    console.warn("[suno-helper] overlay state 書き込み失敗（context invalidated?）:", err);
+  }
 }

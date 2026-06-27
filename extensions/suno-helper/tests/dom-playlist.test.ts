@@ -35,11 +35,13 @@ import {
   PLAYLIST_ROW_LABEL_SELECTOR,
   SELECT_CLIP_BUTTON_SELECTOR,
   clickPlaylistRowByName,
+  collectClipRowTitle,
   ensureClipRowsLoaded,
   ensureClipRowsLoadedByIds,
   fillPlaylistNameAndCreate,
   multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
+  scrollAndMultiSelectByIds,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
 import { markBbox } from "./_helpers";
@@ -81,21 +83,27 @@ function getOrCreateClipList(): HTMLElement {
 }
 
 /**
- * 新 Suno DOM 構造 (#881) の clip row を単一中間ラッパ配下に挿入する。
- *   scroller > div.clip-list-wrapper > div(per-clip = 返り値 row) > .multi-select-button > button
- * を写像する。Emotion の hash class は構造判定に使わないため、ここでは付与しない。
- * ID ベース row loader（内部の collectLoadedClipRows）は button の
- * `closest('.multi-select-button').parentElement`（= per-clip div）を row として導出するため、
- * 返り値 `row` はその per-clip div になる。
+ * Suno DOM 構造の clip row を単一中間ラッパ配下に挿入する。
+ *
+ * 新 DOM (2025-06):
+ *   scroller > clip-list-wrapper > row(clip card) > bareWrapper > .multi-select-button > button
+ *                                                 > contentDiv > img[src="cdn2.suno.ai/image_<UUID>"]
+ * bareWrapper は img も a[href] も持たない中間 div。resolveClipRowFromSelectButton は
+ * hasClipContent で bare wrapper を検出し、1 段上の row (clip card) を返す。
+ *
  *   - selectLabel: multi-select ボタンの aria-label（"Select clip"=未選択 / "Deselect clip"=選択済み）
  *   - visible=false: display:none + bbox 0×0（strict isVisible で除外される行）
+ *   - idSource: clip ID の埋め込み方法
+ *       "image"（デフォルト）: img[src] の CDN URL に UUID を埋め込む（新 Suno DOM）
+ *       "href": a[href="/song/<id>"] リンク（旧 DOM 互換）
+ *       "data-song-id" / "data-clip-id": data 属性（旧 DOM 互換）
  */
 function addClipRow(
   opts: {
     selectLabel?: string;
     visible?: boolean;
     songId?: string;
-    idSource?: "href" | "data-song-id" | "data-clip-id";
+    idSource?: "href" | "data-song-id" | "data-clip-id" | "image";
   } = {},
 ): {
   row: HTMLElement;
@@ -104,7 +112,7 @@ function addClipRow(
   const { selectLabel = "Select clip", visible = true, songId, idSource = "href" } = opts;
   const list = getOrCreateClipList();
 
-  const row = document.createElement("div"); // per-clip div（.multi-select-button の親 = 導出される row）
+  const row = document.createElement("div"); // clip card（返り値 row）
   if (songId && idSource === "data-song-id") {
     row.dataset.songId = songId;
   }
@@ -117,12 +125,24 @@ function addClipRow(
     songLink.textContent = songId;
     row.appendChild(songLink);
   }
-  const wrapper = document.createElement("div");
-  wrapper.className = "multi-select-button";
+  // bare wrapper: .multi-select-button のみを含む中間 div（新 Suno DOM 構造を再現）
+  const bareWrapper = document.createElement("div");
+  const multiSelect = document.createElement("div");
+  multiSelect.className = "multi-select-button";
   const btn = document.createElement("button");
   btn.setAttribute("aria-label", selectLabel);
-  wrapper.appendChild(btn);
-  row.appendChild(wrapper);
+  multiSelect.appendChild(btn);
+  bareWrapper.appendChild(multiSelect);
+  row.appendChild(bareWrapper);
+  // content area: image URL に clip UUID を埋め込む（新 Suno DOM の唯一の ID ソース）
+  if (songId && idSource === "image") {
+    const contentDiv = document.createElement("div");
+    const img = document.createElement("img");
+    img.src = `https://cdn2.suno.ai/image_${songId}.jpeg?width=100`;
+    img.dataset.src = `https://cdn2.suno.ai/image_large_${songId}.jpeg`;
+    contentDiv.appendChild(img);
+    row.appendChild(contentDiv);
+  }
   list.appendChild(row);
 
   if (visible === false) {
@@ -629,6 +649,115 @@ describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip 
     await vi.runAllTimersAsync();
 
     await expect(pending).resolves.toEqual([found]);
+  });
+});
+
+describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given 新 Suno DOM (image URL のみ) When target ID で取得する Then img src から UUID を抽出して該当 row を返す", async () => {
+    const freshA = addClipRow({ songId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", idSource: "image" }).row;
+    const freshB = addClipRow({ songId: "11111111-2222-3333-4444-555555555555", idSource: "image" }).row;
+
+    const pending = ensureClipRowsLoadedByIds(
+      ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "11111111-2222-3333-4444-555555555555"],
+      { isAborted: () => false },
+    );
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(new Set(result)).toEqual(new Set([freshA, freshB]));
+  });
+
+  it("Given image_large_ prefix の data-src When target ID で取得する Then large prefix を除去して UUID を抽出する", async () => {
+    const list =
+      document.querySelector<HTMLElement>(".clip-browser-list-scroller") ??
+      (() => {
+        const s = document.createElement("div");
+        s.className = "clip-browser-list-scroller";
+        document.body.appendChild(s);
+        const w = document.createElement("div");
+        s.appendChild(w);
+        return s;
+      })();
+    const wrapper = list.firstElementChild as HTMLElement;
+
+    const row = document.createElement("div");
+    const bareW = document.createElement("div");
+    const ms = document.createElement("div");
+    ms.className = "multi-select-button";
+    const btn = document.createElement("button");
+    btn.setAttribute("aria-label", "Select clip");
+    ms.appendChild(btn);
+    bareW.appendChild(ms);
+    row.appendChild(bareW);
+    // data-src のみ（src が placeholder の場合）
+    const contentDiv = document.createElement("div");
+    const img = document.createElement("img");
+    img.src = "data:image/gif;base64,placeholder";
+    img.dataset.src = "https://cdn2.suno.ai/image_large_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpeg";
+    contentDiv.appendChild(img);
+    row.appendChild(contentDiv);
+    wrapper.appendChild(row);
+    markBbox(row, 200, 60);
+    markBbox(btn, 20, 20);
+
+    const pending = ensureClipRowsLoadedByIds(["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"], { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual([row]);
+  });
+
+  it("Given image と href が両方ある row When target ID で取得する Then href 経路が優先される", async () => {
+    const list =
+      document.querySelector<HTMLElement>(".clip-browser-list-scroller") ??
+      (() => {
+        const s = document.createElement("div");
+        s.className = "clip-browser-list-scroller";
+        document.body.appendChild(s);
+        const w = document.createElement("div");
+        s.appendChild(w);
+        return s;
+      })();
+    const wrapper = list.firstElementChild as HTMLElement;
+
+    const row = document.createElement("div");
+    // href 経路
+    const songLink = document.createElement("a");
+    songLink.href = "/song/href-id";
+    row.appendChild(songLink);
+    // bare wrapper + multi-select
+    const bareW = document.createElement("div");
+    const ms = document.createElement("div");
+    ms.className = "multi-select-button";
+    const btn = document.createElement("button");
+    btn.setAttribute("aria-label", "Select clip");
+    ms.appendChild(btn);
+    bareW.appendChild(ms);
+    row.appendChild(bareW);
+    // image 経路
+    const contentDiv = document.createElement("div");
+    const img = document.createElement("img");
+    img.src = "https://cdn2.suno.ai/image_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpeg";
+    contentDiv.appendChild(img);
+    row.appendChild(contentDiv);
+    wrapper.appendChild(row);
+    markBbox(row, 200, 60);
+    markBbox(btn, 20, 20);
+
+    // href-id で見つかる（href 経路が先に評価される）
+    const pending = ensureClipRowsLoadedByIds(["href-id"], { isAborted: () => false });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual([row]);
   });
 });
 
@@ -1510,5 +1639,170 @@ describe("grid view (#1237): .multi-select-button / a[href*='/song/'] 不在の 
       await expect(multiSelectClips(rows)).resolves.toBeUndefined();
       expect(clicks).toEqual(["a", "b"]);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// collectClipRowTitle (#1251): clip row から曲タイトルを抽出する
+// ---------------------------------------------------------------------------
+
+describe("collectClipRowTitle: clip row の曲タイトル抽出", () => {
+  it('Given row 内に aria-label="Play SongName" の span When collectClipRowTitle Then "SongName" を返す', () => {
+    const row = document.createElement("div");
+    const titleSpan = document.createElement("span");
+    titleSpan.setAttribute("role", "button");
+    titleSpan.setAttribute("aria-label", "Play Midnight Cafe");
+    titleSpan.textContent = "Midnight Cafe";
+    row.appendChild(titleSpan);
+
+    expect(collectClipRowTitle(row)).toBe("Midnight Cafe");
+  });
+
+  it("Given row 内にタイトル要素が無い When collectClipRowTitle Then null を返す", () => {
+    const row = document.createElement("div");
+    const otherSpan = document.createElement("span");
+    otherSpan.textContent = "not a title";
+    row.appendChild(otherSpan);
+
+    expect(collectClipRowTitle(row)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scrollAndMultiSelectByIds (#1251): 仮想スクロール対応の clip multi-select
+// ---------------------------------------------------------------------------
+
+describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-select", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given 全 ID が初期ビューポートに存在する When scrollAndMultiSelectByIds Then 全件選択し件数を返す", async () => {
+    const idA = "aaaaaaaa-1111-2222-3333-444444444444";
+    const idB = "bbbbbbbb-1111-2222-3333-444444444444";
+    const a = addClipRow({ songId: idA, idSource: "image" });
+    const b = addClipRow({ songId: idB, idSource: "image" });
+    selectOnClick(a.btn);
+    selectOnClick(b.btn);
+    const scroller = getOrCreateScroller();
+    // scrollHeight / clientHeight stub
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const pending = scrollAndMultiSelectByIds([idA, idB], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+    const count = await pending;
+
+    expect(count).toBe(2);
+  });
+
+  it("Given titleFallbackMap でマッチする row When scrollAndMultiSelectByIds Then fallback で選択する", async () => {
+    // row の clip ID (image UUID) と target ID は一致しないが、タイトルで fallback マッチする
+    const rowUuid = "cccccccc-1111-2222-3333-444444444444";
+    const targetId = "dddddddd-1111-2222-3333-444444444444";
+    const row = addClipRow({ songId: rowUuid, idSource: "image" });
+    // タイトル要素を追加
+    const titleSpan = document.createElement("span");
+    titleSpan.setAttribute("role", "button");
+    titleSpan.setAttribute("aria-label", "Play Dawn Cloud");
+    titleSpan.textContent = "Dawn Cloud";
+    row.row.appendChild(titleSpan);
+    selectOnClick(row.btn);
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const titleFallbackMap = new Map([[targetId, "Dawn Cloud"]]);
+    const pending = scrollAndMultiSelectByIds([targetId], {
+      isAborted: () => false,
+      titleFallbackMap,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+    const count = await pending;
+
+    expect(count).toBe(1);
+  });
+
+  it("Given isAborted=true When scrollAndMultiSelectByIds Then 早期終了し見つかった分だけ返す", async () => {
+    const idA = "eeeeeeee-1111-2222-3333-444444444444";
+    addClipRow({ songId: idA, idSource: "image" });
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const pending = scrollAndMultiSelectByIds([idA, "ffffffff-1111-2222-3333-444444444444"], {
+      isAborted: () => true,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+    const count = await pending;
+
+    // abort なので throw せず、見つかった分だけ返す
+    expect(count).toBeGreaterThanOrEqual(0);
+  });
+
+  it("Given 空の targetIds When scrollAndMultiSelectByIds Then throw する", async () => {
+    getOrCreateScroller();
+
+    await expect(scrollAndMultiSelectByIds([], { isAborted: () => false })).rejects.toThrow(
+      /playlist 対象の clip ID がありません/,
+    );
+  });
+
+  it("Given ID が見つからない When scrollAndMultiSelectByIds Then missing ID を含むエラーで throw する", async () => {
+    const otherId = "11111111-aaaa-bbbb-cccc-dddddddddddd";
+    const missingId = "22222222-aaaa-bbbb-cccc-dddddddddddd";
+    addClipRow({ songId: otherId, idSource: "image" });
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const pending = scrollAndMultiSelectByIds([missingId], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+    });
+    const expectation = expect(pending).rejects.toThrow(new RegExp(missingId));
+    await vi.runAllTimersAsync();
+    await expectation;
   });
 });

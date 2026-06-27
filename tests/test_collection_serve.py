@@ -29,11 +29,13 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
+    _extract_and_rename_music,
     build_collections_index,
     create_server,
     find_collection_dirs,
@@ -513,9 +515,10 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
 # - `find_collection_dirs(root: Path) -> list[Path]`
 #       root 直下の `*-collection` ディレクトリのみを名前昇順で返す。
 # - `build_collections_index(root: Path) -> list[dict]`
-#       各 collection を `{id, name, has_prompts, pattern_count}` に写像する。
+#       各 collection を `{id, name, status, pattern_count, downloaded_count}` に写像する。
 #       id=ディレクトリ名 / name=CollectionPaths.collection_name /
-#       has_prompts=docs json の存在 / pattern_count=entries 数 or None。
+#       status="needs_prompts"|"ready"|"downloaded" / pattern_count=entries 数 or None /
+#       downloaded_count=02-Individual-music/ 内の音声ファイル数。
 # - `resolve_collection_prompts_path(root: Path, cid: str) -> Path | None`
 #       cid が既知の collection dir 名のとき docs json パスを返す。
 #       未知 id / トラバーサル文字列は None（fail-loud せずホワイトリスト弾き）。
@@ -559,10 +562,10 @@ def test_find_collection_dirs_returns_only_collection_dirs_sorted(tmp_path):
     ]
 
 
-def test_build_collections_index_reports_has_prompts_and_pattern_count(tmp_path):
+def test_build_collections_index_reports_status_and_pattern_count(tmp_path):
     """Given prompts 有り(2件) と prompts 無しの collection
     When build_collections_index を呼ぶ
-    Then has_prompts と pattern_count を正しく写像する（無しは pattern_count=None）。
+    Then status と pattern_count を正しく写像する（prompts 無しは status=needs_prompts, pattern_count=None）。
     """
     _make_collection(
         tmp_path,
@@ -574,12 +577,14 @@ def test_build_collections_index_reports_has_prompts_and_pattern_count(tmp_path)
     index = {row["id"]: row for row in build_collections_index(tmp_path)}
 
     with_prompts = index["20260601-clm-with-prompts-collection"]
-    assert with_prompts["has_prompts"] is True
+    assert with_prompts["status"] == "ready"
     assert with_prompts["pattern_count"] == 2
+    assert with_prompts["downloaded_count"] == 0
 
     no_prompts = index["20260602-clm-no-prompts-collection"]
-    assert no_prompts["has_prompts"] is False
+    assert no_prompts["status"] == "needs_prompts"
     assert no_prompts["pattern_count"] is None
+    assert no_prompts["downloaded_count"] == 0
 
 
 def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
@@ -593,6 +598,81 @@ def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
 
     assert row["id"] == "20260601-clm-midnight-mood-collection"
     assert row["name"] == "midnight-mood-collection"
+
+
+def test_build_collections_index_reports_prefix_aware_playlist_name(tmp_path):
+    """Given multi-word prefix の collection
+    When playlist_prefix 付きで build_collections_index を呼ぶ
+    Then prefix 全体を使った playlist_name を返す。
+    """
+    _make_collection(tmp_path, "20260601-soulful-grooves-wah-groove-collection", entries=[])
+
+    row = build_collections_index(tmp_path, playlist_prefix="soulful-grooves")[0]
+
+    assert row["playlist_name"] == "soulful-grooves | wah-groove"
+
+
+def test_build_collections_index_status_downloaded_when_music_files_sufficient(tmp_path):
+    """Given prompts 2 件 + 02-Individual-music/ に mp3 2 件
+    When build_collections_index を呼ぶ
+    Then status=downloaded, downloaded_count=2。
+    """
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-done-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}, {"name": "B", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "track1.mp3").write_bytes(b"fake")
+    (music_dir / "track2.mp3").write_bytes(b"fake")
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["status"] == "downloaded"
+    assert row["downloaded_count"] == 2
+
+
+def test_build_collections_index_status_ready_when_music_files_insufficient(tmp_path):
+    """Given prompts 2 件 + 02-Individual-music/ に mp3 1 件
+    When build_collections_index を呼ぶ
+    Then status=ready, downloaded_count=1。
+    """
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-partial-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}, {"name": "B", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "track1.mp3").write_bytes(b"fake")
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["status"] == "ready"
+    assert row["downloaded_count"] == 1
+
+
+def test_build_collections_index_counts_multiple_audio_formats(tmp_path):
+    """Given 02-Individual-music/ に mp3, m4a, wav ファイル
+    When build_collections_index を呼ぶ
+    Then 全音声形式をカウントする。
+    """
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-multi-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "track1.mp3").write_bytes(b"fake")
+    (music_dir / "track2.m4a").write_bytes(b"fake")
+    (music_dir / "track3.wav").write_bytes(b"fake")
+    (music_dir / "notes.txt").write_bytes(b"not audio")  # 非音声は除外
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["downloaded_count"] == 3
 
 
 def test_resolve_collection_prompts_path_valid_id_returns_docs_json(tmp_path):
@@ -645,7 +725,7 @@ def serve_dir(tmp_path):
     """
     started = []
 
-    def _start(planning: Path, allow_origin=None):
+    def _start(planning: Path, allow_origin=None, playlist_capture=None):
         server = create_server(
             0,
             allow_origin,
@@ -653,6 +733,7 @@ def serve_dir(tmp_path):
             collection_dir=None,
             distrokid=None,
             collections_root=planning,
+            playlist_capture=playlist_capture,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -670,7 +751,7 @@ def serve_dir(tmp_path):
 def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
     """Given prompts 有り/無しの collection を持つ planning dir
     When `GET /collections`
-    Then `[{id, name, has_prompts, pattern_count}]` を返す。
+    Then `[{id, name, status, pattern_count, downloaded_count}]` を返す（#1216）。
     """
     planning = tmp_path / "planning"
     _make_collection(
@@ -686,18 +767,37 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
         body = json.loads(resp.read().decode("utf-8"))
 
     by_id = {row["id"]: row for row in body}
-    # #893 追加要件 B: build_collections_index は各 entry に mapped を含める。
-    # dir mode の serve_dir fixture は playlist_capture を渡さない（prefix 無）ため全件 mapped=False。
     assert by_id["20260601-clm-aaa-collection"] == {
         "id": "20260601-clm-aaa-collection",
         "name": "aaa-collection",
-        "has_prompts": True,
+        "status": "ready",
         "pattern_count": 1,
-        "mapped": False,
-        "playlist_name": None,
+        "downloaded_count": 0,
     }
-    assert by_id["20260602-clm-bbb-collection"]["has_prompts"] is False
+    assert by_id["20260602-clm-bbb-collection"]["status"] == "needs_prompts"
     assert by_id["20260602-clm-bbb-collection"]["pattern_count"] is None
+
+
+def test_get_collections_includes_prefix_aware_playlist_name_when_capture_enabled(serve_dir, tmp_path):
+    """Given capture prefix 付き dir mode サーバー
+    When `GET /collections`
+    Then multi-word prefix 対応の playlist_name を返す。
+    """
+    planning = tmp_path / "planning"
+    channel_root = tmp_path / "channel"
+    channel_root.mkdir()
+    _make_collection(
+        planning,
+        "20260601-soulful-grooves-wah-groove-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    base = serve_dir(planning, playlist_capture=(channel_root, "soulful-grooves"))
+
+    with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body[0]["playlist_name"] == "soulful-grooves | wah-groove"
 
 
 def test_dir_mode_get_version_is_available_before_collection_routing(serve_dir, tmp_path):
@@ -848,3 +948,995 @@ def test_single_mode_collections_route_returns_404(serve, origin):
         urllib.request.urlopen(req)
 
     _assert_json_404_with_cors(exc_info.value, origin)
+
+
+# ---------------------------------------------------------------------------
+# POST /collections/<id>/downloaded (#1216): ダウンロード完了通知
+# ---------------------------------------------------------------------------
+
+
+def _post(url: str, body, *, headers=None):
+    """JSON body を POST する。"""
+    data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST", headers=headers or {})
+    return urllib.request.urlopen(req)
+
+
+def _fetch_token(base: str) -> str:
+    """GET /auth/token からサーバートークンを取得する。"""
+    req = urllib.request.Request(f"{base}/auth/token", headers={"Origin": _EXTENSION_ORIGIN})
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))["token"]
+
+
+def test_post_downloaded_updates_workflow_state(serve_dir, tmp_path):
+    """Given dir mode サーバー + 既知 collection
+    When POST /collections/<id>/downloaded を送る
+    Then workflow-state.json が更新され 200 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 5, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
+
+    assert result["ok"] is True
+    assert result["collection_id"] == "20260601-clm-aaa-collection"
+
+    # workflow-state.json が正しく更新されたか確認
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
+    assert ws["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_unknown_collection_returns_404(serve_dir, tmp_path):
+    """Given 存在しない collection id
+    When POST /collections/<id>/downloaded を送る
+    Then 404 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/nope-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 404
+
+
+@pytest.mark.parametrize("malicious_id", ["../secrets", "../../etc/passwd", "..%2F.."])
+def test_post_downloaded_traversal_returns_404(serve_dir, tmp_path, malicious_id):
+    """Given パストラバーサルを狙う collection id
+    When POST /collections/<id>/downloaded を送る
+    Then 404 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/{malicious_id}/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 404
+
+
+def test_post_downloaded_without_origin_returns_403(serve_dir, tmp_path):
+    """Given Origin ヘッダ無しの POST
+    When POST /collections/<id>/downloaded を送る
+    Then 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+        )
+
+    assert exc_info.value.code == 403
+
+
+def test_post_downloaded_invalid_json_returns_400(serve_dir, tmp_path):
+    """Given JSON として解釈できない body
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            b"{not json",
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
+
+
+def test_post_downloaded_missing_fields_returns_400(serve_dir, tmp_path):
+    """Given 必須フィールド欠落の body
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 1}  # format と suno_playlist_url が欠落
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
+
+
+def test_post_downloaded_zero_file_count_does_not_set_music_downloaded(serve_dir, tmp_path):
+    """Given file_count=0
+    When POST /collections/<id>/downloaded を送る
+    Then suno_playlist_url は設定されるが assets.music_downloaded は設定されない。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
+    assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
+
+
+def test_post_downloaded_idempotent_two_calls(serve_dir, tmp_path):
+    """Given 冪等 2-call パターン（1st: file_count=0、2nd: file_count=N）
+    When 同じ collection に対して POST を 2 回送る
+    Then 1st で playlist URL のみ記録、2nd で music_downloaded=true が追加され、
+         既存キーが壊れない（冪等）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
+    auth_headers = {"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token}
+
+    # 1st call: file_count=0 → playlist URL のみ記録
+    payload_1 = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    with _post(url, payload_1, headers=auth_headers) as resp:
+        assert resp.status == 200
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
+    assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
+
+    # 2nd call: file_count=8 → music_downloaded=true、playlist URL は維持
+    payload_2 = {"file_count": 8, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    with _post(url, payload_2, headers=auth_headers) as resp:
+        assert resp.status == 200
+
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
+    assert ws["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_idempotent_repeated_calls_do_not_break(serve_dir, tmp_path):
+    """Given 同じ payload で POST を 3 回繰り返す
+    When 冪等な繰り返し呼び出し
+    Then 毎回 200 を返し、workflow-state.json の内容は一貫して正しい。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
+    payload = {"file_count": 5, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/xyz"}
+
+    for _ in range(3):
+        with _post(url, payload, headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token}) as resp:
+            assert resp.status == 200
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/xyz"
+    assert ws["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_preserves_existing_workflow_state(serve_dir, tmp_path):
+    """Given 既存の workflow-state.json に別のキーがある状態
+    When POST /collections/<id>/downloaded を送る
+    Then 既存キーが保持されつつ新しいキーが追加される（deep merge）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws_path.write_text(
+        json.dumps({"planning": {"thumbnail": {"approved": True}}, "meta": {"version": 1}}),
+        encoding="utf-8",
+    )
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 3, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/merge"}
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    # 既存キーが保持されている
+    assert ws["planning"]["thumbnail"]["approved"] is True
+    assert ws["meta"]["version"] == 1
+    # 新しいキーが追加されている
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/merge"
+    assert ws["assets"]["music_downloaded"] is True
+
+
+# ---------------------------------------------------------------------------
+# _extract_and_rename_music (#1256): ZIP 展開 + 曲順リネーム
+# ---------------------------------------------------------------------------
+
+
+def _make_zip(path: Path, files: dict[str, bytes]) -> Path:
+    """指定ファイル名→バイト内容の dict から ZIP を作る。"""
+    with zipfile.ZipFile(path, "w") as zf:
+        for name, data in files.items():
+            zf.writestr(name, data)
+    return path
+
+
+def test_extract_and_rename_happy_path(tmp_path):
+    """ZIP 内の mp3 が suno-prompts.json の曲順でリネームされて 02-Individual-music/ に配置される。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "螺旋の降下 — Spiral Descent", "style": "s", "lyrics": ""},
+            {"name": "最初の回転 — First Revolution", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {
+            "Spiral Descent.mp3": b"audio-a",
+            "Spiral Descent_1.mp3": b"audio-b",
+            "First Revolution.mp3": b"audio-a2",
+            "First Revolution_1.mp3": b"audio-b2",
+        },
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == [
+        "01a-Spiral Descent.mp3",
+        "01b-Spiral Descent.mp3",
+        "02a-First Revolution.mp3",
+        "02b-First Revolution.mp3",
+    ]
+
+
+def test_extract_without_prompts(tmp_path):
+    """suno-prompts.json が無い場合、元ファイル名のまま配置される。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=None)
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"Track A.mp3": b"a", "Track B.mp3": b"b"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == ["Track A.mp3", "Track B.mp3"]
+
+
+def test_extract_invalid_zip_path(tmp_path):
+    """存在しない ZIP パス → fail-soft（例外なし、ファイル生成なし）。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+
+    _extract_and_rename_music(coll, str(tmp_path / "nonexistent.zip"))
+
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists()
+
+
+def test_extract_non_zip_file(tmp_path):
+    """ZIP でないファイル → fail-soft。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+    not_zip = tmp_path / "fake.zip"
+    not_zip.write_text("this is not a zip")
+
+    _extract_and_rename_music(coll, str(not_zip))
+
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists()
+
+
+def test_extract_variant_detection(tmp_path):
+    """_1 サフィックスが正しく take B として扱われる。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — My Song", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"My Song.mp3": b"take-a", "My Song_1.mp3": b"take-b"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    assert (music_dir / "01a-My Song.mp3").read_bytes() == b"take-a"
+    assert (music_dir / "01b-My Song.mp3").read_bytes() == b"take-b"
+
+
+def test_extract_unmatched_files(tmp_path):
+    """prompts にマッチしないファイルは番号 prefix なしで配置される。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — Known", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"Known.mp3": b"matched", "Unknown.mp3": b"unmatched"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == ["01a-Known.mp3", "Unknown.mp3"]
+
+
+def test_extract_skips_non_audio_files(tmp_path):
+    """ZIP 内の非音声ファイル（画像等）はスキップされる。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — Track", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {"Track.mp3": b"audio", "cover.jpg": b"image"},
+    )
+
+    _extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = [f.name for f in music_dir.iterdir()]
+    assert names == ["01a-Track.mp3"]
+
+
+def test_extract_existing_audio_plus_empty_zip_returns_zero(tmp_path):
+    """既存の音声ファイルがある状態で空 ZIP を展開すると moved_count=0 を返す (#1217 QA-1217-01)。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — Existing", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    (music_dir / "01a-Existing.mp3").write_bytes(b"pre-existing")
+    # ZIP with no audio files
+    zip_path = _make_zip(tmp_path / "empty-audio.zip", {"readme.txt": b"not audio"})
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 0
+
+
+def test_extract_title_based_matching(tmp_path):
+    """entry.title でもマッチする (#1217 CODING-1217-03)。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "夜明け — Dawn Chorus", "title": "Custom Dawn Title", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(
+        tmp_path / "title-match.zip",
+        {"Custom Dawn Title.mp3": b"audio-by-title"},
+    )
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 1
+    music_dir = coll / "02-Individual-music"
+    names = [f.name for f in music_dir.iterdir()]
+    assert names == ["01a-Custom Dawn Title.mp3"]
+
+
+def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
+    """POST /downloaded に download_path を含めると ZIP 展開 + リネームが実行される。"""
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+            {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(
+        tmp_path / "test.zip",
+        {
+            "Song A.mp3": b"a1",
+            "Song A_1.mp3": b"a2",
+            "Song B.mp3": b"b1",
+            "Song B_1.mp3": b"b2",
+        },
+    )
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 4,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/test",
+        "download_path": str(zip_path),
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == ["01a-Song A.mp3", "01b-Song A.mp3", "02a-Song B.mp3", "02b-Song B.mp3"]
+
+
+# ---------------------------------------------------------------------------
+# Payload validation (#1217): file_count / format / download_path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_file_count", [True, False, "5", 3.14, -1])
+def test_post_downloaded_invalid_file_count_returns_400(serve_dir, tmp_path, bad_file_count):
+    """Given file_count が int 以外 / bool / 負数
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": bad_file_count, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
+
+
+@pytest.mark.parametrize("bad_expected_file_count", [True, False, "5", 3.14, -1])
+def test_post_downloaded_invalid_expected_file_count_returns_400(serve_dir, tmp_path, bad_expected_file_count):
+    """Given expected_file_count が int 以外 / bool / 負数
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 1,
+        "expected_file_count": bad_expected_file_count,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
+
+
+@pytest.mark.parametrize("bad_format", ["flac", "ogg", "aac", ""])
+def test_post_downloaded_invalid_format_returns_400(serve_dir, tmp_path, bad_format):
+    """Given format が mp3/m4a/wav 以外
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 1, "format": bad_format, "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
+
+
+def test_post_downloaded_relative_download_path_returns_400(serve_dir, tmp_path):
+    """Given download_path が相対パス
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す（パストラバーサル防御 #1217）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 4,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": "../../../etc/passwd",
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
+
+
+def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
+    """ZIP 内の単一ファイルがサイズ上限を超える場合、展開しない (#1217)。"""
+    import youtube_automation.scripts.collection_serve as cs
+
+    # テスト用に上限を 10 bytes に下げる（実際の 500MB は CI で生成不可）。
+    monkeypatch.setattr(cs, "_ZIP_MAX_SINGLE_FILE", 10)
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+    zip_path = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("huge.mp3", b"x" * 100)  # 100 bytes > limit of 10
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 0
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists() or len(list(music_dir.iterdir())) == 0
+
+
+def test_extract_too_many_entries_rejected(tmp_path):
+    """ZIP 内の entry 数が 1000 を超える場合、展開しない (#1217)。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+    zip_path = tmp_path / "many.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for i in range(1001):
+            zf.writestr(f"track_{i:04d}.mp3", b"x")
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 0
+
+
+def test_post_downloaded_extraction_failure_does_not_set_music_downloaded(serve_dir, tmp_path):
+    """Given download_path が存在しない ZIP を指す
+    When POST /collections/<id>/downloaded を送る
+    Then extraction 失敗時は 500 を返し workflow-state.json を更新しない (#1217)。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    # 存在しない ZIP パスを指定
+    nonexistent = str(tmp_path / "does_not_exist.zip")
+    payload = {
+        "file_count": 5,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": nonexistent,
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    # workflow-state.json should not exist since the request failed before updating
+    assert not ws_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Token auth (#1217): /auth/token + X-Serve-Token validation
+# ---------------------------------------------------------------------------
+
+
+def test_get_auth_token_returns_uuid(serve_dir, tmp_path):
+    """Given extension origin に lock した dir mode サーバー
+    When exact extension Origin から GET /auth/token を送る
+    Then UUID 形式の token を含む JSON を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    req = urllib.request.Request(f"{base}/auth/token", headers={"Origin": _EXTENSION_ORIGIN})
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert "token" in body
+    # UUID v4 format: 8-4-4-4-12 hex digits
+    assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", body["token"])
+
+
+def test_get_auth_token_web_origin_returns_403(serve_dir, tmp_path):
+    """Given web origin (https://suno.com) からの GET /auth/token
+    When Origin ヘッダ付きでリクエストする
+    Then 403 を返す（token は background script のみに公開・#1217 SEC-001）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    req = urllib.request.Request(
+        f"{base}/auth/token",
+        headers={"Origin": "https://suno.com"},
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 403
+
+
+def test_get_auth_token_no_origin_returns_403(serve_dir, tmp_path):
+    """Given Origin ヘッダ無しの GET /auth/token
+    When リクエストする
+    Then 403 を返す（token は exact extension Origin にだけ公開する・#1217 SEC-001）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(f"{base}/auth/token")
+
+    assert exc_info.value.code == 403
+
+
+def test_get_auth_token_other_extension_origin_returns_403(serve_dir, tmp_path):
+    """Given extension origin lock と別 extension Origin
+    When GET /auth/token を送る
+    Then 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    req = urllib.request.Request(f"{base}/auth/token", headers={"Origin": "chrome-extension://otherextension"})
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 403
+
+
+def test_post_downloaded_missing_token_returns_403(serve_dir, tmp_path):
+    """Given Origin はあるが X-Serve-Token ヘッダが無い
+    When POST /collections/<id>/downloaded を送る
+    Then 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code == 403
+
+
+def test_post_downloaded_wrong_token_returns_403(serve_dir, tmp_path):
+    """Given 不正な X-Serve-Token ヘッダ
+    When POST /collections/<id>/downloaded を送る
+    Then 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": "wrong-token"},
+        )
+
+    assert exc_info.value.code == 403
+
+
+def test_post_downloaded_valid_token_succeeds(serve_dir, tmp_path):
+    """Given 正しい X-Serve-Token を GET /auth/token から取得
+    When POST /collections/<id>/downloaded を送る
+    Then 200 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 3, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+
+# ---------------------------------------------------------------------------
+# Body size / type validation (#1217)
+# ---------------------------------------------------------------------------
+
+
+def test_post_downloaded_oversized_body_returns_413(serve_dir, tmp_path):
+    """Given Content-Length > 10KB
+    When POST /collections/<id>/downloaded を送る
+    Then 413 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    # Create a body larger than 10KB
+    oversized = b"x" * 10241
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            oversized,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 413
+
+
+# ---------------------------------------------------------------------------
+# ZIP extraction edge cases (#1217)
+# ---------------------------------------------------------------------------
+
+
+def test_post_downloaded_empty_zip_returns_500(serve_dir, tmp_path):
+    """Given download_path が音声ファイルを含まない ZIP を指す
+    When POST /collections/<id>/downloaded を送る
+    Then placed_count == 0 で 500 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    # ZIP with only non-audio files
+    zip_path = _make_zip(tmp_path / "no-audio.zip", {"readme.txt": b"hello", "notes.doc": b"world"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+
+
+def test_post_downloaded_partial_zip_returns_500_and_does_not_set_music_downloaded(serve_dir, tmp_path):
+    """Given prompts 2 件に対して ZIP 内の音声が 1 件
+    When POST /collections/<id>/downloaded を送る
+    Then 500 を返し assets.music_downloaded を設定しない。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+            {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(tmp_path / "partial.zip", {"Song A.mp3": b"audio1"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    assert not ws_path.exists()
+
+
+def test_post_downloaded_partial_zip_with_expected_count_records_playlist_without_music_downloaded(serve_dir, tmp_path):
+    """Given prompts 2 件に対して range ZIP の音声が 1 件
+    When expected_file_count=1 で POST /collections/<id>/downloaded を送る
+    Then 200 を返し playlist URL だけを記録する。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+            {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(tmp_path / "partial-range.zip", {"Song A.mp3": b"audio1"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 1,
+        "expected_file_count": 1,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/range",
+        "download_path": str(zip_path),
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
+
+    assert result["placed_count"] == 1
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/range"
+    assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
+
+
+def test_post_downloaded_success_includes_placed_count(serve_dir, tmp_path):
+    """Given 有効な ZIP を download_path に指定
+    When POST /collections/<id>/downloaded を送る
+    Then レスポンスに placed_count が含まれる。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "valid.zip",
+        {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"},
+    )
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
+
+    assert result["ok"] is True
+    assert result["placed_count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Payload type validation (#1217 TEST-1217-003): non-string download_path / suno_playlist_url
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("download_path", ["/tmp"]),
+        ("download_path", {"a": 1}),
+        ("suno_playlist_url", ["url"]),
+        ("suno_playlist_url", {}),
+    ],
+)
+def test_post_downloaded_payload_type_validation(serve_dir, tmp_path, field, bad_value):
+    """Given download_path or suno_playlist_url が非文字列型
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す（#1217 型バリデーション）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    payload[field] = bad_value
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
