@@ -558,8 +558,7 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
             status="fail",
             category="data",
             message=(
-                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。"
-                "/wf-new は stale report では開始不可"
+                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
             ),
             next_action={
                 "kind": "human",
