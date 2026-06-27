@@ -423,6 +423,13 @@ class TestBootstrapChecks:
         assert r.category == "bootstrap"
         assert r.next_action["cmd"] == "uv init"
 
+    def test_uv_project_not_a_file_is_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").mkdir()
+        r = doctor.check_uv_project(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "ファイルではない" in r.message
+
     def test_uv_project_present_is_ok(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
         r = doctor.check_uv_project(tmp_path)

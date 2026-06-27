@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `refactor(doctor)`: `/onboard` スキルを `/setup` にリネームしツール設定特化に責務整理。`yt-doctor` の `data` カテゴリを撤去し `bootstrap` カテゴリを新設（#1273）
+
 ## [5.5.12] - 2026-06-25
 
 ### Changed
