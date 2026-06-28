@@ -144,10 +144,7 @@ export function useSunoRunner(): RunnerState {
 
   const resolveVisibleCollections = useCallback(
     (source: CollectionSummary[], currentSelectedId: string) => {
-      const visibleCollections = visiblePromptCollections(
-        source,
-        resumableCollectionId ? [resumableCollectionId] : [],
-      );
+      const visibleCollections = visiblePromptCollections(source, resumableCollectionId ? [resumableCollectionId] : []);
       const preferredSelectedId = currentSelectedId || resumableCollectionId || "";
       const nextSelectedId = resolvePromptCollectionId(
         visibleCollections,
@@ -503,7 +500,10 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     if (!playlistName) {
-      report("playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。", true);
+      report(
+        "playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。",
+        true,
+      );
       return;
     }
     const expectedClipCount = playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
@@ -623,7 +623,9 @@ export function useSunoRunner(): RunnerState {
         total: totalEntries,
         timestamp: Date.now(),
         failedIndices:
-          persistedResume?.collectionId === selectedCollectionId ? persistedResume.failedIndices : restoredFailedIndices,
+          persistedResume?.collectionId === selectedCollectionId
+            ? persistedResume.failedIndices
+            : restoredFailedIndices,
         submittedClipIds: result.clipIds,
         playlistExpectedClipCount: expectedClipCountForManualAdoption,
       };

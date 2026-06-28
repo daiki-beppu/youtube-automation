@@ -133,9 +133,7 @@ export function resolvePlaylistClipIds(
     throw new Error("playlist 対象の clip ID が 0 件です。bridge が clip を観測できなかった可能性があります。");
   }
   if (clipIds.length !== expectedClipCount) {
-    throw new Error(
-      `playlist 対象の clip ID 数が不足しています: expected ${expectedClipCount}, got ${clipIds.length}`,
-    );
+    throw new Error(`playlist 対象の clip ID 数が不足しています: expected ${expectedClipCount}, got ${clipIds.length}`);
   }
   return clipIds;
 }

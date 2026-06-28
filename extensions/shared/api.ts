@@ -244,7 +244,9 @@ export function visiblePromptCollections(
   includeDownloadedIds: string[] = [],
 ): CollectionSummary[] {
   const include = new Set(includeDownloadedIds);
-  return collections.filter((c) => c.status !== "downloaded" || include.has(c.id));
+  return collections.filter(
+    (c) => c.status !== "downloaded" || include.has(c.id),
+  );
 }
 
 /**
@@ -264,7 +266,11 @@ export function resolvePromptCollectionId(
   allowDownloadedSelected = false,
 ): string | null {
   const selected = collections.find((c) => c.id === selectedId);
-  if (selected && (selected.status === "ready" || (allowDownloadedSelected && selected.status === "downloaded"))) {
+  if (
+    selected &&
+    (selected.status === "ready" ||
+      (allowDownloadedSelected && selected.status === "downloaded"))
+  ) {
     return selected.id;
   }
   return pickInitialCollectionId(collections);

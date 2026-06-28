@@ -1877,9 +1877,7 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
     getOrCreateScroller();
 
     const pending = readSelectedClipIds({ isAborted: () => false, renderWaitMs: 10 });
-    const expectation = expect(pending).rejects.toThrow(
-      "選択中の clip がありません",
-    );
+    const expectation = expect(pending).rejects.toThrow("選択中の clip がありません");
     await vi.runAllTimersAsync();
     await expectation;
   });

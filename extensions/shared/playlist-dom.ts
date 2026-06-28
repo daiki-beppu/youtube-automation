@@ -883,10 +883,14 @@ export async function readSelectedClipIds(
 
   const ids = Array.from(selectedIds);
   if (ids.length === 0) {
-    throw new Error("選択中の clip がありません。Suno で対象曲を選択してから再実行してください。");
+    throw new Error(
+      "選択中の clip がありません。Suno で対象曲を選択してから再実行してください。",
+    );
   }
   if (expectedClipCount !== undefined && ids.length !== expectedClipCount) {
-    throw new Error(`選択中 clip 数が一致しません: expected ${expectedClipCount}, got ${ids.length}`);
+    throw new Error(
+      `選択中 clip 数が一致しません: expected ${expectedClipCount}, got ${ids.length}`,
+    );
   }
   return ids;
 }
