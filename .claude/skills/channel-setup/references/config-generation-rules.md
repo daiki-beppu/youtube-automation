@@ -117,7 +117,7 @@
 | `image_generation.gemini.composition_rules.*` | 「ビジュアルアイデンティティ」「サムネイル方針」 |
 | `image_generation.gemini.diff_prompt_template` | コレクション側 `prompts/<theme>.md` への差分指示テンプレ |
 
-`reference_images.default` の TTP サムネは `/benchmark`（`yt-benchmark`）が
+`reference_images.default` の TTP サムネは `/benchmark` skill（CLI は `yt-benchmark-collect`）が
 `docs/benchmarks/*.md` 取得時に `data/thumbnail_compare/benchmark/` に自動 download する。
 **手動 download はしない**（issue #567）。
 

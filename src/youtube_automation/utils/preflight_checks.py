@@ -112,6 +112,55 @@ def check_title_template_compliance(
     return "; ".join(issues) if issues else None
 
 
+def check_title_duplicate_warnings(
+    title: str,
+    existing_titles: Collection[str] = (),
+    title_template_cfg: Mapping[str, object] | None = None,
+    *,
+    min_suffix_chars: int = 16,
+) -> list[str]:
+    """企画/タイトル決定段階で使う重複 warning を返す.
+
+    upload preflight の fail-loud 判定とは分離し、早い段階で「過去タイトルと似すぎる」
+    候補を人間が見直せるようにする。検出対象:
+
+    - タイトル全体の完全一致
+    - `separator` 以降（RHS / タイトル後半）の完全一致
+    - separator を持たないタイトル同士の長い末尾一致
+    """
+    normalized = _normalize_title_for_compare(title)
+    if not normalized:
+        return []
+
+    cfg: Mapping[str, object] = title_template_cfg or {}
+    separator = str(cfg.get("separator") or DEFAULT_TITLE_SEPARATOR)
+    rhs = _title_rhs(normalized, separator)
+
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for existing in existing_titles:
+        existing_norm = _normalize_title_for_compare(str(existing))
+        if not existing_norm:
+            continue
+
+        msg: str | None = None
+        if normalized.casefold() == existing_norm.casefold():
+            msg = f"タイトル全体が既存タイトルと完全一致: {existing_norm!r}"
+        else:
+            existing_rhs = _title_rhs(existing_norm, separator)
+            if rhs and existing_rhs and rhs.casefold() == existing_rhs.casefold():
+                msg = f"タイトル後半が既存タイトルと一致: {rhs!r} (既存: {existing_norm!r})"
+            else:
+                suffix = _matching_suffix(normalized, existing_norm, min_chars=min_suffix_chars)
+                if suffix:
+                    msg = f"タイトル末尾が既存タイトルと一致: {suffix!r} (既存: {existing_norm!r})"
+
+        if msg and msg not in seen:
+            warnings.append(msg)
+            seen.add(msg)
+    return warnings
+
+
 def _first_pattern_hit(text: str, patterns: Sequence[str] | Collection[str]) -> str | None:
     for pattern in patterns:
         m = re.search(str(pattern), text)
@@ -124,6 +173,32 @@ def _has_duplicate_full_title(title: str, existing_titles: Collection[str]) -> b
     if not title:
         return False
     return any(title == str(other).strip() for other in existing_titles)
+
+
+def _normalize_title_for_compare(title: str) -> str:
+    return " ".join(title.strip().split())
+
+
+def _title_rhs(title: str, separator: str) -> str:
+    if not separator or separator not in title:
+        return ""
+    parts = title.split(separator, 1)
+    return parts[1].strip() if len(parts) == 2 else ""
+
+
+def _matching_suffix(a: str, b: str, *, min_chars: int) -> str:
+    a_fold = a.casefold()
+    b_fold = b.casefold()
+    max_len = min(len(a_fold), len(b_fold))
+    match_len = 0
+    for i in range(1, max_len + 1):
+        if a_fold[-i] != b_fold[-i]:
+            break
+        match_len = i
+    if match_len < min_chars:
+        return ""
+    suffix = a[-match_len:].strip()
+    return suffix if len(suffix) >= min_chars else ""
 
 
 def _contains_any_vocab(text: str, vocabulary: Collection[str]) -> bool:

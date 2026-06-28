@@ -758,6 +758,95 @@ class TestUploadCompleteCollectionDedup:
 
 
 # ---------------------------------------------------------------------------
+# Issue #1052: post-upload manual checklist
+# ---------------------------------------------------------------------------
+
+
+class TestPostUploadManualChecklist:
+    """アップロード完了後に Studio 手動確認 checklist を表示する."""
+
+    def test_should_print_manual_checklist_for_new_upload(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_NEW",
+                "video_url": "https://www.youtube.com/watch?v=VID_NEW",
+                "upload_source": "new_upload",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" in messages
+        assert "AI コンテンツの開示設定" in messages
+        assert "収益化が ON" in messages
+        assert "https://studio.youtube.com/video/VID_NEW/edit" in messages
+
+    def test_should_not_print_manual_checklist_for_existing_video_reuse(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_EXISTING",
+                "video_url": "https://www.youtube.com/watch?v=VID_EXISTING",
+                "upload_source": "existing_video",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" not in messages
+
+
+# ---------------------------------------------------------------------------
+# Issue #1053: active channel visibility
+# ---------------------------------------------------------------------------
+
+
+class TestActiveChannelVisibility:
+    """誤投稿防止のため操作中チャンネルをログ表示する."""
+
+    def test_should_log_active_channel_identity(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        cfg = SimpleNamespace(
+            meta=SimpleNamespace(
+                channel_name="Rainy Jazz Night",
+                youtube_handle="@rainyjazz",
+                channel_id="UC123",
+            )
+        )
+
+        with (
+            patch("youtube_automation.agents.youtube_auto_uploader.load_config", return_value=cfg),
+            caplog.at_level(logging.INFO),
+        ):
+            uploader._log_active_channel()
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "操作中チャンネル" in messages
+        assert "Rainy Jazz Night" in messages
+        assert "@rainyjazz" in messages
+        assert "UC123" in messages
+
+
+# ---------------------------------------------------------------------------
 # Issue #647: scheduled publish (status.publishAt) regression
 # ---------------------------------------------------------------------------
 
@@ -856,12 +945,17 @@ class TestDefaultPublishAt:
     @staticmethod
     def _config(time_text: str | None = "20:00", tz: str = "Asia/Tokyo") -> SimpleNamespace:
         return SimpleNamespace(
+            meta=SimpleNamespace(
+                channel_name="Rainy Jazz Night",
+                youtube_handle="@rainyjazz",
+                channel_id="UC123",
+            ),
             youtube=SimpleNamespace(
                 api=SimpleNamespace(
                     default_publish_time=time_text,
                     default_publish_timezone=tz,
                 )
-            )
+            ),
         )
 
     def test_resolves_today_when_default_time_is_still_future(self):
