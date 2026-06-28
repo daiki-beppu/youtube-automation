@@ -757,6 +757,39 @@ class TestUploadCompleteCollectionDedup:
 
 
 # ---------------------------------------------------------------------------
+# Issue #1053: active channel visibility
+# ---------------------------------------------------------------------------
+
+
+class TestActiveChannelVisibility:
+    """誤投稿防止のため操作中チャンネルをログ表示する."""
+
+    def test_should_log_active_channel_identity(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        cfg = SimpleNamespace(
+            meta=SimpleNamespace(
+                channel_name="Rainy Jazz Night",
+                youtube_handle="@rainyjazz",
+                channel_id="UC123",
+            )
+        )
+
+        with (
+            patch("youtube_automation.agents.youtube_auto_uploader.load_config", return_value=cfg),
+            caplog.at_level(logging.INFO),
+        ):
+            uploader._log_active_channel()
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "操作中チャンネル" in messages
+        assert "Rainy Jazz Night" in messages
+        assert "@rainyjazz" in messages
+        assert "UC123" in messages
+
+
+# ---------------------------------------------------------------------------
 # Issue #647: scheduled publish (status.publishAt) regression
 # ---------------------------------------------------------------------------
 

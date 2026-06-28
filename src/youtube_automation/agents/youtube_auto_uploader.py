@@ -223,6 +223,7 @@ class YouTubeAutoUploader(
         if not collection_dir.exists():
             raise FileNotFoundError(f"コレクションディレクトリが見つかりません: {collection_path}")
 
+        self._log_active_channel()
         logger.info(f"🎵 コレクションアップロード開始: {collection_dir.name}")
         logger.info(f"📁 パス: {collection_dir}")
 
@@ -258,6 +259,16 @@ class YouTubeAutoUploader(
         self._print_upload_report(results)
 
         return results
+
+    def _log_active_channel(self) -> None:
+        """誤投稿防止のため、現在操作対象のチャンネルを明示表示する。"""
+        config = load_config()
+        parts = [config.meta.channel_name]
+        if config.meta.youtube_handle:
+            parts.append(config.meta.youtube_handle)
+        if config.meta.channel_id:
+            parts.append(config.meta.channel_id)
+        logger.info(f"🎯 操作中チャンネル: {' / '.join(parts)}")
 
     def _print_upload_report(self, results: Dict):
         """アップロード結果レポート表示"""
