@@ -1279,6 +1279,33 @@ def test_post_downloaded_zero_file_count_preserves_existing_music_downloaded(ser
     assert ws["assets"]["music_downloaded"] is True
 
 
+@pytest.mark.parametrize("bad_state", [b"{not json", b"[]"])
+def test_post_downloaded_zero_file_count_rejects_invalid_workflow_state(serve_dir, tmp_path, bad_state):
+    """既存 workflow-state.json が壊れている場合は playlist URL 記録でも上書きしない。"""
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}]
+    )
+    ws_path = coll / "workflow-state.json"
+    ws_path.write_bytes(bad_state)
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+    assert "invalid workflow-state.json" in _read_error_json(exc_info.value)["error"]
+    assert ws_path.read_bytes() == bad_state
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists() or list(music_dir.iterdir()) == []
+
+
 def test_post_downloaded_idempotent_two_calls(serve_dir, tmp_path):
     """Given 冪等 2-call パターン（1st: file_count=0、2nd: file_count=N）
     When 同じ collection に対して POST を 2 回送る
@@ -2413,6 +2440,44 @@ def test_post_downloaded_workflow_write_failure_rolls_back_music_and_workflow(se
     assert sorted(path.name for path in music_dir.iterdir()) == ["legacy.mp3"]
     assert (music_dir / "legacy.mp3").read_bytes() == b"legacy"
     assert json.loads(ws_path.read_text(encoding="utf-8")) == original_ws
+
+
+def test_post_downloaded_invalid_workflow_state_rolls_back_zip_music(serve_dir, tmp_path):
+    """ZIP 配置後に既存 workflow-state.json の破損を検出したら music と state を元に戻す。"""
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "legacy.mp3").write_bytes(b"legacy")
+    ws_path = coll / "workflow-state.json"
+    bad_state = b"{not json"
+    ws_path.write_bytes(bad_state)
+    zip_path = _make_zip(tmp_path / "valid.zip", {"Song A.mp3": b"new-a", "Song A_1.mp3": b"new-b"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            {
+                "file_count": 2,
+                "expected_file_count": 2,
+                "format": "mp3",
+                "suno_playlist_url": "https://suno.com/playlist/corrupt",
+                "download_path": str(zip_path),
+            },
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+    assert "invalid workflow-state.json" in _read_error_json(exc_info.value)["error"]
+    assert sorted(path.name for path in music_dir.iterdir()) == ["legacy.mp3"]
+    assert (music_dir / "legacy.mp3").read_bytes() == b"legacy"
+    assert ws_path.read_bytes() == bad_state
 
 
 def test_post_downloaded_partial_zip_keeps_download_archive(serve_dir, tmp_path):

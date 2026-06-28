@@ -38,6 +38,18 @@ def expected_download_count(pattern_count: int | None, explicit_expected: int | 
     return max(pattern_expected, explicit_expected)
 
 
+def _read_existing_workflow_state(ws_path: Path) -> dict:
+    if not ws_path.is_file():
+        return {}
+    try:
+        data = json.loads(ws_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError("invalid workflow-state.json") from exc
+    if not isinstance(data, dict):
+        raise ValueError("invalid workflow-state.json: root must be an object")
+    return data
+
+
 def update_workflow_state_downloaded(
     coll_dir: Path,
     *,
@@ -47,14 +59,7 @@ def update_workflow_state_downloaded(
     atomic_json_write: AtomicJsonWriter,
 ) -> None:
     ws_path = CollectionPaths(coll_dir).workflow_state_path
-    data: dict = {}
-    if ws_path.is_file():
-        try:
-            data = json.loads(ws_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            data = {}
-    if not isinstance(data, dict):
-        data = {}
+    data = _read_existing_workflow_state(ws_path)
 
     planning = data.setdefault("planning", {})
     if not isinstance(planning, dict):
