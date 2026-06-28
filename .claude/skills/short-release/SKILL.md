@@ -73,18 +73,26 @@ uv run yt-upload-shorts <release-path>              # 実投稿
 `ShortUploader` が自動で行うこと:
 - 本編 JP / EN それぞれの `publish_at` 基準で `cfg.shorts.publish_time` 翌日公開時刻を計算
 - 各言語のメタデータ生成（タイトル / 説明欄 / `#Shorts` タグ）
-- `workflow-state.json::post_upload.short.{jp,en}` に記録
+- `workflow-state.json::post_upload.shorts` への list 形式記録は現行 `ShortUploader` の collection 型 upload 向け。
+  release 型の `{jp,en}` upload 結果記録は未実装のため、この skill では書き込まない。
 
 ### Step 6: workflow-state.json 更新
 
 ```json
 "post_upload": {
-  "short": {
-    "jp": { "generated": true, "uploaded": true, "video_id": "xxx", "publish_at": "..." },
-    "en": { "generated": true, "uploaded": true, "video_id": "yyy", "publish_at": "..." }
-  }
+  "shorts": [
+    {
+      "short_num": 1,
+      "video_id": "xxx",
+      "publish_at": "2026-03-12T08:00:00+09:00",
+      "uploaded_at": "2026-03-11T09:12:00+09:00"
+    }
+  ]
 }
 ```
+
+上記は collection 型 `yt-upload-shorts` の実装済み schema。release 型の JP/EN 別 upload schema は
+未実装のため、単一 object に言語別キーを持たせる形式は使わない。
 
 ## 設定
 

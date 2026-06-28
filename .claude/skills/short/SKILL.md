@@ -101,23 +101,26 @@ uv run yt-upload-shorts <collection-path>              # 実投稿
 - CC `publish_at` 基準で `cfg.shorts.publish_time` 翌日公開時刻を計算
 - `cfg.shorts.min_hours_between_shorts_per_collection` で投稿間隔チェック
 - `BAHMetadataGenerator.generate_shorts_metadata(cc_video_url)` で EN + 全 supported_languages のメタデータ生成
-- `workflow-state.json::post_upload.short` に記録
+- `workflow-state.json::post_upload.shorts` に `short_num` をキーに upsert
 
 ### Step 7: workflow-state.json 更新
 
 ```json
 "post_upload": {
-  "short": {
-    "generated": true,
-    "uploaded": true,
-    "count": 3,
-    "publish_at": "2026-03-12T08:00:00+09:00",
-    "videos": [
-      { "video_id": "xxx", "title": "Morning Light — Whispers Across the Hills ✦ Channel #Shorts" }
-    ]
-  }
+  "shorts": [
+    {
+      "short_num": 1,
+      "video_id": "xxx",
+      "publish_at": "2026-03-12T08:00:00+09:00",
+      "uploaded_at": "2026-03-11T09:12:00+09:00",
+      "title": "Morning Light - Whispers Across the Hills #Shorts"
+    }
+  ]
 }
 ```
+
+`short_num` 未指定で `01-master/short.mp4` を投稿した場合は `short_num: null` の entry として扱う。
+同じ `short_num` を再投稿した場合は既存 entry を置換し、別の `short_num` は append する。
 
 ## 設定
 
