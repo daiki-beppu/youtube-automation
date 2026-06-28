@@ -235,6 +235,29 @@ class TestDefaultPublishTimeFallback:
         assert result is None
         assert not mock_resolve.called
 
+    def test_execute_next_step_suppresses_downstream_default_when_auto_schedule_false(self, tmp_path):
+        col, _ = _make_tracking_collection(tmp_path)
+        uploader, mock_inner = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+        )
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_IMMEDIATE",
+                "video_url": "https://www.youtube.com/watch?v=V_IMMEDIATE",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        with patch("youtube_automation.agents._published_dates.resolve_default_publish_at") as mock_resolve:
+            uploader.execute_next_step(col)
+
+        call_kwargs = mock_inner.upload_collection.call_args.kwargs
+        assert call_kwargs["publish_at"] is None
+        assert call_kwargs["apply_default_publish_at"] is False
+        assert not mock_resolve.called
+
 
 class TestExecuteCompleteCollectionResume:
     """resumable upload session URI の tracking 連携を検証する.

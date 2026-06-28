@@ -1002,6 +1002,29 @@ class TestDefaultPublishAt:
         assert mock_default.called
         assert mock_inner.call_args.kwargs["publish_at"] == "2099-01-01T20:00:00+09:00"
 
+    def test_upload_collection_can_suppress_default_when_publish_at_omitted(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch.object(uploader, "_preflight_check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.agents.youtube_auto_uploader.BAHMetadataGenerator") as mock_gen_cls,
+            patch("youtube_automation.agents.youtube_auto_uploader._resolve_default_publish_at") as mock_default,
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at=None, apply_default_publish_at=False)
+
+        assert not mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] is None
+
     def test_upload_collection_keeps_explicit_publish_at(self, tmp_path):
         from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
 

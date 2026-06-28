@@ -1,21 +1,23 @@
+import type { DownloadedPayload } from "../../shared/api";
 import type { ProgressPayload } from "../../shared/constants";
 import { PHASE } from "../../shared/constants";
 import { triggerDownloadAll } from "./download";
 import { onMessage, sendMessage } from "./messaging";
-import { downloadFormatItem, serverUrlItem } from "./storage";
 
 type DownloadResult = { ok: true; filename: string } | { ok: false; message: string };
 
 export interface DownloadFlow {
   installMessageHandlers: () => void;
   performDownload: (
+    context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
     sunoPlaylistUrl: string,
   ) => Promise<void>;
-  recordPlaylistUrl: (collectionId: string, sunoPlaylistUrl: string) => Promise<void>;
+  recordPlaylistUrl: (context: DownloadContext, collectionId: string, sunoPlaylistUrl: string) => Promise<void>;
   downloadBestEffort: (
+    context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
@@ -30,6 +32,7 @@ export interface DownloadFlowDeps {
 }
 
 export interface RetryDownloadOptions {
+  context: DownloadContext;
   collectionId: string;
   playlistName: string;
   submittedClipIds: string[];
@@ -37,6 +40,11 @@ export interface RetryDownloadOptions {
   resolvePlaylistUrl: (playlistName: string) => Promise<string>;
   selectClipIds: (submittedClipIds: string[]) => Promise<void>;
   clearResumeState: (collectionId: string) => Promise<void>;
+}
+
+export interface DownloadContext {
+  baseUrl: string;
+  format: DownloadedPayload["format"];
 }
 
 const DOWNLOAD_COMPLETE_TIMEOUT_MS = 660000;
@@ -86,25 +94,27 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
   }
 
   async function performDownload(
+    context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
     sunoPlaylistUrl: string,
   ): Promise<void> {
-    const format = await downloadFormatItem.getValue();
-    const baseUrl = (await serverUrlItem.getValue()).trim();
-
     if (deps.isAborted()) return;
 
-    deps.emitProgress({ phase: PHASE.DOWNLOADING, total: progressTotal, message: `${format.toUpperCase()} 形式` });
-    const startResult = await sendMessage("startDownload", { format });
+    deps.emitProgress({
+      phase: PHASE.DOWNLOADING,
+      total: progressTotal,
+      message: `${context.format.toUpperCase()} 形式`,
+    });
+    const startResult = await sendMessage("startDownload", { format: context.format });
     if (!startResult?.ok) {
       throw new Error(startResult?.message ?? "Download all 監視を開始できませんでした");
     }
     const downloadPromise = waitForDownloadComplete();
     let watcherActive = true;
     try {
-      await triggerDownloadAll(format);
+      await triggerDownloadAll(context.format);
 
       const downloadResult = await downloadPromise;
 
@@ -119,12 +129,12 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       }
 
       await sendMessage("postDownloaded", {
-        baseUrl,
+        baseUrl: context.baseUrl,
         collectionId,
         body: {
           file_count: expectedFileCount,
           expected_file_count: expectedFileCount,
-          format,
+          format: context.format,
           suno_playlist_url: sunoPlaylistUrl,
           download_path: downloadResult.filename,
         },
@@ -139,28 +149,31 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     }
   }
 
-  async function recordPlaylistUrl(collectionId: string, sunoPlaylistUrl: string): Promise<void> {
-    const format = await downloadFormatItem.getValue();
-    const baseUrl = (await serverUrlItem.getValue()).trim();
+  async function recordPlaylistUrl(
+    context: DownloadContext,
+    collectionId: string,
+    sunoPlaylistUrl: string,
+  ): Promise<void> {
     await sendMessage("postDownloaded", {
-      baseUrl,
+      baseUrl: context.baseUrl,
       collectionId,
       body: {
         file_count: 0,
-        format,
+        format: context.format,
         suno_playlist_url: sunoPlaylistUrl,
       },
     });
   }
 
   async function downloadBestEffort(
+    context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
     sunoPlaylistUrl: string,
   ): Promise<string | null> {
     try {
-      await performDownload(collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl);
+      await performDownload(context, collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl);
       return null;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -186,7 +199,13 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       return;
     }
     const sunoPlaylistUrl = await options.resolvePlaylistUrl(options.playlistName);
-    await performDownload(options.collectionId, total, options.expectedClipCount ?? total, sunoPlaylistUrl);
+    await performDownload(
+      options.context,
+      options.collectionId,
+      total,
+      options.expectedClipCount ?? total,
+      sunoPlaylistUrl,
+    );
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
       return;

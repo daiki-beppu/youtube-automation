@@ -26,7 +26,14 @@ logger = logging.getLogger(__name__)
 class CompleteCollectionExecutorMixin:
     """Complete Collection アップロード実行ループを提供する mixin。"""
 
-    def _execute_complete_collection(self, collection_path: Path, tracking: dict, publish_at: str = None) -> dict:
+    def _execute_complete_collection(
+        self,
+        collection_path: Path,
+        tracking: dict,
+        publish_at: str = None,
+        *,
+        apply_default_publish_at: bool = True,
+    ) -> dict:
         """Complete Collection アップロード"""
         logger.info("📅 Complete Collection アップロード開始")
         logger.info(f"🎵 コレクション: {collection_path.name}")
@@ -59,6 +66,7 @@ class CompleteCollectionExecutorMixin:
             result = self.uploader.upload_collection(
                 str(collection_path),
                 publish_at=publish_at,
+                apply_default_publish_at=apply_default_publish_at,
                 resume_session_uri=resume_session_uri,
                 on_session_uri_changed=_on_session_uri_changed,
                 on_upload_complete=_on_upload_complete,

@@ -85,7 +85,7 @@ function findScopedMoreButton(): HTMLElement | null {
       return button;
     }
   }
-  return scroller?.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR) ?? null;
+  return null;
 }
 
 async function waitForDownloadMenuItem(timeoutMs: number, pollMs: number): Promise<HTMLElement> {

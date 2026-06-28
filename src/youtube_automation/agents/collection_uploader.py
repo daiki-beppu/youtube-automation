@@ -197,7 +197,13 @@ class CollectionUploader(
         cc = tracking.get("complete_collection", {})
         if cc.get("status") != "completed":
             publish_at = self._calculate_publish_at()
-            return self._execute_complete_collection(collection_path, tracking, publish_at=publish_at)
+            apply_default_publish_at = self.config.get("schedule", {}).get("auto_schedule_enabled") is not False
+            return self._execute_complete_collection(
+                collection_path,
+                tracking,
+                publish_at=publish_at,
+                apply_default_publish_at=apply_default_publish_at,
+            )
 
         # 全完了
         tracking["status"] = "completed"

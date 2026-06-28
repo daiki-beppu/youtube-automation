@@ -55,6 +55,8 @@ import {
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { downloadFormatItem, serverUrlItem } from "../lib/storage";
+import type { DownloadContext } from "../lib/download-flow";
 
 function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submittedIds: string[]): Map<string, string> {
   const map = new Map<string, string>();
@@ -71,6 +73,13 @@ function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submitte
     }
   }
   return map;
+}
+
+async function resolveDownloadContext(): Promise<DownloadContext> {
+  return {
+    baseUrl: (await serverUrlItem.getValue()).trim(),
+    format: await downloadFormatItem.getValue(),
+  };
 }
 
 export default defineContentScript({
@@ -542,9 +551,11 @@ export default defineContentScript({
           if (expectedPlaylistClipCount >= fullCollectionClipCount) {
             persistInterruptState(total);
             try {
+              const downloadContext = await resolveDownloadContext();
               const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-              await downloadFlow.recordPlaylistUrl(collectionId, sunoPlaylistUrl);
+              await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
               const downloadError = await downloadFlow.downloadBestEffort(
+                downloadContext,
                 collectionId,
                 total,
                 verifiedPlaylistClipCount,
@@ -653,9 +664,16 @@ export default defineContentScript({
             return;
           }
           if (collectionId && shouldDownload) {
+            const downloadContext = await resolveDownloadContext();
             const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-            await downloadFlow.recordPlaylistUrl(collectionId, sunoPlaylistUrl);
-            await downloadFlow.performDownload(collectionId, verifiedClipCount, verifiedClipCount, sunoPlaylistUrl);
+            await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
+            await downloadFlow.performDownload(
+              downloadContext,
+              collectionId,
+              verifiedClipCount,
+              verifiedClipCount,
+              sunoPlaylistUrl,
+            );
           }
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
@@ -685,7 +703,9 @@ export default defineContentScript({
       aborted = false;
       void (async () => {
         try {
+          const downloadContext = await resolveDownloadContext();
           await downloadFlow.retryDownload({
+            context: downloadContext,
             collectionId,
             playlistName,
             submittedClipIds,

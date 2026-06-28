@@ -176,13 +176,10 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
 
     if cfg.backup_originals:
         backup.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, backup)
-    try:
-        os.replace(tmp, path)
-    except Exception:
-        if tmp.exists():
-            tmp.unlink()
-        raise
+        os.replace(path, backup)
+    else:
+        path.unlink()
+    os.replace(tmp, path)
     if not quiet:
         print(f"cleaned: {path.name}")
     return True

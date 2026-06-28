@@ -235,6 +235,30 @@ describe("triggerDownloadAll", () => {
     expect(clicked).toEqual(["selected-row-more", "download-all", "mp3", "confirm"]);
   });
 
+  it("DOM fixture: selected clip row に More が無ければ未選択 row の More を押さず throw する", async () => {
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="selected.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+        </article>
+        <article>
+          <img src="unselected.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Select clip">Unselected</button></div>
+          <button aria-label="More options" data-testid="unselected-more">...</button>
+        </article>
+      </div>
+    `;
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="unselected-more"]')!
+      .addEventListener("click", () => clicked.push("unselected-more"));
+
+    await expect(triggerDownloadAll("mp3")).rejects.toThrow(/More メニューボタン.*見つかりませんでした/);
+    expect(clicked).toEqual([]);
+  });
+
   it("DOM fixture: default deps は aria-label が無い Download all を text fallback で選ぶ", async () => {
     const clicked: string[] = [];
     vi.stubGlobal("PointerEvent", MouseEvent);
