@@ -136,6 +136,15 @@ def _cmd_pull(args: argparse.Namespace) -> int:
     channel_id = remote_raw["id"]
     print(f"📡 fetched remote channel settings (channelId={channel_id})")
 
+    if args.channel_id_only:
+        if not args.apply:
+            print("✋ dry-run. re-run with --apply to write channel.channel_id.")
+            return 0
+        config_path = _channel_dir() / "config" / "channel" / "meta.json"
+        _write_channel_settings(config_path, channel_id)
+        print(f"📝 wrote channel.channel_id → {config_path}")
+        return 0
+
     lines = diff_settings(remote_channel, remote_loc, local_channel, local_loc)
     _print_diff(lines, direction="remote → local")
 
@@ -148,8 +157,8 @@ def _cmd_pull(args: argparse.Namespace) -> int:
 
     channel_dir = _channel_dir()
     config_path = channel_dir / "config" / "channel" / "meta.json"
-    _write_youtube_channel(config_path, remote_channel)
-    print(f"📝 wrote youtube_channel section → {config_path}")
+    _write_channel_settings(config_path, channel_id, remote_channel)
+    print(f"📝 wrote channel.channel_id and youtube_channel section → {config_path}")
 
     if not args.no_localizations and remote_loc:
         loc_path = channel_dir / "config" / "localizations.json"
@@ -160,14 +169,27 @@ def _cmd_pull(args: argparse.Namespace) -> int:
     return 0
 
 
-def _write_youtube_channel(path: Path, youtube_channel: dict[str, Any]) -> None:
-    """config/channel/meta.json の youtube_channel セクションのみを差し替える。"""
+def _write_channel_settings(
+    path: Path,
+    channel_id: str,
+    youtube_channel: dict[str, Any] | None = None,
+) -> None:
+    """config/channel/meta.json の channel_id（と任意で youtube_channel）を差し替える。"""
     data = json.loads(path.read_text(encoding="utf-8"))
-    data["youtube_channel"] = youtube_channel
+    _set_channel_id(data, channel_id)
+    if youtube_channel is not None:
+        data["youtube_channel"] = youtube_channel
     path.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+
+
+def _set_channel_id(data: dict[str, Any], channel_id: str) -> None:
+    channel = data.get("channel")
+    if not isinstance(channel, dict):
+        raise ConfigError("config/channel/meta.json の channel セクションが不正です")
+    channel["channel_id"] = channel_id
 
 
 def _write_localizations(path: Path, remote_loc: dict[str, Any]) -> None:
@@ -225,6 +247,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_pull = sub.add_parser("pull", help="YouTube → local (dry-run by default)")
     _add_common(p_pull)
     p_pull.add_argument("--apply", action="store_true", help="actually overwrite local config files")
+    p_pull.add_argument(
+        "--channel-id-only",
+        action="store_true",
+        help="write only config/channel/meta.json::channel.channel_id",
+    )
     p_pull.set_defaults(func=_cmd_pull)
 
     return parser

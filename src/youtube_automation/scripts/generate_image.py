@@ -178,6 +178,24 @@ def run_requests_parallel(
     return results, errors
 
 
+def print_provider_fallback_hint(provider_name: str) -> None:
+    """画像生成プロバイダー失敗時に、手動切替の次アクションを表示する。"""
+    print()
+    print("  代替プロバイダーの候補:")
+    if provider_name == "gemini":
+        print("  - GCP 課金や Gemini API 障害が疑われる場合:")
+        print("      config/skills/thumbnail.yaml の image_generation.provider を codex に変更")
+        print("      生成は .claude/skills/thumbnail/references/codex-image.sh 経由で実行")
+        print("  - OPENAI_API_KEY がある場合:")
+        print("      image_generation.provider を openai に変更して再試行")
+    elif provider_name == "openai":
+        print("  - OpenAI 側の障害や quota が疑われる場合:")
+        print("      image_generation.provider を gemini または codex に変更して再試行")
+    else:
+        print("  - provider 固有の手順を確認し、gemini / openai / codex のいずれかへ切り替え")
+    print("  詳細: .claude/skills/thumbnail/SKILL.md の「障害時の provider fallback」")
+
+
 def main():
     from dotenv import find_dotenv, load_dotenv
 
@@ -412,6 +430,7 @@ def main():
         for attempt, error in errors:
             prefix = f"attempt {attempt + 1}: " if cli_max_attempts > 1 else ""
             print(f"[ERROR] {prefix}{error}")
+        print_provider_fallback_hint(cfg.provider)
         sys.exit(1)
 
     saved_paths: list[Path] = []
@@ -437,6 +456,7 @@ def main():
     else:
         print(f"  画像生成: 失敗 (0/{cli_max_attempts})")
         print("  プロンプト・参照画像・config を調整して再試行してください。")
+        print_provider_fallback_hint(cfg.provider)
     print("===========================================")
     print()
 

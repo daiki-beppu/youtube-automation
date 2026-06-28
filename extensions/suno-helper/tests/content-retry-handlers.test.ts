@@ -133,7 +133,7 @@ async function loadContentScript(overrides?: {
     readSelectedClipIds: overrides?.readSelectedClipIdsError
       ? vi.fn(() => Promise.reject(overrides.readSelectedClipIdsError))
       : vi.fn(() => Promise.resolve(["clip-1", "clip-2"])),
-    scrollAndMultiSelectByIds: vi.fn(() => Promise.resolve(0)),
+    scrollAndMultiSelectByIds: vi.fn((ids: string[]) => Promise.resolve(ids.length)),
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
   }));
 
@@ -233,8 +233,14 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-    expect(downloadedPosts).toHaveLength(1);
+    expect(downloadedPosts).toHaveLength(2);
     expect(downloadedPosts[0].payload).toMatchObject({
+      body: {
+        file_count: 0,
+        suno_playlist_url: "https://suno.com/playlist/test",
+      },
+    });
+    expect(downloadedPosts[1].payload).toMatchObject({
       body: {
         file_count: clipIds.length,
         expected_file_count: clipIds.length,
@@ -374,6 +380,22 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
       ),
     );
     expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(true);
+  });
+
+  it("Given Download all 待機中に stop When retryDownload Then watcher を cancel し downloaded POST しない", async () => {
+    const { handlers, sentMessages } = await loadContentScript();
+
+    handlers.get("retryDownload")!({
+      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
+    });
+
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    handlers.get("stop")!({ data: {} });
+
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(true), {
+      timeout: 1500,
+    });
+    expect(sentMessages.some((m) => m.type === "postDownloaded")).toBe(false);
   });
 });
 

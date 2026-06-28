@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 // Download all DOM 操作のユニットテスト (#1146)。
 // triggerDownloadAll の各ステップを副作用注入で検証する。
 // DOM を使わず mock deps のみで動作するため jsdom は不要。
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TriggerDownloadAllDeps } from "../lib/download";
 import { triggerDownloadAll } from "../lib/download";
@@ -29,6 +30,11 @@ function createMockDeps(overrides?: Partial<TriggerDownloadAllDeps>): TriggerDow
 }
 
 describe("triggerDownloadAll", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    vi.unstubAllGlobals();
+  });
+
   it("正常フロー: More → Download all → 形式選択 → 確認の順序で操作する", async () => {
     const moreButton = stubElement();
     const downloadMenuItem = stubElement();
@@ -116,5 +122,36 @@ describe("triggerDownloadAll", () => {
 
     await expect(triggerDownloadAll("flac", deps)).rejects.toThrow(/形式 "flac"/);
     expect(deps.clickConfirm).not.toHaveBeenCalled();
+  });
+
+  it("DOM fixture: default deps で More → Download all → MP3 → Download を操作する", async () => {
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <button aria-label="More options">...</button>
+      <div data-context-menu="true">
+        <button aria-label="Download all">Download all</button>
+      </div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">M4A</button>
+        <button class="flex w-full">MP3</button>
+        <button class="flex w-full">WAV</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+    const more = document.querySelector<HTMLButtonElement>('button[aria-label="More options"]')!;
+    const downloadAll = document.querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!;
+    const mp3 = Array.from(document.querySelectorAll<HTMLButtonElement>("button.flex.w-full")).find(
+      (button) => button.textContent?.trim() === "MP3",
+    )!;
+    const confirm = document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!;
+    more.addEventListener("click", () => clicked.push("more"));
+    downloadAll.addEventListener("click", () => clicked.push("download-all"));
+    mp3.addEventListener("click", () => clicked.push("mp3"));
+    confirm.addEventListener("click", () => clicked.push("confirm"));
+
+    await triggerDownloadAll("mp3");
+
+    expect(clicked).toEqual(["more", "download-all", "mp3", "confirm"]);
   });
 });

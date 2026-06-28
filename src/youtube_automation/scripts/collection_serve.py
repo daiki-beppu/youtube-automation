@@ -751,10 +751,10 @@ def _extract_and_rename_music(
                     lookup = candidate
                     track_num = name_to_index[candidate]
                     break
-            if track_num is not None:
-                new_name = f"{track_num:02d}{variant}-{lookup}{ext}"
-            else:
-                new_name = extracted.name
+            if track_num is None:
+                print(f"[yt-collection-serve] prompts に未対応の音声ファイルをスキップします: {extracted.name}")
+                continue
+            new_name = f"{track_num:02d}{variant}-{lookup}{ext}"
             dest = music_dir / new_name
             if dest.exists():
                 dest.unlink()

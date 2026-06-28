@@ -11,6 +11,7 @@ FEATURES_DOC_PATH = REPO_ROOT / "docs" / "features.md"
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 README_FEATURES_LINK = "[`docs/features.md`](docs/features.md)"
 CATALOG_ROW_PATTERN = re.compile(r"^\| /([a-z0-9-]+) \| .+ \|$", re.MULTILINE)
+CATALOG_TOTAL_PATTERN = re.compile(r"全 \*\*(\d+) 個\*\*")
 
 
 def _read(path: Path) -> str:
@@ -23,6 +24,13 @@ def _skill_names() -> list[str]:
 
 def _catalog_skill_names() -> list[str]:
     return CATALOG_ROW_PATTERN.findall(_read(FEATURES_DOC_PATH))
+
+
+def _catalog_declared_total() -> int:
+    match = CATALOG_TOTAL_PATTERN.search(_read(FEATURES_DOC_PATH))
+    if not match:
+        raise AssertionError("docs/features.md に skill 総数表記が見つかりません")
+    return int(match.group(1))
 
 
 def _features_section(text: str) -> str:
@@ -52,6 +60,16 @@ def test_features_doc_lists_every_skill_directory_once() -> None:
     actual = sorted(_catalog_skill_names())
     assert actual == expected, (
         f"docs/features.md の skill 行が `.claude/skills/` と一致しません\nexpected={expected}\nactual={actual}"
+    )
+
+
+def test_features_doc_declared_total_matches_catalog_rows() -> None:
+    declared_total = _catalog_declared_total()
+    catalog_names = _catalog_skill_names()
+    assert declared_total == len(catalog_names), (
+        "docs/features.md の skill 総数表記が catalog row 数と一致しません\n"
+        f"declared_total={declared_total}\n"
+        f"catalog_rows={len(catalog_names)}"
     )
 
 

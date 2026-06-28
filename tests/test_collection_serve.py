@@ -1345,18 +1345,18 @@ def test_extract_and_rename_happy_path(tmp_path):
 
 
 def test_extract_without_prompts(tmp_path):
-    """suno-prompts.json が無い場合、元ファイル名のまま配置される。"""
+    """suno-prompts.json が無い場合、対応件数を確定できないため配置しない。"""
     coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=None)
     zip_path = _make_zip(
         tmp_path / "download.zip",
         {"Track A.mp3": b"a", "Track B.mp3": b"b"},
     )
 
-    _extract_and_rename_music(coll, str(zip_path))
+    result = _extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
-    names = sorted(f.name for f in music_dir.iterdir())
-    assert names == ["Track A.mp3", "Track B.mp3"]
+    assert result == 0
+    assert not music_dir.exists() or list(music_dir.iterdir()) == []
 
 
 def test_extract_invalid_zip_path(tmp_path):
@@ -1463,7 +1463,7 @@ def test_extract_japanese_name_with_english_tail(tmp_path):
 
 
 def test_extract_unmatched_files(tmp_path):
-    """prompts にマッチしないファイルは番号 prefix なしで配置される。"""
+    """prompts にマッチしないファイルは配置せず、完了件数にも数えない。"""
     coll = _make_collection(
         tmp_path,
         "20260601-clm-aaa-collection",
@@ -1474,11 +1474,12 @@ def test_extract_unmatched_files(tmp_path):
         {"Known.mp3": b"matched", "Unknown.mp3": b"unmatched"},
     )
 
-    _extract_and_rename_music(coll, str(zip_path))
+    result = _extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     names = sorted(f.name for f in music_dir.iterdir())
-    assert names == ["01a-Known.mp3", "Unknown.mp3"]
+    assert result == 1
+    assert names == ["01a-Known.mp3"]
 
 
 def test_extract_skips_non_audio_files(tmp_path):
@@ -2159,6 +2160,42 @@ def test_post_downloaded_partial_zip_returns_500_and_does_not_set_music_download
     token = _fetch_token(base)
     payload = {
         "file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    assert not ws_path.exists()
+    music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
+    assert not music_dir.exists() or list(music_dir.iterdir()) == []
+
+
+def test_post_downloaded_unmatched_zip_returns_500_and_does_not_set_music_downloaded(serve_dir, tmp_path):
+    """Given ZIP 内の音声数は足りるが prompts に 1 件もマッチしない
+    When POST /collections/<id>/downloaded を送る
+    Then placed_count=0 として 500 を返し assets.music_downloaded を設定しない。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "unmatched.zip", {"Unknown.mp3": b"audio1", "Unknown_1.mp3": b"audio2"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "expected_file_count": 2,
         "format": "mp3",
         "suno_playlist_url": "https://suno.com/playlist/abc",
         "download_path": str(zip_path),

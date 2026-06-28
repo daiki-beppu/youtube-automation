@@ -204,36 +204,53 @@ export default defineContentScript({
       emitProgress({ phase: PHASE.DOWNLOADING, total: progressTotal, message: `${format.toUpperCase()} 形式` });
       await sendMessage("startDownload", { format });
       const downloadPromise = waitForDownloadComplete(isAborted);
+      let watcherActive = true;
       try {
         await triggerDownloadAll(format);
-      } catch (err) {
-        downloadCompleteResolver = null;
-        await sendMessage("cancelDownload", undefined).catch((cancelErr: unknown) => {
-          console.warn("[suno-helper] cancelDownload 中継失敗:", cancelErr);
+
+        const downloadResult = await downloadPromise;
+
+        if (isAborted()) return;
+
+        if (!downloadResult) {
+          throw new Error("Download all がタイムアウトしました");
+        }
+        watcherActive = false;
+        if (!downloadResult.ok) {
+          throw new Error(downloadResult.message);
+        }
+
+        await sendMessage("postDownloaded", {
+          baseUrl,
+          collectionId,
+          body: {
+            file_count: expectedFileCount,
+            expected_file_count: expectedFileCount,
+            format,
+            suno_playlist_url: sunoPlaylistUrl,
+            download_path: downloadResult.filename,
+          },
         });
-        throw err;
+      } finally {
+        if (watcherActive) {
+          downloadCompleteResolver = null;
+          await sendMessage("cancelDownload", undefined).catch((cancelErr: unknown) => {
+            console.warn("[suno-helper] cancelDownload 中継失敗:", cancelErr);
+          });
+        }
       }
+    }
 
-      const downloadResult = await downloadPromise;
-
-      if (isAborted()) return;
-
-      if (!downloadResult) {
-        throw new Error("Download all がタイムアウトしました");
-      }
-      if (!downloadResult.ok) {
-        throw new Error(downloadResult.message);
-      }
-
+    async function recordPlaylistUrl(collectionId: string, sunoPlaylistUrl: string): Promise<void> {
+      const format = await downloadFormatItem.getValue();
+      const baseUrl = (await serverUrlItem.getValue()).trim();
       await sendMessage("postDownloaded", {
         baseUrl,
         collectionId,
         body: {
-          file_count: expectedFileCount,
-          expected_file_count: expectedFileCount,
+          file_count: 0,
           format,
           suno_playlist_url: sunoPlaylistUrl,
-          download_path: downloadResult.filename,
         },
       });
     }
@@ -341,7 +358,7 @@ export default defineContentScript({
       expectedClipCount: number,
       entries: PromptEntry[],
       order: number[],
-    ): Promise<void> {
+    ): Promise<number> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
       const allSubmittedIds = [...previousSubmittedClipIds, ...tracker.getSubmittedIds()];
       const observedCount = new Set(allSubmittedIds).size;
@@ -356,12 +373,17 @@ export default defineContentScript({
         expectedClipCount,
       );
       const titleFallbackMap = buildTitleFallbackMap(entries, order, submittedIds);
-      await scrollAndMultiSelectByIds(submittedIds, {
+      const selectedCount = await scrollAndMultiSelectByIds(submittedIds, {
         isAborted: () => aborted,
         titleFallbackMap,
       });
       if (aborted) {
-        return;
+        return selectedCount;
+      }
+      if (selectedCount !== expectedClipCount) {
+        throw new Error(
+          `playlist 対象の DOM 選択数が一致しません: expected ${expectedClipCount}, selected ${selectedCount}`,
+        );
       }
       await abortableSleep(SETTLE_MS, () => aborted);
 
@@ -382,6 +404,7 @@ export default defineContentScript({
         pollIntervalMs: POLL_INTERVAL_MS,
         timeoutMs: GENERATE_TIMEOUT_MS,
       });
+      return selectedCount;
     }
 
     async function waitForSubmittedClipsComplete(
@@ -610,6 +633,7 @@ export default defineContentScript({
       }
       // collection mode のみ: 全 entry 生成後、FINISHED 直前に clip 一括 playlist 追加を実行する (#854)。
       if (playlistName) {
+        let verifiedPlaylistClipCount = expectedPlaylistClipCount;
         if (aborted) {
           persistInterruptState(total);
           emitProgress({ phase: PHASE.STOPPED, total });
@@ -629,7 +653,7 @@ export default defineContentScript({
           return;
         }
         try {
-          await addClipsToPlaylist(
+          verifiedPlaylistClipCount = await addClipsToPlaylist(
             total,
             playlistName,
             previousSubmittedClipIds,
@@ -656,10 +680,11 @@ export default defineContentScript({
             persistInterruptState(total);
             try {
               const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
+              await recordPlaylistUrl(collectionId, sunoPlaylistUrl);
               const downloadError = await downloadBestEffort(
                 collectionId,
                 total,
-                expectedPlaylistClipCount,
+                verifiedPlaylistClipCount,
                 sunoPlaylistUrl,
                 () => aborted,
               );
@@ -753,14 +778,22 @@ export default defineContentScript({
       aborted = false;
       void (async () => {
         try {
-          await addClipsToPlaylist(0, playlistName, submittedClipIds, expectedClipCount, [], []);
+          const verifiedClipCount = await addClipsToPlaylist(
+            0,
+            playlistName,
+            submittedClipIds,
+            expectedClipCount,
+            [],
+            [],
+          );
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
           if (collectionId) {
             const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-            await performDownload(collectionId, expectedClipCount, expectedClipCount, sunoPlaylistUrl, () => aborted);
+            await recordPlaylistUrl(collectionId, sunoPlaylistUrl);
+            await performDownload(collectionId, verifiedClipCount, verifiedClipCount, sunoPlaylistUrl, () => aborted);
           }
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });

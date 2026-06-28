@@ -1,220 +1,270 @@
 ---
 name: channel-new
-description: "Use when 新しい YouTube チャンネル用の独立リポジトリを作成したいとき。「チャンネル追加」「新チャンネル」「チャンネル開設」「チャンネルセットアップ」「新しいチャンネル作りたい」「TTP 対象を集める」など、新規チャンネルのセットアップに関わる場面で必ず使用すること。競合発掘→分析→方向性決定→セットアップの全工程のエントリポイント"
+description: "Use when 新しい YouTube チャンネル用の独立リポジトリを現在のディレクトリで初期化したいとき。「チャンネル追加」「新チャンネル」「チャンネル開設」「チャンネルセットアップ」「新しいチャンネル作りたい」「TTP 対象を集める」など、新規チャンネルの TTP ベンチマーク収集、config 生成、簡易ペルソナ、branding 初回反映まで end-to-end で進める場面で必ず使用すること。"
 ---
 
 ## Overview
 
-新チャンネル開設のエントリポイント。新しい独立リポジトリを作成し、ビジョンヒアリング → 競合チャンネル発掘 → 最小セットアップを行う。
+新チャンネル開設を `/setup`（onboard）後の 1 スキルで完結させるエントリポイント。
+現在の作業ディレクトリをそのまま channel repo として使い、TTP ベンチマーク収集、フルパッケージ config 生成、簡易ペルソナ、YouTube branding 初回反映まで進める。
 
-**全体フロー（4スキル連携）**:
+**標準フロー**:
 ```
-/channel-new       → Phase 1: ビジョン共有 & 競合発掘 + 独立リポジトリ作成 ← このスキル
-/channel-research  → Phase 2: ベンチマーク徹底分析
-/channel-direction → Phase 3: 方向性ブレスト
-/channel-setup     → Phase 4: テクニカルセットアップ + 検証
+/setup        → GCP / OAuth / ADC / automation パッケージ準備
+/channel-new  → TTP hearing + benchmark + config + persona + branding ← このスキル
+/wf-new       → 初回コレクション制作
 ```
 
-共有テンプレートは `.claude/skills/channel-setup/references/` に配置（`yt-skills sync` で配布）。
+`/channel-research`、`/channel-direction`、`/channel-setup` は廃止しない。
+詳細分析、方向性の再検討、運用中の設定 push / pull が必要なときに追加で使う。
 
-## TTP 原則（ベンチマーク参照）
+## TTP 原則
 
-`/channel-new` の競合発掘は **TTP（徹底的にパクる）対象の収集** そのものである。
-ここで集める競合チャンネルは、後段の `/channel-research` / `/channel-direction` で
-タイトル構造・サムネ構図・動画尺・投稿頻度の **型** を転写する元になる。
-発掘の質がそのまま転写素材の質を決める — 関係性メモには「何を TTP したいか」も書く。
+`/channel-new` の主目的は、競合チャンネルを **seed** ではなく **TTP 対象** として収集し、転写する型を明文化すること。
+ユーザーには「どんなチャンネルにしたいか」より先に「どのチャンネルの何を TTP したいか」を聞く。
+
+TTP メモは最低限、以下の観点を含める:
+
+- タイトル構造
+- サムネ構図
+- 投稿頻度
+- 動画尺
+- ジャンル / 音楽スタイル
+- branding description / keywords の段落構造と語彙
 
 ## Instructions
 
-**実行場所**: 新リポジトリの親ディレクトリ（例: `~/01-dev/projects/`）
+**実行場所**: `/setup` 完了後の channel repo ルート。テンプレートから clone しない。今いるディレクトリを初期化する。
 
-### Step 1: ビジョンヒアリング
+### Step 1: TTP ヒアリング
 
-ユーザーに以下を質問:
+ユーザーに以下を質問し、各チャンネルごとに「何を転写するか」の関係性メモを必須で残す。
 
-- **どんなチャンネルにしたい？** — ジャンル、雰囲気、世界観のイメージ
-- **参考にしたいチャンネルはある？** — YouTube URL や名前を1つ以上もらう
-- **仮のチャンネル名** — 後で変更可能
-- **リポジトリ名**（`youtube-{ケバブケース}` 形式） — 提案して承認を得る
+- **TTP したいチャンネル**: URL / handle / channel ID を 1 件以上
+- **転写したい要素**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のどれか
+- **仮チャンネル名と SHORT**: `meta.json::channel.name` / `channel.short` に入れる
+- **初期ジャンル情報**: `genre.primary` / `genre.style` / `genre.context`
+- **動画尺の初期値（分）**: `audio.target_duration_min` / `target_duration_max`
+- **音楽エンジン**: `music_engine` に入れる `suno` / `lyria` のどちらか
+- **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか
 
-この時点では genre/style/context は仮決定でよい。`/channel-direction` で確定する。
+このヒアリング結果は `yt-channel-init` の CLI 引数と、後続の seed fetch / benchmark 反映に使う。
 
-参考チャンネルの URL / handle / `@user` 表記は **seed として保持**し、Step 3 のリサーチ用認証と Step 4 の最小 config 作成が完了した直後に YouTube Data API で fetch する。seed fetch は Step 5 の競合発掘に先行し、Step 5 / Step 6 で同じ seed を再確認・再発掘しない。
+### Step 2: 現在のディレクトリを repo 初期化
 
-### Step 2: 独立リポジトリ作成
-
-テンプレートから新リポジトリを作成し、automation パッケージをインストール、スキルと CLAUDE.md 運営方針テンプレを同期:
+`.git` がなければ現在のディレクトリで初期化する。テンプレートリポジトリは使わない。
 
 ```bash
-gh repo create <short> --template daiki-beppu/youtube-channel-template --private --clone
-cd <short>
-uv add git+https://github.com/daiki-beppu/youtube-automation.git
-uv run yt-skills sync                       # .claude/skills/ を展開
-uv run yt-skills sync --asset claude-md     # .claude/CLAUDE.md (BGM 運営方針テンプレ) を展開
+git init
+gh repo create <repo-name> --private --source . --remote origin
 ```
 
-`--asset claude-md` は **共通骨格のみ** を `.claude/CLAUDE.md` に展開する。チャンネル固有の戦術メモは `.claude/CLAUDE.local.md` に分離して書く（`yt-skills sync --asset claude-md --force` を再実行しても `.local.md` は触られない）。
+`gh` 未認証やリポジトリ作成を今行わない判断になった場合も、ローカル初期化と config 生成は止めない。
+ただし remote 作成を保留したことは作業メモに明記する。
 
-正準ディレクトリ構造は `channel-setup/references/directory-structure.md` を参照（不足分があれば補完）。
+### Step 3: setup 完了確認
 
-### Step 3: 認証セットアップ
+`/channel-new` は **`/setup` 完了済み** を前提に進める。`/setup` が automation パッケージ導入、`yt-skills sync`、GCP プロジェクト作成、API 有効化、ADC、OAuth クライアント ID 配置、OAuth token 生成までを担当する。
 
-**本番認証は `/onboard` で実施する**（GCP プロジェクト作成・API 有効化・OAuth クライアント ID 配置までを AI 主導 wizard で完結）。
+AI は以下を実行して状態を確認する:
 
-`/channel-new` 段階では **リサーチ用の最低限認証を必ず整える**（seed fetch と競合ベンチマーク収集のため）。本番用認証は後段で `/onboard` を呼ぶ。
+```bash
+uv run yt-doctor --json
+```
 
-**リサーチ用ショートカット**: 既存チャンネルのトークンをコピーして使用可能（YouTube Data API はチャンネル所有権に関係なく動作）。コピー元は **その場で動的に列挙** する。特定リポジトリ名はハードコードしない:
+以下の check が `ok` でない場合は、ここで `/setup` を案内して停止する。認証とツール導入が完了するまで Step 4 以降へ進まない。
 
-1. **候補の動的列挙**: 新リポジトリの親ディレクトリ（このリポジトリの 1 つ上、例: `~/01-dev/projects/`）配下の各サブディレクトリを走査し、`auth/token.json` が存在するものをコピー元候補として収集する:
+- `ffmpeg`
+- `ffprobe`
+- `uv`
+- `uv_project`
+- `automation_package`
+- `skills_synced`
+- `gcloud`
+- `gcloud_account`
+- `gcp_project`
+- `billing_linked`
+- `apis_enabled`
+- `adc`
+- `adc_quota_project`
+- `iam_aiplatform_user`
+- `env_file`
+- `client_secrets`
+- `oauth_token`
 
-   ```bash
-   ls -d ../*/auth/token.json 2>/dev/null
-   ```
+Step 4 の config 生成で解消するため、以下の config 未生成由来の fail は許容する:
 
-2. **ユーザーに選択を提示**: 候補が 1 件以上見つかったら、リポジトリ名と最終更新日時を一覧で提示し、どれをコピー元にするかユーザーに選んでもらう。1 件しかない場合も自動採用せず必ず確認する。
+- `channel_config`: `config/channel/ ディレクトリが存在しない (新規チャンネル)`
+- `upload_ready`: `config/channel/meta.json が存在しない`
+- `upload_ready`: `channel.channel_id が未設定`
 
-3. **明示入力**: 候補が 0 件、または提示した候補をユーザーが採用しない場合は、コピー元の `auth/token.json` への **絶対パス** をユーザーに入力してもらう:
+`upload_ready` が `auth/token.json が存在しない`、`upload 必須 scope 不足`、`token.json 読み込み失敗` で fail している場合は `/setup` を案内して停止する。その他の fail / warn / unknown が残る場合は、表示された `next_action` に従って解消してから進む。
 
-   ```
-   コピー元の token.json の絶対パスを教えてください（例: /Users/<you>/path/to/some-channel/auth/token.json）
-   ```
+seed fetch と競合ベンチマーク収集は YouTube Data API 認証に依存するため、既存チャンネルの token コピーで代替しない。
 
-4. **コピー実行**: 選択 or 入力されたパスを使ってコピー:
-
-   ```bash
-   cp <選択されたパス> auth/token.json
-   ```
-
-5. **コピー可能なトークンが用意できない場合**: seed fetch を実行できないため、ここで `/onboard` を案内して YouTube Data API の認証を先に完了させる。Step 3 はスキップしない。認証が整うまで Step 4 以降へ進まない。
-
-本番用の GCP プロジェクト作成 / API 有効化 / Vertex AI 設定 / `.env` 書き出し / OAuth クライアント ID 配置は `/onboard` で AI 主導の wizard 完結させる (旧: `/channel-setup` の GCP ブートストラップ step は `/onboard` への delegate に縮約済み)。
-
-### Step 4: 最小 config 作成
+### Step 4: フルパッケージ config / ディレクトリ生成
 
 `yt-channel-init` で `config/channel/*.json` と正準ディレクトリ構造を一括生成する:
 
 ```bash
 uv run yt-channel-init \
-  --short "<仮 SHORT>" \
-  --name "<仮チャンネル名>"
+  --short "<SHORT>" \
+  --name "<仮チャンネル名>" \
+  --genre "<genre.primary>" \
+  --style "<genre.style>" \
+  --context "<genre.context>" \
+  --core-message "<core message>" \
+  --target-duration-min "<min minutes>" \
+  --target-duration-max "<max minutes>" \
+  --music-engine "<suno|lyria>" \
+  --branding-description "<TTP 構造を転写した説明文>" \
+  --channel-keyword "<keyword 1>" \
+  --channel-keyword "<keyword 2>" \
+  --benchmark-channel "UC...|slug|Channel Name|title structure + thumbnail composition"
 ```
 
-生成される config（テンプレ既定値は CLI 内 `_TEMPLATES` を単一情報源とする）:
+TTP 対象がこの時点で channel ID まで確定している場合は、`--benchmark-channel` を初回の同一コマンドに含める。
+既存ファイルは `--force` がない限り上書きされないため、初回生成後に `yt-channel-init --benchmark-channel ...` だけを再実行しても `config/channel/analytics.json` には追加されない。
 
-- `config/channel/{meta,content,youtube,analytics,playlists,workflow,audio}.json` 計 7 ファイル
-- `auth/`, `collections/`, `data/`, `docs/benchmarks/`, `research/` ディレクトリと `.gitkeep`
+生成対象:
 
-冪等性: 既存ファイルは `--force` がない限り上書きせず、差分のあるファイルは stderr に unified diff を出して skip する。
+- `config/channel/{meta,content,youtube,analytics,playlists,workflow,audio}.json`
+- `config/localizations.json`
+- `config/schedule_config.json`
+- `config/upload_settings.json`
+- `config/skills/{suno,thumbnail}.yaml`
+- `.env`
+- `.gitignore`
+- `auth/client_secrets.template.json`
+- `auth/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/`
 
-オプション引数（Phase 1 では原則指定不要、後続 `/channel-direction` で実値を埋める）:
+冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。
 
-- `--genre <str>` / `--style <str>` / `--context <str>` — `content.json::genre.*` の初期値（既定 `"TBD"`）
-- `--target <dir>` — 出力先ルート（既定: `$CHANNEL_DIR` → CWD）
-- `--force` — 既存ファイル上書き
+### Step 5: TTP seed fetch と benchmark 反映
 
-### Step 4.5: seed fetch とベンチマーク初期反映
-
-Step 1 で受け取った参考チャンネルを、Step 5 より前に YouTube Data API で実データ化する。URL / handle / `@user` / channel ID は `yt-channel-seed` にそのまま渡す:
+Step 1 の TTP チャンネルを YouTube Data API で実データ化する。
 
 ```bash
-uv run yt-channel-seed "https://www.youtube.com/@example" --target .
+uv run yt-channel-seed "https://www.youtube.com/@example" \
+  --target . \
+  --no-write-benchmark \
+  --json
 ```
 
-`yt-channel-seed` は以下を実行する:
+表示されたチャンネル名、登録者数、動画数、直近タイトルをユーザーに提示し、TTP 対象として確定するか確認する。
+承認されたチャンネルだけ relationship メモ付きで `config/channel/analytics.json::benchmark.channels` に反映する。
 
-- `channels.list(part=snippet,statistics,contentDetails)` でチャンネル名・登録者数・動画数・uploads playlist を取得
-- `playlistItems.list(part=snippet, playlistId=<uploads>, maxResults=10)` で直近 10 本のタイトルを取得
-- 結果を対話に表示する
-- `config/channel/analytics.json::benchmark.channels` に seed チャンネルを追加する（既存 channel ID は重複追加しない）
-
-表示されたチャンネル名、登録者数、動画数、直近 10 本タイトルをユーザーに提示し、「このチャンネルをベンチマーク先として確定するか」を確認する。確定しない場合のみ、直前に追加された entry を `analytics.json` から削除し、その seed を Step 5 の重複除外対象にも含めない。同じ URL / handle / `@user` / channel ID で再実行して確認しない。
-
-### Step 5: 競合チャンネル発掘
-
-**目標: 5-10 チャンネルを発見**
-
-**手順は以下の順序で固定する。スキップ・並び替え・任意化しない。**
-
-1. **MANDATORY**: `yt-discover-competitors` を実行する（WebSearch / WebFetch から始めない）。
-   ニッチキーワードを 3-5 個渡すと、登録者数レンジ・最終投稿日でフィルタした
-   ランキング付き Markdown + CSV が出力される（詳細は `/discover-competitors` skill 参照）:
-
-   ```bash
-   uv run yt-discover-competitors \
-     --keywords "{キーワード1},{キーワード2},{キーワード3}" \
-     --min-subscribers 10000 --max-subscribers 1000000 \
-     --posted-within-days 30 --top 20 \
-     --output research/discovery.md
-   ```
-
-2. **ユーザー承認**: API の出力結果（research/discovery.md）をユーザーに提示し、採用するチャンネルを選定してもらう。
-3. **補完判断**: 承認後の有効候補が **3 件未満** の場合のみ、下記の WebSearch 補完手順に進む。
-   3 件以上なら補完はスキップして直接 `benchmark.channels` 反映へ。
-4. **`benchmark.channels` 反映**: 採用候補を `config/channel/analytics.json` に追加。Step 4.5 で確定済みの seed チャンネルが既に存在する場合は、同じ channel ID を追加しない。
-
-#### 補完手順（承認後の有効候補 < 3 件のときだけ発動）
-
-1. ユーザーの参考チャンネルのジャンル・特徴を把握
-2. WebSearch で類似チャンネルを探す:
-   - `"youtube channels similar to {参考チャンネル}" {ジャンル} music`
-   - `best {ジャンル} music youtube channels`
-   - `{ジャンル} BGM youtube` 等
-3. 見つかったチャンネルの **channel_id** を特定:
-   - チャンネル URL を WebFetch → HTML ソースから `"channelId":"UC..."` を抽出
-   - または `"externalId":"UC..."` パターン
-4. 各チャンネルの概要情報（登録者数、動画数、特徴）を簡単に収集
-
-発掘したチャンネルをテーブル形式でユーザーに提示:
-
-```
-| # | チャンネル名 | 登録者 | 動画数 | 特徴 | 関係性メモ |
-|---|-------------|--------|--------|------|-----------|
+```bash
+uv run yt-channel-seed "https://www.youtube.com/@example" \
+  --target . \
+  --relationship "title-structure: ..., thumbnail-composition: ..., posting-cadence: ..."
 ```
 
-ユーザーの承認後、`config/channel/analytics.json` の `benchmark.channels` に全チャンネルを追加する。Step 4.5 で確定済みの seed チャンネルは再 fetch せず、既存 entry を維持する:
+### Step 6: 競合発掘とベンチマーク収集
 
-```json
-{
-  "id": "UC...",
-  "slug": "channel-slug",
-  "name": "Channel Name",
-  "relationship": "ユーザーのメモ or 自動分類"
-}
+WebSearch から始めない。まず `yt-discover-competitors` を実行する。
+
+```bash
+uv run yt-discover-competitors \
+  --keywords "{キーワード1},{キーワード2},{キーワード3}" \
+  --min-subscribers 10000 --max-subscribers 1000000 \
+  --posted-within-days 30 --top 20 \
+  --output research/discovery.md
 ```
 
-### Step 6: ベンチマーク・コメントデータ収集
+ユーザー承認後、採用候補を `benchmark.channels` に追加する。
+承認後の有効候補が 3 件未満の場合だけ WebSearch で補完する。
 
-ベンチマークデータは **`/benchmark` スキル** に委譲する（詳細はそちら参照）。初回は全チャンネル強制更新 + サムネイル画像保持で:
+続けてベンチマークとコメントを収集する。
 
 ```bash
 uv run yt-benchmark-collect --force --keep-thumbnails -v
-```
-
-続けてコメントも収集:
-
-```bash
 uv run yt-benchmark-comments --min-views 5000
 ```
 
-- 出力: `data/benchmark_YYYYMMDD.json`, `data/comments_YYYYMMDD.json`, `docs/benchmarks/{slug}.md`
-- Step 4.5 で seed fetch 済みのチャンネルは `benchmark.channels` の既存 entry を正とし、Step 6 の前に seed 確認用 fetch を繰り返さない。
+### Step 7: 簡易ペルソナ導出
 
-### Step 7: 次フェーズへの案内
+新チャンネルには `/viewer-voice` の結果がまだないため、ここでは軽量版だけ作る。
 
-「データ収集が完了しました。次は `/channel-research` で徹底分析を行います。」
+入力:
+
+- `config/channel/analytics.json::benchmark.channels`
+- `data/benchmark_YYYYMMDD.json`
+- `data/comments_YYYYMMDD.json`
+- TTP ヒアリングの関係性メモ
+
+出力:
+
+```text
+docs/channel/personas/channel-new-persona.md
+```
+
+内容:
+
+- 第一ペルソナ 1 名
+- 補助ペルソナ 1-2 名
+- 利用シーン
+- 検索語彙 / コメント語彙
+- タイトル、タグ、概要欄、サムネへの反映方針
+
+本格的な見直しは公開後に `/audience-persona` で実行する。
+
+### Step 8: branding 初回反映
+
+TTP 対象の `brandingSettings` を参照して、ローカル config の `youtube_channel` と `config/localizations.json` を確認する。
+
+確認観点:
+
+- description の段落構造
+- keywords の件数、順序、クォート形式
+- country / default_language
+- localizations の言語セット
+
+まず認証済みチャンネルの ID を `config/channel/meta.json::channel.channel_id` に保存し、取り違え防止の照合を有効にする。
+この操作は local branding を上書きしない。
+
+```bash
+uv run yt-channel-settings pull --channel-id-only --apply
+uv run yt-channel-settings diff
+uv run yt-channel-settings push
+uv run yt-channel-settings push --apply
+```
+
+`push` dry-run の内容をユーザーに見せ、`meta.json::channel.channel_id` が認証済みチャンネル ID と一致していることを確認してから `--apply` する。
+
+### Step 9: wf-new 接続前チェック
+
+`/wf-new` へ進む前に、初回で止まりやすい前提を確認する。
+
+| 前提 | 初回 fallback |
+|---|---|
+| Analytics データがまだ無い | #1272 で wf-new 側対応予定。初回は benchmark / TTP メモを企画根拠として使う |
+| `config/skills/thumbnail.yaml` の reference_images が空 | `yt-benchmark-collect --keep-thumbnails` の出力を確認し、空なら TTP サムネの手動選定メモを `notes` に残す |
+| `config/skills/suno.yaml` が placeholder のまま | Step 1 のジャンル情報を `genre_line` に反映してから進む |
+| `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
+
+最後に案内する:
+
+```text
+チャンネル初期化が完了しました。次は /wf-new で初回コレクション制作に進めます。
+```
 
 ## 障害時ガイダンス
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| OAuth 未認証/失効 | `auth.oauth_handler` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
-| YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota（既定 10,000 units・太平洋時間 0 時リセット）を待つか呼び出しを抑える |
-| API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud / YouTube のステータスを確認し、時間を置いて再実行 |
-| `gh` CLI 不在/未認証 | `command not found: gh` / `gh auth` エラー | `gh` を install し `gh auth login` を実行 |
-| 委譲先 skill の失敗 | 子 skill がエラー終了 | 各子 skill の「障害時ガイダンス」を参照して個別に対処 |
+| `/setup` 未完了 | `auth/token.json` 不在、ADC 未設定、API 403 | `/setup` を先に完了する |
+| `gh` CLI 不在/未認証 | `command not found: gh` / `gh auth` エラー | `gh` を install し `gh auth login` を実行。remote 作成だけ保留して config 生成は継続可 |
+| YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota リセットを待つか、対象チャンネル数を絞る |
+| seed が誤チャンネル | `yt-channel-seed --no-write-benchmark --json` の表示が想定と違う | ユーザー確認で不採用にし、承認後の書き込みコマンドを実行しない |
+| branding push 失敗 | `yt-channel-settings push --apply` が 400/403 | dry-run 差分、OAuth scope、`meta.json::channel.channel_id` を確認する |
 
 ## Cross References
 
-- `/channel-research` → 次フェーズ: 収集データの徹底分析
-- `/channel-direction` → Phase 3: 方向性ブレスト
-- `/channel-setup` → Phase 4: テクニカルセットアップ
+- `/setup` → 前提: automation ツール導入 + GCP / OAuth / ADC 準備
+- `/benchmark` → ベンチマーク収集の詳細
+- `/audience-persona` → 公開後の本格ペルソナ見直し
+- `/channel-research` → 収集済みデータの詳細分析
+- `/channel-direction` → 方向性の再検討
+- `/channel-setup` → 運用中の設定 push / pull と詳細セットアップ
+- `/wf-new` → 初回コレクション制作

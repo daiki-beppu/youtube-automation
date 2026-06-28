@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **46 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **47 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -28,7 +28,7 @@
 | /channel-import | 既存 YouTube チャンネルを自動化システムに取り込み |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 | /discover-competitors | ニッチキーワードから競合候補を YouTube Data API で自動発掘 |
-| /onboard | GCP / OAuth 設定を wizard 形式で診断・セットアップ |
+| /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
 
 ## オーディエンス・ポジショニング検証
 

@@ -16,7 +16,7 @@ description: "Use when collection 型チャンネル（BGM テイスター）で
 - `config.youtube.content_model.type == "collection"`
 - CC 動画が YouTube にアップ済みで、`20-documentation/upload_tracking.json::complete_collection.video_url` が記録されている
 
-いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/channel-import` / `/onboard` / `/video-upload`）。
+いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/channel-import` / `/setup` / `/video-upload`）。
 
 ## Quick Reference
 
@@ -24,7 +24,7 @@ description: "Use when collection 型チャンネル（BGM テイスター）で
 |---------|------|
 | `uv run yt-upload-shorts <collection-path>` | 全ショートを順次アップロード |
 | `uv run yt-upload-shorts <collection-path> --short-num 2` | 2 本目だけアップロード |
-| `uv run yt-upload-shorts <collection-path> --dry-run` | メタデータプレビュー（API 呼ばない） |
+| `uv run yt-upload-shorts <collection-path> --plan` | メタデータプレビュー（API 呼ばない） |
 | `bash .claude/skills/short/references/generate-shorts.sh <collection-path>` | FFmpeg 一括生成 |
 | `bash .claude/skills/short/references/test-crop-positions.sh <master> 30` | loop-mp4 素材時のクロップ位置確認 |
 | `uv run yt-shorts-bulk-update-loc <collection-path>` | 投稿済みショートの localizations を一括差し替え |
@@ -93,7 +93,7 @@ bash .claude/skills/short/references/generate-shorts.sh <collection-path>
 
 ```bash
 open <collection>/01-master/shorts/short-01-*.mp4
-uv run yt-upload-shorts <collection-path> --dry-run    # メタデータ確認
+uv run yt-upload-shorts <collection-path> --plan       # メタデータ確認
 uv run yt-upload-shorts <collection-path>              # 実投稿
 ```
 
@@ -101,23 +101,26 @@ uv run yt-upload-shorts <collection-path>              # 実投稿
 - CC `publish_at` 基準で `cfg.shorts.publish_time` 翌日公開時刻を計算
 - `cfg.shorts.min_hours_between_shorts_per_collection` で投稿間隔チェック
 - `BAHMetadataGenerator.generate_shorts_metadata(cc_video_url)` で EN + 全 supported_languages のメタデータ生成
-- `workflow-state.json::post_upload.short` に記録
+- `workflow-state.json::post_upload.shorts` に `short_num` をキーに upsert
 
 ### Step 7: workflow-state.json 更新
 
 ```json
 "post_upload": {
-  "short": {
-    "generated": true,
-    "uploaded": true,
-    "count": 3,
-    "publish_at": "2026-03-12T08:00:00+09:00",
-    "videos": [
-      { "video_id": "xxx", "title": "Morning Light — Whispers Across the Hills ✦ Channel #Shorts" }
-    ]
-  }
+  "shorts": [
+    {
+      "short_num": 1,
+      "video_id": "xxx",
+      "publish_at": "2026-03-12T08:00:00+09:00",
+      "uploaded_at": "2026-03-11T09:12:00+09:00",
+      "title": "Morning Light - Whispers Across the Hills #Shorts"
+    }
+  ]
 }
 ```
+
+`short_num` 未指定で `01-master/short.mp4` を投稿した場合は `short_num: null` の entry として扱う。
+同じ `short_num` を再投稿した場合は既存 entry を置換し、別の `short_num` は append する。
 
 ## 設定
 

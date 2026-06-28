@@ -47,6 +47,38 @@ OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"`
 
 `config/skills/thumbnail.yaml` の `image_generation.provider` が未設定の場合、デフォルトは `gemini`。channel-config 側で `image_generation.provider` が明示されている場合はそちらが優先される（既存の切り替え挙動は変更しない）。
 
+## 障害時の provider fallback
+
+Gemini API 障害、GCP 課金切れ、ADC 認証不備、quota 超過が疑われる場合は、自動切替せずに provider を明示変更して再実行する。
+
+GCP 課金なしで進める場合:
+
+```yaml
+# config/skills/thumbnail.yaml
+image_generation:
+  provider: codex
+```
+
+その後、`yt-generate-image` ではなく codex wrapper を使う:
+
+```bash
+bash .claude/skills/thumbnail/references/codex-image.sh \
+  "<thumbnail prompt>" \
+  <collection-path>/10-assets/main-codex.png \
+  <reference-image-1> <reference-image-2>
+```
+
+OpenAI API に切り替える場合:
+
+```yaml
+image_generation:
+  provider: openai
+  openai:
+    aspect_ratio: "16:9"
+```
+
+Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`yt-generate-image` はこの fallback 章を案内する。生成物の品質差が出るため、自動で provider を切り替えて上書きすることはしない。
+
 ## codex 経由の生成
 
 `image_generation.provider: codex` のチャンネルでは、`yt-generate-image` ではなく `codex-image.sh` を正規の生成経路として使う。`ImageProvider` API 実装は持たないため、`yt-generate-image` に誤配線した場合は明示エラーでこの shell 経路へ誘導される。

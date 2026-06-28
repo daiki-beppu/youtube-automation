@@ -12,6 +12,7 @@ import pytest
 from youtube_automation.scripts import generate_master
 from youtube_automation.scripts.generate_master import (
     _collect_audio_inputs,
+    _estimate_looped_duration,
     _resolve_loop_count,
     _sum_track_duration,
     build_filter,
@@ -48,6 +49,14 @@ class TestResolveLoopCount:
     def test_target_duration_min_clamped_to_one(self):
         # target が極小で single_loop が大きいケースでも 1 未満にならない
         assert _resolve_loop_count(None, 1, single_loop_sec=4600, crossfade=1.0) == 1
+
+
+class TestEstimateLoopedDuration:
+    def test_single_loop_has_raw_total(self):
+        assert _estimate_looped_duration(3600.0, 1, 1.0) == pytest.approx(3600.0)
+
+    def test_multiple_loops_subtract_inter_loop_crossfades(self):
+        assert _estimate_looped_duration(4600.0, 2, 1.0) == pytest.approx(9199.0)
 
 
 class TestSumTrackDuration:
@@ -686,6 +695,53 @@ class TestCliShuffle:
         assert captured["kwargs"]["shuffle_seed"] == 777
 
 
+class TestCliNoLoop:
+    """CLI 引数 --no-loop が target_duration_min を明示的に抑止する."""
+
+    def _patch_main_dependencies(self, monkeypatch, skill_config: dict | None = None) -> dict:
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_skill_config",
+            lambda _: skill_config or {},
+        )
+
+        captured: dict = {}
+
+        def fake_generate_master(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return Path("/tmp/fake-master.mp3")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.generate_master",
+            fake_generate_master,
+        )
+        return captured
+
+    def test_no_loop_passes_single_loop_even_when_skill_target_exists(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 120}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path), "--no-loop"])
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["loops"] == 1
+        assert captured["kwargs"]["target_duration_min"] == 120
+        assert captured["kwargs"]["no_loop"] is True
+
+    def test_no_loop_is_mutually_exclusive_with_target_duration(self, monkeypatch, tmp_path):
+        self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--no-loop", "--target-duration", "120"],
+        )
+
+        with pytest.raises(SystemExit):
+            generate_master.main()
+
+
 class TestCliSkillConfigShuffle:
     """skill-config の audio.shuffle / audio.shuffle_seed を CLI 未指定時のデフォルトとして解決する。"""
 
@@ -1291,7 +1347,7 @@ class TestCliSkillConfigPinFirst:
 
 
 class TestCollectAudioInputs:
-    """_collect_audio_inputs() の MP3 / WAV / 混在判定。"""
+    """_collect_audio_inputs() の MP3 / M4A / WAV 入力判定。"""
 
     def _setup(self, tmp_path: Path) -> Path:
         music_dir = tmp_path / "02-Individual-music"
@@ -1302,24 +1358,29 @@ class TestCollectAudioInputs:
         music_dir = self._setup(tmp_path)
         (music_dir / "01-a.mp3").write_bytes(b"\x00")
         (music_dir / "02-b.mp3").write_bytes(b"\x00")
-        files, ext = _collect_audio_inputs(music_dir)
-        assert ext == "mp3"
+        files = _collect_audio_inputs(music_dir)
         assert [p.name for p in files] == ["01-a.mp3", "02-b.mp3"]
+
+    def test_m4a_only(self, tmp_path):
+        music_dir = self._setup(tmp_path)
+        (music_dir / "01-a.m4a").write_bytes(b"\x00")
+        (music_dir / "02-b.m4a").write_bytes(b"\x00")
+        files = _collect_audio_inputs(music_dir)
+        assert [p.name for p in files] == ["01-a.m4a", "02-b.m4a"]
 
     def test_wav_only(self, tmp_path):
         music_dir = self._setup(tmp_path)
         (music_dir / "01-a.wav").write_bytes(b"\x00")
         (music_dir / "02-b.wav").write_bytes(b"\x00")
-        files, ext = _collect_audio_inputs(music_dir)
-        assert ext == "wav"
+        files = _collect_audio_inputs(music_dir)
         assert [p.name for p in files] == ["01-a.wav", "02-b.wav"]
 
-    def test_mixed_raises_validation_error(self, tmp_path):
+    def test_mixed_mp3_and_m4a_is_allowed(self, tmp_path):
         music_dir = self._setup(tmp_path)
         (music_dir / "01-a.mp3").write_bytes(b"\x00")
-        (music_dir / "02-b.wav").write_bytes(b"\x00")
-        with pytest.raises(ValidationError, match="混在"):
-            _collect_audio_inputs(music_dir)
+        (music_dir / "02-b.m4a").write_bytes(b"\x00")
+        files = _collect_audio_inputs(music_dir)
+        assert [p.name for p in files] == ["01-a.mp3", "02-b.m4a"]
 
     def test_empty_raises_validation_error(self, tmp_path):
         music_dir = self._setup(tmp_path)
@@ -1327,8 +1388,8 @@ class TestCollectAudioInputs:
             _collect_audio_inputs(music_dir)
 
 
-class TestGenerateMasterWavInput:
-    """generate_master() が WAV 入力に対して master.wav を pcm_s16le で出力する。"""
+class TestGenerateMasterAudioInputs:
+    """generate_master() が対応入力を master.mp3 に変換する。"""
 
     def _setup_collection(self, tmp_path: Path, ext: str, file_count: int = 2) -> Path:
         (tmp_path / "01-master").mkdir()
@@ -1338,7 +1399,7 @@ class TestGenerateMasterWavInput:
             (music_dir / f"{i + 1:02d}-track.{ext}").write_bytes(b"\x00" * 128)
         return tmp_path
 
-    def test_wav_inputs_produce_master_wav_with_pcm_codec(self, tmp_path, monkeypatch):
+    def test_wav_inputs_produce_master_mp3_with_lame_codec(self, tmp_path, monkeypatch):
         collection = self._setup_collection(tmp_path, ext="wav", file_count=3)
         monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
 
@@ -1351,17 +1412,13 @@ class TestGenerateMasterWavInput:
         with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
             result = run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
 
-        # 出力は master.wav
-        assert result == collection / "01-master" / "master.wav"
+        assert result == collection / "01-master" / "master.mp3"
         cmd = captured["cmd"]
-        assert cmd[-3] == str(collection / "01-master" / "master.wav")
-        # pcm_s16le コーデック (-c:a pcm_s16le)
+        assert cmd[-3] == str(collection / "01-master" / "master.mp3")
         idx = cmd.index("-c:a")
-        assert cmd[idx + 1] == "pcm_s16le"
-        # MP3 専用フラグが付与されない
-        assert "libmp3lame" not in cmd
-        assert "-b:a" not in cmd
-        assert "-q:a" not in cmd
+        assert cmd[idx + 1] == "libmp3lame"
+        b_idx = cmd.index("-b:a")
+        assert cmd[b_idx + 1] == "192k"
 
     def test_mp3_inputs_keep_mp3_codec(self, tmp_path, monkeypatch):
         # 既存挙動の回帰確認: MP3 入力では libmp3lame + -b:a + master.mp3
@@ -1385,26 +1442,59 @@ class TestGenerateMasterWavInput:
         assert cmd[b_idx + 1] == "192k"
         assert "pcm_s16le" not in cmd
 
-    def test_single_wav_copies_to_master_wav(self, tmp_path, monkeypatch):
-        # 1 ファイル + WAV → ffmpeg は呼ばれず shutil.copyfile 経路、出力は master.wav
+    def test_single_wav_transcodes_to_master_mp3(self, tmp_path, monkeypatch):
+        # 1 ファイル + WAV → ffmpeg で master.mp3 に変換する
         collection = self._setup_collection(tmp_path, ext="wav", file_count=1)
         monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
 
-        with patch.object(generate_master.subprocess, "run") as mock_run:
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run) as mock_run:
             result = run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
 
-        mock_run.assert_not_called()
-        assert result == collection / "01-master" / "master.wav"
-        assert result.exists()
+        mock_run.assert_called_once()
+        assert result == collection / "01-master" / "master.mp3"
+        assert captured["cmd"].count("-i") == 1
+        assert "-filter_complex" not in captured["cmd"]
 
-    def test_mixed_mp3_and_wav_raises(self, tmp_path, monkeypatch):
-        # MP3 + WAV 混在は ValidationError で明示失敗
+    def test_m4a_inputs_produce_master_mp3(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, ext="m4a", file_count=2)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            result = run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
+
+        assert result == collection / "01-master" / "master.mp3"
+        assert captured["cmd"].count("-i") == 2
+        idx = captured["cmd"].index("-c:a")
+        assert captured["cmd"][idx + 1] == "libmp3lame"
+
+    def test_mixed_mp3_and_m4a_produce_master_mp3(self, tmp_path, monkeypatch):
         (tmp_path / "01-master").mkdir()
         music_dir = tmp_path / "02-Individual-music"
         music_dir.mkdir()
         (music_dir / "01.mp3").write_bytes(b"\x00")
-        (music_dir / "02.wav").write_bytes(b"\x00")
+        (music_dir / "02.m4a").write_bytes(b"\x00")
         monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
 
-        with pytest.raises(ValidationError, match="混在"):
-            run_generate_master(tmp_path, crossfade=1.0, bitrate="192k", quiet=True)
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            result = run_generate_master(tmp_path, crossfade=1.0, bitrate="192k", quiet=True)
+
+        assert result == tmp_path / "01-master" / "master.mp3"
+        assert [Path(p).name for p in _input_files_in_cmd(captured["cmd"])] == ["01.mp3", "02.m4a"]

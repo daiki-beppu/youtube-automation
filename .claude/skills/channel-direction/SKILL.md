@@ -1,14 +1,14 @@
 ---
 name: channel-direction
-description: "Use when /channel-research の分析結果をもとに新チャンネルの方向性を決定したいとき。「方向性決めたい」「チャンネルの方針」「ポジショニング」「差別化」「ブレスト」「TTP 対象を決める」など、新チャンネルの戦略的方向性を対話で決定する場面で使用すること。/channel-research の後、/channel-setup の前に実行する"
+description: "Use when /channel-new 後に新チャンネルの方向性を再検討・精緻化したいとき。「方向性決めたい」「チャンネルの方針」「ポジショニング」「差別化」「ブレスト」「TTP 対象を決める」など、TTP ベンチマーク分析をもとに戦略的方向性を対話で見直す場面で使用すること。初回セットアップは /channel-new だけで完結する"
 ---
 
 ## Overview
 
-`/channel-research` の分析レポートをもとに、ユーザーと対話で新チャンネルの方向性を決定する。
+`/channel-research` の分析レポート、または `/channel-new` の TTP ヒアリング・ベンチマーク結果をもとに、ユーザーと対話で新チャンネルの方向性を再検討する。
 データに基づいた議論を行い、決定事項をドキュメントに保存する。
 
-**前提**: `/channel-research` が完了し、`docs/channel-research.md` が存在すること。
+**前提**: `/channel-new` が完了していること。詳細分析済みなら `docs/channel-research.md` を優先して使う。
 
 ## TTP 原則（ベンチマーク参照）
 
@@ -22,7 +22,7 @@ description: "Use when /channel-research の分析結果をもとに新チャン
 
 ### Step 1: 分析レポートの読み込みとサマリー
 
-`docs/channel-research.md` を読み込み、ユーザーに要点をサマリーで提示:
+`docs/channel-research.md` があれば読み込み、なければ `/channel-new` の TTP メモ、`config/channel/analytics.json`、`docs/benchmarks/*.md` を読み込んでユーザーに要点をサマリーで提示:
 
 - 競合の全体像（登録者レンジ、投稿頻度、平均再生数）
 - 最も参考になるチャンネル（ロールモデル候補）
@@ -154,7 +154,7 @@ description: "Use when /channel-research の分析結果をもとに新チャン
 
 ### Step 5: 次フェーズへの案内
 
-「方向性が確定しました。次は `/channel-setup` でテクニカルセットアップを行います。」
+「方向性が更新されました。config を再生成・再反映する場合は `/channel-setup`、制作に進む場合は `/wf-new` を実行してください。」
 
 リポジトリ名が変更された場合、ユーザーにリポジトリのリネームを案内する。
 
@@ -182,5 +182,7 @@ uv sync
 
 ## Cross References
 
-- `/channel-research` → 前フェーズ: ベンチマーク分析
-- `/channel-setup` → 次フェーズ: テクニカルセットアップ
+- `/channel-new` → 前提: TTP benchmark / 初回 config / persona / branding
+- `/channel-research` → 任意: ベンチマーク詳細分析
+- `/channel-setup` → 任意: config 再生成 / branding 再反映
+- `/wf-new` → 初回コレクション制作
