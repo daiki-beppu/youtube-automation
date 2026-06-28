@@ -21,6 +21,7 @@ function createMockDeps(overrides?: Partial<TriggerDownloadAllDeps>): TriggerDow
     findMoreButton: vi.fn(() => moreButton),
     waitForDownloadMenuItem: vi.fn(async () => downloadMenuItem),
     waitForFormatModal: vi.fn(async () => formatModal),
+    waitForModalClose: vi.fn(async () => {}),
     selectFormat: vi.fn(),
     clickConfirm: vi.fn(),
     clickElement: vi.fn(),
@@ -64,8 +65,8 @@ describe("triggerDownloadAll", () => {
 
     // Step 5: 確認ボタンを click
     expect(deps.clickConfirm).toHaveBeenCalledWith(formatModal);
+    expect(deps.waitForModalClose).toHaveBeenCalledWith(formatModal, expect.any(Number), expect.any(Number));
 
-    // settle sleep が各ステップ間で呼ばれる（5 回: More 後 / Download all 後 / modal 後 / format 選択後 / 確認後は無し → 4 回）
     expect(deps.sleep).toHaveBeenCalled();
   });
 
@@ -141,11 +142,28 @@ describe("triggerDownloadAll", () => {
     expect(deps.clickConfirm).not.toHaveBeenCalled();
   });
 
+  it("waitForModalClose が throw した場合はそのまま伝播する", async () => {
+    const deps = createMockDeps({
+      waitForModalClose: vi.fn(async () => {
+        throw new Error("形式選択モーダルが閉じませんでした");
+      }),
+    });
+
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/形式選択モーダル/);
+    expect(deps.clickConfirm).toHaveBeenCalled();
+  });
+
   it("DOM fixture: default deps で More → Download all → MP3 → Download を操作する", async () => {
     const clicked: string[] = [];
     vi.stubGlobal("PointerEvent", MouseEvent);
     document.body.innerHTML = `
-      <button aria-label="More options">...</button>
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
       <div data-context-menu="true">
         <button aria-label="Download all">Download all</button>
       </div>
@@ -165,18 +183,69 @@ describe("triggerDownloadAll", () => {
     more.addEventListener("click", () => clicked.push("more"));
     downloadAll.addEventListener("click", () => clicked.push("download-all"));
     mp3.addEventListener("click", () => clicked.push("mp3"));
-    confirm.addEventListener("click", () => clicked.push("confirm"));
+    confirm.addEventListener("click", () => {
+      clicked.push("confirm");
+      document.querySelector(".modal-class.modal-overlay")?.remove();
+    });
 
     await triggerDownloadAll("mp3");
 
     expect(clicked).toEqual(["more", "download-all", "mp3", "confirm"]);
   });
 
+  it("DOM fixture: default deps は文書先頭の無関係な More ではなく selected clip row の More を押す", async () => {
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <button aria-label="More options" data-testid="unrelated-more">...</button>
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options" data-testid="selected-row-more">...</button>
+        </article>
+      </div>
+      <div data-context-menu="true">
+        <button aria-label="Download all">Download all</button>
+      </div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">MP3</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="unrelated-more"]')!
+      .addEventListener("click", () => clicked.push("unrelated-more"));
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="selected-row-more"]')!
+      .addEventListener("click", () => clicked.push("selected-row-more"));
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!
+      .addEventListener("click", () => clicked.push("download-all"));
+    document
+      .querySelector<HTMLButtonElement>("button.flex.w-full")!
+      .addEventListener("click", () => clicked.push("mp3"));
+    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
+      clicked.push("confirm");
+      document.querySelector(".modal-class.modal-overlay")?.remove();
+    });
+
+    await triggerDownloadAll("mp3");
+
+    expect(clicked).toEqual(["selected-row-more", "download-all", "mp3", "confirm"]);
+  });
+
   it("DOM fixture: default deps は aria-label が無い Download all を text fallback で選ぶ", async () => {
     const clicked: string[] = [];
     vi.stubGlobal("PointerEvent", MouseEvent);
     document.body.innerHTML = `
-      <button aria-label="More options">...</button>
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
       <div data-context-menu="true">
         <button>Download all</button>
       </div>
@@ -189,9 +258,10 @@ describe("triggerDownloadAll", () => {
       (button) => button.textContent?.trim() === "Download all",
     )!;
     downloadAll.addEventListener("click", () => clicked.push("download-all"));
-    document
-      .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
-      .addEventListener("click", () => clicked.push("confirm"));
+    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
+      clicked.push("confirm");
+      document.querySelector(".modal-class.modal-overlay")?.remove();
+    });
 
     await triggerDownloadAll("mp3");
 
@@ -201,7 +271,13 @@ describe("triggerDownloadAll", () => {
   it("DOM fixture: default deps は format button が disabled なら throw する", async () => {
     vi.stubGlobal("PointerEvent", MouseEvent);
     document.body.innerHTML = `
-      <button aria-label="More options">...</button>
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
       <div data-context-menu="true"><button>Download all</button></div>
       <div class="modal-class modal-overlay">
         <button class="flex w-full" disabled>MP3</button>
@@ -215,7 +291,13 @@ describe("triggerDownloadAll", () => {
   it("DOM fixture: default deps は format button が無ければ throw する", async () => {
     vi.stubGlobal("PointerEvent", MouseEvent);
     document.body.innerHTML = `
-      <button aria-label="More options">...</button>
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
       <div data-context-menu="true"><button>Download all</button></div>
       <div class="modal-class modal-overlay">
         <button class="flex w-full">WAV</button>
@@ -229,7 +311,13 @@ describe("triggerDownloadAll", () => {
   it("DOM fixture: default deps は confirm button が無ければ throw する", async () => {
     vi.stubGlobal("PointerEvent", MouseEvent);
     document.body.innerHTML = `
-      <button aria-label="More options">...</button>
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
       <div data-context-menu="true"><button>Download all</button></div>
       <div class="modal-class modal-overlay">
         <button class="flex w-full">MP3</button>

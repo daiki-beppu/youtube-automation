@@ -1188,7 +1188,8 @@ def test_post_downloaded_invalid_json_returns_400(serve_dir, tmp_path):
     assert exc_info.value.code == 400
 
 
-def test_post_downloaded_missing_fields_returns_400(serve_dir, tmp_path):
+@pytest.mark.parametrize("payload", [{"format": "mp3"}, {"file_count": 0}, {}])
+def test_post_downloaded_missing_fields_returns_400(serve_dir, tmp_path, payload):
     """Given 必須フィールド欠落の body
     When POST /collections/<id>/downloaded を送る
     Then 400 を返す。
@@ -1197,7 +1198,6 @@ def test_post_downloaded_missing_fields_returns_400(serve_dir, tmp_path):
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
-    payload = {"file_count": 1}  # format が欠落
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         _post(
@@ -1646,6 +1646,22 @@ def test_extract_nested_zip_audio_files(tmp_path):
     assert result == 1
     music_dir = coll / "02-Individual-music"
     assert [f.name for f in music_dir.iterdir()] == ["01a-Song A.mp3"]
+
+
+def test_extract_title_with_slash_uses_zip_member_stem_and_sanitized_output(tmp_path):
+    """Suno タイトルに / が含まれても ZIP member の相対 stem で照合し、配置名は安全化する。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "集中 — Study / Focus", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "slash-title.zip", {"Study / Focus.mp3": b"audio"})
+
+    result = extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 1
+    music_dir = coll / "02-Individual-music"
+    assert [f.name for f in music_dir.iterdir()] == ["01a-Study - Focus.mp3"]
 
 
 def test_extract_rejects_zip_slip_audio_entry(tmp_path, monkeypatch):

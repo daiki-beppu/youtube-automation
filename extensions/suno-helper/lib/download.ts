@@ -1,6 +1,9 @@
 import { simulateClick, sleep } from "../../shared/dom";
+import { CLIP_LIST_SCROLLER_SELECTOR } from "../../shared/playlist-dom";
 
 const MORE_BUTTON_SELECTOR = 'button[aria-label="More options"]';
+const DESELECT_CLIP_BUTTON_SELECTOR = 'button[aria-label="Deselect clip"]';
+const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
 const CONTEXT_MENU_SELECTOR = 'div[data-context-menu="true"]';
 const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
 const FORMAT_MODAL_SELECTOR = "div.modal-class.modal-overlay";
@@ -10,6 +13,8 @@ const MENU_APPEAR_POLL_MS = 100;
 const MENU_APPEAR_TIMEOUT_MS = 5000;
 const MODAL_APPEAR_POLL_MS = 200;
 const MODAL_APPEAR_TIMEOUT_MS = 10000;
+const MODAL_CLOSE_POLL_MS = 200;
+const MODAL_CLOSE_TIMEOUT_MS = 10000;
 const SETTLE_AFTER_CLICK_MS = 500;
 
 async function waitForElement<T extends HTMLElement>(
@@ -43,6 +48,44 @@ function findElementByTextContent<T extends HTMLElement>(
     }
   }
   return null;
+}
+
+function resolveClipRowFromSelectButton(button: HTMLElement): HTMLElement | null {
+  const multiSelectWrapper = button.closest(MULTI_SELECT_BUTTON_SELECTOR);
+  if (multiSelectWrapper?.parentElement) {
+    const parent = multiSelectWrapper.parentElement;
+    if (parent.querySelector("img") || parent.querySelector("a[href]")) {
+      return parent;
+    }
+    return parent.parentElement ?? parent;
+  }
+  return button.closest<HTMLElement>("article");
+}
+
+function collectSelectedClipRows(root: ParentNode): HTMLElement[] {
+  const buttons = root.querySelectorAll<HTMLElement>(DESELECT_CLIP_BUTTON_SELECTOR);
+  const rows: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  for (const button of buttons) {
+    const row = resolveClipRowFromSelectButton(button);
+    if (row && !seen.has(row)) {
+      seen.add(row);
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function findScopedMoreButton(): HTMLElement | null {
+  const scroller = document.querySelector<HTMLElement>(CLIP_LIST_SCROLLER_SELECTOR);
+  const root = scroller ?? document;
+  for (const row of collectSelectedClipRows(root)) {
+    const button = row.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR);
+    if (button) {
+      return button;
+    }
+  }
+  return scroller?.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR) ?? null;
 }
 
 async function waitForDownloadMenuItem(timeoutMs: number, pollMs: number): Promise<HTMLElement> {
@@ -83,23 +126,35 @@ function clickDownloadConfirm(modal: HTMLElement): void {
   btn.click();
 }
 
+async function waitForFormatModalClose(modal: HTMLElement, timeoutMs: number, pollMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!modal.isConnected || !document.contains(modal) || !document.querySelector(FORMAT_MODAL_SELECTOR)) {
+      return;
+    }
+    await sleep(pollMs);
+  }
+  throw new Error(`形式選択モーダルが閉じませんでした (${timeoutMs}ms)`);
+}
+
 /** triggerDownloadAll の副作用注入点。テスタビリティのため DOM 操作を差し替え可能にする。 */
 export interface TriggerDownloadAllDeps {
   findMoreButton: () => HTMLElement | null;
   waitForDownloadMenuItem: (timeoutMs: number, pollMs: number) => Promise<HTMLElement>;
   waitForFormatModal: (timeoutMs: number, pollMs: number) => Promise<HTMLElement>;
+  waitForModalClose: (modal: HTMLElement, timeoutMs: number, pollMs: number) => Promise<void>;
   selectFormat: (modal: HTMLElement, format: string) => void;
   clickConfirm: (modal: HTMLElement) => void;
   clickElement: (el: HTMLElement) => void;
   sleep: (ms: number) => Promise<void>;
 }
 
-/** デフォルトの DOM 実装。 */
 function defaultDownloadDeps(): TriggerDownloadAllDeps {
   return {
-    findMoreButton: () => document.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR),
+    findMoreButton: findScopedMoreButton,
     waitForDownloadMenuItem: (timeoutMs, pollMs) => waitForDownloadMenuItem(timeoutMs, pollMs),
     waitForFormatModal: (timeoutMs, pollMs) => waitForElement<HTMLElement>(FORMAT_MODAL_SELECTOR, timeoutMs, pollMs),
+    waitForModalClose: waitForFormatModalClose,
     selectFormat: selectFormatInModal,
     clickConfirm: clickDownloadConfirm,
     clickElement: simulateClick,
@@ -139,4 +194,5 @@ export async function triggerDownloadAll(
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
   deps.clickConfirm(modal);
+  await deps.waitForModalClose(modal, MODAL_CLOSE_TIMEOUT_MS, MODAL_CLOSE_POLL_MS);
 }

@@ -70,6 +70,8 @@ def extract_downloaded_archive(coll_dir: Path, download_path: str, expected_coun
 
 _SUNO_TRACK_PREFIX_RE = re.compile(r"^Track\s+\d+\s+(.+)$", re.IGNORECASE)
 _LATIN_TITLE_TAIL_RE = re.compile(r"([A-Za-z][A-Za-z0-9 &'(),.!?:/-]*)$")
+_OUTPUT_STEM_SEPARATOR_RE = re.compile(r"[\\/]+")
+_OUTPUT_STEM_SPACE_RE = re.compile(r"\s+")
 
 
 def _strip_suno_track_prefix(stem: str) -> str:
@@ -93,6 +95,33 @@ def _suno_name_lookup_candidates(name: str) -> list[str]:
         if candidate and candidate not in deduped:
             deduped.append(candidate)
     return deduped
+
+
+def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str]]:
+    member_path = PurePosixPath(filename)
+    relative_stem = member_path.with_suffix("").as_posix()
+    raw_stems = [relative_stem, member_path.stem]
+    deduped: list[tuple[str, str]] = []
+    for raw_stem in raw_stems:
+        if raw_stem.endswith("_1"):
+            stem = raw_stem[:-2]
+            variant = "b"
+        else:
+            stem = raw_stem
+            variant = "a"
+        for candidate in _suno_name_lookup_candidates(stem):
+            item = (candidate, variant)
+            if item not in deduped:
+                deduped.append(item)
+    return deduped
+
+
+def _sanitize_output_stem(stem: str) -> str:
+    sanitized = _OUTPUT_STEM_SEPARATOR_RE.sub(" - ", stem)
+    sanitized = _OUTPUT_STEM_SPACE_RE.sub(" ", sanitized).strip(" .")
+    if not sanitized:
+        raise ValueError("ZIP extraction output name is empty after sanitization")
+    return sanitized
 
 
 def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
@@ -164,37 +193,35 @@ def extract_and_rename_music(coll_dir: Path, download_path: str, target_dir: Pat
             audio_infos = [
                 info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
             ]
+            extracted_audio: list[tuple[Path, str, int, str]] = []
             for info in audio_infos:
                 if not _is_safe_zip_member(info.filename):
                     print(f"[yt-collection-serve] 危険な ZIP entry をスキップします: {info.filename}")
                     continue
-                zf.extract(info, tmp_dir)
+                extracted_path = Path(zf.extract(info, tmp_dir))
+                track_num = None
+                lookup = ""
+                variant = "a"
+                for candidate, candidate_variant in _zip_member_lookup_candidates(info.filename):
+                    if candidate in name_to_index:
+                        lookup = candidate
+                        variant = candidate_variant
+                        track_num = name_to_index[candidate]
+                        break
+                if track_num is None:
+                    print(f"[yt-collection-serve] prompts に未対応の音声ファイルをスキップします: {info.filename}")
+                    continue
+                extracted_audio.append((extracted_path, lookup, track_num, variant))
 
         moved_count = 0
-        for extracted in Path(tmp_dir).rglob("*"):
+        for extracted, lookup, track_num, variant in extracted_audio:
             if not extracted.is_file():
+                print(f"[yt-collection-serve] ZIP entry の展開結果が見つかりません: {extracted}")
                 continue
             ext = extracted.suffix.lower()
             if ext not in _AUDIO_EXTENSIONS:
                 continue
-            stem = extracted.stem
-            if stem.endswith("_1"):
-                lookups = _suno_name_lookup_candidates(stem[:-2])
-                variant = "b"
-            else:
-                lookups = _suno_name_lookup_candidates(stem)
-                variant = "a"
-            lookup = lookups[0]
-            track_num = None
-            for candidate in lookups:
-                if candidate in name_to_index:
-                    lookup = candidate
-                    track_num = name_to_index[candidate]
-                    break
-            if track_num is None:
-                print(f"[yt-collection-serve] prompts に未対応の音声ファイルをスキップします: {extracted.name}")
-                continue
-            new_name = f"{track_num:02d}{variant}-{lookup}{ext}"
+            new_name = f"{track_num:02d}{variant}-{_sanitize_output_stem(lookup)}{ext}"
             dest = music_dir / new_name
             if dest.exists():
                 raise ValueError(f"ZIP extraction output name collision: {dest.name}")
