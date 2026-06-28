@@ -803,6 +803,94 @@ export async function scrollAndMultiSelectByIds(
   return foundIds.size + titleMatchedIds.size;
 }
 
+export interface ReadSelectedClipIdsOptions {
+  isAborted: () => boolean;
+  expectedClipCount?: number;
+  renderWaitMs?: number;
+}
+
+/**
+ * ユーザーが Suno UI 上で手動選択した clip ID を採用するため、選択済み row を全スクロールで読む。
+ *
+ * Suno の clip list は仮想スクロールのため、現在 viewport にある row だけを読むと不足する。
+ * scrollAndMultiSelectByIds と同じく top → bottom を走査し、row が再マウントされた時点の
+ * aria-label="Deselect clip" から選択状態を検出する。ID は data/song href/image URL fallback の
+ * 既存抽出ロジックを使う。
+ */
+export async function readSelectedClipIds(
+  options: ReadSelectedClipIdsOptions,
+): Promise<string[]> {
+  const {
+    isAborted,
+    expectedClipCount,
+    renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+  } = options;
+
+  const scroller = document.querySelector<HTMLElement>(
+    CLIP_LIST_SCROLLER_SELECTOR,
+  );
+  if (!scroller) {
+    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+  }
+
+  const selectedIds = new Set<string>();
+
+  function collectVisibleSelectedRows(): void {
+    const buttons = scroller!.querySelectorAll<HTMLElement>(
+      DESELECT_CLIP_BUTTON_ANY_SELECTOR,
+    );
+    const seenRows = new Set<HTMLElement>();
+    for (const button of buttons) {
+      const row = resolveClipRowFromSelectButton(button);
+      if (!row || seenRows.has(row) || !isVisible(row)) continue;
+      seenRows.add(row);
+      const rowIds = collectClipRowIds(row);
+      const firstId = rowIds.values().next().value as string | undefined;
+      if (!firstId) {
+        throw new Error(
+          "選択中 clip の ID を解決できません。Suno の UI 変更の可能性があります。",
+        );
+      }
+      selectedIds.add(firstId);
+    }
+  }
+
+  const enoughSelected = () =>
+    expectedClipCount !== undefined && selectedIds.size >= expectedClipCount;
+
+  for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event("scroll"));
+    await sleep(renderWaitMs);
+    collectVisibleSelectedRows();
+    if (isAborted() || enoughSelected()) break;
+
+    const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+
+    for (let pos = 0; pos <= maxScroll; pos += step) {
+      if (isAborted() || enoughSelected()) break;
+      scroller.scrollTop = Math.min(pos, maxScroll);
+      scroller.dispatchEvent(new Event("scroll"));
+      await sleep(renderWaitMs);
+      collectVisibleSelectedRows();
+    }
+
+    if (isAborted() || enoughSelected()) break;
+  }
+
+  restoreClipListHead(scroller);
+
+  const ids = Array.from(selectedIds);
+  if (ids.length === 0) {
+    throw new Error("選択中の clip がありません。Suno で対象曲を選択してから再実行してください。");
+  }
+  if (expectedClipCount !== undefined && ids.length !== expectedClipCount) {
+    throw new Error(`選択中 clip 数が一致しません: expected ${expectedClipCount}, got ${ids.length}`);
+  }
+  return ids;
+}
+
 /**
  * Cmd+P (Mac=metaKey / 他=ctrlKey) を document に dispatch して Add to Playlist dialog を開き、
  * 出現した dialog を返す (#854)。cookie consent dialog は findPlaylistDialog の除外フィルタで拾わない。

@@ -7,7 +7,7 @@
 //   - shouldShowResumeBanner: 起動時バナー表示条件（collection 一致 + stale 判定）。要件4
 //   - resolveRunRange: 1-based UI 入力 → 0-based inclusive range への変換 + バリデーション。要件1/2
 //   - resumeBannerRange: バナー承認時に range UI へ prefill する 1-based start/end。要件4
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   RESUME_STALE_MS,
@@ -186,12 +186,10 @@ describe("resolvePlaylistClipIds: resume を跨ぐ playlist 対象 ID 解決 (#1
     ]);
   });
 
-  it("Given 合成後も不足 When 解決 Then warn して部分 ID を返す", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = resolvePlaylistClipIds(["clip-a"], ["clip-b"], 4);
-    expect(result).toEqual(["clip-a", "clip-b"]);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("expected 4, got 2"));
-    warnSpy.mockRestore();
+  it("Given 合成後も不足 When 解決 Then 部分 playlist を作らず throw する", () => {
+    expect(() => resolvePlaylistClipIds(["clip-a"], ["clip-b"], 4)).toThrow(
+      "playlist 対象の clip ID 数が不足しています: expected 4, got 2",
+    );
   });
 
   it("Given 0 件 When 解決 Then throw する", () => {

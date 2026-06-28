@@ -14,8 +14,9 @@ import {
   type PromptEntry,
   resolvePromptCollectionId,
   resolveCompatibilityWarning,
+  visiblePromptCollections,
 } from "../../shared/api";
-import { type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { DEFAULT_SPEED_PRESET_ID, readSpeedPresetId, writeSpeedPresetId } from "../lib/preset-state";
 import {
@@ -26,6 +27,7 @@ import {
   resolveRunRange,
   resumeBannerRange,
   shouldShowResumeBanner,
+  writeResumeState,
 } from "../lib/resume-state";
 import {
   buildFailedEntriesRunOverrides,
@@ -76,6 +78,7 @@ interface RunnerState {
   // playlist / download 単独再実行 (#1251)。失敗フォールバック用。
   retryPlaylist: () => Promise<void>;
   retryDownload: () => Promise<void>;
+  adoptSelectedClips: () => Promise<void>;
   fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
   // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
@@ -94,6 +97,7 @@ async function fetchCollectionEntries(baseUrl: string, collectionId: string | nu
 
 export function useSunoRunner(): RunnerState {
   const [url, setUrlState] = useState("");
+  const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
@@ -129,8 +133,13 @@ export function useSunoRunner(): RunnerState {
   const [resumeDismissed, setResumeDismissed] = useState(false);
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
+  const selectedCollection = useMemo(
+    () => collections.find((c) => c.id === selectedCollectionId),
+    [collections, selectedCollectionId],
+  );
+
   const derivedPlaylistName = useMemo(() => {
-    const selected = collections.find((c) => c.id === selectedCollectionId);
+    const selected = selectedCollection;
     if (!selected) {
       return undefined;
     }
@@ -139,7 +148,7 @@ export function useSunoRunner(): RunnerState {
     }
     const theme = selected.name.replace(/-collection$/, "");
     return extractPlaylistName(selected.id, theme);
-  }, [collections, selectedCollectionId]);
+  }, [selectedCollection]);
   const playlistName = derivedPlaylistName ?? restoredPlaylistName;
 
   // 再開バナーのソース (#872)。chrome.storage と content snapshot を二重化し、いずれかが
@@ -214,6 +223,22 @@ export function useSunoRunner(): RunnerState {
     entries.length,
   ]);
 
+  const expectedClipCountForManualAdoption = useMemo<number | undefined>(() => {
+    if (playlistExpectedClipCountForResume !== undefined) {
+      return playlistExpectedClipCountForResume;
+    }
+    if (entries.length > 0) {
+      return entries.length * CLIPS_PER_REQUEST;
+    }
+    if (selectedCollection?.expected_file_count) {
+      return selectedCollection.expected_file_count;
+    }
+    if (selectedCollection?.pattern_count) {
+      return selectedCollection.pattern_count * CLIPS_PER_REQUEST;
+    }
+    return undefined;
+  }, [playlistExpectedClipCountForResume, entries.length, selectedCollection]);
+
   const report = useCallback((text: string, error = false) => {
     setStatus(text);
     setIsError(error);
@@ -238,6 +263,34 @@ export function useSunoRunner(): RunnerState {
     setSpeedPresetId(id);
     void writeSpeedPresetId(id);
   }, []);
+
+  const resumableCollectionId = useMemo(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, persistedResume.collectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.collectionId;
+    }
+    return undefined;
+  }, [persistedResume, resumeCheckedAt]);
+
+  const resolveVisibleCollections = useCallback(
+    (source: CollectionSummary[], currentSelectedId: string) => {
+      const visibleCollections = visiblePromptCollections(
+        source,
+        resumableCollectionId ? [resumableCollectionId] : [],
+      );
+      const preferredSelectedId = currentSelectedId || resumableCollectionId || "";
+      const nextSelectedId = resolvePromptCollectionId(
+        visibleCollections,
+        preferredSelectedId,
+        Boolean(resumableCollectionId),
+      );
+      return { visibleCollections, nextSelectedId };
+    },
+    [resumableCollectionId],
+  );
 
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);
@@ -270,6 +323,7 @@ export function useSunoRunner(): RunnerState {
   );
 
   const applySingleFileMode = useCallback(() => {
+    setAllCollections([]);
     setCollections([]);
     setSelectedCollectionId("");
   }, []);
@@ -278,8 +332,9 @@ export function useSunoRunner(): RunnerState {
     async (baseUrl: string, currentSelectedId: string): Promise<PromptSource> => {
       try {
         const fetched = await fetchCollections(baseUrl);
-        const nextSelectedId = resolvePromptCollectionId(fetched, currentSelectedId);
-        setCollections(fetched);
+        setAllCollections(fetched);
+        const { visibleCollections, nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
+        setCollections(visibleCollections);
         setSelectedCollectionId(nextSelectedId ?? "");
         return { kind: "collection", collectionId: nextSelectedId };
       } catch (err) {
@@ -293,7 +348,7 @@ export function useSunoRunner(): RunnerState {
         throw err;
       }
     },
-    [applySingleFileMode],
+    [applySingleFileMode, resolveVisibleCollections],
   );
 
   const loadCollections = useCallback(
@@ -316,7 +371,16 @@ export function useSunoRunner(): RunnerState {
         void loadCollections(trimmed);
       }
     });
-  }, [loadCollections]);
+  }, []);
+
+  useEffect(() => {
+    if (allCollections.length === 0) {
+      return;
+    }
+    const { visibleCollections, nextSelectedId } = resolveVisibleCollections(allCollections, selectedCollectionId);
+    setCollections(visibleCollections);
+    setSelectedCollectionId(nextSelectedId ?? "");
+  }, [allCollections, resolveVisibleCollections, selectedCollectionId]);
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
@@ -441,21 +505,34 @@ export function useSunoRunner(): RunnerState {
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
   const retryPlaylist = useCallback(async () => {
-    if (isRunning || !playlistName) {
+    if (isRunning) {
+      return;
+    }
+    if (!playlistName) {
+      report("playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。", true);
+      return;
+    }
+    const expectedClipCount = playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
+    if (submittedClipIdsForResume.length === 0 || expectedClipCount <= 0) {
+      report(
+        "playlist 再開に必要な clip ID がありません。Suno タブを開いたまま「データ取得」後に再試行してください。",
+        true,
+      );
       return;
     }
     setIsRunning(true);
-    setResumeDismissed(true);
     try {
       await sendMessage("retryPlaylist", {
         playlistName,
         submittedClipIds: submittedClipIdsForResume,
-        expectedClipCount: playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length,
+        expectedClipCount,
         collectionId: selectedCollectionId || undefined,
       });
-      report("playlist 追加を再実行しています…");
+      setResumeDismissed(true);
+      report("playlist 追加とダウンロードを再実行しています…");
     } catch (err) {
       setIsRunning(false);
+      setResumeDismissed(false);
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
@@ -494,7 +571,18 @@ export function useSunoRunner(): RunnerState {
 
   // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
   const retryDownload = useCallback(async () => {
-    if (isRunning || !selectedCollectionId || !playlistName) {
+    if (isRunning) {
+      return;
+    }
+    if (!selectedCollectionId || !playlistName) {
+      report("コレクションまたは playlist 名を解決できないため、ダウンロードを再開できません。", true);
+      return;
+    }
+    if (submittedClipIdsForResume.length === 0) {
+      report(
+        "ダウンロード再開に必要な clip ID がありません。Suno タブを開いたまま「データ取得」後に再試行してください。",
+        true,
+      );
       return;
     }
     setIsRunning(true);
@@ -511,6 +599,63 @@ export function useSunoRunner(): RunnerState {
       report(formatRunError(message), true);
     }
   }, [isRunning, selectedCollectionId, playlistName, submittedClipIdsForResume, report]);
+
+  const adoptSelectedClips = useCallback(async () => {
+    if (isRunning) {
+      return;
+    }
+    if (!selectedCollectionId) {
+      report("コレクションを選択してから、選択中の曲を採用してください。", true);
+      return;
+    }
+    if (expectedClipCountForManualAdoption === undefined || expectedClipCountForManualAdoption <= 0) {
+      report("期待 clip 数を解決できません。データ取得後に再試行してください。", true);
+      return;
+    }
+    setIsRunning(true);
+    try {
+      const result = await sendMessage("adoptSelectedClips", {
+        expectedClipCount: expectedClipCountForManualAdoption,
+      });
+      const totalEntries =
+        persistedResume?.collectionId === selectedCollectionId
+          ? persistedResume.total
+          : entries.length || selectedCollection?.pattern_count || Math.ceil(result.clipIds.length / CLIPS_PER_REQUEST);
+      const failedIndex =
+        persistedResume?.collectionId === selectedCollectionId ? persistedResume.failedIndex : totalEntries;
+      const nextResume: ResumeState = {
+        collectionId: selectedCollectionId,
+        failedIndex,
+        total: totalEntries,
+        timestamp: Date.now(),
+        failedIndices:
+          persistedResume?.collectionId === selectedCollectionId ? persistedResume.failedIndices : restoredFailedIndices,
+        submittedClipIds: result.clipIds,
+        playlistExpectedClipCount: expectedClipCountForManualAdoption,
+      };
+      await writeResumeState(nextResume);
+      setPersistedResume(nextResume);
+      setResumeCheckedAt(Date.now());
+      setRestoredSubmittedClipIds(result.clipIds);
+      setRestoredPlaylistExpectedClipCount(expectedClipCountForManualAdoption);
+      setResumeDismissed(false);
+      report(`選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      report(formatRunError(message), true);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [
+    isRunning,
+    selectedCollectionId,
+    expectedClipCountForManualAdoption,
+    persistedResume,
+    entries.length,
+    selectedCollection,
+    restoredFailedIndices,
+    report,
+  ]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。
@@ -567,6 +712,7 @@ export function useSunoRunner(): RunnerState {
     rerunFailed,
     retryPlaylist,
     retryDownload,
+    adoptSelectedClips,
     fetchData,
     run,
     stop,

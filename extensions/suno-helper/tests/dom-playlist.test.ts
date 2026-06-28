@@ -41,6 +41,7 @@ import {
   fillPlaylistNameAndCreate,
   multiSelectClips,
   openAddToPlaylistDialogViaCmdP,
+  readSelectedClipIds,
   scrollAndMultiSelectByIds,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
@@ -1802,6 +1803,83 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
       renderWaitMs: 10,
     });
     const expectation = expect(pending).rejects.toThrow(new RegExp(missingId));
+    await vi.runAllTimersAsync();
+    await expectation;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readSelectedClipIds: 手動選択済み clip の採用
+// ---------------------------------------------------------------------------
+
+describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Given 選択済み row が期待件数分ある When readSelectedClipIds Then ID を返す", async () => {
+    const idA = "aaaaaaaa-1111-2222-3333-444444444444";
+    const idB = "bbbbbbbb-1111-2222-3333-444444444444";
+    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
+    addClipRow({ songId: idB, idSource: "image", selectLabel: "Deselect clip" });
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      expectedClipCount: 2,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toEqual([idA, idB]);
+  });
+
+  it("Given 選択済み row 数が期待件数と違う When readSelectedClipIds Then 件数不一致で throw する", async () => {
+    const idA = "cccccccc-1111-2222-3333-444444444444";
+    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      expectedClipCount: 2,
+      renderWaitMs: 10,
+    });
+    const expectation = expect(pending).rejects.toThrow("選択中 clip 数が一致しません: expected 2, got 1");
+    await vi.runAllTimersAsync();
+    await expectation;
+  });
+
+  it("Given 選択済み row が無い When readSelectedClipIds Then 手動選択を促すエラーで throw する", async () => {
+    getOrCreateScroller();
+
+    const pending = readSelectedClipIds({ isAborted: () => false, renderWaitMs: 10 });
+    const expectation = expect(pending).rejects.toThrow(
+      "選択中の clip がありません",
+    );
     await vi.runAllTimersAsync();
     await expectation;
   });

@@ -20,6 +20,7 @@ interface DownloadDelta {
 async function loadBackground(opts?: {
   searchResults?: Array<{ filename: string; startTime?: string; url?: string }>;
   searchResultsById?: Record<number, Array<{ filename: string; startTime?: string; url?: string }>>;
+  recentSearchResults?: Array<{ id?: number; filename: string; startTime?: string; url?: string; state?: string }>;
   debuggerAttachError?: Error;
   debuggerSendCommandError?: Error;
 }) {
@@ -61,9 +62,23 @@ async function loadBackground(opts?: {
       }),
     },
     search: vi.fn(
-      (query: { id: number }, cb: (results: Array<{ filename: string; startTime: string; url: string }>) => void) => {
+      (
+        query: { id?: number },
+        cb: (results: Array<{ id: number; filename: string; startTime: string; url: string; state?: string }>) => void,
+      ) => {
+        if (typeof query.id !== "number") {
+          const results = (opts?.recentSearchResults ?? []).map((r, index) => ({
+            id: r.id ?? index + 100,
+            startTime: new Date().toISOString(),
+            url: "https://download.example.com/file.zip",
+            ...r,
+          }));
+          cb(results);
+          return;
+        }
         const defaults = [
           {
+            id: query.id,
             filename: `suno-playlist-${query.id}.zip`,
             startTime: new Date().toISOString(),
             url: "https://suno.com/api/download/zip",
@@ -72,6 +87,7 @@ async function loadBackground(opts?: {
         const configuredResults = opts?.searchResultsById?.[query.id] ?? opts?.searchResults;
         const results = configuredResults
           ? configuredResults.map((r) => ({
+              id: query.id as number,
               startTime: new Date().toISOString(),
               url: "https://suno.com/api/download/zip",
               ...r,
@@ -269,12 +285,12 @@ describe('background onMessage("startDownload"): 成功時にタイムアウト�
   });
 });
 
-describe('background onMessage("startDownload"): 非 Suno URL は拒否する (#1217 SEC-002)', () => {
+describe('background onMessage("startDownload"): 監視開始後の ZIP は URL host に依存せず拾う (#1217)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("Given example.com の .zip ダウンロード完了 When listener 発火 Then downloadComplete を送信しない", async () => {
+  it("Given example.com の .zip ダウンロード完了 When listener 発火 Then downloadComplete を送信する", async () => {
     const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground({
       searchResults: [
         { filename: "file.zip", startTime: new Date().toISOString(), url: "https://example.com/file.zip" },
@@ -289,10 +305,12 @@ describe('background onMessage("startDownload"): 非 Suno URL は拒否する (#
     const listener = downloadListeners[0];
     listener({ id: 1, state: { current: "complete" } });
 
-    // 非 Suno URL なので downloadComplete は送信されない
-    expect(sentMessages.filter((m) => m.type === "downloadComplete")).toHaveLength(0);
-    // listener も解除されない（次の正当なダウンロードを待ち続ける）
-    expect(removedDownloadListeners).toHaveLength(0);
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "file.zip" },
+      tabId: 42,
+    });
+    expect(removedDownloadListeners).toContain(listener);
   });
 });
 
@@ -354,7 +372,7 @@ describe('background onMessage("startDownload"): 無関係な interrupted は無
     vi.unstubAllGlobals();
   });
 
-  it("Given 非 Suno URL の interrupted When listener 発火 Then listener を維持し失敗通知しない", async () => {
+  it("Given fresh ZIP の interrupted When listener 発火 Then 失敗通知する", async () => {
     const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground({
       searchResults: [
         { filename: "file.zip", startTime: new Date().toISOString(), url: "https://example.com/file.zip" },
@@ -369,8 +387,12 @@ describe('background onMessage("startDownload"): 無関係な interrupted は無
     const listener = downloadListeners[0];
     listener({ id: 1, state: { current: "interrupted" } });
 
-    expect(sentMessages.filter((m) => m.type === "downloadFailed")).toHaveLength(0);
-    expect(removedDownloadListeners).toHaveLength(0);
+    expect(sentMessages).toContainEqual({
+      type: "downloadFailed",
+      data: { message: expect.stringContaining("中断") },
+      tabId: 42,
+    });
+    expect(removedDownloadListeners).toContain(listener);
   });
 
   it("Given 非 zip の interrupted When listener 発火 Then listener を維持し失敗通知しない", async () => {
@@ -460,6 +482,84 @@ describe('background onMessage("startDownload"): 監視開始前の .zip は無�
       tabId: 42,
     });
     expect(removedDownloadListeners).toContain(listener);
+  });
+});
+
+describe('background onMessage("startDownload"): timeout fallback で完了済み ZIP を拾う', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("Given onChanged を取り逃した fresh ZIP When timeout Then downloadComplete を中継する", async () => {
+    const freshStart = new Date().toISOString();
+    const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground({
+      recentSearchResults: [
+        {
+          id: 88,
+          filename: "/Users/test/Downloads/soulful-grooves.zip",
+          startTime: freshStart,
+          url: "https://download.example.com/soulful-grooves.zip",
+        },
+      ],
+    });
+
+    handlers.get("startDownload")!({
+      data: { format: "mp3" },
+      sender: { tab: { id: 42 } },
+    });
+
+    vi.advanceTimersByTime(600000);
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "/Users/test/Downloads/soulful-grooves.zip" },
+      tabId: 42,
+    });
+    expect(removedDownloadListeners).toContain(downloadListeners[0]);
+  });
+});
+
+describe('background onMessage("startDownload"): polling fallback で完了済み ZIP を即時に拾う', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("Given onChanged を取り逃した fresh ZIP When poll interval 経過 Then timeout を待たず downloadComplete を中継する", async () => {
+    const freshStart = new Date().toISOString();
+    const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground({
+      recentSearchResults: [
+        {
+          id: 89,
+          filename: "/Users/test/Downloads/soulful-grooves.zip",
+          startTime: freshStart,
+          url: "https://download.example.com/soulful-grooves.zip",
+        },
+      ],
+    });
+
+    handlers.get("startDownload")!({
+      data: { format: "mp3" },
+      sender: { tab: { id: 42 } },
+    });
+
+    vi.advanceTimersByTime(3000);
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "/Users/test/Downloads/soulful-grooves.zip" },
+      tabId: 42,
+    });
+    expect(removedDownloadListeners).toContain(downloadListeners[0]);
   });
 });
 

@@ -41,7 +41,7 @@ export interface PromptEntry {
 /** collection の状態 (#1216)。サーバーがファイルシステムから動的に判定する。
  * - `needs_prompts`: suno-prompts.json が未作成
  * - `ready`: prompts 存在・ダウンロード未完了
- * - `downloaded`: 02-Individual-music/ に pattern_count 以上の音声ファイルがある */
+ * - `downloaded`: 02-Individual-music/ に期待数以上の音声ファイルがある */
 export type CollectionStatus = "needs_prompts" | "ready" | "downloaded";
 
 /** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。
@@ -53,6 +53,7 @@ export interface CollectionSummary {
   status: CollectionStatus;
   pattern_count: number | null;
   downloaded_count: number;
+  expected_file_count?: number | null;
 }
 
 /** Suno `/me` から捕捉した 1 playlist (#893)。POST /suno/playlists の body 要素。 */
@@ -237,23 +238,33 @@ export async function fetchCollectionPrompts(
   return fetchPromptArray(`${baseUrl}${collectionPromptsRoute(id)}`);
 }
 
+/** popup の実行対象一覧に出す collection。完了済みは次の作業対象ではないため非表示にする。 */
+export function visiblePromptCollections(
+  collections: CollectionSummary[],
+  includeDownloadedIds: string[] = [],
+): CollectionSummary[] {
+  const include = new Set(includeDownloadedIds);
+  return collections.filter((c) => c.status !== "downloaded" || include.has(c.id));
+}
+
 /**
  * ドロップダウンの初期選択 id を決める (#816)。
- * 最初の `status !== "needs_prompts"` な entry の id。実行可能な選択肢が無ければ null。
+ * 最初の `ready` な entry の id。実行可能な選択肢が無ければ null。
  * #1216: has_prompts → status ベースに移行。
  */
 export function pickInitialCollectionId(
   collections: CollectionSummary[],
 ): string | null {
-  return collections.find((c) => c.status !== "needs_prompts")?.id ?? null;
+  return collections.find((c) => c.status === "ready")?.id ?? null;
 }
 
 export function resolvePromptCollectionId(
   collections: CollectionSummary[],
   selectedId: string,
+  allowDownloadedSelected = false,
 ): string | null {
   const selected = collections.find((c) => c.id === selectedId);
-  if (selected && selected.status !== "needs_prompts") {
+  if (selected && (selected.status === "ready" || (allowDownloadedSelected && selected.status === "downloaded"))) {
     return selected.id;
   }
   return pickInitialCollectionId(collections);
@@ -395,7 +406,7 @@ export interface DownloadedPayload {
   file_count: number;
   expected_file_count?: number;
   format: "mp3" | "m4a" | "wav";
-  suno_playlist_url: string;
+  suno_playlist_url?: string;
   download_path?: string;
 }
 

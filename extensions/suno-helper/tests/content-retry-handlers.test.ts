@@ -18,6 +18,7 @@ const clearResumeStateMock = vi.fn(() => Promise.resolve());
 
 async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
+  readSelectedClipIdsError?: Error;
   triggerDownloadAllError?: Error;
   postDownloadedError?: Error;
   postDownloadedRejectOnCall?: number;
@@ -39,6 +40,9 @@ async function loadContentScript(overrides?: {
       sentMessages.push({ type, payload });
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
+      }
+      if (type === "resolvePlaylistUrl") {
+        return Promise.resolve({ url: "https://suno.com/playlist/test" });
       }
       if (type === "postDownloaded" && overrides?.postDownloadedError) {
         postDownloadedCallCount += 1;
@@ -84,6 +88,7 @@ async function loadContentScript(overrides?: {
   vi.doMock("../lib/bridge-listener", () => ({
     attachBridgeListener: vi.fn(),
     createFeedPoller: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+    requestFeedPoll: vi.fn(() => Promise.resolve([])),
     requestSliderSet: vi.fn(),
   }));
 
@@ -91,6 +96,7 @@ async function loadContentScript(overrides?: {
     createClipTracker: vi.fn(() => ({
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => []),
+      getPendingSubmittedIds: vi.fn(() => []),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -124,12 +130,15 @@ async function loadContentScript(overrides?: {
       : vi.fn(() => Promise.resolve()),
     fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
     openAddToPlaylistDialogViaCmdP: vi.fn(() => Promise.resolve({} as HTMLElement)),
+    readSelectedClipIds: overrides?.readSelectedClipIdsError
+      ? vi.fn(() => Promise.reject(overrides.readSelectedClipIdsError))
+      : vi.fn(() => Promise.resolve(["clip-1", "clip-2"])),
     scrollAndMultiSelectByIds: vi.fn(() => Promise.resolve(0)),
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => [{ title: "test-playlist", url: "https://suno.com/playlist/test" }]),
+    scrapePlaylistsFromMe: vi.fn(() => []),
   }));
 
   vi.doMock("../lib/auto-capture", () => ({
@@ -206,8 +215,8 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     vi.unstubAllGlobals();
   });
 
-  it("Given collectionId 付き When retryPlaylist Then FINISHED phase を emit し resume state を消去する", async () => {
-    const { handlers, progressMessages } = await loadContentScript();
+  it("Given collectionId 付き When retryPlaylist Then playlist 追加後に download まで進めて resume state を消去する", async () => {
+    const { handlers, progressMessages, sentMessages } = await loadContentScript();
 
     // submittedClipIds を指定し resolvePlaylistClipIds が正常に返るようにする
     const clipIds = ["clip-1", "clip-2"];
@@ -220,8 +229,29 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
       },
     });
 
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/test-playlist.zip" },
+    });
+
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
+    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    expect(downloadedPosts).toHaveLength(2);
+    expect(downloadedPosts[0].payload).toMatchObject({
+      body: {
+        file_count: 0,
+        suno_playlist_url: "https://suno.com/playlist/test",
+      },
+    });
+    expect(downloadedPosts[1].payload).toMatchObject({
+      body: {
+        file_count: clipIds.length,
+        expected_file_count: clipIds.length,
+        download_path: "/Users/test/Downloads/test-playlist.zip",
+      },
+    });
+    expect(downloadedPosts[1].payload).not.toHaveProperty("body.suno_playlist_url");
   });
 });
 
@@ -287,14 +317,20 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts).toHaveLength(2);
+    expect(downloadedPosts[0].payload).toMatchObject({
+      body: {
+        file_count: 0,
+        suno_playlist_url: "https://suno.com/playlist/test",
+      },
+    });
     expect(downloadedPosts[1].payload).toMatchObject({
       body: {
         file_count: clipIds.length,
         expected_file_count: clipIds.length,
-        suno_playlist_url: "https://suno.com/playlist/test",
         download_path: "/Users/test/Downloads/test-playlist.zip",
       },
     });
+    expect(downloadedPosts[1].payload).not.toHaveProperty("body.suno_playlist_url");
   });
 });
 
@@ -357,6 +393,40 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
   });
 });
 
+// adoptSelectedClips -----------------------------------------------------------
+
+describe('content onMessage("adoptSelectedClips"): 手動選択 clip 採用', () => {
+  beforeEach(() => {
+    clearResumeStateMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given 選択済み clip が期待件数分ある When adoptSelectedClips Then clipIds を返す", async () => {
+    const { handlers } = await loadContentScript();
+
+    const result = await handlers.get("adoptSelectedClips")!({
+      data: { expectedClipCount: 2 },
+    });
+
+    expect(result).toEqual({ ok: true, clipIds: ["clip-1", "clip-2"] });
+  });
+
+  it("Given 選択済み clip が不足 When adoptSelectedClips Then caller にエラーを返す", async () => {
+    const { handlers } = await loadContentScript({
+      readSelectedClipIdsError: new Error("選択中 clip 数が一致しません: expected 2, got 1"),
+    });
+
+    await expect(
+      handlers.get("adoptSelectedClips")!({
+        data: { expectedClipCount: 2 },
+      }) as Promise<unknown>,
+    ).rejects.toThrow("選択中 clip 数が一致しません");
+  });
+});
+
 describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#1217 TEST-1217-001)', () => {
   beforeEach(() => {
     clearResumeStateMock.mockReset();
@@ -366,7 +436,7 @@ describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#12
     vi.unstubAllGlobals();
   });
 
-  it("Given 2 回目の postDownloaded が reject When retryDownload Then ERROR phase を emit する", async () => {
+  it("Given postDownloaded が reject When retryDownload Then ERROR phase を emit する", async () => {
     const { handlers, progressMessages } = await loadContentScript({
       postDownloadedError: new Error("POST downloaded failed: 403 Forbidden"),
       postDownloadedRejectOnCall: 2,

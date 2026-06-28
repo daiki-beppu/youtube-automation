@@ -92,6 +92,7 @@ async function loadContentScriptWithPlaylistRows(
   vi.doMock("../lib/bridge-listener", () => ({
     attachBridgeListener: vi.fn(),
     createFeedPoller: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+    requestFeedPoll: vi.fn(() => Promise.resolve([])),
     requestSliderSet: vi.fn(),
   }));
 
@@ -99,6 +100,7 @@ async function loadContentScriptWithPlaylistRows(
     createClipTracker: vi.fn(() => ({
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
+      getPendingSubmittedIds: vi.fn(() => []),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -260,15 +262,17 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     );
   });
 
-  it("Given 2 entries で 3 ID しか保存されていない When playlist-only resume Then warn して ensureClipRows へ進む", async () => {
+  it("Given 2 entries で 3 ID しか保存されていない When playlist-only resume Then ERROR で止めて部分 playlist を作らない", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      [],
+    );
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
       data: {
         entries,
@@ -279,25 +283,30 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         playlistExpectedClipCount: entries.length * CLIPS_PER_REQUEST,
       },
     });
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-
-    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
-      submittedClipIds,
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          index: entries.length,
+          message: expect.stringContaining("expected 4, got 3"),
+        }),
+      ),
     );
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("expected 4, got 3"));
-    warnSpy.mockRestore();
+
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
 
-  it("Given 旧 payload が期待件数なしで playlist-only resume When run Then warn して scrollAndMultiSelect へ進む", async () => {
+  it("Given 旧 payload が期待件数なしで playlist-only resume When ID が不足 Then ERROR で止める", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows([], []);
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      [],
+    );
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     runHandler({
       data: {
         entries,
@@ -307,10 +316,17 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         submittedClipIds,
       },
     });
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          index: entries.length,
+          message: expect.stringContaining("expected 4, got 3"),
+        }),
+      ),
+    );
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("expected 4, got 3"));
-    warnSpy.mockRestore();
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
 
   it("Given collection の manual range run When playlist 追加 Then range 内で生成した ID 件数だけを要求する", async () => {
@@ -358,12 +374,21 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         playlistExpectedClipCount: currentSubmittedClipIds.length,
       }),
     );
-    expect(sentMessages.filter((m) => m.type === "postDownloaded")[1].payload).toMatchObject({
+    const playlistUrlPost = sentMessages.filter((m) => m.type === "postDownloaded")[0];
+    expect(playlistUrlPost.payload).toMatchObject({
+      body: {
+        file_count: 0,
+        suno_playlist_url: expect.any(String),
+      },
+    });
+    const downloadedPost = sentMessages.filter((m) => m.type === "postDownloaded")[1];
+    expect(downloadedPost.payload).toMatchObject({
       body: {
         file_count: currentSubmittedClipIds.length,
         expected_file_count: currentSubmittedClipIds.length,
         download_path: "/Users/test/Downloads/manual-range.zip",
       },
     });
+    expect(downloadedPost.payload).not.toHaveProperty("body.suno_playlist_url");
   });
 });

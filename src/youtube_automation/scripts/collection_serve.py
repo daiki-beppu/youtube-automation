@@ -67,6 +67,7 @@ _DEFAULT_ALLOWED_WEB_ORIGINS = frozenset(
 )
 # `collections/planning/` 配下で 1 コレクションを示すディレクトリ接尾辞。
 _COLLECTION_DIR_SUFFIX = "-collection"
+_SUNO_CLIPS_PER_PROMPT = 2
 
 # Suno playlist capture の出力先（`<root>/config/suno-playlists.json`）と env fallback 名（#893）。
 _PLAYLISTS_OUTPUT_RELPATH = Path("config") / "suno-playlists.json"
@@ -482,18 +483,61 @@ def _count_audio_files(music_dir: Path) -> int:
     return sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
 
 
-def _determine_status(has_prompts: bool, pattern_count: int | None, downloaded_count: int) -> str:
+def _expected_download_count(pattern_count: int | None, explicit_expected: int | None = None) -> int | None:
+    """collection 完了に必要な音声ファイル数を返す.
+
+    Suno は 1 prompt につき 2 clip 生成するため、既定は prompt 数 * 2。
+    explicit_expected は full download 件数以上のときだけ上書きとして使う。
+    """
+    default_expected = pattern_count * _SUNO_CLIPS_PER_PROMPT if pattern_count is not None and pattern_count > 0 else None
+    if explicit_expected is None:
+        return default_expected
+    if default_expected is None or explicit_expected >= default_expected:
+        return explicit_expected
+    return default_expected
+
+
+def _determine_status(
+    has_prompts: bool,
+    pattern_count: int | None,
+    downloaded_count: int,
+    explicit_expected: int | None = None,
+) -> str:
     """collection の status を判定する（#1216）.
 
     - ``needs_prompts``: suno-prompts.json が無い
-    - ``downloaded``: prompts が有り、02-Individual-music/ の音声ファイル数 >= pattern_count
+    - ``downloaded``: prompts が有り、02-Individual-music/ の音声ファイル数 >= pattern_count * 2
     - ``ready``: prompts が有り、ダウンロード未完了
     """
     if not has_prompts:
         return "needs_prompts"
-    if pattern_count is not None and downloaded_count >= pattern_count:
+    expected_count = _expected_download_count(pattern_count, explicit_expected)
+    if expected_count is not None and downloaded_count >= expected_count:
         return "downloaded"
     return "ready"
+
+
+def _read_music_expected_file_count(coll_dir: Path) -> int | None:
+    """workflow-state.json から full playlist download の期待ファイル数を読む."""
+    ws_path = CollectionPaths(coll_dir).workflow_state_path
+    if not ws_path.is_file():
+        return None
+    try:
+        data = json.loads(ws_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    planning = data.get("planning")
+    if not isinstance(planning, dict):
+        return None
+    music = planning.get("music")
+    if not isinstance(music, dict):
+        return None
+    expected = music.get("expected_file_count")
+    if isinstance(expected, int) and not isinstance(expected, bool) and expected > 0:
+        return expected
+    return None
 
 
 def build_collections_index(root: Path, playlist_prefix: str | None = None) -> list[dict]:
@@ -514,7 +558,9 @@ def build_collections_index(root: Path, playlist_prefix: str | None = None) -> l
         pattern_count = len(json.loads(prompts_path.read_text(encoding="utf-8"))) if has_prompts else None
         music_dir = CollectionPaths(coll).music_dir
         downloaded_count = _count_audio_files(music_dir)
-        status = _determine_status(has_prompts, pattern_count, downloaded_count)
+        expected_file_count = _read_music_expected_file_count(coll)
+        expected_count = _expected_download_count(pattern_count, expected_file_count)
+        status = _determine_status(has_prompts, pattern_count, downloaded_count, expected_file_count)
         entry = {
             "id": coll.name,
             "name": CollectionPaths(coll).collection_name,
@@ -522,6 +568,8 @@ def build_collections_index(root: Path, playlist_prefix: str | None = None) -> l
             "pattern_count": pattern_count,
             "downloaded_count": downloaded_count,
         }
+        if expected_count is not None:
+            entry["expected_file_count"] = expected_count
         if playlist_prefix is not None:
             entry["playlist_name"] = derive_playlist_name(coll.name, playlist_prefix)
         index.append(entry)
@@ -561,12 +609,14 @@ def _update_workflow_state_downloaded(
     coll_dir: Path,
     *,
     file_count: int,
-    suno_playlist_url: str,
+    suno_playlist_url: str | None = None,
+    expected_file_count: int | None = None,
 ) -> None:
     """workflow-state.json を更新する（POST /collections/<id>/downloaded、#1216）.
 
-    - ``planning.music.suno_playlist_url`` = suno_playlist_url
-    - file_count > 0 → ``assets.music_downloaded`` = true
+    - suno_playlist_url 指定時だけ ``planning.music.suno_playlist_url`` を更新
+    - expected_file_count が full download 件数なら ``planning.music.expected_file_count`` へ保存
+    - file_count が expected_file_count 以上 → ``assets.music_downloaded`` = true
 
     atomic write（tempfile + os.replace）で中間 temp を残さない。
     """
@@ -580,7 +630,6 @@ def _update_workflow_state_downloaded(
     if not isinstance(data, dict):
         data = {}
 
-    # planning.music.suno_playlist_url
     planning = data.setdefault("planning", {})
     if not isinstance(planning, dict):
         planning = {}
@@ -589,15 +638,38 @@ def _update_workflow_state_downloaded(
     if not isinstance(music, dict):
         music = {}
         planning["music"] = music
-    music["suno_playlist_url"] = suno_playlist_url
+    if suno_playlist_url:
+        music["suno_playlist_url"] = suno_playlist_url
+    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+    pattern_count: int | None = None
+    if prompts_path.is_file():
+        try:
+            prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
+            if isinstance(prompts_data, list):
+                pattern_count = len(prompts_data)
+        except (json.JSONDecodeError, OSError):
+            pattern_count = None
+    full_expected_count = _expected_download_count(pattern_count)
+    effective_expected_count = _expected_download_count(pattern_count, expected_file_count)
+    if (
+        expected_file_count is not None
+        and full_expected_count is not None
+        and expected_file_count >= full_expected_count
+    ):
+        music["expected_file_count"] = expected_file_count
 
     # assets.music_downloaded
+    assets = data.setdefault("assets", {})
+    if not isinstance(assets, dict):
+        assets = {}
+        data["assets"] = assets
     if file_count > 0:
-        assets = data.setdefault("assets", {})
-        if not isinstance(assets, dict):
-            assets = {}
-            data["assets"] = assets
-        assets["music_downloaded"] = True
+        if effective_expected_count is not None and file_count >= effective_expected_count:
+            assets["music_downloaded"] = True
+        elif effective_expected_count is None:
+            assets["music_downloaded"] = True
+        elif "music_downloaded" in assets:
+            del assets["music_downloaded"]
 
     ws_path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=str(ws_path.parent), prefix=".workflow-state-", suffix=".json")
@@ -609,6 +681,39 @@ def _update_workflow_state_downloaded(
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
         raise
+
+
+_SUNO_TRACK_PREFIX_RE = re.compile(r"^Track\s+\d+\s+(.+)$", re.IGNORECASE)
+_LATIN_TITLE_TAIL_RE = re.compile(r"([A-Za-z][A-Za-z0-9 &'(),.!?:/-]*)$")
+
+
+def _strip_suno_track_prefix(stem: str) -> str:
+    """Suno ZIP の `Track 01 Title` stem を prompts 照合用の `Title` に正規化する。"""
+    match = _SUNO_TRACK_PREFIX_RE.match(stem.strip())
+    if match is None:
+        return stem.strip()
+    return match.group(1).strip()
+
+
+def _suno_name_lookup_candidates(name: str) -> list[str]:
+    """Suno filename / prompt name から曲名照合候補を作る.
+
+    Suno ZIP には ``Track 01 Title`` と ``日本語 English Title`` の両方が来る。
+    prompt 側の ``日本語 — English Title`` と同じ英題で照合できるようにする。
+    """
+    base = _strip_suno_track_prefix(name)
+    candidates = [base]
+    if " — " in base:
+        candidates.append(base.split(" — ", 1)[1].strip())
+    tail_match = _LATIN_TITLE_TAIL_RE.search(base)
+    if tail_match:
+        candidates.append(tail_match.group(1).strip())
+
+    deduped: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in deduped:
+            deduped.append(candidate)
+    return deduped
 
 
 def _extract_and_rename_music(
@@ -634,11 +739,14 @@ def _extract_and_rename_music(
                 full_name = entry.get("name", "")
                 parts = full_name.split(" — ", 1)
                 english_name = parts[1] if len(parts) == 2 else full_name
-                name_to_index[english_name] = i
-                name_to_index[full_name] = i
+                for candidate in _suno_name_lookup_candidates(english_name):
+                    name_to_index[candidate] = i
+                for candidate in _suno_name_lookup_candidates(full_name):
+                    name_to_index[candidate] = i
                 title = entry.get("title")
-                if title and title not in name_to_index:
-                    name_to_index[title] = i
+                if title:
+                    for candidate in _suno_name_lookup_candidates(title):
+                        name_to_index.setdefault(candidate, i)
         except (json.JSONDecodeError, OSError, TypeError):
             pass
 
@@ -681,12 +789,18 @@ def _extract_and_rename_music(
                 continue
             stem = extracted.stem
             if stem.endswith("_1"):
-                lookup = stem[:-2]
+                lookups = _suno_name_lookup_candidates(stem[:-2])
                 variant = "b"
             else:
-                lookup = stem
+                lookups = _suno_name_lookup_candidates(stem)
                 variant = "a"
-            track_num = name_to_index.get(lookup)
+            lookup = lookups[0]
+            track_num = None
+            for candidate in lookups:
+                if candidate in name_to_index:
+                    lookup = candidate
+                    track_num = name_to_index[candidate]
+                    break
             if track_num is not None:
                 new_name = f"{track_num:02d}{variant}-{lookup}{ext}"
             else:
@@ -701,6 +815,35 @@ def _extract_and_rename_music(
         return 0
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _is_download_archive_cleanup_target(path: Path, downloads_dir: Path | None = None) -> bool:
+    """Suno bulk download ZIP の自動削除対象か判定する.
+
+    ユーザーの Downloads 以外や ZIP 以外は削除しない。POST /downloaded は絶対パスを受け取るため、
+    誤って任意ファイルを消さないよう cleanup は狭く制限する。
+    """
+    if path.suffix.lower() != ".zip":
+        return False
+    try:
+        resolved_path = path.resolve()
+        resolved_downloads = (downloads_dir or (Path.home() / "Downloads")).resolve()
+    except OSError:
+        return False
+    return resolved_path.is_file() and resolved_path.is_relative_to(resolved_downloads)
+
+
+def _cleanup_download_archive(path: Path, downloads_dir: Path | None = None) -> bool:
+    """成功処理済みの Downloads ZIP を削除する。削除したら True。"""
+    if not _is_download_archive_cleanup_target(path, downloads_dir):
+        return False
+    try:
+        path.unlink()
+        print(f"[yt-collection-serve] ダウンロード ZIP を削除しました: {path}")
+        return True
+    except OSError as exc:
+        print(f"[yt-collection-serve] ダウンロード ZIP 削除に失敗しました: {path}: {exc}")
+        return False
 
 
 def build_version_payload() -> dict[str, str]:
@@ -860,12 +1003,11 @@ def create_server(
             _downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
             _downloaded_suffix = "/downloaded"
             if dir_mode and self.path.startswith(_downloaded_prefix) and self.path.endswith(_downloaded_suffix):
-                if (
-                    allow_origin is None
-                    or origin is None
-                    or origin != allow_origin
-                    or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)
-                ):
+                raw_origin = self.headers.get("Origin")
+                if raw_origin is not None and (origin is None or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)):
+                    self.send_error(403, "Forbidden")
+                    return
+                if raw_origin is None and allow_origin is not None:
                     self.send_error(403, "Forbidden")
                     return
                 # Token auth: require X-Serve-Token header (#1217).
@@ -902,7 +1044,7 @@ def create_server(
                 file_count = payload.get("file_count")
                 fmt = payload.get("format")
                 suno_playlist_url = payload.get("suno_playlist_url")
-                if file_count is None or not fmt or not suno_playlist_url:
+                if file_count is None or not fmt:
                     self.send_error(400, "Bad Request")
                     return
                 # Validate file_count is a non-negative integer (not bool) (#1217).
@@ -926,11 +1068,21 @@ def create_server(
                 if download_path is not None and not isinstance(download_path, str):
                     self.send_error(400, "Bad Request")
                     return
-                # Validate suno_playlist_url type (#1217).
-                if not isinstance(suno_playlist_url, str):
+                # Validate suno_playlist_url type if present (#1217).
+                if suno_playlist_url is not None and not isinstance(suno_playlist_url, str):
                     self.send_error(400, "Bad Request")
                     return
                 coll_dir = collections_root / cid
+                prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+                pattern_count = 0
+                if prompts_path.is_file():
+                    try:
+                        prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
+                        if isinstance(prompts_data, list):
+                            pattern_count = len(prompts_data)
+                    except (json.JSONDecodeError, OSError):
+                        pattern_count = 0
+                expected_count = _expected_download_count(pattern_count, expected_file_count)
                 placed_count_for_response = file_count
                 if download_path:
                     # Validate download_path: must be an absolute path (#1217).
@@ -944,19 +1096,7 @@ def create_server(
                         # Extraction failed: return 500 and do not mark as downloaded (#1217).
                         self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
                         return
-                    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
-                    pattern_count = 0
-                    if prompts_path.is_file():
-                        try:
-                            prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
-                            if isinstance(prompts_data, list):
-                                pattern_count = len(prompts_data)
-                        except (json.JSONDecodeError, OSError):
-                            pattern_count = 0
-                    expected_count = (
-                        expected_file_count if expected_file_count is not None else max(file_count, pattern_count)
-                    )
-                    if placed_count < expected_count:
+                    if expected_count is not None and placed_count < expected_count:
                         self._send_json_error(
                             500,
                             "ZIP extraction incomplete: "
@@ -964,9 +1104,16 @@ def create_server(
                         )
                         return
                     placed_count_for_response = placed_count
-                    file_count = placed_count if pattern_count == 0 or placed_count >= pattern_count else 0
+                    file_count = placed_count
                 # Update workflow state AFTER extraction (#1217).
-                _update_workflow_state_downloaded(coll_dir, file_count=file_count, suno_playlist_url=suno_playlist_url)
+                _update_workflow_state_downloaded(
+                    coll_dir,
+                    file_count=file_count,
+                    suno_playlist_url=suno_playlist_url,
+                    expected_file_count=expected_count,
+                )
+                if download_path:
+                    _cleanup_download_archive(resolved_dp)
                 resp_body = json.dumps(
                     {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
                 ).encode("utf-8")
@@ -988,13 +1135,12 @@ def create_server(
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if self.path == "/auth/token":
-                origin = self.headers.get("Origin")
-                if (
-                    allow_origin is None
-                    or origin is None
-                    or origin != allow_origin
-                    or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)
-                ):
+                raw_origin = self.headers.get("Origin")
+                origin = self._allowed_origin()
+                if raw_origin is not None and (origin is None or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)):
+                    self.send_error(403, "Forbidden")
+                    return
+                if raw_origin is None and allow_origin is not None:
                     self.send_error(403, "Forbidden")
                     return
                 body = json.dumps({"token": serve_token}).encode("utf-8")

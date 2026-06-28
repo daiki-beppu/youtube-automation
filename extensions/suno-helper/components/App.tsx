@@ -36,6 +36,7 @@ export function App() {
     rerunFailed,
     retryPlaylist,
     retryDownload,
+    adoptSelectedClips,
     fetchData,
     run,
     stop,
@@ -222,22 +223,31 @@ export function App() {
       </div>
 
       {!isRunning && playlistName && selectedCollectionId && (
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => void retryPlaylist()}
-            className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+            onClick={() => void adoptSelectedClips()}
+            className="rounded border border-gray-400 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
           >
-            Playlist から再開
+            選択中の曲を採用
           </button>
-          <button
-            type="button"
-            onClick={() => void retryDownload()}
-            disabled={!selectedCollectionId}
-            className="flex-1 rounded border border-green-500 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
-          >
-            Download から再開
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void retryPlaylist()}
+              className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+            >
+              Playlist から再開
+            </button>
+            <button
+              type="button"
+              onClick={() => void retryDownload()}
+              disabled={!selectedCollectionId}
+              className="flex-1 rounded border border-green-500 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
+            >
+              Download から再開
+            </button>
+          </div>
         </div>
       )}
 

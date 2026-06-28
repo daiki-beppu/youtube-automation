@@ -4,11 +4,15 @@
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
 import { postDownloaded } from "../../shared/api";
 import { describeRelayFailure } from "../components/runner-errors";
+import { captureFromTab } from "../lib/auto-capture";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
 
 export default defineBackground(() => {
   let activeDownloadWatcher: { tabId: number; cleanup: () => void } | null = null;
+  const SUNO_ME_PLAYLISTS_URL = "https://suno.com/me/playlists";
+  const PLAYLIST_URL_RESOLVE_TIMEOUT_MS = 15000;
+  const PLAYLIST_URL_RESOLVE_POLL_MS = 500;
 
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);
@@ -39,6 +43,9 @@ export default defineBackground(() => {
   );
   onMessage("retryDownload", ({ data, sender }) =>
     sendMessage("retryDownload", data, requireRelayTab(sender, "retryDownload")),
+  );
+  onMessage("adoptSelectedClips", ({ data, sender }) =>
+    sendMessage("adoptSelectedClips", data, requireRelayTab(sender, "adoptSelectedClips")),
   );
   onMessage("queryProgress", ({ sender }) =>
     sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
@@ -83,24 +90,9 @@ export default defineBackground(() => {
       });
     };
 
-    const isSunoZipStartedAfterMonitor = (item: chrome.downloads.DownloadItem): boolean => {
+    const isZipStartedAfterMonitor = (item: chrome.downloads.DownloadItem): boolean => {
       const filename = item.filename ?? "";
       if (!filename.toLowerCase().endsWith(".zip")) {
-        return false;
-      }
-      const downloadUrl = item.url ?? "";
-      let isSunoUrl = false;
-      try {
-        const hostname = new URL(downloadUrl).hostname;
-        isSunoUrl =
-          hostname === "suno.com" ||
-          hostname.endsWith(".suno.com") ||
-          hostname === "sunocdn.com" ||
-          hostname.endsWith(".sunocdn.com");
-      } catch {
-        return false;
-      }
-      if (!isSunoUrl) {
         return false;
       }
       const downloadStartMs = new Date(item.startTime).getTime();
@@ -108,14 +100,40 @@ export default defineBackground(() => {
     };
 
     const watchTimeout: { id?: ReturnType<typeof setTimeout> } = {};
+    const completedPoll: { id?: ReturnType<typeof setInterval> } = {};
+    let watcherFinished = false;
     const cleanupWatcher = (): void => {
+      if (watcherFinished) {
+        return;
+      }
+      watcherFinished = true;
       chrome.downloads.onChanged.removeListener(listener);
       if (watchTimeout.id !== undefined) {
         clearTimeout(watchTimeout.id);
       }
+      if (completedPoll.id !== undefined) {
+        clearInterval(completedPoll.id);
+      }
       if (activeDownloadWatcher?.cleanup === cleanupWatcher) {
         activeDownloadWatcher = null;
       }
+    };
+
+    const notifyDownloadComplete = (filename: string, id?: number): void => {
+      if (watcherFinished) {
+        return;
+      }
+      console.info(`[suno-helper] ZIP ダウンロード完了: ${filename}${id === undefined ? "" : ` (id=${id})`}`);
+      cleanupWatcher();
+      sendMessage("downloadComplete", { filename }, tabId).catch((err: unknown) => {
+        console.warn("[suno-helper] downloadComplete 中継失敗:", err);
+      });
+    };
+
+    const findCompletedZipAfterMonitor = (callback: (item: chrome.downloads.DownloadItem | null) => void): void => {
+      chrome.downloads.search({ state: "complete", limit: 50, orderBy: ["-startTime"] }, (results) => {
+        callback(results.find(isZipStartedAfterMonitor) ?? null);
+      });
     };
 
     const listener = (delta: chrome.downloads.DownloadDelta): void => {
@@ -130,7 +148,13 @@ export default defineBackground(() => {
         }
         const item = results[0];
         const filename = item.filename ?? "";
-        if (!isSunoZipStartedAfterMonitor(item)) {
+        if (!isZipStartedAfterMonitor(item)) {
+          console.debug("[suno-helper] Download all 監視対象外の download event を無視:", {
+            filename,
+            url: item.url,
+            startTime: item.startTime,
+            state,
+          });
           return;
         }
         if (state === "interrupted") {
@@ -140,25 +164,37 @@ export default defineBackground(() => {
           notifyDownloadFailed(message);
           return;
         }
-        console.info(`[suno-helper] ZIP ダウンロード完了: ${filename} (id=${delta.id})`);
-        // listener を解除して以降のダウンロードイベントを無視する
-        cleanupWatcher();
-        // content script へダウンロード完了を中継する
-        sendMessage("downloadComplete", { filename }, tabId).catch((err: unknown) => {
-          console.warn("[suno-helper] downloadComplete 中継失敗:", err);
-        });
+        notifyDownloadComplete(filename, delta.id);
       });
     };
     chrome.downloads.onChanged.addListener(listener);
     activeDownloadWatcher = { tabId, cleanup: cleanupWatcher };
 
+    // onChanged を取り逃した場合に備えて、監視中は完了済み ZIP を短周期で探す。
+    // Suno/CDN 側の redirect や browser 実装差で onChanged の URL 条件が揺れても、
+    // startDownload 後に開始した .zip を見つけたら即 downloadComplete へ進める。
+    const DOWNLOAD_COMPLETE_POLL_MS = 3000;
+    completedPoll.id = setInterval(() => {
+      findCompletedZipAfterMonitor((item) => {
+        if (item) {
+          notifyDownloadComplete(item.filename ?? "", item.id);
+        }
+      });
+    }, DOWNLOAD_COMPLETE_POLL_MS);
+
     // 安全弁: 10 分以内にダウンロードが完了しなければ listener を解除する（メモリリーク防止）
     const DOWNLOAD_WATCH_TIMEOUT_MS = 600000;
     watchTimeout.id = setTimeout(() => {
-      const message = "Download all 監視タイムアウト（10 分）。listener を解除しました。";
-      console.warn(`[suno-helper] ${message}`);
-      cleanupWatcher();
-      notifyDownloadFailed(message);
+      findCompletedZipAfterMonitor((item) => {
+        if (item) {
+          notifyDownloadComplete(item.filename ?? "", item.id);
+          return;
+        }
+        const message = "Download all 監視タイムアウト（10 分）。listener を解除しました。";
+        console.warn(`[suno-helper] ${message}`);
+        cleanupWatcher();
+        notifyDownloadFailed(message);
+      });
     }, DOWNLOAD_WATCH_TIMEOUT_MS);
   });
 
@@ -209,6 +245,32 @@ export default defineBackground(() => {
   // runner → background: content script から localhost server へ直接 token 取得しないよう、
   // token fetch と POST /downloaded は background の extension origin から実行する。
   onMessage("postDownloaded", ({ data }) => postDownloaded(data.baseUrl, data.collectionId, data.body));
+
+  onMessage("resolvePlaylistUrl", async ({ data }) => {
+    const tab = await browser.tabs.create({ url: SUNO_ME_PLAYLISTS_URL, active: false });
+    if (typeof tab.id !== "number") {
+      throw new Error("playlist URL 解決用タブを作成できませんでした");
+    }
+    const tabId = tab.id;
+    try {
+      const items = await captureFromTab(tabId, {
+        sendCapture: (targetTabId) => sendMessage("capturePlaylists", undefined, targetTabId),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        now: () => Date.now(),
+        timeoutMs: PLAYLIST_URL_RESOLVE_TIMEOUT_MS,
+        pollMs: PLAYLIST_URL_RESOLVE_POLL_MS,
+      });
+      const item = items.find((playlist) => playlist.title === data.playlistName);
+      if (!item) {
+        throw new Error(`playlist URL を解決できません: ${data.playlistName}`);
+      }
+      return { url: item.url };
+    } finally {
+      await browser.tabs.remove(tabId).catch((err: unknown) => {
+        console.debug("[suno-helper] playlist URL 解決用タブの close に失敗:", err);
+      });
+    }
+  });
 
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する
   // （content↔content 直送不可のため）。tab を持たない送信元は転送先が無いため no-op。

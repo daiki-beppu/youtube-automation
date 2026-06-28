@@ -20,6 +20,11 @@ const storageMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
+const resumeStateMocks = vi.hoisted(() => ({
+  readResumeState: vi.fn(async () => null),
+  writeResumeState: vi.fn(async () => undefined),
+}));
+
 vi.mock("wxt/browser", () => ({
   browser: {
     runtime: {
@@ -54,7 +59,8 @@ vi.mock("../lib/resume-state", async () => {
   const actual = await vi.importActual<typeof import("../lib/resume-state")>("../lib/resume-state");
   return {
     ...actual,
-    readResumeState: vi.fn(async () => null),
+    readResumeState: resumeStateMocks.readResumeState,
+    writeResumeState: resumeStateMocks.writeResumeState,
   };
 });
 
@@ -137,6 +143,8 @@ describe("Suno popup compatibility check", () => {
     vi.clearAllMocks();
     storageMocks.getValue.mockResolvedValue("");
     storageMocks.setValue.mockResolvedValue(undefined);
+    resumeStateMocks.readResumeState.mockResolvedValue(null);
+    resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
   });
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
@@ -283,6 +291,62 @@ describe("Suno popup compatibility check", () => {
     expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
   });
 
+  it("clip ID が無い再開時に Suno 上の選択中 clip を採用して resume state に保存する", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation((message: string) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "adoptSelectedClips") {
+        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
+    });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("adoptSelectedClips", { expectedClipCount: 2 });
+    expect(resumeStateMocks.writeResumeState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "20260601-clm-theme-a-collection",
+        failedIndex: 1,
+        total: 1,
+        submittedClipIds: ["clip-a", "clip-b"],
+        playlistExpectedClipCount: 2,
+      }),
+    );
+  });
+
   it("dir mode でデータ取得後に URL を変更すると再取得まで連続実行できない", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
@@ -374,6 +438,43 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).not.toContain("コレクション一覧取得失敗");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/collections`);
+  });
+
+  it("popup 起動時の collection 一覧同期は downloaded collection を表示しない", async () => {
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    fetchMock.mockReset();
+    storageMocks.getValue.mockResolvedValue(BASE_URL);
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, [
+        {
+          id: "20260601-clm-done-collection",
+          name: "done-collection",
+          status: "downloaded",
+          pattern_count: 2,
+          downloaded_count: 4,
+        },
+        {
+          id: "20260601-clm-ready-collection",
+          name: "ready-collection",
+          status: "ready",
+          pattern_count: 1,
+          downloaded_count: 0,
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("ready-collection");
+    });
+    expect(container.textContent).not.toContain("done-collection");
   });
 
   it("CORS なし 404 (TypeError) で /collections が reject されても single-file mode へ fallback する", async () => {

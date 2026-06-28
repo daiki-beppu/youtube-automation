@@ -65,6 +65,7 @@ vi.mock("../lib/messaging", () => ({
 vi.mock("../lib/bridge-listener", () => ({
   attachBridgeListener: harness.attachBridgeListener,
   createFeedPoller: harness.createFeedPoller,
+  requestFeedPoll: vi.fn(() => Promise.resolve([])),
   requestSliderSet: harness.requestSliderSet,
 }));
 

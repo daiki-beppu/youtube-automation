@@ -35,6 +35,16 @@ export interface RetryPlaylistPayload {
   collectionId?: string;
 }
 
+/** overlay → runner: Suno UI でユーザーが手動選択した clip を resume 用 ID として採用する。 */
+export interface AdoptSelectedClipsPayload {
+  expectedClipCount: number;
+}
+
+/** runner → background: `/me/playlists` から playlist URL を解決する。 */
+export interface ResolvePlaylistUrlPayload {
+  playlistName: string;
+}
+
 /** runner → background: ダウンロード完了を通知するペイロード (#1146)。 */
 export interface DownloadCompletePayload {
   filename: string;
@@ -59,6 +69,10 @@ interface ProtocolMap {
   stop(): { ok: true };
   /** overlay → background → runner: playlist 追加のみ再実行する。entries 不要。 */
   retryPlaylist(payload: RetryPlaylistPayload): { ok: true };
+  /** overlay → background → runner: 手動選択中の clip ID を読む。 */
+  adoptSelectedClips(payload: AdoptSelectedClipsPayload): { ok: true; clipIds: string[] };
+  /** runner → background: bg `/me/playlists` tab から playlist URL を解決する。 */
+  resolvePlaylistUrl(payload: ResolvePlaylistUrlPayload): { url: string };
   /** runner → background → overlay: 進捗を通知する。 */
   progress(payload: ProgressPayload): void;
   /** overlay → background → runner: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */

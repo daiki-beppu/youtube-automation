@@ -19,6 +19,7 @@ import {
   postDownloaded,
   resolvePromptCollectionId,
   resolveCompatibilityWarning,
+  visiblePromptCollections,
 } from "../../shared/api";
 
 const BASE_URL = "http://localhost:7873";
@@ -300,13 +301,35 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
 
 // ---------------------------------------------------------------------------
 // pickInitialCollectionId (#816): ドロップダウン初期選択ロジック（純関数）
-//   - 初期値は最初の status !== "needs_prompts" な entry の id (#1216)
-//   - 全て needs_prompts / 空配列 のときは null（選択不可）
+//   - 初期値は最初の ready entry の id (#1216)
+//   - 全て needs_prompts/downloaded / 空配列 のときは null（選択不可）
 // React テスト基盤を増やさず、選択ルールを純関数として担保する。
 // ---------------------------------------------------------------------------
 
+describe("shared/api visiblePromptCollections: popup 表示対象", () => {
+  it("Given ready/needs_prompts/downloaded When 表示対象へ絞る Then downloaded だけ除外する", () => {
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+      { id: "c3", name: "c3", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
+    ];
+
+    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual(["c1", "c2"]);
+  });
+
+  it("Given downloaded が resume 対象 When 表示対象へ絞る Then その collection だけ例外的に残す", () => {
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
+      { id: "c3", name: "c3", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
+    ];
+
+    expect(visiblePromptCollections(collections, ["c2"]).map((c) => c.id)).toEqual(["c1", "c2"]);
+  });
+});
+
 describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
-  it("Given 全て ready/downloaded When 初期値を選ぶ Then 先頭の id を返す", () => {
+  it("Given ready/downloaded When 初期値を選ぶ Then ready の id を返す", () => {
     const collections: CollectionSummary[] = [
       { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
       { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 2 },
@@ -315,7 +338,7 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
     expect(pickInitialCollectionId(collections)).toBe("c1");
   });
 
-  it("Given 先頭が needs_prompts When 初期値を選ぶ Then 最初の ready/downloaded な id を返す", () => {
+  it("Given 先頭が needs_prompts When 初期値を選ぶ Then 最初の ready id を返す", () => {
     const collections: CollectionSummary[] = [
       { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
       { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
@@ -324,10 +347,10 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
     expect(pickInitialCollectionId(collections)).toBe("c2");
   });
 
-  it("Given 全て needs_prompts When 初期値を選ぶ Then null を返す (実行可能な選択肢なし)", () => {
+  it("Given 全て needs_prompts/downloaded When 初期値を選ぶ Then null を返す (実行可能な選択肢なし)", () => {
     const collections: CollectionSummary[] = [
       { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
     ];
 
     expect(pickInitialCollectionId(collections)).toBeNull();
@@ -357,13 +380,31 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
     expect(resolvePromptCollectionId(collections, "old-url-c9")).toBe("c1");
   });
 
-  it("Given 選択中 id が needs_prompts When 解決 Then 最初の ready/downloaded id を返す", () => {
+  it("Given 選択中 id が needs_prompts When 解決 Then 最初の ready id を返す", () => {
     const collections: CollectionSummary[] = [
       { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
       { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
     ];
 
     expect(resolvePromptCollectionId(collections, "c1")).toBe("c2");
+  });
+
+  it("Given 選択中 id が downloaded When 解決 Then 最初の ready id を返す", () => {
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", status: "downloaded", pattern_count: 1, downloaded_count: 2 },
+      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+    ];
+
+    expect(resolvePromptCollectionId(collections, "c1")).toBe("c2");
+  });
+
+  it("Given 選択中 id が downloaded かつ resume 対象 When 解決 Then 選択中 id を返す", () => {
+    const collections: CollectionSummary[] = [
+      { id: "c1", name: "c1", status: "downloaded", pattern_count: 1, downloaded_count: 2 },
+      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+    ];
+
+    expect(resolvePromptCollectionId(collections, "c1", true)).toBe("c1");
   });
 
   it("Given prompts あり collection が無い When 解決 Then null を返す", () => {
@@ -586,7 +627,6 @@ describe("shared/api postDownloaded: 正常系", () => {
       file_count: 5,
       expected_file_count: 5,
       format: "mp3",
-      suno_playlist_url: "https://suno.com/playlist/test",
       download_path: "/Users/test/Downloads/test.zip",
     });
 
@@ -596,6 +636,7 @@ describe("shared/api postDownloaded: 正常系", () => {
     const body = JSON.parse(postCall[1].body as string);
     expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
     expect(body.expected_file_count).toBe(5);
+    expect(body.suno_playlist_url).toBeUndefined();
   });
 
   it("Given postDownloaded When ヘッダーを確認 Then X-Serve-Token が含まれる", async () => {
