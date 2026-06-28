@@ -29,7 +29,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: extensions/suno-helper/pnpm-lock.yaml
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
       - name: Lint
         run: pnpm lint
       - name: Format check
@@ -78,7 +78,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: extensions/distrokid-helper/pnpm-lock.yaml
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
       - name: Lint
         run: pnpm lint
       - name: Format check

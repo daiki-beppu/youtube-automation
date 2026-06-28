@@ -1,6 +1,0 @@
-packages:
-  - extensions/suno-helper
-  - extensions/distrokid-helper
-
-allowBuilds:
-  protobufjs: true
