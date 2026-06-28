@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -754,6 +755,62 @@ class TestUploadCompleteCollectionDedup:
         mock_upload_video.assert_called_once()
         assert result["video_id"] == "VID_AFTER_FAILOPEN"
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Issue #1052: post-upload manual checklist
+# ---------------------------------------------------------------------------
+
+
+class TestPostUploadManualChecklist:
+    """アップロード完了後に Studio 手動確認 checklist を表示する."""
+
+    def test_should_print_manual_checklist_for_new_upload(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_NEW",
+                "video_url": "https://www.youtube.com/watch?v=VID_NEW",
+                "upload_source": "new_upload",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" in messages
+        assert "AI コンテンツの開示設定" in messages
+        assert "収益化が ON" in messages
+        assert "https://studio.youtube.com/video/VID_NEW/edit" in messages
+
+    def test_should_not_print_manual_checklist_for_existing_video_reuse(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_EXISTING",
+                "video_url": "https://www.youtube.com/watch?v=VID_EXISTING",
+                "upload_source": "existing_video",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" not in messages
 
 
 # ---------------------------------------------------------------------------
