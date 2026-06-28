@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
 
 from youtube_automation.cli import doctor
+
+
+def _assert_no_bare_yt_channel_status(value: object) -> None:
+    text = json.dumps(value, ensure_ascii=False)
+    for match in re.finditer("yt-channel-status", text):
+        prefix = text[max(0, match.start() - len("uv run ")) : match.start()]
+        assert prefix == "uv run "
+
 
 # ---------------------------------------------------------------------------
 # テストヘルパー
@@ -216,6 +225,8 @@ class TestOAuthToken:
         r = doctor.check_oauth_token(tmp_path)
         assert r.status == "fail"
         assert r.next_action["kind"] == "ai-exec"
+        assert "uv run yt-channel-status" in r.next_action["cmd"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_valid(self, tmp_path):
         auth = tmp_path / "auth"
@@ -270,13 +281,13 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 2 system + 11 api + 1 channel + 2 data + 1 upload = 17
-        assert len(payload["checks"]) == 17
+        # 6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 21
+        assert len(payload["checks"]) == 21
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
             assert "category" in c
-            assert c["category"] in ("system", "api", "channel", "data", "upload")
+            assert c["category"] in ("bootstrap", "api", "channel", "data", "upload")
 
     def test_human_output(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
@@ -385,6 +396,193 @@ class TestCheckChannelConfig:
         doctor.check_channel_config(tmp_path)
 
         assert "CHANNEL_DIR" not in os.environ
+
+
+# ---------------------------------------------------------------------------
+# bootstrap checks
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapChecks:
+    def test_check_uv_ok(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda cmd: "/usr/local/bin/uv" if cmd == "uv" else None)
+        r = doctor.check_uv()
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_check_uv_missing_is_fail(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda cmd: None)
+        r = doctor.check_uv()
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["kind"] == "human"
+
+    def test_uv_project_missing_is_fail_with_uv_init(self, tmp_path):
+        r = doctor.check_uv_project(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["cmd"] == "uv init"
+
+    def test_uv_project_not_a_file_is_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").mkdir()
+        r = doctor.check_uv_project(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "ファイルではない" in r.message
+
+    def test_uv_project_present_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+        r = doctor.check_uv_project(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_automation_package_missing_pyproject_is_fail_with_uv_init(self, tmp_path):
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["cmd"] == "uv init"
+
+    def test_automation_package_missing_dependency_is_fail_with_uv_add(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["requests>=2"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "uv add" in r.next_action["cmd"]
+
+    def test_automation_package_dependency_name_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["youtube-channels-automation>=5"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_automation_package_similar_name_is_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["youtube-channels-automation-extra>=1"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "uv add" in r.next_action["cmd"]
+
+    def test_automation_package_git_dependency_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation.git"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "ok"
+
+    def test_automation_package_self_project_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "youtube-channels-automation"\ndependencies = []\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_automation_package_invalid_toml_is_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[project\n", encoding="utf-8")
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+
+    def test_skills_synced_missing_is_fail_with_yt_skills_sync(self, tmp_path):
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
+
+    def test_skills_synced_requires_all_bundled_skills(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        setup_dir = tmp_path / ".claude" / "skills" / "setup"
+        setup_dir.mkdir(parents=True)
+        (setup_dir / "SKILL.md").write_text("# setup", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert ".claude/skills/channel-new/SKILL.md" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
+
+    def test_skills_synced_present_is_ok(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_skills_synced_legacy_onboard_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        for skill_name in ["setup", "onboard"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 onboard skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
+    def test_skills_synced_reports_missing_bundled_skill(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        skill_dir = tmp_path / ".claude" / "skills" / "wf-new"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# wf-new", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert ".claude/skills/setup/SKILL.md" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
+
+    def test_skills_synced_missing_agents_link_is_warn(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        skill_dir = tmp_path / ".claude" / "skills" / "setup"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# setup", encoding="utf-8")
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "warn"
+        assert r.category == "bootstrap"
+        assert r.next_action["kind"] == "human"
+
+    def test_skills_synced_wrong_agents_link_is_warn(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        skill_dir = tmp_path / ".claude" / "skills" / "setup"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# setup", encoding="utf-8")
+        wrong_target = tmp_path / "wrong-skills"
+        wrong_target.mkdir()
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(wrong_target)
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "warn"
+        assert r.category == "bootstrap"
+        assert r.next_action["kind"] == "human"
 
 
 # ---------------------------------------------------------------------------
@@ -710,6 +908,8 @@ class TestCheckUploadReady:
         assert r.status == "fail"
         assert r.next_action is not None
         assert r.next_action["kind"] == "ai-exec"
+        assert "uv run yt-channel-status" in r.next_action["cmd"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_token_parse_error_is_fail(self, tmp_path):
         """token.json が JSON として不正: fail."""
@@ -764,6 +964,8 @@ class TestCheckUploadReady:
         r = doctor.check_upload_ready(tmp_path)
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_channel_id_missing_key_is_fail(self, tmp_path):
         """meta.json に channel.channel_id キーがない: fail."""
@@ -785,6 +987,9 @@ class TestCheckUploadReady:
         # meta.json を書かない
         r = doctor.check_upload_ready(tmp_path)
         assert r.status == "fail"
+        assert r.message == "config/channel/meta.json が存在しない"
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
 
     def test_channel_id_fail_next_action_is_human(self, tmp_path):
         """channel_id 未設定時の next_action は human (取得コマンド案内)."""
@@ -793,6 +998,8 @@ class TestCheckUploadReady:
         r = doctor.check_upload_ready(tmp_path)
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_message_contains_all_issues_when_multiple(self, tmp_path):
         """scope 不足と channel_id 未設定が同時の場合、message に両方の事由が含まれる."""
@@ -865,11 +1072,11 @@ class TestUploadRequiredScopes:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_17_checks(self, monkeypatch, tmp_path):
-        """2 system + 11 api + 1 channel + 2 data + 1 upload = 計 17 件."""
+    def test_returns_21_checks(self, monkeypatch, tmp_path):
+        """6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 計 21 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 17
+        assert len(results) == 21
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -879,29 +1086,33 @@ class TestRunAllChecksExtended:
         assert len(api_results) == 11
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):
-        """新規 4 check (channel_config / analytics_report / benchmark_data / upload_ready) が含まれる."""
+        """bootstrap / channel / data / upload の check が含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         ids = {r.id for r in results}
+        assert "uv" in ids
+        assert "uv_project" in ids
+        assert "automation_package" in ids
+        assert "skills_synced" in ids
         assert "channel_config" in ids
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
         assert "upload_ready" in ids
 
-    def test_category_order_system_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
-        """runway 順序: system → api → channel → data → upload."""
+    def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
+        """runway 順序: bootstrap → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         categories = [r.category for r in results]
 
-        last_system = max(i for i, c in enumerate(categories) if c == "system")
+        last_bootstrap = max(i for i, c in enumerate(categories) if c == "bootstrap")
         first_api = next(i for i, c in enumerate(categories) if c == "api")
         last_api = max(i for i, c in enumerate(categories) if c == "api")
         first_channel = next(i for i, c in enumerate(categories) if c == "channel")
         first_data = next(i for i, c in enumerate(categories) if c == "data")
         first_upload = next(i for i, c in enumerate(categories) if c == "upload")
 
-        assert last_system < first_api
+        assert last_bootstrap < first_api
         assert last_api < first_channel
         assert first_channel < first_data
         assert first_data < first_upload
@@ -913,6 +1124,13 @@ class TestRunAllChecksExtended:
         channel_results = [r for r in results if r.category == "channel"]
         assert len(channel_results) == 1
         assert channel_results[0].id == "channel_config"
+
+    def test_bootstrap_checks_are_tool_setup_checks(self, monkeypatch, tmp_path):
+        """bootstrap カテゴリはツール・automation 導入系 check のみ."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
+        assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
 
     def test_data_checks_are_analytics_report_and_benchmark_data(self, monkeypatch, tmp_path):
         """data カテゴリは analytics_report と benchmark_data の 2 件."""
@@ -937,31 +1155,35 @@ class TestRunAllChecksExtended:
 
 class TestRenderTableCategories:
     def test_all_five_category_labels_in_output(self, monkeypatch, tmp_path):
-        """render_table 出力に system / api / channel / data / upload のカテゴリラベルが含まれる."""
+        """render_table 出力に bootstrap / api / channel / data / upload のカテゴリラベルが含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
         lower = output.lower()
-        assert "system" in lower
+        assert "bootstrap" in lower
         assert "api" in lower
         assert "channel" in lower
         assert "data" in lower
         assert "upload" in lower
 
     def test_new_check_ids_appear_in_output(self, monkeypatch, tmp_path):
-        """render_table に新規 check の id が含まれる."""
+        """render_table に bootstrap / channel / data / upload の check id が含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
+        assert "uv" in output
+        assert "uv_project" in output
+        assert "automation_package" in output
+        assert "skills_synced" in output
         assert "channel_config" in output
         assert "analytics_report" in output
         assert "benchmark_data" in output
         assert "upload_ready" in output
 
     def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):
-        """出力内でのカテゴリ出現順: system → api → channel → data → upload."""
+        """出力内でのカテゴリ出現順: bootstrap → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)

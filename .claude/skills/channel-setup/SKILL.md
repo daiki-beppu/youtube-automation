@@ -150,11 +150,11 @@ Fail Fast 原則）。`channel-setup` 側で空欄を残さないことで、こ
 
 ### Step 6: GCP / Vertex AI ブートストラップ
 
-**`/onboard` を実行してください**。GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 作成までを AI 主導の wizard で進める。
+**`/setup` を実行してください**。GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 作成までを AI 主導の wizard で進める。
 
-事前に `yt-doctor --json` を叩き、`checks[]` のうち `category == "api"` の全 check が `ok` なら `/onboard` は完了済みのため本 step を skip して **Step 7 へ進む**（`channel` / `data` / `upload` カテゴリは config 生成後フェーズで満たす）。
+事前に `uv run yt-doctor --json` を叩き、`checks[]` のうち `category == "api"` の全 check が `ok` なら `/setup` は完了済みのため本 step を skip して **Step 7 へ進む**（`channel` / `upload` カテゴリは config 生成後フェーズで満たす）。
 
-旧: bootstrap.sh / terraform を手動で叩く手順は `references/gcp-bootstrap.md` に残してあるが、通常ルートは `/onboard` に統一する。
+旧: bootstrap.sh / terraform を手動で叩く手順は `references/gcp-bootstrap.md` に残してあるが、通常ルートは `/setup` に統一する。
 
 ### Step 7: 検証
 

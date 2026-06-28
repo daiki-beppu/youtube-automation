@@ -10,7 +10,7 @@ _WF_NEW_SKILL_MD = _SKILLS_DIR / "wf-new" / "SKILL.md"
 _COLLECTION_IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _FRESHNESS_RULES_MD = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
 _COLLECTION_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "collection-lifecycle.md"
-_ONBOARD_SKILL_MD = _SKILLS_DIR / "onboard" / "SKILL.md"
+_SETUP_SKILL_MD = _SKILLS_DIR / "setup" / "SKILL.md"
 _WORKFLOW_CHEATSHEET_MD = _REPO_ROOT / "docs" / "workflow-cheatsheet.md"
 
 _ANALYTICS_REPORT_GLOB = "reports/analysis_*.md"
@@ -180,9 +180,9 @@ def test_collection_lifecycle_documents_three_input_modes() -> None:
     assert "/analytics-collect` → `/analytics-analyze`" not in planning
 
 
-def test_onboard_benchmark_data_respects_analytics_mode_priority() -> None:
-    text = _read(_ONBOARD_SKILL_MD)
-    benchmark_data = _section(text, "### `benchmark_data` — ベンチマークデータ状態")
+def test_setup_benchmark_data_respects_analytics_mode_priority() -> None:
+    text = _read(_SETUP_SKILL_MD)
+    benchmark_data = _section(text, "#### `benchmark_data` — ベンチマークデータ状態")
 
     assert "fresh `reports/analysis_*.md` がある → benchmark の有無に関係なく analytics mode" in benchmark_data
     assert "`reports/analysis_*.md` が無く、`data/benchmark_*.json` がある → benchmark fallback mode" in benchmark_data

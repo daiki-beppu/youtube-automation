@@ -1,4 +1,4 @@
-"""yt-doctor system カテゴリ (ffmpeg/ffprobe) の単体テスト"""
+"""yt-doctor bootstrap カテゴリ (ffmpeg/ffprobe) の単体テスト"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ class TestCheckFfmpeg:
         monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/local/bin/{cmd}" if cmd == "ffmpeg" else None)
         r = doctor.check_ffmpeg()
         assert r.status == "ok"
-        assert r.category == "system"
+        assert r.category == "bootstrap"
         assert r.id == "ffmpeg"
         assert "/usr/local/bin/ffmpeg" in r.message
 
@@ -26,7 +26,7 @@ class TestCheckFfmpeg:
         monkeypatch.setattr("shutil.which", lambda cmd: None)
         r = doctor.check_ffmpeg()
         assert r.status == "fail"
-        assert r.category == "system"
+        assert r.category == "bootstrap"
         assert r.id == "ffmpeg"
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
@@ -45,7 +45,7 @@ class TestCheckFfprobe:
         monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/local/bin/{cmd}" if cmd == "ffprobe" else None)
         r = doctor.check_ffprobe()
         assert r.status == "ok"
-        assert r.category == "system"
+        assert r.category == "bootstrap"
         assert r.id == "ffprobe"
         assert "/usr/local/bin/ffprobe" in r.message
 
@@ -54,7 +54,7 @@ class TestCheckFfprobe:
         monkeypatch.setattr("shutil.which", lambda cmd: None)
         r = doctor.check_ffprobe()
         assert r.status == "fail"
-        assert r.category == "system"
+        assert r.category == "bootstrap"
         assert r.id == "ffprobe"
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
@@ -107,12 +107,12 @@ class TestSystemChecksCombinations:
 
 
 # ---------------------------------------------------------------------------
-# run_all_checks に system カテゴリが含まれること
+# run_all_checks に bootstrap カテゴリが含まれること
 # ---------------------------------------------------------------------------
 
 
-class TestRunAllChecksWithSystem:
-    def test_system_checks_present(self, monkeypatch, tmp_path):
+class TestRunAllChecksWithBootstrap:
+    def test_bootstrap_checks_present(self, monkeypatch, tmp_path):
         """run_all_checks に ffmpeg / ffprobe が含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
@@ -120,58 +120,58 @@ class TestRunAllChecksWithSystem:
         assert "ffmpeg" in ids
         assert "ffprobe" in ids
 
-    def test_system_checks_count(self, monkeypatch, tmp_path):
-        """system カテゴリは ffmpeg + ffprobe の 2 件."""
+    def test_bootstrap_checks_count(self, monkeypatch, tmp_path):
+        """bootstrap カテゴリは ffmpeg + ffprobe + uv + uv project + automation + skills の 6 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        system_results = [r for r in results if r.category == "system"]
-        assert len(system_results) == 2
+        bootstrap_results = [r for r in results if r.category == "bootstrap"]
+        assert len(bootstrap_results) == 6
 
-    def test_total_checks_is_17(self, monkeypatch, tmp_path):
-        """2 system + 11 api + 1 channel + 2 data + 1 upload = 計 17 件."""
+    def test_total_checks_is_21(self, monkeypatch, tmp_path):
+        """6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 計 21 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 17
+        assert len(results) == 21
 
-    def test_system_before_api(self, monkeypatch, tmp_path):
-        """system カテゴリは api カテゴリより前に配置される."""
+    def test_bootstrap_before_api(self, monkeypatch, tmp_path):
+        """bootstrap カテゴリは api カテゴリより前に配置される."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         categories = [r.category for r in results]
 
-        last_system = max(i for i, c in enumerate(categories) if c == "system")
+        last_bootstrap = max(i for i, c in enumerate(categories) if c == "bootstrap")
         first_api = next(i for i, c in enumerate(categories) if c == "api")
-        assert last_system < first_api
+        assert last_bootstrap < first_api
 
 
 # ---------------------------------------------------------------------------
-# render_table / JSON 出力に system が含まれること
+# render_table / JSON 出力に bootstrap が含まれること
 # ---------------------------------------------------------------------------
 
 
-class TestSystemInOutput:
-    def test_system_category_in_table(self, monkeypatch, tmp_path):
-        """render_table 出力に system カテゴリラベルが含まれる."""
+class TestBootstrapInOutput:
+    def test_bootstrap_category_in_table(self, monkeypatch, tmp_path):
+        """render_table 出力に bootstrap カテゴリラベルが含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
-        assert "system" in output.lower()
+        assert "bootstrap" in output.lower()
         assert "ffmpeg" in output
         assert "ffprobe" in output
 
-    def test_system_category_in_json(self, monkeypatch, tmp_path, capsys):
-        """--json 出力に system カテゴリが含まれる."""
+    def test_bootstrap_category_in_json(self, monkeypatch, tmp_path, capsys):
+        """--json 出力に bootstrap カテゴリが含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         monkeypatch.setattr(doctor, "resolve_channel_dir", lambda t: tmp_path)
         doctor.main(["--json"])
         out = capsys.readouterr().out
         payload = json.loads(out)
         categories = {c["category"] for c in payload["checks"]}
-        assert "system" in categories
+        assert "bootstrap" in categories
 
-    def test_system_appears_first_in_table(self, monkeypatch, tmp_path):
-        """render_table で system が api より先に出現する."""
+    def test_bootstrap_appears_first_in_table(self, monkeypatch, tmp_path):
+        """render_table で bootstrap が api より先に出現する."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)

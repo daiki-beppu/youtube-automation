@@ -1,4 +1,4 @@
-"""yt-doctor: API 設定の状態診断 CLI (read-only)"""
+"""yt-doctor: ツール・API 設定の状態診断 CLI (read-only)"""
 
 from __future__ import annotations
 
@@ -9,9 +9,27 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
+
+from youtube_automation.cli.skills_sync import bundled_skill_names
+
+PYPROJECT_FILENAME = "pyproject.toml"
+CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
+AGENTS_SKILLS_LINK = Path(".agents") / "skills"
+SKILL_FILENAME = "SKILL.md"
+AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
+SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
+SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
+LEGACY_ONBOARD_SKILL = "onboard"
+
+BOOTSTRAP_CATEGORY = "bootstrap"
+API_CATEGORY = "api"
+CHANNEL_CATEGORY = "channel"
+DATA_CATEGORY = "data"
+UPLOAD_CATEGORY = "upload"
 
 REQUIRED_APIS = [
     "youtube.googleapis.com",
@@ -36,7 +54,7 @@ class CheckResult:
     id: str
     status: str  # ok / warn / fail / unknown
     message: str
-    category: str = "api"  # system / api / channel / data / upload
+    category: str = API_CATEGORY  # bootstrap / api / channel / data / upload
     next_action: Optional[dict] = None
 
 
@@ -87,6 +105,94 @@ def _project_id_for(channel_dir: Path) -> Optional[str]:
     return env.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or _adc_quota_project()
 
 
+def _project_table(pyproject_path: Path) -> dict[str, object]:
+    try:
+        data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError) as e:
+        raise ValueError(f"{pyproject_path} 読み込み失敗: {e}") from e
+
+    project = data.get("project")
+    if not isinstance(project, dict):
+        return {}
+    return project
+
+
+def _project_dependencies(project: dict[str, object]) -> list[str]:
+    dependencies = project.get("dependencies")
+    if not isinstance(dependencies, list):
+        return []
+    return [item for item in dependencies if isinstance(item, str)]
+
+
+def _project_name(project: dict[str, object]) -> Optional[str]:
+    name = project.get("name")
+    return name if isinstance(name, str) else None
+
+
+def _canonical_package_name(package_name: str) -> str:
+    return re.sub(r"[-_.]+", "-", package_name).lower()
+
+
+def _dependency_package_name(dependency: str) -> Optional[str]:
+    match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", dependency)
+    if not match:
+        return None
+    return _canonical_package_name(match.group(1))
+
+
+def _has_automation_dependency(dependencies: list[str]) -> bool:
+    return any(_dependency_package_name(dependency) == AUTOMATION_PACKAGE_NAME for dependency in dependencies)
+
+
+def _is_automation_project(project_name: Optional[str]) -> bool:
+    return project_name is not None and _canonical_package_name(project_name) == AUTOMATION_PACKAGE_NAME
+
+
+def _skills_sync_failure(message: str) -> CheckResult:
+    return CheckResult(
+        id="skills_synced",
+        status="fail",
+        category=BOOTSTRAP_CATEGORY,
+        message=message,
+        next_action={"kind": "ai-exec", "cmd": SKILLS_SYNC_CMD},
+    )
+
+
+def _skills_sync_prune_failure(message: str) -> CheckResult:
+    return CheckResult(
+        id="skills_synced",
+        status="fail",
+        category=BOOTSTRAP_CATEGORY,
+        message=message,
+        next_action={"kind": "ai-exec", "cmd": SKILLS_SYNC_PRUNE_CMD},
+    )
+
+
+def _skills_sync_warning(message: str) -> CheckResult:
+    return CheckResult(
+        id="skills_synced",
+        status="warn",
+        category=BOOTSTRAP_CATEGORY,
+        message=message,
+        next_action={
+            "kind": "human",
+            "instructions": (
+                f"{AGENTS_SKILLS_LINK} を {CLAUDE_SKILLS_DIR} へ向ける symlink として手動作成してください"
+            ),
+        },
+    )
+
+
+def _agents_skills_link_is_valid(channel_dir: Path, skills_dir: Path) -> bool:
+    link = channel_dir / AGENTS_SKILLS_LINK
+    if not link.is_symlink():
+        return False
+    try:
+        return link.resolve(strict=True) == skills_dir.resolve(strict=True)
+    except OSError:
+        return False
+
+
 # --- checks ---
 
 
@@ -96,7 +202,7 @@ def check_ffmpeg() -> CheckResult:
         return CheckResult(
             id="ffmpeg",
             status="fail",
-            category="system",
+            category=BOOTSTRAP_CATEGORY,
             message="ffmpeg が見つからない",
             next_action={
                 "kind": "human",
@@ -107,7 +213,7 @@ def check_ffmpeg() -> CheckResult:
                 ),
             },
         )
-    return CheckResult(id="ffmpeg", status="ok", category="system", message=f"ffmpeg found: {path}")
+    return CheckResult(id="ffmpeg", status="ok", category=BOOTSTRAP_CATEGORY, message=f"ffmpeg found: {path}")
 
 
 def check_ffprobe() -> CheckResult:
@@ -116,7 +222,7 @@ def check_ffprobe() -> CheckResult:
         return CheckResult(
             id="ffprobe",
             status="fail",
-            category="system",
+            category=BOOTSTRAP_CATEGORY,
             message="ffprobe が見つからない",
             next_action={
                 "kind": "human",
@@ -128,7 +234,116 @@ def check_ffprobe() -> CheckResult:
                 ),
             },
         )
-    return CheckResult(id="ffprobe", status="ok", category="system", message=f"ffprobe found: {path}")
+    return CheckResult(id="ffprobe", status="ok", category=BOOTSTRAP_CATEGORY, message=f"ffprobe found: {path}")
+
+
+def check_uv() -> CheckResult:
+    path = shutil.which("uv")
+    if not path:
+        return CheckResult(
+            id="uv",
+            status="fail",
+            category=BOOTSTRAP_CATEGORY,
+            message="uv が見つからない",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "https://docs.astral.sh/uv/getting-started/installation/ を参照して uv を install してください"
+                ),
+            },
+        )
+    return CheckResult(id="uv", status="ok", category=BOOTSTRAP_CATEGORY, message=f"uv found: {path}")
+
+
+def check_uv_project(channel_dir: Path) -> CheckResult:
+    pyproject_path = channel_dir / PYPROJECT_FILENAME
+    if not pyproject_path.exists():
+        return CheckResult(
+            id="uv_project",
+            status="fail",
+            category=BOOTSTRAP_CATEGORY,
+            message=f"{PYPROJECT_FILENAME} が無い",
+            next_action={"kind": "ai-exec", "cmd": "uv init"},
+        )
+    if not pyproject_path.is_file():
+        return CheckResult(
+            id="uv_project",
+            status="fail",
+            category=BOOTSTRAP_CATEGORY,
+            message=f"{PYPROJECT_FILENAME} がファイルではない",
+        )
+    return CheckResult(id="uv_project", status="ok", category=BOOTSTRAP_CATEGORY, message="uv project 初期化済み")
+
+
+def check_automation_package(channel_dir: Path) -> CheckResult:
+    pyproject_path = channel_dir / PYPROJECT_FILENAME
+    if not pyproject_path.is_file():
+        return CheckResult(
+            id="automation_package",
+            status="fail",
+            category=BOOTSTRAP_CATEGORY,
+            message=f"{PYPROJECT_FILENAME} が無いため automation パッケージを確認できない",
+            next_action={"kind": "ai-exec", "cmd": "uv init"},
+        )
+    try:
+        project = _project_table(pyproject_path)
+    except ValueError as e:
+        return CheckResult(
+            id="automation_package",
+            status="fail",
+            category=BOOTSTRAP_CATEGORY,
+            message=str(e),
+        )
+    dependencies = _project_dependencies(project)
+    if _is_automation_project(_project_name(project)):
+        return CheckResult(
+            id="automation_package",
+            status="ok",
+            category=BOOTSTRAP_CATEGORY,
+            message="automation パッケージ本体プロジェクト",
+        )
+    if not _has_automation_dependency(dependencies):
+        return CheckResult(
+            id="automation_package",
+            status="fail",
+            category=BOOTSTRAP_CATEGORY,
+            message="automation パッケージが pyproject.toml の dependencies に無い",
+            next_action={
+                "kind": "ai-exec",
+                "cmd": "uv add git+https://github.com/daiki-beppu/youtube-automation.git",
+            },
+        )
+    return CheckResult(
+        id="automation_package",
+        status="ok",
+        category=BOOTSTRAP_CATEGORY,
+        message="automation パッケージ導入済み",
+    )
+
+
+def check_skills_synced(channel_dir: Path) -> CheckResult:
+    skills_dir = channel_dir / CLAUDE_SKILLS_DIR
+    bundled_skills = bundled_skill_names()
+    missing_skill_files = [
+        Path(skill_name) / SKILL_FILENAME
+        for skill_name in bundled_skills
+        if not (skills_dir / skill_name / SKILL_FILENAME).is_file()
+    ]
+    if missing_skill_files:
+        sample = ", ".join(str(CLAUDE_SKILLS_DIR / path) for path in missing_skill_files[:5])
+        return _skills_sync_failure(f"同梱 skill が未展開: {sample}")
+    if (skills_dir / LEGACY_ONBOARD_SKILL / SKILL_FILENAME).exists():
+        return _skills_sync_prune_failure(
+            f"旧 onboard skill が残存: {CLAUDE_SKILLS_DIR / LEGACY_ONBOARD_SKILL / SKILL_FILENAME}"
+        )
+    if not _agents_skills_link_is_valid(channel_dir, skills_dir):
+        return _skills_sync_warning(f"{AGENTS_SKILLS_LINK} が {CLAUDE_SKILLS_DIR} を指す symlink になっていない")
+    return CheckResult(
+        id="skills_synced",
+        status="ok",
+        category=BOOTSTRAP_CATEGORY,
+        message=f"skills synced ({len(bundled_skills)} bundled skills)",
+    )
 
 
 def check_gcloud() -> CheckResult:
@@ -480,7 +695,7 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
             message=f"{path} が無い",
             next_action={
                 "kind": "ai-exec",
-                "cmd": "yt-channel-status を 1 回叩くと初回認証フロー (loopback redirect) が発火する",
+                "cmd": "uv run yt-channel-status を 1 回叩くと初回認証フロー (loopback redirect) が発火する",
             },
         )
     try:
@@ -506,7 +721,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="channel_config",
             status="fail",
-            category="channel",
+            category=CHANNEL_CATEGORY,
             message="config/channel/ ディレクトリが存在しない (新規チャンネル)",
             next_action={
                 "kind": "human",
@@ -528,14 +743,14 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="channel_config",
             status="ok",
-            category="channel",
+            category=CHANNEL_CATEGORY,
             message="config/channel/ ロード成功",
         )
     except ConfigError as e:
         return CheckResult(
             id="channel_config",
             status="fail",
-            category="channel",
+            category=CHANNEL_CATEGORY,
             message=f"config/channel/ ロード失敗: {e}",
             next_action={
                 "kind": "human",
@@ -556,30 +771,28 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="analytics_report",
             status="fail",
-            category="data",
+            category=DATA_CATEGORY,
             message=(
                 "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
             ),
             next_action={
                 "kind": "human",
-                "instructions": (
-                    "/analytics-analyze を再実行してください。"
-                    "必要なら先に /analytics-collect で最新データを収集してください"
-                ),
+                "instructions": "/analytics-analyze を再実行してください（必要なら先に /analytics-collect）",
             },
         )
+
     if input_mode.report_count > 0:
         return CheckResult(
             id="analytics_report",
             status="ok",
-            category="data",
+            category=DATA_CATEGORY,
             message=f"reports/analysis_*.md {input_mode.report_count} 件存在 ({input_mode.mode})",
         )
 
     return CheckResult(
         id="analytics_report",
         status="ok",
-        category="data",
+        category=DATA_CATEGORY,
         message=f"reports/analysis_*.md 未生成。/wf-new は {input_mode.mode} で開始可能",
     )
 
@@ -619,15 +832,15 @@ def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
 def _matching_files(directory: Path, pattern: str) -> list[Path]:
     if not directory.is_dir():
         return []
-    return [path for path in directory.glob(pattern) if path.is_file()]
+    return sorted(path for path in directory.glob(pattern) if path.is_file())
 
 
-def _latest_filename_date(paths: list[Path]) -> Optional[tuple[int, Path]]:
-    dated_paths: list[tuple[int, Path]] = []
+def _latest_filename_date(paths: list[Path]) -> Optional[tuple[str, Path]]:
+    dated_paths: list[tuple[str, Path]] = []
     for path in paths:
         match = re.search(r"(\d{8})", path.name)
         if match:
-            dated_paths.append((int(match.group(1)), path))
+            dated_paths.append((match.group(1), path))
     if not dated_paths:
         return None
     return max(dated_paths, key=lambda item: item[0])
@@ -639,7 +852,7 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="benchmark_data",
             status="ok",
-            category="data",
+            category=DATA_CATEGORY,
             message=f"data/benchmark_*.json {input_mode.benchmark_count} 件存在 ({input_mode.mode} 対応)",
         )
 
@@ -647,7 +860,7 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="benchmark_data",
             status="ok",
-            category="data",
+            category=DATA_CATEGORY,
             message=(
                 "data/benchmark_*.json 未生成。analytics mode では "
                 "/collection-ideate が /benchmark の鮮度確認・必要時更新を扱う"
@@ -657,7 +870,7 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
     return CheckResult(
         id="benchmark_data",
         status="ok",
-        category="data",
+        category=DATA_CATEGORY,
         message=f"data/benchmark_*.json 未生成。/wf-new は {input_mode.mode} で開始可能",
     )
 
@@ -669,11 +882,11 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="upload_ready",
             status="fail",
-            category="upload",
+            category=UPLOAD_CATEGORY,
             message="auth/token.json が存在しない",
             next_action={
                 "kind": "ai-exec",
-                "cmd": "yt-channel-status を実行して OAuth 認証を完了してください",
+                "cmd": "uv run yt-channel-status を実行して OAuth 認証を完了してください",
             },
         )
 
@@ -683,7 +896,7 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="upload_ready",
             status="fail",
-            category="upload",
+            category=UPLOAD_CATEGORY,
             message=f"token.json 読み込み失敗: {e}",
         )
 
@@ -719,7 +932,7 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="upload_ready",
             status="ok",
-            category="upload",
+            category=UPLOAD_CATEGORY,
             message=f"upload 必須 scope 充足, channel_id 設定済み ({channel_id})",
         )
 
@@ -728,12 +941,12 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="upload_ready",
             status="fail",
-            category="upload",
+            category=UPLOAD_CATEGORY,
             message="; ".join(issues),
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "token.json を削除して `yt-channel-status` で再認証し、"
+                    "token.json を削除して `uv run yt-channel-status` で再認証し、"
                     "youtube / youtube.force-ssl scope を含む OAuth 同意で取得し直してください"
                 ),
             },
@@ -742,13 +955,13 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
     return CheckResult(
         id="upload_ready",
         status="fail",
-        category="upload",
+        category=UPLOAD_CATEGORY,
         message="; ".join(issues),
         next_action={
             "kind": "human",
             "instructions": (
                 "config/channel/meta.json の channel.channel_id に YouTube チャンネル ID を設定してください。"
-                "`yt-channel-status` でチャンネル ID を確認できます。"
+                "`uv run yt-channel-status` でチャンネル ID を確認できます。"
             ),
         },
     )
@@ -758,6 +971,10 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
     return [
         check_ffmpeg(),
         check_ffprobe(),
+        check_uv(),
+        check_uv_project(channel_dir),
+        check_automation_package(channel_dir),
+        check_skills_synced(channel_dir),
         check_gcloud(),
         check_gcloud_account(),
         check_gcp_project(channel_dir),
@@ -896,7 +1113,7 @@ def run_accounts(search_root: Path, as_json: bool) -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(prog="yt-doctor", description="API 設定の状態診断")
+    parser = argparse.ArgumentParser(prog="yt-doctor", description="ツール・API 設定の状態診断")
     sub = parser.add_subparsers(dest="command")
 
     # default (no subcommand): 従来の診断

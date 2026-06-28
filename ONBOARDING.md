@@ -56,7 +56,7 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 
 ### 2.3 OAuth セットアップ
 
-**Claude Code 上で `/onboard` を実行する**。AI が `yt-doctor` で API 設定の状態を診断し、GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 配置まで wizard で誘導する。
+**Claude Code 上で `/setup` を実行する**。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 配置まで wizard で誘導する。
 
 `gcloud auth login` / `gcloud auth application-default login` / Google Cloud Console での OAuth クライアント ID 作成の 3 ステップだけは PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外 (プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・トークン取得など) は AI が gcloud を直接 Bash で実行する。
 
@@ -69,16 +69,16 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 新しい YouTube チャンネルを 1 本立ち上げるときの **5 スキル連携**。Claude Code 上で 1 ステップずつ実行する。
 
 ```
-/onboard           → Phase 0: API 設定 (GCP + OAuth) を AI 主導で完結
+/setup             → Phase 0: ツール導入 + API 設定 (GCP + OAuth) を AI 主導で完結
 /channel-new       → Phase 1: ビジョン共有 + 競合発掘 + 独立リポジトリ作成
 /channel-research  → Phase 2: ベンチマーク徹底分析
 /channel-direction → Phase 3: 方向性ブレスト（差別化決定）
-/channel-setup     → Phase 4: テクニカルセットアップ（config 生成、Step 6 は /onboard 完了済みなら skip）
+/channel-setup     → Phase 4: テクニカルセットアップ（config 生成、Step 6 は /setup 完了済みなら skip）
 yt-skills sync                # Claude Code スキル群を新リポへ展開
 yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ展開
 ```
 
-`/onboard` は新規開設時だけでなく、別 PC への引っ越し、ADC 切れ、`client_secrets.json` の作り直しなど、API 設定だけを再整備したいときの単独入口としても使える。
+`/setup` は新規開設時だけでなく、別 PC への引っ越し、ADC 切れ、`client_secrets.json` の作り直しなど、ツール導入や API 設定だけを再整備したいときの単独入口としても使える。
 
 ### 3.1 `/channel-new`（競合発掘 + リポジトリ作成）
 
