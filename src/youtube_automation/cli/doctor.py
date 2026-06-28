@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,14 @@ class CheckResult:
     message: str
     category: str = "api"  # system / api / channel / data / upload
     next_action: Optional[dict] = None
+
+
+@dataclass(frozen=True)
+class _WfNewInputMode:
+    mode: str
+    report_count: int
+    benchmark_count: int
+    stale_report: bool
 
 
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
@@ -76,34 +85,6 @@ def _adc_quota_project() -> Optional[str]:
 def _project_id_for(channel_dir: Path) -> Optional[str]:
     env = _read_env_file(channel_dir / ".env")
     return env.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or _adc_quota_project()
-
-
-def _check_data_files(
-    *,
-    check_id: str,
-    directory: Path,
-    pattern: str,
-    empty_dir_message: str,
-    no_files_message: str,
-    ok_message: str,
-    next_action: dict,
-) -> CheckResult:
-    """data カテゴリ: ディレクトリ存在 + ファイル存在を共通診断する。"""
-    files = list(directory.glob(pattern)) if directory.is_dir() else []
-    if not files:
-        return CheckResult(
-            id=check_id,
-            status="fail",
-            category="data",
-            message=empty_dir_message if not directory.is_dir() else no_files_message,
-            next_action=next_action,
-        )
-    return CheckResult(
-        id=check_id,
-        status="ok",
-        category="data",
-        message=ok_message.format(count=len(files)),
-    )
 
 
 # --- checks ---
@@ -570,36 +551,114 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
 
 
 def check_analytics_report(channel_dir: Path) -> CheckResult:
-    return _check_data_files(
-        check_id="analytics_report",
-        directory=channel_dir / "reports",
-        pattern="analysis_*.md",
-        empty_dir_message="reports/ ディレクトリが存在しない",
-        no_files_message="reports/analysis_*.md が存在しない",
-        ok_message="reports/analysis_*.md {count} 件存在",
-        next_action={
-            "kind": "human",
-            "instructions": (
-                "/analytics-collect を実行してデータを収集し、"
-                "その後 /analytics-analyze でレポートを生成してください"
-                "（AI 推論コストのため手動実行が必要）"
+    input_mode = _resolve_wf_new_input_mode(channel_dir)
+    if input_mode.stale_report:
+        return CheckResult(
+            id="analytics_report",
+            status="fail",
+            category="data",
+            message=(
+                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
             ),
-        },
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/analytics-analyze を再実行してください。"
+                    "必要なら先に /analytics-collect で最新データを収集してください"
+                ),
+            },
+        )
+    if input_mode.report_count > 0:
+        return CheckResult(
+            id="analytics_report",
+            status="ok",
+            category="data",
+            message=f"reports/analysis_*.md {input_mode.report_count} 件存在 ({input_mode.mode})",
+        )
+
+    return CheckResult(
+        id="analytics_report",
+        status="ok",
+        category="data",
+        message=f"reports/analysis_*.md 未生成。/wf-new は {input_mode.mode} で開始可能",
     )
 
 
+def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
+    reports_dir = channel_dir / "reports"
+    data_dir = channel_dir / "data"
+    reports = _matching_files(reports_dir, "analysis_*.md")
+    benchmarks = _matching_files(data_dir, "benchmark_*.json")
+    data_files = _matching_files(data_dir, "analytics_data_*.json")
+
+    if reports:
+        latest_report = _latest_filename_date(reports)
+        latest_data = _latest_filename_date(data_files)
+        stale_report = latest_data is not None and (latest_report is None or latest_report[0] < latest_data[0])
+        return _WfNewInputMode(
+            mode="analytics mode",
+            report_count=len(reports),
+            benchmark_count=len(benchmarks),
+            stale_report=stale_report,
+        )
+    if benchmarks:
+        return _WfNewInputMode(
+            mode="benchmark fallback mode",
+            report_count=0,
+            benchmark_count=len(benchmarks),
+            stale_report=False,
+        )
+    return _WfNewInputMode(
+        mode="minimal mode",
+        report_count=0,
+        benchmark_count=0,
+        stale_report=False,
+    )
+
+
+def _matching_files(directory: Path, pattern: str) -> list[Path]:
+    if not directory.is_dir():
+        return []
+    return [path for path in directory.glob(pattern) if path.is_file()]
+
+
+def _latest_filename_date(paths: list[Path]) -> Optional[tuple[int, Path]]:
+    dated_paths: list[tuple[int, Path]] = []
+    for path in paths:
+        match = re.search(r"(\d{8})", path.name)
+        if match:
+            dated_paths.append((int(match.group(1)), path))
+    if not dated_paths:
+        return None
+    return max(dated_paths, key=lambda item: item[0])
+
+
 def check_benchmark_data(channel_dir: Path) -> CheckResult:
-    return _check_data_files(
-        check_id="benchmark_data",
-        directory=channel_dir / "docs" / "benchmarks",
-        pattern="*.md",
-        empty_dir_message="docs/benchmarks/ ディレクトリが存在しない",
-        no_files_message="docs/benchmarks/*.md が存在しない",
-        ok_message="docs/benchmarks/*.md {count} 件存在",
-        next_action={
-            "kind": "ai-exec",
-            "cmd": "/benchmark を実行してベンチマークデータを生成してください",
-        },
+    input_mode = _resolve_wf_new_input_mode(channel_dir)
+    if input_mode.benchmark_count > 0:
+        return CheckResult(
+            id="benchmark_data",
+            status="ok",
+            category="data",
+            message=f"data/benchmark_*.json {input_mode.benchmark_count} 件存在 ({input_mode.mode} 対応)",
+        )
+
+    if input_mode.mode == "analytics mode":
+        return CheckResult(
+            id="benchmark_data",
+            status="ok",
+            category="data",
+            message=(
+                "data/benchmark_*.json 未生成。analytics mode では "
+                "/collection-ideate が /benchmark の鮮度確認・必要時更新を扱う"
+            ),
+        )
+
+    return CheckResult(
+        id="benchmark_data",
+        status="ok",
+        category="data",
+        message=f"data/benchmark_*.json 未生成。/wf-new は {input_mode.mode} で開始可能",
     )
 
 
