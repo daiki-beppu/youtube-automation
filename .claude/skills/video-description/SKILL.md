@@ -124,6 +124,16 @@ skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き
 - `[総時間]`: `2+ Hours` / `1+ Hour` 等（切り捨て表記）
 - ユースケースはコレクションテーマに応じて調整
 
+タイトル案を決めたら、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する:
+
+```bash
+uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
+```
+
+- `タイトル全体` / `タイトル後半` / 長い `タイトル末尾` が過去タイトルと一致した warning は、アップロード直前まで持ち越さずこの段階で見直す
+- warning が無ければそのまま保存してよい
+- 最終 upload preflight は別途維持されるため、このチェックを省略しない
+
 ### タグ（YouTube タグ欄）
 
 `config/channel/content.json` の `tags.base` + `tags.themes.<theme>` を結合してタグリストを生成する。

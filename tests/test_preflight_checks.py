@@ -12,6 +12,7 @@ from youtube_automation.utils.preflight_checks import (
     check_required_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
+    check_title_duplicate_warnings,
     check_title_template_compliance,
     extract_descriptions_md_tags,
 )
@@ -340,3 +341,49 @@ class TestCheckTitleTemplateCompliance:
         for i, title in enumerate(self.EXISTING):
             others = [t for j, t in enumerate(self.EXISTING) if j != i]
             assert check_title_template_compliance(title, others, self.CFG) is None
+
+
+class TestCheckTitleDuplicateWarnings:
+    """企画/タイトル決定段階の早期 warning。upload preflight の fail 判定とは分離する。"""
+
+    CFG = {
+        "template": "{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
+        "separator": " | ",
+    }
+    EXISTING = [
+        "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
+        "Golden Hour Soul Flow | 4 Hours of Smooth City Funk",
+    ]
+
+    def test_full_duplicate_warns(self) -> None:
+        warnings = check_title_duplicate_warnings(
+            "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
+            self.EXISTING,
+            self.CFG,
+        )
+        assert len(warnings) == 1
+        assert "完全一致" in warnings[0]
+
+    def test_rhs_duplicate_warns_even_when_preflight_allows_it(self) -> None:
+        title = "Brand New Soul Funk Energy | 3 Hours of Soulful Retro Funk Grooves"
+        assert check_title_template_compliance(title, self.EXISTING, self.CFG) is None
+
+        warnings = check_title_duplicate_warnings(title, self.EXISTING, self.CFG)
+
+        assert len(warnings) == 1
+        assert "タイトル後半" in warnings[0]
+        assert "3 Hours of Soulful Retro Funk Grooves" in warnings[0]
+
+    def test_long_suffix_duplicate_without_separator_warns(self) -> None:
+        warnings = check_title_duplicate_warnings(
+            "Rainy Cafe Jazz for Work and Deep Focus",
+            ["Night Cafe Piano for Work and Deep Focus"],
+            {"template": "{theme} BGM"},
+        )
+        assert len(warnings) == 1
+        assert "タイトル末尾" in warnings[0]
+        assert "for Work and Deep Focus" in warnings[0]
+
+    def test_short_suffix_overlap_is_ignored(self) -> None:
+        warnings = check_title_duplicate_warnings("Rain Jazz BGM", ["Cafe Jazz BGM"], {}, min_suffix_chars=16)
+        assert warnings == []
