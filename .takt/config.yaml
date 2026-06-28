@@ -4,11 +4,3 @@
 # このリポジトリ固有の上書きは draft_pr / base_branch のみ。
 draft_pr: false
 base_branch: main
-
-# Codex usage limit のため一時的に全 persona を claude に変更
-provider: claude
-persona_providers:
-  coder:
-    provider: claude
-  planner:
-    provider: claude

@@ -20,6 +20,7 @@ from youtube_automation.cli.skills_sync import (
     _asset_root,
     _list_entries,
     build_parser,
+    bundled_skill_names,
 )
 
 
@@ -69,6 +70,10 @@ def test_asset_root_missing_source_raises(tmp_path: Path, monkeypatch: pytest.Mo
 def test_list_entries_skills_lists_directories_only(fake_repo: Path) -> None:
     root = _asset_root("skills")
     assert _list_entries(root) == ["channel-direction", "channel-research"]
+
+
+def test_bundled_skill_names_uses_skills_asset(fake_repo: Path) -> None:
+    assert bundled_skill_names() == ["channel-direction", "channel-research"]
 
 
 # ---------- cmd_list ----------

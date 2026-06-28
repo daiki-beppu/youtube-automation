@@ -62,9 +62,49 @@ gh repo create <repo-name> --private --source . --remote origin
 `gh` 未認証やリポジトリ作成を今行わない判断になった場合も、ローカル初期化と config 生成は止めない。
 ただし remote 作成を保留したことは作業メモに明記する。
 
-### Step 3: フルパッケージ config / ディレクトリ生成
+### Step 3: setup 完了確認
 
-`yt-channel-init` で `config/channel/*.json` だけでなく、初回運用に必要なファイル群を一括生成する。
+`/channel-new` は **`/setup` 完了済み** を前提に進める。`/setup` が automation パッケージ導入、`yt-skills sync`、GCP プロジェクト作成、API 有効化、ADC、OAuth クライアント ID 配置、OAuth token 生成までを担当する。
+
+AI は以下を実行して状態を確認する:
+
+```bash
+uv run yt-doctor --json
+```
+
+以下の check が `ok` でない場合は、ここで `/setup` を案内して停止する。認証とツール導入が完了するまで Step 4 以降へ進まない。
+
+- `ffmpeg`
+- `ffprobe`
+- `uv`
+- `uv_project`
+- `automation_package`
+- `skills_synced`
+- `gcloud`
+- `gcloud_account`
+- `gcp_project`
+- `billing_linked`
+- `apis_enabled`
+- `adc`
+- `adc_quota_project`
+- `iam_aiplatform_user`
+- `env_file`
+- `client_secrets`
+- `oauth_token`
+
+Step 4 の config 生成で解消するため、以下の config 未生成由来の fail は許容する:
+
+- `channel_config`: `config/channel/ ディレクトリが存在しない (新規チャンネル)`
+- `upload_ready`: `config/channel/meta.json が存在しない`
+- `upload_ready`: `channel.channel_id が未設定`
+
+`upload_ready` が `auth/token.json が存在しない`、`upload 必須 scope 不足`、`token.json 読み込み失敗` で fail している場合は `/setup` を案内して停止する。その他の fail / warn / unknown が残る場合は、表示された `next_action` に従って解消してから進む。
+
+seed fetch と競合ベンチマーク収集は YouTube Data API 認証に依存するため、既存チャンネルの token コピーで代替しない。
+
+### Step 4: フルパッケージ config / ディレクトリ生成
+
+`yt-channel-init` で `config/channel/*.json` と正準ディレクトリ構造を一括生成する:
 
 ```bash
 uv run yt-channel-init \
@@ -100,7 +140,7 @@ TTP 対象がこの時点で channel ID まで確定している場合は、`--b
 
 冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。
 
-### Step 4: TTP seed fetch と benchmark 反映
+### Step 5: TTP seed fetch と benchmark 反映
 
 Step 1 の TTP チャンネルを YouTube Data API で実データ化する。
 
@@ -120,7 +160,7 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
   --relationship "title-structure: ..., thumbnail-composition: ..., posting-cadence: ..."
 ```
 
-### Step 5: 競合発掘とベンチマーク収集
+### Step 6: 競合発掘とベンチマーク収集
 
 WebSearch から始めない。まず `yt-discover-competitors` を実行する。
 
@@ -142,7 +182,7 @@ uv run yt-benchmark-collect --force --keep-thumbnails -v
 uv run yt-benchmark-comments --min-views 5000
 ```
 
-### Step 6: 簡易ペルソナ導出
+### Step 7: 簡易ペルソナ導出
 
 新チャンネルには `/viewer-voice` の結果がまだないため、ここでは軽量版だけ作る。
 
@@ -169,7 +209,7 @@ docs/channel/personas/channel-new-persona.md
 
 本格的な見直しは公開後に `/audience-persona` で実行する。
 
-### Step 7: branding 初回反映
+### Step 8: branding 初回反映
 
 TTP 対象の `brandingSettings` を参照して、ローカル config の `youtube_channel` と `config/localizations.json` を確認する。
 
@@ -192,7 +232,7 @@ uv run yt-channel-settings push --apply
 
 `push` dry-run の内容をユーザーに見せ、`meta.json::channel.channel_id` が認証済みチャンネル ID と一致していることを確認してから `--apply` する。
 
-### Step 8: wf-new 接続前チェック
+### Step 9: wf-new 接続前チェック
 
 `/wf-new` へ進む前に、初回で止まりやすい前提を確認する。
 
@@ -221,7 +261,7 @@ uv run yt-channel-settings push --apply
 
 ## Cross References
 
-- `/setup` (`/onboard`) → 前提: GCP / OAuth / ADC 準備
+- `/setup` → 前提: automation ツール導入 + GCP / OAuth / ADC 準備
 - `/benchmark` → ベンチマーク収集の詳細
 - `/audience-persona` → 公開後の本格ペルソナ見直し
 - `/channel-research` → 収集済みデータの詳細分析

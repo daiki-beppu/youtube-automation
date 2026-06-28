@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
 
 from youtube_automation.cli import doctor
+
+
+def _assert_no_bare_yt_channel_status(value: object) -> None:
+    text = json.dumps(value, ensure_ascii=False)
+    for match in re.finditer("yt-channel-status", text):
+        prefix = text[max(0, match.start() - len("uv run ")) : match.start()]
+        assert prefix == "uv run "
+
 
 # ---------------------------------------------------------------------------
 # テストヘルパー
@@ -216,6 +225,8 @@ class TestOAuthToken:
         r = doctor.check_oauth_token(tmp_path)
         assert r.status == "fail"
         assert r.next_action["kind"] == "ai-exec"
+        assert "uv run yt-channel-status" in r.next_action["cmd"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_valid(self, tmp_path):
         auth = tmp_path / "auth"
@@ -270,13 +281,13 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 2 system + 11 api + 1 channel + 2 data + 1 upload = 17
-        assert len(payload["checks"]) == 17
+        # 6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 21
+        assert len(payload["checks"]) == 21
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
             assert "category" in c
-            assert c["category"] in ("system", "api", "channel", "data", "upload")
+            assert c["category"] in ("bootstrap", "api", "channel", "data", "upload")
 
     def test_human_output(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
@@ -388,54 +399,190 @@ class TestCheckChannelConfig:
 
 
 # ---------------------------------------------------------------------------
-# _check_data_files helper（DRY 違反再発防止）
+# bootstrap checks
 # ---------------------------------------------------------------------------
 
 
-class TestCheckDataFilesHelper:
-    """_check_data_files が3ブランチ（dir無し/file無し/ok）を共通化していることを検証する。
-
-    check_analytics_report / check_benchmark_data の共通ロジックが
-    helper に統合されていることを証明し、重複実装への退行を防ぐ。
-    """
-
-    def _call(self, tmp_path, extra_dir="", *, create_dir=False, files=None):
-        directory = tmp_path / extra_dir if extra_dir else tmp_path / "testdir"
-        if create_dir:
-            directory.mkdir(parents=True)
-        if files:
-            for name in files:
-                (directory / name).write_text("x", encoding="utf-8")
-        return doctor._check_data_files(
-            check_id="test_check",
-            directory=directory,
-            pattern="*.txt",
-            empty_dir_message="dir なし",
-            no_files_message="files なし",
-            ok_message="{count} 件",
-            next_action={"kind": "human", "instructions": "do something"},
-        )
-
-    def test_no_directory_returns_fail_with_empty_dir_message(self, tmp_path):
-        """ディレクトリが存在しない場合: empty_dir_message で fail."""
-        r = self._call(tmp_path)
-        assert r.status == "fail"
-        assert r.message == "dir なし"
-        assert r.category == "data"
-        assert r.id == "test_check"
-
-    def test_directory_exists_but_no_files_returns_fail_with_no_files_message(self, tmp_path):
-        """ディレクトリ存在・ファイルなし: no_files_message で fail."""
-        r = self._call(tmp_path, create_dir=True)
-        assert r.status == "fail"
-        assert r.message == "files なし"
-
-    def test_files_present_returns_ok_with_count(self, tmp_path):
-        """ファイルが存在: ok_message に件数を埋め込んで ok."""
-        r = self._call(tmp_path, create_dir=True, files=["a.txt", "b.txt"])
+class TestBootstrapChecks:
+    def test_check_uv_ok(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda cmd: "/usr/local/bin/uv" if cmd == "uv" else None)
+        r = doctor.check_uv()
         assert r.status == "ok"
-        assert r.message == "2 件"
-        assert r.next_action is None
+        assert r.category == "bootstrap"
+
+    def test_check_uv_missing_is_fail(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda cmd: None)
+        r = doctor.check_uv()
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["kind"] == "human"
+
+    def test_uv_project_missing_is_fail_with_uv_init(self, tmp_path):
+        r = doctor.check_uv_project(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["cmd"] == "uv init"
+
+    def test_uv_project_not_a_file_is_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").mkdir()
+        r = doctor.check_uv_project(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "ファイルではない" in r.message
+
+    def test_uv_project_present_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+        r = doctor.check_uv_project(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_automation_package_missing_pyproject_is_fail_with_uv_init(self, tmp_path):
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["cmd"] == "uv init"
+
+    def test_automation_package_missing_dependency_is_fail_with_uv_add(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["requests>=2"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "uv add" in r.next_action["cmd"]
+
+    def test_automation_package_dependency_name_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["youtube-channels-automation>=5"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_automation_package_similar_name_is_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["youtube-channels-automation-extra>=1"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "uv add" in r.next_action["cmd"]
+
+    def test_automation_package_git_dependency_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation.git"]\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "ok"
+
+    def test_automation_package_self_project_is_ok(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "youtube-channels-automation"\ndependencies = []\n',
+            encoding="utf-8",
+        )
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_automation_package_invalid_toml_is_fail(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[project\n", encoding="utf-8")
+        r = doctor.check_automation_package(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+
+    def test_skills_synced_missing_is_fail_with_yt_skills_sync(self, tmp_path):
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
+
+    def test_skills_synced_requires_all_bundled_skills(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        setup_dir = tmp_path / ".claude" / "skills" / "setup"
+        setup_dir.mkdir(parents=True)
+        (setup_dir / "SKILL.md").write_text("# setup", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert ".claude/skills/channel-new/SKILL.md" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
+
+    def test_skills_synced_present_is_ok(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_skills_synced_legacy_onboard_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        for skill_name in ["setup", "onboard"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 onboard skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
+    def test_skills_synced_reports_missing_bundled_skill(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        skill_dir = tmp_path / ".claude" / "skills" / "wf-new"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# wf-new", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert ".claude/skills/setup/SKILL.md" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
+
+    def test_skills_synced_missing_agents_link_is_warn(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        skill_dir = tmp_path / ".claude" / "skills" / "setup"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# setup", encoding="utf-8")
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "warn"
+        assert r.category == "bootstrap"
+        assert r.next_action["kind"] == "human"
+
+    def test_skills_synced_wrong_agents_link_is_warn(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
+        skill_dir = tmp_path / ".claude" / "skills" / "setup"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# setup", encoding="utf-8")
+        wrong_target = tmp_path / "wrong-skills"
+        wrong_target.mkdir()
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(wrong_target)
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "warn"
+        assert r.category == "bootstrap"
+        assert r.next_action["kind"] == "human"
 
 
 # ---------------------------------------------------------------------------
@@ -450,22 +597,32 @@ class TestCheckAnalyticsReport:
         assert r.id == "analytics_report"
         assert r.category == "data"
 
-    def test_no_reports_dir_is_fail(self, tmp_path):
-        """reports/ ディレクトリが存在しない: fail."""
+    def test_no_reports_dir_uses_minimal_mode(self, tmp_path):
+        """reports/ と data/benchmark が無い場合: minimal mode で ok."""
         r = doctor.check_analytics_report(tmp_path)
-        assert r.status == "fail"
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
 
-    def test_fail_next_action_is_human_not_ai_exec(self, tmp_path):
-        """fail 時の next_action は human (AI 推論コストのため ai-exec にしない)."""
+    def test_missing_report_has_no_next_action(self, tmp_path):
+        """analytics 不在は /wf-new readiness のブロッカーにしない."""
         r = doctor.check_analytics_report(tmp_path)
-        assert r.next_action is not None
-        assert r.next_action["kind"] == "human"
+        assert r.next_action is None
 
-    def test_reports_dir_exists_but_no_analysis_file_is_fail(self, tmp_path):
-        """reports/ 存在・analysis_*.md なし: fail."""
+    def test_reports_dir_exists_but_no_analysis_file_uses_minimal_mode(self, tmp_path):
+        """reports/ 存在・analysis_*.md なし: minimal mode で ok."""
         (tmp_path / "reports").mkdir()
         r = doctor.check_analytics_report(tmp_path)
-        assert r.status == "fail"
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_no_analysis_file_with_benchmark_uses_fallback_mode(self, tmp_path):
+        """analysis 不在 + data/benchmark_*.json あり: benchmark fallback mode で ok."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "benchmark fallback mode" in r.message
 
     def test_analysis_file_present_is_ok(self, tmp_path):
         """reports/analysis_YYYYMMDD.md が 1 件以上存在: ok."""
@@ -484,22 +641,91 @@ class TestCheckAnalyticsReport:
         r = doctor.check_analytics_report(tmp_path)
         assert r.status == "ok"
 
+    def test_stale_analysis_file_is_fail(self, tmp_path):
+        """latest data より古い analysis report は /wf-new readiness のブロッカー."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Old Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "fail"
+        assert "stale report" in r.message
+        assert r.next_action is not None
+        assert "/analytics-analyze" in r.next_action["instructions"]
+
+    def test_analysis_file_same_date_as_latest_data_is_ok(self, tmp_path):
+        """analysis report が latest data と同日なら stale ではない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+
+    def test_latest_analysis_file_controls_staleness(self, tmp_path):
+        """複数 report がある場合は最新 report 日付で stale を判定する."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Old", encoding="utf-8")
+        (reports_dir / "analysis_20240202.md").write_text("# Fresh", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+
     def test_non_analysis_file_does_not_count(self, tmp_path):
         """analysis_ プレフィックスがないファイルは対象外."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         (reports_dir / "other_report.md").write_text("# Other", encoding="utf-8")
         r = doctor.check_analytics_report(tmp_path)
-        assert r.status == "fail"
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
 
-    def test_fail_next_action_mentions_analytics_tools(self, tmp_path):
-        """fail 時の案内に /analytics-collect と /analytics-analyze が含まれる."""
+    def test_analysis_pattern_directory_does_not_count(self, tmp_path):
+        """analysis_*.md に一致するディレクトリは report 入力として扱わない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").mkdir()
         r = doctor.check_analytics_report(tmp_path)
-        action_str = json.dumps(r.next_action)
-        assert "analytics" in action_str.lower()
-        # 2 ステップ両方が言及されていること
-        assert "collect" in action_str.lower() or "analytics-collect" in action_str
-        assert "analyze" in action_str.lower() or "analytics-analyze" in action_str
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+        assert "analytics mode" not in r.message
+
+    def test_analytics_data_pattern_directory_does_not_make_report_stale(self, tmp_path):
+        """analytics_data_*.json に一致するディレクトリは stale 判定に使わない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").mkdir()
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+        assert r.next_action is None
+
+    def test_missing_report_does_not_force_analytics_tools(self, tmp_path):
+        """analytics 不在だけでは /analytics-collect / /analytics-analyze に誘導しない."""
+        r = doctor.check_analytics_report(tmp_path)
+        payload = json.dumps({"message": r.message, "next_action": r.next_action}, ensure_ascii=False)
+        assert "analytics-collect" not in payload
+        assert "analytics-analyze" not in payload
 
 
 # ---------------------------------------------------------------------------
@@ -514,53 +740,133 @@ class TestCheckBenchmarkData:
         assert r.id == "benchmark_data"
         assert r.category == "data"
 
-    def test_no_benchmarks_dir_is_fail(self, tmp_path):
-        """docs/benchmarks/ が存在しない: fail."""
-        r = doctor.check_benchmark_data(tmp_path)
-        assert r.status == "fail"
-
-    def test_fail_next_action_is_ai_exec(self, tmp_path):
-        """fail 時の next_action は ai-exec (/benchmark は AI 主導)."""
-        r = doctor.check_benchmark_data(tmp_path)
-        assert r.next_action is not None
-        assert r.next_action["kind"] == "ai-exec"
-
-    def test_fail_next_action_cmd_mentions_benchmark(self, tmp_path):
-        """fail 時の cmd に /benchmark が含まれる."""
-        r = doctor.check_benchmark_data(tmp_path)
-        cmd = r.next_action.get("cmd", "")
-        assert "benchmark" in cmd
-
-    def test_benchmarks_dir_exists_but_no_md_is_fail(self, tmp_path):
-        """docs/benchmarks/ 存在・.md ファイルなし: fail."""
-        (tmp_path / "docs" / "benchmarks").mkdir(parents=True)
-        r = doctor.check_benchmark_data(tmp_path)
-        assert r.status == "fail"
-
-    def test_benchmark_md_present_is_ok(self, tmp_path):
-        """docs/benchmarks/*.md が 1 件以上存在: ok."""
-        bm_dir = tmp_path / "docs" / "benchmarks"
-        bm_dir.mkdir(parents=True)
-        (bm_dir / "benchmark_2024.md").write_text("# Benchmark", encoding="utf-8")
+    def test_no_benchmark_data_uses_minimal_mode(self, tmp_path):
+        """data/benchmark_*.json が存在しない: minimal mode で ok."""
         r = doctor.check_benchmark_data(tmp_path)
         assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_missing_benchmark_has_no_next_action(self, tmp_path):
+        """benchmark 不在は /wf-new readiness のブロッカーにしない."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.next_action is None
+
+    def test_missing_benchmark_does_not_force_benchmark_skill(self, tmp_path):
+        """benchmark 不在だけでは /benchmark 実行に誘導しない."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.next_action is None
+        assert "cmd" not in json.dumps(r.__dict__, ensure_ascii=False)
+
+    def test_data_dir_exists_but_no_benchmark_file_uses_minimal_mode(self, tmp_path):
+        """data/ 存在・benchmark_*.json なし: minimal mode で ok."""
+        (tmp_path / "data").mkdir()
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_benchmark_json_present_is_ok(self, tmp_path):
+        """data/benchmark_*.json が 1 件以上存在: ok."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
+        (bm_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "benchmark fallback mode" in r.message
 
     def test_multiple_benchmark_files_is_ok(self, tmp_path):
-        """複数の .md ファイルが存在しても ok."""
-        bm_dir = tmp_path / "docs" / "benchmarks"
-        bm_dir.mkdir(parents=True)
-        (bm_dir / "ch_a.md").write_text("# A", encoding="utf-8")
-        (bm_dir / "ch_b.md").write_text("# B", encoding="utf-8")
+        """複数の benchmark_*.json ファイルが存在しても ok."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
+        (bm_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        (bm_dir / "benchmark_20240201.json").write_text("{}", encoding="utf-8")
         r = doctor.check_benchmark_data(tmp_path)
         assert r.status == "ok"
 
     def test_non_md_file_does_not_count(self, tmp_path):
-        """.csv や .txt など .md 以外のファイルは対象外."""
-        bm_dir = tmp_path / "docs" / "benchmarks"
-        bm_dir.mkdir(parents=True)
+        """benchmark_*.json 以外のファイルは対象外."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
         (bm_dir / "data.csv").write_text("col1,col2", encoding="utf-8")
         r = doctor.check_benchmark_data(tmp_path)
-        assert r.status == "fail"
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_benchmark_pattern_directory_does_not_count(self, tmp_path):
+        """benchmark_*.json に一致するディレクトリは benchmark 入力として扱わない."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
+        (bm_dir / "benchmark_20240101.json").mkdir()
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+        assert "benchmark fallback mode" not in r.message
+
+    def test_fresh_analysis_without_benchmark_stays_in_analytics_mode(self, tmp_path):
+        """fresh analysis がある場合、benchmark 不在でも minimal mode とは表示しない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+        assert "minimal mode" not in r.message
+
+
+class TestDataReadinessSummary:
+    def test_missing_analytics_and_benchmark_do_not_block_wf_new_readiness(self, tmp_path):
+        """analytics / benchmark 不在でも data カテゴリは minimal mode として next_check にならない."""
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["fail"] == 0
+        assert summary["warn"] == 0
+        assert summary["unknown"] == 0
+        assert summary["next_check_id"] is None
+        assert "minimal mode" in results[0].message
+        assert "minimal mode" in results[1].message
+
+    def test_missing_analytics_with_benchmark_uses_fallback_without_next_check(self, tmp_path):
+        """analytics 不在 + benchmark ありでも next_check は発生しない."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["next_check_id"] is None
+        assert "benchmark fallback mode" in results[0].message
+        assert "benchmark fallback mode" in results[1].message
+
+    def test_stale_analytics_report_blocks_wf_new_readiness(self, tmp_path):
+        """stale analytics report は data カテゴリの次アクションとして扱う."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Old Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["fail"] == 1
+        assert summary["next_check_id"] == "analytics_report"
+
+    def test_fresh_analytics_without_benchmark_has_single_input_mode(self, tmp_path):
+        """analytics_report と benchmark_data が同じ入力モード契約を参照する."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["next_check_id"] is None
+        assert "analytics mode" in results[0].message
+        assert "analytics mode" in results[1].message
+        assert "minimal mode" not in json.dumps([r.message for r in results], ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +908,8 @@ class TestCheckUploadReady:
         assert r.status == "fail"
         assert r.next_action is not None
         assert r.next_action["kind"] == "ai-exec"
+        assert "uv run yt-channel-status" in r.next_action["cmd"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_token_parse_error_is_fail(self, tmp_path):
         """token.json が JSON として不正: fail."""
@@ -656,6 +964,8 @@ class TestCheckUploadReady:
         r = doctor.check_upload_ready(tmp_path)
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_channel_id_missing_key_is_fail(self, tmp_path):
         """meta.json に channel.channel_id キーがない: fail."""
@@ -677,6 +987,9 @@ class TestCheckUploadReady:
         # meta.json を書かない
         r = doctor.check_upload_ready(tmp_path)
         assert r.status == "fail"
+        assert r.message == "config/channel/meta.json が存在しない"
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
 
     def test_channel_id_fail_next_action_is_human(self, tmp_path):
         """channel_id 未設定時の next_action は human (取得コマンド案内)."""
@@ -685,6 +998,8 @@ class TestCheckUploadReady:
         r = doctor.check_upload_ready(tmp_path)
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_message_contains_all_issues_when_multiple(self, tmp_path):
         """scope 不足と channel_id 未設定が同時の場合、message に両方の事由が含まれる."""
@@ -757,11 +1072,11 @@ class TestUploadRequiredScopes:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_17_checks(self, monkeypatch, tmp_path):
-        """2 system + 11 api + 1 channel + 2 data + 1 upload = 計 17 件."""
+    def test_returns_21_checks(self, monkeypatch, tmp_path):
+        """6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 計 21 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 17
+        assert len(results) == 21
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -771,29 +1086,33 @@ class TestRunAllChecksExtended:
         assert len(api_results) == 11
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):
-        """新規 4 check (channel_config / analytics_report / benchmark_data / upload_ready) が含まれる."""
+        """bootstrap / channel / data / upload の check が含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         ids = {r.id for r in results}
+        assert "uv" in ids
+        assert "uv_project" in ids
+        assert "automation_package" in ids
+        assert "skills_synced" in ids
         assert "channel_config" in ids
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
         assert "upload_ready" in ids
 
-    def test_category_order_system_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
-        """runway 順序: system → api → channel → data → upload."""
+    def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
+        """runway 順序: bootstrap → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         categories = [r.category for r in results]
 
-        last_system = max(i for i, c in enumerate(categories) if c == "system")
+        last_bootstrap = max(i for i, c in enumerate(categories) if c == "bootstrap")
         first_api = next(i for i, c in enumerate(categories) if c == "api")
         last_api = max(i for i, c in enumerate(categories) if c == "api")
         first_channel = next(i for i, c in enumerate(categories) if c == "channel")
         first_data = next(i for i, c in enumerate(categories) if c == "data")
         first_upload = next(i for i, c in enumerate(categories) if c == "upload")
 
-        assert last_system < first_api
+        assert last_bootstrap < first_api
         assert last_api < first_channel
         assert first_channel < first_data
         assert first_data < first_upload
@@ -805,6 +1124,13 @@ class TestRunAllChecksExtended:
         channel_results = [r for r in results if r.category == "channel"]
         assert len(channel_results) == 1
         assert channel_results[0].id == "channel_config"
+
+    def test_bootstrap_checks_are_tool_setup_checks(self, monkeypatch, tmp_path):
+        """bootstrap カテゴリはツール・automation 導入系 check のみ."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
+        assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
 
     def test_data_checks_are_analytics_report_and_benchmark_data(self, monkeypatch, tmp_path):
         """data カテゴリは analytics_report と benchmark_data の 2 件."""
@@ -829,31 +1155,35 @@ class TestRunAllChecksExtended:
 
 class TestRenderTableCategories:
     def test_all_five_category_labels_in_output(self, monkeypatch, tmp_path):
-        """render_table 出力に system / api / channel / data / upload のカテゴリラベルが含まれる."""
+        """render_table 出力に bootstrap / api / channel / data / upload のカテゴリラベルが含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
         lower = output.lower()
-        assert "system" in lower
+        assert "bootstrap" in lower
         assert "api" in lower
         assert "channel" in lower
         assert "data" in lower
         assert "upload" in lower
 
     def test_new_check_ids_appear_in_output(self, monkeypatch, tmp_path):
-        """render_table に新規 check の id が含まれる."""
+        """render_table に bootstrap / channel / data / upload の check id が含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
+        assert "uv" in output
+        assert "uv_project" in output
+        assert "automation_package" in output
+        assert "skills_synced" in output
         assert "channel_config" in output
         assert "analytics_report" in output
         assert "benchmark_data" in output
         assert "upload_ready" in output
 
     def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):
-        """出力内でのカテゴリ出現順: system → api → channel → data → upload."""
+        """出力内でのカテゴリ出現順: bootstrap → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
