@@ -29,6 +29,10 @@ interface ProgressMessage {
 async function loadContentScriptWithPlaylistRows(
   submittedIdsFromTracker: string[],
   playlistRowsResult: HTMLElement[] | Error,
+  overrides?: {
+    postDownloadedError?: Error;
+    postDownloadedRejectOnCall?: number;
+  },
 ) {
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
@@ -36,6 +40,7 @@ async function loadContentScriptWithPlaylistRows(
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
   const sentMessages: Array<{ type: string; payload: unknown }> = [];
+  let postDownloadedCallCount = 0;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const scrollAndMultiSelectByIdsMock = vi.fn((_ids: string[], _options: unknown) => {
     if (playlistRowsResult instanceof Error) {
@@ -55,6 +60,12 @@ async function loadContentScriptWithPlaylistRows(
       }
       if (type === "startDownload") {
         return Promise.resolve({ ok: true });
+      }
+      if (type === "postDownloaded" && overrides?.postDownloadedError) {
+        postDownloadedCallCount += 1;
+        if ((overrides.postDownloadedRejectOnCall ?? 1) === postDownloadedCallCount) {
+          return Promise.reject(overrides.postDownloadedError);
+        }
       }
       return Promise.resolve();
     }),
@@ -413,6 +424,54 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         download_path: "/Users/test/Downloads/regression.zip",
       },
     });
+  });
+
+  it("Given full collection run When ZIP 完了後の postDownloaded が失敗 Then ERROR で止めて resume state を保持する", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const currentSubmittedClipIds = ["clip-1", "clip-2"];
+    const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
+    const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
+      {
+        postDownloadedError: new Error("POST downloaded failed: 500 Internal Server Error"),
+        postDownloadedRejectOnCall: 2,
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+      },
+    });
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/regression.zip" },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          index: entries.length,
+          message: expect.stringContaining("POST downloaded failed"),
+        }),
+      ),
+    );
+    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(2);
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "collection-a",
+        failedIndex: entries.length,
+        total: entries.length,
+        submittedClipIds: currentSubmittedClipIds,
+        playlistExpectedClipCount: currentSubmittedClipIds.length,
+      }),
+    );
+    expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
   });
 
   it("Given full collection run の Download all が失敗 When run Then ERROR のまま終了する", async () => {

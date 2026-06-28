@@ -16,7 +16,7 @@ export const RESUME_STATE_KEY = "sunoResumeState";
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
- * Python 側は collection_serve.py の do_POST 内でインライン prefix/suffix マッチで処理する。 */
+ * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
 export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
 
 /** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
@@ -40,6 +40,11 @@ export const VERSION_ROUTE = "/version";
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
   return `${COLLECTIONS_ROUTE}/${id}${PROMPTS_ROUTE}`;
+}
+
+/** 個別 collection の download 完了通知 POST サブパス `/collections/<id>/downloaded` を組み立てる。 */
+export function collectionDownloadedRoute(id: string): string {
+  return DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(id));
 }
 
 /** Suno 同時生成キューの上限リクエスト数 (#816、実 DOM 検証: 同時 10 リクエスト)。 */

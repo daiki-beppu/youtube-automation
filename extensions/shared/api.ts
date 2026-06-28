@@ -4,9 +4,9 @@
 //   - HTTP 非 2xx で throw
 //   - 配列でない / 空配列の JSON で throw (fail-loud、silent 続行しない)
 import {
+  collectionDownloadedRoute,
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
-  DOWNLOADED_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
   PROMPTS_ROUTE,
@@ -528,7 +528,7 @@ export async function postDownloaded(
     throw new Error("file_count が正数の場合は download_path が必要です");
   }
   const token = await fetchServeToken(baseUrl);
-  const url = `${baseUrl}${DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(collectionId))}`;
+  const url = `${baseUrl}${collectionDownloadedRoute(collectionId)}`;
   let res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Serve-Token": token },

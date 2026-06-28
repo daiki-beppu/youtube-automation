@@ -250,7 +250,7 @@ def test_get_version_returns_server_and_min_extension_semvers(serve):
 
     assert set(body) == {"version", "min_extension_version"}
     assert re.match(r"^\d+\.\d+\.\d+$", body["version"])
-    assert re.match(r"^\d+\.\d+\.\d+$", body["min_extension_version"])
+    assert body["min_extension_version"] == "0.2.0"
 
 
 def test_get_version_sets_cors_header_for_extension_origin(serve):
@@ -918,6 +918,7 @@ def test_dir_mode_get_version_is_available_before_collection_routing(serve_dir, 
         body = json.loads(resp.read().decode("utf-8"))
 
     assert set(body) == {"version", "min_extension_version"}
+    assert body["min_extension_version"] == "0.2.0"
 
 
 def test_get_collection_prompts_returns_entries(serve_dir, tmp_path):
@@ -1863,10 +1864,10 @@ def test_post_downloaded_download_path_without_playlist_url_returns_400(serve_di
 
 def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
     """ZIP 内の単一ファイルがサイズ上限を超える場合、展開しない (#1217)。"""
-    import youtube_automation.scripts.collection_serve as cs
+    import youtube_automation.utils.suno_downloaded_artifacts as artifacts
 
     # テスト用に上限を 10 bytes に下げる（実際の 500MB は CI で生成不可）。
-    monkeypatch.setattr(cs, "_ZIP_MAX_SINGLE_FILE", 10)
+    monkeypatch.setattr(artifacts, "_ZIP_MAX_SINGLE_FILE", 10)
     coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
     zip_path = tmp_path / "bomb.zip"
     with zipfile.ZipFile(zip_path, "w") as zf:
@@ -2316,6 +2317,87 @@ def test_post_downloaded_malformed_prompts_returns_500_and_does_not_update_artif
     assert not (coll / "workflow-state.json").exists()
     music_dir = coll / "02-Individual-music"
     assert not music_dir.exists() or list(music_dir.iterdir()) == []
+
+
+def test_post_downloaded_zip_output_name_collision_returns_500_without_partial_music(serve_dir, tmp_path):
+    """ZIP 内の複数 entry が同じ出力名に解決される場合は上書きせず失敗する。"""
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = tmp_path / "collision.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("disc1/Song A.mp3", b"first")
+        zf.writestr("disc2/Song A.mp3", b"second")
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            {
+                "file_count": 2,
+                "expected_file_count": 2,
+                "format": "mp3",
+                "suno_playlist_url": "https://suno.com/playlist/collision",
+                "download_path": str(zip_path),
+            },
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+    assert not (coll / "workflow-state.json").exists()
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists() or list(music_dir.iterdir()) == []
+
+
+def test_post_downloaded_workflow_write_failure_rolls_back_music_and_workflow(serve_dir, tmp_path, monkeypatch):
+    """ZIP commit 後に workflow-state.json 更新が失敗しても music と workflow を元に戻す。"""
+    import youtube_automation.scripts.collection_serve as cs
+
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "legacy.mp3").write_bytes(b"legacy")
+    ws_path = coll / "workflow-state.json"
+    original_ws = {"planning": {"thumbnail": {"approved": True}}, "assets": {"music_downloaded": False}}
+    ws_path.write_text(json.dumps(original_ws, ensure_ascii=False), encoding="utf-8")
+    zip_path = _make_zip(tmp_path / "valid.zip", {"Song A.mp3": b"new-a", "Song A_1.mp3": b"new-b"})
+    original_atomic_json_write = cs._atomic_json_write
+
+    def fail_workflow_write(path: Path, data: dict, *, prefix: str) -> None:
+        if path.name == "workflow-state.json":
+            raise OSError("simulated workflow write failure")
+        original_atomic_json_write(path, data, prefix=prefix)
+
+    monkeypatch.setattr(cs, "_atomic_json_write", fail_workflow_write)
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            {
+                "file_count": 2,
+                "expected_file_count": 2,
+                "format": "mp3",
+                "suno_playlist_url": "https://suno.com/playlist/rollback",
+                "download_path": str(zip_path),
+            },
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+    assert sorted(path.name for path in music_dir.iterdir()) == ["legacy.mp3"]
+    assert (music_dir / "legacy.mp3").read_bytes() == b"legacy"
+    assert json.loads(ws_path.read_text(encoding="utf-8")) == original_ws
 
 
 def test_post_downloaded_partial_zip_keeps_download_archive(serve_dir, tmp_path):

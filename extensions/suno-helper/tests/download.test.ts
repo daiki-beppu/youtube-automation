@@ -154,4 +154,71 @@ describe("triggerDownloadAll", () => {
 
     expect(clicked).toEqual(["more", "download-all", "mp3", "confirm"]);
   });
+
+  it("DOM fixture: default deps は aria-label が無い Download all を text fallback で選ぶ", async () => {
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <button aria-label="More options">...</button>
+      <div data-context-menu="true">
+        <button>Download all</button>
+      </div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">MP3</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+    const downloadAll = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "Download all",
+    )!;
+    downloadAll.addEventListener("click", () => clicked.push("download-all"));
+    document
+      .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
+      .addEventListener("click", () => clicked.push("confirm"));
+
+    await triggerDownloadAll("mp3");
+
+    expect(clicked).toEqual(["download-all", "confirm"]);
+  });
+
+  it("DOM fixture: default deps は format button が disabled なら throw する", async () => {
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <button aria-label="More options">...</button>
+      <div data-context-menu="true"><button>Download all</button></div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full" disabled>MP3</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+
+    await expect(triggerDownloadAll("mp3")).rejects.toThrow(/形式 "mp3"/);
+  });
+
+  it("DOM fixture: default deps は format button が無ければ throw する", async () => {
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <button aria-label="More options">...</button>
+      <div data-context-menu="true"><button>Download all</button></div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">WAV</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+
+    await expect(triggerDownloadAll("mp3")).rejects.toThrow(/形式 "mp3"/);
+  });
+
+  it("DOM fixture: default deps は confirm button が無ければ throw する", async () => {
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <button aria-label="More options">...</button>
+      <div data-context-menu="true"><button>Download all</button></div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">MP3</button>
+      </div>
+    `;
+
+    await expect(triggerDownloadAll("mp3")).rejects.toThrow(/ダウンロード確認ボタン/);
+  });
 });

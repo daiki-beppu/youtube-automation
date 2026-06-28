@@ -238,6 +238,16 @@ describe("shared/api fetchCollections: 正常系", () => {
 
     await expect(fetchCollections(BASE_URL)).resolves.toEqual([]);
   });
+
+  it("Given expected_file_count が null または非負整数 When fetch する Then 値を保持する", async () => {
+    const rows = [
+      { ...SAMPLE_COLLECTIONS[0], expected_file_count: null },
+      { ...SAMPLE_COLLECTIONS[1], expected_file_count: 4 },
+    ];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => rows }));
+
+    await expect(fetchCollections(BASE_URL)).resolves.toEqual(rows);
+  });
 });
 
 describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
@@ -280,6 +290,19 @@ describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
 
     await expect(fetchCollections(BASE_URL)).rejects.toThrow(/pattern_count/);
   });
+
+  it.each([["4"], [false], [-1]])(
+    "Given expected_file_count=%s When fetch する Then fail-loud に throw する",
+    async (expectedFileCount) => {
+      mockFetch(() => ({
+        ok: true,
+        status: 200,
+        json: async () => [{ ...SAMPLE_COLLECTIONS[0], expected_file_count: expectedFileCount }],
+      }));
+
+      await expect(fetchCollections(BASE_URL)).rejects.toThrow(/expected_file_count/);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
