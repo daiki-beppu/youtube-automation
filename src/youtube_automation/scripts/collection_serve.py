@@ -489,7 +489,9 @@ def _expected_download_count(pattern_count: int | None, explicit_expected: int |
     Suno は 1 prompt につき 2 clip 生成するため、既定は prompt 数 * 2。
     explicit_expected は full download 件数以上のときだけ上書きとして使う。
     """
-    default_expected = pattern_count * _SUNO_CLIPS_PER_PROMPT if pattern_count is not None and pattern_count > 0 else None
+    default_expected = None
+    if pattern_count is not None and pattern_count > 0:
+        default_expected = pattern_count * _SUNO_CLIPS_PER_PROMPT
     if explicit_expected is None:
         return default_expected
     if default_expected is None or explicit_expected >= default_expected:
