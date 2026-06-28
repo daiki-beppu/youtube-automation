@@ -487,6 +487,48 @@ def _read_music_expected_file_count(coll_dir: Path) -> int | None:
     return None
 
 
+def _read_workflow_theme(coll_dir: Path) -> str | None:
+    """workflow-state.json から collection theme slug を読む。"""
+    ws_path = CollectionPaths(coll_dir).workflow_state_path
+    if not ws_path.is_file():
+        return None
+    try:
+        data = json.loads(ws_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    theme = data.get("theme")
+    return theme if isinstance(theme, str) and theme else None
+
+
+def _theme_from_collection_dir(coll_dir: Path) -> str:
+    """表示用 theme slug を返す。workflow-state を優先し、旧 collection_name は fallback。"""
+    workflow_theme = _read_workflow_theme(coll_dir)
+    if workflow_theme:
+        return workflow_theme
+    fallback = CollectionPaths(coll_dir).collection_name
+    return fallback[: -len(_COLLECTION_DIR_SUFFIX)] if fallback.endswith(_COLLECTION_DIR_SUFFIX) else fallback
+
+
+def _channel_from_collection_id(collection_id: str, theme: str) -> str | None:
+    """`<date>-<channel>-<theme>-collection` から channel を抽出する。"""
+    stripped = (
+        collection_id[: -len(_COLLECTION_DIR_SUFFIX)]
+        if collection_id.endswith(_COLLECTION_DIR_SUFFIX)
+        else collection_id
+    )
+    suffix = f"-{theme}"
+    if not theme or not stripped.endswith(suffix):
+        return None
+    date_plus_channel = stripped[: -len(suffix)]
+    parts = date_plus_channel.split("-")
+    if len(parts) < 2 or not parts[0].isdigit():
+        return None
+    channel = "-".join(parts[1:])
+    return channel or None
+
+
 def _read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | None:
     """suno-prompts.json の entry 数を読む。不在・破損時は default。"""
     prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
@@ -520,13 +562,18 @@ def build_collections_index(root: Path) -> list[dict]:
         expected_file_count = _read_music_expected_file_count(coll)
         expected_count = _expected_download_count(pattern_count, expected_file_count)
         status = _determine_status(has_prompts, pattern_count, downloaded_count, expected_file_count)
+        theme = _theme_from_collection_dir(coll)
+        channel = _channel_from_collection_id(coll.name, theme)
         entry = {
             "id": coll.name,
-            "name": CollectionPaths(coll).collection_name,
+            "name": theme,
             "status": status,
             "pattern_count": pattern_count,
             "downloaded_count": downloaded_count,
+            "theme": theme,
         }
+        if channel is not None:
+            entry["channel"] = channel
         if expected_count is not None:
             entry["expected_file_count"] = expected_count
         index.append(entry)
@@ -589,6 +636,8 @@ def _parse_downloaded_payload(payload: object) -> DownloadedPayload:
         raise DownloadedPayloadError("file_count must be a non-negative integer")
     if not isinstance(fmt, str) or fmt not in _VALID_DOWNLOAD_FORMATS:
         raise DownloadedPayloadError("format is invalid")
+    if file_count > 0 and download_path is None:
+        raise DownloadedPayloadError("download_path is required when file_count is positive")
     if expected_file_count is not None and (
         not isinstance(expected_file_count, int) or isinstance(expected_file_count, bool) or expected_file_count < 0
     ):

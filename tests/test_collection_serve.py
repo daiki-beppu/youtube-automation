@@ -530,7 +530,7 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
 # ---------------------------------------------------------------------------
 
 
-def _make_collection(planning: Path, dir_name: str, entries=None) -> Path:
+def _make_collection(planning: Path, dir_name: str, entries=None, *, theme: str | None = None) -> Path:
     """planning dir 配下に `<dir_name>/20-documentation/suno-prompts.json` を作る。
 
     `entries` が None のとき json を置かない（has_prompts=False のケース）。
@@ -540,6 +540,8 @@ def _make_collection(planning: Path, dir_name: str, entries=None) -> Path:
     docs.mkdir(parents=True)
     if entries is not None:
         (docs / "suno-prompts.json").write_text(json.dumps(entries), encoding="utf-8")
+    if theme is not None:
+        (coll / "workflow-state.json").write_text(json.dumps({"theme": theme}), encoding="utf-8")
     return coll
 
 
@@ -592,14 +594,16 @@ def test_build_collections_index_reports_status_and_pattern_count(tmp_path):
 def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
     """Given `<date>-<channel>-<theme>-collection` 形式の dir
     When build_collections_index を呼ぶ
-    Then id=dir 名そのまま / name=CollectionPaths.collection_name（日付＋チャンネル接頭辞除去）。
+    Then id=dir 名そのまま / name=theme / channel, theme を返す。
     """
     _make_collection(tmp_path, "20260601-clm-midnight-mood-collection", entries=[])
 
     row = build_collections_index(tmp_path)[0]
 
     assert row["id"] == "20260601-clm-midnight-mood-collection"
-    assert row["name"] == "midnight-mood-collection"
+    assert row["name"] == "midnight-mood"
+    assert row["theme"] == "midnight-mood"
+    assert row["channel"] == "clm"
 
 
 def test_build_collections_index_does_not_emit_playlist_name(tmp_path):
@@ -607,11 +611,18 @@ def test_build_collections_index_does_not_emit_playlist_name(tmp_path):
     When build_collections_index を呼ぶ
     Then playlist_name は返さない（#1216 BREAKING contract）。
     """
-    _make_collection(tmp_path, "20260601-soulful-grooves-wah-groove-collection", entries=[])
+    _make_collection(
+        tmp_path,
+        "20260601-soulful-grooves-wah-groove-collection",
+        entries=[],
+        theme="wah-groove",
+    )
 
     row = build_collections_index(tmp_path)[0]
 
     assert "playlist_name" not in row
+    assert row["channel"] == "soulful-grooves"
+    assert row["theme"] == "wah-groove"
 
 
 def test_build_collections_index_status_downloaded_when_music_files_sufficient(tmp_path):
@@ -802,10 +813,12 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
     by_id = {row["id"]: row for row in body}
     assert by_id["20260601-clm-aaa-collection"] == {
         "id": "20260601-clm-aaa-collection",
-        "name": "aaa-collection",
+        "name": "aaa",
         "status": "ready",
         "pattern_count": 1,
         "downloaded_count": 0,
+        "theme": "aaa",
+        "channel": "clm",
         "expected_file_count": 2,
     }
     assert by_id["20260602-clm-bbb-collection"]["status"] == "needs_prompts"
@@ -824,6 +837,7 @@ def test_get_collections_does_not_include_playlist_name_when_capture_enabled(ser
         planning,
         "20260601-soulful-grooves-wah-groove-collection",
         entries=[{"name": "A", "style": "s", "lyrics": ""}],
+        theme="wah-groove",
     )
     base = serve_dir(planning, playlist_capture=(channel_root, "soulful-grooves"))
 
@@ -832,6 +846,8 @@ def test_get_collections_does_not_include_playlist_name_when_capture_enabled(ser
         body = json.loads(resp.read().decode("utf-8"))
 
     assert "playlist_name" not in body[0]
+    assert body[0]["channel"] == "soulful-grooves"
+    assert body[0]["theme"] == "wah-groove"
 
 
 def test_dir_mode_get_version_is_available_before_collection_routing(serve_dir, tmp_path):
@@ -1016,7 +1032,7 @@ def test_post_downloaded_updates_workflow_state(serve_dir, tmp_path):
     )
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
-    payload = {"file_count": 5, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
@@ -1033,7 +1049,7 @@ def test_post_downloaded_updates_workflow_state(serve_dir, tmp_path):
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
     ws = json.loads(ws_path.read_text(encoding="utf-8"))
     assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
-    assert ws["assets"]["music_downloaded"] is True
+    assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
 
 
 def test_post_downloaded_unknown_collection_returns_404(serve_dir, tmp_path):
@@ -1042,7 +1058,7 @@ def test_post_downloaded_unknown_collection_returns_404(serve_dir, tmp_path):
     Then 404 を返す。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
@@ -1064,7 +1080,7 @@ def test_post_downloaded_traversal_returns_404(serve_dir, tmp_path, malicious_id
     Then 404 を返す。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
@@ -1085,7 +1101,7 @@ def test_post_downloaded_without_origin_returns_403(serve_dir, tmp_path):
     Then 403 を返す。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning)
     payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
@@ -1104,7 +1120,7 @@ def test_post_downloaded_invalid_json_returns_400(serve_dir, tmp_path):
     Then 400 を返す。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
 
@@ -1124,7 +1140,7 @@ def test_post_downloaded_missing_fields_returns_400(serve_dir, tmp_path):
     Then 400 を返す。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {"file_count": 1}  # format が欠落
@@ -1139,28 +1155,25 @@ def test_post_downloaded_missing_fields_returns_400(serve_dir, tmp_path):
     assert exc_info.value.code == 400
 
 
-def test_post_downloaded_without_playlist_url_succeeds(serve_dir, tmp_path):
-    """Given playlist URL なしの downloaded body
+def test_post_downloaded_positive_file_count_without_download_path_returns_400(serve_dir, tmp_path):
+    """Given file_count>0 だが download_path なしの downloaded body
     When POST /collections/<id>/downloaded を送る
-    Then 200 を返し music_downloaded を更新するが suno_playlist_url は作らない。
+    Then ZIP 展開成功に基づかない完了扱いを避けるため 400 を返す。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {"file_count": 1, "format": "mp3"}
 
-    with _post(
-        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-        payload,
-        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
-    ) as resp:
-        assert resp.status == 200
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
 
-    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
-    ws = json.loads(ws_path.read_text(encoding="utf-8"))
-    assert "suno_playlist_url" not in ws["planning"]["music"]
-    assert ws["assets"]["music_downloaded"] is True
+    assert exc_info.value.code == 400
 
 
 def test_post_downloaded_zero_file_count_does_not_set_music_downloaded(serve_dir, tmp_path):
@@ -1169,7 +1182,7 @@ def test_post_downloaded_zero_file_count_does_not_set_music_downloaded(serve_dir
     Then suno_playlist_url は設定されるが assets.music_downloaded は設定されない。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
@@ -1193,7 +1206,7 @@ def test_post_downloaded_zero_file_count_preserves_existing_music_downloaded(ser
     Then assets.music_downloaded=true を維持する。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
     ws_path.write_text(json.dumps({"assets": {"music_downloaded": True}}), encoding="utf-8")
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
@@ -1219,7 +1232,7 @@ def test_post_downloaded_idempotent_two_calls(serve_dir, tmp_path):
          既存キーが壊れない（冪等）。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
@@ -1235,8 +1248,15 @@ def test_post_downloaded_idempotent_two_calls(serve_dir, tmp_path):
     assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
     assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
 
-    # 2nd call: file_count=8 → music_downloaded=true、playlist URL は維持
-    payload_2 = {"file_count": 8, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    zip_path = _make_zip(tmp_path / "download.zip", {"A.mp3": b"a", "A_1.mp3": b"b"})
+    # 2nd call: ZIP 展開成功 → music_downloaded=true、playlist URL は維持
+    payload_2 = {
+        "file_count": 2,
+        "expected_file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
     with _post(url, payload_2, headers=auth_headers) as resp:
         assert resp.status == 200
 
@@ -1251,13 +1271,23 @@ def test_post_downloaded_idempotent_repeated_calls_do_not_break(serve_dir, tmp_p
     Then 毎回 200 を返し、workflow-state.json の内容は一貫して正しい。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     url = f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded"
-    payload = {"file_count": 5, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/xyz"}
+    zip_path = _make_zip(tmp_path / "download.zip", {"A.mp3": b"a", "A_1.mp3": b"b"})
+    payload = {
+        "file_count": 2,
+        "expected_file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/xyz",
+        "download_path": str(zip_path),
+    }
 
-    for _ in range(3):
+    for i in range(3):
+        if i > 0:
+            zip_path = _make_zip(tmp_path / f"download-{i}.zip", {"A.mp3": b"a", "A_1.mp3": b"b"})
+            payload["download_path"] = str(zip_path)
         with _post(url, payload, headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token}) as resp:
             assert resp.status == 200
 
@@ -1273,7 +1303,7 @@ def test_post_downloaded_preserves_existing_workflow_state(serve_dir, tmp_path):
     Then 既存キーが保持されつつ新しいキーが追加される（deep merge）。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
     ws_path.write_text(
         json.dumps({"planning": {"thumbnail": {"approved": True}}, "meta": {"version": 1}}),
@@ -1281,7 +1311,14 @@ def test_post_downloaded_preserves_existing_workflow_state(serve_dir, tmp_path):
     )
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
-    payload = {"file_count": 3, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/merge"}
+    zip_path = _make_zip(tmp_path / "download.zip", {"A.mp3": b"a", "A_1.mp3": b"b"})
+    payload = {
+        "file_count": 2,
+        "expected_file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/merge",
+        "download_path": str(zip_path),
+    }
 
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
@@ -2014,7 +2051,7 @@ def test_post_downloaded_valid_token_succeeds(serve_dir, tmp_path):
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
-    payload = {"file_count": 3, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",

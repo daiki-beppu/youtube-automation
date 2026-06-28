@@ -122,9 +122,12 @@ popup 上部に進捗が出る:
 
 1. Suno 側で対象 playlist に collection の全 clip が紐付いている
 2. clip 数 = collection の entry 数（数が合わなければ resume で残りを回す）
-3. ZIP ダウンロードが完了し、Chrome のダウンロードフォルダに ZIP ファイルが存在する
-4. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
-5. `workflow-state.json` の `assets.music_downloaded` が `true` になっている（DL 完了時）
+3. `02-Individual-music/` に mp3/m4a/wav が配置されている
+4. `GET /collections` で対象 collection の `status` が `downloaded`、`downloaded_count` が期待 clip 数以上になっている
+5. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
+6. `workflow-state.json` の `assets.music_downloaded` が `true` になっている（DL 完了時）
+
+成功処理後、ユーザーの Downloads 配下にある Suno ZIP は自動削除されることがある。完了判定は ZIP の存在ではなく、展開済み音声ファイルと `workflow-state.json` を見る。
 
 ### Step 8. 中断時
 

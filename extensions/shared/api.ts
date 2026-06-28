@@ -51,6 +51,8 @@ export interface CollectionSummary {
   status: CollectionStatus;
   pattern_count: number | null;
   downloaded_count: number;
+  channel?: string;
+  theme?: string;
   expected_file_count?: number | null;
 }
 

@@ -173,7 +173,10 @@ export function useSunoRunner(): RunnerState {
     if (!selected) {
       return undefined;
     }
-    const theme = selected.name.replace(/-collection$/, "");
+    if (selected.channel && selected.theme) {
+      return `${selected.channel} | ${selected.theme}`;
+    }
+    const theme = (selected.theme ?? selected.name).replace(/-collection$/, "");
     return extractPlaylistName(selected.id, theme);
   }, [selectedCollection]);
   const playlistName = derivedPlaylistName ?? restoredPlaylistName;

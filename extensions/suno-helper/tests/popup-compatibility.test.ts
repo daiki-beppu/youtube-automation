@@ -203,7 +203,9 @@ describe("Suno popup compatibility check", () => {
         jsonResponse(200, [
           {
             id: "20260601-clm-theme-a-collection",
-            name: "theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
             status: "ready",
             pattern_count: 1,
             downloaded_count: 0,
@@ -244,6 +246,49 @@ describe("Suno popup compatibility check", () => {
       indices: undefined,
       submittedClipIds: undefined,
       playlistExpectedClipCount: undefined,
+    });
+  });
+
+  it("dir mode の channel/theme から multi-word channel の playlist 名を導出する", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-soulful-grooves-wah-groove-collection",
+            name: "wah-groove",
+            channel: "soulful-grooves",
+            theme: "wah-groove",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+
+    await waitFor(() => {
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
+        "run",
+        expect.objectContaining({
+          playlistName: "soulful-grooves | wah-groove",
+        }),
+      );
     });
   });
 
