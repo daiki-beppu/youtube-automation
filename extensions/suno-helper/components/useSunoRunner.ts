@@ -98,8 +98,7 @@ async function fetchCollectionEntries(baseUrl: string, collectionId: string | nu
 export function useSunoRunner(): RunnerState {
   const [url, setUrlState] = useState("");
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
-  const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  const [selectedCollectionId, setSelectedCollectionId] = useState("");
+  const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
@@ -131,6 +130,40 @@ export function useSunoRunner(): RunnerState {
   const [resumeCheckedAt, setResumeCheckedAt] = useState<number | null>(null);
   // 一度承認/却下したバナーは再表示しない（同一 popup セッション内）。
   const [resumeDismissed, setResumeDismissed] = useState(false);
+
+  const resumableCollectionId = useMemo(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, persistedResume.collectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.collectionId;
+    }
+    return undefined;
+  }, [persistedResume, resumeCheckedAt]);
+
+  const resolveVisibleCollections = useCallback(
+    (source: CollectionSummary[], currentSelectedId: string) => {
+      const visibleCollections = visiblePromptCollections(
+        source,
+        resumableCollectionId ? [resumableCollectionId] : [],
+      );
+      const preferredSelectedId = currentSelectedId || resumableCollectionId || "";
+      const nextSelectedId = resolvePromptCollectionId(
+        visibleCollections,
+        preferredSelectedId,
+        Boolean(resumableCollectionId),
+      );
+      return { visibleCollections, nextSelectedId };
+    },
+    [resumableCollectionId],
+  );
+
+  const { visibleCollections: collections, nextSelectedId } = useMemo(
+    () => resolveVisibleCollections(allCollections, selectedCollectionIdState),
+    [allCollections, resolveVisibleCollections, selectedCollectionIdState],
+  );
+  const selectedCollectionId = nextSelectedId ?? "";
 
   // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
   const selectedCollection = useMemo(
@@ -264,34 +297,6 @@ export function useSunoRunner(): RunnerState {
     void writeSpeedPresetId(id);
   }, []);
 
-  const resumableCollectionId = useMemo(() => {
-    if (
-      resumeCheckedAt !== null &&
-      persistedResume &&
-      shouldShowResumeBanner(persistedResume, persistedResume.collectionId, resumeCheckedAt)
-    ) {
-      return persistedResume.collectionId;
-    }
-    return undefined;
-  }, [persistedResume, resumeCheckedAt]);
-
-  const resolveVisibleCollections = useCallback(
-    (source: CollectionSummary[], currentSelectedId: string) => {
-      const visibleCollections = visiblePromptCollections(
-        source,
-        resumableCollectionId ? [resumableCollectionId] : [],
-      );
-      const preferredSelectedId = currentSelectedId || resumableCollectionId || "";
-      const nextSelectedId = resolvePromptCollectionId(
-        visibleCollections,
-        preferredSelectedId,
-        Boolean(resumableCollectionId),
-      );
-      return { visibleCollections, nextSelectedId };
-    },
-    [resumableCollectionId],
-  );
-
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);
   }, []);
@@ -324,7 +329,6 @@ export function useSunoRunner(): RunnerState {
 
   const applySingleFileMode = useCallback(() => {
     setAllCollections([]);
-    setCollections([]);
     setSelectedCollectionId("");
   }, []);
 
@@ -333,8 +337,7 @@ export function useSunoRunner(): RunnerState {
       try {
         const fetched = await fetchCollections(baseUrl);
         setAllCollections(fetched);
-        const { visibleCollections, nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
-        setCollections(visibleCollections);
+        const { nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
         setSelectedCollectionId(nextSelectedId ?? "");
         return { kind: "collection", collectionId: nextSelectedId };
       } catch (err) {
@@ -371,16 +374,7 @@ export function useSunoRunner(): RunnerState {
         void loadCollections(trimmed);
       }
     });
-  }, []);
-
-  useEffect(() => {
-    if (allCollections.length === 0) {
-      return;
-    }
-    const { visibleCollections, nextSelectedId } = resolveVisibleCollections(allCollections, selectedCollectionId);
-    setCollections(visibleCollections);
-    setSelectedCollectionId(nextSelectedId ?? "");
-  }, [allCollections, resolveVisibleCollections, selectedCollectionId]);
+  }, [loadCollections]);
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
