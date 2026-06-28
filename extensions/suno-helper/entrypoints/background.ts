@@ -52,15 +52,10 @@ export default defineBackground(() => {
   onMessage("queryProgress", ({ sender }) =>
     sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
   );
-  // background → runner 中継。playlist URL 解決用に、指定タブの runner content が
-  // 自身の document を scrape した結果を返す。
   onMessage("capturePlaylists", ({ sender }) =>
     sendMessage("capturePlaylists", undefined, requireRelayTab(sender, "capturePlaylists")),
   );
 
-  // runner → background: Download all 開始通知 (#1146)。content script は chrome.downloads API に
-  // アクセスできないため、background が chrome.downloads.onChanged を監視して完了を中継する。
-  // ダウンロード監視は startDownload 受信時に listener を登録し、完了時に自動解除する。
   onMessage("startDownload", ({ data, sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {

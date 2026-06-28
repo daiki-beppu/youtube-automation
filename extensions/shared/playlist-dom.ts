@@ -756,8 +756,6 @@ export async function scrollAndMultiSelectByIds(
       );
       if (selectBtn) {
         selectBtn.click();
-        // Verify selection actually took effect (#1217 AI-NEW-1217-001).
-        // Suno's React state update may not be synchronous; brief poll.
         let verified = false;
         for (let attempt = 0; attempt < 3; attempt++) {
           await sleep(50);
@@ -765,7 +763,6 @@ export async function scrollAndMultiSelectByIds(
             verified = true;
             break;
           }
-          // Retry click if first attempt didn't take
           if (attempt < 2) selectBtn.click();
         }
         if (!verified) {

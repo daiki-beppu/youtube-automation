@@ -137,7 +137,6 @@ async function waitForFormatModalClose(modal: HTMLElement, timeoutMs: number, po
   throw new Error(`形式選択モーダルが閉じませんでした (${timeoutMs}ms)`);
 }
 
-/** triggerDownloadAll の副作用注入点。テスタビリティのため DOM 操作を差し替え可能にする。 */
 export interface TriggerDownloadAllDeps {
   findMoreButton: () => HTMLElement | null;
   waitForDownloadMenuItem: (timeoutMs: number, pollMs: number) => Promise<HTMLElement>;
