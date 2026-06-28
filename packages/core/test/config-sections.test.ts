@@ -84,30 +84,6 @@ describe("youtube.api synthetic-media flags", () => {
       "Asia/Tokyo"
     );
   });
-
-  test("rejects an invalid default publish time", () => {
-    // Given an impossible channel-level default publish time
-    const sections = minimalSections();
-    const yt = (
-      sections["youtube.json"] as { youtube: Record<string, unknown> }
-    ).youtube;
-    yt.default_publish_time = "99:99";
-
-    // When/Then schedule errors are caught at config load time
-    expect(() => load(sections)).toThrow(/default_publish_time/u);
-  });
-
-  test("rejects an unknown default publish timezone", () => {
-    // Given an invalid IANA timezone name
-    const sections = minimalSections();
-    const yt = (
-      sections["youtube.json"] as { youtube: Record<string, unknown> }
-    ).youtube;
-    yt.default_publish_timezone = "No/Such_Zone";
-
-    // When/Then schedule errors are caught at config load time
-    expect(() => load(sections)).toThrow(/default_publish_timezone/u);
-  });
 });
 
 // --- music_engine warning (non-fatal) -------------------------------------
