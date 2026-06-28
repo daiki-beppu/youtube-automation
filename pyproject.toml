@@ -81,6 +81,7 @@ yt-theme-compare = "youtube_automation.scripts.theme_compare:main"
 yt-thumbnail-check = "youtube_automation.scripts.thumbnail_check:main"
 yt-thumbnail-compare = "youtube_automation.scripts.compare_thumbnails:main"
 yt-thumbnail-correlate = "youtube_automation.scripts.thumbnail_correlate:main"
+yt-title-duplicate-check = "youtube_automation.scripts.title_duplicate_check:main"
 yt-video-analyze = "youtube_automation.scripts.video_analyze:main"
 yt-vote-log = "youtube_automation.scripts.vote_log:main"
 
