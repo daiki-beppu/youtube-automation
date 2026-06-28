@@ -71,6 +71,24 @@ open <release-path>/video/short-{jp,en}.mp4
 この skill は生成物の確認までを扱う。release 型ショートのアップロード実行と、
 workflow-state へのアップロード結果記録は未実装。
 
+`workflow-state.json::post_upload.shorts` の実装済み schema は collection 型 `yt-upload-shorts` 向けの list 形式:
+
+```json
+"post_upload": {
+  "shorts": [
+    {
+      "short_num": 1,
+      "video_id": "xxx",
+      "publish_at": "2026-03-12T08:00:00+09:00",
+      "uploaded_at": "2026-03-11T09:12:00+09:00"
+    }
+  ]
+}
+```
+
+上記は collection 型 `yt-upload-shorts` の実装済み schema。release 型の JP/EN 別 upload schema は
+未実装のため、単一 object に言語別キーを持たせる形式は使わない。
+
 ## 設定
 
 | 配置 | ファイル | 責務 |
