@@ -10,12 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `feat(upload)`: アップロード完了後に YouTube Studio で確認すべき手動チェックリストを表示（#1052）
+- `feat(upload)`: アップロード実行時に操作対象のチャンネル名と channel ID を表示（#1053）
+- `feat(thumbnail)`: サムネイル生成で primary provider が失敗した場合の fallback provider 設定と手順を追加（#1097）
+- `feat(preflight)`: タイトル重複を公開前に検出する早期警告 CLI と preflight 連携を追加（#1055）
+- `feat(metadata)`: Suno パターン名をトラック表示名へ反映する生成ロジックを追加（#1092）
+- `feat(masterup)`: Suno 音源の後処理 CLI `yt-suno-audio-cleanup` を追加（#1048）
+- `feat(masterup)`: `generate-master` に尺プレビューと `--no-loop` を追加（#1091）
+- `docs(masterup)`: Suno ショート URL からの楽曲解決手順を追加（#1094）
+- `docs(automation-update)`: GitHub CLI が使えない環境向けに curl での release 取得手順を追加（#1098）
+- `docs(short)`: short / short-release の workflow-state schema 記述を実運用の状態ファイルに合わせて修正（#1171）
+- `docs(short-release)`: short-release スキルの手順をショート生成までの責務に整理（#1170）
+- `docs(short)`: short / short-release の dry-run 手順を現行の `--plan` フラグ表記に修正（#1169）
+- `docs(channel-setup)`: Terraform GCP reference を現行テンプレートと同期（#1172）
+- `docs(channel-setup)`: benchmark 取得手順で参照する CLI 名を現行名に修正（#1168）
 - `feat(channel-init)`: `yt-channel-init` を最小 config 生成からフルパッケージ生成に拡張。`--music-engine` / `--benchmark-channel` / `--branding-description` / `--channel-keyword` / `--target-duration-min` / `--target-duration-max` / `--supported-language` / `--default-language` / `--core-message` / `--country` 引数を追加し、`config/channel/*.json` に加えて `config/localizations.json` / `config/schedule_config.json` / `config/upload_settings.json` / `config/skills/{suno,thumbnail}.yaml` / `.env` / `.gitignore` / `auth/client_secrets.template.json` を一括生成する。テンプレート群を `channel_init_templates.py` に分離（#1271）
 - `feat(channel-settings)`: `yt-channel-settings pull --channel-id-only --apply` を追加。YouTube API から `channel_id` のみを取得して `config/channel/meta.json::channel.channel_id` に書き込む。通常の `pull --apply` でも `channel_id` を自動反映するよう `_write_channel_settings` に統合（#1271）
 - `docs(skills)`: `/channel-new` を TTP ベンチマーク → config → ペルソナ → branding の end-to-end スキルに刷新。`/audience-persona` / `/channel-direction` / `/channel-research` / `/channel-setup` の description・前提条件・Cross References を新フローに合わせて更新（#1271）
 - `refactor(doctor)`: `/onboard` スキルを `/setup` にリネームしツール設定特化に責務整理。`yt-doctor` に `bootstrap` カテゴリを新設（#1273）
 - `docs(setup)`: `/setup` の GCP プロジェクト新規作成手順でチャンネル名由来の project ID / 表示名を推奨し、OAuth 同意画面のアプリ名とクライアント ID 名も HUMAN STEP に提示するよう更新（#1277, #1278）
 - `docs(wf-new)`: アナリティクス未収集の初回チャンネルでも `/wf-new` から企画生成を開始できるよう、`collection-ideate` / `wf-new` の入力モードに benchmark fallback mode と minimal mode を追加。`yt-doctor` の readiness 判定も analytics 不在をブロッカーにしない契約へ更新（#1272）
+
+### Fixed
+
+- `fix(upload)`: descriptions.md の必須セクション不備時に再作成手順を含むエラーを表示（#1051）
 
 ## [5.5.12] - 2026-06-25
 

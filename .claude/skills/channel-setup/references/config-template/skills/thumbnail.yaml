@@ -15,6 +15,10 @@
 # 自動 download される想定（手動 download を回避する導線、issue #567）。
 
 image_generation:
+  # GCP 課金なしで始める場合は codex を推奨。Gemini を使う場合は gemini に変更し、
+  # ADC / GCP 課金が有効なことを確認する。
+  # provider: codex
+
   gemini:
     # チャンネル統一の背景色（channel-direction の「ビジュアルアイデンティティ」
     # から転写）

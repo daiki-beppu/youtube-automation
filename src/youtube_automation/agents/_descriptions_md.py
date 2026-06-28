@@ -14,6 +14,14 @@ from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
 logger = logging.getLogger(__name__)
 
+_DESCRIPTIONS_MD_RECREATE_GUIDE = (
+    "→ 手書きファイルを直接直すのではなく、正規フローで作り直してください:\n"
+    "  1. /video-description を再実行する\n"
+    "  2. 生成された 20-documentation/descriptions.md を確認する\n"
+    "  3. 必要なら生成後の本文だけを調整してから再アップロードする\n"
+    "  必須セクション: `## タイトル案` / `## Complete Collection 概要欄` / `## タグ（YouTube タグ欄）`"
+)
+
 
 class DescriptionsMdMixin:
     """descriptions.md のパース・ローカライゼーション抽出を提供する mixin。"""
@@ -36,7 +44,8 @@ class DescriptionsMdMixin:
                 raise RuntimeError(
                     f"descriptions.md が無いのに別名ファイルが存在します: "
                     f"{[p.name for p in stray]}\n"
-                    f"→ ファイル名は `descriptions.md` 固定。リネームして /video-description を再実行してください"
+                    f"→ ファイル名は `descriptions.md` 固定です。\n"
+                    f"{_DESCRIPTIONS_MD_RECREATE_GUIDE}"
                 )
             return None
 
@@ -47,7 +56,10 @@ class DescriptionsMdMixin:
         tags_raw = self._extract_md_section(text, "タグ（YouTube タグ欄）")
 
         if not (title and description):
-            logger.warning("⚠️  descriptions.md のパースに失敗 — BAHMetadataGenerator にフォールバック")
+            logger.warning(
+                "⚠️  descriptions.md のパースに失敗 — 正規フォーマットとして読み込めません\n%s",
+                _DESCRIPTIONS_MD_RECREATE_GUIDE,
+            )
             return None
 
         tags = parse_youtube_tags(tags_raw) if tags_raw else []

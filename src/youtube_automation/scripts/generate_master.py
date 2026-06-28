@@ -107,6 +107,35 @@ def _resolve_loop_count(
     return 1
 
 
+def _estimate_looped_duration(single_loop_sec: float, loops: int, crossfade: float) -> float:
+    """ループ展開後の理論尺を秒で返す。"""
+    return max(0.0, loops * single_loop_sec - max(0, loops - 1) * crossfade)
+
+
+def _print_duration_preview(
+    *,
+    single_loop_sec: float,
+    effective_loops: int,
+    crossfade: float,
+    target_duration_min: int | None,
+    no_loop: bool,
+) -> None:
+    """目標尺とループ回数の事前見積もりを表示する。"""
+    estimated = _estimate_looped_duration(single_loop_sec, effective_loops, crossfade)
+    print("  Duration preview")
+    print(f"    Track total : {_format_duration(single_loop_sec)}")
+    if target_duration_min is not None:
+        target_sec = target_duration_min * 60
+        print(f"    Target      : {_format_duration(target_sec)}")
+    elif no_loop:
+        print("    Target      : disabled by --no-loop")
+    print(f"    Loop count  : {effective_loops}")
+    print(f"    Estimated   : {_format_duration(estimated)}")
+    if no_loop and target_duration_min is not None and single_loop_sec < target_duration_min * 60:
+        shortage = target_duration_min * 60 - single_loop_sec
+        print(f"    Note        : 1 パスでは目標尺に {_format_duration(shortage)} 不足します")
+
+
 def _format_duration(seconds: float) -> str:
     total = int(seconds)
     h, rem = divmod(total, 3600)
@@ -212,6 +241,7 @@ def generate_master(
     *,
     loops: int | None = None,
     target_duration_min: int | None = None,
+    no_loop: bool = False,
     shuffle: bool = False,
     shuffle_seed: int | None = None,
     pin_first: list[str] | None = None,
@@ -249,7 +279,9 @@ def generate_master(
     if pinned:
         print(f"[Pin] first {len(pinned)} track(s) fixed: {[p.name for p in pinned]}")
 
-    single_loop_sec = _sum_track_duration(files) if target_duration_min is not None else 0.0
+    should_print_duration_preview = (not quiet) and (target_duration_min is not None or loops is not None or no_loop)
+    needs_duration_probe = target_duration_min is not None or should_print_duration_preview
+    single_loop_sec = _sum_track_duration(files) if needs_duration_probe else 0.0
     effective_loops = _resolve_loop_count(loops, target_duration_min, single_loop_sec, crossfade)
 
     expanded = files * effective_loops
@@ -272,6 +304,15 @@ def generate_master(
         print(f"  Crossfade: {crossfade:g}s (triangle curve)")
         if use_bitrate:
             print(f"  Bitrate  : {bitrate}")
+        if should_print_duration_preview:
+            print()
+            _print_duration_preview(
+                single_loop_sec=single_loop_sec,
+                effective_loops=effective_loops,
+                crossfade=crossfade,
+                target_duration_min=target_duration_min,
+                no_loop=no_loop,
+            )
         print()
 
     if n_effective == 1:
@@ -364,6 +405,12 @@ def main() -> int:
         dest="target_duration",
         help="目標尺 (分) 以上になる最小のループ回数を自動算出",
     )
+    loop_group.add_argument(
+        "--no-loop",
+        action="store_true",
+        dest="no_loop",
+        help="skill-config の target_duration_min を使わず 1 パスで生成する (--loop 1 相当)",
+    )
     parser.add_argument(
         "--shuffle",
         action="store_true",
@@ -405,11 +452,20 @@ def main() -> int:
         crossfade = float(audio.get("crossfade_duration", 1.0))
         bitrate = str(audio.get("bitrate", "192k"))
 
-        # CLI フラグ (--loop / --target-duration) が両方未指定なら
+        # CLI フラグ (--loop / --target-duration / --no-loop) がすべて未指定なら
         # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
         # --loop 指定時は loops 指定が最優先のため skill-config 値を黙って無視する。
         target_duration: int | None = args.target_duration
-        if args.loop is None and args.target_duration is None:
+        no_loop_target_duration: int | None = None
+        if args.no_loop:
+            skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
+            if skill_target is not None:
+                no_loop_target_duration = int(skill_target)
+                if no_loop_target_duration < 1:
+                    raise ValidationError(
+                        f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
+                    )
+        elif args.loop is None and args.target_duration is None:
             skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
             if skill_target is not None:
                 target_duration = int(skill_target)
@@ -462,8 +518,9 @@ def main() -> int:
             collection_dir,
             crossfade,
             bitrate,
-            loops=args.loop,
-            target_duration_min=target_duration,
+            loops=1 if args.no_loop else args.loop,
+            target_duration_min=no_loop_target_duration if args.no_loop else target_duration,
+            no_loop=args.no_loop,
             shuffle=shuffle_enabled,
             shuffle_seed=shuffle_seed,
             pin_first=pin_first,
