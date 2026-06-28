@@ -506,6 +506,7 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
+      shouldDownload: true,
     });
     await waitFor(() => {
       expect(container.textContent).toContain("playlist 追加とダウンロードを再実行しています…");

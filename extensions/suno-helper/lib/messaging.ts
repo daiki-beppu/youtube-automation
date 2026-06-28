@@ -33,6 +33,7 @@ export interface RetryPlaylistPayload {
   submittedClipIds: string[];
   expectedClipCount: number;
   collectionId?: string;
+  shouldDownload?: boolean;
 }
 
 /** overlay → runner: Suno UI でユーザーが手動選択した clip を resume 用 ID として採用する。 */

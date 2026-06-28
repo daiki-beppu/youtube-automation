@@ -419,6 +419,9 @@ export async function postDownloaded(
   if (payload.download_path && !payload.suno_playlist_url) {
     throw new Error("download_path を送る場合は suno_playlist_url が必要です");
   }
+  if (payload.file_count > 0 && !payload.download_path) {
+    throw new Error("file_count が正数の場合は download_path が必要です");
+  }
   const token = await fetchServeToken(baseUrl);
   const url = `${baseUrl}${DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(collectionId))}`;
   let res = await fetch(url, {

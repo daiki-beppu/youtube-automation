@@ -507,6 +507,8 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     const expectedClipCount = playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
+    const fullCollectionClipCount = entries.length * CLIPS_PER_REQUEST;
+    const shouldDownload = fullCollectionClipCount > 0 && expectedClipCount >= fullCollectionClipCount;
     if (submittedClipIdsForResume.length === 0 || expectedClipCount <= 0) {
       report(
         "playlist 再開に必要な clip ID がありません。Suno タブを開いたまま「データ取得」後に再試行してください。",
@@ -521,6 +523,7 @@ export function useSunoRunner(): RunnerState {
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount,
         collectionId: selectedCollectionId || undefined,
+        shouldDownload,
       });
       setResumeDismissed(true);
       report("playlist 追加とダウンロードを再実行しています…");
@@ -533,6 +536,7 @@ export function useSunoRunner(): RunnerState {
   }, [
     isRunning,
     playlistName,
+    entries.length,
     submittedClipIdsForResume,
     playlistExpectedClipCountForResume,
     selectedCollectionId,

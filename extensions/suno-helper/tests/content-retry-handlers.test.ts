@@ -227,6 +227,7 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         submittedClipIds: clipIds,
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
+        shouldDownload: true,
       },
     });
 
@@ -253,6 +254,26 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         download_path: "/Users/test/Downloads/test-playlist.zip",
       },
     });
+  });
+
+  it("Given partial collection retryPlaylist When playlist 追加 Then download/post は実行しない", async () => {
+    const { handlers, progressMessages, sentMessages } = await loadContentScript();
+    const clipIds = ["clip-1", "clip-2"];
+
+    handlers.get("retryPlaylist")!({
+      data: {
+        playlistName: "test-playlist",
+        submittedClipIds: clipIds,
+        expectedClipCount: clipIds.length,
+        collectionId: "coll-1",
+        shouldDownload: false,
+      },
+    });
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
+    expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(0);
+    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(0);
   });
 });
 

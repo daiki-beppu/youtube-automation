@@ -607,7 +607,7 @@ describe("shared/api postDownloaded: 正常系", () => {
 
     await expect(
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
-        file_count: 5,
+        file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
       }),
@@ -624,7 +624,7 @@ describe("shared/api postDownloaded: 正常系", () => {
     const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
-      file_count: 5,
+      file_count: 0,
       expected_file_count: 5,
       format: "mp3",
       suno_playlist_url: "https://suno.com/playlist/test",
@@ -655,11 +655,25 @@ describe("shared/api postDownloaded: 正常系", () => {
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
+  it("Given file_count 正数で download_path が無い payload When postDownloaded Then fetch 前に throw する", async () => {
+    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 5,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/playlist/test",
+      }),
+    ).rejects.toThrow(/download_path/);
+
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("Given postDownloaded When ヘッダーを確認 Then X-Serve-Token が含まれる", async () => {
     const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
-      file_count: 5,
+      file_count: 0,
       format: "mp3",
       suno_playlist_url: "https://suno.com/playlist/test",
     });
@@ -714,7 +728,7 @@ describe("shared/api postDownloaded: 403 retry (#1217 ARCH-1217-002)", () => {
 
     await expect(
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
-        file_count: 5,
+        file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
       }),

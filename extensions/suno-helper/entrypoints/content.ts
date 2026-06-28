@@ -775,7 +775,7 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { playlistName, submittedClipIds, expectedClipCount, collectionId } = data;
+      const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } = data;
       currentSnapshot = initSnapshot([], playlistName);
       running = true;
       aborted = false;
@@ -793,7 +793,7 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
-          if (collectionId) {
+          if (collectionId && shouldDownload) {
             const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
             await recordPlaylistUrl(collectionId, sunoPlaylistUrl);
             await performDownload(collectionId, verifiedClipCount, verifiedClipCount, sunoPlaylistUrl, () => aborted);

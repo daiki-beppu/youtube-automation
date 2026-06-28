@@ -641,7 +641,7 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
 
   it("Given postDownloaded message When handler runs Then shared api に委譲する", async () => {
     const { handlers, postDownloadedMock } = await loadBackground();
-    const body = { file_count: 2, format: "mp3", suno_playlist_url: "https://suno.com/playlist/test" };
+    const body = { file_count: 0, format: "mp3", suno_playlist_url: "https://suno.com/playlist/test" };
 
     await handlers.get("postDownloaded")!({
       data: { baseUrl: "http://localhost:8787", collectionId: "coll-1", body },
@@ -661,7 +661,7 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
         data: {
           baseUrl: "http://localhost:8787",
           collectionId: "coll-1",
-          body: { file_count: 2, format: "mp3", suno_playlist_url: "https://suno.com/playlist/test" },
+          body: { file_count: 0, format: "mp3", suno_playlist_url: "https://suno.com/playlist/test" },
         },
         sender: { tab: { id: 42 } },
       }),

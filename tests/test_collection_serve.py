@@ -1720,7 +1720,7 @@ def test_post_downloaded_invalid_expected_file_count_returns_400(serve_dir, tmp_
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {
-        "file_count": 1,
+        "file_count": 0,
         "expected_file_count": bad_expected_file_count,
         "format": "mp3",
         "suno_playlist_url": "https://suno.com/playlist/abc",
@@ -2391,7 +2391,7 @@ def test_post_downloaded_payload_type_validation(serve_dir, tmp_path, field, bad
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
-    payload = {"file_count": 1, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+    payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
     payload[field] = bad_value
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:

@@ -18,6 +18,7 @@ type Handler = (message: { data: Record<string, unknown> }) => unknown;
 type RunHandler = (message: { data: RunPayload }) => { ok: true };
 
 const writeResumeStateMock = vi.fn<(state: ResumeState) => Promise<void>>();
+const clearResumeStateForCollectionMock = vi.fn(() => Promise.resolve());
 
 interface ProgressMessage {
   phase: string;
@@ -64,7 +65,7 @@ async function loadContentScriptWithPlaylistRows(
     return {
       ...actual,
       writeResumeState: writeResumeStateMock,
-      clearResumeStateForCollection: vi.fn(() => Promise.resolve()),
+      clearResumeStateForCollection: clearResumeStateForCollectionMock,
     };
   });
 
@@ -186,6 +187,7 @@ async function loadContentScriptWithPlaylistRows(
 describe("content.ts playlist 追加失敗時の resume state", () => {
   beforeEach(() => {
     writeResumeStateMock.mockReset();
+    clearResumeStateForCollectionMock.mockReset();
   });
 
   it("Given 通常 run で playlist row 解決が失敗 When run Then tracker が観測した submittedClipIds を保存する", async () => {
@@ -366,6 +368,51 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(writeResumeStateMock).not.toHaveBeenCalled();
     expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(0);
     expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(0);
+  });
+
+  it("Given full collection run When Download all completes Then playlist URL と ZIP 完了を POST して FINISHED になる", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const currentSubmittedClipIds = ["clip-1", "clip-2"];
+    const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
+    const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+      },
+    });
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/regression.zip" },
+    });
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("collection-a");
+
+    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    expect(downloadedPosts).toHaveLength(2);
+    expect(downloadedPosts[0].payload).toMatchObject({
+      body: {
+        file_count: 0,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/playlist/regression",
+      },
+    });
+    expect(downloadedPosts[1].payload).toMatchObject({
+      body: {
+        file_count: 2,
+        expected_file_count: 2,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/playlist/regression",
+        download_path: "/Users/test/Downloads/regression.zip",
+      },
+    });
   });
 
   it("Given full collection run の Download all が失敗 When run Then ERROR のまま終了する", async () => {
