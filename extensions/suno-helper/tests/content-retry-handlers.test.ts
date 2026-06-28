@@ -141,10 +141,6 @@ async function loadContentScript(overrides?: {
     scrapePlaylistsFromMe: vi.fn(() => []),
   }));
 
-  vi.doMock("../lib/auto-capture", () => ({
-    triggerPlaylistCaptureFailSoft: vi.fn(() => Promise.resolve()),
-  }));
-
   vi.doMock("../lib/ack-probe", () => ({
     createAckWaiter: vi.fn(() => vi.fn(() => Promise.resolve())),
     markAck: vi.fn(() => Promise.resolve({ submissions: 0, domInFlight: 0 })),

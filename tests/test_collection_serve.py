@@ -604,12 +604,12 @@ def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
 
 def test_build_collections_index_does_not_emit_playlist_name(tmp_path):
     """Given multi-word prefix の collection
-    When playlist_prefix 付きで build_collections_index を呼ぶ
+    When build_collections_index を呼ぶ
     Then playlist_name は返さない（#1216 BREAKING contract）。
     """
     _make_collection(tmp_path, "20260601-soulful-grooves-wah-groove-collection", entries=[])
 
-    row = build_collections_index(tmp_path, playlist_prefix="soulful-grooves")[0]
+    row = build_collections_index(tmp_path)[0]
 
     assert "playlist_name" not in row
 
@@ -1538,6 +1538,41 @@ def test_extract_title_based_matching(tmp_path):
     music_dir = coll / "02-Individual-music"
     names = [f.name for f in music_dir.iterdir()]
     assert names == ["01a-Custom Dawn Title.mp3"]
+
+
+def test_extract_nested_zip_audio_files(tmp_path):
+    """ZIP 内で音声がサブディレクトリ配下でも展開して配置する。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "nested.zip", {"playlist/Song A.mp3": b"audio"})
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 1
+    music_dir = coll / "02-Individual-music"
+    assert [f.name for f in music_dir.iterdir()] == ["01a-Song A.mp3"]
+
+
+def test_extract_rejects_zip_slip_audio_entry(tmp_path, monkeypatch):
+    """ZIP entry 名に .. を含む音声ファイルは tmp_dir 外へ展開しない。"""
+    import youtube_automation.scripts.collection_serve as cs
+
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    extract_root = tmp_path / "extract"
+    monkeypatch.setattr(cs.tempfile, "mkdtemp", lambda prefix: str(extract_root))
+    zip_path = _make_zip(tmp_path / "zipslip.zip", {"../evil.mp3": b"bad"})
+
+    result = _extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 0
+    assert not (tmp_path / "evil.mp3").exists()
 
 
 def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):

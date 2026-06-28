@@ -27,7 +27,7 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from youtube_automation import __version__
 from youtube_automation.scripts.distrokid_release import (
@@ -136,61 +136,6 @@ def normalize_suno_title(title: str, prefix: str) -> str | None:
     return f"{prefix.lower()}-{theme_slug}"
 
 
-def derive_collection_slug(collection_id: str, prefix: str) -> str | None:
-    """collection dir 名から `<prefix>-<theme-slug>` を導出する（#893 要件 B）。
-
-    `<date>-<channel>-<theme>-collection` 形式から日付・接尾辞を剥がし、theme を
-    `normalize_suno_title` と同じ slug 形へ写像する（マージキー突合の不変条件）。
-    """
-    name = collection_id
-    if name.endswith(_COLLECTION_DIR_SUFFIX):
-        name = name[: -len(_COLLECTION_DIR_SUFFIX)]
-    # `<date>-<channel>-<theme...>` の date を剥がす（CollectionPaths.collection_name と同方針）。
-    parts = name.split("-", 1)
-    if len(parts) == 2 and parts[0].isdigit():
-        name = parts[1]
-    # channel 部を剥がす（#976）: `soulful-grooves` のような複数トークンのチャンネル名は
-    # 旧来の「1 トークン剥がし」だと 2 トークン目が theme に混入し playlist 側 slug と
-    # 永遠に一致しない。prefix と前方一致（大小無視・空白/ハイフン無差別）すれば prefix
-    # 全体を剥がし、一致しなければ従来の 1 トークン剥がしに fallback する
-    # （dir の channel 表記が prefix と異なる運用、例: dir `df365-...` + prefix `DF`）。
-    prefix_match = re.match(rf"^{_prefix_pattern(prefix)}-", name, re.IGNORECASE)
-    if prefix_match is not None:
-        name = name[prefix_match.end() :]
-    elif "-" in name:
-        name = name.split("-", 1)[1]
-    theme_slug = _slugify(name)
-    if not theme_slug:
-        return None
-    return f"{prefix.lower()}-{theme_slug}"
-
-
-def derive_playlist_name(collection_id: str, prefix: str) -> str | None:
-    """collection dir 名から `<prefix> | <theme>` 形式の Suno playlist 名を導出する。
-
-    `derive_collection_slug` と同じ prefix 剥がしロジックを使い、マルチワード prefix
-    （例: `soulful-grooves`）でも正しく `soulful-grooves | wah-groove` を返す。
-    prefix 未指定や theme 空は None。
-    """
-    name = collection_id
-    if name.endswith(_COLLECTION_DIR_SUFFIX):
-        name = name[: -len(_COLLECTION_DIR_SUFFIX)]
-    parts = name.split("-", 1)
-    if len(parts) == 2 and parts[0].isdigit():
-        name = parts[1]
-    prefix_match = re.match(rf"^{_prefix_pattern(prefix)}-", name, re.IGNORECASE)
-    if prefix_match is not None:
-        theme = name[prefix_match.end() :]
-    elif "-" in name:
-        theme = name.split("-", 1)[1]
-    else:
-        return None
-    theme = theme.strip()
-    if not theme:
-        return None
-    return f"{prefix.lower()} | {theme}"
-
-
 def _playlists_list_to_dict(data: list) -> dict:
     """旧 wf-batch list スキーマ `[{slug, suno_url, suno_title, captured_at}]` を dict へ写像する（#976）。
 
@@ -217,8 +162,8 @@ def _read_playlists_json(target: Path) -> dict:
     """既存 capture JSON を dict で読む。不在・破損・非 dict/list は空 dict 扱い（#893）。
 
     旧 wf-batch list スキーマは dict へ写像して返す（#976）。これにより
-    `read_mapped_slugs` の mapped 判定と `write_suno_playlists` の merge が
-    list 形式の既存ファイルを「破損」扱いで無視・上書き消失させない。
+    `write_suno_playlists` の merge が list 形式の既存ファイルを
+    「破損」扱いで無視・上書き消失させない。
     """
     if not target.is_file():
         return {}
@@ -231,19 +176,6 @@ def _read_playlists_json(target: Path) -> dict:
     if isinstance(data, list):
         return _playlists_list_to_dict(data)
     return {}
-
-
-def read_mapped_slugs(root: Path) -> set[str]:
-    """既存 `<root>/config/suno-playlists.json` の slug 集合を返す（#893 要件 B）。
-
-    .. deprecated:: #1145
-        status enum が mapped / playlist_name を置換したため、
-        GET /collections ハンドラからの呼び出しは無くなった。
-        後方互換のために残置。次回 breaking で削除予定。
-
-    不在・破損は空集合（fail-loud せず「未マッピング」として扱う）。
-    """
-    return set(_read_playlists_json(playlists_output_path(root)).keys())
 
 
 def distrokid_releases_output_path(root: Path) -> Path:
@@ -260,6 +192,19 @@ def _read_distrokid_releases(target: Path) -> dict:
     except (json.JSONDecodeError, OSError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _atomic_json_write(target: Path, data: dict, *, prefix: str) -> None:
+    """JSON dict を target へ atomic に書く。失敗時は中間 temp を残さない。"""
+    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=prefix, suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, target)
+    except BaseException:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
 
 
 def read_released_discs(root: Path) -> set[str]:
@@ -285,16 +230,7 @@ def write_distrokid_release(root: Path, collection_id: str, disc: str, album_tit
     recorded_at = datetime.now().astimezone().isoformat()
     data[key] = {"album_title": album_title, "recorded_at": recorded_at}
 
-    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=".distrokid-releases-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_name, target)
-    except BaseException:
-        # 書き込み失敗時に temp を残さない（atomic write の後始末）。
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+    _atomic_json_write(target, data, prefix=".distrokid-releases-")
 
 
 def find_distrokid_discs(collection_dir: Path) -> list[str]:
@@ -424,16 +360,7 @@ def write_suno_playlists(root: Path, payload: list[dict], *, prefix: str) -> int
             data[slug] = entry
             written += 1
 
-    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=".suno-playlists-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_name, target)
-    except BaseException:
-        # 書き込み失敗時に temp を残さない（atomic write の後始末）。
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+    _atomic_json_write(target, data, prefix=".suno-playlists-")
     return written
 
 
@@ -542,7 +469,19 @@ def _read_music_expected_file_count(coll_dir: Path) -> int | None:
     return None
 
 
-def build_collections_index(root: Path, playlist_prefix: str | None = None) -> list[dict]:
+def _read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | None:
+    """suno-prompts.json の entry 数を読む。不在・破損時は default。"""
+    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+    if not prompts_path.is_file():
+        return default
+    try:
+        prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return default
+    return len(prompts_data) if isinstance(prompts_data, list) else default
+
+
+def build_collections_index(root: Path) -> list[dict]:
     """各 collection を index entry に写像する（#816 dir mode / #1216 BREAKING）.
 
     - id   = ディレクトリ名（拡張から個別 fetch する際のホワイトリスト key）
@@ -553,12 +492,11 @@ def build_collections_index(root: Path, playlist_prefix: str | None = None) -> l
 
     #1216 BREAKING: mapped_slugs を廃止。mapped / has_prompts / playlist_name を廃止。
     """
-    del playlist_prefix
     index: list[dict] = []
     for coll in find_collection_dirs(root):
         prompts_path = coll / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
         has_prompts = prompts_path.is_file()
-        pattern_count = len(json.loads(prompts_path.read_text(encoding="utf-8"))) if has_prompts else None
+        pattern_count = _read_pattern_count(coll)
         music_dir = CollectionPaths(coll).music_dir
         downloaded_count = _count_audio_files(music_dir)
         expected_file_count = _read_music_expected_file_count(coll)
@@ -651,15 +589,7 @@ def _update_workflow_state_downloaded(
         planning["music"] = music
     if suno_playlist_url:
         music["suno_playlist_url"] = suno_playlist_url
-    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
-    pattern_count: int | None = None
-    if prompts_path.is_file():
-        try:
-            prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
-            if isinstance(prompts_data, list):
-                pattern_count = len(prompts_data)
-        except (json.JSONDecodeError, OSError):
-            pattern_count = None
+    pattern_count = _read_pattern_count(coll_dir)
     full_expected_count = _expected_download_count(pattern_count)
     effective_expected_count = _expected_download_count(pattern_count, expected_file_count)
     if (
@@ -683,15 +613,7 @@ def _update_workflow_state_downloaded(
             del assets["music_downloaded"]
 
     ws_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(ws_path.parent), prefix=".workflow-state-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_name, ws_path)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+    _atomic_json_write(ws_path, data, prefix=".workflow-state-")
 
 
 _SUNO_TRACK_PREFIX_RE = re.compile(r"^Track\s+\d+\s+(.+)$", re.IGNORECASE)
@@ -727,6 +649,37 @@ def _suno_name_lookup_candidates(name: str) -> list[str]:
     return deduped
 
 
+def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
+    """suno-prompts.json の曲名候補から track index への lookup を作る。"""
+    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+    name_to_index: dict[str, int] = {}
+    if not prompts_path.is_file():
+        return name_to_index
+    try:
+        prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
+        for i, entry in enumerate(prompts, 1):
+            full_name = entry.get("name", "")
+            parts = full_name.split(" — ", 1)
+            english_name = parts[1] if len(parts) == 2 else full_name
+            for candidate in _suno_name_lookup_candidates(english_name):
+                name_to_index[candidate] = i
+            for candidate in _suno_name_lookup_candidates(full_name):
+                name_to_index[candidate] = i
+            title = entry.get("title")
+            if title:
+                for candidate in _suno_name_lookup_candidates(title):
+                    name_to_index.setdefault(candidate, i)
+    except (json.JSONDecodeError, OSError, TypeError):
+        pass
+    return name_to_index
+
+
+def _is_safe_zip_member(filename: str) -> bool:
+    """ZIP member が展開先 tmp_dir 外へ脱出しない名前か判定する。"""
+    path = PurePosixPath(filename)
+    return not path.is_absolute() and all(part != ".." for part in path.parts)
+
+
 def _extract_and_rename_music(
     coll_dir: Path,
     download_path: str,
@@ -742,25 +695,7 @@ def _extract_and_rename_music(
         print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
         return 0
 
-    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
-    name_to_index: dict[str, int] = {}
-    if prompts_path.is_file():
-        try:
-            prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
-            for i, entry in enumerate(prompts, 1):
-                full_name = entry.get("name", "")
-                parts = full_name.split(" — ", 1)
-                english_name = parts[1] if len(parts) == 2 else full_name
-                for candidate in _suno_name_lookup_candidates(english_name):
-                    name_to_index[candidate] = i
-                for candidate in _suno_name_lookup_candidates(full_name):
-                    name_to_index[candidate] = i
-                title = entry.get("title")
-                if title:
-                    for candidate in _suno_name_lookup_candidates(title):
-                        name_to_index.setdefault(candidate, i)
-        except (json.JSONDecodeError, OSError, TypeError):
-            pass
+    name_to_index = _build_name_to_index(coll_dir)
 
     music_dir = target_dir or CollectionPaths(coll_dir).music_dir
     music_dir.mkdir(parents=True, exist_ok=True)
@@ -790,10 +725,13 @@ def _extract_and_rename_music(
                 info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
             ]
             for info in audio_infos:
+                if not _is_safe_zip_member(info.filename):
+                    print(f"[yt-collection-serve] 危険な ZIP entry をスキップします: {info.filename}")
+                    continue
                 zf.extract(info, tmp_dir)
 
         moved_count = 0
-        for extracted in Path(tmp_dir).iterdir():
+        for extracted in Path(tmp_dir).rglob("*"):
             if not extracted.is_file():
                 continue
             ext = extracted.suffix.lower()
@@ -886,8 +824,8 @@ def create_server(
     単一ファイル mode の `/suno/prompts.json` は配信しない）。既定 None は
     単一ファイル mode（`/suno/prompts.json` + `/distrokid/*`）。
 
-    `playlist_capture=(root, prefix)` 指定時のみ POST `/suno/playlists` を有効化し、
-    dir mode の `/collections` には `mapped` 判定を付与する（#893）。None なら POST は 404。
+    `playlist_capture=(root, prefix)` 指定時のみ POST `/suno/playlists` を有効化する（#893）。
+    None なら POST は 404。
 
     distrokid が None または `enabled == False` のとき `/distrokid/*` は 404。
     """
@@ -945,6 +883,122 @@ def create_server(
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Serve-Token")
             self.end_headers()
+
+        def _handle_downloaded_post(self, cid: str) -> None:
+            """POST /collections/<id>/downloaded を処理する（dir mode only、#1216/#1217）。"""
+            assert collections_root is not None
+            raw_origin = self.headers.get("Origin")
+            if not _is_exact_extension_origin_lock(raw_origin, allow_origin):
+                self.send_error(403, "Forbidden")
+                return
+            req_token = self.headers.get("X-Serve-Token")
+            if req_token != serve_token:
+                self.send_error(403, "Forbidden")
+                return
+
+            cid = urllib.parse.unquote(cid)
+            if ".." in cid:
+                self.send_error(404, "Not Found")
+                return
+            known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
+            if cid not in known_ids:
+                self.send_error(404, "Not Found")
+                return
+
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if length > 10240:
+                self.send_error(413, "Payload Too Large")
+                return
+            raw = self.rfile.read(length) if length else b""
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self.send_error(400, "Bad Request")
+                return
+            if not isinstance(payload, dict):
+                self.send_error(400, "Bad Request")
+                return
+
+            file_count = payload.get("file_count")
+            fmt = payload.get("format")
+            suno_playlist_url = payload.get("suno_playlist_url")
+            if file_count is None or not fmt:
+                self.send_error(400, "Bad Request")
+                return
+            if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
+                self.send_error(400, "Bad Request")
+                return
+            expected_file_count = payload.get("expected_file_count")
+            if expected_file_count is not None and (
+                not isinstance(expected_file_count, int)
+                or isinstance(expected_file_count, bool)
+                or expected_file_count < 0
+            ):
+                self.send_error(400, "Bad Request")
+                return
+            if fmt not in _VALID_DOWNLOAD_FORMATS:
+                self.send_error(400, "Bad Request")
+                return
+            download_path = payload.get("download_path")
+            if download_path is not None and not isinstance(download_path, str):
+                self.send_error(400, "Bad Request")
+                return
+            if suno_playlist_url is not None and not isinstance(suno_playlist_url, str):
+                self.send_error(400, "Bad Request")
+                return
+
+            coll_dir = collections_root / cid
+            pattern_count = _read_pattern_count(coll_dir, default=0)
+            expected_count = _expected_download_count(pattern_count, expected_file_count)
+            placed_count_for_response = file_count
+            if download_path:
+                if not suno_playlist_url:
+                    self.send_error(400, "Bad Request")
+                    return
+                dp = Path(download_path)
+                if not dp.is_absolute():
+                    self.send_error(400, "Bad Request")
+                    return
+                resolved_dp = dp.resolve()
+                staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
+                try:
+                    placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
+                    if placed_count == 0:
+                        self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
+                        return
+                    if expected_count is not None and placed_count < expected_count:
+                        self._send_json_error(
+                            500,
+                            "ZIP extraction incomplete: "
+                            f"expected at least {expected_count} audio files, placed {placed_count}",
+                        )
+                        return
+                    music_dir = CollectionPaths(coll_dir).music_dir
+                    music_dir.mkdir(parents=True, exist_ok=True)
+                    for staged in staging_dir.iterdir():
+                        if not staged.is_file():
+                            continue
+                        dest = music_dir / staged.name
+                        if dest.exists():
+                            dest.unlink()
+                        shutil.move(str(staged), str(dest))
+                finally:
+                    shutil.rmtree(staging_dir, ignore_errors=True)
+                placed_count_for_response = placed_count
+                file_count = placed_count
+
+            _update_workflow_state_downloaded(
+                coll_dir,
+                file_count=file_count,
+                suno_playlist_url=suno_playlist_url,
+                expected_file_count=expected_count,
+            )
+            if download_path:
+                _cleanup_download_archive(resolved_dp)
+            resp_body = json.dumps(
+                {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
+            ).encode("utf-8")
+            self._send_bytes(resp_body, "application/json; charset=utf-8")
 
         def do_POST(self) -> None:  # noqa: N802
             # GET と異なり POST は Origin 必須。未設定・不許可は 403。
@@ -1018,134 +1072,8 @@ def create_server(
             _downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
             _downloaded_suffix = "/downloaded"
             if dir_mode and self.path.startswith(_downloaded_prefix) and self.path.endswith(_downloaded_suffix):
-                raw_origin = self.headers.get("Origin")
-                if not _is_exact_extension_origin_lock(raw_origin, allow_origin):
-                    self.send_error(403, "Forbidden")
-                    return
-                # Token auth: require X-Serve-Token header (#1217).
-                req_token = self.headers.get("X-Serve-Token")
-                if req_token != serve_token:
-                    self.send_error(403, "Forbidden")
-                    return
                 cid = self.path[len(_downloaded_prefix) : -len(_downloaded_suffix)]
-                # URL-decode cid to handle percent-encoded collection ids (#1217).
-                cid = urllib.parse.unquote(cid)
-                # パストラバーサル防御: ".." を含む id を reject する（#1216）。
-                if ".." in cid:
-                    self.send_error(404, "Not Found")
-                    return
-                # ホワイトリスト検証: find_collection_dirs の既知 id に含まれるか。
-                known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
-                if cid not in known_ids:
-                    self.send_error(404, "Not Found")
-                    return
-                # Body size guard: reject oversized payloads (#1217).
-                length = int(self.headers.get("Content-Length", 0) or 0)
-                if length > 10240:
-                    self.send_error(413, "Payload Too Large")
-                    return
-                raw = self.rfile.read(length) if length else b""
-                try:
-                    payload = json.loads(raw.decode("utf-8"))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    self.send_error(400, "Bad Request")
-                    return
-                if not isinstance(payload, dict):
-                    self.send_error(400, "Bad Request")
-                    return
-                file_count = payload.get("file_count")
-                fmt = payload.get("format")
-                suno_playlist_url = payload.get("suno_playlist_url")
-                if file_count is None or not fmt:
-                    self.send_error(400, "Bad Request")
-                    return
-                # Validate file_count is a non-negative integer (not bool) (#1217).
-                if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
-                    self.send_error(400, "Bad Request")
-                    return
-                expected_file_count = payload.get("expected_file_count")
-                if expected_file_count is not None and (
-                    not isinstance(expected_file_count, int)
-                    or isinstance(expected_file_count, bool)
-                    or expected_file_count < 0
-                ):
-                    self.send_error(400, "Bad Request")
-                    return
-                # Validate format is a known audio format (#1217).
-                if fmt not in _VALID_DOWNLOAD_FORMATS:
-                    self.send_error(400, "Bad Request")
-                    return
-                # Validate download_path type if present (#1217).
-                download_path = payload.get("download_path")
-                if download_path is not None and not isinstance(download_path, str):
-                    self.send_error(400, "Bad Request")
-                    return
-                # Validate suno_playlist_url type if present (#1217).
-                if suno_playlist_url is not None and not isinstance(suno_playlist_url, str):
-                    self.send_error(400, "Bad Request")
-                    return
-                coll_dir = collections_root / cid
-                prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
-                pattern_count = 0
-                if prompts_path.is_file():
-                    try:
-                        prompts_data = json.loads(prompts_path.read_text(encoding="utf-8"))
-                        if isinstance(prompts_data, list):
-                            pattern_count = len(prompts_data)
-                    except (json.JSONDecodeError, OSError):
-                        pattern_count = 0
-                expected_count = _expected_download_count(pattern_count, expected_file_count)
-                placed_count_for_response = file_count
-                if download_path:
-                    if not suno_playlist_url:
-                        self.send_error(400, "Bad Request")
-                        return
-                    # Validate download_path: must be an absolute path (#1217).
-                    dp = Path(download_path)
-                    if not dp.is_absolute():
-                        self.send_error(400, "Bad Request")
-                        return
-                    resolved_dp = dp.resolve()
-                    staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
-                    try:
-                        placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
-                        if placed_count == 0:
-                            # Extraction failed: return 500 and do not mark as downloaded (#1217).
-                            self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
-                            return
-                        if expected_count is not None and placed_count < expected_count:
-                            self._send_json_error(
-                                500,
-                                "ZIP extraction incomplete: "
-                                f"expected at least {expected_count} audio files, placed {placed_count}",
-                            )
-                            return
-                        music_dir = CollectionPaths(coll_dir).music_dir
-                        music_dir.mkdir(parents=True, exist_ok=True)
-                        for staged in staging_dir.iterdir():
-                            if not staged.is_file():
-                                continue
-                            dest = music_dir / staged.name
-                            if dest.exists():
-                                dest.unlink()
-                            shutil.move(str(staged), str(dest))
-                    finally:
-                        shutil.rmtree(staging_dir, ignore_errors=True)
-                    placed_count_for_response = placed_count
-                    file_count = placed_count
-                # Update workflow state AFTER extraction (#1217).
-                _update_workflow_state_downloaded(
-                    coll_dir,
-                    file_count=file_count,
-                    suno_playlist_url=suno_playlist_url,
-                    expected_file_count=expected_count,
-                )
-                if download_path:
-                    _cleanup_download_archive(resolved_dp)
-                resp_body = json.dumps(
-                    {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
-                ).encode("utf-8")
-                self._send_bytes(resp_body, "application/json; charset=utf-8")
+                self._handle_downloaded_post(cid)
                 return
 
             # その他のパスは 404。POST は定義済みルートのみハンドルする。
@@ -1189,7 +1117,7 @@ def create_server(
 
         def _serve_dir_mode(self) -> None:
             if self.path == COLLECTIONS_ROUTE:
-                index = build_collections_index(collections_root, capture_prefix)
+                index = build_collections_index(collections_root)
                 body = json.dumps(index).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return

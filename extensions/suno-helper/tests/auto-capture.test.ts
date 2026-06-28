@@ -5,8 +5,7 @@
 // 切り出し（overlay-relay と同方針）、副作用を引数注入にして純ロジックを検証する。
 import { describe, expect, it, vi } from "vitest";
 
-import { autoCapturePlaylists, captureFromTab, triggerPlaylistCaptureFailSoft } from "../lib/auto-capture";
-import type { AutoCaptureDeps } from "../lib/auto-capture";
+import { captureFromTab } from "../lib/auto-capture";
 import type { CapturedPlaylist } from "../../shared/api";
 
 const ITEMS: CapturedPlaylist[] = [
@@ -145,110 +144,5 @@ describe("captureFromTab: content script 応答までリトライする", () => 
     });
 
     expect(result).toEqual([]);
-  });
-});
-
-// AutoCaptureDeps の各メソッドを typed mock で構築する。各 fn は vi.fn のため
-// toHaveBeenCalledWith / not.toHaveBeenCalled を呼べる（型は AutoCaptureDeps に一致）。
-function makeDeps(overrides: Partial<AutoCaptureDeps> = {}): AutoCaptureDeps {
-  return {
-    getServerUrl: vi.fn<() => Promise<string>>(async () => "http://localhost:7873"),
-    createMeTab: vi.fn<() => Promise<{ id?: number }>>(async () => ({ id: 7 })),
-    removeTab: vi.fn<(tabId: number) => Promise<void>>(async () => undefined),
-    capture: vi.fn<(tabId: number) => Promise<CapturedPlaylist[]>>(async () => ITEMS),
-    post: vi.fn<(baseUrl: string, items: CapturedPlaylist[]) => Promise<unknown>>(async () => ({
-      written: 2,
-      path: "/p",
-    })),
-    ...overrides,
-  };
-}
-
-describe("autoCapturePlaylists: 正常系 create→capture→POST→remove", () => {
-  it("Given URL あり・capture 結果あり When 実行 Then tab を開き scrape→POST し finally で閉じる", async () => {
-    const deps = makeDeps();
-
-    await autoCapturePlaylists(deps);
-
-    expect(deps.createMeTab).toHaveBeenCalledTimes(1);
-    expect(deps.capture).toHaveBeenCalledWith(7);
-    expect(deps.post).toHaveBeenCalledWith("http://localhost:7873", ITEMS);
-    expect(deps.removeTab).toHaveBeenCalledWith(7);
-  });
-
-  it("Given サーバー URL が末尾空白付き When 実行 Then trim した baseUrl で POST する", async () => {
-    const deps = makeDeps({ getServerUrl: vi.fn(async () => "  http://localhost:7873  ") });
-
-    await autoCapturePlaylists(deps);
-
-    expect(deps.post).toHaveBeenCalledWith("http://localhost:7873", ITEMS);
-  });
-});
-
-describe("autoCapturePlaylists: fail-soft / 早期 return の分岐", () => {
-  it("Given サーバー URL 未設定 When 実行 Then tab を開かず POST もしない（fail soft）", async () => {
-    const deps = makeDeps({ getServerUrl: vi.fn(async () => "   ") });
-
-    await autoCapturePlaylists(deps);
-
-    expect(deps.createMeTab).not.toHaveBeenCalled();
-    expect(deps.post).not.toHaveBeenCalled();
-    expect(deps.removeTab).not.toHaveBeenCalled();
-  });
-
-  it("Given tab.id が取れない When 実行 Then capture/POST せず（閉じる対象も無い）", async () => {
-    const deps = makeDeps({ createMeTab: vi.fn(async () => ({})) });
-
-    await autoCapturePlaylists(deps);
-
-    expect(deps.capture).not.toHaveBeenCalled();
-    expect(deps.post).not.toHaveBeenCalled();
-    expect(deps.removeTab).not.toHaveBeenCalled();
-  });
-
-  it("Given capture 結果が空 When 実行 Then POST せず tab は閉じる", async () => {
-    const deps = makeDeps({ capture: vi.fn(async () => [] as CapturedPlaylist[]) });
-
-    await autoCapturePlaylists(deps);
-
-    expect(deps.post).not.toHaveBeenCalled();
-    expect(deps.removeTab).toHaveBeenCalledWith(7);
-  });
-
-  it("Given capture が throw When 実行 Then POST せず finally で tab を閉じ、例外を伝播する", async () => {
-    const deps = makeDeps({ capture: vi.fn(async () => Promise.reject(new Error("scrape failed"))) });
-
-    await expect(autoCapturePlaylists(deps)).rejects.toThrow("scrape failed");
-    expect(deps.post).not.toHaveBeenCalled();
-    expect(deps.removeTab).toHaveBeenCalledWith(7);
-  });
-
-  it("Given POST が throw When 実行 Then finally で tab を閉じ、例外を伝播する", async () => {
-    const deps = makeDeps({ post: vi.fn(async () => Promise.reject(new Error("HTTP 403"))) });
-
-    await expect(autoCapturePlaylists(deps)).rejects.toThrow("HTTP 403");
-    expect(deps.removeTab).toHaveBeenCalledWith(7);
-  });
-});
-
-describe("triggerPlaylistCaptureFailSoft: content→background trigger は FINISHED を妨げない", () => {
-  it("Given send 成功 When trigger Then onError を呼ばず正常に resolve する", async () => {
-    const send = vi.fn(async () => undefined);
-    const onError = vi.fn();
-
-    await triggerPlaylistCaptureFailSoft(send, onError);
-
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(onError).not.toHaveBeenCalled();
-  });
-
-  it("Given send が throw（background 不在等）When trigger Then 握って onError へ流し、reject しない（fail soft）", async () => {
-    const err = new Error("no receiving end");
-    const send = vi.fn(async () => Promise.reject(err));
-    const onError = vi.fn();
-
-    // reject せず resolve することで、呼び出し側の PHASE.FINISHED 進行が妨げられないことを担保する。
-    await expect(triggerPlaylistCaptureFailSoft(send, onError)).resolves.toBeUndefined();
-    expect(onError).toHaveBeenCalledWith(err);
   });
 });

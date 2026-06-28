@@ -260,16 +260,6 @@ export default defineContentScript({
       }
     }
 
-    async function downloadStrict(
-      collectionId: string,
-      progressTotal: number,
-      expectedFileCount: number,
-      sunoPlaylistUrl: string,
-      isAborted: () => boolean,
-    ): Promise<void> {
-      await performDownload(collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl, isAborted);
-    }
-
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       // attempt ごとに lastSubmittedEntryIndex を -1 にリセットする。
       // injectWithVerification が silent drop を検知して同一 entry を retry するとき、
@@ -770,7 +760,7 @@ export default defineContentScript({
           }
           if (collectionId) {
             const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-            await downloadStrict(collectionId, expectedClipCount, expectedClipCount, sunoPlaylistUrl, () => aborted);
+            await performDownload(collectionId, expectedClipCount, expectedClipCount, sunoPlaylistUrl, () => aborted);
           }
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
@@ -800,7 +790,7 @@ export default defineContentScript({
       aborted = false;
       void (async () => {
         try {
-          const total = submittedClipIds.length || 0;
+          const total = submittedClipIds.length;
           if (submittedClipIds.length === 0) {
             throw new Error("retryDownload に必要な clip ID がありません");
           }
@@ -811,7 +801,7 @@ export default defineContentScript({
             return;
           }
           const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-          await downloadStrict(collectionId, total, expectedClipCount ?? total, sunoPlaylistUrl, () => aborted);
+          await performDownload(collectionId, total, expectedClipCount ?? total, sunoPlaylistUrl, () => aborted);
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
