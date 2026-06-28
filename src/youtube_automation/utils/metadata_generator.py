@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+import yaml
+
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
@@ -30,17 +32,25 @@ from .youtube_tag import normalize_youtube_tags
 
 logger = logging.getLogger(__name__)
 
-# `pattern-b1-` のような variation 接尾辞も許容する（`_clean_track_title` のサニタイズ規約と同じ）。
-# 末尾 `(?![a-z])` で `pattern-e-` のような範囲外文字は明示的に reject する。
-_PATTERN_KEY_RE = re.compile(r"^\d+-pattern-([a-d])(?![a-z])", re.IGNORECASE)
+# `pattern-b1-` のような variation 接尾辞を保持する。
+_PATTERN_KEY_RE = re.compile(r"^\d+-pattern-([a-d]\d*)-", re.IGNORECASE)
+_EXTRA_VARIATION_RE = re.compile(r"^\d+-extra-v(\d+)(?:[-.]|$)", re.IGNORECASE)
 
 
 def _extract_pattern_key(filename: str) -> str | None:
-    """ファイル名から pattern_key（'a'|'b'|'c'|'d'）を抽出する。マッチしなければ None."""
+    """ファイル名から pattern_key（'a'|'b1'|'d2' 等）を抽出する。マッチしなければ None."""
     m = _PATTERN_KEY_RE.match(filename)
     if not m:
         return None
     return m.group(1).lower()
+
+
+def _extract_extra_variation(filename: str) -> str | None:
+    """`01-extra-v2-...` から extra variation 番号を抽出する。"""
+    m = _EXTRA_VARIATION_RE.match(filename)
+    if not m:
+        return None
+    return m.group(1)
 
 
 def _referenced_placeholders(template: str) -> set[str]:
@@ -363,6 +373,7 @@ class BAHMetadataGenerator:
             )
 
         self.tracks = tracks
+        self._apply_suno_pattern_track_names()
         # LLM がリネームした表示名が workflow-state.json に永続化されていれば再ロード時にも反映する
         self._apply_persisted_display_names()
         logger.info(f"楽曲解析完了: {len(tracks)}曲")
@@ -420,7 +431,7 @@ class BAHMetadataGenerator:
         title = re.sub(r"^\d{2}-", "", title)
 
         # パターンプレフィックス削除 ("pattern-a1-", "pattern-b-", "pattern-c2-" 等)
-        title = re.sub(r"^pattern-[a-z]\d?-", "", title, flags=re.IGNORECASE)
+        title = re.sub(r"^pattern-[a-z]\d*-", "", title, flags=re.IGNORECASE)
 
         # サフィックス削除 ("(Remix)", "(Extended)" 等)
         title = re.sub(r"\s*\([^)]+\)\s*$", "", title)
@@ -534,6 +545,79 @@ class BAHMetadataGenerator:
             elif data.get("name"):
                 result[key] = f"Pattern {key.upper()}: {data['name']}"
         return result
+
+    def _load_suno_pattern_name_en(self) -> Dict[str, str]:
+        """20-documentation/suno-patterns.yaml から pattern_key -> name_en を解決する.
+
+        `yt-generate-suno` と同じく `patterns:` 配列順を A/B/C... に対応させる。
+        複数 scene を持つ pattern は `a1`, `a2` の variation key も同じ `name_en` に
+        紐づけ、`pattern-d2-...` のようなファイル名から参照できるようにする。
+        """
+        patterns_path = CollectionPaths(self.collection_path).docs_dir / "suno-patterns.yaml"
+        if not patterns_path.exists():
+            return {}
+
+        try:
+            with open(patterns_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except (OSError, yaml.YAMLError):
+            return {}
+
+        patterns = data.get("patterns") or []
+        if not isinstance(patterns, list):
+            return {}
+
+        labels = "abcdefghijklmnopqrstuvwxyz"
+        result: Dict[str, str] = {}
+        for i, pattern in enumerate(patterns):
+            if i >= len(labels) or not isinstance(pattern, dict):
+                continue
+            name_en = str(pattern.get("name_en") or "").strip()
+            if not name_en:
+                continue
+            base_key = labels[i]
+            result[base_key] = name_en
+            scenes = pattern.get("scenes") or []
+            if isinstance(scenes, list):
+                for j, _scene in enumerate(scenes, 1):
+                    result[f"{base_key}{j}"] = name_en
+        return result
+
+    @staticmethod
+    def _prefix_track_title(prefix: str, title: str) -> str:
+        """既存 title の情報を残しながら、読みやすい prefix を付ける."""
+        prefix = " ".join(prefix.split())
+        title = " ".join(title.split())
+        if not prefix:
+            return title
+        if not title or title.casefold() == prefix.casefold() or title.casefold().startswith(f"{prefix.casefold()} - "):
+            return title or prefix
+        return f"{prefix} - {title}"
+
+    def _apply_suno_pattern_track_names(self) -> None:
+        """suno-patterns.yaml の name_en をトラック表示名のプレフィックスに適用する."""
+        pattern_names = self._load_suno_pattern_name_en()
+        theme = self._extract_theme_name()
+
+        for track in self.tracks:
+            filename = track.get("filename", "")
+            title = track.get("title", "")
+            prefix = ""
+
+            pattern_key = track.get("pattern_key")
+            if pattern_key:
+                prefix = pattern_names.get(pattern_key) or pattern_names.get(pattern_key[:1], "")
+            else:
+                extra_variation = _extract_extra_variation(filename)
+                if extra_variation and theme:
+                    extra_title = f"{theme} Extra V{extra_variation}"
+                    if title.casefold() == f"extra v{extra_variation}".casefold():
+                        track["title"] = extra_title
+                        continue
+                    prefix = extra_title
+
+            if prefix:
+                track["title"] = self._prefix_track_title(prefix, title)
 
     def detect_duplicate_track_titles(self) -> Dict[str, List[int]]:
         """同名トラックを検出する（case-insensitive）.
