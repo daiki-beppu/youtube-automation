@@ -503,9 +503,13 @@ def _read_workflow_theme(coll_dir: Path) -> str | None:
 
 
 def _theme_from_collection_dir(coll_dir: Path) -> str:
-    """表示用 theme slug を返す。workflow-state を優先し、旧 collection_name は fallback。"""
+    """collection dir 由来の theme slug を返す。
+
+    workflow-state.json の theme は人間向け表示名の場合があるため、collection id の
+    suffix slug として検証できる値だけを `/collections` の theme 契約に使う。
+    """
     workflow_theme = _read_workflow_theme(coll_dir)
-    if workflow_theme:
+    if workflow_theme and _channel_from_collection_id(coll_dir.name, workflow_theme) is not None:
         return workflow_theme
     fallback = CollectionPaths(coll_dir).collection_name
     return fallback[: -len(_COLLECTION_DIR_SUFFIX)] if fallback.endswith(_COLLECTION_DIR_SUFFIX) else fallback
@@ -662,16 +666,30 @@ def _parse_downloaded_payload(payload: object) -> DownloadedPayload:
 
 
 def _commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
-    """staging_dir のリネーム済み音声ファイルを 02-Individual-music/ へ原子的に寄せる。"""
+    """staging_dir のリネーム済み音声ファイルを 02-Individual-music/ へ rollback 可能に寄せる。"""
     music_dir = CollectionPaths(coll_dir).music_dir
-    music_dir.mkdir(parents=True, exist_ok=True)
-    for staged in staging_dir.iterdir():
-        if not staged.is_file():
-            continue
-        dest = music_dir / staged.name
-        if dest.exists():
-            dest.unlink()
-        shutil.move(str(staged), str(dest))
+    music_dir.parent.mkdir(parents=True, exist_ok=True)
+    backup_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-backup-"))
+    backup_payload = backup_dir / "02-Individual-music"
+    had_existing_music_dir = music_dir.exists()
+
+    try:
+        if had_existing_music_dir:
+            shutil.move(str(music_dir), str(backup_payload))
+        music_dir.mkdir(parents=True, exist_ok=True)
+        for staged in sorted(staging_dir.iterdir()):
+            if staged.is_file():
+                shutil.move(str(staged), str(music_dir / staged.name))
+    except Exception:
+        shutil.rmtree(music_dir, ignore_errors=True)
+        if had_existing_music_dir and backup_payload.exists():
+            shutil.move(str(backup_payload), str(music_dir))
+        raise
+    else:
+        shutil.rmtree(backup_dir, ignore_errors=True)
+    finally:
+        if backup_dir.exists() and not backup_payload.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
 
 
 def _extract_downloaded_archive(coll_dir: Path, download_path: str, expected_count: int | None) -> int:

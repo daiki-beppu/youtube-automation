@@ -35,6 +35,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
+    _commit_staged_music_files,
     _extract_and_rename_music,
     build_collections_index,
     create_server,
@@ -604,6 +605,25 @@ def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
     assert row["channel"] == "clm"
 
 
+def test_build_collections_index_uses_dir_slug_when_workflow_theme_is_display_name(tmp_path):
+    """Given workflow-state.theme が人間向け表示名の既存 collection
+    When build_collections_index を呼ぶ
+    Then extension が playlist 名導出に使う theme/channel は dir slug から返す。
+    """
+    _make_collection(
+        tmp_path,
+        "20260601-rjn-rainy-jazz-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+        theme="Rainy Jazz",
+    )
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["name"] == "rainy-jazz"
+    assert row["theme"] == "rainy-jazz"
+    assert row["channel"] == "rjn"
+
+
 def test_build_collections_index_does_not_emit_playlist_name(tmp_path):
     """Given multi-word prefix の collection
     When build_collections_index を呼ぶ
@@ -715,6 +735,42 @@ def test_build_collections_index_uses_workflow_expected_file_count_when_larger(t
     assert row["status"] == "ready"
     assert row["downloaded_count"] == 4
     assert row["expected_file_count"] == 6
+
+
+def test_commit_staged_music_files_rolls_back_when_staged_move_fails(tmp_path, monkeypatch):
+    """Given 既存 music_dir と staging 2 件
+    When 2 件目の staged move が失敗する
+    Then music_dir は呼び出し前と同一に戻る。
+    """
+    coll = tmp_path / "20260601-clm-rainy-jazz-collection"
+    music_dir = coll / "02-Individual-music"
+    staging_dir = coll / ".suno-music-staging"
+    music_dir.mkdir(parents=True)
+    staging_dir.mkdir(parents=True)
+    (music_dir / "01_old.mp3").write_bytes(b"old-1")
+    (music_dir / "02_old.mp3").write_bytes(b"old-2")
+    (staging_dir / "01_new.mp3").write_bytes(b"new-1")
+    (staging_dir / "02_new.mp3").write_bytes(b"new-2")
+
+    original_files = {p.name: p.read_bytes() for p in sorted(music_dir.iterdir())}
+    real_move = __import__("shutil").move
+    staged_move_count = 0
+
+    def fail_second_staged_move(src, dst, *args, **kwargs):
+        nonlocal staged_move_count
+        if Path(src).parent == staging_dir:
+            staged_move_count += 1
+            if staged_move_count == 2:
+                raise OSError("simulated move failure")
+        return real_move(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("youtube_automation.scripts.collection_serve.shutil.move", fail_second_staged_move)
+
+    with pytest.raises(OSError, match="simulated move failure"):
+        _commit_staged_music_files(coll, staging_dir)
+
+    assert {p.name: p.read_bytes() for p in sorted(music_dir.iterdir())} == original_files
+    assert not any(p.name.startswith(".suno-music-backup-") for p in coll.iterdir())
 
 
 def test_resolve_collection_prompts_path_valid_id_returns_docs_json(tmp_path):

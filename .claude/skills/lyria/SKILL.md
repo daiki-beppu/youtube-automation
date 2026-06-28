@@ -168,7 +168,7 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 1. `audio.target_duration_min` + skill-config `duration_padding_min` から必要セグメント数 N を自動算出（`ceil((target + padding) * 60 / 184)`）
 2. `lyria_client.generate_music()` を N 回呼び、レスポンスを `02-Individual-music/{NN}_{name}.wav` に PCM s16le 48 kHz stereo で保存（既存ファイルは skip = resume 可能）
 3. 失敗時は `--max-retries` 回までリトライ
-4. 全セグメント揃ったら `generate_master.generate_master()` 経由でクロスフェード結合し `01-master/master.wav` を出力（`masterup.audio.crossfade_duration` を参照）
+4. 全セグメント揃ったら `generate_master.generate_master()` 経由でクロスフェード結合し `01-master/master.mp3` を出力（`masterup.audio.crossfade_duration` を参照）
 
 ```bash
 uv run yt-generate-lyria-master \
@@ -211,7 +211,7 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 ```
 
 **コピー対象**:
-- `01-master/master.wav` → メインの `01-master/`
+- `01-master/master.mp3` → メインの `01-master/`
 - `10-assets/main.png` → メインの `10-assets/`
 
 事前確認には `--dry-run` を付ける。
@@ -293,7 +293,7 @@ uv run yt-generate-lyria-master \
 
 cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "lyria" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "lyria"` + `cmux notify --title "lyria 完了"` を呼ぶ（非 cmux 環境では skip）。
 
-完了通知が届いたらログ末尾から結果サマリー（生成セグメント数、`01-master/master.wav` のパス）をユーザーへ返す。429 / クォータエラーが出た場合はそのエラー行を抜き出して報告し、`--max-retries` の調整やリトライタイミングを提案する。
+完了通知が届いたらログ末尾から結果サマリー（生成セグメント数、`01-master/master.mp3` のパス）をユーザーへ返す。429 / クォータエラーが出た場合はそのエラー行を抜き出して報告し、`--max-retries` の調整やリトライタイミングを提案する。
 
 ## オーディオビジュアライザー / オーバーレイ
 

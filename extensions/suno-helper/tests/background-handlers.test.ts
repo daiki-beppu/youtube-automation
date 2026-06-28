@@ -27,6 +27,12 @@ interface DownloadItem {
   state?: string;
 }
 
+interface StoredDownloadWatcher {
+  tabId: number;
+  monitorStartedAt: number;
+  targetDownloadId: number | null;
+}
+
 async function loadBackground(opts?: {
   searchResults?: Array<{ filename: string; startTime?: string; url?: string; finalUrl?: string; referrer?: string }>;
   searchResultsById?: Record<
@@ -45,6 +51,7 @@ async function loadBackground(opts?: {
   debuggerAttachError?: Error;
   debuggerSendCommandError?: Error;
   postDownloadedError?: Error;
+  sessionState?: StoredDownloadWatcher;
 }) {
   vi.resetModules();
 
@@ -75,6 +82,9 @@ async function loadBackground(opts?: {
   const removedCreatedListeners: Array<(item: DownloadItem) => void> = [];
   const downloadListeners: Array<(delta: DownloadDelta) => void> = [];
   const removedDownloadListeners: Array<(delta: DownloadDelta) => void> = [];
+  const sessionStore: Record<string, unknown> = opts?.sessionState
+    ? { "suno-helper:downloadWatcher": opts.sessionState }
+    : {};
 
   const chromeDownloads = {
     onCreated: {
@@ -144,6 +154,19 @@ async function loadBackground(opts?: {
   vi.stubGlobal("chrome", {
     downloads: chromeDownloads,
     debugger: chromeDebugger,
+    storage: {
+      session: {
+        get: vi.fn((key: string, cb: (items: Record<string, unknown>) => void) => {
+          cb({ [key]: sessionStore[key] });
+        }),
+        set: vi.fn((items: Record<string, unknown>) => {
+          Object.assign(sessionStore, items);
+        }),
+        remove: vi.fn((key: string) => {
+          delete sessionStore[key];
+        }),
+      },
+    },
   });
 
   // --- module mocks ---
@@ -193,6 +216,7 @@ async function loadBackground(opts?: {
     chromeDownloads,
     chromeDebugger,
     postDownloadedMock,
+    sessionStore,
   };
 }
 
@@ -204,6 +228,11 @@ function freshZip(id: number, overrides: Partial<DownloadItem> = {}): DownloadIt
     url: "https://suno.com/api/download/zip",
     ...overrides,
   };
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 // startDownload ----------------------------------------------------------------
@@ -239,9 +268,8 @@ describe('background onMessage("startDownload"): .zip 完了で downloadComplete
       tabId: 42,
     });
 
-    // listener が解除されたことを確認
-    expect(removedDownloadListeners).toHaveLength(1);
-    expect(removedDownloadListeners[0]).toBe(listener);
+    // top-level listener は維持し、監視状態だけを解放する。
+    expect(removedDownloadListeners).toHaveLength(0);
   });
 });
 
@@ -281,7 +309,7 @@ describe('background onMessage("startDownload"): タイムアウトで listener 
   });
 
   it("Given 10 分経過 When タイムアウト Then listener を解除する", async () => {
-    const { handlers, downloadListeners, removedDownloadListeners } = await loadBackground();
+    const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground();
 
     handlers.get("startDownload")!({
       data: { format: "mp3" },
@@ -294,8 +322,18 @@ describe('background onMessage("startDownload"): タイムアウトで listener 
     // 10 分 (600000ms) を advance
     vi.advanceTimersByTime(600000);
 
-    expect(removedDownloadListeners).toHaveLength(1);
-    expect(removedDownloadListeners[0]).toBe(downloadListeners[0]);
+    expect(removedDownloadListeners).toHaveLength(0);
+    expect(sentMessages).toContainEqual({
+      type: "downloadFailed",
+      data: { message: expect.stringContaining("タイムアウト") },
+      tabId: 42,
+    });
+    expect(
+      handlers.get("startDownload")!({
+        data: { format: "mp3" },
+        sender: { tab: { id: 42 } },
+      }),
+    ).toEqual({ ok: true });
   });
 });
 
@@ -322,7 +360,7 @@ describe('background onMessage("startDownload"): 成功時にタイムアウト�
     // .zip ダウンロード完了で listener が解除される
     createdListeners[0](freshZip(1));
     listener({ id: 1, state: { current: "complete" } });
-    expect(removedDownloadListeners).toHaveLength(1);
+    expect(removedDownloadListeners).toHaveLength(0);
 
     // 10 分を advance — timeout は clearTimeout 済みなので発火しない
     vi.advanceTimersByTime(600000);
@@ -389,9 +427,8 @@ describe('background onMessage("startDownload"): interrupted 状態でクリー�
     createdListeners[0](freshZip(1));
     listener({ id: 1, state: { current: "interrupted" } });
 
-    // listener が解除されたことを確認
-    expect(removedDownloadListeners).toHaveLength(1);
-    expect(removedDownloadListeners[0]).toBe(listener);
+    // top-level listener は維持し、監視状態だけを解放する。
+    expect(removedDownloadListeners).toHaveLength(0);
 
     // downloadComplete は送信されず、downloadFailed が即時に中継される
     expect(sentMessages.filter((m) => m.type === "downloadComplete")).toHaveLength(0);
@@ -444,7 +481,7 @@ describe('background onMessage("startDownload"): 無関係な interrupted は無
       data: { message: expect.stringContaining("中断") },
       tabId: 42,
     });
-    expect(removedDownloadListeners).toContain(listener);
+    expect(removedDownloadListeners).not.toContain(listener);
   });
 
   it("Given 非 zip の interrupted When listener 発火 Then listener を維持し失敗通知しない", async () => {
@@ -536,7 +573,7 @@ describe('background onMessage("startDownload"): 監視開始前の .zip は無�
       data: { filename: "new.zip" },
       tabId: 42,
     });
-    expect(removedDownloadListeners).toContain(listener);
+    expect(removedDownloadListeners).not.toContain(listener);
   });
 
   it("Given 対象外の fresh Suno ZIP When 別 id の listener 発火 Then 完了扱いしない", async () => {
@@ -609,7 +646,7 @@ describe('background onMessage("startDownload"): timeout fallback で完了済�
       data: { filename: "/Users/test/Downloads/soulful-grooves.zip" },
       tabId: 42,
     });
-    expect(removedDownloadListeners).toContain(downloadListeners[0]);
+    expect(removedDownloadListeners).not.toContain(downloadListeners[0]);
   });
 });
 
@@ -658,7 +695,48 @@ describe('background onMessage("startDownload"): polling fallback で完了済�
       data: { filename: "/Users/test/Downloads/soulful-grooves.zip" },
       tabId: 42,
     });
-    expect(removedDownloadListeners).toContain(downloadListeners[0]);
+    expect(removedDownloadListeners).not.toContain(downloadListeners[0]);
+  });
+});
+
+describe("background downloads listener: service worker restart 後も session watcher を復元する (#1217)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("Given 保存済み watcher When background が再初期化され complete event を受ける Then downloadComplete を中継する", async () => {
+    const freshStart = new Date().toISOString();
+    const { sentMessages, downloadListeners, sessionStore } = await loadBackground({
+      sessionState: {
+        tabId: 42,
+        monitorStartedAt: Date.now(),
+        targetDownloadId: 77,
+      },
+      searchResultsById: {
+        77: [
+          {
+            filename: "/Users/test/Downloads/restored.zip",
+            startTime: freshStart,
+            url: "https://cdn1.suno.ai/restored.zip",
+          },
+        ],
+      },
+    });
+    await flushPromises();
+
+    downloadListeners[0]({ id: 77, state: { current: "complete" } });
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "/Users/test/Downloads/restored.zip" },
+      tabId: 42,
+    });
+    expect(sessionStore["suno-helper:downloadWatcher"]).toBeUndefined();
   });
 });
 
@@ -709,14 +787,15 @@ describe('background onMessage("cancelDownload"): active watcher を解除する
       sender: { tab: { id: 42 } },
     });
 
-    expect(removedDownloadListeners).toContain(listener);
+    expect(removedDownloadListeners).not.toContain(listener);
 
-    handlers.get("startDownload")!({
+    const result = handlers.get("startDownload")!({
       data: { format: "mp3" },
       sender: { tab: { id: 42 } },
     });
 
-    expect(downloadListeners).toHaveLength(2);
+    expect(result).toEqual({ ok: true });
+    expect(downloadListeners).toHaveLength(1);
     expect(sentMessages.filter((m) => m.type === "downloadFailed")).toHaveLength(0);
   });
 
