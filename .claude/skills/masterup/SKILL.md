@@ -145,16 +145,49 @@ $ARGUMENTS
 ### Step 3: MP3 ダウンロード（CDN curl）
 
 各曲について:
-1. Song ID から CDN URL を生成: `https://cdn1.suno.ai/{song_id}.mp3`
-2. `curl` でダウンロードし `02-Individual-music/` に保存
-3. ファイル名: 連番 + タイトルから生成（例: `01-pattern-a-arrival.mp3`）
+1. Song ID または Suno ショート URL（`https://suno.com/s/<slug>`）を UUID に正規化
+2. UUID から CDN URL を生成: `https://cdn1.suno.ai/{song_id}.mp3`
+3. `curl` でダウンロードし `02-Individual-music/` に保存
+4. ファイル名: 連番 + タイトルから生成（例: `01-pattern-a-arrival.mp3`）
+
+**Suno ショート URL の UUID 解決**:
+
+`song_id` 欄に `https://suno.com/s/<slug>` が入っている場合は、リダイレクト先 URL から UUID を抽出してから CDN URL を組み立てる。解決できない場合は当該曲をスキップせず、原因を表示して処理を停止する（silent な欠落禁止）。
+
+```bash
+resolve_suno_song_id() {
+  local input="$1"
+  local uuid_re='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+
+  if echo "$input" | rg -qi "^${uuid_re}$"; then
+    echo "$input"
+    return 0
+  fi
+
+  if echo "$input" | rg -qi '^https://suno\.com/s/[^[:space:]]+$'; then
+    local final_url
+    final_url="$(curl -sI -L -o /dev/null -w '%{url_effective}' "$input")"
+    if echo "$final_url" | rg -qio "$uuid_re"; then
+      echo "$final_url" | rg -o "$uuid_re" | tail -1
+      return 0
+    fi
+    echo "ERROR: Suno ショート URL から UUID を解決できません: $input (final_url=$final_url)" >&2
+    return 1
+  fi
+
+  echo "ERROR: Song ID は UUID または https://suno.com/s/<slug> で指定してください: $input" >&2
+  return 1
+}
+```
 
 **入力値のサニタイズ（必須）**:
 - **Song ID**: UUID v4 形式（`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`、hex + hyphen のみ）であることを検証する。正規表現: `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`（case-insensitive）。不一致なら当該曲をスキップし警告を出す（シェルインジェクション防止）
 - **ファイル名 slug**: タイトルから生成するファイル名は英数字・ハイフン・アンダースコアのみ許可し、それ以外の文字は `-` に置換する（`tr -cs 'a-zA-Z0-9_-' '-'`）。先頭・末尾の `-` は除去する
 
 ```bash
-# song_id の UUID 検証（各曲ループ内で実行）
+# song_id の UUID 正規化・検証（各曲ループ内で実行）
+song_id="$(resolve_suno_song_id "$song_id")" || exit 1
+
 if ! echo "$song_id" | rg -qi '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
   echo "SKIP: invalid song_id format: $song_id"
   continue
