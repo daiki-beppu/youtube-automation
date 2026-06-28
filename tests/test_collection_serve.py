@@ -35,8 +35,6 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
-    _commit_staged_music_files,
-    _extract_and_rename_music,
     build_collections_index,
     create_server,
     find_collection_dirs,
@@ -46,6 +44,7 @@ from youtube_automation.scripts.collection_serve import (
     resolve_prompts_path,
 )
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.suno_downloaded_artifacts import _commit_staged_music_files, _extract_and_rename_music
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_ORIGIN = "https://suno.com"
@@ -764,7 +763,7 @@ def test_commit_staged_music_files_rolls_back_when_staged_move_fails(tmp_path, m
                 raise OSError("simulated move failure")
         return real_move(src, dst, *args, **kwargs)
 
-    monkeypatch.setattr("youtube_automation.scripts.collection_serve.shutil.move", fail_second_staged_move)
+    monkeypatch.setattr("youtube_automation.utils.suno_downloaded_artifacts.shutil.move", fail_second_staged_move)
 
     with pytest.raises(OSError, match="simulated move failure"):
         _commit_staged_music_files(coll, staging_dir)

@@ -20,7 +20,6 @@ import json
 import mimetypes
 import os
 import re
-import shutil
 import tempfile
 import urllib.parse
 import uuid
@@ -39,8 +38,8 @@ from youtube_automation.scripts.distrokid_release import (
 )
 from youtube_automation.scripts.suno_artifacts import (
     COLLECTIONS_ROUTE,
-    DOWNLOADED_ROUTE_SUFFIX,
     DOCUMENTATION_DIRNAME,
+    DOWNLOADED_ROUTE_SUFFIX,
     SUNO_PLAYLISTS_ROUTE,
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_ROUTE,
@@ -55,10 +54,8 @@ from youtube_automation.utils.suno_downloaded_artifacts import (
     DownloadedArtifactError,
     DownloadedPayloadError,
     _apply_downloaded_artifacts,
-    _commit_staged_music_files,
     _count_audio_files,
     _expected_download_count,
-    _extract_and_rename_music,
     _parse_downloaded_payload,
     _read_pattern_count,
 )
@@ -493,6 +490,7 @@ def _channel_from_collection_id(collection_id: str, theme: str) -> str | None:
     channel = "-".join(parts[1:])
     return channel or None
 
+
 def build_collections_index(root: Path) -> list[dict]:
     """各 collection を index entry に写像する（#816 dir mode / #1216 BREAKING）.
 
@@ -569,6 +567,7 @@ def _is_exact_extension_origin_lock(raw_origin: str | None, allow_origin: str | 
         and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
         and raw_origin == allow_origin
     )
+
 
 def build_version_payload() -> dict[str, str]:
     """拡張の互換確認用 version payload を返す（#1023）."""
