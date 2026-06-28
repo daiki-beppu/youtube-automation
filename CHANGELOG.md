@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(masterup)`: Suno ショート URL からの楽曲解決手順を追加（#1094）
 - `docs(automation-update)`: GitHub CLI が使えない環境向けに curl での release 取得手順を追加（#1098）
 - `docs(short)`: short / short-release の workflow-state schema 記述を実運用の状態ファイルに合わせて修正（#1171）
 - `docs(short-release)`: short-release スキルの手順をショート生成までの責務に整理（#1170）
