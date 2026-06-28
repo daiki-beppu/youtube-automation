@@ -69,6 +69,3 @@ def apply_downloaded_artifacts(
         if music_backup_dir is not None:
             shutil.rmtree(music_backup_dir, ignore_errors=True)
     return placed_count_for_response
-
-
-_apply_downloaded_artifacts = apply_downloaded_artifacts

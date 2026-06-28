@@ -208,9 +208,3 @@ def extract_and_rename_music(coll_dir: Path, download_path: str, target_dir: Pat
         return 0
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-_count_audio_files = count_audio_files
-_commit_staged_music_files = commit_staged_music_files
-_extract_downloaded_archive = extract_downloaded_archive
-_extract_and_rename_music = extract_and_rename_music

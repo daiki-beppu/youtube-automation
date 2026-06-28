@@ -227,6 +227,16 @@ class TestCli:
         err = capsys.readouterr().err
         assert "not allowed with argument" in err
 
+    def test_no_loop_and_target_duration_mutually_exclusive(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", "--no-loop", "--target-duration", "120"],
+        )
+        with pytest.raises(SystemExit) as exc:
+            generate_master.main()
+        assert exc.value.code == 2
+        assert "not allowed with argument" in capsys.readouterr().err
+
     def test_invalid_loop_value(self, monkeypatch, capsys):
         monkeypatch.setattr("sys.argv", ["yt-generate-master", "--loop", "0"])
         # collection 解決前にバリデーションで落ちる
@@ -323,6 +333,26 @@ class TestCliSkillConfigTargetDuration:
         assert rc == 0
         assert captured["kwargs"]["loops"] == 3
         assert captured["kwargs"]["target_duration_min"] is None
+
+    def test_cli_no_loop_ignores_skill_config_target_duration(self, monkeypatch, tmp_path):
+        # Given: --no-loop 指定時は skill-config の target_duration_min を黙って無視
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 120}},
+        )
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--no-loop"],
+        )
+
+        # When
+        rc = generate_master.main()
+
+        # Then: no_loop=True, target_duration_min=None (skill-config 値が漏れない)
+        assert rc == 0
+        assert captured["kwargs"]["loops"] is None
+        assert captured["kwargs"]["target_duration_min"] is None
+        assert captured["kwargs"]["no_loop"] is True
 
     def test_skill_config_target_duration_below_one_raises_validation_error(self, monkeypatch, capsys, tmp_path):
         # Given: skill-config 値が境界外 (< 1) — CLI と同じ境界条件で弾く

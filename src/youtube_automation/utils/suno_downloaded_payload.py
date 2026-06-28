@@ -64,6 +64,3 @@ def parse_downloaded_payload(payload: object) -> DownloadedPayload:
         expected_file_count=expected_file_count,
         download_path=download_path,
     )
-
-
-_parse_downloaded_payload = parse_downloaded_payload

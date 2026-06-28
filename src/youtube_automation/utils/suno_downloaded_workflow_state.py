@@ -90,8 +90,3 @@ def update_workflow_state_downloaded(
 
     ws_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_json_write(ws_path, data, prefix=".workflow-state-")
-
-
-_read_pattern_count = read_pattern_count
-_expected_download_count = expected_download_count
-_update_workflow_state_downloaded = update_workflow_state_downloaded

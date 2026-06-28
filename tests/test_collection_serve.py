@@ -44,7 +44,7 @@ from youtube_automation.scripts.collection_serve import (
     resolve_prompts_path,
 )
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.suno_downloaded_archive import _commit_staged_music_files, _extract_and_rename_music
+from youtube_automation.utils.suno_downloaded_archive import commit_staged_music_files, extract_and_rename_music
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_ORIGIN = "https://suno.com"
@@ -766,7 +766,7 @@ def test_commit_staged_music_files_rolls_back_when_staged_move_fails(tmp_path, m
     monkeypatch.setattr("youtube_automation.utils.suno_downloaded_archive.shutil.move", fail_second_staged_move)
 
     with pytest.raises(OSError, match="simulated move failure"):
-        _commit_staged_music_files(coll, staging_dir)
+        commit_staged_music_files(coll, staging_dir)
 
     assert {p.name: p.read_bytes() for p in sorted(music_dir.iterdir())} == original_files
     assert not any(p.name.startswith(".suno-music-backup-") for p in coll.iterdir())
@@ -1391,7 +1391,7 @@ def test_post_downloaded_preserves_existing_workflow_state(serve_dir, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _extract_and_rename_music (#1256): ZIP 展開 + 曲順リネーム
+# extract_and_rename_music (#1256): ZIP 展開 + 曲順リネーム
 # ---------------------------------------------------------------------------
 
 
@@ -1423,7 +1423,7 @@ def test_extract_and_rename_happy_path(tmp_path):
         },
     )
 
-    _extract_and_rename_music(coll, str(zip_path))
+    extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     names = sorted(f.name for f in music_dir.iterdir())
@@ -1443,7 +1443,7 @@ def test_extract_without_prompts(tmp_path):
         {"Track A.mp3": b"a", "Track B.mp3": b"b"},
     )
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     assert result == 0
@@ -1454,7 +1454,7 @@ def test_extract_invalid_zip_path(tmp_path):
     """存在しない ZIP パス → fail-soft（例外なし、ファイル生成なし）。"""
     coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
 
-    _extract_and_rename_music(coll, str(tmp_path / "nonexistent.zip"))
+    extract_and_rename_music(coll, str(tmp_path / "nonexistent.zip"))
 
     music_dir = coll / "02-Individual-music"
     assert not music_dir.exists()
@@ -1466,7 +1466,7 @@ def test_extract_non_zip_file(tmp_path):
     not_zip = tmp_path / "fake.zip"
     not_zip.write_text("this is not a zip")
 
-    _extract_and_rename_music(coll, str(not_zip))
+    extract_and_rename_music(coll, str(not_zip))
 
     music_dir = coll / "02-Individual-music"
     assert not music_dir.exists()
@@ -1484,7 +1484,7 @@ def test_extract_variant_detection(tmp_path):
         {"My Song.mp3": b"take-a", "My Song_1.mp3": b"take-b"},
     )
 
-    _extract_and_rename_music(coll, str(zip_path))
+    extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     assert (music_dir / "01a-My Song.mp3").read_bytes() == b"take-a"
@@ -1511,7 +1511,7 @@ def test_extract_suno_track_prefixed_names(tmp_path):
         },
     )
 
-    _extract_and_rename_music(coll, str(zip_path))
+    extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     names = sorted(f.name for f in music_dir.iterdir())
@@ -1542,7 +1542,7 @@ def test_extract_japanese_name_with_english_tail(tmp_path):
         },
     )
 
-    _extract_and_rename_music(coll, str(zip_path))
+    extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     names = sorted(f.name for f in music_dir.iterdir())
@@ -1565,7 +1565,7 @@ def test_extract_unmatched_files(tmp_path):
         {"Known.mp3": b"matched", "Unknown.mp3": b"unmatched"},
     )
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     names = sorted(f.name for f in music_dir.iterdir())
@@ -1585,7 +1585,7 @@ def test_extract_skips_non_audio_files(tmp_path):
         {"Track.mp3": b"audio", "cover.jpg": b"image"},
     )
 
-    _extract_and_rename_music(coll, str(zip_path))
+    extract_and_rename_music(coll, str(zip_path))
 
     music_dir = coll / "02-Individual-music"
     names = [f.name for f in music_dir.iterdir()]
@@ -1605,7 +1605,7 @@ def test_extract_existing_audio_plus_empty_zip_returns_zero(tmp_path):
     # ZIP with no audio files
     zip_path = _make_zip(tmp_path / "empty-audio.zip", {"readme.txt": b"not audio"})
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     assert result == 0
 
@@ -1624,7 +1624,7 @@ def test_extract_title_based_matching(tmp_path):
         {"Custom Dawn Title.mp3": b"audio-by-title"},
     )
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     assert result == 1
     music_dir = coll / "02-Individual-music"
@@ -1641,7 +1641,7 @@ def test_extract_nested_zip_audio_files(tmp_path):
     )
     zip_path = _make_zip(tmp_path / "nested.zip", {"playlist/Song A.mp3": b"audio"})
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     assert result == 1
     music_dir = coll / "02-Individual-music"
@@ -1661,7 +1661,7 @@ def test_extract_rejects_zip_slip_audio_entry(tmp_path, monkeypatch):
     monkeypatch.setattr(cs.tempfile, "mkdtemp", lambda prefix: str(extract_root))
     zip_path = _make_zip(tmp_path / "zipslip.zip", {"../evil.mp3": b"bad"})
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     assert result == 0
     assert not (tmp_path / "evil.mp3").exists()
@@ -1872,7 +1872,7 @@ def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("huge.mp3", b"x" * 100)  # 100 bytes > limit of 10
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     assert result == 0
     music_dir = coll / "02-Individual-music"
@@ -1887,7 +1887,7 @@ def test_extract_too_many_entries_rejected(tmp_path):
         for i in range(1001):
             zf.writestr(f"track_{i:04d}.mp3", b"x")
 
-    result = _extract_and_rename_music(coll, str(zip_path))
+    result = extract_and_rename_music(coll, str(zip_path))
 
     assert result == 0
 

@@ -260,6 +260,10 @@ def generate_master(
     if pinned:
         print(f"[Pin] first {len(pinned)} track(s) fixed: {[p.name for p in pinned]}")
 
+    if no_loop:
+        loops = 1
+        target_duration_min = None
+
     should_print_duration_preview = (not quiet) and (target_duration_min is not None or loops is not None or no_loop)
     needs_duration_probe = target_duration_min is not None or should_print_duration_preview
     single_loop_sec = _sum_track_duration(files) if needs_duration_probe else 0.0
@@ -403,6 +407,12 @@ def main() -> int:
         dest="target_duration",
         help="目標尺 (分) 以上になる最小のループ回数を自動算出",
     )
+    loop_group.add_argument(
+        "--no-loop",
+        action="store_true",
+        dest="no_loop",
+        help="skill-config の target_duration_min を無視し、1 パスで生成",
+    )
     parser.add_argument(
         "--shuffle",
         action="store_true",
@@ -444,11 +454,11 @@ def main() -> int:
         crossfade = float(audio.get("crossfade_duration", 1.0))
         bitrate = str(audio.get("bitrate", "192k"))
 
-        # CLI フラグ (--loop / --target-duration) がすべて未指定なら
+        # CLI フラグ (--loop / --target-duration / --no-loop) がすべて未指定なら
         # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
-        # --loop 指定時は loops 指定が最優先のため skill-config 値を黙って無視する。
+        # --loop / --no-loop 指定時は CLI 指定が最優先のため skill-config 値を黙って無視する。
         target_duration: int | None = args.target_duration
-        if args.loop is None and args.target_duration is None:
+        if args.loop is None and args.target_duration is None and not args.no_loop:
             skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
             if skill_target is not None:
                 target_duration = int(skill_target)
@@ -503,7 +513,7 @@ def main() -> int:
             bitrate,
             loops=args.loop,
             target_duration_min=target_duration,
-            no_loop=False,
+            no_loop=args.no_loop,
             shuffle=shuffle_enabled,
             shuffle_seed=shuffle_seed,
             pin_first=pin_first,
