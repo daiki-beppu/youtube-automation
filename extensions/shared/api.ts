@@ -49,7 +49,6 @@ export type CollectionStatus = "needs_prompts" | "ready" | "downloaded";
 export interface CollectionSummary {
   id: string;
   name: string;
-  playlist_name?: string | null;
   status: CollectionStatus;
   pattern_count: number | null;
   downloaded_count: number;

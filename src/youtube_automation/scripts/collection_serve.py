@@ -551,8 +551,9 @@ def build_collections_index(root: Path, playlist_prefix: str | None = None) -> l
     - pattern_count = json があれば entries 数、無ければ None
     - downloaded_count = ``02-Individual-music/`` 内の音声ファイル数
 
-    #1216 BREAKING: mapped_slugs を廃止。mapped / has_prompts を廃止。
+    #1216 BREAKING: mapped_slugs を廃止。mapped / has_prompts / playlist_name を廃止。
     """
+    del playlist_prefix
     index: list[dict] = []
     for coll in find_collection_dirs(root):
         prompts_path = coll / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
@@ -572,8 +573,6 @@ def build_collections_index(root: Path, playlist_prefix: str | None = None) -> l
         }
         if expected_count is not None:
             entry["expected_file_count"] = expected_count
-        if playlist_prefix is not None:
-            entry["playlist_name"] = derive_playlist_name(coll.name, playlist_prefix)
         index.append(entry)
     return index
 
@@ -605,6 +604,16 @@ def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     if origin.startswith(_EXTENSION_ORIGIN_SCHEME):
         return True
     return origin in _DEFAULT_ALLOWED_WEB_ORIGINS
+
+
+def _is_exact_extension_origin_lock(raw_origin: str | None, allow_origin: str | None) -> bool:
+    """Token/mutating endpoints require an explicit extension Origin lock."""
+    return (
+        raw_origin is not None
+        and allow_origin is not None
+        and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
+        and raw_origin == allow_origin
+    )
 
 
 def _update_workflow_state_downloaded(
@@ -721,6 +730,7 @@ def _suno_name_lookup_candidates(name: str) -> list[str]:
 def _extract_and_rename_music(
     coll_dir: Path,
     download_path: str,
+    target_dir: Path | None = None,
 ) -> int:
     """ZIP を展開し suno-prompts.json の曲順でリネームして 02-Individual-music/ へ配置する (#1256).
 
@@ -752,7 +762,7 @@ def _extract_and_rename_music(
         except (json.JSONDecodeError, OSError, TypeError):
             pass
 
-    music_dir = CollectionPaths(coll_dir).music_dir
+    music_dir = target_dir or CollectionPaths(coll_dir).music_dir
     music_dir.mkdir(parents=True, exist_ok=True)
 
     tmp_dir = tempfile.mkdtemp(prefix="suno-extract-")
@@ -807,7 +817,10 @@ def _extract_and_rename_music(
                 new_name = f"{track_num:02d}{variant}-{lookup}{ext}"
             else:
                 new_name = extracted.name
-            shutil.move(str(extracted), str(music_dir / new_name))
+            dest = music_dir / new_name
+            if dest.exists():
+                dest.unlink()
+            shutil.move(str(extracted), str(dest))
             moved_count += 1
 
         print(f"[yt-collection-serve] 展開完了: {moved_count} files → {music_dir}")
@@ -1006,10 +1019,7 @@ def create_server(
             _downloaded_suffix = "/downloaded"
             if dir_mode and self.path.startswith(_downloaded_prefix) and self.path.endswith(_downloaded_suffix):
                 raw_origin = self.headers.get("Origin")
-                if raw_origin is not None and (origin is None or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)):
-                    self.send_error(403, "Forbidden")
-                    return
-                if raw_origin is None and allow_origin is not None:
+                if not _is_exact_extension_origin_lock(raw_origin, allow_origin):
                     self.send_error(403, "Forbidden")
                     return
                 # Token auth: require X-Serve-Token header (#1217).
@@ -1087,24 +1097,40 @@ def create_server(
                 expected_count = _expected_download_count(pattern_count, expected_file_count)
                 placed_count_for_response = file_count
                 if download_path:
+                    if not suno_playlist_url:
+                        self.send_error(400, "Bad Request")
+                        return
                     # Validate download_path: must be an absolute path (#1217).
                     dp = Path(download_path)
                     if not dp.is_absolute():
                         self.send_error(400, "Bad Request")
                         return
                     resolved_dp = dp.resolve()
-                    placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp))
-                    if placed_count == 0:
-                        # Extraction failed: return 500 and do not mark as downloaded (#1217).
-                        self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
-                        return
-                    if expected_count is not None and placed_count < expected_count:
-                        self._send_json_error(
-                            500,
-                            "ZIP extraction incomplete: "
-                            f"expected at least {expected_count} audio files, placed {placed_count}",
-                        )
-                        return
+                    staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
+                    try:
+                        placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
+                        if placed_count == 0:
+                            # Extraction failed: return 500 and do not mark as downloaded (#1217).
+                            self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
+                            return
+                        if expected_count is not None and placed_count < expected_count:
+                            self._send_json_error(
+                                500,
+                                "ZIP extraction incomplete: "
+                                f"expected at least {expected_count} audio files, placed {placed_count}",
+                            )
+                            return
+                        music_dir = CollectionPaths(coll_dir).music_dir
+                        music_dir.mkdir(parents=True, exist_ok=True)
+                        for staged in staging_dir.iterdir():
+                            if not staged.is_file():
+                                continue
+                            dest = music_dir / staged.name
+                            if dest.exists():
+                                dest.unlink()
+                            shutil.move(str(staged), str(dest))
+                    finally:
+                        shutil.rmtree(staging_dir, ignore_errors=True)
                     placed_count_for_response = placed_count
                     file_count = placed_count
                 # Update workflow state AFTER extraction (#1217).
@@ -1138,11 +1164,7 @@ def create_server(
                 return
             if self.path == "/auth/token":
                 raw_origin = self.headers.get("Origin")
-                origin = self._allowed_origin()
-                if raw_origin is not None and (origin is None or not origin.startswith(_EXTENSION_ORIGIN_SCHEME)):
-                    self.send_error(403, "Forbidden")
-                    return
-                if raw_origin is None and allow_origin is not None:
+                if not _is_exact_extension_origin_lock(raw_origin, allow_origin):
                     self.send_error(403, "Forbidden")
                     return
                 body = json.dumps({"token": serve_token}).encode("utf-8")

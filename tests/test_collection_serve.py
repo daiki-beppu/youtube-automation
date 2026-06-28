@@ -602,16 +602,16 @@ def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
     assert row["name"] == "midnight-mood-collection"
 
 
-def test_build_collections_index_reports_prefix_aware_playlist_name(tmp_path):
+def test_build_collections_index_does_not_emit_playlist_name(tmp_path):
     """Given multi-word prefix の collection
     When playlist_prefix 付きで build_collections_index を呼ぶ
-    Then prefix 全体を使った playlist_name を返す。
+    Then playlist_name は返さない（#1216 BREAKING contract）。
     """
     _make_collection(tmp_path, "20260601-soulful-grooves-wah-groove-collection", entries=[])
 
     row = build_collections_index(tmp_path, playlist_prefix="soulful-grooves")[0]
 
-    assert row["playlist_name"] == "soulful-grooves | wah-groove"
+    assert "playlist_name" not in row
 
 
 def test_build_collections_index_status_downloaded_when_music_files_sufficient(tmp_path):
@@ -812,10 +812,10 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
     assert by_id["20260602-clm-bbb-collection"]["pattern_count"] is None
 
 
-def test_get_collections_includes_prefix_aware_playlist_name_when_capture_enabled(serve_dir, tmp_path):
+def test_get_collections_does_not_include_playlist_name_when_capture_enabled(serve_dir, tmp_path):
     """Given capture prefix 付き dir mode サーバー
     When `GET /collections`
-    Then multi-word prefix 対応の playlist_name を返す。
+    Then playlist_name は返さない（拡張側で collection id/name から導出する）。
     """
     planning = tmp_path / "planning"
     channel_root = tmp_path / "channel"
@@ -831,7 +831,7 @@ def test_get_collections_includes_prefix_aware_playlist_name_when_capture_enable
         assert resp.status == 200
         body = json.loads(resp.read().decode("utf-8"))
 
-    assert body[0]["playlist_name"] == "soulful-grooves | wah-groove"
+    assert "playlist_name" not in body[0]
 
 
 def test_dir_mode_get_version_is_available_before_collection_routing(serve_dir, tmp_path):
@@ -1740,6 +1740,27 @@ def test_post_downloaded_relative_download_path_returns_400(serve_dir, tmp_path)
     assert exc_info.value.code == 400
 
 
+def test_post_downloaded_download_path_without_playlist_url_returns_400(serve_dir, tmp_path):
+    """Given download_path 付きだが suno_playlist_url が無い payload
+    When POST /collections/<id>/downloaded を送る
+    Then workflow-state の lost update を避けるため 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    zip_path = _make_zip(tmp_path / "test.zip", {"Song A.mp3": b"a1"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            {"file_count": 1, "format": "mp3", "download_path": str(zip_path)},
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 400
+
+
 def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
     """ZIP 内の単一ファイルがサイズ上限を超える場合、展開しない (#1217)。"""
     import youtube_automation.scripts.collection_serve as cs
@@ -1827,37 +1848,35 @@ def test_get_auth_token_returns_uuid(serve_dir, tmp_path):
     assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", body["token"])
 
 
-def test_get_auth_token_default_allows_extension_origin(serve_dir, tmp_path):
+def test_get_auth_token_default_rejects_extension_origin_without_exact_lock(serve_dir, tmp_path):
     """Given allow_origin 未指定の通常起動
     When chrome-extension Origin から GET /auth/token を送る
-    Then token を返す。
+    Then 403 を返す。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
     req = urllib.request.Request(f"{base}/auth/token", headers={"Origin": "chrome-extension://runtime-id"})
 
-    with urllib.request.urlopen(req) as resp:
-        assert resp.status == 200
-        body = json.loads(resp.read().decode("utf-8"))
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
 
-    assert "token" in body
+    assert exc_info.value.code == 403
 
 
-def test_get_auth_token_default_allows_missing_origin(serve_dir, tmp_path):
+def test_get_auth_token_default_rejects_missing_origin(serve_dir, tmp_path):
     """Given allow_origin 未指定の通常起動
     When Origin なしで GET /auth/token を送る
-    Then extension service worker fetch 互換として token を返す。
+    Then 403 を返す。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
 
-    with urllib.request.urlopen(f"{base}/auth/token") as resp:
-        assert resp.status == 200
-        body = json.loads(resp.read().decode("utf-8"))
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(f"{base}/auth/token")
 
-    assert "token" in body
+    assert exc_info.value.code == 403
 
 
 def test_get_auth_token_web_origin_returns_403(serve_dir, tmp_path):
@@ -1969,46 +1988,34 @@ def test_post_downloaded_valid_token_succeeds(serve_dir, tmp_path):
         assert resp.status == 200
 
 
-def test_post_downloaded_default_allows_extension_origin_with_token(serve_dir, tmp_path):
+def test_post_downloaded_default_rejects_extension_origin_without_exact_lock(serve_dir, tmp_path):
     """Given allow_origin 未指定の通常起動
-    When chrome-extension Origin + token で POST /downloaded を送る
-    Then 200 を返す。
+    When chrome-extension Origin で /auth/token を取得しようとする
+    Then 403 を返す。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
     origin = "chrome-extension://runtime-id"
     req = urllib.request.Request(f"{base}/auth/token", headers={"Origin": origin})
-    with urllib.request.urlopen(req) as resp:
-        token = json.loads(resp.read().decode("utf-8"))["token"]
-    payload = {"file_count": 3, "format": "mp3"}
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
 
-    with _post(
-        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-        payload,
-        headers={"Origin": origin, "X-Serve-Token": token},
-    ) as resp:
-        assert resp.status == 200
+    assert exc_info.value.code == 403
 
 
-def test_post_downloaded_default_allows_missing_origin_with_token(serve_dir, tmp_path):
+def test_post_downloaded_default_rejects_missing_origin_without_exact_lock(serve_dir, tmp_path):
     """Given allow_origin 未指定の通常起動
-    When Origin なし + token で POST /downloaded を送る
-    Then 200 を返す。
+    When Origin なしで /auth/token を取得しようとする
+    Then 403 を返す。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning)
-    with urllib.request.urlopen(f"{base}/auth/token") as resp:
-        token = json.loads(resp.read().decode("utf-8"))["token"]
-    payload = {"file_count": 3, "format": "mp3"}
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(f"{base}/auth/token")
 
-    with _post(
-        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-        payload,
-        headers={"X-Serve-Token": token},
-    ) as resp:
-        assert resp.status == 200
+    assert exc_info.value.code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -2036,6 +2043,33 @@ def test_post_downloaded_oversized_body_returns_413(serve_dir, tmp_path):
         )
 
     assert exc_info.value.code == 413
+
+
+@pytest.mark.parametrize("raw_body", [b"[]", b'"x"', b"null"])
+def test_post_downloaded_non_object_json_returns_400(serve_dir, tmp_path, raw_body):
+    """Given JSON として valid だが object でない body
+    When POST /collections/<id>/downloaded を送る
+    Then 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    req = urllib.request.Request(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        data=raw_body,
+        headers={
+            "Origin": _EXTENSION_ORIGIN,
+            "Content-Type": "application/json",
+            "X-Serve-Token": token,
+        },
+        method="POST",
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -2105,6 +2139,8 @@ def test_post_downloaded_partial_zip_returns_500_and_does_not_set_music_download
     assert exc_info.value.code == 500
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
     assert not ws_path.exists()
+    music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
+    assert not music_dir.exists() or list(music_dir.iterdir()) == []
 
 
 def test_post_downloaded_partial_zip_does_not_cleanup_archive(serve_dir, tmp_path, monkeypatch):
@@ -2177,6 +2213,8 @@ def test_post_downloaded_partial_zip_with_underreported_expected_count_returns_5
     assert exc_info.value.code == 500
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
     assert not ws_path.exists()
+    music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
+    assert not music_dir.exists() or list(music_dir.iterdir()) == []
 
 
 def test_post_downloaded_success_includes_placed_count(serve_dir, tmp_path):

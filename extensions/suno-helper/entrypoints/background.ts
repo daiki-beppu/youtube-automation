@@ -13,6 +13,7 @@ export default defineBackground(() => {
   const SUNO_ME_PLAYLISTS_URL = "https://suno.com/me/playlists";
   const PLAYLIST_URL_RESOLVE_TIMEOUT_MS = 15000;
   const PLAYLIST_URL_RESOLVE_POLL_MS = 500;
+  const TRUSTED_DOWNLOAD_HOST_SUFFIXES = [".suno.com", ".suno.ai"];
 
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);
@@ -90,9 +91,29 @@ export default defineBackground(() => {
       });
     };
 
+    const isTrustedSunoDownloadUrl = (value: string | undefined): boolean => {
+      if (!value) {
+        return false;
+      }
+      try {
+        const { hostname } = new URL(value);
+        return hostname === "suno.com" || TRUSTED_DOWNLOAD_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
+      } catch {
+        return false;
+      }
+    };
+
+    const isTrustedSunoDownload = (item: chrome.downloads.DownloadItem): boolean =>
+      isTrustedSunoDownloadUrl(item.url) ||
+      isTrustedSunoDownloadUrl(item.finalUrl) ||
+      isTrustedSunoDownloadUrl(item.referrer);
+
     const isZipStartedAfterMonitor = (item: chrome.downloads.DownloadItem): boolean => {
       const filename = item.filename ?? "";
       if (!filename.toLowerCase().endsWith(".zip")) {
+        return false;
+      }
+      if (!isTrustedSunoDownload(item)) {
         return false;
       }
       const downloadStartMs = new Date(item.startTime).getTime();

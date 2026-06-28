@@ -60,6 +60,7 @@ export interface RetryDownloadPayload {
   collectionId: string;
   playlistName: string;
   submittedClipIds: string[];
+  expectedClipCount?: number;
 }
 
 interface ProtocolMap {

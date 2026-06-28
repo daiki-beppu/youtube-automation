@@ -329,7 +329,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
 
-  it("Given collection の manual range run When playlist 追加 Then range 内で生成した ID 件数だけを要求する", async () => {
+  it("Given collection の manual range run When playlist 追加 Then /downloaded には送らない", async () => {
     const entries = Array.from(
       { length: 24 },
       (_, index): PromptEntry => ({
@@ -344,8 +344,10 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       (_, index) => `range-clip-${index + 1}`,
     );
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { handlers, scrollAndMultiSelectByIdsMock, runHandler, sentMessages } =
-      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
+    const { scrollAndMultiSelectByIdsMock, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
+    );
 
     runHandler({
       data: {
@@ -356,39 +358,49 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
     await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
-    handlers.get("downloadComplete")!({
-      data: { filename: "/Users/test/Downloads/manual-range.zip" },
-    });
-    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(2));
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "progress")).toBe(true));
 
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       currentSubmittedClipIds,
       expect.objectContaining({ isAborted: expect.any(Function) }),
     );
-    expect(writeResumeStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        collectionId: "collection-a",
-        failedIndex: entries.length,
-        submittedClipIds: currentSubmittedClipIds,
-        playlistExpectedClipCount: currentSubmittedClipIds.length,
-      }),
+    expect(writeResumeStateMock).not.toHaveBeenCalled();
+    expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(0);
+    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(0);
+  });
+
+  it("Given full collection run の Download all が失敗 When run Then ERROR のまま終了する", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const currentSubmittedClipIds = ["clip-1", "clip-2"];
+    const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
+    const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
     );
-    const playlistUrlPost = sentMessages.filter((m) => m.type === "postDownloaded")[0];
-    expect(playlistUrlPost.payload).toMatchObject({
-      body: {
-        file_count: 0,
-        suno_playlist_url: expect.any(String),
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
       },
     });
-    const downloadedPost = sentMessages.filter((m) => m.type === "postDownloaded")[1];
-    expect(downloadedPost.payload).toMatchObject({
-      body: {
-        file_count: currentSubmittedClipIds.length,
-        expected_file_count: currentSubmittedClipIds.length,
-        download_path: "/Users/test/Downloads/manual-range.zip",
-      },
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+
+    handlers.get("downloadFailed")!({
+      data: { message: "ZIP ダウンロードが中断されました" },
     });
-    expect(downloadedPost.payload).not.toHaveProperty("body.suno_playlist_url");
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          index: entries.length,
+          message: expect.stringContaining("ZIP ダウンロードが中断されました"),
+        }),
+      ),
+    );
+    const lastProgress = progressMessages.at(-1);
+    expect(lastProgress).toMatchObject({ phase: PHASE.ERROR });
   });
 });

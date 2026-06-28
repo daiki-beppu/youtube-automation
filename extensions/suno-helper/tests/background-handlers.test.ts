@@ -18,11 +18,23 @@ interface DownloadDelta {
 }
 
 async function loadBackground(opts?: {
-  searchResults?: Array<{ filename: string; startTime?: string; url?: string }>;
-  searchResultsById?: Record<number, Array<{ filename: string; startTime?: string; url?: string }>>;
-  recentSearchResults?: Array<{ id?: number; filename: string; startTime?: string; url?: string; state?: string }>;
+  searchResults?: Array<{ filename: string; startTime?: string; url?: string; finalUrl?: string; referrer?: string }>;
+  searchResultsById?: Record<
+    number,
+    Array<{ filename: string; startTime?: string; url?: string; finalUrl?: string; referrer?: string }>
+  >;
+  recentSearchResults?: Array<{
+    id?: number;
+    filename: string;
+    startTime?: string;
+    url?: string;
+    finalUrl?: string;
+    referrer?: string;
+    state?: string;
+  }>;
   debuggerAttachError?: Error;
   debuggerSendCommandError?: Error;
+  postDownloadedError?: Error;
 }) {
   vi.resetModules();
 
@@ -126,8 +138,11 @@ async function loadBackground(opts?: {
     }),
   }));
 
+  const postDownloadedMock = opts?.postDownloadedError
+    ? vi.fn(() => Promise.reject(opts.postDownloadedError))
+    : vi.fn(() => Promise.resolve());
   vi.doMock("../../shared/api", () => ({
-    postDownloaded: vi.fn(() => Promise.resolve()),
+    postDownloaded: postDownloadedMock,
   }));
 
   vi.doMock("../components/runner-errors", () => ({
@@ -155,6 +170,7 @@ async function loadBackground(opts?: {
     removedDownloadListeners,
     chromeDownloads,
     chromeDebugger,
+    postDownloadedMock,
   };
 }
 
@@ -285,12 +301,12 @@ describe('background onMessage("startDownload"): 成功時にタイムアウト�
   });
 });
 
-describe('background onMessage("startDownload"): 監視開始後の ZIP は URL host に依存せず拾う (#1217)', () => {
+describe('background onMessage("startDownload"): 非 Suno ZIP は無視する (#1217)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("Given example.com の .zip ダウンロード完了 When listener 発火 Then downloadComplete を送信する", async () => {
+  it("Given example.com の .zip ダウンロード完了 When listener 発火 Then downloadComplete を送信しない", async () => {
     const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground({
       searchResults: [
         { filename: "file.zip", startTime: new Date().toISOString(), url: "https://example.com/file.zip" },
@@ -305,12 +321,8 @@ describe('background onMessage("startDownload"): 監視開始後の ZIP は URL 
     const listener = downloadListeners[0];
     listener({ id: 1, state: { current: "complete" } });
 
-    expect(sentMessages).toContainEqual({
-      type: "downloadComplete",
-      data: { filename: "file.zip" },
-      tabId: 42,
-    });
-    expect(removedDownloadListeners).toContain(listener);
+    expect(sentMessages.filter((m) => m.type === "downloadComplete")).toHaveLength(0);
+    expect(removedDownloadListeners).not.toContain(listener);
   });
 });
 
@@ -375,7 +387,7 @@ describe('background onMessage("startDownload"): 無関係な interrupted は無
   it("Given fresh ZIP の interrupted When listener 発火 Then 失敗通知する", async () => {
     const { handlers, sentMessages, downloadListeners, removedDownloadListeners } = await loadBackground({
       searchResults: [
-        { filename: "file.zip", startTime: new Date().toISOString(), url: "https://example.com/file.zip" },
+        { filename: "file.zip", startTime: new Date().toISOString(), url: "https://suno.com/api/download/zip" },
       ],
     });
 
@@ -503,7 +515,7 @@ describe('background onMessage("startDownload"): timeout fallback で完了済�
           id: 88,
           filename: "/Users/test/Downloads/soulful-grooves.zip",
           startTime: freshStart,
-          url: "https://download.example.com/soulful-grooves.zip",
+          url: "https://cdn1.suno.ai/soulful-grooves.zip",
         },
       ],
     });
@@ -542,7 +554,7 @@ describe('background onMessage("startDownload"): polling fallback で完了済�
           id: 89,
           filename: "/Users/test/Downloads/soulful-grooves.zip",
           startTime: freshStart,
-          url: "https://download.example.com/soulful-grooves.zip",
+          url: "https://cdn1.suno.ai/soulful-grooves.zip",
         },
       ],
     });
@@ -622,6 +634,41 @@ describe('background onMessage("cancelDownload"): active watcher を解除する
 
     expect(downloadListeners).toHaveLength(2);
     expect(sentMessages.filter((m) => m.type === "downloadFailed")).toHaveLength(0);
+  });
+});
+
+describe('background onMessage("postDownloaded"): privileged POST boundary', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given postDownloaded message When handler runs Then shared api に委譲する", async () => {
+    const { handlers, postDownloadedMock } = await loadBackground();
+    const body = { file_count: 2, format: "mp3", suno_playlist_url: "https://suno.com/playlist/test" };
+
+    await handlers.get("postDownloaded")!({
+      data: { baseUrl: "http://localhost:8787", collectionId: "coll-1", body },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(postDownloadedMock).toHaveBeenCalledWith("http://localhost:8787", "coll-1", body);
+  });
+
+  it("Given shared api rejects When handler runs Then rejection を呼び出し側へ伝播する", async () => {
+    const { handlers } = await loadBackground({
+      postDownloadedError: new Error("POST downloaded failed: 403 Forbidden"),
+    });
+
+    await expect(
+      handlers.get("postDownloaded")!({
+        data: {
+          baseUrl: "http://localhost:8787",
+          collectionId: "coll-1",
+          body: { file_count: 2, format: "mp3", suno_playlist_url: "https://suno.com/playlist/test" },
+        },
+        sender: { tab: { id: 42 } },
+      }),
+    ).rejects.toThrow("403");
   });
 });
 

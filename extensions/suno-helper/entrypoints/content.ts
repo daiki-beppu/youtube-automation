@@ -184,25 +184,6 @@ export default defineContentScript({
       return resolved.url;
     }
 
-    async function recordPlaylistUrlBestEffort(collectionId: string, playlistName: string): Promise<void> {
-      try {
-        const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-        const format = await downloadFormatItem.getValue();
-        const baseUrl = (await serverUrlItem.getValue()).trim();
-        await sendMessage("postDownloaded", {
-          baseUrl,
-          collectionId,
-          body: {
-            file_count: 0,
-            format,
-            suno_playlist_url: sunoPlaylistUrl,
-          },
-        });
-      } catch (err) {
-        console.warn("[suno-helper] playlist URL 記録をスキップしました:", err);
-      }
-    }
-
     /**
      * Download all の低レベル副作用本体 (#1146/#1217)。
      * 1. DOWNLOADING phase に遷移し DOM で Download all を起動
@@ -212,6 +193,7 @@ export default defineContentScript({
       collectionId: string,
       progressTotal: number,
       expectedFileCount: number,
+      sunoPlaylistUrl: string,
       isAborted: () => boolean,
     ): Promise<void> {
       const format = await downloadFormatItem.getValue();
@@ -250,6 +232,7 @@ export default defineContentScript({
           file_count: expectedFileCount,
           expected_file_count: expectedFileCount,
           format,
+          suno_playlist_url: sunoPlaylistUrl,
           download_path: downloadResult.filename,
         },
       });
@@ -259,11 +242,12 @@ export default defineContentScript({
       collectionId: string,
       progressTotal: number,
       expectedFileCount: number,
+      sunoPlaylistUrl: string,
       isAborted: () => boolean,
-    ): Promise<boolean> {
+    ): Promise<string | null> {
       try {
-        await performDownload(collectionId, progressTotal, expectedFileCount, isAborted);
-        return true;
+        await performDownload(collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl, isAborted);
+        return null;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(`[suno-helper] Download all failed: ${message}`);
@@ -272,7 +256,7 @@ export default defineContentScript({
           total: progressTotal,
           message: `ダウンロード失敗（手動でダウンロードしてください）: ${message}`,
         });
-        return false;
+        return message;
       }
     }
 
@@ -280,9 +264,10 @@ export default defineContentScript({
       collectionId: string,
       progressTotal: number,
       expectedFileCount: number,
+      sunoPlaylistUrl: string,
       isAborted: () => boolean,
     ): Promise<void> {
-      await performDownload(collectionId, progressTotal, expectedFileCount, isAborted);
+      await performDownload(collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl, isAborted);
     }
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
@@ -676,11 +661,30 @@ export default defineContentScript({
 
         // --- DOWNLOADING phase (#1146) ---
         if (collectionId && !aborted) {
-          persistInterruptState(total);
-          const playlistUrlRecord = recordPlaylistUrlBestEffort(collectionId, playlistName);
-          const downloaded = await downloadBestEffort(collectionId, total, expectedPlaylistClipCount, () => aborted);
-          await playlistUrlRecord;
-          keepResumeStateForDownloadRetry = !downloaded;
+          const fullCollectionClipCount = total * CLIPS_PER_REQUEST;
+          if (expectedPlaylistClipCount >= fullCollectionClipCount) {
+            persistInterruptState(total);
+            try {
+              const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
+              const downloadError = await downloadBestEffort(
+                collectionId,
+                total,
+                expectedPlaylistClipCount,
+                sunoPlaylistUrl,
+                () => aborted,
+              );
+              keepResumeStateForDownloadRetry = downloadError !== null;
+              if (downloadError !== null) {
+                emitProgress({ phase: PHASE.ERROR, index: total, total, message: downloadError });
+                return;
+              }
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              keepResumeStateForDownloadRetry = true;
+              emitProgress({ phase: PHASE.ERROR, index: total, total, message });
+              return;
+            }
+          }
           if (aborted) {
             persistInterruptState(total);
             emitProgress({ phase: PHASE.STOPPED, total });
@@ -764,13 +768,10 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
-          const playlistUrlRecord = collectionId
-            ? recordPlaylistUrlBestEffort(collectionId, playlistName)
-            : Promise.resolve();
           if (collectionId) {
-            await downloadStrict(collectionId, expectedClipCount, expectedClipCount, () => aborted);
+            const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
+            await downloadStrict(collectionId, expectedClipCount, expectedClipCount, sunoPlaylistUrl, () => aborted);
           }
-          await playlistUrlRecord;
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
@@ -793,7 +794,7 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { collectionId, playlistName, submittedClipIds } = data;
+      const { collectionId, playlistName, submittedClipIds, expectedClipCount } = data;
       currentSnapshot = initSnapshot([], undefined);
       running = true;
       aborted = false;
@@ -809,9 +810,8 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
-          const playlistUrlRecord = recordPlaylistUrlBestEffort(collectionId, playlistName);
-          await downloadStrict(collectionId, total, total, () => aborted);
-          await playlistUrlRecord;
+          const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
+          await downloadStrict(collectionId, total, expectedClipCount ?? total, sunoPlaylistUrl, () => aborted);
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;

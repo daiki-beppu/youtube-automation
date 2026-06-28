@@ -711,9 +711,11 @@ export async function scrollAndMultiSelectByIds(
 
       const rowIds = collectClipRowIds(row);
       let matched = false;
+      const matchedIds: string[] = [];
+      let titleMatchedId: string | undefined;
       for (const id of rowIds) {
         if (uniqueTargetIds.has(id)) {
-          foundIds.add(id);
+          matchedIds.push(id);
           matched = true;
         }
       }
@@ -727,7 +729,7 @@ export async function scrollAndMultiSelectByIds(
               !foundIds.has(id) &&
               !titleMatchedIds.has(id)
             ) {
-              titleMatchedIds.add(id);
+              titleMatchedId = id;
               matched = true;
               break;
             }
@@ -736,7 +738,19 @@ export async function scrollAndMultiSelectByIds(
       }
       if (!matched) continue;
 
-      if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) continue;
+      const markMatched = (): void => {
+        for (const id of matchedIds) {
+          foundIds.add(id);
+        }
+        if (titleMatchedId) {
+          titleMatchedIds.add(titleMatchedId);
+        }
+      };
+
+      if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) {
+        markMatched();
+        continue;
+      }
       const selectBtn = row.querySelector<HTMLButtonElement>(
         SELECT_CLIP_BUTTON_ANY_SELECTOR,
       );
@@ -755,10 +769,9 @@ export async function scrollAndMultiSelectByIds(
           if (attempt < 2) selectBtn.click();
         }
         if (!verified) {
-          console.warn(
-            `[suno-helper] clip row selection verification failed for row, continuing`,
-          );
+          throw new Error("clip row selection verification failed");
         }
+        markMatched();
       }
     }
   }

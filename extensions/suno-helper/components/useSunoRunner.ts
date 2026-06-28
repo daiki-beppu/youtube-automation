@@ -173,9 +173,6 @@ export function useSunoRunner(): RunnerState {
     if (!selected) {
       return undefined;
     }
-    if (selected.playlist_name) {
-      return selected.playlist_name;
-    }
     const theme = selected.name.replace(/-collection$/, "");
     return extractPlaylistName(selected.id, theme);
   }, [selectedCollection]);
@@ -585,6 +582,7 @@ export function useSunoRunner(): RunnerState {
         collectionId: selectedCollectionId,
         playlistName,
         submittedClipIds: submittedClipIdsForResume,
+        expectedClipCount: expectedClipCountForManualAdoption,
       });
       report("ダウンロードを再実行しています…");
     } catch (err) {
@@ -592,7 +590,14 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [isRunning, selectedCollectionId, playlistName, submittedClipIdsForResume, report]);
+  }, [
+    isRunning,
+    selectedCollectionId,
+    playlistName,
+    submittedClipIdsForResume,
+    expectedClipCountForManualAdoption,
+    report,
+  ]);
 
   const adoptSelectedClips = useCallback(async () => {
     if (isRunning) {

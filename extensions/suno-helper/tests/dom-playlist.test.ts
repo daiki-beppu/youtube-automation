@@ -1712,6 +1712,30 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     expect(count).toBe(2);
   });
 
+  it("Given click 後も Deselect clip へ遷移しない row When scrollAndMultiSelectByIds Then reject する", async () => {
+    const idA = "abababab-1111-2222-3333-444444444444";
+    addClipRow({ songId: idA, idSource: "image" });
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const pending = scrollAndMultiSelectByIds([idA], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+    });
+    const expectation = expect(pending).rejects.toThrow(/selection verification failed/);
+    await vi.runAllTimersAsync();
+    await expectation;
+  });
+
   it("Given titleFallbackMap でマッチする row When scrollAndMultiSelectByIds Then fallback で選択する", async () => {
     // row の clip ID (image UUID) と target ID は一致しないが、タイトルで fallback マッチする
     const rowUuid = "cccccccc-1111-2222-3333-444444444444";
