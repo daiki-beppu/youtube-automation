@@ -145,10 +145,21 @@ brew install --cask google-cloud-sdk
 利用者に既存流用か新規作成か聞く:
 
 - 既存流用: project ID を聞いて `gcloud config set project <project-id>` と `gcloud auth application-default set-quota-project <project-id>` を実行（`.env` への `GOOGLE_CLOUD_PROJECT` 書き込みは不要。project_id は ADC quota project から自動解決される）
-- 新規作成: project ID を聞いて (英数字・ハイフン、6-30 文字、グローバルユニーク) AI が以下を実行:
+- 新規作成: チャンネル情報から推奨 project ID と表示名を生成し、利用者に提示して承認またはカスタム入力を求める
+
+新規作成時の推奨値:
+
+- チャンネル名: `config/channel/meta.json` の `channel.name` が存在すればそれを使う。未設定の場合は `<channel_dir>` のベースネームを title case 化して使う (例: `lofi-beats` -> `Lofi Beats`)
+- project ID: `yt-{channel-slug}`。`channel-slug` はチャンネル名を kebab-case 化し、英小文字・数字・ハイフン以外をハイフンに置換、連続ハイフンを 1 個に畳み、先頭末尾のハイフンを削る
+- project ID は GCP 制約に合わせて 6-30 文字、英小文字開始、英小文字/数字/ハイフン終端に収める。30 文字を超える場合は `yt-` を含めて 30 文字以内に truncate し、短すぎる/空になる場合はカスタム入力を求める
+- project 表示名 (`--name`): `{チャンネル名} YouTube` (例: `Lo-Fi Beats YouTube`)
+
+利用者には「推奨 project ID は `<suggested-project-id>`、表示名は `<channel-name> YouTube`。この ID で作成してよいか、またはカスタム project ID を入力してください」と確認する。project ID はグローバルユニークなので、作成失敗時は別 ID を聞いてリトライする。
+
+承認またはカスタム入力で project ID が決まったら、AI が以下を実行:
 
 ```bash
-gcloud projects create <project-id> --name="<project-id>"
+gcloud projects create <project-id> --name="<channel-name> YouTube"
 gcloud config set project <project-id>
 gcloud auth application-default set-quota-project <project-id>
 ```
@@ -222,6 +233,11 @@ GOOGLE_CLOUD_LOCATION=us-central1
 
 **[HUMAN STEP]** で依頼 (`yt-doctor` の `next_action.url` をそのまま使う):
 
+HUMAN STEP を出す前に、`gcp_project` と同じルールでチャンネル名を解決し、以下の推奨名をメッセージに含める:
+
+- OAuth 同意画面のアプリ名: `{チャンネル名} YouTube Automation` (例: `Lo-Fi Beats YouTube Automation`)
+- OAuth クライアント ID 名: `{チャンネル名} Desktop Client` (例: `Lo-Fi Beats Desktop Client`)
+
 ```
 > [HUMAN STEP]
 > OAuth クライアント ID は Google Cloud Console でしか作成できません。
@@ -229,11 +245,15 @@ GOOGLE_CLOUD_LOCATION=us-central1
 > 以下の URL を開いてください:
 >   https://console.cloud.google.com/apis/credentials?project=<project-id>
 >
+> 推奨入力値:
+>   - OAuth 同意画面のアプリ名: <channel-name> YouTube Automation
+>   - OAuth クライアント ID 名: <channel-name> Desktop Client
+>
 > 手順:
 >   1. 「+ 認証情報を作成」→「OAuth クライアント ID」
 >   2. (初回のみ)「OAuth 同意画面の設定」を求められたら、ユーザータイプ「外部」を選んで
->      アプリ名と連絡先メールだけ入力して保存。テストユーザーに自分のメールを追加する
->   3. アプリの種類: 「デスクトップアプリ」を選択
+>      上記の推奨アプリ名と連絡先メールだけ入力して保存。テストユーザーに自分のメールを追加する
+>   3. アプリの種類: 「デスクトップアプリ」を選択し、名前には上記の推奨 OAuth クライアント ID 名を入力
 >   4. 作成後、JSON をダウンロードして以下のパスに配置:
 >      <channel_dir>/auth/client_secrets.json
 >
