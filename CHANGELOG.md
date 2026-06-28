@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(masterup)`: `generate-master` に尺プレビューと `--no-loop` を追加（#1091）
 - `feat(channel-init)`: `yt-channel-init` を最小 config 生成からフルパッケージ生成に拡張。`--music-engine` / `--benchmark-channel` / `--branding-description` / `--channel-keyword` / `--target-duration-min` / `--target-duration-max` / `--supported-language` / `--default-language` / `--core-message` / `--country` 引数を追加し、`config/channel/*.json` に加えて `config/localizations.json` / `config/schedule_config.json` / `config/upload_settings.json` / `config/skills/{suno,thumbnail}.yaml` / `.env` / `.gitignore` / `auth/client_secrets.template.json` を一括生成する。テンプレート群を `channel_init_templates.py` に分離（#1271）
 - `feat(channel-settings)`: `yt-channel-settings pull --channel-id-only --apply` を追加。YouTube API から `channel_id` のみを取得して `config/channel/meta.json::channel.channel_id` に書き込む。通常の `pull --apply` でも `channel_id` を自動反映するよう `_write_channel_settings` に統合（#1271）
 - `docs(skills)`: `/channel-new` を TTP ベンチマーク → config → ペルソナ → branding の end-to-end スキルに刷新。`/audience-persona` / `/channel-direction` / `/channel-research` / `/channel-setup` の description・前提条件・Cross References を新フローに合わせて更新（#1271）
