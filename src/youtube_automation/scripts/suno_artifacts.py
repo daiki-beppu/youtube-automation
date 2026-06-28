@@ -26,6 +26,7 @@ def collection_downloaded_route(collection_id: str) -> str:
     """個別 collection の download 完了通知 POST ルートを組み立てる。"""
     return f"{COLLECTIONS_ROUTE}/{collection_id}{DOWNLOADED_ROUTE_SUFFIX}"
 
+
 # yt-collection-serve の Suno playlist capture サブパス（#893、POST）。
 # suno-helper 拡張の POST URL（extensions/shared/constants.ts の PLAYLISTS_CAPTURE_ROUTE）と対の契約。
 SUNO_PLAYLISTS_ROUTE = "/suno/playlists"
