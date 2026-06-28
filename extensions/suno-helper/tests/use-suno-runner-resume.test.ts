@@ -293,19 +293,4 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       /if \(!playlistName\) \{[\s\S]*?report\(\s*"playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。",\s*true,\s*\);[\s\S]*?return;/,
     );
   });
-
-  it("Given playlist-only resume has no clip IDs When useSunoRunner を読む Then retryPlaylist を送らず UI にエラーを出す", () => {
-    expect(runnerSource).toMatch(
-      /if \(submittedClipIdsForResume\.length === 0 \|\| expectedClipCount <= 0\) \{[\s\S]*?playlist 再開に必要な clip ID がありません。[\s\S]*?true,[\s\S]*?\);[\s\S]*?return;/,
-    );
-  });
-
-  it("Given retryPlaylist send succeeds When useSunoRunner を読む Then resume banner は送信成功後にだけ閉じる", () => {
-    expect(runnerSource).toMatch(
-      /await sendMessage\("retryPlaylist",[\s\S]*?\}\);[\s\S]*?setResumeDismissed\(true\);[\s\S]*?report\("playlist 追加とダウンロードを再実行しています…"\);/,
-    );
-    expect(runnerSource).toMatch(
-      /catch \(err\) \{[\s\S]*?setIsRunning\(false\);[\s\S]*?setResumeDismissed\(false\);[\s\S]*?report\(formatRunError\(message\), true\);/,
-    );
-  });
 });

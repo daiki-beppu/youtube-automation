@@ -679,7 +679,10 @@ def _extract_downloaded_archive(coll_dir: Path, download_path: str, expected_cou
     resolved_dp = Path(download_path).resolve()
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
     try:
-        placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
+        try:
+            placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
+        except ValueError as exc:
+            raise DownloadedArtifactError(str(exc)) from exc
         if placed_count == 0:
             raise DownloadedArtifactError("ZIP extraction failed: 0 audio files placed")
         if expected_count is not None and placed_count < expected_count:
@@ -819,20 +822,28 @@ def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
         return name_to_index
     try:
         prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
-        for i, entry in enumerate(prompts, 1):
-            full_name = entry.get("name", "")
-            parts = full_name.split(" — ", 1)
-            english_name = parts[1] if len(parts) == 2 else full_name
-            for candidate in _suno_name_lookup_candidates(english_name):
-                name_to_index[candidate] = i
-            for candidate in _suno_name_lookup_candidates(full_name):
-                name_to_index[candidate] = i
-            title = entry.get("title")
-            if title:
-                for candidate in _suno_name_lookup_candidates(title):
-                    name_to_index.setdefault(candidate, i)
-    except (json.JSONDecodeError, OSError, TypeError):
-        pass
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: {prompts_path}") from exc
+    if not isinstance(prompts, list):
+        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: root must be a list")
+    for i, entry in enumerate(prompts, 1):
+        if not isinstance(entry, dict):
+            raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: entry {i} must be an object")
+        full_name = entry.get("name", "")
+        if not isinstance(full_name, str):
+            raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: entry {i}.name must be a string")
+        parts = full_name.split(" — ", 1)
+        english_name = parts[1] if len(parts) == 2 else full_name
+        for candidate in _suno_name_lookup_candidates(english_name):
+            name_to_index[candidate] = i
+        for candidate in _suno_name_lookup_candidates(full_name):
+            name_to_index[candidate] = i
+        title = entry.get("title")
+        if title is not None and not isinstance(title, str):
+            raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: entry {i}.title must be a string")
+        if title:
+            for candidate in _suno_name_lookup_candidates(title):
+                name_to_index.setdefault(candidate, i)
     return name_to_index
 
 

@@ -2252,6 +2252,43 @@ def test_post_downloaded_unmatched_zip_returns_500_and_does_not_set_music_downlo
     assert not music_dir.exists() or list(music_dir.iterdir()) == []
 
 
+def test_post_downloaded_malformed_prompts_returns_500_and_does_not_update_artifacts(serve_dir, tmp_path):
+    """Given suno-prompts.json が壊れている
+    When POST /collections/<id>/downloaded を送る
+    Then 500 を返し workflow-state / music を更新しない。
+    """
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    (coll / "20-documentation" / "suno-prompts.json").write_text("{bad json", encoding="utf-8")
+    zip_path = _make_zip(tmp_path / "malformed-prompts.zip", {"Song A.mp3": b"audio1"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 1,
+        "expected_file_count": 1,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            payload,
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        )
+
+    assert exc_info.value.code == 500
+    assert "invalid suno-prompts.json" in _read_error_json(exc_info.value)["error"]
+    assert not (coll / "workflow-state.json").exists()
+    music_dir = coll / "02-Individual-music"
+    assert not music_dir.exists() or list(music_dir.iterdir()) == []
+
+
 def test_post_downloaded_partial_zip_does_not_cleanup_archive(serve_dir, tmp_path, monkeypatch):
     """ZIP が期待数未満なら cleanup せず、再取得や調査ができるよう残す。"""
     import youtube_automation.scripts.collection_serve as cs

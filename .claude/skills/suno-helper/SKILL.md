@@ -121,7 +121,7 @@ popup 上部に進捗が出る:
 `finished` 表示後、以下を確認:
 
 1. Suno 側で対象 playlist に collection の全 clip が紐付いている
-2. clip 数 = collection の entry 数（数が合わなければ resume で残りを回す）
+2. clip 数 = collection の entry 数 × 2（数が合わなければ resume で残りを回す）
 3. `02-Individual-music/` に mp3/m4a/wav が配置されている
 4. `GET /collections` で対象 collection の `status` が `downloaded`、`downloaded_count` が期待 clip 数以上になっている
 5. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
