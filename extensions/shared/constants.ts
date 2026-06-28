@@ -33,10 +33,6 @@ export const PROMPTS_ROUTE = "/suno/prompts.json";
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
 export const COLLECTIONS_ROUTE = "/collections";
 
-/** yt-collection-serve の Suno playlist capture サブパス (#893、POST)。
- * SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PLAYLISTS_ROUTE。 */
-export const PLAYLISTS_CAPTURE_ROUTE = "/suno/playlists";
-
 /** yt-collection-serve の互換確認サブパス（#1023）。
  * SSOT: src/youtube_automation/scripts/collection_serve.py VERSION_ROUTE。 */
 export const VERSION_ROUTE = "/version";

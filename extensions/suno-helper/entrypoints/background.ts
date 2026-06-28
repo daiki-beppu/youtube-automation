@@ -51,8 +51,8 @@ export default defineBackground(() => {
   onMessage("queryProgress", ({ sender }) =>
     sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
   );
-  // overlay → runner 中継 (#893)。overlay の手動 Capture を送信元と同一タブの runner content へ転送し、
-  // runner が自身の document を scrape した結果をそのまま overlay へ返す。
+  // background → runner 中継。playlist URL 解決用に、指定タブの runner content が
+  // 自身の document を scrape した結果を返す。
   onMessage("capturePlaylists", ({ sender }) =>
     sendMessage("capturePlaylists", undefined, requireRelayTab(sender, "capturePlaylists")),
   );
@@ -64,18 +64,11 @@ export default defineBackground(() => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
       console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
-      return;
+      return { ok: false, message: "startDownload: 送信元タブが特定できません" } as const;
     }
     const { format } = data;
     if (activeDownloadWatcher !== null) {
-      sendMessage(
-        "downloadFailed",
-        { message: "別の Download all 監視が進行中です。完了後に再実行してください。" },
-        tabId,
-      ).catch((err: unknown) => {
-        console.warn("[suno-helper] downloadFailed 中継失敗:", err);
-      });
-      return;
+      return { ok: false, message: "別の Download all 監視が進行中です。完了後に再実行してください。" } as const;
     }
     console.info(`[suno-helper] Download all 監視を開始します (format=${format})`);
 
@@ -217,6 +210,7 @@ export default defineBackground(() => {
         notifyDownloadFailed(message);
       });
     }, DOWNLOAD_WATCH_TIMEOUT_MS);
+    return { ok: true } as const;
   });
 
   onMessage("cancelDownload", ({ sender }) => {

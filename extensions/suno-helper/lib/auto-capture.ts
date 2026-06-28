@@ -1,5 +1,5 @@
 // background.ts は wxt の defineBackground globals を伴い node 環境の vitest から import できない。
-// bg `/me` tab の scrape retry ロジックをここへ切り出し、副作用（送信 / sleep / clock）を
+// playlist URL 解決用 bg `/me` tab の scrape retry ロジックをここへ切り出し、副作用（送信 / sleep / clock）を
 // 引数注入にして tester surface とする。
 import type { CapturedPlaylist } from "../../shared/api";
 
@@ -16,7 +16,7 @@ export interface CaptureFromTabDeps {
 }
 
 /**
- * bg `/me` tab の content script が応答するまでリトライしつつ playlist を scrape する (#893)。
+ * bg `/me` tab の content script が応答するまでリトライしつつ playlist を scrape する。
  * tab 生成直後は content script 未注入で sendCapture が reject されるため、deadline まで poll する。
  * SPA 未描画で scrape 結果が空の場合もリトライする（React hydration + API fetch 待ち）。
  * deadline 超過時:

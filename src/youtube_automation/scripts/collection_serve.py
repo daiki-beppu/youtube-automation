@@ -25,6 +25,7 @@ import tempfile
 import urllib.parse
 import uuid
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
@@ -403,6 +404,23 @@ _ZIP_MAX_SINGLE_FILE = 500 * 1024 * 1024  # 500 MB
 _ZIP_MAX_ENTRIES = 1000
 
 
+class DownloadedPayloadError(ValueError):
+    """POST /downloaded の入力 payload が不正。HTTP 400 に変換する。"""
+
+
+class DownloadedArtifactError(RuntimeError):
+    """POST /downloaded の artifact 適用に失敗。HTTP 500 に変換する。"""
+
+
+@dataclass(frozen=True)
+class DownloadedPayload:
+    file_count: int
+    format: str
+    suno_playlist_url: str | None = None
+    expected_file_count: int | None = None
+    download_path: str | None = None
+
+
 def _count_audio_files(music_dir: Path) -> int:
     """02-Individual-music/ 内の音声ファイル（mp3/m4a/wav）件数を返す。不在は 0。"""
     if not music_dir.is_dir():
@@ -552,6 +570,101 @@ def _is_exact_extension_origin_lock(raw_origin: str | None, allow_origin: str | 
         and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
         and raw_origin == allow_origin
     )
+
+
+def _parse_downloaded_payload(payload: object) -> DownloadedPayload:
+    """POST /collections/<id>/downloaded の JSON body を検証して wire 型へ変換する。"""
+    if not isinstance(payload, dict):
+        raise DownloadedPayloadError("payload must be an object")
+
+    file_count = payload.get("file_count")
+    fmt = payload.get("format")
+    suno_playlist_url = payload.get("suno_playlist_url")
+    expected_file_count = payload.get("expected_file_count")
+    download_path = payload.get("download_path")
+
+    if file_count is None or not fmt:
+        raise DownloadedPayloadError("file_count and format are required")
+    if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
+        raise DownloadedPayloadError("file_count must be a non-negative integer")
+    if not isinstance(fmt, str) or fmt not in _VALID_DOWNLOAD_FORMATS:
+        raise DownloadedPayloadError("format is invalid")
+    if expected_file_count is not None and (
+        not isinstance(expected_file_count, int) or isinstance(expected_file_count, bool) or expected_file_count < 0
+    ):
+        raise DownloadedPayloadError("expected_file_count must be a non-negative integer")
+    if download_path is not None:
+        if not isinstance(download_path, str):
+            raise DownloadedPayloadError("download_path must be a string")
+        if not suno_playlist_url:
+            raise DownloadedPayloadError("suno_playlist_url is required when download_path is present")
+        if not Path(download_path).is_absolute():
+            raise DownloadedPayloadError("download_path must be absolute")
+    if suno_playlist_url is not None and not isinstance(suno_playlist_url, str):
+        raise DownloadedPayloadError("suno_playlist_url must be a string")
+
+    return DownloadedPayload(
+        file_count=file_count,
+        format=fmt,
+        suno_playlist_url=suno_playlist_url,
+        expected_file_count=expected_file_count,
+        download_path=download_path,
+    )
+
+
+def _commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
+    """staging_dir のリネーム済み音声ファイルを 02-Individual-music/ へ原子的に寄せる。"""
+    music_dir = CollectionPaths(coll_dir).music_dir
+    music_dir.mkdir(parents=True, exist_ok=True)
+    for staged in staging_dir.iterdir():
+        if not staged.is_file():
+            continue
+        dest = music_dir / staged.name
+        if dest.exists():
+            dest.unlink()
+        shutil.move(str(staged), str(dest))
+
+
+def _extract_downloaded_archive(coll_dir: Path, download_path: str, expected_count: int | None) -> tuple[int, Path]:
+    """ZIP を staging に展開し、成功時だけ呼び出し側が commit できる状態にする。"""
+    resolved_dp = Path(download_path).resolve()
+    staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
+    try:
+        placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
+        if placed_count == 0:
+            raise DownloadedArtifactError("ZIP extraction failed: 0 audio files placed")
+        if expected_count is not None and placed_count < expected_count:
+            raise DownloadedArtifactError(
+                f"ZIP extraction incomplete: expected at least {expected_count} audio files, placed {placed_count}"
+            )
+        _commit_staged_music_files(coll_dir, staging_dir)
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+    return placed_count, resolved_dp
+
+
+def _apply_downloaded_artifacts(coll_dir: Path, payload: DownloadedPayload) -> int:
+    """downloaded payload を collection の成果物へ適用し、レスポンス用 placed_count を返す。"""
+    pattern_count = _read_pattern_count(coll_dir, default=0)
+    expected_count = _expected_download_count(pattern_count, payload.expected_file_count)
+    placed_count_for_response = payload.file_count
+    file_count = payload.file_count
+    cleanup_path: Path | None = None
+
+    if payload.download_path:
+        placed_count, cleanup_path = _extract_downloaded_archive(coll_dir, payload.download_path, expected_count)
+        placed_count_for_response = placed_count
+        file_count = placed_count
+
+    _update_workflow_state_downloaded(
+        coll_dir,
+        file_count=file_count,
+        suno_playlist_url=payload.suno_playlist_url,
+        expected_file_count=expected_count,
+    )
+    if cleanup_path is not None:
+        _cleanup_download_archive(cleanup_path)
+    return placed_count_for_response
 
 
 def _update_workflow_state_downloaded(
@@ -915,86 +1028,21 @@ def create_server(
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self.send_error(400, "Bad Request")
                 return
-            if not isinstance(payload, dict):
-                self.send_error(400, "Bad Request")
-                return
-
-            file_count = payload.get("file_count")
-            fmt = payload.get("format")
-            suno_playlist_url = payload.get("suno_playlist_url")
-            if file_count is None or not fmt:
-                self.send_error(400, "Bad Request")
-                return
-            if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
-                self.send_error(400, "Bad Request")
-                return
-            expected_file_count = payload.get("expected_file_count")
-            if expected_file_count is not None and (
-                not isinstance(expected_file_count, int)
-                or isinstance(expected_file_count, bool)
-                or expected_file_count < 0
-            ):
-                self.send_error(400, "Bad Request")
-                return
-            if fmt not in _VALID_DOWNLOAD_FORMATS:
-                self.send_error(400, "Bad Request")
-                return
-            download_path = payload.get("download_path")
-            if download_path is not None and not isinstance(download_path, str):
-                self.send_error(400, "Bad Request")
-                return
-            if suno_playlist_url is not None and not isinstance(suno_playlist_url, str):
+            try:
+                downloaded = _parse_downloaded_payload(payload)
+            except DownloadedPayloadError:
                 self.send_error(400, "Bad Request")
                 return
 
             coll_dir = collections_root / cid
-            pattern_count = _read_pattern_count(coll_dir, default=0)
-            expected_count = _expected_download_count(pattern_count, expected_file_count)
-            placed_count_for_response = file_count
-            if download_path:
-                if not suno_playlist_url:
-                    self.send_error(400, "Bad Request")
-                    return
-                dp = Path(download_path)
-                if not dp.is_absolute():
-                    self.send_error(400, "Bad Request")
-                    return
-                resolved_dp = dp.resolve()
-                staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
-                try:
-                    placed_count = _extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
-                    if placed_count == 0:
-                        self._send_json_error(500, "ZIP extraction failed: 0 audio files placed")
-                        return
-                    if expected_count is not None and placed_count < expected_count:
-                        self._send_json_error(
-                            500,
-                            "ZIP extraction incomplete: "
-                            f"expected at least {expected_count} audio files, placed {placed_count}",
-                        )
-                        return
-                    music_dir = CollectionPaths(coll_dir).music_dir
-                    music_dir.mkdir(parents=True, exist_ok=True)
-                    for staged in staging_dir.iterdir():
-                        if not staged.is_file():
-                            continue
-                        dest = music_dir / staged.name
-                        if dest.exists():
-                            dest.unlink()
-                        shutil.move(str(staged), str(dest))
-                finally:
-                    shutil.rmtree(staging_dir, ignore_errors=True)
-                placed_count_for_response = placed_count
-                file_count = placed_count
-
-            _update_workflow_state_downloaded(
-                coll_dir,
-                file_count=file_count,
-                suno_playlist_url=suno_playlist_url,
-                expected_file_count=expected_count,
-            )
-            if download_path:
-                _cleanup_download_archive(resolved_dp)
+            try:
+                placed_count_for_response = _apply_downloaded_artifacts(coll_dir, downloaded)
+            except DownloadedPayloadError:
+                self.send_error(400, "Bad Request")
+                return
+            except DownloadedArtifactError as exc:
+                self._send_json_error(500, str(exc))
+                return
             resp_body = json.dumps(
                 {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
             ).encode("utf-8")

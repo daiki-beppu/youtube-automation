@@ -1,12 +1,16 @@
-import { DEFAULT_URL, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { useEffect, useState } from "react";
+
+import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { downloadFormatItem, type DownloadFormat } from "../lib/storage";
 import { PatternList } from "./PatternList";
-import { PlaylistCaptureTab } from "./PlaylistCaptureTab";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
 const SPEED_PRESET_ORDER: SpeedPresetId[] = ["fast", "balanced", "safe"];
+const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
+  const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
   const {
     url,
     setUrl,
@@ -41,6 +45,23 @@ export function App() {
     run,
     stop,
   } = useSunoRunner();
+
+  useEffect(() => {
+    let mounted = true;
+    void downloadFormatItem.getValue().then((value) => {
+      if (mounted) {
+        setDownloadFormat(value);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const updateDownloadFormat = (value: DownloadFormat): void => {
+    setDownloadFormat(value);
+    void downloadFormatItem.setValue(value);
+  };
 
   return (
     <div className="flex flex-col gap-3 p-3 text-gray-900">
@@ -196,6 +217,21 @@ export function App() {
         })}
       </fieldset>
 
+      <label className="flex flex-col gap-1 text-sm">
+        DL 形式
+        <select
+          value={downloadFormat}
+          onChange={(e) => updateDownloadFormat(e.target.value as DownloadFormat)}
+          className="rounded border border-gray-300 px-2 py-1"
+        >
+          {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
+            <option key={format} value={format}>
+              {format.toUpperCase()}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <div className="flex gap-2">
         <button
           type="button"
@@ -256,9 +292,6 @@ export function App() {
       {status && (
         <p className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}>{status}</p>
       )}
-
-      {/* overlay 下部の Suno playlist capture セクション (#893)。サーバー URL は上の入力欄を共用する。 */}
-      <PlaylistCaptureTab baseUrl={url} />
     </div>
   );
 }

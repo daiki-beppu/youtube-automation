@@ -1,6 +1,5 @@
-// 連続実行完了時の自動 capture orchestration の回帰テスト (#893 追加要件 A)。
+// playlist URL 解決用 bg tab scrape orchestration の回帰テスト。
 //
-// 受け入れ基準「playlist 化完了 → bg tab で /me を開いて閉じ、POST /suno/playlists が走る」の中核。
 // background.ts は wxt globals を伴い node 環境から import 不可のため、orchestration を lib/auto-capture へ
 // 切り出し（overlay-relay と同方針）、副作用を引数注入にして純ロジックを検証する。
 import { describe, expect, it, vi } from "vitest";

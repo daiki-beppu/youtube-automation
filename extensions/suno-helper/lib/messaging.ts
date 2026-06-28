@@ -55,6 +55,8 @@ export interface DownloadFailedPayload {
   message: string;
 }
 
+export type StartDownloadResult = { ok: true } | { ok: false; message: string };
+
 /** overlay → runner: ダウンロードのみ再実行するペイロード (#1251)。 */
 export interface RetryDownloadPayload {
   collectionId: string;
@@ -85,7 +87,7 @@ interface ProtocolMap {
   capturePlaylists(): CapturedPlaylist[];
   /** runner → background: Download all 開始を通知し、background の chrome.downloads 監視を起動する (#1146)。
    *  content script は chrome.downloads API にアクセスできないため background に委譲する。 */
-  startDownload(payload: { format: string }): void;
+  startDownload(payload: { format: string }): StartDownloadResult;
   /** runner → background: Download all 起動前後の失敗時に chrome.downloads watcher を解除する (#1217)。 */
   cancelDownload(): void;
   /** background → runner: chrome.downloads の完了通知を content へ中継する (#1146)。 */

@@ -52,6 +52,9 @@ async function loadContentScriptWithPlaylistRows(
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
       }
+      if (type === "startDownload") {
+        return Promise.resolve({ ok: true });
+      }
       return Promise.resolve();
     }),
   }));

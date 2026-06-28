@@ -20,6 +20,7 @@ async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
   readSelectedClipIdsError?: Error;
   triggerDownloadAllError?: Error;
+  startDownloadResult?: { ok: true } | { ok: false; message: string };
   postDownloadedError?: Error;
   postDownloadedRejectOnCall?: number;
 }) {
@@ -43,6 +44,9 @@ async function loadContentScript(overrides?: {
       }
       if (type === "resolvePlaylistUrl") {
         return Promise.resolve({ url: "https://suno.com/playlist/test" });
+      }
+      if (type === "startDownload") {
+        return Promise.resolve(overrides?.startDownloadResult ?? { ok: true });
       }
       if (type === "postDownloaded" && overrides?.postDownloadedError) {
         postDownloadedCallCount += 1;
@@ -160,10 +164,11 @@ async function loadContentScript(overrides?: {
     downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
   }));
 
+  const triggerDownloadAllMock = overrides?.triggerDownloadAllError
+    ? vi.fn(() => Promise.reject(overrides.triggerDownloadAllError))
+    : vi.fn(() => Promise.resolve());
   vi.doMock("../lib/download", () => ({
-    triggerDownloadAll: overrides?.triggerDownloadAllError
-      ? vi.fn(() => Promise.reject(overrides.triggerDownloadAllError))
-      : vi.fn(() => Promise.resolve()),
+    triggerDownloadAll: triggerDownloadAllMock,
   }));
 
   vi.doMock("../../shared/api", () => ({}));
@@ -171,7 +176,7 @@ async function loadContentScript(overrides?: {
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
 
-  return { handlers, progressMessages, sentMessages };
+  return { handlers, progressMessages, sentMessages, triggerDownloadAllMock };
 }
 
 // retryPlaylist ----------------------------------------------------------------
@@ -380,6 +385,27 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
       ),
     );
     expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(true);
+  });
+
+  it("Given startDownload が拒否された When retryDownload Then Download all を押さず ERROR phase を emit する", async () => {
+    const { handlers, progressMessages, sentMessages, triggerDownloadAllMock } = await loadContentScript({
+      startDownloadResult: { ok: false, message: "別の Download all 監視が進行中です" },
+    });
+
+    handlers.get("retryDownload")!({
+      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          message: expect.stringContaining("別の Download all 監視が進行中です"),
+        }),
+      ),
+    );
+    expect(triggerDownloadAllMock).not.toHaveBeenCalled();
+    expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(false);
   });
 
   it("Given Download all 待機中に stop When retryDownload Then watcher を cancel し downloaded POST しない", async () => {

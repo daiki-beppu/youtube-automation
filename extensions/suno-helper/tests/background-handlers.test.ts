@@ -587,17 +587,14 @@ describe('background onMessage("startDownload"): 同時監視を排他する (#1
       data: { format: "mp3" },
       sender: { tab: { id: 42 } },
     });
-    handlers.get("startDownload")!({
+    const result = handlers.get("startDownload")!({
       data: { format: "mp3" },
       sender: { tab: { id: 43 } },
     });
 
     expect(downloadListeners).toHaveLength(1);
-    expect(sentMessages).toContainEqual({
-      type: "downloadFailed",
-      data: { message: expect.stringContaining("監視が進行中") },
-      tabId: 43,
-    });
+    expect(result).toEqual({ ok: false, message: expect.stringContaining("監視が進行中") });
+    expect(sentMessages.filter((m) => m.type === "downloadFailed")).toHaveLength(0);
   });
 });
 

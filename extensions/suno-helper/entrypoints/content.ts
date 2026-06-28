@@ -202,7 +202,10 @@ export default defineContentScript({
       if (isAborted()) return;
 
       emitProgress({ phase: PHASE.DOWNLOADING, total: progressTotal, message: `${format.toUpperCase()} 形式` });
-      await sendMessage("startDownload", { format });
+      const startResult = await sendMessage("startDownload", { format });
+      if (!startResult?.ok) {
+        throw new Error(startResult?.message ?? "Download all 監視を開始できませんでした");
+      }
       const downloadPromise = waitForDownloadComplete(isAborted);
       let watcherActive = true;
       try {
