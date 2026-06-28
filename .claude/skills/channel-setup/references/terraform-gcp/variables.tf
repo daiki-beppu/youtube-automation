@@ -52,5 +52,6 @@ variable "apis" {
     "youtubeanalytics.googleapis.com",
     "aiplatform.googleapis.com",
     "generativelanguage.googleapis.com",
+    "storage.googleapis.com",
   ]
 }
