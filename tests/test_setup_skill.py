@@ -71,6 +71,25 @@ def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
     assert "`.agents/skills` が `.claude/skills` を指す symlink" in text
 
 
+def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    assert "`config/channel/meta.json` の `channel.name`" in text
+    assert "`yt-{channel-slug}`" in text
+    assert "kebab-case" in text
+    assert "6-30 文字" in text
+    assert "`--name`): `{チャンネル名} YouTube`" in text
+    assert "承認またはカスタム入力" in text
+
+
+def test_setup_skill_suggests_oauth_app_and_client_names() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    assert "`gcp_project` と同じルールでチャンネル名を解決" in text
+    assert "`{チャンネル名} YouTube Automation`" in text
+    assert "`{チャンネル名} Desktop Client`" in text
+    assert "OAuth 同意画面のアプリ名: <channel-name> YouTube Automation" in text
+    assert "OAuth クライアント ID 名: <channel-name> Desktop Client" in text
+
+
 def test_skills_use_uv_run_for_doctor_json() -> None:
     offenders: list[str] = []
     for skill_md in sorted(_SKILLS_DIR.glob("*/SKILL.md")):

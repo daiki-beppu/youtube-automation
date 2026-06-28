@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(channel-settings)`: `yt-channel-settings pull --channel-id-only --apply` を追加。YouTube API から `channel_id` のみを取得して `config/channel/meta.json::channel.channel_id` に書き込む。通常の `pull --apply` でも `channel_id` を自動反映するよう `_write_channel_settings` に統合（#1271）
 - `docs(skills)`: `/channel-new` を TTP ベンチマーク → config → ペルソナ → branding の end-to-end スキルに刷新。`/audience-persona` / `/channel-direction` / `/channel-research` / `/channel-setup` の description・前提条件・Cross References を新フローに合わせて更新（#1271）
 - `refactor(doctor)`: `/onboard` スキルを `/setup` にリネームしツール設定特化に責務整理。`yt-doctor` に `bootstrap` カテゴリを新設（#1273）
+- `docs(setup)`: `/setup` の GCP プロジェクト新規作成手順でチャンネル名由来の project ID / 表示名を推奨し、OAuth 同意画面のアプリ名とクライアント ID 名も HUMAN STEP に提示するよう更新（#1277, #1278）
 - `docs(wf-new)`: アナリティクス未収集の初回チャンネルでも `/wf-new` から企画生成を開始できるよう、`collection-ideate` / `wf-new` の入力モードに benchmark fallback mode と minimal mode を追加。`yt-doctor` の readiness 判定も analytics 不在をブロッカーにしない契約へ更新（#1272）
 
 ## [5.5.12] - 2026-06-25
