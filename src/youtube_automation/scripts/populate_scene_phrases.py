@@ -146,7 +146,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--translations-json",
-        help="Claude Agent が生成した翻訳 JSON object（例: '{\"ja\":\"...\",\"ko\":\"...\"}'）",
+        help='Claude Agent が生成した翻訳 JSON object（例: \'{"ja":"...","ko":"..."}\'）',
     )
     parser.add_argument(
         "--translations-file",

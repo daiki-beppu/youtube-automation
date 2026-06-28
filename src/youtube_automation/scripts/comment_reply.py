@@ -60,9 +60,7 @@ def _load_agent_replies(path: str | None) -> dict[str, str] | None:
         rows = payload
     elif isinstance(payload, dict):
         return {
-            str(comment_id): str(reply_text)
-            for comment_id, reply_text in payload.items()
-            if str(reply_text).strip()
+            str(comment_id): str(reply_text) for comment_id, reply_text in payload.items() if str(reply_text).strip()
         }
     else:
         raise AutomationError("agent replies JSON は object / list / {replies: [...]} のいずれかで指定してください")
