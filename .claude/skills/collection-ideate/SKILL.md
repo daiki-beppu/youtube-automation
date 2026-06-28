@@ -6,6 +6,7 @@ description: "Use when 新コレクションの企画が必要なとき、デー
 ## Overview
 
 最新の分析データ + 競合ベンチマークを基に、各ペルソナ向けの企画提案を自動生成する。
+アナリティクス未収集の初回チャンネルでは、ベンチマークまたはユーザー直接入力で初回企画を生成する。
 設定は `config/skills/collection-ideate.yaml` を参照。
 
 > 制作ループ全体の中での位置づけと `workflow-state.json` の扱いは [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) を参照。
@@ -28,17 +29,25 @@ description: "Use when 新コレクションの企画が必要なとき、デー
 
 ## 前提スキル状態確認
 
-Phase 1 に入る前に analyze / benchmark / persona / viewing-scene の状態を確認する。
-`/analytics-analyze` と `/benchmark` は独立・並列で鮮度判定（stale 検出）、`/audience-persona` と `/viewing-scene` は
-存在チェックのみ（更新タイミングは戦略判断のため人間が決める）。
+Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析・企画生成はそのモードに従う。
 
-- `/analytics-analyze` が未生成 or stale → ユーザーに `/analytics-analyze` 実行を案内（必要なら `/analytics-collect` 先行）。**自動呼び出し不可**（AI 推論コスト発生のため）
-- `/benchmark` が stale → Skill ツールで実行（内部で差分更新）
-- `/audience-persona` が未生成 → ユーザーに案内（更新タイミングは戦略判断のため人間が決める）
-- `/viewing-scene` が未生成 → ユーザーに案内（persona 下流のため連動して判断）
+| モード | 判定条件 | 企画生成の入力 | 前提スキルの扱い |
+|---|---|---|---|
+| analytics mode | `reports/analysis_*.md` が存在し、stale ではない | 日次収集データ + ベンチマーク + config | analyze / benchmark / persona / viewing-scene を通常確認 |
+| benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config | analytics 依存をスキップ。persona / viewing-scene は存在すれば使い、無ければ config と benchmark から仮説化 |
+| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config | analytics / benchmark 依存をスキップ。persona / viewing-scene は初回仮説として扱う |
+
+analytics mode では `/analytics-analyze` と `/benchmark` を独立・並列で鮮度判定（stale 検出）し、
+`/audience-persona` と `/viewing-scene` は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
+
+- `reports/analysis_*.md` が存在するが stale → fallback せず中断。ユーザーに `/analytics-analyze` 再実行を案内（必要なら `/analytics-collect` 先行）。**自動呼び出し不可**（AI 推論コスト発生のため）
+- analytics mode で `/benchmark` が stale → Skill ツールで実行（内部で差分更新）
+- analytics mode で `/audience-persona` が未生成 → ユーザーに案内（更新タイミングは戦略判断のため人間が決める）
+- analytics mode で `/viewing-scene` が未生成 → ユーザーに案内（persona 下流のため連動して判断）
 
 判定ルール（鮮度・存在チェックの擬似コード・workflow-state との同期）は
-`references/freshness-rules.md` を参照。stale または未生成を検出したら Phase 1 を中断して該当スキルの実行を促すこと。
+`references/freshness-rules.md` を参照。analytics mode の必須入力で stale または未生成を検出したら
+Phase 1 を中断して該当スキルの実行を促すこと。
 
 ## 実行フロー
 
@@ -61,7 +70,7 @@ uv run yt-channel-status
 
 #### Phase 1-2: 自チャンネル Analytics 分析
 
-最新 `reports/analysis_*.md` を Read で読み込み、自チャンネルのパフォーマンス示唆を取り込む。
+analytics mode では最新 `reports/analysis_*.md` を Read で読み込み、自チャンネルのパフォーマンス示唆を取り込む。
 以下のセクションが `/collection-ideate` 企画立案の直接入力:
 
 - **§ 5 戦略的改善提案** — CTR 改善・コンテンツ最適化の方向性
@@ -70,14 +79,19 @@ uv run yt-channel-status
 
 **エラーハンドリング**:
 
-- `reports/analysis_*.md` が存在しない → **即中断**。ユーザーに `/analytics-collect` → `/analytics-analyze` の先行実行を案内
-- `reports/` が stale（最新 `data/analytics_data_*.json` のファイル名日付より古い）→ 中断。`/analytics-analyze` 再実行を案内
+- `reports/analysis_*.md` が存在しない → 中断せず、入力モード判定に従って benchmark fallback mode または minimal mode へ進む
+- `reports/` が stale（最新 `data/analytics_data_*.json` のファイル名日付より古い）→ fallback せず中断。`/analytics-analyze` 再実行を案内
 
 #### Phase 1-3: 競合ベンチマーク分析
 
-**Skill ツールで `/benchmark` を実行** — `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古いファイルがあれば YouTube Data API (OAuth) で最新データを自動取得・更新する。最新であればスキップされる。
+analytics mode では **Skill ツールで `/benchmark` を実行** — `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古いファイルがあれば YouTube Data API (OAuth) で最新データを自動取得・更新する。最新であればスキップされる。
 
-更新完了後、`docs/benchmarks/` 配下の全 `.md` ファイルを Read ツールで読み込み、以下を抽出:
+benchmark fallback mode では `data/benchmark_*.json` を Read で読み込み、config と合わせて企画入力にする。`/benchmark` の自動実行や `docs/benchmarks/` の読み込みはしない。
+
+minimal mode ではベンチマーク分析をスキップし、ユーザーにテーマ / ジャンル / 雰囲気を確認して企画入力にする。
+
+analytics mode の `/benchmark` 更新完了後、
+`docs/benchmarks/` 配下の全 `.md` ファイルを Read ツールで読み込み、以下を抽出:
 - 競合チャンネルの高パフォーマンステーマ（再生数上位）
 - 共通成功パターン（`common-patterns.md`）
 - 自チャンネルへの戦略的示唆
@@ -92,11 +106,20 @@ Phase 1-1〜1-3 の入力を統合し:
 - 差別化可能な切り口の特定
 - 競合パターン参照と自チャンネル強みの掛け合わせ
 
+benchmark fallback mode では自チャンネル分析の示唆を使わず、ベンチマークの高パフォーマンステーマと
+`config/channel/meta.json` / `config/channel/content.json` の世界観を掛け合わせる。
+
+minimal mode ではユーザー直接入力（テーマ / ジャンル / 雰囲気）と
+`config/channel/meta.json` / `config/channel/content.json` の世界観だけで候補を作る。
+
 ### Phase 2: 戦略的企画立案
-**youtube-video-planner** サブエージェント（Task ツール）で分析結果から CTR 改善に最適なテーマ戦略を構築。
+**youtube-video-planner** サブエージェント（Task ツール）で入力モードごとの材料からテーマ戦略を構築。
+analytics mode では CTR 改善に最適なテーマ戦略を優先し、benchmark fallback mode / minimal mode では
+初回制作を開始できる具体性とチャンネル世界観への整合を優先する。
 
 ### Phase 3: ペルソナベース企画候補生成
 **rpg-collection-research-agent** と **rpg-storytelling-agent** サブエージェント（Task ツール）を連携して、各ペルソナ向けの企画候補を生成。
+benchmark fallback mode / minimal mode でペルソナ文書が無い場合は、入力モードごとの材料から初回仮説の視聴者像を明記して候補を生成する。
 
 ### Phase 4: プレビューサムネイル生成
 
@@ -334,13 +357,17 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 `docs/channel/personas/persona-definition.md` が存在する場合、そこからペルソナを読み込む。鮮度・未生成の判定ルールは冒頭の「前提スキル状態確認」セクションに従う。
 
-**存在しない場合は ideate を進めず、以下を案内して停止する:**
+analytics mode で存在しない場合は ideate を進めず、以下を案内して停止する:
 
 ```
 ❌ docs/channel/personas/persona-definition.md が見つかりません。
    先に `/audience-persona` を実行してターゲットペルソナを定義してください。
-   （チャンネル立ち上げ直後なら `/channel-direction` → `/audience-persona` → `/collection-ideate` の順）
 ```
+
+benchmark fallback mode / minimal mode では停止せず、入力モードごとの材料から初回仮説の視聴者像を明記する:
+
+- benchmark fallback mode: ベンチマークで反応が強い視聴シーンと `config/channel/content.json` の genre / tags から仮説ペルソナを作る
+- minimal mode: ユーザーが入力したテーマ / ジャンル / 雰囲気と `config/channel/meta.json` / `config/channel/content.json` から仮説ペルソナを作る
 
 今回のターゲットペルソナに対し、差別化軸（`config/skills/collection-ideate.yaml` の `differentiation_axes`、デフォルト: location / time_of_day / activity / mood）の掛け合わせで `candidate_count` 個の候補を生成する。以下は `candidate_count=3` のときのテンプレ:
 
@@ -348,9 +375,9 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 |------|---------------|
 | **企画 1** | 軸 A × 軸 B のバリエーション |
 | **企画 2** | 軸 C × 軸 D のバリエーション |
-| **企画 3** | 競合の高再生パターンをペルソナ視点で再解釈 |
+| **企画 3** | analytics / benchmark fallback mode では競合の高再生パターンをペルソナ視点で再解釈。minimal mode では直接入力のテーマを別の差別化軸で再解釈 |
 
-`candidate_count` を変えた場合は枠を増減し、各企画ごとに異なる差別化軸の組み合わせ or 競合パターン再解釈を割り当てる。
+`candidate_count` を変えた場合は枠を増減し、各企画ごとに異なる差別化軸の組み合わせを割り当てる。analytics / benchmark fallback mode では競合パターン再解釈を含め、minimal mode では直接入力と config だけを根拠にする。
 
 ### カラールール
 
@@ -359,10 +386,13 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 各企画には以下を必ず含める:
 - **ターゲットペルソナ**: 名前・視聴シーン・ユースケース
-- **競合パターン参照**: どの競合の成功パターンを参考にしたか
 - **差別化ポイント**: 既存コレクションとどう異なるか
 - **情景没入スコア**: サムネイル + タイトルで情景が浮かぶ度合い（高/中/低）
 - **オブジェクト定義**: `ideate.objects.swappable` 各スロットの具体値（名前・ストーリー・ビジュアル）
+
+入力モード別の根拠項目:
+- **analytics mode / benchmark fallback mode**: 競合パターン参照（どの競合の成功パターンを参考にしたか）を必ず含める
+- **minimal mode**: 競合パターン参照は要求しない。ユーザー直接入力（テーマ / ジャンル / 雰囲気）と config からの根拠、仮説ペルソナ / 視聴シーンの根拠を必ず含める
 
 ## 企画ルール
 
@@ -450,7 +480,7 @@ Mode) の wet airport runway + blue-hour テンプレから外れて参照画像
 
 ### 競合パターン分析ルール
 
-ベンチマークデータを分析し、以下を企画判断に使う:
+analytics mode / benchmark fallback mode ではベンチマークデータを分析し、以下を企画判断に使う。minimal mode ではこの分析をスキップし、ユーザー直接入力（テーマ / ジャンル / 雰囲気）と config から企画根拠を作る。
 - **高再生タイトルの共通要素**: 情景描写の具体性と再生数の相関
 - **低再生タイトルの回避要素**: 抽象的・汎用的なテーマは CTR が低い
 - 具体的な場所 + ムードの組み合わせが視聴者の情景想起を助ける
@@ -484,7 +514,7 @@ Mode) の wet airport runway + blue-hour テンプレから外れて参照画像
 - 競合の既存タイトル・テーマとの類似度が `originality.max_similarity` を超えたら警告
 - ベンチマークから学ぶのは「パターン（構造）」であり「テーマそのもの」ではない
 - 既存コレクションと類似度が高い場合は警告表示
-- `originality.require_pattern_reference: true` の場合、各企画に「競合パターン参照元」と「差別化ポイント」を明記
+- `originality.require_pattern_reference: true` の場合、analytics mode / benchmark fallback mode では各企画に「競合パターン参照元」と「差別化ポイント」を明記。minimal mode では競合パターン参照元を要求せず、ユーザー直接入力 + config からの根拠と差別化ポイントを明記
 
 ## リファレンス
 
@@ -497,9 +527,13 @@ Mode) の wet airport runway + blue-hour テンプレから外れて参照画像
 `/collection-ideate` は**1 つのペルソナに絞って `preview.candidate_count` 個の企画候補**を生成する。次回の `/collection-ideate` では次のペルソナに移る。
 
 **今回のターゲットペルソナ判定**:
-1. `collections/` 配下の全 `workflow-state.json` から `planning.target_persona` を収集
-2. 直近の選択ペルソナの次を今回のターゲットにする
-3. 初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ
+1. `docs/channel/personas/persona-definition.md` が存在する場合、そこに定義されたペルソナを対象にする
+2. `collections/` 配下の全 `workflow-state.json` から `planning.target_persona` を収集
+3. 直近の選択ペルソナの次を今回のターゲットにする。初回 or 不明なら persona 文書の先頭ペルソナを使う
+4. analytics mode で persona 文書が存在しない場合は停止し、`/audience-persona` 実行を案内する
+5. benchmark fallback mode / minimal mode で persona 文書が存在しない場合は、入力モードごとの材料から作る初回仮説の視聴者像を今回のターゲットペルソナとして扱う
+   - benchmark fallback mode: ベンチマークデータ + config
+   - minimal mode: ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config
 
 **`candidate_count` 候補の差別化軸**:
 同一ペルソナ向けに、`differentiation_axes` の掛け合わせを変えてバリエーションを生成する。

@@ -281,13 +281,13 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 6 bootstrap + 11 api + 1 channel + 1 upload = 19
-        assert len(payload["checks"]) == 19
+        # 6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 21
+        assert len(payload["checks"]) == 21
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
             assert "category" in c
-            assert c["category"] in ("bootstrap", "api", "channel", "upload")
+            assert c["category"] in ("bootstrap", "api", "channel", "data", "upload")
 
     def test_human_output(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
@@ -586,6 +586,290 @@ class TestBootstrapChecks:
 
 
 # ---------------------------------------------------------------------------
+# check_analytics_report
+# ---------------------------------------------------------------------------
+
+
+class TestCheckAnalyticsReport:
+    def test_id_and_category(self, tmp_path):
+        """id="analytics_report", category="data" であること."""
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.id == "analytics_report"
+        assert r.category == "data"
+
+    def test_no_reports_dir_uses_minimal_mode(self, tmp_path):
+        """reports/ と data/benchmark が無い場合: minimal mode で ok."""
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_missing_report_has_no_next_action(self, tmp_path):
+        """analytics 不在は /wf-new readiness のブロッカーにしない."""
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.next_action is None
+
+    def test_reports_dir_exists_but_no_analysis_file_uses_minimal_mode(self, tmp_path):
+        """reports/ 存在・analysis_*.md なし: minimal mode で ok."""
+        (tmp_path / "reports").mkdir()
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_no_analysis_file_with_benchmark_uses_fallback_mode(self, tmp_path):
+        """analysis 不在 + data/benchmark_*.json あり: benchmark fallback mode で ok."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "benchmark fallback mode" in r.message
+
+    def test_analysis_file_present_is_ok(self, tmp_path):
+        """reports/analysis_YYYYMMDD.md が 1 件以上存在: ok."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+
+    def test_multiple_analysis_files_is_ok(self, tmp_path):
+        """analysis_*.md が複数存在しても ok."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# A1", encoding="utf-8")
+        (reports_dir / "analysis_20240201.md").write_text("# A2", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+
+    def test_stale_analysis_file_is_fail(self, tmp_path):
+        """latest data より古い analysis report は /wf-new readiness のブロッカー."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Old Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "fail"
+        assert "stale report" in r.message
+        assert r.next_action is not None
+        assert "/analytics-analyze" in r.next_action["instructions"]
+
+    def test_analysis_file_same_date_as_latest_data_is_ok(self, tmp_path):
+        """analysis report が latest data と同日なら stale ではない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+
+    def test_latest_analysis_file_controls_staleness(self, tmp_path):
+        """複数 report がある場合は最新 report 日付で stale を判定する."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Old", encoding="utf-8")
+        (reports_dir / "analysis_20240202.md").write_text("# Fresh", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+
+    def test_non_analysis_file_does_not_count(self, tmp_path):
+        """analysis_ プレフィックスがないファイルは対象外."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "other_report.md").write_text("# Other", encoding="utf-8")
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_analysis_pattern_directory_does_not_count(self, tmp_path):
+        """analysis_*.md に一致するディレクトリは report 入力として扱わない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").mkdir()
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+        assert "analytics mode" not in r.message
+
+    def test_analytics_data_pattern_directory_does_not_make_report_stale(self, tmp_path):
+        """analytics_data_*.json に一致するディレクトリは stale 判定に使わない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").mkdir()
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+        assert r.next_action is None
+
+    def test_missing_report_does_not_force_analytics_tools(self, tmp_path):
+        """analytics 不在だけでは /analytics-collect / /analytics-analyze に誘導しない."""
+        r = doctor.check_analytics_report(tmp_path)
+        payload = json.dumps({"message": r.message, "next_action": r.next_action}, ensure_ascii=False)
+        assert "analytics-collect" not in payload
+        assert "analytics-analyze" not in payload
+
+
+# ---------------------------------------------------------------------------
+# check_benchmark_data
+# ---------------------------------------------------------------------------
+
+
+class TestCheckBenchmarkData:
+    def test_id_and_category(self, tmp_path):
+        """id="benchmark_data", category="data" であること."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.id == "benchmark_data"
+        assert r.category == "data"
+
+    def test_no_benchmark_data_uses_minimal_mode(self, tmp_path):
+        """data/benchmark_*.json が存在しない: minimal mode で ok."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_missing_benchmark_has_no_next_action(self, tmp_path):
+        """benchmark 不在は /wf-new readiness のブロッカーにしない."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.next_action is None
+
+    def test_missing_benchmark_does_not_force_benchmark_skill(self, tmp_path):
+        """benchmark 不在だけでは /benchmark 実行に誘導しない."""
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.next_action is None
+        assert "cmd" not in json.dumps(r.__dict__, ensure_ascii=False)
+
+    def test_data_dir_exists_but_no_benchmark_file_uses_minimal_mode(self, tmp_path):
+        """data/ 存在・benchmark_*.json なし: minimal mode で ok."""
+        (tmp_path / "data").mkdir()
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_benchmark_json_present_is_ok(self, tmp_path):
+        """data/benchmark_*.json が 1 件以上存在: ok."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
+        (bm_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "benchmark fallback mode" in r.message
+
+    def test_multiple_benchmark_files_is_ok(self, tmp_path):
+        """複数の benchmark_*.json ファイルが存在しても ok."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
+        (bm_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        (bm_dir / "benchmark_20240201.json").write_text("{}", encoding="utf-8")
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+
+    def test_non_md_file_does_not_count(self, tmp_path):
+        """benchmark_*.json 以外のファイルは対象外."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
+        (bm_dir / "data.csv").write_text("col1,col2", encoding="utf-8")
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+
+    def test_benchmark_pattern_directory_does_not_count(self, tmp_path):
+        """benchmark_*.json に一致するディレクトリは benchmark 入力として扱わない."""
+        bm_dir = tmp_path / "data"
+        bm_dir.mkdir()
+        (bm_dir / "benchmark_20240101.json").mkdir()
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "minimal mode" in r.message
+        assert "benchmark fallback mode" not in r.message
+
+    def test_fresh_analysis_without_benchmark_stays_in_analytics_mode(self, tmp_path):
+        """fresh analysis がある場合、benchmark 不在でも minimal mode とは表示しない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+
+        r = doctor.check_benchmark_data(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+        assert "minimal mode" not in r.message
+
+
+class TestDataReadinessSummary:
+    def test_missing_analytics_and_benchmark_do_not_block_wf_new_readiness(self, tmp_path):
+        """analytics / benchmark 不在でも data カテゴリは minimal mode として next_check にならない."""
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["fail"] == 0
+        assert summary["warn"] == 0
+        assert summary["unknown"] == 0
+        assert summary["next_check_id"] is None
+        assert "minimal mode" in results[0].message
+        assert "minimal mode" in results[1].message
+
+    def test_missing_analytics_with_benchmark_uses_fallback_without_next_check(self, tmp_path):
+        """analytics 不在 + benchmark ありでも next_check は発生しない."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["next_check_id"] is None
+        assert "benchmark fallback mode" in results[0].message
+        assert "benchmark fallback mode" in results[1].message
+
+    def test_stale_analytics_report_blocks_wf_new_readiness(self, tmp_path):
+        """stale analytics report は data カテゴリの次アクションとして扱う."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240101.md").write_text("# Old Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["fail"] == 1
+        assert summary["next_check_id"] == "analytics_report"
+
+    def test_fresh_analytics_without_benchmark_has_single_input_mode(self, tmp_path):
+        """analytics_report と benchmark_data が同じ入力モード契約を参照する."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20240201_120000.json").write_text("{}", encoding="utf-8")
+
+        results = [doctor.check_analytics_report(tmp_path), doctor.check_benchmark_data(tmp_path)]
+        summary = doctor.summarize(results)
+        assert summary["next_check_id"] is None
+        assert "analytics mode" in results[0].message
+        assert "analytics mode" in results[1].message
+        assert "minimal mode" not in json.dumps([r.message for r in results], ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
 # check_upload_ready
 # ---------------------------------------------------------------------------
 
@@ -788,11 +1072,11 @@ class TestUploadRequiredScopes:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_19_checks(self, monkeypatch, tmp_path):
-        """6 bootstrap + 11 api + 1 channel + 1 upload = 計 19 件."""
+    def test_returns_21_checks(self, monkeypatch, tmp_path):
+        """6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 計 21 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 19
+        assert len(results) == 21
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -802,7 +1086,7 @@ class TestRunAllChecksExtended:
         assert len(api_results) == 11
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):
-        """bootstrap / channel / upload の check が含まれる."""
+        """bootstrap / channel / data / upload の check が含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         ids = {r.id for r in results}
@@ -811,10 +1095,12 @@ class TestRunAllChecksExtended:
         assert "automation_package" in ids
         assert "skills_synced" in ids
         assert "channel_config" in ids
+        assert "analytics_report" in ids
+        assert "benchmark_data" in ids
         assert "upload_ready" in ids
 
-    def test_category_order_bootstrap_then_api_then_channel_then_upload(self, monkeypatch, tmp_path):
-        """runway 順序: bootstrap → api → channel → upload."""
+    def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
+        """runway 順序: bootstrap → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         categories = [r.category for r in results]
@@ -823,11 +1109,13 @@ class TestRunAllChecksExtended:
         first_api = next(i for i, c in enumerate(categories) if c == "api")
         last_api = max(i for i, c in enumerate(categories) if c == "api")
         first_channel = next(i for i, c in enumerate(categories) if c == "channel")
+        first_data = next(i for i, c in enumerate(categories) if c == "data")
         first_upload = next(i for i, c in enumerate(categories) if c == "upload")
 
         assert last_bootstrap < first_api
         assert last_api < first_channel
-        assert first_channel < first_upload
+        assert first_channel < first_data
+        assert first_data < first_upload
 
     def test_channel_config_is_only_channel_check(self, monkeypatch, tmp_path):
         """channel カテゴリは channel_config の 1 件のみ."""
@@ -844,6 +1132,13 @@ class TestRunAllChecksExtended:
         bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
         assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
 
+    def test_data_checks_are_analytics_report_and_benchmark_data(self, monkeypatch, tmp_path):
+        """data カテゴリは analytics_report と benchmark_data の 2 件."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        results = doctor.run_all_checks(tmp_path)
+        data_ids = {r.id for r in results if r.category == "data"}
+        assert data_ids == {"analytics_report", "benchmark_data"}
+
     def test_upload_ready_is_only_upload_check(self, monkeypatch, tmp_path):
         """upload カテゴリは upload_ready の 1 件のみ."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
@@ -859,8 +1154,8 @@ class TestRunAllChecksExtended:
 
 
 class TestRenderTableCategories:
-    def test_all_four_category_labels_in_output(self, monkeypatch, tmp_path):
-        """render_table 出力に bootstrap / api / channel / upload のカテゴリラベルが含まれる."""
+    def test_all_five_category_labels_in_output(self, monkeypatch, tmp_path):
+        """render_table 出力に bootstrap / api / channel / data / upload のカテゴリラベルが含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
@@ -869,10 +1164,11 @@ class TestRenderTableCategories:
         assert "bootstrap" in lower
         assert "api" in lower
         assert "channel" in lower
+        assert "data" in lower
         assert "upload" in lower
 
     def test_new_check_ids_appear_in_output(self, monkeypatch, tmp_path):
-        """render_table に bootstrap / channel / upload の check id が含まれる."""
+        """render_table に bootstrap / channel / data / upload の check id が含まれる."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
@@ -882,10 +1178,12 @@ class TestRenderTableCategories:
         assert "automation_package" in output
         assert "skills_synced" in output
         assert "channel_config" in output
+        assert "analytics_report" in output
+        assert "benchmark_data" in output
         assert "upload_ready" in output
 
     def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):
-        """出力内でのカテゴリ出現順: bootstrap → api → channel → upload."""
+        """出力内でのカテゴリ出現順: bootstrap → api → channel → data → upload."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
@@ -895,8 +1193,10 @@ class TestRenderTableCategories:
         pos_ffmpeg = output.find("ffmpeg")
         pos_gcloud = output.find("gcloud")
         pos_channel_config = output.find("channel_config")
+        pos_analytics = output.find("analytics_report")
         pos_upload_ready = output.find("upload_ready")
 
         assert pos_ffmpeg < pos_gcloud
         assert pos_gcloud < pos_channel_config
-        assert pos_channel_config < pos_upload_ready
+        assert pos_channel_config < pos_analytics
+        assert pos_analytics < pos_upload_ready

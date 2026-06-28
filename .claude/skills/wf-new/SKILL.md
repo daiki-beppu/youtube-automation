@@ -5,7 +5,9 @@ description: "Use when まだコレクションディレクトリが存在せず
 
 ## Overview
 
-新コレクション開始オーケストレーター。企画選択 + サムネイル承認の2箇所のみ一時停止する。
+新コレクション開始オーケストレーター。通常は企画選択 + サムネイル承認の2箇所で一時停止する。
+minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される。
+アナリティクス未収集の新チャンネルでも、ベンチマークまたはユーザー直接入力で初回企画を開始する。
 
 > **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**（CLAUDE.md §6 参照）。
 
@@ -34,13 +36,26 @@ description: "Use when まだコレクションディレクトリが存在せず
 
 データ収集は `/analytics-collect`（`yt-analytics` のラッパー）が担当するため、workflow からは呼び出さない。必要に応じてユーザー側で cron / launchd に登録する運用。
 
-### Phase 1: 企画（自動実行 + ユーザー選択で一時停止）
+### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）
 
 ```
 Step 1（企画）を自動実行中...
 ```
 
-1. **Skill ツールで `/collection-ideate` を実行** — 日次収集データ + ベンチマークを基に分析 + ペルソナ別3つの企画候補をプレビューサムネイル付きで生成
+1. **入力モード判定** — `/collection-ideate` を呼ぶ前に以下を確認し、同じ条件を `/collection-ideate` に引き継ぐ
+
+| モード | 判定条件 | `/collection-ideate` の入力 |
+|---|---|---|
+| analytics mode | `reports/analysis_*.md` が存在し、stale ではない | 日次収集データ + ベンチマーク + config |
+| benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
+| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config |
+
+`reports/analysis_*.md` が存在するが stale の場合は fallback せず、`/analytics-analyze` 再実行を案内して中断する。古い分析と別入力の混在を避けるため。
+
+2. **Skill ツールで `/collection-ideate` を実行** — 入力モードに応じて企画候補をプレビューサムネイル付きで生成
+   - analytics mode: 日次収集データ + ベンチマークを基に分析 + ペルソナ別候補を生成
+   - benchmark fallback mode: 自チャンネル分析をスキップし、ベンチマークデータ + config から初回候補を生成
+   - minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認し、その直接入力 + config から初回候補を生成
 
 `/collection-ideate` の出力が表示された後、**ユーザーに企画選択のみ求める**:
 - 選択肢: 提示された候補のいずれか
@@ -48,7 +63,8 @@ Step 1（企画）を自動実行中...
 - **ここでフローが一時停止し、ユーザーの入力を待つ**
 
 **エラーハンドリング:**
-- `/collection-ideate` がエラー → エラー内容を表示して中断。分析データの確認を案内
+- analytics mode で `/collection-ideate` がエラー → エラー内容を表示して中断。分析データの確認を案内
+- benchmark fallback mode / minimal mode で `/collection-ideate` がエラー → エラー内容を表示して中断。入力モードと不足データを明示して再入力または `/benchmark` を案内
 
 ### Phase 2: 選択後の処理（自動）
 
@@ -179,6 +195,9 @@ Phase 1 の成果物を `20-documentation/` に保存:
 ## Cross References
 
 - 企画生成: `/collection-ideate` スキル
+  - analytics mode: `reports/analysis_*.md` + ベンチマーク + config を使用
+  - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
+  - minimal mode: ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成
 - サムネイル生成: `/thumbnail` スキル
 - ループ動画生成: `/loop-video` スキル
 - 音楽プロンプト生成: `/suno` スキル
