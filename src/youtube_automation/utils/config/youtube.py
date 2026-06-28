@@ -20,6 +20,8 @@ class YoutubeApi:
     language: str
     contains_synthetic_media: bool = True
     self_declared_made_for_kids: bool = False
+    default_publish_time: str | None = None
+    default_publish_timezone: str = "Asia/Tokyo"
 
 
 @dataclass(frozen=True)
