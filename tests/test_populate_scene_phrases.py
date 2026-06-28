@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -113,44 +112,34 @@ def _isolate_config(monkeypatch):
 
 class TestTranslatePhrase:
     def test_excludes_en_from_targets(self):
-        client = MagicMock()
-        client.models.generate_content.return_value = MagicMock(text='{"ja": "あ", "ko": "ㄱ"}')
-
-        result = populate_scene_phrases.translate_phrase("Hello", ["en", "ja", "ko"], client=client)
+        result = populate_scene_phrases.translate_phrase(
+            "Hello",
+            ["en", "ja", "ko"],
+            translations_json='{"ja": "あ", "ko": "ㄱ"}',
+        )
 
         assert result == {"ja": "あ", "ko": "ㄱ"}
-        # en は target に含めない（en は別途追加されるため）
-        prompt_arg = client.models.generate_content.call_args.kwargs["contents"][0]
-        assert "ja, ko" in prompt_arg
-        assert "en, ja" not in prompt_arg
 
     def test_strips_code_fence(self):
-        client = MagicMock()
-        client.models.generate_content.return_value = MagicMock(text='```json\n{"ja": "夜"}\n```')
-
-        result = populate_scene_phrases.translate_phrase("Night", ["ja"], client=client)
+        result = populate_scene_phrases.translate_phrase(
+            "Night",
+            ["ja"],
+            translations_json='```json\n{"ja": "夜"}\n```',
+        )
 
         assert result == {"ja": "夜"}
 
     def test_missing_lang_raises_validation_error(self):
-        client = MagicMock()
-        client.models.generate_content.return_value = MagicMock(text='{"ja": "夜"}')
-
         with pytest.raises(ValidationError, match="翻訳欠落"):
-            populate_scene_phrases.translate_phrase("Night", ["ja", "ko"], client=client)
+            populate_scene_phrases.translate_phrase("Night", ["ja", "ko"], translations_json='{"ja": "夜"}')
 
     def test_invalid_json_raises_validation_error(self):
-        client = MagicMock()
-        client.models.generate_content.return_value = MagicMock(text="not json")
-
         with pytest.raises(ValidationError, match="JSON"):
-            populate_scene_phrases.translate_phrase("Night", ["ja"], client=client)
+            populate_scene_phrases.translate_phrase("Night", ["ja"], translations_json="not json")
 
     def test_no_targets_skips_call(self):
-        client = MagicMock()
-        result = populate_scene_phrases.translate_phrase("x", ["en"], client=client)
+        result = populate_scene_phrases.translate_phrase("x", ["en"], translations_json="")
         assert result == {}
-        client.models.generate_content.assert_not_called()
 
 
 # --- main (CLI) --------------------------------------------------------------
@@ -206,12 +195,12 @@ class TestMainCLI:
         )
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        def fake_translate(en_phrase, langs, *, client=None, model=None):
+        def fake_translate(en_phrase, langs, *, translations_json):
             return {"ja": "深夜のネオン街", "ko": "심야 네온"}
 
         monkeypatch.setattr(populate_scene_phrases, "translate_phrase", fake_translate)
 
-        rc = populate_scene_phrases.main(["20260322-tc-city-collection"])
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--translations-json", "{}"])
         assert rc == 0
 
         ws = json.loads(
@@ -237,7 +226,7 @@ class TestMainCLI:
             lambda *a, **kw: {"ja": "深夜"},
         )
 
-        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--dry-run"])
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--dry-run", "--translations-json", "{}"])
         assert rc == 0
 
         ws = json.loads(
@@ -262,7 +251,7 @@ class TestMainCLI:
             lambda *a, **kw: {"ja": "新しい"},
         )
 
-        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--overwrite"])
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--overwrite", "--translations-json", "{}"])
         assert rc == 0
 
         ws = json.loads(
@@ -287,7 +276,9 @@ class TestMainCLI:
             lambda en, langs, **kw: {"ja": f"翻訳:{en}"},
         )
 
-        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--en", "Custom phrase"])
+        rc = populate_scene_phrases.main(
+            ["20260322-tc-city-collection", "--en", "Custom phrase", "--translations-json", "{}"]
+        )
         assert rc == 0
 
         ws = json.loads(
@@ -306,7 +297,7 @@ class TestMainCLI:
         )
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        rc = populate_scene_phrases.main(["20260322-tc-city-collection"])
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--translations-json", "{}"])
         assert rc == 1
         assert "英語フレーズを解決できません" in capsys.readouterr().err
 
@@ -326,7 +317,7 @@ class TestMainCLI:
             lambda *a, **kw: {"ja": "深夜"},
         )
 
-        rc = populate_scene_phrases.main(["20260322-tc-city-collection"])
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--translations-json", "{}"])
         assert rc == 0
 
         ws = json.loads(
@@ -347,3 +338,18 @@ class TestMainCLI:
         rc = populate_scene_phrases.main(["nonexistent-collection"])
         assert rc == 1
         assert "見つかりません" in capsys.readouterr().err
+
+    def test_missing_translations_json_returns_agent_instruction(self, tmp_path, monkeypatch, capsys):
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "ja"],
+            workflow_state={"theme": "city"},
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection"])
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "--translations-json" in err
+        assert "Claude Agent" in err

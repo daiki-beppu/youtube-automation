@@ -91,6 +91,7 @@ class CommentReplier:
         channel_dir: Path,
         default_language: str,
         owner_channel_id: str | None = None,
+        agent_replies: dict[str, str] | None = None,
         sleep_fn=time.sleep,
     ):
         self._youtube = youtube
@@ -98,6 +99,7 @@ class CommentReplier:
         self._channel_dir = channel_dir
         self._default_language = default_language
         self._owner_channel_id = owner_channel_id
+        self._agent_replies = agent_replies
         self._sleep = sleep_fn
         self._history = ReplyHistory(channel_dir / config.history_file)
         self._title_cache: dict[str, str] = {}
@@ -187,8 +189,11 @@ class CommentReplier:
         video_ids: list[str] | None = None,
         per_video_limit: int = 100,
         since: datetime | None = None,
+        export_candidates: bool = False,
     ) -> ReplyPlan:
         """返信を計画 / 実行する."""
+        if export_candidates and not dry_run:
+            raise ConfigError("export_candidates=True は dry-run でのみ使用できます")
         if not self._config.enabled:
             logger.warning("comments.enabled=false のため、何もしません")
             return ReplyPlan()
@@ -217,7 +222,7 @@ class CommentReplier:
         for vid in target_video_ids:
             if len(plan.planned) >= limit:
                 break
-            self._process_video_comments(vid, engine, plan, dry_run, per_video_limit, since, limit)
+            self._process_video_comments(vid, engine, plan, dry_run, per_video_limit, since, limit, export_candidates)
 
         return plan
 
@@ -258,6 +263,7 @@ class CommentReplier:
         per_video_limit: int,
         since: datetime | None,
         limit: int,
+        export_candidates: bool,
     ) -> None:
         comments = fetch_comments(self._youtube, video_id=video_id, max_results=per_video_limit, since=since)
         while len(plan.planned) < limit:
@@ -270,7 +276,7 @@ class CommentReplier:
                     raise
                 plan.skipped.append(self._video_skip_record(video_id, _COMMENTS_DISABLED_SKIP_REASON))
                 return
-            self._process_comment(comment, engine, plan, dry_run)
+            self._process_comment(comment, engine, plan, dry_run, export_candidates)
 
     def _get_title(self, video_id: str) -> str:
         if video_id in self._title_cache:
@@ -292,6 +298,7 @@ class CommentReplier:
         engine: RuleEngine,
         plan: ReplyPlan,
         dry_run: bool,
+        export_candidates: bool,
     ) -> None:
         skip_reason = self._skip_reason(comment)
         if skip_reason is not None:
@@ -318,25 +325,35 @@ class CommentReplier:
             dry_run=dry_run,
         )
 
-        reply_text = self._generate_reply(comment, match, ctx, plan)
+        reply_text = "" if export_candidates else self._generate_reply(comment, match, ctx, plan)
         if reply_text is None:
             return
 
-        plan.planned.append(
-            {
-                "comment_id": comment.comment_id,
-                "video_id": comment.video_id,
-                "video_title": video_title,
-                "comment_author": comment.author,
-                "comment_text": comment.text,
-                "rule": match.rule.name,
-                **self._generator_metadata(match),
-                "language": match.language,
-                "reply_text": reply_text,
-            }
-        )
+        record = {
+            "comment_id": comment.comment_id,
+            "video_id": comment.video_id,
+            "video_title": video_title,
+            "comment_author": comment.author,
+            "comment_text": comment.text,
+            "rule": match.rule.name,
+            **self._generator_metadata(match),
+            "language": match.language,
+            "reply_text": reply_text,
+        }
+        if export_candidates:
+            record.update(
+                {
+                    "reply_source": "agent_pending",
+                    "channel_persona": self._config.generator.channel_persona,
+                    "max_length": self._config.generator.max_length,
+                    "instruction": "Generate reply_text for this comment. Return JSON only.",
+                }
+            )
+        elif self._agent_replies is not None:
+            record["reply_source"] = "agent"
+        plan.planned.append(record)
 
-        if dry_run:
+        if dry_run or export_candidates:
             return
 
         if self._post_reply(comment, reply_text, match, video_title, plan):
@@ -350,6 +367,20 @@ class CommentReplier:
         plan: ReplyPlan,
     ) -> str | None:
         """返信テキストを生成する. LLM 失敗時は plan を更新して None を返す."""
+        if self._agent_replies is not None:
+            reply_text = self._agent_replies.get(comment.comment_id, "").strip()
+            if not reply_text:
+                plan.skipped.append(self._skip_record(comment, "agent_reply_missing"))
+                return None
+            if len(reply_text) > ctx.max_length:
+                logger.warning(
+                    "agent 生成返信が max_length=%d を超過したため切り詰めます (comment_id=%s)",
+                    ctx.max_length,
+                    comment.comment_id,
+                )
+                reply_text = reply_text[: ctx.max_length]
+            return reply_text
+
         generator = self._resolve_generator(match)
         try:
             return generator.generate(ctx)

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.scripts.comment_reply import _load_agent_replies
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
 from youtube_automation.utils.config.comments import (
@@ -18,6 +20,20 @@ from youtube_automation.utils.config.comments import (
 from youtube_automation.utils.exceptions import YouTubeAPIError
 
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
+
+
+def test_load_agent_replies_accepts_mapping(tmp_path):
+    path = tmp_path / "replies.json"
+    path.write_text(json.dumps({"c1": "Thanks!"}), encoding="utf-8")
+
+    assert _load_agent_replies(str(path)) == {"c1": "Thanks!"}
+
+
+def test_load_agent_replies_accepts_replies_list(tmp_path):
+    path = tmp_path / "replies.json"
+    path.write_text(json.dumps({"replies": [{"comment_id": "c1", "reply_text": "Thanks!"}]}), encoding="utf-8")
+
+    assert _load_agent_replies(str(path)) == {"c1": "Thanks!"}
 
 
 def _mock_youtube(
@@ -128,7 +144,7 @@ def _make_config(**overrides) -> Comments:
         ],
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="skip",
@@ -175,6 +191,64 @@ def test_dry_run_does_not_call_insert(tmp_path):
 
     # 履歴ファイルは書かれない
     assert not (tmp_path / "comment_reply_history.json").exists()
+
+
+def test_export_candidates_does_not_call_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    plan = replier.run(dry_run=True, export_candidates=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["comment_id"] == "c1"
+    assert plan.planned[0]["reply_text"] == ""
+    assert plan.planned[0]["reply_source"] == "agent_pending"
+    assert plan.planned[0]["instruction"] == "Generate reply_text for this comment. Return JSON only."
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_agent_replies_file_path_uses_provided_reply_without_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "見つけてくださってありがとうございます。"},
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["reply_text"] == "見つけてくださってありがとうございます。"
+    assert plan.planned[0]["reply_source"] == "agent"
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_agent_replies_missing_comment_is_skipped_without_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={},
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned == []
+    assert any(row["comment_id"] == "c1" and row["reason"] == "agent_reply_missing" for row in plan.skipped)
+    _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
 def test_apply_calls_insert_and_saves_history(tmp_path):
@@ -565,7 +639,7 @@ def _make_gemini_config(**overrides) -> Comments:
         skip_held_for_review=True,
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="skip",
@@ -635,7 +709,7 @@ def test_llm_retry_on_error_then_plans_reply(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="retry",
@@ -667,7 +741,7 @@ def test_llm_skip_on_error_when_fallback_is_skip(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="persona",
             max_length=280,
             fallback_on_error="skip",
@@ -694,7 +768,7 @@ def test_llm_retry_failure_is_skipped(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="persona",
             max_length=280,
             fallback_on_error="retry",

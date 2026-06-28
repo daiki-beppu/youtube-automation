@@ -43,6 +43,44 @@ def _parse_since(value: str | None) -> datetime | None:
         raise SystemExit(f"[error] --since は ISO8601 形式で指定してください: {e}")
 
 
+def _load_agent_replies(path: str | None) -> dict[str, str] | None:
+    if path is None:
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            payload = json.load(f)
+    except OSError as e:
+        raise AutomationError(f"agent replies JSON を読めません: {path}: {e}") from e
+    except json.JSONDecodeError as e:
+        raise AutomationError(f"agent replies JSON のパースに失敗しました: {path}: {e}") from e
+
+    if isinstance(payload, dict) and isinstance(payload.get("replies"), list):
+        rows = payload["replies"]
+    elif isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict):
+        return {
+            str(comment_id): str(reply_text)
+            for comment_id, reply_text in payload.items()
+            if str(reply_text).strip()
+        }
+    else:
+        raise AutomationError("agent replies JSON は object / list / {replies: [...]} のいずれかで指定してください")
+
+    replies: dict[str, str] = {}
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise AutomationError(f"agent replies JSON replies[{i}] は object でなければなりません")
+        comment_id = row.get("comment_id")
+        reply_text = row.get("reply_text")
+        if not comment_id:
+            raise AutomationError(f"agent replies JSON replies[{i}].comment_id が必須です")
+        if not isinstance(reply_text, str) or not reply_text.strip():
+            raise AutomationError(f"agent replies JSON replies[{i}].reply_text が必須です")
+        replies[str(comment_id)] = reply_text.strip()
+    return replies
+
+
 def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
     if as_json:
         payload = {
@@ -113,6 +151,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--since", default=None, help="ISO8601 形式。これより新しいコメントのみ対象")
     parser.add_argument("--json", action="store_true", help="結果を JSON で出力")
+    parser.add_argument(
+        "--export-candidates",
+        action="store_true",
+        help="返信対象コメントを JSON 出力する（LLM 生成なし、--dry-run と併用）",
+    )
+    parser.add_argument(
+        "--agent-replies-file",
+        default=None,
+        help="Claude Code Agent が生成した返信 JSON を使用する（CLI 内部では返信文を生成しない）",
+    )
     return parser
 
 
@@ -141,18 +189,21 @@ def main(argv: Iterable[str] | None = None) -> int:
     since = _parse_since(args.since)
 
     try:
+        agent_replies = _load_agent_replies(args.agent_replies_file)
         youtube = get_youtube()
         replier = CommentReplier(
             youtube,
             config=effective_config,
             channel_dir=_channel_dir(),
             default_language=config.youtube.api.language,
+            agent_replies=agent_replies,
         )
         plan = replier.run(
             dry_run=args.dry_run,
             video_ids=args.video_ids,
             per_video_limit=args.per_video_limit,
             since=since,
+            export_candidates=args.export_candidates,
         )
     except AutomationError as e:
         print(f"[error] {e}", file=sys.stderr)
