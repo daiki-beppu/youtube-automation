@@ -143,19 +143,10 @@ export function defaultDownloadDeps(): TriggerDownloadAllDeps {
   };
 }
 
-/**
- * multi-select 済みの clip に対して "Download all" を実行する (#1146)。
- * More menu → Download all → 形式選択 → ダウンロード開始の一連の DOM 操作を行う。
- *
- * @param format ダウンロード形式 ("mp3" | "m4a" | "wav")
- * @param deps テスト時に差し替え可能な副作用注入点
- * @throws DOM 操作の各ステップで要素が見つからない / timeout した場合
- */
 export async function triggerDownloadAll(
   format: string,
   deps: TriggerDownloadAllDeps = defaultDownloadDeps(),
 ): Promise<void> {
-  // Step 1: More ボタン（三点リーダー）を click
   const moreBtn = deps.findMoreButton();
   if (!moreBtn) {
     throw new Error(
@@ -166,19 +157,15 @@ export async function triggerDownloadAll(
   deps.clickElement(moreBtn);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
-  // Step 2: context menu 内の "Download all" を待って click
   const downloadItem = await deps.waitForDownloadMenuItem(MENU_APPEAR_TIMEOUT_MS, MENU_APPEAR_POLL_MS);
   deps.clickElement(downloadItem);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
-  // Step 3: 形式選択モーダルを待つ
   const modal = await deps.waitForFormatModal(MODAL_APPEAR_TIMEOUT_MS, MODAL_APPEAR_POLL_MS);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
-  // Step 4: 指定形式を選択
   deps.selectFormat(modal, format);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
-  // Step 5: ダウンロード確認ボタンを click
   deps.clickConfirm(modal);
 }

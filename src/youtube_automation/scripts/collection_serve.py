@@ -674,7 +674,7 @@ def _commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
         shutil.move(str(staged), str(dest))
 
 
-def _extract_downloaded_archive(coll_dir: Path, download_path: str, expected_count: int | None) -> tuple[int, Path]:
+def _extract_downloaded_archive(coll_dir: Path, download_path: str, expected_count: int | None) -> int:
     """ZIP を staging に展開し、成功時だけ呼び出し側が commit できる状態にする。"""
     resolved_dp = Path(download_path).resolve()
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
@@ -692,7 +692,7 @@ def _extract_downloaded_archive(coll_dir: Path, download_path: str, expected_cou
         _commit_staged_music_files(coll_dir, staging_dir)
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
-    return placed_count, resolved_dp
+    return placed_count
 
 
 def _apply_downloaded_artifacts(coll_dir: Path, payload: DownloadedPayload) -> int:
@@ -701,10 +701,9 @@ def _apply_downloaded_artifacts(coll_dir: Path, payload: DownloadedPayload) -> i
     expected_count = _expected_download_count(pattern_count, payload.expected_file_count)
     placed_count_for_response = payload.file_count
     file_count = payload.file_count
-    cleanup_path: Path | None = None
 
     if payload.download_path:
-        placed_count, cleanup_path = _extract_downloaded_archive(coll_dir, payload.download_path, expected_count)
+        placed_count = _extract_downloaded_archive(coll_dir, payload.download_path, expected_count)
         placed_count_for_response = placed_count
         file_count = placed_count
 
@@ -714,8 +713,6 @@ def _apply_downloaded_artifacts(coll_dir: Path, payload: DownloadedPayload) -> i
         suno_playlist_url=payload.suno_playlist_url,
         expected_file_count=expected_count,
     )
-    if cleanup_path is not None:
-        _cleanup_download_archive(cleanup_path)
     return placed_count_for_response
 
 
@@ -823,7 +820,8 @@ def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
     try:
         prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
-        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: {prompts_path}") from exc
+        print(f"[yt-collection-serve] invalid {SUNO_PROMPTS_JSON_FILENAME}: {prompts_path}: {exc}")
+        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}") from exc
     if not isinstance(prompts, list):
         raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: root must be a list")
     for i, entry in enumerate(prompts, 1):
@@ -941,35 +939,6 @@ def _extract_and_rename_music(
         return 0
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-def _is_download_archive_cleanup_target(path: Path, downloads_dir: Path | None = None) -> bool:
-    """Suno bulk download ZIP の自動削除対象か判定する.
-
-    ユーザーの Downloads 以外や ZIP 以外は削除しない。POST /downloaded は絶対パスを受け取るため、
-    誤って任意ファイルを消さないよう cleanup は狭く制限する。
-    """
-    if path.suffix.lower() != ".zip":
-        return False
-    try:
-        resolved_path = path.resolve()
-        resolved_downloads = (downloads_dir or (Path.home() / "Downloads")).resolve()
-    except OSError:
-        return False
-    return resolved_path.is_file() and resolved_path.is_relative_to(resolved_downloads)
-
-
-def _cleanup_download_archive(path: Path, downloads_dir: Path | None = None) -> bool:
-    """成功処理済みの Downloads ZIP を削除する。削除したら True。"""
-    if not _is_download_archive_cleanup_target(path, downloads_dir):
-        return False
-    try:
-        path.unlink()
-        print(f"[yt-collection-serve] ダウンロード ZIP を削除しました: {path}")
-        return True
-    except OSError as exc:
-        print(f"[yt-collection-serve] ダウンロード ZIP 削除に失敗しました: {path}: {exc}")
-        return False
 
 
 def build_version_payload() -> dict[str, str]:

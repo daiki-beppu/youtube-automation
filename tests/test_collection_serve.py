@@ -35,9 +35,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
-    _cleanup_download_archive,
     _extract_and_rename_music,
-    _is_download_archive_cleanup_target,
     build_collections_index,
     create_server,
     find_collection_dirs,
@@ -1654,33 +1652,8 @@ def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
     assert names == ["01a-Song A.mp3", "01b-Song A.mp3", "02a-Song B.mp3", "02b-Song B.mp3"]
 
 
-def test_download_archive_cleanup_only_deletes_zip_under_downloads(tmp_path):
-    """成功処理済み ZIP cleanup は Downloads 配下の .zip だけを削除する。"""
-    downloads = tmp_path / "Downloads"
-    downloads.mkdir()
-    target = downloads / "soulful-grooves.zip"
-    target.write_bytes(b"zip")
-    outside = tmp_path / "soulful-grooves.zip"
-    outside.write_bytes(b"zip")
-    non_zip = downloads / "notes.txt"
-    non_zip.write_text("keep", encoding="utf-8")
-
-    assert _is_download_archive_cleanup_target(target, downloads)
-    assert not _is_download_archive_cleanup_target(outside, downloads)
-    assert not _is_download_archive_cleanup_target(non_zip, downloads)
-
-    assert _cleanup_download_archive(target, downloads) is True
-    assert not target.exists()
-    assert _cleanup_download_archive(outside, downloads) is False
-    assert outside.exists()
-    assert _cleanup_download_archive(non_zip, downloads) is False
-    assert non_zip.exists()
-
-
-def test_post_downloaded_success_cleans_download_archive(serve_dir, tmp_path, monkeypatch):
-    """POST /downloaded が成功した場合だけ download_path の cleanup を呼ぶ。"""
-    import youtube_automation.scripts.collection_serve as cs
-
+def test_post_downloaded_success_keeps_download_archive(serve_dir, tmp_path):
+    """POST /downloaded が成功しても元 ZIP は削除しない。"""
     planning = tmp_path / "planning"
     _make_collection(
         planning,
@@ -1691,8 +1664,6 @@ def test_post_downloaded_success_cleans_download_archive(serve_dir, tmp_path, mo
         tmp_path / "valid.zip",
         {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"},
     )
-    cleaned: list[Path] = []
-    monkeypatch.setattr(cs, "_cleanup_download_archive", lambda path: cleaned.append(path) or True)
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
 
@@ -1708,7 +1679,7 @@ def test_post_downloaded_success_cleans_download_archive(serve_dir, tmp_path, mo
     ) as resp:
         assert resp.status == 200
 
-    assert cleaned == [zip_path.resolve()]
+    assert zip_path.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -2283,16 +2254,16 @@ def test_post_downloaded_malformed_prompts_returns_500_and_does_not_update_artif
         )
 
     assert exc_info.value.code == 500
-    assert "invalid suno-prompts.json" in _read_error_json(exc_info.value)["error"]
+    error = _read_error_json(exc_info.value)["error"]
+    assert error == "invalid suno-prompts.json"
+    assert str(coll) not in error
     assert not (coll / "workflow-state.json").exists()
     music_dir = coll / "02-Individual-music"
     assert not music_dir.exists() or list(music_dir.iterdir()) == []
 
 
-def test_post_downloaded_partial_zip_does_not_cleanup_archive(serve_dir, tmp_path, monkeypatch):
-    """ZIP が期待数未満なら cleanup せず、再取得や調査ができるよう残す。"""
-    import youtube_automation.scripts.collection_serve as cs
-
+def test_post_downloaded_partial_zip_keeps_download_archive(serve_dir, tmp_path):
+    """ZIP が期待数未満なら元 ZIP を残し、再取得や調査ができるようにする。"""
     planning = tmp_path / "planning"
     _make_collection(
         planning,
@@ -2303,8 +2274,6 @@ def test_post_downloaded_partial_zip_does_not_cleanup_archive(serve_dir, tmp_pat
         ],
     )
     zip_path = _make_zip(tmp_path / "partial.zip", {"Song A.mp3": b"audio1"})
-    cleaned: list[Path] = []
-    monkeypatch.setattr(cs, "_cleanup_download_archive", lambda path: cleaned.append(path) or True)
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
 
@@ -2321,7 +2290,7 @@ def test_post_downloaded_partial_zip_does_not_cleanup_archive(serve_dir, tmp_pat
         )
 
     assert exc_info.value.code == 500
-    assert cleaned == []
+    assert zip_path.exists()
 
 
 def test_post_downloaded_partial_zip_with_underreported_expected_count_returns_500(serve_dir, tmp_path):
