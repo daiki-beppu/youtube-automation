@@ -122,7 +122,7 @@ def _print_duration_preview(
         target_sec = target_duration_min * 60
         print(f"    Target      : {_format_duration(target_sec)}")
     elif no_loop:
-        print("    Target      : disabled by --no-loop")
+        print("    Target      : disabled")
     print(f"    Loop count  : {effective_loops}")
     print(f"    Estimated   : {_format_duration(estimated)}")
     if no_loop and target_duration_min is not None and single_loop_sec < target_duration_min * 60:
@@ -403,12 +403,6 @@ def main() -> int:
         dest="target_duration",
         help="目標尺 (分) 以上になる最小のループ回数を自動算出",
     )
-    loop_group.add_argument(
-        "--no-loop",
-        action="store_true",
-        dest="no_loop",
-        help="skill-config の target_duration_min を使わず 1 パスで生成する (--loop 1 相当)",
-    )
     parser.add_argument(
         "--shuffle",
         action="store_true",
@@ -450,20 +444,11 @@ def main() -> int:
         crossfade = float(audio.get("crossfade_duration", 1.0))
         bitrate = str(audio.get("bitrate", "192k"))
 
-        # CLI フラグ (--loop / --target-duration / --no-loop) がすべて未指定なら
+        # CLI フラグ (--loop / --target-duration) がすべて未指定なら
         # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
         # --loop 指定時は loops 指定が最優先のため skill-config 値を黙って無視する。
         target_duration: int | None = args.target_duration
-        no_loop_target_duration: int | None = None
-        if args.no_loop:
-            skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
-            if skill_target is not None:
-                no_loop_target_duration = int(skill_target)
-                if no_loop_target_duration < 1:
-                    raise ValidationError(
-                        f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
-                    )
-        elif args.loop is None and args.target_duration is None:
+        if args.loop is None and args.target_duration is None:
             skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
             if skill_target is not None:
                 target_duration = int(skill_target)
@@ -516,9 +501,9 @@ def main() -> int:
             collection_dir,
             crossfade,
             bitrate,
-            loops=1 if args.no_loop else args.loop,
-            target_duration_min=no_loop_target_duration if args.no_loop else target_duration,
-            no_loop=args.no_loop,
+            loops=args.loop,
+            target_duration_min=target_duration,
+            no_loop=False,
             shuffle=shuffle_enabled,
             shuffle_seed=shuffle_seed,
             pin_first=pin_first,

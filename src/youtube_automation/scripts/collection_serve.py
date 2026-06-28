@@ -53,11 +53,11 @@ from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.suno_downloaded_artifacts import (
     DownloadedArtifactError,
     DownloadedPayloadError,
-    _apply_downloaded_artifacts,
-    _count_audio_files,
-    _expected_download_count,
-    _parse_downloaded_payload,
-    _read_pattern_count,
+    apply_downloaded_artifacts,
+    count_audio_files,
+    expected_download_count,
+    parse_downloaded_payload,
+    read_pattern_count,
 )
 
 DEFAULT_PORT = 7873
@@ -416,7 +416,7 @@ def _determine_status(
     """
     if not has_prompts:
         return "needs_prompts"
-    expected_count = _expected_download_count(pattern_count, explicit_expected)
+    expected_count = expected_download_count(pattern_count, explicit_expected)
     if expected_count is not None and downloaded_count >= expected_count:
         return "downloaded"
     return "ready"
@@ -506,11 +506,11 @@ def build_collections_index(root: Path) -> list[dict]:
     for coll in find_collection_dirs(root):
         prompts_path = coll / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
         has_prompts = prompts_path.is_file()
-        pattern_count = _read_pattern_count(coll)
+        pattern_count = read_pattern_count(coll)
         music_dir = CollectionPaths(coll).music_dir
-        downloaded_count = _count_audio_files(music_dir)
+        downloaded_count = count_audio_files(music_dir)
         expected_file_count = _read_music_expected_file_count(coll)
-        expected_count = _expected_download_count(pattern_count, expected_file_count)
+        expected_count = expected_download_count(pattern_count, expected_file_count)
         status = _determine_status(has_prompts, pattern_count, downloaded_count, expected_file_count)
         theme = _theme_from_collection_dir(coll)
         channel = _channel_from_collection_id(coll.name, theme)
@@ -686,14 +686,14 @@ def create_server(
                 self.send_error(400, "Bad Request")
                 return
             try:
-                downloaded = _parse_downloaded_payload(payload)
+                downloaded = parse_downloaded_payload(payload)
             except DownloadedPayloadError:
                 self.send_error(400, "Bad Request")
                 return
 
             coll_dir = collections_root / cid
             try:
-                placed_count_for_response = _apply_downloaded_artifacts(
+                placed_count_for_response = apply_downloaded_artifacts(
                     coll_dir,
                     downloaded,
                     atomic_json_write=_atomic_json_write,

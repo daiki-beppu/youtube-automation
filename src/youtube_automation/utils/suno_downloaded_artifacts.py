@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
-from youtube_automation.scripts.suno_artifacts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
 from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.suno_artifact_contracts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
 
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
 _VALID_DOWNLOAD_FORMATS = frozenset({"mp3", "m4a", "wav"})
@@ -53,6 +53,10 @@ def _count_audio_files(music_dir: Path) -> int:
     return sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
 
 
+def count_audio_files(music_dir: Path) -> int:
+    return _count_audio_files(music_dir)
+
+
 def _expected_download_count(pattern_count: int | None, explicit_expected: int | None = None) -> int | None:
     if pattern_count is None:
         return explicit_expected
@@ -60,6 +64,10 @@ def _expected_download_count(pattern_count: int | None, explicit_expected: int |
     if explicit_expected is None:
         return pattern_expected
     return max(pattern_expected, explicit_expected)
+
+
+def expected_download_count(pattern_count: int | None, explicit_expected: int | None = None) -> int | None:
+    return _expected_download_count(pattern_count, explicit_expected)
 
 
 def _read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | None:
@@ -73,6 +81,10 @@ def _read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | 
     if not isinstance(prompts, list):
         return default
     return len(prompts)
+
+
+def read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | None:
+    return _read_pattern_count(coll_dir, default=default)
 
 
 def _parse_downloaded_payload(payload: object) -> DownloadedPayload:
@@ -114,6 +126,10 @@ def _parse_downloaded_payload(payload: object) -> DownloadedPayload:
         expected_file_count=expected_file_count,
         download_path=download_path,
     )
+
+
+def parse_downloaded_payload(payload: object) -> DownloadedPayload:
+    return _parse_downloaded_payload(payload)
 
 
 def _commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
@@ -211,6 +227,15 @@ def _apply_downloaded_artifacts(
         if music_backup_dir is not None:
             shutil.rmtree(music_backup_dir, ignore_errors=True)
     return placed_count_for_response
+
+
+def apply_downloaded_artifacts(
+    coll_dir: Path,
+    payload: DownloadedPayload,
+    *,
+    atomic_json_write: AtomicJsonWriter,
+) -> int:
+    return _apply_downloaded_artifacts(coll_dir, payload, atomic_json_write=atomic_json_write)
 
 
 def _update_workflow_state_downloaded(

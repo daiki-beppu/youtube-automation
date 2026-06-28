@@ -500,7 +500,7 @@ export interface DownloadedPayload {
  * 非 2xx は fail-loud で throw する。
  */
 async function fetchServeToken(baseUrl: string): Promise<string> {
-  const res = await fetch(`${baseUrl}/auth/token`);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/auth/token`);
   if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
   const data: unknown = await res.json();
   if (
@@ -527,8 +527,9 @@ export async function postDownloaded(
   if (payload.file_count > 0 && !payload.download_path) {
     throw new Error("file_count が正数の場合は download_path が必要です");
   }
-  const token = await fetchServeToken(baseUrl);
-  const url = `${baseUrl}${collectionDownloadedRoute(collectionId)}`;
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const token = await fetchServeToken(normalizedBaseUrl);
+  const url = `${normalizedBaseUrl}${collectionDownloadedRoute(collectionId)}`;
   let res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Serve-Token": token },

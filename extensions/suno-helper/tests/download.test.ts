@@ -102,7 +102,23 @@ describe("triggerDownloadAll", () => {
     expect(deps.clickConfirm).not.toHaveBeenCalled();
   });
 
-  it("waitForFormatModal が throw した場合はそのまま伝播する", async () => {
+  it("waitForFormatModal が 1 回目に throw した場合は Download all を再クリックして成功できる", async () => {
+    const formatModal = stubElement();
+    const deps = createMockDeps({
+      waitForFormatModal: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("format modal timed out"))
+        .mockResolvedValueOnce(formatModal),
+    });
+
+    await triggerDownloadAll("mp3", deps);
+
+    expect(deps.waitForFormatModal).toHaveBeenCalledTimes(2);
+    expect(deps.clickElement).toHaveBeenCalledTimes(3);
+    expect(deps.selectFormat).toHaveBeenCalledWith(formatModal, "mp3");
+  });
+
+  it("waitForFormatModal が 2 回 throw した場合はそのまま伝播する", async () => {
     const deps = createMockDeps({
       waitForFormatModal: vi.fn(async () => {
         throw new Error("format modal timed out");
@@ -110,6 +126,7 @@ describe("triggerDownloadAll", () => {
     });
 
     await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/format modal timed out/);
+    expect(deps.waitForFormatModal).toHaveBeenCalledTimes(2);
     expect(deps.selectFormat).not.toHaveBeenCalled();
   });
 

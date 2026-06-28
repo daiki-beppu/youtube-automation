@@ -695,53 +695,6 @@ class TestCliShuffle:
         assert captured["kwargs"]["shuffle_seed"] == 777
 
 
-class TestCliNoLoop:
-    """CLI 引数 --no-loop が target_duration_min を明示的に抑止する."""
-
-    def _patch_main_dependencies(self, monkeypatch, skill_config: dict | None = None) -> dict:
-        monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_skill_config",
-            lambda _: skill_config or {},
-        )
-
-        captured: dict = {}
-
-        def fake_generate_master(*args, **kwargs):
-            captured["args"] = args
-            captured["kwargs"] = kwargs
-            return Path("/tmp/fake-master.mp3")
-
-        monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.generate_master",
-            fake_generate_master,
-        )
-        return captured
-
-    def test_no_loop_passes_single_loop_even_when_skill_target_exists(self, monkeypatch, tmp_path):
-        captured = self._patch_main_dependencies(
-            monkeypatch,
-            {"audio": {"target_duration_min": 120}},
-        )
-        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path), "--no-loop"])
-
-        rc = generate_master.main()
-
-        assert rc == 0
-        assert captured["kwargs"]["loops"] == 1
-        assert captured["kwargs"]["target_duration_min"] == 120
-        assert captured["kwargs"]["no_loop"] is True
-
-    def test_no_loop_is_mutually_exclusive_with_target_duration(self, monkeypatch, tmp_path):
-        self._patch_main_dependencies(monkeypatch, {})
-        monkeypatch.setattr(
-            "sys.argv",
-            ["yt-generate-master", str(tmp_path), "--no-loop", "--target-duration", "120"],
-        )
-
-        with pytest.raises(SystemExit):
-            generate_master.main()
-
-
 class TestCliSkillConfigShuffle:
     """skill-config の audio.shuffle / audio.shuffle_seed を CLI 未指定時のデフォルトとして解決する。"""
 

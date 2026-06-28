@@ -95,7 +95,7 @@ export interface TriggerDownloadAllDeps {
 }
 
 /** デフォルトの DOM 実装。 */
-export function defaultDownloadDeps(): TriggerDownloadAllDeps {
+function defaultDownloadDeps(): TriggerDownloadAllDeps {
   return {
     findMoreButton: () => document.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR),
     waitForDownloadMenuItem: (timeoutMs, pollMs) => waitForDownloadMenuItem(timeoutMs, pollMs),
@@ -125,7 +125,14 @@ export async function triggerDownloadAll(
   deps.clickElement(downloadItem);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
-  const modal = await deps.waitForFormatModal(MODAL_APPEAR_TIMEOUT_MS, MODAL_APPEAR_POLL_MS);
+  let modal: HTMLElement;
+  try {
+    modal = await deps.waitForFormatModal(MODAL_APPEAR_TIMEOUT_MS, MODAL_APPEAR_POLL_MS);
+  } catch {
+    deps.clickElement(downloadItem);
+    await deps.sleep(SETTLE_AFTER_CLICK_MS);
+    modal = await deps.waitForFormatModal(MODAL_APPEAR_TIMEOUT_MS, MODAL_APPEAR_POLL_MS);
+  }
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 
   deps.selectFormat(modal, format);

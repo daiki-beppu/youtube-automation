@@ -735,6 +735,22 @@ describe("shared/api postDownloaded: 正常系", () => {
     const headers = postCall[1].headers as Record<string, string>;
     expect(headers["X-Serve-Token"]).toBe("test-token");
   });
+
+  it("Given baseUrl 末尾 slash When postDownloaded Then token と POST URL を正規化する", async () => {
+    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+
+    await postDownloaded(`${BASE_URL}/`, "20260601-clm-aaa-collection", {
+      file_count: 0,
+      format: "mp3",
+      suno_playlist_url: "https://suno.com/playlist/test",
+    });
+
+    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/auth/token`);
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${BASE_URL}/collections/20260601-clm-aaa-collection/downloaded`,
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });
 
 describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
