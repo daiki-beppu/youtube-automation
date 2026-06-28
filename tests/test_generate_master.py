@@ -12,6 +12,7 @@ import pytest
 from youtube_automation.scripts import generate_master
 from youtube_automation.scripts.generate_master import (
     _collect_audio_inputs,
+    _estimate_looped_duration,
     _resolve_loop_count,
     _sum_track_duration,
     build_filter,
@@ -48,6 +49,14 @@ class TestResolveLoopCount:
     def test_target_duration_min_clamped_to_one(self):
         # target が極小で single_loop が大きいケースでも 1 未満にならない
         assert _resolve_loop_count(None, 1, single_loop_sec=4600, crossfade=1.0) == 1
+
+
+class TestEstimateLoopedDuration:
+    def test_single_loop_has_raw_total(self):
+        assert _estimate_looped_duration(3600.0, 1, 1.0) == pytest.approx(3600.0)
+
+    def test_multiple_loops_subtract_inter_loop_crossfades(self):
+        assert _estimate_looped_duration(4600.0, 2, 1.0) == pytest.approx(9199.0)
 
 
 class TestSumTrackDuration:
@@ -684,6 +693,53 @@ class TestCliShuffle:
         assert rc == 0
         assert captured["kwargs"]["shuffle"] is True
         assert captured["kwargs"]["shuffle_seed"] == 777
+
+
+class TestCliNoLoop:
+    """CLI 引数 --no-loop が target_duration_min を明示的に抑止する."""
+
+    def _patch_main_dependencies(self, monkeypatch, skill_config: dict | None = None) -> dict:
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_skill_config",
+            lambda _: skill_config or {},
+        )
+
+        captured: dict = {}
+
+        def fake_generate_master(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return Path("/tmp/fake-master.mp3")
+
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.generate_master",
+            fake_generate_master,
+        )
+        return captured
+
+    def test_no_loop_passes_single_loop_even_when_skill_target_exists(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 120}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path), "--no-loop"])
+
+        rc = generate_master.main()
+
+        assert rc == 0
+        assert captured["kwargs"]["loops"] == 1
+        assert captured["kwargs"]["target_duration_min"] == 120
+        assert captured["kwargs"]["no_loop"] is True
+
+    def test_no_loop_is_mutually_exclusive_with_target_duration(self, monkeypatch, tmp_path):
+        self._patch_main_dependencies(monkeypatch, {})
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-master", str(tmp_path), "--no-loop", "--target-duration", "120"],
+        )
+
+        with pytest.raises(SystemExit):
+            generate_master.main()
 
 
 class TestCliSkillConfigShuffle:
