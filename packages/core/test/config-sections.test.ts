@@ -67,6 +67,23 @@ describe("youtube.api synthetic-media flags", () => {
     expect(config.publishing.youtube.api.containsSyntheticMedia).toBe(false);
     expect(config.publishing.youtube.api.selfDeclaredMadeForKids).toBe(true);
   });
+
+  test("carries default publish schedule fields", () => {
+    // Given youtube.json with channel-level default publish schedule fields
+    const sections = minimalSections();
+    const yt = (
+      sections["youtube.json"] as { youtube: Record<string, unknown> }
+    ).youtube;
+    yt.default_publish_time = "20:00";
+    yt.default_publish_timezone = "Asia/Tokyo";
+
+    // Then they flow through to the api section in camelCase
+    const config = load(sections);
+    expect(config.publishing.youtube.api.defaultPublishTime).toBe("20:00");
+    expect(config.publishing.youtube.api.defaultPublishTimezone).toBe(
+      "Asia/Tokyo"
+    );
+  });
 });
 
 // --- music_engine warning (non-fatal) -------------------------------------

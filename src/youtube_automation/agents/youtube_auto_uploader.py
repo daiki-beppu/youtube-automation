@@ -68,7 +68,9 @@ from youtube_automation.agents._uploader_constants import (  # noqa: E402
 from youtube_automation.utils.channel_settings import build_upload_status_flags  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
-from youtube_automation.utils.publish_schedule import resolve_default_publish_at as _resolve_default_publish_at  # noqa: E402
+from youtube_automation.utils.publish_schedule import (  # noqa: E402
+    resolve_default_publish_at as _resolve_default_publish_at,
+)
 from youtube_automation.utils.upload_core import YouTubeUploadCore  # noqa: E402
 
 # 後方互換 / 公開 API: 定数は従来どおり本モジュールから import できるよう再エクスポートする。
