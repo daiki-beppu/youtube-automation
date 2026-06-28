@@ -82,6 +82,8 @@ export const Youtube = z
         category_id: z.string(),
         // 未設定時は現行の振る舞いに合わせ true / false（AI 開示フラグ）。
         contains_synthetic_media: z.boolean().default(true),
+        default_publish_time: z.string().nullable().default(null),
+        default_publish_timezone: z.string().default("Asia/Tokyo"),
         language: z.string(),
         privacy_status: z.string(),
         self_declared_made_for_kids: z.boolean().default(false),
@@ -98,6 +100,8 @@ export const Youtube = z
       api: {
         categoryId: o.youtube.category_id,
         containsSyntheticMedia: o.youtube.contains_synthetic_media,
+        defaultPublishTime: o.youtube.default_publish_time,
+        defaultPublishTimezone: o.youtube.default_publish_timezone,
         language: o.youtube.language,
         privacyStatus: o.youtube.privacy_status,
         selfDeclaredMadeForKids: o.youtube.self_declared_made_for_kids,

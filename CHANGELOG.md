@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(upload)`: チャンネル設定の既定予約投稿時刻をアップロード時に適用（#1054）
 - `feat(upload)`: アップロード完了後に YouTube Studio で確認すべき手動チェックリストを表示（#1052）
 - `feat(upload)`: アップロード実行時に操作対象のチャンネル名と channel ID を表示（#1053）
 - `feat(thumbnail)`: サムネイル生成で primary provider が失敗した場合の fallback provider 設定と手順を追加（#1097）
