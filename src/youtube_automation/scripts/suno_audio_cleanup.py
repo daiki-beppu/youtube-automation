@@ -124,7 +124,13 @@ def collect_audio_files(collection_dir: Path) -> list[Path]:
     return [p for p in files if p.parent.name != _BACKUP_DIRNAME]
 
 
-def build_ffmpeg_cmd(input_path: Path, output_path: Path, cfg: CleanupConfig, *, duration_sec: float | None) -> list[str]:
+def build_ffmpeg_cmd(
+    input_path: Path,
+    output_path: Path,
+    cfg: CleanupConfig,
+    *,
+    duration_sec: float | None,
+) -> list[str]:
     cmd = [
         "ffmpeg",
         "-y",
@@ -193,7 +199,9 @@ def cleanup_collection(collection_dir: Path, *, apply: bool, force: bool = False
 
     files = collect_audio_files(collection_dir)
     if not files:
-        raise ValidationError(f"音声ファイル ({', '.join(_SUPPORTED_EXTS)}) が見つかりません: {CollectionPaths(collection_dir).music_dir}")
+        music_dir = CollectionPaths(collection_dir).music_dir
+        supported_exts = ", ".join(_SUPPORTED_EXTS)
+        raise ValidationError(f"音声ファイル ({supported_exts}) が見つかりません: {music_dir}")
 
     changed = 0
     for path in files:
@@ -212,7 +220,11 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("plan", "apply"):
         p = sub.add_parser(name)
         p.add_argument("collection", nargs="?", help="collection dir (default: CWD if it looks like a collection)")
-        p.add_argument("--force", action="store_true", help="run even when config is disabled; reprocess existing backups")
+        p.add_argument(
+            "--force",
+            action="store_true",
+            help="run even when config is disabled; reprocess existing backups",
+        )
         p.add_argument("--quiet", action="store_true")
     return parser
 
