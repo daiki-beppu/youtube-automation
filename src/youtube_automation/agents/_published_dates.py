@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
+from youtube_automation.utils.config import load_config
+from youtube_automation.utils.publish_schedule import resolve_default_publish_at
 from youtube_automation.utils.schedule import get_schedule_timezone
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,13 @@ class PublishedDatesMixin:
         """
         schedule_cfg = self.config.get("schedule", {})
         if not _scheduling_enabled(schedule_cfg):
+            if schedule_cfg.get("auto_schedule_enabled") is False:
+                logger.info("📅 公開設定: 即時公開（schedule.auto_schedule_enabled=false）")
+                return None
+            default_publish_at = resolve_default_publish_at(load_config())
+            if default_publish_at:
+                logger.info(f"📅 channel youtube.default_publish_time から公開予定を適用: {default_publish_at}")
+                return default_publish_at
             logger.info("📅 公開設定: 即時公開（schedule_config.json で auto_schedule_enabled 未設定）")
             return None
 

@@ -276,6 +276,8 @@ def _build_youtube(merged: dict) -> YoutubeSection:
         language=yt["language"],
         contains_synthetic_media=bool(yt.get("contains_synthetic_media", True)),
         self_declared_made_for_kids=bool(yt.get("self_declared_made_for_kids", False)),
+        default_publish_time=yt.get("default_publish_time"),
+        default_publish_timezone=yt.get("default_publish_timezone", "Asia/Tokyo"),
     )
 
     cm_data = merged.get("content_model") or {}

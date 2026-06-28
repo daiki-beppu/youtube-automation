@@ -4,7 +4,9 @@
     "privacy_status": "public",
     "language": "ja",
     "contains_synthetic_media": true,
-    "self_declared_made_for_kids": false
+    "self_declared_made_for_kids": false,
+    "default_publish_time": "20:00",
+    "default_publish_timezone": "Asia/Tokyo"
   },
   "content_model": {
     "type": "collection",
