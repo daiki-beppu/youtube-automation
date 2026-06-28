@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(masterup)`: Suno 音源の後処理 CLI `yt-suno-audio-cleanup` を追加（#1048）
 - `feat(masterup)`: `generate-master` に尺プレビューと `--no-loop` を追加（#1091）
 - `docs(masterup)`: Suno ショート URL からの楽曲解決手順を追加（#1094）
 - `docs(automation-update)`: GitHub CLI が使えない環境向けに curl での release 取得手順を追加（#1098）
