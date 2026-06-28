@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(short-release)`: short-release スキルの手順をショート生成までの責務に整理（#1170）
 - `docs(short)`: short / short-release の dry-run 手順を現行の `--plan` フラグ表記に修正（#1169）
 - `docs(channel-setup)`: Terraform GCP reference を現行テンプレートと同期（#1172）
 - `docs(channel-setup)`: benchmark 取得手順で参照する CLI 名を現行名に修正（#1168）
