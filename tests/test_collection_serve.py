@@ -44,7 +44,7 @@ from youtube_automation.scripts.collection_serve import (
     resolve_prompts_path,
 )
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.suno_downloaded_artifacts import _commit_staged_music_files, _extract_and_rename_music
+from youtube_automation.utils.suno_downloaded_archive import _commit_staged_music_files, _extract_and_rename_music
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_ORIGIN = "https://suno.com"
@@ -763,7 +763,7 @@ def test_commit_staged_music_files_rolls_back_when_staged_move_fails(tmp_path, m
                 raise OSError("simulated move failure")
         return real_move(src, dst, *args, **kwargs)
 
-    monkeypatch.setattr("youtube_automation.utils.suno_downloaded_artifacts.shutil.move", fail_second_staged_move)
+    monkeypatch.setattr("youtube_automation.utils.suno_downloaded_archive.shutil.move", fail_second_staged_move)
 
     with pytest.raises(OSError, match="simulated move failure"):
         _commit_staged_music_files(coll, staging_dir)
@@ -1863,7 +1863,7 @@ def test_post_downloaded_download_path_without_playlist_url_returns_400(serve_di
 
 def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
     """ZIP 内の単一ファイルがサイズ上限を超える場合、展開しない (#1217)。"""
-    import youtube_automation.utils.suno_downloaded_artifacts as artifacts
+    import youtube_automation.utils.suno_downloaded_archive as artifacts
 
     # テスト用に上限を 10 bytes に下げる（実際の 500MB は CI で生成不可）。
     monkeypatch.setattr(artifacts, "_ZIP_MAX_SINGLE_FILE", 10)

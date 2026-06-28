@@ -106,9 +106,13 @@ describe("resumeRunRange: playlist phase 停止 (failedIndex=total) は空 entry
 // （ssot-dedup.test.ts の read() 手法を雛形）。実装前は失敗し、draft step の実装後に pass する。
 describe("content.ts: STOPPED phase は resume state を保存する (#898 要件1/2/3/7)", () => {
   const contentSource = read("../entrypoints/content.ts");
+  const downloadFlowSource = read("../lib/download-flow.ts");
 
-  it("Given content.ts When PHASE.STOPPED emit を数える Then 正確に 10 箇所（retryPlaylist の download 中断を含む）", () => {
-    const stoppedEmits = contentSource.match(/emitProgress\(\{ phase: PHASE\.STOPPED/g) ?? [];
+  it("Given runner sources When PHASE.STOPPED emit を数える Then 正確に 10 箇所（download retry flow の中断を含む）", () => {
+    const stoppedEmits =
+      `${contentSource}\n${downloadFlowSource}`.match(
+        /(?:emitProgress|deps\.emitProgress)\(\{ phase: PHASE\.STOPPED/g,
+      ) ?? [];
 
     expect(stoppedEmits).toHaveLength(10);
   });
