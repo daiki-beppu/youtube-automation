@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(setup)`: `/setup` の GCP プロジェクト新規作成手順でチャンネル名由来の project ID / 表示名を推奨し、OAuth 同意画面のアプリ名とクライアント ID 名も HUMAN STEP に提示するよう更新（#1277, #1278）
 - `docs(wf-new)`: アナリティクス未収集の初回チャンネルでも `/wf-new` から企画生成を開始できるよう、`collection-ideate` / `wf-new` の入力モードに benchmark fallback mode と minimal mode を追加。`yt-doctor` の readiness 判定も analytics 不在をブロッカーにしない契約へ更新（#1272）
 
+### Fixed
+
+- `fix(upload)`: descriptions.md の必須セクション不備時に再作成手順を含むエラーを表示（#1051）
+
 ## [5.5.12] - 2026-06-25
 
 ### Changed
