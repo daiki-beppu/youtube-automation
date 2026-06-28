@@ -448,5 +448,15 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     );
     const lastProgress = progressMessages.at(-1);
     expect(lastProgress).toMatchObject({ phase: PHASE.ERROR });
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "collection-a",
+        failedIndex: entries.length,
+        total: entries.length,
+        submittedClipIds: currentSubmittedClipIds,
+        playlistExpectedClipCount: currentSubmittedClipIds.length,
+      }),
+    );
+    expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
   });
 });

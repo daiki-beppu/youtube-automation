@@ -1,31 +1,11 @@
 import { simulateClick, sleep } from "../../shared/dom";
 
-// --- DOM セレクタ SSOT (2026-06-25 実測) ---
-// Suno の DOM は頻繁に変わるため、セレクタを 1 箇所に集約する。
-
-/** More menu ボタン。各 clip row に出現する三点リーダー。
- * aria-label="More options" で完全一致（"More from Suno" 等を除外）。 */
 const MORE_BUTTON_SELECTOR = 'button[aria-label="More options"]';
-
-/** context menu コンテナ。More ボタン click 後に body 末尾へポータル描画される。
- * role="menu" は付かず data-context-menu 属性で識別する。 */
 const CONTEXT_MENU_SELECTOR = 'div[data-context-menu="true"]';
-
-/** "Download all" menu item。context menu 内の button を aria-label で識別する。 */
 const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
-
-/** 形式選択モーダル。Download all click 後に出現する。
- * div.modal-class.modal-overlay で識別（OneTrust cookie dialog の [role="dialog"] と区別）。 */
 const FORMAT_MODAL_SELECTOR = "div.modal-class.modal-overlay";
-
-/** 形式選択モーダル内のフォーマットボタン。
- * button.flex.w-full で M4A / MP3 / WAV のテキストを含む（radio ではなく通常ボタン）。 */
 const FORMAT_OPTION_SELECTOR = "button.flex.w-full";
-
-/** ダウンロード確認ボタン。hxc-btn-variant-primary クラスで確実に識別できる。 */
 const DOWNLOAD_CONFIRM_SELECTOR = "button.hxc-btn-variant-primary";
-
-// --- poll / timeout 定数 ---
 const MENU_APPEAR_POLL_MS = 100;
 const MENU_APPEAR_TIMEOUT_MS = 5000;
 const MODAL_APPEAR_POLL_MS = 200;
@@ -65,20 +45,13 @@ function findElementByTextContent<T extends HTMLElement>(
   return null;
 }
 
-/**
- * context menu 内から "Download all" menu item が出現するまで poll する。
- * Suno は data-context-menu="true" ポータルを body 末尾に描画する。
- * 内部の button[aria-label="Download all"] または テキスト照合で探す。
- */
 async function waitForDownloadMenuItem(timeoutMs: number, pollMs: number): Promise<HTMLElement> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const menu = document.querySelector<HTMLElement>(CONTEXT_MENU_SELECTOR);
     if (menu) {
-      // aria-label で直接探す（最も安定）
       const byLabel = menu.querySelector<HTMLElement>('button[aria-label="Download all"]');
       if (byLabel) return byLabel;
-      // フォールバック: テキスト照合
       const byText = findElementByTextContent<HTMLElement>(menu, "button", DOWNLOAD_MENU_ITEM_TEXT);
       if (byText) return byText;
     }
@@ -87,11 +60,6 @@ async function waitForDownloadMenuItem(timeoutMs: number, pollMs: number): Promi
   throw new Error(`"Download all" menu item が見つかりませんでした (${timeoutMs}ms)`);
 }
 
-/**
- * 形式選択モーダル内で指定形式のオプションを探して click する。
- * Suno は button.flex.w-full で M4A / MP3 / WAV の選択肢を描画する（radio ではない）。
- * 選択済み: bg-foreground-primary、未選択: bg-background-glass-thin。
- */
 function selectFormatInModal(modal: HTMLElement, format: string): void {
   const formatPattern = new RegExp(`^${format}$`, "i");
   const candidates = modal.querySelectorAll<HTMLButtonElement>(FORMAT_OPTION_SELECTOR);
@@ -107,10 +75,6 @@ function selectFormatInModal(modal: HTMLElement, format: string): void {
   );
 }
 
-/**
- * 形式選択モーダル内のダウンロード確認ボタンを探して click する。
- * Suno は hxc-btn-variant-primary クラスの大ボタン (テキスト "Download") を使う。
- */
 function clickDownloadConfirm(modal: HTMLElement): void {
   const btn = modal.querySelector<HTMLButtonElement>(DOWNLOAD_CONFIRM_SELECTOR);
   if (!btn) {

@@ -184,11 +184,6 @@ export default defineContentScript({
       return resolved.url;
     }
 
-    /**
-     * Download all の低レベル副作用本体 (#1146/#1217)。
-     * 1. DOWNLOADING phase に遷移し DOM で Download all を起動
-     * 2. chrome.downloads 完了を待ち file_count:N で postDownloaded
-     */
     async function performDownload(
       collectionId: string,
       progressTotal: number,

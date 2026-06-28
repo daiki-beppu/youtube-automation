@@ -517,5 +517,6 @@ describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#12
         }),
       ),
     );
+    expect(clearResumeStateMock).not.toHaveBeenCalled();
   });
 });

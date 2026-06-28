@@ -104,6 +104,19 @@ export default defineBackground(() => {
     scheduleWatcherTimers(watcher);
   };
 
+  const replaceActiveDownloadWatcher = (
+    current: DownloadWatcherState,
+    next: DownloadWatcherState,
+  ): DownloadWatcherState => {
+    if (activeDownloadWatcher !== current) {
+      return current;
+    }
+    activeDownloadWatcher = next;
+    persistWatcherState(next);
+    scheduleWatcherTimers(next);
+    return next;
+  };
+
   const cleanupWatcher = (watcher: DownloadWatcherState): void => {
     if (activeDownloadWatcher !== watcher) {
       return;
@@ -142,7 +155,9 @@ export default defineBackground(() => {
     callback: (item: chrome.downloads.DownloadItem | null) => void,
   ): void => {
     if (watcher.targetDownloadId === null) {
-      callback(null);
+      chrome.downloads.search({ state: "complete", limit: 50, orderBy: ["-startTime"] }, (results) => {
+        callback(results.find((item) => isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) ?? null);
+      });
       return;
     }
     chrome.downloads.search({ id: watcher.targetDownloadId }, (results) => {
@@ -160,7 +175,11 @@ export default defineBackground(() => {
     completedPoll.id = setInterval(() => {
       findTargetDownload(watcher, (item) => {
         if (item && item.state === "complete" && isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
-          notifyDownloadComplete(watcher, item.filename ?? "", item.id);
+          const currentWatcher =
+            watcher.targetDownloadId === null
+              ? replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id })
+              : watcher;
+          notifyDownloadComplete(currentWatcher, item.filename ?? "", item.id);
         }
       });
     }, DOWNLOAD_COMPLETE_POLL_MS);
@@ -170,7 +189,11 @@ export default defineBackground(() => {
       () => {
         findTargetDownload(watcher, (item) => {
           if (item && item.state === "complete" && isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
-            notifyDownloadComplete(watcher, item.filename ?? "", item.id);
+            const currentWatcher =
+              watcher.targetDownloadId === null
+                ? replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id })
+                : watcher;
+            notifyDownloadComplete(currentWatcher, item.filename ?? "", item.id);
             return;
           }
           const message = "Download all 監視タイムアウト（10 分）。listener を解除しました。";
@@ -203,9 +226,37 @@ export default defineBackground(() => {
       if (watcher.targetDownloadId !== null || !isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
         return;
       }
-      watcher.targetDownloadId = item.id;
-      persistWatcherState(watcher);
+      replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id });
     });
+  };
+
+  const handleDownloadState = (
+    watcher: DownloadWatcherState,
+    item: chrome.downloads.DownloadItem,
+    state: "complete" | "interrupted",
+  ): void => {
+    const filename = item.filename ?? "";
+    if (!isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
+      console.debug("[suno-helper] Download all 監視対象外の download event を無視:", {
+        filename,
+        url: item.url,
+        startTime: item.startTime,
+        state,
+      });
+      return;
+    }
+    const currentWatcher =
+      watcher.targetDownloadId === null
+        ? replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id })
+        : watcher;
+    if (state === "interrupted") {
+      const message = `ZIP ダウンロードが中断されました: ${filename} (id=${item.id})`;
+      console.warn(`[suno-helper] ${message}`);
+      cleanupWatcher(currentWatcher);
+      notifyDownloadFailed(currentWatcher, message);
+      return;
+    }
+    notifyDownloadComplete(currentWatcher, filename, item.id);
   };
 
   const changedListener = (delta: chrome.downloads.DownloadDelta): void => {
@@ -214,32 +265,14 @@ export default defineBackground(() => {
       return;
     }
     withWatcherState((watcher) => {
-      if (watcher.targetDownloadId !== delta.id) {
+      if (watcher.targetDownloadId !== null && watcher.targetDownloadId !== delta.id) {
         return;
       }
       chrome.downloads.search({ id: delta.id }, (results) => {
         if (!results || results.length === 0) {
           return;
         }
-        const item = results[0];
-        const filename = item.filename ?? "";
-        if (!isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
-          console.debug("[suno-helper] Download all 監視対象外の download event を無視:", {
-            filename,
-            url: item.url,
-            startTime: item.startTime,
-            state,
-          });
-          return;
-        }
-        if (state === "interrupted") {
-          const message = `ZIP ダウンロードが中断されました: ${filename} (id=${delta.id})`;
-          console.warn(`[suno-helper] ${message}`);
-          cleanupWatcher(watcher);
-          notifyDownloadFailed(watcher, message);
-          return;
-        }
-        notifyDownloadComplete(watcher, filename, delta.id);
+        handleDownloadState(watcher, results[0], state);
       });
     });
   };

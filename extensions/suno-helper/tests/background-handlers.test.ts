@@ -599,6 +599,29 @@ describe('background onMessage("startDownload"): 監視開始前の .zip は無�
     expect(sentMessages.filter((m) => m.type === "downloadComplete")).toHaveLength(0);
     expect(removedDownloadListeners).not.toContain(listener);
   });
+
+  it("Given onCreated を取り逃した fresh Suno ZIP When complete event だけ届く Then 対象確定して完了通知する", async () => {
+    const freshStart = new Date().toISOString();
+    const { handlers, sentMessages, downloadListeners, sessionStore } = await loadBackground({
+      searchResultsById: {
+        33: [{ filename: "missed-created.zip", startTime: freshStart, url: "https://suno.com/api/download/zip" }],
+      },
+    });
+
+    handlers.get("startDownload")!({
+      data: { format: "mp3" },
+      sender: { tab: { id: 42 } },
+    });
+
+    downloadListeners[0]({ id: 33, state: { current: "complete" } });
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "missed-created.zip" },
+      tabId: 42,
+    });
+    expect(sessionStore["suno-helper:downloadWatcher"]).toBeUndefined();
+  });
 });
 
 describe('background onMessage("startDownload"): timeout fallback で完了済み ZIP を拾う', () => {
@@ -734,6 +757,36 @@ describe("background downloads listener: service worker restart 後も session w
     expect(sentMessages).toContainEqual({
       type: "downloadComplete",
       data: { filename: "/Users/test/Downloads/restored.zip" },
+      tabId: 42,
+    });
+    expect(sessionStore["suno-helper:downloadWatcher"]).toBeUndefined();
+  });
+
+  it("Given target 未確定の保存済み watcher When complete event を受ける Then 対象確定して downloadComplete を中継する", async () => {
+    const freshStart = new Date().toISOString();
+    const { sentMessages, downloadListeners, sessionStore } = await loadBackground({
+      sessionState: {
+        tabId: 42,
+        monitorStartedAt: Date.now(),
+        targetDownloadId: null,
+      },
+      searchResultsById: {
+        78: [
+          {
+            filename: "/Users/test/Downloads/restored-null.zip",
+            startTime: freshStart,
+            url: "https://cdn1.suno.ai/restored-null.zip",
+          },
+        ],
+      },
+    });
+    await flushPromises();
+
+    downloadListeners[0]({ id: 78, state: { current: "complete" } });
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "/Users/test/Downloads/restored-null.zip" },
       tabId: 42,
     });
     expect(sessionStore["suno-helper:downloadWatcher"]).toBeUndefined();
