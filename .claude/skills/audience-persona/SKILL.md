@@ -1,11 +1,14 @@
 ---
 name: audience-persona
-description: "Use when ターゲット視聴者のペルソナを定義・見直したいとき。「誰が聴くか」「ペルソナ設定」「ターゲット」「視聴者像」「ターゲット層」「リスナー像」「TTP の人物像版」など。/viewer-voice の結果を前提とし、/viewing-scene の入力になる。チャンネル立ち上げ・方向性見直し時に必ず使用すること"
+description: "Use when ターゲット視聴者のペルソナを本格的に定義・見直したいとき。「誰が聴くか」「ペルソナ設定」「ターゲット」「視聴者像」「ターゲット層」「リスナー像」「TTP の人物像版」など。新チャンネル初期化時の簡易ペルソナは /channel-new に統合済みで、公開後の /viewer-voice 結果を使った再定義や方向性見直し時に使用すること"
 ---
 
 ## Overview
 
 コメント分析 + ベンチマークタグ分析 + Web 調査で主要ペルソナ 2-3 名を定義する。
+
+新チャンネル立ち上げ時の軽量ペルソナは `/channel-new` が `docs/channel/personas/channel-new-persona.md` として作成する。
+本スキルは、公開後に `/viewer-voice` の実コメント分析を加えてペルソナを見直すための本格版として使う。
 
 ## TTP 原則（ベンチマーク参照）
 
@@ -20,6 +23,7 @@ description: "Use when ターゲット視聴者のペルソナを定義・見直
   存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-import` を案内。
 - `docs/plans/viewer-voice-analysis.md` が存在すること。
   未実施の場合は先に `/viewer-voice` を実行するよう案内。
+- `docs/channel/personas/channel-new-persona.md` が存在する場合は初期仮説として読み込み、公開後データで更新する。
 
 ## 実行フロー
 
@@ -79,5 +83,6 @@ options:
 ## 関連ファイル
 
 - `docs/plans/viewer-voice-analysis.md` — コメント分析結果（入力）
+- `docs/channel/personas/channel-new-persona.md` — channel-new が作る初期ペルソナ仮説
 - `data/benchmark_YYYYMMDD.json` — タグデータ
 - `config/channel/content.json` — 現在のタグ設定
