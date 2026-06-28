@@ -89,6 +89,10 @@ collection 内の個別トラックをクロスフェード結合した最終音
 
 ## Chrome 拡張
 
+**yield guard (歩留まりガードレール)**:
+suno-helper が担う、Suno 生成曲の品質最低ラインを保証する仕組み。feed v3 の `metadata.duration` で尺を検知し、閾値外（短すぎ / 長すぎ）の曲を NG 判定して同一プロンプトで自動再生成する (ADR-0012)。masterup-pairs のキュレーション（ペア選択 + stock 退避）とは別責務 — yield guard は「壊れた曲を弾く」、キュレーションは「良い曲を選ぶ」。
+_Avoid_: フィルタ, バリデーション (yield guard は検知 + 自動再生成のループを含む。単なるフィルタではない)
+
 **community-helper**:
 YouTube Studio Web のコミュニティ投稿画面に対して DOM 注入を行う Chrome 拡張。`yt-collection-serve` から投稿データ (テキスト + スケジュール日時 + 画像) を取得し、Studio の DOM に自動入力する。suno-helper / distrokid-helper と同列の `extensions/community-helper/` に配置する。
 _Avoid_: studio-helper (Studio 全般ではなくコミュニティ投稿専用), community-post-helper (冗長)

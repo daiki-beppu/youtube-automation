@@ -1,6 +1,12 @@
 # automation リポジトリの takt 設定
 # provider / model / language / persona_providers はグローバル設定 (~/.takt/config.yaml) を継承する。
 # グローバルは Codex + Opus ハイブリッド構成（doer/planner 系のみ codex、レビュー系・supervisor は opus）。
-# このリポジトリ固有の上書きは draft_pr / base_branch のみ。
 draft_pr: false
 base_branch: main
+
+provider: codex
+persona_providers:
+  coder:
+    provider: codex
+  planner:
+    provider: codex
