@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
+import yaml
 
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
@@ -745,7 +746,12 @@ class TestExtractPatternKey:
     def test_pattern_b_with_variation_suffix(self):
         from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
-        assert _extract_pattern_key("05-pattern-b1-quiet-hours.mp3") == "b"
+        assert _extract_pattern_key("05-pattern-b1-quiet-hours.mp3") == "b1"
+
+    def test_pattern_d_with_variation_suffix(self):
+        from youtube_automation.utils.metadata_generator import _extract_pattern_key
+
+        assert _extract_pattern_key("05-pattern-d2-quiet-hours.mp3") == "d2"
 
     def test_pattern_c_uppercase(self):
         from youtube_automation.utils.metadata_generator import _extract_pattern_key
@@ -1016,6 +1022,107 @@ class TestLoadThemeDisplayNames:
         gen.collection_path = tmp_path
         (tmp_path / "workflow-state.json").write_text(_json.dumps({}), encoding="utf-8")
         assert gen._load_theme_display_names() == {}
+
+
+# ===========================================================================
+# 18. suno-patterns.yaml 由来のトラック表示名
+# ===========================================================================
+
+
+def _write_suno_patterns(collection: Path, patterns: list[dict]) -> None:
+    docs_dir = collection / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "suno-patterns.yaml").write_text(
+        yaml.safe_dump({"patterns": patterns}, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+class TestSunoPatternTrackNames:
+    """suno-patterns.yaml の name_en を metadata の track title に反映する。"""
+
+    def test_loads_name_en_for_pattern_variations(self, tmp_path):
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        _write_suno_patterns(
+            tmp_path,
+            [
+                {"name_jp": "石畳", "name_en": "Cobblestone Lane", "scenes": ["scene"]},
+                {"name_jp": "窓辺", "name_en": "Rain Window", "scenes": ["scene 1", "scene 2"]},
+            ],
+        )
+
+        assert gen._load_suno_pattern_name_en() == {
+            "a": "Cobblestone Lane",
+            "a1": "Cobblestone Lane",
+            "b": "Rain Window",
+            "b1": "Rain Window",
+            "b2": "Rain Window",
+        }
+
+    def test_analyze_applies_name_en_prefix(self, tmp_path, monkeypatch):
+        collection = tmp_path / "20260601-live-rainy-city-collection"
+        music_dir = collection / "02-Individual-music"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01-pattern-a-quiet-corner.mp3").write_bytes(b"audio")
+        (music_dir / "02-pattern-b2-v1.mp3").write_bytes(b"audio")
+        _write_suno_patterns(
+            collection,
+            [
+                {"name_jp": "石畳", "name_en": "Cobblestone Lane", "scenes": ["scene"]},
+                {"name_jp": "窓辺", "name_en": "Rain Window", "scenes": ["scene 1", "scene 2"]},
+            ],
+        )
+
+        gen = _make_generator("20260601-live-rainy-city-collection")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _f: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert tracks[0]["pattern_key"] == "a"
+        assert tracks[0]["title"] == "Cobblestone Lane - Quiet Corner"
+        assert tracks[1]["pattern_key"] == "b2"
+        assert tracks[1]["title"] == "Rain Window - V1"
+
+    def test_extra_variation_uses_theme_default_title(self, tmp_path, monkeypatch):
+        collection = tmp_path / "20260601-live-rainy-city-collection"
+        music_dir = collection / "02-Individual-music"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01-extra-v1.mp3").write_bytes(b"audio")
+
+        gen = _make_generator("20260601-live-rainy-city-collection")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _f: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert tracks[0]["pattern_key"] is None
+        assert tracks[0]["title"] == "Rainy City Extra V1"
+
+    def test_persisted_display_name_overrides_suno_prefix(self, tmp_path, monkeypatch):
+        import json as _json
+
+        collection = tmp_path / "20260601-live-rainy-city-collection"
+        music_dir = collection / "02-Individual-music"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01-pattern-a-quiet-corner.mp3").write_bytes(b"audio")
+        _write_suno_patterns(
+            collection,
+            [{"name_jp": "石畳", "name_en": "Cobblestone Lane", "scenes": ["scene"]}],
+        )
+        (collection / "workflow-state.json").write_text(
+            _json.dumps({"track_display_names": {"01-pattern-a-quiet-corner.mp3": "Manual Title"}}),
+            encoding="utf-8",
+        )
+
+        gen = _make_generator("20260601-live-rainy-city-collection")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _f: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert tracks[0]["title"] == "Manual Title"
 
 
 # ===========================================================================
