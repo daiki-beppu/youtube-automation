@@ -277,7 +277,7 @@ def generate_master(
         print("  yt-generate-master")
         print("  ──────────────────────────────────────────")
         print()
-        input_exts = ", ".join(sorted({p.suffix.lstrip('.').upper() for p in files}))
+        input_exts = ", ".join(sorted({p.suffix.lstrip(".").upper() for p in files}))
         print(f"  Input : {n} audio files ({input_exts}){loop_note}")
         print(f"  Output: {output.name}")
         print(f"  Crossfade: {crossfade:g}s (triangle curve)")
