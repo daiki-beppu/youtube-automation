@@ -94,16 +94,11 @@ def build_filter(cfg: CleanupConfig, *, duration_sec: float | None = None) -> st
     filters: list[str] = []
     if cfg.trim_silence:
         filters.append(
-            "silenceremove="
-            f"start_periods=1:start_duration=0.2:start_threshold={cfg.silence_threshold_db:g}dB"
+            f"silenceremove=start_periods=1:start_duration=0.2:start_threshold={cfg.silence_threshold_db:g}dB"
         )
     if cfg.adaptive_eq:
-        filters.append(
-            f"equalizer=f={cfg.muddiness_freq_hz}:t=q:w=1:g={cfg.muddiness_gain_db:g}"
-        )
-        filters.append(
-            f"equalizer=f={cfg.harshness_freq_hz}:t=q:w=1:g={cfg.harshness_gain_db:g}"
-        )
+        filters.append(f"equalizer=f={cfg.muddiness_freq_hz}:t=q:w=1:g={cfg.muddiness_gain_db:g}")
+        filters.append(f"equalizer=f={cfg.harshness_freq_hz}:t=q:w=1:g={cfg.harshness_gain_db:g}")
     if cfg.volume_smoothing:
         filters.append("dynaudnorm=f=150:g=15:p=0.95")
     if cfg.limiter:
