@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -847,6 +848,88 @@ class TestUploadVideoScheduledPublish:
 
         body = mock_core_upload.call_args.args[1]
         assert "publishAt" not in body["status"]
+
+
+class TestDefaultPublishAt:
+    """#1054: チャンネル既定の予約投稿時刻。"""
+
+    @staticmethod
+    def _config(time_text: str | None = "20:00", tz: str = "Asia/Tokyo") -> SimpleNamespace:
+        return SimpleNamespace(
+            youtube=SimpleNamespace(
+                api=SimpleNamespace(
+                    default_publish_time=time_text,
+                    default_publish_timezone=tz,
+                )
+            )
+        )
+
+    def test_resolves_today_when_default_time_is_still_future(self):
+        from youtube_automation.agents.youtube_auto_uploader import _resolve_default_publish_at
+
+        now = datetime.fromisoformat("2099-01-01T19:00:00+09:00")
+        assert _resolve_default_publish_at(self._config(), now=now) == "2099-01-01T20:00:00+09:00"
+
+    def test_resolves_tomorrow_when_default_time_has_passed(self):
+        from youtube_automation.agents.youtube_auto_uploader import _resolve_default_publish_at
+
+        now = datetime.fromisoformat("2099-01-01T21:00:00+09:00")
+        assert _resolve_default_publish_at(self._config(), now=now) == "2099-01-02T20:00:00+09:00"
+
+    def test_returns_none_when_not_configured(self):
+        from youtube_automation.agents.youtube_auto_uploader import _resolve_default_publish_at
+
+        assert _resolve_default_publish_at(self._config(time_text=None)) is None
+
+    def test_upload_collection_applies_default_when_publish_at_omitted(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch.object(uploader, "_preflight_check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.agents.youtube_auto_uploader.BAHMetadataGenerator") as mock_gen_cls,
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader._resolve_default_publish_at",
+                return_value="2099-01-01T20:00:00+09:00",
+            ) as mock_default,
+            patch("youtube_automation.agents.youtube_auto_uploader.load_config", return_value=self._config()),
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at=None)
+
+        assert mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] == "2099-01-01T20:00:00+09:00"
+
+    def test_upload_collection_keeps_explicit_publish_at(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch.object(uploader, "_preflight_check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.agents.youtube_auto_uploader.BAHMetadataGenerator") as mock_gen_cls,
+            patch("youtube_automation.agents.youtube_auto_uploader._resolve_default_publish_at") as mock_default,
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at="2099-01-05T20:00:00+09:00")
+
+        assert not mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] == "2099-01-05T20:00:00+09:00"
 
 
 class TestNormalizePublishAt:

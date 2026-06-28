@@ -202,6 +202,40 @@ def _read_resume_uri(tracking_path: Path) -> str | None:
     return data.get("complete_collection", {}).get("resume_session_uri")
 
 
+class TestDefaultPublishTimeFallback:
+    """#1054: schedule_config 未指定時に channel youtube.default_publish_time を使う。"""
+
+    def test_calculate_publish_at_uses_channel_default_when_schedule_disabled(self, tmp_path):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"timezone": "Asia/Tokyo"}},
+        )
+
+        with (
+            patch("youtube_automation.agents._published_dates.load_config", return_value=MagicMock()),
+            patch(
+                "youtube_automation.agents._published_dates.resolve_default_publish_at",
+                return_value="2099-01-01T20:00:00+09:00",
+            ) as mock_resolve,
+        ):
+            result = uploader._calculate_publish_at()
+
+        assert result == "2099-01-01T20:00:00+09:00"
+        assert mock_resolve.called
+
+    def test_auto_schedule_false_suppresses_channel_default(self, tmp_path):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+        )
+
+        with patch("youtube_automation.agents._published_dates.resolve_default_publish_at") as mock_resolve:
+            result = uploader._calculate_publish_at()
+
+        assert result is None
+        assert not mock_resolve.called
+
+
 class TestExecuteCompleteCollectionResume:
     """resumable upload session URI の tracking 連携を検証する.
 

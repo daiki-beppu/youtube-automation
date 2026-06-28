@@ -154,6 +154,30 @@ def test_synthetic_media_flags_override(tmp_path, monkeypatch):
     assert config.youtube.api.self_declared_made_for_kids is True
 
 
+def test_default_publish_time_defaults_to_none(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.default_publish_time is None
+    assert config.youtube.api.default_publish_timezone == "Asia/Tokyo"
+
+
+def test_default_publish_time_override(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["youtube.json"]["youtube"]["default_publish_time"] = "20:30"
+    sections["youtube.json"]["youtube"]["default_publish_timezone"] = "Asia/Tokyo"
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.default_publish_time == "20:30"
+    assert config.youtube.api.default_publish_timezone == "Asia/Tokyo"
+
+
 def test_load_pinned_comment_section(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["pinned-comment.json"] = {
