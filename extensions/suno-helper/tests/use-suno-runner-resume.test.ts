@@ -290,7 +290,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist-only resume cannot resolve playlistName When useSunoRunner を読む Then silent return せず UI にエラーを出す", () => {
     expect(runnerSource).toMatch(
-      /if \(!playlistName\) \{[\s\S]*?report\("playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。", true\);[\s\S]*?return;/,
+      /if \(!playlistName\) \{[\s\S]*?report\(\s*"playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。",\s*true,\s*\);[\s\S]*?return;/,
     );
   });
 
