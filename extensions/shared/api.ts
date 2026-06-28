@@ -105,6 +105,11 @@ export async function resolveCompatibilityWarning(
 }
 
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+const COLLECTION_STATUSES: CollectionStatus[] = [
+  "needs_prompts",
+  "ready",
+  "downloaded",
+];
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
@@ -131,6 +136,60 @@ function compareSemver(left: string, right: string): number {
 
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function assertObject(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${field} must be non-empty string`);
+  }
+  return value;
+}
+
+function assertOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return assertString(value, field);
+}
+
+function assertNonNegativeInteger(value: unknown, field: string): number {
+  if (!Number.isInteger(value) || (value as number) < 0) {
+    throw new Error(`${field} must be non-negative integer`);
+  }
+  return value as number;
+}
+
+function assertOptionalNonNegativeInteger(
+  value: unknown,
+  field: string,
+): number | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return assertNonNegativeInteger(value, field);
+}
+
+function assertCollectionStatus(
+  value: unknown,
+  field: string,
+): CollectionStatus {
+  if (
+    typeof value !== "string" ||
+    !COLLECTION_STATUSES.includes(value as CollectionStatus)
+  ) {
+    throw new Error(`${field} must be valid collection status`);
+  }
+  return value as CollectionStatus;
 }
 
 /**
@@ -218,7 +277,53 @@ export async function fetchCollections(
   if (!Array.isArray(data)) {
     throw new Error("配列ではない JSON が返りました。");
   }
-  return data as CollectionSummary[];
+  return data.map((item, index) => normalizeCollectionSummary(item, index));
+}
+
+function normalizeCollectionSummary(
+  item: unknown,
+  index: number,
+): CollectionSummary {
+  const record = assertObject(item, `collections[${index}]`);
+  const summary: CollectionSummary = {
+    id: assertString(record.id, `collections[${index}].id`),
+    name: assertString(record.name, `collections[${index}].name`),
+    status: assertCollectionStatus(
+      record.status,
+      `collections[${index}].status`,
+    ),
+    pattern_count:
+      assertOptionalNonNegativeInteger(
+        record.pattern_count,
+        `collections[${index}].pattern_count`,
+      ) ?? null,
+    downloaded_count: assertNonNegativeInteger(
+      record.downloaded_count,
+      `collections[${index}].downloaded_count`,
+    ),
+  };
+  const channel = assertOptionalString(
+    record.channel,
+    `collections[${index}].channel`,
+  );
+  if (channel !== undefined) {
+    summary.channel = channel;
+  }
+  const theme = assertOptionalString(
+    record.theme,
+    `collections[${index}].theme`,
+  );
+  if (theme !== undefined) {
+    summary.theme = theme;
+  }
+  const expectedFileCount = assertOptionalNonNegativeInteger(
+    record.expected_file_count,
+    `collections[${index}].expected_file_count`,
+  );
+  if (expectedFileCount !== undefined) {
+    summary.expected_file_count = expectedFileCount;
+  }
+  return summary;
 }
 
 /**

@@ -513,6 +513,66 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("persisted resume が entries 未取得でも Playlist から再開すると Download all 対象として送る", async () => {
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: "20260601-clm-theme-a-collection",
+      failedIndex: 1,
+      total: 1,
+      timestamp: Date.now(),
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 2,
+    } as never);
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(500, {}));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
+      expect(container.textContent).toContain("Playlist: clm | theme-a");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Playlist から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryPlaylist", {
+      collectionId: "20260601-clm-theme-a-collection",
+      playlistName: "clm | theme-a",
+      submittedClipIds: ["clip-a", "clip-b"],
+      expectedClipCount: 2,
+      shouldDownload: true,
+    });
+  });
+
   it("clip ID が無い状態で Playlist から再開しても retryPlaylist を送らずエラー表示する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))

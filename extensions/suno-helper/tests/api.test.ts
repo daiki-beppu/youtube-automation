@@ -252,6 +252,34 @@ describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
 
     await expect(fetchCollections(BASE_URL)).rejects.toThrow();
   });
+
+  it("Given invalid status When fetch する Then fail-loud に throw する", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ ...SAMPLE_COLLECTIONS[0], status: "mapped" }],
+    }));
+
+    await expect(fetchCollections(BASE_URL)).rejects.toThrow(/status/);
+  });
+
+  it("Given downloaded_count 欠落 When fetch する Then fail-loud に throw する", async () => {
+    const withoutDownloadedCount: Record<string, unknown> = { ...SAMPLE_COLLECTIONS[0] };
+    delete withoutDownloadedCount.downloaded_count;
+    mockFetch(() => ({ ok: true, status: 200, json: async () => [withoutDownloadedCount] }));
+
+    await expect(fetchCollections(BASE_URL)).rejects.toThrow(/downloaded_count/);
+  });
+
+  it("Given pattern_count 型不正 When fetch する Then fail-loud に throw する", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ ...SAMPLE_COLLECTIONS[0], pattern_count: "12" }],
+    }));
+
+    await expect(fetchCollections(BASE_URL)).rejects.toThrow(/pattern_count/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -687,6 +715,46 @@ describe("shared/api postDownloaded: 正常系", () => {
 });
 
 describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
+  it("Given /auth/token が非 2xx When postDownloaded Then downloaded POST に進まず throw する", async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (typeof url === "string" && url.includes("/auth/token")) {
+        return { ok: false, status: 403, statusText: "Forbidden", json: async () => ({}) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchFn);
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 0,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/playlist/test",
+      }),
+    ).rejects.toThrow(/GET \/auth\/token failed: 403/);
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given /auth/token が invalid body When postDownloaded Then downloaded POST に進まず throw する", async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (typeof url === "string" && url.includes("/auth/token")) {
+        return { ok: true, status: 200, json: async () => ({ token: "" }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchFn);
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 0,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/playlist/test",
+      }),
+    ).rejects.toThrow(/invalid response/);
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
   it("Given HTTP 500 When postDownloaded Then ステータスを含めて throw する", async () => {
     mockFetchForDownloaded(() => ({
       ok: false,

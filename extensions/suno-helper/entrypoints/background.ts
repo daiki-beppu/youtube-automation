@@ -115,12 +115,14 @@ export default defineBackground(() => {
 
     const watchTimeout: { id?: ReturnType<typeof setTimeout> } = {};
     const completedPoll: { id?: ReturnType<typeof setInterval> } = {};
+    let targetDownloadId: number | null = null;
     let watcherFinished = false;
     const cleanupWatcher = (): void => {
       if (watcherFinished) {
         return;
       }
       watcherFinished = true;
+      chrome.downloads.onCreated.removeListener(createdListener);
       chrome.downloads.onChanged.removeListener(listener);
       if (watchTimeout.id !== undefined) {
         clearTimeout(watchTimeout.id);
@@ -144,15 +146,29 @@ export default defineBackground(() => {
       });
     };
 
-    const findCompletedZipAfterMonitor = (callback: (item: chrome.downloads.DownloadItem | null) => void): void => {
-      chrome.downloads.search({ state: "complete", limit: 50, orderBy: ["-startTime"] }, (results) => {
-        callback(results.find(isZipStartedAfterMonitor) ?? null);
+    const findTargetDownload = (callback: (item: chrome.downloads.DownloadItem | null) => void): void => {
+      if (targetDownloadId === null) {
+        callback(null);
+        return;
+      }
+      chrome.downloads.search({ id: targetDownloadId }, (results) => {
+        callback(results[0] ?? null);
       });
+    };
+
+    const createdListener = (item: chrome.downloads.DownloadItem): void => {
+      if (targetDownloadId !== null || !isZipStartedAfterMonitor(item)) {
+        return;
+      }
+      targetDownloadId = item.id;
     };
 
     const listener = (delta: chrome.downloads.DownloadDelta): void => {
       const state = delta.state?.current;
       if (state !== "complete" && state !== "interrupted") {
+        return;
+      }
+      if (targetDownloadId !== delta.id) {
         return;
       }
       // 完了したダウンロードの詳細を取得してファイル名を確認する
@@ -181,6 +197,7 @@ export default defineBackground(() => {
         notifyDownloadComplete(filename, delta.id);
       });
     };
+    chrome.downloads.onCreated.addListener(createdListener);
     chrome.downloads.onChanged.addListener(listener);
     activeDownloadWatcher = { tabId, cleanup: cleanupWatcher };
 
@@ -189,8 +206,8 @@ export default defineBackground(() => {
     // startDownload 後に開始した .zip を見つけたら即 downloadComplete へ進める。
     const DOWNLOAD_COMPLETE_POLL_MS = 3000;
     completedPoll.id = setInterval(() => {
-      findCompletedZipAfterMonitor((item) => {
-        if (item) {
+      findTargetDownload((item) => {
+        if (item && item.state === "complete" && isZipStartedAfterMonitor(item)) {
           notifyDownloadComplete(item.filename ?? "", item.id);
         }
       });
@@ -199,8 +216,8 @@ export default defineBackground(() => {
     // 安全弁: 10 分以内にダウンロードが完了しなければ listener を解除する（メモリリーク防止）
     const DOWNLOAD_WATCH_TIMEOUT_MS = 600000;
     watchTimeout.id = setTimeout(() => {
-      findCompletedZipAfterMonitor((item) => {
-        if (item) {
+      findTargetDownload((item) => {
+        if (item && item.state === "complete" && isZipStartedAfterMonitor(item)) {
           notifyDownloadComplete(item.filename ?? "", item.id);
           return;
         }

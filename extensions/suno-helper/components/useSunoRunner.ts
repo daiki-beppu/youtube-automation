@@ -507,8 +507,12 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     const expectedClipCount = playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
-    const fullCollectionClipCount = entries.length * CLIPS_PER_REQUEST;
-    const shouldDownload = fullCollectionClipCount > 0 && expectedClipCount >= fullCollectionClipCount;
+    const fullCollectionClipCount =
+      selectedCollection?.expected_file_count ??
+      (selectedCollection?.pattern_count ? selectedCollection.pattern_count * CLIPS_PER_REQUEST : undefined) ??
+      (entries.length > 0 ? entries.length * CLIPS_PER_REQUEST : undefined) ??
+      playlistExpectedClipCountForResume;
+    const shouldDownload = fullCollectionClipCount !== undefined && expectedClipCount >= fullCollectionClipCount;
     if (submittedClipIdsForResume.length === 0 || expectedClipCount <= 0) {
       report(
         "playlist 再開に必要な clip ID がありません。Suno タブを開いたまま「データ取得」後に再試行してください。",
@@ -540,6 +544,7 @@ export function useSunoRunner(): RunnerState {
     submittedClipIdsForResume,
     playlistExpectedClipCountForResume,
     selectedCollectionId,
+    selectedCollection,
     report,
   ]);
 
