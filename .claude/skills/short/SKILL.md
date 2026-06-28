@@ -24,7 +24,7 @@ description: "Use when collection 型チャンネル（BGM テイスター）で
 |---------|------|
 | `uv run yt-upload-shorts <collection-path>` | 全ショートを順次アップロード |
 | `uv run yt-upload-shorts <collection-path> --short-num 2` | 2 本目だけアップロード |
-| `uv run yt-upload-shorts <collection-path> --dry-run` | メタデータプレビュー（API 呼ばない） |
+| `uv run yt-upload-shorts <collection-path> --plan` | メタデータプレビュー（API 呼ばない） |
 | `bash .claude/skills/short/references/generate-shorts.sh <collection-path>` | FFmpeg 一括生成 |
 | `bash .claude/skills/short/references/test-crop-positions.sh <master> 30` | loop-mp4 素材時のクロップ位置確認 |
 | `uv run yt-shorts-bulk-update-loc <collection-path>` | 投稿済みショートの localizations を一括差し替え |
@@ -93,7 +93,7 @@ bash .claude/skills/short/references/generate-shorts.sh <collection-path>
 
 ```bash
 open <collection>/01-master/shorts/short-01-*.mp4
-uv run yt-upload-shorts <collection-path> --dry-run    # メタデータ確認
+uv run yt-upload-shorts <collection-path> --plan       # メタデータ確認
 uv run yt-upload-shorts <collection-path>              # 実投稿
 ```
 
