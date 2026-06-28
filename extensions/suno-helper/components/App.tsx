@@ -9,6 +9,10 @@ import { useSunoRunner } from "./useSunoRunner";
 const SPEED_PRESET_ORDER: SpeedPresetId[] = ["fast", "balanced", "safe"];
 const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
+function isDownloadFormat(value: unknown): value is DownloadFormat {
+  return DOWNLOAD_FORMAT_OPTIONS.includes(value as DownloadFormat);
+}
+
 export function App() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
   const {
@@ -50,7 +54,7 @@ export function App() {
     let mounted = true;
     void downloadFormatItem.getValue().then((value) => {
       if (mounted) {
-        setDownloadFormat(value);
+        setDownloadFormat(isDownloadFormat(value) ? value : DOWNLOAD_FORMAT_DEFAULT);
       }
     });
     return () => {

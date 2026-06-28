@@ -20,6 +20,11 @@ const storageMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
+const downloadFormatMocks = vi.hoisted(() => ({
+  getValue: vi.fn(async () => "mp3"),
+  setValue: vi.fn(async () => undefined),
+}));
+
 const resumeStateMocks = vi.hoisted(() => ({
   readResumeState: vi.fn(async () => null),
   writeResumeState: vi.fn(async () => undefined),
@@ -35,10 +40,7 @@ vi.mock("wxt/browser", () => ({
 
 vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
-  downloadFormatItem: {
-    getValue: vi.fn(() => Promise.resolve("mp3")),
-    setValue: vi.fn(() => Promise.resolve()),
-  },
+  downloadFormatItem: downloadFormatMocks,
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
@@ -130,6 +132,10 @@ describe("Suno popup compatibility check", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     fetchMock = vi.fn();
+    storageMocks.getValue.mockResolvedValue("");
+    storageMocks.setValue.mockResolvedValue(undefined);
+    downloadFormatMocks.getValue.mockResolvedValue("mp3");
+    downloadFormatMocks.setValue.mockResolvedValue(undefined);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -137,6 +143,18 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
   });
+
+  async function rerenderAppWithDownloadFormat(value: string): Promise<void> {
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    downloadFormatMocks.getValue.mockResolvedValueOnce(value);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+  }
 
   afterEach(() => {
     act(() => {
@@ -450,6 +468,37 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
+    });
+  });
+
+  it("DL 形式 select は storage の初期値を反映し、変更時に保存する", async () => {
+    await rerenderAppWithDownloadFormat("m4a");
+
+    const select = Array.from(container.querySelectorAll("select")).find((candidate) =>
+      Array.from(candidate.options).some((option) => option.value === "wav"),
+    );
+    if (!select) throw new Error("download format select not found");
+    await waitFor(() => {
+      expect(select.value).toBe("m4a");
+    });
+
+    await act(async () => {
+      setSelectValue(select, "wav");
+    });
+
+    expect(downloadFormatMocks.setValue).toHaveBeenCalledWith("wav");
+    expect(select.value).toBe("wav");
+  });
+
+  it("DL 形式 select は不正な storage 値を MP3 に戻す", async () => {
+    await rerenderAppWithDownloadFormat("flac");
+
+    const select = Array.from(container.querySelectorAll("select")).find((candidate) =>
+      Array.from(candidate.options).some((option) => option.value === "wav"),
+    );
+    if (!select) throw new Error("download format select not found");
+    await waitFor(() => {
+      expect(select.value).toBe("mp3");
     });
   });
 

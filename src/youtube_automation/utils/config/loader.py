@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from youtube_automation.utils.config.analytics import Analytics, Benchmark
 from youtube_automation.utils.config.audio import Audio
@@ -49,6 +50,7 @@ from youtube_automation.utils.config.youtube import (
     YoutubeSection,
 )
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.publish_schedule import parse_default_publish_time
 
 logger = logging.getLogger(__name__)
 
@@ -276,8 +278,8 @@ def _build_youtube(merged: dict) -> YoutubeSection:
         language=yt["language"],
         contains_synthetic_media=bool(yt.get("contains_synthetic_media", True)),
         self_declared_made_for_kids=bool(yt.get("self_declared_made_for_kids", False)),
-        default_publish_time=yt.get("default_publish_time"),
-        default_publish_timezone=yt.get("default_publish_timezone", "Asia/Tokyo"),
+        default_publish_time=_validate_default_publish_time(yt.get("default_publish_time")),
+        default_publish_timezone=_validate_default_publish_timezone(yt.get("default_publish_timezone", "Asia/Tokyo")),
     )
 
     cm_data = merged.get("content_model") or {}
@@ -298,6 +300,33 @@ def _build_youtube(merged: dict) -> YoutubeSection:
         content_model=content_model,
         overlays=overlays,
     )
+
+
+def _validate_default_publish_time(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError(
+            f"youtube.default_publish_time は string または null でなければなりません（got {type(value).__name__}）"
+        )
+    try:
+        parse_default_publish_time(value)
+    except ValueError as exc:
+        raise ConfigError(f"youtube.default_publish_time が不正です: {exc}") from exc
+    return value
+
+
+def _validate_default_publish_timezone(value: object) -> str:
+    if not isinstance(value, str):
+        raise ConfigError(
+            "youtube.default_publish_timezone は IANA timezone string でなければなりません"
+            f"（got {type(value).__name__}）"
+        )
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError as exc:
+        raise ConfigError(f"youtube.default_publish_timezone は未知の timezone です: {value!r}") from exc
+    return value
 
 
 def _build_overlays(raw: object) -> Overlays:

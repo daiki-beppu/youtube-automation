@@ -55,6 +55,8 @@ async function loadBackground(opts?: {
   tabCreateResult?: { id?: number };
   capturePlaylistsResult?: Array<{ title: string; url: string }>;
   capturePlaylistsError?: Error;
+  useRealPostDownloaded?: boolean;
+  fetchImpl?: ReturnType<typeof vi.fn>;
 }) {
   vi.resetModules();
 
@@ -189,9 +191,14 @@ async function loadBackground(opts?: {
   const postDownloadedMock = opts?.postDownloadedError
     ? vi.fn(() => Promise.reject(opts.postDownloadedError))
     : vi.fn(() => Promise.resolve());
-  vi.doMock("../../shared/api", () => ({
-    postDownloaded: postDownloadedMock,
-  }));
+  if (opts?.useRealPostDownloaded) {
+    vi.doUnmock("../../shared/api");
+    vi.stubGlobal("fetch", opts.fetchImpl ?? vi.fn());
+  } else {
+    vi.doMock("../../shared/api", () => ({
+      postDownloaded: postDownloadedMock,
+    }));
+  }
 
   const captureFromTabMock = opts?.capturePlaylistsError
     ? vi.fn(() => Promise.reject(opts.capturePlaylistsError))
@@ -289,6 +296,58 @@ describe('background onMessage("startDownload"): .zip 完了で downloadComplete
 
     // top-level listener は維持し、監視状態だけを解放する。
     expect(removedDownloadListeners).toHaveLength(0);
+  });
+});
+
+describe('background onMessage("postDownloaded"): shared/api 実配線', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("token 取得、downloaded POST、403 retry を実 fetch で実行する", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: "stale-token" }) })
+      .mockResolvedValueOnce({ ok: false, status: 403, statusText: "Forbidden" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: "fresh-token" }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" });
+    const { handlers } = await loadBackground({ useRealPostDownloaded: true, fetchImpl });
+
+    await handlers.get("postDownloaded")!({
+      data: {
+        baseUrl: "http://localhost:7873/",
+        collectionId: "20260601 clm",
+        body: {
+          file_count: 0,
+          format: "mp3",
+          suno_playlist_url: "https://suno.com/playlist/test",
+        },
+      },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "http://localhost:7873/auth/token");
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:7873/collections/20260601%20clm/downloaded",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Serve-Token": "stale-token" },
+        body: JSON.stringify({
+          file_count: 0,
+          format: "mp3",
+          suno_playlist_url: "https://suno.com/playlist/test",
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "http://localhost:7873/auth/token");
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:7873/collections/20260601%20clm/downloaded",
+      expect.objectContaining({
+        headers: { "Content-Type": "application/json", "X-Serve-Token": "fresh-token" },
+      }),
+    );
   });
 });
 

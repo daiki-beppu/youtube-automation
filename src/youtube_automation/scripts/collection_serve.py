@@ -343,7 +343,8 @@ def write_suno_playlists(root: Path, payload: list[dict], *, prefix: str) -> int
     .. deprecated:: #1145
         新規コレクションは POST ``/collections/<id>/downloaded`` で playlist URL を
         workflow-state.json に記録する。本関数は旧 ``POST /suno/playlists`` の内部実装
-        として後方互換のために残置する。次回 breaking で削除予定。
+        として後方互換のために残置する。下流チャンネル repo の `/wf-batch` 系スキルが
+        ``config/suno-playlists.json`` を読まなくなったことを確認してから #1301 で削除する。
 
     prefix 不一致 item は skip、同 slug は captured_at 後勝ちで上書き、既存 JSON 破損は
     空 dict 扱いで再作成する。`tempfile.mkstemp` → `os.replace` で中間 temp を残さず
@@ -717,7 +718,8 @@ def create_server(
             # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
             # .. deprecated:: #1145
             #     新規コレクションは POST /collections/<id>/downloaded を使用する。
-            #     本ルートは旧 playlist capture の後方互換として残置。次回 breaking で削除予定。
+            #     下流チャンネル repo の /wf-batch 系スキルが config/suno-playlists.json を読む
+            #     旧運用との互換だけに残置。削除条件は #1301 で追跡する。
             if self.path == SUNO_PLAYLISTS_ROUTE:
                 if capture_root is None:
                     self.send_error(404, "Not Found")

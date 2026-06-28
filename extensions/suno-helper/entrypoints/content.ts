@@ -226,19 +226,16 @@ export default defineContentScript({
       order: number[],
     ): Promise<number> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
-      const allSubmittedIds = [...previousSubmittedClipIds, ...tracker.getSubmittedIds()];
+      const currentSubmittedIds = tracker.getSubmittedIds();
+      const allSubmittedIds = [...previousSubmittedClipIds, ...currentSubmittedIds];
       const observedCount = new Set(allSubmittedIds).size;
       if (observedCount !== expectedClipCount) {
         console.warn(
           `[suno-helper] bridge observation gap: expected ${expectedClipCount} clip IDs, observed ${observedCount}`,
         );
       }
-      const submittedIds = resolvePlaylistClipIds(
-        previousSubmittedClipIds,
-        tracker.getSubmittedIds(),
-        expectedClipCount,
-      );
-      const titleFallbackMap = buildTitleFallbackMap(entries, order, submittedIds);
+      const submittedIds = resolvePlaylistClipIds(previousSubmittedClipIds, currentSubmittedIds, expectedClipCount);
+      const titleFallbackMap = buildTitleFallbackMap(entries, order, currentSubmittedIds);
       const selectedCount = await scrollAndMultiSelectByIds(submittedIds, {
         isAborted: () => aborted,
         titleFallbackMap,

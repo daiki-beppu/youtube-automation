@@ -272,7 +272,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist phase When content.ts を読む Then 保存済み ID と今回観測 ID を resolvePlaylistClipIds で合成してから scrollAndMultiSelectByIds で row 解決する", () => {
     expect(contentSource).toMatch(
-      /const submittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*tracker\.getSubmittedIds\(\),\s*expectedClipCount,\s*\);[\s\S]*?scrollAndMultiSelectByIds\(submittedIds,/,
+      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const submittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?scrollAndMultiSelectByIds\(submittedIds,/,
     );
   });
 

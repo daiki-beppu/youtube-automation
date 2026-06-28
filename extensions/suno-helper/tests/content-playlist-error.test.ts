@@ -308,6 +308,42 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
 
+  it("Given 保存済み ID と今回再実行 ID が混在 When title fallback を作る Then 今回 ID にだけ今回 entry title を割り当てる", async () => {
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+      { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
+    ];
+    const previousSubmittedClipIds = ["old-clip-1", "old-clip-2"];
+    const currentSubmittedClipIds = ["new-clip-1", "new-clip-2"];
+    const rows = [...previousSubmittedClipIds, ...currentSubmittedClipIds].map(() => ({}) as HTMLElement);
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        indices: [1],
+        submittedClipIds: previousSubmittedClipIds,
+        playlistExpectedClipCount: 4,
+      },
+    });
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+
+    const [ids, options] = scrollAndMultiSelectByIdsMock.mock.calls[0] as [
+      string[],
+      { titleFallbackMap: Map<string, string> },
+    ];
+    expect(ids).toEqual([...previousSubmittedClipIds, ...currentSubmittedClipIds]);
+    expect(options.titleFallbackMap.get("old-clip-1")).toBeUndefined();
+    expect(options.titleFallbackMap.get("old-clip-2")).toBeUndefined();
+    expect(options.titleFallbackMap.get("new-clip-1")).toBe("Track Two");
+    expect(options.titleFallbackMap.get("new-clip-2")).toBe("Track Two");
+  });
+
   it("Given 旧 payload が期待件数なしで playlist-only resume When ID が不足 Then ERROR で止める", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },

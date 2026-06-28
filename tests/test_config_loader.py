@@ -178,6 +178,26 @@ def test_default_publish_time_override(tmp_path, monkeypatch):
     assert config.youtube.api.default_publish_timezone == "Asia/Tokyo"
 
 
+def test_default_publish_time_rejects_invalid_value(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["youtube.json"]["youtube"]["default_publish_time"] = "99:99"
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="default_publish_time"):
+        load_config()
+
+
+def test_default_publish_timezone_rejects_unknown_zone(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["youtube.json"]["youtube"]["default_publish_timezone"] = "No/Such_Zone"
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="default_publish_timezone"):
+        load_config()
+
+
 def test_load_pinned_comment_section(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["pinned-comment.json"] = {

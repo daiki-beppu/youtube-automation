@@ -4,6 +4,37 @@ import { z } from "zod";
 
 import { snakeToCamel } from "../../internal/case.ts";
 
+const PublishTime = z
+  .string()
+  .regex(/^\d{2}:\d{2}(:\d{2})?$/u, {
+    message: "default_publish_time must be HH:MM or HH:MM:SS",
+  })
+  .refine(
+    (value) => {
+      const parts = value.split(":").map(Number);
+      const hour = parts[0] ?? Number.NaN;
+      const minute = parts[1] ?? Number.NaN;
+      const second = parts[2] ?? 0;
+      return hour <= 23 && minute <= 59 && second <= 59;
+    },
+    { message: "default_publish_time is outside the valid clock range" }
+  )
+  .nullable()
+  .default(null);
+
+const PublishTimezone = z.string().refine(
+  (value) => {
+    try {
+      const formatter = new Intl.DateTimeFormat("en-US", { timeZone: value });
+      formatter.format(0);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: "default_publish_timezone must be a valid IANA timezone" }
+);
+
 /** `overlays.audio_visualizer` セクション（optional, #511）。 */
 const OverlayAudioVisualizer = z
   .object({
@@ -82,8 +113,8 @@ export const Youtube = z
         category_id: z.string(),
         // 未設定時は現行の振る舞いに合わせ true / false（AI 開示フラグ）。
         contains_synthetic_media: z.boolean().default(true),
-        default_publish_time: z.string().nullable().default(null),
-        default_publish_timezone: z.string().default("Asia/Tokyo"),
+        default_publish_time: PublishTime,
+        default_publish_timezone: PublishTimezone.default("Asia/Tokyo"),
         language: z.string(),
         privacy_status: z.string(),
         self_declared_made_for_kids: z.boolean().default(false),
