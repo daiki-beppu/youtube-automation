@@ -285,8 +285,16 @@ class YouTubeAutoUploader(
                     logger.info(f"⏭️  Complete Collection: 既存動画を流用 {results['complete_video']['video_url']}")
                 else:
                     logger.info(f"✅ Complete Collection: {results['complete_video']['video_url']}")
+                    self._print_post_upload_manual_checklist(results["complete_video"]["video_url"])
             else:
                 logger.error(f"❌ Complete Collection: {results['complete_video']['error']}")
+
+    def _print_post_upload_manual_checklist(self, video_url: str) -> None:
+        """YouTube Studio で手動確認が必要な項目をアップロード直後に表示する。"""
+        logger.info("📝 アップロード後の手動チェックリスト")
+        logger.info("  [ ] YouTube Studio で AI コンテンツの開示設定を確認")
+        logger.info("  [ ] YouTube Studio で収益化が ON になっているか確認")
+        logger.info(f"  Studio: https://studio.youtube.com/video/{video_url.rsplit('=', 1)[-1]}/edit")
 
     def process_collections_directory(self, status_filter: List[str] = None) -> Dict:
         """
