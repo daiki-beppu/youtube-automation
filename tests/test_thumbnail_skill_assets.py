@@ -176,8 +176,8 @@ def test_thumbnail_skill_includes_codex_prompt_helper_script() -> None:
     script = _read_codex_prompt_script()
 
     assert "from youtube_automation.utils.image_provider.config import build_codex_prompt" in script
-    assert "load_skill_config(\"thumbnail\")" in script
-    assert "parser.add_argument(\"title\"" in script
+    assert 'load_skill_config("thumbnail")' in script
+    assert 'parser.add_argument("title"' in script
 
 
 def test_thumbnail_default_config_provides_anatomy_clause() -> None:
