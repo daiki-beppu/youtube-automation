@@ -286,6 +286,48 @@ def test_stock_duplicate_overwrite_replaces_existing_stock(tmp_path, monkeypatch
     assert str(existing) in (collection / "01-master" / ".selection.log").read_text(encoding="utf-8")
 
 
+def test_stock_duplicate_overwrite_rollback_restores_existing_when_source_move_fails(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    short = _write_audio(collection, "01a-Dawn Groove.mp3", b"new")
+    survivor = _write_audio(collection, "01b-Dawn Groove.mp3", b"survivor")
+    existing = (
+        tmp_path
+        / "assets"
+        / "stock"
+        / "music"
+        / "b-side"
+        / ("20260629-test-collection__01a-dawn-groove__dawn-groove.mp3")
+    )
+    existing.parent.mkdir(parents=True)
+    existing.write_bytes(b"existing")
+
+    def fake_probe(path: Path) -> float:
+        return 20.0 if path == short else 120.0
+
+    original_safe_move = suno_track_selection._safe_move
+
+    def fail_source_to_stock(source: Path, destination: Path) -> None:
+        if source == short and destination == existing:
+            raise OSError("injected source move failure")
+        original_safe_move(source, destination)
+
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
+    monkeypatch.setattr(suno_track_selection, "_safe_move", fail_source_to_stock)
+    cfg = _cfg()
+    cfg["stock"]["on_duplicate"] = "overwrite"
+
+    with pytest.raises(OSError, match="injected source move failure"):
+        suno_track_selection.select_suno_tracks(collection, cfg)
+
+    assert short.exists()
+    assert survivor.exists()
+    assert existing.read_bytes() == b"existing"
+    assert not (collection / "01-master" / ".selection.log").exists()
+
+
 def test_same_plan_duplicate_stock_fail_preserves_all_sources(tmp_path, monkeypatch):
     collection = _make_collection(
         tmp_path,

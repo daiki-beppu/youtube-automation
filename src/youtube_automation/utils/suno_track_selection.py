@@ -36,7 +36,6 @@ _STOCK_TEMPLATE_FIELDS = {"collection_slug", "song_id", "title_slug", "ext"}
 @dataclass(frozen=True)
 class PromptEntry:
     index: int
-    title: str
     has_lyrics: bool
 
 
@@ -251,14 +250,6 @@ def parse_selection_config(cfg: Mapping[str, object], collection_dir: Path) -> S
     )
 
 
-def _title_from_prompt(entry: Mapping[str, object], index: int) -> str:
-    raw = entry.get("title") or entry.get("name") or f"track-{index:02d}"
-    if not isinstance(raw, str):
-        raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {index}.title/name must be a string")
-    parts = raw.split(" — ", 1)
-    return (parts[1] if len(parts) == 2 else raw).strip() or f"track-{index:02d}"
-
-
 def _has_substantive_lyrics(value: object) -> bool:
     if not isinstance(value, str):
         return False
@@ -291,7 +282,6 @@ def load_prompts(collection_dir: Path) -> list[PromptEntry]:
         prompts.append(
             PromptEntry(
                 index=i,
-                title=_title_from_prompt(entry, i),
                 has_lyrics=_has_substantive_lyrics(entry.get("lyrics")),
             )
         )
@@ -568,8 +558,8 @@ def _apply_plan(
                 if stock_cfg.on_duplicate == "overwrite":
                     backup = _backup_path(transaction_dir, dest, "overwrite-dest", i)
                     _safe_move(dest, backup)
-                    _safe_move(candidate.path, dest)
                     stock_overwrites.append((candidate.path, dest, backup))
+                    _safe_move(candidate.path, dest)
                     stocked_paths.append(dest)
                     continue
                 raise ValidationError(f"stock destination already exists: {dest}")
