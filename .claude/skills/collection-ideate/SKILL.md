@@ -555,15 +555,15 @@ analytics mode / benchmark fallback mode ではベンチマークデータを分
 
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
-企画確定後、**選択した企画のプレビュー画像を `main.png` にコピー**してセッションディレクトリを削除する。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
+企画確定後、選択した企画のプレビュー画像は企画参照として保存し、**`main.png` にはコピーしない**。`main.png/jpg` は `/thumbnail` で承認済みテキスト付き `thumbnail.jpg` から再生成する textless 動画背景として確定する。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
 
 ### parallel モード（デフォルト）
 
 不採用 (`candidate_count` - 1) 枚を `assets/stock/<theme>/` に退避してからプレビューディレクトリを削除する（#364）:
 
 ```bash
-# 1. 選択した企画のプレビュー画像を main.png としてコピー
-cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png
+# 1. 選択した企画のプレビュー画像を企画参照として保存（最終背景 main.png にはしない）
+cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/planning-preview.png
 
 # 2. 不採用プレビューを stock 退避（--exclude で採用 1 枚だけ除外）
 THEME="<theme-slug>"   # コレクションのテーマ slug
@@ -595,24 +595,24 @@ parallel モードでは `config/skills/collection-ideate.yaml` の `preview.sto
 不採用 (`candidate_count` - 1) 案は画像が未生成なので stock 退避は不要。`cp` 1 回 + `rm -rf` だけで済む:
 
 ```bash
-# 1. 選択した企画のプレビュー画像を main.png としてコピー
-cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png
+# 1. 選択した企画のプレビュー画像を企画参照として保存（最終背景 main.png にはしない）
+cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/planning-preview.png
 
 # 2. セッションディレクトリ削除
 rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-### コスト拒否 / 生成失敗で main.png が無い場合
+### コスト拒否 / 生成失敗で企画参照画像が無い場合
 
-4-2 でユーザーがコストを拒否、または 4-4 / 4-5 で全枚生成失敗した場合は `main.png` が未生成のまま Next Step を抜ける。`cp` は実行せず、セッションディレクトリが存在すれば削除する:
+4-2 でユーザーがコストを拒否、または 4-4 / 4-5 で全枚生成失敗した場合は `planning-preview.png` が未生成のまま Next Step を抜ける。`cp` は実行せず、セッションディレクトリが存在すれば削除する:
 
 ```bash
-# 採用画像が無いので main.png コピーはスキップ
+# 採用画像が無いので planning-preview.png コピーはスキップ
 # セッションディレクトリが残っていれば削除（部分生成のゴミ掃除）
 [ -d collections/planning/_plan-previews/<session-dir> ] && rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-このケースでは下流の `/thumbnail <theme>` が `main.png` 不在を検出し、**Phase 1 から** 本番サムネを新規生成する流れに合流する（下記「企画選択後」参照）。
+このケースでも下流の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する流れに合流する（下記「企画選択後」参照）。
 
 > **定期クリーンアップ**: 放棄されたセッションのディレクトリが残る場合、7 日以上前のものは手動削除可:
 > `find collections/planning/_plan-previews/ -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +`
@@ -620,5 +620,5 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 > stock 側の保守は `uv run yt-stock-prune --dry-run` で候補確認 →（必要なら）本実行。
 
 企画選択後:
-→ `/thumbnail <theme>` でサムネ仕上げに進む。`main.png` が既に存在する場合は Phase 2 からテキストオーバーレイのみ実行。コスト拒否や生成失敗で `main.png` が無い場合は Phase 1 から本番サムネを新規生成する
+→ `/thumbnail <theme>` で、テキスト付き `thumbnail.jpg` と textless `main.png/jpg` を別成果物として確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
 → サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）

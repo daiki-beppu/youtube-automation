@@ -6,6 +6,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
 
@@ -137,12 +139,13 @@ def _run_generate_videos(
     return result, ffmpeg_log
 
 
-def test_static_background_rejects_thumbnail_only_assets(tmp_path: Path) -> None:
+@pytest.mark.parametrize("thumbnail_name", ["thumbnail.jpg", "thumbnail.png"])
+def test_static_background_rejects_thumbnail_only_assets(tmp_path: Path, thumbnail_name: str) -> None:
     """#1310: thumbnail.* は upload 用なので静止動画背景には使わない。"""
     collection = _create_collection(tmp_path)
     assets_dir = collection / "10-assets"
     (assets_dir / "main.jpg").unlink()
-    (assets_dir / "thumbnail.jpg").write_bytes(b"text-included-thumbnail")
+    (assets_dir / thumbnail_name).write_bytes(b"text-included-thumbnail")
 
     result, _ = _run_generate_videos(
         tmp_path,
@@ -154,6 +157,28 @@ def test_static_background_rejects_thumbnail_only_assets(tmp_path: Path) -> None
     assert result.returncode != 0
     assert "No video background found" in result.stdout + result.stderr
     assert "thumbnail.jpg/png is upload-only" in result.stdout + result.stderr
+
+
+def test_loop_video_background_does_not_require_main_image(tmp_path: Path) -> None:
+    """#1310: loop.mp4 があれば main.* 不在でも動画背景として使える。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "main.jpg").unlink()
+    (assets_dir / "thumbnail.jpg").write_bytes(b"text-included-thumbnail")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Video BG : loop.mp4 (loop)" in result.stdout
+    assert "Thumbnail:" not in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "10-assets/loop.mp4" in master_cmd
+    assert "10-assets/thumbnail.jpg" not in master_cmd
 
 
 def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
@@ -170,6 +195,8 @@ def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
+    assert "Video BG : main.png (still)" in result.stdout
+    assert "Thumbnail:" not in result.stdout
     master_cmd = _master_ffmpeg_command(ffmpeg_log)
     assert "10-assets/main.png" in master_cmd
     assert "10-assets/main.jpg" not in master_cmd

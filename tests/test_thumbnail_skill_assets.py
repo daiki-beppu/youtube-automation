@@ -177,8 +177,8 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
         "TEXTLESS_PROMPT=\"$(cat <<'PROMPT'",
         '--reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg"',
         '--prompt "$TEXTLESS_PROMPT"',
-        '--output "${COLLECTION_PATH}/10-assets/main-v1.jpg"',
-        "cp main-v1.jpg main.png",
+        '--output "${COLLECTION_PATH}/10-assets/main-v1.png"',
+        "cp main-v1.png main.png",
         "テキスト付き生成プロンプト",
         "テキストなし再生成プロンプト",
         "文字入り `thumbnail.jpg` をそのまま動画背景や `/loop-video` 入力にしない",
@@ -216,6 +216,19 @@ def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs()
         "無効チャンネルでは作らない",
     ):
         assert required in naming_block
+
+
+def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
+    """#1310: Two-Phase フォールバックでも thumbnail と textless main を別成果物にする。"""
+    skill = _read_thumbnail_skill()
+    two_phase_block = _slice_between(skill, "### Two-Phase モード", "## 品質チェック")
+
+    assert "旧チャンネル向けのフォールバック" in two_phase_block
+    assert "`thumbnail.jpg`（テキスト付き YouTube サムネ）" in two_phase_block
+    assert "`main.png/jpg`（テキストなし動画背景）" in two_phase_block
+    assert "既存 `main.png/jpg` は企画参照または過去背景として扱い" in two_phase_block
+    assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成" in two_phase_block
+    assert "既に存在する場合は Phase 1 をスキップ" not in two_phase_block
 
 
 def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:

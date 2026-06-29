@@ -48,6 +48,24 @@ def _wf_new_phase_2c_block(text: str) -> str:
     return match.group(1)
 
 
+def _wf_new_phase_2e_block(text: str) -> str:
+    match = re.search(
+        r"#### 2e\. ループ動画生成(.*?)(?:#### 2f\.|\Z)",
+        text,
+        flags=re.DOTALL,
+    )
+    if not match:
+        raise AssertionError("wf-new/SKILL.md に Phase 2e ブロックが見つかりません")
+    return match.group(1)
+
+
+def _collection_ideate_next_step_block(text: str) -> str:
+    match = re.search(r"^## Next Step(.*?)(?:^## |\Z)", text, flags=re.DOTALL | re.MULTILINE)
+    if not match:
+        raise AssertionError("collection-ideate/SKILL.md に Next Step ブロックが見つかりません")
+    return match.group(1)
+
+
 def _assert_codex_ttp_prompt_policy(block: str) -> None:
     assert ".claude/skills/thumbnail/references/codex-prompt.py" in block
     assert "default_prompt_template" in block
@@ -130,3 +148,36 @@ def test_wf_new_routes_codex_and_single_step_through_thumbnail_contract() -> Non
     assert "同一画像で代用しない" in block
     assert "旧運用は禁止" in block
     assert "cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg" not in block
+
+
+def test_wf_new_skips_loop_video_when_loop_video_disabled() -> None:
+    """Given wf-new Phase 2e
+    When loop-video.yaml::enabled=false
+    Then /loop-video を呼ばず静止背景運用として prepared に進む。
+    """
+    block = _wf_new_phase_2e_block(_read(_WF_NEW_SKILL_MD))
+
+    assert "config/skills/loop-video.yaml::enabled" in block
+    assert "`enabled: false`" in block
+    assert "`/loop-video` は呼ばず" in block
+    assert "textless `main.png/jpg` の静止画背景運用" in block
+    assert "`assets.loop_video = false` を維持" in block
+    assert '`phase = "prepared"`' in block
+
+
+def test_collection_ideate_next_step_keeps_preview_out_of_main_background() -> None:
+    """Given collection-ideate Next Step
+    Then preview は企画参照であり main.png へ直接コピーしない。
+    """
+    block = _collection_ideate_next_step_block(_read(_IDEATE_SKILL_MD))
+
+    assert "`main.png` にはコピーしない" in block
+    assert "planning-preview.png" in block
+    assert "`/thumbnail <theme>`" in block
+    assert "テキスト付き `thumbnail.jpg` と textless `main.png/jpg`" in block
+    assert "`main.png` として動画背景に流用しない" in block
+    assert (
+        "cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png"
+        not in block
+    )
+    assert "Phase 2 からテキストオーバーレイのみ実行" not in block

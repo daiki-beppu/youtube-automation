@@ -181,15 +181,17 @@ Phase 1 の成果物を `20-documentation/` に保存:
      - 中断 → ここで一旦停止（後で `/wf-next` で再開可能）
    ```
 
-承認されたら `assets.thumbnail = true` に更新し、次の `/loop-video` 呼び出しへ進む。再生成または中断の場合は停止する。
+承認されたら `assets.thumbnail = true` に更新し、ループ動画設定確認へ進む。再生成または中断の場合は停止する。
 
 #### 2e. ループ動画生成
 
-サムネイル承認後、`/loop-video` を Skill ツールで実行する（テキストなし `main.png/jpg` → `loop.mp4`）。
+サムネイル承認後、`config/skills/loop-video.yaml::enabled` を確認する。
 
-- 成功: `assets.loop_video = true` に更新
-- 失敗: `assets.loop_video = "failed"` を記録して続行（`/wf-next` で再試行可能）
-- いずれの場合も `phase = "prepared"` に更新する
+- `enabled: false` の場合: `/loop-video` は呼ばず、textless `main.png/jpg` の静止画背景運用として続行する。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
+- `enabled` 未指定 or `true` の場合: `/loop-video` を Skill ツールで実行する（テキストなし `main.png/jpg` → `loop.mp4`）
+  - 成功: `assets.loop_video = true` に更新
+  - 失敗: `assets.loop_video = "failed"` を記録して続行（`/wf-next` で再試行可能）
+  - いずれの場合も `phase = "prepared"` に更新する
 
 #### 2f. Suno helper server 起動（Suno のみ）
 
