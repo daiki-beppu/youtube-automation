@@ -150,7 +150,8 @@ Fail Fast 原則）。`channel-setup` 側で空欄を残さないことで、こ
 | ファイル | 生成方法 |
 |---------|---------|
 | `config/channel/audio.json` | `references/config-template/audio.json` をコピー。`target_duration_min` は channel-direction.md の「動画の長さ」を必ず転記する（空のまま終了しない、issue #567）|
-| `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整し、アップロード設定は同ファイル内の `upload_settings` を編集する |
+| `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整する |
+| `config/channel/youtube.json` | `references/config-template/youtube.json` をコピー。アップロード metadata に使う `category_id` / `privacy_status` を編集する |
 | `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。`supported_languages` は `["ja", "en", "de"]` を必ず含める（広告単価が高い 3 言語、issue #272）。低 CPM 言語は原則追加しない。多言語展開しないチャンネルは省略可（`load_config().localizations.supported_languages` は `youtube.api.language` へフォールバック）。`config/localizations.json` が唯一の Canonical ソース |
 | `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
 

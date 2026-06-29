@@ -67,7 +67,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | モジュール | 責務 |
 |---|---|
 | `utils.config` | `config/channel/*.json` の glob ロード／バリデーション。`load_config()` / `channel_dir()` / `reset()` / `ChannelConfig` を export |
-| `utils.config.{meta,content,youtube,analytics,playlists,workflow,audio,localizations}` | 責務別 dataclass |
+| `utils.config.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid}` | 責務別 dataclass |
 | `cli.config_migrate` | `yt-config-migrate` 本体（v1 → v2 変換） |
 | `utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
 | `utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
@@ -95,7 +95,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
   2. `utils/config/loader.py::_build_*` で JSON からの組み立てを追加
   3. 必須キーであれば `_REQUIRED_KEYS_BY_SECTION` にも登録
 - Path のみ必要な場合（loader を起動したくない）は `channel_dir()` を使う
-- サンプルは `examples/channel_config.example/`（7 ファイル）と `examples/localizations.example.json`
+- サンプルは `examples/channel_config.example/`（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と `examples/localizations.example.json`
 
 ### エラーハンドリング
 

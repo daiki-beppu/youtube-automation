@@ -153,7 +153,7 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 
 ### 4.3 最小 config の構造
 
-`/channel-setup` が以下の 7 ファイルを生成する（v2.0.0 以降の責務別分割）:
+`/channel-setup` が以下の必須 + optional ファイルを生成する（v2.0.0 以降の責務別分割）:
 
 | ファイル | 責務 |
 |---|---|
@@ -164,8 +164,12 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 | `playlists.json` | `playlists` (optional) |
 | `workflow.json` | (optional, 拡張用 reserved) |
 | `audio.json` | `audio` (optional) |
+| `shorts.json` | `shorts` (optional) |
+| `comments.json` | `comments` (optional) |
+| `pinned-comment.json` | `pinned_comment` (optional) |
+| `distrokid.json` | `distrokid` (optional) |
 
-サンプルは [`examples/channel_config.example/`](examples/channel_config.example/)（7 ファイル）と [`examples/localizations.example.json`](examples/localizations.example.json)。v1.x からの移行は [`docs/migration/v2-config-split.md`](docs/migration/v2-config-split.md) と `uv run yt-config-migrate migrate --apply`。
+サンプルは [`examples/channel_config.example/`](examples/channel_config.example/)（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と [`examples/localizations.example.json`](examples/localizations.example.json)。v1.x からの移行は [`docs/migration/v2-config-split.md`](docs/migration/v2-config-split.md) と `uv run yt-config-migrate migrate --apply`。
 
 ---
 

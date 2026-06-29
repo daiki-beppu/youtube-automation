@@ -10,7 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `docs(skills)`: wf-next / wf-status / analytics-analyze / wf-new / channel-setup / video-upload / community-post / collection-ideate の記述を現行実装に同期し、optional config 一覧を README / AGENTS / CLAUDE に追記（#1173, #1174, #1175, #1176, #1177, #1178, #1179, #1180）
-- `fix(channel-init)`: `yt-channel-init` が `config/upload_settings.json` を生成せず、アップロード設定を `config/schedule_config.json::upload_settings` に統一するよう修正（#1306）
 
 ## [5.5.13] - 2026-06-29
 

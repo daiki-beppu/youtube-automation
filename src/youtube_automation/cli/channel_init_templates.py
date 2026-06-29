@@ -208,9 +208,35 @@ def _render_schedule(_ctx: ChannelInitContext) -> dict:
     }
 
 
+def _render_upload_settings(_ctx: ChannelInitContext) -> dict:
+    return {
+        "default_metadata": {
+            "category_id": "10",
+            "privacy_status": "public",
+            "language": "ja",
+        },
+        "thumbnail_settings": {
+            "auto_set_thumbnail": True,
+            "thumbnail_search_patterns": ["main.png", "*main*.png", "thumbnail.png", "*thumb*.png"],
+        },
+        "playlist_settings": {
+            "auto_create_playlists": True,
+            "playlist_privacy": "public",
+        },
+        "quality_settings": {
+            "validate_before_upload": True,
+            "min_video_duration": 30,
+            "max_video_duration": 7200,
+            "required_file_extensions": [".mp4"],
+            "validate_audio_sync": False,
+        },
+    }
+
+
 ROOT_JSON_TEMPLATES: dict[Path, Callable[[ChannelInitContext], dict]] = {
     CONFIG_DIR / "localizations.json": _render_localizations,
     CONFIG_DIR / "schedule_config.json": _render_schedule,
+    CONFIG_DIR / "upload_settings.json": _render_upload_settings,
 }
 
 
