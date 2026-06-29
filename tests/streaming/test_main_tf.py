@@ -263,6 +263,9 @@ class TestMainTfSourceVideoPreflight:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'data\s+"external"\s+"source_video_preflight"')
         assert block is not None, 'data "external" "source_video_preflight" が存在しない'
+        assert "count   = var.source_video_preflight_enabled ? 1 : 0" in block, (
+            "source_video_preflight_enabled=false でも external data source が実行される"
+        )
         assert "video_preflight.py" in block, "external data source が video_preflight.py を呼んでいない"
         assert re.search(r"video_path\s*=\s*var\.video_path", block), (
             "external data source query が var.video_path を渡していない"
@@ -276,7 +279,8 @@ class TestMainTfSourceVideoPreflight:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         locals_block = extract_block(text, r"^\s*locals")
         assert locals_block is not None, "main.tf に locals ブロックが存在しない"
-        assert "source_video_preflight  = data.external.source_video_preflight.result" in locals_block
+        assert "data.external.source_video_preflight[0].result" in locals_block
+        assert 'status          = "disabled"' in locals_block
         assert 'source_video_ok         = local.source_video_preflight.ok == "true"' in locals_block
         assert 'source_video_profile_ok = local.source_video_preflight.profile_ok == "true"' in locals_block
 
@@ -290,7 +294,6 @@ class TestMainTfSourceVideoPreflight:
         assert deploy_block is not None
         lifecycle_block = extract_block(deploy_block, r"lifecycle")
         assert lifecycle_block is not None
-        assert "var.source_video_preflight_enabled" in lifecycle_block
         assert "local.source_video_ok" in lifecycle_block
         assert "local.source_video_preflight.message" in lifecycle_block
 

@@ -100,10 +100,21 @@ def _keyframe_times(path: Path) -> list[float]:
     return sorted(set(times))
 
 
-def _max_interval(times: list[float]) -> float | None:
-    if len(times) < 2:
+def _max_interval(times: list[float], duration: float | None) -> float | None:
+    boundaries = [time for time in times if time >= 0]
+    if duration is not None and duration > 0:
+        boundaries.append(duration)
+    boundaries = sorted(set(boundaries))
+    if not boundaries:
         return None
-    return max(b - a for a, b in zip(times, times[1:], strict=False))
+
+    previous = 0.0
+    intervals: list[float] = []
+    for boundary in boundaries:
+        if boundary >= previous:
+            intervals.append(boundary - previous)
+            previous = boundary
+    return max(intervals) if intervals else None
 
 
 def _int_or_none(value: object) -> int | None:
@@ -147,10 +158,11 @@ def check_video(path: Path) -> dict[str, str]:
 
     height = _int_or_none(stream.get("height"))
     width = _int_or_none(stream.get("width"))
+    duration = _float_or_none(format_info.get("duration"))
     bitrate_bps = _int_or_none(stream.get("bit_rate")) or _int_or_none(format_info.get("bit_rate"))
     bitrate_kbps = round(bitrate_bps / 1000) if bitrate_bps is not None else None
     required_bitrate_kbps = _required_bitrate_kbps(height)
-    max_keyframe_interval = _max_interval(keyframes)
+    max_keyframe_interval = _max_interval(keyframes, duration)
 
     failures: list[str] = []
     if max_keyframe_interval is not None and max_keyframe_interval > MAX_KEYFRAME_INTERVAL_SEC:

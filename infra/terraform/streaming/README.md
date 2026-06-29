@@ -16,6 +16,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 ## 前提
 
 - `terraform` >= 1.5 インストール済み
+- `python3` が PATH 上にある（配信元 MP4 のプリフライト検証を Terraform `external` data source から実行するため）
 - Vultr API キーを 1Password に保管済み（または環境変数で渡せる状態）
 - `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
 - Terraform state 用の GCS bucket を `infra/terraform/bootstrap` で作成済み
@@ -67,7 +68,7 @@ terraform apply
 - 映像ビットレート: 1080p 以上は 4,500 Kbps 以上、720p 以上は 2,500 Kbps 以上（未満は hard fail）
 - コーデック / プロファイル: H.264 High profile 推奨（Baseline などは Terraform `check` の warning）
 
-`ffprobe` が無い環境では検証を `skipped` として通す。明示的に止めたい場合のみ `source_video_preflight_enabled = false` を指定する。
+`ffprobe` が無い環境では検証を `skipped` として通す。検証自体を無効化したい場合のみ `source_video_preflight_enabled = false` を指定する。
 
 推奨再エンコード例（1080p30 / `vc2-1c-2gb` の 2 TB/月を想定）:
 
