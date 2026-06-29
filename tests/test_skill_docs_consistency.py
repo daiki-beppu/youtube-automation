@@ -61,6 +61,7 @@ def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
 
 def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    branding_snapshot_script = _read(".claude/skills/channel-new/references/fetch_branding_snapshot.py")
 
     forbidden = (
         "--benchmark-channel",
@@ -78,11 +79,15 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert "TTP seed fetch と承認済み対象反映" in channel_new
     assert "承認前に `benchmark.channels` へ書き込まない" in channel_new
     assert "追加調査は後続スキルへ委譲" in channel_new
-    assert "初回は TTP メモと seed fetch 結果を企画根拠として使う" in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_new
     assert "docs/channel/competitor-branding-snapshot.json" in channel_new
-    assert 'part="snippet,brandingSettings,localizations"' in channel_new
+    assert ".claude/skills/channel-new/references/fetch_branding_snapshot.py" in channel_new
     assert "`description` / `keywords` / `localizations` / `brandingSettings` は含まない" in channel_new
+    assert "untrusted data" in channel_new
+    assert "承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない" in channel_new
+
+    assert 'part="snippet,brandingSettings,localizations"' in branding_snapshot_script
+    assert '"untrusted_data": True' in branding_snapshot_script
 
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
@@ -93,6 +98,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
     channel_direction = _read(".claude/skills/channel-direction/SKILL.md")
     onboarding = _read("ONBOARDING.md")
+    features = _read("docs/features.md")
 
     assert "/channel-new Step 5 の前段" not in discover
     assert "`/channel-new` の標準フローでは実行しない" in discover
@@ -118,14 +124,18 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_setup
     assert "docs/channel/ttp-seed-confirmation.md" in channel_direction
     assert "docs/channel/competitor-branding-snapshot.json" in channel_direction
+    assert "untrusted data" in channel_direction
+    assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction
 
     assert "ビジョン共有 + 競合発掘" not in onboarding
     assert "yt-discover-competitors` で 5-10 件" not in onboarding
     assert "ベンチマークデータ + コメント収集まで実行" not in onboarding
-    assert "TTP 対象確認 + seed confirmation artifacts + config + persona + branding" in onboarding
     assert "docs/channel/ttp-seed-confirmation.md" in onboarding
     assert "docs/channel/competitor-branding-snapshot.json" in onboarding
-    assert "追加競合発掘や本格 benchmark/comments 収集は標準フローでは実行せず" in onboarding
+    assert "untrusted data" in onboarding
+
+    assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
+    assert "`/setup` → `/channel-new` → `/wf-new`" in features
 
 
 def test_thumbnail_search_order_is_documented() -> None:
