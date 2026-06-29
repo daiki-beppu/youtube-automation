@@ -54,26 +54,10 @@ def _load_agent_replies(path: str | None) -> dict[str, str] | None:
     except json.JSONDecodeError as e:
         raise AutomationError(f"agent replies JSON のパースに失敗しました: {path}: {e}") from e
 
-    if isinstance(payload, dict) and isinstance(payload.get("replies"), list):
-        rows = payload["replies"]
-    elif isinstance(payload, list):
-        rows = payload
-    elif isinstance(payload, dict):
-        replies: dict[str, str] = {}
-        for comment_id, reply_text in payload.items():
-            if not isinstance(comment_id, str) or not comment_id.strip():
-                raise AutomationError(
-                    "agent replies JSON mapping の key は非空文字列の comment_id でなければなりません"
-                )
-            if not isinstance(reply_text, str) or not reply_text.strip():
-                raise AutomationError(
-                    f"agent replies JSON mapping[{comment_id!r}] は非空文字列の reply_text でなければなりません"
-                )
-            replies[comment_id.strip()] = reply_text.strip()
-        return replies
-    else:
-        raise AutomationError("agent replies JSON は object / list / {replies: [...]} のいずれかで指定してください")
+    if not (isinstance(payload, dict) and isinstance(payload.get("replies"), list)):
+        raise AutomationError('agent replies JSON は {"replies": [...]} の object で指定してください')
 
+    rows = payload["replies"]
     replies: dict[str, str] = {}
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
@@ -198,6 +182,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     try:
         if args.export_candidates and not args.json:
             raise ConfigError("--export-candidates は --json と併用してください")
+        if args.export_candidates and not args.dry_run:
+            raise ConfigError("--export-candidates は --dry-run でのみ使用できます")
+        if args.export_candidates and args.agent_replies_file:
+            raise ConfigError("--export-candidates と --agent-replies-file は同時指定できません")
         agent_replies = _load_agent_replies(args.agent_replies_file)
         youtube = get_youtube()
         replier = CommentReplier(

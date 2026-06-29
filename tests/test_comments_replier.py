@@ -24,14 +24,7 @@ from youtube_automation.utils.exceptions import AutomationError, ConfigError, Yo
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
 
 
-def test_load_agent_replies_accepts_mapping(tmp_path):
-    path = tmp_path / "replies.json"
-    path.write_text(json.dumps({"c1": "Thanks!"}), encoding="utf-8")
-
-    assert _load_agent_replies(str(path)) == {"c1": "Thanks!"}
-
-
-def test_load_agent_replies_accepts_replies_list(tmp_path):
+def test_load_agent_replies_accepts_replies_object(tmp_path):
     path = tmp_path / "replies.json"
     path.write_text(json.dumps({"replies": [{"comment_id": "c1", "reply_text": "Thanks!"}]}), encoding="utf-8")
 
@@ -41,10 +34,12 @@ def test_load_agent_replies_accepts_replies_list(tmp_path):
 @pytest.mark.parametrize(
     "payload",
     [
+        {"c1": "Thanks!"},
         {"c1": None},
         {"c1": {"text": "Thanks!"}},
         {"c1": ""},
         {"": "Thanks!"},
+        [{"comment_id": "c1", "reply_text": "Thanks!"}],
         {"replies": [{"comment_id": "c1", "reply_text": None}]},
         {"replies": [{"comment_id": "c1"}]},
         {"replies": [{"comment_id": "", "reply_text": "Thanks!"}]},
@@ -248,6 +243,26 @@ def test_export_candidates_rejects_apply_mode_before_generating(tmp_path, _mock_
     yt._insert_mock.execute.assert_not_called()
 
 
+def test_export_candidates_rejects_agent_replies_before_generating(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "Thanks!"},
+    )
+
+    with pytest.raises(ConfigError, match="agent_replies"):
+        replier.run(dry_run=True, export_candidates=True)
+
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+    yt._insert_mock.execute.assert_not_called()
+
+
 def test_cli_export_candidates_requires_json(monkeypatch, tmp_path, capsys):
     config = SimpleNamespace(
         comments=_make_config(),
@@ -263,6 +278,80 @@ def test_cli_export_candidates_requires_json(monkeypatch, tmp_path, capsys):
     assert rc == 1
     assert "--json" in capsys.readouterr().err
     get_youtube.assert_not_called()
+
+
+def test_cli_export_candidates_rejects_apply_before_youtube(monkeypatch, tmp_path, capsys):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    get_youtube = MagicMock()
+    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(["--apply", "--export-candidates", "--json"])
+
+    assert rc == 1
+    assert "--dry-run" in capsys.readouterr().err
+    get_youtube.assert_not_called()
+
+
+def test_cli_export_candidates_rejects_agent_replies_file_before_youtube(monkeypatch, tmp_path, capsys):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    replies_path = tmp_path / "replies.json"
+    replies_path.write_text(json.dumps({"replies": [{"comment_id": "c1", "reply_text": "Thanks!"}]}), encoding="utf-8")
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    get_youtube = MagicMock()
+    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(["--dry-run", "--export-candidates", "--json", "--agent-replies-file", str(replies_path)])
+
+    assert rc == 1
+    assert "同時指定" in capsys.readouterr().err
+    get_youtube.assert_not_called()
+
+
+def test_cli_agent_replies_file_flows_to_replier_without_generator(
+    monkeypatch, tmp_path, capsys, _mock_default_genai_client
+):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    replies_path = tmp_path / "replies.json"
+    replies_path.write_text(
+        json.dumps({"replies": [{"comment_id": "c1", "reply_text": "見つけてくださってありがとうございます。"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "get_youtube", lambda: yt)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(
+        [
+            "--dry-run",
+            "--json",
+            "--video-id",
+            "v1",
+            "--agent-replies-file",
+            str(replies_path),
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["planned"][0]["reply_source"] == "agent"
+    assert payload["planned"][0]["reply_text"] == "見つけてくださってありがとうございます。"
+    _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
 def test_agent_replies_file_path_uses_provided_reply_without_generator(tmp_path, _mock_default_genai_client):
