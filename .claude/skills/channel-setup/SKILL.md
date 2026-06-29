@@ -67,7 +67,7 @@ print(json.dumps(resp['items'][0], indent=2, ensure_ascii=False))
 
 - `brandingSettings.channel.description` の章立て構造（welcome 行 + 数段の段落 + 箇条書きセクションなど）と段落順をそのまま転写する
 - `keywords` の構成・順序・クォート形式を踏襲し、固有名詞だけを自チャンネル名に置換する
-- `localizations` で多言語化されているなら、自分も同じ言語セットを採用候補にする。多言語化していなければ `youtube.json::content_model` の `localization.supported_languages` も同様に絞る選択肢を提示する
+- `localizations` で多言語化されているなら、自分も同じ言語セットを採用候補にする。多言語化していなければ `config/localizations.json::supported_languages` も同様に絞る選択肢を提示する
 - 独自設計の文言は **転写後の差分** として後出しで提案する（先に独自文言を書いてしまうのは TTP 違反）
 
 取得した競合スナップショットは `docs/channel/competitor-branding-snapshot.json` などに保存しておくと、後段の `/channel-setup` 再実行や `/video-description` での再参照が楽になる（必須ではない）。
@@ -84,7 +84,7 @@ print(json.dumps(resp['items'][0], indent=2, ensure_ascii=False))
 
 - [ ] `descriptions.opening` / `descriptions.sub_opening` の段落構造が競合の `brandingSettings.channel.description` と対応しているか
 - [ ] `tags.base` の語彙・件数・クォート形式が `brandingSettings.channel.keywords` と整合しているか
-- [ ] `localization.supported_languages` が競合 `localizations` のエントリ言語と整合しているか（TTP 路線なら同じ、独自路線なら明示的に diff を説明）
+- [ ] `config/localizations.json::supported_languages` が競合 `localizations` のエントリ言語と整合しているか（TTP 路線なら同じ、独自路線なら明示的に diff を説明）
 - [ ] 独自要素を入れている場合、どこを転写しどこを差別化したか 1 行ずつ説明できるか
 
 self-check が pass したら提案をユーザーに見せ、承認 or 修正指示を受ける。
@@ -150,7 +150,7 @@ Fail Fast 原則）。`channel-setup` 側で空欄を残さないことで、こ
 | ファイル | 生成方法 |
 |---------|---------|
 | `config/channel/audio.json` | `references/config-template/audio.json` をコピー。`target_duration_min` は channel-direction.md の「動画の長さ」を必ず転記する（空のまま終了しない、issue #567）|
-| `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度を方向性に合わせて調整する |
+| `config/schedule_config.json` | `references/schedule-template.json` をコピー。投稿頻度と `upload_settings` を方向性に合わせて調整する |
 | `config/channel/youtube.json` | `references/config-template/youtube.json` をコピー。アップロード metadata に使う `category_id` / `privacy_status` を編集する |
 | `config/localizations.json` | `references/localizations-template.json` をコピーし、ジャンル情報を反映した具体的な文言に調整。`supported_languages` は `["ja", "en", "de"]` を必ず含める（広告単価が高い 3 言語、issue #272）。低 CPM 言語は原則追加しない。多言語展開しないチャンネルは省略可（`load_config().localizations.supported_languages` は `youtube.api.language` へフォールバック）。`config/localizations.json` が唯一の Canonical ソース |
 | `.claude/CLAUDE.md` | `references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |

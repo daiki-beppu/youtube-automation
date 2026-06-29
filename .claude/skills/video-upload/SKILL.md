@@ -33,13 +33,13 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 | content_model.type | 動作 | 対応言語の出所 |
 |-------------------|------|--------------|
-| `collection` | Complete Collection アップロード → live 移動（単一動画） | `localization.supported_languages` + `localization.default_language`（`localizations.json` と同期） |
+| `collection` | Complete Collection アップロード → live 移動（単一動画） | `config/localizations.json` / `load_config().localizations.*` |
 | `single_release` | 言語ごとに別動画をアップロード | `content_model.languages`（発音言語リスト） |
 
 ### collection 型
 - 下記フローのとおり Complete Collection を1本アップロード
 - `collection_uploader.py` を使用
-- 多言語ローカライゼーションは `localization.supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
+- 多言語ローカライゼーションは `config/localizations.json` の `supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
 - `load_config().localizations.supported_languages` は `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
 
 ### single_release + languages: ["jp","en"]（COT）

@@ -130,8 +130,7 @@ TTP 対象がこの時点で channel ID まで確定している場合は、`--b
 
 - `config/channel/{meta,content,youtube,analytics,playlists,workflow,audio}.json`
 - `config/localizations.json`
-- `config/schedule_config.json`
-- `config/upload_settings.json`
+- `config/schedule_config.json`（`upload_settings` を含む）
 - `config/skills/{suno,thumbnail}.yaml`
 - `.env`
 - `.gitignore`

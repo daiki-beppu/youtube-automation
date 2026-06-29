@@ -52,7 +52,6 @@ PACKAGE_FILES: tuple[str, ...] = (
     "auth/client_secrets.template.json",
     "config/localizations.json",
     "config/schedule_config.json",
-    "config/upload_settings.json",
     "config/skills/suno.yaml",
     "config/skills/thumbnail.yaml",
 )

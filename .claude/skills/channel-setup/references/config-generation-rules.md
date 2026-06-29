@@ -10,7 +10,7 @@
 1. **`/channel-setup` Step 2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
 2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
 3. `brandingSettings.channel.keywords` は数・順序・スペース入りクォート形式（`"chill beats"` 等）まで踏襲する
-4. `localizations` で多言語化されている言語セットを `localization.supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
+4. `localizations` で多言語化されている言語セットを `config/localizations.json::supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
 5. TTP self-check（SKILL.md Step 2.3）に通してから提案する
 
 「独自路線」「ハイブリッド路線」を選んでいる場合は競合スナップショットを必ず参照しつつも、転写率と差別化の比率を方向性ドキュメントに合わせる。
@@ -21,7 +21,7 @@
 
 - `channel` — name, short, core_message, channel_id, youtube_handle, url
 - `content_model` — collection / release など
-- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版の対象言語、単一ソース宣言）。`supported_languages` は多言語チャンネルなら高 CPM 言語（`ja` / `en` / `de`）を推奨、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。en-only 運用も可（preflight は `supported_languages` を尊重し、ハードコード必須言語は無い）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
+- `localizations` — `config/localizations.json` の `default_language` + `supported_languages`。scene_phrases / 概要欄多言語版の対象言語の単一ソース。`supported_languages` は多言語チャンネルなら高 CPM 言語（`ja` / `en` / `de`）を推奨、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。en-only 運用も可（preflight は `supported_languages` を尊重し、ハードコード必須言語は無い）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
 - `music_engine` — `"suno"` または `"lyria"`（チャンネルのデフォルト音楽エンジン）
 - `genre` — primary, style, context
 - `youtube` — デフォルトのアップロード設定
