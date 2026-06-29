@@ -297,10 +297,20 @@ def test_suno_default_yaml_does_not_own_lyric_authoring_config():
     assert suno_lyric_data["lyrics_generation"]["provider"] == "claude"
 
 
+def test_suno_lyric_default_yaml_defines_cta_and_safe_quote_source_contract():
+    """suno-lyric の SKILL.md が参照する config path を default YAML に持つ."""
+    data = yaml.safe_load(_SUNO_LYRIC_DEFAULT_YAML.read_text(encoding="utf-8"))
+
+    assert data["cta"]["positions"] == []
+    assert data["source"]["base_url"] == "https://iyashitour.com"
+    assert data["source"]["index_path"].startswith("/meigen/")
+
+
 def test_channel_setup_rules_list_suno_lyrics_override_keys():
     text = _CONFIG_RULES_MD.read_text(encoding="utf-8")
 
     assert "config/skills/suno-lyric.yaml" in text
+    assert "| suno-lyric | `config/skills/suno-lyric.yaml` |" in text
     assert "lyrics_guidelines.style_reference" not in text
     assert "lyrics_generation.provider" not in text
 
@@ -464,7 +474,7 @@ def test_aggregates_multiple_video_analysis_jsons(channel_dir, tmp_path):
 
 
 def _write_vocal_patterns(dir_: Path, scenes: list[str]) -> Path:
-    """vocal モード + lyrics 付きの suno-patterns.yaml を作る（scene 数は可変）."""
+    """vocal モードの suno-patterns.yaml を作る（scene 数は可変）."""
     path = dir_ / "patterns.yaml"
     path.write_text(
         yaml.safe_dump(
@@ -482,6 +492,15 @@ def _write_vocal_patterns(dir_: Path, scenes: list[str]) -> Path:
                 ],
             }
         ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_suno_lyrics_json(dir_: Path, names: list[str], *, lyrics: str = "[Verse]\nexternal lyric\n") -> Path:
+    path = dir_ / "suno-lyrics.json"
+    path.write_text(
+        json.dumps([{"name": name, "lyrics": lyrics} for name in names], ensure_ascii=False),
         encoding="utf-8",
     )
     return path
@@ -568,17 +587,33 @@ def test_build_prompt_entries_style_excludes_exclude_styles(channel_dir, tmp_pat
     assert "EDM" not in style
 
 
-def test_build_prompt_entries_vocal_includes_rstripped_lyrics(channel_dir, tmp_path):
-    """Given vocal モード + 末尾改行付き lyrics + auto_lyrics_structure: false
+def test_build_prompt_entries_vocal_includes_rstripped_external_lyrics(channel_dir, tmp_path):
+    """Given vocal モード + 末尾改行付き suno-lyrics.json + auto_lyrics_structure: false
     When lyrics を読む
     Then rstrip された歌詞本文が入る。
     """
     _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+    _write_suno_lyrics_json(tmp_path, ["歌もの — Vocal"], lyrics="[Verse]\nla la la\n\n")
 
     entries = build_prompt_entries(patterns_path)
 
     assert entries[0]["lyrics"] == "[Verse]\nla la la"
+
+
+def test_build_prompt_entries_vocal_requires_suno_lyrics_json(channel_dir, tmp_path):
+    """vocal mode は `/suno-lyric` が出す suno-lyrics.json を必須にする."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    message = str(exc_info.value)
+    assert "suno-lyrics.json is required for vocal mode" in message
+    assert "Run /suno-lyric first" in message
 
 
 def test_build_prompt_entries_vocal_prefers_suno_lyrics_json(channel_dir, tmp_path):
@@ -749,6 +784,10 @@ def test_build_prompt_entries_multiple_scenes_become_separate_variations(channel
     """
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+    _write_suno_lyrics_json(
+        tmp_path,
+        ["歌もの — Vocal (Variation 1)", "歌もの — Vocal (Variation 2)"],
+    )
 
     entries = build_prompt_entries(patterns_path)
 
@@ -812,6 +851,23 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     assert len(data) == 1
     # #900: strict 等価から subset 検証へ緩和 (build_prompt_entries 側の relaxation と同様)。
     assert {"name", "style", "lyrics"} <= set(data[0])
+
+
+def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path, monkeypatch):
+    """collection directory 引数でも 20-documentation/suno-lyrics.json を JSON 出力へ merge する."""
+    collection_dir = tmp_path / "collection"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    patterns_path = _write_vocal_patterns(docs_dir, ["a dreamy scene"])
+    patterns_path.rename(docs_dir / "suno-patterns.yaml")
+    _write_suno_lyrics_json(docs_dir, ["歌もの — Vocal"], lyrics="[Verse]\nfrom collection dir")
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(collection_dir)])
+
+    main()
+
+    data = json.loads((docs_dir / "suno-prompts.json").read_text(encoding="utf-8"))
+    assert data[0]["lyrics"] == "[Verse]\nfrom collection dir"
 
 
 # ---------------------------------------------------------------------------
@@ -904,6 +960,7 @@ def test_vocal_mode_skips_tracks_per_collection_validation(channel_dir, tmp_path
     data["mode"] = "vocal"
     data["patterns"][0]["lyrics"] = "[Intro]\nla la\n"
     patterns_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    _write_suno_lyrics_json(tmp_path, ["テスト — Test"], lyrics="[Intro]\nla la")
 
     entries = build_prompt_entries(patterns_path)
 
@@ -1051,6 +1108,10 @@ def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguat
     }
     patterns_path = tmp_path / "patterns.yaml"
     patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    _write_suno_lyrics_json(
+        tmp_path,
+        ["通学路 — Walking Home (Variation 1)", "通学路 — Walking Home (Variation 2)"],
+    )
 
     entries = build_prompt_entries(patterns_path)
 
@@ -1262,6 +1323,10 @@ def test_advanced_fields_apply_to_every_entry_collection_scope(channel_dir, tmp_
     """
     _write_suno_override(channel_dir, genre_line="dream pop vocals", weirdness=40)
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+    _write_suno_lyrics_json(
+        tmp_path,
+        ["歌もの — Vocal (Variation 1)", "歌もの — Vocal (Variation 2)"],
+    )
 
     entries = build_prompt_entries(patterns_path)
 

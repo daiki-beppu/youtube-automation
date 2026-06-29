@@ -370,6 +370,14 @@ def test_skill_md_has_hiragana_guide():
     assert "hiragana" in text.lower() or "ひらがな" in text
 
 
+def test_suno_lyric_output_contract_uses_config_language():
+    """/suno-lyric の出力契約は English 固定ではなく config の lyric.language に従う."""
+    text = _SUNO_LYRIC_SKILL_MD.read_text(encoding="utf-8")
+    assert "config/skills/suno-lyric.yaml::lyric.language" in text
+    assert "Lyrics (English)" not in text
+    assert "英語歌詞" not in text
+
+
 def test_skill_md_has_auto_lyrics_structure():
     """SKILL.md に auto_lyrics_structure の記述があること."""
     text = _SKILL_MD.read_text(encoding="utf-8")

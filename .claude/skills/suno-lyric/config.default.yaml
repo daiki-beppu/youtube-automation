@@ -4,6 +4,8 @@
 # チャンネル側で config/skills/suno-lyric.yaml に上書きする。
 
 # 名言ソース（iyashitour.com の英語名言ページ）
+# 安全境界: scheme=https / host=iyashitour.com / path は /meigen/ 配下のみ許可。
+# 別 host や private IP への自動取得は禁止し、人間が取得済み引用メモを渡す。
 source:
   base_url: "https://iyashitour.com"
   index_path: "/meigen/eigo_meigen/eigo_ijin"
@@ -205,6 +207,10 @@ forbidden_topics:
   - violence
   - brand-names
   - real-person-names  # 偉人名そのものを歌詞に出さない
+
+# CTA を歌詞に入れる場合の対象 entry name。空なら CTA は入れない。
+cta:
+  positions: []
 
 # 出力先（collections/planning/<theme>/ からの相対パス）
 output:

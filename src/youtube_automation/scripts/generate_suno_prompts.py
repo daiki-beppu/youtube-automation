@@ -296,8 +296,8 @@ def _validate_unique_titles(yaml_path: Path, entry_names: list[str]) -> None:
 def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
     """`suno-lyrics.json` から entry name -> lyrics を読み込む.
 
-    `/suno-lyric` は lyrics 専任で、`/suno` がここで Style と結合する。ファイルがなければ
-    後方互換として空 dict を返し、従来どおり `suno-patterns.yaml::patterns[].lyrics` を使う。
+    `/suno-lyric` は lyrics 専任で、`/suno` がここで Style と結合する。
+    vocal mode のファイル必須チェックは呼び出し元で行う。
     """
     if not lyrics_path.exists():
         return {}
@@ -389,6 +389,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     is_vocal = mode == "vocal"
     external_lyrics_path = patterns_path.parent / SUNO_LYRICS_JSON_FILENAME
     has_external_lyrics = is_vocal and external_lyrics_path.exists()
+    if is_vocal and not has_external_lyrics:
+        raise ConfigError(
+            f"{SUNO_LYRICS_JSON_FILENAME} is required for vocal mode. "
+            f"Run /suno-lyric first and write: {external_lyrics_path}"
+        )
     external_lyrics = _load_external_lyrics(external_lyrics_path) if is_vocal else {}
 
     resolved: list[_ResolvedPattern] = []
