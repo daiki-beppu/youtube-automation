@@ -14,6 +14,9 @@ from youtube_automation.utils import skill_config
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
+_SUNO_LYRIC_DEFAULT_YAML = (
+    Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno-lyric" / "config.default.yaml"
+)
 _SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
 _CONFIG_RULES_MD = (
     Path(__file__).resolve().parents[1]
@@ -284,27 +287,22 @@ def test_skill_md_warns_about_genre_line_exclude_styles_conflict():
 # ---------------------------------------------------------------------------
 
 
-def test_default_yaml_defines_lyrics_style_reference_and_generation_provider():
-    """Given suno skill の default config
-    When lyrics 関連設定を読む
-    Then style reference と provider 切替の初期値が定義されている。
-    """
-    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+def test_suno_default_yaml_does_not_own_lyric_authoring_config():
+    """`/suno` は Style / merge 専任で、歌詞生成 config を持たない."""
+    suno_data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+    suno_lyric_data = yaml.safe_load(_SUNO_LYRIC_DEFAULT_YAML.read_text(encoding="utf-8"))
 
-    lyrics_guidelines = data["lyrics_guidelines"]
-    assert lyrics_guidelines["style_reference"] == []
-
-    lyrics_generation = data["lyrics_generation"]
-    assert lyrics_generation["provider"] == "claude"
-    assert set(lyrics_generation) == {"provider"}
+    assert "lyrics_guidelines" not in suno_data
+    assert "lyrics_generation" not in suno_data
+    assert suno_lyric_data["lyrics_generation"]["provider"] == "claude"
 
 
 def test_channel_setup_rules_list_suno_lyrics_override_keys():
     text = _CONFIG_RULES_MD.read_text(encoding="utf-8")
 
-    assert "lyrics_guidelines.style_reference" in text
-    assert "lyrics_generation.provider" in text
-    assert "config/skills/suno.yaml" in text
+    assert "config/skills/suno-lyric.yaml" in text
+    assert "lyrics_guidelines.style_reference" not in text
+    assert "lyrics_generation.provider" not in text
 
 
 # ---------------------------------------------------------------------------
@@ -660,6 +658,88 @@ def test_build_prompt_entries_vocal_fails_on_duplicate_suno_lyrics_names(channel
 
     assert "duplicated lyrics entry names" in str(exc_info.value)
     assert "歌もの — Vocal" in str(exc_info.value)
+
+
+def test_build_prompt_entries_vocal_fails_when_suno_lyrics_json_missing_expected_name(channel_dir, tmp_path):
+    """suno-lyrics.json が存在する場合、期待 entry name の欠落は fallback せず fail-loud."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+    (tmp_path / "suno-lyrics.json").write_text(
+        json.dumps([{"name": "別名 — Wrong", "lyrics": "[Verse]\nwrong"}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    message = str(exc_info.value)
+    assert "names must match prompt entry names" in message
+    assert "missing: 歌もの — Vocal" in message
+    assert "extra: 別名 — Wrong" in message
+
+
+def test_build_prompt_entries_vocal_fails_when_multi_scene_suno_lyrics_json_is_incomplete(channel_dir, tmp_path):
+    """multi scene では Variation ごとの lyrics entry が全て必要."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+    (tmp_path / "suno-lyrics.json").write_text(
+        json.dumps([{"name": "歌もの — Vocal (Variation 1)", "lyrics": "[Verse]\none"}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    assert "missing: 歌もの — Vocal (Variation 2)" in str(exc_info.value)
+
+
+def test_build_prompt_entries_vocal_accepts_suno_lyrics_json_title_alias(channel_dir, tmp_path):
+    """旧互換として `title` alias も entry name として受け付ける."""
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+    (tmp_path / "suno-lyrics.json").write_text(
+        json.dumps([{"title": "歌もの — Vocal", "lyrics": "[Verse]\nfrom title"}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["lyrics"] == "[Verse]\nfrom title"
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ("{not json", "invalid JSON"),
+        ({}, "root must be a list"),
+        (["not object"], "entry 1 must be an object"),
+        ([{"lyrics": "x"}], "entry 1.name must be a non-empty string"),
+        ([{"name": "   ", "lyrics": "x"}], "entry 1.name must be a non-empty string"),
+        ([{"name": "歌もの — Vocal", "lyrics": 123}], "entry 1.lyrics must be a string"),
+    ],
+)
+def test_build_prompt_entries_vocal_fails_on_invalid_suno_lyrics_json_shapes(
+    channel_dir,
+    tmp_path,
+    payload,
+    expected,
+):
+    """外部 lyrics JSON の shape error は ConfigError として固定する."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+    raw = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
+    (tmp_path / "suno-lyrics.json").write_text(raw, encoding="utf-8")
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    assert expected in str(exc_info.value)
 
 
 def test_build_prompt_entries_multiple_scenes_become_separate_variations(channel_dir, tmp_path):

@@ -333,6 +333,29 @@ def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
     return lyrics_by_name
 
 
+def _validate_external_lyrics_names(
+    *,
+    lyrics_path: Path,
+    expected_names: set[str],
+    actual_names: set[str],
+) -> None:
+    """`suno-lyrics.json` と最終 prompt entry name の完全一致を検証する."""
+    missing = sorted(expected_names - actual_names)
+    extra = sorted(actual_names - expected_names)
+    if not missing and not extra:
+        return
+
+    details = []
+    if missing:
+        details.append("missing: " + ", ".join(missing))
+    if extra:
+        details.append("extra: " + ", ".join(extra))
+    joined_details = "; ".join(details)
+    raise ConfigError(
+        f"{SUNO_LYRICS_JSON_FILENAME} names must match prompt entry names: {lyrics_path} ({joined_details})"
+    )
+
+
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
@@ -364,9 +387,12 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     auto_vocal = any(kw in genre_line.lower() for kw in vocal_keywords)
     mode = data.get("mode", "vocal" if auto_vocal else "instrumental")
     is_vocal = mode == "vocal"
-    external_lyrics = _load_external_lyrics(patterns_path.parent / SUNO_LYRICS_JSON_FILENAME) if is_vocal else {}
+    external_lyrics_path = patterns_path.parent / SUNO_LYRICS_JSON_FILENAME
+    has_external_lyrics = is_vocal and external_lyrics_path.exists()
+    external_lyrics = _load_external_lyrics(external_lyrics_path) if is_vocal else {}
 
     resolved: list[_ResolvedPattern] = []
+    expected_external_lyrics_names: set[str] = set()
     for pattern in patterns:
         tempo = pattern.get("tempo")
         style_key = pattern.get("style")
@@ -388,7 +414,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         lyrics_by_scene = []
         for j in range(1, len(scenes) + 1):
             entry_name = f"{base_name} (Variation {j})" if multi else base_name
-            lyrics_by_scene.append(external_lyrics.get(entry_name, fallback_lyrics))
+            if has_external_lyrics:
+                expected_external_lyrics_names.add(entry_name)
+                lyrics_by_scene.append(external_lyrics.get(entry_name, ""))
+            else:
+                lyrics_by_scene.append(fallback_lyrics)
 
         resolved.append(
             _ResolvedPattern(
@@ -399,6 +429,13 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
                 scenes=scenes,
                 lyrics_by_scene=lyrics_by_scene,
             )
+        )
+
+    if has_external_lyrics:
+        _validate_external_lyrics_names(
+            lyrics_path=external_lyrics_path,
+            expected_names=expected_external_lyrics_names,
+            actual_names=set(external_lyrics),
         )
 
     # インストモードのみ: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、

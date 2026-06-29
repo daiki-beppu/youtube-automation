@@ -331,6 +331,7 @@ def test_default_yaml_has_quality_rule_keys():
 # ---------------------------------------------------------------------------
 
 _SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
+_SUNO_LYRIC_SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
 
 
 def test_skill_md_has_quality_rules_section():
@@ -364,8 +365,8 @@ def test_skill_md_has_instrument_adjectives():
 
 
 def test_skill_md_has_hiragana_guide():
-    """SKILL.md にひらがな歌詞ガイドの記述があること."""
-    text = _SKILL_MD.read_text(encoding="utf-8")
+    """/suno-lyric の SKILL.md にひらがな歌詞ガイドの記述があること."""
+    text = _SUNO_LYRIC_SKILL_MD.read_text(encoding="utf-8")
     assert "hiragana" in text.lower() or "ひらがな" in text
 
 

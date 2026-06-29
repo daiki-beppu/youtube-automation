@@ -30,7 +30,6 @@ vocal_gender: "male"  # male / female / neutral / auto
 # 歌詞生成
 lyrics_generation:
   # claude: skill 実行中に Claude が直接生成
-  # codex: references/codex-lyrics-quote.sh に委譲（試作段階では未実装）
   provider: claude
   # 検証 NG 時の最大再生成回数
   max_retries: 3
