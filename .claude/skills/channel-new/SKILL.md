@@ -240,12 +240,13 @@ uv run yt-channel-settings push --apply
 | Analytics データがまだ無い | #1272 で wf-new 側対応予定。初回は benchmark / TTP メモを企画根拠として使う |
 | `config/skills/thumbnail.yaml` の reference_images が空 | `yt-benchmark-collect --keep-thumbnails` の出力を確認し、空なら TTP サムネの手動選定メモを `notes` に残す |
 | `config/skills/suno.yaml` が placeholder のまま | Step 1 のジャンル情報を `genre_line` に反映してから進む |
+| `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` で初期化する。初回動画の追加は `/video-upload` 内部の自動 assign に任せる |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
 
 最後に案内する:
 
 ```text
-チャンネル初期化が完了しました。次は /wf-new で初回コレクション制作に進めます。
+チャンネル初期化が完了しました。次は /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。
 ```
 
 ## 障害時ガイダンス
