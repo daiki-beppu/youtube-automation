@@ -174,7 +174,7 @@ def check_video(path: Path) -> dict[str, str]:
 
     codec = str(stream.get("codec_name") or "")
     profile = str(stream.get("profile") or "")
-    profile_ok = codec == "h264" and "high" in profile.lower()
+    profile_ok = codec == "h264" and profile.lower() == "high"
     profile_message = (
         "source video uses H.264 High profile."
         if profile_ok

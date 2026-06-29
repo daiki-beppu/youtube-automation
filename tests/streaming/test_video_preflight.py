@@ -364,6 +364,42 @@ def test_check_video_warns_non_high_profile_without_hard_fail(monkeypatch, tmp_p
     assert "H.264 High is recommended" in result["profile_message"]
 
 
+def test_check_video_warns_h264_high_variant_profiles(monkeypatch, tmp_path):
+    """Given H.264 High 以外の High variant profile
+    When check_video を呼ぶ
+    Then substring match で H.264 High 扱いせず warning を返す。
+    """
+    module = _load_module()
+    video = tmp_path / "stream.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(module.shutil, "which", lambda _cmd: "/usr/bin/ffprobe")
+    monkeypatch.setattr(module, "_keyframe_times", lambda _path: [0.0, 2.0, 4.0])
+
+    for profile in ("High 10", "High 4:2:2", "High 4:4:4 Predictive"):
+        monkeypatch.setattr(
+            module,
+            "_video_metadata",
+            lambda _path, profile=profile: (
+                {
+                    "codec_name": "h264",
+                    "profile": profile,
+                    "width": 1920,
+                    "height": 1080,
+                    "bit_rate": "4500000",
+                },
+                {"duration": "4.0"},
+            ),
+        )
+
+        result = module.check_video(video)
+
+        assert result["ok"] == "true"
+        assert result["status"] == "ok"
+        assert result["profile_ok"] == "false"
+        assert f"h264 / {profile}" in result["profile_message"]
+        assert "H.264 High is recommended" in result["profile_message"]
+
+
 def test_check_video_does_not_use_container_bitrate_for_video_bitrate(monkeypatch, tmp_path):
     """Given stream.bit_rate が無く format.bit_rate だけある動画
     When check_video を呼ぶ
