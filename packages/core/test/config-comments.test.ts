@@ -99,7 +99,7 @@ describe("comments — full configuration", () => {
           channel_persona: "Warm lo-fi jazz host",
           fallback_on_error: "retry",
           max_length: 300,
-          model: "gemini-2.5-pro",
+          model: "gemini-3.5-flash",
           provider: "gemini",
           requests_per_minute: 10,
         },
@@ -131,7 +131,7 @@ describe("comments — full configuration", () => {
     expect(rule?.provider).toBe("gemini");
     const { generator } = comments;
     expect(generator.provider).toBe("gemini");
-    expect(generator.model).toBe("gemini-2.5-pro");
+    expect(generator.model).toBe("gemini-3.5-flash");
     expect(generator.channelPersona).toBe("Warm lo-fi jazz host");
     expect(generator.maxLength).toBe(300);
     expect(generator.fallbackOnError).toBe("retry");
@@ -176,7 +176,7 @@ describe("comments.generator — validation", () => {
     // Given an unsupported fallback value
     const sections = commentsWithGenerator({
       fallback_on_error: "template",
-      model: "gemini-2.5-pro",
+      model: "gemini-3.5-flash",
       provider: "gemini",
     });
 
