@@ -4,12 +4,25 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def _frontmatter(path: str) -> dict:
+    text = _read(path)
+    if not text.startswith("---\n"):
+        raise AssertionError(f"{path} does not start with frontmatter")
+    end = text.find("\n---", 4)
+    if end == -1:
+        raise AssertionError(f"{path} frontmatter is not closed")
+    parsed = yaml.safe_load(text[4:end])
+    assert isinstance(parsed, dict)
+    return parsed
 
 
 def test_workflow_schema_references_existing_skill_schema() -> None:
@@ -68,6 +81,36 @@ def test_thumbnail_search_order_is_documented() -> None:
         ".claude/skills/video-upload/references/posting-checklist.md",
     ):
         assert expected_order in _read(path)
+
+
+def test_first_post_playlist_initialization_contract_is_documented() -> None:
+    playlist = _read(".claude/skills/playlist/SKILL.md")
+    video_upload = _read(".claude/skills/video-upload/SKILL.md")
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
+
+    description = _frontmatter(".claude/skills/playlist/SKILL.md")["description"]
+    for trigger in ("初投稿", "初回投稿", "初回公開前にプレイリスト初期化"):
+        assert trigger in description
+
+    for command in (
+        "uv run yt-playlist-status",
+        "uv run yt-playlist-manager --init --dry-run",
+        "uv run yt-playlist-manager --init",
+    ):
+        assert command in video_upload
+        assert command in wf_next
+        assert command in checklist
+
+    for text in (playlist, video_upload, wf_next, channel_new, checklist):
+        assert "playlist_id" in text
+        assert "自動 assign" in text
+
+    assert "`collection` 型では `collection_uploader` 内部の `assign_video()`" in video_upload
+    assert "`single_release` 型では `playlists.jp` / `playlists.en`" in video_upload
+    assert "`approval_gates.upload` とは別の playlist 作成ゲート" in wf_next
+    assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
 
 
 def test_common_docs_list_optional_channel_config_files() -> None:
