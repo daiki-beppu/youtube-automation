@@ -131,6 +131,15 @@ class TestProviderSwitchEndToEnd:
         assert cfg.provider == "codex"
         assert cfg.gemini is None
         assert cfg.openai is None
+        assert cfg.codex is not None
+        assert cfg.codex.default_prompt_template.count("{title}") == 1
+        for required in (
+            "TTP this reference thumbnail",
+            "winning layout",
+            "more readable on mobile",
+            "no broken hands",
+        ):
+            assert required in cfg.codex.default_prompt_template
         with pytest.raises(ConfigError, match="codex-image\\.sh"):
             get_provider(cfg)
 

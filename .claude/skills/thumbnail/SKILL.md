@@ -99,6 +99,21 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 
 参照画像つきで雰囲気を寄せたい場合は、3 引数目以降に画像パスを追加する。
 
+TTP 参照画像から上位互換サムネを作る場合は、長い個別指定ではなく
+`image_generation.codex.default_prompt_template` を使う。参照画像は mood reference
+ではなく winning template として扱い、変える要素は `{title}` と品質改善
+（mobile readability / face impact / no logos / no watermarks / no broken hands）に限定する。
+日本語方針は「TTPを徹底して上位互換の生成」。
+
+既定テンプレート:
+
+```text
+TTP this reference thumbnail, then improve it into a stronger original thumbnail.
+Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
+Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
+Use the title {title}.
+```
+
 内部実装の要約:
 
 - wrapper は `codex exec --json --sandbox workspace-write --add-dir <out_dir> --skip-git-repo-check` で起動する
@@ -111,7 +126,7 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 
 運用上の注意:
 
-- **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。`/tmp/rjn-codex-prompt-short.txt` のように参照画像つきでも 14 行・600〜800 字に収めるとほぼ通る。失敗したら短縮を最優先で試す
+- **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。TTP 参照画像つきでは `image_generation.codex.default_prompt_template` を使い、`{title}` だけを差し替える。失敗したら短縮を最優先で試す
 - **reference 画像つきは prompt で「変更点」を明示する**: 「reference を参考に」程度の弱い指示だと agent が `image_generation` tool を skip して reference を `<out>` に cp するだけで終わる failure mode がある。wrapper の自動付与文 + MD5 一致検証で抑止しているが、prompt 側でも reference からの差分（色味の参考 / 構図だけ流用 / 主役を差し替え 等）を明示しておくと安定する
 - 失敗時 wrapper は `agent_message (最終)` と codex stderr の末尾 30 行を診断 dump するので、これを見て prompt 短縮 or 参照画像見直しに切り替える
 

@@ -186,3 +186,10 @@ image_generation:
     # codex-image.sh 経路は API provider ではないため model / quality は持たない。
     # ChatGPT サブスクの fair-use 上限内で使い、大量生成には使わない。
     # cost_per_image_usd: null
+    # 参照サムネを mood reference ではなく winning template として扱い、
+    # {title} だけを差し替える短い TTP 上位互換プロンプト。
+    default_prompt_template: |
+      TTP this reference thumbnail, then improve it into a stronger original thumbnail.
+      Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
+      Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
+      Use the title {title}.
