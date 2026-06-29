@@ -17,6 +17,11 @@ def _read_thumbnail_skill() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_loop_video_skill() -> str:
+    path = _repo_root() / ".claude" / "skills" / "loop-video" / "SKILL.md"
+    return path.read_text(encoding="utf-8")
+
+
 def _read_thumbnail_default_config() -> str:
     path = _repo_root() / ".claude" / "skills" / "thumbnail" / "config.default.yaml"
     return path.read_text(encoding="utf-8")
@@ -137,6 +142,89 @@ def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles()
     assert "整合性監査" in role_block
     assert "320px" in role_block
     assert "公開**後**" in role_block
+
+
+def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -> None:
+    """#1310: /thumbnail は文字入りサムネ承認後に文字なし main を AI 再生成する。"""
+    skill = _read_thumbnail_skill()
+
+    standard_block = _slice_between(
+        skill,
+        "### 標準生成順序とファイル契約",
+        "### Single-Step / TTP モード",
+    )
+    single_step_block = _slice_between(
+        skill,
+        "### Single-Step / TTP モード",
+        "### Two-Phase モード（従来方式・フォールバック）",
+    )
+
+    for required in (
+        "テキスト付き YouTube サムネ → テキストなし動画背景",
+        "ベンチマーク先サムネを参照画像",
+        "10-assets/thumbnail.jpg",
+        "10-assets/main.png",
+        "10-assets/main.jpg",
+        "config/skills/loop-video.yaml::enabled: true",
+        "config/skills/loop-video.yaml::enabled: false",
+        "静止画背景",
+        "両者を同一画像で代用しない",
+    ):
+        assert required in standard_block
+
+    for required in (
+        "/thumbnail-compare",
+        "--reference <collection-path>/10-assets/thumbnail.jpg",
+        "--output <collection-path>/10-assets/main-v1.jpg",
+        "cp main-v1.jpg main.png",
+        "テキスト付き生成プロンプト",
+        "テキストなし再生成プロンプト",
+        "文字入り `thumbnail.jpg` をそのまま動画背景や `/loop-video` 入力にしない",
+    ):
+        assert required in single_step_block
+
+
+def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs() -> None:
+    """#1310: prompt 保存とファイル命名が thumbnail/main/loop の役割を明示する。"""
+    skill = _read_thumbnail_skill()
+    prompt_block = _slice_between(skill, "## プロンプト保存", "## ファイル命名ルール（上書き禁止）")
+    naming_block = _slice_between(skill, "## ファイル命名ルール（上書き禁止）", "### クリーンアップ")
+
+    for required in (
+        "## Text-Included Thumbnail Prompt (thumbnail.jpg)",
+        "## Textless Background Regeneration Prompt (main.png/main.jpg)",
+        "テキスト付きサムネを生成したプロンプト",
+        "テキストなし背景を再生成したプロンプト",
+    ):
+        assert required in prompt_block
+
+    for required in (
+        "`thumbnail.jpg` | YouTube アップロード用のテキスト付き最終サムネ",
+        "`main.png` / `main.jpg` | 動画背景・`/loop-video` 入力用のテキストなし最終画像",
+        "`loop.mp4` | `loop-video` 有効チャンネルだけで生成する動画背景",
+        "無効チャンネルでは作らない",
+    ):
+        assert required in naming_block
+
+
+def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:
+    """#1310: /loop-video は文字入り thumbnail ではなく文字なし main を入力にする。"""
+    skill = _read_loop_video_skill()
+    prerequisites_block = _slice_between(skill, "### 前提条件", "### ステップ")
+    steps_block = _slice_between(skill, "### ステップ", "### 構造化プロンプト（推奨）")
+
+    for required in (
+        "テキストなし `main.png/jpg`",
+        "`thumbnail.jpg` は YouTube アップロード用のテキスト付きサムネイル",
+        "`/loop-video` の入力には使わない",
+        "config/skills/loop-video.yaml::enabled: false",
+        "テキストなし `main.png/jpg` を静止画背景として使う",
+    ):
+        assert required in skill
+
+    assert "`10-assets/thumbnail.jpg` ではなく、テキストなし `main.png/jpg` を入力" in prerequisites_block
+    assert "Veo を実行せず" in steps_block
+    assert "文字入り `thumbnail.jpg` しか無い場合は `/thumbnail` に戻ってテキストなし版を再生成" in steps_block
 
 
 def test_thumbnail_default_config_remains_ttp_aligned() -> None:

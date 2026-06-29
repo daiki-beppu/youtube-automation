@@ -166,7 +166,7 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 | モード | 説明 |
 |---|---|
-| `single_step`（**デフォルト**・TTP 推奨）| テキスト付き参照画像から差分のみ指示、1 ステップで完成。ベンチマーク模倣（TTP）の標準実装 |
+| `single_step`（**デフォルト**・TTP 推奨）| テキスト付き参照画像から差分のみ指示し、YouTube 用のテキスト付きサムネ候補を 1 ステップで生成。ベンチマーク模倣（TTP）の標準実装 |
 | `diff_from_reference` | 既存キャラ画像を参照に差分指示 |
 | `two_phase` | 従来の 2 フェーズ（背景 → テキストオーバーレイ）|
 
@@ -206,9 +206,21 @@ uv run yt-generate-image \
 
 ## ワークフロー
 
+### 標準生成順序とファイル契約
+
+`/thumbnail` の標準手順は、**テキスト付き YouTube サムネ → テキストなし動画背景**の順に進める。
+
+1. ベンチマーク先サムネを参照画像にして、YouTube 用のテキスト付きサムネ候補を生成する。
+2. 承認したテキスト付き画像を参照画像にして、文字・ロゴ・タイポグラフィを除去したテキストなし版を AI で再生成する。
+3. テキスト付き最終サムネは `10-assets/thumbnail.jpg`、テキストなし動画背景は `10-assets/main.png` または `10-assets/main.jpg` として確定する。
+4. `config/skills/loop-video.yaml::enabled: true` のチャンネルでは、テキストなし `main.png/jpg` を `/loop-video` に渡して `loop.mp4` を生成する。
+5. `config/skills/loop-video.yaml::enabled: false` のチャンネルでは Veo を実行せず、テキストなし `main.png/jpg` を静止画背景として `/videoup` に渡す。
+
+`thumbnail.jpg` はアップロード用の文字入りサムネイル、`main.png/jpg` は動画背景・loop-video 入力用の文字なし素材として扱う。両者を同一画像で代用しない。
+
 ### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）
 
-ベンチマーク模倣（**TTP**: trace / imitate）の標準実装。テキスト付き参照画像（テキストレイアウト・背景テクスチャ・オブジェクト配置を含む）を参照にして、**変更点だけ**をプロンプトで指示する。背景生成とテキストオーバーレイが 1 回の生成で完了する。
+ベンチマーク模倣（**TTP**: trace / imitate）の標準実装。テキスト付きベンチマーク参照画像（テキストレイアウト・背景テクスチャ・オブジェクト配置を含む）を参照にして、**変更点だけ**をプロンプトで指示する。1 回目の生成では、YouTube 用のテキスト付きサムネ候補を作る。
 
 **重要**: 参照画像と同じ要素（レイアウト、固定オブジェクト、テキスト配置）はプロンプトに含めない。差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。コピーではなくバリエーションを作るのがゴール。
 
@@ -277,13 +289,26 @@ uv run yt-generate-image "${REF_ARGS[@]}" \
 
 stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: false` を上書きする（default のみで生成される）。
 
-4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
-5. 背景画像（テキストなし）も必要な場合は、テキストなしの参照画像で別途生成
+4. `open` でプレビュー → `/thumbnail-compare` で 320px 視認性検証 → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
+5. 承認済み `thumbnail.jpg` を参照画像にして、テキストなし動画背景を AI 再生成:
+
+```bash
+uv run yt-generate-image \
+  --reference <collection-path>/10-assets/thumbnail.jpg \
+  --prompt "<textless background regeneration prompt>" \
+  --output <collection-path>/10-assets/main-v1.jpg -y
+```
+
+テキストなし再生成プロンプトでは、参照画像の構図・主役スケール・光・色温度・背景テクスチャは維持し、タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名だけを除去する。新しいテキストを追加しないことを明示する。
+
+6. `open` でプレビュー → ユーザー承認 → `cp main-v1.jpg main.png`（PNG が不要な運用では `main.jpg` でも可）
+7. `20-documentation/thumbnail-prompts.md` に、テキスト付き生成プロンプトとテキストなし再生成プロンプトの両方を保存する
 
 #### 運用上の注意
 
 - **リトライ前提**: 画像生成プロバイダーは同一プロンプトでも瞬発的にエラーを返す。各 attempt 内で内蔵リトライ最大 2 回が走る
 - **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで継承される。変えたい部分だけ明示指示
+- **テキストなし版の作成**: `main.png/jpg` は `thumbnail.jpg` から文字だけを取り除いた動画背景素材として再生成する。文字入り `thumbnail.jpg` をそのまま動画背景や `/loop-video` 入力にしない
 - **コスト**: 事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を指定したときのみ CLI 表示に出る。未指定なら「不明」と表示され、実コストは GCP Cloud Console > Billing で確認する（`max_attempts × 1 リクエスト` ＋ 各 attempt で内蔵リトライ最大 2 回）
 
 #### 失敗時の対処
@@ -309,6 +334,8 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 - [ ] `diff_prompt_template` に `${ip_safety_clause}` 相当の除外句（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を含めている (#569)。参照元ベンチマークサムネに署名・サイン・透かし・チャンネルロゴ等の識別マークがある場合は特に必須
 - [ ] stock 合成（#364）の扱いを確認し、`image_generation.gemini.reference_images.stock.enabled` が意図どおりになっている
 - [ ] サムネ承認**前**に `/thumbnail-compare` を実行し、320px 縮小時の文字可読性・コントラスト・主役認識を検証する段取りになっている
+- [ ] 承認済み `thumbnail.jpg` からテキストなし `main.png/jpg` を AI 再生成する段取りになっている
+- [ ] `20-documentation/thumbnail-prompts.md` にテキスト付き生成プロンプトとテキストなし再生成プロンプトの両方を保存する段取りになっている
 
 チェック通過後に本章上部の手順へ戻って `/thumbnail` を進める。CLI エラーで止まったときは、このチェックリストではなく本章上部の `#### プリフライト` を参照する。
 
@@ -392,16 +419,16 @@ Phase 2 生成後:
 *モデル: {image_generation.gemini.model}*
 *参照画像: <使用した参照画像>*
 
-## Video Background Prompt (main.png)
+## Text-Included Thumbnail Prompt (thumbnail.jpg)
 
 \```
-<生成に使用したプロンプト>
+<ベンチマーク参照画像からテキスト付きサムネを生成したプロンプト>
 \```
 
-## Text Overlay Prompt (thumbnail.jpg)
+## Textless Background Regeneration Prompt (main.png/main.jpg)
 
 \```
-<テキストオーバーレイ指示>
+<承認済み thumbnail.jpg からテキストなし背景を再生成したプロンプト>
 \```
 ```
 
@@ -409,10 +436,11 @@ Phase 2 生成後:
 
 | ファイル | 用途 |
 |---------|------|
-| `main.png` | 動画背景（テキストなし） |
-| `main-v{N}.jpg` | 背景候補 |
+| `thumbnail.jpg` | YouTube アップロード用のテキスト付き最終サムネ |
 | `thumbnail-v{N}.jpg` | テキスト付き候補 |
-| `thumbnail.jpg` | **最終承認後にベスト版をコピー** |
+| `main.png` / `main.jpg` | 動画背景・`/loop-video` 入力用のテキストなし最終画像 |
+| `main-v{N}.jpg` | テキストなし背景候補 |
+| `loop.mp4` | `loop-video` 有効チャンネルだけで生成する動画背景。無効チャンネルでは作らない |
 
 ### クリーンアップ（承認後に必ず実行・stock 退避）
 
