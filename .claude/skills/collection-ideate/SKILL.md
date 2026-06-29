@@ -179,7 +179,7 @@ else:
 
 例（`cost_per_image_usd` が設定済み・parallel・`candidate_count=3` の場合）: `3 枚 × $0.101 = $0.303 (parallel / gemini-3.1-flash-image-preview / 2K)`
 
-**ユーザーが拒否した場合** → サムネ生成を完全スキップしテキストのみで提示（プレビューサムネイル生成はブロッキングにしない）。`main.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` が `main.png` 不在を検出して Phase 1 から本番サムネを新規生成する（Next Step の「コスト拒否 / 生成失敗で main.png が無い場合」参照）。
+**ユーザーが拒否した場合** → プレビュー画像生成を完全スキップしテキストのみで提示（企画参照画像生成はブロッキングにしない）。`planning-preview.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する（Next Step の「コスト拒否 / 生成失敗で企画参照画像が無い場合」参照）。
 
 **4-3: セッションディレクトリ作成**
 
@@ -203,7 +203,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 - **`single_step` の場合**: `image_generation.gemini.diff_prompt_template` をベースに、オブジェクトデザインルール（`ideate.objects` が定義されている場合）に従って企画ごとのオリジナルオブジェクトを指定。
   - **背景色**: `image_generation.gemini.brand_background` を使用（定義がある場合）。全コレクション統一
   - **差別化はオブジェクトで行う**: `ideate.objects.swappable` で定義されたスロットを企画ごとに変える
-  - **キャラ + 手が写る構図では `${anatomy_clause}` を全企画プロンプトに展開する**（#570）。`single_step` プレビューが `/wf-new` Phase 2c でそのまま最終 thumbnail に流用されるため、ここで anatomy 強調 clause が当たっていないと、Gemini の手・指破綻（指の融合・本数異常・溶融）が公開サムネに混入する経路ができる
+  - **キャラ + 手が写る構図では `${anatomy_clause}` を全企画プロンプトに展開する**（#570）。`single_step` プレビューは企画参照素材として保存され、最終 `thumbnail.jpg` には流用しない。ただし参照素材の手・指破綻（指の融合・本数異常・溶融）が後段 `/thumbnail` の方向性に影響するため、ここで anatomy 強調 clause を当てておく
   - **IP / 版権セーフティ clause を常時付与 (#569)**: ベンチマーク TTP 由来の署名・サイン・透かし・ロゴが焼き込まれないよう、`single_step.ip_safety_clause`（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を全企画プロンプトに含める。`diff_prompt_template` 自体に組み込んでおけば 4-1 で生成するテキスト案にも自動で含まれる
   - 具体的な差分プロンプトの書き方は `references/object-design-examples.md` を参照
 

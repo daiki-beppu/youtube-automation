@@ -10,6 +10,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
+_VIDEOUP_SKILL_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "SKILL.md"
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -101,6 +102,36 @@ fi
 output_path="${!#}"
 mkdir -p "$(dirname "$output_path")"
 printf 'stub-output' > "$output_path"
+""",
+    )
+    _write_executable(
+        bin_dir / "jq",
+        """#!/bin/bash
+set -eu
+expr=""
+file=""
+for arg in "$@"; do
+    if [[ "$arg" != "-r" ]]; then
+        expr="$arg"
+        break
+    fi
+done
+for arg in "$@"; do
+    file="$arg"
+done
+
+case "$expr" in
+    *".overlays.enabled // false"*)
+        if [[ -f "$file" ]] && grep -Eq '"enabled"[[:space:]]*:[[:space:]]*true' "$file"; then
+            printf 'true\\n'
+        else
+            printf 'false\\n'
+        fi
+        ;;
+    *".overlays.audio_visualizer.enabled"*) printf 'false\\n' ;;
+    *".overlays.subscribe_popup.enabled"*) printf 'false\\n' ;;
+    *) printf '\\n' ;;
+esac
 """,
     )
     return bin_dir
@@ -200,6 +231,43 @@ def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
     master_cmd = _master_ffmpeg_command(ffmpeg_log)
     assert "10-assets/main.png" in master_cmd
     assert "10-assets/main.jpg" not in master_cmd
+
+
+def test_overlay_static_background_uses_textless_main_png(tmp_path: Path) -> None:
+    """#1310: overlay 経路でも thumbnail.* ではなく textless main.png を背景入力にする。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "loop.mp4").unlink()
+    (assets_dir / "main.png").write_bytes(b"fake-png-background")
+    (assets_dir / "thumbnail.jpg").write_bytes(b"text-included-thumbnail")
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+        extra_env={"OVERLAYS_CONFIG": str(overlays_config)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Overlays : enabled" in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "10-assets/main.png" in master_cmd
+    assert "10-assets/thumbnail.jpg" not in master_cmd
+
+
+def test_videoup_skill_documents_current_overlay_support() -> None:
+    """#1310: videoup 文書は overlay 未実装時代の説明を残さない。"""
+    skill = _VIDEOUP_SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "`generate_videos.sh` は `config/channel/youtube.json::overlays.enabled: true`" in skill
+    assert "filter_complex" in skill
+    assert "Suno 側ではなく `/videoup` の overlays 設定で反映する" in skill
+    assert "未実装" not in skill
+    assert "v12.x にはこの filter 経路が無い" not in skill
+    assert "#511 の実装を待つ" not in skill
 
 
 def test_24fps_loop_skips_normalization(tmp_path: Path) -> None:

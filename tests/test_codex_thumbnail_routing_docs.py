@@ -8,6 +8,8 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
+_IDEATE_DEFAULT_CONFIG = _SKILLS_DIR / "collection-ideate" / "config.default.yaml"
+_IDEATE_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "collection-lifecycle.md"
 _WF_NEW_SKILL_MD = _SKILLS_DIR / "wf-new" / "SKILL.md"
 
 
@@ -181,3 +183,36 @@ def test_collection_ideate_next_step_keeps_preview_out_of_main_background() -> N
         not in block
     )
     assert "Phase 2 からテキストオーバーレイのみ実行" not in block
+
+
+def test_collection_ideate_cost_rejection_uses_new_thumbnail_contract() -> None:
+    """Given collection-ideate cost rejection
+    Then it does not route back to old main.png Phase 1 fallback.
+    """
+    text = _read(_IDEATE_SKILL_MD)
+
+    assert "後段の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成" in text
+    assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成" in text
+    assert "`planning-preview.png` は未生成のまま Next Step に進み" in text
+    assert "`main.png` 不在を検出して Phase 1" not in text
+    assert "プレビューが `/wf-new` Phase 2c でそのまま最終 thumbnail に流用" not in text
+
+
+def test_collection_ideate_config_and_lifecycle_reference_new_thumbnail_contract() -> None:
+    """Given distributed collection-ideate docs/config
+    Then preview, upload thumbnail, and textless background roles are explicit.
+    """
+    config = _read(_IDEATE_DEFAULT_CONFIG)
+    lifecycle = _read(_IDEATE_LIFECYCLE_MD)
+
+    assert "採用 1 枚 planning-preview.png + 残り stock 退避" in config
+    assert "planning-preview.png は企画参照素材" in config
+    assert "最終 thumbnail.jpg と textless main.png/jpg は後段 /thumbnail で別生成" in config
+    assert "採用 1 枚 main.png" not in config
+
+    assert "thumbnail.jpg, textless main.png/jpg, planning-preview.png" in lifecycle
+    assert "テキスト付き `10-assets/thumbnail.jpg`" in lifecycle
+    assert "textless `10-assets/main.png` または `main.jpg`" in lifecycle
+    assert "サムネイル作成（テキスト付き thumbnail.jpg）" in lifecycle
+    assert "textless 動画背景作成（main.png または main.jpg）" in lifecycle
+    assert "画像生成 → `10-assets/thumbnail.jpg`" not in lifecycle

@@ -232,29 +232,28 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 ## オーディオビジュアライザー / オーバーレイについて
 
-**現状: 未実装（feature 化を #511 で追跡中）**
-
-`generate_videos.sh` は現時点で**オーディオビジュアライザー（波形・スペクトラム表示）や購読ボタンポップアップ等のオーバーレイ合成をサポートしていない**。出力は textless `main.png/jpg`（静止画背景）または `loop.mp4`（ループ動画背景）に音声を重ねただけの動画になる。
+`generate_videos.sh` は `config/channel/youtube.json::overlays.enabled: true` のときだけ、audio visualizer や subscribe popup を `filter_complex` で合成する。無効時または `jq` 不在時は従来の textless `main.png/jpg`（静止画背景）または `loop.mp4`（ループ動画背景）に音声を重ねる経路を維持する。
 
 ### よくある誤解 (#646 feedback)
 
-「Suno のデータ取り込み時にビジュアライザーを付けて」とユーザーが指示しても、ビジュアライザーは付かない。理由:
+「Suno のデータ取り込み時にビジュアライザーを付けて」とユーザーが指示しても、Suno / Lyria / masterup の工程ではビジュアライザーは付かない。理由:
 
 - `/suno` / `/lyria` / `/masterup` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
-- ビジュアライザーは本質的に**動画生成（`generate_videos.sh`）側の合成処理**で、`ffmpeg` の `filter_complex` に `showfreqs` 等を組む必要がある
-- 現状の `generate_videos.sh` v12.x にはこの filter 経路が無いため、どの工程でどう指示しても最終 MP4 にビジュアライザーは反映されない
+- ビジュアライザーは本質的に**動画生成（`generate_videos.sh`）側の合成処理**で、`ffmpeg` の `filter_complex` に `showfreqs` 等を組む
+- 反映したい場合は `config/channel/youtube.json::overlays.enabled: true` と必要な overlay 設定を用意してから `/videoup` を実行する
 
-### 正しい運用（実装されるまでの暫定）
+### 正しい運用
 
-- ビジュアライザーが必要な動画は、現状では `master-mix.{wav,m4a}` と `main.png` で `generate_videos.sh` を回した後、**外部ツール（DaVinci Resolve / After Effects / ffmpeg 手書きスクリプト）で別途オーバーレイ合成する**
-- 自動化フローに取り込みたい場合は #511（`overlays.enabled` config-driven 合成）の進捗を待つ。マージされ次第、`config/channel/youtube.json::overlays.audio_visualizer.enabled: true` でチャンネル単位で有効化できるようになる予定
+- ビジュアライザーが必要な動画は、`config/channel/youtube.json::overlays.enabled: true` にしたうえで `overlays.audio_visualizer.enabled: true` を設定して `/videoup` を実行する
+- popup も必要なら `overlays.subscribe_popup.enabled: true` と画像パスを設定する。画像が見つからない場合は popup だけスキップし、visualizer は継続する
+- overlays 無効チャンネルでは従来どおり textless `main.png/jpg` または `loop.mp4` のみで生成する
 
 ### Claude への指示時の注意
 
-オペレーターから「ビジュアライザー付きで」「波形表示で」等の指示があった場合は、**この制約を即座に明示してから作業を進めること**。「Suno に指示しても載らない」「現状の videoup では合成できない」「#511 が必要」を伝えた上で、
+オペレーターから「ビジュアライザー付きで」「波形表示で」等の指示があった場合は、**Suno 側ではなく `/videoup` の overlays 設定で反映する**ことを明示してから作業を進めること。その上で、
 
+- overlays を有効にして生成するか
 - 静止画 / ループ動画のみで進めるか
-- #511 の実装を待つか
 - 外部ツールで後付けするか
 
 をユーザーに選んでもらう。黙って静止画で生成すると今回のような FB（期待と実装の乖離）が再発する。

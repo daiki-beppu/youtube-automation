@@ -211,11 +211,52 @@ def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs()
 
     for required in (
         "`thumbnail.jpg` | YouTube アップロード用のテキスト付き最終サムネ",
+        "`thumbnail-v{N}.jpg` / `thumbnail-v{N}.png` / `thumbnail-codex-v{N}.png` | テキスト付き候補",
         "`main.png` / `main.jpg` | 動画背景・`/loop-video` 入力用のテキストなし最終画像",
+        "`main-v{N}.png` / `main-v{N}.jpg` | テキストなし背景候補",
         "`loop.mp4` | `loop-video` 有効チャンネルだけで生成する動画背景",
         "無効チャンネルでは作らない",
     ):
         assert required in naming_block
+
+
+def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa() -> None:
+    """#1310: 品質チェックは文字入り thumbnail と textless main を逆に扱わない。"""
+    skill = _read_thumbnail_skill()
+    qa_block = _slice_between(skill, "## 品質チェック", "## 視認性検証")
+
+    for required in (
+        "テキスト付き thumbnail 候補生成後",
+        "`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`",
+        "/thumbnail-compare",
+        "タイトル可読性",
+        "`thumbnail_text.channel_name` が表示されているか",
+        "textless main 候補生成後",
+        "`main-v1.png` / `main-v1.jpg`",
+        "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
+        "yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+    ):
+        assert required in qa_block
+
+    assert "Phase 1 生成後" not in qa_block
+    assert "Phase 2 生成後" not in qa_block
+    assert "テキストが入っていないか" not in qa_block
+    assert "single_step プレビューを最終 thumbnail に流用" not in qa_block
+
+
+def test_thumbnail_skill_cleanup_archives_png_candidates() -> None:
+    """#1310: 承認後 cleanup は main/thumbnail の PNG 候補も stock 退避する。"""
+    skill = _read_thumbnail_skill()
+    cleanup_block = _slice_between(skill, "### クリーンアップ", "### `workflow-state.json` 更新")
+
+    for required in (
+        "10-assets/main-v*.png",
+        "10-assets/main-v*.jpg",
+        "10-assets/thumbnail-v*.jpg",
+        "10-assets/thumbnail-v*.png",
+        "10-assets/thumbnail-codex-v*.png",
+    ):
+        assert required in cleanup_block
 
 
 def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
