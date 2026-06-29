@@ -1,6 +1,6 @@
 # suno skill default config
 #
-# SunoAI v5 用プロンプト生成の設定。チャンネル側で config/skills/suno.yaml に上書き。
+# SunoAI V5.5 用プロンプト生成の設定。チャンネル側で config/skills/suno.yaml に上書き。
 
 # Suno ワークスペース名 (UI 表示用)
 workspace_name: ""
@@ -13,10 +13,10 @@ genre_line: ""
 exclude_styles: "heavy metal, aggressive, EDM, dubstep, techno, industrial, white noise, orchestral, rain sounds, vinyl crackle, ambient noise"
 
 # Style Influence (0-100、高いほどジャンル指定が強く反映される)
-style_influence: 95
+style_influence: 50
 
 # Weirdness (0-100、高いほど予測不能な展開が増える)
-weirdness: 10
+weirdness: 50
 
 # 歌詞構造の自動タグ付け ([Verse], [Chorus] 等を AI が自動挿入)
 auto_lyrics_structure: true
@@ -58,8 +58,8 @@ banned_artists:
   - Nujabes
   - J Dilla
 
-# Model (V5 推奨)
-model: V5
+# Model (V5.5 推奨)
+model: V5.5
 
 # スタイルバリアント (A/B テスト用、省略可)
 # 各パターンで style: <key> を指定すると variant 固有の genre_line が使われる

@@ -14,6 +14,7 @@ import yaml
 
 from youtube_automation.scripts.suno_artifacts import (
     DOCUMENTATION_DIRNAME,
+    SUNO_LYRICS_JSON_FILENAME,
     SUNO_PATTERNS_FILENAME,
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_MD_FILENAME,
@@ -185,12 +186,12 @@ class _ResolvedPattern:
     style_label: str
     style_line: str
     scenes: list[str]
-    lyrics: str  # rstrip 済み。歌詞が無ければ ""
+    lyrics_by_scene: list[str]  # scenes と同じ長さ。各値は rstrip 済み。歌詞が無ければ ""
 
 
 # suno-prompts.json へ wire する More Options の key 一覧 (#900, vocal_gender 追加)。
 # JSON への反映は **channel override (config/skills/suno.yaml) に明示設定されたキーのみ**。
-# config.default.yaml 同梱の既定値 (style_influence: 85 等) は JSON には載せない
+# config.default.yaml 同梱の既定値 (style_influence: 50 等) は JSON には載せない
 # (= 「何も足さない既存 collection は name/style/lyrics の 3 キーちょうど」の後方互換を守るため)。
 # MD 出力は従来どおり merged 値 (既定込み) を表示する。
 # vocal_gender は suno-helper 拡張が Suno UI Voice section の Male / Female ボタン押下に使う
@@ -292,6 +293,46 @@ def _validate_unique_titles(yaml_path: Path, entry_names: list[str]) -> None:
     )
 
 
+def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
+    """`suno-lyrics.json` から entry name -> lyrics を読み込む.
+
+    `/suno-lyric` は lyrics 専任で、`/suno` がここで Style と結合する。ファイルがなければ
+    後方互換として空 dict を返し、従来どおり `suno-patterns.yaml::patterns[].lyrics` を使う。
+    """
+    if not lyrics_path.exists():
+        return {}
+
+    try:
+        raw = json.loads(lyrics_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME} is invalid JSON: {lyrics_path}") from exc
+
+    if not isinstance(raw, list):
+        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME} root must be a list: {lyrics_path}")
+
+    lyrics_by_name: dict[str, str] = {}
+    duplicates: set[str] = set()
+    for i, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i} must be an object")
+        name = item.get("name") or item.get("title")
+        lyrics = item.get("lyrics")
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
+        if not isinstance(lyrics, str):
+            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.lyrics must be a string")
+        clean_name = name.strip()
+        if clean_name in lyrics_by_name:
+            duplicates.add(clean_name)
+        lyrics_by_name[clean_name] = lyrics.rstrip()
+
+    if duplicates:
+        duplicate_names = ", ".join(sorted(duplicates))
+        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: duplicated lyrics entry names: {duplicate_names}")
+
+    return lyrics_by_name
+
+
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
@@ -306,7 +347,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     exclude_styles = suno.get("exclude_styles", "") or fb_exclude
     style_variants = suno.get("style_variants", {})
     style_influence = suno.get("style_influence", 50)
-    weirdness = suno.get("weirdness", 10)
+    weirdness = suno.get("weirdness", 50)
 
     base_parts = [genre_line]
     if mood_descriptors:
@@ -323,6 +364,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     auto_vocal = any(kw in genre_line.lower() for kw in vocal_keywords)
     mode = data.get("mode", "vocal" if auto_vocal else "instrumental")
     is_vocal = mode == "vocal"
+    external_lyrics = _load_external_lyrics(patterns_path.parent / SUNO_LYRICS_JSON_FILENAME) if is_vocal else {}
 
     resolved: list[_ResolvedPattern] = []
     for pattern in patterns:
@@ -338,15 +380,24 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             effective_style = base_style
             style_label = ""
 
+        scenes = pattern["scenes"]
         raw_lyrics = pattern.get("lyrics")
+        fallback_lyrics = raw_lyrics.rstrip() if raw_lyrics else ""
+        base_name = f"{pattern['name_jp']} — {pattern['name_en']}"
+        multi = len(scenes) > 1
+        lyrics_by_scene = []
+        for j in range(1, len(scenes) + 1):
+            entry_name = f"{base_name} (Variation {j})" if multi else base_name
+            lyrics_by_scene.append(external_lyrics.get(entry_name, fallback_lyrics))
+
         resolved.append(
             _ResolvedPattern(
                 name_jp=pattern["name_jp"],
                 name_en=pattern["name_en"],
                 style_label=style_label,
                 style_line=_style_line(tempo, effective_style),
-                scenes=pattern["scenes"],
-                lyrics=raw_lyrics.rstrip() if raw_lyrics else "",
+                scenes=scenes,
+                lyrics_by_scene=lyrics_by_scene,
             )
         )
 
@@ -419,11 +470,12 @@ def generate(patterns_path: Path) -> str:
                 lines.append(resolved.exclude_styles)
                 lines.append("```")
 
-            if resolved.is_vocal and pattern.lyrics:
+            lyrics = pattern.lyrics_by_scene[j - 1]
+            if resolved.is_vocal and lyrics:
                 lines.append("")
                 lines.append("**Lyrics:**")
                 lines.append("```")
-                lines.append(pattern.lyrics)
+                lines.append(lyrics)
                 lines.append("```")
 
         lines.append("")
@@ -476,7 +528,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             report.errors.extend(validate_banned_artists(full_style, banned_artists))
 
             # auto_lyrics_structure: 歌詞構造の自動補強 (#904)
-            lyrics = pattern.lyrics if resolved.is_vocal else ""
+            lyrics = pattern.lyrics_by_scene[j - 1] if resolved.is_vocal else ""
             if auto_lyrics:
                 lyrics = apply_auto_lyrics_structure(lyrics, is_vocal=resolved.is_vocal)
 

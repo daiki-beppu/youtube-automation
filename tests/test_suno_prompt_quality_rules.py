@@ -318,8 +318,8 @@ def test_default_yaml_has_quality_rule_keys():
     """config.default.yaml に #904 で追加した品質ルール関連キーが存在すること."""
     data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
 
-    assert data["style_influence"] == 95, "style_influence は 85 → 95 に変更されるべき"
-    assert data["weirdness"] == 10, "weirdness: 10 が追加されるべき"
+    assert data["style_influence"] == 50, "style_influence の既定値は 50"
+    assert data["weirdness"] == 50, "weirdness の既定値は 50"
     assert data["auto_lyrics_structure"] is True, "auto_lyrics_structure: true が追加されるべき"
     assert data["style_char_limit"] == 120, "style_char_limit: 120 が追加されるべき"
     assert isinstance(data["banned_artists"], list), "banned_artists はリスト型であるべき"
