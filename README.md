@@ -50,7 +50,11 @@ channel-repo/                  # チャンネル固有リポジトリ
 │   │   ├── analytics.json     #   analytics / benchmark (optional)
 │   │   ├── playlists.json     #   playlists (optional)
 │   │   ├── workflow.json      #   (optional, 拡張用 reserved)
-│   │   └── audio.json         #   audio (optional)
+│   │   ├── audio.json         #   audio (optional)
+│   │   ├── shorts.json        #   shorts (optional)
+│   │   ├── comments.json      #   comments (optional)
+│   │   ├── pinned-comment.json # pinned_comment (optional)
+│   │   └── distrokid.json     #   distrokid (optional)
 │   └── localizations.json     # 多言語テンプレート
 ├── auth/                      # OAuth 2.0 認証情報 (channel 固有)
 │   ├── client_secrets.json
@@ -113,7 +117,7 @@ yt-skills sync --asset skills --prune --yes  # 列挙したうえで実際に削
 
 ### 3. チャンネル設定を作成
 
-`config/channel/*.json`（責務別分割の 4〜7 ファイル）と `config/localizations.json` を作成します。
+`config/channel/*.json`（責務別分割の必須ファイル + optional ファイル）と `config/localizations.json` を作成します。
 サンプルは [`examples/channel_config.example/`](examples/channel_config.example/) と [`examples/localizations.example.json`](examples/localizations.example.json) を参照してください。
 
 v1.x から v2.0.0 へ移行するチャンネルは [`docs/migration/v2-config-split.md`](docs/migration/v2-config-split.md) の手順に従い、`uv run yt-config-migrate migrate --apply` で旧 `config/channel_config.json` を自動分割できます。
@@ -169,7 +173,7 @@ nix develop
 
 ### config/channel/*.json
 
-チャンネルのメタデータ、ジャンル、タグ、タイトルテンプレートなどを責務別 7 ファイルに分割して定義します（v2.0.0 以降）。
+チャンネルのメタデータ、ジャンル、タグ、タイトルテンプレートなどを責務別ファイルに分割して定義します（v2.0.0 以降）。
 
 | ファイル | 責務 |
 |---|---|
@@ -180,8 +184,12 @@ nix develop
 | `playlists.json` | `playlists` (optional) |
 | `workflow.json` | (optional, 拡張用 reserved) |
 | `audio.json` | `audio` (optional) |
+| `shorts.json` | `shorts` (optional) |
+| `comments.json` | `comments` (optional) |
+| `pinned-comment.json` | `pinned_comment` (optional) |
+| `distrokid.json` | `distrokid` (optional) |
 
-詳細なフィールド説明は [`examples/channel_config.example/`](examples/channel_config.example/) を参照してください。多言語テンプレートは `config/localizations.json` に集約します（単一ソース）。
+詳細なフィールド説明は [`examples/channel_config.example/`](examples/channel_config.example/) を参照してください。多言語テンプレートは `config/localizations.json` に集約します（単一ソース）。`community.example.json` は `/community-post` が直接読む skill-local raw JSON の雛形で、共通 config loader の必須/optional section ではありません。
 
 ### 環境変数
 

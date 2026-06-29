@@ -1,7 +1,7 @@
 """テーマ/コレクション別 launch curve 比較分析
 
 Phase 1 の launch_curve_data の DataFrame を再利用し、
-channel_config.theme_tags のキーワードでテーマ分類、
+config/channel/content.json::tags.themes のキーワードでテーマ分類、
 各テーマの平均曲線とピーク日齢を AI 消費向けに集計する。
 """
 

@@ -83,7 +83,7 @@ phase 値と日本語ラベル:
 ### 補足
 
 - `workflow-state.json` が存在しないコレクションは「未トラッキング」として表示する
-- スキーマ詳細は `.claude/references/workflow/schema.md` を参照
+- スキーマ詳細は `.claude/skills/wf-new/references/schema.md` を参照
 
 ## 障害時ガイダンス
 
