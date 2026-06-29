@@ -81,7 +81,7 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert "初回は TTP メモと seed fetch 結果を企画根拠として使う" in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_new
     assert "docs/channel/competitor-branding-snapshot.json" in channel_new
-    assert "part=\"snippet,brandingSettings,localizations\"" in channel_new
+    assert 'part="snippet,brandingSettings,localizations"' in channel_new
     assert "`description` / `keywords` / `localizations` / `brandingSettings` は含まない" in channel_new
 
 
