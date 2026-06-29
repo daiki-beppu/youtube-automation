@@ -119,12 +119,11 @@ uv run yt-channel-init \
   --music-engine "<suno|lyria>" \
   --branding-description "<TTP 構造を転写した説明文>" \
   --channel-keyword "<keyword 1>" \
-  --channel-keyword "<keyword 2>" \
-  --benchmark-channel "UC...|slug|Channel Name|title structure + thumbnail composition"
+  --channel-keyword "<keyword 2>"
 ```
 
-TTP 対象がこの時点で channel ID まで確定している場合は、`--benchmark-channel` を初回の同一コマンドに含める。
-既存ファイルは `--force` がない限り上書きされないため、初回生成後に `yt-channel-init --benchmark-channel ...` だけを再実行しても `config/channel/analytics.json` には追加されない。
+TTP 対象がこの時点で channel ID まで分かっている場合も、Step 4 では `benchmark.channels` へ書き込まない。
+候補 URL / handle / channel ID と関係性メモだけを残し、Step 5 の実データ確認とユーザー承認後に反映する。
 
 生成対象:
 
