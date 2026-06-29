@@ -174,12 +174,19 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
             tmp.unlink()
         raise RuntimeError(f"ffmpeg cleanup failed ({path.name}, rc={proc.returncode}):\n{proc.stderr}")
 
-    if cfg.backup_originals:
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(path, backup)
-    else:
-        path.unlink()
-    os.replace(tmp, path)
+    backup_created = False
+    try:
+        if cfg.backup_originals:
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(path, backup)
+            backup_created = True
+        os.replace(tmp, path)
+    except OSError:
+        if backup_created and backup.exists() and not path.exists():
+            os.replace(backup, path)
+        if tmp.exists():
+            tmp.unlink()
+        raise
     if not quiet:
         print(f"cleaned: {path.name}")
     return True

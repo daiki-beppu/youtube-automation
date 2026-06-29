@@ -560,6 +560,21 @@ def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     return origin in _DEFAULT_ALLOWED_WEB_ORIGINS
 
 
+def _is_read_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
+    """Read-only GET/OPTIONS CORS 判定.
+
+    Token/mutating endpoints are locked by `is_origin_allowed` +
+    `_is_exact_extension_origin_lock`; read-only routes must remain reachable from
+    the suno.com overlay content script even when `--allow-origin` locks writes to
+    one extension origin.
+    """
+    if not origin:
+        return False
+    if allow_origin is None:
+        return is_origin_allowed(origin, allow_origin)
+    return origin == allow_origin or origin in _DEFAULT_ALLOWED_WEB_ORIGINS
+
+
 def _is_exact_extension_origin_lock(raw_origin: str | None, allow_origin: str | None) -> bool:
     """Token/mutating endpoints require an explicit extension Origin lock."""
     return (
@@ -611,6 +626,8 @@ def create_server(
             if headers is None:
                 return None
             origin = headers.get("Origin")
+            if self.command in {"GET", "HEAD", "OPTIONS"}:
+                return origin if _is_read_origin_allowed(origin, allow_origin) else None
             return origin if is_origin_allowed(origin, allow_origin) else None
 
         def _send_cors(self, origin: str | None) -> None:

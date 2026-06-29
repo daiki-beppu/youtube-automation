@@ -106,6 +106,68 @@ def test_process_file_apply_backs_up_original_and_replaces(tmp_path: Path, monke
     assert source.read_bytes() == b"cleaned"
 
 
+def test_process_file_apply_without_backup_preserves_original_when_replace_fails(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["01-a.mp3"])
+    source = collection / "02-Individual-music" / "01-a.mp3"
+
+    monkeypatch.setattr(mod, "probe_duration", lambda _path: 60)
+    monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    def fake_run(cmd, capture_output, text):
+        Path(cmd[-1]).write_bytes(b"cleaned")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    def fail_replace(src, dst):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(mod.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        process_file(
+            source,
+            CleanupConfig(enabled=True, backup_originals=False),
+            apply=True,
+            force=False,
+            quiet=True,
+        )
+
+    assert source.read_bytes() == b"audio"
+    assert not (source.parent / ".01-a.cleanup-tmp.mp3").exists()
+
+
+def test_process_file_apply_with_backup_restores_original_when_final_replace_fails(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["01-a.mp3"])
+    source = collection / "02-Individual-music" / "01-a.mp3"
+    tmp_output = source.parent / ".01-a.cleanup-tmp.mp3"
+    backup = collection / "02-Individual-music" / "originals-pre-cleanup" / "01-a.mp3"
+
+    monkeypatch.setattr(mod, "probe_duration", lambda _path: 60)
+    monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    def fake_run(cmd, capture_output, text):
+        Path(cmd[-1]).write_bytes(b"cleaned")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    real_replace = mod.os.replace
+
+    def fail_final_replace(src, dst):
+        if Path(src) == tmp_output and Path(dst) == source:
+            raise OSError("final replace failed")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(mod.os, "replace", fail_final_replace)
+
+    with pytest.raises(OSError, match="final replace failed"):
+        process_file(source, CleanupConfig(enabled=True), apply=True, force=False, quiet=True)
+
+    assert source.read_bytes() == b"audio"
+    assert not backup.exists()
+    assert not tmp_output.exists()
+
+
 def test_process_file_skips_when_backup_exists(tmp_path: Path) -> None:
     collection = _make_collection(tmp_path, ["01-a.mp3"])
     source = collection / "02-Individual-music" / "01-a.mp3"
