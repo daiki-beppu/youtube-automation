@@ -52,7 +52,6 @@ PACKAGE_FILES: tuple[str, ...] = (
     "auth/client_secrets.template.json",
     "config/localizations.json",
     "config/schedule_config.json",
-    "config/upload_settings.json",
     "config/skills/suno.yaml",
     "config/skills/thumbnail.yaml",
 )
@@ -247,6 +246,23 @@ def test_main_creates_full_package_files_when_target_is_empty(tmp_path):
     assert rc == 0
     for rel in PACKAGE_FILES:
         assert (tmp_path / rel).is_file(), f"missing package file: {rel}"
+
+
+def test_main_nests_upload_settings_in_schedule_config(tmp_path):
+    # Given/When: フルパッケージ生成を実行
+    rc = main(_required_args(tmp_path))
+
+    # Then: upload_settings は root file ではなく schedule_config.json に内包される
+    assert rc == 0
+    assert not (tmp_path / "config" / "upload_settings.json").exists()
+    schedule = _read_json(tmp_path / "config" / "schedule_config.json")
+    assert schedule["upload_settings"] == {
+        "privacy_status": "private",
+        "category_id": "10",
+        "auto_create_playlist": True,
+        "max_retries": 3,
+        "retry_delay_seconds": 300,
+    }
 
 
 def test_benchmark_channel_args_are_written_to_analytics_json(tmp_path):

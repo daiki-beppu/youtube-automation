@@ -4,7 +4,7 @@
 
 ```
 XXX-collection-name/
-├── 01-master/           # マスター音声・動画（master.mp3, *.mp4）
+├── 01-master/           # マスター音声・動画（*.mp3, *.mp4）
 ├── 02-Individual-music/ # 個別音声ファイル（*.mp3）
 ├── 03-Individual-movie/ # 個別動画ファイル（MP4）
 ├── 10-assets/           # サムネイル・静止画素材（main.png, thumbnail.jpg）

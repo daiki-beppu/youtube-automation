@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """yt-theme-compare: テーマ/コレクション別の launch curve 比較 CLI
 
-Phase 1 の日次データと channel_config.theme_tags を組み合わせ、
+Phase 1 の日次データと config/channel/content.json::tags.themes を組み合わせ、
 各テーマの平均初速とロングテールを AI 消費向け JSON で出力する。
 """
 

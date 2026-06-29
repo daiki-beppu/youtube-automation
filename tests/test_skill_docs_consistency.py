@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from youtube_automation.cli.channel_init_templates import ROOT_JSON_TEMPLATES
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -25,11 +27,16 @@ def test_workflow_schema_reference_points_to_existing_wf_new_schema() -> None:
 def test_analytics_analyze_uses_split_config_namespace_for_themes() -> None:
     text = _read(".claude/skills/analytics-analyze/SKILL.md")
     script = _read("src/youtube_automation/scripts/theme_compare.py")
+    utility = _read("src/youtube_automation/utils/theme_performance.py")
 
     assert "channel_config.tags.themes" not in text
     assert "channel_config.tags.themes" not in script
+    assert "channel_config.tags.themes" not in utility
+    assert "channel_config.theme_tags" not in script
+    assert "channel_config.theme_tags" not in utility
     assert "config/channel/content.json::tags.themes" in text
     assert "config/channel/content.json::tags.themes" in script
+    assert "config/channel/content.json::tags.themes" in utility
     assert "load_config().content.tags.themes" in text
 
 
@@ -44,11 +51,17 @@ def test_scene_phrases_docs_use_root_localizations_path() -> None:
 
 
 def test_channel_setup_keeps_upload_settings_inside_schedule_config() -> None:
-    text = _read(".claude/skills/channel-setup/SKILL.md")
+    setup_text = _read(".claude/skills/channel-setup/SKILL.md")
+    new_text = _read(".claude/skills/channel-new/SKILL.md")
+    root_template_paths = {path.as_posix() for path in ROOT_JSON_TEMPLATES}
 
-    assert "`config/upload_settings.json`" not in text
-    assert "`config/schedule_config.json`" in text
-    assert "`upload_settings`" in text
+    assert "`config/upload_settings.json`" not in setup_text
+    assert "`config/upload_settings.json`" not in new_text
+    assert "config/upload_settings.json" not in root_template_paths
+    assert "config/schedule_config.json" in root_template_paths
+    assert "`config/schedule_config.json`" in setup_text
+    assert "`config/schedule_config.json`" in new_text
+    assert "`upload_settings`" in setup_text
 
 
 def test_video_upload_documents_thumbnail_search_order() -> None:
@@ -88,6 +101,6 @@ def test_collection_lifecycle_uses_mp3_as_common_audio_contract() -> None:
     text = _read(".claude/skills/collection-ideate/references/collection-lifecycle.md")
 
     assert "02-Individual-music/ # 個別音声ファイル（WAV）" not in text
-    assert "01-master/           # マスター音声・動画（master.mp3, *.mp4）" in text
+    assert "01-master/           # マスター音声・動画（*.mp3, *.mp4）" in text
     assert "02-Individual-music/ # 個別音声ファイル（*.mp3）" in text
     assert "WAV は中間成果物" in text
