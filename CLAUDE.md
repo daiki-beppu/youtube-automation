@@ -50,6 +50,10 @@ config/channel/         # 責務別分割設定（v2.0.0 以降）
   playlists.json        # playlists
   workflow.json         # (v4.0.0 で short / community 撤去、後方互換で素通し)
   audio.json            # audio
+  shorts.json           # shorts (optional)
+  comments.json         # comments (optional)
+  pinned-comment.json   # pinned_comment (optional)
+  distrokid.json        # distrokid (optional)
 config/localizations.json
 auth/{client_secrets,token}.json
 .claude/skills/         # yt-skills sync で展開

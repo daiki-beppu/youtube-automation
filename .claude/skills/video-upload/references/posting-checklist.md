@@ -3,7 +3,7 @@
 ## 必須ファイル確認
 
 - [ ] マスター動画（`01-master/00-master.mp4` または `03-Individual-movie/*master*.mp4`）
-- [ ] サムネイル（`10-assets/thumbnail.jpg`）
+- [ ] サムネイル（候補順: `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png` → `10-assets/main.jpg` → `10-assets/main.png`）
 - [ ] 概要欄（`20-documentation/descriptions.md` — `/video-description` スキルで生成済み）
 
 ## コンテンツ品質確認

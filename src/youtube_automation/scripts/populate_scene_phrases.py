@@ -2,7 +2,7 @@
 """コレクションの workflow-state.json.scene_phrases を多言語翻訳で投入する CLI.
 
 `config/channel/content.json::title.theme_scenes[<theme>].scene` を英語ソースとして
-取得し、`config/channel/localizations.json::supported_languages` に列挙された全言語へ
+取得し、`config/localizations.json::supported_languages` に列挙された全言語へ
 Vertex AI Gemini で翻訳して `collections/<sub>/<collection>/workflow-state.json` の
 `scene_phrases` フィールドに書き込む。
 

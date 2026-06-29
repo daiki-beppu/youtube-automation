@@ -85,7 +85,9 @@ def main() -> int:
 
         theme_keywords = config.content.tags.themes or {}
         if not theme_keywords:
-            raise ConfigError("channel_config.tags.themes が未設定です。テーマ比較を行うには設定してください。")
+            raise ConfigError(
+                "config/channel/content.json::tags.themes が未設定です。テーマ比較を行うには設定してください。"
+            )
 
         theme_video_map = classify_videos_by_theme(meta, theme_keywords)
         analysis = analyze_theme_performance(df, theme_video_map, peak_days=peak_days)

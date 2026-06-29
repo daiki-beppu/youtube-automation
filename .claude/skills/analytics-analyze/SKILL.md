@@ -61,7 +61,7 @@ $ARGUMENTS
 
 - **`yt-launch-curve --latest`**: 新作動画の投稿後 N 日時点のパフォーマンスを、過去動画の同日齢ベンチマーク (p25/p50/p75) と比較。判定・`trace`・`all_videos` ランキングを返す。新作の初速評価や「過去の成功パターン vs 今の初速」の判断に必須。
 - **`yt-channel-trend`**: 日次 views/subs の移動平均、週次集計、前週比、z-score ベースの異常検知 (spike/dip)、up/flat/down トレンド判定。直近の勢い判断・バズ日特定に使う。
-- **`yt-theme-compare`**: `channel_config.tags.themes` のキーワードでタイトル分類し、各テーマの平均 launch curve・ピーク日齢平均・初速最強/ロングテール最強テーマを返す。テーマ選定の根拠データ。
+- **`yt-theme-compare`**: `config/channel/content.json::tags.themes`（コードからは `load_config().content.tags.themes`）のキーワードでタイトル分類し、各テーマの平均 launch curve・ピーク日齢平均・初速最強/ロングテール最強テーマを返す。テーマ選定の根拠データ。
 - **`yt-thumbnail-correlate --metric views`**: サムネ画像の特徴量 (brightness/contrast/saturation/dominant_hue/colorfulness) と CTR/views/engagement の Pearson 相関。CTR データ未提供時は `--metric views` / `engagement` にフォールバック。次回サムネ制作の方向性。
 
 これらの出力 JSON をそのまま分析の根拠として引用し、「数値 (例: 中央値比 6.3倍)」を含む主張を行うこと。

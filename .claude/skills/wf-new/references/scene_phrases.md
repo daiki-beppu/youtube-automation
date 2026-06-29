@@ -27,7 +27,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> [options]
 
 ## 振る舞い
 
-1. `config/channel/localizations.json::supported_languages` を取得
+1. `config/localizations.json::supported_languages` を取得
 2. **1 言語以下なら no-op で正常終了**（多言語対応していないチャンネルでは scene_phrases 不要のため）
 3. 既存 `scene_phrases` がある場合、`--overwrite` 無指定ならスキップ
 4. 英語ソース取得: `--en` 優先、なければ `content.json::title.theme_scenes` から longest-match
