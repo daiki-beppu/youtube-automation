@@ -312,7 +312,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
 
-  it("Given 保存済み ID と今回再実行 ID が混在 When title fallback を作る Then 今回 ID にだけ今回 entry title を割り当てる", async () => {
+  it("Given 保存済み ID と今回再実行 ID が混在 When title fallback を作る Then 旧 ID と今回 ID に対応 entry title を割り当てる", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
       { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
@@ -342,8 +342,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { titleFallbackMap: Map<string, string> },
     ];
     expect(ids).toEqual([...previousSubmittedClipIds, ...currentSubmittedClipIds]);
-    expect(options.titleFallbackMap.get("old-clip-1")).toBeUndefined();
-    expect(options.titleFallbackMap.get("old-clip-2")).toBeUndefined();
+    expect(options.titleFallbackMap.get("old-clip-1")).toBe("Track One");
+    expect(options.titleFallbackMap.get("old-clip-2")).toBe("Track One");
     expect(options.titleFallbackMap.get("new-clip-1")).toBe("Track Two");
     expect(options.titleFallbackMap.get("new-clip-2")).toBe("Track Two");
   });

@@ -244,7 +244,11 @@ export default defineContentScript({
         );
       }
       const submittedIds = resolvePlaylistClipIds(previousSubmittedClipIds, currentSubmittedIds, expectedClipCount);
-      const titleFallbackMap = buildTitleFallbackMap(entries, order, currentSubmittedIds);
+      const currentTitleFallbackMap = buildTitleFallbackMap(entries, order, currentSubmittedIds);
+      const currentOrder = new Set(order);
+      const previousOrder = entries.map((_, index) => index).filter((index) => !currentOrder.has(index));
+      const previousTitleFallbackMap = buildTitleFallbackMap(entries, previousOrder, previousSubmittedClipIds);
+      const titleFallbackMap = new Map([...previousTitleFallbackMap, ...currentTitleFallbackMap]);
       const selectedCount = await scrollAndMultiSelectByIds(submittedIds, {
         isAborted: () => aborted,
         titleFallbackMap,

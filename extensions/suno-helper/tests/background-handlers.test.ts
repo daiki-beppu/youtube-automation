@@ -778,6 +778,40 @@ describe('background onMessage("startDownload"): 監視開始前の .zip は無�
     expect(sentMessages.filter((m) => m.type === "downloadComplete")).toHaveLength(0);
   });
 
+  it("Given malformed URL の fresh ZIP When complete event が届く Then 完了扱いしない", async () => {
+    const freshStart = new Date().toISOString();
+    const { handlers, sentMessages, createdListeners, downloadListeners } = await loadBackground({
+      searchResultsById: {
+        100: [
+          {
+            filename: "malformed.zip",
+            startTime: freshStart,
+            url: "https://",
+            finalUrl: "not a url",
+          },
+        ],
+      },
+    });
+
+    await handlers.get("startDownload")!({
+      data: { format: "mp3" },
+      sender: { tab: { id: 42 } },
+    });
+
+    createdListeners[0](
+      freshZip(100, {
+        filename: "malformed.zip",
+        startTime: freshStart,
+        url: "https://",
+        finalUrl: "not a url",
+      }),
+    );
+    downloadListeners[0]({ id: 100, state: { current: "complete" } });
+    await flushPromises();
+
+    expect(sentMessages.filter((m) => m.type === "downloadComplete")).toHaveLength(0);
+  });
+
   it("Given onCreated を取り逃した fresh Suno ZIP When complete event だけ届く Then 対象確定して完了通知する", async () => {
     const freshStart = new Date().toISOString();
     const { handlers, sentMessages, downloadListeners, sessionStore } = await loadBackground({

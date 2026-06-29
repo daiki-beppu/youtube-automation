@@ -29,12 +29,11 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     if (!value) {
       return false;
     }
-    try {
-      const { hostname } = new URL(value);
-      return hostname === "suno.com" || TRUSTED_DOWNLOAD_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
-    } catch {
+    if (!URL.canParse(value)) {
       return false;
     }
+    const { hostname } = new URL(value);
+    return hostname === "suno.com" || TRUSTED_DOWNLOAD_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
   };
 
   const isTrustedSunoDownload = (item: chrome.downloads.DownloadItem): boolean =>
