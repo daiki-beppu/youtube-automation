@@ -2,7 +2,13 @@
 // 拡張ライフサイクルのログ、action クリック中継、および overlay ⇄ runner の content↔content 中継を担う。
 // overlay (content script) は `browser.tabs.*` を呼べないため、overlay の no-tabId メッセージを受けて
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
-import { postDownloaded } from "../../shared/api";
+import {
+  fetchCollectionPrompts,
+  fetchCollections,
+  fetchPrompts,
+  postDownloaded,
+  resolveCompatibilityWarning,
+} from "../../shared/api";
 import { describeRelayFailure } from "../components/runner-errors";
 import { captureFromTab } from "../lib/auto-capture";
 import { installDownloadWatcher } from "../lib/download-watcher";
@@ -78,6 +84,26 @@ export default defineBackground(() => {
       throw new Error("sendTrustedCmdP: 送信元タブが特定できません");
     }
     await sendTrustedCmdP(tabId, data.isMac);
+  });
+
+  onMessage("fetchCompatibilityWarning", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCompatibilityWarning");
+    return resolveCompatibilityWarning(data.baseUrl, data.extensionVersion);
+  });
+
+  onMessage("fetchCollections", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCollections");
+    return fetchCollections(data.baseUrl);
+  });
+
+  onMessage("fetchPrompts", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchPrompts");
+    return fetchPrompts(data.baseUrl);
+  });
+
+  onMessage("fetchCollectionPrompts", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCollectionPrompts");
+    return fetchCollectionPrompts(data.baseUrl, data.collectionId);
   });
 
   // runner → background: content script から localhost server へ直接 token 取得しないよう、

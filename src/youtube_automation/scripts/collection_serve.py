@@ -563,16 +563,10 @@ def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
 def _is_read_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     """Read-only GET/OPTIONS CORS 判定.
 
-    Token/mutating endpoints are locked by `is_origin_allowed` +
-    `_is_exact_extension_origin_lock`; read-only routes must remain reachable from
-    the suno.com overlay content script even when `--allow-origin` locks writes to
-    one extension origin.
+    `--allow-origin` 指定時は read-only も exact lock に従う。Suno overlay から
+    必要な read API は background script が extension origin で取得する。
     """
-    if not origin:
-        return False
-    if allow_origin is None:
-        return is_origin_allowed(origin, allow_origin)
-    return origin == allow_origin or origin in _DEFAULT_ALLOWED_WEB_ORIGINS
+    return is_origin_allowed(origin, allow_origin)
 
 
 def _is_exact_extension_origin_lock(raw_origin: str | None, allow_origin: str | None) -> bool:

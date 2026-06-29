@@ -4,15 +4,15 @@ issue #698: #692 の `yt-suno-serve` を `yt-collection-serve` に一般化し�
 エンドポイントをサブパス分離する。`/suno/prompts.json` は #692 と同じ
 配列 JSON を返す（契約不変・ルートのみ `/prompts.json` → `/suno/prompts.json`）。
 CORS はデフォルトで `chrome-extension://` と suno.com / distrokid.com 系 web origin を
-許可する（#896）。`--allow-origin` 指定時も read-only route は helper web origin を
-維持し、token / mutating endpoint は exact extension origin lock にする。
+許可する（#896）。`--allow-origin` 指定時は read-only / token / mutating endpoint の
+すべてを exact origin lock にする。
 
 契約（draft が実装すべき public API）:
 - `resolve_prompts_path(path: Path) -> Path`
     dir → `<dir>/20-documentation/suno-prompts.json` / file → そのまま / 不在 → ConfigError。
 - `is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool`
     allow_origin=None なら `chrome-extension://` scheme と
-    suno.com / distrokid.com 系 web origin を許可。指定時は write/auth 用の完全一致のみ許可。
+    suno.com / distrokid.com 系 web origin を許可。指定時は完全一致のみ許可。
 - `create_server(port, allow_origin, *, prompts_path, collection_dir, distrokid) -> ThreadingHTTPServer`
     `GET /suno/prompts.json` で配列 JSON、`OPTIONS` で preflight を返すサーバーを生成する。
     distrokid は `Distrokid | None`（None / 無効時は `/distrokid/*` が 404）。
@@ -46,6 +46,7 @@ from youtube_automation.scripts.collection_serve import (
 )
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.suno_downloaded_archive import commit_staged_music_files, extract_and_rename_music
+from youtube_automation.utils.suno_downloaded_payload import DownloadedArtifactError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_ORIGIN = "https://suno.com"
@@ -377,10 +378,10 @@ def test_allow_origin_exact_match_locks_to_single_extension(serve):
         assert resp.headers.get("Access-Control-Allow-Origin") is None
 
 
-def test_allow_origin_lock_keeps_read_only_suno_origin(serve):
+def test_allow_origin_lock_rejects_read_only_suno_origin_cors(serve):
     """Given --allow-origin で 1 拡張に固定
     When suno.com（overlay content script）から read-only GET
-    Then CORS ヘッダを返し、データ取得フローを維持する。
+    Then CORS ヘッダを返さず、ブラウザからの直接 read を許可しない。
     """
     locked = "chrome-extension://lockedextensionid"
     base = serve([], allow_origin=locked)
@@ -390,7 +391,25 @@ def test_allow_origin_lock_keeps_read_only_suno_origin(serve):
     )
 
     with urllib.request.urlopen(req) as resp:
-        assert resp.headers.get("Access-Control-Allow-Origin") == "https://suno.com"
+        assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
+def test_allow_origin_lock_rejects_read_only_suno_origin_options_cors(serve):
+    """Given --allow-origin で 1 拡張に固定
+    When suno.com から read-only preflight
+    Then OPTIONS でも CORS ヘッダを返さない。
+    """
+    locked = "chrome-extension://lockedextensionid"
+    base = serve([], allow_origin=locked)
+    req = urllib.request.Request(
+        f"{base}{_SUNO_PROMPTS_ROUTE}",
+        method="OPTIONS",
+        headers={"Origin": "https://suno.com"},
+    )
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 204
+        assert resp.headers.get("Access-Control-Allow-Origin") is None
 
 
 def test_unknown_path_returns_404(serve):
@@ -1037,10 +1056,10 @@ def test_dir_mode_collections_sets_cors_header_for_extension_origin(serve_dir, t
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
-def test_dir_mode_collections_keeps_suno_origin_when_extension_locked(serve_dir, tmp_path):
+def test_dir_mode_collections_rejects_suno_origin_cors_when_extension_locked(serve_dir, tmp_path):
     """Given --allow-origin で write/auth を 1 拡張に固定
     When Suno overlay から `GET /collections`
-    Then read-only route は CORS を返し、主UIの collection fetch を維持する。
+    Then read-only route も CORS を返さず、直接 fetch を許可しない。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
@@ -1052,7 +1071,25 @@ def test_dir_mode_collections_keeps_suno_origin_when_extension_locked(serve_dir,
     )
     with urllib.request.urlopen(req) as resp:
         assert resp.status == 200
-        assert resp.headers.get("Access-Control-Allow-Origin") == _SUNO_ORIGIN
+        assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
+def test_dir_mode_collection_prompts_rejects_suno_origin_cors_when_extension_locked(serve_dir, tmp_path):
+    """Given --allow-origin で 1 拡張に固定
+    When Suno overlay から `GET /collections/<id>/suno/prompts.json`
+    Then CORS ヘッダを返さず、background 経由取得の境界を維持する。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+
+    req = urllib.request.Request(
+        f"{base}{_collection_prompts_route('20260601-clm-aaa-collection')}",
+        headers={"Origin": _SUNO_ORIGIN},
+    )
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+        assert resp.headers.get("Access-Control-Allow-Origin") is None
 
 
 @pytest.mark.parametrize("origin", [_SUNO_ORIGIN, _EXTENSION_ORIGIN])
@@ -1654,6 +1691,58 @@ def test_extract_existing_audio_plus_empty_zip_returns_zero(tmp_path):
     result = extract_and_rename_music(coll, str(zip_path))
 
     assert result == 0
+    assert {p.name: p.read_bytes() for p in music_dir.iterdir()} == {"01a-Existing.mp3": b"pre-existing"}
+
+
+def test_extract_collision_rolls_back_existing_music_dir(tmp_path):
+    """出力名が衝突した場合は fail-loud にし、既存 music_dir を触らない。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "テスト — Song", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir(parents=True)
+    (music_dir / "01a-Existing.mp3").write_bytes(b"pre-existing")
+    zip_path = _make_zip(tmp_path / "collision.zip", {"Song.mp3": b"one", "nested/Song.mp3": b"two"})
+
+    with pytest.raises(DownloadedArtifactError, match="collision"):
+        extract_and_rename_music(coll, str(zip_path))
+
+    assert {p.name: p.read_bytes() for p in music_dir.iterdir()} == {"01a-Existing.mp3": b"pre-existing"}
+
+
+def test_extract_commit_failure_rolls_back_existing_music_dir(tmp_path, monkeypatch):
+    """staging commit 中の move 失敗でも direct helper は既存 music_dir を元に戻す。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "テスト — Song A", "style": "s", "lyrics": ""},
+            {"name": "テスト — Song B", "style": "s", "lyrics": ""},
+        ],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir(parents=True)
+    (music_dir / "01a-Existing.mp3").write_bytes(b"pre-existing")
+    zip_path = _make_zip(tmp_path / "move-failure.zip", {"Song A.mp3": b"a", "Song B.mp3": b"b"})
+    real_move = __import__("shutil").move
+    commit_move_count = 0
+
+    def fail_second_commit_move(src, dst, *args, **kwargs):
+        nonlocal commit_move_count
+        if Path(dst).parent == music_dir:
+            commit_move_count += 1
+            if commit_move_count == 2:
+                raise OSError("simulated commit move failure")
+        return real_move(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("youtube_automation.utils.suno_downloaded_archive.shutil.move", fail_second_commit_move)
+
+    with pytest.raises(DownloadedArtifactError, match="simulated commit move failure"):
+        extract_and_rename_music(coll, str(zip_path))
+
+    assert {p.name: p.read_bytes() for p in music_dir.iterdir()} == {"01a-Existing.mp3": b"pre-existing"}
 
 
 def test_extract_title_based_matching(tmp_path):
@@ -1720,7 +1809,7 @@ def test_extract_rejects_zip_slip_audio_entry(tmp_path, monkeypatch):
         entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
     )
     extract_root = tmp_path / "extract"
-    monkeypatch.setattr(cs.tempfile, "mkdtemp", lambda prefix: str(extract_root))
+    monkeypatch.setattr(cs.tempfile, "mkdtemp", lambda prefix, **kwargs: str(extract_root))
     zip_path = _make_zip(tmp_path / "zipslip.zip", {"../evil.mp3": b"bad"})
 
     result = extract_and_rename_music(coll, str(zip_path))

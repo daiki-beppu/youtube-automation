@@ -201,7 +201,11 @@ async function loadBackground(opts?: {
     vi.stubGlobal("fetch", opts.fetchImpl ?? vi.fn());
   } else {
     vi.doMock("../../shared/api", () => ({
+      fetchCollectionPrompts: vi.fn(() => Promise.resolve([])),
+      fetchCollections: vi.fn(() => Promise.resolve([])),
+      fetchPrompts: vi.fn(() => Promise.resolve([])),
       postDownloaded: postDownloadedMock,
+      resolveCompatibilityWarning: vi.fn(() => Promise.resolve("")),
     }));
   }
 
@@ -354,6 +358,50 @@ describe('background onMessage("postDownloaded"): shared/api 実配線', () => {
         headers: { "Content-Type": "application/json", "X-Serve-Token": "fresh-token" },
       }),
     );
+  });
+});
+
+describe("background read API handlers: localhost read を extension origin 境界へ委譲する", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("collections/prompts/version を background fetch で取得する", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: "p1", style: "lofi", lyrics: "" }] })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: "p2", style: "lofi", lyrics: "" }] })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ version: "5.5.7", min_extension_version: "0.2.0" }),
+      });
+    const { handlers } = await loadBackground({ useRealPostDownloaded: true, fetchImpl });
+
+    await handlers.get("fetchCollections")!({
+      data: { baseUrl: "http://localhost:7873" },
+      sender: { tab: { id: 42 } },
+    });
+    await handlers.get("fetchPrompts")!({
+      data: { baseUrl: "http://localhost:7873" },
+      sender: { tab: { id: 42 } },
+    });
+    await handlers.get("fetchCollectionPrompts")!({
+      data: { baseUrl: "http://localhost:7873", collectionId: "20260601-clm" },
+      sender: { tab: { id: 42 } },
+    });
+    await expect(
+      handlers.get("fetchCompatibilityWarning")!({
+        data: { baseUrl: "http://localhost:7873", extensionVersion: "0.1.9" },
+        sender: { tab: { id: 42 } },
+      }),
+    ).resolves.toContain("拡張を更新してください");
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "http://localhost:7873/collections");
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "http://localhost:7873/suno/prompts.json");
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "http://localhost:7873/collections/20260601-clm/suno/prompts.json");
+    expect(fetchImpl).toHaveBeenNthCalledWith(4, "http://localhost:7873/version");
   });
 });
 

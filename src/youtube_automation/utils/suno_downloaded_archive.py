@@ -39,7 +39,7 @@ def commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
         for staged in sorted(staging_dir.iterdir()):
             if staged.is_file():
                 shutil.move(str(staged), str(music_dir / staged.name))
-    except Exception:
+    except (OSError, shutil.Error):
         shutil.rmtree(music_dir, ignore_errors=True)
         if had_existing_music_dir and backup_payload.exists():
             shutil.move(str(backup_payload), str(music_dir))
@@ -162,15 +162,14 @@ def _is_safe_zip_member(filename: str) -> bool:
     return not path.is_absolute() and all(part != ".." for part in path.parts)
 
 
-def extract_and_rename_music(coll_dir: Path, download_path: str, target_dir: Path | None = None) -> int:
+def _extract_and_rename_music_to_dir(coll_dir: Path, download_path: str, target_dir: Path) -> int:
     zip_path = Path(download_path)
     if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
         print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
         return 0
 
     name_to_index = _build_name_to_index(coll_dir)
-    music_dir = target_dir or CollectionPaths(coll_dir).music_dir
-    music_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = tempfile.mkdtemp(prefix="suno-extract-")
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
@@ -222,16 +221,36 @@ def extract_and_rename_music(coll_dir: Path, download_path: str, target_dir: Pat
             if ext not in _AUDIO_EXTENSIONS:
                 continue
             new_name = f"{track_num:02d}{variant}-{_sanitize_output_stem(lookup)}{ext}"
-            dest = music_dir / new_name
+            dest = target_dir / new_name
             if dest.exists():
                 raise ValueError(f"ZIP extraction output name collision: {dest.name}")
             shutil.move(str(extracted), str(dest))
             moved_count += 1
 
-        print(f"[yt-collection-serve] 展開完了: {moved_count} files → {music_dir}")
+        print(f"[yt-collection-serve] 展開完了: {moved_count} files → {target_dir}")
         return moved_count
-    except Exception as exc:
+    except zipfile.BadZipFile as exc:
         print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
         return 0
+    except (OSError, ValueError, shutil.Error) as exc:
+        print(f"[yt-collection-serve] ZIP 展開エラー: {exc}")
+        raise DownloadedArtifactError(f"ZIP extraction failed: {exc}") from exc
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def extract_and_rename_music(coll_dir: Path, download_path: str, target_dir: Path | None = None) -> int:
+    if target_dir is not None:
+        return _extract_and_rename_music_to_dir(coll_dir, download_path, target_dir)
+
+    staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
+    try:
+        placed_count = _extract_and_rename_music_to_dir(coll_dir, download_path, staging_dir)
+        if placed_count > 0:
+            try:
+                commit_staged_music_files(coll_dir, staging_dir)
+            except (OSError, shutil.Error) as exc:
+                raise DownloadedArtifactError(f"ZIP extraction commit failed: {exc}") from exc
+        return placed_count
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)

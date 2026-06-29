@@ -46,9 +46,41 @@ vi.mock("../lib/storage", () => ({
 
 vi.mock("../lib/messaging", () => messagingMocks);
 
-function defaultSendMessage(message: string): Promise<unknown> {
+async function readJson(url: string): Promise<unknown> {
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
+
+function defaultSendMessage(message: string, payload?: Record<string, string>): Promise<unknown> {
   if (message === "queryProgress") {
     throw new Error("runner unavailable");
+  }
+  if (message === "fetchCompatibilityWarning") {
+    return (async () => {
+      const resp = await fetch(`${payload?.baseUrl}/version`);
+      if (!resp.ok) {
+        return "";
+      }
+      const data = (await resp.json()) as { version: string; min_extension_version: string };
+      if (payload?.extensionVersion === data.min_extension_version) {
+        return "";
+      }
+      return `拡張を更新してください（拡張 ${payload?.extensionVersion} / 必要 ${data.min_extension_version} / サーバー ${data.version}）。`;
+    })();
+  }
+  if (message === "fetchCollections") {
+    return readJson(`${payload?.baseUrl}/collections`);
+  }
+  if (message === "fetchPrompts") {
+    return readJson(`${payload?.baseUrl}/suno/prompts.json`);
+  }
+  if (message === "fetchCollectionPrompts") {
+    return readJson(
+      `${payload?.baseUrl}/collections/${encodeURIComponent(payload?.collectionId ?? "")}/suno/prompts.json`,
+    );
   }
   return Promise.resolve({ ok: true });
 }
@@ -376,14 +408,14 @@ describe("Suno popup compatibility check", () => {
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
-    messagingMocks.sendMessage.mockImplementation((message: string) => {
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
       if (message === "queryProgress") {
         throw new Error("runner unavailable");
       }
       if (message === "adoptSelectedClips") {
         return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
       }
-      return Promise.resolve({ ok: true });
+      return defaultSendMessage(message, payload);
     });
 
     await act(async () => {
@@ -432,14 +464,14 @@ describe("Suno popup compatibility check", () => {
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
-    messagingMocks.sendMessage.mockImplementation((message: string) => {
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
       if (message === "queryProgress") {
         throw new Error("runner unavailable");
       }
       if (message === "adoptSelectedClips") {
         return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
       }
-      return Promise.resolve({ ok: true });
+      return defaultSendMessage(message, payload);
     });
 
     await act(async () => {
@@ -520,14 +552,14 @@ describe("Suno popup compatibility check", () => {
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
-    messagingMocks.sendMessage.mockImplementation((message: string) => {
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
       if (message === "queryProgress") {
         throw new Error("runner unavailable");
       }
       if (message === "adoptSelectedClips") {
         return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
       }
-      return Promise.resolve({ ok: true });
+      return defaultSendMessage(message, payload);
     });
 
     await act(async () => {
@@ -676,7 +708,7 @@ describe("Suno popup compatibility check", () => {
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
-    messagingMocks.sendMessage.mockImplementation((message: string) => {
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
       if (message === "queryProgress") {
         throw new Error("runner unavailable");
       }
@@ -686,7 +718,7 @@ describe("Suno popup compatibility check", () => {
       if (message === "retryPlaylist") {
         return Promise.reject(new Error("relay failed"));
       }
-      return Promise.resolve({ ok: true });
+      return defaultSendMessage(message, payload);
     });
 
     await act(async () => {

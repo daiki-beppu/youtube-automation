@@ -3,7 +3,7 @@
 // （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
-import type { CapturedPlaylist, DownloadedPayload, PromptEntry } from "../../shared/api";
+import type { CapturedPlaylist, CollectionSummary, DownloadedPayload, PromptEntry } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
@@ -98,6 +98,14 @@ interface ProtocolMap {
   /** content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
    *  content script は chrome.debugger API にアクセスできないため background に委譲する。 */
   sendTrustedCmdP(payload: { isMac: boolean }): void;
+  /** overlay → background: localhost read API を extension origin から取得する。 */
+  fetchCompatibilityWarning(payload: { baseUrl: string; extensionVersion: string }): string;
+  /** overlay → background: `/collections` を extension origin から取得する。 */
+  fetchCollections(payload: { baseUrl: string }): CollectionSummary[];
+  /** overlay → background: `/suno/prompts.json` を extension origin から取得する。 */
+  fetchPrompts(payload: { baseUrl: string }): PromptEntry[];
+  /** overlay → background: collection prompts を extension origin から取得する。 */
+  fetchCollectionPrompts(payload: { baseUrl: string; collectionId: string }): PromptEntry[];
   /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。 */
   postDownloaded(payload: { baseUrl: string; collectionId: string; body: DownloadedPayload }): void;
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */

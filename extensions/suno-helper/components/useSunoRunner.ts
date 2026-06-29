@@ -8,12 +8,8 @@ import { browser } from "wxt/browser";
 import {
   type CollectionSummary,
   extractPlaylistName,
-  fetchCollectionPrompts,
-  fetchCollections,
-  fetchPrompts,
   type PromptEntry,
   resolvePromptCollectionId,
-  resolveCompatibilityWarning,
   visiblePromptCollections,
 } from "../../shared/api";
 import { CLIPS_PER_REQUEST, type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
@@ -92,7 +88,7 @@ async function fetchCollectionEntries(baseUrl: string, collectionId: string | nu
   if (collectionId === null) {
     throw new Error("prompts を取得できる collection がありません。");
   }
-  return fetchCollectionPrompts(baseUrl, collectionId);
+  return sendMessage("fetchCollectionPrompts", { baseUrl, collectionId });
 }
 
 export function useSunoRunner(): RunnerState {
@@ -332,7 +328,7 @@ export function useSunoRunner(): RunnerState {
   const syncCollections = useCallback(
     async (baseUrl: string, currentSelectedId: string): Promise<PromptSource> => {
       try {
-        const fetched = await fetchCollections(baseUrl);
+        const fetched = await sendMessage("fetchCollections", { baseUrl });
         setAllCollections(fetched);
         const { nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
         setSelectedCollectionId(nextSelectedId ?? "");
@@ -425,12 +421,13 @@ export function useSunoRunner(): RunnerState {
     await serverUrlItem.setValue(trimmed);
     report("取得中…");
     const extensionVersion = browser.runtime.getManifest().version;
-    setCompatibilityWarning(await resolveCompatibilityWarning(trimmed, extensionVersion));
+    const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl: trimmed, extensionVersion });
+    setCompatibilityWarning(typeof warning === "string" ? warning : "");
     try {
       const promptSource = await syncCollections(trimmed, selectedCollectionId);
       const data =
         promptSource.kind === "single-file"
-          ? await fetchPrompts(trimmed)
+          ? await sendMessage("fetchPrompts", { baseUrl: trimmed })
           : await fetchCollectionEntries(trimmed, promptSource.collectionId);
       setEntries(data);
       setItemStates(data.map(() => "idle"));
