@@ -187,9 +187,7 @@ def _parse_pair_config(cfg: Mapping[str, object], collection_dir: Path) -> PairS
     if min_song_sec is not None and max_song_sec is not None and min_song_sec >= max_song_sec:
         raise ValidationError("pair_selection.min_song_sec は max_song_sec 未満にしてください")
 
-    out_of_range_action = _string_value(
-        raw.get("out_of_range_action"), "stock", "pair_selection.out_of_range_action"
-    )
+    out_of_range_action = _string_value(raw.get("out_of_range_action"), "stock", "pair_selection.out_of_range_action")
     if out_of_range_action not in {"stock", "delete"}:
         raise ValidationError("pair_selection.out_of_range_action は stock / delete のいずれかです")
 
@@ -228,9 +226,7 @@ def _validate_template(template: str) -> None:
         raise ValidationError(f"stock.filename_template is invalid: {exc}") from exc
     invalid = sorted(field for field in fields if field not in _STOCK_TEMPLATE_FIELDS)
     if invalid:
-        raise ValidationError(
-            "stock.filename_template contains unsupported placeholder: " + ", ".join(invalid)
-        )
+        raise ValidationError("stock.filename_template contains unsupported placeholder: " + ", ".join(invalid))
 
 
 def _parse_stock_config(cfg: Mapping[str, object], collection_dir: Path) -> StockConfig:
@@ -353,9 +349,7 @@ def collect_candidates(collection_dir: Path) -> list[Candidate]:
     return candidates
 
 
-def _is_duration_out_of_range(
-    candidate: Candidate, *, min_song_sec: float | None, max_song_sec: float | None
-) -> bool:
+def _is_duration_out_of_range(candidate: Candidate, *, min_song_sec: float | None, max_song_sec: float | None) -> bool:
     if min_song_sec is not None and candidate.duration < min_song_sec:
         return True
     if max_song_sec is not None and candidate.duration > max_song_sec:

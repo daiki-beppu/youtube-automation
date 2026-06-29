@@ -191,8 +191,13 @@ def test_stock_duplicate_fail_preserves_source_and_existing_stock(tmp_path, monk
     )
     short = _write_audio(collection, "01a-Dawn Groove.mp3")
     survivor = _write_audio(collection, "01b-Dawn Groove.mp3")
-    existing = tmp_path / "assets" / "stock" / "music" / "b-side" / (
-        "20260629-test-collection__01a-dawn-groove__dawn-groove.mp3"
+    existing = (
+        tmp_path
+        / "assets"
+        / "stock"
+        / "music"
+        / "b-side"
+        / ("20260629-test-collection__01a-dawn-groove__dawn-groove.mp3")
     )
     existing.parent.mkdir(parents=True)
     existing.write_bytes(b"existing")
@@ -324,6 +329,5 @@ def test_main_returns_1_and_stderr_on_validation_error(tmp_path, monkeypatch, ca
 def test_project_scripts_registers_suno_select_tracks_entrypoint():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     assert (
-        pyproject["project"]["scripts"]["yt-suno-select-tracks"]
-        == "youtube_automation.scripts.suno_select_tracks:main"
+        pyproject["project"]["scripts"]["yt-suno-select-tracks"] == "youtube_automation.scripts.suno_select_tracks:main"
     )
