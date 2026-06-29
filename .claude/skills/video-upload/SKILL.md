@@ -80,7 +80,7 @@ $ARGUMENTS
 
 メタデータは `descriptions.md` から title / description / tags を優先使用。存在しない場合は `BAHMetadataGenerator` で自動生成にフォールバック。
 
-プレイリストへの動画追加は content model ごとのアップロード経路が担う。`collection` 型では `collection_uploader` 内部の `assign_video()`、`single_release` 型では `playlists.jp` / `playlists.en` を使う既存アップロード経路に任せる。初投稿時に `/playlist` で行うのは未作成プレイリストの作成と `playlist_id` 書き戻しであり、個別動画の手動 assign ではない。
+プレイリストへの動画追加は後続のアップロード経路が担う。`collection` 型では `collection_uploader` 内部の `assign_video()` に任せる。初投稿時に `/playlist` で行うのは未作成プレイリストの作成と `playlist_id` 書き戻しであり、個別動画の手動 assign ではない。
 
 ### コマンドリファレンス
 

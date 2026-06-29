@@ -56,7 +56,7 @@ uv run yt-playlist-manager --init              # 実反映
 
 実行後、`playlists.json` の各エントリに `playlist_id` が書き戻される。
 
-**初投稿前の扱い**: `collections/live/` がまだ空でも `--init` を実行してよい。この場合は未作成プレイリストの作成と `playlist_id` 書き戻しが主目的で、初回動画の追加は後続の `/video-upload` 内部 `assign_video()` に任せる。初投稿前に `(未作成)` が残っているとアップロード時の自動 assign がスキップされるため、公開前に必ず初期化する。
+**初投稿前の扱い**: `collections/live/` がまだ空でも `--init` を実行してよい。この場合は未作成プレイリストの作成と `playlist_id` 書き戻しが主目的で、初回動画の追加は後続の `/video-upload` に任せる。collection 型では `/video-upload` 内部の自動 assign (`assign_video()`) が追加を担う。初投稿前に `(未作成)` が残っているとアップロード時の自動 assign がスキップされるため、公開前に必ず初期化する。
 
 ### Step 3: 単一動画の追加（運用フェーズ）
 

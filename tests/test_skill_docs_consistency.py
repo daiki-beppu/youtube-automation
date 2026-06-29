@@ -108,8 +108,10 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
         assert "自動 assign" in text
 
     assert "`collection` 型では `collection_uploader` 内部の `assign_video()`" in video_upload
-    assert "`single_release` 型では `playlists.jp` / `playlists.en`" in video_upload
+    assert "プレイリストへの動画追加は後続のアップロード経路が担う" in video_upload
     assert "`approval_gates.upload` とは別の playlist 作成ゲート" in wf_next
+    assert "初投稿プレイリスト初期化ゲート" in wf_next
+    assert "`upload.video_id = null`" in wf_next
     assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
 
 
