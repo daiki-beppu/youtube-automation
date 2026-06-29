@@ -144,7 +144,7 @@ else
 fi
 
 THUMBNAIL=""
-for candidate in "${ASSETS_DIR}/main.jpg" "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/thumbnail.jpg" "${ASSETS_DIR}/thumbnail.png"; do
+for candidate in "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/main.jpg"; do
     if [[ -f "$candidate" ]]; then
         THUMBNAIL="$candidate"
         break
@@ -340,7 +340,7 @@ if ! command -v ffmpeg &>/dev/null; then
     echo "ERROR: ffmpeg not found"; exit 1
 fi
 if [[ -z "$THUMBNAIL" ]]; then
-    echo "ERROR: No thumbnail found in ${ASSETS_DIR}/ (main.jpg/png or thumbnail.jpg/png)"; exit 1
+    echo "ERROR: No video background found in ${ASSETS_DIR}/ (main.png or main.jpg required; thumbnail.jpg/png is upload-only)"; exit 1
 fi
 if [[ -z "$MASTER_AUDIO" ]]; then
     echo "ERROR: master-mix.{wav,m4a,aac,mp3,flac} または master.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1

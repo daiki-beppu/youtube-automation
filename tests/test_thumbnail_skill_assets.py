@@ -174,14 +174,25 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
 
     for required in (
         "/thumbnail-compare",
-        "--reference <collection-path>/10-assets/thumbnail.jpg",
-        "--output <collection-path>/10-assets/main-v1.jpg",
+        "TEXTLESS_PROMPT=\"$(cat <<'PROMPT'",
+        "--reference \"${COLLECTION_PATH}/10-assets/thumbnail.jpg\"",
+        "--prompt \"$TEXTLESS_PROMPT\"",
+        "--output \"${COLLECTION_PATH}/10-assets/main-v1.jpg\"",
         "cp main-v1.jpg main.png",
         "テキスト付き生成プロンプト",
         "テキストなし再生成プロンプト",
         "文字入り `thumbnail.jpg` をそのまま動画背景や `/loop-video` 入力にしない",
     ):
         assert required in single_step_block
+
+
+def test_thumbnail_skill_initial_generation_examples_output_text_included_candidates() -> None:
+    """#1310: 標準入口の初回生成例は main ではなく thumbnail 候補を出す。"""
+    skill = _read_thumbnail_skill()
+    mode_block = _slice_between(skill, "## 生成モード判定", "## ワークフロー")
+
+    assert "--output <collection-path>/10-assets/thumbnail-v1.jpg -y" in mode_block
+    assert "--output <collection-path>/10-assets/main-v1.jpg -y" not in mode_block
 
 
 def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs() -> None:

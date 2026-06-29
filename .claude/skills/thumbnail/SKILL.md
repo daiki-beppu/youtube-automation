@@ -178,7 +178,7 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 uv run yt-generate-image \
   --prompt "<prompt_prefix を含むプロンプト>" \
   --reference <channel_dir>/<reference_images.default> \
-  --output <collection-path>/10-assets/main-v1.jpg -y
+  --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
 
 **参照画像の選択ロジック**:
@@ -193,7 +193,7 @@ uv run yt-generate-image \
 ```bash
 uv run yt-generate-image \
   --prompt "<完全なプロンプト>" \
-  --output <collection-path>/10-assets/main-v1.jpg -y
+  --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
 
 `composition_prefix` が自動付加される。
@@ -293,10 +293,16 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 5. 承認済み `thumbnail.jpg` を参照画像にして、テキストなし動画背景を AI 再生成:
 
 ```bash
+COLLECTION_PATH="<collection-path>"
+TEXTLESS_PROMPT="$(cat <<'PROMPT'
+<textless background regeneration prompt>
+PROMPT
+)"
+
 uv run yt-generate-image \
-  --reference <collection-path>/10-assets/thumbnail.jpg \
-  --prompt "<textless background regeneration prompt>" \
-  --output <collection-path>/10-assets/main-v1.jpg -y
+  --reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg" \
+  --prompt "$TEXTLESS_PROMPT" \
+  --output "${COLLECTION_PATH}/10-assets/main-v1.jpg" -y
 ```
 
 テキストなし再生成プロンプトでは、参照画像の構図・主役スケール・光・色温度・背景テクスチャは維持し、タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名だけを除去する。新しいテキストを追加しないことを明示する。

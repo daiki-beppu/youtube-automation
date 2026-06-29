@@ -115,14 +115,18 @@ def test_collection_ideate_codex_sequential_requires_short_prompt() -> None:
     _assert_codex_ttp_prompt_policy(block)
 
 
-def test_wf_new_treats_codex_preview_as_finished_thumbnail() -> None:
+def test_wf_new_routes_codex_and_single_step_through_thumbnail_contract() -> None:
     """Given wf-new Phase 2c
     When image_generation.provider=codex
-    Then single_step と同様に main.png を thumbnail.jpg へコピーして /thumbnail 再生成を不要にする。
+    Then preview を最終画像扱いせず /thumbnail で thumbnail と textless main を別成果物にする。
     """
     block = _wf_new_phase_2c_block(_read(_WF_NEW_SKILL_MD))
 
     assert "codex" in block
     assert "single_step" in block
-    assert "cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg" in block
-    assert "/thumbnail" in block
+    assert "`/thumbnail <theme>`" in block
+    assert "テキスト付き `10-assets/thumbnail.jpg`" in block
+    assert "テキストなし `10-assets/main.png` または `main.jpg`" in block
+    assert "同一画像で代用しない" in block
+    assert "旧運用は禁止" in block
+    assert "cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg" not in block
