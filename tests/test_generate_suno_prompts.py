@@ -732,8 +732,10 @@ def test_build_prompt_entries_vocal_fails_when_multi_scene_suno_lyrics_json_is_i
     assert "missing: 歌もの — Vocal (Variation 2)" in str(exc_info.value)
 
 
-def test_build_prompt_entries_vocal_accepts_suno_lyrics_json_title_alias(channel_dir, tmp_path):
-    """旧互換として `title` alias も entry name として受け付ける."""
+def test_build_prompt_entries_vocal_rejects_suno_lyrics_json_title_alias(channel_dir, tmp_path):
+    """suno-lyrics.json の公開 contract は `name` 必須で、未定義 `title` alias は受け付けない."""
+    from youtube_automation.utils.exceptions import ConfigError
+
     _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
@@ -741,9 +743,40 @@ def test_build_prompt_entries_vocal_accepts_suno_lyrics_json_title_alias(channel
         encoding="utf-8",
     )
 
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    assert "entry 1.name must be a non-empty string" in str(exc_info.value)
+
+
+def test_build_prompt_entries_auto_vocal_requires_suno_lyrics_json(channel_dir, tmp_path):
+    """mode 省略でも genre_line が vocal なら suno-lyrics.json 必須契約を適用する."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_minimal_patterns(tmp_path)
+    data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    data.pop("mode", None)
+    patterns_path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    assert "suno-lyrics.json is required for vocal mode" in str(exc_info.value)
+
+
+def test_build_prompt_entries_auto_vocal_merges_suno_lyrics_json(channel_dir, tmp_path):
+    """mode 省略 + vocal genre_line でも suno-lyrics.json を merge する."""
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    patterns_path = _write_minimal_patterns(tmp_path)
+    data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    data.pop("mode", None)
+    patterns_path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    _write_suno_lyrics_json(tmp_path, ["テスト — Test"], lyrics="[Verse]\nauto vocal")
+
     entries = build_prompt_entries(patterns_path)
 
-    assert entries[0]["lyrics"] == "[Verse]\nfrom title"
+    assert entries[0]["lyrics"] == "[Verse]\nauto vocal"
 
 
 @pytest.mark.parametrize(

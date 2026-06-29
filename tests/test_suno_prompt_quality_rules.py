@@ -320,6 +320,7 @@ def test_default_yaml_has_quality_rule_keys():
 
     assert data["style_influence"] == 50, "style_influence の既定値は 50"
     assert data["weirdness"] == 50, "weirdness の既定値は 50"
+    assert data["model"] == "V5.5", "model の既定値は V5.5"
     assert data["auto_lyrics_structure"] is True, "auto_lyrics_structure: true が追加されるべき"
     assert data["style_char_limit"] == 120, "style_char_limit: 120 が追加されるべき"
     assert isinstance(data["banned_artists"], list), "banned_artists はリスト型であるべき"

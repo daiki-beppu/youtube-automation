@@ -299,9 +299,6 @@ def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
     `/suno-lyric` は lyrics 専任で、`/suno` がここで Style と結合する。
     vocal mode のファイル必須チェックは呼び出し元で行う。
     """
-    if not lyrics_path.exists():
-        return {}
-
     try:
         raw = json.loads(lyrics_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -315,7 +312,7 @@ def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
     for i, item in enumerate(raw, 1):
         if not isinstance(item, dict):
             raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i} must be an object")
-        name = item.get("name") or item.get("title")
+        name = item.get("name")
         lyrics = item.get("lyrics")
         if not isinstance(name, str) or not name.strip():
             raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
