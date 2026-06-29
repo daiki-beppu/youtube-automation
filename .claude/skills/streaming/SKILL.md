@@ -27,6 +27,7 @@ description: "Use when YouTube ライブ配信用の Vultr VPS を Terraform で
 | 初回構築 | §1 |
 | 動画差し替え | `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh ./new_video.mp4` |
 | 帯域チェック | `uv run yt-stream-bandwidth --check-threshold --terraform-dir infra/terraform/streaming` |
+| 配信元 MP4 の実測 | `uv run yt-stream-bandwidth --probe-bitrate ./stream.mp4` |
 | アーカイブ件数確認（11h+1h 運用時） | `uv run yt-stream-archive-check --expected 2` |
 | サービス状態 | `ssh -i ~/.ssh/yt_stream_key root@$(terraform -chdir=infra/terraform/streaming output -raw instance_ip) systemctl status youtube-stream` |
 | ログ追跡 | 同上 + `journalctl -u youtube-stream -f` |
@@ -57,6 +58,21 @@ terraform apply
 ```
 
 apply 完了で 1 本目の配信が即開始。`terraform output -raw instance_ip` で IP を確認。
+
+`terraform plan` / `apply` は、ローカルに `ffprobe` があれば配信元 MP4 をプリフライト検証する。`run-ffmpeg.sh` は `-c:v copy` で映像をストリームコピーするため、ソース動画のキーフレーム間隔・ビットレート・H.264 profile が YouTube Live 品質をそのまま決める。キーフレーム最大間隔 > 4 秒、または 1080p で 4,500 Kbps 未満 / 720p で 2,500 Kbps 未満なら plan 時点で止まる。H.264 High profile 以外は warning。`ffprobe` が無い場合は soft skip される。
+
+1080p30 の推奨再エンコード例:
+
+```bash
+ffmpeg -i input.mp4 \
+  -c:v libx264 -profile:v high -level:v 4.1 \
+  -b:v 4500k -maxrate 4500k -bufsize 9000k \
+  -g 60 -keyint_min 60 \
+  -preset slow -pix_fmt yuv420p -an \
+  output.mp4
+```
+
+24/7 配信では 4,500 Kbps + 音声 200 Kbps で月約 1.52 TB。`vc2-1c-2gb` の 2 TB/月に収めるため、6,800 Kbps 級へ上げる場合はプランアップか運用時間短縮を先に検討する。
 
 配信サイクルを変える場合は `terraform.tfvars` で `stream_hours` / `break_hours` を指定する。0 は無制限を意味し、`stream_hours=0` では `RuntimeMaxSec` を出力しない。`break_hours=0` では `RestartSec=10s` を出力する。
 

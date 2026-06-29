@@ -37,6 +37,7 @@ local fix 衝突注意:
 ### Changed
 
 - `feat(thumbnail)`: Codex サムネイル生成の既定プロンプトを、参照画像を winning template として扱う短い TTP 上位互換型に変更。`image_generation.codex.default_prompt_template` を追加し、`/collection-ideate` と channel-setup テンプレートの Codex 導線を同方針へ更新（#1300）
+- `feat(streaming)`: Terraform streaming module に配信元 MP4 の ffprobe プリフライトを追加。キーフレーム間隔と最低ビットレートを plan/apply 前に hard fail し、H.264 High profile は warning として通知する。README / `/streaming` skill に `-c:v copy` 前提の動画要件と推奨再エンコード例を追記（#1299）
 - `refactor(shared)`: CollectionSummary を boolean fields (`has_prompts` / `mapped`) から status enum (`needs_prompts` | `ready` | `downloaded`) に置換。`downloaded_count` フィールド追加、`playlist_name` 廃止。POST `/collections/<id>/downloaded` エンドポイント新設（#1216）**BREAKING**
 - `feat(suno-helper)`: Playlist 追加後の Download all DOM 操作 + chrome.downloads 連携を実装 (#1146)
 - `feat(serve)`: POST `/collections/<id>/downloaded` に冪等更新ロジックを追加（playlist URL 記録 + DL 完了マーク）(#1145)

@@ -3,6 +3,24 @@ locals {
   ssh_host_key_algorithm  = "ED25519"
   ssh_host_public_key     = trimspace(tls_private_key.ssh_host.public_key_openssh)
   ssh_host_public_key_sha = sha256(local.ssh_host_public_key)
+  source_video_preflight  = data.external.source_video_preflight.result
+  source_video_ok         = local.source_video_preflight.ok == "true"
+  source_video_profile_ok = local.source_video_preflight.profile_ok == "true"
+}
+
+data "external" "source_video_preflight" {
+  program = ["python3", "${path.module}/video_preflight.py"]
+
+  query = {
+    video_path = var.video_path
+  }
+}
+
+check "source_video_h264_profile" {
+  assert {
+    condition     = !var.source_video_preflight_enabled || local.source_video_profile_ok
+    error_message = local.source_video_preflight.profile_message
+  }
 }
 
 resource "tls_private_key" "ssh_host" {
@@ -70,6 +88,10 @@ resource "null_resource" "deploy" {
     precondition {
       condition     = var.stream_hours > 0 || var.break_hours == 0
       error_message = "break_hours は stream_hours > 0 のときのみ有効です。24/7 モード (stream_hours=0) では break_hours=0 にしてください。"
+    }
+    precondition {
+      condition     = !var.source_video_preflight_enabled || local.source_video_ok
+      error_message = local.source_video_preflight.message
     }
   }
 

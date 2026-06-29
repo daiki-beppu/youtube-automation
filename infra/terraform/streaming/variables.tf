@@ -33,6 +33,12 @@ variable "video_path" {
   description = "VPS にアップロードするローカル動画ファイルの絶対パス（環境依存のため必須項目）"
 }
 
+variable "source_video_preflight_enabled" {
+  type        = bool
+  description = "terraform plan/apply 時に ffprobe で配信元 MP4 の YouTube 要件（キーフレーム間隔・最低ビットレート・H.264 High 推奨）を検査する。ffprobe 未インストール時は soft skip"
+  default     = true
+}
+
 variable "install_root" {
   type        = string
   description = "VPS 上で動画・ログ・運用スクリプトを配置する root ディレクトリ"

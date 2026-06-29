@@ -26,6 +26,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
     - **`ssh -i ~/.ssh/yt_stream_key root@<ip>` で SSH できることは agent 登録の検証にならない**: `-i` 指定は鍵ファイルを直接読むため agent 状態と無関係に成功する。Terraform provisioner は `agent = true` のみで動作するため、検証は **必ず `ssh-add -l`** で行う
 - `null_resource.deploy.connection` は `host_key` 検証を有効化している。host 鍵は Terraform が `tls_private_key.ssh_host` として生成し、cloud-init の `ssh_keys` で `/etc/ssh/ssh_host_ed25519_key{,.pub}` に固定配置するため、初回 apply でも TOFU に依存せず接続先ホストを検証できる
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
+- `ffprobe` が PATH 上にある場合、`terraform plan` / `apply` 時に配信元 MP4 の YouTube 要件をプリフライト検証する（無い場合は soft skip）
 - operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
 
 ## 配置 root
@@ -57,6 +58,29 @@ terraform apply
 ```
 
 `terraform.tfvars` には secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
+
+## 配信元動画のプリフライト
+
+`run-ffmpeg.sh` は映像を `-c:v copy`（ストリームコピー）で YouTube Live へ送るため、**ソース MP4 のエンコード品質がそのまま配信品質になる**。`terraform plan` / `apply` では `external` data source から `video_preflight.py` を呼び、ローカル `ffprobe` で次を検査する。
+
+- キーフレーム最大間隔: 4 秒以下（超過時は hard fail）
+- 映像ビットレート: 1080p 以上は 4,500 Kbps 以上、720p 以上は 2,500 Kbps 以上（未満は hard fail）
+- コーデック / プロファイル: H.264 High profile 推奨（Baseline などは Terraform `check` の warning）
+
+`ffprobe` が無い環境では検証を `skipped` として通す。明示的に止めたい場合のみ `source_video_preflight_enabled = false` を指定する。
+
+推奨再エンコード例（1080p30 / `vc2-1c-2gb` の 2 TB/月を想定）:
+
+```bash
+ffmpeg -i input.mp4 \
+  -c:v libx264 -profile:v high -level:v 4.1 \
+  -b:v 4500k -maxrate 4500k -bufsize 9000k \
+  -g 60 -keyint_min 60 \
+  -preset slow -pix_fmt yuv420p -an \
+  output.mp4
+```
+
+帯域目安: 映像 4,500 Kbps + 音声 200 Kbps の 24/7 配信は月約 1.52 TB。6,800 Kbps 級に上げると 2 TB/月を超えうるため、画質改善時は `yt-stream-bandwidth --probe-bitrate` と月次帯域レポートを併用する。
 
 > **tfstate と secret の関係（誤解しやすいので明記）**
 >
