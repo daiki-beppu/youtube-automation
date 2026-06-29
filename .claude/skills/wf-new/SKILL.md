@@ -129,7 +129,7 @@ uv run yt-populate-scene-phrases <collection-dir-name>
 - 既に `scene_phrases` が存在する場合もスキップ（`--overwrite` で上書き可能）
 - `theme_scenes[<theme>]` が未定義の場合は `--en "<custom phrase>"` で英語フレーズを明示指定する。詳細は `references/scene_phrases.md` 参照
 
-`theme_scenes` 未定義 + `--en` 未指定、または Gemini 呼び出し失敗時はエラーを報告して続行する。メタデータ生成前に `/wf-next` から再実行できる。
+`theme_scenes` 未定義 + `--en` 未指定、または Gemini 呼び出し失敗時はエラー内容を表示して停止する。`config/channel/content.json` の `title.theme_scenes` を追加するか、`--en "<custom phrase>"` を渡して再実行する。
 
 #### 2c. サムネイル確定 + 音楽素材生成
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts import suno_select_tracks
+from youtube_automation.utils import suno_track_selection
 from youtube_automation.utils.exceptions import ValidationError
 
 
@@ -23,9 +24,9 @@ def _make_collection(tmp_path: Path, prompts: list[dict]) -> Path:
     return collection
 
 
-def _write_audio(collection: Path, name: str) -> Path:
+def _write_audio(collection: Path, name: str, content: bytes = b"audio") -> Path:
     path = collection / "02-Individual-music" / name
-    path.write_bytes(b"audio")
+    path.write_bytes(content)
     return path
 
 
@@ -57,9 +58,9 @@ def test_vocal_prompt_keeps_one_winner_and_stocks_loser(tmp_path, monkeypatch):
     )
     _write_audio(collection, "01a-Dawn Song.mp3")
     _write_audio(collection, "01b-Dawn Song.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
 
-    result = suno_select_tracks.select_suno_tracks(collection, _cfg())
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
 
     music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
     assert music_files == ["01-Dawn Song.mp3"]
@@ -76,9 +77,9 @@ def test_instrumental_prompt_keeps_both_clips_after_duration_filter(tmp_path, mo
     )
     _write_audio(collection, "01a-Dawn Groove.mp3")
     _write_audio(collection, "01b-Dawn Groove.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
 
-    result = suno_select_tracks.select_suno_tracks(collection, _cfg())
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
 
     music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
     assert music_files == ["01a-Dawn Groove.mp3", "01b-Dawn Groove.mp3"]
@@ -98,9 +99,9 @@ def test_duration_filter_stocks_too_short_and_keeps_survivor(tmp_path, monkeypat
     def fake_probe(path: Path) -> float:
         return 20.0 if path == short else 120.0
 
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", fake_probe)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
 
-    result = suno_select_tracks.select_suno_tracks(collection, _cfg())
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
 
     music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
     assert music_files == [survivor.name]
@@ -117,14 +118,15 @@ def test_all_candidates_dropped_fails_loud(tmp_path, monkeypatch):
     )
     first = _write_audio(collection, "01a-Dawn Groove.mp3")
     second = _write_audio(collection, "01b-Dawn Groove.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 20.0)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 20.0)
 
     with pytest.raises(ValidationError, match="採用候補が 0 件"):
-        suno_select_tracks.select_suno_tracks(collection, _cfg())
+        suno_track_selection.select_suno_tracks(collection, _cfg())
 
     assert first.exists()
     assert second.exists()
-    assert not (tmp_path / "assets" / "stock").exists()
+    stock_root = tmp_path / "assets" / "stock"
+    assert not stock_root.exists() or not any(path.is_file() for path in stock_root.rglob("*"))
     assert not (collection / "01-master" / ".selection.log").exists()
 
 
@@ -135,9 +137,9 @@ def test_never_mode_skips_selection(tmp_path, monkeypatch):
     )
     _write_audio(collection, "01a-Dawn Song.mp3")
     _write_audio(collection, "01b-Dawn Song.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
 
-    result = suno_select_tracks.select_suno_tracks(collection, _cfg(mode="never"))
+    result = suno_track_selection.select_suno_tracks(collection, _cfg(mode="never"))
 
     music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
     assert music_files == ["01a-Dawn Song.mp3", "01b-Dawn Song.mp3"]
@@ -155,9 +157,9 @@ def test_duration_filter_can_delete_too_short_clip(tmp_path, monkeypatch):
     def fake_probe(path: Path) -> float:
         return 20.0 if path == short else 120.0
 
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", fake_probe)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
 
-    result = suno_select_tracks.select_suno_tracks(collection, _cfg(out_of_range_action="delete"))
+    result = suno_track_selection.select_suno_tracks(collection, _cfg(out_of_range_action="delete"))
 
     assert not short.exists()
     assert survivor.exists()
@@ -172,13 +174,14 @@ def test_dry_run_does_not_move_delete_or_write_log(tmp_path, monkeypatch, capsys
     )
     first = _write_audio(collection, "01a-Dawn Song.mp3")
     second = _write_audio(collection, "01b-Dawn Song.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
 
-    result = suno_select_tracks.select_suno_tracks(collection, _cfg(), dry_run=True)
+    result = suno_track_selection.select_suno_tracks(collection, _cfg(), dry_run=True)
 
     assert first.exists()
     assert second.exists()
-    assert not (tmp_path / "assets" / "stock").exists()
+    stock_root = tmp_path / "assets" / "stock"
+    assert not stock_root.exists() or not any(path.is_file() for path in stock_root.rglob("*"))
     assert not (collection / "01-master" / ".selection.log").exists()
     assert len(result.stocked) == 1
     assert "dry_run=true" in capsys.readouterr().out
@@ -205,16 +208,168 @@ def test_stock_duplicate_fail_preserves_source_and_existing_stock(tmp_path, monk
     def fake_probe(path: Path) -> float:
         return 20.0 if path == short else 120.0
 
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", fake_probe)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
     cfg = _cfg()
     cfg["stock"]["on_duplicate"] = "fail"
 
     with pytest.raises(ValidationError, match="stock destination already exists"):
-        suno_select_tracks.select_suno_tracks(collection, cfg)
+        suno_track_selection.select_suno_tracks(collection, cfg)
 
     assert short.exists()
     assert survivor.exists()
     assert existing.read_bytes() == b"existing"
+
+
+def test_stock_duplicate_skip_keeps_existing_stock_and_removes_source(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    short = _write_audio(collection, "01a-Dawn Groove.mp3", b"new")
+    survivor = _write_audio(collection, "01b-Dawn Groove.mp3", b"survivor")
+    existing = (
+        tmp_path
+        / "assets"
+        / "stock"
+        / "music"
+        / "b-side"
+        / ("20260629-test-collection__01a-dawn-groove__dawn-groove.mp3")
+    )
+    existing.parent.mkdir(parents=True)
+    existing.write_bytes(b"existing")
+
+    def fake_probe(path: Path) -> float:
+        return 20.0 if path == short else 120.0
+
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
+
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
+
+    assert not short.exists()
+    assert survivor.exists()
+    assert existing.read_bytes() == b"existing"
+    assert result.stocked == [existing]
+    assert str(existing) in (collection / "01-master" / ".selection.log").read_text(encoding="utf-8")
+
+
+def test_stock_duplicate_overwrite_replaces_existing_stock(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    short = _write_audio(collection, "01a-Dawn Groove.mp3", b"new")
+    survivor = _write_audio(collection, "01b-Dawn Groove.mp3", b"survivor")
+    existing = (
+        tmp_path
+        / "assets"
+        / "stock"
+        / "music"
+        / "b-side"
+        / ("20260629-test-collection__01a-dawn-groove__dawn-groove.mp3")
+    )
+    existing.parent.mkdir(parents=True)
+    existing.write_bytes(b"existing")
+
+    def fake_probe(path: Path) -> float:
+        return 20.0 if path == short else 120.0
+
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
+    cfg = _cfg()
+    cfg["stock"]["on_duplicate"] = "overwrite"
+
+    result = suno_track_selection.select_suno_tracks(collection, cfg)
+
+    assert not short.exists()
+    assert survivor.exists()
+    assert existing.read_bytes() == b"new"
+    assert result.stocked == [existing]
+    assert str(existing) in (collection / "01-master" / ".selection.log").read_text(encoding="utf-8")
+
+
+def test_same_plan_duplicate_stock_fail_preserves_all_sources(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [
+            {"name": "夜明け — Same", "lyrics": "[Verse]\nhello"},
+            {"name": "夜明け — Same", "lyrics": "[Verse]\nhello again"},
+        ],
+    )
+    files = [
+        _write_audio(collection, "01a-Same.mp3"),
+        _write_audio(collection, "01b-Same.mp3"),
+        _write_audio(collection, "02a-Same.mp3"),
+        _write_audio(collection, "02b-Same.mp3"),
+    ]
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+    cfg = _cfg()
+    cfg["stock"]["filename_template"] = "same.{ext}"
+    cfg["stock"]["on_duplicate"] = "fail"
+
+    with pytest.raises(ValidationError, match="duplicate stock destination"):
+        suno_track_selection.select_suno_tracks(collection, cfg)
+
+    assert all(path.exists() for path in files)
+    assert not (tmp_path / "assets" / "stock").exists()
+    assert not (collection / "01-master" / ".selection.log").exists()
+
+
+def test_apply_rollback_restores_files_when_winner_rename_fails(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Song", "lyrics": "[Verse]\nhello dawn"}],
+    )
+    first = _write_audio(collection, "01a-Dawn Song.mp3")
+    second = _write_audio(collection, "01b-Dawn Song.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+    original_rename = Path.rename
+
+    def fail_winner_rename(self: Path, target: Path) -> Path:
+        if self.name == "01a-Dawn Song.mp3" and Path(target).name == "01-Dawn Song.mp3":
+            raise OSError("injected rename failure")
+        return original_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", fail_winner_rename)
+
+    with pytest.raises(OSError, match="injected rename failure"):
+        suno_track_selection.select_suno_tracks(collection, _cfg())
+
+    assert first.exists()
+    assert second.exists()
+    stock_root = tmp_path / "assets" / "stock"
+    assert not stock_root.exists() or not any(path.is_file() for path in stock_root.rglob("*"))
+    assert not (collection / "01-master" / ".selection.log").exists()
+
+
+def test_log_path_directory_fails_before_file_side_effects(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Song", "lyrics": "[Verse]\nhello dawn"}],
+    )
+    first = _write_audio(collection, "01a-Dawn Song.mp3")
+    second = _write_audio(collection, "01b-Dawn Song.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    with pytest.raises(ValidationError, match="selection log path is a directory"):
+        suno_track_selection.select_suno_tracks(collection, _cfg(selection_log_path="01-master"))
+
+    assert first.exists()
+    assert second.exists()
+    assert not (tmp_path / "assets" / "stock").exists()
+
+
+def test_missing_initial_second_clip_fails_before_duration_filter(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    source = _write_audio(collection, "01a-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    with pytest.raises(ValidationError, match="prompt ごとに 2 clip 必要"):
+        suno_track_selection.select_suno_tracks(collection, _cfg())
+
+    assert source.exists()
+    assert not (collection / "01-master" / ".selection.log").exists()
 
 
 def test_invalid_audio_filename_fails_loud(tmp_path, monkeypatch):
@@ -223,10 +378,10 @@ def test_invalid_audio_filename_fails_loud(tmp_path, monkeypatch):
         [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
     )
     invalid = _write_audio(collection, "loose-download.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
 
     with pytest.raises(ValidationError, match="命名規則に合わない音源"):
-        suno_select_tracks.select_suno_tracks(collection, _cfg())
+        suno_track_selection.select_suno_tracks(collection, _cfg())
 
     assert invalid.exists()
 
@@ -249,12 +404,13 @@ def test_malformed_config_is_rejected(tmp_path, monkeypatch, override, match):
         [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
     )
     _write_audio(collection, "01a-Dawn Groove.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    _write_audio(collection, "01b-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
     cfg = _cfg()
     cfg.update(override)
 
     with pytest.raises(ValidationError, match=match):
-        suno_select_tracks.select_suno_tracks(collection, cfg)
+        suno_track_selection.select_suno_tracks(collection, cfg)
 
 
 @pytest.mark.parametrize(
@@ -275,12 +431,12 @@ def test_path_and_template_config_is_rejected(tmp_path, monkeypatch, override, m
     )
     _write_audio(collection, "01a-Dawn Groove.mp3")
     _write_audio(collection, "01b-Dawn Groove.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
     cfg = _cfg()
     cfg.update(override)
 
     with pytest.raises(ValidationError, match=match):
-        suno_select_tracks.select_suno_tracks(collection, cfg)
+        suno_track_selection.select_suno_tracks(collection, cfg)
 
 
 def test_main_uses_explicit_collection_and_reports_success(tmp_path, monkeypatch, capsys):
@@ -289,7 +445,8 @@ def test_main_uses_explicit_collection_and_reports_success(tmp_path, monkeypatch
         [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
     )
     _write_audio(collection, "01a-Dawn Groove.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    _write_audio(collection, "01b-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
     monkeypatch.setattr(suno_select_tracks, "load_skill_config", lambda _: _cfg())
     monkeypatch.setattr(sys, "argv", ["yt-suno-select-tracks", str(collection)])
 
@@ -303,7 +460,8 @@ def test_main_uses_cwd_and_dry_run(tmp_path, monkeypatch, capsys):
         [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
     )
     source = _write_audio(collection, "01a-Dawn Groove.mp3")
-    monkeypatch.setattr(suno_select_tracks, "probe_duration", lambda _: 120.0)
+    _write_audio(collection, "01b-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
     monkeypatch.setattr(suno_select_tracks, "load_skill_config", lambda _: _cfg())
     monkeypatch.setattr(sys, "argv", ["yt-suno-select-tracks", "--dry-run"])
     monkeypatch.chdir(collection)
