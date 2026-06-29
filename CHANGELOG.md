@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.13] - 2026-06-29
+
 ### Changed
 
 - `refactor(shared)`: CollectionSummary を boolean fields (`has_prompts` / `mapped`) から status enum (`needs_prompts` | `ready` | `downloaded`) に置換。`downloaded_count` フィールド追加、`playlist_name` 廃止。POST `/collections/<id>/downloaded` エンドポイント新設（#1216）**BREAKING**
@@ -38,6 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(upload)`: descriptions.md の必須セクション不備時に再作成手順を含むエラーを表示（#1051）
+
+### Migration
+
+所要時間の目安: 10〜20 分
+
+local fix 衝突注意:
+- suno-helper: 拡張 version が 0.2.0 になり、`yt-collection-serve` の `/version` も `min_extension_version=0.2.0` を返す。古い拡張を使っている下流は更新が必要。
+
+サマリ:
+
+- `suno-helper` 0.2.0 を前提に、Playlist 追加後の Download all 操作、chrome.downloads 連携、dir mode の collection 切り替え安定化を含めた運用へ更新。
+- `yt-channel-init` をフルパッケージ生成へ拡張し、初期チャンネルセットアップで config / localization / schedule / upload settings / skill config をまとめて生成可能にした。
+- `/channel-new` と関連スキルを TTP ベンチマークから config・ペルソナ・branding までの end-to-end フローに刷新。
+- CollectionSummary の status enum 化と `/collections/<id>/downloaded` 追加により、Suno 生成後の DL 完了状態を明示的に扱う。
+- `/setup` へのリネーム、`yt-doctor` bootstrap カテゴリ追加、初回チャンネル向け benchmark fallback / minimal mode を追加。
 
 ## [5.5.12] - 2026-06-25
 
@@ -1193,6 +1210,8 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.13]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.13
+[5.5.12]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.12
 [5.5.11]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.11
 [5.5.10]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.10
 [5.5.9]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.9
@@ -1206,8 +1225,6 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 [5.5.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.1
 [5.5.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.0
 [5.4.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.4.0
-[5.5.12]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.12
-[5.5.11]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.11
 [5.3.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.3.0
 [5.2.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.2.0
 [5.1.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.1.1
