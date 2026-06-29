@@ -1092,6 +1092,14 @@ function selectOnClick(btn: HTMLButtonElement): void {
   });
 }
 
+function appendTitle(row: HTMLElement, title: string): void {
+  const titleSpan = document.createElement("span");
+  titleSpan.setAttribute("role", "button");
+  titleSpan.setAttribute("aria-label", `Play ${title}`);
+  titleSpan.textContent = title;
+  row.appendChild(titleSpan);
+}
+
 /** Select clip / Deselect clip いずれのボタンも持たない row（UI 変更で button が消えた状況）。 */
 function addRowWithoutSelectButton(): HTMLElement {
   const row = document.createElement("div");
@@ -1741,12 +1749,7 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     const rowUuid = "cccccccc-1111-2222-3333-444444444444";
     const targetId = "dddddddd-1111-2222-3333-444444444444";
     const row = addClipRow({ songId: rowUuid, idSource: "image" });
-    // タイトル要素を追加
-    const titleSpan = document.createElement("span");
-    titleSpan.setAttribute("role", "button");
-    titleSpan.setAttribute("aria-label", "Play Dawn Cloud");
-    titleSpan.textContent = "Dawn Cloud";
-    row.row.appendChild(titleSpan);
+    appendTitle(row.row, "Dawn Cloud");
     selectOnClick(row.btn);
     const scroller = getOrCreateScroller();
     Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
@@ -1770,6 +1773,73 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     const count = await pending;
 
     expect(count).toBe(1);
+  });
+
+  it("Given titleFallbackMap の同名 target が2件で row が1件だけ When scrollAndMultiSelectByIds Then reject する", async () => {
+    const targetA = "dddddddd-1111-2222-3333-444444444444";
+    const targetB = "eeeeeeee-1111-2222-3333-444444444444";
+    const row = addClipRow();
+    appendTitle(row.row, "Dawn Cloud");
+    selectOnClick(row.btn);
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const titleFallbackMap = new Map([
+      [targetA, "Dawn Cloud"],
+      [targetB, "Dawn Cloud"],
+    ]);
+    const pending = scrollAndMultiSelectByIds([targetA, targetB], {
+      isAborted: () => false,
+      titleFallbackMap,
+      renderWaitMs: 10,
+    });
+    const expectation = expect(pending).rejects.toThrow(/missing clip ID: .*eeeeeeee/);
+    await vi.runAllTimersAsync();
+    await expectation;
+  });
+
+  it("Given titleFallbackMap の同名 target が2件で row も2件 When scrollAndMultiSelectByIds Then distinct row を選択する", async () => {
+    const targetA = "dddddddd-1111-2222-3333-444444444444";
+    const targetB = "eeeeeeee-1111-2222-3333-444444444444";
+    const rowA = addClipRow();
+    const rowB = addClipRow();
+    appendTitle(rowA.row, "Dawn Cloud");
+    appendTitle(rowB.row, "Dawn Cloud");
+    selectOnClick(rowA.btn);
+    selectOnClick(rowB.btn);
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const titleFallbackMap = new Map([
+      [targetA, "Dawn Cloud"],
+      [targetB, "Dawn Cloud"],
+    ]);
+    const pending = scrollAndMultiSelectByIds([targetA, targetB], {
+      isAborted: () => false,
+      titleFallbackMap,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toBe(2);
   });
 
   it("Given isAborted=true When scrollAndMultiSelectByIds Then 早期終了し見つかった分だけ返す", async () => {

@@ -698,6 +698,7 @@ export async function scrollAndMultiSelectByIds(
 
   const foundIds = new Set<string>();
   const titleMatchedIds = new Set<string>();
+  const titleMatchedRows = new WeakSet<HTMLElement>();
 
   async function selectMatchingRows(): Promise<void> {
     const buttons = scroller!.querySelectorAll<HTMLElement>(
@@ -727,7 +728,8 @@ export async function scrollAndMultiSelectByIds(
               t === title &&
               uniqueTargetIds.has(id) &&
               !foundIds.has(id) &&
-              !titleMatchedIds.has(id)
+              !titleMatchedIds.has(id) &&
+              !titleMatchedRows.has(row)
             ) {
               titleMatchedId = id;
               matched = true;
@@ -744,6 +746,7 @@ export async function scrollAndMultiSelectByIds(
         }
         if (titleMatchedId) {
           titleMatchedIds.add(titleMatchedId);
+          titleMatchedRows.add(row);
         }
       };
 

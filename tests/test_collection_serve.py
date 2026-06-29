@@ -45,8 +45,9 @@ from youtube_automation.scripts.collection_serve import (
     resolve_prompts_path,
 )
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.suno_downloaded_apply import apply_downloaded_artifacts
 from youtube_automation.utils.suno_downloaded_archive import commit_staged_music_files, extract_and_rename_music
-from youtube_automation.utils.suno_downloaded_payload import DownloadedArtifactError
+from youtube_automation.utils.suno_downloaded_payload import DownloadedArtifactError, DownloadedPayload
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_ORIGIN = "https://suno.com"
@@ -2237,6 +2238,21 @@ def test_post_downloaded_valid_token_succeeds(serve_dir, tmp_path):
         headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
+
+
+def test_apply_downloaded_artifacts_propagates_unknown_atomic_write_error(tmp_path):
+    """未知例外は DownloadedArtifactError に丸めず、上位へ伝播する。"""
+    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
+
+    def fail_unexpected(_path: Path, _data: dict, *, prefix: str) -> None:
+        raise RuntimeError("unexpected writer failure")
+
+    with pytest.raises(RuntimeError, match="unexpected writer failure"):
+        apply_downloaded_artifacts(
+            coll,
+            DownloadedPayload(file_count=0, format="mp3", suno_playlist_url="https://suno.com/playlist/abc"),
+            atomic_json_write=fail_unexpected,
+        )
 
 
 def test_post_downloaded_default_rejects_extension_origin_without_exact_lock(serve_dir, tmp_path):

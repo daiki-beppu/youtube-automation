@@ -91,6 +91,11 @@ async function fetchCollectionEntries(baseUrl: string, collectionId: string | nu
   return sendMessage("fetchCollectionPrompts", { baseUrl, collectionId });
 }
 
+function maxDefined(...values: Array<number | null | undefined>): number | undefined {
+  const candidates = values.filter((value): value is number => typeof value === "number" && value > 0);
+  return candidates.length > 0 ? Math.max(...candidates) : undefined;
+}
+
 export function useSunoRunner(): RunnerState {
   const [url, setUrlState] = useState("");
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
@@ -250,19 +255,12 @@ export function useSunoRunner(): RunnerState {
   ]);
 
   const expectedClipCountForManualAdoption = useMemo<number | undefined>(() => {
-    if (playlistExpectedClipCountForResume !== undefined) {
-      return playlistExpectedClipCountForResume;
-    }
-    if (entries.length > 0) {
-      return entries.length * CLIPS_PER_REQUEST;
-    }
-    if (selectedCollection?.expected_file_count) {
-      return selectedCollection.expected_file_count;
-    }
-    if (selectedCollection?.pattern_count) {
-      return selectedCollection.pattern_count * CLIPS_PER_REQUEST;
-    }
-    return undefined;
+    return maxDefined(
+      playlistExpectedClipCountForResume,
+      selectedCollection?.expected_file_count,
+      entries.length > 0 ? entries.length * CLIPS_PER_REQUEST : undefined,
+      selectedCollection?.pattern_count ? selectedCollection.pattern_count * CLIPS_PER_REQUEST : undefined,
+    );
   }, [playlistExpectedClipCountForResume, entries.length, selectedCollection]);
 
   const report = useCallback((text: string, error = false) => {
@@ -504,11 +502,12 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     const expectedClipCount = playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
-    const fullCollectionClipCount =
-      selectedCollection?.expected_file_count ??
-      (selectedCollection?.pattern_count ? selectedCollection.pattern_count * CLIPS_PER_REQUEST : undefined) ??
-      (entries.length > 0 ? entries.length * CLIPS_PER_REQUEST : undefined) ??
-      playlistExpectedClipCountForResume;
+    const fullCollectionClipCount = maxDefined(
+      selectedCollection?.expected_file_count,
+      selectedCollection?.pattern_count ? selectedCollection.pattern_count * CLIPS_PER_REQUEST : undefined,
+      entries.length > 0 ? entries.length * CLIPS_PER_REQUEST : undefined,
+      playlistExpectedClipCountForResume,
+    );
     const shouldDownload = fullCollectionClipCount !== undefined && expectedClipCount >= fullCollectionClipCount;
     if (submittedClipIdsForResume.length === 0 || expectedClipCount <= 0) {
       report(
