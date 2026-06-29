@@ -28,7 +28,7 @@ def _read(path: Path) -> str:
 
 def _section(text: str, heading: str) -> str:
     match = re.search(
-        rf"^{re.escape(heading)}\n(?P<body>.*?)(?=^## |^### |\Z)",
+        rf"^{re.escape(heading)}\n(?P<body>.*?)(?=^#{{2,4}}\s|\Z)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
@@ -134,9 +134,68 @@ def test_wf_new_overview_declares_minimal_mode_extra_pause() -> None:
     overview = _section(text, "## Overview")
     phase_1 = _section(text, "### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）")
 
+    assert "子スキルを順番に呼び" in overview
     assert "通常は企画選択 + サムネイル承認の2箇所" in overview
     assert "minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加" in overview
     assert "minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認" in phase_1
+
+
+def test_wf_new_declares_sequential_child_skill_orchestration() -> None:
+    text = _read(_WF_NEW_SKILL_MD)
+    rules = _section(text, "### 呼び出しルール")
+    sequence = _section(text, "### 実行シーケンス")
+
+    assert "子スキルは必ず上から順に呼ぶ" in rules
+    assert "並列 Agent は使わない" in rules
+    assert "子スキルの内部手順を `/wf-new` で再実装しない" in rules
+
+    expected_order = (
+        "/collection-ideate",
+        "yt-init-collection",
+        "yt-populate-scene-phrases",
+        "/thumbnail",
+        "/suno",
+        "/lyria",
+        "/loop-video",
+        "yt-collection-serve",
+    )
+    cursor = -1
+    for token in expected_order:
+        index = sequence.find(token, cursor + 1)
+        assert index != -1, f"wf-new 実行シーケンスに `{token}` がありません"
+        assert index > cursor, f"wf-new 実行シーケンスで `{token}` の順序が崩れています"
+        cursor = index
+
+
+def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
+    text = _read(_WF_NEW_SKILL_MD)
+    phase_2f = _section(text, "#### 2f. Suno helper server 起動（Suno のみ）")
+    phase_2g = _section(text, "#### 2g. 完了ガイダンス")
+    overview = _section(text, "## Overview")
+
+    for token in (
+        "Suno チャンネルでは",
+        "yt-collection-serve",
+        "Chrome 拡張でのブラウザ実行だけを user に引き継ぐ",
+    ):
+        assert token in overview, f"wf-new Overview に Suno server 起動責務 `{token}` がありません"
+
+    for token in (
+        '"$CHANNEL_DIR/collections/planning"',
+        "PORT=7873",
+        "--allow-origin",
+        "chrome-extension://<EXTENSION_ID>",
+        "--port",
+        "/collections",
+        "/auth/token",
+        '"status": "ready"',
+        '"pattern_count"',
+    ):
+        assert token in phase_2f, f"wf-new Phase 2f に Suno server 契約 `{token}` がありません"
+
+    assert "Suno-helper server" in phase_2g
+    assert "collection 単体パスや `suno-prompts.json` 直指定は playlist phase がスキップ" in phase_2f
+    assert "`/wf-new` が自動で行うのは Suno 用 localhost server の起動と疎通確認まで" in text
 
 
 def test_wf_new_cross_references_document_fallback_differences() -> None:
