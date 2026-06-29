@@ -19,7 +19,9 @@ from youtube_automation.utils.image_provider.config import (
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
+    build_codex_prompt,
     parse_image_generation_config,
+    render_codex_prompt,
     replace_model,
 )
 
@@ -97,16 +99,70 @@ class TestParseImageGenerationConfig:
         assert isinstance(cfg.codex, CodexConfig)
         assert cfg.codex.default_prompt_template == "Use the title {title}."
 
-    def test_codex_provider_uses_empty_prompt_template_when_subconfig_omitted(self):
+    @pytest.mark.parametrize(
+        "codex_section",
+        [
+            None,
+            "oops",
+            ["oops"],
+        ],
+    )
+    def test_codex_provider_rejects_invalid_subconfig_shape(self, codex_section):
         """Given image_generation.provider=codex
-        When codex sub-config が省略される
-        Then prompt template は空文字の CodexConfig として保持される。
+        When codex sub-config が mapping ではない
+        Then raw AttributeError ではなく ConfigError で fail-fast する。
         """
-        cfg = parse_image_generation_config({"image_generation": {"provider": "codex"}})
+        with pytest.raises(ConfigError, match="image_generation\\.codex"):
+            parse_image_generation_config({"image_generation": {"provider": "codex", "codex": codex_section}})
 
-        assert cfg.provider == "codex"
-        assert cfg.codex is not None
-        assert cfg.codex.default_prompt_template == ""
+    @pytest.mark.parametrize(
+        "template",
+        [
+            "",
+            "No title placeholder.",
+            "{title} and {title}",
+        ],
+    )
+    def test_codex_provider_rejects_invalid_prompt_template(self, template):
+        """Given image_generation.provider=codex
+        When default_prompt_template が空、または `{title}` を exactly once 含まない
+        Then ConfigError で fail-fast する。
+        """
+        with pytest.raises(ConfigError, match="default_prompt_template"):
+            parse_image_generation_config(
+                {
+                    "image_generation": {
+                        "provider": "codex",
+                        "codex": {"default_prompt_template": template},
+                    }
+                }
+            )
+
+    def test_render_codex_prompt_replaces_only_title(self):
+        """Given Codex prompt template
+        When title を渡す
+        Then `{title}` だけが差し替わった prompt を返す。
+        """
+        prompt = render_codex_prompt("Use the title {title}.", "Rain Study")
+
+        assert prompt == "Use the title Rain Study."
+
+    def test_build_codex_prompt_reads_skill_config_shape(self):
+        """Given thumbnail skill-config dict
+        When Codex prompt helper を呼ぶ
+        Then parser 境界検証済み template に title を差し込む。
+        """
+        prompt = build_codex_prompt(
+            {
+                "image_generation": {
+                    "provider": "codex",
+                    "codex": {"default_prompt_template": "Use the title {title}."},
+                }
+            },
+            "Rain Study",
+        )
+
+        assert prompt == "Use the title Rain Study."
 
     def test_supported_providers_declares_codex(self):
         """Given provider 設定の許容値

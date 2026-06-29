@@ -19,11 +19,7 @@ from youtube_automation.utils.image_provider.base import (
     ImageGenerationResult,
     ImageProvider,
 )
-from youtube_automation.utils.image_provider.config import (
-    CodexConfig,
-    ImageGenerationConfig,
-    parse_image_generation_config,
-)
+from youtube_automation.utils.image_provider.config import ImageGenerationConfig, parse_image_generation_config
 from youtube_automation.utils.image_provider.prompt_schema import PromptSchema
 
 __all__ = [
@@ -34,7 +30,6 @@ __all__ = [
     "PromptSchema",
     "RETRY_BACKOFF",
     "RETRY_MAX",
-    "CodexConfig",
     "get_provider",
     "load_image_generation_config",
     "parse_image_generation_config",

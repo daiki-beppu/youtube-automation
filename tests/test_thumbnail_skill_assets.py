@@ -33,6 +33,11 @@ def _read_channel_setup_thumbnail_template() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_codex_prompt_script() -> str:
+    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "codex-prompt.py"
+    return path.read_text(encoding="utf-8")
+
+
 def _load_thumbnail_default_config() -> dict:
     return yaml.safe_load(_read_thumbnail_default_config()) or {}
 
@@ -164,6 +169,15 @@ def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() ->
         "Use the title {title}.",
     ):
         assert required in channel_setup_template
+
+
+def test_thumbnail_skill_includes_codex_prompt_helper_script() -> None:
+    """#1300: collection-ideate から共有する Codex prompt helper を同梱する。"""
+    script = _read_codex_prompt_script()
+
+    assert "from youtube_automation.utils.image_provider.config import build_codex_prompt" in script
+    assert "load_skill_config(\"thumbnail\")" in script
+    assert "parser.add_argument(\"title\"" in script
 
 
 def test_thumbnail_default_config_provides_anatomy_clause() -> None:

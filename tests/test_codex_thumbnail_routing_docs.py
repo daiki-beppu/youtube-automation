@@ -49,10 +49,8 @@ def _wf_new_phase_2c_block(text: str) -> str:
 
 
 def _assert_codex_ttp_prompt_policy(block: str) -> None:
-    assert "load_skill_config('thumbnail')" in block
+    assert ".claude/skills/thumbnail/references/codex-prompt.py" in block
     assert "default_prompt_template" in block
-    assert "template.count('{title}') != 1" in block
-    assert "template.replace('{title}'" in block
     assert "TTP 上位互換" in block
     assert "短い" in block or "短縮" in block or "短く" in block
 

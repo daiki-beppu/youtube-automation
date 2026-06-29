@@ -254,23 +254,7 @@ if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
   build_codex_prompt() {
-    local title="$1"
-    TITLE="$title" uv run python3 -c "
-import os
-from youtube_automation.utils.skill_config import load_skill_config
-
-template = (
-    load_skill_config('thumbnail')
-    .get('image_generation', {})
-    .get('codex', {})
-    .get('default_prompt_template')
-)
-if not isinstance(template, str) or not template.strip():
-    raise SystemExit('thumbnail image_generation.codex.default_prompt_template is required')
-if template.count('{title}') != 1:
-    raise SystemExit('thumbnail image_generation.codex.default_prompt_template must contain exactly one {title}')
-print(template.replace('{title}', os.environ['TITLE']))
-"
+    uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "$1"
   }
   bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Aタイトル>")" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
   bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Bタイトル>")" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
@@ -350,22 +334,7 @@ PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider impor
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
-  CODEX_PROMPT=$(TITLE="<選択された企画タイトル>" uv run python3 -c "
-import os
-from youtube_automation.utils.skill_config import load_skill_config
-
-template = (
-    load_skill_config('thumbnail')
-    .get('image_generation', {})
-    .get('codex', {})
-    .get('default_prompt_template')
-)
-if not isinstance(template, str) or not template.strip():
-    raise SystemExit('thumbnail image_generation.codex.default_prompt_template is required')
-if template.count('{title}') != 1:
-    raise SystemExit('thumbnail image_generation.codex.default_prompt_template must contain exactly one {title}')
-print(template.replace('{title}', os.environ['TITLE']))
-")
+  CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
   bash .claude/skills/thumbnail/references/codex-image.sh \
     "$CODEX_PROMPT" \
     collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png \

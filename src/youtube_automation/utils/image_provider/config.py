@@ -172,7 +172,7 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {})
         return ImageGenerationConfig(provider="gemini_cli", gemini_cli=gemini_cli_cfg)
 
-    codex_cfg = _build_codex(section.get("codex") or {})
+    codex_cfg = _build_codex(section.get("codex"))
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
 
@@ -211,8 +211,33 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
     )
 
 
-def _build_codex(d: dict[str, Any]) -> CodexConfig:
-    return CodexConfig(default_prompt_template=str(d.get("default_prompt_template", "")))
+def _build_codex(d: Any) -> CodexConfig:
+    if not isinstance(d, dict):
+        raise ConfigError("image_generation.codex は mapping で指定してください")
+    return CodexConfig(default_prompt_template=_validate_codex_prompt_template(d.get("default_prompt_template")))
+
+
+def _validate_codex_prompt_template(template: Any) -> str:
+    if not isinstance(template, str) or not template.strip():
+        raise ConfigError("image_generation.codex.default_prompt_template は空でない文字列で指定してください")
+    if template.count("{title}") != 1:
+        raise ConfigError("image_generation.codex.default_prompt_template は {title} をちょうど 1 回含めてください")
+    return template
+
+
+def render_codex_prompt(template: str, title: str) -> str:
+    """Codex thumbnail prompt template の `{title}` を差し替える。"""
+    if not isinstance(title, str) or not title.strip():
+        raise ConfigError("Codex thumbnail prompt の title は空でない文字列で指定してください")
+    return _validate_codex_prompt_template(template).replace("{title}", title)
+
+
+def build_codex_prompt(skill_cfg: dict[str, Any], title: str) -> str:
+    """thumbnail skill-config から Codex 用 prompt を生成する。"""
+    cfg = parse_image_generation_config(skill_cfg)
+    if cfg.provider != "codex" or cfg.codex is None:
+        raise ConfigError("image_generation.provider=codex の設定で実行してください")
+    return render_codex_prompt(cfg.codex.default_prompt_template, title)
 
 
 def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConfig:
