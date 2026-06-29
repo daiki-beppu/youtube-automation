@@ -707,7 +707,7 @@ def test_workflow_approval_gates_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_name_is_ignored_for_legacy_rules(tmp_path, monkeypatch):
+def test_comments_rule_name_is_required_for_legacy_rules(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -718,8 +718,8 @@ def test_comments_rule_name_is_ignored_for_legacy_rules(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    config = load_config()
-    assert config.comments.rules[0].name == ""
+    with pytest.raises(ConfigError, match=r"comments\.rules\[0\]\.name"):
+        load_config()
 
 
 def test_comments_templates_must_be_object(tmp_path, monkeypatch):

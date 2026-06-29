@@ -63,16 +63,6 @@ const validateRule = (raw: unknown, index: number, add: Issue): void => {
     add(`comments.rules[${index}].name が必須です`);
     return;
   }
-  if ("template_key" in raw) {
-    add(`comments.rules[${index}].template_key は廃止されました`);
-    return;
-  }
-  if ("generator" in raw) {
-    add(
-      `comments.rules[${index}].generator は廃止されました。provider を使用してください`
-    );
-    return;
-  }
   const ruleProvider = (raw.provider as string | undefined) ?? null;
   if (ruleProvider !== null && !VALID_PROVIDERS.includes(ruleProvider)) {
     add(
@@ -100,9 +90,24 @@ const validateComments = (cm: unknown, add: Issue): void => {
     return;
   }
   const rulesRaw = cm.rules;
+  if (rulesRaw !== undefined && rulesRaw !== null && !Array.isArray(rulesRaw)) {
+    add("comments.rules は list でなければなりません");
+    return;
+  }
   if (Array.isArray(rulesRaw)) {
     for (const [i, raw] of rulesRaw.entries()) {
       validateRule(raw, i, add);
+    }
+  }
+  const { language } = cm;
+  if (language !== undefined && language !== null) {
+    if (typeof language !== "string") {
+      add("comments.language は文字列でなければなりません");
+      return;
+    }
+    if (!language.trim()) {
+      add("comments.language は空文字にできません");
+      return;
     }
   }
   const genRaw = cm.generator;
@@ -148,6 +153,7 @@ const buildComments = (cm: Record<string, unknown>) => {
     generator: buildGenerator(genRaw),
     historyFile:
       (cm.history_file as string | undefined) ?? "comment_reply_history.json",
+    language: (cm.language as string | undefined) ?? null,
     maxRepliesPerRun: (cm.max_replies_per_run as number | undefined) ?? 20,
     ngWords: [...((cm.ng_words as string[] | undefined) ?? [])],
     rules: rulesRaw.map(buildRule),

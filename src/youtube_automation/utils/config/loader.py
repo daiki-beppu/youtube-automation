@@ -498,6 +498,9 @@ def _build_comments(merged: dict) -> Comments:
     for index, raw in enumerate(rules_raw):
         if not isinstance(raw, dict):
             raise ConfigError(f"comments.rules[{index}] は object でなければなりません")
+        name = raw.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigError(f"comments.rules[{index}].name が必須です")
         provider = raw.get("provider")
         if provider is not None and provider not in VALID_PROVIDERS:
             raise ConfigError(
@@ -510,7 +513,7 @@ def _build_comments(merged: dict) -> Comments:
             )
         rules.append(
             CommentRule(
-                name=str(raw.get("name", "")),
+                name=name.strip(),
                 keywords=list(raw.get("keywords", [])),
                 pattern=raw.get("pattern"),
                 language=raw.get("language"),

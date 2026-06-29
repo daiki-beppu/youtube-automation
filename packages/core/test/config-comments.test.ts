@@ -67,6 +67,7 @@ describe("comments — defaults", () => {
     // Then the section is disabled with codex generator + documented defaults
     expect(config.engagement.comments.enabled).toBe(false);
     expect(config.engagement.comments.rules).toEqual([]);
+    expect(config.engagement.comments.language).toBeNull();
     expect(config.engagement.comments.generator.provider).toBe("codex");
     expect(config.engagement.comments.maxRepliesPerRun).toBe(20);
     expect(config.engagement.comments.generator.maxLength).toBe(280);
@@ -103,6 +104,7 @@ describe("comments — full configuration", () => {
           provider: "gemini",
           requests_per_minute: 10,
         },
+        language: "ja",
         max_replies_per_run: 5,
         ng_words: ["spam"],
         rules: [
@@ -122,6 +124,7 @@ describe("comments — full configuration", () => {
     expect(comments.enabled).toBe(true);
     expect(comments.maxRepliesPerRun).toBe(5);
     expect(comments.delayBetweenRepliesSec).toBe(1);
+    expect(comments.language).toBe("ja");
     expect(comments.ngWords).toEqual(["spam"]);
     expect(comments.rules).toHaveLength(1);
     const [rule] = comments.rules;
@@ -208,6 +211,15 @@ describe("comments.rules — validation", () => {
     expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.name/u);
   });
 
+  test("rejects non-array rules", () => {
+    const sections = minimalSections();
+    sections["comments.json"] = {
+      comments: { enabled: true, rules: "legacy" },
+    };
+
+    expect(() => load(sections)).toThrow(/comments\.rules/u);
+  });
+
   test("rejects an invalid rule provider", () => {
     // Given a rule with an unsupported provider override
     const sections = minimalSections();
@@ -267,6 +279,26 @@ describe("comments.rules — validation", () => {
   });
 });
 
+describe("comments.language — validation", () => {
+  test("rejects an empty language", () => {
+    const sections = minimalSections();
+    sections["comments.json"] = {
+      comments: { enabled: true, language: "" },
+    };
+
+    expect(() => load(sections)).toThrow(/comments\.language/u);
+  });
+
+  test("rejects a non-string language", () => {
+    const sections = minimalSections();
+    sections["comments.json"] = {
+      comments: { enabled: true, language: ["ja"] },
+    };
+
+    expect(() => load(sections)).toThrow(/comments\.language/u);
+  });
+});
+
 // --- deprecated keys -------------------------------------------------------
 
 describe("comments — deprecated keys are rejected, not migrated", () => {
@@ -292,7 +324,7 @@ describe("comments — deprecated keys are rejected, not migrated", () => {
     expect(() => load(sections)).toThrow(/comments\.templates/u);
   });
 
-  test("rejects comments.rules[].template_key", () => {
+  test("ignores comments.rules[].template_key for legacy compatibility", () => {
     // Given a rule carrying the retired template_key
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -301,11 +333,11 @@ describe("comments — deprecated keys are rejected, not migrated", () => {
       },
     };
 
-    // When/Then the rule-level deprecation guard fires
-    expect(() => load(sections)).toThrow(/template_key/u);
+    // Then it loads, but the retired key is not represented in the output.
+    expect(load(sections).engagement.comments.rules[0]?.name).toBe("legacy");
   });
 
-  test("rejects comments.rules[].generator", () => {
+  test("ignores comments.rules[].generator for legacy compatibility", () => {
     // Given a rule carrying the retired generator key
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -314,7 +346,7 @@ describe("comments — deprecated keys are rejected, not migrated", () => {
       },
     };
 
-    // When/Then the rule-level deprecation guard fires
-    expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.generator/u);
+    // Then it loads, but the retired key is not represented in the output.
+    expect(load(sections).engagement.comments.rules[0]?.name).toBe("legacy");
   });
 });

@@ -481,7 +481,7 @@ def test_agent_replies_over_max_length_is_truncated_without_generator(tmp_path, 
     )
     replier = CommentReplier(
         yt,
-        config=_make_config(generator=GeneratorConfig(provider="gemini", model="gemini-3.5-flash", max_length=5)),
+        config=_make_config(generator=GeneratorConfig(provider="gemini", model="gemini-3.5-flash", max_length=12)),
         channel_dir=tmp_path,
         default_language="ja",
         agent_replies={"c1": "123456789"},
@@ -489,8 +489,47 @@ def test_agent_replies_over_max_length_is_truncated_without_generator(tmp_path, 
 
     plan = replier.run(dry_run=True)
 
-    assert plan.planned[0]["reply_text"] == "@Alic"
+    assert plan.planned[0]["reply_text"] == "@Alice 12345"
     _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_agent_replies_skip_when_mention_exceeds_max_length(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(generator=GeneratorConfig(provider="gemini", model="gemini-3.5-flash", max_length=5)),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "123456789"},
+    )
+
+    plan = replier.run(dry_run=False)
+
+    assert plan.planned == []
+    assert any(row["reason"] == "mention_exceeds_max_length" for row in plan.skipped)
+    yt._insert_mock.execute.assert_not_called()
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_codex_generator_apply_requires_agent_replies(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(generator=GeneratorConfig(provider="codex", max_length=280)),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    with pytest.raises(ConfigError, match="codex"):
+        replier.run(dry_run=False)
+
+    yt._insert_mock.execute.assert_not_called()
 
 
 def test_agent_replies_missing_comment_is_skipped_without_generator(tmp_path, _mock_default_genai_client):

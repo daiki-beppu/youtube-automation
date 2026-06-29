@@ -1032,6 +1032,30 @@ def test_post_distrokid_releases_invalid_content_length_returns_400(tmp_path, se
         conn.close()
 
 
+def test_post_distrokid_releases_negative_content_length_returns_400(tmp_path, serve_dir_dk):
+    """Given negative Content-Length
+    When 許可 Origin から POST /distrokid/releases する
+    Then body を処理せず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    conn, resp = _post_declared_length(
+        f"{base}{_DISTROKID_RELEASES_ROUTE}",
+        declared_length=-1,
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 400
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
+        assert not distrokid_releases_output_path(capture_root).exists()
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------------------
 # spec.json 優先（#941）: _read_disc_album_title / build_distrokid_collections_index
 # ---------------------------------------------------------------------------

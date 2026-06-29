@@ -692,11 +692,9 @@ def create_server(
                 self.send_error(404, "Not Found")
                 return
 
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            if length > 10240:
-                self.send_error(413, "Payload Too Large")
+            raw = self._read_limited_post_body()
+            if raw is None:
                 return
-            raw = self.rfile.read(length) if length else b""
             try:
                 payload = json.loads(raw.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
@@ -726,6 +724,20 @@ def create_server(
             ).encode("utf-8")
             self._send_bytes(resp_body, "application/json; charset=utf-8")
 
+        def _read_limited_post_body(self) -> bytes | None:
+            try:
+                length = int(self.headers.get("Content-Length", 0) or 0)
+            except ValueError:
+                self.send_error(400, "Bad Request")
+                return None
+            if length < 0:
+                self.send_error(400, "Bad Request")
+                return None
+            if length > _MAX_POST_BODY_BYTES:
+                self.send_error(413, "Payload Too Large")
+                return None
+            return self.rfile.read(length) if length else b""
+
         def do_POST(self) -> None:  # noqa: N802
             # GET と異なり POST は Origin 必須。未設定・不許可は 403。
             # （チェック順: まず capture root の有無に関わらず Origin を確認する）
@@ -743,15 +755,9 @@ def create_server(
                 if origin is None:
                     self.send_error(403, "Forbidden")
                     return
-                try:
-                    length = int(self.headers.get("Content-Length", 0) or 0)
-                except ValueError:
-                    self.send_error(400, "Bad Request")
+                raw = self._read_limited_post_body()
+                if raw is None:
                     return
-                if length > _MAX_POST_BODY_BYTES:
-                    self.send_error(413, "Payload Too Large")
-                    return
-                raw = self.rfile.read(length) if length else b""
                 try:
                     payload = json.loads(raw.decode("utf-8"))
                 except (json.JSONDecodeError, UnicodeDecodeError):
@@ -778,15 +784,9 @@ def create_server(
                 if origin is None:
                     self.send_error(403, "Forbidden")
                     return
-                try:
-                    length = int(self.headers.get("Content-Length", 0) or 0)
-                except ValueError:
-                    self.send_error(400, "Bad Request")
+                raw = self._read_limited_post_body()
+                if raw is None:
                     return
-                if length > _MAX_POST_BODY_BYTES:
-                    self.send_error(413, "Payload Too Large")
-                    return
-                raw = self.rfile.read(length) if length else b""
                 try:
                     payload = json.loads(raw.decode("utf-8"))
                 except (json.JSONDecodeError, UnicodeDecodeError):

@@ -1,6 +1,6 @@
 # Thumbnail TTP Audit (2026-06-30)
 
-Related issues: #520, #521, #522.
+Related issues: #520, #521, #522. This report closes the local inventory needed for #522, but #520 remains open because several required downstream roots were not present in this checkout.
 
 Scope scanned: local first-party channel roots under `/Users/mba/02-yt` that contain `config/skills/thumbnail.yaml`.
 
@@ -47,6 +47,6 @@ Not present in this checkout scan: `bobble`, `neta`, `yt-studio`.
 
 ## Follow-Ups
 
-- #520 can be closed with this audit report unless missing channel roots (`bobble`, `neta`, `yt-studio`) need to be restored locally and scanned.
+- #520 should stay open: required channel roots `bobble`, `neta`, `yt-studio`, and `libecity` were not present in this checkout and need a restored local scan or another evidence source.
 - #521 should stay deferred until a visual QA pass is run over the listed live collections; no image regeneration was performed in this automation PR.
 - #522 can be closed for inventory and operating decision: stock reuse remains enabled, `thumbnail_candidate` stays the only reusable source role, and existing `ideate_preview` files remain archive-only.

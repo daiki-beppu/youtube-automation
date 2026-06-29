@@ -657,6 +657,28 @@ def test_post_suno_playlists_invalid_content_length_returns_400(tmp_path, serve_
         conn.close()
 
 
+def test_post_suno_playlists_negative_content_length_returns_400(tmp_path, serve_capture):
+    """Given negative Content-Length
+    When 許可 Origin から POST /suno/playlists する
+    Then body を処理せず 400 を返す。
+    """
+    capture_root = tmp_path / "out"
+    base = serve_capture(capture_root=capture_root, prefix="df365")
+
+    conn, resp = _post_declared_length(
+        f"{base}{_SUNO_PLAYLISTS_ROUTE}",
+        declared_length=-1,
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 400
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
+        assert not (capture_root / _OUTPUT_RELPATH).exists()
+    finally:
+        conn.close()
+
+
 def test_options_preflight_allows_post_method(tmp_path, serve_capture):
     """Given 許可 Origin からの preflight
     When `OPTIONS /suno/playlists`

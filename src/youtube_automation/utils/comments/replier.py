@@ -20,6 +20,7 @@ from youtube_automation.utils.comments.generator_factory import create_reply_gen
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.config.comments import (
     FALLBACK_RETRY,
+    PROVIDER_CODEX,
     Comments,
 )
 from youtube_automation.utils.exceptions import ConfigError, GeneratorError, YouTubeAPIError
@@ -170,6 +171,11 @@ class CommentReplier:
             raise ConfigError("export_candidates=True は dry-run でのみ使用できます")
         if export_candidates and self._agent_replies is not None:
             raise ConfigError("export_candidates=True と agent_replies は同時に使用できません")
+        if not dry_run and self._agent_replies is None and self._config.generator.provider == PROVIDER_CODEX:
+            raise ConfigError(
+                "comments.generator.provider='codex' は --apply で直接使用できません。"
+                "--export-candidates と --agent-replies-file の監査済みフローを使用してください"
+            )
         if not self._config.enabled:
             logger.warning("comments.enabled=false のため、何もしません")
             return ReplyPlan()
@@ -420,7 +426,10 @@ class CommentReplier:
                 ctx.max_length,
                 comment.comment_id,
             )
-            reply_text = reply_text[: ctx.max_length].rstrip()
+            reply_text = _truncate_preserving_mention(reply_text, mention, ctx.max_length)
+            if reply_text is None:
+                plan.skipped.append(self._skip_record(comment, "mention_exceeds_max_length"))
+                return None
         lowered = reply_text.lower()
         if any(word.lower() in lowered for word in self._config.ng_words if word):
             plan.skipped.append(self._skip_record(comment, "reply_contains_ng_word"))
@@ -552,3 +561,18 @@ def _author_mention(author: str | None) -> str | None:
     if not normalized:
         return None
     return f"@{normalized}"
+
+
+def _truncate_preserving_mention(reply_text: str, mention: str | None, max_length: int) -> str | None:
+    if not mention or not reply_text.startswith(mention):
+        return reply_text[:max_length].rstrip()
+    if len(mention) > max_length:
+        return None
+    prefix = f"{mention} "
+    if not reply_text.startswith(prefix):
+        return mention if len(reply_text) > max_length else reply_text
+    available = max_length - len(prefix)
+    if available <= 0:
+        return mention
+    body = reply_text[len(prefix) : len(prefix) + available].rstrip()
+    return f"{prefix}{body}".rstrip()
