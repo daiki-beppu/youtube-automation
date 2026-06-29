@@ -251,10 +251,14 @@ done <<< "$REFS"
 # 違う値の場合は連打数と plan-{a,b,c,...} の採番をその値に合わせて調整する。
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
-  # codex は長文 prompt で失敗しやすいため、4-1 の本番プロンプトを短縮して差分だけを書く。
-  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Aの短縮プロンプト>" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Bの短縮プロンプト>" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Cの短縮プロンプト>" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[@]}"
+  # codex は image_generation.codex.default_prompt_template を必ず使う。
+  # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  build_codex_prompt() {
+    uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "$1"
+  }
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Aタイトル>")" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Bタイトル>")" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Cタイトル>")" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[@]}"
 else
   uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
   uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
@@ -328,8 +332,11 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 # <x> は選択された企画の番号（a/b/c）
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
+  # codex は image_generation.codex.default_prompt_template を必ず使う。
+  # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
   bash .claude/skills/thumbnail/references/codex-image.sh \
-    "<選択された企画の短縮プロンプト>" \
+    "$CODEX_PROMPT" \
     collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png \
     "${REF_PATHS[@]}"
 else

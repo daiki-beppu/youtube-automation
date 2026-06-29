@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(suno)`: Suno V5.5 向けプロンプト設計を更新し、ボーカル曲用の `/suno-lyric` スキルと lyric reference を追加。`suno-lyrics.json` の必須化・entry name 完全一致検証・auto-prep slug / quote source safety guidance も追加（#1305）
+
 ### Changed
 
 - `feat(masterup)`: Suno 生成後の 2 clip を `20-documentation/suno-prompts.json` の歌詞有無で整理する `yt-suno-select-tracks` を追加。歌詞あり prompt は 1 clip 採用、instrumental は 2 clip 採用とし、極端に短い/長い失敗生成を stock 退避または削除できるようにした（#1308）
@@ -30,6 +34,7 @@ local fix 衝突注意:
 
 ### Changed
 
+- `feat(thumbnail)`: Codex サムネイル生成の既定プロンプトを、参照画像を winning template として扱う短い TTP 上位互換型に変更。`image_generation.codex.default_prompt_template` を追加し、`/collection-ideate` と channel-setup テンプレートの Codex 導線を同方針へ更新（#1300）
 - `refactor(shared)`: CollectionSummary を boolean fields (`has_prompts` / `mapped`) から status enum (`needs_prompts` | `ready` | `downloaded`) に置換。`downloaded_count` フィールド追加、`playlist_name` 廃止。POST `/collections/<id>/downloaded` エンドポイント新設（#1216）**BREAKING**
 - `feat(suno-helper)`: Playlist 追加後の Download all DOM 操作 + chrome.downloads 連携を実装 (#1146)
 - `feat(serve)`: POST `/collections/<id>/downloaded` に冪等更新ロジックを追加（playlist URL 記録 + DL 完了マーク）(#1145)

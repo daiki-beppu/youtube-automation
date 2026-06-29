@@ -1,0 +1,229 @@
+# suno-lyric skill default config
+#
+# 偉人の名言やテーマのエッセンスを骨格に Suno V5.5 歌詞を 1 曲ずつ生成するスキルの設定。
+# チャンネル側で config/skills/suno-lyric.yaml に上書きする。
+
+# 名言ソース（iyashitour.com の英語名言ページ）
+# 安全境界: scheme=https / host=iyashitour.com / path は /meigen/ 配下のみ許可。
+# 別 host や private IP への自動取得は禁止し、人間が取得済み引用メモを渡す。
+source:
+  base_url: "https://iyashitour.com"
+  index_path: "/meigen/eigo_meigen/eigo_ijin"
+  # 1 曲あたり何個の名言から選定するか
+  fetch_candidates_per_track: 8
+  # WebFetch のリトライ回数
+  fetch_retries: 2
+  # キャッシュ TTL（秒）。同一偉人ページの重複取得を抑制
+  cache_ttl_sec: 900
+
+# 歌詞のターゲットペルソナ
+# `docs/audience-persona.md` が無い場合のフォールバック
+persona:
+  primary: "Carla"
+  secondary: "Marcus"
+  tertiary: "Kenji"
+  # 各曲のうち何割を primary 寄りで書くか（残りは secondary / tertiary に振る）
+  primary_ratio: 0.7
+
+# ボーカル設定
+vocal_gender: "male"  # male / female / neutral / auto
+# auto は collections/planning/<theme>/01-thumbnail/main.png のキャラ性別から推定（要画像解析）
+
+# 歌詞生成
+lyrics_generation:
+  # claude: skill 実行中に Claude が直接生成
+  provider: claude
+  # 検証 NG 時の最大再生成回数
+  max_retries: 3
+
+# 偉人の重み付け（mood tag → 偉人候補リスト）
+# mood tag は suno-patterns.yaml::patterns[].mood または scene tag と一致させる
+affinity_weights:
+  # 過去・郷愁・時の流れ
+  nostalgia:
+    - { name: "maya-angelou",        weight: 1.0 }
+    - { name: "f-scott-fitzgerald",  weight: 0.9 }
+    - { name: "hemingway",           weight: 0.8 }
+    - { name: "hermann-hesse",       weight: 0.7 }
+    - { name: "ray-bradbury",        weight: 0.6 }
+
+  # 静かな自信・誇り
+  confidence:
+    - { name: "martin-luther-king",  weight: 1.0 }
+    - { name: "nelson-mandela",      weight: 0.95 }
+    - { name: "muhammad-ali",        weight: 0.85 }
+    - { name: "maya-angelou",        weight: 0.8 }
+    - { name: "churchill",           weight: 0.6 }
+
+  # 愛・優しさ・親密さ
+  romance:
+    - { name: "shakespeare",         weight: 1.0 }
+    - { name: "victor-hugo",         weight: 0.9 }
+    - { name: "goethe",              weight: 0.85 }
+    - { name: "saint-exupery",       weight: 0.8 }
+    - { name: "pablo-neruda",        weight: 0.7 }
+
+  # グルーヴ・自由・解放
+  groove:
+    - { name: "bob-marley",          weight: 1.0 }
+    - { name: "john-lennon",         weight: 0.95 }
+    - { name: "miles-davis",         weight: 0.9 }
+    - { name: "louis-armstrong",     weight: 0.8 }
+    - { name: "duke-ellington",      weight: 0.7 }
+
+  # 内省・知恵・哲学
+  reflection:
+    - { name: "gandhi",              weight: 1.0 }
+    - { name: "lincoln",             weight: 0.9 }
+    - { name: "albert-camus",        weight: 0.85 }
+    - { name: "dostoevsky",          weight: 0.75 }
+    - { name: "tolstoy",             weight: 0.7 }
+
+  # 夢・希望・未来志向
+  dream:
+    - { name: "walt-disney",         weight: 1.0 }
+    - { name: "jfk",                 weight: 0.9 }
+    - { name: "picasso",             weight: 0.85 }
+    - { name: "van-gogh",            weight: 0.8 }
+    - { name: "steve-jobs",          weight: 0.7 }
+
+  # 楽しさ・陽気さ・good times
+  good-times:
+    - { name: "mark-twain",          weight: 1.0 }
+    - { name: "oscar-wilde",         weight: 0.9 }
+    - { name: "frank-sinatra",       weight: 0.85 }
+    - { name: "elvis-presley",       weight: 0.75 }
+    - { name: "bob-marley",          weight: 0.7 }
+
+  # コーディング・集中・職人気質（Marcus 向け）
+  focus:
+    - { name: "leonardo-da-vinci",   weight: 1.0 }
+    - { name: "steve-jobs",          weight: 0.95 }
+    - { name: "albert-einstein",     weight: 0.85 }
+    - { name: "picasso",             weight: 0.75 }
+    - { name: "miles-davis",         weight: 0.7 }
+
+# 同じ偉人を 1 コレクション内で使う上限回数
+# 1 にすると完全分散、2-3 にすると人気偉人の重複を許容
+max_uses_per_great_person: 2
+
+# 歌詞構造ガイドライン（Suno V5.5 セクションタグ）
+lyric:
+  format: "suno_v5_section_tags"
+  language: "en"
+
+  sections:
+    # 必須セクション最小構成
+    - { tag: "Verse",   count: 2, lines_min: 4, lines_max: 6 }
+    - { tag: "Chorus",  count: 2, lines_min: 4, lines_max: 6 }
+    # 以下から 1 つ挿入（多様性のため曲ごとに切替可）
+    - { tag: "Bridge",            count: 1, lines_min: 2, lines_max: 4, optional_pool: true }
+    - { tag: "Instrumental break", count: 1, lines: 0,                  optional_pool: true }
+
+  # 押韻パターン候補（各 Verse/Chorus でランダム選択）
+  rhyme_scheme:
+    - "abab"
+    - "aabb"
+    - "abba"
+
+  # テンポ別 1 行の単語数ガイド
+  line_word_count_by_tempo:
+    slow:   { min: 6, max: 8 }   # 80-95 BPM
+    mid:    { min: 4, max: 7 }   # 95-110 BPM
+    up:     { min: 3, max: 5 }   # 110+ BPM
+
+  vocab_constraints:
+    # 含めない語（AI 臭の代表例）
+    avoid:
+      - "yo"
+      - "ay"
+      - "uh"
+      - "yeah yeah"
+      - "let me tell ya"
+      - "y'all"
+      - "baby baby"
+      - "oh oh oh"
+
+    # 優先語（Carla 層向け語彙）
+    prefer:
+      - "smooth"
+      - "soulful"
+      - "midnight"
+      - "memory"
+      - "golden"
+      - "quiet"
+      - "pride"
+      - "longing"
+      - "time"
+      - "stay"
+
+# 和訳設定（レビュー用・ニュアンス維持の意訳）
+# suno-lyrics.md にのみ載せる。Chrome 拡張用 JSON には含めない。
+translation:
+  # 和訳を生成するか
+  enabled: true
+  # 翻訳の粒度: "section" (セクション単位の意訳・推奨) / "line" (行対訳・非推奨)
+  granularity: "section"
+  # ニュアンス維持の方針
+  preserve:
+    - "emotion_temperature"   # 感情の温度感
+    - "scene_imagery"         # 情景・視覚イメージ
+    - "persona_voice"         # ペルソナの語り口
+    - "chorus_repetition"     # フックの反復性
+  drop:
+    - "rhyme"                 # 押韻は再現しない
+    - "word_order"            # 英語の語順を引きずらない
+    - "literal_meaning"       # 逐語訳的な「正確さ」は捨てる
+  # 翻訳臭検出語（これらが混入したら NG）
+  translation_smell_words:
+    - "という意味"
+    - "と歌う"
+    - "と歌っている"
+    - "Verse 1 では"
+    - "Verse 2 では"
+    - "Chorus は"
+    - "ここで"
+    - "つまり"
+  # Carla 語彙の英→日マッピング（参考。LLM への hint）
+  carla_vocab_jp:
+    golden: "金色の / 黄金の"
+    stay: "残る / 居続ける"
+    quiet: "静かな"
+    longing: "焦がれる / 恋しさ"
+    midnight: "深夜 / 真夜中"
+    memory: "記憶 / 思い出"
+    slow: "ゆっくり / 緩やかな"
+    pride: "誇り"
+    feel: "感じる（feelings は「気持ち」より「感じたもの」寄り）"
+    stay_chorus: "離れない / 残ったまま"
+  # Chorus の和訳 1 行の文字数目安
+  chorus_line_chars: { min: 6, max: 14 }
+
+# 禁止トピック
+forbidden_topics:
+  - politics
+  - religion
+  - explicit
+  - violence
+  - brand-names
+  - real-person-names  # 偉人名そのものを歌詞に出さない
+
+# CTA を歌詞に入れる場合の対象 entry name。空なら CTA は入れない。
+cta:
+  positions: []
+
+# 出力先（collections/planning/<theme>/ からの相対パス）
+output:
+  lyrics_md: "20-documentation/suno-lyrics.md"
+  lyrics_json: "20-documentation/suno-lyrics.json"
+  # 既存エントリを上書きしない（追記モード）
+  preserve_existing: true
+
+# 検証ルール
+validation:
+  # 名言原文との連続一致語数の上限（これを超えると直接転載として失格）
+  max_consecutive_quote_words: 4
+  # 必須セクションが揃っているか
+  require_sections: ["Verse", "Chorus"]
+  # 1 セクションあたりの最大行数を超えたら警告
+  warn_section_overflow: true
