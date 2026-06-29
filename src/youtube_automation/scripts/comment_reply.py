@@ -68,7 +68,10 @@ def _load_agent_replies(path: str | None) -> dict[str, str] | None:
             raise AutomationError(f"agent replies JSON replies[{i}].comment_id が必須です")
         if not isinstance(reply_text, str) or not reply_text.strip():
             raise AutomationError(f"agent replies JSON replies[{i}].reply_text が必須です")
-        replies[comment_id.strip()] = reply_text.strip()
+        comment_key = comment_id.strip()
+        if comment_key in replies:
+            raise AutomationError(f"agent replies JSON comment_id が重複しています: {comment_key}")
+        replies[comment_key] = reply_text.strip()
     return replies
 
 

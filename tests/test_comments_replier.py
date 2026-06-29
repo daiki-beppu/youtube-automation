@@ -43,6 +43,7 @@ def test_load_agent_replies_accepts_replies_object(tmp_path):
         {"replies": [{"comment_id": "c1", "reply_text": None}]},
         {"replies": [{"comment_id": "c1"}]},
         {"replies": [{"comment_id": "", "reply_text": "Thanks!"}]},
+        {"replies": [{"comment_id": "c1", "reply_text": "first"}, {"comment_id": "c1", "reply_text": "second"}]},
         [{"comment_id": "c1", "reply_text": []}],
     ],
 )
@@ -392,9 +393,11 @@ def test_agent_replies_apply_posts_reply_and_saves_history_without_generator(tmp
 
     assert plan.planned[0]["reply_source"] == "agent"
     assert plan.replied[0]["reply_text"] == "見つけてくださってありがとうございます。"
+    assert plan.replied[0]["reply_source"] == "agent"
     yt._insert_mock.execute.assert_called_once()
     history = ReplyHistory(tmp_path / "comment_reply_history.json")
     assert history.has_replied("c1")
+    assert history._data["replied"]["c1"]["reply_source"] == "agent"
     _mock_default_genai_client.models.generate_content.assert_not_called()
 
 

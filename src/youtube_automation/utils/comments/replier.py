@@ -361,7 +361,8 @@ class CommentReplier:
         if dry_run or export_candidates:
             return
 
-        if self._post_reply(comment, reply_text, match, video_title, plan):
+        reply_source = "agent" if self._agent_replies is not None else None
+        if self._post_reply(comment, reply_text, match, video_title, plan, reply_source=reply_source):
             self._sleep(self._config.delay_between_replies_sec)
 
     def _generate_reply(
@@ -440,6 +441,7 @@ class CommentReplier:
         match: RuleMatch,
         video_title: str,
         plan: ReplyPlan,
+        reply_source: str | None = None,
     ) -> bool:
         """YouTube に返信を投稿し履歴を永続化する.
 
@@ -478,6 +480,8 @@ class CommentReplier:
             "replied_at": datetime.now(timezone.utc).isoformat(),
             "reply_text": reply_text,
         }
+        if reply_source is not None:
+            metadata["reply_source"] = reply_source
         self._history.mark_replied(comment.comment_id, metadata)
         # insert→save 間で save が失敗すると次回実行で二重返信するため、リトライで確実に永続化 (#382)
         save_failed = False
