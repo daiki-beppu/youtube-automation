@@ -107,12 +107,13 @@ class TestStreamingSkillSshAgent:
         """
         text = read_file(_STREAMING_SKILL)
 
-        assert "配信元 MP4 の実測" in text
+        assert "月間帯域見積もり用の MP4 実測" in text
         assert "ffprobe" in text
         assert "-c:v copy" in text
         assert "4,500 Kbps" in text
         assert "-profile:v high" in text
         assert "1.52 TB" in text
+        assert "preflight 合否は `terraform plan` / `apply` の stream-level 検証" in text
 
 
 # ============================================================================
@@ -169,6 +170,8 @@ class TestStreamingReadme:
         assert "4,500 Kbps" in text
         assert "-profile:v high" in text
         assert "1.52 TB" in text
+        assert "container 全体の平均 bitrate" in text
+        assert "preflight の合否確認は `terraform plan` / `apply` の stream-level 検証" in text
 
     def test_mentions_op_read_for_secret_injection(self):
         """Given README

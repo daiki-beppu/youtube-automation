@@ -27,7 +27,7 @@ description: "Use when YouTube ライブ配信用の Vultr VPS を Terraform で
 | 初回構築 | §1 |
 | 動画差し替え | `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh ./new_video.mp4` |
 | 帯域チェック | `uv run yt-stream-bandwidth --check-threshold --terraform-dir infra/terraform/streaming` |
-| 配信元 MP4 の実測 | `uv run yt-stream-bandwidth --probe-bitrate ./stream.mp4` |
+| 月間帯域見積もり用の MP4 実測 | `uv run yt-stream-bandwidth --probe-bitrate ./stream.mp4` |
 | アーカイブ件数確認（11h+1h 運用時） | `uv run yt-stream-archive-check --expected 2` |
 | サービス状態 | `ssh -i ~/.ssh/yt_stream_key root@$(terraform -chdir=infra/terraform/streaming output -raw instance_ip) systemctl status youtube-stream` |
 | ログ追跡 | 同上 + `journalctl -u youtube-stream -f` |
@@ -73,6 +73,8 @@ ffmpeg -i input.mp4 \
 ```
 
 24/7 配信では 4,500 Kbps + 音声 200 Kbps で月約 1.52 TB。`vc2-1c-2gb` の 2 TB/月に収めるため、6,800 Kbps 級へ上げる場合はプランアップか運用時間短縮を先に検討する。
+
+`yt-stream-bandwidth --probe-bitrate` は container 全体の平均 bitrate を見る月間帯域見積もり用。配信元 MP4 の preflight 合否は `terraform plan` / `apply` の stream-level 検証を正とする。
 
 配信サイクルを変える場合は `terraform.tfvars` で `stream_hours` / `break_hours` を指定する。0 は無制限を意味し、`stream_hours=0` では `RuntimeMaxSec` を出力しない。`break_hours=0` では `RestartSec=10s` を出力する。
 

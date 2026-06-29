@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
+from pathlib import Path
 from types import ModuleType
 
 from tests.streaming._helpers import _VIDEO_PREFLIGHT_PY
@@ -32,6 +35,60 @@ def test_check_video_skips_when_ffprobe_missing(monkeypatch, tmp_path):
     assert result["ok"] == "true"
     assert result["status"] == "skipped"
     assert "ffprobe not found" in result["message"]
+
+
+def test_main_rejects_missing_empty_or_non_string_video_path(monkeypatch):
+    """Given Terraform external から不正な video_path が渡る
+    When main を呼ぶ
+    Then stdout JSON で failed を返す。
+    """
+    module = _load_module()
+
+    for query in ({}, {"video_path": ""}, {"video_path": 123}):
+        stdout = io.StringIO()
+        monkeypatch.setattr(module.sys, "stdin", io.StringIO(json.dumps(query)))
+        monkeypatch.setattr(module.sys, "stdout", stdout)
+
+        rc = module.main()
+        result = json.loads(stdout.getvalue())
+
+        assert rc == 0
+        assert result["ok"] == "false"
+        assert result["status"] == "failed"
+        assert result["message"] == "video_path is required."
+
+
+def test_main_passes_expanded_video_path_to_check_video(monkeypatch, tmp_path):
+    """Given Terraform external から valid な video_path が渡る
+    When main を呼ぶ
+    Then expanduser 済み Path を check_video に渡し stdout JSON を返す。
+    """
+    module = _load_module()
+    video = tmp_path / "stream.mp4"
+    seen: dict[str, Path] = {}
+
+    def fake_check_video(path: Path) -> dict[str, str]:
+        seen["path"] = path
+        return {
+            "ok": "true",
+            "status": "ok",
+            "message": "checked",
+            "profile_ok": "true",
+            "profile_message": "checked",
+        }
+
+    stdout = io.StringIO()
+    monkeypatch.setattr(module, "check_video", fake_check_video)
+    monkeypatch.setattr(module.sys, "stdin", io.StringIO(json.dumps({"video_path": str(video)})))
+    monkeypatch.setattr(module.sys, "stdout", stdout)
+
+    rc = module.main()
+    result = json.loads(stdout.getvalue())
+
+    assert rc == 0
+    assert seen["path"] == video.expanduser()
+    assert result["ok"] == "true"
+    assert result["message"] == "checked"
 
 
 def test_check_video_fails_low_bitrate_and_long_keyframe_interval(monkeypatch, tmp_path):

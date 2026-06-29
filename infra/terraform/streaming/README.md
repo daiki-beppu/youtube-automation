@@ -81,7 +81,7 @@ ffmpeg -i input.mp4 \
   output.mp4
 ```
 
-帯域目安: 映像 4,500 Kbps + 音声 200 Kbps の 24/7 配信は月約 1.52 TB。6,800 Kbps 級に上げると 2 TB/月を超えうるため、画質改善時は `yt-stream-bandwidth --probe-bitrate` と月次帯域レポートを併用する。
+帯域目安: 映像 4,500 Kbps + 音声 200 Kbps の 24/7 配信は月約 1.52 TB。6,800 Kbps 級に上げると 2 TB/月を超えうるため、画質改善時は `yt-stream-bandwidth --probe-bitrate` と月次帯域レポートを併用する。`--probe-bitrate` は container 全体の平均 bitrate を見る月間帯域見積もり用であり、preflight の合否確認は `terraform plan` / `apply` の stream-level 検証を正とする。
 
 > **tfstate と secret の関係（誤解しやすいので明記）**
 >
@@ -292,7 +292,8 @@ uv run yt-stream-bandwidth --report --terraform-dir infra/terraform/streaming
 # 80% 閾値アラート (未超は静黙)
 uv run yt-stream-bandwidth --check-threshold --terraform-dir infra/terraform/streaming
 
-# 配信元 MP4 のビットレートを ffprobe で実測 (想定 4 Mbps と比較)
+# 配信元 MP4 の container 全体 bitrate を ffprobe で実測し、月間帯域を概算する
+# preflight の合否確認は terraform plan/apply の stream-level 検証を使う
 uv run yt-stream-bandwidth --probe-bitrate /path/to/stream.mp4
 ```
 
