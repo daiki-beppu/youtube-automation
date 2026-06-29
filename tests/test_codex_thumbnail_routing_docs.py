@@ -82,7 +82,9 @@ def test_collection_ideate_codex_parallel_requires_short_prompt() -> None:
     """
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
 
-    assert "短縮" in block or "短く" in block
+    assert "default_prompt_template" in block
+    assert "TTP 上位互換" in block
+    assert "短い" in block or "短縮" in block or "短く" in block
     assert "prompt" in block or "プロンプト" in block
 
 

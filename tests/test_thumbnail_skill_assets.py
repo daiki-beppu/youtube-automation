@@ -17,6 +17,20 @@ def _read_thumbnail_default_config() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_channel_setup_thumbnail_template() -> str:
+    path = (
+        _repo_root()
+        / ".claude"
+        / "skills"
+        / "channel-setup"
+        / "references"
+        / "config-template"
+        / "skills"
+        / "thumbnail.yaml"
+    )
+    return path.read_text(encoding="utf-8")
+
+
 def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
     start_idx = text.find(start_marker)
     if start_idx == -1:
@@ -96,6 +110,31 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config
     assert 'diff_prompt_template: ""' in config
+
+
+def test_thumbnail_default_config_provides_codex_ttp_upgrade_prompt() -> None:
+    """#1300: Codex 経路の既定プロンプトは短い TTP 上位互換型にする。"""
+    config = _read_thumbnail_default_config()
+
+    assert "default_prompt_template: |" in config
+    assert "TTP this reference thumbnail" in config
+    assert "winning layout" in config
+    assert "more readable on mobile" in config
+    assert "stronger face impact" in config
+    assert "no logos" in config
+    assert "no watermarks" in config
+    assert "no broken hands" in config
+    assert "Use the title {title}." in config
+
+
+def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
+    """#1300: channel-setup で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
+    template = _read_channel_setup_thumbnail_template()
+
+    assert "default_prompt_template: |" in template
+    assert "TTP this reference thumbnail" in template
+    assert "winning template" in template
+    assert "Use the title {title}." in template
 
 
 def test_thumbnail_default_config_provides_anatomy_clause() -> None:
