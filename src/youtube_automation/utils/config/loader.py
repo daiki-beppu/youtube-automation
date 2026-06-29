@@ -18,6 +18,7 @@ from youtube_automation.utils.config.comments import (
     SCOPE_ANY,
     VALID_FALLBACK_VALUES,
     VALID_PROVIDERS,
+    VALID_SCOPES,
     CommentRule,
     Comments,
     GeneratorConfig,
@@ -494,21 +495,30 @@ def _build_comments(merged: dict) -> Comments:
     if not isinstance(rules_raw, list):
         raise ConfigError("comments.rules は list でなければなりません")
     rules: list[object] = []
-    for raw in rules_raw:
-        if isinstance(raw, dict):
-            rules.append(
-                CommentRule(
-                    name=str(raw.get("name", "")),
-                    keywords=list(raw.get("keywords", [])),
-                    pattern=raw.get("pattern"),
-                    language=raw.get("language"),
-                    priority=int(raw.get("priority", 0)),
-                    provider=raw.get("provider"),
-                    scope=raw.get("scope", SCOPE_ANY),
-                )
+    for index, raw in enumerate(rules_raw):
+        if not isinstance(raw, dict):
+            raise ConfigError(f"comments.rules[{index}] は object でなければなりません")
+        provider = raw.get("provider")
+        if provider is not None and provider not in VALID_PROVIDERS:
+            raise ConfigError(
+                f"comments.rules[{index}].provider は {VALID_PROVIDERS} のいずれかでなければなりません: {provider!r}"
             )
-        else:
-            rules.append(raw)
+        scope = raw.get("scope", SCOPE_ANY)
+        if scope not in VALID_SCOPES:
+            raise ConfigError(
+                f"comments.rules[{index}].scope は {VALID_SCOPES} のいずれかでなければなりません: {scope!r}"
+            )
+        rules.append(
+            CommentRule(
+                name=str(raw.get("name", "")),
+                keywords=list(raw.get("keywords", [])),
+                pattern=raw.get("pattern"),
+                language=raw.get("language"),
+                priority=int(raw.get("priority", 0)),
+                provider=provider,
+                scope=scope,
+            )
+        )
 
     gen_raw = cm.get("generator")
     generator = GeneratorConfig()
@@ -517,10 +527,14 @@ def _build_comments(merged: dict) -> Comments:
             raise ConfigError("comments.generator は object でなければなりません")
         generator = _build_generator_config(gen_raw)
 
+    language = cm.get("language")
+    if language is not None and not isinstance(language, str):
+        raise ConfigError("comments.language は文字列でなければなりません")
+
     return Comments(
         enabled=bool(cm.get("enabled", False)),
         rules=rules,
-        language=cm.get("language"),
+        language=language,
         ng_words=list(cm.get("ng_words", [])),
         max_replies_per_run=int(cm.get("max_replies_per_run", 20)),
         delay_between_replies_sec=float(cm.get("delay_between_replies_sec", 2.0)),

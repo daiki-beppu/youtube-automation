@@ -760,7 +760,7 @@ def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str
     assert json.loads(err.read().decode("utf-8")) == {"error": message}
 
 
-def _post_declared_length(url: str, *, declared_length: int, origin: str):
+def _post_declared_length(url: str, *, declared_length: int | str, origin: str):
     """Content-Length だけを大きく宣言して POST する。"""
     parsed = urllib.parse.urlsplit(url)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port)
@@ -1004,6 +1004,30 @@ def test_post_distrokid_releases_body_too_large_returns_413(tmp_path, serve_dir_
         assert resp.status == 413
         assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
         assert json.loads(resp.read().decode("utf-8")) == {"error": "Payload Too Large"}
+    finally:
+        conn.close()
+
+
+def test_post_distrokid_releases_invalid_content_length_returns_400(tmp_path, serve_dir_dk):
+    """Given invalid Content-Length
+    When 許可 Origin から POST /distrokid/releases する
+    Then body を処理せず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    conn, resp = _post_declared_length(
+        f"{base}{_DISTROKID_RELEASES_ROUTE}",
+        declared_length="not-a-number",
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 400
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
+        assert not distrokid_releases_output_path(capture_root).exists()
     finally:
         conn.close()
 

@@ -212,6 +212,57 @@ def test_dry_run_does_not_call_insert(tmp_path):
     assert not (tmp_path / "comment_reply_history.json").exists()
 
 
+def test_comments_language_overrides_default_language(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "hello", "author": "Alice"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(language="en"), channel_dir=tmp_path, default_language="ja")
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned[0]["language"] == "en"
+
+
+def test_empty_generated_reply_is_skipped_without_insert(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "hello", "author": "Alice"}]},
+    )
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value.text = "   "
+
+    with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
+        replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+        plan = replier.run(dry_run=False)
+
+    assert plan.planned == []
+    assert plan.replied == []
+    assert any(row["reason"] == "empty_reply" for row in plan.skipped)
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_agent_reply_with_ng_word_is_skipped_without_insert(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "hello", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "this contains spam"},
+    )
+
+    plan = replier.run(dry_run=False)
+
+    assert plan.planned == []
+    assert plan.replied == []
+    assert any(row["reason"] == "reply_contains_ng_word" for row in plan.skipped)
+    yt._insert_mock.execute.assert_not_called()
+
+
 def test_export_candidates_does_not_call_generator(tmp_path, _mock_default_genai_client):
     yt = _mock_youtube(
         video_ids=["v1"],
@@ -353,6 +404,28 @@ def test_cli_agent_replies_file_flows_to_replier_without_generator(
     assert payload["planned"][0]["reply_source"] == "agent"
     assert payload["planned"][0]["reply_text"] == "@Alice 見つけてくださってありがとうございます。"
     _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_cli_non_json_summary_uses_reply_policy_not_rule(monkeypatch, tmp_path, capsys):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "get_youtube", lambda: yt)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(["--dry-run", "--video-id", "v1"])
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "policy=all_comments" in out
+    assert "provider=gemini" in out
+    assert "rule=" not in out
 
 
 def test_agent_replies_file_path_uses_provided_reply_without_generator(tmp_path, _mock_default_genai_client):

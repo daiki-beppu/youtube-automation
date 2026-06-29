@@ -42,11 +42,11 @@ Not present in this checkout scan: `bobble`, `neta`, `yt-studio`.
 
 1. `deepfocus365` intentionally uses `two_phase`, so it is outside the default `single_step` TTP mode. The config comments document the reason: channel-specific vehicle/private-jet template and text overlay phase.
 2. `youtube-abyss` does not set `image_generation.provider` in its channel override and therefore inherits the automation default `gemini`, while the other active channels explicitly use `codex`. If ABYSS should follow current codex image generation, update `/Users/mba/02-yt/youtube-abyss/config/skills/thumbnail.yaml` in that channel repo.
-3. Stock reuse is configured on by default, but most archived stock images are `source_role: "ideate_preview"`. With the default `thumbnail_candidate` filter, those files are archived but not reused. This is acceptable when only final rejected `/thumbnail` candidates should influence future thumbnails; otherwise, channels should either archive rejected final candidates as `thumbnail_candidate` or explicitly loosen `source_role`.
+3. Stock reuse is configured on by default, but most archived stock images are `source_role: "ideate_preview"`. With the default `thumbnail_candidate` filter, those files are archived but not reused. Decision: keep `ideate_preview` archive-only and keep the `thumbnail_candidate` filter unchanged. Reusing ideation previews would mix lower-confidence exploratory assets into final thumbnail prompts, so only final rejected `/thumbnail` candidates should become reusable stock.
 4. No local evidence of `/thumbnail-compare` being disabled was found. The shared thumbnail skill requires it before approval, so this remains an operating-procedure check rather than a per-channel config gap.
 
 ## Follow-Ups
 
 - #520 can be closed with this audit report unless missing channel roots (`bobble`, `neta`, `yt-studio`) need to be restored locally and scanned.
 - #521 should stay deferred until a visual QA pass is run over the listed live collections; no image regeneration was performed in this automation PR.
-- #522 can be closed for inventory, with one follow-up decision: whether `ideate_preview` stock should remain archive-only or become eligible for reference reuse.
+- #522 can be closed for inventory and operating decision: stock reuse remains enabled, `thumbnail_candidate` stays the only reusable source role, and existing `ideate_preview` files remain archive-only.

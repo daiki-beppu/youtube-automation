@@ -98,7 +98,7 @@ def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
     for row in plan.planned:
         print(
             f"  [planned] video={row['video_id']} comment_id={row['comment_id']} "
-            f"rule={row.get('rule')} lang={row.get('language')}"
+            f"policy={row.get('reply_policy')} provider={row.get('provider')} lang={row.get('language')}"
         )
         print(f"    author: {row.get('comment_author')}")
         print(f"    text  : {row.get('comment_text', '')[:80]}")
@@ -106,7 +106,7 @@ def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
     for row in plan.replied:
         print(
             f"  [replied] video={row['video_id']} comment_id={row['comment_id']} "
-            f"rule={row.get('rule')} lang={row.get('language')}"
+            f"policy={row.get('reply_policy')} provider={row.get('provider')} lang={row.get('language')}"
         )
         print(f"    reply : {row.get('reply_text', '')[:120]}")
     for row in plan.skipped:
@@ -118,7 +118,7 @@ def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-comments-reply",
-        description="YouTube コメントに対して config/channel/comments.json のルールで自動返信する",
+        description="基本フィルタ通過後の YouTube コメントを返信候補化し、LLM または agent 返信で処理する",
     )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="API 送信せず計画のみ出力")

@@ -70,6 +70,12 @@ class CommentRule:
     provider: str | None = None
     scope: str = SCOPE_ANY
 
+    def __post_init__(self) -> None:
+        if self.provider is not None and self.provider not in VALID_PROVIDERS:
+            raise ConfigError(f"CommentRule.provider 無効: {self.provider!r}")
+        if self.scope not in VALID_SCOPES:
+            raise ConfigError(f"CommentRule.scope 無効: {self.scope!r}")
+
 
 @dataclass(frozen=True)
 class Comments:
@@ -97,5 +103,7 @@ class Comments:
     generator: GeneratorConfig = field(default_factory=GeneratorConfig)
 
     def __post_init__(self) -> None:
+        if self.language is not None and not isinstance(self.language, str):
+            raise ConfigError("comments.language は文字列でなければなりません")
         if self.language is not None and not self.language.strip():
-            raise ConfigError("Comments.language は空文字にできません")
+            raise ConfigError("comments.language は空文字にできません")

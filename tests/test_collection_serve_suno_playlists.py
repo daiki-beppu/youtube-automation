@@ -475,7 +475,7 @@ def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str
     assert json.loads(err.read().decode("utf-8")) == {"error": message}
 
 
-def _post_declared_length(url: str, *, declared_length: int, origin: str):
+def _post_declared_length(url: str, *, declared_length: int | str, origin: str):
     """Content-Length だけを大きく宣言して POST する。"""
     parsed = urllib.parse.urlsplit(url)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port)
@@ -633,6 +633,26 @@ def test_post_suno_playlists_body_too_large_returns_413(tmp_path, serve_capture)
         assert resp.status == 413
         assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
         assert json.loads(resp.read().decode("utf-8")) == {"error": "Payload Too Large"}
+    finally:
+        conn.close()
+
+
+def test_post_suno_playlists_invalid_content_length_returns_400(tmp_path, serve_capture):
+    """Given invalid Content-Length
+    When 許可 Origin から POST /suno/playlists する
+    Then body を処理せず 400 を返す。
+    """
+    base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
+
+    conn, resp = _post_declared_length(
+        f"{base}{_SUNO_PLAYLISTS_ROUTE}",
+        declared_length="not-a-number",
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 400
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
     finally:
         conn.close()
 

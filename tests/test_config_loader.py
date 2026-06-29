@@ -1285,8 +1285,8 @@ def test_comments_generator_not_object_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_invalid_provider_is_ignored(tmp_path, monkeypatch):
-    """comments.rules[i].provider は後方互換で保持するが処理では無視する."""
+def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
+    """comments.rules[i].provider は旧スキーマでも valid 値だけを受け入れる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1303,8 +1303,8 @@ def test_comments_rule_invalid_provider_is_ignored(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    config = load_config()
-    assert config.comments.rules[0].provider == "openai"
+    with pytest.raises(ConfigError, match=r"comments\.rules\[0\]\.provider"):
+        load_config()
 
 
 def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypatch):
@@ -1370,8 +1370,24 @@ def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
     assert config.comments.rules[1].scope == "reply"
 
 
-def test_comments_rule_invalid_scope_is_ignored(tmp_path, monkeypatch):
-    """comments.rules[i].scope は後方互換で保持するが処理では無視する."""
+def test_comments_rule_non_object_raises(tmp_path, monkeypatch):
+    """comments.rules[] の要素は legacy 互換でも object のみ受け入れる."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": ["legacy-string"],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=r"comments\.rules\[0\] は object"):
+        load_config()
+
+
+def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
+    """comments.rules[i].scope は旧スキーマでも valid 値だけを受け入れる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1382,19 +1398,50 @@ def test_comments_rule_invalid_scope_is_ignored(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
+    with pytest.raises(ConfigError, match=r"comments\.rules\[0\]\.scope"):
+        load_config()
+
+
+def test_comments_language_loads(tmp_path, monkeypatch):
+    """comments.language は返信言語ヒントとしてロードされる."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"enabled": True, "language": "ja"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
     config = load_config()
-    assert config.comments.rules[0].scope == "thread"
+
+    assert config.comments.language == "ja"
 
 
-def test_comments_dataclass_accepts_legacy_rule_scope():
-    """Comments dataclass は旧 rules[].scope を検証しない."""
+def test_comments_language_empty_raises(tmp_path, monkeypatch):
+    """comments.language の空文字は ConfigError."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"enabled": True, "language": ""}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.language"):
+        load_config()
+
+
+def test_comments_language_non_string_raises(tmp_path, monkeypatch):
+    """comments.language が文字列でない場合は ConfigError."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"enabled": True, "language": ["ja"]}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.language"):
+        load_config()
+
+
+def test_comment_rule_dataclass_rejects_invalid_legacy_scope():
+    """CommentRule dataclass も旧 rules[].scope の invalid 値を拒否する."""
     from youtube_automation.utils.config.comments import CommentRule, Comments
 
-    comments = Comments(
-        enabled=True,
-        rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")],
-    )
-    assert comments.rules[0].scope == "thread"
+    with pytest.raises(ConfigError, match="scope"):
+        Comments(enabled=True, rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")])
 
 
 def test_comments_dataclass_defaults_to_codex_without_loader():
@@ -1407,18 +1454,15 @@ def test_comments_dataclass_defaults_to_codex_without_loader():
     assert comments.rules[0].provider == "gemini"
 
 
-def test_comments_dataclass_accepts_legacy_rule_provider():
-    """Comments dataclass は旧 rules[].provider を検証しない."""
+def test_comment_rule_dataclass_rejects_invalid_legacy_provider():
+    """CommentRule dataclass も旧 rules[].provider の invalid 値を拒否する."""
     from youtube_automation.utils.config.comments import (
         CommentRule,
         Comments,
     )
 
-    comments = Comments(
-        enabled=True,
-        rules=[CommentRule(name="bad", keywords=["hi"], provider="openai")],
-    )
-    assert comments.rules[0].provider == "openai"
+    with pytest.raises(ConfigError, match="provider"):
+        Comments(enabled=True, rules=[CommentRule(name="bad", keywords=["hi"], provider="openai")])
 
 
 def test_comments_legacy_type_key_raises(tmp_path, monkeypatch):
