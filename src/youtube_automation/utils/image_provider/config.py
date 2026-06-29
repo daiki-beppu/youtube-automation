@@ -94,16 +94,25 @@ class OpenAIConfig:
 
 
 @dataclass(frozen=True)
+class CodexConfig:
+    """Codex shell 経路で使う prompt 設定。"""
+
+    default_prompt_template: str = ""
+
+
+@dataclass(frozen=True)
 class ImageGenerationConfig:
     """provider 切り替え可能な画像生成設定の親 dataclass。
 
     ``provider`` の値に対応する側のみが非 None（例: provider="gemini" なら
-    ``gemini`` のみ）。``codex`` は shell 経路なので API provider sub-config を持たない。
+    ``gemini`` のみ）。``codex`` は shell 経路なので API provider ではないが、
+    prompt template などの実行契約は ``codex`` に保持する。
     """
 
     provider: ProviderName
     gemini: GeminiConfig | None = None
     openai: OpenAIConfig | None = None
+    codex: CodexConfig | None = None
     gemini_cli: GeminiCliConfig | None = None
 
     @classmethod
@@ -163,7 +172,8 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {})
         return ImageGenerationConfig(provider="gemini_cli", gemini_cli=gemini_cli_cfg)
 
-    return ImageGenerationConfig(provider="codex", gemini=None, openai=None)
+    codex_cfg = _build_codex(section.get("codex")) if "codex" in section else CodexConfig()
+    return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
 
 def _build_from_legacy_gemini(legacy: dict[str, Any]) -> ImageGenerationConfig:
@@ -199,6 +209,40 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
         thinking=d.get("thinking", "medium"),
         batch=int(d.get("batch", 1)),
     )
+
+
+def _build_codex(d: Any) -> CodexConfig:
+    if not isinstance(d, dict):
+        raise ConfigError("image_generation.codex は mapping で指定してください")
+    template = d.get("default_prompt_template", "")
+    if not isinstance(template, str):
+        raise ConfigError("image_generation.codex.default_prompt_template は文字列で指定してください")
+    if template:
+        template = _validate_codex_prompt_template(template)
+    return CodexConfig(default_prompt_template=template)
+
+
+def _validate_codex_prompt_template(template: Any) -> str:
+    if not isinstance(template, str) or not template.strip():
+        raise ConfigError("image_generation.codex.default_prompt_template は空でない文字列で指定してください")
+    if template.count("{title}") != 1:
+        raise ConfigError("image_generation.codex.default_prompt_template は {title} をちょうど 1 回含めてください")
+    return template
+
+
+def render_codex_prompt(template: str, title: str) -> str:
+    """Codex thumbnail prompt template の `{title}` を差し替える。"""
+    if not isinstance(title, str) or not title.strip():
+        raise ConfigError("Codex thumbnail prompt の title は空でない文字列で指定してください")
+    return _validate_codex_prompt_template(template).replace("{title}", title)
+
+
+def build_codex_prompt(skill_cfg: dict[str, Any], title: str) -> str:
+    """thumbnail skill-config から Codex 用 prompt を生成する。"""
+    cfg = parse_image_generation_config(skill_cfg)
+    if cfg.provider != "codex" or cfg.codex is None:
+        raise ConfigError("image_generation.provider=codex の設定で実行してください")
+    return render_codex_prompt(cfg.codex.default_prompt_template, title)
 
 
 def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConfig:

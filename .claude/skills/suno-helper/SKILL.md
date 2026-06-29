@@ -8,6 +8,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 `<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `yt-collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化 → ZIP 一括ダウンロードまで進める。
 
 このスキルはプロンプト生成（`/suno`）の **次工程** であり、マスター化（`/masterup`）の **前工程** にあたる。suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 1 タブで完結させるため、`/masterup` の DL ステップ（Step 2-3）は原則スキップされる。
+新規 collection を `/wf-new` から開始した直後は、`/wf-new` が `yt-collection-serve` の起動と疎通確認まで完了している場合がある。その場合、本スキルは既存 server を再利用し、Chrome popup 以降の operator 手順から進める。
 
 ## When to Use
 
@@ -38,7 +39,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 ## Instructions
 
-### Step 1. サーバーを起動する
+### Step 1. サーバーを起動または再利用する
 
 **必ず dir mode + 拡張 origin lock 付き**で起動する。
 
@@ -50,6 +51,8 @@ uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
 `<EXTENSION_ID>` は chrome://extensions → suno-helper → 詳細の ID。`POST /collections/<id>/downloaded` と `GET /auth/token` はこの exact origin 以外を 403 にするため、未指定では ZIP 展開・DL 完了記録が動かない。
 
 collection 単体パスを直接渡す single file mode は playlist phase がスキップされるため本 skill では使わない。dir mode で読まれるのは **`-collection` suffix を持つ dir のみ**。それ以外（例: `01-master` や雑多ファイル）は無視される。
+
+`/wf-new` 完了ガイダンスに `Suno-helper server: ✅ http://localhost:<PORT>` が出ている場合は、その URL を使って下記 3 点の確認だけ行い、追加起動しない。確認に失敗する場合のみ、空き port を選んで起動し直す。
 
 起動後の確認（**3 点すべてパスすること**）:
 

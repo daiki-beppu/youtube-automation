@@ -153,7 +153,7 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 
 ### 4.3 最小 config の構造
 
-`/channel-setup` が以下の必須 + optional ファイルを生成する（v2.0.0 以降の責務別分割）:
+下流チャンネルの `config/channel/` は以下の必須 + optional ファイル構造を持つ（v2.0.0 以降の責務別分割）:
 
 | ファイル | 責務 |
 |---|---|

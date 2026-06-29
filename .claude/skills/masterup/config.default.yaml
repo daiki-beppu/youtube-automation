@@ -78,6 +78,35 @@ suno_download:
   retry_count: 3
   retry_delay_seconds: 2
 
+# Suno 1 Generate = 2 clip の採用整理。
+# /suno-helper が全 clip を 02-Individual-music/ に配置した後、/masterup が
+# yt-generate-master の直前に実行する。
+pair_selection:
+  # auto: suno-prompts.json の lyrics から歌詞あり/なしを判定する。
+  #   - 歌詞あり: 同名タイトル / prompt entry ごとに 1 clip だけ winner 採用
+  #   - 歌詞なし: 同じ prompt から出た 2 clip を両方採用
+  # never: 採用整理をスキップし、02-Individual-music/ 直下の音源をそのまま使う。
+  mode: auto
+
+  # winner 選定戦略。初版は random のみ。
+  strategy: random
+  # null なら実行ごとに seed を生成し、01-master/.selection.log に記録する。
+  random_seed: null
+
+  # 極端に短い曲 / 長い曲は master から除外する。
+  # Suno の失敗生成（数秒で終わる、5 分超で崩れる等）を master に混ぜないための guard。
+  # null で片側だけ無効化できる。
+  min_song_sec: 45
+  max_song_sec: 300
+  out_of_range_action: stock # stock | delete
+
+  selection_log_path: "01-master/.selection.log"
+
+stock:
+  dir: "assets/stock/music/b-side"
+  filename_template: "{collection_slug}__{song_id}__{title_slug}.{ext}"
+  on_duplicate: skip # skip | overwrite | fail
+
 # 雨音レイヤー設定 (DEPRECATED, #512)
 # `audio.finalize.ambient_layers` へ移行してください。
 # 旧 `rain_layer` namespace は後方互換 alias として読み続けますが、

@@ -105,6 +105,23 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
         assert "localization.supported_languages" not in text
         assert "config/localizations.json" in text
 
+    rules = _read(".claude/skills/channel-setup/references/config-generation-rules.md")
+    required_sections = rules.split("以下は **すべて `config/channel/*.json` に含める**:", 1)[1].split(
+        "## ルート設定ファイル",
+        1,
+    )[0]
+    assert "`localizations`" not in required_sections
+    assert "`config/localizations.json`" in rules
+
+
+def test_channel_setup_does_not_recopy_youtube_json_after_config_completion() -> None:
+    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
+
+    assert "`config/channel/youtube.json::youtube.{category_id,privacy_status}`" in channel_setup
+
+    step5 = channel_setup.split("### Step 5: 残りファイル生成", 1)[1].split("### Step 6:", 1)[0]
+    assert "`config/channel/youtube.json`" not in step5
+
 
 def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch, caplog) -> None:
     from youtube_automation.scripts import theme_compare

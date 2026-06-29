@@ -7,14 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(suno)`: Suno V5.5 向けプロンプト設計を更新し、ボーカル曲用の `/suno-lyric` スキルと lyric reference を追加。`suno-lyrics.json` の必須化・entry name 完全一致検証・auto-prep slug / quote source safety guidance も追加（#1305）
+
 ### Changed
 
 - `docs(skills)`: wf-next / wf-status / analytics-analyze / wf-new / channel-setup / video-upload / community-post / collection-ideate の記述を現行実装に同期し、optional config 一覧を README / AGENTS / CLAUDE に追記（#1173, #1174, #1175, #1176, #1177, #1178, #1179, #1180）
+- `feat(masterup)`: Suno 生成後の 2 clip を `20-documentation/suno-prompts.json` の歌詞有無で整理する `yt-suno-select-tracks` を追加。歌詞あり prompt は 1 clip 採用、instrumental は 2 clip 採用とし、極端に短い/長い失敗生成を stock 退避または削除できるようにした（#1308）
+- `docs(wf-new)`: `/wf-new` を子スキル順次実行のオーケストレーターとして整理し、Suno チャンネルでは `yt-collection-serve` 起動と疎通確認まで行って `/suno-helper` に引き継ぐ導線を追加（#1308）
+
+### Migration
+
+所要時間の目安: 5〜10 分
+
+local fix 衝突注意:
+- masterup: `pair_selection.*` / `stock.*` の既定値と `yt-suno-select-tracks` 手順を追加。下流で `config/skills/masterup.yaml` や `/masterup` を手書き調整している場合は同期時に確認が必要。
+- wf-new, suno-helper: `/wf-new` が Suno-helper server 起動まで担う前提へ導線を更新。下流で開始フローを手書き調整している場合は差分確認が必要。
+
+サマリ:
+
+- Suno vocal 曲は 1 prompt から生成される 2 clip のうち 1 つだけを master 採用し、未採用 clip を stock に残せるようにした。
+- instrumental 曲は従来通り 2 clip を活かしつつ、尺外の失敗生成だけを master から除外できるようにした。
+- `/wf-new` 完了後に `/suno-helper` が既存 `yt-collection-serve` を再利用できる運用へ整理した。
 
 ## [5.5.13] - 2026-06-29
 
 ### Changed
 
+- `feat(thumbnail)`: Codex サムネイル生成の既定プロンプトを、参照画像を winning template として扱う短い TTP 上位互換型に変更。`image_generation.codex.default_prompt_template` を追加し、`/collection-ideate` と channel-setup テンプレートの Codex 導線を同方針へ更新（#1300）
 - `refactor(shared)`: CollectionSummary を boolean fields (`has_prompts` / `mapped`) から status enum (`needs_prompts` | `ready` | `downloaded`) に置換。`downloaded_count` フィールド追加、`playlist_name` 廃止。POST `/collections/<id>/downloaded` エンドポイント新設（#1216）**BREAKING**
 - `feat(suno-helper)`: Playlist 追加後の Download all DOM 操作 + chrome.downloads 連携を実装 (#1146)
 - `feat(serve)`: POST `/collections/<id>/downloaded` に冪等更新ロジックを追加（playlist URL 記録 + DL 完了マーク）(#1145)
@@ -34,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(short)`: short / short-release の dry-run 手順を現行の `--plan` フラグ表記に修正（#1169）
 - `docs(channel-setup)`: Terraform GCP reference を現行テンプレートと同期（#1172）
 - `docs(channel-setup)`: benchmark 取得手順で参照する CLI 名を現行名に修正（#1168）
+- `fix(cost)`: 高額化しやすい `gemini-2.5-pro` 既定利用を廃止。`/video-analyze` の既定モデルを `gemini-3.5-flash` に変更し、`yt-populate-scene-phrases` は Vertex AI Gemini を直接呼ばず、Claude Code の Agent ツールで生成した翻訳 JSON を `--translations-json` / `--translations-file` で受け取って `workflow-state.json.scene_phrases` に書き込む方式へ変更した。`yt-comments-reply` も `--export-candidates` と `--agent-replies-file` を追加し、Claude Code のメインエージェントがサブエージェントに返信 JSON を作らせて CLI に渡せるようにした。CLI 内部から `claude -p` は呼ばない。
 - `feat(channel-init)`: `yt-channel-init` を最小 config 生成からフルパッケージ生成に拡張。`--music-engine` / `--benchmark-channel` / `--branding-description` / `--channel-keyword` / `--target-duration-min` / `--target-duration-max` / `--supported-language` / `--default-language` / `--core-message` / `--country` 引数を追加し、`config/channel/*.json` に加えて `config/localizations.json` / `config/schedule_config.json` / `config/upload_settings.json` / `config/skills/{suno,thumbnail}.yaml` / `.env` / `.gitignore` / `auth/client_secrets.template.json` を一括生成する。テンプレート群を `channel_init_templates.py` に分離（#1271）
 - `feat(channel-settings)`: `yt-channel-settings pull --channel-id-only --apply` を追加。YouTube API から `channel_id` のみを取得して `config/channel/meta.json::channel.channel_id` に書き込む。通常の `pull --apply` でも `channel_id` を自動反映するよう `_write_channel_settings` に統合（#1271）
 - `docs(skills)`: `/channel-new` を TTP ベンチマーク → config → ペルソナ → branding の end-to-end スキルに刷新。`/audience-persona` / `/channel-direction` / `/channel-research` / `/channel-setup` の description・前提条件・Cross References を新フローに合わせて更新（#1271）
