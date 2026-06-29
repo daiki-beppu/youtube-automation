@@ -28,7 +28,7 @@ from typing import Iterable
 from youtube_automation.utils.comments import CommentReplier
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
-from youtube_automation.utils.exceptions import AutomationError
+from youtube_automation.utils.exceptions import AutomationError, ConfigError
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
@@ -59,9 +59,18 @@ def _load_agent_replies(path: str | None) -> dict[str, str] | None:
     elif isinstance(payload, list):
         rows = payload
     elif isinstance(payload, dict):
-        return {
-            str(comment_id): str(reply_text) for comment_id, reply_text in payload.items() if str(reply_text).strip()
-        }
+        replies: dict[str, str] = {}
+        for comment_id, reply_text in payload.items():
+            if not isinstance(comment_id, str) or not comment_id.strip():
+                raise AutomationError(
+                    "agent replies JSON mapping の key は非空文字列の comment_id でなければなりません"
+                )
+            if not isinstance(reply_text, str) or not reply_text.strip():
+                raise AutomationError(
+                    f"agent replies JSON mapping[{comment_id!r}] は非空文字列の reply_text でなければなりません"
+                )
+            replies[comment_id.strip()] = reply_text.strip()
+        return replies
     else:
         raise AutomationError("agent replies JSON は object / list / {replies: [...]} のいずれかで指定してください")
 
@@ -71,11 +80,11 @@ def _load_agent_replies(path: str | None) -> dict[str, str] | None:
             raise AutomationError(f"agent replies JSON replies[{i}] は object でなければなりません")
         comment_id = row.get("comment_id")
         reply_text = row.get("reply_text")
-        if not comment_id:
+        if not isinstance(comment_id, str) or not comment_id.strip():
             raise AutomationError(f"agent replies JSON replies[{i}].comment_id が必須です")
         if not isinstance(reply_text, str) or not reply_text.strip():
             raise AutomationError(f"agent replies JSON replies[{i}].reply_text が必須です")
-        replies[str(comment_id)] = reply_text.strip()
+        replies[comment_id.strip()] = reply_text.strip()
     return replies
 
 
@@ -187,6 +196,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     since = _parse_since(args.since)
 
     try:
+        if args.export_candidates and not args.json:
+            raise ConfigError("--export-candidates は --json と併用してください")
         agent_replies = _load_agent_replies(args.agent_replies_file)
         youtube = get_youtube()
         replier = CommentReplier(

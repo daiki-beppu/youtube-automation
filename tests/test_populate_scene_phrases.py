@@ -134,8 +134,30 @@ class TestTranslatePhrase:
             populate_scene_phrases.translate_phrase("Night", ["ja", "ko"], translations_json='{"ja": "夜"}')
 
     def test_invalid_json_raises_validation_error(self):
-        with pytest.raises(ValidationError, match="JSON"):
+        with pytest.raises(ValidationError, match="JSON") as exc_info:
             populate_scene_phrases.translate_phrase("Night", ["ja"], translations_json="not json")
+        assert "not json" not in str(exc_info.value)
+
+    def test_non_object_json_raises_validation_error_without_raw_payload(self):
+        with pytest.raises(ValidationError, match="object") as exc_info:
+            populate_scene_phrases.translate_phrase("Night", ["ja"], translations_json='["secret"]')
+        assert "secret" not in str(exc_info.value)
+
+    @pytest.mark.parametrize("translations_json", ['{"ja": 123}', '{"ja": ""}', '{"ja": {"text": "夜"}}'])
+    def test_rejects_non_string_or_empty_translation_values(self, translations_json):
+        with pytest.raises(ValidationError, match="非空文字列"):
+            populate_scene_phrases.translate_phrase("Night", ["ja"], translations_json=translations_json)
+
+    def test_missing_language_error_does_not_include_raw_payload(self):
+        with pytest.raises(ValidationError, match="翻訳欠落") as exc_info:
+            populate_scene_phrases.translate_phrase(
+                "Night",
+                ["ja", "ko"],
+                translations_json='{"ja": "夜", "credential": "SECRET"}',
+            )
+        message = str(exc_info.value)
+        assert "credential" in message
+        assert "SECRET" not in message
 
     def test_no_targets_skips_call(self):
         result = populate_scene_phrases.translate_phrase("x", ["en"], translations_json="")
@@ -211,6 +233,79 @@ class TestMainCLI:
         assert ws["scene_phrases"]["en"] == "Late-night neon city, jazz between rain and streetlights"
         assert ws["scene_phrases"]["ja"] == "深夜のネオン街"
         assert ws["scene_phrases"]["ko"] == "심야 네온"
+
+    def test_writes_translated_phrases_from_file(self, tmp_path, monkeypatch):
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "ja"],
+            workflow_state={"theme": "city"},
+        )
+        translations_file = tmp_path / "phrases.json"
+        translations_file.write_text('{"ja": "深夜のネオン街"}', encoding="utf-8")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--translations-file", str(translations_file)])
+
+        assert rc == 0
+        ws = json.loads(
+            (ch / "collections" / "planning" / "20260322-tc-city-collection" / "workflow-state.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert ws["scene_phrases"]["ja"] == "深夜のネオン街"
+
+    def test_missing_translations_file_returns_error(self, tmp_path, monkeypatch, capsys):
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "ja"],
+            workflow_state={"theme": "city"},
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(
+            ["20260322-tc-city-collection", "--translations-file", str(tmp_path / "missing.json")]
+        )
+
+        assert rc == 1
+        assert "--translations-file" in capsys.readouterr().err
+
+    def test_translations_json_and_file_are_rejected(self, tmp_path, monkeypatch, capsys):
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "ja"],
+            workflow_state={"theme": "city"},
+        )
+        translations_file = tmp_path / "phrases.json"
+        translations_file.write_text('{"ja": "深夜"}', encoding="utf-8")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(
+            [
+                "20260322-tc-city-collection",
+                "--translations-json",
+                '{"ja": "夜"}',
+                "--translations-file",
+                str(translations_file),
+            ]
+        )
+
+        assert rc == 1
+        assert "同時指定" in capsys.readouterr().err
+
+    def test_translations_file_directory_returns_controlled_error(self, tmp_path, monkeypatch, capsys):
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "ja"],
+            workflow_state={"theme": "city"},
+        )
+        translations_dir = tmp_path / "translations-dir"
+        translations_dir.mkdir()
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(["20260322-tc-city-collection", "--translations-file", str(translations_dir)])
+
+        assert rc == 1
+        assert "通常ファイル" in capsys.readouterr().err
 
     def test_dry_run_does_not_write(self, tmp_path, monkeypatch, capsys):
         ch = _setup_channel(

@@ -95,18 +95,26 @@ def translate_phrase(
     try:
         payload = json.loads(_strip_fence(translations_json))
     except json.JSONDecodeError as exc:
-        raise ValidationError(f"scene_phrases 翻訳 JSON をパースできません: {translations_json!r}") from exc
+        raise ValidationError(f"scene_phrases 翻訳 JSON をパースできません: {exc.msg}") from exc
     if not isinstance(payload, dict):
-        raise ValidationError(f"scene_phrases 翻訳 JSON が object ではありません: {payload!r}")
+        raise ValidationError("scene_phrases 翻訳 JSON は object でなければなりません")
 
-    missing = [lang for lang in targets if not payload.get(lang)]
+    missing = [lang for lang in targets if lang not in payload]
     if missing:
         prompt = _build_prompt(en_phrase, targets)
         raise ValidationError(
-            f"scene_phrases 翻訳 JSON に翻訳欠落: {missing}. payload={payload!r}\n"
+            f"scene_phrases 翻訳 JSON に翻訳欠落: {missing}. keys={sorted(str(key) for key in payload)}\n"
             f"Claude Agent には次のプロンプトで再生成させてください:\n{prompt}"
         )
-    return {lang: str(payload[lang]) for lang in targets}
+    translations: dict[str, str] = {}
+    invalid = [lang for lang in targets if not isinstance(payload[lang], str) or not payload[lang].strip()]
+    if invalid:
+        raise ValidationError(
+            f"scene_phrases 翻訳 JSON の各言語値は非空文字列でなければなりません: invalid_languages={invalid}"
+        )
+    for lang in targets:
+        translations[lang] = payload[lang].strip()
+    return translations
 
 
 def _load_translations_json(args: argparse.Namespace) -> str | None:
@@ -116,9 +124,12 @@ def _load_translations_json(args: argparse.Namespace) -> str | None:
         return args.translations_json
     if args.translations_file:
         path = Path(args.translations_file)
-        if not path.exists():
-            raise ConfigError(f"--translations-file が見つかりません: {path}")
-        return path.read_text(encoding="utf-8")
+        if not path.is_file():
+            raise ConfigError(f"--translations-file は通常ファイルを指定してください: {path}")
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ConfigError(f"--translations-file を読めません: {path}: {exc}") from exc
     return None
 
 
