@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(channel-new)`: `/channel-new` の初期フローを TTP 対象確認中心に整理し、追加競合発掘・本格 benchmark/comments 収集は後続スキルへ委譲する方針に変更（#1309）
 - `docs(skills)`: wf-next / wf-status / analytics-analyze / wf-new / channel-setup / video-upload / community-post / collection-ideate の記述を現行実装に同期し、optional config 一覧を README / AGENTS / CLAUDE に追記（#1173, #1174, #1175, #1176, #1177, #1178, #1179, #1180）
 - `feat(masterup)`: Suno 生成後の 2 clip を `20-documentation/suno-prompts.json` の歌詞有無で整理する `yt-suno-select-tracks` を追加。歌詞あり prompt は 1 clip 採用、instrumental は 2 clip 採用とし、極端に短い/長い失敗生成を stock 退避または削除できるようにした（#1308）
 - `docs(wf-new)`: `/wf-new` を子スキル順次実行のオーケストレーターとして整理し、Suno チャンネルでは `yt-collection-serve` 起動と疎通確認まで行って `/suno-helper` に引き継ぐ導線を追加（#1308）
