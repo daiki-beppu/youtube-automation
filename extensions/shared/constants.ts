@@ -15,16 +15,23 @@ export const RESUME_STATE_KEY = "sunoResumeState";
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
+/** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
+ * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
+export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
+
+/** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
+ * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
+export const DOWNLOAD_FORMAT_KEY = "sunoDownloadFormat" as const;
+
+/** Suno ダウンロード形式のデフォルト値 (#1215)。 */
+export const DOWNLOAD_FORMAT_DEFAULT = "mp3" as const;
+
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
 
 /** yt-collection-serve dir mode の collection 列挙サブパス (#816)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
 export const COLLECTIONS_ROUTE = "/collections";
-
-/** yt-collection-serve の Suno playlist capture サブパス (#893、POST)。
- * SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PLAYLISTS_ROUTE。 */
-export const PLAYLISTS_CAPTURE_ROUTE = "/suno/playlists";
 
 /** yt-collection-serve の互換確認サブパス（#1023）。
  * SSOT: src/youtube_automation/scripts/collection_serve.py VERSION_ROUTE。 */
@@ -33,6 +40,11 @@ export const VERSION_ROUTE = "/version";
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
   return `${COLLECTIONS_ROUTE}/${id}${PROMPTS_ROUTE}`;
+}
+
+/** 個別 collection の download 完了通知 POST サブパス `/collections/<id>/downloaded` を組み立てる。 */
+export function collectionDownloadedRoute(id: string): string {
+  return DOWNLOADED_ROUTE.replace(":id", encodeURIComponent(id));
 }
 
 /** Suno 同時生成キューの上限リクエスト数 (#816、実 DOM 検証: 同時 10 リクエスト)。 */
@@ -236,7 +248,9 @@ export const PHASE = {
   // entry 単位の失敗 (#948)。リトライ上限まで失敗した entry をスキップして次へ進むときに emit する。
   // 非終了 phase（run 全体は継続する）。失敗 index は snapshot の failedIndices に蓄積される。
   ENTRY_FAILED: "entry-failed",
-  // 全 entry の生成 DONE 後、FINISHED 直前に挟む clip 一括 playlist 追加 phase (#854)。非終了 phase。
+  // 全 entry の生成 DONE 後、playlist 追加完了後に Suno playlist を一括ダウンロードする phase (#1215)。非終了 phase。
+  DOWNLOADING: "downloading",
+  // 全 entry の生成 DONE 後の clip 一括 playlist 追加 phase (#854)。ADDING_TO_PLAYLIST → DOWNLOADING → FINISHED の順。非終了 phase。
   ADDING_TO_PLAYLIST: "adding-to-playlist",
   FINISHED: "finished",
   STOPPED: "stopped",

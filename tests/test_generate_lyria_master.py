@@ -118,7 +118,7 @@ def _patch_generate_master(monkeypatch, *, return_path: Path | None = None):
     def fake_generate(collection_dir, crossfade, bitrate, **kwargs):
         captured["args"] = (collection_dir, crossfade, bitrate)
         captured["kwargs"] = kwargs
-        return return_path or (Path(collection_dir) / "01-master" / "master.wav")
+        return return_path or (Path(collection_dir) / "01-master" / "master.mp3")
 
     monkeypatch.setattr(generate_lyria_master.generate_master, "generate_master", fake_generate)
     return captured

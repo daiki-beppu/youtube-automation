@@ -8,9 +8,9 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from youtube_automation.utils.audio_formats import AUDIO_EXTS
 from youtube_automation.utils.collection_paths import CollectionPaths, resolve_collection_dir
@@ -47,15 +47,15 @@ class CleanupConfig:
     codec: str = "libmp3lame"
 
 
-def _as_mapping(value: Any, context: str) -> dict[str, Any]:
+def _as_mapping(value: object, context: str) -> Mapping[str, object]:
     if value is None:
         return {}
-    if not isinstance(value, dict):
+    if not isinstance(value, Mapping):
         raise ConfigError(f"skill-config の {context} は mapping である必要があります: {value!r}")
     return value
 
 
-def resolve_cleanup_config(skill_cfg: dict[str, Any]) -> CleanupConfig:
+def resolve_cleanup_config(skill_cfg: Mapping[str, object]) -> CleanupConfig:
     post = _as_mapping(skill_cfg.get("post_processing"), "post_processing")
     raw = _as_mapping(post.get("suno_audio_cleanup"), "post_processing.suno_audio_cleanup")
     audio = _as_mapping(skill_cfg.get("audio"), "audio")
@@ -88,6 +88,20 @@ def resolve_cleanup_config(skill_cfg: dict[str, Any]) -> CleanupConfig:
         bitrate=str(raw.get("bitrate") or audio.get("bitrate") or "192k"),
         codec=str(raw.get("codec") or "libmp3lame"),
     )
+
+
+def _output_codec_for(path: Path, cfg: CleanupConfig) -> str:
+    match path.suffix.lower():
+        case ".m4a":
+            return "aac"
+        case ".wav":
+            return "pcm_s16le"
+        case _:
+            return cfg.codec
+
+
+def _codec_uses_bitrate(codec: str) -> bool:
+    return codec in {"aac", "libmp3lame"}
 
 
 def build_filter(cfg: CleanupConfig, *, duration_sec: float | None = None) -> str:
@@ -126,6 +140,7 @@ def build_ffmpeg_cmd(
     *,
     duration_sec: float | None,
 ) -> list[str]:
+    codec = _output_codec_for(output_path, cfg)
     cmd = [
         "ffmpeg",
         "-y",
@@ -134,9 +149,9 @@ def build_ffmpeg_cmd(
         "-af",
         build_filter(cfg, duration_sec=duration_sec),
         "-c:a",
-        cfg.codec,
+        codec,
     ]
-    if cfg.codec == "libmp3lame":
+    if _codec_uses_bitrate(codec):
         cmd.extend(["-b:a", cfg.bitrate])
     cmd.append(str(output_path))
     return cmd
@@ -174,12 +189,19 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
             tmp.unlink()
         raise RuntimeError(f"ffmpeg cleanup failed ({path.name}, rc={proc.returncode}):\n{proc.stderr}")
 
-    if cfg.backup_originals:
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(path, backup)
-    else:
-        path.unlink()
-    os.replace(tmp, path)
+    backup_created = False
+    try:
+        if cfg.backup_originals:
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(path, backup)
+            backup_created = True
+        os.replace(tmp, path)
+    except OSError:
+        if backup_created and backup.exists() and not path.exists():
+            os.replace(backup, path)
+        if tmp.exists():
+            tmp.unlink()
+        raise
     if not quiet:
         print(f"cleaned: {path.name}")
     return True

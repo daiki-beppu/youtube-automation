@@ -20,6 +20,16 @@ const storageMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
+const downloadFormatMocks = vi.hoisted(() => ({
+  getValue: vi.fn(async () => "mp3"),
+  setValue: vi.fn(async () => undefined),
+}));
+
+const resumeStateMocks = vi.hoisted(() => ({
+  readResumeState: vi.fn(async () => null),
+  writeResumeState: vi.fn(async () => undefined),
+}));
+
 vi.mock("wxt/browser", () => ({
   browser: {
     runtime: {
@@ -30,13 +40,47 @@ vi.mock("wxt/browser", () => ({
 
 vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
+  downloadFormatItem: downloadFormatMocks,
+  readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
 
-function defaultSendMessage(message: string): Promise<unknown> {
+async function readJson(url: string): Promise<unknown> {
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
+
+function defaultSendMessage(message: string, payload?: Record<string, string>): Promise<unknown> {
   if (message === "queryProgress") {
     throw new Error("runner unavailable");
+  }
+  if (message === "fetchCompatibilityWarning") {
+    return (async () => {
+      const resp = await fetch(`${payload?.baseUrl}/version`);
+      if (!resp.ok) {
+        return "";
+      }
+      const data = (await resp.json()) as { version: string; min_extension_version: string };
+      if (payload?.extensionVersion === data.min_extension_version) {
+        return "";
+      }
+      return `拡張を更新してください（拡張 ${payload?.extensionVersion} / 必要 ${data.min_extension_version} / サーバー ${data.version}）。`;
+    })();
+  }
+  if (message === "fetchCollections") {
+    return readJson(`${payload?.baseUrl}/collections`);
+  }
+  if (message === "fetchPrompts") {
+    return readJson(`${payload?.baseUrl}/suno/prompts.json`);
+  }
+  if (message === "fetchCollectionPrompts") {
+    return readJson(
+      `${payload?.baseUrl}/collections/${encodeURIComponent(payload?.collectionId ?? "")}/suno/prompts.json`,
+    );
   }
   return Promise.resolve({ ok: true });
 }
@@ -54,7 +98,8 @@ vi.mock("../lib/resume-state", async () => {
   const actual = await vi.importActual<typeof import("../lib/resume-state")>("../lib/resume-state");
   return {
     ...actual,
-    readResumeState: vi.fn(async () => null),
+    readResumeState: resumeStateMocks.readResumeState,
+    writeResumeState: resumeStateMocks.writeResumeState,
   };
 });
 
@@ -120,6 +165,10 @@ describe("Suno popup compatibility check", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     fetchMock = vi.fn();
+    storageMocks.getValue.mockResolvedValue("");
+    storageMocks.setValue.mockResolvedValue(undefined);
+    downloadFormatMocks.getValue.mockResolvedValue("mp3");
+    downloadFormatMocks.setValue.mockResolvedValue(undefined);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     vi.stubGlobal("fetch", fetchMock);
 
@@ -127,6 +176,18 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
   });
+
+  async function rerenderAppWithDownloadFormat(value: string): Promise<void> {
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    downloadFormatMocks.getValue.mockResolvedValueOnce(value);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+  }
 
   afterEach(() => {
     act(() => {
@@ -137,6 +198,8 @@ describe("Suno popup compatibility check", () => {
     vi.clearAllMocks();
     storageMocks.getValue.mockResolvedValue("");
     storageMocks.setValue.mockResolvedValue(undefined);
+    resumeStateMocks.readResumeState.mockResolvedValue(null);
+    resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
   });
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
@@ -189,7 +252,15 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
         jsonResponse(200, [
-          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", has_prompts: true, pattern_count: 1 },
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
@@ -229,13 +300,68 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("dir mode の channel/theme から multi-word channel の playlist 名を導出する", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-soulful-grooves-wah-groove-collection",
+            name: "wah-groove",
+            channel: "soulful-grooves",
+            theme: "wah-groove",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+
+    await waitFor(() => {
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
+        "run",
+        expect.objectContaining({
+          playlistName: "soulful-grooves | wah-groove",
+        }),
+      );
+    });
+  });
+
   it("dir mode でデータ取得後に collection を変更すると再取得まで連続実行できない", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
         jsonResponse(200, [
-          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", has_prompts: true, pattern_count: 1 },
-          { id: "20260602-clm-theme-b-collection", name: "theme-b-collection", has_prompts: true, pattern_count: 1 },
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+          {
+            id: "20260602-clm-theme-b-collection",
+            name: "theme-b-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
@@ -265,12 +391,471 @@ describe("Suno popup compatibility check", () => {
     expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
   });
 
+  it("clip ID が無い再開時に Suno 上の選択中 clip を採用して resume state に保存する", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "adoptSelectedClips") {
+        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
+    });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("adoptSelectedClips", { expectedClipCount: 2 });
+    expect(resumeStateMocks.writeResumeState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "20260601-clm-theme-a-collection",
+        failedIndex: 1,
+        total: 1,
+        submittedClipIds: ["clip-a", "clip-b"],
+        playlistExpectedClipCount: 2,
+      }),
+    );
+  });
+
+  it("選択中 clip 採用後に Download から再開すると retryDownload payload を送る", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "adoptSelectedClips") {
+        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Download から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
+      collectionId: "20260601-clm-theme-a-collection",
+      playlistName: "clm | theme-a",
+      submittedClipIds: ["clip-a", "clip-b"],
+      expectedClipCount: 2,
+    });
+  });
+
+  it("expected_file_count が entries×2 より大きい場合は手動採用と Download 再開に expected_file_count を使う", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 4,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "adoptSelectedClips") {
+        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b", "clip-c", "clip-d"] });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("選択中の曲 4 件を採用しました。");
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("adoptSelectedClips", { expectedClipCount: 4 });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Download から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
+      collectionId: "20260601-clm-theme-a-collection",
+      playlistName: "clm | theme-a",
+      submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
+      expectedClipCount: 4,
+    });
+  });
+
+  it("DL 形式 select は storage の初期値を反映し、変更時に保存する", async () => {
+    await rerenderAppWithDownloadFormat("m4a");
+
+    const select = Array.from(container.querySelectorAll("select")).find((candidate) =>
+      Array.from(candidate.options).some((option) => option.value === "wav"),
+    );
+    if (!select) throw new Error("download format select not found");
+    await waitFor(() => {
+      expect(select.value).toBe("m4a");
+    });
+
+    await act(async () => {
+      setSelectValue(select, "wav");
+    });
+
+    expect(downloadFormatMocks.setValue).toHaveBeenCalledWith("wav");
+    expect(select.value).toBe("wav");
+  });
+
+  it("DL 形式 select は不正な storage 値を MP3 に戻す", async () => {
+    await rerenderAppWithDownloadFormat("flac");
+
+    const select = Array.from(container.querySelectorAll("select")).find((candidate) =>
+      Array.from(candidate.options).some((option) => option.value === "wav"),
+    );
+    if (!select) throw new Error("download format select not found");
+    await waitFor(() => {
+      expect(select.value).toBe("mp3");
+    });
+  });
+
+  it("選択中 clip 採用後に Playlist から再開すると retryPlaylist payload を送る", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "adoptSelectedClips") {
+        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Playlist から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryPlaylist", {
+      collectionId: "20260601-clm-theme-a-collection",
+      playlistName: "clm | theme-a",
+      submittedClipIds: ["clip-a", "clip-b"],
+      expectedClipCount: 2,
+      shouldDownload: true,
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("playlist 追加とダウンロードを再実行しています…");
+    });
+  });
+
+  it("persisted resume が entries 未取得でも Playlist から再開すると Download all 対象として送る", async () => {
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: "20260601-clm-theme-a-collection",
+      failedIndex: 1,
+      total: 1,
+      timestamp: Date.now(),
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 2,
+    } as never);
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(500, {}));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
+      expect(container.textContent).toContain("Playlist: clm | theme-a");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Playlist から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryPlaylist", {
+      collectionId: "20260601-clm-theme-a-collection",
+      playlistName: "clm | theme-a",
+      submittedClipIds: ["clip-a", "clip-b"],
+      expectedClipCount: 2,
+      shouldDownload: true,
+    });
+  });
+
+  it("clip ID が無い状態で Playlist から再開しても retryPlaylist を送らずエラー表示する", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Playlist から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("retryPlaylist", expect.anything());
+    expect(container.textContent).toContain("playlist 再開に必要な clip ID がありません。");
+  });
+
+  it("Playlist から再開の送信に失敗したらエラーを表示して再試行可能にする", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "adoptSelectedClips") {
+        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      if (message === "retryPlaylist") {
+        return Promise.reject(new Error("relay failed"));
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Playlist から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryPlaylist", expect.anything());
+    await waitFor(() => {
+      expect(container.textContent).toContain("開始失敗: relay failed");
+      expect(buttonByText(container, "Playlist から再開").disabled).toBe(false);
+    });
+  });
+
+  it("clip ID が無い状態で Download から再開しても retryDownload を送らずエラー表示する", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Download から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("retryDownload", expect.anything());
+    expect(container.textContent).toContain("ダウンロード再開に必要な clip ID がありません。");
+  });
+
   it("dir mode でデータ取得後に URL を変更すると再取得まで連続実行できない", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
         jsonResponse(200, [
-          { id: "20260601-clm-theme-a-collection", name: "theme-a-collection", has_prompts: true, pattern_count: 1 },
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
         ]),
       )
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
@@ -320,7 +905,7 @@ describe("Suno popup compatibility check", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
   });
 
-  it("popup 起動時の collection 一覧同期では全件 mapped を取得失敗にしない", async () => {
+  it("popup 起動時の collection 一覧同期は status ベースの新スキーマで動作する (#1216)", async () => {
     act(() => {
       root.unmount();
     });
@@ -333,9 +918,9 @@ describe("Suno popup compatibility check", () => {
         {
           id: "20260601-clm-theme-a-collection",
           name: "theme-a-collection",
-          has_prompts: true,
+          status: "ready",
           pattern_count: 1,
-          mapped: true,
+          downloaded_count: 0,
         },
       ]),
     );
@@ -345,11 +930,48 @@ describe("Suno popup compatibility check", () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain("未マッピング collection はありません。");
+      expect(container.textContent).toContain("コレクション");
     });
     expect(container.textContent).not.toContain("コレクション一覧取得失敗");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/collections`);
+  });
+
+  it("popup 起動時の collection 一覧同期は downloaded collection を表示しない", async () => {
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    fetchMock.mockReset();
+    storageMocks.getValue.mockResolvedValue(BASE_URL);
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, [
+        {
+          id: "20260601-clm-done-collection",
+          name: "done-collection",
+          status: "downloaded",
+          pattern_count: 2,
+          downloaded_count: 4,
+        },
+        {
+          id: "20260601-clm-ready-collection",
+          name: "ready-collection",
+          status: "ready",
+          pattern_count: 1,
+          downloaded_count: 0,
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("ready-collection");
+    });
+    expect(container.textContent).not.toContain("done-collection");
   });
 
   it("CORS なし 404 (TypeError) で /collections が reject されても single-file mode へ fallback する", async () => {

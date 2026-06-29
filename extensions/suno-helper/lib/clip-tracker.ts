@@ -21,6 +21,8 @@ export interface ClipTracker {
   getInFlightCount(): number;
   /** 未終端 clip の id 一覧（active feed poll の照会対象）。 */
   getPendingIds(): string[];
+  /** この run で投入した clip のうち、まだ終端 status に達していない id 一覧。 */
+  getPendingSubmittedIds(): string[];
   /** この run の generate レスポンスで観測した clip id 一覧。playlist 対象の SSOT。 */
   getSubmittedIds(): string[];
   /** run 開始時に playlist 対象 ID だけを初期化する。status 集計は残す。 */
@@ -85,6 +87,16 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
       const ids: string[] = [];
       for (const [id, status] of statusById) {
         if (!TERMINAL.has(status)) {
+          ids.push(id);
+        }
+      }
+      return ids;
+    },
+    getPendingSubmittedIds() {
+      const ids: string[] = [];
+      for (const id of submittedById.keys()) {
+        const status = statusById.get(id);
+        if (!status || !TERMINAL.has(status)) {
           ids.push(id);
         }
       }

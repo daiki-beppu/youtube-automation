@@ -26,6 +26,7 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.submissionCount()).toBe(1);
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
     expect(tracker.getPendingIds()).toEqual(["c1", "c2"]);
+    expect(tracker.getPendingSubmittedIds()).toEqual(["c1", "c2"]);
   });
 
   it("Given feed 観測で complete へ遷移 When 読む Then in-flight から外れる（バグ本体の修正点）", () => {
@@ -131,6 +132,7 @@ describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
 
     expect(tracker.getInFlightCount()).toBe(0);
     expect(tracker.getSubmittedIds()).toEqual(["fresh-a"]);
+    expect(tracker.getPendingSubmittedIds()).toEqual([]);
   });
 
   it("Given clearSubmittedIds When 実行 Then playlist 対象だけを消し in-flight status は保持する", () => {

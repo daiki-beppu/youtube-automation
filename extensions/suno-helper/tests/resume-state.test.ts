@@ -186,10 +186,14 @@ describe("resolvePlaylistClipIds: resume を跨ぐ playlist 対象 ID 解決 (#1
     ]);
   });
 
-  it("Given 合成後も不足 When 解決 Then 件数不一致で fail-loud する", () => {
+  it("Given 合成後も不足 When 解決 Then 部分 playlist を作らず throw する", () => {
     expect(() => resolvePlaylistClipIds(["clip-a"], ["clip-b"], 4)).toThrow(
-      "playlist 対象 clip ID 数が一致しません: expected 4, got 2",
+      "playlist 対象の clip ID 数が不足しています: expected 4, got 2",
     );
+  });
+
+  it("Given 0 件 When 解決 Then throw する", () => {
+    expect(() => resolvePlaylistClipIds([], [], 4)).toThrow("playlist 対象の clip ID が 0 件です");
   });
 });
 

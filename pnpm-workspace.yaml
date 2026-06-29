@@ -1,2 +1,6 @@
+packages:
+  - extensions/suno-helper
+  - extensions/distrokid-helper
+
 allowBuilds:
   protobufjs: set this to true or false

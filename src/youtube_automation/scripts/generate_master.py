@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""コレクションの個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を生成する。
+"""コレクションの個別音声 (MP3 / M4A / WAV) をクロスフェード結合してマスター音源を生成する。
 
 skill-config (`masterup.audio.crossfade_duration` / `bitrate`) を参照するため、
 `metadata_generator` のタイムスタンプ計算と常に同じクロスフェード秒数で結合される。
 
-入力ファイルの拡張子に追従して出力フォーマットが決まる:
-- すべて `.mp3` → `master.mp3` (`libmp3lame -b:a {bitrate} -q:a 0`)
-- すべて `.wav` → `master.wav` (`pcm_s16le`、ビットレートは無視)
-MP3 と WAV が混在しているディレクトリは `ValidationError` で明示的に失敗させる
-(出力フォーマットを一意に決められないため)。
+入力は `.mp3` / `.m4a` / `.wav` を受け付け、出力は常に `master.mp3`
+(`libmp3lame -b:a {bitrate} -q:a 0`) に統一する。
 
 Usage:
     yt-generate-master                   # CWD がコレクションディレクトリ
@@ -53,12 +50,9 @@ _PIN_FIRST_COUNT_KEY = "pin_first_count"
 # 自動生成 seed の上限（ログ・再現用に 32-bit unsigned 範囲）。
 _AUTO_SEED_BOUND = 2**32
 
-# 対応する入力音声フォーマット。拡張子 (lower, ドットなし) → ffmpeg コーデックオプション。
-# 出力 `master.<ext>` の拡張子もここで決まる。
-_AUDIO_FORMATS: dict[str, list[str]] = {
-    "mp3": ["-c:a", "libmp3lame"],
-    "wav": ["-c:a", "pcm_s16le"],
-}
+# 対応する入力音声フォーマット。出力は常に MP3 に統一する。
+_AUDIO_INPUT_EXTENSIONS = ("mp3", "m4a", "wav")
+_OUTPUT_CODEC = ["-c:a", "libmp3lame"]
 
 
 def build_filter(n: int, crossfade: float) -> str:
@@ -128,7 +122,7 @@ def _print_duration_preview(
         target_sec = target_duration_min * 60
         print(f"    Target      : {_format_duration(target_sec)}")
     elif no_loop:
-        print("    Target      : disabled by --no-loop")
+        print("    Target      : disabled")
     print(f"    Loop count  : {effective_loops}")
     print(f"    Estimated   : {_format_duration(estimated)}")
     if no_loop and target_duration_min is not None and single_loop_sec < target_duration_min * 60:
@@ -164,29 +158,16 @@ def _spin(stop_event: threading.Event, start: float, segments: int) -> None:
         i += 1
 
 
-def _collect_audio_inputs(music_dir: Path) -> tuple[list[Path], str]:
-    """`music_dir` から `_AUDIO_FORMATS` 対応の音声ファイルを列挙し、(files, ext) を返す。
+def _collect_audio_inputs(music_dir: Path) -> list[Path]:
+    """`music_dir` から対応音声ファイルを拡張子混在込みで列挙する。"""
+    matches: list[Path] = []
+    for ext in _AUDIO_INPUT_EXTENSIONS:
+        matches.extend(music_dir.glob(f"*.{ext}"))
 
-    - すべて同一拡張子なら (sorted files, ext) を返す。
-    - 2 種類以上の拡張子が混在していれば `ValidationError` (出力 master.<ext> を一意に決められない)。
-    - 1 件も見つからなければ `ValidationError`。
-    """
-    matches_by_ext: dict[str, list[Path]] = {}
-    for ext in _AUDIO_FORMATS:
-        found = sorted(music_dir.glob(f"*.{ext}"))
-        if found:
-            matches_by_ext[ext] = found
-
-    if not matches_by_ext:
-        supported = ", ".join(f".{e}" for e in _AUDIO_FORMATS)
+    if not matches:
+        supported = ", ".join(f".{e}" for e in _AUDIO_INPUT_EXTENSIONS)
         raise ValidationError(f"音声ファイル ({supported}) が見つかりません: {music_dir}")
-    if len(matches_by_ext) > 1:
-        found_labels = ", ".join(f".{e}({len(v)})" for e, v in matches_by_ext.items())
-        raise ValidationError(
-            f"音声フォーマットが混在しています (出力フォーマットを一意に決められません): {music_dir} [{found_labels}]"
-        )
-    ext, files = next(iter(matches_by_ext.items()))
-    return files, ext
+    return sorted(matches, key=lambda p: p.name)
 
 
 def _apply_pin_first(
@@ -257,7 +238,7 @@ def generate_master(
     if not music_dir.is_dir():
         raise ValidationError(f"ディレクトリが見つかりません: {music_dir}")
 
-    files, audio_ext = _collect_audio_inputs(music_dir)
+    files = _collect_audio_inputs(music_dir)
     n = len(files)
 
     # 先頭固定を解決 (要件 1-4, 10): pin された曲は順序固定、残りを shuffle 対象とする。
@@ -279,6 +260,10 @@ def generate_master(
     if pinned:
         print(f"[Pin] first {len(pinned)} track(s) fixed: {[p.name for p in pinned]}")
 
+    if no_loop:
+        loops = 1
+        target_duration_min = None
+
     should_print_duration_preview = (not quiet) and (target_duration_min is not None or loops is not None or no_loop)
     needs_duration_probe = target_duration_min is not None or should_print_duration_preview
     single_loop_sec = _sum_track_duration(files) if needs_duration_probe else 0.0
@@ -288,10 +273,7 @@ def generate_master(
     n_effective = len(expanded)
 
     master_dir.mkdir(parents=True, exist_ok=True)
-    output = master_dir / f"master.{audio_ext}"
-
-    # WAV (PCM) は bitrate オプションを取らないため、表示と ffmpeg コマンドの両方で扱いを分ける。
-    use_bitrate = audio_ext == "mp3"
+    output = master_dir / "master.mp3"
 
     if not quiet:
         loop_note = f" × {effective_loops} loops = {n_effective} segments" if effective_loops > 1 else ""
@@ -299,11 +281,11 @@ def generate_master(
         print("  yt-generate-master")
         print("  ──────────────────────────────────────────")
         print()
-        print(f"  Input : {n} {audio_ext.upper()} files{loop_note}")
+        input_exts = ", ".join(sorted({p.suffix.lstrip(".").upper() for p in files}))
+        print(f"  Input : {n} audio files ({input_exts}){loop_note}")
         print(f"  Output: {output.name}")
         print(f"  Crossfade: {crossfade:g}s (triangle curve)")
-        if use_bitrate:
-            print(f"  Bitrate  : {bitrate}")
+        print(f"  Bitrate  : {bitrate}")
         if should_print_duration_preview:
             print()
             _print_duration_preview(
@@ -315,27 +297,47 @@ def generate_master(
             )
         print()
 
-    if n_effective == 1:
+    if n_effective == 1 and expanded[0].suffix.lower() == ".mp3":
         shutil.copyfile(expanded[0], output)
         if not quiet:
             print("  Single file — copied directly.\n")
         return output
 
-    cmd = ["ffmpeg", "-y"]
-    for f in expanded:
-        cmd.extend(["-i", str(f)])
-    cmd.extend(
-        [
-            "-filter_complex",
-            build_filter(n_effective, crossfade),
-            "-map",
-            "[aout]",
-            *_AUDIO_FORMATS[audio_ext],
+    if n_effective == 1:
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(expanded[0]),
+            *_OUTPUT_CODEC,
+            "-b:a",
+            bitrate,
+            "-q:a",
+            "0",
+            str(output),
+            "-loglevel",
+            "error",
         ]
-    )
-    if use_bitrate:
-        cmd.extend(["-b:a", bitrate, "-q:a", "0"])
-    cmd.extend([str(output), "-loglevel", "error"])
+    else:
+        cmd = ["ffmpeg", "-y"]
+        for f in expanded:
+            cmd.extend(["-i", str(f)])
+        cmd.extend(
+            [
+                "-filter_complex",
+                build_filter(n_effective, crossfade),
+                "-map",
+                "[aout]",
+                *_OUTPUT_CODEC,
+                "-b:a",
+                bitrate,
+                "-q:a",
+                "0",
+                str(output),
+                "-loglevel",
+                "error",
+            ]
+        )
 
     start = time.monotonic()
     stop_event = threading.Event()
@@ -383,7 +385,7 @@ def generate_master(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を生成",
+        description="個別音声 (MP3 / M4A / WAV) をクロスフェード結合して master.mp3 を生成",
     )
     parser.add_argument(
         "collection",
@@ -409,7 +411,7 @@ def main() -> int:
         "--no-loop",
         action="store_true",
         dest="no_loop",
-        help="skill-config の target_duration_min を使わず 1 パスで生成する (--loop 1 相当)",
+        help="skill-config の target_duration_min を無視し、1 パスで生成",
     )
     parser.add_argument(
         "--shuffle",
@@ -454,18 +456,9 @@ def main() -> int:
 
         # CLI フラグ (--loop / --target-duration / --no-loop) がすべて未指定なら
         # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
-        # --loop 指定時は loops 指定が最優先のため skill-config 値を黙って無視する。
+        # --loop / --no-loop 指定時は CLI 指定が最優先のため skill-config 値を黙って無視する。
         target_duration: int | None = args.target_duration
-        no_loop_target_duration: int | None = None
-        if args.no_loop:
-            skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
-            if skill_target is not None:
-                no_loop_target_duration = int(skill_target)
-                if no_loop_target_duration < 1:
-                    raise ValidationError(
-                        f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
-                    )
-        elif args.loop is None and args.target_duration is None:
+        if args.loop is None and args.target_duration is None and not args.no_loop:
             skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
             if skill_target is not None:
                 target_duration = int(skill_target)
@@ -518,8 +511,8 @@ def main() -> int:
             collection_dir,
             crossfade,
             bitrate,
-            loops=1 if args.no_loop else args.loop,
-            target_duration_min=no_loop_target_duration if args.no_loop else target_duration,
+            loops=args.loop,
+            target_duration_min=target_duration,
             no_loop=args.no_loop,
             shuffle=shuffle_enabled,
             shuffle_seed=shuffle_seed,

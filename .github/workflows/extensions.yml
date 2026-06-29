@@ -29,7 +29,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: extensions/suno-helper/pnpm-lock.yaml
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
       - name: Lint
         run: pnpm lint
       - name: Format check
@@ -47,7 +47,7 @@ jobs:
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
             );
-            const expected = ["storage", "activeTab", "tabs"];
+            const expected = ["storage", "activeTab", "tabs", "downloads", "debugger"];
             const actual = manifest.permissions ?? [];
             const same =
               actual.length === expected.length &&
@@ -78,7 +78,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: extensions/distrokid-helper/pnpm-lock.yaml
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-workspace
       - name: Lint
         run: pnpm lint
       - name: Format check

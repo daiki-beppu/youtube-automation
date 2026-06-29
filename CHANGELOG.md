@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(shared)`: CollectionSummary を boolean fields (`has_prompts` / `mapped`) から status enum (`needs_prompts` | `ready` | `downloaded`) に置換。`downloaded_count` フィールド追加、`playlist_name` 廃止。POST `/collections/<id>/downloaded` エンドポイント新設（#1216）**BREAKING**
+- `feat(suno-helper)`: Playlist 追加後の Download all DOM 操作 + chrome.downloads 連携を実装 (#1146)
+- `feat(serve)`: POST `/collections/<id>/downloaded` に冪等更新ロジックを追加（playlist URL 記録 + DL 完了マーク）(#1145)
+- `deprecate`: `read_mapped_slugs()` / `write_suno_playlists()` / `normalize_suno_title()` / `POST /suno/playlists` を deprecated 化 (#1145)
 - `feat(upload)`: チャンネル設定の既定予約投稿時刻をアップロード時に適用（#1054）
 - `feat(upload)`: アップロード完了後に YouTube Studio で確認すべき手動チェックリストを表示（#1052）
 - `feat(upload)`: アップロード実行時に操作対象のチャンネル名と channel ID を表示（#1053）

@@ -2,44 +2,26 @@
 // 拡張ライフサイクルのログ、action クリック中継、および overlay ⇄ runner の content↔content 中継を担う。
 // overlay (content script) は `browser.tabs.*` を呼べないため、overlay の no-tabId メッセージを受けて
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
-import { postCapturedPlaylists } from "../../shared/api";
+import {
+  fetchCollectionPrompts,
+  fetchCollections,
+  fetchPrompts,
+  postDownloaded,
+  resolveCompatibilityWarning,
+} from "../../shared/api";
 import { describeRelayFailure } from "../components/runner-errors";
-import { autoCapturePlaylists, captureFromTab } from "../lib/auto-capture";
+import { captureFromTab } from "../lib/auto-capture";
+import { installDownloadWatcher } from "../lib/download-watcher";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
-import { serverUrlItem } from "../lib/storage";
-
-// 自動 capture で開く Suno playlists ページの URL（追加要件 A）。
-// Suno の URL 構造変更（/me → /me/playlists）に追従。
-const SUNO_ME_URL = "https://suno.com/me/playlists";
-// bg `/me` tab の content script が capturePlaylists に応答するまでの poll 上限と間隔。
-// tab 生成直後は content script 未注入で sendMessage が reject されるためリトライする。
-const CAPTURE_TAB_TIMEOUT_MS = 15000;
-const CAPTURE_TAB_POLL_MS = 300;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** lib/auto-capture の orchestration に実 collaborator（browser tab / messaging / storage / api）を配線する。 */
-function runAutoCapture(): Promise<void> {
-  return autoCapturePlaylists({
-    getServerUrl: () => serverUrlItem.getValue(),
-    createMeTab: () => browser.tabs.create({ url: SUNO_ME_URL, active: false }),
-    removeTab: (tabId) => browser.tabs.remove(tabId),
-    capture: (tabId) =>
-      captureFromTab(tabId, {
-        sendCapture: (id) => sendMessage("capturePlaylists", undefined, id),
-        sleep,
-        now: Date.now,
-        timeoutMs: CAPTURE_TAB_TIMEOUT_MS,
-        pollMs: CAPTURE_TAB_POLL_MS,
-      }),
-    post: (baseUrl, items) => postCapturedPlaylists(baseUrl, items),
-  });
-}
+import { sendTrustedCmdP } from "../lib/trusted-shortcut";
 
 export default defineBackground(() => {
+  const SUNO_ME_PLAYLISTS_URL = "https://suno.com/me/playlists";
+  const PLAYLIST_URL_RESOLVE_TIMEOUT_MS = 15000;
+  const PLAYLIST_URL_RESOLVE_POLL_MS = 500;
+  const downloadWatcher = installDownloadWatcher({ sendMessage });
+
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);
   });
@@ -64,21 +46,98 @@ export default defineBackground(() => {
   // のため requireRelayTab が fail-loud で throw する（握りつぶさない）。
   onMessage("run", ({ data, sender }) => sendMessage("run", data, requireRelayTab(sender, "run")));
   onMessage("stop", ({ sender }) => sendMessage("stop", undefined, requireRelayTab(sender, "stop")));
+  onMessage("retryPlaylist", ({ data, sender }) =>
+    sendMessage("retryPlaylist", data, requireRelayTab(sender, "retryPlaylist")),
+  );
+  onMessage("retryDownload", ({ data, sender }) =>
+    sendMessage("retryDownload", data, requireRelayTab(sender, "retryDownload")),
+  );
+  onMessage("adoptSelectedClips", ({ data, sender }) =>
+    sendMessage("adoptSelectedClips", data, requireRelayTab(sender, "adoptSelectedClips")),
+  );
   onMessage("queryProgress", ({ sender }) =>
     sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
   );
-  // overlay → runner 中継 (#893)。overlay の手動 Capture を送信元と同一タブの runner content へ転送し、
-  // runner が自身の document を scrape した結果をそのまま overlay へ返す。
   onMessage("capturePlaylists", ({ sender }) =>
     sendMessage("capturePlaylists", undefined, requireRelayTab(sender, "capturePlaylists")),
   );
 
-  // runner → background: 連続実行完了時の自動 capture trigger (#893 追加要件 A)。
-  // bg `/me` tab を開いて scrape→POST→close する。fail soft（失敗は warning のみ、runner の FINISHED は妨げない）。
-  onMessage("requestPlaylistCapture", () => {
-    void runAutoCapture().catch((err) => {
-      console.warn("[suno-helper] auto playlist capture failed:", err);
-    });
+  onMessage("startDownload", async ({ data, sender }) => {
+    const tabId = relayTabId(sender);
+    if (tabId === null) {
+      console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
+      return { ok: false, message: "startDownload: 送信元タブが特定できません" } as const;
+    }
+    return downloadWatcher.start(tabId, data.format);
+  });
+
+  onMessage("cancelDownload", async ({ sender }) => {
+    await downloadWatcher.cancelForTab(requireRelayTab(sender, "cancelDownload"));
+  });
+
+  // content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
+  // content script は chrome.debugger API にアクセスできないため background に委譲する。
+  // attach → rawKeyDown + keyUp → detach を一瞬で行い、デバッグバーの表示時間を最小化する。
+  onMessage("sendTrustedCmdP", async ({ data, sender }) => {
+    const tabId = relayTabId(sender);
+    if (tabId === null) {
+      throw new Error("sendTrustedCmdP: 送信元タブが特定できません");
+    }
+    await sendTrustedCmdP(tabId, data.isMac);
+  });
+
+  onMessage("fetchCompatibilityWarning", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCompatibilityWarning");
+    return resolveCompatibilityWarning(data.baseUrl, data.extensionVersion);
+  });
+
+  onMessage("fetchCollections", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCollections");
+    return fetchCollections(data.baseUrl);
+  });
+
+  onMessage("fetchPrompts", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchPrompts");
+    return fetchPrompts(data.baseUrl);
+  });
+
+  onMessage("fetchCollectionPrompts", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCollectionPrompts");
+    return fetchCollectionPrompts(data.baseUrl, data.collectionId);
+  });
+
+  // runner → background: content script から localhost server へ直接 token 取得しないよう、
+  // token fetch と POST /downloaded は background の extension origin から実行する。
+  onMessage("postDownloaded", async ({ data, sender }) => {
+    requireRelayTab(sender, "postDownloaded");
+    await postDownloaded(data.baseUrl, data.collectionId, data.body);
+  });
+
+  onMessage("resolvePlaylistUrl", async ({ data, sender }) => {
+    requireRelayTab(sender, "resolvePlaylistUrl");
+    const tab = await browser.tabs.create({ url: SUNO_ME_PLAYLISTS_URL, active: false });
+    if (typeof tab.id !== "number") {
+      throw new Error("playlist URL 解決用タブを作成できませんでした");
+    }
+    const tabId = tab.id;
+    try {
+      const items = await captureFromTab(tabId, {
+        sendCapture: (targetTabId) => sendMessage("capturePlaylists", undefined, targetTabId),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        now: () => Date.now(),
+        timeoutMs: PLAYLIST_URL_RESOLVE_TIMEOUT_MS,
+        pollMs: PLAYLIST_URL_RESOLVE_POLL_MS,
+      });
+      const item = items.find((playlist) => playlist.title === data.playlistName);
+      if (!item) {
+        throw new Error(`playlist URL を解決できません: ${data.playlistName}`);
+      }
+      return { url: item.url };
+    } finally {
+      await browser.tabs.remove(tabId).catch((err: unknown) => {
+        console.debug("[suno-helper] playlist URL 解決用タブの close に失敗:", err);
+      });
+    }
   });
 
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する
