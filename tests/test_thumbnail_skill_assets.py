@@ -175,9 +175,9 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
     for required in (
         "/thumbnail-compare",
         "TEXTLESS_PROMPT=\"$(cat <<'PROMPT'",
-        "--reference \"${COLLECTION_PATH}/10-assets/thumbnail.jpg\"",
-        "--prompt \"$TEXTLESS_PROMPT\"",
-        "--output \"${COLLECTION_PATH}/10-assets/main-v1.jpg\"",
+        '--reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg"',
+        '--prompt "$TEXTLESS_PROMPT"',
+        '--output "${COLLECTION_PATH}/10-assets/main-v1.jpg"',
         "cp main-v1.jpg main.png",
         "テキスト付き生成プロンプト",
         "テキストなし再生成プロンプト",
