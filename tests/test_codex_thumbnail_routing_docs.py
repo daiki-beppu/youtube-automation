@@ -48,6 +48,15 @@ def _wf_new_phase_2c_block(text: str) -> str:
     return match.group(1)
 
 
+def _assert_codex_ttp_prompt_policy(block: str) -> None:
+    assert "load_skill_config('thumbnail')" in block
+    assert "default_prompt_template" in block
+    assert "template.count('{title}') != 1" in block
+    assert "template.replace('{title}'" in block
+    assert "TTP 上位互換" in block
+    assert "短い" in block or "短縮" in block or "短く" in block
+
+
 def test_collection_ideate_parallel_generation_branches_to_codex_image_script() -> None:
     """Given collection-ideate Phase 4-4 parallel
     When provider=codex が設定されている
@@ -82,10 +91,7 @@ def test_collection_ideate_codex_parallel_requires_short_prompt() -> None:
     """
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
 
-    assert "default_prompt_template" in block
-    assert "TTP 上位互換" in block
-    assert "短い" in block or "短縮" in block or "短く" in block
-    assert "prompt" in block or "プロンプト" in block
+    _assert_codex_ttp_prompt_policy(block)
 
 
 def test_collection_ideate_sequential_generation_branches_to_codex_image_script() -> None:
@@ -99,6 +105,16 @@ def test_collection_ideate_sequential_generation_branches_to_codex_image_script(
     assert "codex" in block
     assert ".claude/skills/thumbnail/references/codex-image.sh" in block
     assert "yt-generate-image" in block
+
+
+def test_collection_ideate_codex_sequential_requires_short_prompt() -> None:
+    """Given collection-ideate Phase 4-4 sequential の codex 分岐
+    When codex-image.sh を呼ぶ
+    Then parallel と同じ TTP 上位互換 prompt template 契約を使う。
+    """
+    block = _phase_4_4_sequential_block(_read(_IDEATE_SKILL_MD))
+
+    _assert_codex_ttp_prompt_policy(block)
 
 
 def test_wf_new_treats_codex_preview_as_finished_thumbnail() -> None:

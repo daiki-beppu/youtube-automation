@@ -94,16 +94,25 @@ class OpenAIConfig:
 
 
 @dataclass(frozen=True)
+class CodexConfig:
+    """Codex shell 経路で使う prompt 設定。"""
+
+    default_prompt_template: str = ""
+
+
+@dataclass(frozen=True)
 class ImageGenerationConfig:
     """provider 切り替え可能な画像生成設定の親 dataclass。
 
     ``provider`` の値に対応する側のみが非 None（例: provider="gemini" なら
-    ``gemini`` のみ）。``codex`` は shell 経路なので API provider sub-config を持たない。
+    ``gemini`` のみ）。``codex`` は shell 経路なので API provider ではないが、
+    prompt template などの実行契約は ``codex`` に保持する。
     """
 
     provider: ProviderName
     gemini: GeminiConfig | None = None
     openai: OpenAIConfig | None = None
+    codex: CodexConfig | None = None
     gemini_cli: GeminiCliConfig | None = None
 
     @classmethod
@@ -163,7 +172,8 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {})
         return ImageGenerationConfig(provider="gemini_cli", gemini_cli=gemini_cli_cfg)
 
-    return ImageGenerationConfig(provider="codex", gemini=None, openai=None)
+    codex_cfg = _build_codex(section.get("codex") or {})
+    return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
 
 def _build_from_legacy_gemini(legacy: dict[str, Any]) -> ImageGenerationConfig:
@@ -199,6 +209,10 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
         thinking=d.get("thinking", "medium"),
         batch=int(d.get("batch", 1)),
     )
+
+
+def _build_codex(d: dict[str, Any]) -> CodexConfig:
+    return CodexConfig(default_prompt_template=str(d.get("default_prompt_template", "")))
 
 
 def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConfig:

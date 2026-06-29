@@ -251,11 +251,30 @@ done <<< "$REFS"
 # 違う値の場合は連打数と plan-{a,b,c,...} の採番をその値に合わせて調整する。
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
-  # codex は image_generation.codex.default_prompt_template を使う。
+  # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
-  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Aタイトルを入れた TTP 上位互換プロンプト>" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Bタイトルを入れた TTP 上位互換プロンプト>" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "<企画Cタイトルを入れた TTP 上位互換プロンプト>" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[@]}"
+  build_codex_prompt() {
+    local title="$1"
+    TITLE="$title" uv run python3 -c "
+import os
+from youtube_automation.utils.skill_config import load_skill_config
+
+template = (
+    load_skill_config('thumbnail')
+    .get('image_generation', {})
+    .get('codex', {})
+    .get('default_prompt_template')
+)
+if not isinstance(template, str) or not template.strip():
+    raise SystemExit('thumbnail image_generation.codex.default_prompt_template is required')
+if template.count('{title}') != 1:
+    raise SystemExit('thumbnail image_generation.codex.default_prompt_template must contain exactly one {title}')
+print(template.replace('{title}', os.environ['TITLE']))
+"
+  }
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Aタイトル>")" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Bタイトル>")" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Cタイトル>")" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[@]}"
 else
   uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
   uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
@@ -329,8 +348,26 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 # <x> は選択された企画の番号（a/b/c）
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
+  # codex は image_generation.codex.default_prompt_template を必ず使う。
+  # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  CODEX_PROMPT=$(TITLE="<選択された企画タイトル>" uv run python3 -c "
+import os
+from youtube_automation.utils.skill_config import load_skill_config
+
+template = (
+    load_skill_config('thumbnail')
+    .get('image_generation', {})
+    .get('codex', {})
+    .get('default_prompt_template')
+)
+if not isinstance(template, str) or not template.strip():
+    raise SystemExit('thumbnail image_generation.codex.default_prompt_template is required')
+if template.count('{title}') != 1:
+    raise SystemExit('thumbnail image_generation.codex.default_prompt_template must contain exactly one {title}')
+print(template.replace('{title}', os.environ['TITLE']))
+")
   bash .claude/skills/thumbnail/references/codex-image.sh \
-    "<選択された企画タイトルを入れた TTP 上位互換プロンプト>" \
+    "$CODEX_PROMPT" \
     collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png \
     "${REF_PATHS[@]}"
 else

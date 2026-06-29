@@ -15,6 +15,7 @@ import pytest
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.config import (
     SUPPORTED_PROVIDERS,
+    CodexConfig,
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
@@ -73,13 +74,18 @@ class TestParseImageGenerationConfig:
         assert cfg.openai.thinking == "medium"
         assert cfg.openai.batch == 1
 
-    def test_parses_image_generation_namespace_for_codex_without_api_sub_config(self):
+    def test_parses_image_generation_namespace_for_codex_prompt_template(self):
         """Given image_generation.provider が codex
         When skill-config を parse する
-        Then codex は正規 provider として通り、API provider 用 sub-config は作られない。
+        Then codex は正規 provider として通り、prompt template を保持する。
         """
         # Given
-        skill_cfg = {"image_generation": {"provider": "codex"}}
+        skill_cfg = {
+            "image_generation": {
+                "provider": "codex",
+                "codex": {"default_prompt_template": "Use the title {title}."},
+            }
+        }
 
         # When
         cfg = parse_image_generation_config(skill_cfg)
@@ -88,6 +94,19 @@ class TestParseImageGenerationConfig:
         assert cfg.provider == "codex"
         assert cfg.gemini is None
         assert cfg.openai is None
+        assert isinstance(cfg.codex, CodexConfig)
+        assert cfg.codex.default_prompt_template == "Use the title {title}."
+
+    def test_codex_provider_uses_empty_prompt_template_when_subconfig_omitted(self):
+        """Given image_generation.provider=codex
+        When codex sub-config が省略される
+        Then prompt template は空文字の CodexConfig として保持される。
+        """
+        cfg = parse_image_generation_config({"image_generation": {"provider": "codex"}})
+
+        assert cfg.provider == "codex"
+        assert cfg.codex is not None
+        assert cfg.codex.default_prompt_template == ""
 
     def test_supported_providers_declares_codex(self):
         """Given provider 設定の許容値

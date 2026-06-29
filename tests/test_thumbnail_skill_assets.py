@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import yaml
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -29,6 +31,20 @@ def _read_channel_setup_thumbnail_template() -> str:
         / "thumbnail.yaml"
     )
     return path.read_text(encoding="utf-8")
+
+
+def _load_thumbnail_default_config() -> dict:
+    return yaml.safe_load(_read_thumbnail_default_config()) or {}
+
+
+def _load_channel_setup_thumbnail_template() -> dict:
+    return yaml.safe_load(_read_channel_setup_thumbnail_template()) or {}
+
+
+def _codex_prompt_template(config: dict) -> str:
+    template = config["image_generation"]["codex"]["default_prompt_template"]
+    assert isinstance(template, str)
+    return template
 
 
 def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
@@ -114,27 +130,40 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
 
 def test_thumbnail_default_config_provides_codex_ttp_upgrade_prompt() -> None:
     """#1300: Codex 経路の既定プロンプトは短い TTP 上位互換型にする。"""
-    config = _read_thumbnail_default_config()
+    template = _codex_prompt_template(_load_thumbnail_default_config())
 
-    assert "default_prompt_template: |" in config
-    assert "TTP this reference thumbnail" in config
-    assert "winning layout" in config
-    assert "more readable on mobile" in config
-    assert "stronger face impact" in config
-    assert "no logos" in config
-    assert "no watermarks" in config
-    assert "no broken hands" in config
-    assert "Use the title {title}." in config
+    assert template.count("{title}") == 1
+    for required in (
+        "TTP this reference thumbnail",
+        "winning layout",
+        "more readable on mobile",
+        "stronger face impact",
+        "no logos",
+        "no watermarks",
+        "no broken hands",
+        "Use the title {title}.",
+    ):
+        assert required in template
 
 
 def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
     """#1300: channel-setup で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
-    template = _read_channel_setup_thumbnail_template()
+    default_template = _codex_prompt_template(_load_thumbnail_default_config())
+    channel_setup_template = _codex_prompt_template(_load_channel_setup_thumbnail_template())
 
-    assert "default_prompt_template: |" in template
-    assert "TTP this reference thumbnail" in template
-    assert "winning template" in template
-    assert "Use the title {title}." in template
+    assert channel_setup_template == default_template
+    assert channel_setup_template.count("{title}") == 1
+    for required in (
+        "TTP this reference thumbnail",
+        "winning layout",
+        "more readable on mobile",
+        "stronger face impact",
+        "no logos",
+        "no watermarks",
+        "no broken hands",
+        "Use the title {title}.",
+    ):
+        assert required in channel_setup_template
 
 
 def test_thumbnail_default_config_provides_anatomy_clause() -> None:
