@@ -31,7 +31,7 @@ description: "Use when 新規チャンネルの追加競合候補を YouTube Dat
 |--------|--------|---------------|
 | **既存チャンネル**で競合再発掘 | チャンネル config | `config/channel/content.json` の `genre` / `tags.base` / `descriptions.template_note` |
 | **既存チャンネル**で類似帯探索 | 既存ベンチマーク | `config/channel/analytics.json` の `benchmark.channels` を YouTube で開いてタイトル頻出語を抽出 |
-| **新規チャンネル企画** | `/channel-new` の TTP メモと初期 config | ニッチ仮説の `genre_keywords` / `target_scene` |
+| **新規チャンネル企画** | `/channel-new` の TTP メモと初期 config | `config/channel/content.json::genre.{primary,style,context}` / `tags.base` / TTP メモ内の用途・シーン語彙 |
 | **完全に手探り** | ユーザー宣言 | 「夜カフェ系の lo-fi」のような自然文を Claude が分解 |
 
 config からの抽出例（rjn）:

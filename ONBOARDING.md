@@ -66,37 +66,43 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 
 ## 3. 新規チャンネル開設フロー — `/channel-new` 起点
 
-新しい YouTube チャンネルを 1 本立ち上げるときの **5 スキル連携**。Claude Code 上で 1 ステップずつ実行する。
+新しい YouTube チャンネルを 1 本立ち上げるときの標準フロー。Claude Code 上で 1 ステップずつ実行する。
 
 ```
 /setup             → Phase 0: ツール導入 + API 設定 (GCP + OAuth) を AI 主導で完結
-/channel-new       → Phase 1: ビジョン共有 + 競合発掘 + 独立リポジトリ作成
-/channel-research  → Phase 2: ベンチマーク徹底分析
-/channel-direction → Phase 3: 方向性ブレスト（差別化決定）
-/channel-setup     → Phase 4: テクニカルセットアップ（config 生成、Step 6 は /setup 完了済みなら skip）
+/channel-new       → Phase 1: TTP 対象確認 + seed confirmation + config + persona + branding
+/wf-new            → Phase 2: 初回コレクション制作
+
+# 任意後続: 追加調査や方向性再検討が必要なときだけ実行
+/discover-competitors → 追加競合候補の発掘
+/benchmark            → 承認済み TTP 対象の動画データ収集
+/viewer-voice         → コメント収集と視聴者インサイト分析
+/channel-research     → /benchmark / /viewer-voice 後の詳細分析
+/channel-direction    → 方向性ブレスト（差別化決定）
+/channel-setup        → config 再生成 / branding 再反映
 yt-skills sync                # Claude Code スキル群を新リポへ展開
 yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ展開
 ```
 
 `/setup` は新規開設時だけでなく、別 PC への引っ越し、ADC 切れ、`client_secrets.json` の作り直しなど、ツール導入や API 設定だけを再整備したいときの単独入口としても使える。
 
-### 3.1 `/channel-new`（競合発掘 + リポジトリ作成）
+### 3.1 `/channel-new`（TTP 対象確認 + 初期セットアップ）
 
-ユーザーにビジョン（ジャンル / 雰囲気 / 仮チャンネル名）をヒアリング → `gh repo create` で独立リポジトリを作成 → `uv add` でパッケージ導入 → `yt-discover-competitors` で 5-10 件の競合チャンネルを発掘 → ベンチマークデータ + コメント収集まで実行する。
+ユーザーに TTP したいチャンネルと転写したい要素をヒアリング → seed fetch で実データを確認 → ユーザー承認済み対象だけを `benchmark.channels` に反映 → 独立リポジトリ初期化、config、簡易ペルソナ、初回 branding まで実行する。追加競合発掘や本格 benchmark/comments 収集は標準フローでは実行せず、必要なときに後続スキルへ委譲する。
 
 詳細は [`/channel-new` skill](./.claude/skills/channel-new/SKILL.md)。
 
-### 3.2 `/channel-research`（ベンチマーク分析）
+### 3.2 任意: `/channel-research`（ベンチマーク分析）
 
-`/channel-new` で集めたベンチマークデータを徹底分析。タイトル構造・サムネ構図・動画尺・投稿頻度の **型** を抽出する。
+`/benchmark` や `/viewer-voice` で集めたデータを徹底分析。タイトル構造・サムネ構図・動画尺・投稿頻度・コメント語彙の **型** を抽出する。
 
-### 3.3 `/channel-direction`（方向性決定）
+### 3.3 任意: `/channel-direction`（方向性決定）
 
-分析結果をもとに、対話で「このチャンネルは何で勝つか」を決める。`/audience-persona` `/viewing-scene` `/viewer-voice` も使ってターゲット層と利用シーンを言語化する。
+`/channel-new` の TTP メモと seed fetch 結果、または `/channel-research` の分析結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
 
-### 3.4 `/channel-setup`（テクニカルセットアップ）
+### 3.4 任意: `/channel-setup`（テクニカルセットアップ）
 
-責務別 `config/channel/*.json` を生成、GCP / Vertex AI ブートストラップ（API 有効化・サービスアカウント作成・ADC 設定・`.env` 書き出し）、認証ファイル配置を AI セッション内で完結させる。
+`/channel-direction` 後の config 再生成や、運用中の branding 再反映が必要な場合に使う。GCP / OAuth / ADC の API 設定は `/setup` が担当する。
 
 ### 3.5 `yt-skills sync` でスキル + 運営方針を新リポへ展開
 

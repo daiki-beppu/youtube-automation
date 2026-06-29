@@ -85,18 +85,41 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     discover = _read(".claude/skills/discover-competitors/SKILL.md")
     research = _read(".claude/skills/channel-research/SKILL.md")
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
+    setup = _read(".claude/skills/setup/SKILL.md")
+    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
+    channel_direction = _read(".claude/skills/channel-direction/SKILL.md")
+    onboarding = _read("ONBOARDING.md")
 
     assert "/channel-new Step 5 の前段" not in discover
     assert "`/channel-new` の標準フローでは実行しない" in discover
     assert "ユーザー承認と relationship メモを必ず残す" in discover
+    assert "genre_keywords" not in discover
+    assert "target_scene" not in discover
+    assert "config/channel/content.json::genre.{primary,style,context}" in discover
 
     assert "`/channel-new` で収集したベンチマークデータ + コメントデータ" not in research
-    assert "/benchmark` や `/viewer-voice` で収集した" in research
+    assert "/benchmark` と `/viewer-voice` で収集した" in research
     assert "TTP 対象確認 / 初回 config / persona / branding" in research
+    assert "/viewer-voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
     assert "`/channel-new` の標準フローでは実行せず" in viewer_voice
     assert "任意後続スキル" in viewer_voice
+
+    for path_text in (setup, channel_setup, channel_direction, onboarding):
+        assert "TTP benchmark" not in path_text
+        assert "TTP ベンチマーク収集" not in path_text
+
+    assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
+    assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_setup
+    assert "TTP メモや seed fetch 結果" in channel_direction
+    assert "seed fetch 結果、`config/channel/analytics.json::benchmark.channels`" in channel_direction
+
+    assert "ビジョン共有 + 競合発掘" not in onboarding
+    assert "yt-discover-competitors` で 5-10 件" not in onboarding
+    assert "ベンチマークデータ + コメント収集まで実行" not in onboarding
+    assert "TTP 対象確認 + seed confirmation + config + persona + branding" in onboarding
+    assert "追加競合発掘や本格 benchmark/comments 収集は標準フローでは実行せず" in onboarding
 
 
 def test_thumbnail_search_order_is_documented() -> None:
