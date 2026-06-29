@@ -56,7 +56,7 @@ export default defineBackground(() => {
     sendMessage("capturePlaylists", undefined, requireRelayTab(sender, "capturePlaylists")),
   );
 
-  onMessage("startDownload", ({ data, sender }) => {
+  onMessage("startDownload", async ({ data, sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
       console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
@@ -65,9 +65,8 @@ export default defineBackground(() => {
     return downloadWatcher.start(tabId, data.format);
   });
 
-  onMessage("cancelDownload", ({ sender }) => {
-    const tabId = relayTabId(sender);
-    downloadWatcher.cancelForTab(tabId);
+  onMessage("cancelDownload", async ({ sender }) => {
+    await downloadWatcher.cancelForTab(requireRelayTab(sender, "cancelDownload"));
   });
 
   // content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
@@ -83,9 +82,13 @@ export default defineBackground(() => {
 
   // runner → background: content script から localhost server へ直接 token 取得しないよう、
   // token fetch と POST /downloaded は background の extension origin から実行する。
-  onMessage("postDownloaded", ({ data }) => postDownloaded(data.baseUrl, data.collectionId, data.body));
+  onMessage("postDownloaded", async ({ data, sender }) => {
+    requireRelayTab(sender, "postDownloaded");
+    await postDownloaded(data.baseUrl, data.collectionId, data.body);
+  });
 
-  onMessage("resolvePlaylistUrl", async ({ data }) => {
+  onMessage("resolvePlaylistUrl", async ({ data, sender }) => {
+    requireRelayTab(sender, "resolvePlaylistUrl");
     const tab = await browser.tabs.create({ url: SUNO_ME_PLAYLISTS_URL, active: false });
     if (typeof tab.id !== "number") {
       throw new Error("playlist URL 解決用タブを作成できませんでした");

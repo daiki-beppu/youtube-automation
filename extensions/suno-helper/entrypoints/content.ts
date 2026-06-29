@@ -55,7 +55,7 @@ import {
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
-import { downloadFormatItem, serverUrlItem } from "../lib/storage";
+import { readDownloadFormat, serverUrlItem } from "../lib/storage";
 import type { DownloadContext } from "../lib/download-flow";
 
 function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submittedIds: string[]): Map<string, string> {
@@ -78,7 +78,7 @@ function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submitte
 async function resolveDownloadContext(): Promise<DownloadContext> {
   return {
     baseUrl: (await serverUrlItem.getValue()).trim(),
-    format: await downloadFormatItem.getValue(),
+    format: await readDownloadFormat(),
   };
 }
 

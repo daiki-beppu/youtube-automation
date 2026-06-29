@@ -41,6 +41,7 @@ vi.mock("wxt/browser", () => ({
 vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadFormatItem: downloadFormatMocks,
+  readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);

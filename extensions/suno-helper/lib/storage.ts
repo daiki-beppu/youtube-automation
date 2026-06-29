@@ -16,3 +16,18 @@ export type DownloadFormat = "mp3" | "m4a" | "wav";
 export const downloadFormatItem = storage.defineItem<DownloadFormat>(`local:${DOWNLOAD_FORMAT_KEY}`, {
   fallback: DOWNLOAD_FORMAT_DEFAULT,
 });
+
+const DOWNLOAD_FORMAT_VALUES = ["mp3", "m4a", "wav"] as const;
+
+export function normalizeDownloadFormat(value: unknown): DownloadFormat {
+  return DOWNLOAD_FORMAT_VALUES.includes(value as DownloadFormat) ? (value as DownloadFormat) : DOWNLOAD_FORMAT_DEFAULT;
+}
+
+export async function readDownloadFormat(): Promise<DownloadFormat> {
+  const value: unknown = await downloadFormatItem.getValue();
+  const normalized = normalizeDownloadFormat(value);
+  if (normalized !== value) {
+    await downloadFormatItem.setValue(normalized);
+  }
+  return normalized;
+}

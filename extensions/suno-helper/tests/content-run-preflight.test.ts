@@ -72,6 +72,7 @@ vi.mock("../lib/bridge-listener", () => ({
 vi.mock("../lib/storage", () => ({
   serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
   downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
+  readDownloadFormat: vi.fn(() => Promise.resolve("mp3")),
 }));
 
 vi.mock("../lib/download", () => ({

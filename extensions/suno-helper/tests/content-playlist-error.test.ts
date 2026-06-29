@@ -32,6 +32,7 @@ async function loadContentScriptWithPlaylistRows(
   overrides?: {
     postDownloadedError?: Error;
     postDownloadedRejectOnCall?: number;
+    downloadFormatValue?: unknown;
   },
 ) {
   vi.resetModules();
@@ -172,9 +173,12 @@ async function loadContentScriptWithPlaylistRows(
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
+  const normalizeDownloadFormat = (value: unknown): "mp3" | "m4a" | "wav" =>
+    value === "mp3" || value === "m4a" || value === "wav" ? value : "mp3";
   vi.doMock("../lib/storage", () => ({
     serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
-    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
+    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve(overrides?.downloadFormatValue ?? "mp3")) },
+    readDownloadFormat: vi.fn(() => Promise.resolve(normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3"))),
   }));
 
   vi.doMock("../lib/download", () => ({
@@ -461,6 +465,42 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
   });
+
+  it.each(["m4a", "wav"] as const)(
+    "Given download format=%s When full collection run completes Then startDownload と postDownloaded に同じ形式を渡す",
+    async (format) => {
+      const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+      const currentSubmittedClipIds = ["clip-1", "clip-2"];
+      const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
+      const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
+        currentSubmittedClipIds,
+        rows,
+        { downloadFormatValue: format },
+      );
+
+      runHandler({
+        data: {
+          entries,
+          playlistName: "vj | regression",
+          collectionId: "collection-a",
+        },
+      });
+      await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+
+      handlers.get("downloadComplete")!({
+        data: { filename: "/Users/test/Downloads/regression.zip" },
+      });
+
+      await vi.waitFor(() =>
+        expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })),
+      );
+      expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format });
+      const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+      expect(downloadedPosts).toHaveLength(2);
+      expect(downloadedPosts[0].payload).toMatchObject({ body: { format } });
+      expect(downloadedPosts[1].payload).toMatchObject({ body: { format } });
+    },
+  );
 
   it("Given full collection run When ZIP 完了後の postDownloaded が失敗 Then ERROR で止めて resume state を保持する", async () => {
     const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];

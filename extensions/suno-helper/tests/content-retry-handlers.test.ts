@@ -23,6 +23,7 @@ async function loadContentScript(overrides?: {
   startDownloadResult?: { ok: true } | { ok: false; message: string };
   postDownloadedError?: Error;
   postDownloadedRejectOnCall?: number;
+  downloadFormatValue?: unknown;
 }) {
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
@@ -159,9 +160,12 @@ async function loadContentScript(overrides?: {
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
+  const normalizeDownloadFormat = (value: unknown): "mp3" | "m4a" | "wav" =>
+    value === "mp3" || value === "m4a" || value === "wav" ? value : "mp3";
   vi.doMock("../lib/storage", () => ({
     serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
-    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
+    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve(overrides?.downloadFormatValue ?? "mp3")) },
+    readDownloadFormat: vi.fn(() => Promise.resolve(normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3"))),
   }));
 
   const triggerDownloadAllMock = overrides?.triggerDownloadAllError
@@ -347,6 +351,28 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
         download_path: "/Users/test/Downloads/test-playlist.zip",
       },
     });
+  });
+
+  it("Given 不正な保存済み download format When retryDownload Then mp3 に正規化して実行する", async () => {
+    const { handlers, sentMessages, triggerDownloadAllMock } = await loadContentScript({
+      downloadFormatValue: "flac",
+    });
+
+    const clipIds = ["clip-1", "clip-2"];
+    handlers.get("retryDownload")!({
+      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: clipIds, expectedClipCount: 4 },
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/test-playlist.zip" },
+    });
+
+    await vi.waitFor(() => expect(triggerDownloadAllMock).toHaveBeenCalledWith("mp3"));
+    expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format: "mp3" });
+    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
+    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    expect(downloadedPosts[0].payload).toMatchObject({ body: { format: "mp3" } });
   });
 });
 

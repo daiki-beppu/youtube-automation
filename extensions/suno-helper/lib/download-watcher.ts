@@ -16,8 +16,8 @@ interface DownloadWatcherState {
 }
 
 export interface DownloadWatcherController {
-  start: (tabId: number, format: string) => { ok: true } | { ok: false; message: string };
-  cancelForTab: (tabId: number | null) => void;
+  start: (tabId: number, format: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+  cancelForTab: (tabId: number) => Promise<void>;
 }
 
 export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSender }): DownloadWatcherController {
@@ -204,18 +204,18 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     });
   };
 
-  const withWatcherState = (fn: (watcher: DownloadWatcherState) => void): void => {
-    if (activeDownloadWatcher !== null) {
-      fn(activeDownloadWatcher);
-      return;
-    }
-    void readStoredWatcherState().then((watcher) => {
-      if (watcher === null) {
-        return;
-      }
+  const hydration = readStoredWatcherState().then((watcher) => {
+    if (watcher !== null) {
       activeDownloadWatcher = watcher;
       scheduleWatcherTimers(watcher);
-      fn(watcher);
+    }
+  });
+
+  const withWatcherState = (fn: (watcher: DownloadWatcherState) => void): void => {
+    void hydration.then(() => {
+      if (activeDownloadWatcher !== null) {
+        fn(activeDownloadWatcher);
+      }
     });
   };
 
@@ -277,15 +277,10 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
 
   chrome.downloads.onCreated.addListener(createdListener);
   chrome.downloads.onChanged.addListener(changedListener);
-  void readStoredWatcherState().then((watcher) => {
-    if (watcher !== null) {
-      activeDownloadWatcher = watcher;
-      scheduleWatcherTimers(watcher);
-    }
-  });
 
   return {
-    start: (tabId, format) => {
+    start: async (tabId, format) => {
+      await hydration;
       if (activeDownloadWatcher !== null) {
         return { ok: false, message: "別の Download all 監視が進行中です。完了後に再実行してください。" } as const;
       }
@@ -293,8 +288,9 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
       setActiveDownloadWatcher({ tabId, monitorStartedAt: Date.now(), targetDownloadId: null });
       return { ok: true } as const;
     },
-    cancelForTab: (tabId) => {
-      if (activeDownloadWatcher && (tabId === null || activeDownloadWatcher.tabId === tabId)) {
+    cancelForTab: async (tabId) => {
+      await hydration;
+      if (activeDownloadWatcher && activeDownloadWatcher.tabId === tabId) {
         cleanupWatcher(activeDownloadWatcher);
       }
     },

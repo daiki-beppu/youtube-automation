@@ -1,17 +1,13 @@
 import { useEffect, useState } from "react";
 
 import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
-import { downloadFormatItem, type DownloadFormat } from "../lib/storage";
+import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
 import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
 const SPEED_PRESET_ORDER: SpeedPresetId[] = ["fast", "balanced", "safe"];
 const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
-
-function isDownloadFormat(value: unknown): value is DownloadFormat {
-  return DOWNLOAD_FORMAT_OPTIONS.includes(value as DownloadFormat);
-}
 
 export function App() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
@@ -52,9 +48,9 @@ export function App() {
 
   useEffect(() => {
     let mounted = true;
-    void downloadFormatItem.getValue().then((value) => {
+    void readDownloadFormat().then((value) => {
       if (mounted) {
-        setDownloadFormat(isDownloadFormat(value) ? value : DOWNLOAD_FORMAT_DEFAULT);
+        setDownloadFormat(value);
       }
     });
     return () => {
