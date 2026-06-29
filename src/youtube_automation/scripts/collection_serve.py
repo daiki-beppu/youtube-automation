@@ -569,14 +569,15 @@ def _is_read_origin_allowed(origin: str | None, allow_origin: str | None) -> boo
     return is_origin_allowed(origin, allow_origin)
 
 
-def _is_exact_extension_origin_lock(raw_origin: str | None, allow_origin: str | None) -> bool:
-    """Token/mutating endpoints require an explicit extension Origin lock."""
-    return (
-        raw_origin is not None
-        and allow_origin is not None
-        and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
-        and raw_origin == allow_origin
-    )
+def _is_locked_extension_request(raw_origin: str | None, allow_origin: str | None) -> bool:
+    """Token/mutating endpoints require an explicit extension lock.
+
+    Chrome MV3 background fetches can omit the Origin header. Web-page CORS
+    fetches include an Origin, so keep rejecting non-matching explicit origins.
+    """
+    if allow_origin is None or not allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
+        return False
+    return raw_origin is None or raw_origin == allow_origin
 
 
 def build_version_payload() -> dict[str, str]:
@@ -670,7 +671,7 @@ def create_server(
             """POST /collections/<id>/downloaded を処理する（dir mode only、#1216/#1217）。"""
             assert collections_root is not None
             raw_origin = self.headers.get("Origin")
-            if not _is_exact_extension_origin_lock(raw_origin, allow_origin):
+            if not _is_locked_extension_request(raw_origin, allow_origin):
                 self.send_error(403, "Forbidden")
                 return
             req_token = self.headers.get("X-Serve-Token")
@@ -816,7 +817,7 @@ def create_server(
                 return
             if self.path == "/auth/token":
                 raw_origin = self.headers.get("Origin")
-                if not _is_exact_extension_origin_lock(raw_origin, allow_origin):
+                if not _is_locked_extension_request(raw_origin, allow_origin):
                     self.send_error(403, "Forbidden")
                     return
                 body = json.dumps({"token": serve_token}).encode("utf-8")
@@ -1025,7 +1026,7 @@ def main() -> None:
         default=None,
         help=(
             "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded "
-            "and GET /auth/token require an exact chrome-extension://<EXTENSION_ID> lock. "
+            "and GET /auth/token require an explicit chrome-extension://<EXTENSION_ID> lock. "
             "Default allows chrome-extension scheme plus suno.com / distrokid.com helper origins "
             "for read-only routes only."
         ),

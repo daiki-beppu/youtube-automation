@@ -2151,19 +2151,21 @@ def test_get_auth_token_web_origin_returns_403(serve_dir, tmp_path):
     assert exc_info.value.code == 403
 
 
-def test_get_auth_token_no_origin_returns_403(serve_dir, tmp_path):
-    """Given Origin ヘッダ無しの GET /auth/token
+def test_get_auth_token_no_origin_with_extension_lock_returns_uuid(serve_dir, tmp_path):
+    """Given extension origin に lock した dir mode サーバー
+    And Chrome MV3 background fetch 相当の Origin ヘッダ無しリクエスト
     When リクエストする
-    Then 403 を返す（token は exact extension Origin にだけ公開する・#1217 SEC-001）。
+    Then UUID 形式の token を含む JSON を返す。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
 
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        urllib.request.urlopen(f"{base}/auth/token")
+    with urllib.request.urlopen(f"{base}/auth/token") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
 
-    assert exc_info.value.code == 403
+    assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", body["token"])
 
 
 def test_get_auth_token_other_extension_origin_returns_403(serve_dir, tmp_path):
@@ -2237,6 +2239,26 @@ def test_post_downloaded_valid_token_succeeds(serve_dir, tmp_path):
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
         payload,
         headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+
+def test_post_downloaded_no_origin_with_valid_token_succeeds(serve_dir, tmp_path):
+    """Given extension origin lock + Origin なしで取得した正しい X-Serve-Token
+    When Origin なしで POST /collections/<id>/downloaded を送る
+    Then 200 を返す（Chrome MV3 background fetch の実挙動）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    with urllib.request.urlopen(f"{base}/auth/token") as resp:
+        token = json.loads(resp.read().decode("utf-8"))["token"]
+    payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
 

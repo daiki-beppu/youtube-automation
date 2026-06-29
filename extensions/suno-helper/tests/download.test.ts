@@ -235,6 +235,48 @@ describe("triggerDownloadAll", () => {
     expect(clicked).toEqual(["selected-row-more", "download-all", "mp3", "confirm"]);
   });
 
+  it("DOM fixture: list view の clip-row 配下にある More を押す", async () => {
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <div class="clip-browser-list-scroller">
+        <div class="relative">
+          <div data-testid="clip-row" role="group" class="clip-row" aria-label="Smoke Test Groove">
+            <div class="row-main">
+              <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+              <span role="button" aria-label="Play Smoke Test Groove">Smoke Test Groove</span>
+            </div>
+            <button aria-label="More options" data-testid="list-row-more">...</button>
+          </div>
+        </div>
+      </div>
+      <div data-context-menu="true">
+        <button aria-label="Download all">Download all</button>
+      </div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">M4A</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="list-row-more"]')!
+      .addEventListener("click", () => clicked.push("list-row-more"));
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!
+      .addEventListener("click", () => clicked.push("download-all"));
+    document
+      .querySelector<HTMLButtonElement>("button.flex.w-full")!
+      .addEventListener("click", () => clicked.push("m4a"));
+    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
+      clicked.push("confirm");
+      document.querySelector(".modal-class.modal-overlay")?.remove();
+    });
+
+    await triggerDownloadAll("m4a");
+
+    expect(clicked).toEqual(["list-row-more", "download-all", "m4a", "confirm"]);
+  });
+
   it("DOM fixture: selected clip row に More が無ければ未選択 row の More を押さず throw する", async () => {
     const clicked: string[] = [];
     vi.stubGlobal("PointerEvent", MouseEvent);

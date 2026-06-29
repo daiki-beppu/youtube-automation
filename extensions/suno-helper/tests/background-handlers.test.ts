@@ -937,6 +937,45 @@ describe('background onMessage("startDownload"): polling fallback で完了済�
     });
     expect(removedDownloadListeners).not.toContain(downloadListeners[0]);
   });
+
+  it("Given Suno bulk ZIP の modal.run URL When poll interval 経過 Then downloadComplete を中継する", async () => {
+    const freshStart = new Date().toISOString();
+    const bulkZipUrl = "https://suno-ai--bulk-download-prod-web.modal.run/bulk_zip/613c9f0a40e04529959559aa0d963dc7";
+    const { handlers, sentMessages, createdListeners } = await loadBackground({
+      searchResultsById: {
+        90: [
+          {
+            filename: "/Users/test/Downloads/test.zip",
+            startTime: freshStart,
+            url: bulkZipUrl,
+            state: "complete",
+          },
+        ],
+      },
+    });
+
+    await handlers.get("startDownload")!({
+      data: { format: "m4a" },
+      sender: { tab: { id: 42 } },
+    });
+
+    createdListeners[0](
+      freshZip(90, {
+        filename: "/Users/test/Downloads/test.zip",
+        startTime: freshStart,
+        url: bulkZipUrl,
+      }),
+    );
+    await flushPromises();
+    vi.advanceTimersByTime(3000);
+    await flushPromises();
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "/Users/test/Downloads/test.zip" },
+      tabId: 42,
+    });
+  });
 });
 
 describe("background downloads listener: service worker restart 後も session watcher を復元する (#1217)", () => {
@@ -1073,6 +1112,28 @@ describe('background onMessage("startDownload"): 同時監視を排他する (#1
     expect(downloadListeners).toHaveLength(1);
     expect(result).toEqual({ ok: false, message: expect.stringContaining("監視が進行中") });
     expect(sentMessages.filter((m) => m.type === "downloadFailed")).toHaveLength(0);
+  });
+
+  it("Given 同一タブの未確定 watcher が残っている When startDownload Then stale watcher を解除して再開する", async () => {
+    const { handlers, sessionStore } = await loadBackground();
+
+    await handlers.get("startDownload")!({
+      data: { format: "mp3" },
+      sender: { tab: { id: 42 } },
+    });
+    const firstState = sessionStore["suno-helper:downloadWatcher"];
+
+    const result = await handlers.get("startDownload")!({
+      data: { format: "mp3" },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sessionStore["suno-helper:downloadWatcher"]).toMatchObject({
+      tabId: 42,
+      targetDownloadId: null,
+    });
+    expect(sessionStore["suno-helper:downloadWatcher"]).not.toBe(firstState);
   });
 });
 

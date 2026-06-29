@@ -4,6 +4,7 @@ import { CLIP_LIST_SCROLLER_SELECTOR } from "../../shared/playlist-dom";
 const MORE_BUTTON_SELECTOR = 'button[aria-label="More options"]';
 const DESELECT_CLIP_BUTTON_SELECTOR = 'button[aria-label="Deselect clip"]';
 const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
+const CLIP_ROW_SELECTOR = '[data-testid="clip-row"], .clip-row, article, [role="group"]';
 const CONTEXT_MENU_SELECTOR = 'div[data-context-menu="true"]';
 const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
 const FORMAT_MODAL_SELECTOR = "div.modal-class.modal-overlay";
@@ -51,6 +52,10 @@ function findElementByTextContent<T extends HTMLElement>(
 }
 
 function resolveClipRowFromSelectButton(button: HTMLElement): HTMLElement | null {
+  const explicitRow = button.closest<HTMLElement>(CLIP_ROW_SELECTOR);
+  if (explicitRow) {
+    return explicitRow;
+  }
   const multiSelectWrapper = button.closest(MULTI_SELECT_BUTTON_SELECTOR);
   if (multiSelectWrapper?.parentElement) {
     const parent = multiSelectWrapper.parentElement;
@@ -60,6 +65,10 @@ function resolveClipRowFromSelectButton(button: HTMLElement): HTMLElement | null
     return parent.parentElement ?? parent;
   }
   return button.closest<HTMLElement>("article");
+}
+
+function resolveClipRowFromMoreButton(button: HTMLElement): HTMLElement | null {
+  return button.closest<HTMLElement>(CLIP_ROW_SELECTOR);
 }
 
 function collectSelectedClipRows(root: ParentNode): HTMLElement[] {
@@ -82,6 +91,13 @@ function findScopedMoreButton(): HTMLElement | null {
   for (const row of collectSelectedClipRows(root)) {
     const button = row.querySelector<HTMLElement>(MORE_BUTTON_SELECTOR);
     if (button) {
+      return button;
+    }
+  }
+  const moreButtons = root.querySelectorAll<HTMLElement>(MORE_BUTTON_SELECTOR);
+  for (const button of moreButtons) {
+    const row = resolveClipRowFromMoreButton(button);
+    if (row?.querySelector(DESELECT_CLIP_BUTTON_SELECTOR)) {
       return button;
     }
   }
