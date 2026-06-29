@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""コレクションの workflow-state.json.scene_phrases を多言語翻訳で投入する CLI.
+"""コレクションの workflow-state.json.scene_phrases を投入する CLI.
 
 `config/channel/content.json::title.theme_scenes[<theme>].scene` を英語ソースとして
-取得し、`config/channel/localizations.json::supported_languages` に列挙された全言語へ
-Vertex AI Gemini で翻訳して `collections/<sub>/<collection>/workflow-state.json` の
-`scene_phrases` フィールドに書き込む。
+取得し、呼び出し側エージェントが生成した翻訳 JSON と合わせて
+`collections/<sub>/<collection>/workflow-state.json` の `scene_phrases` フィールドに
+書き込む。
 
 `/wf-new` の Phase 2a（コレクション初期化直後）から呼ばれる想定。多言語非対応チャンネル
 （`supported_languages` が 1 言語以下）では no-op で正常終了する。
 
 Usage:
     yt-populate-scene-phrases <collection-name>
-    yt-populate-scene-phrases <collection-name> --en "Custom English phrase"
+    yt-populate-scene-phrases <collection-name> --translations-json '{"ja":"..."}'
+    yt-populate-scene-phrases <collection-name> --translations-file /tmp/phrases.json
+    yt-populate-scene-phrases <collection-name> --en "Custom English phrase" --translations-json '{"ja":"..."}'
     yt-populate-scene-phrases <collection-name> --overwrite
     yt-populate-scene-phrases <collection-name> --dry-run
 """
@@ -22,7 +24,6 @@ import argparse
 import json
 import logging
 import sys
-import time
 from pathlib import Path
 
 from youtube_automation.utils.config import channel_dir, load_config
@@ -30,10 +31,7 @@ from youtube_automation.utils.exceptions import AutomationError, ConfigError, Va
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 SOURCE_LANG = "en"
-_RETRY_MAX = 3
-_RETRY_BACKOFF_SEC = (5, 15)
 
 
 def _resolve_collection_path(name: str) -> Path:
@@ -71,66 +69,68 @@ def _strip_fence(text: str) -> str:
     return text.strip()
 
 
-def _generate_with_retry(client, *, model: str, contents) -> str:
-    """一過性 429/503 に備えた指数バックオフ付き generate_content."""
-    last_exc: Exception | None = None
-    for attempt in range(_RETRY_MAX):
-        try:
-            return client.models.generate_content(model=model, contents=contents).text or ""
-        except Exception as exc:
-            last_exc = exc
-            if attempt + 1 >= _RETRY_MAX:
-                break
-            wait = _RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC) - 1)]
-            logger.warning("Gemini 呼び出し失敗 (%s), %ss 待機して再試行", exc, wait)
-            time.sleep(wait)
-    raise ValidationError(f"Gemini 呼び出しが {_RETRY_MAX} 回失敗しました: {last_exc}") from last_exc
-
-
 def translate_phrase(
     en_phrase: str,
     target_langs: list[str],
     *,
-    client=None,
-    model: str = DEFAULT_GEMINI_MODEL,
+    translations_json: str,
 ) -> dict[str, str]:
-    """Vertex AI Gemini で英語フレーズを target_langs に翻訳して dict を返す.
+    """エージェント生成済み JSON を target_langs 用の翻訳 dict として検証する.
 
     Args:
         en_phrase: 英語ソースフレーズ
         target_langs: 翻訳先の BCP-47 言語コード（`en` を含めても自動で除外する）
-        client: テスト用に DI 可能な google-genai Client。None なら ADC で生成
-        model: Gemini モデル名
+        translations_json: 呼び出し側エージェントが作成した JSON object
 
     Returns:
         {lang: translated_phrase} の辞書（`en` は含まない）
 
     Raises:
-        ValidationError: Gemini レスポンスが JSON dict として解釈できない / 言語欠落
+        ValidationError: JSON dict として解釈できない / 言語欠落
     """
     targets = [lang for lang in target_langs if lang != SOURCE_LANG]
     if not targets:
         return {}
 
-    if client is None:
-        from youtube_automation.utils.genai_client import create_genai_client
-
-        client = create_genai_client()
-
-    prompt = _build_prompt(en_phrase, targets)
-    logger.info("Gemini 翻訳リクエスト: model=%s, langs=%s", model, targets)
-    raw = _generate_with_retry(client, model=model, contents=[prompt])
     try:
-        payload = json.loads(_strip_fence(raw))
+        payload = json.loads(_strip_fence(translations_json))
     except json.JSONDecodeError as exc:
-        raise ValidationError(f"Gemini レスポンスが JSON としてパースできません: {raw!r}") from exc
+        raise ValidationError(f"scene_phrases 翻訳 JSON をパースできません: {exc.msg}") from exc
     if not isinstance(payload, dict):
-        raise ValidationError(f"Gemini レスポンスが JSON dict ではありません: {payload!r}")
+        raise ValidationError("scene_phrases 翻訳 JSON は object でなければなりません")
 
-    missing = [lang for lang in targets if not payload.get(lang)]
+    missing = [lang for lang in targets if lang not in payload]
     if missing:
-        raise ValidationError(f"Gemini レスポンスに翻訳欠落: {missing}. payload={payload!r}")
-    return {lang: str(payload[lang]) for lang in targets}
+        prompt = _build_prompt(en_phrase, targets)
+        raise ValidationError(
+            f"scene_phrases 翻訳 JSON に翻訳欠落: {missing}. keys={sorted(str(key) for key in payload)}\n"
+            f"Claude Agent には次のプロンプトで再生成させてください:\n{prompt}"
+        )
+    translations: dict[str, str] = {}
+    invalid = [lang for lang in targets if not isinstance(payload[lang], str) or not payload[lang].strip()]
+    if invalid:
+        raise ValidationError(
+            f"scene_phrases 翻訳 JSON の各言語値は非空文字列でなければなりません: invalid_languages={invalid}"
+        )
+    for lang in targets:
+        translations[lang] = payload[lang].strip()
+    return translations
+
+
+def _load_translations_json(args: argparse.Namespace) -> str | None:
+    if args.translations_json and args.translations_file:
+        raise ConfigError("--translations-json と --translations-file は同時指定できません")
+    if args.translations_json:
+        return args.translations_json
+    if args.translations_file:
+        path = Path(args.translations_file)
+        if not path.is_file():
+            raise ConfigError(f"--translations-file は通常ファイルを指定してください: {path}")
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ConfigError(f"--translations-file を読めません: {path}: {exc}") from exc
+    return None
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -156,9 +156,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="翻訳結果を表示するだけで workflow-state.json を更新しない",
     )
     parser.add_argument(
-        "--model",
-        default=DEFAULT_GEMINI_MODEL,
-        help=f"Gemini モデル名 (デフォルト: {DEFAULT_GEMINI_MODEL})",
+        "--translations-json",
+        help='Claude Agent が生成した翻訳 JSON object（例: \'{"ja":"...","ko":"..."}\'）',
+    )
+    parser.add_argument(
+        "--translations-file",
+        help="Claude Agent が生成した翻訳 JSON object を保存したファイルパス",
     )
     return parser
 
@@ -196,7 +199,17 @@ def main(argv: list[str] | None = None) -> int:
                 f"title.theme_scenes[{theme!r}].scene を設定してください"
             )
 
-        translations = translate_phrase(en_phrase, supported, model=args.model)
+        translations_json = _load_translations_json(args)
+        if translations_json is None:
+            target_langs = [lang for lang in supported if lang != SOURCE_LANG]
+            prompt = _build_prompt(en_phrase, target_langs)
+            raise ConfigError(
+                "多言語 scene_phrases には Claude Agent が生成した翻訳 JSON が必要です。"
+                "--translations-json または --translations-file を指定してください。\n"
+                f"Claude Agent へのプロンプト:\n{prompt}"
+            )
+
+        translations = translate_phrase(en_phrase, supported, translations_json=translations_json)
         scene_phrases: dict[str, str] = {SOURCE_LANG: en_phrase, **translations}
 
         if args.dry_run:

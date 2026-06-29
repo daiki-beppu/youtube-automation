@@ -118,9 +118,14 @@ PY
 ## ステップ 4 - `scene_phrases` を新言語セットに揃える
 
 既存コレクションに `workflow-state.json` がある場合は、`supported_languages` と一致するよう再生成する。
+英語以外の文言は Agent で JSON file に保存してから CLI に渡す。
 
 ```bash
-uv run yt-populate-scene-phrases
+cat > /tmp/scene-phrases.json <<'JSON'
+{"ja":"深夜のネオン街、雨と街灯のあいだのジャズ","de":"Späte Neonstadt, Jazz zwischen Regen und Straßenlicht"}
+JSON
+
+uv run yt-populate-scene-phrases <collection-dir-name> --overwrite --translations-file /tmp/scene-phrases.json
 ```
 
 ## ステップ 5 - 検証

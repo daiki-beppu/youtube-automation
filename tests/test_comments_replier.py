@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.scripts import comment_reply
+from youtube_automation.scripts.comment_reply import _load_agent_replies
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
 from youtube_automation.utils.config.comments import (
@@ -15,9 +19,40 @@ from youtube_automation.utils.config.comments import (
     Comments,
     GeneratorConfig,
 )
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
+
+
+def test_load_agent_replies_accepts_replies_object(tmp_path):
+    path = tmp_path / "replies.json"
+    path.write_text(json.dumps({"replies": [{"comment_id": "c1", "reply_text": "Thanks!"}]}), encoding="utf-8")
+
+    assert _load_agent_replies(str(path)) == {"c1": "Thanks!"}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"c1": "Thanks!"},
+        {"c1": None},
+        {"c1": {"text": "Thanks!"}},
+        {"c1": ""},
+        {"": "Thanks!"},
+        [{"comment_id": "c1", "reply_text": "Thanks!"}],
+        {"replies": [{"comment_id": "c1", "reply_text": None}]},
+        {"replies": [{"comment_id": "c1"}]},
+        {"replies": [{"comment_id": "", "reply_text": "Thanks!"}]},
+        {"replies": [{"comment_id": "c1", "reply_text": "first"}, {"comment_id": "c1", "reply_text": "second"}]},
+        [{"comment_id": "c1", "reply_text": []}],
+    ],
+)
+def test_load_agent_replies_rejects_invalid_shapes(tmp_path, payload):
+    path = tmp_path / "replies.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(AutomationError):
+        _load_agent_replies(str(path))
 
 
 def _mock_youtube(
@@ -128,7 +163,7 @@ def _make_config(**overrides) -> Comments:
         ],
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="skip",
@@ -175,6 +210,234 @@ def test_dry_run_does_not_call_insert(tmp_path):
 
     # 履歴ファイルは書かれない
     assert not (tmp_path / "comment_reply_history.json").exists()
+
+
+def test_export_candidates_does_not_call_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    plan = replier.run(dry_run=True, export_candidates=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["comment_id"] == "c1"
+    assert plan.planned[0]["reply_text"] == ""
+    assert plan.planned[0]["reply_source"] == "agent_pending"
+    assert "untrusted viewer content" in plan.planned[0]["instruction"]
+    assert "schema-only JSON" in plan.planned[0]["instruction"]
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_export_candidates_rejects_apply_mode_before_generating(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    with pytest.raises(ConfigError, match="dry-run"):
+        replier.run(dry_run=False, export_candidates=True)
+
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_export_candidates_rejects_agent_replies_before_generating(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "Thanks!"},
+    )
+
+    with pytest.raises(ConfigError, match="agent_replies"):
+        replier.run(dry_run=True, export_candidates=True)
+
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_cli_export_candidates_requires_json(monkeypatch, tmp_path, capsys):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    get_youtube = MagicMock()
+    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(["--dry-run", "--export-candidates"])
+
+    assert rc == 1
+    assert "--json" in capsys.readouterr().err
+    get_youtube.assert_not_called()
+
+
+def test_cli_export_candidates_rejects_apply_before_youtube(monkeypatch, tmp_path, capsys):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    get_youtube = MagicMock()
+    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(["--apply", "--export-candidates", "--json"])
+
+    assert rc == 1
+    assert "--dry-run" in capsys.readouterr().err
+    get_youtube.assert_not_called()
+
+
+def test_cli_export_candidates_rejects_agent_replies_file_before_youtube(monkeypatch, tmp_path, capsys):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    replies_path = tmp_path / "replies.json"
+    replies_path.write_text(json.dumps({"replies": [{"comment_id": "c1", "reply_text": "Thanks!"}]}), encoding="utf-8")
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    get_youtube = MagicMock()
+    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(["--dry-run", "--export-candidates", "--json", "--agent-replies-file", str(replies_path)])
+
+    assert rc == 1
+    assert "同時指定" in capsys.readouterr().err
+    get_youtube.assert_not_called()
+
+
+def test_cli_agent_replies_file_flows_to_replier_without_generator(
+    monkeypatch, tmp_path, capsys, _mock_default_genai_client
+):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    replies_path = tmp_path / "replies.json"
+    replies_path.write_text(
+        json.dumps({"replies": [{"comment_id": "c1", "reply_text": "見つけてくださってありがとうございます。"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "get_youtube", lambda: yt)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(
+        [
+            "--dry-run",
+            "--json",
+            "--video-id",
+            "v1",
+            "--agent-replies-file",
+            str(replies_path),
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["planned"][0]["reply_source"] == "agent"
+    assert payload["planned"][0]["reply_text"] == "見つけてくださってありがとうございます。"
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_agent_replies_file_path_uses_provided_reply_without_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "見つけてくださってありがとうございます。"},
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert len(plan.planned) == 1
+    assert plan.planned[0]["reply_text"] == "見つけてくださってありがとうございます。"
+    assert plan.planned[0]["reply_source"] == "agent"
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_agent_replies_apply_posts_reply_and_saves_history_without_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "見つけてくださってありがとうございます。"},
+    )
+
+    plan = replier.run(dry_run=False)
+
+    assert plan.planned[0]["reply_source"] == "agent"
+    assert plan.replied[0]["reply_text"] == "見つけてくださってありがとうございます。"
+    assert plan.replied[0]["reply_source"] == "agent"
+    yt._insert_mock.execute.assert_called_once()
+    history = ReplyHistory(tmp_path / "comment_reply_history.json")
+    assert history.has_replied("c1")
+    assert history._data["replied"]["c1"]["reply_source"] == "agent"
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_agent_replies_over_max_length_is_truncated_without_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(generator=GeneratorConfig(provider="gemini", model="gemini-3.5-flash", max_length=5)),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "123456789"},
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned[0]["reply_text"] == "12345"
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_agent_replies_missing_comment_is_skipped_without_generator(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={},
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned == []
+    assert any(row["comment_id"] == "c1" and row["reason"] == "agent_reply_missing" for row in plan.skipped)
+    _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
 def test_apply_calls_insert_and_saves_history(tmp_path):
@@ -565,7 +828,7 @@ def _make_gemini_config(**overrides) -> Comments:
         skip_held_for_review=True,
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="skip",
@@ -635,7 +898,7 @@ def test_llm_retry_on_error_then_plans_reply(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="Warm lo-fi host",
             max_length=280,
             fallback_on_error="retry",
@@ -667,7 +930,7 @@ def test_llm_skip_on_error_when_fallback_is_skip(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="persona",
             max_length=280,
             fallback_on_error="skip",
@@ -694,7 +957,7 @@ def test_llm_retry_failure_is_skipped(tmp_path):
     config = _make_gemini_config(
         generator=GeneratorConfig(
             provider="gemini",
-            model="gemini-2.5-pro",
+            model="gemini-3.5-flash",
             channel_persona="persona",
             max_length=280,
             fallback_on_error="retry",
@@ -735,10 +998,50 @@ def test_rule_provider_override_gemini_requires_explicit_gemini_generator_config
         comments_by_video={"v1": [{"comment_id": "c1", "text": "first!"}]},
     )
 
-    from youtube_automation.utils.exceptions import ConfigError
-
     with pytest.raises(ConfigError, match="rule.provider='gemini'"):
-        CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        replier.run(dry_run=True)
+
+
+def test_agent_and_export_paths_do_not_require_generator_setup(tmp_path):
+    """provider を使わない経路は rule.provider validation を踏まず候補処理できる."""
+    config = _make_config(
+        rules=[CommentRule(name="ai_rule", pattern=".+", provider="gemini")],
+        generator=GeneratorConfig(
+            provider="codex",
+            model=None,
+            channel_persona="persona",
+            max_length=280,
+            fallback_on_error="skip",
+            requests_per_minute=30,
+        ),
+    )
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!"}]},
+    )
+    export_replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+
+    export_plan = export_replier.run(dry_run=True, export_candidates=True)
+
+    assert export_plan.planned[0]["reply_source"] == "agent_pending"
+
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!"}]},
+    )
+    agent_replier = CommentReplier(
+        yt,
+        config=config,
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "Thanks!"},
+    )
+
+    agent_plan = agent_replier.run(dry_run=True)
+
+    assert agent_plan.planned[0]["reply_source"] == "agent"
+    assert agent_plan.planned[0]["reply_text"] == "Thanks!"
 
 
 def _mock_youtube_with_status(
