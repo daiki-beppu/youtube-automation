@@ -1,22 +1,22 @@
 ---
 name: channel-new
-description: "Use when 新しい YouTube チャンネル用の独立リポジトリを現在のディレクトリで初期化したいとき。「チャンネル追加」「新チャンネル」「チャンネル開設」「チャンネルセットアップ」「新しいチャンネル作りたい」「TTP 対象を集める」など、新規チャンネルの TTP ベンチマーク収集、config 生成、簡易ペルソナ、branding 初回反映まで end-to-end で進める場面で必ず使用すること。"
+description: "Use when 新しい YouTube チャンネル用の独立リポジトリを現在のディレクトリで初期化したいとき。「チャンネル追加」「新チャンネル」「チャンネル開設」「チャンネルセットアップ」「新しいチャンネル作りたい」「TTP 対象を集める」など、新規チャンネルの TTP 対象確認、config 生成、簡易ペルソナ、branding 初回反映まで end-to-end で進める場面で必ず使用すること。"
 ---
 
 ## Overview
 
 新チャンネル開設を `/setup`（onboard）後の 1 スキルで完結させるエントリポイント。
-現在の作業ディレクトリをそのまま channel repo として使い、TTP ベンチマーク収集、フルパッケージ config 生成、簡易ペルソナ、YouTube branding 初回反映まで進める。
+現在の作業ディレクトリをそのまま channel repo として使い、TTP 対象の確認と TTP に必要な情報収集、フルパッケージ config 生成、簡易ペルソナ、YouTube branding 初回反映まで進める。
 
 **標準フロー**:
 ```
 /setup        → GCP / OAuth / ADC / automation パッケージ準備
-/channel-new  → TTP hearing + benchmark + config + persona + branding ← このスキル
+/channel-new  → TTP hearing + seed confirmation + config + persona + branding ← このスキル
 /wf-new       → 初回コレクション制作
 ```
 
 `/channel-research`、`/channel-direction`、`/channel-setup` は廃止しない。
-詳細分析、方向性の再検討、運用中の設定 push / pull が必要なときに追加で使う。
+追加の競合探索、本格ベンチマーク収集、詳細分析、方向性の再検討、運用中の設定 push / pull が必要なときに追加で使う。
 
 ## TTP 原則
 
@@ -48,7 +48,7 @@ TTP メモは最低限、以下の観点を含める:
 - **音楽エンジン**: `music_engine` に入れる `suno` / `lyria` のどちらか
 - **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか
 
-このヒアリング結果は `yt-channel-init` の CLI 引数と、後続の seed fetch / benchmark 反映に使う。
+このヒアリング結果は `yt-channel-init` の CLI 引数と、後続の seed fetch / TTP 対象反映に使う。
 
 ### Step 2: 現在のディレクトリを repo 初期化
 
@@ -100,7 +100,7 @@ Step 4 の config 生成で解消するため、以下の config 未生成由来
 
 `upload_ready` が `auth/token.json が存在しない`、`upload 必須 scope 不足`、`token.json 読み込み失敗` で fail している場合は `/setup` を案内して停止する。その他の fail / warn / unknown が残る場合は、表示された `next_action` に従って解消してから進む。
 
-seed fetch と競合ベンチマーク収集は YouTube Data API 認証に依存するため、既存チャンネルの token コピーで代替しない。
+seed fetch は YouTube Data API 認証に依存するため、既存チャンネルの token コピーで代替しない。
 
 ### Step 4: フルパッケージ config / ディレクトリ生成
 
@@ -139,7 +139,7 @@ TTP 対象がこの時点で channel ID まで確定している場合は、`--b
 
 冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。
 
-### Step 5: TTP seed fetch と benchmark 反映
+### Step 5: TTP seed fetch と承認済み対象反映
 
 Step 1 の TTP チャンネルを YouTube Data API で実データ化する。
 
@@ -151,7 +151,7 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
 ```
 
 表示されたチャンネル名、登録者数、動画数、直近タイトルをユーザーに提示し、TTP 対象として確定するか確認する。
-承認されたチャンネルだけ relationship メモ付きで `config/channel/analytics.json::benchmark.channels` に反映する。
+承認前に `benchmark.channels` へ書き込まない。承認されたチャンネルだけ relationship メモ付きで `config/channel/analytics.json::benchmark.channels` に反映する。
 
 ```bash
 uv run yt-channel-seed "https://www.youtube.com/@example" \
@@ -159,38 +159,33 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
   --relationship "title-structure: ..., thumbnail-composition: ..., posting-cadence: ..."
 ```
 
-### Step 6: 競合発掘とベンチマーク収集
+実データ確認時に、TTP するうえで必要な情報だけをメモする:
 
-WebSearch から始めない。まず `yt-discover-competitors` を実行する。
+- チャンネル名 / handle / channel ID
+- 登録者数、動画数、直近タイトルから見える型
+- タイトル構造、サムネ構図、投稿頻度、動画尺
+- description / keywords / localizations の転写方針
+- `config/channel/analytics.json::benchmark.channels` に入れた relationship
 
-```bash
-uv run yt-discover-competitors \
-  --keywords "{キーワード1},{キーワード2},{キーワード3}" \
-  --min-subscribers 10000 --max-subscribers 1000000 \
-  --posted-within-days 30 --top 20 \
-  --output research/discovery.md
-```
+### Step 6: 追加調査は後続スキルへ委譲
 
-ユーザー承認後、採用候補を `benchmark.channels` に追加する。
-承認後の有効候補が 3 件未満の場合だけ WebSearch で補完する。
+`/channel-new` の標準フローでは、TTP 対象以外の競合発掘や本格ベンチマーク収集を実行しない。
+以下は必要になった時点で、ユーザーに目的を確認してから後続スキルとして実行する:
 
-続けてベンチマークとコメントを収集する。
-
-```bash
-uv run yt-benchmark-collect --force --keep-thumbnails -v
-uv run yt-benchmark-comments --min-views 5000
-```
+- 追加の競合候補を広げたい → `/discover-competitors`
+- 承認済み TTP 対象の動画データやサムネイルを本格収集したい → `/benchmark`
+- コメントを含めて視聴者インサイトを見たい → `/viewer-voice`
+- 収集済みデータから方向性を深掘りしたい → `/channel-research`
 
 ### Step 7: 簡易ペルソナ導出
 
-新チャンネルには `/viewer-voice` の結果がまだないため、ここでは軽量版だけ作る。
+新チャンネルには `/viewer-voice` や `/benchmark` の結果がまだない場合があるため、ここでは軽量版だけ作る。
 
 入力:
 
 - `config/channel/analytics.json::benchmark.channels`
-- `data/benchmark_YYYYMMDD.json`
-- `data/comments_YYYYMMDD.json`
 - TTP ヒアリングの関係性メモ
+- Step 5 の seed fetch 結果と、TTP に必要な実データメモ
 
 出力:
 
@@ -237,8 +232,8 @@ uv run yt-channel-settings push --apply
 
 | 前提 | 初回 fallback |
 |---|---|
-| Analytics データがまだ無い | #1272 で wf-new 側対応予定。初回は benchmark / TTP メモを企画根拠として使う |
-| `config/skills/thumbnail.yaml` の reference_images が空 | `yt-benchmark-collect --keep-thumbnails` の出力を確認し、空なら TTP サムネの手動選定メモを `notes` に残す |
+| Analytics データがまだ無い | #1272 で wf-new 側対応予定。初回は TTP メモと seed fetch 結果を企画根拠として使う |
+| `config/skills/thumbnail.yaml` の reference_images が空 | TTP サムネの手動選定メモを `notes` に残す。本格収集が必要なら `/benchmark` で `yt-benchmark-collect --keep-thumbnails` を実行する |
 | `config/skills/suno.yaml` が placeholder のまま | Step 1 のジャンル情報を `genre_line` に反映してから進む |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
 
@@ -261,7 +256,9 @@ uv run yt-channel-settings push --apply
 ## Cross References
 
 - `/setup` → 前提: automation ツール導入 + GCP / OAuth / ADC 準備
-- `/benchmark` → ベンチマーク収集の詳細
+- `/discover-competitors` → TTP 対象外の追加競合発掘
+- `/benchmark` → 承認済み TTP 対象の本格ベンチマーク収集
+- `/viewer-voice` → コメント収集と視聴者インサイト分析
 - `/audience-persona` → 公開後の本格ペルソナ見直し
 - `/channel-research` → 収集済みデータの詳細分析
 - `/channel-direction` → 方向性の再検討
