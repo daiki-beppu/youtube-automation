@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import socket
 import sys
 import threading
@@ -2253,6 +2254,52 @@ def test_apply_downloaded_artifacts_propagates_unknown_atomic_write_error(tmp_pa
             DownloadedPayload(file_count=0, format="mp3", suno_playlist_url="https://suno.com/playlist/abc"),
             atomic_json_write=fail_unexpected,
         )
+
+
+def test_apply_downloaded_artifacts_restores_outer_backup_when_inner_music_rollback_fails(tmp_path, monkeypatch):
+    """内側 commit rollback が失敗しても外側 transaction backup から music dir を戻す。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "01_old.mp3").write_bytes(b"old")
+    zip_path = _make_zip(tmp_path / "downloaded.zip", {"Song A.mp3": b"new-a", "Song A_1.mp3": b"new-b"})
+    original_files = {p.name: p.read_bytes() for p in sorted(music_dir.iterdir())}
+    real_move = shutil.move
+
+    def fail_staged_move_and_inner_restore(src, dst, *args, **kwargs):
+        src_path = Path(src)
+        dst_path = Path(dst)
+        if src_path.parent.name.startswith(".suno-music-") and src_path.suffix == ".mp3":
+            raise OSError("simulated staged move failure")
+        if src_path.parent.name.startswith(".suno-music-backup-") and dst_path == music_dir:
+            raise OSError("simulated inner rollback failure")
+        return real_move(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "youtube_automation.utils.suno_downloaded_archive.shutil.move",
+        fail_staged_move_and_inner_restore,
+    )
+
+    def write_json(_path: Path, _data: dict, *, prefix: str) -> None:
+        return None
+
+    with pytest.raises(DownloadedArtifactError, match="simulated staged move failure|simulated inner rollback failure"):
+        apply_downloaded_artifacts(
+            coll,
+            DownloadedPayload(
+                file_count=1,
+                format="mp3",
+                suno_playlist_url="https://suno.com/playlist/abc",
+                download_path=str(zip_path),
+            ),
+            atomic_json_write=write_json,
+        )
+
+    assert {p.name: p.read_bytes() for p in sorted(music_dir.iterdir())} == original_files
 
 
 def test_post_downloaded_default_rejects_extension_origin_without_exact_lock(serve_dir, tmp_path):

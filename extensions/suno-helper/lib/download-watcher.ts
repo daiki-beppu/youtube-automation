@@ -38,9 +38,7 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
   };
 
   const isTrustedSunoDownload = (item: chrome.downloads.DownloadItem): boolean =>
-    isTrustedSunoDownloadUrl(item.url) ||
-    isTrustedSunoDownloadUrl(item.finalUrl) ||
-    isTrustedSunoDownloadUrl(item.referrer);
+    isTrustedSunoDownloadUrl(item.url) || isTrustedSunoDownloadUrl(item.finalUrl);
 
   const isZipStartedAfterMonitor = (item: chrome.downloads.DownloadItem, monitorStartedAt: number): boolean => {
     const filename = item.filename ?? "";

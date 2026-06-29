@@ -55,15 +55,15 @@ def apply_downloaded_artifacts(
     music_backup_dir: Path | None = None
     workflow_existed = workflow_state_path.exists()
     workflow_backup = workflow_state_path.read_bytes() if workflow_existed else None
-    download_committed = False
+    restore_music_on_error = False
 
     try:
         if payload.download_path:
             if music_dir.exists():
                 music_backup_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-apply-backup-"))
                 shutil.copytree(music_dir, music_backup_dir / "02-Individual-music")
+            restore_music_on_error = True
             placed_count = extract_downloaded_archive(coll_dir, payload.download_path, expected_count)
-            download_committed = True
             placed_count_for_response = placed_count
             file_count = placed_count
 
@@ -81,7 +81,7 @@ def apply_downloaded_artifacts(
             music_backup_dir=music_backup_dir,
             workflow_existed=workflow_existed,
             workflow_backup=workflow_backup,
-            restore_music=download_committed,
+            restore_music=restore_music_on_error,
         )
         raise
     except (OSError, ValueError, shutil.Error) as exc:
@@ -91,7 +91,7 @@ def apply_downloaded_artifacts(
             music_backup_dir=music_backup_dir,
             workflow_existed=workflow_existed,
             workflow_backup=workflow_backup,
-            restore_music=download_committed,
+            restore_music=restore_music_on_error,
         )
         raise DownloadedArtifactError(str(exc)) from exc
     finally:
