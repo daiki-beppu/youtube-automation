@@ -172,7 +172,7 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {})
         return ImageGenerationConfig(provider="gemini_cli", gemini_cli=gemini_cli_cfg)
 
-    codex_cfg = _build_codex(section.get("codex"))
+    codex_cfg = _build_codex(section.get("codex")) if "codex" in section else CodexConfig()
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
 
@@ -214,7 +214,12 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
 def _build_codex(d: Any) -> CodexConfig:
     if not isinstance(d, dict):
         raise ConfigError("image_generation.codex は mapping で指定してください")
-    return CodexConfig(default_prompt_template=_validate_codex_prompt_template(d.get("default_prompt_template")))
+    template = d.get("default_prompt_template", "")
+    if not isinstance(template, str):
+        raise ConfigError("image_generation.codex.default_prompt_template は文字列で指定してください")
+    if template:
+        template = _validate_codex_prompt_template(template)
+    return CodexConfig(default_prompt_template=template)
 
 
 def _validate_codex_prompt_template(template: Any) -> str:

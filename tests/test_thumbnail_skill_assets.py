@@ -1,5 +1,8 @@
 """thumbnail skill の配布アセット内容を固定化するテスト。"""
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -34,8 +37,11 @@ def _read_channel_setup_thumbnail_template() -> str:
 
 
 def _read_codex_prompt_script() -> str:
-    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "codex-prompt.py"
-    return path.read_text(encoding="utf-8")
+    return _codex_prompt_script_path().read_text(encoding="utf-8")
+
+
+def _codex_prompt_script_path() -> Path:
+    return _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "codex-prompt.py"
 
 
 def _load_thumbnail_default_config() -> dict:
@@ -62,6 +68,26 @@ def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
         raise AssertionError(f"{end_marker!r} が見つかりません")
 
     return text[start_idx:end_idx]
+
+
+def _run_codex_prompt_cli(tmp_path: Path, thumbnail_yaml: str, title: str) -> subprocess.CompletedProcess[str]:
+    channel_dir = tmp_path / "channel"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "thumbnail.yaml").write_text(thumbnail_yaml, encoding="utf-8")
+
+    env = os.environ.copy()
+    env["CHANNEL_DIR"] = str(channel_dir)
+    env["PYTHONPATH"] = str(_repo_root() / "src") + os.pathsep + env.get("PYTHONPATH", "")
+
+    return subprocess.run(
+        [sys.executable, str(_codex_prompt_script_path()), title],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 def test_thumbnail_skill_adds_ttp_preflight_checklist_before_two_phase_section() -> None:
@@ -178,6 +204,56 @@ def test_thumbnail_skill_includes_codex_prompt_helper_script() -> None:
     assert "from youtube_automation.utils.image_provider.config import build_codex_prompt" in script
     assert 'load_skill_config("thumbnail")' in script
     assert 'parser.add_argument("title"' in script
+
+
+def test_codex_prompt_helper_cli_renders_default_template(tmp_path: Path) -> None:
+    """#1300: provider=codex の最小 override で default template を title 差し替えして出力する。"""
+    result = _run_codex_prompt_cli(
+        tmp_path,
+        "image_generation:\n  provider: codex\n",
+        "Rain Study",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "TTP this reference thumbnail" in result.stdout
+    assert "Use the title Rain Study." in result.stdout
+    assert "{title}" not in result.stdout
+
+
+def test_codex_prompt_helper_cli_rejects_non_codex_provider(tmp_path: Path) -> None:
+    """#1300: codex 以外の provider では prompt helper を失敗させる。"""
+    result = _run_codex_prompt_cli(
+        tmp_path,
+        "image_generation:\n  provider: gemini\n",
+        "Rain Study",
+    )
+
+    assert result.returncode != 0
+    assert "provider=codex" in result.stderr
+
+
+def test_codex_prompt_helper_cli_rejects_empty_title(tmp_path: Path) -> None:
+    """#1300: 空 title は title 差し替え入口で失敗させる。"""
+    result = _run_codex_prompt_cli(
+        tmp_path,
+        "image_generation:\n  provider: codex\n",
+        "",
+    )
+
+    assert result.returncode != 0
+    assert "title" in result.stderr
+
+
+def test_codex_prompt_helper_cli_rejects_invalid_template(tmp_path: Path) -> None:
+    """#1300: `{title}` を含まない override template は失敗させる。"""
+    result = _run_codex_prompt_cli(
+        tmp_path,
+        "image_generation:\n  provider: codex\n  codex:\n    default_prompt_template: No placeholder.\n",
+        "Rain Study",
+    )
+
+    assert result.returncode != 0
+    assert "default_prompt_template" in result.stderr
 
 
 def test_thumbnail_default_config_provides_anatomy_clause() -> None:
