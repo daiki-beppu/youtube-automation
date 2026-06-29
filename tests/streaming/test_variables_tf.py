@@ -118,18 +118,14 @@ class TestVariablesTfNullResource:
             "video_path には default を設定してはならない（環境依存・必須項目）"
         )
 
-    def test_source_video_preflight_enabled_variable_defaults_true(self):
+    def test_source_video_preflight_enabled_variable_does_not_exist(self):
         """Given variables.tf
         When source_video_preflight_enabled 変数定義を読む
-        Then type=bool, default=true, description に ffprobe soft skip が明記されている（#1299）。
+        Then preflight 契約を optional 化する変数は存在しない（#1299）。
         """
         text = strip_hcl_comments(read_file(_VARIABLES_TF))
         block = extract_block(text, r'variable\s+"source_video_preflight_enabled"')
-        assert block is not None, 'variable "source_video_preflight_enabled" が存在しない'
-        assert re.search(r"type\s*=\s*bool", block), "source_video_preflight_enabled.type が bool でない"
-        assert re.search(r"default\s*=\s*true", block), "source_video_preflight_enabled.default が true でない"
-        assert "ffprobe" in block, "description に ffprobe の説明が無い"
-        assert "soft skip" in block, "description に ffprobe 未インストール時の soft skip が明記されていない"
+        assert block is None, 'variable "source_video_preflight_enabled" で preflight を optional 化している'
 
     def test_install_root_is_string_with_default_youtube_stream_root(self):
         """Given variables.tf

@@ -56,7 +56,7 @@ def _video_metadata(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             "-show_entries",
             "stream=codec_name,profile,width,height,bit_rate",
             "-show_entries",
-            "format=bit_rate,duration",
+            "format=duration",
             "-of",
             "json",
             "--",
@@ -159,7 +159,7 @@ def check_video(path: Path) -> dict[str, str]:
     height = _int_or_none(stream.get("height"))
     width = _int_or_none(stream.get("width"))
     duration = _float_or_none(format_info.get("duration"))
-    bitrate_bps = _int_or_none(stream.get("bit_rate")) or _int_or_none(format_info.get("bit_rate"))
+    bitrate_bps = _int_or_none(stream.get("bit_rate"))
     bitrate_kbps = round(bitrate_bps / 1000) if bitrate_bps is not None else None
     required_bitrate_kbps = _required_bitrate_kbps(height)
     max_keyframe_interval = _max_interval(keyframes, duration)

@@ -3,19 +3,12 @@ locals {
   ssh_host_key_algorithm  = "ED25519"
   ssh_host_public_key     = trimspace(tls_private_key.ssh_host.public_key_openssh)
   ssh_host_public_key_sha = sha256(local.ssh_host_public_key)
-  source_video_preflight = var.source_video_preflight_enabled ? data.external.source_video_preflight[0].result : {
-    ok              = "true"
-    status          = "disabled"
-    message         = "source video preflight disabled."
-    profile_ok      = "true"
-    profile_message = "source video preflight disabled."
-  }
+  source_video_preflight  = data.external.source_video_preflight.result
   source_video_ok         = local.source_video_preflight.ok == "true"
   source_video_profile_ok = local.source_video_preflight.profile_ok == "true"
 }
 
 data "external" "source_video_preflight" {
-  count   = var.source_video_preflight_enabled ? 1 : 0
   program = ["python3", "${path.module}/video_preflight.py"]
 
   query = {

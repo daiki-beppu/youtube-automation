@@ -171,3 +171,66 @@ def test_check_video_enforces_720p_bitrate_boundary(monkeypatch, tmp_path):
     ok_result = module.check_video(video)
     assert ok_result["ok"] == "true"
     assert ok_result["required_bitrate_kbps"] == "2500"
+
+
+def test_check_video_warns_non_high_profile_without_hard_fail(monkeypatch, tmp_path):
+    """Given bitrate / keyframe は正常だが H.264 High ではない動画
+    When check_video を呼ぶ
+    Then hard fail せず profile warning だけ返す。
+    """
+    module = _load_module()
+    video = tmp_path / "stream.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(module.shutil, "which", lambda _cmd: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        module,
+        "_video_metadata",
+        lambda _path: (
+            {
+                "codec_name": "h264",
+                "profile": "Constrained Baseline",
+                "width": 1920,
+                "height": 1080,
+                "bit_rate": "4500000",
+            },
+            {"duration": "4.0"},
+        ),
+    )
+    monkeypatch.setattr(module, "_keyframe_times", lambda _path: [0.0, 2.0, 4.0])
+
+    result = module.check_video(video)
+
+    assert result["ok"] == "true"
+    assert result["status"] == "ok"
+    assert result["profile_ok"] == "false"
+    assert "H.264 High is recommended" in result["profile_message"]
+
+
+def test_check_video_does_not_use_container_bitrate_for_video_bitrate(monkeypatch, tmp_path):
+    """Given stream.bit_rate が無く format.bit_rate だけある動画
+    When check_video を呼ぶ
+    Then container 全体の bitrate では合格させず hard fail する。
+    """
+    module = _load_module()
+    video = tmp_path / "stream.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(module.shutil, "which", lambda _cmd: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        module,
+        "_video_metadata",
+        lambda _path: (
+            {
+                "codec_name": "h264",
+                "profile": "High",
+                "width": 1920,
+                "height": 1080,
+            },
+            {"duration": "4.0", "bit_rate": "4600000"},
+        ),
+    )
+    monkeypatch.setattr(module, "_keyframe_times", lambda _path: [0.0, 2.0, 4.0])
+
+    result = module.check_video(video)
+
+    assert result["ok"] == "false"
+    assert "video bitrate is unavailable" in result["message"]
