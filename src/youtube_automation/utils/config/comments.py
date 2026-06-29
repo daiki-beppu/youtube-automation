@@ -14,7 +14,8 @@ FALLBACK_SKIP = "skip"
 FALLBACK_RETRY = "retry"
 VALID_FALLBACK_VALUES = (FALLBACK_SKIP, FALLBACK_RETRY)
 
-# CommentRule.scope: コメントの階層（top-level / reply）でマッチ対象を絞る (#524)
+# Deprecated comments.rules compatibility constants. Rule-based matching is no
+# longer used, but downstream configs may still contain these values.
 SCOPE_TOP_LEVEL = "top_level"
 SCOPE_REPLY = "reply"
 SCOPE_ANY = "any"
@@ -55,18 +56,10 @@ class GeneratorConfig:
 
 @dataclass(frozen=True)
 class CommentRule:
-    """コメント返信ルール 1 件.
+    """旧 `comments.rules[]` 互換用のデータ形状.
 
-    - `keywords` のいずれかが本文に部分一致 → match
-    - `pattern`（正規表現）のいずれかが本文にマッチ → match
-    - 両方指定時はどちらか成立で match
-    - `language` は返信言語ヒント。省略時は channel 既定言語を使う
-    - `priority` が大きい順に評価し、最初に match したルールが採用される
-    - `provider`: ルール単位の provider override。VALID_PROVIDERS のいずれか。
-      省略時はグローバルの comments.generator.provider に従う
-    - `scope`: マッチ対象のコメント階層。VALID_SCOPES のいずれか (#524)。
-      `"top_level"` は top-level コメントのみ、`"reply"` は reply のみ、
-      `"any"`（既定）は両方に当たる（#365 以前と等価の後方互換挙動）
+    Rule-based matching is deprecated. Loader/replier keep accepting this shape
+    so old downstream configs do not fail, but the values are ignored.
     """
 
     name: str
@@ -83,7 +76,8 @@ class Comments:
     """`comments` セクション（optional）.
 
     - `enabled`: この機能を有効にするか
-    - `rules`: マッチング規則のリスト
+    - `rules`: 後方互換のため保持する旧マッチング規則（処理では無視）
+    - `language`: 返信言語ヒント。省略時は YouTube API 既定言語を使う
     - `ng_words`: 本文にいずれかが含まれるコメントは除外
     - `max_replies_per_run`: 1 回の実行で返信する上限件数
     - `delay_between_replies_sec`: 返信 API 呼び出し間の sleep 秒
@@ -93,7 +87,8 @@ class Comments:
     """
 
     enabled: bool = False
-    rules: list[CommentRule] = field(default_factory=list)
+    rules: list[object] = field(default_factory=list)
+    language: str | None = None
     ng_words: list[str] = field(default_factory=list)
     max_replies_per_run: int = 20
     delay_between_replies_sec: float = 2.0
@@ -102,8 +97,5 @@ class Comments:
     generator: GeneratorConfig = field(default_factory=GeneratorConfig)
 
     def __post_init__(self) -> None:
-        for rule in self.rules:
-            if rule.provider is not None and rule.provider not in VALID_PROVIDERS:
-                raise ConfigError(f"CommentRule.provider 無効: {rule.provider!r}")
-            if rule.scope not in VALID_SCOPES:
-                raise ConfigError(f"CommentRule.scope 無効: {rule.scope!r}（{VALID_SCOPES} のいずれか）")
+        if self.language is not None and not self.language.strip():
+            raise ConfigError("Comments.language は空文字にできません")

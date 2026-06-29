@@ -707,7 +707,7 @@ def test_workflow_approval_gates_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_name_required(tmp_path, monkeypatch):
+def test_comments_rule_name_is_ignored_for_legacy_rules(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -718,8 +718,8 @@ def test_comments_rule_name_required(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].name"):
-        load_config()
+    config = load_config()
+    assert config.comments.rules[0].name == ""
 
 
 def test_comments_templates_must_be_object(tmp_path, monkeypatch):
@@ -1285,8 +1285,8 @@ def test_comments_generator_not_object_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
-    """comments.rules[i].provider が無効な値のとき ConfigError を送出する."""
+def test_comments_rule_invalid_provider_is_ignored(tmp_path, monkeypatch):
+    """comments.rules[i].provider は後方互換で保持するが処理では無視する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1303,12 +1303,12 @@ def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].provider"):
-        load_config()
+    config = load_config()
+    assert config.comments.rules[0].provider == "openai"
 
 
 def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypatch):
-    """rule provider='gemini' は rule 単位の override として有効."""
+    """rule provider='gemini' は互換フィールドとして保持されるが generator は global を使う."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1370,8 +1370,8 @@ def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
     assert config.comments.rules[1].scope == "reply"
 
 
-def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
-    """#524: comments.rules[i].scope が無効な値のとき ConfigError を送出する."""
+def test_comments_rule_invalid_scope_is_ignored(tmp_path, monkeypatch):
+    """comments.rules[i].scope は後方互換で保持するが処理では無視する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1382,19 +1382,19 @@ def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].scope"):
-        load_config()
+    config = load_config()
+    assert config.comments.rules[0].scope == "thread"
 
 
-def test_comments_dataclass_rejects_invalid_rule_scope():
-    """#524: Comments dataclass を直接構築した場合も rule scope を検証する."""
+def test_comments_dataclass_accepts_legacy_rule_scope():
+    """Comments dataclass は旧 rules[].scope を検証しない."""
     from youtube_automation.utils.config.comments import CommentRule, Comments
 
-    with pytest.raises(ConfigError, match="scope"):
-        Comments(
-            enabled=True,
-            rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")],
-        )
+    comments = Comments(
+        enabled=True,
+        rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")],
+    )
+    assert comments.rules[0].scope == "thread"
 
 
 def test_comments_dataclass_defaults_to_codex_without_loader():
@@ -1407,18 +1407,18 @@ def test_comments_dataclass_defaults_to_codex_without_loader():
     assert comments.rules[0].provider == "gemini"
 
 
-def test_comments_dataclass_rejects_invalid_rule_provider():
-    """Comments dataclass を直接構築した場合も rule provider を検証する."""
+def test_comments_dataclass_accepts_legacy_rule_provider():
+    """Comments dataclass は旧 rules[].provider を検証しない."""
     from youtube_automation.utils.config.comments import (
         CommentRule,
         Comments,
     )
 
-    with pytest.raises(ConfigError, match="provider"):
-        Comments(
-            enabled=True,
-            rules=[CommentRule(name="bad", keywords=["hi"], provider="openai")],
-        )
+    comments = Comments(
+        enabled=True,
+        rules=[CommentRule(name="bad", keywords=["hi"], provider="openai")],
+    )
+    assert comments.rules[0].provider == "openai"
 
 
 def test_comments_legacy_type_key_raises(tmp_path, monkeypatch):
@@ -1447,8 +1447,8 @@ def test_comments_legacy_templates_key_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_legacy_template_key_raises(tmp_path, monkeypatch):
-    """旧 comments.rules[].template_key は互換変換せず ConfigError にする."""
+def test_comments_legacy_template_key_is_ignored(tmp_path, monkeypatch):
+    """旧 comments.rules[].template_key は後方互換で読み捨てる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1458,12 +1458,12 @@ def test_comments_legacy_template_key_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].template_key"):
-        load_config()
+    config = load_config()
+    assert config.comments.rules[0].name == "legacy"
 
 
-def test_comments_legacy_rule_generator_key_raises(tmp_path, monkeypatch):
-    """旧 comments.rules[].generator は互換変換せず ConfigError にする."""
+def test_comments_legacy_rule_generator_key_is_ignored(tmp_path, monkeypatch):
+    """旧 comments.rules[].generator は後方互換で読み捨てる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1473,8 +1473,8 @@ def test_comments_legacy_rule_generator_key_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].generator"):
-        load_config()
+    config = load_config()
+    assert config.comments.rules[0].name == "legacy"
 
 
 # ----- overlays (#511) -----------------------------------------------------

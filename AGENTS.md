@@ -165,3 +165,4 @@ collections/            # コンテンツ成果物
 - AGENTS.md は Codex CLI が起動時に読み込むプロジェクトドキュメント。Codex 側で本ファイルを参照する前提で記述している
 - skill 機能（`.agents/skills/` 配下の SKILL.md）も Codex CLI 標準仕様に沿って読み込まれる
 - ただし、本リポジトリのスキル群は Claude Code 文脈で設計された記述が多い（例: `claude-code-setup` プラグイン前提、TodoWrite ツール前提）。Codex 経由で個別スキルを起動する際は記述差異を考慮すること
+- skill 内の Claude Code 固有表現は、Codex 実行時に次のように読み替える: `AskUserQuestion` は通常のユーザー確認、`Read ツール` は画像/ファイル閲覧手段、`Bash ツール run_in_background=true` は長時間コマンドを非同期 session で起動して進捗を poll、`TodoWrite` は Codex の plan/checklist 更新。これらの表記が残っていても実装不整合とは扱わず、同等の Codex 機能で実行する。

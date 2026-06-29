@@ -15,9 +15,11 @@ issue #934 で新規追加するエンドポイント（dir mode 時のみ有効
 
 from __future__ import annotations
 
+import http.client
 import json
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -758,6 +760,21 @@ def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str
     assert json.loads(err.read().decode("utf-8")) == {"error": message}
 
 
+def _post_declared_length(url: str, *, declared_length: int, origin: str):
+    """Content-Length だけを大きく宣言して POST する。"""
+    parsed = urllib.parse.urlsplit(url)
+    conn = http.client.HTTPConnection(parsed.hostname, parsed.port)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    conn.putrequest("POST", path)
+    conn.putheader("Host", parsed.netloc)
+    conn.putheader("Origin", origin)
+    conn.putheader("Content-Length", str(declared_length))
+    conn.endheaders()
+    return conn, conn.getresponse()
+
+
 def test_post_distrokid_releases_writes_file_and_returns_recorded(tmp_path, serve_dir_dk):
     """Given 許可 Origin からの POST /distrokid/releases（capture_root あり）
     When 有効な body を送る
@@ -916,6 +933,79 @@ def test_post_distrokid_releases_missing_field_returns_400(tmp_path, serve_dir_d
         )
 
     _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
+
+
+def test_post_distrokid_releases_unknown_collection_returns_400(tmp_path, serve_dir_dk):
+    """Given collections_root に存在しない collection_id
+    When 許可 Origin から POST /distrokid/releases する
+    Then リリース記録を書かず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {
+                "collection_id": "20990101-missing-collection",
+                "disc": "disc1-alpha",
+                "album_title": "Ghost Album",
+            },
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_unknown_disc_returns_400(tmp_path, serve_dir_dk):
+    """Given collection は存在するが disc が存在しない
+    When 許可 Origin から POST /distrokid/releases する
+    Then リリース記録を書かず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {
+                "collection_id": "20260526-abc-collection",
+                "disc": "disc99-missing",
+                "album_title": "Ghost Album",
+            },
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_body_too_large_returns_413(tmp_path, serve_dir_dk):
+    """Given 1 MiB を超える body
+    When 許可 Origin から POST /distrokid/releases する
+    Then body を処理せず 413 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    conn, resp = _post_declared_length(
+        f"{base}{_DISTROKID_RELEASES_ROUTE}",
+        declared_length=1024 * 1024 + 1,
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 413
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Payload Too Large"}
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

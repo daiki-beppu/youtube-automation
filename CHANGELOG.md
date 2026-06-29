@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(comments)`: コメント返信の `RuleEngine` / `no_rule_matched` 経路を撤去し、基本フィルタ通過後の全コメントを Agent 生成返信の候補に変更。旧 `comments.rules` は後方互換で読み込むが処理では無視し、返信文の `@投稿者名` 補完と NG ワード監査を追加（#1011）
+- `fix(serve)`: `yt-collection-serve` の POST body を 1 MiB に制限し、dir mode の `/distrokid/releases` で実在する collection/disc のみ記録できるようにした（#953）
+- `docs(thumbnail)`: 下流チャンネルの `config/skills/thumbnail.yaml` と stock 運用状況を横断監査し、TTP 設定・stock 再利用・live collection 棚卸し結果を `docs/audits/thumbnail-ttp-2026-06-30.md` に追加（#520, #521, #522）
+- `docs(skills)`: `masterup` の `yt-suno-fetch` 記述を将来案として明記し、Claude Code 固有表現を Codex 共用時に読み替える注記を AGENTS / CLAUDE に追加（#1181, #1182）
 - `docs(skills)`: 初投稿前に `/playlist` で未作成プレイリストを初期化し、`/video-upload` の自動 assign に引き継ぐ導線を追加（#1314）
 - `feat(streaming)`: Terraform streaming module に配信元 MP4 の ffprobe プリフライトを追加。キーフレーム間隔と最低ビットレートを plan/apply 前に hard fail し、H.264 High profile は warning として通知する。README / `/streaming` skill に `-c:v copy` 前提の動画要件と推奨再エンコード例を追記（#1299）
 - `docs(skills)`: wf-next / wf-status / analytics-analyze / wf-new / channel-setup / video-upload / community-post / collection-ideate の記述を現行実装に同期し、optional config 一覧を README / AGENTS / CLAUDE に追記（#1173, #1174, #1175, #1176, #1177, #1178, #1179, #1180）

@@ -9,7 +9,6 @@ from youtube_automation.utils.comments.generator import (
 )
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import CommentReplier, ReplyPlan
-from youtube_automation.utils.comments.rule_engine import RuleEngine, RuleMatch
 
 __all__ = [
     "CodexGenerator",
@@ -19,7 +18,5 @@ __all__ = [
     "ReplyGenerator",
     "ReplyHistory",
     "ReplyPlan",
-    "RuleEngine",
-    "RuleMatch",
     "fetch_comments",
 ]

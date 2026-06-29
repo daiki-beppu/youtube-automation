@@ -202,9 +202,9 @@ def test_dry_run_does_not_call_insert(tmp_path):
     replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
     plan = replier.run(dry_run=True)
 
-    assert len(plan.planned) == 1
-    assert plan.planned[0]["comment_id"] == "c1"
-    assert plan.planned[0]["reply_text"] == "Generated reply"
+    assert len(plan.planned) == 2
+    assert [row["comment_id"] for row in plan.planned] == ["c1", "c2"]
+    assert plan.planned[0]["reply_text"] == "@Alice Generated reply"
     assert plan.replied == []
     yt._insert_mock.execute.assert_not_called()
 
@@ -351,7 +351,7 @@ def test_cli_agent_replies_file_flows_to_replier_without_generator(
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["planned"][0]["reply_source"] == "agent"
-    assert payload["planned"][0]["reply_text"] == "見つけてくださってありがとうございます。"
+    assert payload["planned"][0]["reply_text"] == "@Alice 見つけてくださってありがとうございます。"
     _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
@@ -371,7 +371,7 @@ def test_agent_replies_file_path_uses_provided_reply_without_generator(tmp_path,
     plan = replier.run(dry_run=True)
 
     assert len(plan.planned) == 1
-    assert plan.planned[0]["reply_text"] == "見つけてくださってありがとうございます。"
+    assert plan.planned[0]["reply_text"] == "@Alice 見つけてくださってありがとうございます。"
     assert plan.planned[0]["reply_source"] == "agent"
     _mock_default_genai_client.models.generate_content.assert_not_called()
 
@@ -392,7 +392,7 @@ def test_agent_replies_apply_posts_reply_and_saves_history_without_generator(tmp
     plan = replier.run(dry_run=False)
 
     assert plan.planned[0]["reply_source"] == "agent"
-    assert plan.replied[0]["reply_text"] == "見つけてくださってありがとうございます。"
+    assert plan.replied[0]["reply_text"] == "@Alice 見つけてくださってありがとうございます。"
     assert plan.replied[0]["reply_source"] == "agent"
     yt._insert_mock.execute.assert_called_once()
     history = ReplyHistory(tmp_path / "comment_reply_history.json")
@@ -416,7 +416,7 @@ def test_agent_replies_over_max_length_is_truncated_without_generator(tmp_path, 
 
     plan = replier.run(dry_run=True)
 
-    assert plan.planned[0]["reply_text"] == "12345"
+    assert plan.planned[0]["reply_text"] == "@Alic"
     _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
@@ -551,7 +551,7 @@ def test_ng_word_excludes_comment(tmp_path):
 
     planned_ids = [row["comment_id"] for row in plan.planned]
     assert planned_ids == ["c2"]
-    assert any(row["reason"] == "no_rule_matched" for row in plan.skipped if row["comment_id"] == "c1")
+    assert any(row["reason"] == "ng_word" for row in plan.skipped if row["comment_id"] == "c1")
 
 
 def test_explicit_video_ids_skip_playlist_items_lookup(tmp_path):
@@ -634,22 +634,26 @@ def test_api_error_recorded_in_errors(tmp_path):
     assert not (tmp_path / "comment_reply_history.json").exists()
 
 
-@pytest.mark.parametrize(
-    "reason_text,expected_reason",
-    [
-        ("spam", "no_rule_matched"),
-        ("まったく関係ない文章", "no_rule_matched"),
-    ],
-)
-def test_no_match_reasons(tmp_path, reason_text, expected_reason):
+def test_unrelated_comment_is_planned_after_basic_filters(tmp_path):
     yt = _mock_youtube(
         video_ids=["v1"],
-        comments_by_video={"v1": [{"comment_id": "c1", "text": reason_text}]},
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "まったく関係ない文章", "author": "Viewer"}]},
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    plan = replier.run(dry_run=True)
+    assert [row["comment_id"] for row in plan.planned] == ["c1"]
+    assert plan.skipped == []
+
+
+def test_ng_word_reason(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "spam"}]},
     )
     replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
     plan = replier.run(dry_run=True)
     assert plan.planned == []
-    assert any(row["reason"] == expected_reason for row in plan.skipped)
+    assert any(row["reason"] == "ng_word" for row in plan.skipped)
 
 
 def test_own_comment_is_skipped_when_owner_channel_id_provided(tmp_path):
@@ -864,7 +868,7 @@ def test_gemini_generator_used_when_configured(tmp_path):
         plan = replier.run(dry_run=True)
 
     assert len(plan.planned) == 1
-    assert plan.planned[0]["reply_text"] == "Thanks for being first!"
+    assert plan.planned[0]["reply_text"] == "@Alice Thanks for being first!"
     assert plan.planned[0]["provider"] == "gemini"
     assert "template_key" not in plan.planned[0]
 
@@ -920,7 +924,7 @@ def test_llm_retry_on_error_then_plans_reply(tmp_path):
         plan = replier.run(dry_run=True)
 
     assert len(plan.planned) == 1
-    assert plan.planned[0]["reply_text"] == "Retry reply"
+    assert plan.planned[0]["reply_text"] == "@Alice Retry reply"
     assert plan.errors == []
     assert mock_client.models.generate_content.call_count == 2
 
@@ -980,8 +984,8 @@ def test_llm_retry_failure_is_skipped(tmp_path):
     assert mock_client.models.generate_content.call_count == 2
 
 
-def test_rule_provider_override_gemini_requires_explicit_gemini_generator_config(tmp_path):
-    """rule.provider='gemini' は Gemini 用 model が解決できない設定を拒否する."""
+def test_legacy_rule_provider_is_ignored(tmp_path):
+    """rules[].provider は後方互換で受け取るが処理では無視する."""
     config = _make_config(
         rules=[CommentRule(name="ai_rule", pattern=".+", provider="gemini")],
         generator=GeneratorConfig(
@@ -995,12 +999,19 @@ def test_rule_provider_override_gemini_requires_explicit_gemini_generator_config
     )
     yt = _mock_youtube(
         video_ids=["v1"],
-        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!"}]},
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "first!", "author": "Alice"}]},
     )
 
-    with pytest.raises(ConfigError, match="rule.provider='gemini'"):
-        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
-        replier.run(dry_run=True)
+    replier = CommentReplier(
+        yt,
+        config=config,
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "Thanks!"},
+    )
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned[0]["provider"] == "codex"
 
 
 def test_agent_and_export_paths_do_not_require_generator_setup(tmp_path):
@@ -1041,7 +1052,7 @@ def test_agent_and_export_paths_do_not_require_generator_setup(tmp_path):
     agent_plan = agent_replier.run(dry_run=True)
 
     assert agent_plan.planned[0]["reply_source"] == "agent"
-    assert agent_plan.planned[0]["reply_text"] == "Thanks!"
+    assert agent_plan.planned[0]["reply_text"] == "@Unknown Thanks!"
 
 
 def _mock_youtube_with_status(
@@ -1213,10 +1224,9 @@ def test_fetch_video_status_wraps_http_error(tmp_path):
         fetch_video_status(yt, ["v1"])
 
 
-def test_legacy_rule_generator_key_rejected_by_loader():
-    """旧 rules[].generator は ConfigError で停止する."""
+def test_legacy_rule_generator_key_is_ignored_by_loader():
+    """旧 rules[].generator は後方互換で読み捨てる."""
     from youtube_automation.utils.config.loader import _build_comments
-    from youtube_automation.utils.exceptions import ConfigError
 
     merged = {
         "comments": {
@@ -1225,8 +1235,9 @@ def test_legacy_rule_generator_key_rejected_by_loader():
         }
     }
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].generator"):
-        _build_comments(merged)
+    comments = _build_comments(merged)
+    assert comments.rules[0].name == "bad"
+    assert comments.rules[0].keywords == ["hi"]
 
 
 # ─── 履歴 save リトライのテスト (#382) ────────────────────────────────────────
