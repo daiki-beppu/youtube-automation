@@ -8,14 +8,12 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 MAX_KEYFRAME_INTERVAL_SEC = 4.0
 MIN_BITRATE_BY_HEIGHT_KBPS = (
     (1080, 4500),
     (720, 2500),
 )
-DEFAULT_MIN_BITRATE_KBPS = 1500
 
 
 def _result(
@@ -38,17 +36,18 @@ def _result(
     return data
 
 
-def _run_ffprobe(args: list[str]) -> dict[str, Any]:
+def _run_ffprobe(args: list[str]) -> dict[str, object]:
     proc = subprocess.run(
         ["ffprobe", "-v", "error", *args],
         check=True,
         capture_output=True,
         text=True,
     )
-    return json.loads(proc.stdout or "{}")
+    data: object = json.loads(proc.stdout or "{}")
+    return data if isinstance(data, dict) else {}
 
 
-def _video_metadata(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+def _video_metadata(path: Path) -> tuple[dict[str, object], dict[str, object]]:
     data = _run_ffprobe(
         [
             "-select_streams",
@@ -131,13 +130,11 @@ def _float_or_none(value: object) -> float | None:
         return None
 
 
-def _required_bitrate_kbps(height: int | None) -> int:
-    if height is None:
-        return DEFAULT_MIN_BITRATE_KBPS
+def _required_bitrate_kbps(height: int | None) -> int | None:
     for min_height, bitrate in MIN_BITRATE_BY_HEIGHT_KBPS:
-        if height >= min_height:
+        if height is not None and height >= min_height:
             return bitrate
-    return DEFAULT_MIN_BITRATE_KBPS
+    return None
 
 
 def check_video(path: Path) -> dict[str, str]:
@@ -162,14 +159,17 @@ def check_video(path: Path) -> dict[str, str]:
     bitrate_bps = _int_or_none(stream.get("bit_rate"))
     bitrate_kbps = round(bitrate_bps / 1000) if bitrate_bps is not None else None
     required_bitrate_kbps = _required_bitrate_kbps(height)
+    required_bitrate_bps = required_bitrate_kbps * 1000 if required_bitrate_kbps is not None else None
     max_keyframe_interval = _max_interval(keyframes, duration)
 
     failures: list[str] = []
-    if max_keyframe_interval is not None and max_keyframe_interval > MAX_KEYFRAME_INTERVAL_SEC:
+    if max_keyframe_interval is None:
+        failures.append("keyframe interval is unavailable")
+    elif max_keyframe_interval > MAX_KEYFRAME_INTERVAL_SEC:
         failures.append(f"keyframe interval {max_keyframe_interval:.2f}s exceeds {MAX_KEYFRAME_INTERVAL_SEC:.0f}s")
     if bitrate_kbps is None:
         failures.append("video bitrate is unavailable")
-    elif bitrate_kbps < required_bitrate_kbps:
+    elif required_bitrate_bps is not None and bitrate_bps is not None and bitrate_bps < required_bitrate_bps:
         failures.append(f"video bitrate {bitrate_kbps} Kbps is below {required_bitrate_kbps} Kbps")
 
     codec = str(stream.get("codec_name") or "")
@@ -197,7 +197,7 @@ def check_video(path: Path) -> dict[str, str]:
             width=width or "",
             height=height or "",
             bitrate_kbps=bitrate_kbps or "",
-            required_bitrate_kbps=required_bitrate_kbps,
+            required_bitrate_kbps=required_bitrate_kbps or "",
             max_keyframe_interval_sec=(f"{max_keyframe_interval:.3f}" if max_keyframe_interval is not None else ""),
         )
     return _result(
@@ -209,7 +209,7 @@ def check_video(path: Path) -> dict[str, str]:
         width=width or "",
         height=height or "",
         bitrate_kbps=bitrate_kbps or "",
-        required_bitrate_kbps=required_bitrate_kbps,
+        required_bitrate_kbps=required_bitrate_kbps or "",
         max_keyframe_interval_sec=f"{max_keyframe_interval:.3f}" if max_keyframe_interval is not None else "",
     )
 

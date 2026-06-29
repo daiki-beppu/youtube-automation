@@ -135,10 +135,80 @@ def test_check_video_uses_duration_for_single_keyframe_interval(monkeypatch, tmp
     assert result["max_keyframe_interval_sec"] == "10.000"
 
 
+def test_check_video_fails_when_keyframe_interval_is_unavailable(monkeypatch, tmp_path):
+    """Given keyframe timestamp も duration も取得できない
+    When check_video を呼ぶ
+    Then 判定不能な keyframe 間隔を hard fail する。
+    """
+    module = _load_module()
+    video = tmp_path / "stream.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(module.shutil, "which", lambda _cmd: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        module,
+        "_video_metadata",
+        lambda _path: (
+            {
+                "codec_name": "h264",
+                "profile": "High",
+                "width": 1920,
+                "height": 1080,
+                "bit_rate": "4500000",
+            },
+            {},
+        ),
+    )
+    monkeypatch.setattr(module, "_keyframe_times", lambda _path: [])
+
+    result = module.check_video(video)
+
+    assert result["ok"] == "false"
+    assert "keyframe interval is unavailable" in result["message"]
+    assert result["max_keyframe_interval_sec"] == ""
+
+
+def test_check_video_enforces_1080p_bitrate_boundary_in_bps(monkeypatch, tmp_path):
+    """Given 1080p の bitrate 境界
+    When check_video を呼ぶ
+    Then 4,500,000 bps 未満は丸めず fail、以上は ok。
+    """
+    module = _load_module()
+    video = tmp_path / "stream.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(module.shutil, "which", lambda _cmd: "/usr/bin/ffprobe")
+    monkeypatch.setattr(module, "_keyframe_times", lambda _path: [0.0, 2.0, 4.0])
+
+    def set_metadata(bit_rate: str):
+        monkeypatch.setattr(
+            module,
+            "_video_metadata",
+            lambda _path: (
+                {
+                    "codec_name": "h264",
+                    "profile": "High",
+                    "width": 1920,
+                    "height": 1080,
+                    "bit_rate": bit_rate,
+                },
+                {"duration": "4.0"},
+            ),
+        )
+
+    set_metadata("4499999")
+    low_result = module.check_video(video)
+    assert low_result["ok"] == "false"
+    assert "below 4500 Kbps" in low_result["message"]
+
+    set_metadata("4500000")
+    ok_result = module.check_video(video)
+    assert ok_result["ok"] == "true"
+    assert ok_result["required_bitrate_kbps"] == "4500"
+
+
 def test_check_video_enforces_720p_bitrate_boundary(monkeypatch, tmp_path):
     """Given 720p の bitrate 境界
     When check_video を呼ぶ
-    Then 2,500 Kbps 未満は fail、以上は ok。
+    Then 2,500,000 bps 未満は丸めず fail、以上は ok。
     """
     module = _load_module()
     video = tmp_path / "stream.mp4"
@@ -162,7 +232,7 @@ def test_check_video_enforces_720p_bitrate_boundary(monkeypatch, tmp_path):
             ),
         )
 
-    set_metadata("2499000")
+    set_metadata("2499999")
     low_result = module.check_video(video)
     assert low_result["ok"] == "false"
     assert "below 2500 Kbps" in low_result["message"]
@@ -171,6 +241,37 @@ def test_check_video_enforces_720p_bitrate_boundary(monkeypatch, tmp_path):
     ok_result = module.check_video(video)
     assert ok_result["ok"] == "true"
     assert ok_result["required_bitrate_kbps"] == "2500"
+
+
+def test_check_video_does_not_enforce_unlisted_low_resolution_bitrate(monkeypatch, tmp_path):
+    """Given 720p 未満の動画
+    When check_video を呼ぶ
+    Then 未定義の 1,500 Kbps 下限では fail しない。
+    """
+    module = _load_module()
+    video = tmp_path / "stream.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(module.shutil, "which", lambda _cmd: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        module,
+        "_video_metadata",
+        lambda _path: (
+            {
+                "codec_name": "h264",
+                "profile": "High",
+                "width": 854,
+                "height": 480,
+                "bit_rate": "1000000",
+            },
+            {"duration": "4.0"},
+        ),
+    )
+    monkeypatch.setattr(module, "_keyframe_times", lambda _path: [0.0, 2.0, 4.0])
+
+    result = module.check_video(video)
+
+    assert result["ok"] == "true"
+    assert result["required_bitrate_kbps"] == ""
 
 
 def test_check_video_warns_non_high_profile_without_hard_fail(monkeypatch, tmp_path):
