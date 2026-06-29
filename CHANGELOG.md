@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `feat(masterup)`: Suno 生成後の 2 clip を `20-documentation/suno-prompts.json` の歌詞有無で整理する `yt-suno-select-tracks` を追加。歌詞あり prompt は 1 clip 採用、instrumental は 2 clip 採用とし、極端に短い/長い失敗生成を stock 退避または削除できるようにした（#1308）
+- `docs(wf-new)`: `/wf-new` を子スキル順次実行のオーケストレーターとして整理し、Suno チャンネルでは `yt-collection-serve` 起動と疎通確認まで行って `/suno-helper` に引き継ぐ導線を追加（#1308）
+
+### Migration
+
+所要時間の目安: 5〜10 分
+
+local fix 衝突注意:
+- masterup: `pair_selection.*` / `stock.*` の既定値と `yt-suno-select-tracks` 手順を追加。下流で `config/skills/masterup.yaml` や `/masterup` を手書き調整している場合は同期時に確認が必要。
+- wf-new, suno-helper: `/wf-new` が Suno-helper server 起動まで担う前提へ導線を更新。下流で開始フローを手書き調整している場合は差分確認が必要。
+
+サマリ:
+
+- Suno vocal 曲は 1 prompt から生成される 2 clip のうち 1 つだけを master 採用し、未採用 clip を stock に残せるようにした。
+- instrumental 曲は従来通り 2 clip を活かしつつ、尺外の失敗生成だけを master から除外できるようにした。
+- `/wf-new` 完了後に `/suno-helper` が既存 `yt-collection-serve` を再利用できる運用へ整理した。
+
 ## [5.5.13] - 2026-06-29
 
 ### Changed
