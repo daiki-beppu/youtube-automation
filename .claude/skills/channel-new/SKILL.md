@@ -49,6 +49,7 @@ TTP メモは最低限、以下の観点を含める:
 - **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか
 
 このヒアリング結果は `yt-channel-init` の CLI 引数と、後続の seed fetch / TTP 対象反映に使う。
+ヒアリング後は `docs/channel/ttp-seed-confirmation.md` を作成し、TTP したいチャンネル URL / handle / channel ID、転写したい要素、関係性メモを保存する。
 
 ### Step 2: 現在のディレクトリを repo 初期化
 
@@ -158,12 +159,55 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
   --relationship "title-structure: ..., thumbnail-composition: ..., posting-cadence: ..."
 ```
 
-実データ確認時に、TTP するうえで必要な情報だけをメモする:
+`yt-channel-seed --no-write-benchmark --json` の出力は seed 確認用であり、`description` / `keywords` / `localizations` / `brandingSettings` は含まない。
+seed 確認後、`docs/channel/ttp-seed-confirmation.md` を更新して以下を保存する:
+
+- source URL / handle / channel ID
+- `yt-channel-seed --no-write-benchmark --json` の要約（チャンネル名、登録者数、動画数、uploads playlist ID、直近タイトル）
+- ユーザーの承認 / 不採用判断
+- 承認済み対象だけの relationship メモ
+- `config/channel/analytics.json::benchmark.channels` に反映した id / slug / name / relationship
+- 後続 `/discover-competitors` / `/benchmark` / `/viewer-voice` / `/channel-research` が必要かどうか
+
+承認済み TTP 対象について、branding 転写に必要な情報は別途取得して保存する:
+
+```bash
+uv run python3 - <<'PY'
+from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+import json
+from pathlib import Path
+
+approved_channel_ids = ["UC..."]  # Step 5 で承認された TTP 対象だけ
+youtube = YouTubeOAuthHandler().get_youtube_service()
+items = []
+for channel_id in approved_channel_ids:
+    resp = youtube.channels().list(
+        part="snippet,brandingSettings,localizations",
+        id=channel_id,
+    ).execute()
+    items.extend(resp.get("items", []))
+
+out = Path("docs/channel/competitor-branding-snapshot.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps({"items": items}, indent=2, ensure_ascii=False), encoding="utf-8")
+PY
+```
+
+`docs/channel/competitor-branding-snapshot.json` は以下を含む TTP branding snapshot として扱う:
+
+- `snippet.description`
+- `brandingSettings.channel.description`
+- `brandingSettings.channel.keywords`
+- `brandingSettings.channel.country` / `snippet.country`
+- `brandingSettings.channel.defaultLanguage` / `snippet.defaultLanguage`
+- `localizations` 全エントリ
+
+TTP するうえで必要な実データメモは、`docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` を正とする:
 
 - チャンネル名 / handle / channel ID
 - 登録者数、動画数、直近タイトルから見える型
 - タイトル構造、サムネ構図、投稿頻度、動画尺
-- description / keywords / localizations の転写方針
+- description / keywords / localizations の転写方針（branding snapshot 由来）
 - `config/channel/analytics.json::benchmark.channels` に入れた relationship
 
 ### Step 6: 追加調査は後続スキルへ委譲
@@ -183,8 +227,8 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
 入力:
 
 - `config/channel/analytics.json::benchmark.channels`
-- TTP ヒアリングの関係性メモ
-- Step 5 の seed fetch 結果と、TTP に必要な実データメモ
+- `docs/channel/ttp-seed-confirmation.md`
+- `docs/channel/competitor-branding-snapshot.json`
 
 出力:
 
@@ -204,7 +248,7 @@ docs/channel/personas/channel-new-persona.md
 
 ### Step 8: branding 初回反映
 
-TTP 対象の `brandingSettings` を参照して、ローカル config の `youtube_channel` と `config/localizations.json` を確認する。
+Step 5 で保存した `docs/channel/competitor-branding-snapshot.json` の TTP 対象 `brandingSettings` を参照して、ローカル config の `youtube_channel` と `config/localizations.json` を確認する。
 
 確認観点:
 

@@ -79,6 +79,10 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert "承認前に `benchmark.channels` へ書き込まない" in channel_new
     assert "追加調査は後続スキルへ委譲" in channel_new
     assert "初回は TTP メモと seed fetch 結果を企画根拠として使う" in channel_new
+    assert "docs/channel/ttp-seed-confirmation.md" in channel_new
+    assert "docs/channel/competitor-branding-snapshot.json" in channel_new
+    assert "part=\"snippet,brandingSettings,localizations\"" in channel_new
+    assert "`description` / `keywords` / `localizations` / `brandingSettings` は含まない" in channel_new
 
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
@@ -112,13 +116,15 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
     assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_setup
-    assert "TTP メモや seed fetch 結果" in channel_direction
-    assert "seed fetch 結果、`config/channel/analytics.json::benchmark.channels`" in channel_direction
+    assert "docs/channel/ttp-seed-confirmation.md" in channel_direction
+    assert "docs/channel/competitor-branding-snapshot.json" in channel_direction
 
     assert "ビジョン共有 + 競合発掘" not in onboarding
     assert "yt-discover-competitors` で 5-10 件" not in onboarding
     assert "ベンチマークデータ + コメント収集まで実行" not in onboarding
-    assert "TTP 対象確認 + seed confirmation + config + persona + branding" in onboarding
+    assert "TTP 対象確認 + seed confirmation artifacts + config + persona + branding" in onboarding
+    assert "docs/channel/ttp-seed-confirmation.md" in onboarding
+    assert "docs/channel/competitor-branding-snapshot.json" in onboarding
     assert "追加競合発掘や本格 benchmark/comments 収集は標準フローでは実行せず" in onboarding
 
 

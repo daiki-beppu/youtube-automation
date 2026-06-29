@@ -70,7 +70,7 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 
 ```
 /setup             → Phase 0: ツール導入 + API 設定 (GCP + OAuth) を AI 主導で完結
-/channel-new       → Phase 1: TTP 対象確認 + seed confirmation + config + persona + branding
+/channel-new       → Phase 1: TTP 対象確認 + seed confirmation artifacts + config + persona + branding
 /wf-new            → Phase 2: 初回コレクション制作
 
 # 任意後続: 追加調査や方向性再検討が必要なときだけ実行
@@ -88,7 +88,7 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 
 ### 3.1 `/channel-new`（TTP 対象確認 + 初期セットアップ）
 
-ユーザーに TTP したいチャンネルと転写したい要素をヒアリング → seed fetch で実データを確認 → ユーザー承認済み対象だけを `benchmark.channels` に反映 → 独立リポジトリ初期化、config、簡易ペルソナ、初回 branding まで実行する。追加競合発掘や本格 benchmark/comments 収集は標準フローでは実行せず、必要なときに後続スキルへ委譲する。
+ユーザーに TTP したいチャンネルと転写したい要素をヒアリング → seed fetch で実データを確認 → ユーザー承認済み対象だけを `benchmark.channels` に反映 → `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` を保存 → 独立リポジトリ初期化、config、簡易ペルソナ、初回 branding まで実行する。追加競合発掘や本格 benchmark/comments 収集は標準フローでは実行せず、必要なときに後続スキルへ委譲する。
 
 詳細は [`/channel-new` skill](./.claude/skills/channel-new/SKILL.md)。
 
@@ -98,7 +98,7 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 
 ### 3.3 任意: `/channel-direction`（方向性決定）
 
-`/channel-new` の TTP メモと seed fetch 結果、または `/channel-research` の分析結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
+`/channel-new` が保存した `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`、または `/channel-research` の分析結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
 
 ### 3.4 任意: `/channel-setup`（テクニカルセットアップ）
 
