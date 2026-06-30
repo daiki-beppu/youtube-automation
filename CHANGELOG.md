@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(thumbnail)`: single_step TTP 生成で参照画像を必須化し、複数候補では候補ごとに同一ベンチマークチャンネル内のユニークな参照画像を 1 枚ずつ割り当てるように変更。参照不足・重複・同一参照の再利用をエラー化し、参照なし生成フォールバックを削除（#1318）
 - `fix(thumbnail)`: `main.png/jpg` を textless 動画背景 / 参照画像として扱う契約に統一し、upload thumbnail / DistroKid cover は `thumbnail.jpg/png` のみを候補にするよう skill docs と回帰テストを更新（#1310）
 - `docs(channel-new)`: `/channel-new` の初期フローを TTP 対象確認中心に整理し、追加競合発掘・本格 benchmark/comments 収集は後続スキルへ委譲する方針に変更（#1309）
 - `docs(skills)`: 初投稿前に `/playlist` で未作成プレイリストを初期化し、`/video-upload` の自動 assign に引き継ぐ導線を追加（#1314）

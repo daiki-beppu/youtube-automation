@@ -28,6 +28,8 @@ from youtube_automation.utils.image_provider import (
 from youtube_automation.utils.image_provider.composition import (
     apply_composition_rules,
     confirm_cost,
+    format_reference_assignment,
+    infer_benchmark_channel,
     print_cost_summary,
     prompt_overwrite_or_rename,
     resolve_composition_source,
@@ -101,12 +103,65 @@ def plan_output_paths(first_path: Path, count: int) -> list[Path]:
     return paths
 
 
-def plan_reference_assignments(reference_images: list[Path], count: int, rotate: bool) -> list[Path | None]:
+def plan_reference_assignments(
+    reference_images: list[Path],
+    count: int,
+    rotate: bool,
+    *,
+    require_unique: bool = False,
+) -> list[Path | None]:
     """各 attempt に割り当てる参照画像を逐次時と同じ規則で確定する。
 
     参照画像が無い場合は ``None`` を並べる。ある場合は ``select_reference`` で
     attempt インデックスに応じたローテーション割り当てを再現する。
+
+    ``require_unique=True`` は thumbnail single_step TTP 用の strict モード。
+    候補ごとに別参照画像を 1 枚ずつ使うため、参照なし・参照不足・重複・
+    ``--no-rotate`` による先頭固定を ``ConfigError`` にする。
     """
+    if require_unique:
+        if not reference_images:
+            raise ConfigError(
+                "single_step TTP 生成には参照画像が必須です。"
+                "config/skills/thumbnail.yaml の image_generation.gemini.reference_images.default を設定し、"
+                "--reference で CLI へ展開してください。"
+            )
+        if count > 1 and not rotate:
+            raise ConfigError(
+                "single_step TTP 生成で複数候補を出す場合、--no-rotate は使えません。"
+                "候補ごとに別参照画像を割り当てるため、参照画像を候補数分指定してください。"
+            )
+
+        if len(reference_images) < count:
+            raise ConfigError(
+                f"single_step TTP 生成には候補数分のユニークな参照画像が必要です "
+                f"(max_attempts={count}, references={len(reference_images)})。"
+                "同じベンチマークチャンネル内の別サムネイル画像を追加してください。"
+            )
+        selected_references = reference_images[:count]
+
+        seen: set[Path] = set()
+        duplicates: list[Path] = []
+        for ref in selected_references:
+            key = ref.resolve(strict=False)
+            if key in seen:
+                duplicates.append(ref)
+            seen.add(key)
+        if duplicates:
+            duplicate_list = ", ".join(str(path) for path in duplicates)
+            raise ConfigError(f"single_step TTP 生成では同一参照画像を再利用できません: {duplicate_list}")
+
+        assignments: list[Path | None] = list(selected_references)
+        known_channels = {infer_benchmark_channel(ref) for ref in selected_references}
+        known_channels.discard("unknown")
+        if len(known_channels) > 1:
+            raise ConfigError(
+                "single_step TTP 生成の複数候補では同じベンチマークチャンネル内の参照画像だけを使ってください "
+                f"(detected={', '.join(sorted(known_channels))})。"
+                "別チャンネル由来の参照画像は別スコープとして明示してください。"
+            )
+        return assignments
+
     if not reference_images:
         return [None] * count
     return [select_reference(reference_images, attempt, rotate) for attempt in range(count)]
@@ -397,7 +452,25 @@ def main():
     # 出力パス（-vN）と参照画像をループ前に全 attempt ぶん確定し、
     # resolve_unique_path の直列依存を排除してから並列 submit する。
     planned_paths = plan_output_paths(output_path, cli_max_attempts)
-    reference_assignments = plan_reference_assignments(reference_images, cli_max_attempts, rotate)
+    try:
+        reference_assignments = plan_reference_assignments(
+            reference_images,
+            cli_max_attempts,
+            rotate,
+            require_unique=(generation_mode == "single_step"),
+        )
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    if reference_assignments:
+        print()
+        print("参照割当:")
+        for attempt, selected_ref in enumerate(reference_assignments, start=1):
+            if selected_ref is None:
+                print(f"  attempt {attempt}: 参照画像なし")
+            else:
+                print(f"  attempt {attempt}: {format_reference_assignment(selected_ref)}")
 
     # attempt>0 のヘッダは並列実行前にまとめて表示し、stdout の交錯を避ける。
     for attempt in range(1, cli_max_attempts):
@@ -406,7 +479,7 @@ def main():
         print(f"--- attempt {attempt + 1}/{cli_max_attempts} ---")
         print(f"出力先:       {planned_paths[attempt]}")
         if selected_ref is not None:
-            print(f"参照画像:     {selected_ref.name}")
+            print(f"参照画像:     {format_reference_assignment(selected_ref)}")
 
     requests = build_requests(
         prompt,

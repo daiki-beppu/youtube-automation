@@ -287,6 +287,33 @@ def select_reference(refs: list[Path], attempt: int, rotate: bool) -> Path:
     return refs[0]
 
 
+def infer_benchmark_channel(reference_path: Path) -> str:
+    """参照画像パスからベンチマークチャンネル名を推定する。
+
+    明示メタデータは CLI へ渡ってこないため、運用上の配置規約だけを見る:
+    ``.../benchmark/<channel>/<file>`` ならディレクトリ名、そうでなければ
+    ``<channel>-<video>.jpg`` 形式の stem 先頭を返す。推定できない場合は
+    ``"unknown"`` とし、ログ上で追跡不能であることを明示する。
+    """
+    parts = reference_path.parts
+    if "benchmark" in parts:
+        index = parts.index("benchmark")
+        if index + 1 < len(parts) - 1:
+            return parts[index + 1]
+
+    stem = reference_path.stem
+    if "-" in stem:
+        channel, _rest = stem.split("-", 1)
+        if channel:
+            return channel
+    return "unknown"
+
+
+def format_reference_assignment(reference_path: Path) -> str:
+    """候補ごとの参照画像ログを監査しやすい形に整える。"""
+    return f"{reference_path} (benchmark_channel={infer_benchmark_channel(reference_path)})"
+
+
 def validate_single_step_references(skill_cfg: dict[str, Any]) -> None:
     """``generation_mode == "single_step"`` 時に参照画像未設定を検知して ``ConfigError`` を送出する。
 

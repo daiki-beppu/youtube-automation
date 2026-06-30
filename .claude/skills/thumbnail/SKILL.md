@@ -157,9 +157,9 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 1. `image_generation.provider` → 使用するプロバイダー（`gemini` / `openai` / `codex`）
 2. `image_generation.gemini.model` → 使用する Gemini モデル
-3. `image_generation.gemini.style` → スタイル説明（参照画像ベース or プロンプトベース）
+3. `image_generation.gemini.style` → スタイル説明（参照画像ベース）
 4. `image_generation.gemini.prompt_prefix` → プロンプト冒頭の固定文（キャラ描写等）
-5. `image_generation.gemini.reference_images` → 参照画像の定義（あれば参照画像モード）
+5. `image_generation.gemini.reference_images.default` → 同じベンチマークチャンネル内の参照画像リスト（single_step では必須）
 6. `image_generation.gemini.fixed_character` → 固定キャラの設定（あればキャラ固定モード）
 7. `image_generation.gemini.composition_rules` → 構図・環境のルール
 8. `image_generation.gemini.thumbnail_text` → テキストオーバーレイの設定
@@ -177,9 +177,9 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 | `diff_from_reference` | 既存キャラ画像を参照に差分指示 |
 | `two_phase` | 従来の 2 フェーズ（背景 → テキストオーバーレイ）|
 
-### 参照画像モード（`reference_images` が定義されている場合）
+### 参照画像モード（必須）
 
-参照画像を渡してスタイルを維持する方式。
+参照画像を渡して TTP の勝ちパターンを踏襲する方式。`single_step` では参照画像なしの生成は行わない。
 
 ```bash
 uv run yt-generate-image \
@@ -189,25 +189,15 @@ uv run yt-generate-image \
 ```
 
 **参照画像の選択ロジック**:
-- `reference_images` のキーからシーンに最適なものを選択
+- `reference_images.default` には同じベンチマークチャンネル内の別サムネイル画像を並べる
+- `--max-attempts N` のときは N 枚以上のユニーク参照画像が必要。不足・重複・同一参照の再利用はエラー
+- `--reference-index N` を指定した場合のみ単一参照固定になり、attempt 数は 1 に固定される
 - `path_base: "channel_dir"` の場合、パスはチャンネルディレクトリからの相対パス
 - `--reference` 使用時は `composition_prefix` が自動スキップされる（generate_image.py 修正済み）
 
-### プロンプトベースモード（`reference_images` が未定義の場合）
-
-参照画像なしでプロンプトのみで生成する方式（フォールバック）。
-
-```bash
-uv run yt-generate-image \
-  --prompt "<完全なプロンプト>" \
-  --output <collection-path>/10-assets/thumbnail-v1.jpg -y
-```
-
-`composition_prefix` が自動付加される。
-
 ## プロンプト構築
 
-プロンプト構築の原則（prompt_prefix / fixed_character / composition_rules の組み立て）は `references/prompting.md`、参照画像モード・プロンプトベースモードの具体的なプロンプトテンプレート例は `references/sample-prompts.md` を参照する。
+プロンプト構築の原則（prompt_prefix / fixed_character / composition_rules の組み立て）は `references/prompting.md`、TTP の短い差分プロンプト例は `references/sample-prompts.md` を参照する。
 
 > 将来検討（issue #654）: imagegen の 14 項目 Shared prompt schema 形式と既存 skill-config の bridge ヘルパが `references/prompt-schema.md` および `youtube_automation.utils.image_provider.prompt_schema` に試験導入されている。実本番フローからは未接続。設計判断は `docs/skill-design/ADR-001-thumbnail-prompt-schema.md`。
 
@@ -239,15 +229,18 @@ uv run yt-generate-image \
 
 1. **skill-config に `reference_images.default` が未設定** → `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` にベンチマークサムネのパス（文字列 1 件 or list 複数件）を設定
 2. **設定はあるが CLI 引数に展開していない** → `--reference <path>` で渡す。list なら `--reference A --reference B --reference C` のように複数指定
+3. **`--max-attempts N` に参照画像が足りない** → 同じベンチマークチャンネル内の別サムネイル画像を N 枚以上に増やす。ローテーションで同じ参照へ戻す運用はしない
 
 #### 参照画像（複数 + ローテーション）
 
-`reference_images.default` は文字列 1 件 / list 複数件の両方を受け付ける。list 指定時は同一ベンチマークチャンネル内の複数サムネ候補を並べておくことで、attempt 毎にローテーションして雰囲気が出る組合せを探れる。
+`reference_images.default` は同じベンチマークチャンネル内の複数サムネ候補を list で指定する。`--max-attempts N` で N 候補を出す場合、各 attempt は別参照画像 1 枚を使う。参照画像が N 枚未満、同じ画像の重複、`--no-rotate` による先頭固定はいずれもエラーになる。
+
+別チャンネル由来の参照画像や stock 画像を混ぜる場合は、TTP 参照プールとは別スコープとして扱う。混在させるなら `config/skills/thumbnail.yaml` 側で明示し、生成ログの `benchmark_channel=` と `thumbnail-prompts.md` の attempt 別参照欄で追跡できるようにする。
 
 | CLI 引数 | 用途 |
 |---|---|
-| `--max-attempts N` | 試行回数。各 attempt で参照を切替、出力は `-vN` で別保存 |
-| `--no-rotate` | 切替を無効化（先頭固定） |
+| `--max-attempts N` | 試行回数。各 attempt で別参照を 1 枚ずつ割当、出力は `-vN` で別保存 |
+| `--no-rotate` | single_step の複数候補では使用不可（同一参照再利用になるためエラー） |
 | `--reference-index N` | 特定の参照のみ使用（ローテーション無効、attempt=1） |
 
 config 側のデフォルトは `image_generation.gemini.single_step.{max_attempts, rotate}` で設定可能。
@@ -263,7 +256,7 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
 
 #### 生成コマンド
 
-`reference_images.default` と stock (#364 PR-B) を Python ワンライナーで合成し、`--reference` 引数を組み立てる。stock 採用ログは stderr の `[INFO] stock 採用: ...` で確認できる。
+`reference_images.default` から `--reference` 引数を組み立てる。default では同じベンチマークチャンネル内の別サムネイル画像のみを使う。
 
 ```bash
 THEME="<theme-slug>"   # 例: tavern / library / jazz-bar
@@ -272,14 +265,12 @@ REFS=$(uv run python3 -c "
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.image_provider.composition import normalize_reference_default
-from youtube_automation.utils.stock import resolve_stock_refs
 
 cfg = load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {})
 ref_cfg = cfg.get('reference_images', {}) if isinstance(cfg, dict) else {}
 ch = channel_dir()
 defaults = [str(ch / p) for p in normalize_reference_default(ref_cfg.get('default'))]
-stock = [str(p) for p in resolve_stock_refs(ch, stock_refs_config=ref_cfg.get('stock', {}), theme='$THEME')]
-for p in defaults + stock:
+for p in defaults:
     print(p)
 ")
 
@@ -294,7 +285,7 @@ uv run yt-generate-image "${REF_ARGS[@]}" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
 
-stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: false` を上書きする（default のみで生成される）。
+stock 画像を別スコープとして混ぜたい場合だけ、`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: true` を明示し、採用ログ stderr の `[INFO] stock 採用: ...` を保存する。stock を混ぜると「同じベンチマークチャンネルの別サムネ」ではなくなるため、生成後の `thumbnail-prompts.md` に attempt ごとの参照元を必ず記録する。
 
 4. `open` でプレビュー → `/thumbnail-compare` で 320px 視認性検証 → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
 5. 承認済み `thumbnail.jpg` を参照画像にして、テキストなし動画背景を AI 再生成:
@@ -338,11 +329,12 @@ uv run yt-generate-image \
 
 コレクション着手時は、本章上部のプロンプト構築や生成コマンドへ進む**前**に必ずここを通す。1 項目でも欠けると TTP モードの再現性が落ちる。
 
-- [ ] `reference_images.default` が設定済みで、直近の高再生ベンチマークサムネを指している
+- [ ] `reference_images.default` が設定済みで、同じベンチマークチャンネル内の別サムネイル画像を `--max-attempts` 以上の枚数だけ指している
   ```bash
   uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {}).get('reference_images', {}).get('default'), ensure_ascii=False, indent=2))"
   ```
 - [ ] `image_generation.gemini.generation_mode` が `generation_mode: "single_step"` になっている。`two_phase` / `diff_from_reference` を使うなら理由を明示する
+- [ ] 同じ参照画像の重複、参照不足、`--no-rotate` による複数候補生成になっていない
 - [ ] `diff_prompt_template` に参照と重複する要素（レイアウト・固定オブジェクト・テキスト配置・既知の色味）を書いていない。差分のみを記述する
 - [ ] `diff_prompt_template` に `${ip_safety_clause}` 相当の除外句（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を含めている (#569)。参照元ベンチマークサムネに署名・サイン・透かし・チャンネルロゴ等の識別マークがある場合は特に必須
 - [ ] stock 合成（#364）の扱いを確認し、`image_generation.gemini.reference_images.stock.enabled` が意図どおりになっている
@@ -437,7 +429,14 @@ textless main 候補生成後（`main-v1.png` / `main-v1.jpg`）:
 *プロバイダー: {image_generation.provider}*
 *スタイル: {image_generation.gemini.style}*
 *モデル: {image_generation.gemini.model}*
-*参照画像: <使用した参照画像>*
+
+## Reference Assignments
+
+| attempt | output | reference_image | benchmark_channel |
+|---:|---|---|---|
+| 1 | `10-assets/thumbnail-v1.jpg` | `<参照画像 1>` | `<benchmark_channel>` |
+| 2 | `10-assets/thumbnail-v2.jpg` | `<参照画像 2>` | `<benchmark_channel>` |
+| 3 | `10-assets/thumbnail-v3.jpg` | `<参照画像 3>` | `<benchmark_channel>` |
 
 ## Text-Included Thumbnail Prompt (thumbnail.jpg)
 
@@ -515,11 +514,11 @@ image_generation:
 
 ### stock 再利用（参照画像プールへの自動合成）
 
-PR-B (#364): 上記「生成コマンド」の Python ワンライナーで `resolve_stock_refs()` を呼び、stock 画像を `reference_images.default` の末尾に合成して `--reference` に展開する。`composition.select_reference` の attempt ローテーション対象になるため、`--max-attempts N` を増やすほど stock 由来のバリエーションが反映される。
+PR-B (#364): stock 画像は `reference_images.default` とは別スコープの参照プールとして扱う。TTP single_step の標準フローでは同じベンチマークチャンネル内の別サムネだけを使うため、stock 合成は default OFF。必要なチャンネルだけ `enabled: true` を明示し、`resolve_stock_refs()` の結果を `--reference` に追加する。
 
-- **デフォルト動作**: `enabled: true` (opt-out) で `source_role="thumbnail_candidate"` のみ採用、`theme_match="exact"` で同テーマのみ。stock が 0 件なら default のみで生成（`fallback_when_empty: true`）。
+- **デフォルト動作**: `enabled: false` で stock は混ぜない。
+- **有効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: true` を明示する。
 - **採用ログ**: 1 枚採用ごとに stderr へ `[INFO] stock 採用: <path> (theme=<t>, role=thumbnail_candidate)` を出力。監査時は stderr を grep。
-- **無効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: false` を上書き。
 - **チューニング**: `max_count` / `shuffle` / `theme_match: "any"` / `source_role: null` (role フィルタなし) などをチャンネル側で調整。
 
 ```yaml
@@ -527,7 +526,7 @@ image_generation:
   gemini:
     reference_images:
       stock:
-        enabled: true
+        enabled: false
         max_count: 3
         theme_match: "exact"     # "any" で全テーマ横断
         source_role: "thumbnail_candidate"

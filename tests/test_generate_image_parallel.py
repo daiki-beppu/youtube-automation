@@ -136,6 +136,49 @@ class TestPlanReferenceAssignments:
             Path("/a.jpg"),
         ]
 
+    def test_strict_requires_references(self) -> None:
+        with pytest.raises(ConfigError, match="参照画像が必須"):
+            plan_reference_assignments([], 3, rotate=True, require_unique=True)
+
+    def test_strict_assigns_unique_reference_per_attempt_without_reuse(self) -> None:
+        refs = [Path("/bench-a.jpg"), Path("/bench-b.jpg"), Path("/bench-c.jpg")]
+        assert plan_reference_assignments(refs, 3, rotate=True, require_unique=True) == refs
+
+    def test_strict_rejects_reference_shortage(self) -> None:
+        refs = [Path("/bench-a.jpg"), Path("/bench-b.jpg")]
+        with pytest.raises(ConfigError, match="候補数分のユニークな参照画像"):
+            plan_reference_assignments(refs, 3, rotate=True, require_unique=True)
+
+    def test_strict_rejects_duplicate_reference_paths(self) -> None:
+        refs = [Path("/bench-a.jpg"), Path("/bench-a.jpg"), Path("/bench-b.jpg")]
+        with pytest.raises(ConfigError, match="同一参照画像を再利用"):
+            plan_reference_assignments(refs, 3, rotate=True, require_unique=True)
+
+    def test_strict_ignores_unused_duplicate_reference_paths(self) -> None:
+        refs = [Path("/bench-a.jpg"), Path("/bench-b.jpg"), Path("/bench-c.jpg"), Path("/bench-a.jpg")]
+        assert plan_reference_assignments(refs, 3, rotate=True, require_unique=True) == refs[:3]
+
+    def test_strict_rejects_no_rotate_for_multiple_attempts(self) -> None:
+        refs = [Path("/bench-a.jpg"), Path("/bench-b.jpg"), Path("/bench-c.jpg")]
+        with pytest.raises(ConfigError, match="--no-rotate"):
+            plan_reference_assignments(refs, 3, rotate=False, require_unique=True)
+
+    def test_strict_reference_index_style_single_attempt_allows_one_reference(self) -> None:
+        refs = [Path("/bench-a.jpg")]
+        assert plan_reference_assignments(refs, 1, rotate=False, require_unique=True) == refs
+
+    def test_strict_rejects_mixed_known_benchmark_channels(self) -> None:
+        refs = [
+            Path("/data/thumbnail_compare/benchmark/jazzgak-a.jpg"),
+            Path("/data/thumbnail_compare/benchmark/lofi-b.jpg"),
+        ]
+        with pytest.raises(ConfigError, match="同じベンチマークチャンネル"):
+            plan_reference_assignments(refs, 2, rotate=True, require_unique=True)
+
+    def test_strict_allows_unknown_benchmark_channel_paths_for_compatibility(self) -> None:
+        refs = [Path("/refs/a.jpg"), Path("/refs/b.jpg")]
+        assert plan_reference_assignments(refs, 2, rotate=True, require_unique=True) == refs
+
 
 # ---- build_requests --------------------------------------------------------
 
