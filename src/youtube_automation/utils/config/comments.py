@@ -14,13 +14,6 @@ FALLBACK_SKIP = "skip"
 FALLBACK_RETRY = "retry"
 VALID_FALLBACK_VALUES = (FALLBACK_SKIP, FALLBACK_RETRY)
 
-# Deprecated comments.rules compatibility constants. Rule-based matching is no
-# longer used, but downstream configs may still contain these values.
-SCOPE_TOP_LEVEL = "top_level"
-SCOPE_REPLY = "reply"
-SCOPE_ANY = "any"
-VALID_SCOPES = (SCOPE_TOP_LEVEL, SCOPE_REPLY, SCOPE_ANY)
-
 MAX_LENGTH_DEFAULT = 280
 CHANNEL_PERSONA_DEFAULT = ""
 REQUESTS_PER_MINUTE_DEFAULT = 30
@@ -55,34 +48,11 @@ class GeneratorConfig:
 
 
 @dataclass(frozen=True)
-class CommentRule:
-    """旧 `comments.rules[]` 互換用のデータ形状.
-
-    Rule-based matching is deprecated. Loader/replier keep accepting this shape
-    so old downstream configs do not fail, but the values are ignored.
-    """
-
-    name: str
-    keywords: list[str] = field(default_factory=list)
-    pattern: str | None = None
-    language: str | None = None
-    priority: int = 0
-    provider: str | None = None
-    scope: str = SCOPE_ANY
-
-    def __post_init__(self) -> None:
-        if self.provider is not None and self.provider not in VALID_PROVIDERS:
-            raise ConfigError(f"CommentRule.provider 無効: {self.provider!r}")
-        if self.scope not in VALID_SCOPES:
-            raise ConfigError(f"CommentRule.scope 無効: {self.scope!r}")
-
-
-@dataclass(frozen=True)
 class Comments:
     """`comments` セクション（optional）.
 
     - `enabled`: この機能を有効にするか
-    - `rules`: 後方互換のため保持する旧マッチング規則（処理では無視）
+    - `rules`: 後方互換入力は loader で受けるが、処理では無視し空配列に正規化
     - `language`: 返信言語ヒント。省略時は YouTube API 既定言語を使う
     - `ng_words`: 本文にいずれかが含まれるコメントは除外
     - `max_replies_per_run`: 1 回の実行で返信する上限件数
@@ -93,7 +63,7 @@ class Comments:
     """
 
     enabled: bool = False
-    rules: list[CommentRule] = field(default_factory=list)
+    rules: list[object] = field(default_factory=list)
     language: str | None = None
     ng_words: list[str] = field(default_factory=list)
     max_replies_per_run: int = 20

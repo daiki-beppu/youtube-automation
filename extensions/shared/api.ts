@@ -476,11 +476,25 @@ export async function recordDistrokidRelease(
   baseUrl: string,
   record: DistrokidReleaseRecord,
 ): Promise<void> {
-  const resp = await fetch(`${baseUrl}${DISTROKID_RELEASES_ROUTE}`, {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const url = `${normalizedBaseUrl}${DISTROKID_RELEASES_ROUTE}`;
+  const token = await fetchServeToken(normalizedBaseUrl);
+  let resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Serve-Token": token },
     body: JSON.stringify(record),
   });
+  if (resp.status === 403) {
+    const freshToken = await fetchServeToken(normalizedBaseUrl);
+    resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Serve-Token": freshToken,
+      },
+      body: JSON.stringify(record),
+    });
+  }
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
@@ -537,7 +551,7 @@ export async function postDownloaded(
   });
   // 403 retry: token may be stale after server restart
   if (res.status === 403) {
-    const freshToken = await fetchServeToken(baseUrl);
+    const freshToken = await fetchServeToken(normalizedBaseUrl);
     res = await fetch(url, {
       method: "POST",
       headers: {

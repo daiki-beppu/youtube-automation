@@ -1056,7 +1056,7 @@ def main() -> None:
         "--allow-origin",
         default=None,
         help=(
-            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded "
+            "lock CORS to a single origin via exact match. Mutating POST routes "
             "and GET /auth/token require an explicit chrome-extension://<EXTENSION_ID> lock. "
             "Default allows chrome-extension scheme plus suno.com / distrokid.com helper origins "
             "for read-only routes only."
@@ -1144,7 +1144,7 @@ def main() -> None:
     else:
         print(
             "  serve token: disabled until --allow-origin "
-            "chrome-extension://<EXTENSION_ID> is set for /auth/token and /downloaded"
+            "chrome-extension://<EXTENSION_ID> is set for /auth/token and mutating POST routes"
         )
     print("Press Ctrl-C to stop.")
     try:

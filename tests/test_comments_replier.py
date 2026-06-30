@@ -15,7 +15,6 @@ from youtube_automation.scripts.comment_reply import _load_agent_replies
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
 from youtube_automation.utils.config.comments import (
-    CommentRule,
     Comments,
     GeneratorConfig,
 )
@@ -153,14 +152,7 @@ def _make_http_error(status: int, reason: str, api_reason: str) -> HttpError:
 def _make_config(**overrides) -> Comments:
     base = dict(
         enabled=True,
-        rules=[
-            CommentRule(
-                name="greeting",
-                keywords=["こんにちは"],
-                language="ja",
-                priority=10,
-            )
-        ],
+        rules=[],
         generator=GeneratorConfig(
             provider="gemini",
             model="gemini-3.5-flash",
@@ -989,13 +981,7 @@ def _make_gemini_config(**overrides) -> Comments:
     """global provider=gemini を設定した Comments を返す."""
     base = dict(
         enabled=True,
-        rules=[
-            CommentRule(
-                name="catch_all",
-                pattern=".+",
-                priority=0,
-            )
-        ],
+        rules=[],
         ng_words=[],
         max_replies_per_run=20,
         delay_between_replies_sec=0.0,
@@ -1158,7 +1144,7 @@ def test_llm_retry_failure_is_skipped(tmp_path):
 def test_legacy_rule_provider_is_ignored(tmp_path):
     """rules[].provider は後方互換で受け取るが処理では無視する."""
     config = _make_config(
-        rules=[CommentRule(name="ai_rule", pattern=".+", provider="gemini")],
+        rules=[],
         generator=GeneratorConfig(
             provider="codex",
             model=None,
@@ -1188,7 +1174,7 @@ def test_legacy_rule_provider_is_ignored(tmp_path):
 def test_agent_and_export_paths_do_not_require_generator_setup(tmp_path):
     """provider を使わない経路は rule.provider validation を踏まず候補処理できる."""
     config = _make_config(
-        rules=[CommentRule(name="ai_rule", pattern=".+", provider="gemini")],
+        rules=[],
         generator=GeneratorConfig(
             provider="codex",
             model=None,

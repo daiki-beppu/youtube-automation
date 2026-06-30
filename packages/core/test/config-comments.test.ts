@@ -194,7 +194,7 @@ describe("comments.generator — validation", () => {
 
 // --- rule validation -------------------------------------------------------
 
-describe("comments.rules — validation", () => {
+describe("comments.rules — legacy compatibility", () => {
   test("rejects non-array rules", () => {
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -220,7 +220,7 @@ describe("comments.rules — validation", () => {
     expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
-  test("defaults rule scope to 'any' (#524)", () => {
+  test("normalizes legacy rules with missing scope to an empty list (#524)", () => {
     // Given a rule with no scope
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -230,7 +230,7 @@ describe("comments.rules — validation", () => {
     expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
-  test("reads explicit rule scope overrides (#524)", () => {
+  test("normalizes legacy rules with explicit scopes to an empty list (#524)", () => {
     // Given rules with explicit scopes
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -246,7 +246,7 @@ describe("comments.rules — validation", () => {
     expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
-  test("ignores an invalid rule scope (#524)", () => {
+  test("normalizes legacy rules with invalid scope to an empty list (#524)", () => {
     // Given a rule with an unsupported scope
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -282,7 +282,7 @@ describe("comments.language — validation", () => {
 
 // --- deprecated keys -------------------------------------------------------
 
-describe("comments — deprecated keys are rejected, not migrated", () => {
+describe("comments — deprecated section keys and legacy rule data", () => {
   test("rejects comments.generator.type", () => {
     // Given the retired generator.type key
     const sections = minimalSections();
@@ -305,7 +305,7 @@ describe("comments — deprecated keys are rejected, not migrated", () => {
     expect(() => load(sections)).toThrow(/comments\.templates/u);
   });
 
-  test("ignores comments.rules[].template_key for legacy compatibility", () => {
+  test("normalizes comments.rules[].template_key as legacy rule data", () => {
     // Given a rule carrying the retired template_key
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -317,7 +317,7 @@ describe("comments — deprecated keys are rejected, not migrated", () => {
     expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
-  test("ignores comments.rules[].generator for legacy compatibility", () => {
+  test("normalizes comments.rules[].generator as legacy rule data", () => {
     // Given a rule carrying the retired generator key
     const sections = minimalSections();
     sections["comments.json"] = {

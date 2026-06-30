@@ -1465,33 +1465,14 @@ def test_comments_language_non_string_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comment_rule_dataclass_rejects_invalid_legacy_scope():
-    """CommentRule dataclass も旧 rules[].scope の invalid 値を拒否する."""
-    from youtube_automation.utils.config.comments import CommentRule, Comments
-
-    with pytest.raises(ConfigError, match="scope"):
-        Comments(enabled=True, rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")])
-
-
 def test_comments_dataclass_defaults_to_codex_without_loader():
     """Comments dataclass を直接構築した場合でも codex 既定になる."""
-    from youtube_automation.utils.config.comments import CommentRule, Comments
+    from youtube_automation.utils.config.comments import Comments
 
-    comments = Comments(enabled=True, rules=[CommentRule(name="ok", keywords=["hi"], provider="gemini")])
+    comments = Comments(enabled=True)
 
     assert comments.generator.provider == "codex"
-    assert comments.rules[0].provider == "gemini"
-
-
-def test_comment_rule_dataclass_rejects_invalid_legacy_provider():
-    """CommentRule dataclass も旧 rules[].provider の invalid 値を拒否する."""
-    from youtube_automation.utils.config.comments import (
-        CommentRule,
-        Comments,
-    )
-
-    with pytest.raises(ConfigError, match="provider"):
-        Comments(enabled=True, rules=[CommentRule(name="bad", keywords=["hi"], provider="openai")])
+    assert comments.rules == []
 
 
 def test_comments_legacy_type_key_raises(tmp_path, monkeypatch):
