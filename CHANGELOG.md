@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.14] - 2026-06-30
+
 ### Added
 
 - `feat(benchmark)`: `yt-benchmark-comments` に `-y` / `--yes` を追加し、確認プロンプトをスキップできるようにした（#1334）
@@ -1254,6 +1256,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.14]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.14
 [5.5.13]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.13
 [5.5.12]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.12
 [5.5.11]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.11
