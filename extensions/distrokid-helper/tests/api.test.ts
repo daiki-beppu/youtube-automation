@@ -137,6 +137,21 @@ describe("fetchCollectionRelease", () => {
     );
   });
 
+  it("スペース入り collection id を path segment encode して fetch する", async () => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(200, SAMPLE_PAYLOAD));
+
+    // When
+    const result = await fetchCollectionRelease("http://localhost:7873", "20260526-rainy jazz-collection", "disc1");
+
+    // Then
+    expect(result).toEqual(SAMPLE_PAYLOAD);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:7873/collections/20260526-rainy%20jazz-collection/distrokid/disc1/release.json",
+      expect.anything(),
+    );
+  });
+
   it("404 のとき ReleaseUnavailableError を throw する", async () => {
     // Given
     fetchMock.mockResolvedValue(jsonResponse(404, {}));

@@ -536,6 +536,30 @@ def test_get_collection_distrokid_release_json_returns_payload(serve_dir_dk, tmp
     assert len(body["release"]["tracks"]) == 2
 
 
+def test_get_collection_distrokid_release_json_decodes_space_in_collection_id(serve_dir_dk, tmp_path):
+    """Given スペース入り collection_id を URL encode した release.json URL
+    When `GET /collections/<id>/distrokid/<disc>/release.json`
+    Then decode 後の実 collection から payload を返す。
+    """
+    planning = tmp_path / "planning"
+    collection_id = "20260526-rainy jazz-collection"
+    coll = planning / collection_id
+    coll.mkdir(parents=True)
+    _make_disc(coll, "disc1-alpha", mp3_count=1, album_title="Rainy Jazz")
+    base = serve_dir_dk(planning)
+    encoded_id = urllib.parse.quote(collection_id, safe="")
+
+    url = f"{base}{_COLLECTIONS_ROUTE}/{encoded_id}/distrokid/disc1-alpha/release.json"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body["release"]["album_title"] == "Rainy Jazz"
+    track = body["release"]["tracks"][0]
+    assert track["asset_path"].startswith(f"{_COLLECTIONS_ROUTE}/{encoded_id}/distrokid/assets/")
+    assert collection_id not in track["asset_path"]
+
+
 def test_get_collection_distrokid_release_json_asset_path_is_collection_scoped(serve_dir_dk, tmp_path):
     """Given collection-scoped release.json
     When track の asset_path を確認する
@@ -696,6 +720,24 @@ def test_get_collection_distrokid_asset_serves_mp3(serve_dir_dk, tmp_path):
     base = serve_dir_dk(planning)
 
     url = f"{base}{_COLLECTIONS_ROUTE}/20260526-abc-collection/distrokid/assets/30-distrokid/disc1-alpha/track-01.mp3"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        assert resp.headers.get("Content-Type") == "audio/mpeg"
+        assert resp.read() == _MP3_BYTES
+
+
+def test_get_collection_distrokid_asset_decodes_space_in_collection_id(serve_dir_dk, tmp_path):
+    """Given スペース入り collection_id を URL encode した asset URL
+    When `GET /collections/<id>/distrokid/assets/<rel>`
+    Then decode 後の実 collection から asset を返す。
+    """
+    planning = tmp_path / "planning"
+    collection_id = "20260526-rainy jazz-collection"
+    _make_collection(planning, collection_id, discs=["disc1-alpha"])
+    base = serve_dir_dk(planning)
+    encoded_id = urllib.parse.quote(collection_id, safe="")
+
+    url = f"{base}{_COLLECTIONS_ROUTE}/{encoded_id}/distrokid/assets/30-distrokid/disc1-alpha/track-01.mp3"
     with urllib.request.urlopen(url) as resp:
         assert resp.status == 200
         assert resp.headers.get("Content-Type") == "audio/mpeg"

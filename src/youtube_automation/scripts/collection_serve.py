@@ -593,6 +593,14 @@ def build_version_payload() -> dict[str, str]:
     }
 
 
+def _decode_collection_id_path_segment(cid: str) -> str:
+    return urllib.parse.unquote(cid)
+
+
+def _encode_collection_id_path_segment(cid: str) -> str:
+    return urllib.parse.quote(cid, safe="")
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -684,7 +692,7 @@ def create_server(
                 self.send_error(403, "Forbidden")
                 return
 
-            cid = urllib.parse.unquote(cid)
+            cid = _decode_collection_id_path_segment(cid)
             if ".." in cid:
                 self.send_error(404, "Not Found")
                 return
@@ -830,7 +838,8 @@ def create_server(
             downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
             if dir_mode and self.path.startswith(downloaded_prefix) and self.path.endswith(DOWNLOADED_ROUTE_SUFFIX):
                 cid = self.path[len(downloaded_prefix) : -len(DOWNLOADED_ROUTE_SUFFIX)]
-                if self.path != collection_downloaded_route(cid):
+                decoded_cid = _decode_collection_id_path_segment(cid)
+                if self.path != collection_downloaded_route(decoded_cid):
                     self.send_error(404, "Not Found")
                     return
                 self._handle_downloaded_post(cid)
@@ -883,7 +892,7 @@ def create_server(
                 return
             coll_prefix = f"{COLLECTIONS_ROUTE}/"
             if self.path.startswith(coll_prefix) and self.path.endswith(SUNO_PROMPTS_ROUTE):
-                cid = self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)]
+                cid = _decode_collection_id_path_segment(self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)])
                 resolved = resolve_collection_prompts_path(collections_root, cid)
                 if resolved is None or not resolved.is_file():
                     self._send_json_error(404, "Not Found")
@@ -928,7 +937,8 @@ def create_server(
             if len(parts) != 2:
                 self.send_error(404, "Not Found")
                 return
-            coll_id, sub = parts
+            raw_coll_id, sub = parts
+            coll_id = _decode_collection_id_path_segment(raw_coll_id)
 
             # トラバーサル防御: find_collection_dirs のホワイトリストで弾く（#934）。
             known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
@@ -969,7 +979,8 @@ def create_server(
                     self.send_error(404, "Not Found")
                     return
                 # asset_path を collection-scoped 形式にするための prefix を組み立てる（#934）。
-                coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
+                encoded_coll_id = _encode_collection_id_path_segment(coll_id)
+                coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{encoded_coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
                 distrokid_source = f"{_DISTROKID_DIRNAME}/{disc}"
                 try:
                     payload = build_release_payload(

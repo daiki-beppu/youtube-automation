@@ -323,6 +323,18 @@ describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () 
 
     expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260601-clm-aaa-collection/suno/prompts.json`);
   });
+
+  it("Given スペース入り id When fetch する Then id を path segment encode して要求する", async () => {
+    const fetchFn = mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ name: "p1", style: "lofi", lyrics: "" }],
+    }));
+
+    await fetchCollectionPrompts(BASE_URL, "20260526-rainy jazz-collection");
+
+    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`);
+  });
 });
 
 describe("shared/api fetchCollectionPrompts: 正常系", () => {
