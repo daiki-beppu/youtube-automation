@@ -22,6 +22,7 @@ CORS はデフォルトで `chrome-extension://` と suno.com / distrokid.com �
 
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import shutil
@@ -1122,6 +1123,21 @@ def _post(url: str, body, *, headers=None):
     data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST", headers=headers or {})
     return urllib.request.urlopen(req)
+
+
+def _post_declared_length(url: str, *, declared_length: int | str, headers: dict[str, str]):
+    parsed = urllib.parse.urlsplit(url)
+    conn = http.client.HTTPConnection(parsed.hostname, parsed.port)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    conn.putrequest("POST", path)
+    conn.putheader("Host", parsed.netloc)
+    conn.putheader("Content-Length", str(declared_length))
+    for key, value in headers.items():
+        conn.putheader(key, value)
+    conn.endheaders()
+    return conn, conn.getresponse()
 
 
 def _fetch_token(base: str) -> str:
@@ -2360,7 +2376,7 @@ def test_post_downloaded_default_rejects_missing_origin_without_exact_lock(serve
 
 
 def test_post_downloaded_oversized_body_returns_413(serve_dir, tmp_path):
-    """Given Content-Length > 10KB
+    """Given Content-Length > 10 KiB
     When POST /collections/<id>/downloaded を送る
     Then 413 を返す。
     """
@@ -2368,17 +2384,61 @@ def test_post_downloaded_oversized_body_returns_413(serve_dir, tmp_path):
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
-    # Create a body larger than 10KB
-    oversized = b"x" * 10241
+    conn, resp = _post_declared_length(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        declared_length=10 * 1024 + 1,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    )
+    try:
+        assert resp.status == 413
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Payload Too Large"}
+    finally:
+        conn.close()
 
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(
-            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-            oversized,
-            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
-        )
 
-    assert exc_info.value.code == 413
+def test_post_downloaded_invalid_content_length_returns_400(serve_dir, tmp_path):
+    """Given invalid Content-Length
+    When POST /collections/<id>/downloaded を送る
+    Then body を処理せず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    conn, resp = _post_declared_length(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        declared_length="not-a-number",
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    )
+    try:
+        assert resp.status == 400
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
+    finally:
+        conn.close()
+
+
+def test_post_downloaded_negative_content_length_returns_400(serve_dir, tmp_path):
+    """Given negative Content-Length
+    When POST /collections/<id>/downloaded を送る
+    Then body を処理せず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    coll = _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    conn, resp = _post_declared_length(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        declared_length=-1,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    )
+    try:
+        assert resp.status == 400
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
+        assert not (coll / "workflow-state.json").exists()
+    finally:
+        conn.close()
 
 
 @pytest.mark.parametrize("raw_body", [b"[]", b'"x"', b"null"])

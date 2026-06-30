@@ -27,7 +27,8 @@ differentiation_axes:
 preview:
   # サムネイル生成タイミング (#354 / #450)
   # 案数 N = candidate_count (下記キー)。
-  # - parallel (デフォルト): テキスト N 案 → 確認 → N 枚一括生成 → 比較選択 → 採用 1 枚 main.png + 残り stock 退避
+  # - parallel (デフォルト): テキスト N 案 → 確認 → N 枚一括生成 → 比較選択 → 採用 1 枚 planning-preview.png + 残り stock 退避
+  #   planning-preview.png は企画参照素材。最終 thumbnail.jpg と textless main.png/jpg は後段 /thumbnail で別生成する。
   # - sequential: テキスト N 案 → 選択 → 選択 1 案だけ生成 (コスト 1/N の opt-in)
   thumbnail_mode: parallel
   # 1 回の /collection-ideate で生成する企画候補数 (テキスト案数 = 生成枚数)

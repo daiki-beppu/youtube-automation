@@ -106,9 +106,9 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 
 このフォールバックは **`/masterup` が壊れていても master.mp3 を生成できる最小経路**であり、Suno 公式 API 公開までの暫定運用として機能する。
 
-### Suno 公式 API 公開時の移行プラン
+### Suno 公式 API 公開時の移行プラン（将来案 / 現行手順ではない）
 
-Suno が公式 API（プレイリスト一覧 / 楽曲メタデータ / ダウンロード URL）を公開した場合の移行方針:
+この節は `yt-suno-fetch` が存在する前提の現行実行手順ではない。Suno が公式 API（プレイリスト一覧 / 楽曲メタデータ / ダウンロード URL）を公開した場合の移行方針:
 
 1. **新規 `yt-suno-fetch` CLI を追加**（`scripts/` 配下、`yt-*` プレフィックス踏襲、`pyproject.toml::[project.scripts]` 登録）。公式 API クライアントを実装し、認証情報は `auth/suno_token.json` 等の独立ファイル + `utils/secrets.py::_SECRET_REFS` 経由で解決する。
 2. **本 SKILL.md の Step 2 / Step 3 を書き換え**、WebFetch + CDN curl の経路を `yt-suno-fetch` 呼び出しに置換する。skill-config の `suno_download.cdn_url_template` は deprecated として `config.default.yaml` に deprecation note を残し、しばらくは「API 障害時の緊急 fallback」として併存させる。
@@ -587,7 +587,7 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 `/masterup` は**音源（mp3 / wav）を作る工程**で、映像オーバーレイ（ビジュアライザー・波形・購読ボタンポップアップ等）は扱わない。
 ユーザーから「ビジュアライザー付きで」「波形を出して」等の指示があっても、`/masterup` 段階では何も合成できない。
 
-ビジュアライザー周りの現状と制約は `videoup` SKILL.md の「オーディオビジュアライザー / オーバーレイについて」節を参照（#511 で feature 化中・現状未実装）。
+ビジュアライザー周りの現行仕様は `videoup` SKILL.md の「オーディオビジュアライザー / オーバーレイについて」節を参照。必要な場合は `/videoup` 実行前に `config/channel/youtube.json::overlays.enabled: true` と overlay 詳細設定を用意する。
 誤指示の事故防止のため、masterup 着手前に動画にオーバーレイが必要かをユーザーへ確認すること（#646 feedback）。
 
 ## Next Step

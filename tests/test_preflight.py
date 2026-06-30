@@ -27,7 +27,13 @@ def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
-def _write_minimal_channel(tmp_path: Path, *, youtube_language: str, supported_languages: list[str]) -> Path:
+def _write_minimal_channel(
+    tmp_path: Path,
+    *,
+    youtube_language: str,
+    supported_languages: list[str],
+    audio: dict[str, float | int] | None = None,
+) -> Path:
     channel_dir = tmp_path / "channel"
     _write_json(
         channel_dir / "config" / "channel" / "meta.json",
@@ -70,6 +76,8 @@ def _write_minimal_channel(tmp_path: Path, *, youtube_language: str, supported_l
         channel_dir / "config" / "localizations.json",
         {"supported_languages": supported_languages, "languages": {}},
     )
+    if audio is not None:
+        _write_json(channel_dir / "config" / "channel" / "audio.json", {"audio": audio})
     return channel_dir
 
 
@@ -148,3 +156,25 @@ def test_low_cpm_localization_warning_still_runs(
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
     assert "low CPM localization languages included: ko" in caplog.text
+
+
+def test_target_duration_config_does_not_block_upload_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    channel_dir = _write_minimal_channel(
+        tmp_path,
+        youtube_language="en",
+        supported_languages=["en"],
+        audio={"target_duration_min": 60, "target_duration_max": 120},
+    )
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "continuous focus mix"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    master_dir = collection_dir / "01-master"
+    master_dir.mkdir(parents=True)
+    (master_dir / "master.mp4").write_bytes(b"not a valid mp4")
+
+    _run_preflight(channel_dir, collection_dir, monkeypatch)

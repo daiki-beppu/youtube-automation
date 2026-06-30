@@ -1,6 +1,6 @@
 ---
 name: discover-competitors
-description: "Use when 新規チャンネルの競合候補を YouTube Data API で自動発掘したいとき、複数のニッチ仮説を並行検証したいとき。「競合候補」「競合発掘」「ニッチ検証」「ライバル探し」「discover-competitors」など、ニッチキーワードから競合候補リストを自動生成する場面で使用すること。/channel-new Step 5 の前段としても、独立した並行検証ツールとしても使える"
+description: "Use when 新規チャンネルの追加競合候補を YouTube Data API で自動発掘したいとき、複数のニッチ仮説を並行検証したいとき。「競合候補」「競合発掘」「ニッチ検証」「ライバル探し」「discover-competitors」など、ニッチキーワードから競合候補リストを自動生成する場面で使用すること。/channel-new で TTP 対象を確認した後の任意後続スキルとしても、独立した並行検証ツールとしても使える"
 ---
 
 ## Overview
@@ -13,8 +13,8 @@ description: "Use when 新規チャンネルの競合候補を YouTube Data API 
 - 出力: ランキング付き Markdown + 同名 CSV（スコア内訳列付き）
 - 想定時間: 5 分以内（API quota 約 660 units / 実行）
 
-`/channel-new` Step 5 で競合 URL を人手で集めていた工程を置き換える。複数のニッチ仮説を
-並行検証したい場合は、このスキルを単独で何度も走らせる。
+`/channel-new` の標準フローでは実行しない。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
+並行検証したい場合に、このスキルを任意で走らせる。
 
 ## Instructions
 
@@ -31,7 +31,7 @@ description: "Use when 新規チャンネルの競合候補を YouTube Data API 
 |--------|--------|---------------|
 | **既存チャンネル**で競合再発掘 | チャンネル config | `config/channel/content.json` の `genre` / `tags.base` / `descriptions.template_note` |
 | **既存チャンネル**で類似帯探索 | 既存ベンチマーク | `config/channel/analytics.json` の `benchmark.channels` を YouTube で開いてタイトル頻出語を抽出 |
-| **新規チャンネル企画** | `/channel-new` Step 1-4 の出力 | ニッチ仮説の `genre_keywords` / `target_scene` |
+| **新規チャンネル企画** | `/channel-new` の TTP メモと初期 config | `config/channel/content.json::genre.{primary,style,context}` / `tags.base` / TTP メモ内の用途・シーン語彙 |
 | **完全に手探り** | ユーザー宣言 | 「夜カフェ系の lo-fi」のような自然文を Claude が分解 |
 
 config からの抽出例（rjn）:
@@ -108,7 +108,7 @@ uv run yt-discover-competitors \
 ### Step 4: 結果の活用
 
 - ユーザーに Markdown を提示し、承認を得る
-- 採用した候補を `config/channel/analytics.json` の `benchmark.channels` に追加（`/channel-new` Step 5 と合流）
+- 採用した候補を `config/channel/analytics.json` の `benchmark.channels` に追加する場合は、ユーザー承認と relationship メモを必ず残す
 - 並行検証なら、ニッチ仮説ごとに `--output research/{niche}-discovery.md` で別ファイルに分けて比較する
 
 ## API コスト
@@ -131,6 +131,6 @@ uv run yt-discover-competitors \
 
 ## Cross References
 
-- `/channel-new` Step 5: 新チャンネル開設フロー内での前段呼び出し
+- `/channel-new`: TTP 対象確認と初期 config 生成。追加競合発掘が必要な場合に本スキルへ委譲
 - `/benchmark`: 発掘済みチャンネルのベンチマークデータ収集
 - `/channel-research`: 収集データの徹底分析

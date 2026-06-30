@@ -80,6 +80,19 @@ resolve_videoup_yaml() {
 }
 VIDEOUP_YAML="$(resolve_videoup_yaml)"
 
+resolve_loop_video_yaml() {
+    local dir="$COLLECTION_DIR"
+    for _ in 1 2 3 4 5 6; do
+        if [[ -f "$dir/config/skills/loop-video.yaml" ]]; then
+            echo "$dir/config/skills/loop-video.yaml"; return
+        fi
+        local parent; parent="$(dirname "$dir")"
+        [[ "$parent" == "$dir" ]] && break
+        dir="$parent"
+    done
+}
+LOOP_VIDEO_YAML="$(resolve_loop_video_yaml)"
+
 yaml_get() {
     # $1=section $2=key $3=fallback  （`section:` 配下の `  key: value` を拾う）
     local section="$1" key="$2" fallback="$3" val
@@ -98,6 +111,27 @@ yaml_get() {
         }
     ' "$VIDEOUP_YAML")"
     # 周囲のクォートを除去
+    val="${val%\"}"; val="${val#\"}"
+    val="${val%\'}"; val="${val#\'}"
+    if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
+}
+
+yaml_top_get() {
+    # $1=file $2=key $3=fallback  （top-level の `key: value` を拾う）
+    local file="$1" key="$2" fallback="$3" val
+    if [[ -z "$file" || ! -f "$file" ]]; then
+        echo "$fallback"; return
+    fi
+    val="$(awk -v key="$key" '
+        $0 ~ ("^" key ":[[:space:]]*") {
+            line = $0
+            sub(/^[^:]+:[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*$/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            print line
+            exit
+        }
+    ' "$file")"
     val="${val%\"}"; val="${val#\"}"
     val="${val%\'}"; val="${val#\'}"
     if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
@@ -127,8 +161,11 @@ COLLECTION_NAME="$(echo "$dir_basename" \
     | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}' OFS='-')"
 
 # ─── Auto-detect Assets ─────────────────────────────────
+LOOP_VIDEO_ENABLED="$(yaml_top_get "$LOOP_VIDEO_YAML" enabled true)"
 LOOP_VIDEO=""
-if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
+if [[ "$LOOP_VIDEO_ENABLED" == "false" ]]; then
+    echo "  Loop     : disabled by config/skills/loop-video.yaml — 静止画モードで出力します"
+elif [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
     echo "  Loop     : $(basename "${LOOP_VIDEO}") (detected)"
 else
@@ -143,10 +180,10 @@ else
     fi
 fi
 
-THUMBNAIL=""
-for candidate in "${ASSETS_DIR}/main.jpg" "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/thumbnail.jpg" "${ASSETS_DIR}/thumbnail.png"; do
+VIDEO_BACKGROUND=""
+for candidate in "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/main.jpg"; do
     if [[ -f "$candidate" ]]; then
-        THUMBNAIL="$candidate"
+        VIDEO_BACKGROUND="$candidate"
         break
     fi
 done
@@ -339,8 +376,8 @@ ov_get() {
 if ! command -v ffmpeg &>/dev/null; then
     echo "ERROR: ffmpeg not found"; exit 1
 fi
-if [[ -z "$THUMBNAIL" ]]; then
-    echo "ERROR: No thumbnail found in ${ASSETS_DIR}/ (main.jpg/png or thumbnail.jpg/png)"; exit 1
+if [[ -z "$VIDEO_BACKGROUND" && -z "$LOOP_VIDEO" ]]; then
+    echo "ERROR: No video background found in ${ASSETS_DIR}/ (main.png or main.jpg required; thumbnail.jpg/png is upload-only)"; exit 1
 fi
 if [[ -z "$MASTER_AUDIO" ]]; then
     echo "ERROR: master-mix.{wav,m4a,aac,mp3,flac} または master.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1
@@ -419,7 +456,7 @@ echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
     echo "  Video BG : $(basename "$LOOP_VIDEO") (loop)"
 else
-    echo "  Thumbnail: $(basename "$THUMBNAIL")"
+    echo "  Video BG : $(basename "$VIDEO_BACKGROUND") (still)"
 fi
 echo "  Audio    : $(basename "$MASTER_AUDIO")"
 echo "  Output   : $(basename "$MASTER_OUTPUT")"
@@ -528,12 +565,12 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     enc_profile="$(ov_get '.overlays.encoder.profile' 'high')"
     enc_framerate="$(ov_get '.overlays.encoder.framerate' '24')"
 
-    # 入力配列: [0]=背景 (loop or thumbnail), [1]=master audio, [2]=popup PNG (任意)
+    # 入力配列: [0]=背景 (loop or textless main image), [1]=master audio, [2]=popup PNG (任意)
     INPUTS=()
     if [[ -n "$LOOP_VIDEO" ]]; then
         INPUTS+=(-stream_loop -1 -i "$LOOP_VIDEO")
     else
-        INPUTS+=(-framerate "$enc_framerate" -loop 1 -i "$THUMBNAIL")
+        INPUTS+=(-framerate "$enc_framerate" -loop 1 -i "$VIDEO_BACKGROUND")
     fi
     INPUTS+=("${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO")
 
@@ -678,9 +715,9 @@ else
         else
             bake_len="$period"
             bake_filter="$EFFECT_FILTER_STATIC"
-            bake_input=(-framerate "$STILL_EFFECT_FPS" -loop 1 -i "$THUMBNAIL")
+            bake_input=(-framerate "$STILL_EFFECT_FPS" -loop 1 -i "$VIDEO_BACKGROUND")
             bake_crf="$STILL_EFFECT_CRF"
-            bake_src_file="$THUMBNAIL"
+            bake_src_file="$VIDEO_BACKGROUND"
         fi
         if [[ "${bake_len:-0}" -le 0 ]] || awk "BEGIN{exit !(${bake_len:-0} >= ${video_duration:-0})}" || [[ "${bake_len:-0}" -gt "$BAKE_MAX_LEN" ]]; then
             echo "  Effect bake skip (bake_len=${bake_len}s, video=${video_duration%.*}s) — 全尺再エンコードにフォールバック"
@@ -757,7 +794,7 @@ else
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image + ${EFFECT} effect, full encode fallback)"
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
-        ffmpeg -y -framerate "$STILL_EFFECT_FPS" -loop 1 -i "$THUMBNAIL" \
+        ffmpeg -y -framerate "$STILL_EFFECT_FPS" -loop 1 -i "$VIDEO_BACKGROUND" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -filter_complex "$EFFECT_FILTER_STATIC" \
             -map "[vout]" -map 1:a:0 \
@@ -777,7 +814,7 @@ else
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
         echo "  ℹ️  ループ動画なし → 静止画背景で出力 (loop.mp4 を配置すればループ動画になります)"
-        ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$THUMBNAIL" \
+        ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$VIDEO_BACKGROUND" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
             -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \

@@ -66,7 +66,7 @@ $ARGUMENTS
 アップロード前に以下を確認する（詳細は `references/posting-checklist.md` 参照）:
 
 1. **マスター動画**: `01-master/*.mp4` または `03-Individual-movie/*master*.mp4` — 存在しなければエラー終了
-2. **サムネイル**: `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png` → `10-assets/main.jpg` → `10-assets/main.png` の候補順で探索 — いずれも存在しなければエラー終了
+2. **サムネイル**: `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png` の候補順で探索 — いずれも存在しなければエラー終了。`main.png/jpg` は textless 動画背景なので upload thumbnail には使わない
 3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/video-description` スキルを実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
 4. **初投稿時のプレイリスト初期化**: `config/channel/playlists.json` が存在する場合は `/playlist` スキルで `uv run yt-playlist-status` を実行する。`(未作成)` があるときは、初投稿前に `uv run yt-playlist-manager --init --dry-run` → ユーザー確認 → `uv run yt-playlist-manager --init` で playlist ID を作成・書き戻してからアップロードへ進む
 

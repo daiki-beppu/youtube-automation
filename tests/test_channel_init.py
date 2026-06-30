@@ -436,6 +436,28 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     assert thumbnail["image_generation"]["gemini"]["composition_rules"]["channel_branding"] == "Focus Atlas"
 
 
+def test_channel_init_does_not_generate_legacy_upload_settings_file(tmp_path):
+    """#1310: channel init は旧 root upload settings で main.* 探索契約を配らない。"""
+    rc = main(_required_args(tmp_path))
+
+    assert rc == 0
+    assert not (tmp_path / "config" / "upload_settings.json").exists()
+
+
+def test_channel_setup_legacy_upload_settings_template_is_removed() -> None:
+    """#1310: sync で配布する旧 upload settings template を復活させない。"""
+    template_path = (
+        Path(__file__).resolve().parents[1]
+        / ".claude"
+        / "skills"
+        / "channel-setup"
+        / "references"
+        / "upload-settings-template.json"
+    )
+
+    assert not template_path.exists()
+
+
 def test_supported_language_args_are_written_to_youtube_and_localizations(tmp_path):
     # Given: TTP 対象が en-only のため localizations を 1 言語に絞る
     extra = [

@@ -459,6 +459,9 @@ class TestUploadCollectionForwarding:
         master_dir = col_dir / "01-master"
         master_dir.mkdir(parents=True)
         (master_dir / "video.mp4").write_bytes(b"\x00")
+        assets_dir = col_dir / "10-assets"
+        assets_dir.mkdir()
+        (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
 
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
         on_session = MagicMock()
@@ -687,6 +690,9 @@ class TestUploadCompleteCollectionDedup:
         master_dir = col_dir / "01-master"
         master_dir.mkdir(parents=True)
         (master_dir / "video.mp4").write_bytes(b"\x00")
+        assets_dir = col_dir / "10-assets"
+        assets_dir.mkdir()
+        (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
 
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
         mock_gen = MagicMock()
@@ -730,6 +736,44 @@ class TestUploadCompleteCollectionDedup:
         mock_upload_video.assert_called_once()
         assert result["video_id"] == "VID_NEW"
         assert result["upload_source"] == "new_upload"
+
+    def test_should_fail_loud_when_upload_thumbnail_missing(self, tmp_path):
+        """#1310: main.* は動画背景なので upload thumbnail 欠落を隠さない。"""
+        from youtube_automation.utils.exceptions import ValidationError
+
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "10-assets" / "thumbnail.jpg").unlink()
+        (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
+
+        with (
+            patch.object(uploader, "_load_descriptions_md", return_value=None),
+            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
+            pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        mock_upload_video.assert_not_called()
+
+    def test_should_fail_loud_when_upload_thumbnail_missing_even_if_dedup_hits(self, tmp_path):
+        """#1310: dedup existing-video 経路でも upload thumbnail 欠落を隠さない。"""
+        from youtube_automation.utils.exceptions import ValidationError
+
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "10-assets" / "thumbnail.jpg").unlink()
+        (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
+        existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
+
+        with (
+            patch.object(uploader, "_load_descriptions_md", return_value=None),
+            patch.object(uploader, "_find_existing_video_by_title", return_value=existing) as mock_find_existing,
+            patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
+            pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        mock_find_existing.assert_not_called()
+        mock_upload_video.assert_not_called()
 
     def test_should_proceed_with_upload_when_search_api_raises_http_error(self, tmp_path, caplog):
         """plan 要件 #10: search API 自体が HttpError を投げたケースで fail-open で upload 続行."""

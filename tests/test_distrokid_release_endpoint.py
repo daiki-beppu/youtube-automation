@@ -163,6 +163,15 @@ def test_build_release_payload_no_thumbnail_yields_null_cover(tmp_path):
     assert build_release_payload(collection, distrokid)["release"]["cover"] is None
 
 
+def test_build_release_payload_main_only_yields_null_cover(tmp_path):
+    """#1310: textless main.png だけでは DistroKid cover に fallback しない。"""
+    collection = _make_collection(tmp_path, with_thumbnail=False)
+    (collection / "10-assets" / "main.png").write_bytes(_PNG_BYTES)
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    assert build_release_payload(collection, distrokid)["release"]["cover"] is None
+
+
 def test_build_release_payload_no_workflow_state_yields_null_release_date(tmp_path):
     """Given workflow-state.json 無し
     When build_release_payload を呼ぶ

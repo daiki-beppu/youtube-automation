@@ -1,14 +1,14 @@
 ---
 name: channel-research
-description: "Use when /channel-new で収集した TTP ベンチマークデータを徹底分析したいとき。「競合分析」「ベンチマーク分析」「チャンネルリサーチ」「競合を調べて」「TTP 対象抽出」など、channel-new 後に詳細な競合分析や方向性の再検討材料が必要な場面で使用すること。初回セットアップは /channel-new だけで完結する"
+description: "Use when /benchmark と /viewer-voice で収集した TTP ベンチマークデータを徹底分析したいとき。「競合分析」「ベンチマーク分析」「チャンネルリサーチ」「競合を調べて」「TTP 対象抽出」など、channel-new 後に詳細な競合分析や方向性の再検討材料が必要な場面で使用すること。初回セットアップは /channel-new だけで完結する"
 ---
 
 ## Overview
 
-`/channel-new` で収集したベンチマークデータ + コメントデータを読み込み、徹底的に分析してレポートを生成する。
-初回チャンネル開設フローは `/channel-new` で完結するため、本スキルは深掘り分析や方向性の再検討が必要なときに追加で実行する。
+`/benchmark` と `/viewer-voice` で収集したベンチマークデータ + コメントデータを読み込み、徹底的に分析してレポートを生成する。
+初回チャンネル開設フローは `/channel-new` で TTP 対象確認まで完結するため、本スキルは深掘り分析や方向性の再検討が必要なときに追加で実行する。
 
-**前提**: `/channel-new` が完了し、以下のデータが存在すること:
+**前提**: `/channel-new` で TTP 対象確認が完了し、`/benchmark` と `/viewer-voice` を実行済みで、以下のデータが存在すること:
 - `data/benchmark_YYYYMMDD.json` — 競合チャンネルの動画データ
 - `data/comments_YYYYMMDD.json` — 競合動画のコメント
 - `docs/benchmarks/*.md` — 各チャンネルの個別レポート
@@ -135,6 +135,8 @@ description: "Use when /channel-new で収集した TTP ベンチマークデー
 
 ## Cross References
 
-- `/channel-new` → 前提: TTP benchmark / 初回 config / persona / branding
+- `/channel-new` → 前提: TTP 対象確認 / 初回 config / persona / branding
+- `/benchmark` → 前提: 承認済み TTP 対象の動画データ収集
+- `/viewer-voice` → 前提: コメント収集と視聴者インサイト分析
 - `/channel-direction` → 任意: 方向性の再検討
 - `/wf-new` → 初回コレクション制作
