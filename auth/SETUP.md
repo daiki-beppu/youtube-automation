@@ -2,7 +2,7 @@
 
 新しい YouTube チャンネル用に GCP プロジェクト + API + 認証情報を用意する手順。
 
-本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているため、手動クリックが残るのは **OAuth クライアント ID 作成の 1 ステップだけ**。
+本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているため、手動作業として残るのは **Google Auth Platform での Branding / Audience / Clients 設定と `client_secrets.json` 配置**。
 
 ---
 

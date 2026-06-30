@@ -29,7 +29,7 @@
   - `storage.googleapis.com`
 - `google_project_iam_member` = `roles/aiplatform.user` → `var.adc_email`
 
-**OAuth 2.0 クライアント ID は google provider で未サポート** のため、別途 Console から作成する（この 1 ステップだけ手動）。
+**Google Auth Platform の Branding / Audience / Clients 設定は google provider で未サポート** のため、別途 Console から設定し、`client_secrets.json` を配置する。
 
 ## 前提
 

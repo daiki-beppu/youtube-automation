@@ -86,8 +86,9 @@ def test_setup_skill_suggests_oauth_app_and_client_names() -> None:
     assert "`gcp_project` と同じルールでチャンネル名を解決" in text
     assert "`{チャンネル名} YouTube Automation`" in text
     assert "`{チャンネル名} Desktop Client`" in text
-    assert "OAuth 同意画面のアプリ名: <channel-name> YouTube Automation" in text
+    assert "Google Auth Platform > Branding のアプリ名: <channel-name> YouTube Automation" in text
     assert "OAuth クライアント ID 名: <channel-name> Desktop Client" in text
+    assert "OAuth 同意画面のアプリ名: <channel-name> YouTube Automation" not in text
 
 
 def test_skills_use_uv_run_for_doctor_json() -> None:

@@ -14,7 +14,7 @@
 #   6. roles/aiplatform.user を ADC ユーザーに付与
 #   7. .env に GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI を書き出し
 #      (project_id は ADC quota project から自動解決されるため .env への書き出し不要)
-#   8. OAuth クライアント ID 作成のための Console URL を案内 (この 1 クリックだけ手動)
+#   8. Google Auth Platform 手動設定のための Console URL を案内
 #
 # 注意:
 #   Claude Code / CI / パイプ等の非対話セッション (TTY を持たない環境) からは実行しないこと。
@@ -251,8 +251,8 @@ ok "${ENV_FILE} に Vertex AI 用環境変数を書き出しました (project_i
 
 cat <<EOF
 
----- 最後に手動で 1 ステップ必要 ----
-gcloud からは OAuth 2.0 クライアント ID を作成できないため、Console の Google Auth Platform で作成してください:
+---- 最後に Google Auth Platform の手動設定が必要 ----
+gcloud からは Google Auth Platform の Branding / Audience / Clients 設定を作成できないため、Console で設定してください:
 
   https://console.cloud.google.com/apis/credentials?project=${PROJECT_ID}
 

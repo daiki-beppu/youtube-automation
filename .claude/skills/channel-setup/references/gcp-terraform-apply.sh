@@ -100,8 +100,8 @@ fi
 
 cat <<EOF
 
----- 最後に手動で 1 ステップ必要 ----
-OAuth 2.0 クライアント ID を Console の Google Auth Platform で作成:
+---- 最後に Google Auth Platform の手動設定が必要 ----
+Google Auth Platform の Branding / Audience / Clients 設定を Console で作成:
 
   $OAUTH_URL
 
