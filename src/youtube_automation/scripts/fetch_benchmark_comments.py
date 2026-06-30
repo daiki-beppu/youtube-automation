@@ -77,7 +77,7 @@ class BenchmarkCommentCollector:
 
         return comments
 
-    def collect(self, force: bool = False, yes: bool = False) -> dict:
+    def collect(self, force: bool = False) -> dict:
         """全対象動画のコメントを収集"""
         output_path = self.data_dir / f"comments_{self.today.strftime('%Y%m%d')}.json"
         if output_path.exists() and not force:
@@ -85,7 +85,7 @@ class BenchmarkCommentCollector:
             with open(output_path) as f:
                 return json.load(f)
 
-        ensure_benchmark_fresh(self.data_dir, assume_yes=yes)
+        ensure_benchmark_fresh(self.data_dir)
 
         targets = load_benchmark_videos(self.data_dir, min_views=self.min_views)
         if not targets:
@@ -196,7 +196,7 @@ def main():
             sys.exit(0)
 
     collector = BenchmarkCommentCollector(min_views=args.min_views, max_comments=args.max_comments)
-    result = collector.collect(force=args.force, yes=args.yes)
+    result = collector.collect(force=args.force)
     if result:
         print_summary(result)
 
