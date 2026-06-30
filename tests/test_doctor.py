@@ -194,6 +194,23 @@ class TestClientSecrets:
         assert r.status == "fail"
         assert "foo-proj" in r.next_action["url"]
 
+    def test_missing_instructions_follow_google_auth_platform_contract(self, tmp_path):
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.next_action is not None
+        instructions = r.next_action["instructions"]
+        for expected in (
+            "Google Auth Platform",
+            "Audience > Test users",
+            "403 access_denied",
+            "Clients > Create client",
+            "Desktop app",
+            "Add secret",
+            "auth/client_secrets_template.json",
+        ):
+            assert expected in instructions
+        assert "認証情報を作成 → OAuth クライアント ID" not in instructions
+
     def test_valid(self, tmp_path):
         auth = tmp_path / "auth"
         auth.mkdir()

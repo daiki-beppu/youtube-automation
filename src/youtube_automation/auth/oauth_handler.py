@@ -138,12 +138,18 @@ class YouTubeOAuthHandler:
             raise FileNotFoundError(
                 f"❌ client_secrets.json が見つかりません: {self.client_secrets_file}\n"
                 "設定手順:\n"
-                "1. Google Cloud Console (https://console.cloud.google.com/)\n"
-                "2. YouTube Data API v3 を有効化\n"
-                "3. OAuth 2.0 認証情報を作成\n"
-                "4. client_secrets.json をダウンロード\n"
-                "5. <channel_dir>/auth/ に配置 (または CLIENT_SECRETS_DIR 環境変数を指定)\n"
-                "   または 1Password に CLIENT_SECRETS_JSON として登録"
+                "1. Google Cloud Console で YouTube Data API v3 を有効化\n"
+                "2. Google Auth Platform > Branding でアプリ情報を保存\n"
+                "3. Google Auth Platform > Audience > Test users に OAuth 認証でログインする Google アカウントを追加\n"
+                "   (未追加だと初回認証が 403 access_denied で止まります)\n"
+                "4. Google Auth Platform > Clients > Create client で Application type Desktop app を作成\n"
+                "5. 作成直後の client secret を控えるか JSON をダウンロードし、"
+                "<channel_dir>/auth/client_secrets.json に配置\n"
+                "6. secret を見失った場合は Clients > 対象 client > Client secrets > Add secret で再発行し、"
+                "JSON を再ダウンロード\n"
+                "   JSON ダウンロードが表示されない場合は auth/client_secrets_template.json をコピーし、"
+                "client_id / project_id / client_secret を手入力\n"
+                "   または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
             )
 
     def authenticate(self, force_reauth=False):

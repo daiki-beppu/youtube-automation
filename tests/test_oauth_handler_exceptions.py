@@ -295,6 +295,31 @@ class TestClientSecretsFallback:
 
         assert handler.client_secrets_file == tmp_path / "auth" / "client_secrets.json"
 
+    def test_missing_client_secrets_error_follows_google_auth_platform_contract(self, tmp_path: Path, monkeypatch):
+        """Missing secrets must point every direct OAuth entrypoint at the new Console UI."""
+        self._force_fallback_path(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            MagicMock(side_effect=ConfigError("op read failed")),
+        )
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            handler._validate_client_secrets()
+
+        message = str(exc_info.value)
+        for expected in (
+            "Google Auth Platform",
+            "Audience > Test users",
+            "403 access_denied",
+            "Clients > Create client",
+            "Desktop app",
+            "Add secret",
+            "auth/client_secrets_template.json",
+        ):
+            assert expected in message
+        assert "OAuth 2.0 認証情報を作成" not in message
+
     def test_should_not_swallow_non_config_error(self, tmp_path: Path, monkeypatch):
         """Given 1Password 取得が ``RuntimeError`` を raise（想定外）
         When ``YouTubeOAuthHandler()``

@@ -101,14 +101,24 @@ fi
 cat <<EOF
 
 ---- 最後に手動で 1 ステップ必要 ----
-OAuth 2.0 クライアント ID を Console で作成:
+OAuth 2.0 クライアント ID を Console の Google Auth Platform で作成:
 
   $OAUTH_URL
 
 手順:
-  1. 「認証情報を作成」→「OAuth クライアント ID」
-  2. アプリケーションの種類: 「デスクトップ」
-  3. ダウンロード JSON を auth/client_secrets.json に配置
+  1. 左メニューで「Google Auth Platform」を開く
+  2. 「Branding」でアプリ名・サポートメール・デベロッパー連絡先を保存
+  3. 「Audience」で User type は External、Publishing status は Testing のまま、
+     「Test users」に OAuth 認証でログインする Google アカウントを追加
+     (未追加だと初回認証が 403 access_denied で止まります)
+  4. 「Clients」→「Create client」で Application type「Desktop app」を選び、
+     名前を <channel-name> Desktop Client にする
+  5. 作成直後の client secret を控えるか JSON をダウンロードし、
+     チャンネルリポジトリの auth/client_secrets.json として配置
+  6. secret を見失った場合は「Clients」→対象 client→「Client secrets」→
+     「Add secret」で新しい secret を発行して JSON を再ダウンロード
+     (JSON ダウンロードが出ない場合は auth/client_secrets_template.json をコピーし、
+     client_id / project_id / client_secret を手入力)
 
 詳細は auth/SETUP.md を参照。
 -----------------------------------

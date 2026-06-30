@@ -660,9 +660,16 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     else "https://console.cloud.google.com/apis/credentials"
                 ),
                 "instructions": (
-                    "Console で「認証情報を作成 → OAuth クライアント ID → "
-                    "アプリの種類: デスクトップ」を選び、ダウンロードした JSON を "
-                    f"`{path}` に配置してください。"
+                    "Console の Google Auth Platform で Branding を保存し、"
+                    "Audience > Test users に OAuth 認証でログインする Google アカウントを追加してください "
+                    "(未追加だと初回認証が 403 access_denied で止まります)。"
+                    "その後 Clients > Create client で Application type Desktop app を選び、"
+                    "作成直後の client secret を控えるか JSON をダウンロードして "
+                    f"`{path}` に配置してください。secret を見失った場合は "
+                    "Clients > 対象 client > Client secrets > Add secret で新しい secret を発行し、"
+                    "JSON を再ダウンロードします。JSON ダウンロードが表示されない場合は "
+                    "`auth/client_secrets_template.json` をコピーし、"
+                    "`client_id` / `project_id` / `client_secret` を手入力してください。"
                 ),
             },
         )
