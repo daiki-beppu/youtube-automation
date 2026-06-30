@@ -674,12 +674,7 @@ def create_server(
         def _handle_downloaded_post(self, cid: str) -> None:
             """POST /collections/<id>/downloaded を処理する（dir mode only、#1216/#1217）。"""
             assert collections_root is not None
-            raw_origin = self.headers.get("Origin")
-            if not _is_locked_extension_request(raw_origin, allow_origin):
-                self.send_error(403, "Forbidden")
-                return
-            req_token = self.headers.get("X-Serve-Token")
-            if req_token != serve_token:
+            if not self._authorize_mutating_post():
                 self.send_error(403, "Forbidden")
                 return
 
@@ -738,9 +733,15 @@ def create_server(
                 return None
             return self.rfile.read(length) if length else b""
 
+        def _authorize_mutating_post(self) -> bool:
+            raw_origin = self.headers.get("Origin")
+            if not _is_locked_extension_request(raw_origin, allow_origin):
+                return False
+            return self.headers.get("X-Serve-Token") == serve_token
+
         def do_POST(self) -> None:  # noqa: N802
-            # GET と異なり POST は Origin 必須。未設定・不許可は 403。
-            # （チェック順: まず capture root の有無に関わらず Origin を確認する）
+            # Mutating POST は endpoint ごとに extension origin lock + X-Serve-Token を検証する。
+            # Chrome MV3 background fetch は Origin を省略し得るため、token route と同じ判定を使う。
             origin = self._allowed_origin()
 
             # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
@@ -752,7 +753,7 @@ def create_server(
                 if capture_root is None:
                     self.send_error(404, "Not Found")
                     return
-                if origin is None:
+                if not self._authorize_mutating_post():
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()
@@ -781,7 +782,7 @@ def create_server(
                     # capture root 未指定時は #893 の POST 無効と同じ gating（#934）。
                     self.send_error(404, "Not Found")
                     return
-                if origin is None:
+                if not self._authorize_mutating_post():
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()

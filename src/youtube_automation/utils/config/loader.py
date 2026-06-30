@@ -15,11 +15,8 @@ from youtube_automation.utils.config.comments import (
     PROVIDER_CODEX,
     PROVIDER_GEMINI,
     REQUESTS_PER_MINUTE_DEFAULT,
-    SCOPE_ANY,
     VALID_FALLBACK_VALUES,
     VALID_PROVIDERS,
-    VALID_SCOPES,
-    CommentRule,
     Comments,
     GeneratorConfig,
 )
@@ -488,7 +485,11 @@ def _build_generator_config(raw: dict) -> GeneratorConfig:
 
 
 def _build_comments(merged: dict) -> Comments:
-    cm = merged.get("comments") or {}
+    cm = merged.get("comments", {})
+    if cm is None:
+        cm = {}
+    if not isinstance(cm, dict):
+        raise ConfigError("comments セクションは object でなければなりません")
     if "templates" in cm:
         raise ConfigError("comments.templates は廃止されました。LLM provider で返信を生成してください")
     rules_raw = cm.get("rules", [])
@@ -496,34 +497,6 @@ def _build_comments(merged: dict) -> Comments:
         rules_raw = []
     if not isinstance(rules_raw, list):
         raise ConfigError("comments.rules は list でなければなりません")
-    rules: list[CommentRule] = []
-    for index, raw in enumerate(rules_raw):
-        if not isinstance(raw, dict):
-            raise ConfigError(f"comments.rules[{index}] は object でなければなりません")
-        name = raw.get("name")
-        if not isinstance(name, str) or not name.strip():
-            raise ConfigError(f"comments.rules[{index}].name が必須です")
-        provider = raw.get("provider")
-        if provider is not None and provider not in VALID_PROVIDERS:
-            raise ConfigError(
-                f"comments.rules[{index}].provider は {VALID_PROVIDERS} のいずれかでなければなりません: {provider!r}"
-            )
-        scope = raw.get("scope", SCOPE_ANY)
-        if scope not in VALID_SCOPES:
-            raise ConfigError(
-                f"comments.rules[{index}].scope は {VALID_SCOPES} のいずれかでなければなりません: {scope!r}"
-            )
-        rules.append(
-            CommentRule(
-                name=name.strip(),
-                keywords=list(raw.get("keywords", [])),
-                pattern=raw.get("pattern"),
-                language=raw.get("language"),
-                priority=int(raw.get("priority", 0)),
-                provider=provider,
-                scope=scope,
-            )
-        )
 
     gen_raw = cm.get("generator")
     generator = GeneratorConfig()
@@ -538,7 +511,7 @@ def _build_comments(merged: dict) -> Comments:
 
     return Comments(
         enabled=bool(cm.get("enabled", False)),
-        rules=rules,
+        rules=[],
         language=language,
         ng_words=list(cm.get("ng_words", [])),
         max_replies_per_run=int(cm.get("max_replies_per_run", 20)),

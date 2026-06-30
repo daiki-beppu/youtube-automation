@@ -126,12 +126,7 @@ describe("comments — full configuration", () => {
     expect(comments.delayBetweenRepliesSec).toBe(1);
     expect(comments.language).toBe("ja");
     expect(comments.ngWords).toEqual(["spam"]);
-    expect(comments.rules).toHaveLength(1);
-    const [rule] = comments.rules;
-    expect(rule?.name).toBe("greet_ja");
-    expect(rule?.keywords).toEqual(["こんにちは"]);
-    expect(rule?.priority).toBe(10);
-    expect(rule?.provider).toBe("gemini");
+    expect(comments.rules).toEqual([]);
     const { generator } = comments;
     expect(generator.provider).toBe("gemini");
     expect(generator.model).toBe("gemini-3.5-flash");
@@ -200,38 +195,6 @@ describe("comments.generator — validation", () => {
 // --- rule validation -------------------------------------------------------
 
 describe("comments.rules — validation", () => {
-  test("rejects a rule with no name", () => {
-    // Given a rule missing its name
-    const sections = minimalSections();
-    sections["comments.json"] = {
-      comments: { enabled: true, rules: [{ keywords: ["hi"] }] },
-    };
-
-    // When/Then the rule index + name is reported
-    expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.name/u);
-  });
-
-  test.each([[""], ["   "], [123]])("rejects invalid rule name %#", (name) => {
-    const sections = minimalSections();
-    sections["comments.json"] = {
-      comments: { enabled: true, rules: [{ keywords: ["hi"], name }] },
-    };
-
-    expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.name/u);
-  });
-
-  test("trims rule name when building config", () => {
-    const sections = minimalSections();
-    sections["comments.json"] = {
-      comments: {
-        enabled: true,
-        rules: [{ keywords: ["hi"], name: "  legacy  " }],
-      },
-    };
-
-    expect(load(sections).engagement.comments.rules[0]?.name).toBe("legacy");
-  });
-
   test("rejects non-array rules", () => {
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -241,18 +204,20 @@ describe("comments.rules — validation", () => {
     expect(() => load(sections)).toThrow(/comments\.rules/u);
   });
 
-  test("rejects an invalid rule provider", () => {
-    // Given a rule with an unsupported provider override
+  test("normalizes legacy rule entries to an empty list", () => {
     const sections = minimalSections();
     sections["comments.json"] = {
       comments: {
         enabled: true,
-        rules: [{ keywords: ["hi"], name: "bad_rule", provider: "openai" }],
+        rules: [
+          { keywords: ["hi"] },
+          { keywords: ["hi"], name: "bad_rule", provider: "openai" },
+          "legacy-string",
+        ],
       },
     };
 
-    // When/Then the rule provider guard fires
-    expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.provider/u);
+    expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
   test("defaults rule scope to 'any' (#524)", () => {
@@ -262,8 +227,7 @@ describe("comments.rules — validation", () => {
       comments: { enabled: true, rules: [{ keywords: ["hi"], name: "g" }] },
     };
 
-    // Then the scope defaults to 'any' (backward-compatible)
-    expect(load(sections).engagement.comments.rules[0]?.scope).toBe("any");
+    expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
   test("reads explicit rule scope overrides (#524)", () => {
@@ -279,13 +243,10 @@ describe("comments.rules — validation", () => {
       },
     };
 
-    // Then both scopes are preserved
-    const { rules } = load(sections).engagement.comments;
-    expect(rules[0]?.scope).toBe("top_level");
-    expect(rules[1]?.scope).toBe("reply");
+    expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
-  test("rejects an invalid rule scope (#524)", () => {
+  test("ignores an invalid rule scope (#524)", () => {
     // Given a rule with an unsupported scope
     const sections = minimalSections();
     sections["comments.json"] = {
@@ -295,8 +256,7 @@ describe("comments.rules — validation", () => {
       },
     };
 
-    // When/Then the scope enum guard fires
-    expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.scope/u);
+    expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 });
 
@@ -354,8 +314,7 @@ describe("comments — deprecated keys are rejected, not migrated", () => {
       },
     };
 
-    // Then it loads, but the retired key is not represented in the output.
-    expect(load(sections).engagement.comments.rules[0]?.name).toBe("legacy");
+    expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 
   test("ignores comments.rules[].generator for legacy compatibility", () => {
@@ -367,7 +326,6 @@ describe("comments — deprecated keys are rejected, not migrated", () => {
       },
     };
 
-    // Then it loads, but the retired key is not represented in the output.
-    expect(load(sections).engagement.comments.rules[0]?.name).toBe("legacy");
+    expect(load(sections).engagement.comments.rules).toEqual([]);
   });
 });

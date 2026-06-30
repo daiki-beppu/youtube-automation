@@ -4,7 +4,7 @@ Related issues: #520, #521, #522. This report records the local inventory availa
 
 Scope scanned: local first-party channel roots under `/Users/mba/02-yt` that contain `config/skills/thumbnail.yaml`.
 
-Not present in this checkout scan: `bobble`, `neta`, `yt-studio`.
+Not present in this checkout scan: `bobble`, `neta`, `yt-studio`, `libecity`.
 
 ## Config Audit
 

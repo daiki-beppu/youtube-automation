@@ -573,6 +573,24 @@ def test_codex_generator_apply_requires_agent_replies(tmp_path):
     yt._insert_mock.execute.assert_not_called()
 
 
+def test_codex_generator_dry_run_requires_export_candidates_or_agent_replies(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(generator=GeneratorConfig(provider="codex", max_length=280)),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    with pytest.raises(ConfigError, match="codex"):
+        replier.run(dry_run=True)
+
+    yt._insert_mock.execute.assert_not_called()
+
+
 def test_agent_replies_missing_comment_is_skipped_without_generator(tmp_path, _mock_default_genai_client):
     yt = _mock_youtube(
         video_ids=["v1"],
@@ -1389,8 +1407,7 @@ def test_legacy_rule_generator_key_is_ignored_by_loader():
     }
 
     comments = _build_comments(merged)
-    assert comments.rules[0].name == "bad"
-    assert comments.rules[0].keywords == ["hi"]
+    assert comments.rules == []
 
 
 # ─── 履歴 save リトライのテスト (#382) ────────────────────────────────────────

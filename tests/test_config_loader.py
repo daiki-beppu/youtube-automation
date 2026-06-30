@@ -552,10 +552,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.comments.enabled is True
     assert config.comments.max_replies_per_run == 5
     assert config.comments.delay_between_replies_sec == 1.0
-    assert len(config.comments.rules) == 1
-    assert config.comments.rules[0].name == "greet_ja"
-    assert config.comments.rules[0].keywords == ["こんにちは"]
-    assert config.comments.rules[0].provider == "gemini"
+    assert config.comments.rules == []
     assert config.comments.generator.provider == "gemini"
     assert config.comments.generator.fallback_on_error == "retry"
     assert config.comments.ng_words == ["spam"]
@@ -707,7 +704,7 @@ def test_workflow_approval_gates_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_name_is_required_for_legacy_rules(tmp_path, monkeypatch):
+def test_comments_rule_without_name_is_ignored_by_loader(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -718,8 +715,9 @@ def test_comments_rule_name_is_required_for_legacy_rules(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match=r"comments\.rules\[0\]\.name"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.rules == []
 
 
 def test_comments_templates_must_be_object(tmp_path, monkeypatch):
@@ -1285,8 +1283,20 @@ def test_comments_generator_not_object_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
-    """comments.rules[i].provider は旧スキーマでも valid 値だけを受け入れる."""
+@pytest.mark.parametrize("comments_raw", [[], "", False, "legacy"])
+def test_comments_section_non_object_raises(tmp_path, monkeypatch, comments_raw):
+    """comments セクション自体は falsy 値でも object 以外を未設定扱いしない."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": comments_raw}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments セクションは object"):
+        load_config()
+
+
+def test_comments_rule_invalid_provider_is_ignored_by_loader(tmp_path, monkeypatch):
+    """comments.rules[] は legacy 互換で受けるが処理では無視する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1303,12 +1313,13 @@ def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match=r"comments\.rules\[0\]\.provider"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.rules == []
 
 
 def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypatch):
-    """rule provider='gemini' は互換フィールドとして保持されるが generator は global を使う."""
+    """rule provider='gemini' は互換入力として受けるが generator は global を使う."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1329,11 +1340,11 @@ def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypa
     config = load_config()
 
     assert config.comments.generator.provider == "codex"
-    assert config.comments.rules[0].provider == "gemini"
+    assert config.comments.rules == []
 
 
 def test_comments_rule_scope_defaults_to_any(tmp_path, monkeypatch):
-    """#524: scope 未指定の rule は 'any' でロードされる（後方互換）."""
+    """#524: scope 未指定の legacy rule も無視してロードされる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1346,11 +1357,11 @@ def test_comments_rule_scope_defaults_to_any(tmp_path, monkeypatch):
 
     config = load_config()
 
-    assert config.comments.rules[0].scope == "any"
+    assert config.comments.rules == []
 
 
 def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
-    """#524: scope を指定すると rule に反映される."""
+    """#524: scope を指定した legacy rule も無視してロードされる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1366,12 +1377,11 @@ def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
 
     config = load_config()
 
-    assert config.comments.rules[0].scope == "top_level"
-    assert config.comments.rules[1].scope == "reply"
+    assert config.comments.rules == []
 
 
-def test_comments_rule_non_object_raises(tmp_path, monkeypatch):
-    """comments.rules[] の要素は legacy 互換でも object のみ受け入れる."""
+def test_comments_rule_non_object_is_ignored_by_loader(tmp_path, monkeypatch):
+    """comments.rules[] の要素 shape は処理で使わないため検証しない."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1382,8 +1392,9 @@ def test_comments_rule_non_object_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match=r"comments\.rules\[0\] は object"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.rules == []
 
 
 @pytest.mark.parametrize("rules_raw", ["", {}, False])
@@ -1403,8 +1414,8 @@ def test_comments_rules_falsy_non_list_raises(tmp_path, monkeypatch, rules_raw):
         load_config()
 
 
-def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
-    """comments.rules[i].scope は旧スキーマでも valid 値だけを受け入れる."""
+def test_comments_rule_invalid_scope_is_ignored_by_loader(tmp_path, monkeypatch):
+    """comments.rules[i].scope は legacy 入力として受けるが処理では無視する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1415,8 +1426,9 @@ def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match=r"comments\.rules\[0\]\.scope"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.rules == []
 
 
 def test_comments_language_loads(tmp_path, monkeypatch):
@@ -1520,7 +1532,7 @@ def test_comments_legacy_template_key_is_ignored(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     config = load_config()
-    assert config.comments.rules[0].name == "legacy"
+    assert config.comments.rules == []
 
 
 def test_comments_legacy_rule_generator_key_is_ignored(tmp_path, monkeypatch):
@@ -1535,7 +1547,7 @@ def test_comments_legacy_rule_generator_key_is_ignored(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     config = load_config()
-    assert config.comments.rules[0].name == "legacy"
+    assert config.comments.rules == []
 
 
 # ----- overlays (#511) -----------------------------------------------------

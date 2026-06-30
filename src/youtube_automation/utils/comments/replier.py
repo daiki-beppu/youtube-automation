@@ -175,9 +175,9 @@ class CommentReplier:
             raise ConfigError("export_candidates=True は dry-run でのみ使用できます")
         if export_candidates and self._agent_replies is not None:
             raise ConfigError("export_candidates=True と agent_replies は同時に使用できません")
-        if not dry_run and self._agent_replies is None and self._config.generator.provider == PROVIDER_CODEX:
+        if self._agent_replies is None and not export_candidates and self._config.generator.provider == PROVIDER_CODEX:
             raise ConfigError(
-                "comments.generator.provider='codex' は --apply で直接使用できません。"
+                "comments.generator.provider='codex' は直接生成に使用できません。"
                 "--export-candidates と --agent-replies-file の監査済みフローを使用してください"
             )
 
