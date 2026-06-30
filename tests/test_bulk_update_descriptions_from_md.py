@@ -616,10 +616,7 @@ class TestLoadCollection:
         message = str(excinfo.value)
         assert "descriptions.md parse failed in alpha" in message
         assert "期待する見出し（完全一致）" in message
-        assert (
-            "不足/不一致の見出し:\n"
-            "  - ## Complete Collection 概要欄"
-        ) in message
+        assert ("不足/不一致の見出し:\n  - ## Complete Collection 概要欄") in message
         assert "検出した ## 見出し" in message
         assert "修正例" in message
         assert "/video-description を再実行" in message
@@ -641,10 +638,7 @@ class TestLoadCollection:
         message = str(excinfo.value)
         assert "descriptions.md parse failed in alpha" in message
         assert "期待する見出し（完全一致）" in message
-        assert (
-            "不足/不一致の見出し:\n"
-            "  - ## タイトル案"
-        ) in message
+        assert ("不足/不一致の見出し:\n  - ## タイトル案") in message
         assert "検出した ## 見出し" in message
         assert "修正例" in message
         assert "/video-description を再実行" in message

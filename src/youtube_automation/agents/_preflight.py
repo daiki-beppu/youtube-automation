@@ -84,8 +84,7 @@ class PreflightMixin:
 
         if title_raw is None or description_raw is None:
             raise RuntimeError(
-                f"❌ {desc_path}: descriptions.md のパースに失敗\n"
-                f"{_build_descriptions_md_parse_diagnostics(text)}"
+                f"❌ {desc_path}: descriptions.md のパースに失敗\n{_build_descriptions_md_parse_diagnostics(text)}"
             )
 
         title = title_raw.strip()

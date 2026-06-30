@@ -79,8 +79,7 @@ def load_collection(col: str) -> dict:
 
     if not (description and title):
         raise RuntimeError(
-            f"descriptions.md parse failed in {col}\n"
-            f"{_build_descriptions_md_parse_diagnostics(desc_md)}"
+            f"descriptions.md parse failed in {col}\n{_build_descriptions_md_parse_diagnostics(desc_md)}"
         )
 
     return {

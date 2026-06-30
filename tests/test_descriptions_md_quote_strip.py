@@ -97,10 +97,7 @@ class TestDescriptionsMdQuoteStrip:
         assert result is None
         assert "期待する見出し（完全一致）" in messages
         assert (
-            "不足/不一致の見出し:\n"
-            "  - ## タイトル案\n"
-            "  - ## Complete Collection 概要欄\n"
-            "  - ## タグ（YouTube タグ欄）"
+            "不足/不一致の見出し:\n  - ## タイトル案\n  - ## Complete Collection 概要欄\n  - ## タグ（YouTube タグ欄）"
         ) in messages
         assert "検出した ## 見出し" in messages
         assert "## タイトル" in messages

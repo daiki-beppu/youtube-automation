@@ -124,11 +124,7 @@ class TestAuditLocalPreflightContract:
         message = issues[0]
         assert "descriptions.md parse failed" in message
         assert "期待する見出し（完全一致）" in message
-        assert (
-            "不足/不一致の見出し:\n"
-            "  - ## タイトル案\n"
-            "  - ## タグ（YouTube タグ欄）"
-        ) in message
+        assert ("不足/不一致の見出し:\n  - ## タイトル案\n  - ## タグ（YouTube タグ欄）") in message
         assert "検出した ## 見出し" in message
         assert "## タイトル" in message
         assert "修正例" in message
