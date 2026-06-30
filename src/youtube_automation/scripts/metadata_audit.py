@@ -23,13 +23,13 @@ import re
 import sys
 from pathlib import Path
 
-from youtube_automation.agents._descriptions_md import (  # noqa: E402
-    _build_descriptions_md_parse_diagnostics,
-    extract_descriptions_md_section,
-)
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.config.config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.descriptions_md import (  # noqa: E402
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+)
 from youtube_automation.utils.preflight_checks import (  # noqa: E402
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -69,18 +69,21 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     title_raw = extract_section(text, "タイトル案")
     description_raw = extract_section(text, "Complete Collection 概要欄")
     if title_raw is None or description_raw is None:
-        issues.append("descriptions.md parse failed\n" + _build_descriptions_md_parse_diagnostics(text))
-        return issues
+        issues.append("descriptions.md parse failed\n" + build_descriptions_md_parse_diagnostics(text))
 
-    title = title_raw.strip()
-    description = description_raw.strip()
+    title = title_raw.strip() if title_raw is not None else ""
+    description = description_raw.strip() if description_raw is not None else ""
 
-    if not title:
+    if title_raw is None:
+        pass
+    elif not title:
         issues.append("missing 'タイトル案' section")
     elif len(title) > 100:
         issues.append(f"title too long: {len(title)} codepoints (>100)")
 
-    if not description:
+    if description_raw is None:
+        pass
+    elif not description:
         issues.append("missing 'Complete Collection 概要欄' section")
     else:
         ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]

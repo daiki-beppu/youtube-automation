@@ -4,30 +4,31 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.descriptions_md import (
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+)
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.preflight_checks import check_title_duplicate_warnings
 
-SECTION_RE = lambda h: re.compile(  # noqa: E731
-    rf"## {re.escape(h)}\s*\n+```\n(.*?)```", re.DOTALL
-)
-
 
 def extract_section(text: str, header: str) -> str | None:
-    m = SECTION_RE(header).search(text)
-    return m.group(1).strip() if m else None
+    return extract_descriptions_md_section(text, header)
 
 
 def read_descriptions_title(collection_dir: Path) -> str:
     desc_path = CollectionPaths(collection_dir).descriptions_md_path
     if not desc_path.exists():
         raise FileNotFoundError(f"{desc_path} not found. Pass --title to check a title before saving descriptions.md.")
-    title = extract_section(desc_path.read_text(encoding="utf-8"), "タイトル案")
+    text = desc_path.read_text(encoding="utf-8")
+    title = extract_section(text, "タイトル案")
+    if title is None:
+        raise ValueError(f"{desc_path}: descriptions.md parse failed\n{build_descriptions_md_parse_diagnostics(text)}")
     if not title:
         raise ValueError(f"{desc_path}: missing 'タイトル案' section")
     return title.strip()

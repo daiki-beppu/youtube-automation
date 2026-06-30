@@ -11,12 +11,12 @@ import logging
 import re
 from pathlib import Path
 
-from youtube_automation.agents._descriptions_md import (
-    _build_descriptions_md_parse_diagnostics,
-    extract_descriptions_md_section,
-)
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
+from youtube_automation.utils.descriptions_md import (
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+)
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -84,7 +84,7 @@ class PreflightMixin:
 
         if title_raw is None or description_raw is None:
             raise RuntimeError(
-                f"❌ {desc_path}: descriptions.md のパースに失敗\n{_build_descriptions_md_parse_diagnostics(text)}"
+                f"❌ {desc_path}: descriptions.md のパースに失敗\n{build_descriptions_md_parse_diagnostics(text)}"
             )
 
         title = title_raw.strip()

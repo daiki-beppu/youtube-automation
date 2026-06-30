@@ -67,6 +67,7 @@ def _write_local_collection(
     scene_phrases: dict[str, str],
     description: str,
     title_heading: str = "タイトル案",
+    write_workflow_state: bool = True,
 ) -> Path:
     collection_dir = tmp_path / "20260622-test-collection"
     docs_dir = collection_dir / "20-documentation"
@@ -84,10 +85,11 @@ Continuous Focus Mix
 """,
         encoding="utf-8",
     )
-    (collection_dir / "workflow-state.json").write_text(
-        json.dumps({"scene_phrases": scene_phrases}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    if write_workflow_state:
+        (collection_dir / "workflow-state.json").write_text(
+            json.dumps({"scene_phrases": scene_phrases}, ensure_ascii=False),
+            encoding="utf-8",
+        )
     return collection_dir
 
 
@@ -129,6 +131,23 @@ class TestAuditLocalPreflightContract:
         assert "## タイトル" in message
         assert "修正例" in message
         assert "/video-description を再実行" in message
+
+    def test_parse_failure_keeps_independent_local_audits(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={},
+            description="A continuous BGM mix without chapter markers.",
+            title_heading="タイトル",
+            write_workflow_state=False,
+        )
+        cfg = _audit_config(["en"])
+        cfg.content.tags.min_count = 2
+
+        issues = audit_local(collection_dir, cfg)
+
+        assert any("descriptions.md parse failed" in issue for issue in issues)
+        assert any("workflow-state.json missing" in issue for issue in issues)
+        assert any("tags count: 1 (min 2)" in issue for issue in issues)
 
 
 class TestAuditRemoteZhCodes:

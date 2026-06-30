@@ -22,11 +22,11 @@ import argparse
 import json
 import time
 
-from youtube_automation.agents._descriptions_md import (
-    _build_descriptions_md_parse_diagnostics,
+from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.descriptions_md import (
+    build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
-from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.youtube_service import get_youtube
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
@@ -78,9 +78,7 @@ def load_collection(col: str) -> dict:
         tags = parse_youtube_tags(tags_raw)
 
     if not (description and title):
-        raise RuntimeError(
-            f"descriptions.md parse failed in {col}\n{_build_descriptions_md_parse_diagnostics(desc_md)}"
-        )
+        raise RuntimeError(f"descriptions.md parse failed in {col}\n{build_descriptions_md_parse_diagnostics(desc_md)}")
 
     return {
         "collection": col,
