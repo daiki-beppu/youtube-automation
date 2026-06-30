@@ -60,6 +60,15 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 
 `gcloud auth login` / `gcloud auth application-default login` / Google Cloud Console での OAuth クライアント ID 作成の 3 ステップだけは PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外 (プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・トークン取得など) は AI が gcloud を直接 Bash で実行する。
 
+Google Cloud Console の新 UI では、OAuth 関連の手動操作は **Google Auth Platform** に集約されている。`/setup` が URL を出したら、以下の画面名を目印に進める:
+
+1. **Google Auth Platform > Branding**: アプリ名は `<channel-name> YouTube Automation`、ユーザーサポートメールとデベロッパー連絡先には自分の Google アカウントを入れて保存する。
+2. **Google Auth Platform > Audience**: User type は **External**、Publishing status は **Testing** のままでよい。**Test users** に、OAuth 認証でログインする Google アカウントを必ず追加する。追加しないと初回認証が `403 access_denied` で止まる。
+3. **Google Auth Platform > Clients**: **Create client** から Application type **Desktop app** を選び、名前は `<channel-name> Desktop Client` にする。
+4. 作成直後に表示される client secret を控えるか JSON をダウンロードし、`<channel_dir>/auth/client_secrets.json` として保存する。作成直後の画面を閉じて secret を見失った場合は、**Clients > 対象 client > Client secrets > Add secret** で新しい secret を発行し、JSON を再ダウンロードする。JSON ダウンロードが表示されない場合は `auth/client_secrets_template.json` をコピーし、`client_id` / `project_id` / `client_secret` を手入力して保存する。
+
+`yt-channel-status` などの初回認証で `403 access_denied` が出た場合は、上記 **Audience > Test users** にログイン中の Google アカウントが入っているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
+
 手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`auth/SETUP.md`](auth/SETUP.md) と `.claude/skills/channel-setup/references/gcp-bootstrap.sh` / `infra/terraform/gcp/` を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。
 
 ---
