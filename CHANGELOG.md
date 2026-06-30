@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(distrokid)`: `distrokid.profile.artist` を release payload に含め、distrokid-helper が `bandname` と Apple Music credits の performer / producer 名へ反映できるようにした（#1211）
+
 ## [5.5.14] - 2026-06-30
 
 ### Added
