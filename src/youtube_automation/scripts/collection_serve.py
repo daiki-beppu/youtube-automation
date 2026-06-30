@@ -838,7 +838,8 @@ def create_server(
             downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
             if dir_mode and self.path.startswith(downloaded_prefix) and self.path.endswith(DOWNLOADED_ROUTE_SUFFIX):
                 cid = self.path[len(downloaded_prefix) : -len(DOWNLOADED_ROUTE_SUFFIX)]
-                if self.path != collection_downloaded_route(cid):
+                decoded_cid = _decode_collection_id_path_segment(cid)
+                if self.path != collection_downloaded_route(decoded_cid):
                     self.send_error(404, "Not Found")
                     return
                 self._handle_downloaded_post(cid)
