@@ -17,18 +17,18 @@
 
 ## チャンネル立ち上げ
 
-新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップの一連の工程。
+標準フローは `/setup` → `/channel-new` → `/wf-new`。追加競合発掘、benchmark、viewer voice、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。
 
 | Skill | なにができるか |
 |---|---|
-| /channel-new | 新規チャンネル用リポジトリの作成・全工程のエントリポイント |
-| /channel-research | ベンチマーク済み競合データを徹底分析 |
-| /channel-direction | 競合分析から方向性・ポジショニングを対話で決定 |
-| /channel-setup | config 生成と YouTube 側設定（branding / status / localizations）の push |
+| /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
+| /channel-new | TTP 対象確認、seed confirmation artifacts、config、簡易ペルソナ、初回 branding まで進める |
+| /discover-competitors | 任意: ニッチキーワードから追加競合候補を YouTube Data API で自動発掘 |
+| /channel-research | 任意: benchmark / viewer-voice 済みデータを徹底分析 |
+| /channel-direction | 任意: TTP seed confirmation または分析結果から方向性・ポジショニングを対話で再検討 |
+| /channel-setup | 任意: config 再生成と YouTube 側設定（branding / status / localizations）の push |
 | /channel-import | 既存 YouTube チャンネルを自動化システムに取り込み |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
-| /discover-competitors | ニッチキーワードから競合候補を YouTube Data API で自動発掘 |
-| /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
 
 ## オーディエンス・ポジショニング検証
 
