@@ -16,14 +16,12 @@ from youtube_automation.utils.config import load_config
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
-    check_duration,
     check_low_cpm_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
     check_title_template_compliance,
     extract_descriptions_md_tags,
 )
-from youtube_automation.utils.probe import probe_duration
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +67,7 @@ class PreflightMixin:
         4. タイトルが 100 codepoint 以内（YouTube 制限）
         5. タグ件数が `tags.min_count` を満たすこと（戦略書違反防止）
         6. タグの quotation 込み文字数が YouTube の 500 制限内
-        7. master 動画尺が `audio.target_duration_min/max` 範囲内
-        8. supported_languages に低 CPM 警告対象言語が含まれる場合は warning を出すこと
+        7. supported_languages に低 CPM 警告対象言語が含まれる場合は warning を出すこと
         """
         paths = CollectionPaths(collection_dir)
         desc_path = paths.descriptions_md_path
@@ -141,21 +138,8 @@ class PreflightMixin:
             if msg:
                 issues.append(msg)
 
-        # 動画尺チェック（target_duration が設定済みかつ master mp4 が存在する場合のみ）
-        if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
-            master_video = paths.find_master_video()
-            if master_video:
-                dur = probe_duration(master_video)
-                if dur is None:
-                    issues.append(f"duration probe failed for {master_video.name}")
-                else:
-                    msg = check_duration(
-                        dur,
-                        config.audio.target_duration_min,
-                        config.audio.target_duration_max,
-                    )
-                    if msg:
-                        issues.append(msg)
+        # `audio.target_duration_min/max` は master 生成側では分単位として扱うため、
+        # 秒単位の preflight duration gate には使わない (#1313)。
 
         if issues:
             raise RuntimeError("❌ preflight failed:\n  - " + "\n  - ".join(issues))
