@@ -86,7 +86,7 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert "untrusted data" in channel_new
     assert "承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない" in channel_new
 
-    assert 'part="snippet,brandingSettings,localizations"' in branding_snapshot_script
+    assert 'CHANNELS_PART = "snippet,brandingSettings,localizations"' in branding_snapshot_script
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
