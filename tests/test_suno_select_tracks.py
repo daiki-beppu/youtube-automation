@@ -130,6 +130,60 @@ def test_all_candidates_dropped_fails_loud(tmp_path, monkeypatch):
     assert not (collection / "01-master" / ".selection.log").exists()
 
 
+def test_all_candidates_over_max_can_keep_shortest_with_explicit_recovery(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Red Pressure", "lyrics": "[Verse]\npressure rising"}],
+    )
+    first = _write_audio(collection, "01a-Red Pressure.mp3")
+    _write_audio(collection, "01b-Red Pressure.mp3")
+
+    def fake_probe(path: Path) -> float:
+        return 479.4 if path == first else 481.2
+
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
+
+    result = suno_track_selection.select_suno_tracks(
+        collection,
+        _cfg(),
+        allow_best_effort_over_max=True,
+    )
+
+    assert sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file()) == [
+        "01-Red Pressure.mp3"
+    ]
+    assert len(result.exceptions_over_limit) == 1
+    assert result.exceptions_over_limit[0].candidate.path == first
+    assert len(result.stocked) == 1
+
+    log_text = (collection / "01-master" / ".selection.log").read_text(encoding="utf-8")
+    assert "[exceptions_over_limit]" in log_text
+    assert "01 a Red Pressure duration=479.40s max_song_sec=300.00s source=01a-Red Pressure.mp3" in log_text
+
+    workflow_state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+    selection_state = workflow_state["music_pair_selection"]
+    assert selection_state["exceptions_over_limit_count"] == 1
+    assert selection_state["exceptions_over_limit"][0]["title"] == "Red Pressure"
+    assert selection_state["exceptions_over_limit"][0]["duration_sec"] == 479.4
+
+
+def test_best_effort_over_max_does_not_rescue_too_short_clips(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    first = _write_audio(collection, "01a-Dawn Groove.mp3")
+    second = _write_audio(collection, "01b-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 20.0)
+
+    with pytest.raises(ValidationError, match="採用候補が 0 件"):
+        suno_track_selection.select_suno_tracks(collection, _cfg(), allow_best_effort_over_max=True)
+
+    assert first.exists()
+    assert second.exists()
+    assert not (collection / "workflow-state.json").exists()
+
+
 def test_never_mode_skips_selection(tmp_path, monkeypatch):
     collection = _make_collection(
         tmp_path,
@@ -511,6 +565,25 @@ def test_main_uses_cwd_and_dry_run(tmp_path, monkeypatch, capsys):
     assert suno_select_tracks.main() == 0
     assert source.exists()
     assert "dry_run=true" in capsys.readouterr().out
+
+
+def test_main_passes_best_effort_over_max_flag(tmp_path, monkeypatch, capsys):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Red Pressure", "lyrics": "[Verse]\npressure"}],
+    )
+    _write_audio(collection, "01a-Red Pressure.mp3")
+    _write_audio(collection, "01b-Red Pressure.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 479.4)
+    monkeypatch.setattr(suno_select_tracks, "load_skill_config", lambda _: _cfg())
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["yt-suno-select-tracks", str(collection), "--allow-best-effort-over-max"],
+    )
+
+    assert suno_select_tracks.main() == 0
+    assert "exceptions_over_limit=1" in capsys.readouterr().out
 
 
 def test_main_returns_1_and_stderr_on_validation_error(tmp_path, monkeypatch, capsys):

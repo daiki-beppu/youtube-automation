@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(masterup)`: `yt-suno-select-tracks` で全候補が `max_song_sec` 超過した prompt を `--allow-best-effort-over-max` で最短候補として例外採用できるようにし、selection log と `workflow-state.json::music_pair_selection` に記録するようにした（#1324）
+
 ## [5.5.14] - 2026-06-30
 
 ### Added

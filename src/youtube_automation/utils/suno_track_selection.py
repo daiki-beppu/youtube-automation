@@ -9,10 +9,12 @@ clips. In both modes, filter obviously broken durations before selection.
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 import shutil
 import string
+import tempfile
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -57,6 +59,13 @@ class Candidate:
 
 
 @dataclass(frozen=True)
+class OverLimitException:
+    candidate: Candidate
+    max_song_sec: float
+    reason: str
+
+
+@dataclass(frozen=True)
 class PairSelectionConfig:
     mode: str
     min_song_sec: float | None
@@ -90,6 +99,7 @@ class SelectionPlan:
     dropped: list[Candidate]
     winners: list[Candidate]
     renames: list[tuple[Candidate, Path]]
+    exceptions_over_limit: list[OverLimitException]
     mode_counts: dict[str, int]
 
 
@@ -100,6 +110,7 @@ class SelectionResult:
     deleted: list[Path]
     dropped: list[Candidate]
     winners: list[Candidate]
+    exceptions_over_limit: list[OverLimitException]
     mode_counts: dict[str, int]
     log_path: Path
 
@@ -355,6 +366,14 @@ def _is_duration_out_of_range(candidate: Candidate, *, min_song_sec: float | Non
     return False
 
 
+def _is_over_max_only(candidate: Candidate, *, min_song_sec: float | None, max_song_sec: float | None) -> bool:
+    if max_song_sec is None or candidate.duration <= max_song_sec:
+        return False
+    if min_song_sec is not None and candidate.duration < min_song_sec:
+        return False
+    return True
+
+
 def _stock_name(candidate: Candidate, collection_dir: Path, stock_cfg: StockConfig) -> str:
     try:
         name = stock_cfg.filename_template.format(
@@ -386,6 +405,7 @@ def _plan_suno_selection(
     prompts: Mapping[int, PromptEntry],
     candidates: list[Candidate],
     cfg: SelectionConfig,
+    allow_best_effort_over_max: bool,
 ) -> SelectionPlan:
     seed = cfg.pair.random_seed if cfg.pair.random_seed is not None else random.SystemRandom().randrange(2**32)
     rng = random.Random(seed)
@@ -396,6 +416,7 @@ def _plan_suno_selection(
     kept: list[Path] = []
     winners: list[Candidate] = []
     renames: list[tuple[Candidate, Path]] = []
+    exceptions_over_limit: list[OverLimitException] = []
     mode_counts = {"vocal": 0, "instrumental": 0}
 
     for candidate in candidates:
@@ -415,10 +436,45 @@ def _plan_suno_selection(
         grouped.setdefault(candidate.prompt_index, []).append(candidate)
 
     missing_after_filter = [p.index for p in prompts.values() if p.index not in grouped]
+    if missing_after_filter and allow_best_effort_over_max:
+        dropped_by_prompt: dict[int, list[Candidate]] = {}
+        for candidate in dropped:
+            dropped_by_prompt.setdefault(candidate.prompt_index, []).append(candidate)
+
+        still_missing: list[int] = []
+        for prompt_index in missing_after_filter:
+            over_max_candidates = [
+                candidate
+                for candidate in dropped_by_prompt.get(prompt_index, [])
+                if _is_over_max_only(
+                    candidate,
+                    min_song_sec=cfg.pair.min_song_sec,
+                    max_song_sec=cfg.pair.max_song_sec,
+                )
+            ]
+            if not over_max_candidates:
+                still_missing.append(prompt_index)
+                continue
+            selected = sorted(over_max_candidates, key=lambda c: (c.duration, c.path.name))[0]
+            grouped.setdefault(prompt_index, []).append(selected)
+            dropped.remove(selected)
+            stocked = [(candidate, dest) for candidate, dest in stocked if candidate != selected]
+            deleted = [candidate for candidate in deleted if candidate != selected]
+            exceptions_over_limit.append(
+                OverLimitException(
+                    candidate=selected,
+                    max_song_sec=cfg.pair.max_song_sec or 0,
+                    reason="all_candidates_over_max_song_sec; selected_shortest_over_limit",
+                )
+            )
+        missing_after_filter = still_missing
+
     if missing_after_filter:
         raise ValidationError(
             "尺フィルタ後に採用候補が 0 件になった prompt があります: "
             + ", ".join(f"{i:02d}" for i in missing_after_filter)
+            + "。5分超など max_song_sec 超過だけが原因なら "
+            + "--allow-best-effort-over-max で最短候補を警告付き例外採用できます。"
         )
 
     for prompt_index in sorted(grouped):
@@ -450,6 +506,7 @@ def _plan_suno_selection(
         dropped=dropped,
         winners=winners,
         renames=renames,
+        exceptions_over_limit=exceptions_over_limit,
         mode_counts=mode_counts,
     )
 
@@ -586,6 +643,7 @@ def _apply_plan(
             deleted=deleted_paths,
             dropped=plan.dropped,
             winners=plan.winners,
+            exceptions_over_limit=plan.exceptions_over_limit,
             mode_counts=plan.mode_counts,
             log_path=plan.log_path,
         )
@@ -598,9 +656,11 @@ def _apply_plan(
             deleted=result.deleted,
             dropped=result.dropped,
             winners=result.winners,
+            exceptions_over_limit=result.exceptions_over_limit,
             mode_counts=result.mode_counts,
             dry_run=False,
         )
+        _update_workflow_state_music_pair_selection(collection_dir, result)
     except Exception:
         _rollback(
             stocked_new=stocked_new,
@@ -625,6 +685,7 @@ def _write_log(
     deleted: list[Path],
     dropped: list[Candidate],
     winners: list[Candidate],
+    exceptions_over_limit: list[OverLimitException],
     mode_counts: dict[str, int],
     dry_run: bool,
 ) -> None:
@@ -636,17 +697,28 @@ def _write_log(
         f"{c.prompt_index:02d} {c.variant or '-'} {c.title} duration={c.duration:.2f}s source={c.path.name}"
         for c in dropped
     ]
+    exception_lines = [
+        (
+            f"{e.candidate.prompt_index:02d} {e.candidate.variant or '-'} {e.candidate.title} "
+            f"duration={e.candidate.duration:.2f}s max_song_sec={e.max_song_sec:.2f}s "
+            f"source={e.candidate.path.name} reason={e.reason}"
+        )
+        for e in exceptions_over_limit
+    ]
     lines = [
         f"executed_at={datetime.now(timezone.utc).isoformat()}",
         f"seed={seed}",
         f"dry_run={str(dry_run).lower()}",
         f"vocal_groups={mode_counts.get('vocal', 0)}",
         f"instrumental_groups={mode_counts.get('instrumental', 0)}",
+        f"exceptions_over_limit={len(exceptions_over_limit)}",
         "---",
         "[kept]",
         *[str(p.relative_to(collection_dir)) if p.is_relative_to(collection_dir) else str(p) for p in kept],
         "[winners]",
         *winner_lines,
+        "[exceptions_over_limit]",
+        *exception_lines,
         "[dropped_duration]",
         *dropped_lines,
         "[stocked]",
@@ -664,10 +736,65 @@ def _write_log(
     tmp_path.replace(log_path)
 
 
-def select_suno_tracks(collection_dir: Path, cfg: Mapping[str, object], *, dry_run: bool = False) -> SelectionResult:
+def _exception_payload(exception: OverLimitException) -> dict[str, object]:
+    candidate = exception.candidate
+    return {
+        "prompt_index": candidate.prompt_index,
+        "variant": candidate.variant or None,
+        "title": candidate.title,
+        "source": candidate.path.name,
+        "duration_sec": round(candidate.duration, 2),
+        "max_song_sec": round(exception.max_song_sec, 2),
+        "reason": exception.reason,
+    }
+
+
+def _atomic_json_write(target: Path, data: dict) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=".workflow-state-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, target)
+    except BaseException:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
+
+
+def _update_workflow_state_music_pair_selection(collection_dir: Path, result: SelectionResult) -> None:
+    if not result.exceptions_over_limit:
+        return
+
+    workflow_state_path = collection_dir / "workflow-state.json"
+    if workflow_state_path.is_file():
+        try:
+            data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise ValidationError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
+        if not isinstance(data, dict):
+            raise ValidationError(f"workflow-state.json の root は object である必要があります: {workflow_state_path}")
+    else:
+        data = {}
+
+    data["music_pair_selection"] = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "exceptions_over_limit_count": len(result.exceptions_over_limit),
+        "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
+    }
+    _atomic_json_write(workflow_state_path, data)
+
+
+def select_suno_tracks(
+    collection_dir: Path,
+    cfg: Mapping[str, object],
+    *,
+    dry_run: bool = False,
+    allow_best_effort_over_max: bool = False,
+) -> SelectionResult:
     parsed_cfg = parse_selection_config(cfg, collection_dir)
     if parsed_cfg.pair.mode == "never":
-        return SelectionResult([], [], [], [], [], {}, parsed_cfg.pair.selection_log_path)
+        return SelectionResult([], [], [], [], [], [], {}, parsed_cfg.pair.selection_log_path)
 
     prompts = {p.index: p for p in load_prompts(collection_dir)}
     candidates = collect_candidates(collection_dir)
@@ -677,6 +804,7 @@ def select_suno_tracks(collection_dir: Path, cfg: Mapping[str, object], *, dry_r
         prompts=prompts,
         candidates=candidates,
         cfg=parsed_cfg,
+        allow_best_effort_over_max=allow_best_effort_over_max,
     )
 
     if dry_run:
@@ -686,6 +814,7 @@ def select_suno_tracks(collection_dir: Path, cfg: Mapping[str, object], *, dry_r
             deleted=[candidate.path for candidate in plan.deleted],
             dropped=plan.dropped,
             winners=plan.winners,
+            exceptions_over_limit=plan.exceptions_over_limit,
             mode_counts=plan.mode_counts,
             log_path=plan.log_path,
         )
@@ -698,6 +827,7 @@ def select_suno_tracks(collection_dir: Path, cfg: Mapping[str, object], *, dry_r
             deleted=result.deleted,
             dropped=result.dropped,
             winners=result.winners,
+            exceptions_over_limit=result.exceptions_over_limit,
             mode_counts=result.mode_counts,
             dry_run=True,
         )
