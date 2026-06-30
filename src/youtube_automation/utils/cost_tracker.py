@@ -104,7 +104,7 @@ def _log_path(category: Category) -> Path:
 def relative_to_channel_dir(path: Path) -> str:
     """チャンネルディレクトリ相対のパス文字列に正規化。範囲外なら絶対パス文字列。"""
     try:
-        return str(path.relative_to(_channel_dir()))
+        return path.relative_to(_channel_dir()).as_posix()
     except ValueError:
         return str(path)
 
@@ -112,21 +112,28 @@ def relative_to_channel_dir(path: Path) -> str:
 @contextlib.contextmanager
 def _file_lock(path: Path):
     """生成履歴ファイルの読み書き競合を防ぐ排他ロック。"""
+    if _fcntl is None and _msvcrt is None:
+        with _IN_PROCESS_LOCK:
+            yield
+        return
+
     lock_path = path.with_suffix(path.suffix + _LOCK_FILE_SUFFIX)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+b") as lock_f:
-        _prepare_lock_file(lock_f)
-        _acquire_lock(lock_f)
-        try:
-            yield
-        finally:
-            _release_lock(lock_f)
+    with _IN_PROCESS_LOCK:
+        with lock_path.open("a+b") as lock_f:
+            _prepare_lock_file(lock_f)
+            _acquire_lock(lock_f)
+            try:
+                yield
+            finally:
+                _release_lock(lock_f)
 
 
 def _prepare_lock_file(lock_f: BinaryIO) -> None:
-    lock_f.seek(0)
-    if not lock_f.read(_LOCK_REGION_BYTES):
-        lock_f.write(b"\0")
+    lock_f.seek(0, 2)
+    size = lock_f.tell()
+    if size < _LOCK_REGION_BYTES:
+        lock_f.write(b"\0" * (_LOCK_REGION_BYTES - size))
         lock_f.flush()
     lock_f.seek(0)
 
@@ -138,8 +145,7 @@ def _acquire_lock(lock_f: BinaryIO) -> None:
     if _msvcrt is not None:
         _acquire_msvcrt_lock(lock_f)
         return
-    # Platform file locks are unavailable, but same-process writes still need serialization.
-    _IN_PROCESS_LOCK.acquire()
+    raise RuntimeError("platform file locks are unavailable")
 
 
 def _acquire_msvcrt_lock(lock_f: BinaryIO) -> None:
@@ -171,7 +177,7 @@ def _release_lock(lock_f: BinaryIO) -> None:
         lock_f.seek(0)
         _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_UNLCK, _LOCK_REGION_BYTES)
         return
-    _IN_PROCESS_LOCK.release()
+    raise RuntimeError("platform file locks are unavailable")
 
 
 def log_generation(

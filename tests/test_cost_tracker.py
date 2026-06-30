@@ -269,6 +269,8 @@ def test_generate_image_entrypoint_starts_when_fcntl_is_unavailable():
     repo_root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     code = """
 import importlib.abc
 import sys
