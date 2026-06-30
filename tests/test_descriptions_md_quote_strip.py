@@ -96,10 +96,13 @@ class TestDescriptionsMdQuoteStrip:
         messages = "\n".join(record.getMessage() for record in caplog.records)
         assert result is None
         assert "期待する見出し（完全一致）" in messages
-        assert "不足/不一致の見出し" in messages
+        assert (
+            "不足/不一致の見出し:\n"
+            "  - ## タイトル案\n"
+            "  - ## Complete Collection 概要欄\n"
+            "  - ## タグ（YouTube タグ欄）"
+        ) in messages
         assert "検出した ## 見出し" in messages
-        assert "## タイトル案" in messages
-        assert "## Complete Collection 概要欄" in messages
         assert "## タイトル" in messages
         assert "修正例" in messages
         assert "/video-description を再実行" in messages

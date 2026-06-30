@@ -41,10 +41,20 @@ def _format_heading_list(headings: Sequence[str]) -> str:
     return "\n".join(f"  - ## {heading}" for heading in headings)
 
 
-def _build_descriptions_md_parse_diagnostics(text: str, missing_headings: Sequence[str]) -> str:
+def _missing_descriptions_md_headings(text: str) -> list[str]:
+    """期待する `descriptions.md` 見出しのうち、抽出できないものを返す."""
+    return [
+        heading
+        for heading in _DESCRIPTIONS_MD_EXPECTED_HEADINGS
+        if extract_descriptions_md_section(text, heading) is None
+    ]
+
+
+def _build_descriptions_md_parse_diagnostics(text: str, missing_headings: Sequence[str] | None = None) -> str:
     """descriptions.md の見出し不一致を人間が直せる形で説明する."""
     found_headings = _extract_level2_headings(text)
-    missing = list(dict.fromkeys(missing_headings))
+    missing_source = missing_headings if missing_headings is not None else _missing_descriptions_md_headings(text)
+    missing = list(dict.fromkeys(missing_source))
     return "\n".join(
         [
             "期待する見出し（完全一致）:",
@@ -99,22 +109,14 @@ class DescriptionsMdMixin:
 
         text = desc_path.read_text(encoding="utf-8")
 
-        title = self._extract_md_section(text, "タイトル案")
-        description = self._extract_md_section(text, "Complete Collection 概要欄")
-        tags_raw = self._extract_md_section(text, "タグ（YouTube タグ欄）")
+        title = extract_descriptions_md_section(text, "タイトル案")
+        description = extract_descriptions_md_section(text, "Complete Collection 概要欄")
+        tags_raw = extract_descriptions_md_section(text, "タグ（YouTube タグ欄）")
 
         if not (title and description):
-            parsed_sections = {
-                "タイトル案": title,
-                "Complete Collection 概要欄": description,
-                "タグ（YouTube タグ欄）": tags_raw,
-            }
-            missing_headings = [
-                heading for heading in _DESCRIPTIONS_MD_EXPECTED_HEADINGS if parsed_sections.get(heading) is None
-            ]
             logger.warning(
                 "⚠️  descriptions.md のパースに失敗 — 正規フォーマットとして読み込めません\n%s",
-                _build_descriptions_md_parse_diagnostics(text, missing_headings),
+                _build_descriptions_md_parse_diagnostics(text),
             )
             return None
 
@@ -137,6 +139,11 @@ class DescriptionsMdMixin:
     @staticmethod
     def _extract_md_section(text: str, heading: str) -> str | None:
         """Markdown の ## heading 直後のコードフェンス内容を抽出"""
-        pattern = rf"## {re.escape(heading)}\s*\n+```\n(.*?)```"
-        m = re.search(pattern, text, re.DOTALL)
-        return m.group(1).strip() if m else None
+        return extract_descriptions_md_section(text, heading)
+
+
+def extract_descriptions_md_section(text: str, heading: str) -> str | None:
+    """Markdown の ## heading 直後のコードフェンス内容を抽出する."""
+    pattern = rf"## {re.escape(heading)}\s*\n+```\n(.*?)```"
+    m = re.search(pattern, text, re.DOTALL)
+    return m.group(1).strip() if m else None

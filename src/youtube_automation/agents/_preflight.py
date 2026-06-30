@@ -13,6 +13,7 @@ from pathlib import Path
 
 from youtube_automation.agents._descriptions_md import (
     _build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
 )
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
@@ -78,19 +79,19 @@ class PreflightMixin:
             raise RuntimeError(f"❌ {desc_path} が存在しません。/video-description を実行してください。")
 
         text = desc_path.read_text(encoding="utf-8")
-        title = (self._extract_md_section(text, "タイトル案") or "").strip()
-        description = (self._extract_md_section(text, "Complete Collection 概要欄") or "").strip()
+        title_raw = extract_descriptions_md_section(text, "タイトル案")
+        description_raw = extract_descriptions_md_section(text, "Complete Collection 概要欄")
 
-        if not title or not description:
-            missing_headings = []
-            if not title:
-                missing_headings.append("タイトル案")
-            if not description:
-                missing_headings.append("Complete Collection 概要欄")
+        if title_raw is None or description_raw is None:
             raise RuntimeError(
                 f"❌ {desc_path}: descriptions.md のパースに失敗\n"
-                f"{_build_descriptions_md_parse_diagnostics(text, missing_headings)}"
+                f"{_build_descriptions_md_parse_diagnostics(text)}"
             )
+
+        title = title_raw.strip()
+        description = description_raw.strip()
+        if not title or not description:
+            raise RuntimeError(f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空")
 
         if len(title) > 100:
             raise RuntimeError(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}")

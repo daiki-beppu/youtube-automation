@@ -20,9 +20,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import time
 
+from youtube_automation.agents._descriptions_md import (
+    _build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+)
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.youtube_service import get_youtube
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
@@ -51,9 +54,7 @@ def discover_collections() -> list[str]:
 
 
 def extract_md_section(md_text: str, header: str) -> str | None:
-    pattern = rf"## {re.escape(header)}\s*\n+```\n(.*?)```"
-    m = re.search(pattern, md_text, re.DOTALL)
-    return m.group(1).strip() if m else None
+    return extract_descriptions_md_section(md_text, header)
 
 
 def utf16_units(s: str) -> int:
@@ -77,7 +78,10 @@ def load_collection(col: str) -> dict:
         tags = parse_youtube_tags(tags_raw)
 
     if not (description and title):
-        raise RuntimeError(f"missing description or title section in {col}")
+        raise RuntimeError(
+            f"descriptions.md parse failed in {col}\n"
+            f"{_build_descriptions_md_parse_diagnostics(desc_md)}"
+        )
 
     return {
         "collection": col,
