@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(benchmark)`: `yt-benchmark-comments` に `-y` / `--yes` を追加し、確認プロンプトをスキップできるようにした（#1334）
 - `feat(suno)`: Suno V5.5 向けプロンプト設計を更新し、ボーカル曲用の `/suno-lyric` スキルと lyric reference を追加。`suno-lyrics.json` の必須化・entry name 完全一致検証・auto-prep slug / quote source safety guidance も追加（#1305）
 
 ### Changed
