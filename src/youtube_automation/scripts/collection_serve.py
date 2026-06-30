@@ -593,6 +593,10 @@ def build_version_payload() -> dict[str, str]:
     }
 
 
+def _decode_collection_id_path_segment(cid: str) -> str:
+    return urllib.parse.unquote(cid)
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -684,7 +688,7 @@ def create_server(
                 self.send_error(403, "Forbidden")
                 return
 
-            cid = urllib.parse.unquote(cid)
+            cid = _decode_collection_id_path_segment(cid)
             if ".." in cid:
                 self.send_error(404, "Not Found")
                 return
@@ -883,7 +887,7 @@ def create_server(
                 return
             coll_prefix = f"{COLLECTIONS_ROUTE}/"
             if self.path.startswith(coll_prefix) and self.path.endswith(SUNO_PROMPTS_ROUTE):
-                cid = self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)]
+                cid = _decode_collection_id_path_segment(self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)])
                 resolved = resolve_collection_prompts_path(collections_root, cid)
                 if resolved is None or not resolved.is_file():
                     self._send_json_error(404, "Not Found")
