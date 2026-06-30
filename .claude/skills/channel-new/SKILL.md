@@ -274,10 +274,42 @@ uv run yt-channel-settings push --apply
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` で初期化する。初回動画の追加は `/video-upload` 内部の自動 assign に任せる |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
 
+### Step 10: 初回保存と automation-update 前の整理
+
+`/channel-new` 完了直後は、`/setup` と本スキルで生成したファイルが未コミットのまま残りやすい。後続の `/automation-update` は dirty worktree で停止するため、最後に必ず git 状態を確認する。
+
+```bash
+git status --porcelain
+```
+
+出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。
+
+出力が非空の場合は、差分をユーザーに見せたうえで初回 commit を作成する。シークレットを混入させないため、staging は除外 pathspec 付きで行い、staged files を確認してから commit する。
+
+```bash
+git status --short
+git add -A -- . ':(exclude).env' ':(exclude)auth/client_secrets.json' ':(exclude)auth/token.json'
+git diff --cached --name-only
+git diff --cached --name-only | rg '(^|/)(client_secrets|token)\.json$|(^|/)\.env$' && echo "secret-like file staged; unstage before commit"
+git commit -m "chore: 初回チャンネル設定を保存"
+git status --porcelain
+```
+
+`git diff --cached --name-only` に `.env` / `auth/client_secrets.json` / `auth/token.json` が含まれる場合は commit しない。該当ファイルを `git restore --staged -- <path>` で外し、`.gitignore` を確認してからやり直す。
+
+`gh repo create` や remote 作成を保留している、git user identity 未設定で commit できない、またはユーザーが今 commit しない判断をした場合は、保存未完了として次の手順を明確に案内して終了する:
+
+```text
+未コミット変更が残っています。/automation-update の前に以下を完了してください:
+  1. git status --short で差分を確認
+  2. .env / auth/client_secrets.json / auth/token.json が staged されていないことを確認
+  3. git commit -m "chore: 初回チャンネル設定を保存"
+```
+
 最後に案内する:
 
 ```text
-チャンネル初期化が完了しました。次は /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。
+チャンネル初期化が完了しました。初回保存も完了しているため、次は /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。
 ```
 
 ## 障害時ガイダンス

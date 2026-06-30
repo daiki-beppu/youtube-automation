@@ -103,6 +103,25 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
+def test_channel_new_requires_initial_save_before_followup_update() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    automation_update = _read(".claude/skills/automation-update/SKILL.md")
+
+    assert "初回保存と automation-update 前の整理" in channel_new
+    assert "git status --porcelain" in channel_new
+    assert "後続の `/automation-update` は dirty worktree で停止する" in channel_new
+    assert (
+        "git add -A -- . ':(exclude).env' ':(exclude)auth/client_secrets.json' ':(exclude)auth/token.json'"
+    ) in channel_new
+    assert 'git commit -m "chore: 初回チャンネル設定を保存"' in channel_new
+    assert "secret-like file staged; unstage before commit" in channel_new
+    assert "未コミット変更が残っています。/automation-update の前に以下を完了してください" in channel_new
+    assert "初回保存も完了しているため" in channel_new
+
+    assert "`git status --porcelain` が **非空** の場合" in automation_update
+    assert "/channel-new 直後の初回保存が未完了なら" in automation_update
+
+
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     discover = _read(".claude/skills/discover-competitors/SKILL.md")
     research = _read(".claude/skills/channel-research/SKILL.md")

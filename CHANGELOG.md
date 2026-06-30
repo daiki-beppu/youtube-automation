@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `docs(channel-new)`: `/channel-new` 完了時に `git status --porcelain` で未コミット変更を確認し、初回 commit 作成または明確な保存手順を案内する完了ゲートを追加。`/automation-update` の dirty worktree 停止時にも `/channel-new` 直後の初回保存未完了を案内するよう更新（#1329）
+
+### Migration
+
+所要時間の目安: 0〜2 分
+
+local fix 衝突注意:
+- channel-new, automation-update: 下流で該当 skill を手書き調整している場合は `yt-skills diff` で差分確認が必要。
+
+サマリ:
+
+- 新規チャンネルセットアップ完了時に未コミット変更を残したまま後続の `/automation-update` へ進まないよう、初回保存手順を skill に明記した。
+
 ## [5.5.14] - 2026-06-30
 
 ### Added
