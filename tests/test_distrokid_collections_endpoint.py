@@ -800,6 +800,34 @@ def test_post_distrokid_releases_writes_file_and_returns_recorded(tmp_path, serv
     assert "20260526-abc-collection/disc1-alpha" in released
 
 
+def test_post_distrokid_releases_ignores_query_side_inputs(tmp_path, serve_dir_dk):
+    """Given root route に query だけで collection/disc を渡す
+    When body が空の POST /distrokid/releases?... を送る
+    Then 記録を書かず 400/404 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+    query = urllib.parse.urlencode(
+        {
+            "collection_id": "20260526-abc-collection",
+            "disc": "disc1-alpha",
+            "album_title": "Alpha Vol.1",
+        }
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}?{query}",
+            {},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code in {400, 404}
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
 def test_post_distrokid_releases_overwrite_on_repost(tmp_path, serve_dir_dk):
     """Given 同一 disc への再 POST（上書き冪等）
     When 2 回 POST する

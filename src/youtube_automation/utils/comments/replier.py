@@ -167,6 +167,10 @@ class CommentReplier:
         export_candidates: bool = False,
     ) -> ReplyPlan:
         """返信を計画 / 実行する."""
+        if not self._config.enabled:
+            logger.warning("comments.enabled=false のため、何もしません")
+            return ReplyPlan()
+
         if export_candidates and not dry_run:
             raise ConfigError("export_candidates=True は dry-run でのみ使用できます")
         if export_candidates and self._agent_replies is not None:
@@ -176,9 +180,6 @@ class CommentReplier:
                 "comments.generator.provider='codex' は --apply で直接使用できません。"
                 "--export-candidates と --agent-replies-file の監査済みフローを使用してください"
             )
-        if not self._config.enabled:
-            logger.warning("comments.enabled=false のため、何もしません")
-            return ReplyPlan()
 
         plan = ReplyPlan()
         limit = self._config.max_replies_per_run

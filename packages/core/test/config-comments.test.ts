@@ -211,6 +211,27 @@ describe("comments.rules — validation", () => {
     expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.name/u);
   });
 
+  test.each([[""], ["   "], [123]])("rejects invalid rule name %#", (name) => {
+    const sections = minimalSections();
+    sections["comments.json"] = {
+      comments: { enabled: true, rules: [{ keywords: ["hi"], name }] },
+    };
+
+    expect(() => load(sections)).toThrow(/comments\.rules\[0\]\.name/u);
+  });
+
+  test("trims rule name when building config", () => {
+    const sections = minimalSections();
+    sections["comments.json"] = {
+      comments: {
+        enabled: true,
+        rules: [{ keywords: ["hi"], name: "  legacy  " }],
+      },
+    };
+
+    expect(load(sections).engagement.comments.rules[0]?.name).toBe("legacy");
+  });
+
   test("rejects non-array rules", () => {
     const sections = minimalSections();
     sections["comments.json"] = {

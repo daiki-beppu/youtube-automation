@@ -8,6 +8,7 @@ import subprocess
 import time
 
 from youtube_automation.utils.comments.generator import ReplyContext
+from youtube_automation.utils.comments.prompt_safety import viewer_payload_json
 from youtube_automation.utils.exceptions import GeneratorError
 
 logger = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ class CodexGenerator:
             if ctx.language is not None
             else "Reply in the same language as the comment"
         )
-        viewer_payload = _viewer_payload_json(ctx)
+        viewer_payload = viewer_payload_json(ctx)
         return (
             "Generate a YouTube comment reply.\n\n"
             f"Channel persona:\n{ctx.channel_persona}\n\n"
@@ -99,14 +100,6 @@ class CodexGenerator:
             "- Stay true to the channel persona, be warm and natural\n"
             "- Output the reply text only (no preamble or explanation)"
         )
-
-
-def _viewer_payload_json(ctx: ReplyContext) -> str:
-    payload = json.dumps(
-        {"commenter": ctx.comment_author, "comment": ctx.comment_text},
-        ensure_ascii=False,
-    )
-    return payload.replace("</", "<\\/")
 
 
 def _extract_agent_message(stdout: str) -> str:

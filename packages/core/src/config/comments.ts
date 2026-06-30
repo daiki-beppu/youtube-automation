@@ -59,7 +59,7 @@ const validateRule = (raw: unknown, index: number, add: Issue): void => {
     add(`comments.rules[${index}] は object でなければなりません`);
     return;
   }
-  if (!raw.name) {
+  if (typeof raw.name !== "string" || !raw.name.trim()) {
     add(`comments.rules[${index}].name が必須です`);
     return;
   }
@@ -136,7 +136,7 @@ const buildGenerator = (raw: Record<string, unknown> | undefined) => ({
 const buildRule = (raw: Record<string, unknown>) => ({
   keywords: [...((raw.keywords as string[] | undefined) ?? [])],
   language: (raw.language as string | undefined) ?? null,
-  name: raw.name as string,
+  name: (raw.name as string).trim(),
   pattern: (raw.pattern as string | undefined) ?? null,
   priority: (raw.priority as number | undefined) ?? 0,
   provider: (raw.provider as string | undefined) ?? null,

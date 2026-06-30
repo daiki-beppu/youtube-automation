@@ -491,10 +491,12 @@ def _build_comments(merged: dict) -> Comments:
     cm = merged.get("comments") or {}
     if "templates" in cm:
         raise ConfigError("comments.templates は廃止されました。LLM provider で返信を生成してください")
-    rules_raw = cm.get("rules") or []
+    rules_raw = cm.get("rules", [])
+    if rules_raw is None:
+        rules_raw = []
     if not isinstance(rules_raw, list):
         raise ConfigError("comments.rules は list でなければなりません")
-    rules: list[object] = []
+    rules: list[CommentRule] = []
     for index, raw in enumerate(rules_raw):
         if not isinstance(raw, dict):
             raise ConfigError(f"comments.rules[{index}] は object でなければなりません")

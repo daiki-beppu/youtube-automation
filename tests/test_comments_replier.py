@@ -212,6 +212,29 @@ def test_dry_run_does_not_call_insert(tmp_path):
     assert not (tmp_path / "comment_reply_history.json").exists()
 
 
+def test_disabled_comments_noop_before_apply_provider_guards(tmp_path, _mock_default_genai_client):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "hello", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(enabled=False, generator=GeneratorConfig(provider="codex")),
+        channel_dir=tmp_path,
+        default_language="ja",
+    )
+
+    plan = replier.run(dry_run=False)
+
+    assert plan.planned == []
+    assert plan.skipped == []
+    assert plan.replied == []
+    assert plan.errors == []
+    yt.channels.assert_not_called()
+    yt._insert_mock.execute.assert_not_called()
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
 def test_comments_language_overrides_default_language(tmp_path):
     yt = _mock_youtube(
         video_ids=["v1"],
@@ -239,6 +262,24 @@ def test_empty_generated_reply_is_skipped_without_insert(tmp_path):
     assert plan.planned == []
     assert plan.replied == []
     assert any(row["reason"] == "empty_reply" for row in plan.skipped)
+    yt._insert_mock.execute.assert_not_called()
+
+
+def test_gemini_generated_reply_with_ng_word_is_skipped_without_insert(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "hello", "author": "Alice"}]},
+    )
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value.text = "this contains spam"
+
+    with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
+        replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+        plan = replier.run(dry_run=False)
+
+    assert plan.planned == []
+    assert plan.replied == []
+    assert any(row["reason"] == "reply_contains_ng_word" for row in plan.skipped)
     yt._insert_mock.execute.assert_not_called()
 
 

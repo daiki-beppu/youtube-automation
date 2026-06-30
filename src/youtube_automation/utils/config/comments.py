@@ -93,7 +93,7 @@ class Comments:
     """
 
     enabled: bool = False
-    rules: list[object] = field(default_factory=list)
+    rules: list[CommentRule] = field(default_factory=list)
     language: str | None = None
     ng_words: list[str] = field(default_factory=list)
     max_replies_per_run: int = 20

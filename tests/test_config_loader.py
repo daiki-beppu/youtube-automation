@@ -1386,6 +1386,23 @@ def test_comments_rule_non_object_raises(tmp_path, monkeypatch):
         load_config()
 
 
+@pytest.mark.parametrize("rules_raw", ["", {}, False])
+def test_comments_rules_falsy_non_list_raises(tmp_path, monkeypatch, rules_raw):
+    """comments.rules は falsy 値でも list 以外を暗黙に [] 扱いしない."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": rules_raw,
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=r"comments\.rules は list"):
+        load_config()
+
+
 def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
     """comments.rules[i].scope は旧スキーマでも valid 値だけを受け入れる."""
     sections = _minimal_sections()

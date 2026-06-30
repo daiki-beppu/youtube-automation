@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from youtube_automation.utils.comments.prompt_safety import viewer_payload_json
 from youtube_automation.utils.exceptions import GeneratorError
 
 if TYPE_CHECKING:
@@ -124,7 +124,7 @@ class GeminiGenerator:
             if ctx.language is not None
             else "Reply in the same language as the comment"
         )
-        viewer_payload = _viewer_payload_json(ctx)
+        viewer_payload = viewer_payload_json(ctx)
         return (
             f"You are the host of a YouTube channel with the following persona:\n\n"
             f"{ctx.channel_persona}\n\n"
@@ -143,11 +143,3 @@ class GeminiGenerator:
             f"- Stay true to the channel persona, be warm and natural\n"
             f"- Output the reply text only (no preamble or explanation)"
         )
-
-
-def _viewer_payload_json(ctx: ReplyContext) -> str:
-    payload = json.dumps(
-        {"commenter": ctx.comment_author, "comment": ctx.comment_text},
-        ensure_ascii=False,
-    )
-    return payload.replace("</", "<\\/")

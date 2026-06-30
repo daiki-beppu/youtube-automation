@@ -1,6 +1,6 @@
 # Thumbnail TTP Audit (2026-06-30)
 
-Related issues: #520, #521, #522. This report closes the local inventory needed for #522, but #520 remains open because several required downstream roots were not present in this checkout.
+Related issues: #520, #521, #522. This report records the local inventory available in this checkout, but it does not close #520 or #522 because several required downstream roots were not present and the all-channel stock operation table remains incomplete.
 
 Scope scanned: local first-party channel roots under `/Users/mba/02-yt` that contain `config/skills/thumbnail.yaml`.
 
@@ -41,7 +41,7 @@ Not present in this checkout scan: `bobble`, `neta`, `yt-studio`.
 ## Findings
 
 1. `deepfocus365` intentionally uses `two_phase`, so it is outside the default `single_step` TTP mode. The config comments document the reason: channel-specific vehicle/private-jet template and text overlay phase.
-2. `youtube-abyss` does not set `image_generation.provider` in its channel override and therefore inherits the automation default `gemini`, while the other active channels explicitly use `codex`. If ABYSS should follow current codex image generation, update `/Users/mba/02-yt/youtube-abyss/config/skills/thumbnail.yaml` in that channel repo.
+2. `youtube-abyss` explicitly sets `image_generation.provider: codex`; no provider drift was found in the local scan.
 3. Stock reuse is configured on by default, but most archived stock images are `source_role: "ideate_preview"`. With the default `thumbnail_candidate` filter, those files are archived but not reused. Decision: keep `ideate_preview` archive-only and keep the `thumbnail_candidate` filter unchanged. Reusing ideation previews would mix lower-confidence exploratory assets into final thumbnail prompts, so only final rejected `/thumbnail` candidates should become reusable stock.
 4. No local evidence of `/thumbnail-compare` being disabled was found. The shared thumbnail skill requires it before approval, so this remains an operating-procedure check rather than a per-channel config gap.
 
@@ -49,4 +49,4 @@ Not present in this checkout scan: `bobble`, `neta`, `yt-studio`.
 
 - #520 should stay open: required channel roots `bobble`, `neta`, `yt-studio`, and `libecity` were not present in this checkout and need a restored local scan or another evidence source.
 - #521 should stay deferred until a visual QA pass is run over the listed live collections; no image regeneration was performed in this automation PR.
-- #522 can be closed for inventory and operating decision: stock reuse remains enabled, `thumbnail_candidate` stays the only reusable source role, and existing `ideate_preview` files remain archive-only.
+- #522 should stay open: this report records local inventory and the stock reuse decision for scanned roots only; the full all-channel stock operation table remains incomplete until missing roots are scanned.
