@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any
 
 
 def configure_utf8_stdio() -> None:
@@ -19,17 +18,46 @@ def configure_utf8_stdio() -> None:
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
-    _reconfigure_stream(getattr(sys, "stdin", None), errors="surrogateescape")
-    _reconfigure_stream(getattr(sys, "stdout", None), errors="backslashreplace")
-    _reconfigure_stream(getattr(sys, "stderr", None), errors="backslashreplace")
+    _reconfigure_stream(getattr(sys, "stdin", None), errors="surrogateescape", stream_name="stdin")
+    _reconfigure_stream(
+        getattr(sys, "stdout", None),
+        errors="backslashreplace",
+        stream_name="stdout",
+        required=True,
+    )
+    _reconfigure_stream(
+        getattr(sys, "stderr", None),
+        errors="backslashreplace",
+        stream_name="stderr",
+        required=True,
+    )
 
 
-def _reconfigure_stream(stream: Any, *, errors: str) -> None:
+def _reconfigure_stream(
+    stream: object | None,
+    *,
+    errors: str,
+    stream_name: str,
+    required: bool = False,
+) -> bool:
     reconfigure = getattr(stream, "reconfigure", None)
     if not callable(reconfigure):
-        return
+        if required and _has_non_utf8_encoding(stream):
+            raise RuntimeError(f"failed to configure {stream_name} for utf-8")
+        return False
 
     try:
         reconfigure(encoding="utf-8", errors=errors)
-    except (AttributeError, TypeError, ValueError, OSError):
-        return
+    except (AttributeError, TypeError, ValueError, OSError) as exc:
+        if required:
+            raise RuntimeError(f"failed to configure {stream_name} for utf-8") from exc
+        return False
+
+    return True
+
+
+def _has_non_utf8_encoding(stream: object | None) -> bool:
+    encoding = getattr(stream, "encoding", None)
+    if not isinstance(encoding, str):
+        return False
+    return encoding.lower().replace("_", "-") != "utf-8"
