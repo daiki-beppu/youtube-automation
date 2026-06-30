@@ -468,16 +468,6 @@ def _post(url: str, body, *, headers=None):
     return urllib.request.urlopen(req)
 
 
-def _fetch_token(base: str) -> str:
-    req = urllib.request.Request(f"{base}/auth/token", headers={"Origin": _EXTENSION_ORIGIN})
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read().decode("utf-8"))["token"]
-
-
-def _auth_headers(base: str) -> dict[str, str]:
-    return {"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": _fetch_token(base)}
-
-
 def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str, expected_origin: str | None) -> None:
     assert err.code == status
     assert err.headers.get_content_type() == "application/json"
@@ -485,7 +475,7 @@ def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str
     assert json.loads(err.read().decode("utf-8")) == {"error": message}
 
 
-def _post_declared_length(url: str, *, declared_length: int | str, origin: str, token: str | None = None):
+def _post_declared_length(url: str, *, declared_length: int | str, origin: str):
     """Content-Length だけを大きく宣言して POST する。"""
     parsed = urllib.parse.urlsplit(url)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port)
@@ -495,8 +485,6 @@ def _post_declared_length(url: str, *, declared_length: int | str, origin: str, 
     conn.putrequest("POST", path)
     conn.putheader("Host", parsed.netloc)
     conn.putheader("Origin", origin)
-    if token is not None:
-        conn.putheader("X-Serve-Token", token)
     conn.putheader("Content-Length", str(declared_length))
     conn.endheaders()
     return conn, conn.getresponse()
@@ -508,10 +496,10 @@ def test_post_suno_playlists_writes_file_and_returns_written_and_path(tmp_path, 
     Then 200 + `{written, path}` を返し、`<root>/config/suno-playlists.json` を更新する。
     """
     capture_root = tmp_path / "out"
-    base = serve_capture(capture_root=capture_root, prefix="df365", allow_origin=_EXTENSION_ORIGIN)
+    base = serve_capture(capture_root=capture_root, prefix="df365")
     payload = [{"title": "df365 | smoke", "url": "https://suno.com/playlist/u1"}]
 
-    with _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers=_auth_headers(base)) as resp:
+    with _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
         assert resp.status == 200
         result = json.loads(resp.read().decode("utf-8"))
 
@@ -526,10 +514,10 @@ def test_post_suno_playlists_echoes_cors_header_for_allowed_origin(tmp_path, ser
     When レスポンスヘッダを読む
     Then Access-Control-Allow-Origin がその Origin を echo する。
     """
-    base = serve_capture(capture_root=tmp_path / "out", prefix="df365", allow_origin=_EXTENSION_ORIGIN)
+    base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
     payload = [{"title": "df365 | smoke", "url": "https://suno.com/playlist/u1"}]
 
-    with _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers=_auth_headers(base)) as resp:
+    with _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
@@ -538,10 +526,10 @@ def test_post_suno_playlists_returns_written_zero_for_prefix_mismatch(tmp_path, 
     When POST する
     Then 200 で written=0 を返す（サーバー側フィルタが弾く）。
     """
-    base = serve_capture(capture_root=tmp_path / "out", prefix="df365", allow_origin=_EXTENSION_ORIGIN)
+    base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
     payload = [{"title": "other | nope", "url": "https://suno.com/playlist/u9"}]
 
-    with _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers=_auth_headers(base)) as resp:
+    with _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN}) as resp:
         assert resp.status == 200
         result = json.loads(resp.read().decode("utf-8"))
 
@@ -576,38 +564,6 @@ def test_post_suno_playlists_with_disallowed_origin_returns_403(tmp_path, serve_
     _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=None)
 
 
-def test_post_suno_playlists_missing_token_returns_403(tmp_path, serve_capture):
-    """Given extension origin lock だが X-Serve-Token が無い
-    When POST /suno/playlists する
-    Then 403 を返し書き込まない。
-    """
-    capture_root = tmp_path / "out"
-    base = serve_capture(capture_root=capture_root, prefix="df365", allow_origin=_EXTENSION_ORIGIN)
-    payload = [{"title": "df365 | smoke", "url": "https://suno.com/playlist/u1"}]
-
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN})
-
-    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=_EXTENSION_ORIGIN)
-    assert not (capture_root / _OUTPUT_RELPATH).exists()
-
-
-def test_post_suno_playlists_default_rejects_extension_origin_without_exact_lock(tmp_path, serve_capture):
-    """Given allow_origin 未指定の通常起動
-    When 任意 extension Origin から POST /suno/playlists する
-    Then 403 を返し書き込まない。
-    """
-    capture_root = tmp_path / "out"
-    base = serve_capture(capture_root=capture_root, prefix="df365")
-    payload = [{"title": "df365 | smoke", "url": "https://suno.com/playlist/u1"}]
-
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN})
-
-    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=_EXTENSION_ORIGIN)
-    assert not (capture_root / _OUTPUT_RELPATH).exists()
-
-
 def test_post_suno_playlists_returns_404_when_capture_disabled(serve_capture):
     """Given playlist_capture 未設定（--playlist-capture-root 無し）で起動したサーバー
     When 許可 Origin から POST する
@@ -640,10 +596,10 @@ def test_post_suno_playlists_non_list_body_returns_400(tmp_path, serve_capture):
     When 許可 Origin から POST する
     Then 400 を返す（body は配列契約のまま受ける、envelope 流用を弾く）。
     """
-    base = serve_capture(capture_root=tmp_path / "out", prefix="df365", allow_origin=_EXTENSION_ORIGIN)
+    base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", {"title": "df365 | x"}, headers=_auth_headers(base))
+        _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", {"title": "df365 | x"}, headers={"Origin": _EXTENSION_ORIGIN})
 
     _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
 
@@ -653,10 +609,10 @@ def test_post_suno_playlists_invalid_json_body_returns_400(tmp_path, serve_captu
     When 許可 Origin から POST する
     Then CORS 付き JSON 400 を返す（fail-loud、silent に空書き込みしない）。
     """
-    base = serve_capture(capture_root=tmp_path / "out", prefix="df365", allow_origin=_EXTENSION_ORIGIN)
+    base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", b"{not json", headers=_auth_headers(base))
+        _post(f"{base}{_SUNO_PLAYLISTS_ROUTE}", b"{not json", headers={"Origin": _EXTENSION_ORIGIN})
 
     _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
 
@@ -666,14 +622,11 @@ def test_post_suno_playlists_body_too_large_returns_413(tmp_path, serve_capture)
     When 許可 Origin から POST /suno/playlists する
     Then body を処理せず 413 を返す。
     """
-    base = serve_capture(capture_root=tmp_path / "out", prefix="df365", allow_origin=_EXTENSION_ORIGIN)
-    token = _fetch_token(base)
-
+    base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
     conn, resp = _post_declared_length(
         f"{base}{_SUNO_PLAYLISTS_ROUTE}",
         declared_length=1024 * 1024 + 1,
         origin=_EXTENSION_ORIGIN,
-        token=token,
     )
     try:
         assert resp.status == 413
@@ -688,14 +641,11 @@ def test_post_suno_playlists_invalid_content_length_returns_400(tmp_path, serve_
     When 許可 Origin から POST /suno/playlists する
     Then body を処理せず 400 を返す。
     """
-    base = serve_capture(capture_root=tmp_path / "out", prefix="df365", allow_origin=_EXTENSION_ORIGIN)
-    token = _fetch_token(base)
-
+    base = serve_capture(capture_root=tmp_path / "out", prefix="df365")
     conn, resp = _post_declared_length(
         f"{base}{_SUNO_PLAYLISTS_ROUTE}",
         declared_length="not-a-number",
         origin=_EXTENSION_ORIGIN,
-        token=token,
     )
     try:
         assert resp.status == 400
@@ -711,14 +661,11 @@ def test_post_suno_playlists_negative_content_length_returns_400(tmp_path, serve
     Then body を処理せず 400 を返す。
     """
     capture_root = tmp_path / "out"
-    base = serve_capture(capture_root=capture_root, prefix="df365", allow_origin=_EXTENSION_ORIGIN)
-    token = _fetch_token(base)
-
+    base = serve_capture(capture_root=capture_root, prefix="df365")
     conn, resp = _post_declared_length(
         f"{base}{_SUNO_PLAYLISTS_ROUTE}",
         declared_length=-1,
         origin=_EXTENSION_ORIGIN,
-        token=token,
     )
     try:
         assert resp.status == 400

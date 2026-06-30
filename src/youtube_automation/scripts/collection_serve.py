@@ -674,7 +674,12 @@ def create_server(
         def _handle_downloaded_post(self, cid: str) -> None:
             """POST /collections/<id>/downloaded を処理する（dir mode only、#1216/#1217）。"""
             assert collections_root is not None
-            if not self._authorize_mutating_post():
+            raw_origin = self.headers.get("Origin")
+            if not _is_locked_extension_request(raw_origin, allow_origin):
+                self.send_error(403, "Forbidden")
+                return
+            req_token = self.headers.get("X-Serve-Token")
+            if req_token != serve_token:
                 self.send_error(403, "Forbidden")
                 return
 
@@ -733,15 +738,9 @@ def create_server(
                 return None
             return self.rfile.read(length) if length else b""
 
-        def _authorize_mutating_post(self) -> bool:
-            raw_origin = self.headers.get("Origin")
-            if not _is_locked_extension_request(raw_origin, allow_origin):
-                return False
-            return self.headers.get("X-Serve-Token") == serve_token
-
         def do_POST(self) -> None:  # noqa: N802
-            # Mutating POST は endpoint ごとに extension origin lock + X-Serve-Token を検証する。
-            # Chrome MV3 background fetch は Origin を省略し得るため、token route と同じ判定を使う。
+            # GET と異なり POST は Origin 必須。未設定・不許可は 403。
+            # （チェック順: まず capture root の有無に関わらず Origin を確認する）
             origin = self._allowed_origin()
 
             # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
@@ -753,7 +752,7 @@ def create_server(
                 if capture_root is None:
                     self.send_error(404, "Not Found")
                     return
-                if not self._authorize_mutating_post():
+                if origin is None:
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()
@@ -778,11 +777,11 @@ def create_server(
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。
             if self.path == _DISTROKID_RELEASES_ROUTE:
-                if capture_root is None or collections_root is None:
-                    # release 記録は dir mode の collection/disc 実在検証と一体の契約（#934）。
+                if capture_root is None:
+                    # capture root 未指定時は #893 の POST 無効と同じ gating（#934）。
                     self.send_error(404, "Not Found")
                     return
-                if not self._authorize_mutating_post():
+                if origin is None:
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()
@@ -810,14 +809,15 @@ def create_server(
                     # 必須フィールド欠落・非 string は 400（#934）。
                     self.send_error(400, "Bad Request")
                     return
-                known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
-                coll_dir = known_collections.get(coll_id)
-                if coll_dir is None:
-                    self.send_error(400, "Bad Request")
-                    return
-                if disc not in find_distrokid_discs(coll_dir):
-                    self.send_error(400, "Bad Request")
-                    return
+                if collections_root is not None:
+                    known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
+                    coll_dir = known_collections.get(coll_id)
+                    if coll_dir is None:
+                        self.send_error(400, "Bad Request")
+                        return
+                    if disc not in find_distrokid_discs(coll_dir):
+                        self.send_error(400, "Bad Request")
+                        return
                 write_distrokid_release(capture_root, coll_id, disc, album_title)
                 resp_body = json.dumps(
                     {"recorded": True, "path": str(distrokid_releases_output_path(capture_root))}
@@ -1059,7 +1059,7 @@ def main() -> None:
         "--allow-origin",
         default=None,
         help=(
-            "lock CORS to a single origin via exact match. Mutating POST routes "
+            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded "
             "and GET /auth/token require an explicit chrome-extension://<EXTENSION_ID> lock. "
             "Default allows chrome-extension scheme plus suno.com / distrokid.com helper origins "
             "for read-only routes only."
@@ -1147,7 +1147,7 @@ def main() -> None:
     else:
         print(
             "  serve token: disabled until --allow-origin "
-            "chrome-extension://<EXTENSION_ID> is set for /auth/token and mutating POST routes"
+            "chrome-extension://<EXTENSION_ID> is set for /auth/token and /downloaded"
         )
     print("Press Ctrl-C to stop.")
     try:
