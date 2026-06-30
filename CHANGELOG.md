@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `fix(upload)`: `descriptions.md` の見出し不一致時に、期待する見出し一覧・不足/不一致の見出し・検出済み見出し・修正例を表示するよう改善（#1340）
 - `fix(suno-helper)`: `yt-collection-serve` の `/collections/<id>/suno/prompts.json` で URL エンコード済み collection ID をデコードし、スペースを含むフォルダ名でも prompts を取得できるようにした（#1338）
+- `fix(suno-helper)`: Suno Helper が `/collections` の `status` 形式と保存済み `suno_playlist_url` に追従し、Download 再開時は保存済み URL を優先するよう修正。Service Worker の `storage` 権限を生成 manifest で検証し、Suno 新 UI の Exclude styles / More メニュー検出とエラー案内も改善（#1321, #1336, #1337, #1339）
 - `fix(cost)`: Windows 環境で `fcntl` がない場合も `cost_tracker` と `yt-generate-image` が起動できるよう、`msvcrt` / プロセス内 lock fallback を追加（#1315）
 - `fix(upload)`: upload preflight が `audio.target_duration_min/max` を秒単位として誤判定していた master 動画尺チェックを無効化（#1313）
 - `fix(metadata-generator)`: `BAHMetadataGenerator` の音声尺取得に `ffprobe` fallback を追加し、Suno 由来の `.m4a` が `afinfo` 失敗だけで 0 秒扱いされないようにした（#1323）

@@ -701,7 +701,7 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { collectionId, playlistName, submittedClipIds, expectedClipCount } = data;
+      const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } = data;
       currentSnapshot = initSnapshot([], undefined);
       running = true;
       aborted = false;
@@ -712,6 +712,7 @@ export default defineContentScript({
             context: downloadContext,
             collectionId,
             playlistName,
+            savedSunoPlaylistUrl: sunoPlaylistUrl,
             submittedClipIds,
             expectedClipCount,
             resolvePlaylistUrl,

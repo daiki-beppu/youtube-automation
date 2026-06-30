@@ -54,6 +54,7 @@ export interface CollectionSummary {
   channel?: string;
   theme?: string;
   expected_file_count?: number | null;
+  suno_playlist_url?: string;
 }
 
 /** Suno `/me` から捕捉した 1 playlist。legacy scrape 互換の内部型。 */
@@ -323,6 +324,13 @@ function normalizeCollectionSummary(
   if (expectedFileCount !== undefined) {
     summary.expected_file_count = expectedFileCount;
   }
+  const sunoPlaylistUrl = assertOptionalString(
+    record.suno_playlist_url,
+    `collections[${index}].suno_playlist_url`,
+  );
+  if (sunoPlaylistUrl !== undefined) {
+    summary.suno_playlist_url = sunoPlaylistUrl;
+  }
   return summary;
 }
 
@@ -348,6 +356,11 @@ export function visiblePromptCollections(
   );
 }
 
+/** `status` ベースで prompts 取得可能な collection を判定する。 */
+export function collectionHasPrompts(collection: CollectionSummary): boolean {
+  return collection.status === "ready" || collection.status === "downloaded";
+}
+
 /**
  * ドロップダウンの初期選択 id を決める (#816)。
  * 最初の `ready` な entry の id。実行可能な選択肢が無ければ null。
@@ -356,7 +369,10 @@ export function visiblePromptCollections(
 export function pickInitialCollectionId(
   collections: CollectionSummary[],
 ): string | null {
-  return collections.find((c) => c.status === "ready")?.id ?? null;
+  return (
+    collections.find((c) => collectionHasPrompts(c) && c.status === "ready")
+      ?.id ?? null
+  );
 }
 
 export function resolvePromptCollectionId(
@@ -367,8 +383,8 @@ export function resolvePromptCollectionId(
   const selected = collections.find((c) => c.id === selectedId);
   if (
     selected &&
-    (selected.status === "ready" ||
-      (allowDownloadedSelected && selected.status === "downloaded"))
+    collectionHasPrompts(selected) &&
+    (selected.status === "ready" || allowDownloadedSelected)
   ) {
     return selected.id;
   }

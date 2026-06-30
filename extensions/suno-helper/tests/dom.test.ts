@@ -978,6 +978,17 @@ describe("resolveAdvancedFields: More Options 3 フィールドの解決 (#900, 
     expect(fields.styleInfluence).toBeNull();
   });
 
+  it("Given aria-label に Exclude を含む textarea When 解決する Then excludeStyles として返す", () => {
+    const exclude = document.createElement("textarea");
+    exclude.setAttribute("aria-label", "Exclude styles");
+    document.body.appendChild(exclude);
+    setRect(exclude, VISIBLE_RECT);
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBe(exclude);
+  });
+
   it("Given slider 2 つだけ存在 When 解決する Then aria-label で Weirdness / Style Influence を区別する", () => {
     const weirdness = addSlider({ ariaLabel: "Weirdness", value: 0 });
     const styleInfluence = addSlider({ ariaLabel: "Style Influence", value: 50 });

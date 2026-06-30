@@ -13,10 +13,11 @@ const SELECTORS = {
   // 表記変更 ((Optional) の有無等) に耐えるよう "Song Title" の弱い case-insensitive substring match。
   title: 'input[placeholder*="Song Title" i]',
   // Custom Mode > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
-  //   - Exclude styles: native text input (placeholder 完全一致、maxlength=1000)
+  //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
   // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
-  excludeStyles: 'input[placeholder="Exclude styles"]',
+  excludeStyles:
+    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i]',
   weirdness: '[role="slider"][aria-label="Weirdness"]',
   styleInfluence: '[role="slider"][aria-label="Style Influence"]',
   // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
@@ -220,7 +221,7 @@ export async function setSliderValue(
 
 /** More Options の advanced フィールド解決結果（#900, vocal gender 追加）。不在は null（fail-soft）。 */
 export interface ResolvedAdvancedFields {
-  excludeStyles: HTMLInputElement | null;
+  excludeStyles: HTMLInputElement | HTMLTextAreaElement | null;
   weirdness: HTMLElement | null;
   styleInfluence: HTMLElement | null;
   /** Voice section の Male / Female ボタンペア。将来 neutral 等が追加されても nested で拡張しやすい形にしておく。 */
@@ -258,7 +259,9 @@ function pickPreferVisible<T extends HTMLElement>(els: T[]): T | null {
 export function resolveAdvancedFields(): ResolvedAdvancedFields {
   const excludeStyles = pickPreferVisible(
     Array.from(
-      document.querySelectorAll<HTMLInputElement>(SELECTORS.excludeStyles),
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+        SELECTORS.excludeStyles,
+      ),
     ),
   );
   const weirdness = pickPreferVisible(
@@ -356,7 +359,7 @@ export async function injectAdvancedFields(
   if (entry.exclude_styles !== undefined) {
     if (!fields.excludeStyles) {
       throw new FatalRunError(
-        "Exclude styles 欄が見つかりません。Suno の UI 変更の可能性があります。",
+        "Exclude styles 欄が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。",
       );
     }
     setNativeValue(fields.excludeStyles, entry.exclude_styles);
