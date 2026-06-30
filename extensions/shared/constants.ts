@@ -219,7 +219,7 @@ export function distrokidReleaseRoute(
   collectionId: string,
   disc: string,
 ): string {
-  return `/collections/${collectionId}/distrokid/${disc}/release.json`;
+  return `/collections/${encodeURIComponent(collectionId)}/distrokid/${disc}/release.json`;
 }
 
 /** ローカル配信元の既定 URL。 */
