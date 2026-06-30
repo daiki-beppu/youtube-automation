@@ -216,23 +216,11 @@ def test_common_docs_list_optional_channel_config_files() -> None:
 def test_distrokid_skill_uses_helper_name() -> None:
     skill_path = ROOT / ".claude" / "skills" / "distrokid-helper" / "SKILL.md"
     assert skill_path.exists()
-    skill = skill_path.read_text(encoding="utf-8")
 
     frontmatter = _frontmatter(".claude/skills/distrokid-helper/SKILL.md")
     assert frontmatter["name"] == "distrokid-helper"
-    assert "yt-collection-serve 起動" in frontmatter["description"]
-    assert "### ステップ 9: distrokid-helper サーバー起動" in skill
-    assert (
-        'uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" '
-        '--playlist-capture-root "$CHANNEL_DIR" --port 7874'
-    ) in skill
-    assert (
-        "CHANNEL_DIR=/path/to/channel uv run yt-collection-serve "
-        "/path/to/channel/collections/planning --playlist-capture-root /path/to/channel --port 7874"
-    ) in skill
-    assert "`--playlist-capture-root` は distrokid-helper の配信済み記録" in skill
-    assert "`--playlist-capture-prefix` は Suno playlist capture 用" in skill
-    assert "DistroKid サーバー起動では指定しない" in skill
+    assert (skill_path.parent / "references" / "distrokid_prepare.py").is_file()
+    assert (skill_path.parent / "references" / "spec-example.json").is_file()
 
     features = _read("docs/features.md")
     assert "/distrokid-helper" in features

@@ -23,7 +23,7 @@ SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
-LEGACY_ONBOARD_SKILL = "onboard"
+LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep")
 
 BOOTSTRAP_CATEGORY = "bootstrap"
 API_CATEGORY = "api"
@@ -332,10 +332,11 @@ def check_skills_synced(channel_dir: Path) -> CheckResult:
     if missing_skill_files:
         sample = ", ".join(str(CLAUDE_SKILLS_DIR / path) for path in missing_skill_files[:5])
         return _skills_sync_failure(f"同梱 skill が未展開: {sample}")
-    if (skills_dir / LEGACY_ONBOARD_SKILL / SKILL_FILENAME).exists():
-        return _skills_sync_prune_failure(
-            f"旧 onboard skill が残存: {CLAUDE_SKILLS_DIR / LEGACY_ONBOARD_SKILL / SKILL_FILENAME}"
-        )
+    for legacy_skill in LEGACY_BUNDLED_SKILLS:
+        if (skills_dir / legacy_skill / SKILL_FILENAME).exists():
+            return _skills_sync_prune_failure(
+                f"旧 {legacy_skill} skill が残存: {CLAUDE_SKILLS_DIR / legacy_skill / SKILL_FILENAME}"
+            )
     if not _agents_skills_link_is_valid(channel_dir, skills_dir):
         return _skills_sync_warning(f"{AGENTS_SKILLS_LINK} が {CLAUDE_SKILLS_DIR} を指す symlink になっていない")
     return CheckResult(
