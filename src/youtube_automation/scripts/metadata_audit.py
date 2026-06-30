@@ -26,6 +26,10 @@ from pathlib import Path
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.config.config import ChannelConfig  # noqa: E402
+from youtube_automation.utils.descriptions_md import (  # noqa: E402
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+)
 from youtube_automation.utils.preflight_checks import (  # noqa: E402
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -39,14 +43,10 @@ from youtube_automation.utils.probe import probe_duration  # noqa: E402
 COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
 TS_RE = re.compile(r"^\d{1,2}:\d{2}")
-SECTION_RE = lambda h: re.compile(  # noqa: E731
-    rf"## {re.escape(h)}\s*\n+```\n(.*?)```", re.DOTALL
-)
 
 
 def extract_section(text: str, header: str) -> str | None:
-    m = SECTION_RE(header).search(text)
-    return m.group(1).strip() if m else None
+    return extract_descriptions_md_section(text, header)
 
 
 def audit_local(col: Path, config: ChannelConfig) -> list[str]:
@@ -66,15 +66,24 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
         return issues
 
     text = desc_md.read_text(encoding="utf-8")
-    title = (extract_section(text, "タイトル案") or "").strip()
-    description = (extract_section(text, "Complete Collection 概要欄") or "").strip()
+    title_raw = extract_section(text, "タイトル案")
+    description_raw = extract_section(text, "Complete Collection 概要欄")
+    if title_raw is None or description_raw is None:
+        issues.append("descriptions.md parse failed\n" + build_descriptions_md_parse_diagnostics(text))
 
-    if not title:
+    title = title_raw.strip() if title_raw is not None else ""
+    description = description_raw.strip() if description_raw is not None else ""
+
+    if title_raw is None:
+        pass
+    elif not title:
         issues.append("missing 'タイトル案' section")
     elif len(title) > 100:
         issues.append(f"title too long: {len(title)} codepoints (>100)")
 
-    if not description:
+    if description_raw is None:
+        pass
+    elif not description:
         issues.append("missing 'Complete Collection 概要欄' section")
     else:
         ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]

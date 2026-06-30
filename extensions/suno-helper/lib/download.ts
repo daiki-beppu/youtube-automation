@@ -1,7 +1,7 @@
 import { simulateClick, sleep } from "../../shared/dom";
 import { CLIP_LIST_SCROLLER_SELECTOR } from "../../shared/playlist-dom";
 
-const MORE_BUTTON_SELECTOR = 'button[aria-label="More options"]';
+const MORE_BUTTON_SELECTOR = 'button[aria-label="More options"], button[aria-label="More menu contents"]';
 const DESELECT_CLIP_BUTTON_SELECTOR = 'button[aria-label="Deselect clip"]';
 const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
 const CLIP_ROW_SELECTOR = '[data-testid="clip-row"], .clip-row, article, [role="group"]';

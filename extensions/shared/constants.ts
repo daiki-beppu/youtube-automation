@@ -39,7 +39,7 @@ export const VERSION_ROUTE = "/version";
 
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
-  return `${COLLECTIONS_ROUTE}/${id}${PROMPTS_ROUTE}`;
+  return `${COLLECTIONS_ROUTE}/${encodeURIComponent(id)}${PROMPTS_ROUTE}`;
 }
 
 /** 個別 collection の download 完了通知 POST サブパス `/collections/<id>/downloaded` を組み立てる。 */
@@ -219,7 +219,7 @@ export function distrokidReleaseRoute(
   collectionId: string,
   disc: string,
 ): string {
-  return `/collections/${collectionId}/distrokid/${disc}/release.json`;
+  return `/collections/${encodeURIComponent(collectionId)}/distrokid/${disc}/release.json`;
 }
 
 /** ローカル配信元の既定 URL。 */

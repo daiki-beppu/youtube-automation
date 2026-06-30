@@ -504,6 +504,65 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("collection に保存済み playlist URL がある場合は Download 再開 payload に含める", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+            suno_playlist_url: "https://suno.com/playlist/saved",
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "adoptSelectedClips") {
+        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Download から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
+      collectionId: "20260601-clm-theme-a-collection",
+      playlistName: "clm | theme-a",
+      sunoPlaylistUrl: "https://suno.com/playlist/saved",
+      submittedClipIds: ["clip-a", "clip-b"],
+      expectedClipCount: 2,
+    });
+  });
+
   it("expected_file_count が entries×2 より大きい場合は手動採用と Download 再開に expected_file_count を使う", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock

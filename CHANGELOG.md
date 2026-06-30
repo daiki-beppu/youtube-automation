@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.14] - 2026-06-30
+
 ### Added
 
+- `feat(benchmark)`: `yt-benchmark-comments` に `-y` / `--yes` を追加し、確認プロンプトをスキップできるようにした（#1334）
 - `feat(suno)`: Suno V5.5 向けプロンプト設計を更新し、ボーカル曲用の `/suno-lyric` スキルと lyric reference を追加。`suno-lyrics.json` の必須化・entry name 完全一致検証・auto-prep slug / quote source safety guidance も追加（#1305）
 
 ### Changed
 
+- `feat(thumbnail)`: single_step TTP 生成で参照画像を必須化し、複数候補では候補ごとに同一ベンチマークチャンネル内のユニークな参照画像を 1 枚ずつ割り当てるように変更。参照不足・重複・同一参照の再利用をエラー化し、参照なし生成フォールバックを削除（#1318）
 - `refactor(comments)`: コメント返信の `RuleEngine` / `no_rule_matched` 経路を撤去し、基本フィルタ通過後の全コメントを Agent 生成返信の候補に変更。旧 `comments.rules` は後方互換で読み込むが処理では無視し、返信文の `@投稿者名` 補完と NG ワード監査を追加（#1011）
 - `fix(serve)`: `yt-collection-serve` の POST body を 1 MiB に制限し、dir mode の `/distrokid/releases` で実在する collection/disc のみ記録できるようにした（#953）
 - `docs(thumbnail)`: 下流チャンネルの `config/skills/thumbnail.yaml` と stock 運用状況を横断監査し、TTP 設定・stock 再利用・live collection 棚卸し結果を `docs/audits/thumbnail-ttp-2026-06-30.md` に追加（#520, #521, #522）
@@ -28,8 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(cli)`: `yt-*` CLI 起動時に標準入出力を UTF-8 へ再設定し、Windows cp932 コンソールで日本語パスや Unicode ダッシュを含む出力が `UnicodeEncodeError` で落ちないようにした（#1331）
+- `fix(upload)`: `descriptions.md` の見出し不一致時に、期待する見出し一覧・不足/不一致の見出し・検出済み見出し・修正例を表示するよう改善（#1340）
+- `fix(suno-helper)`: `yt-collection-serve` の `/collections/<id>/suno/prompts.json` で URL エンコード済み collection ID をデコードし、スペースを含むフォルダ名でも prompts を取得できるようにした（#1338）
+- `fix(suno-helper)`: Suno Helper が `/collections` の `status` 形式と保存済み `suno_playlist_url` に追従し、Download 再開時は保存済み URL を優先するよう修正。Service Worker の `storage` 権限を生成 manifest で検証し、Suno 新 UI の Exclude styles / More メニュー検出とエラー案内も改善（#1321, #1336, #1337, #1339）
 - `fix(cost)`: Windows 環境で `fcntl` がない場合も `cost_tracker` と `yt-generate-image` が起動できるよう、`msvcrt` / プロセス内 lock fallback を追加（#1315）
 - `fix(upload)`: upload preflight が `audio.target_duration_min/max` を秒単位として誤判定していた master 動画尺チェックを無効化（#1313）
+- `fix(metadata-generator)`: `BAHMetadataGenerator` の音声尺取得に `ffprobe` fallback を追加し、Suno 由来の `.m4a` が `afinfo` 失敗だけで 0 秒扱いされないようにした（#1323）
 
 ### Migration
 
@@ -1250,6 +1258,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.14]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.14
 [5.5.13]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.13
 [5.5.12]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.12
 [5.5.11]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.11

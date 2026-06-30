@@ -245,6 +245,22 @@ class TestExtractDescriptionsMdTags:
         p.write_text("## タグ（YouTube タグ欄）\n```\n\n```\n", encoding="utf-8")
         assert extract_descriptions_md_tags(p) is None
 
+    def test_returns_none_for_level3_tag_heading(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        p.write_text(
+            "### タグ（YouTube タグ欄）\n```\nlofi beats, jazz\n```\n",
+            encoding="utf-8",
+        )
+        assert extract_descriptions_md_tags(p) is None
+
+    def test_returns_none_for_tag_heading_typo(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        p.write_text(
+            "## タグ\n```\nlofi beats, jazz\n```\n",
+            encoding="utf-8",
+        )
+        assert extract_descriptions_md_tags(p) is None
+
 
 class TestCheckTitleTemplateCompliance:
     """`check_title_template_compliance` の鋳型逸脱・巻数表記・RHS 重複検出 (#602)."""

@@ -277,6 +277,44 @@ describe("triggerDownloadAll", () => {
     expect(clicked).toEqual(["list-row-more", "download-all", "m4a", "confirm"]);
   });
 
+  it('DOM fixture: aria-label="More menu contents" の More を押す', async () => {
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More menu contents" data-testid="selected-row-more">...</button>
+        </article>
+      </div>
+      <div data-context-menu="true">
+        <button aria-label="Download all">Download all</button>
+      </div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">MP3</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="selected-row-more"]')!
+      .addEventListener("click", () => clicked.push("selected-row-more"));
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!
+      .addEventListener("click", () => clicked.push("download-all"));
+    document
+      .querySelector<HTMLButtonElement>("button.flex.w-full")!
+      .addEventListener("click", () => clicked.push("mp3"));
+    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
+      clicked.push("confirm");
+      document.querySelector(".modal-class.modal-overlay")?.remove();
+    });
+
+    await triggerDownloadAll("mp3");
+
+    expect(clicked).toEqual(["selected-row-more", "download-all", "mp3", "confirm"]);
+  });
+
   it("DOM fixture: selected clip row に More が無ければ未選択 row の More を押さず throw する", async () => {
     const clicked: string[] = [];
     vi.stubGlobal("PointerEvent", MouseEvent);

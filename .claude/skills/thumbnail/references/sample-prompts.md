@@ -2,23 +2,14 @@
 
 SKILL.md 内に散在していたプロンプト例を集約（内容改変なし・移動のみ）。プロンプト構築の原則は `prompting.md` を参照。
 
-## 参照画像モードのプロンプトテンプレート（Single-Step / TTP・参照画像モード）
+## Single-Step / TTP の短い差分プロンプト
 
 ```
-{prompt_prefix}, {表情}.
-She/He/It wears {outfit}. {ポーズ・活動}. {環境描写}.
-{光と雰囲気}. {face}.
-No text, no words, no letters, no typography.
-```
-
-## プロンプトベースモードの末尾スタイル句
-
-`reference_images` がない場合、スタイル句を末尾に付加する。
-チャンネル `CLAUDE.md` にスタイル句指定があればそれを使用。なければデフォルト:
-
-```
-Hyper-detailed digital matte painting blending photorealism with subtle painterly
-illustration touches. Widescreen 16:9 aspect ratio.
+Use the reference thumbnail as the winning template.
+Create a stronger original thumbnail for {title}.
+Keep the readable layout, scale, lighting, and energy.
+Change the subject details, concrete objects, colors, and marks.
+No logos, signatures, watermarks, brand marks, or near-copy.
 ```
 
 ## Two-Phase モードのテキストオーバーレイ・フォールバックプロンプト

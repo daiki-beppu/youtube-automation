@@ -759,6 +759,26 @@ def test_build_collections_index_uses_workflow_expected_file_count_when_larger(t
     assert row["expected_file_count"] == 6
 
 
+def test_build_collections_index_includes_saved_suno_playlist_url(tmp_path):
+    """Given workflow-state.json に suno_playlist_url がある
+    When build_collections_index を呼ぶ
+    Then Download 再開用に entry へ URL を含める。
+    """
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-theme-a-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    (coll / "workflow-state.json").write_text(
+        json.dumps({"planning": {"music": {"suno_playlist_url": "https://suno.com/playlist/saved"}}}),
+        encoding="utf-8",
+    )
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["suno_playlist_url"] == "https://suno.com/playlist/saved"
+
+
 def test_commit_staged_music_files_rolls_back_when_staged_move_fails(tmp_path, monkeypatch):
     """Given 既存 music_dir と staging 2 件
     When 2 件目の staged move が失敗する
@@ -954,6 +974,26 @@ def test_get_collection_prompts_returns_entries(serve_dir, tmp_path):
     base = serve_dir(planning)
 
     url = f"{base}{_collection_prompts_route('20260601-clm-aaa-collection')}"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body == entries
+
+
+def test_get_collection_prompts_decodes_space_in_collection_id(serve_dir, tmp_path):
+    """Given スペースを含む collection id
+    When `GET /collections/<url-encoded id>/suno/prompts.json`
+    Then 200 で prompts json を返す（#1338）。
+    """
+    planning = tmp_path / "planning"
+    collection_id = "20260601-clm-rainy jazz-collection"
+    entries = [{"name": "A", "style": "slow, jazz", "lyrics": ""}]
+    _make_collection(planning, collection_id, entries=entries)
+    base = serve_dir(planning)
+
+    encoded_id = urllib.parse.quote(collection_id, safe="")
+    url = f"{base}{_collection_prompts_route(encoded_id)}"
     with urllib.request.urlopen(url) as resp:
         assert resp.status == 200
         body = json.loads(resp.read().decode("utf-8"))
@@ -1178,6 +1218,39 @@ def test_post_downloaded_updates_workflow_state(serve_dir, tmp_path):
     ws = json.loads(ws_path.read_text(encoding="utf-8"))
     assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/abc"
     assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
+
+
+def test_post_downloaded_decodes_space_in_collection_id(serve_dir, tmp_path):
+    """Given スペースを含む collection id
+    When `POST /collections/<url-encoded id>/downloaded`
+    Then 200 で保存し、レスポンスの collection_id は decode 済みで返す（#1338）。
+    """
+    planning = tmp_path / "planning"
+    collection_id = "20260601-clm-rainy jazz-collection"
+    _make_collection(
+        planning,
+        collection_id,
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/space"}
+
+    encoded_id = urllib.parse.quote(collection_id, safe="")
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/{encoded_id}/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
+
+    assert result["ok"] is True
+    assert result["collection_id"] == collection_id
+
+    ws_path = planning / collection_id / "workflow-state.json"
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/space"
 
 
 def test_post_downloaded_unknown_collection_returns_404(serve_dir, tmp_path):

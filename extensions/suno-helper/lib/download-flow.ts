@@ -35,6 +35,7 @@ export interface RetryDownloadOptions {
   context: DownloadContext;
   collectionId: string;
   playlistName: string;
+  savedSunoPlaylistUrl?: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
   resolvePlaylistUrl: (playlistName: string) => Promise<string>;
@@ -198,7 +199,20 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
       return;
     }
-    const sunoPlaylistUrl = await options.resolvePlaylistUrl(options.playlistName);
+    const savedSunoPlaylistUrl = options.savedSunoPlaylistUrl?.trim();
+    let sunoPlaylistUrl: string;
+    if (savedSunoPlaylistUrl) {
+      sunoPlaylistUrl = savedSunoPlaylistUrl;
+    } else {
+      try {
+        sunoPlaylistUrl = await options.resolvePlaylistUrl(options.playlistName);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `保存済み playlist URL が無く、playlist 名からの再解決にも失敗しました: ${options.playlistName} (${message})`,
+        );
+      }
+    }
     await performDownload(
       options.context,
       options.collectionId,

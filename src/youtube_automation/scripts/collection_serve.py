@@ -451,6 +451,29 @@ def _read_music_expected_file_count(coll_dir: Path) -> int | None:
     return None
 
 
+def _read_music_suno_playlist_url(coll_dir: Path) -> str | None:
+    """workflow-state.json から保存済み Suno playlist URL を読む."""
+    ws_path = CollectionPaths(coll_dir).workflow_state_path
+    if not ws_path.is_file():
+        return None
+    try:
+        data = json.loads(ws_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    planning = data.get("planning")
+    if not isinstance(planning, dict):
+        return None
+    music = planning.get("music")
+    if not isinstance(music, dict):
+        return None
+    url = music.get("suno_playlist_url")
+    if isinstance(url, str) and url:
+        return url
+    return None
+
+
 def _read_workflow_theme(coll_dir: Path) -> str | None:
     """workflow-state.json から collection theme slug を読む。"""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
@@ -517,6 +540,7 @@ def build_collections_index(root: Path) -> list[dict]:
         downloaded_count = count_audio_files(music_dir)
         expected_file_count = _read_music_expected_file_count(coll)
         expected_count = expected_download_count(pattern_count, expected_file_count)
+        suno_playlist_url = _read_music_suno_playlist_url(coll)
         status = _determine_status(has_prompts, pattern_count, downloaded_count, expected_file_count)
         theme = _theme_from_collection_dir(coll)
         channel = _channel_from_collection_id(coll.name, theme)
@@ -532,6 +556,8 @@ def build_collections_index(root: Path) -> list[dict]:
             entry["channel"] = channel
         if expected_count is not None:
             entry["expected_file_count"] = expected_count
+        if suno_playlist_url is not None:
+            entry["suno_playlist_url"] = suno_playlist_url
         index.append(entry)
     return index
 
@@ -591,6 +617,14 @@ def build_version_payload() -> dict[str, str]:
         "version": __version__.split("+", 1)[0],
         "min_extension_version": MIN_EXTENSION_VERSION,
     }
+
+
+def _decode_collection_id_path_segment(cid: str) -> str:
+    return urllib.parse.unquote(cid)
+
+
+def _encode_collection_id_path_segment(cid: str) -> str:
+    return urllib.parse.quote(cid, safe="")
 
 
 def create_server(
@@ -684,7 +718,7 @@ def create_server(
                 self.send_error(403, "Forbidden")
                 return
 
-            cid = urllib.parse.unquote(cid)
+            cid = _decode_collection_id_path_segment(cid)
             if ".." in cid:
                 self.send_error(404, "Not Found")
                 return
@@ -830,7 +864,8 @@ def create_server(
             downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
             if dir_mode and self.path.startswith(downloaded_prefix) and self.path.endswith(DOWNLOADED_ROUTE_SUFFIX):
                 cid = self.path[len(downloaded_prefix) : -len(DOWNLOADED_ROUTE_SUFFIX)]
-                if self.path != collection_downloaded_route(cid):
+                decoded_cid = _decode_collection_id_path_segment(cid)
+                if self.path != collection_downloaded_route(decoded_cid):
                     self.send_error(404, "Not Found")
                     return
                 self._handle_downloaded_post(cid)
@@ -883,7 +918,7 @@ def create_server(
                 return
             coll_prefix = f"{COLLECTIONS_ROUTE}/"
             if self.path.startswith(coll_prefix) and self.path.endswith(SUNO_PROMPTS_ROUTE):
-                cid = self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)]
+                cid = _decode_collection_id_path_segment(self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)])
                 resolved = resolve_collection_prompts_path(collections_root, cid)
                 if resolved is None or not resolved.is_file():
                     self._send_json_error(404, "Not Found")
@@ -928,7 +963,8 @@ def create_server(
             if len(parts) != 2:
                 self.send_error(404, "Not Found")
                 return
-            coll_id, sub = parts
+            raw_coll_id, sub = parts
+            coll_id = _decode_collection_id_path_segment(raw_coll_id)
 
             # トラバーサル防御: find_collection_dirs のホワイトリストで弾く（#934）。
             known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
@@ -969,7 +1005,8 @@ def create_server(
                     self.send_error(404, "Not Found")
                     return
                 # asset_path を collection-scoped 形式にするための prefix を組み立てる（#934）。
-                coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
+                encoded_coll_id = _encode_collection_id_path_segment(coll_id)
+                coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{encoded_coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
                 distrokid_source = f"{_DISTROKID_DIRNAME}/{disc}"
                 try:
                     payload = build_release_payload(

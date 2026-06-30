@@ -209,67 +209,97 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 
 - **それ以外の場合**: 4-1 で生成済みの本番品質プロンプトをそのまま流用
 
-`REF_ARGS` / `REF_PATHS` を構築してから provider に応じた経路で `preview.candidate_count` 枚を順次生成する:
+`REF_PATHS` を構築してから provider に応じた経路で `preview.candidate_count` 枚を順次生成する:
 
 ```bash
 # <dir> は 4-3 で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
 # <slug> はテーマ名をケバブケースに変換（例: "The Wanderer's Road" → "wanderers-road"）
 # THEME はコレクションテーマ slug。ideate 段階の暫定値で OK
-#   (stock_refs.theme_match="exact" で 0 件なら fallback_when_empty=true で default のみで生成)
 THEME="<slug>"
+
+CANDIDATE_COUNT=$(uv run python3 -c "
+from youtube_automation.utils.skill_config import load_skill_config
+preview = load_skill_config('collection-ideate').get('preview', {})
+print(int(preview.get('candidate_count', 3) or 3))
+")
 
 REFS=$(uv run python3 -c "
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.image_provider.composition import normalize_reference_default
-from youtube_automation.utils.stock import resolve_stock_refs
 
 thumb = load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {})
 ref_cfg = thumb.get('reference_images', {}) if isinstance(thumb, dict) else {}
 ch = channel_dir()
 defaults = [str(ch / p) for p in normalize_reference_default(ref_cfg.get('default'))]
 
-# PR-B (#364): preview.stock_refs が true なら stock を ideate_preview role で混ぜる
-ideate_cfg = load_skill_config('collection-ideate').get('preview', {})
-stock = []
-if ideate_cfg.get('stock_refs', True):
-    stock_cfg = dict(ref_cfg.get('stock', {}))
-    stock_cfg['source_role'] = 'ideate_preview'   # ideate スキル専用に上書き
-    stock = [str(p) for p in resolve_stock_refs(ch, stock_refs_config=stock_cfg, theme='$THEME')]
-
-for p in defaults + stock:
+for p in defaults:
     print(p)
 ")
 
-REF_ARGS=()
 REF_PATHS=()
 while IFS= read -r p; do
-  [ -n "$p" ] && REF_ARGS+=(--reference "$p") && REF_PATHS+=("$p")
+  [ -n "$p" ] && REF_PATHS+=("$p")
 done <<< "$REFS"
 
-# 順次実行。以下は candidate_count=3 のサンプル。
-# 違う値の場合は連打数と plan-{a,b,c,...} の採番をその値に合わせて調整する。
+VALIDATED_REFS=$(printf '%s\n' "${REF_PATHS[@]}" | uv run python3 -c "
+import sys
+from pathlib import Path
+from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.thumbnail_references import plan_ttp_reference_assignments
+
+refs = [Path(line.strip()) for line in sys.stdin if line.strip()]
+candidate_count = int(sys.argv[1])
+validated = plan_ttp_reference_assignments(
+    refs,
+    candidate_count,
+    True,
+    benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark',
+)
+for ref in validated:
+    print(ref)
+" "$CANDIDATE_COUNT")
+mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
+
+# 順次実行。candidate_count の数だけ plan-{a,b,c,...} を生成する。
+LABELS=(a b c d e f g h)
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  # 候補ごとに別参照画像 1 枚だけを渡す。参照不足なら生成せず設定を直す。
+  if [ "${#REF_PATHS[@]}" -lt "$CANDIDATE_COUNT" ]; then
+    echo "ERROR: codex single_step preview requires at least ${CANDIDATE_COUNT} unique reference images" >&2
+    exit 1
+  fi
   build_codex_prompt() {
     uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "$1"
   }
-  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Aタイトル>")" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Bタイトル>")" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Cタイトル>")" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[@]}"
+  for idx in $(seq 0 $((CANDIDATE_COUNT - 1))); do
+    label="${LABELS[$idx]}"
+    title="<企画${label}タイトル>"
+    bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
+      "$(build_codex_prompt "$title")" \
+      "collections/planning/_plan-previews/<dir>/plan-${label}-<slug>.png" \
+      "${REF_PATHS[$idx]}"
+  done
 else
-  uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
-  uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
-  uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
+  for idx in $(seq 0 $((CANDIDATE_COUNT - 1))); do
+    label="${LABELS[$idx]}"
+    prompt="<企画${label}プロンプト>"
+    uv run yt-generate-image --ttp-strict-references \
+      --reference "${REF_PATHS[$idx]}" \
+      --max-attempts 1 \
+      --prompt "$prompt" \
+      --output "collections/planning/_plan-previews/<dir>/plan-${label}-<slug>.png" -y
+  done
 fi
 ```
 
-- 全企画とも同じ `REF_ARGS` を共有（stock シャッフル結果も共有）。stock 採用ログは stderr `[INFO] stock 採用: ...` に出る
+- 全企画とも `REF_PATHS[$idx]` の別々の benchmark 参照を 1 枚ずつ使う。TTP strict preview では stock を混ぜない
 - 出力先: `collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png`（`<x>` は a/b/c/... のラベル、`candidate_count` 枚ぶん）
 - `-y` 指定時、同名ファイルが既存なら自動で `-v2`, `-v3` ... と採番（追加の安全策）
-- stock 合成を止めたい場合は `config/skills/collection-ideate.yaml` の `preview.stock_refs: false`、または thumbnail 側の `image_generation.gemini.reference_images.stock.enabled: false` を上書き
+- stock は TTP strict preview には混ぜない。stock 参照を使う場合は `/thumbnail` の汎用参照生成で別途扱う
 
 **4-4-check: 生成後セルフチェック (#489, 任意)**
 
@@ -334,13 +364,19 @@ PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider impor
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  # 選択した企画と同じ index の参照画像 1 枚だけを使う（a=0, b=1, c=2）。
+  REF_INDEX="<選択された企画の0-based index>"
+  if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
+    echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
+    exit 1
+  fi
   CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
-  bash .claude/skills/thumbnail/references/codex-image.sh \
+  bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
     "$CODEX_PROMPT" \
     collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png \
-    "${REF_PATHS[@]}"
+    "${REF_PATHS[$REF_INDEX]}"
 else
-  uv run yt-generate-image "${REF_ARGS[@]}" \
+  uv run yt-generate-image --ttp-strict-references --reference "${REF_PATHS[$REF_INDEX]}" --max-attempts 1 \
     --prompt "<選択された企画のプロンプト>" \
     --output collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png -y
 fi

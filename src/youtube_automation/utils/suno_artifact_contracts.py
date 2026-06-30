@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import urllib.parse
+
 DOCUMENTATION_DIRNAME = "20-documentation"
 SUNO_PATTERNS_FILENAME = "suno-patterns.yaml"
 SUNO_LYRICS_JSON_FILENAME = "suno-lyrics.json"
@@ -16,4 +18,5 @@ SUNO_PLAYLISTS_ROUTE = "/suno/playlists"
 
 def collection_downloaded_route(collection_id: str) -> str:
     """個別 collection の download 完了通知 POST ルートを組み立てる。"""
-    return f"{COLLECTIONS_ROUTE}/{collection_id}{DOWNLOADED_ROUTE_SUFFIX}"
+    encoded_id = urllib.parse.quote(collection_id, safe="")
+    return f"{COLLECTIONS_ROUTE}/{encoded_id}{DOWNLOADED_ROUTE_SUFFIX}"

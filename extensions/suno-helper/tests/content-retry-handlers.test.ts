@@ -353,6 +353,34 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
     });
   });
 
+  it("Given 保存済み playlist URL 付き When retryDownload Then URL 再解決せず Download all へ進む", async () => {
+    const { handlers, sentMessages } = await loadContentScript();
+
+    const clipIds = ["clip-1", "clip-2"];
+    handlers.get("retryDownload")!({
+      data: {
+        collectionId: "coll-1",
+        playlistName: "test-playlist",
+        sunoPlaylistUrl: "https://suno.com/playlist/saved",
+        submittedClipIds: clipIds,
+        expectedClipCount: 4,
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/test-playlist.zip" },
+    });
+
+    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
+    expect(sentMessages.some((m) => m.type === "resolvePlaylistUrl")).toBe(false);
+    expect(sentMessages.find((m) => m.type === "postDownloaded")?.payload).toMatchObject({
+      body: {
+        suno_playlist_url: "https://suno.com/playlist/saved",
+      },
+    });
+  });
+
   it("Given 不正な保存済み download format When retryDownload Then mp3 に正規化して実行する", async () => {
     const { handlers, sentMessages, triggerDownloadAllMock } = await loadContentScript({
       downloadFormatValue: "flac",
