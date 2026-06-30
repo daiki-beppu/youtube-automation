@@ -64,6 +64,7 @@ export interface RetryDownloadPayload {
   playlistName: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
+  sunoPlaylistUrl?: string;
 }
 
 interface ProtocolMap {

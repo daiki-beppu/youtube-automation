@@ -10,6 +10,7 @@ import {
   type CollectionSummary,
   type PromptEntry,
   checkServerCompatibility,
+  collectionHasPrompts,
   fetchCollections,
   fetchCollectionPrompts,
   fetchPrompts,
@@ -248,6 +249,13 @@ describe("shared/api fetchCollections: 正常系", () => {
 
     await expect(fetchCollections(BASE_URL)).resolves.toEqual(rows);
   });
+
+  it("Given suno_playlist_url がある When fetch する Then 値を保持する", async () => {
+    const rows = [{ ...SAMPLE_COLLECTIONS[0], suno_playlist_url: "https://suno.com/playlist/saved" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => rows }));
+
+    await expect(fetchCollections(BASE_URL)).resolves.toEqual(rows);
+  });
 });
 
 describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
@@ -303,6 +311,16 @@ describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
       await expect(fetchCollections(BASE_URL)).rejects.toThrow(/expected_file_count/);
     },
   );
+
+  it("Given suno_playlist_url 型不正 When fetch する Then fail-loud に throw する", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ ...SAMPLE_COLLECTIONS[0], suno_playlist_url: ["https://suno.com/playlist/saved"] }],
+    }));
+
+    await expect(fetchCollections(BASE_URL)).rejects.toThrow(/suno_playlist_url/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -388,6 +406,24 @@ describe("shared/api visiblePromptCollections: popup 表示対象", () => {
     ];
 
     expect(visiblePromptCollections(collections, ["c2"]).map((c) => c.id)).toEqual(["c1", "c2"]);
+  });
+});
+
+describe("shared/api collectionHasPrompts: status ベースの prompts 判定", () => {
+  it.each([
+    ["ready", true],
+    ["downloaded", true],
+    ["needs_prompts", false],
+  ] as const)("Given status=%s When 判定 Then %s を返す", (status, expected) => {
+    expect(
+      collectionHasPrompts({
+        id: "c1",
+        name: "c1",
+        status,
+        pattern_count: status === "needs_prompts" ? null : 1,
+        downloaded_count: 0,
+      }),
+    ).toBe(expected);
   });
 });
 

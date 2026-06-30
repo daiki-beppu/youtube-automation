@@ -586,12 +586,14 @@ export function useSunoRunner(): RunnerState {
     }
     setIsRunning(true);
     try {
-      await sendMessage("retryDownload", {
+      const payload = {
         collectionId: selectedCollectionId,
         playlistName,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount: expectedClipCountForManualAdoption,
-      });
+        ...(selectedCollection?.suno_playlist_url ? { sunoPlaylistUrl: selectedCollection.suno_playlist_url } : {}),
+      };
+      await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
     } catch (err) {
       setIsRunning(false);
@@ -601,6 +603,7 @@ export function useSunoRunner(): RunnerState {
   }, [
     isRunning,
     selectedCollectionId,
+    selectedCollection,
     playlistName,
     submittedClipIdsForResume,
     expectedClipCountForManualAdoption,

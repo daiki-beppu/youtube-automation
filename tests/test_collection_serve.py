@@ -759,6 +759,26 @@ def test_build_collections_index_uses_workflow_expected_file_count_when_larger(t
     assert row["expected_file_count"] == 6
 
 
+def test_build_collections_index_includes_saved_suno_playlist_url(tmp_path):
+    """Given workflow-state.json に suno_playlist_url がある
+    When build_collections_index を呼ぶ
+    Then Download 再開用に entry へ URL を含める。
+    """
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-theme-a-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    (coll / "workflow-state.json").write_text(
+        json.dumps({"planning": {"music": {"suno_playlist_url": "https://suno.com/playlist/saved"}}}),
+        encoding="utf-8",
+    )
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["suno_playlist_url"] == "https://suno.com/playlist/saved"
+
+
 def test_commit_staged_music_files_rolls_back_when_staged_move_fails(tmp_path, monkeypatch):
     """Given 既存 music_dir と staging 2 件
     When 2 件目の staged move が失敗する

@@ -105,7 +105,9 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
     });
 
     it("Given entry.exclude_styles 有 + excludeStyles selector null When 注入 Then throw する", async () => {
-      await expect(injectAdvancedFields({ exclude_styles: "hyperpop, edm" }, ALL_NULL)).rejects.toThrow();
+      await expect(injectAdvancedFields({ exclude_styles: "hyperpop, edm" }, ALL_NULL)).rejects.toThrow(
+        /その他のオプション/,
+      );
     });
   });
 
