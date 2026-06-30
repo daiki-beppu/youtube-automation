@@ -32,7 +32,7 @@
 
 ### ルート 0: `/setup` skill (AI 主導 wizard、推奨)
 
-Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 配置まで wizard で誘導する。
+Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・`.env` 書き出し・Google Auth Platform 手動設定まで wizard で誘導する。
 
 ```
 /setup
@@ -67,7 +67,7 @@ Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導
 | `--skip-adc` | `gcloud auth application-default login` を省略 |
 | `--dry-run` | 変更せずプレビュー |
 
-完了時に OAuth クライアント ID 作成用の Console URL が表示されるので、そこだけ手動で作成（[Step OAuth](#step-oauth) 参照）。
+完了時に Google Auth Platform 手動設定用の Console URL が表示されるので、Branding / Audience / Clients を設定し、`client_secrets.json` を配置する（[Step OAuth](#step-oauth) 参照）。
 
 ### ルート B: `infra/terraform/gcp`（宣言的 IaC・本命）
 
@@ -106,7 +106,7 @@ cd ../../..
 8. `client_secrets.json` にリネームし、**チャンネルリポジトリの `auth/` 配下**に配置
    - 推奨パス: `<channel_dir>/auth/client_secrets.json`
 
-作成直後の画面を閉じて client secret を見失った場合は、**Clients** → 対象 client → **Client secrets** → **Add secret** で新しい secret を発行し、JSON を再ダウンロードする。JSON ダウンロードが表示されない場合は `auth/client_secrets_template.json` をコピーし、`client_id` / `project_id` / `client_secret` を手入力して `client_secrets.json` として保存する。
+作成直後の画面を閉じて client secret を見失った場合は、**Clients** → 対象 client → **Client secrets** → **Add secret** で新しい secret を発行し、JSON を再ダウンロードする。JSON ダウンロードが表示されない場合は `auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を手入力して `client_secrets.json` として保存する。
 
 `yt-channel-status` などの初回認証で `403 access_denied` が出る場合は、**Audience > Test users** にログイン中の Google アカウントが登録されているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
 

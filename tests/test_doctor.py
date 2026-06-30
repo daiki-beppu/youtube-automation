@@ -206,7 +206,7 @@ class TestClientSecrets:
             "Clients > Create client",
             "Desktop app",
             "Add secret",
-            "auth/client_secrets_template.json",
+            "auth/client_secrets.template.json",
         ):
             assert expected in instructions
         assert "認証情報を作成 → OAuth クライアント ID" not in instructions

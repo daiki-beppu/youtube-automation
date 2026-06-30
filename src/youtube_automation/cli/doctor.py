@@ -668,7 +668,7 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     f"`{path}` に配置してください。secret を見失った場合は "
                     "Clients > 対象 client > Client secrets > Add secret で新しい secret を発行し、"
                     "JSON を再ダウンロードします。JSON ダウンロードが表示されない場合は "
-                    "`auth/client_secrets_template.json` をコピーし、"
+                    "`auth/client_secrets.template.json` をコピーし、"
                     "`client_id` / `project_id` / `client_secret` を手入力してください。"
                 ),
             },

@@ -315,7 +315,7 @@ class TestClientSecretsFallback:
             "Clients > Create client",
             "Desktop app",
             "Add secret",
-            "auth/client_secrets_template.json",
+            "auth/client_secrets.template.json",
         ):
             assert expected in message
         assert "OAuth 2.0 認証情報を作成" not in message

@@ -147,7 +147,7 @@ class YouTubeOAuthHandler:
                 "<channel_dir>/auth/client_secrets.json に配置\n"
                 "6. secret を見失った場合は Clients > 対象 client > Client secrets > Add secret で再発行し、"
                 "JSON を再ダウンロード\n"
-                "   JSON ダウンロードが表示されない場合は auth/client_secrets_template.json をコピーし、"
+                "   JSON ダウンロードが表示されない場合は auth/client_secrets.template.json をコピーし、"
                 "client_id / project_id / client_secret を手入力\n"
                 "   または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
             )

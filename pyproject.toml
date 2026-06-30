@@ -125,7 +125,7 @@ include = [
     "docs/workflow-cheatsheet.md",
     "docs/features.md",
     "auth/SETUP.md",
-    "auth/client_secrets_template.json",
+    "auth/client_secrets.template.json",
     "README.md",
     "LICENSE",
     "pyproject.toml",

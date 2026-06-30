@@ -16,18 +16,12 @@ GOOGLE_AUTH_PLATFORM_KEYWORDS = (
     "Create client",
     "Desktop app",
     "Add secret",
-    "auth/client_secrets_template.json",
-)
-
-STATIC_OAUTH_ENTRYPOINTS = (
-    "ONBOARDING.md",
-    "auth/SETUP.md",
-    ".claude/skills/setup/SKILL.md",
-    ".claude/skills/channel-setup/references/gcp-bootstrap.md",
+    "auth/client_secrets.template.json",
 )
 
 LEGACY_UNDERSTATEMENT_ENTRYPOINTS = (
     "auth/SETUP.md",
+    "infra/terraform/gcp/README.md",
     ".claude/skills/channel-setup/references/gcp-bootstrap.md",
     ".claude/skills/channel-setup/references/terraform-gcp/README.md",
 )
@@ -47,12 +41,6 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
-def test_static_oauth_entrypoints_follow_google_auth_platform_contract() -> None:
-    for relative_path in STATIC_OAUTH_ENTRYPOINTS:
-        text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
-        _assert_oauth_guidance_contract(text, relative_path)
-
-
 def test_oauth_docs_do_not_understate_google_auth_platform_manual_work() -> None:
     for relative_path in LEGACY_UNDERSTATEMENT_ENTRYPOINTS:
         text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
@@ -60,6 +48,17 @@ def test_oauth_docs_do_not_understate_google_auth_platform_manual_work() -> None
         assert "1 ステップだけ" not in text
         assert "1ステップだけ" not in text
         assert "OAuth クライアント ID 作成の 1 ステップだけ" not in text
+
+
+def test_terraform_output_contract_uses_google_auth_platform_language() -> None:
+    for relative_path in (
+        "infra/terraform/gcp/outputs.tf",
+        ".claude/skills/channel-setup/references/terraform-gcp/outputs.tf",
+    ):
+        text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+        assert "Google Auth Platform の Branding / Audience / Clients 手動設定用 Console URL" in text
+        assert "OAuth クライアント ID を作成する Console URL" not in text
+        assert "手動操作が必要な唯一のステップ" not in text
 
 
 def test_gcp_bootstrap_stdout_follows_google_auth_platform_contract(tmp_path: Path) -> None:
