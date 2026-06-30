@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
-# Usage: bash .claude/skills/thumbnail/references/codex-image.sh <prompt> <output.png> reference.png [reference2.png ...]
+# Usage: bash .claude/skills/thumbnail/references/codex-image.sh [--require-reference] <prompt> <output.png> [reference.png ...]
 # ChatGPT サブスク認証の codex CLI で画像生成し、PNG を保存する。
 set -euo pipefail
 
-prompt=${1:?usage: codex-image.sh <prompt> <output.png> reference.png [reference2.png ...]}
+require_reference=false
+if [ "${1:-}" = "--require-reference" ]; then
+  require_reference=true
+  shift
+fi
+
+prompt=${1:?usage: codex-image.sh [--require-reference] <prompt> <output.png> [reference.png ...]}
 out=${2:?output path required}
 shift 2
 
-if [ "$#" -lt 1 ]; then
+if [ "$require_reference" = true ] && [ "$#" -lt 1 ]; then
   echo "ERROR: codex-image.sh requires at least one reference image for thumbnail TTP generation" >&2
-  echo "usage: codex-image.sh <prompt> <output.png> reference.png [reference2.png ...]" >&2
+  echo "usage: codex-image.sh --require-reference <prompt> <output.png> reference.png [reference2.png ...]" >&2
   exit 1
 fi
 

@@ -225,6 +225,34 @@ class TestPlanReferenceAssignments:
         with pytest.raises(ConfigError, match="同じベンチマークチャンネル"):
             plan_ttp_reference_assignments(refs, 2, rotate=True)
 
+    def test_strict_canonicalizes_and_rejects_parent_escape(self, tmp_path: Path) -> None:
+        benchmark_root = tmp_path / "data" / "thumbnail_compare" / "benchmark"
+        channel_dir = benchmark_root / "jazzgak"
+        channel_dir.mkdir(parents=True)
+        outside = tmp_path / "data" / "thumbnail_compare" / "outside.jpg"
+        outside.parent.mkdir(parents=True, exist_ok=True)
+        outside.write_bytes(b"outside")
+        valid = channel_dir / "a.jpg"
+        valid.write_bytes(b"valid")
+
+        escaped = channel_dir / ".." / ".." / "outside.jpg"
+        with pytest.raises(ConfigError, match="benchmark サムネイルに限定"):
+            plan_ttp_reference_assignments([valid, escaped], 2, rotate=True, benchmark_root=benchmark_root)
+
+    def test_strict_canonicalizes_and_rejects_symlink_escape(self, tmp_path: Path) -> None:
+        benchmark_root = tmp_path / "data" / "thumbnail_compare" / "benchmark"
+        channel_dir = benchmark_root / "jazzgak"
+        channel_dir.mkdir(parents=True)
+        outside = tmp_path / "secret.jpg"
+        outside.write_bytes(b"secret")
+        valid = channel_dir / "a.jpg"
+        valid.write_bytes(b"valid")
+        escaped = channel_dir / "linked.jpg"
+        escaped.symlink_to(outside)
+
+        with pytest.raises(ConfigError, match="benchmark サムネイルに限定"):
+            plan_ttp_reference_assignments([valid, escaped], 2, rotate=True, benchmark_root=benchmark_root)
+
 
 # ---- build_requests --------------------------------------------------------
 
@@ -312,6 +340,7 @@ def _patch_generate_image_cli(
     argv: list[str],
     *,
     provider: _FakeProvider,
+    channel_root: Path | None = None,
 ) -> None:
     cfg = SimpleNamespace(
         provider="gemini",
@@ -323,6 +352,13 @@ def _patch_generate_image_cli(
             "gemini": {
                 "generation_mode": "single_step",
                 "single_step": {"max_attempts": 3, "rotate": True},
+                "reference_images": {
+                    "default": [
+                        "data/thumbnail_compare/benchmark/jazzgak/a.jpg",
+                        "data/thumbnail_compare/benchmark/jazzgak/b.jpg",
+                        "data/thumbnail_compare/benchmark/jazzgak/c.jpg",
+                    ]
+                },
             }
         }
     }
@@ -330,6 +366,8 @@ def _patch_generate_image_cli(
     monkeypatch.setattr(sys, "argv", ["yt-generate-image", *argv])
     monkeypatch.setattr(generate_image_module, "load_image_generation_config", lambda: cfg)
     monkeypatch.setattr(generate_image_module, "get_provider", lambda _cfg: provider)
+    if channel_root is not None:
+        monkeypatch.setattr(generate_image_module, "_channel_root", lambda: channel_root)
 
     import youtube_automation.utils.skill_config as skill_config_module
 
@@ -364,12 +402,13 @@ class TestGenerateImageCLIReferenceContract:
             "3",
             "--max-workers",
             "1",
+            "--ttp-strict-references",
             "-y",
         ]
         for ref in refs:
             argv.extend(["--reference", str(ref)])
 
-        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, channel_root=tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
             generate_image_main()
@@ -399,12 +438,13 @@ class TestGenerateImageCLIReferenceContract:
             str(tmp_path / "thumbnail-v1.jpg"),
             "--max-attempts",
             "3",
+            "--ttp-strict-references",
             "-y",
         ]
         for ref in refs:
             argv.extend(["--reference", str(ref)])
 
-        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, channel_root=tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
             generate_image_main()
@@ -426,12 +466,13 @@ class TestGenerateImageCLIReferenceContract:
             "--max-attempts",
             "3",
             "--no-rotate",
+            "--ttp-strict-references",
             "-y",
         ]
         for ref in refs:
             argv.extend(["--reference", str(ref)])
 
-        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, channel_root=tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
             generate_image_main()
@@ -454,12 +495,13 @@ class TestGenerateImageCLIReferenceContract:
             "3",
             "--reference-index",
             "1",
+            "--ttp-strict-references",
             "-y",
         ]
         for ref in refs:
             argv.extend(["--reference", str(ref)])
 
-        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, channel_root=tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
             generate_image_main()
@@ -482,10 +524,35 @@ class TestGenerateImageCLIReferenceContract:
             str(tmp_path / "thumbnail-v1.jpg"),
             "--reference-index",
             "2",
+            "--ttp-strict-references",
             "-y",
         ]
         for ref in refs:
             argv.extend(["--reference", str(ref)])
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, channel_root=tmp_path)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+        assert exc_info.value.code == 1
+        assert provider.requests == []
+
+    def test_ttp_strict_rejects_missing_cli_references_before_existing_output_prompt(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        provider = _FakeProvider()
+        output = tmp_path / "thumbnail-v1.jpg"
+        output.write_bytes(b"existing")
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(output),
+            "--ttp-strict-references",
+        ]
 
         _patch_generate_image_cli(monkeypatch, argv, provider=provider)
 
@@ -493,3 +560,31 @@ class TestGenerateImageCLIReferenceContract:
             generate_image_main()
         assert exc_info.value.code == 1
         assert provider.requests == []
+        captured = capsys.readouterr()
+        assert "reference_images.default" in captured.out
+        assert "--reference" in captured.out
+        assert "上書きしますか" not in captured.out
+
+    def test_generic_single_step_allows_no_reference_without_ttp_strict(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(tmp_path / "short.png"),
+            "--max-attempts",
+            "1",
+            "-y",
+        ]
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+        assert exc_info.value.code == 0
+        assert len(provider.requests) == 1
+        assert provider.requests[0].references == []

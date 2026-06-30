@@ -62,7 +62,7 @@ image_generation:
 その後、`yt-generate-image` ではなく codex wrapper を使う:
 
 ```bash
-bash .claude/skills/thumbnail/references/codex-image.sh \
+bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
   "<thumbnail prompt>" \
   <collection-path>/10-assets/thumbnail-codex-v1.png \
   <reference-image-1> <reference-image-2>
@@ -93,13 +93,13 @@ Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`yt-generat
 直接実行例:
 
 ```bash
-bash .claude/skills/thumbnail/references/codex-image.sh \
+bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
   "a cozy cafe table with steaming coffee, soft morning light" \
   collections/planning/sample/10-assets/thumbnail-codex-v1.png \
   data/thumbnail_compare/benchmark/<channel>/<reference>.jpg
 ```
 
-複数候補を作る場合でも、1 回の `codex-image.sh` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。参照画像 0 件では停止する。
+複数候補を作る場合でも、1 回の `codex-image.sh --require-reference` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。TTP 生成では参照画像 0 件で停止する。DistroKid cover などの汎用 codex 生成は `--require-reference` を付けない。
 
 TTP 参照画像から上位互換サムネを作る場合は、長い個別指定ではなく
 `image_generation.codex.default_prompt_template` を使う。参照画像は mood reference
@@ -282,6 +282,7 @@ while IFS= read -r p; do
 done <<< "$REFS"
 
 uv run yt-generate-image "${REF_ARGS[@]}" \
+  --ttp-strict-references \
   --max-attempts 3 \
   --prompt "<diff_prompt_template を置換したプロンプト>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y
@@ -516,10 +517,10 @@ image_generation:
 
 ### stock 再利用（参照画像プールへの自動合成）
 
-PR-B (#364): stock 画像は `reference_images.default` とは別スコープの参照プールとして扱う。TTP single_step の標準フローでは同じベンチマークチャンネル内の別サムネだけを使うため、stock 合成は default OFF。必要なチャンネルだけ `enabled: true` を明示し、`resolve_stock_refs()` の結果を `--reference` に追加する。
+PR-B (#364): stock 画像は `reference_images.default` とは別スコープの参照プールとして扱う。TTP single_step の標準フローでは同じベンチマークチャンネル内の別サムネだけを使い、`--ttp-strict-references` では stock 混在を拒否するため、stock 合成は default OFF。必要なチャンネルだけ `enabled: true` を明示し、TTP strict ではない汎用参照生成に限って `resolve_stock_refs()` の結果を `--reference` に追加する。
 
 - **デフォルト動作**: `enabled: false` で stock は混ぜない。
-- **有効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: true` を明示する。
+- **有効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: true` を明示する。TTP strict 候補生成では使わない。
 - **採用ログ**: 1 枚採用ごとに stderr へ `[INFO] stock 採用: <path> (theme=<t>, role=thumbnail_candidate)` を出力。監査時は stderr を grep。
 - **チューニング**: `max_count` / `shuffle` / `theme_match: "any"` / `source_role: null` (role フィルタなし) などをチャンネル側で調整。
 
@@ -545,6 +546,7 @@ spawn 例:
 
 ```bash
 uv run yt-generate-image \
+  --ttp-strict-references \
   --reference <ref> --prompt "<prompt>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y \
   > /tmp/thumbnail-$(date +%s).log 2>&1

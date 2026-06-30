@@ -106,11 +106,38 @@ def test_collection_ideate_codex_parallel_uses_reference_paths_as_positionals() 
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
 
     assert "REF_PATHS" in block, f"codex 用の素の参照パス配列がありません:\n{block}"
-    assert "REF_ARGS" in block, f"API provider 用の --reference 配列が消えています:\n{block}"
     assert "${REF_PATHS[0]}" in block
     assert "${REF_PATHS[1]}" in block
     assert "${REF_PATHS[2]}" in block
-    assert '"${REF_PATHS[@]}"' not in block, f"全候補へ同じ参照配列を渡してはいけません:\n{block}"
+    assert re.search(r"codex-image\.sh[^\n]*\"\$\{REF_PATHS\[@\]\}\"", block) is None, (
+        f"全候補へ同じ参照配列を渡してはいけません:\n{block}"
+    )
+    assert "--require-reference" in block, f"TTP codex 呼び出しは参照必須フラグを明示してください:\n{block}"
+
+
+def test_collection_ideate_parallel_validates_unique_single_channel_references() -> None:
+    """Given collection-ideate Phase 4-4 parallel
+    When TTP preview 参照を組み立てる
+    Then duplicate / mixed channel は生成前 validation に合流する。
+    """
+    block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
+
+    assert "plan_ttp_reference_assignments" in block
+    assert "benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark'" in block
+    assert "VALIDATED_REFS" in block
+
+
+def test_collection_ideate_api_parallel_uses_one_reference_per_candidate() -> None:
+    """Given collection-ideate Phase 4-4 parallel の API provider 分岐
+    When Gemini/OpenAI で preview を作る
+    Then 候補ごとに別参照 1 枚を渡し、同じ REF_ARGS 全体を共有しない。
+    """
+    block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
+
+    assert '--ttp-strict-references --reference "${REF_PATHS[0]}" --max-attempts 1' in block
+    assert '--ttp-strict-references --reference "${REF_PATHS[1]}" --max-attempts 1' in block
+    assert '--ttp-strict-references --reference "${REF_PATHS[2]}" --max-attempts 1' in block
+    assert 'yt-generate-image "${REF_ARGS[@]}"' not in block
 
 
 def test_collection_ideate_codex_parallel_requires_short_prompt() -> None:

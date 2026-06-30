@@ -28,8 +28,6 @@ from youtube_automation.utils.image_provider import (
 from youtube_automation.utils.image_provider.composition import (
     apply_composition_rules,
     confirm_cost,
-    format_reference_assignment,
-    infer_benchmark_channel,
     print_cost_summary,
     prompt_overwrite_or_rename,
     resolve_composition_source,
@@ -40,6 +38,11 @@ from youtube_automation.utils.image_provider.composition import (
 )
 from youtube_automation.utils.image_provider.config import replace_model
 from youtube_automation.utils.profile import section
+from youtube_automation.utils.thumbnail_references import (
+    canonicalize_benchmark_reference,
+    format_reference_assignment,
+    infer_benchmark_channel,
+)
 
 # Gemini 用の解像度オプション（OpenAI provider 時は無視される）
 _GEMINI_VALID_IMAGE_SIZES = ("1K", "2K", "4K")
@@ -122,6 +125,8 @@ def plan_ttp_reference_assignments(
     reference_images: list[Path],
     count: int,
     rotate: bool,
+    *,
+    benchmark_root: Path | None = None,
 ) -> list[Path | None]:
     """thumbnail single_step TTP 用の参照割当を strict 契約で確定する。
 
@@ -147,19 +152,20 @@ def plan_ttp_reference_assignments(
             "同じベンチマークチャンネル内の別サムネイル画像を追加してください。"
         )
     selected_references = reference_images[:count]
+    if benchmark_root is not None:
+        selected_references = [canonicalize_benchmark_reference(ref, benchmark_root) for ref in selected_references]
 
     seen: set[Path] = set()
     duplicates: list[Path] = []
     for ref in selected_references:
-        key = ref.resolve(strict=False)
-        if key in seen:
+        if ref in seen:
             duplicates.append(ref)
-        seen.add(key)
+        seen.add(ref)
     if duplicates:
         duplicate_list = ", ".join(str(path) for path in duplicates)
         raise ConfigError(f"single_step TTP 生成では同一参照画像を再利用できません: {duplicate_list}")
 
-    channels = [infer_benchmark_channel(ref) for ref in selected_references]
+    channels = [infer_benchmark_channel(ref, benchmark_root) for ref in selected_references]
     if any(channel == "unknown" for channel in channels):
         unknown_refs = [str(ref) for ref, channel in zip(selected_references, channels) if channel == "unknown"]
         raise ConfigError(
@@ -310,6 +316,14 @@ def main():
         help="複数参照画像のとき attempt 毎の切替を無効化（先頭固定）",
     )
     parser.add_argument(
+        "--ttp-strict-references",
+        action="store_true",
+        help=(
+            "thumbnail TTP 候補生成用の strict 参照契約を有効化する。"
+            "候補数分のユニークな benchmark 参照、同一チャンネル、path escape 拒否を生成前に検証する"
+        ),
+    )
+    parser.add_argument(
         "--reference-index",
         type=int,
         default=None,
@@ -364,20 +378,9 @@ def main():
     skill_cfg = load_skill_config("thumbnail")
     composition_source = resolve_composition_source(skill_cfg, cfg.provider)
 
-    # single_step モードのプリフライト: 参照画像未設定の取り違えを早期検知
+    # single_step モード情報は TTP strict の事前検証と attempt 解決に使う。
     gemini_section = skill_cfg.get("image_generation", {}).get("gemini", {})
     generation_mode = gemini_section.get("generation_mode") if isinstance(gemini_section, dict) else None
-    if generation_mode == "single_step" and not args.reference:
-        try:
-            validate_single_step_references(skill_cfg)
-        except ConfigError as e:
-            print(f"[ERROR] {e}")
-            sys.exit(1)
-        print(
-            "[ERROR] single_step モードでは --reference の指定が必須です。"
-            "skill-config の image_generation.gemini.reference_images.default を CLI へ展開してください。"
-        )
-        sys.exit(1)
 
     if args.no_composition or args.reference:
         prompt = args.prompt
@@ -398,9 +401,6 @@ def main():
         model = cfg.openai.model
         image_size = cfg.openai.quality
 
-    # コスト算出: skill-config の cost_per_image_usd を尊重。未設定なら None。
-    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider)
-
     # max_attempts / rotate / reference_index の解決（コスト表示前に出すため早期解決）
     single_step_section = gemini_section.get("single_step") if isinstance(gemini_section, dict) else None
     if not isinstance(single_step_section, dict):
@@ -411,6 +411,54 @@ def main():
     if cli_max_attempts < 1:
         cli_max_attempts = 1
     rotate = (not args.no_rotate) and config_rotate
+
+    # TTP strict preflight は既存出力確認・コスト確認・provider 初期化より前に済ませる。
+    if args.ttp_strict_references and generation_mode == "single_step" and not args.reference:
+        try:
+            validate_single_step_references(skill_cfg)
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+        print(
+            "[ERROR] thumbnail TTP strict 生成では --reference の指定が必須です。"
+            "skill-config の image_generation.gemini.reference_images.default を CLI へ展開してください。"
+        )
+        sys.exit(1)
+
+    try:
+        reference_images = resolve_reference_paths(args.reference)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    if args.reference_index is not None:
+        if not reference_images:
+            print("[ERROR] --reference-index 指定には参照画像が必要です（--reference で指定してください）")
+            sys.exit(1)
+        if not (0 <= args.reference_index < len(reference_images)):
+            print(f"[ERROR] --reference-index={args.reference_index} は参照画像範囲外 (0..{len(reference_images) - 1})")
+            sys.exit(1)
+        reference_images = [reference_images[args.reference_index]]
+        cli_max_attempts = 1
+
+    try:
+        if args.ttp_strict_references:
+            benchmark_root = _channel_root() / "data" / "thumbnail_compare" / "benchmark"
+            reference_assignments = plan_ttp_reference_assignments(
+                reference_images,
+                cli_max_attempts,
+                rotate,
+                benchmark_root=benchmark_root,
+            )
+        else:
+            benchmark_root = None
+            reference_assignments = plan_reference_assignments(reference_images, cli_max_attempts, rotate)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    # コスト算出: skill-config の cost_per_image_usd を尊重。未設定なら None。
+    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider)
 
     print("\nモード:       ダイレクト")
     print(f"プロバイダー: {cfg.provider}")
@@ -432,29 +480,11 @@ def main():
     if not args.yes and not confirm_cost(model, cost_per_image):
         sys.exit(0)
 
-    # 参照画像解決（複数対応）
-    try:
-        reference_images = resolve_reference_paths(args.reference)
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
     try:
         provider = get_provider(cfg)
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
-
-    # --reference-index 指定時は単一参照固定 + attempt=1
-    if args.reference_index is not None:
-        if not reference_images:
-            print("[ERROR] --reference-index 指定には参照画像が必要です（--reference で指定してください）")
-            sys.exit(1)
-        if not (0 <= args.reference_index < len(reference_images)):
-            print(f"[ERROR] --reference-index={args.reference_index} は参照画像範囲外 (0..{len(reference_images) - 1})")
-            sys.exit(1)
-        reference_images = [reference_images[args.reference_index]]
-        cli_max_attempts = 1
 
     # 並列度: レート制限を考慮した控えめなデフォルト。1 attempt なら 1。
     max_workers = args.max_workers if args.max_workers is not None else _DEFAULT_MAX_WORKERS
@@ -464,15 +494,6 @@ def main():
     # 出力パス（-vN）と参照画像をループ前に全 attempt ぶん確定し、
     # resolve_unique_path の直列依存を排除してから並列 submit する。
     planned_paths = plan_output_paths(output_path, cli_max_attempts)
-    try:
-        if generation_mode == "single_step":
-            reference_assignments = plan_ttp_reference_assignments(reference_images, cli_max_attempts, rotate)
-        else:
-            reference_assignments = plan_reference_assignments(reference_images, cli_max_attempts, rotate)
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
     if reference_assignments:
         print()
         print("参照割当:")
@@ -480,7 +501,7 @@ def main():
             if selected_ref is None:
                 print(f"  attempt {attempt}: 参照画像なし")
             else:
-                print(f"  attempt {attempt}: {format_reference_assignment(selected_ref)}")
+                print(f"  attempt {attempt}: {format_reference_assignment(selected_ref, benchmark_root)}")
 
     # attempt>0 のヘッダは並列実行前にまとめて表示し、stdout の交錯を避ける。
     for attempt in range(1, cli_max_attempts):
@@ -489,7 +510,7 @@ def main():
         print(f"--- attempt {attempt + 1}/{cli_max_attempts} ---")
         print(f"出力先:       {planned_paths[attempt]}")
         if selected_ref is not None:
-            print(f"参照画像:     {format_reference_assignment(selected_ref)}")
+            print(f"参照画像:     {format_reference_assignment(selected_ref, benchmark_root)}")
 
     requests = build_requests(
         prompt,

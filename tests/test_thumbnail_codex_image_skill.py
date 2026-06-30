@@ -437,8 +437,8 @@ def test_codex_image_script_passes_reference_images_as_repeated_image_flags(tmp_
     assert image_values == [str(ref_a), str(ref_b)], f"`--image <path>` の順序・値が想定外: {image_values!r}"
 
 
-def test_codex_image_script_rejects_zero_reference_images(tmp_path: Path) -> None:
-    """Given 参照画像なしの codex-image.sh 実行
+def test_codex_image_script_requires_reference_only_when_flagged(tmp_path: Path) -> None:
+    """Given --require-reference 付きの codex-image.sh 実行
     When wrapper を起動する
     Then 非 0 で停止し、`codex login` / `codex exec` を呼ばない。
     """
@@ -448,12 +448,33 @@ def test_codex_image_script_rejects_zero_reference_images(tmp_path: Path) -> Non
     env, log_file = _prepare_fake_codex_env(tmp_path)
     output_path = tmp_path / "output.png"
 
-    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "--require-reference", "prompt", str(output_path), env=env)
 
     assert result.returncode != 0
     assert "reference image" in result.stderr
     assert not log_file.exists()
     assert not output_path.exists()
+
+
+def test_codex_image_script_allows_zero_reference_images_for_generic_generation(tmp_path: Path) -> None:
+    """Given 参照画像なしの汎用 codex-image.sh 実行
+    When wrapper を起動する
+    Then codex exec まで進み、`--image` は渡さない。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    output_path = tmp_path / "output.png"
+
+    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
+
+    assert result.returncode == 0, result.stderr
+    invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
+    exec_invocations = [args for args in invocations if args and args[0] == "exec"]
+    assert exec_invocations
+    assert "--image" not in exec_invocations[-1]
+    assert output_path.exists()
 
 
 def test_codex_image_script_checks_login_output_and_png_validity() -> None:

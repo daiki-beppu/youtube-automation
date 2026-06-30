@@ -15,12 +15,11 @@ import pytest
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import (
-    format_reference_assignment,
-    infer_benchmark_channel,
     normalize_reference_default,
     select_reference,
     validate_single_step_references,
 )
+from youtube_automation.utils.thumbnail_references import format_reference_assignment, infer_benchmark_channel
 
 # ---- select_reference ------------------------------------------------------
 
@@ -56,8 +55,8 @@ class TestBenchmarkChannelTrace:
     def test_infers_channel_from_benchmark_subdirectory(self) -> None:
         assert infer_benchmark_channel(Path("/data/thumbnail_compare/benchmark/jazzgak/a.jpg")) == "jazzgak"
 
-    def test_does_not_infer_channel_from_ambiguous_hyphen_filename_prefix(self) -> None:
-        assert infer_benchmark_channel(Path("/data/thumbnail_compare/benchmark/jazzgak-abc123.jpg")) == "unknown"
+    def test_infers_channel_from_benchmark_filename_hyphen_videoid_suffix(self) -> None:
+        assert infer_benchmark_channel(Path("/data/thumbnail_compare/benchmark/jazzgak-abc123.jpg")) == "jazzgak"
 
     def test_infers_channel_from_benchmark_filename_views_suffix(self) -> None:
         path = Path("/data/thumbnail_compare/benchmark/jazzgak_120k_abc123xyz.jpg")
