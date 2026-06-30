@@ -217,7 +217,7 @@ def _render_upload_settings(_ctx: ChannelInitContext) -> dict:
         },
         "thumbnail_settings": {
             "auto_set_thumbnail": True,
-            "thumbnail_search_patterns": ["main.png", "*main*.png", "thumbnail.png", "*thumb*.png"],
+            "thumbnail_search_patterns": ["thumbnail.jpg", "thumbnail.png", "*thumb*.png"],
         },
         "playlist_settings": {
             "auto_create_playlists": True,

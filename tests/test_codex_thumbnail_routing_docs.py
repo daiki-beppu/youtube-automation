@@ -10,6 +10,8 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _IDEATE_DEFAULT_CONFIG = _SKILLS_DIR / "collection-ideate" / "config.default.yaml"
 _IDEATE_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "collection-lifecycle.md"
+_LYRIA_DEFAULT_CONFIG = _SKILLS_DIR / "lyria" / "config.default.yaml"
+_LYRIA_SKILL_MD = _SKILLS_DIR / "lyria" / "SKILL.md"
 _WF_NEW_SKILL_MD = _SKILLS_DIR / "wf-new" / "SKILL.md"
 
 
@@ -47,6 +49,13 @@ def _wf_new_phase_2c_block(text: str) -> str:
     )
     if not match:
         raise AssertionError("wf-new/SKILL.md に Phase 2c ブロックが見つかりません")
+    return match.group(1)
+
+
+def _wf_new_sequence_block(text: str) -> str:
+    match = re.search(r"### 実行シーケンス(.*?)(?:### Phase 1:|\Z)", text, flags=re.DOTALL)
+    if not match:
+        raise AssertionError("wf-new/SKILL.md に実行シーケンスブロックが見つかりません")
     return match.group(1)
 
 
@@ -165,6 +174,36 @@ def test_wf_new_skips_loop_video_when_loop_video_disabled() -> None:
     assert "textless `main.png/jpg` の静止画背景運用" in block
     assert "`assets.loop_video = false` を維持" in block
     assert '`phase = "prepared"`' in block
+
+
+def test_wf_new_sequence_table_allows_static_background_when_loop_video_disabled() -> None:
+    """Given wf-new execution sequence
+    Then loop-video disabled channels do not unconditionally run Veo.
+    """
+    block = _wf_new_sequence_block(_read(_WF_NEW_SKILL_MD))
+
+    assert "`/loop-video` または静止背景運用" in block
+    assert "`loop-video.enabled=true`" in block
+    assert "`enabled=false` なら Veo を呼ばず" in block
+    assert "textless `main.png/jpg` を静止背景として使う" in block
+    assert "`10-assets/loop.mp4` または textless `10-assets/main.png/jpg`" in block
+    old_unconditional_loop_row = (
+        "| 7 | `/loop-video` | 承認済みテキストなし `main.png/jpg` から loop video を生成 | `10-assets/loop.mp4` |"
+    )
+    assert old_unconditional_loop_row not in block
+
+
+def test_lyria_reference_image_uses_textless_main_wording() -> None:
+    """Given lyria structured parameter docs
+    Then main.png is not described as an upload thumbnail.
+    """
+    text = _read(_LYRIA_SKILL_MD)
+    config = _read(_LYRIA_DEFAULT_CONFIG)
+
+    assert "textless 動画背景 / ビジュアル参照画像 `10-assets/main.png`" in text
+    assert "サムネイル `10-assets/main.png`" not in text
+    assert "textless 動画背景 / ビジュアル参照画像を自動採用" in config
+    assert "コレクションのサムネイルを参照画像として自動採用" not in config
 
 
 def test_collection_ideate_next_step_keeps_preview_out_of_main_background() -> None:

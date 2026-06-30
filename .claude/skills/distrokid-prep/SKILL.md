@@ -115,7 +115,7 @@ uv run yt-distrokid-prepare build \
 
 ### ステップ 5: ジャケット新規生成（LLM の担当）
 
-**既存サムネイル（`10-assets/main.png`）の流用禁止。**  
+**既存の textless 動画背景 / 参考ビジュアル（`10-assets/main.png`）の流用禁止。**
 DistroKid の配信ジャケットは 1:1 正方形、テキスト・ロゴなしの新規 AI 生成画像でなければならない。
 
 #### プロンプト組み立て

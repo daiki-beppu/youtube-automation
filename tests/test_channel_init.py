@@ -432,6 +432,38 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     assert thumbnail["image_generation"]["gemini"]["composition_rules"]["channel_branding"] == "Focus Atlas"
 
 
+def test_upload_settings_thumbnail_patterns_exclude_textless_main(tmp_path):
+    """#1310: channel init 生成物は upload thumbnail と textless main を混同しない。"""
+    rc = main(_required_args(tmp_path))
+
+    assert rc == 0
+    upload_settings = _read_json(tmp_path / "config" / "upload_settings.json")
+    patterns = upload_settings["thumbnail_settings"]["thumbnail_search_patterns"]
+
+    assert patterns == ["thumbnail.jpg", "thumbnail.png", "*thumb*.png"]
+    assert "main.png" not in patterns
+    assert "*main*.png" not in patterns
+
+
+def test_channel_setup_upload_settings_template_excludes_textless_main() -> None:
+    """#1310: sync で配布される upload settings template も旧 main.* 探索を配らない。"""
+    template_path = (
+        Path(__file__).resolve().parents[1]
+        / ".claude"
+        / "skills"
+        / "channel-setup"
+        / "references"
+        / "upload-settings-template.json"
+    )
+
+    template = _read_json(template_path)
+    patterns = template["thumbnail_settings"]["thumbnail_search_patterns"]
+
+    assert patterns == ["thumbnail.jpg", "thumbnail.png", "*thumb*.png"]
+    assert "main.png" not in patterns
+    assert "*main*.png" not in patterns
+
+
 def test_supported_language_args_are_written_to_youtube_and_localizations(tmp_path):
     # Given: TTP 対象が en-only のため localizations を 1 言語に絞る
     extra = [

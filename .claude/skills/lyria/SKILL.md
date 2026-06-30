@@ -83,7 +83,7 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 |------|-----|------|
 | `prompt` | string | プロンプト本文。skill-config の `prompt_prefix` ＋ `style_hints` ＋ テーマに合わせた主役楽器・演奏指示で組み立てる |
 | `model` | string | `lyria-3-pro-preview`（本生成）/ `lyria-3-clip-preview`（30 秒固定、通常は使わない） |
-| `reference_image` | Path | 参照画像パス。サムネイル `10-assets/main.png` を指せば音源の雰囲気が画像に寄る。対応形式: `.png`/`.jpg`/`.jpeg`/`.webp` |
+| `reference_image` | Path | 参照画像パス。textless 動画背景 / ビジュアル参照画像 `10-assets/main.png` を指せば音源の雰囲気が画像に寄る。対応形式: `.png`/`.jpg`/`.jpeg`/`.webp` |
 | `bpm` | int | BPM。プロンプトに `", {bpm} BPM"` として自動合成される。目安 60-180 |
 | `intensity` | `"low"` / `"medium"` / `"high"` | それぞれ `"mellow, low-energy"` / `"balanced, moderate energy"` / `"driving, high-energy"` に展開される |
 | `mode` | `"instrumental"` / `"vocal"` | `instrumental` は末尾に `". Instrumental."` を付加、`vocal` は lyrics 未指定時のみ `". With vocals."` を付加 |

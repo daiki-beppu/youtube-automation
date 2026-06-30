@@ -12,7 +12,7 @@ description: "Use when ショート動画用の 9:16 縦型サムネイル画像
 
 - `config/channel/` がロード可能（`load_config()`）
 - Vertex AI ADC 初期化済み (`gcloud auth application-default login` + `set-quota-project`)。project_id は ADC quota project から自動解決（`GOOGLE_CLOUD_PROJECT` は任意で上書き可）
-- `10-assets/main.png` または `main.jpg`（16:9 サムネイル）が既存（参考用）
+- `10-assets/main.png` または `main.jpg`（16:9 textless 動画背景 / 参考ビジュアル）が既存
 
 ## Quick Reference
 

@@ -53,5 +53,5 @@ default_intensity: null
 default_mode: null
 
 # コレクションルートからの相対パス文字列、または絶対パス。
-# 例: "10-assets/main.png" — コレクションのサムネイルを参照画像として自動採用
+# 例: "10-assets/main.png" — textless 動画背景 / ビジュアル参照画像を自動採用
 default_reference_image: null
