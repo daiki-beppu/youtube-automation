@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(launch-curve)`: `yt-launch-curve` で日次データに `impressions` / `impression_ctr` が無い場合も `daily_impressions=0` / `ctr` unavailable として扱い、初期チャンネルの欠損データで落ちないようにした（#1327）
 - `fix(skills)`: `config.default.yaml` を持つ skill の SKILL.md に設定読み込みゲートを追加し、チャンネル override の読み飛ばしを防ぐ契約テストを追加（#1243）
 - `fix(distrokid)`: `distrokid.profile.artist` を release payload に含め、distrokid-helper が `bandname` と Apple Music credits の performer / producer 名へ反映できるようにした（#1211）
+- `fix(automation-update)`: `/automation-update` をチャンネルリポジトリ外で実行した場合に、現在地が不適切な理由と移動先候補または探し方を案内するようにした（#1328）
 
 ### Migration
 
