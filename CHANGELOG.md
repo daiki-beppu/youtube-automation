@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(cli)`: `yt-*` CLI 起動時に標準入出力を UTF-8 へ再設定し、Windows cp932 コンソールで日本語パスや Unicode ダッシュを含む出力が `UnicodeEncodeError` で落ちないようにした（#1331）
 - `fix(cost)`: Windows 環境で `fcntl` がない場合も `cost_tracker` と `yt-generate-image` が起動できるよう、`msvcrt` / プロセス内 lock fallback を追加（#1315）
 - `fix(upload)`: upload preflight が `audio.target_duration_min/max` を秒単位として誤判定していた master 動画尺チェックを無効化（#1313）
 
