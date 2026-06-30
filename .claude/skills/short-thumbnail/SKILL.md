@@ -24,7 +24,7 @@ description: "Use when ショート動画用の 9:16 縦型サムネイル画像
 
 ## Instructions
 
-### Step 1: 既存サムネの確認
+### Step 1: 既存の textless 動画背景 / 参考ビジュアルの確認
 
 ```bash
 open <collection-path>/10-assets/main.*
@@ -37,7 +37,7 @@ open <collection-path>/10-assets/main.*
 `references/prompt-template.md` のテンプレートに沿って構築:
 
 1. **冒頭**: `Tall vertical portrait composition.` を必ず明記
-2. **シーン描写**: 既存サムネを参考に、9:16 縦長を活かして上下方向の環境ディテールを追加
+2. **シーン描写**: 既存の textless 動画背景 / 参考ビジュアルを参考に、9:16 縦長を活かして上下方向の環境ディテールを追加
 3. **テキスト 3 層**（タイトル / チャンネル名 / CTA）の埋め込み指示
 4. **スタイル句**: `references/prompt-template.md` の末尾テンプレを貼り付け
 
@@ -72,7 +72,7 @@ open <collection-path>/10-assets/short.png
 - [ ] 9:16 縦型（1536x2752）
 - [ ] テキスト 3 層がすべて読める
 - [ ] 斜め後ろ / 横顔構図（カメラ目線 NG）
-- [ ] 既存サムネとの世界観の一貫性
+- [ ] 既存の textless 動画背景 / 参考ビジュアルとの世界観の一貫性
 - [ ] 明るく鮮やかなカラー
 
 ### Step 5: ループ動画化（推奨）
@@ -123,7 +123,7 @@ open <collection-path>/10-assets/short-loop.mp4
 
 ```
 10-assets/
-├── main.png          # 16:9 サムネ（動画背景用）
+├── main.png          # 16:9 textless 動画背景 / 参考ビジュアル
 ├── thumbnail.jpg     # 16:9 テキスト付きサムネ（YouTube 用）
 ├── short.png         # 9:16 ショート用サムネ（本スキルで生成）
 ├── short.jpg         # 9:16 JPEG 版（自動生成）

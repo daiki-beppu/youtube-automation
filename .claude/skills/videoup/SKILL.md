@@ -41,6 +41,7 @@ $ARGUMENTS
 2. **マスター音源**: `master-mix.{wav,m4a,aac,mp3,flac}` または `master.{wav,m4a,aac,mp3,flac}` が既にあればスキップ。なければ `/masterup` または `/lyria` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可、`/lyria` / `/masterup` の自動生成出力は `master.{wav,mp3}` で配置される）
 3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
    `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/loop-video` を案内せず textless `10-assets/main.png` または `main.jpg` を静止背景として使用する。
+   この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
 4. **動画生成**: `generate_videos.sh` の実行コマンドを案内

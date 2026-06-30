@@ -80,6 +80,19 @@ resolve_videoup_yaml() {
 }
 VIDEOUP_YAML="$(resolve_videoup_yaml)"
 
+resolve_loop_video_yaml() {
+    local dir="$COLLECTION_DIR"
+    for _ in 1 2 3 4 5 6; do
+        if [[ -f "$dir/config/skills/loop-video.yaml" ]]; then
+            echo "$dir/config/skills/loop-video.yaml"; return
+        fi
+        local parent; parent="$(dirname "$dir")"
+        [[ "$parent" == "$dir" ]] && break
+        dir="$parent"
+    done
+}
+LOOP_VIDEO_YAML="$(resolve_loop_video_yaml)"
+
 yaml_get() {
     # $1=section $2=key $3=fallback  （`section:` 配下の `  key: value` を拾う）
     local section="$1" key="$2" fallback="$3" val
@@ -98,6 +111,27 @@ yaml_get() {
         }
     ' "$VIDEOUP_YAML")"
     # 周囲のクォートを除去
+    val="${val%\"}"; val="${val#\"}"
+    val="${val%\'}"; val="${val#\'}"
+    if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
+}
+
+yaml_top_get() {
+    # $1=file $2=key $3=fallback  （top-level の `key: value` を拾う）
+    local file="$1" key="$2" fallback="$3" val
+    if [[ -z "$file" || ! -f "$file" ]]; then
+        echo "$fallback"; return
+    fi
+    val="$(awk -v key="$key" '
+        $0 ~ ("^" key ":[[:space:]]*") {
+            line = $0
+            sub(/^[^:]+:[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*$/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            print line
+            exit
+        }
+    ' "$file")"
     val="${val%\"}"; val="${val#\"}"
     val="${val%\'}"; val="${val#\'}"
     if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
@@ -127,8 +161,11 @@ COLLECTION_NAME="$(echo "$dir_basename" \
     | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}' OFS='-')"
 
 # ─── Auto-detect Assets ─────────────────────────────────
+LOOP_VIDEO_ENABLED="$(yaml_top_get "$LOOP_VIDEO_YAML" enabled true)"
 LOOP_VIDEO=""
-if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
+if [[ "$LOOP_VIDEO_ENABLED" == "false" ]]; then
+    echo "  Loop     : disabled by config/skills/loop-video.yaml — 静止画モードで出力します"
+elif [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
     echo "  Loop     : $(basename "${LOOP_VIDEO}") (detected)"
 else

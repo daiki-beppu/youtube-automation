@@ -12,6 +12,7 @@ _IDEATE_DEFAULT_CONFIG = _SKILLS_DIR / "collection-ideate" / "config.default.yam
 _IDEATE_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "collection-lifecycle.md"
 _LYRIA_DEFAULT_CONFIG = _SKILLS_DIR / "lyria" / "config.default.yaml"
 _LYRIA_SKILL_MD = _SKILLS_DIR / "lyria" / "SKILL.md"
+_SHORT_THUMBNAIL_SKILL_MD = _SKILLS_DIR / "short-thumbnail" / "SKILL.md"
 _WF_NEW_SKILL_MD = _SKILLS_DIR / "wf-new" / "SKILL.md"
 
 
@@ -204,6 +205,18 @@ def test_lyria_reference_image_uses_textless_main_wording() -> None:
     assert "サムネイル `10-assets/main.png`" not in text
     assert "textless 動画背景 / ビジュアル参照画像を自動採用" in config
     assert "コレクションのサムネイルを参照画像として自動採用" not in config
+
+
+def test_short_thumbnail_uses_textless_main_wording() -> None:
+    """Given short-thumbnail docs
+    Then main.png/main.jpg are reference visuals, not legacy thumbnails.
+    """
+    text = _read(_SHORT_THUMBNAIL_SKILL_MD)
+
+    assert "16:9 textless 動画背景 / 参考ビジュアル" in text
+    assert "既存の textless 動画背景 / 参考ビジュアル" in text
+    assert "16:9 サムネ（動画背景用）" not in text
+    assert "既存サムネ" not in text
 
 
 def test_collection_ideate_next_step_keeps_preview_out_of_main_background() -> None:

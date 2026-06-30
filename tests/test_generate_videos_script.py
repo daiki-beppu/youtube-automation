@@ -212,6 +212,30 @@ def test_loop_video_background_does_not_require_main_image(tmp_path: Path) -> No
     assert "10-assets/thumbnail.jpg" not in master_cmd
 
 
+def test_loop_video_disabled_uses_textless_main_even_when_loop_exists(tmp_path: Path) -> None:
+    """#1310: loop-video.enabled=false では既存 loop.mp4 を無視して textless main.* を背景にする。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "main.png").write_bytes(b"fake-png-background")
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "loop-video.yaml").write_text("enabled: false\n", encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : disabled by config/skills/loop-video.yaml" in result.stdout
+    assert "Video BG : main.png (still)" in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "10-assets/main.png" in master_cmd
+    assert "10-assets/loop.mp4" not in master_cmd
+
+
 def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
     """#1310: 静止背景は textless main.png を main.jpg より優先する。"""
     collection = _create_collection(tmp_path)
@@ -591,6 +615,27 @@ def test_static_image_with_effect_uses_filter_complex(tmp_path: Path) -> None:
     assert "[vout]" in final_cmd
     # 静止画モード固有の scale+pad 前処理が含まれる
     assert "scale=1920:1080:force_original_aspect_ratio=decrease" in final_cmd
+
+
+def test_static_image_with_effect_uses_textless_main_not_thumbnail(tmp_path: Path) -> None:
+    """#1310: effect あり静止画経路でも thumbnail.* ではなく textless main.* を背景にする。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "main.png").write_bytes(b"fake-png-background")
+    (assets_dir / "thumbnail.jpg").write_bytes(b"text-included-thumbnail")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles"},
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    assert "10-assets/main.png" in final_cmd
+    assert "10-assets/thumbnail.jpg" not in final_cmd
 
 
 # ─── Loop artifact warning (#868) ────────────────────────
