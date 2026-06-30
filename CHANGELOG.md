@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(upload)`: `descriptions.md` の見出し不一致時に、期待する見出し一覧・不足/不一致の見出し・検出済み見出し・修正例を表示するよう改善（#1340）
 - `fix(suno-helper)`: `yt-collection-serve` の `/collections/<id>/suno/prompts.json` で URL エンコード済み collection ID をデコードし、スペースを含むフォルダ名でも prompts を取得できるようにした（#1338）
 - `fix(cost)`: Windows 環境で `fcntl` がない場合も `cost_tracker` と `yt-generate-image` が起動できるよう、`msvcrt` / プロセス内 lock fallback を追加（#1315）
 - `fix(upload)`: upload preflight が `audio.target_duration_min/max` を秒単位として誤判定していた master 動画尺チェックを無効化（#1313）

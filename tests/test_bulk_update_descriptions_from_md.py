@@ -610,8 +610,16 @@ class TestLoadCollection:
         reset()
 
         # When/Then
-        with pytest.raises(RuntimeError, match="missing description or title section"):
+        with pytest.raises(RuntimeError) as excinfo:
             mod.load_collection("alpha")
+
+        message = str(excinfo.value)
+        assert "descriptions.md parse failed in alpha" in message
+        assert "期待する見出し（完全一致）" in message
+        assert ("不足/不一致の見出し:\n  - ## Complete Collection 概要欄") in message
+        assert "検出した ## 見出し" in message
+        assert "修正例" in message
+        assert "/video-description を再実行" in message
 
     def test_should_raise_when_title_section_missing(self, tmp_path, monkeypatch):
         """`タイトル案` セクション欠落で `RuntimeError`."""
@@ -624,8 +632,16 @@ class TestLoadCollection:
         reset()
 
         # When/Then
-        with pytest.raises(RuntimeError, match="missing description or title section"):
+        with pytest.raises(RuntimeError) as excinfo:
             mod.load_collection("alpha")
+
+        message = str(excinfo.value)
+        assert "descriptions.md parse failed in alpha" in message
+        assert "期待する見出し（完全一致）" in message
+        assert ("不足/不一致の見出し:\n  - ## タイトル案") in message
+        assert "検出した ## 見出し" in message
+        assert "修正例" in message
+        assert "/video-description を再実行" in message
 
     def test_should_strip_double_quotes_from_tags(self, tmp_path, monkeypatch):
         """ダブルクォートで囲まれたタグから引用符を除去する (#1096)."""

@@ -10,17 +10,14 @@ import re
 from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.descriptions_md import (
+    DESCRIPTIONS_MD_RECREATE_GUIDE,
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+)
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
 logger = logging.getLogger(__name__)
-
-_DESCRIPTIONS_MD_RECREATE_GUIDE = (
-    "→ 手書きファイルを直接直すのではなく、正規フローで作り直してください:\n"
-    "  1. /video-description を再実行する\n"
-    "  2. 生成された 20-documentation/descriptions.md を確認する\n"
-    "  3. 必要なら生成後の本文だけを調整してから再アップロードする\n"
-    "  必須セクション: `## タイトル案` / `## Complete Collection 概要欄` / `## タグ（YouTube タグ欄）`"
-)
 
 
 class DescriptionsMdMixin:
@@ -45,20 +42,20 @@ class DescriptionsMdMixin:
                     f"descriptions.md が無いのに別名ファイルが存在します: "
                     f"{[p.name for p in stray]}\n"
                     f"→ ファイル名は `descriptions.md` 固定です。\n"
-                    f"{_DESCRIPTIONS_MD_RECREATE_GUIDE}"
+                    f"{DESCRIPTIONS_MD_RECREATE_GUIDE}"
                 )
             return None
 
         text = desc_path.read_text(encoding="utf-8")
 
-        title = self._extract_md_section(text, "タイトル案")
-        description = self._extract_md_section(text, "Complete Collection 概要欄")
-        tags_raw = self._extract_md_section(text, "タグ（YouTube タグ欄）")
+        title = extract_descriptions_md_section(text, "タイトル案")
+        description = extract_descriptions_md_section(text, "Complete Collection 概要欄")
+        tags_raw = extract_descriptions_md_section(text, "タグ（YouTube タグ欄）")
 
         if not (title and description):
             logger.warning(
                 "⚠️  descriptions.md のパースに失敗 — 正規フォーマットとして読み込めません\n%s",
-                _DESCRIPTIONS_MD_RECREATE_GUIDE,
+                build_descriptions_md_parse_diagnostics(text),
             )
             return None
 
@@ -81,6 +78,4 @@ class DescriptionsMdMixin:
     @staticmethod
     def _extract_md_section(text: str, heading: str) -> str | None:
         """Markdown の ## heading 直後のコードフェンス内容を抽出"""
-        pattern = rf"## {re.escape(heading)}\s*\n+```\n(.*?)```"
-        m = re.search(pattern, text, re.DOTALL)
-        return m.group(1).strip() if m else None
+        return extract_descriptions_md_section(text, heading)
