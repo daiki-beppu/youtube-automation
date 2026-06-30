@@ -33,13 +33,13 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 | content_model.type | 動作 | 対応言語の出所 |
 |-------------------|------|--------------|
-| `collection` | Complete Collection アップロード → live 移動（単一動画） | `localization.supported_languages` + `localization.default_language`（`localizations.json` と同期） |
+| `collection` | Complete Collection アップロード → live 移動（単一動画） | `config/localizations.json` / `load_config().localizations.*` |
 | `single_release` | 言語ごとに別動画をアップロード | `content_model.languages`（発音言語リスト） |
 
 ### collection 型
 - 下記フローのとおり Complete Collection を1本アップロード
 - `collection_uploader.py` を使用
-- 多言語ローカライゼーションは `localization.supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
+- 多言語ローカライゼーションは `config/localizations.json` の `supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
 - `load_config().localizations.supported_languages` は `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
 
 ### single_release + languages: ["jp","en"]（COT）
@@ -66,8 +66,9 @@ $ARGUMENTS
 アップロード前に以下を確認する（詳細は `references/posting-checklist.md` 参照）:
 
 1. **マスター動画**: `01-master/*.mp4` または `03-Individual-movie/*master*.mp4` — 存在しなければエラー終了
-2. **サムネイル**: `10-assets/thumbnail.jpg` — 存在しなければエラー終了
+2. **サムネイル**: `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png` の候補順で探索 — いずれも存在しなければエラー終了。`main.png/jpg` は textless 動画背景なので upload thumbnail には使わない
 3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/video-description` スキルを実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
+4. **初投稿時のプレイリスト初期化**: `config/channel/playlists.json` が存在する場合は `/playlist` スキルで `uv run yt-playlist-status` を実行する。`(未作成)` があるときは、初投稿前に `uv run yt-playlist-manager --init --dry-run` → ユーザー確認 → `uv run yt-playlist-manager --init` で playlist ID を作成・書き戻してからアップロードへ進む
 
 ### アップロードフロー
 
@@ -78,6 +79,8 @@ $ARGUMENTS
 3. **コミュニティ投稿準備** — `config/channel/community.json` が存在する場合、`/community-post` を呼び出してテンプレ展開 → pbcopy → YouTube Studio 起動まで自動で行う（投稿ボタン押下は Studio 上で手動）。`community.json` が無いチャンネルではスキップ
 
 メタデータは `descriptions.md` から title / description / tags を優先使用。存在しない場合は `BAHMetadataGenerator` で自動生成にフォールバック。
+
+プレイリストへの動画追加は後続のアップロード経路が担う。`collection` 型では `collection_uploader` 内部の `assign_video()` に任せる。初投稿時に `/playlist` で行うのは未作成プレイリストの作成と `playlist_id` 書き戻しであり、個別動画の手動 assign ではない。
 
 ### コマンドリファレンス
 
@@ -151,6 +154,6 @@ uv run yt-upload-collection --plan -c <NAME>
 ## Cross References
 
 - `/video-description` — アップロード前に descriptions.md を生成
-- `/playlist` — プレイリスト状態確認・手動 assign・クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
+- `/playlist` — 初投稿前のプレイリスト初期化、状態確認、手動 assign、クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
 - `/metadata-audit` — アップロード後のローカル ↔ YouTube 整合性監査
 - `/community-post` — アップロード完了後にコミュニティ投稿テンプレを展開して Studio を起動（`config/channel/community.json` がある場合のみ）

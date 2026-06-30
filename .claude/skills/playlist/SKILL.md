@@ -1,6 +1,6 @@
 ---
 name: playlist
-description: "Use when プレイリストの作成・動画割り当て・状態確認をしたいとき。「プレイリスト作って」「プレイリスト整理」「動画をプレイリストに追加」「プレイリスト状況」「削除済み動画を整理」「/playlist」など、`config/channel/playlists.json` に基づくプレイリスト CRUD の場面で使用すること"
+description: "Use when プレイリストの作成・動画割り当て・状態確認をしたいとき。「プレイリスト作って」「プレイリスト整理」「動画をプレイリストに追加」「プレイリスト状況」「削除済み動画を整理」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「/playlist」など、`config/channel/playlists.json` に基づくプレイリスト CRUD の場面で使用すること"
 ---
 
 ## Overview
@@ -16,6 +16,7 @@ description: "Use when プレイリストの作成・動画割り当て・状態
 ## When to Use
 
 - 新チャンネル開設後、`playlists.json` に定義したプレイリストを YouTube 上に初期化したいとき
+- 新チャンネルの初投稿 / 初回公開前に、未作成プレイリストを作成して `playlist_id` を書き戻したいとき
 - 単一動画を特定テーマのプレイリストに割り当てたいとき
 - 現状どの動画がどのプレイリストに入っているかを確認したいとき
 - YouTube で削除済み / 非公開化された動画のエントリをプレイリストから除去したいとき
@@ -54,6 +55,8 @@ uv run yt-playlist-manager --init              # 実反映
 **注意**: `--dry-run` フラグなしが実反映。`yt-channel-settings` のように `--apply` 経由ではないので、dry-run → 確認 → 本番の 2 段階運用を徹底する。
 
 実行後、`playlists.json` の各エントリに `playlist_id` が書き戻される。
+
+**初投稿前の扱い**: `collections/live/` がまだ空でも `--init` を実行してよい。この場合は未作成プレイリストの作成と `playlist_id` 書き戻しが主目的で、初回動画の追加は後続の `/video-upload` に任せる。collection 型では `/video-upload` 内部の自動 assign (`assign_video()`) が追加を担う。初投稿前に `(未作成)` が残っているとアップロード時の自動 assign がスキップされるため、公開前に必ず初期化する。
 
 ### Step 3: 単一動画の追加（運用フェーズ）
 

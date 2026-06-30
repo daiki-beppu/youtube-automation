@@ -52,7 +52,6 @@ PACKAGE_FILES: tuple[str, ...] = (
     "auth/client_secrets.template.json",
     "config/localizations.json",
     "config/schedule_config.json",
-    "config/upload_settings.json",
     "config/skills/suno.yaml",
     "config/skills/thumbnail.yaml",
 )
@@ -247,6 +246,11 @@ def test_main_creates_full_package_files_when_target_is_empty(tmp_path):
     assert rc == 0
     for rel in PACKAGE_FILES:
         assert (tmp_path / rel).is_file(), f"missing package file: {rel}"
+    assert not (tmp_path / "config" / "upload_settings.json").exists()
+
+    schedule = _read_json(tmp_path / "config" / "schedule_config.json")
+    assert schedule["upload_settings"]["category_id"] == "10"
+    assert schedule["upload_settings"]["privacy_status"] == "private"
 
 
 def test_benchmark_channel_args_are_written_to_analytics_json(tmp_path):
@@ -432,21 +436,16 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     assert thumbnail["image_generation"]["gemini"]["composition_rules"]["channel_branding"] == "Focus Atlas"
 
 
-def test_upload_settings_thumbnail_patterns_exclude_textless_main(tmp_path):
-    """#1310: channel init 生成物は upload thumbnail と textless main を混同しない。"""
+def test_channel_init_does_not_generate_legacy_upload_settings_file(tmp_path):
+    """#1310: channel init は旧 root upload settings で main.* 探索契約を配らない。"""
     rc = main(_required_args(tmp_path))
 
     assert rc == 0
-    upload_settings = _read_json(tmp_path / "config" / "upload_settings.json")
-    patterns = upload_settings["thumbnail_settings"]["thumbnail_search_patterns"]
-
-    assert patterns == ["thumbnail.jpg", "thumbnail.png", "*thumb*.png"]
-    assert "main.png" not in patterns
-    assert "*main*.png" not in patterns
+    assert not (tmp_path / "config" / "upload_settings.json").exists()
 
 
-def test_channel_setup_upload_settings_template_excludes_textless_main() -> None:
-    """#1310: sync で配布される upload settings template も旧 main.* 探索を配らない。"""
+def test_channel_setup_legacy_upload_settings_template_is_removed() -> None:
+    """#1310: sync で配布する旧 upload settings template を復活させない。"""
     template_path = (
         Path(__file__).resolve().parents[1]
         / ".claude"
@@ -456,12 +455,7 @@ def test_channel_setup_upload_settings_template_excludes_textless_main() -> None
         / "upload-settings-template.json"
     )
 
-    template = _read_json(template_path)
-    patterns = template["thumbnail_settings"]["thumbnail_search_patterns"]
-
-    assert patterns == ["thumbnail.jpg", "thumbnail.png", "*thumb*.png"]
-    assert "main.png" not in patterns
-    assert "*main*.png" not in patterns
+    assert not template_path.exists()
 
 
 def test_supported_language_args_are_written_to_youtube_and_localizations(tmp_path):

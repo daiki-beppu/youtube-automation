@@ -183,6 +183,42 @@ class TestVersionsTfNullProvider:
         )
 
 
+class TestVersionsTfExternalProvider:
+    """``versions.tf`` の ``required_providers.external`` 宣言（#1299）。"""
+
+    def test_required_providers_declares_external_source(self):
+        """Given versions.tf
+        When required_providers.external を読む
+        Then source = "hashicorp/external" が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None, "required_providers ブロックが存在しない"
+        external_block = extract_block(rp_block, r"external")
+        assert external_block is not None, "required_providers.external が宣言されていない"
+        assert re.search(r'source\s*=\s*"hashicorp/external"', external_block), (
+            'required_providers.external.source が "hashicorp/external" でない'
+        )
+
+    def test_required_providers_external_version_at_least_2_3(self):
+        """Given versions.tf
+        When required_providers.external.version を読む
+        Then ">= 2.3" を含む制約が宣言されている。
+        """
+        text = strip_hcl_comments(read_file(_VERSIONS_TF))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None
+        rp_block = extract_block(terraform_block, r"required_providers")
+        assert rp_block is not None
+        external_block = extract_block(rp_block, r"external")
+        assert external_block is not None
+        assert re.search(r'version\s*=\s*"[^"]*>=\s*2\.3', external_block), (
+            "required_providers.external.version が >= 2.3 を満たしていない"
+        )
+
+
 # ============================================================================
 # outputs.tf
 # ============================================================================

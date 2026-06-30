@@ -252,6 +252,60 @@ class TestMainTfStreamCycleConsistencyPrecondition:
         )
 
 
+class TestMainTfSourceVideoPreflight:
+    """``main.tf`` の配信元動画プリフライト（#1299）。"""
+
+    def test_external_data_source_invokes_video_preflight_script(self):
+        """Given main.tf
+        When data.external.source_video_preflight を読む
+        Then video_preflight.py に var.video_path を渡している。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'data\s+"external"\s+"source_video_preflight"')
+        assert block is not None, 'data "external" "source_video_preflight" が存在しない'
+        assert "count" not in block, "source video preflight を optional 化してはならない"
+        assert "video_preflight.py" in block, "external data source が video_preflight.py を呼んでいない"
+        assert re.search(r"video_path\s*=\s*var\.video_path", block), (
+            "external data source query が var.video_path を渡していない"
+        )
+
+    def test_locals_expose_preflight_result_flags(self):
+        """Given main.tf
+        When locals を読む
+        Then preflight の ok / profile_ok を bool 条件として取り出している。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        locals_block = extract_block(text, r"^\s*locals")
+        assert locals_block is not None, "main.tf に locals ブロックが存在しない"
+        assert "source_video_preflight  = data.external.source_video_preflight.result" in locals_block
+        assert 'source_video_ok         = local.source_video_preflight.ok == "true"' in locals_block
+        assert 'source_video_profile_ok = local.source_video_preflight.profile_ok == "true"' in locals_block
+
+    def test_deploy_lifecycle_has_source_video_preflight_precondition(self):
+        """Given main.tf
+        When null_resource.deploy の lifecycle を読む
+        Then external 結果で hard fail する precondition がある。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        deploy_block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert deploy_block is not None
+        lifecycle_block = extract_block(deploy_block, r"lifecycle")
+        assert lifecycle_block is not None
+        assert "local.source_video_ok" in lifecycle_block
+        assert "local.source_video_preflight.message" in lifecycle_block
+
+    def test_h264_profile_check_is_warning_not_precondition(self):
+        """Given main.tf
+        When check source_video_h264_profile を読む
+        Then profile は precondition ではなく Terraform check warning にしている。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        check_block = extract_block(text, r'check\s+"source_video_h264_profile"')
+        assert check_block is not None, 'check "source_video_h264_profile" が存在しない'
+        assert "local.source_video_profile_ok" in check_block
+        assert "local.source_video_preflight.profile_message" in check_block
+
+
 # ============================================================================
 # main.tf user_data (#124)
 # ============================================================================

@@ -2,7 +2,8 @@
 """コレクションの workflow-state.json.scene_phrases を投入する CLI.
 
 `config/channel/content.json::title.theme_scenes[<theme>].scene` を英語ソースとして
-取得し、呼び出し側エージェントが生成した翻訳 JSON と合わせて
+取得し、`config/localizations.json::supported_languages` に列挙された全言語向けに
+呼び出し側エージェントが生成した翻訳 JSON と合わせて
 `collections/<sub>/<collection>/workflow-state.json` の `scene_phrases` フィールドに
 書き込む。
 
