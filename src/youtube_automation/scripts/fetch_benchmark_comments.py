@@ -12,11 +12,13 @@ Usage:
     python3 ../../automation/fetch_benchmark_comments.py --min-views 5000   # 閾値変更
     python3 ../../automation/fetch_benchmark_comments.py --max-comments 50  # 動画あたりの取得数変更
     python3 ../../automation/fetch_benchmark_comments.py --force            # 既存データがあっても再取得
+    python3 ../../automation/fetch_benchmark_comments.py -y                 # 確認スキップ
 """
 
 import argparse
 import json
 import logging
+import sys
 from datetime import date, datetime
 
 from youtube_automation.scripts.benchmark_collector import (  # noqa: E402
@@ -75,7 +77,7 @@ class BenchmarkCommentCollector:
 
         return comments
 
-    def collect(self, force: bool = False) -> dict:
+    def collect(self, force: bool = False, yes: bool = False) -> dict:
         """全対象動画のコメントを収集"""
         output_path = self.data_dir / f"comments_{self.today.strftime('%Y%m%d')}.json"
         if output_path.exists() and not force:
@@ -83,7 +85,7 @@ class BenchmarkCommentCollector:
             with open(output_path) as f:
                 return json.load(f)
 
-        ensure_benchmark_fresh(self.data_dir)
+        ensure_benchmark_fresh(self.data_dir, assume_yes=yes)
 
         targets = load_benchmark_videos(self.data_dir, min_views=self.min_views)
         if not targets:
@@ -180,10 +182,21 @@ def main():
         help=f"動画あたりの最大取得数（default: {DEFAULT_MAX_COMMENTS}）",
     )
     parser.add_argument("--force", action="store_true", help="既存データがあっても再取得")
+    parser.add_argument("-y", "--yes", action="store_true", help="確認プロンプトをスキップ")
     args = parser.parse_args()
 
+    if not args.yes and not args.force:
+        try:
+            answer = input("続行しますか？ [Y/n] ").strip().lower()
+            if answer and answer != "y":
+                print("キャンセルしました")
+                sys.exit(0)
+        except (EOFError, KeyboardInterrupt):
+            print("\nキャンセルしました")
+            sys.exit(0)
+
     collector = BenchmarkCommentCollector(min_views=args.min_views, max_comments=args.max_comments)
-    result = collector.collect(force=args.force)
+    result = collector.collect(force=args.force, yes=args.yes)
     if result:
         print_summary(result)
 

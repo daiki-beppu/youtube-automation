@@ -1225,10 +1225,11 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
     return targets
 
 
-def ensure_benchmark_fresh(data_dir: Path | None = None):
+def ensure_benchmark_fresh(data_dir: Path | None = None, *, assume_yes: bool = False):
     """ベンチマークデータの鮮度を確認し、全チャンネルが1つの JSON に揃った状態を保証する。
 
     1つでも古い or 欠けているチャンネルがあれば --force で全チャンネル一括更新。
+    assume_yes は呼び出し元 CLI の確認スキップ指定を受け取るための互換引数。
 
     Raises:
         ConfigError: benchmark.channels が未設定のとき
@@ -1271,6 +1272,9 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
     if not need_update:
         logger.info("ベンチマーク: 全チャンネル最新（%d チャンネル）", len(expected_slugs))
         return
+
+    if assume_yes:
+        logger.info("ベンチマーク: 確認プロンプトをスキップして最新化します")
 
     collector.initialize()
     data = collector.collect_all(force=True)
