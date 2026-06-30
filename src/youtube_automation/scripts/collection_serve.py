@@ -597,6 +597,10 @@ def _decode_collection_id_path_segment(cid: str) -> str:
     return urllib.parse.unquote(cid)
 
 
+def _encode_collection_id_path_segment(cid: str) -> str:
+    return urllib.parse.quote(cid, safe="")
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -932,7 +936,8 @@ def create_server(
             if len(parts) != 2:
                 self.send_error(404, "Not Found")
                 return
-            coll_id, sub = parts
+            raw_coll_id, sub = parts
+            coll_id = _decode_collection_id_path_segment(raw_coll_id)
 
             # トラバーサル防御: find_collection_dirs のホワイトリストで弾く（#934）。
             known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
@@ -973,7 +978,8 @@ def create_server(
                     self.send_error(404, "Not Found")
                     return
                 # asset_path を collection-scoped 形式にするための prefix を組み立てる（#934）。
-                coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
+                encoded_coll_id = _encode_collection_id_path_segment(coll_id)
+                coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{encoded_coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
                 distrokid_source = f"{_DISTROKID_DIRNAME}/{disc}"
                 try:
                     payload = build_release_payload(
