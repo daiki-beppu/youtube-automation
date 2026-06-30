@@ -161,11 +161,7 @@ def plan_ttp_reference_assignments(
 
     channels = [infer_benchmark_channel(ref) for ref in selected_references]
     if any(channel == "unknown" for channel in channels):
-        unknown_refs = [
-            str(ref)
-            for ref, channel in zip(selected_references, channels)
-            if channel == "unknown"
-        ]
+        unknown_refs = [str(ref) for ref, channel in zip(selected_references, channels) if channel == "unknown"]
         raise ConfigError(
             "single_step TTP 生成では全参照画像を同じベンチマークチャンネルとして追跡できる必要があります "
             f"(benchmark_channel=unknown: {', '.join(unknown_refs)})。"
