@@ -570,6 +570,7 @@ def _build_distrokid(merged: dict) -> Distrokid:
 def _build_distrokid_profile(profile_raw: dict) -> DistrokidProfile:
     sub_genre = profile_raw.get("sub_genre")
     return DistrokidProfile(
+        artist=str(profile_raw.get("artist", "")),
         language=str(profile_raw.get("language", "")),
         main_genre=str(profile_raw.get("main_genre", "")),
         sub_genre=str(sub_genre) if sub_genre is not None else None,

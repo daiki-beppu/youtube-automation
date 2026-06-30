@@ -65,7 +65,7 @@ const documentInjector: Injector = {
     // chk* 除外済みなので配信先は巻き込まない（#923）。
     uncheckUpsells(document);
     // ストア check 後に可視化されるため await（#923）。
-    await injectAppleMusicCredits(document, release.tracks.length, profile.credits);
+    await injectAppleMusicCredits(document, release.tracks.length, profile.artist, profile.credits);
     // ストア check 後でないと条件付き areyousure が不可視のため、ストア check 後に実行（#923）。
     acceptImportantTerms(document);
   },

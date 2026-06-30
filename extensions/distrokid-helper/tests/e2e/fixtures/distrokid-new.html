@@ -37,8 +37,9 @@
   </head>
   <body>
     <form id="release-form">
-      <!-- アカウント設定で事前登録される暗黙値。/new には hidden のみ（注入対象外・credit 名に使用）。 -->
+      <!-- アカウント設定で事前登録される暗黙値。profile.artist 未設定時の後方互換 fallback。 -->
       <input id="artistName" name="artistName" type="hidden" value="Soulful Grooves" />
+      <input name="bandname" type="text" value="Soulful Grooves" />
 
       <select id="language" name="language">
         <option value="">--</option>

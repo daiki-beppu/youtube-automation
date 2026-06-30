@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 # distrokid.enabled == True のとき profile に必須となるフィールド（条件付き必須）。
 # loader の条件付きバリデーションと dataclass フィールドの SSOT。
-# songwriter / ai_disclosure は任意（distrokid.com/new で省略可能）。
+# artist / songwriter / ai_disclosure は任意（distrokid.com/new で省略可能）。
 REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
     "language",
     "main_genre",
@@ -72,9 +72,9 @@ class DistrokidProfileCredits:
     """Apple Music クレジット既定値（distrokid.com/new の track credits 行）.
 
     各トラックの credits は performer 行と producer 行のペアで構成される（実 DOM 検証済み・#919）。
-    人名（`track-N-performer-1-name` / `track-N-producer-1-name`）は DistroKid 側で
-    アルバム artist で自動フィルされるため、本 dataclass では役割（role select）の既定値
-    のみを保持する。SELECT の `value` 属性に対応する英語値で指定する（i18n は DistroKid 側）。
+    人名（`track-N-performer-1-name` / `track-N-producer-1-name`）は `profile.artist` を使うため、
+    本 dataclass では役割（role select）の既定値のみを保持する。SELECT の `value` 属性に
+    対応する英語値で指定する（i18n は DistroKid 側）。
 
     - `performer_role`: performer 行の role（`track-N-performer-1-role` の SELECT value）。
       実 DOM 検証（#930 / 2026-06-11）: 84 options・楽器名のみ。`"Audio"` は存在しない。
@@ -91,6 +91,7 @@ class DistrokidProfileCredits:
 class DistrokidProfile:
     """`distrokid.profile` セクション（distrokid.com/new フォーム項目に対応）.
 
+    - `artist`: リリースアーティスト名（bandname 欄 / Apple Music credits の人名）
     - `language`: メタデータ言語（language SELECT の value）
     - `main_genre`: メインジャンル（genrePrimary SELECT の value）
     - `sub_genre`: サブジャンル（genreSecondary SELECT の value、任意）
@@ -99,6 +100,7 @@ class DistrokidProfile:
     - `credits`: Apple Music クレジットの既定値（既定は Synthesizer + Producer）
     """
 
+    artist: str = ""
     language: str = ""
     main_genre: str = ""
     sub_genre: str | None = None

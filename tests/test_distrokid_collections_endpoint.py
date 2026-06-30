@@ -53,6 +53,7 @@ _JPG_BYTES = b"\xff\xd8\xff\xe0fake-jpg-bytes"
 def _profile() -> DistrokidProfile:
     """テスト用 DistrokidProfile（#813 新 schema）."""
     return DistrokidProfile(
+        artist="ABYSS MI",
         language="ja",
         main_genre="Electronic",
         sub_genre="House",

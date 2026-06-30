@@ -19,6 +19,7 @@ import type { ReleasePayload } from "../lib/types";
 
 const SAMPLE_PAYLOAD: ReleasePayload = {
   profile: {
+    artist: "Summer Artist",
     language: "en",
     main_genre: "Electronic",
     sub_genre: "House",

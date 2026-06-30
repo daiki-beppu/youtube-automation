@@ -219,6 +219,7 @@ def _full_distrokid_profile() -> dict:
     必須は language / main_genre のみ。sub_genre / songwriter / ai_disclosure は任意。
     """
     return {
+        "artist": "ABYSS MI",
         "language": "ja",
         "main_genre": "Electronic",
         "sub_genre": "House",
@@ -243,6 +244,7 @@ def test_distrokid_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist == ""
     assert config.distrokid.profile.language == ""
     assert config.distrokid.profile.main_genre == ""
     assert config.distrokid.profile.sub_genre is None
@@ -308,6 +310,7 @@ def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
 
     assert isinstance(config.distrokid, Distrokid)
     assert config.distrokid.enabled is True
+    assert profile.artist == "ABYSS MI"
     assert profile.language == "ja"
     assert profile.main_genre == "Electronic"
     assert profile.sub_genre == "House"
@@ -352,6 +355,7 @@ def test_distrokid_enabled_minimal_required_only(tmp_path, monkeypatch):
 
     assert profile.language == "ja"
     assert profile.main_genre == "Electronic"
+    assert profile.artist == ""
     assert profile.songwriter is None
     assert profile.sub_genre is None
 
@@ -403,6 +407,7 @@ def test_distrokid_disabled_with_incomplete_profile_loads(tmp_path, monkeypatch)
     config = load_config()
 
     assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist == ""
     assert config.distrokid.profile.language == "ja"
 
 
