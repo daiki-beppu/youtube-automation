@@ -10,13 +10,12 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
+from youtube_automation.utils.descriptions_md import extract_descriptions_md_section
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
 REQUIRED_LOCALIZATION_LANGUAGES = ("ja", "en", "de")
 LOW_CPM_LOCALIZATION_LANGUAGES = ("ko", "es", "pt", "zh-CN")
-
-_DESC_TAGS_RE = re.compile(r"## タグ（YouTube タグ欄）\s*\n+```\n(.*?)```", re.DOTALL)
 
 # v1〜v9 もしくは末尾のロマン数字 (I/II/III/IV/V/VI/VII/VIII) を検出する。
 # chapter 名末尾にこれが現れる場合、1 パターンを複数バリエーションに展開した事故とみなす。
@@ -239,10 +238,9 @@ def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
     """
     if not desc_md.exists():
         return None
-    m = _DESC_TAGS_RE.search(desc_md.read_text(encoding="utf-8"))
-    if not m:
+    raw = extract_descriptions_md_section(desc_md.read_text(encoding="utf-8"), "タグ（YouTube タグ欄）")
+    if raw is None:
         return None
-    raw = m.group(1).strip()
     tags = parse_youtube_tags(raw)
     return tags or None
 
