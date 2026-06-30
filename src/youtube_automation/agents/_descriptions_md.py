@@ -7,12 +7,19 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
 logger = logging.getLogger(__name__)
+
+_DESCRIPTIONS_MD_EXPECTED_HEADINGS = (
+    "タイトル案",
+    "Complete Collection 概要欄",
+    "タグ（YouTube タグ欄）",
+)
 
 _DESCRIPTIONS_MD_RECREATE_GUIDE = (
     "→ 手書きファイルを直接直すのではなく、正規フローで作り直してください:\n"
@@ -21,6 +28,47 @@ _DESCRIPTIONS_MD_RECREATE_GUIDE = (
     "  3. 必要なら生成後の本文だけを調整してから再アップロードする\n"
     "  必須セクション: `## タイトル案` / `## Complete Collection 概要欄` / `## タグ（YouTube タグ欄）`"
 )
+
+
+def _extract_level2_headings(text: str) -> list[str]:
+    """descriptions.md 内の `##` 見出しを出現順で返す."""
+    return [match.group(1).strip() for match in re.finditer(r"^##\s+(.+?)\s*$", text, re.MULTILINE)]
+
+
+def _format_heading_list(headings: Sequence[str]) -> str:
+    if not headings:
+        return "  - (なし)"
+    return "\n".join(f"  - ## {heading}" for heading in headings)
+
+
+def _build_descriptions_md_parse_diagnostics(text: str, missing_headings: Sequence[str]) -> str:
+    """descriptions.md の見出し不一致を人間が直せる形で説明する."""
+    found_headings = _extract_level2_headings(text)
+    missing = list(dict.fromkeys(missing_headings))
+    return "\n".join(
+        [
+            "期待する見出し（完全一致）:",
+            _format_heading_list(_DESCRIPTIONS_MD_EXPECTED_HEADINGS),
+            "不足/不一致の見出し:",
+            _format_heading_list(missing),
+            "検出した ## 見出し:",
+            _format_heading_list(found_headings),
+            "修正例:",
+            "  ## タイトル案",
+            "  ```",
+            "  公開タイトル",
+            "  ```",
+            "  ## Complete Collection 概要欄",
+            "  ```",
+            "  概要欄本文",
+            "  ```",
+            "  ## タグ（YouTube タグ欄）",
+            "  ```",
+            "  tag one, tag two",
+            "  ```",
+            _DESCRIPTIONS_MD_RECREATE_GUIDE,
+        ]
+    )
 
 
 class DescriptionsMdMixin:
@@ -56,9 +104,17 @@ class DescriptionsMdMixin:
         tags_raw = self._extract_md_section(text, "タグ（YouTube タグ欄）")
 
         if not (title and description):
+            parsed_sections = {
+                "タイトル案": title,
+                "Complete Collection 概要欄": description,
+                "タグ（YouTube タグ欄）": tags_raw,
+            }
+            missing_headings = [
+                heading for heading in _DESCRIPTIONS_MD_EXPECTED_HEADINGS if parsed_sections.get(heading) is None
+            ]
             logger.warning(
                 "⚠️  descriptions.md のパースに失敗 — 正規フォーマットとして読み込めません\n%s",
-                _DESCRIPTIONS_MD_RECREATE_GUIDE,
+                _build_descriptions_md_parse_diagnostics(text, missing_headings),
             )
             return None
 

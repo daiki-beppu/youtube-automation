@@ -107,6 +107,37 @@ def _run_preflight(channel_dir: Path, collection_dir: Path, monkeypatch: pytest.
     _PreflightHarness(channel_dir / "collections")._preflight_check(collection_dir)
 
 
+def test_heading_mismatch_reports_expected_missing_detected_and_fix_example(tmp_path: Path) -> None:
+    collection_dir = tmp_path / "collections" / "planning" / "20260630-heading-typo"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "descriptions.md").write_text(
+        """## タイトル
+```
+Continuous Focus Mix
+```
+
+## Complete Collection 概要欄
+```
+A continuous BGM mix without chapter markers.
+```
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _PreflightHarness(tmp_path / "collections")._preflight_check(collection_dir)
+
+    message = str(excinfo.value)
+    assert "期待する見出し（完全一致）" in message
+    assert "不足/不一致の見出し" in message
+    assert "検出した ## 見出し" in message
+    assert "## タイトル案" in message
+    assert "## タイトル" in message
+    assert "修正例" in message
+    assert "/video-description を再実行" in message
+
+
 def test_en_only_channel_without_timestamps_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
     collection_dir = _write_collection(

@@ -76,6 +76,34 @@ class TestDescriptionsMdQuoteStrip:
         assert "必須セクション" in messages
         assert "## Complete Collection 概要欄" in messages
 
+    def test_warns_with_expected_missing_and_detected_headings_when_heading_mismatches(
+        self,
+        tmp_path: Path,
+        caplog,
+    ) -> None:
+        """見出し typo 時は期待値・不足値・検出値・修正例を表示する."""
+        doc_dir = tmp_path / "20-documentation"
+        doc_dir.mkdir(parents=True)
+        (doc_dir / "descriptions.md").write_text(
+            "## タイトル\n\n```\nTest Title\n```\n\n## Complete Collection 概要\n\n```\nTest description body.\n```\n",
+            encoding="utf-8",
+        )
+
+        mixin = DescriptionsMdMixin()
+        with caplog.at_level(logging.WARNING):
+            result = mixin._load_descriptions_md(tmp_path)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert result is None
+        assert "期待する見出し（完全一致）" in messages
+        assert "不足/不一致の見出し" in messages
+        assert "検出した ## 見出し" in messages
+        assert "## タイトル案" in messages
+        assert "## Complete Collection 概要欄" in messages
+        assert "## タイトル" in messages
+        assert "修正例" in messages
+        assert "/video-description を再実行" in messages
+
     def test_raises_with_recreate_guide_when_stray_description_file_exists(self, tmp_path: Path) -> None:
         """別名 description ファイル検出時も再作成ガイドを含める."""
         doc_dir = tmp_path / "20-documentation"

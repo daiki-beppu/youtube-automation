@@ -11,6 +11,9 @@ import logging
 import re
 from pathlib import Path
 
+from youtube_automation.agents._descriptions_md import (
+    _build_descriptions_md_parse_diagnostics,
+)
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.preflight_checks import (
@@ -79,7 +82,15 @@ class PreflightMixin:
         description = (self._extract_md_section(text, "Complete Collection 概要欄") or "").strip()
 
         if not title or not description:
-            raise RuntimeError(f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空")
+            missing_headings = []
+            if not title:
+                missing_headings.append("タイトル案")
+            if not description:
+                missing_headings.append("Complete Collection 概要欄")
+            raise RuntimeError(
+                f"❌ {desc_path}: descriptions.md のパースに失敗\n"
+                f"{_build_descriptions_md_parse_diagnostics(text, missing_headings)}"
+            )
 
         if len(title) > 100:
             raise RuntimeError(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}")
