@@ -87,6 +87,7 @@ Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`yt-generat
 - codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
 - `codex login status` が `Logged in using ChatGPT` を返す
 - `jq` が PATH 上にある（`--json` の JSONL 解析に使う）
+- TTP 生成のため、3 引数目以降に参照画像を 1 件以上渡す
 - ChatGPT サブスクの fair-use 上限は明文化されていないため、大量生成には使わない
 
 直接実行例:
@@ -94,10 +95,11 @@ Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`yt-generat
 ```bash
 bash .claude/skills/thumbnail/references/codex-image.sh \
   "a cozy cafe table with steaming coffee, soft morning light" \
-  collections/planning/sample/10-assets/thumbnail-codex-v1.png
+  collections/planning/sample/10-assets/thumbnail-codex-v1.png \
+  data/thumbnail_compare/benchmark/<channel>/<reference>.jpg
 ```
 
-参照画像つきで雰囲気を寄せたい場合は、3 引数目以降に画像パスを追加する。
+複数候補を作る場合でも、1 回の `codex-image.sh` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。参照画像 0 件では停止する。
 
 TTP 参照画像から上位互換サムネを作る場合は、長い個別指定ではなく
 `image_generation.codex.default_prompt_template` を使う。参照画像は mood reference

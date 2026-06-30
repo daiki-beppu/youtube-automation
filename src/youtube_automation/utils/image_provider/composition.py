@@ -292,8 +292,9 @@ def infer_benchmark_channel(reference_path: Path) -> str:
 
     明示メタデータは CLI へ渡ってこないため、運用上の配置規約だけを見る:
     ``.../benchmark/<channel>/<file>`` ならディレクトリ名、そうでなければ
-    ``<channel>-<video>.jpg`` 形式の stem 先頭を返す。推定できない場合は
-    ``"unknown"`` とし、ログ上で追跡不能であることを明示する。
+    既存 collector の ``<channel>_<views>k_<video_id>`` / ``<channel>_<video_id>``
+    形式から channel 部分を返す。推定できない場合は ``"unknown"`` とし、
+    strict TTP 側で生成前に停止できるようにする。
     """
     parts = reference_path.parts
     if "benchmark" in parts:
@@ -302,10 +303,12 @@ def infer_benchmark_channel(reference_path: Path) -> str:
             return parts[index + 1]
 
     stem = reference_path.stem
-    if "-" in stem:
-        channel, _rest = stem.split("-", 1)
-        if channel:
-            return channel
+    underscore_match = re.fullmatch(
+        r"(?P<channel>[A-Za-z0-9][A-Za-z0-9_-]*?)_(?:(?:\d+(?:\.\d+)?[kKmM])_)?(?P<video>[A-Za-z0-9_-]{6,})",
+        stem,
+    )
+    if underscore_match:
+        return underscore_match.group("channel")
     return "unknown"
 
 

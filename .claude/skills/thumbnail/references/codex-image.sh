@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Usage: bash .claude/skills/thumbnail/references/codex-image.sh <prompt> <output.png> [reference1.png reference2.png ...]
+# Usage: bash .claude/skills/thumbnail/references/codex-image.sh <prompt> <output.png> reference.png [reference2.png ...]
 # ChatGPT サブスク認証の codex CLI で画像生成し、PNG を保存する。
 set -euo pipefail
 
-prompt=${1:?usage: codex-image.sh <prompt> <output.png> [refs...]}
+prompt=${1:?usage: codex-image.sh <prompt> <output.png> reference.png [reference2.png ...]}
 out=${2:?output path required}
 shift 2
+
+if [ "$#" -lt 1 ]; then
+  echo "ERROR: codex-image.sh requires at least one reference image for thumbnail TTP generation" >&2
+  echo "usage: codex-image.sh <prompt> <output.png> reference.png [reference2.png ...]" >&2
+  exit 1
+fi
 
 if ! command -v codex >/dev/null 2>&1; then
   echo "ERROR: codex CLI が PATH にありません" >&2

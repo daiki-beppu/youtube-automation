@@ -253,12 +253,17 @@ PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider impor
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  # 候補ごとに別参照画像 1 枚だけを渡す。参照不足なら生成せず設定を直す。
+  if [ "${#REF_PATHS[@]}" -lt 3 ]; then
+    echo "ERROR: codex single_step preview requires at least 3 unique reference images" >&2
+    exit 1
+  fi
   build_codex_prompt() {
     uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "$1"
   }
-  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Aタイトル>")" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Bタイトル>")" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[@]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Cタイトル>")" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[@]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Aタイトル>")" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[0]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Bタイトル>")" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[1]}"
+  bash .claude/skills/thumbnail/references/codex-image.sh "$(build_codex_prompt "<企画Cタイトル>")" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[2]}"
 else
   uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
   uv run yt-generate-image "${REF_ARGS[@]}" --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
@@ -334,11 +339,17 @@ PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider impor
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  # 選択した企画と同じ index の参照画像 1 枚だけを使う（a=0, b=1, c=2）。
+  REF_INDEX="<選択された企画の0-based index>"
+  if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
+    echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
+    exit 1
+  fi
   CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
   bash .claude/skills/thumbnail/references/codex-image.sh \
     "$CODEX_PROMPT" \
     collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png \
-    "${REF_PATHS[@]}"
+    "${REF_PATHS[$REF_INDEX]}"
 else
   uv run yt-generate-image "${REF_ARGS[@]}" \
     --prompt "<選択された企画のプロンプト>" \

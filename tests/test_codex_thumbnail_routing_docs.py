@@ -101,15 +101,16 @@ def test_collection_ideate_parallel_generation_branches_to_codex_image_script() 
 def test_collection_ideate_codex_parallel_uses_reference_paths_as_positionals() -> None:
     """Given collection-ideate Phase 4-4 parallel の codex 分岐
     When 参照画像を渡す
-    Then --reference ペアではなく REF_PATHS の位置引数として codex-image.sh へ渡す。
+    Then --reference ペアではなく候補ごとに REF_PATHS の 1 要素だけを位置引数として渡す。
     """
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
 
     assert "REF_PATHS" in block, f"codex 用の素の参照パス配列がありません:\n{block}"
     assert "REF_ARGS" in block, f"API provider 用の --reference 配列が消えています:\n{block}"
-    assert re.search(r"codex-image\.sh[^\n]*.*REF_PATHS", block, flags=re.DOTALL), (
-        f"codex-image.sh 呼び出しに REF_PATHS が位置引数として渡されていません:\n{block}"
-    )
+    assert "${REF_PATHS[0]}" in block
+    assert "${REF_PATHS[1]}" in block
+    assert "${REF_PATHS[2]}" in block
+    assert '"${REF_PATHS[@]}"' not in block, f"全候補へ同じ参照配列を渡してはいけません:\n{block}"
 
 
 def test_collection_ideate_codex_parallel_requires_short_prompt() -> None:

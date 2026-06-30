@@ -107,64 +107,80 @@ def plan_reference_assignments(
     reference_images: list[Path],
     count: int,
     rotate: bool,
-    *,
-    require_unique: bool = False,
 ) -> list[Path | None]:
     """各 attempt に割り当てる参照画像を逐次時と同じ規則で確定する。
 
     参照画像が無い場合は ``None`` を並べる。ある場合は ``select_reference`` で
     attempt インデックスに応じたローテーション割り当てを再現する。
-
-    ``require_unique=True`` は thumbnail single_step TTP 用の strict モード。
-    候補ごとに別参照画像を 1 枚ずつ使うため、参照なし・参照不足・重複・
-    ``--no-rotate`` による先頭固定を ``ConfigError`` にする。
     """
-    if require_unique:
-        if not reference_images:
-            raise ConfigError(
-                "single_step TTP 生成には参照画像が必須です。"
-                "config/skills/thumbnail.yaml の image_generation.gemini.reference_images.default を設定し、"
-                "--reference で CLI へ展開してください。"
-            )
-        if count > 1 and not rotate:
-            raise ConfigError(
-                "single_step TTP 生成で複数候補を出す場合、--no-rotate は使えません。"
-                "候補ごとに別参照画像を割り当てるため、参照画像を候補数分指定してください。"
-            )
-
-        if len(reference_images) < count:
-            raise ConfigError(
-                f"single_step TTP 生成には候補数分のユニークな参照画像が必要です "
-                f"(max_attempts={count}, references={len(reference_images)})。"
-                "同じベンチマークチャンネル内の別サムネイル画像を追加してください。"
-            )
-        selected_references = reference_images[:count]
-
-        seen: set[Path] = set()
-        duplicates: list[Path] = []
-        for ref in selected_references:
-            key = ref.resolve(strict=False)
-            if key in seen:
-                duplicates.append(ref)
-            seen.add(key)
-        if duplicates:
-            duplicate_list = ", ".join(str(path) for path in duplicates)
-            raise ConfigError(f"single_step TTP 生成では同一参照画像を再利用できません: {duplicate_list}")
-
-        assignments: list[Path | None] = list(selected_references)
-        known_channels = {infer_benchmark_channel(ref) for ref in selected_references}
-        known_channels.discard("unknown")
-        if len(known_channels) > 1:
-            raise ConfigError(
-                "single_step TTP 生成の複数候補では同じベンチマークチャンネル内の参照画像だけを使ってください "
-                f"(detected={', '.join(sorted(known_channels))})。"
-                "別チャンネル由来の参照画像は別スコープとして明示してください。"
-            )
-        return assignments
-
     if not reference_images:
         return [None] * count
     return [select_reference(reference_images, attempt, rotate) for attempt in range(count)]
+
+
+def plan_ttp_reference_assignments(
+    reference_images: list[Path],
+    count: int,
+    rotate: bool,
+) -> list[Path | None]:
+    """thumbnail single_step TTP 用の参照割当を strict 契約で確定する。
+
+    候補ごとに別参照画像を 1 枚ずつ使い、全参照が同一 benchmark channel として
+    追跡できることを要求する。追跡不能な ``unknown`` は生成前に止める。
+    """
+    if not reference_images:
+        raise ConfigError(
+            "single_step TTP 生成には参照画像が必須です。"
+            "config/skills/thumbnail.yaml の image_generation.gemini.reference_images.default を設定し、"
+            "--reference で CLI へ展開してください。"
+        )
+    if count > 1 and not rotate:
+        raise ConfigError(
+            "single_step TTP 生成で複数候補を出す場合、--no-rotate は使えません。"
+            "候補ごとに別参照画像を割り当てるため、参照画像を候補数分指定してください。"
+        )
+
+    if len(reference_images) < count:
+        raise ConfigError(
+            f"single_step TTP 生成には候補数分のユニークな参照画像が必要です "
+            f"(max_attempts={count}, references={len(reference_images)})。"
+            "同じベンチマークチャンネル内の別サムネイル画像を追加してください。"
+        )
+    selected_references = reference_images[:count]
+
+    seen: set[Path] = set()
+    duplicates: list[Path] = []
+    for ref in selected_references:
+        key = ref.resolve(strict=False)
+        if key in seen:
+            duplicates.append(ref)
+        seen.add(key)
+    if duplicates:
+        duplicate_list = ", ".join(str(path) for path in duplicates)
+        raise ConfigError(f"single_step TTP 生成では同一参照画像を再利用できません: {duplicate_list}")
+
+    channels = [infer_benchmark_channel(ref) for ref in selected_references]
+    if any(channel == "unknown" for channel in channels):
+        unknown_refs = [
+            str(ref)
+            for ref, channel in zip(selected_references, channels)
+            if channel == "unknown"
+        ]
+        raise ConfigError(
+            "single_step TTP 生成では全参照画像を同じベンチマークチャンネルとして追跡できる必要があります "
+            f"(benchmark_channel=unknown: {', '.join(unknown_refs)})。"
+            "data/thumbnail_compare/benchmark/<channel>/ 配下、または既存の benchmark 保存形式の画像を"
+            "指定してください。"
+        )
+
+    detected_channels = set(channels)
+    if len(detected_channels) > 1:
+        raise ConfigError(
+            "single_step TTP 生成の複数候補では同じベンチマークチャンネル内の参照画像だけを使ってください "
+            f"(detected={', '.join(sorted(detected_channels))})。"
+            "別チャンネル由来の参照画像は別スコープとして明示してください。"
+        )
+    return list(selected_references)
 
 
 def build_requests(
@@ -453,12 +469,10 @@ def main():
     # resolve_unique_path の直列依存を排除してから並列 submit する。
     planned_paths = plan_output_paths(output_path, cli_max_attempts)
     try:
-        reference_assignments = plan_reference_assignments(
-            reference_images,
-            cli_max_attempts,
-            rotate,
-            require_unique=(generation_mode == "single_step"),
-        )
+        if generation_mode == "single_step":
+            reference_assignments = plan_ttp_reference_assignments(reference_images, cli_max_attempts, rotate)
+        else:
+            reference_assignments = plan_reference_assignments(reference_images, cli_max_attempts, rotate)
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
