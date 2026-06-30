@@ -12,6 +12,7 @@ Issue #132: ハードコード単価 (PRICING) 撤廃 + log_generation を metad
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import subprocess
@@ -224,10 +225,10 @@ def test_log_generation_concurrent_writes_preserve_all_entries(tmp_channel: Path
     assert indices == list(range(N))
 
 
-def test_generate_image_module_imports_when_fcntl_is_unavailable():
+def test_generate_image_entrypoint_starts_when_fcntl_is_unavailable():
     """Given fcntl が import できない環境
-    When cost_tracker と yt-generate-image のモジュールを import する
-    Then ImportError にならない。
+    When yt-generate-image のエントリーポイントを --help で起動する
+    Then ImportError にならず argparse の正常終了まで到達する。
     """
     repo_root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
@@ -249,6 +250,14 @@ from youtube_automation.scripts import generate_image
 
 assert callable(cost_tracker.log_generation)
 assert callable(generate_image.main)
+
+sys.argv = ["yt-generate-image", "--help"]
+try:
+    generate_image.main()
+except SystemExit as exc:
+    assert exc.code == 0
+else:
+    raise AssertionError("generate_image.main() did not exit for --help")
 """
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -329,7 +338,7 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
             self.calls.append((mode, nbytes))
             if mode == self.LK_LOCK and self.remaining_lock_failures:
                 self.remaining_lock_failures -= 1
-                raise OSError("fake msvcrt lock contention")
+                raise OSError(errno.EACCES, "fake msvcrt lock contention")
 
     fake_msvcrt = FakeMsvcrt()
     sleep_calls: list[float] = []
@@ -352,6 +361,86 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
         (fake_msvcrt.LK_LOCK, 1),
         (fake_msvcrt.LK_LOCK, 1),
         (fake_msvcrt.LK_UNLCK, 1),
+    ]
+    assert sleep_calls == [
+        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+    ]
+
+
+def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel: Path, monkeypatch):
+    """Given msvcrt.locking が競合ではない OSError を返す
+    When log_generation を呼ぶ
+    Then retry せず既存契約どおり None を返す。
+    """
+
+    class FakeMsvcrt:
+        LK_LOCK = 1
+        LK_UNLCK = 2
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+
+        def locking(self, fd: int, mode: int, nbytes: int) -> None:
+            self.calls.append((mode, nbytes))
+            if mode == self.LK_LOCK:
+                raise OSError(errno.EBADF, "fake invalid file descriptor")
+
+    fake_msvcrt = FakeMsvcrt()
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(cost_tracker, "_fcntl", None)
+    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(cost_tracker.time, "sleep", sleep_calls.append)
+
+    entry = cost_tracker.log_generation(
+        "image",
+        model="gemini-3.1-flash-image-preview",
+        quantity=1,
+        unit="image",
+    )
+
+    assert entry is None
+    assert fake_msvcrt.calls == [(fake_msvcrt.LK_LOCK, 1)]
+    assert sleep_calls == []
+
+
+def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: Path, monkeypatch):
+    """Given msvcrt.locking の競合が解消しない
+    When log_generation を呼ぶ
+    Then retry 上限で停止し既存契約どおり None を返す。
+    """
+
+    class FakeMsvcrt:
+        LK_LOCK = 1
+        LK_UNLCK = 2
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+
+        def locking(self, fd: int, mode: int, nbytes: int) -> None:
+            self.calls.append((mode, nbytes))
+            if mode == self.LK_LOCK:
+                raise OSError(errno.EACCES, "fake persistent lock contention")
+
+    fake_msvcrt = FakeMsvcrt()
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(cost_tracker, "_fcntl", None)
+    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(cost_tracker, "_MSVCRT_LOCK_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr(cost_tracker.time, "sleep", sleep_calls.append)
+
+    entry = cost_tracker.log_generation(
+        "image",
+        model="gemini-3.1-flash-image-preview",
+        quantity=1,
+        unit="image",
+    )
+
+    assert entry is None
+    assert fake_msvcrt.calls == [
+        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_LOCK, 1),
     ]
     assert sleep_calls == [
         cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,

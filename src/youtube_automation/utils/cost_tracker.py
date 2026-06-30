@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import threading
 import time
@@ -76,6 +77,16 @@ _LEGACY_UNIT_BY_CATEGORY: dict[Category, str] = {
 _LOCK_FILE_SUFFIX = ".lock"
 _LOCK_REGION_BYTES = 1
 _MSVCRT_LOCK_RETRY_DELAY_SECONDS = 0.05
+_MSVCRT_LOCK_MAX_ATTEMPTS = 20
+_MSVCRT_LOCK_RETRY_ERRNOS = {
+    errno.EACCES,
+    errno.EAGAIN,
+    getattr(errno, "EDEADLK", errno.EACCES),
+}
+_MSVCRT_LOCK_RETRY_WINERRORS = {
+    32,  # ERROR_SHARING_VIOLATION
+    33,  # ERROR_LOCK_VIOLATION
+}
 _IN_PROCESS_LOCK = threading.Lock()
 
 
@@ -132,13 +143,29 @@ def _acquire_lock(lock_f: BinaryIO) -> None:
 
 
 def _acquire_msvcrt_lock(lock_f: BinaryIO) -> None:
-    while True:
+    last_error: OSError | None = None
+    for attempt in range(_MSVCRT_LOCK_MAX_ATTEMPTS):
         lock_f.seek(0)
         try:
             _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_LOCK, _LOCK_REGION_BYTES)
             return
-        except OSError:
+        except OSError as e:
+            if not _is_msvcrt_lock_contention(e):
+                raise
+            last_error = e
+            if attempt == _MSVCRT_LOCK_MAX_ATTEMPTS - 1:
+                break
             time.sleep(_MSVCRT_LOCK_RETRY_DELAY_SECONDS)
+    raise TimeoutError(
+        f"msvcrt lock acquisition timed out after {_MSVCRT_LOCK_MAX_ATTEMPTS} attempts"
+    ) from last_error
+
+
+def _is_msvcrt_lock_contention(error: OSError) -> bool:
+    return (
+        error.errno in _MSVCRT_LOCK_RETRY_ERRNOS
+        or getattr(error, "winerror", None) in _MSVCRT_LOCK_RETRY_WINERRORS
+    )
 
 
 def _release_lock(lock_f: BinaryIO) -> None:
