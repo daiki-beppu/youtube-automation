@@ -185,6 +185,8 @@ def main():
     parser.add_argument("-y", "--yes", action="store_true", help="確認プロンプトをスキップ")
     args = parser.parse_args()
 
+    collector = BenchmarkCommentCollector(min_views=args.min_views, max_comments=args.max_comments)
+
     if not args.yes and not args.force:
         try:
             answer = input("続行しますか？ [Y/n] ").strip().lower()
@@ -195,7 +197,6 @@ def main():
             print("\nキャンセルしました")
             sys.exit(0)
 
-    collector = BenchmarkCommentCollector(min_views=args.min_views, max_comments=args.max_comments)
     result = collector.collect(force=args.force)
     if result:
         print_summary(result)
