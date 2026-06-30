@@ -221,6 +221,41 @@ def test_community_post_declares_raw_json_loader_exception() -> None:
     assert "`community` section を持たない" in text
 
 
+def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
+    skill_dirs = sorted(path.parent for path in (ROOT / ".claude" / "skills").glob("*/config.default.yaml"))
+    assert skill_dirs
+
+    for skill_dir in skill_dirs:
+        skill = skill_dir.name
+        rel_skill_md = f".claude/skills/{skill}/SKILL.md"
+        text = _read(rel_skill_md)
+
+        assert "## 設定読み込みゲート" in text, f"{skill} missing config read gate"
+        assert f".claude/skills/{skill}/config.default.yaml" in text
+        assert f"config/skills/{skill}.yaml" in text
+        assert f'load_skill_config("{skill}")' in text
+        assert "SKILL.md の説明や記憶から設定値を推測しない" in text
+        assert "存在する場合" in text
+        assert "勝手に作成しない" in text
+
+        gate_pos = text.index("## 設定読み込みゲート")
+        operational_markers = [
+            marker
+            for marker in (
+                "## Instructions",
+                "## 実行フロー",
+                "### Step 1",
+                "### 前提条件チェック",
+                "### 対象コレクション",
+            )
+            if marker in text
+        ]
+        if operational_markers:
+            assert gate_pos < min(text.index(marker) for marker in operational_markers), (
+                f"{skill} config read gate must appear before operational steps"
+            )
+
+
 def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
     text = _read(".claude/skills/collection-ideate/references/collection-lifecycle.md")
 
