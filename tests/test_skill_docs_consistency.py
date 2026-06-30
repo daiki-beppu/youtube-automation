@@ -152,14 +152,15 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
 
 def test_thumbnail_search_order_is_documented() -> None:
-    expected_order = (
-        "`10-assets/thumbnail.jpg` → `10-assets/thumbnail.png` → `10-assets/main.jpg` → `10-assets/main.png`"
-    )
+    expected_order = "`10-assets/thumbnail.jpg` → `10-assets/thumbnail.png`"
     for path in (
         ".claude/skills/video-upload/SKILL.md",
         ".claude/skills/video-upload/references/posting-checklist.md",
     ):
-        assert expected_order in _read(path)
+        text = _read(path)
+        assert expected_order in text
+        assert "→ `10-assets/main.jpg` → `10-assets/main.png`" not in text
+        assert "textless 動画背景" in text
 
 
 def test_first_post_playlist_initialization_contract_is_documented() -> None:

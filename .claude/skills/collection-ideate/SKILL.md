@@ -179,7 +179,7 @@ else:
 
 例（`cost_per_image_usd` が設定済み・parallel・`candidate_count=3` の場合）: `3 枚 × $0.101 = $0.303 (parallel / gemini-3.1-flash-image-preview / 2K)`
 
-**ユーザーが拒否した場合** → サムネ生成を完全スキップしテキストのみで提示（プレビューサムネイル生成はブロッキングにしない）。`main.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` が `main.png` 不在を検出して Phase 1 から本番サムネを新規生成する（Next Step の「コスト拒否 / 生成失敗で main.png が無い場合」参照）。
+**ユーザーが拒否した場合** → プレビュー画像生成を完全スキップしテキストのみで提示（企画参照画像生成はブロッキングにしない）。`planning-preview.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する（Next Step の「コスト拒否 / 生成失敗で企画参照画像が無い場合」参照）。
 
 **4-3: セッションディレクトリ作成**
 
@@ -203,7 +203,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 - **`single_step` の場合**: `image_generation.gemini.diff_prompt_template` をベースに、オブジェクトデザインルール（`ideate.objects` が定義されている場合）に従って企画ごとのオリジナルオブジェクトを指定。
   - **背景色**: `image_generation.gemini.brand_background` を使用（定義がある場合）。全コレクション統一
   - **差別化はオブジェクトで行う**: `ideate.objects.swappable` で定義されたスロットを企画ごとに変える
-  - **キャラ + 手が写る構図では `${anatomy_clause}` を全企画プロンプトに展開する**（#570）。`single_step` プレビューが `/wf-new` Phase 2c でそのまま最終 thumbnail に流用されるため、ここで anatomy 強調 clause が当たっていないと、Gemini の手・指破綻（指の融合・本数異常・溶融）が公開サムネに混入する経路ができる
+  - **キャラ + 手が写る構図では `${anatomy_clause}` を全企画プロンプトに展開する**（#570）。`single_step` プレビューは企画参照素材として保存され、最終 `thumbnail.jpg` には流用しない。ただし参照素材の手・指破綻（指の融合・本数異常・溶融）が後段 `/thumbnail` の方向性に影響するため、ここで anatomy 強調 clause を当てておく
   - **IP / 版権セーフティ clause を常時付与 (#569)**: ベンチマーク TTP 由来の署名・サイン・透かし・ロゴが焼き込まれないよう、`single_step.ip_safety_clause`（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を全企画プロンプトに含める。`diff_prompt_template` 自体に組み込んでおけば 4-1 で生成するテキスト案にも自動で含まれる
   - 具体的な差分プロンプトの書き方は `references/object-design-examples.md` を参照
 
@@ -555,15 +555,15 @@ analytics mode / benchmark fallback mode ではベンチマークデータを分
 
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
-企画確定後、**選択した企画のプレビュー画像を `main.png` にコピー**してセッションディレクトリを削除する。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
+企画確定後、選択した企画のプレビュー画像は企画参照として保存し、**`main.png` にはコピーしない**。`main.png/jpg` は `/thumbnail` で承認済みテキスト付き `thumbnail.jpg` から再生成する textless 動画背景として確定する。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
 
 ### parallel モード（デフォルト）
 
 不採用 (`candidate_count` - 1) 枚を `assets/stock/<theme>/` に退避してからプレビューディレクトリを削除する（#364）:
 
 ```bash
-# 1. 選択した企画のプレビュー画像を main.png としてコピー
-cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png
+# 1. 選択した企画のプレビュー画像を企画参照として保存（最終背景 main.png にはしない）
+cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/planning-preview.png
 
 # 2. 不採用プレビューを stock 退避（--exclude で採用 1 枚だけ除外）
 THEME="<theme-slug>"   # コレクションのテーマ slug
@@ -595,24 +595,24 @@ parallel モードでは `config/skills/collection-ideate.yaml` の `preview.sto
 不採用 (`candidate_count` - 1) 案は画像が未生成なので stock 退避は不要。`cp` 1 回 + `rm -rf` だけで済む:
 
 ```bash
-# 1. 選択した企画のプレビュー画像を main.png としてコピー
-cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png
+# 1. 選択した企画のプレビュー画像を企画参照として保存（最終背景 main.png にはしない）
+cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/planning-preview.png
 
 # 2. セッションディレクトリ削除
 rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-### コスト拒否 / 生成失敗で main.png が無い場合
+### コスト拒否 / 生成失敗で企画参照画像が無い場合
 
-4-2 でユーザーがコストを拒否、または 4-4 / 4-5 で全枚生成失敗した場合は `main.png` が未生成のまま Next Step を抜ける。`cp` は実行せず、セッションディレクトリが存在すれば削除する:
+4-2 でユーザーがコストを拒否、または 4-4 / 4-5 で全枚生成失敗した場合は `planning-preview.png` が未生成のまま Next Step を抜ける。`cp` は実行せず、セッションディレクトリが存在すれば削除する:
 
 ```bash
-# 採用画像が無いので main.png コピーはスキップ
+# 採用画像が無いので planning-preview.png コピーはスキップ
 # セッションディレクトリが残っていれば削除（部分生成のゴミ掃除）
 [ -d collections/planning/_plan-previews/<session-dir> ] && rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-このケースでは下流の `/thumbnail <theme>` が `main.png` 不在を検出し、**Phase 1 から** 本番サムネを新規生成する流れに合流する（下記「企画選択後」参照）。
+このケースでも下流の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する流れに合流する（下記「企画選択後」参照）。
 
 > **定期クリーンアップ**: 放棄されたセッションのディレクトリが残る場合、7 日以上前のものは手動削除可:
 > `find collections/planning/_plan-previews/ -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +`
@@ -620,5 +620,5 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 > stock 側の保守は `uv run yt-stock-prune --dry-run` で候補確認 →（必要なら）本実行。
 
 企画選択後:
-→ `/thumbnail <theme>` でサムネ仕上げに進む。`main.png` が既に存在する場合は Phase 2 からテキストオーバーレイのみ実行。コスト拒否や生成失敗で `main.png` が無い場合は Phase 1 から本番サムネを新規生成する
+→ `/thumbnail <theme>` で、テキスト付き `thumbnail.jpg` と textless `main.png/jpg` を別成果物として確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
 → サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）

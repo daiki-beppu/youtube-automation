@@ -13,7 +13,7 @@ description: "Use when コレクションの音声ファイルが揃い、動画
 | スクリプト | 役割 | 場所 |
 |-----------|------|------|
 | `yt-generate-master` | 個別 MP3 → クロスフェード結合 → マスター MP3 | Python CLI (skill-config `masterup` 参照) |
-| `generate_videos.sh` | 音声 + サムネイル → MP4 動画 | `.claude/skills/videoup/references/generate_videos.sh` |
+| `generate_videos.sh` | 音声 + テキストなし動画背景 (`main.png/jpg` or `loop.mp4`) → MP4 動画 | `.claude/skills/videoup/references/generate_videos.sh` |
 
 ## Quick Reference
 
@@ -40,7 +40,8 @@ $ARGUMENTS
 1. **対象コレクション確認**: `workflow-state.json` で状態確認
 2. **マスター音源**: `master-mix.{wav,m4a,aac,mp3,flac}` または `master.{wav,m4a,aac,mp3,flac}` が既にあればスキップ。なければ `/masterup` または `/lyria` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可、`/lyria` / `/masterup` の自動生成出力は `master.{wav,mp3}` で配置される）
 3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
-   `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/loop-video` を案内せず `10-assets/main.png` を静止背景として使用する。
+   `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/loop-video` を案内せず textless `10-assets/main.png` または `main.jpg` を静止背景として使用する。
+   この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
 4. **動画生成**: `generate_videos.sh` の実行コマンドを案内
@@ -52,7 +53,7 @@ $ARGUMENTS
 
 - **コレクション名**: ディレクトリ名から（`YYYYMMDD-xxx-theme-collection` → `Theme-Name`）
 - **マスター音声**: `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`yt-generate-master`）の自動生成出力（#507）
-- **サムネイル**: `10-assets/main.png` 優先、`thumbnail.jpg` フォールバック
+- **動画背景**: `10-assets/main.png` 優先、`main.jpg` フォールバック。`thumbnail.jpg/png` は YouTube アップロード用のテキスト付きサムネイルなので動画背景には使わない
 - **個別音楽**: `02-Individual-music/*.mp3`（アルファベット順）
 
 ### 重要
@@ -232,29 +233,28 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 ## オーディオビジュアライザー / オーバーレイについて
 
-**現状: 未実装（feature 化を #511 で追跡中）**
-
-`generate_videos.sh` は現時点で**オーディオビジュアライザー（波形・スペクトラム表示）や購読ボタンポップアップ等のオーバーレイ合成をサポートしていない**。出力は `THUMBNAIL`（静止画）または `loop.mp4`（ループ動画背景）に音声を重ねただけの動画になる。
+`generate_videos.sh` は `config/channel/youtube.json::overlays.enabled: true` のときだけ、audio visualizer や subscribe popup を `filter_complex` で合成する。無効時または `jq` 不在時は従来の textless `main.png/jpg`（静止画背景）または `loop.mp4`（ループ動画背景）に音声を重ねる経路を維持する。
 
 ### よくある誤解 (#646 feedback)
 
-「Suno のデータ取り込み時にビジュアライザーを付けて」とユーザーが指示しても、ビジュアライザーは付かない。理由:
+「Suno のデータ取り込み時にビジュアライザーを付けて」とユーザーが指示しても、Suno / Lyria / masterup の工程ではビジュアライザーは付かない。理由:
 
 - `/suno` / `/lyria` / `/masterup` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
-- ビジュアライザーは本質的に**動画生成（`generate_videos.sh`）側の合成処理**で、`ffmpeg` の `filter_complex` に `showfreqs` 等を組む必要がある
-- 現状の `generate_videos.sh` v12.x にはこの filter 経路が無いため、どの工程でどう指示しても最終 MP4 にビジュアライザーは反映されない
+- ビジュアライザーは本質的に**動画生成（`generate_videos.sh`）側の合成処理**で、`ffmpeg` の `filter_complex` に `showfreqs` 等を組む
+- 反映したい場合は `config/channel/youtube.json::overlays.enabled: true` と必要な overlay 設定を用意してから `/videoup` を実行する
 
-### 正しい運用（実装されるまでの暫定）
+### 正しい運用
 
-- ビジュアライザーが必要な動画は、現状では `master-mix.{wav,m4a}` と `main.png` で `generate_videos.sh` を回した後、**外部ツール（DaVinci Resolve / After Effects / ffmpeg 手書きスクリプト）で別途オーバーレイ合成する**
-- 自動化フローに取り込みたい場合は #511（`overlays.enabled` config-driven 合成）の進捗を待つ。マージされ次第、`config/channel/youtube.json::overlays.audio_visualizer.enabled: true` でチャンネル単位で有効化できるようになる予定
+- ビジュアライザーが必要な動画は、`config/channel/youtube.json::overlays.enabled: true` にしたうえで `overlays.audio_visualizer.enabled: true` を設定して `/videoup` を実行する
+- popup も必要なら `overlays.subscribe_popup.enabled: true` と画像パスを設定する。画像が見つからない場合は popup だけスキップし、visualizer は継続する
+- overlays 無効チャンネルでは従来どおり textless `main.png/jpg` または `loop.mp4` のみで生成する
 
 ### Claude への指示時の注意
 
-オペレーターから「ビジュアライザー付きで」「波形表示で」等の指示があった場合は、**この制約を即座に明示してから作業を進めること**。「Suno に指示しても載らない」「現状の videoup では合成できない」「#511 が必要」を伝えた上で、
+オペレーターから「ビジュアライザー付きで」「波形表示で」等の指示があった場合は、**Suno 側ではなく `/videoup` の overlays 設定で反映する**ことを明示してから作業を進めること。その上で、
 
+- overlays を有効にして生成するか
 - 静止画 / ループ動画のみで進めるか
-- #511 の実装を待つか
 - 外部ツールで後付けするか
 
 をユーザーに選んでもらう。黙って静止画で生成すると今回のような FB（期待と実装の乖離）が再発する。
