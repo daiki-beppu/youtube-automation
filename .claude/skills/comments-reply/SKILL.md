@@ -1,15 +1,16 @@
 ---
 name: comments-reply
-description: "Use when YouTube のコメントに自動返信したいとき。`config/channel/comments.json` のルールに沿って LLM 生成返信を dry-run でプレビューしてから apply で実反映する。二重返信は履歴ファイル (`comment_reply_history.json`) で防止。「コメント返信」「自動返信」「コメント対応」「視聴者返信」「リプライ」など、コメント対応の自動化に関わる場面で使用すること"
+description: "Use when YouTube のコメントに自動返信したいとき。`config/channel/comments.json` の基本フィルタを通過した全コメントを候補化し、Agent 生成返信を dry-run で監査してから apply で実反映する。二重返信は履歴ファイル (`comment_reply_history.json`) で防止。「コメント返信」「自動返信」「コメント対応」「視聴者返信」「リプライ」など、コメント対応の自動化に関わる場面で使用すること"
 ---
 
 ## Overview
 
 YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、
-自チャンネルの動画に寄せられたコメントへ `comments.json` のルールに従って自動返信する。
+自チャンネルの動画に寄せられたコメントへ自動返信する。
 
 - **dry-run**: 対象コメントと生成返信テキストのプレビューのみ（API 書き込みなし）
 - **apply**: 実際に YouTube 側へ返信を反映、同時に履歴 JSON を更新
+- **対象条件**: `ng_words` / 既返信 / held for review / 自チャンネル自身のコメント等の基本フィルタを通過した全コメント
 
 ## 前提
 
@@ -19,10 +20,10 @@ YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、
 
 ## 実行フロー
 
-### Phase 1: ルール / provider の確認
+### Phase 1: 基本フィルタ / provider の確認
 
-`config/channel/comments.json` の `rules` と `generator` を Read ツールで確認する。
-ルールは `priority` の降順で評価され、最初にマッチしたものが採用される。
+`config/channel/comments.json` の `ng_words`, `language`, `generator` を Read ツールで確認する。
+`rules` は後方互換のため残っていても処理では無視される。keywords / pattern の未マッチで skip される経路はない。
 Claude Code 運用では CLI 内部の provider 生成を使わず、メインエージェントが Agent ツールで
 サブエージェントを呼び出して返信 JSON を作成する。CLI は候補抽出・検証・YouTube 投稿だけを担当する。
 CLI 内部から `claude -p` は呼ばない。
@@ -61,6 +62,7 @@ uv run yt-comments-reply --dry-run --export-candidates --json --limit 5 > /tmp/c
 ```
 
 返信作成時の確認ポイント:
+- 返信文の先頭に `@コメント投稿者名` が付いているか（CLI も不足時に補完する）
 - `reply_text` がチャンネル persona とコメント言語に合っているか
 - 各 `reply_text` が `max_length` 以内に収まっているか
 - NG ワードや過度な断定、医療・法務・金融などの助言になっていないか
@@ -75,7 +77,7 @@ uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.jso
 出力の確認ポイント:
 - `返信候補` が期待件数になっているか
 - `reply` 欄の Agent 生成文がチャンネル persona とコメント言語に合っているか
-- `skipped` に `already_replied` / `no_rule_matched` があるかを確認
+- `skipped` に `already_replied` / `ng_word` / `reply_contains_ng_word` があるかを確認
 - `agent_reply_missing` が出た場合は `/tmp/comment-replies.json` に該当 `comment_id` の返信がない
 
 ## 設定スキーマ
@@ -84,15 +86,8 @@ uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.jso
 {
   "comments": {
     "enabled": true,
-    "rules": [
-      {
-        "name": "greeting_ja",
-        "keywords": ["こんにちは"],
-        "language": "ja",
-        "priority": 10,
-        "provider": "codex"
-      }
-    ],
+    "language": "ja",
+    "ng_words": ["spam", "http://"],
     "generator": {
       "provider": "codex",
       "model": null,
@@ -106,9 +101,11 @@ uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.jso
 ```
 
 - `comments.generator.provider`: 互換用の内部生成 provider。`codex` / `gemini`。省略時は `codex`
-- `comments.rules[].provider`: ルール単位の provider override。省略時は global provider
+- `comments.language`: 返信言語ヒント。省略時は YouTube API 既定言語
+- `comments.ng_words`: コメント本文に含まれていたら候補から除外し、返信文に含まれていたら投稿前に skip
+- `comments.rules`: 後方互換のため残っていても読み込まれるが、返信対象判定・provider 解決では無視される
 - `fallback_on_error`: `skip` / `retry`
-- **破壊的変更**: 旧 `comments.generator.type`、`comments.templates`、`comments.rules[].template_key`、`comments.rules[].generator`、`fallback_on_error: "template"` は廃止。downstream の `config/channel/comments.json` は `provider` 軸へ移行する
+- **破壊的変更**: 旧 `comments.generator.type`、`comments.templates`、`fallback_on_error: "template"` は廃止。`comments.rules[].template_key` / `comments.rules[].generator` は互換で読み捨てられる
 
 ### Phase 5: apply で反映
 
@@ -142,5 +139,5 @@ uv run yt-comments-reply --apply --agent-replies-file /tmp/comment-replies.json 
 ## 非スコープ
 
 - 1 件ずつ対話承認するモード（別 issue 予定）
-- langdetect 等の自動言語判定（ルール側で明示指定する前提）
+- langdetect 等の自動言語判定（`comments.language` または YouTube API 既定言語を使う）
 - センチメント分析・要約

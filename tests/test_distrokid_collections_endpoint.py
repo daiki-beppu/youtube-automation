@@ -15,9 +15,11 @@ issue #934 で新規追加するエンドポイント（dir mode 時のみ有効
 
 from __future__ import annotations
 
+import http.client
 import json
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -758,6 +760,21 @@ def _assert_json_error(err: urllib.error.HTTPError, *, status: int, message: str
     assert json.loads(err.read().decode("utf-8")) == {"error": message}
 
 
+def _post_declared_length(url: str, *, declared_length: int | str, origin: str):
+    """Content-Length だけを大きく宣言して POST する。"""
+    parsed = urllib.parse.urlsplit(url)
+    conn = http.client.HTTPConnection(parsed.hostname, parsed.port)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    conn.putrequest("POST", path)
+    conn.putheader("Host", parsed.netloc)
+    conn.putheader("Origin", origin)
+    conn.putheader("Content-Length", str(declared_length))
+    conn.endheaders()
+    return conn, conn.getresponse()
+
+
 def test_post_distrokid_releases_writes_file_and_returns_recorded(tmp_path, serve_dir_dk):
     """Given 許可 Origin からの POST /distrokid/releases（capture_root あり）
     When 有効な body を送る
@@ -781,6 +798,55 @@ def test_post_distrokid_releases_writes_file_and_returns_recorded(tmp_path, serv
     assert str(result["path"]).endswith("distrokid-releases.json")
     released = read_released_discs(capture_root)
     assert "20260526-abc-collection/disc1-alpha" in released
+
+
+def test_post_distrokid_releases_ignores_query_side_inputs(tmp_path, serve_dir_dk):
+    """Given root route に query だけで collection/disc を渡す
+    When body が空の POST /distrokid/releases?... を送る
+    Then 記録を書かず 400/404 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+    query = urllib.parse.urlencode(
+        {
+            "collection_id": "20260526-abc-collection",
+            "disc": "disc1-alpha",
+            "album_title": "Alpha Vol.1",
+        }
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}?{query}",
+            {},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code in {400, 404}
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_rejects_path_side_inputs(tmp_path, serve_dir_dk):
+    """Given collection/disc を path 側へ入れた POST
+    When POST /distrokid/releases/<collection>/<disc> を送る
+    Then 記録を書かず 404 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}/20260526-abc-collection/disc1-alpha",
+            {"album_title": "Alpha Vol.1"},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    assert exc_info.value.code == 404
+    assert not distrokid_releases_output_path(capture_root).exists()
 
 
 def test_post_distrokid_releases_overwrite_on_repost(tmp_path, serve_dir_dk):
@@ -822,6 +888,45 @@ def test_post_distrokid_releases_without_capture_root_returns_404(tmp_path, serv
         _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", payload, headers={"Origin": _EXTENSION_ORIGIN})
 
     _assert_json_error(exc_info.value, status=404, message="Not Found", expected_origin=_EXTENSION_ORIGIN)
+
+
+def test_post_distrokid_releases_single_mode_with_capture_root_preserves_legacy_write(tmp_path):
+    """Given single collection mode + capture_root
+    When POST /distrokid/releases する
+    Then dir mode の実在検証を要求せず従来どおり記録を書ける。
+    """
+    planning = tmp_path / "planning"
+    collection_dir = _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    server = create_server(
+        0,
+        _EXTENSION_ORIGIN,
+        prompts_path=None,
+        collection_dir=collection_dir,
+        distrokid=Distrokid(enabled=True, profile=_profile()),
+        collections_root=None,
+        playlist_capture=(capture_root, "dummy"),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://localhost:{server.server_address[1]}"
+    try:
+        with _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {
+                "collection_id": "20260526-abc-collection",
+                "disc": "disc1-alpha",
+                "album_title": "Alpha",
+            },
+            headers={"Origin": _EXTENSION_ORIGIN},
+        ) as resp:
+            assert resp.status == 200
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    released = read_released_discs(capture_root)
+    assert "20260526-abc-collection/disc1-alpha" in released
 
 
 def test_post_distrokid_releases_without_origin_returns_403(tmp_path, serve_dir_dk):
@@ -916,6 +1021,145 @@ def test_post_distrokid_releases_missing_field_returns_400(tmp_path, serve_dir_d
         )
 
     _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
+
+
+def test_post_distrokid_releases_non_string_field_returns_400(tmp_path, serve_dir_dk):
+    """Given 必須フィールドが string ではない
+    When 許可 Origin から POST する
+    Then 400 を返し、暗黙の str() 変換で記録しない。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {"collection_id": 20260526, "disc": "disc1-alpha", "album_title": "Alpha"},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_unknown_collection_returns_400(tmp_path, serve_dir_dk):
+    """Given collections_root に存在しない collection_id
+    When 許可 Origin から POST /distrokid/releases する
+    Then リリース記録を書かず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {
+                "collection_id": "20990101-missing-collection",
+                "disc": "disc1-alpha",
+                "album_title": "Ghost Album",
+            },
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_unknown_disc_returns_400(tmp_path, serve_dir_dk):
+    """Given collection は存在するが disc が存在しない
+    When 許可 Origin から POST /distrokid/releases する
+    Then リリース記録を書かず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {
+                "collection_id": "20260526-abc-collection",
+                "disc": "disc99-missing",
+                "album_title": "Ghost Album",
+            },
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=400, message="Bad Request", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_body_too_large_returns_413(tmp_path, serve_dir_dk):
+    """Given 1 MiB を超える body
+    When 許可 Origin から POST /distrokid/releases する
+    Then body を処理せず 413 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+    conn, resp = _post_declared_length(
+        f"{base}{_DISTROKID_RELEASES_ROUTE}",
+        declared_length=1024 * 1024 + 1,
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 413
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Payload Too Large"}
+    finally:
+        conn.close()
+
+
+def test_post_distrokid_releases_invalid_content_length_returns_400(tmp_path, serve_dir_dk):
+    """Given invalid Content-Length
+    When 許可 Origin から POST /distrokid/releases する
+    Then body を処理せず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+    conn, resp = _post_declared_length(
+        f"{base}{_DISTROKID_RELEASES_ROUTE}",
+        declared_length="not-a-number",
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 400
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
+        assert not distrokid_releases_output_path(capture_root).exists()
+    finally:
+        conn.close()
+
+
+def test_post_distrokid_releases_negative_content_length_returns_400(tmp_path, serve_dir_dk):
+    """Given negative Content-Length
+    When 許可 Origin から POST /distrokid/releases する
+    Then body を処理せず 400 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root)
+    conn, resp = _post_declared_length(
+        f"{base}{_DISTROKID_RELEASES_ROUTE}",
+        declared_length=-1,
+        origin=_EXTENSION_ORIGIN,
+    )
+    try:
+        assert resp.status == 400
+        assert resp.getheader("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+        assert json.loads(resp.read().decode("utf-8")) == {"error": "Bad Request"}
+        assert not distrokid_releases_output_path(capture_root).exists()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

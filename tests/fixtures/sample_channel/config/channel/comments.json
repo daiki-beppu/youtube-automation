@@ -1,15 +1,7 @@
 {
   "comments": {
     "enabled": false,
-    "rules": [
-      {
-        "name": "greeting_ja",
-        "keywords": ["こんにちは"],
-        "language": "ja",
-        "priority": 10,
-        "provider": "codex"
-      }
-    ],
+    "language": "ja",
     "generator": {
       "provider": "codex",
       "channel_persona": "Warm YouTube channel host",

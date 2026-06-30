@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.utils.comments.codex_generator import CodexGenerator
+from youtube_automation.utils import comments as comments_api
 from youtube_automation.utils.comments.generator import GeminiGenerator
 from youtube_automation.utils.comments.generator_factory import create_reply_generator
 from youtube_automation.utils.config.comments import GeneratorConfig
@@ -28,10 +28,17 @@ def test_create_gemini_generator():
     assert isinstance(generator, GeminiGenerator)
 
 
-def test_create_codex_generator():
-    generator = create_reply_generator(_config("codex"), sleep_fn=lambda _: None)
+def test_create_codex_generator_rejects_direct_generation():
+    with pytest.raises(ConfigError, match="監査済みフロー"):
+        create_reply_generator(_config("codex"), sleep_fn=lambda _: None)
 
-    assert isinstance(generator, CodexGenerator)
+
+def test_comments_package_facade_exports_only_public_reply_api():
+    assert comments_api.__all__ == ["CommentReplier", "ReplyPlan"]
+    assert not hasattr(comments_api, "CodexGenerator")
+    assert not hasattr(comments_api, "GeminiGenerator")
+    assert not hasattr(comments_api, "ReplyHistory")
+    assert not hasattr(comments_api, "fetch_comments")
 
 
 def test_unknown_provider_raises_config_error():

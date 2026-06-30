@@ -5,24 +5,8 @@
     "delay_between_replies_sec": 2.0,
     "history_file": "comment_reply_history.json",
     "skip_held_for_review": true,
+    "language": "ja",
     "ng_words": ["spam", "http://"],
-    "rules": [
-      {
-        "name": "greeting_ja",
-        "keywords": ["こんにちは", "はじめまして"],
-        "language": "ja",
-        "priority": 10,
-        "provider": "codex",
-        "scope": "top_level"
-      },
-      {
-        "name": "thanks_en",
-        "keywords": ["thank you", "thanks"],
-        "language": "en",
-        "priority": 5,
-        "scope": "any"
-      }
-    ],
     "generator": {
       "provider": "codex",
       "channel_persona": "Warm YouTube channel host",
