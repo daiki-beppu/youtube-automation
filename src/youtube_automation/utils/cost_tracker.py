@@ -147,7 +147,7 @@ def _acquire_msvcrt_lock(lock_f: BinaryIO) -> None:
     for attempt in range(_MSVCRT_LOCK_MAX_ATTEMPTS):
         lock_f.seek(0)
         try:
-            _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_LOCK, _LOCK_REGION_BYTES)
+            _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_NBLCK, _LOCK_REGION_BYTES)
             return
         except OSError as e:
             if not _is_msvcrt_lock_contention(e):

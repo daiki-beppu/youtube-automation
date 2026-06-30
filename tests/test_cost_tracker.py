@@ -225,6 +225,42 @@ def test_log_generation_concurrent_writes_preserve_all_entries(tmp_channel: Path
     assert indices == list(range(N))
 
 
+def test_log_generation_uses_fcntl_when_available(tmp_channel: Path, monkeypatch):
+    """Given fcntl が利用可能
+    When log_generation を呼ぶ
+    Then POSIX file lock を LOCK_EX / LOCK_UN の対で使う。
+    """
+
+    class FakeFcntl:
+        LOCK_EX = 1
+        LOCK_UN = 2
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+
+        def flock(self, fd: int, mode: int) -> None:
+            self.calls.append((fd, mode))
+
+    class UnexpectedMsvcrt:
+        def locking(self, fd: int, mode: int, nbytes: int) -> None:
+            raise AssertionError("msvcrt should not be used when fcntl is available")
+
+    fake_fcntl = FakeFcntl()
+    monkeypatch.setattr(cost_tracker, "_fcntl", fake_fcntl)
+    monkeypatch.setattr(cost_tracker, "_msvcrt", UnexpectedMsvcrt())
+
+    entry = cost_tracker.log_generation(
+        "image",
+        model="gemini-3.1-flash-image-preview",
+        quantity=1,
+        unit="image",
+    )
+
+    assert entry is not None
+    modes = [mode for _, mode in fake_fcntl.calls]
+    assert modes == [fake_fcntl.LOCK_EX, fake_fcntl.LOCK_UN]
+
+
 def test_generate_image_entrypoint_starts_when_fcntl_is_unavailable():
     """Given fcntl が import できない環境
     When yt-generate-image のエントリーポイントを --help で起動する
@@ -279,6 +315,7 @@ def test_log_generation_uses_msvcrt_when_fcntl_is_unavailable(tmp_channel: Path,
 
     class FakeMsvcrt:
         LK_LOCK = 1
+        LK_NBLCK = 3
         LK_UNLCK = 2
 
         def __init__(self) -> None:
@@ -289,7 +326,7 @@ def test_log_generation_uses_msvcrt_when_fcntl_is_unavailable(tmp_channel: Path,
             self.max_held_count = 0
 
         def locking(self, fd: int, mode: int, nbytes: int) -> None:
-            if mode == self.LK_LOCK:
+            if mode == self.LK_NBLCK:
                 acquired = self._lock.acquire(timeout=5)
                 if not acquired:
                     raise RuntimeError("fake msvcrt lock acquisition timed out")
@@ -316,7 +353,7 @@ def test_log_generation_uses_msvcrt_when_fcntl_is_unavailable(tmp_channel: Path,
     indices = sorted(e["metadata"]["idx"] for e in entries)
     assert indices == list(range(N))
     assert fake_msvcrt.max_held_count == 1
-    assert fake_msvcrt.calls.count((fake_msvcrt.LK_LOCK, 1)) == N
+    assert fake_msvcrt.calls.count((fake_msvcrt.LK_NBLCK, 1)) == N
     assert fake_msvcrt.calls.count((fake_msvcrt.LK_UNLCK, 1)) == N
 
 
@@ -328,6 +365,7 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
 
     class FakeMsvcrt:
         LK_LOCK = 1
+        LK_NBLCK = 3
         LK_UNLCK = 2
 
         def __init__(self) -> None:
@@ -336,7 +374,7 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
 
         def locking(self, fd: int, mode: int, nbytes: int) -> None:
             self.calls.append((mode, nbytes))
-            if mode == self.LK_LOCK and self.remaining_lock_failures:
+            if mode == self.LK_NBLCK and self.remaining_lock_failures:
                 self.remaining_lock_failures -= 1
                 raise OSError(errno.EACCES, "fake msvcrt lock contention")
 
@@ -357,9 +395,9 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
     assert entry is not None
     assert len(entries) == 1
     assert fake_msvcrt.calls == [
-        (fake_msvcrt.LK_LOCK, 1),
-        (fake_msvcrt.LK_LOCK, 1),
-        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
         (fake_msvcrt.LK_UNLCK, 1),
     ]
     assert sleep_calls == [
@@ -376,6 +414,7 @@ def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel:
 
     class FakeMsvcrt:
         LK_LOCK = 1
+        LK_NBLCK = 3
         LK_UNLCK = 2
 
         def __init__(self) -> None:
@@ -383,7 +422,7 @@ def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel:
 
         def locking(self, fd: int, mode: int, nbytes: int) -> None:
             self.calls.append((mode, nbytes))
-            if mode == self.LK_LOCK:
+            if mode == self.LK_NBLCK:
                 raise OSError(errno.EBADF, "fake invalid file descriptor")
 
     fake_msvcrt = FakeMsvcrt()
@@ -400,7 +439,7 @@ def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel:
     )
 
     assert entry is None
-    assert fake_msvcrt.calls == [(fake_msvcrt.LK_LOCK, 1)]
+    assert fake_msvcrt.calls == [(fake_msvcrt.LK_NBLCK, 1)]
     assert sleep_calls == []
 
 
@@ -412,6 +451,7 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
 
     class FakeMsvcrt:
         LK_LOCK = 1
+        LK_NBLCK = 3
         LK_UNLCK = 2
 
         def __init__(self) -> None:
@@ -419,7 +459,7 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
 
         def locking(self, fd: int, mode: int, nbytes: int) -> None:
             self.calls.append((mode, nbytes))
-            if mode == self.LK_LOCK:
+            if mode == self.LK_NBLCK:
                 raise OSError(errno.EACCES, "fake persistent lock contention")
 
     fake_msvcrt = FakeMsvcrt()
@@ -438,9 +478,9 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
 
     assert entry is None
     assert fake_msvcrt.calls == [
-        (fake_msvcrt.LK_LOCK, 1),
-        (fake_msvcrt.LK_LOCK, 1),
-        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
     ]
     assert sleep_calls == [
         cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
@@ -456,6 +496,7 @@ def test_log_generation_releases_msvcrt_lock_when_write_fails(tmp_channel: Path,
 
     class FakeMsvcrt:
         LK_LOCK = 1
+        LK_NBLCK = 3
         LK_UNLCK = 2
 
         def __init__(self) -> None:
@@ -481,7 +522,7 @@ def test_log_generation_releases_msvcrt_lock_when_write_fails(tmp_channel: Path,
 
     assert entry is None
     assert fake_msvcrt.calls == [
-        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
         (fake_msvcrt.LK_UNLCK, 1),
     ]
 
