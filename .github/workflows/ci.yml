@@ -26,6 +26,19 @@ jobs:
       - name: Test
         run: nix develop --command uv run pytest
 
+  windows-cost-tracker:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Test cost tracker on Windows
+        run: uv run pytest tests/test_cost_tracker.py -q
+
   changelog:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
