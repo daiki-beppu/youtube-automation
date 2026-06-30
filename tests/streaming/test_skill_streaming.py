@@ -100,6 +100,21 @@ class TestStreamingSkillSshAgent:
         assert "yt-stream-archive-check --expected 2" in text
         assert "`stream_hours=11` / `break_hours=1` 運用" in text
 
+    def test_skill_documents_source_video_preflight(self):
+        """Given SKILL.md
+        When 初回構築の操作入口を読む
+        Then 配信元 MP4 の ffprobe preflight と再エンコード例が分かる。
+        """
+        text = read_file(_STREAMING_SKILL)
+
+        assert "月間帯域見積もり用の MP4 実測" in text
+        assert "ffprobe" in text
+        assert "-c:v copy" in text
+        assert "4,500 Kbps" in text
+        assert "-profile:v high" in text
+        assert "1.52 TB" in text
+        assert "preflight 合否は `terraform plan` / `apply` の stream-level 検証" in text
+
 
 # ============================================================================
 # infra/terraform/streaming/README.md — #125 新規ドキュメント
@@ -140,6 +155,23 @@ class TestStreamingReadme:
         assert "TF_VAR_vultr_api_key" in text, (
             "README に TF_VAR_vultr_api_key の言及が無い（運用者が必要 env を網羅できない）"
         )
+
+    def test_documents_source_video_preflight(self):
+        """Given README
+        When 配信元動画のプリフライト説明を読む
+        Then ffprobe / -c:v copy / keyframe / bitrate / 推奨再エンコード例が記載されている。
+        """
+        text = read_file(_STREAMING_README)
+
+        assert "配信元動画のプリフライト" in text
+        assert "ffprobe" in text
+        assert "-c:v copy" in text
+        assert "キーフレーム最大間隔" in text
+        assert "4,500 Kbps" in text
+        assert "-profile:v high" in text
+        assert "1.52 TB" in text
+        assert "container 全体の平均 bitrate" in text
+        assert "preflight の合否確認は `terraform plan` / `apply` の stream-level 検証" in text
 
     def test_mentions_op_read_for_secret_injection(self):
         """Given README

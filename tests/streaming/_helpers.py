@@ -26,6 +26,7 @@ _ENV_TFTPL = _STREAMING_DIR / "templates" / "youtube-stream.env.tftpl"
 _LOGROTATE_TFTPL = _STREAMING_DIR / "templates" / "logrotate.conf.tftpl"
 _CRON_D_TFTPL = _STREAMING_DIR / "templates" / "cron.d.tftpl"
 _STREAMING_README = _STREAMING_DIR / "README.md"
+_VIDEO_PREFLIGHT_PY = _STREAMING_DIR / "video_preflight.py"
 _STREAMING_SKILL = _REPO_ROOT / ".claude" / "skills" / "streaming" / "SKILL.md"
 
 _SCRIPTS_STREAMING_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "references"
