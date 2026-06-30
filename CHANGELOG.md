@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(masterup)`: Suno 生成後の 2 clip を `20-documentation/suno-prompts.json` の歌詞有無で整理する `yt-suno-select-tracks` を追加。歌詞あり prompt は 1 clip 採用、instrumental は 2 clip 採用とし、極端に短い/長い失敗生成を stock 退避または削除できるようにした（#1308）
 - `docs(wf-new)`: `/wf-new` を子スキル順次実行のオーケストレーターとして整理し、Suno チャンネルでは `yt-collection-serve` 起動と疎通確認まで行って `/suno-helper` に引き継ぐ導線を追加（#1308）
 
+### Fixed
+
+- `fix(cost)`: Windows 環境で `fcntl` がない場合も `cost_tracker` と `yt-generate-image` が起動できるよう、`msvcrt` / プロセス内 lock fallback を追加（#1315）
+
 ### Migration
 
 所要時間の目安: 5〜10 分
