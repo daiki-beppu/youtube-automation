@@ -27,12 +27,23 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
+import threading
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import BinaryIO, Literal
+
+try:
+    import fcntl as _fcntl
+except ImportError:
+    _fcntl = None
+
+try:
+    import msvcrt as _msvcrt
+except ImportError:
+    _msvcrt = None
 
 from youtube_automation.utils.profile import section
 
@@ -62,6 +73,11 @@ _LEGACY_UNIT_BY_CATEGORY: dict[Category, str] = {
     "analysis": "call",
 }
 
+_LOCK_FILE_SUFFIX = ".lock"
+_LOCK_REGION_BYTES = 1
+_MSVCRT_LOCK_RETRY_DELAY_SECONDS = 0.05
+_IN_PROCESS_LOCK = threading.Lock()
+
 
 def _channel_dir() -> Path:
     """チャンネルディレクトリを ChannelConfig 経由で解決。"""
@@ -84,15 +100,56 @@ def relative_to_channel_dir(path: Path) -> str:
 
 @contextlib.contextmanager
 def _file_lock(path: Path):
-    """fcntl.flock による排他ロック。並列書き込み時の読み書き競合を防ぐ。"""
-    lock_path = path.with_suffix(path.suffix + ".lock")
+    """生成履歴ファイルの読み書き競合を防ぐ排他ロック。"""
+    lock_path = path.with_suffix(path.suffix + _LOCK_FILE_SUFFIX)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("w") as lock_f:
-        fcntl.flock(lock_f.fileno(), fcntl.LOCK_EX)
+    with lock_path.open("a+b") as lock_f:
+        _prepare_lock_file(lock_f)
+        _acquire_lock(lock_f)
         try:
             yield
         finally:
-            fcntl.flock(lock_f.fileno(), fcntl.LOCK_UN)
+            _release_lock(lock_f)
+
+
+def _prepare_lock_file(lock_f: BinaryIO) -> None:
+    lock_f.seek(0)
+    if not lock_f.read(_LOCK_REGION_BYTES):
+        lock_f.write(b"\0")
+        lock_f.flush()
+    lock_f.seek(0)
+
+
+def _acquire_lock(lock_f: BinaryIO) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(lock_f.fileno(), _fcntl.LOCK_EX)
+        return
+    if _msvcrt is not None:
+        _acquire_msvcrt_lock(lock_f)
+        return
+    # Platform file locks are unavailable, but same-process writes still need serialization.
+    _IN_PROCESS_LOCK.acquire()
+
+
+def _acquire_msvcrt_lock(lock_f: BinaryIO) -> None:
+    while True:
+        lock_f.seek(0)
+        try:
+            _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_LOCK, _LOCK_REGION_BYTES)
+            return
+        except OSError:
+            time.sleep(_MSVCRT_LOCK_RETRY_DELAY_SECONDS)
+
+
+def _release_lock(lock_f: BinaryIO) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(lock_f.fileno(), _fcntl.LOCK_UN)
+        return
+    if _msvcrt is not None:
+        lock_f.seek(0)
+        _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_UNLCK, _LOCK_REGION_BYTES)
+        return
+    _IN_PROCESS_LOCK.release()
 
 
 def log_generation(

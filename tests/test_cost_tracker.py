@@ -13,6 +13,9 @@ Issue #132: ハードコード単価 (PRICING) 撤廃 + log_generation を metad
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -57,6 +60,25 @@ def _read_log(channel_dir: Path, filename: str) -> list[dict]:
     if not path.exists():
         return []
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_audio_entries_concurrently(count: int) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = [
+            ex.submit(
+                cost_tracker.log_generation,
+                "audio",
+                model="lyria-3-pro-preview",
+                quantity=1,
+                unit="song",
+                metadata={"idx": i},
+            )
+            for i in range(count)
+        ]
+        for f in futures:
+            f.result()
 
 
 # ============================================================
@@ -193,23 +215,198 @@ def test_log_generation_estimated_cost_usd_is_always_none(tmp_channel: Path, cat
 
 def test_log_generation_concurrent_writes_preserve_all_entries(tmp_channel: Path):
     """ThreadPoolExecutor 並列呼び出しで全エントリが欠落せずに記録されること。"""
-    from concurrent.futures import ThreadPoolExecutor
+    N = 20
+    _write_audio_entries_concurrently(N)
+
+    entries = _read_log(tmp_channel, "audio_costs.json")
+    assert len(entries) == N
+    indices = sorted(e["metadata"]["idx"] for e in entries)
+    assert indices == list(range(N))
+
+
+def test_generate_image_module_imports_when_fcntl_is_unavailable():
+    """Given fcntl が import できない環境
+    When cost_tracker と yt-generate-image のモジュールを import する
+    Then ImportError にならない。
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(repo_root / "src")
+    code = """
+import importlib.abc
+import sys
+
+class BlockFcntl(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname == "fcntl":
+            raise ImportError("No module named 'fcntl'")
+        return None
+
+sys.meta_path.insert(0, BlockFcntl())
+
+from youtube_automation.utils import cost_tracker
+from youtube_automation.scripts import generate_image
+
+assert callable(cost_tracker.log_generation)
+assert callable(generate_image.main)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_log_generation_uses_msvcrt_when_fcntl_is_unavailable(tmp_channel: Path, monkeypatch):
+    """Given fcntl なし / msvcrt あり
+    When 同一プロセス内で並列に cost 記録する
+    Then msvcrt.locking による排他で全エントリが保持される。
+    """
+    import threading
+
+    class FakeMsvcrt:
+        LK_LOCK = 1
+        LK_UNLCK = 2
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+            self._lock = threading.Lock()
+            self._state_lock = threading.Lock()
+            self._held_count = 0
+            self.max_held_count = 0
+
+        def locking(self, fd: int, mode: int, nbytes: int) -> None:
+            if mode == self.LK_LOCK:
+                acquired = self._lock.acquire(timeout=5)
+                if not acquired:
+                    raise RuntimeError("fake msvcrt lock acquisition timed out")
+                with self._state_lock:
+                    self._held_count += 1
+                    self.max_held_count = max(self.max_held_count, self._held_count)
+            elif mode == self.LK_UNLCK:
+                with self._state_lock:
+                    self._held_count -= 1
+                self._lock.release()
+            else:
+                raise ValueError(f"unexpected fake msvcrt mode: {mode}")
+            self.calls.append((mode, nbytes))
+
+    fake_msvcrt = FakeMsvcrt()
+    monkeypatch.setattr(cost_tracker, "_fcntl", None)
+    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
 
     N = 20
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = [
-            ex.submit(
-                cost_tracker.log_generation,
-                "audio",
-                model="lyria-3-pro-preview",
-                quantity=1,
-                unit="song",
-                metadata={"idx": i},
-            )
-            for i in range(N)
-        ]
-        for f in futures:
-            f.result()
+    _write_audio_entries_concurrently(N)
+
+    entries = _read_log(tmp_channel, "audio_costs.json")
+    assert len(entries) == N
+    indices = sorted(e["metadata"]["idx"] for e in entries)
+    assert indices == list(range(N))
+    assert fake_msvcrt.max_held_count == 1
+    assert fake_msvcrt.calls.count((fake_msvcrt.LK_LOCK, 1)) == N
+    assert fake_msvcrt.calls.count((fake_msvcrt.LK_UNLCK, 1)) == N
+
+
+def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkeypatch):
+    """Given msvcrt.locking が競合で一時的に OSError を返す
+    When log_generation を呼ぶ
+    Then ロック取得を待ち直して cost 記録を失わない。
+    """
+
+    class FakeMsvcrt:
+        LK_LOCK = 1
+        LK_UNLCK = 2
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+            self.remaining_lock_failures = 2
+
+        def locking(self, fd: int, mode: int, nbytes: int) -> None:
+            self.calls.append((mode, nbytes))
+            if mode == self.LK_LOCK and self.remaining_lock_failures:
+                self.remaining_lock_failures -= 1
+                raise OSError("fake msvcrt lock contention")
+
+    fake_msvcrt = FakeMsvcrt()
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(cost_tracker, "_fcntl", None)
+    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(cost_tracker.time, "sleep", sleep_calls.append)
+
+    entry = cost_tracker.log_generation(
+        "image",
+        model="gemini-3.1-flash-image-preview",
+        quantity=1,
+        unit="image",
+    )
+
+    entries = _read_log(tmp_channel, "image_costs.json")
+    assert entry is not None
+    assert len(entries) == 1
+    assert fake_msvcrt.calls == [
+        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_UNLCK, 1),
+    ]
+    assert sleep_calls == [
+        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+    ]
+
+
+def test_log_generation_releases_msvcrt_lock_when_write_fails(tmp_channel: Path, monkeypatch):
+    """Given msvcrt ロック取得後に書き込み処理が失敗する
+    When log_generation を呼ぶ
+    Then lock / unlock が対で実行される。
+    """
+
+    class FakeMsvcrt:
+        LK_LOCK = 1
+        LK_UNLCK = 2
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+
+        def locking(self, fd: int, mode: int, nbytes: int) -> None:
+            self.calls.append((mode, nbytes))
+
+    def fail_read_entries(path: Path) -> list[dict]:
+        raise RuntimeError(f"forced read failure: {path.name}")
+
+    fake_msvcrt = FakeMsvcrt()
+    monkeypatch.setattr(cost_tracker, "_fcntl", None)
+    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(cost_tracker, "_read_entries", fail_read_entries)
+
+    entry = cost_tracker.log_generation(
+        "image",
+        model="gemini-3.1-flash-image-preview",
+        quantity=1,
+        unit="image",
+    )
+
+    assert entry is None
+    assert fake_msvcrt.calls == [
+        (fake_msvcrt.LK_LOCK, 1),
+        (fake_msvcrt.LK_UNLCK, 1),
+    ]
+
+
+def test_log_generation_without_platform_file_lock_preserves_threaded_writes(tmp_channel: Path, monkeypatch):
+    """Given fcntl / msvcrt の両方がない環境
+    When 同一プロセス内で並列に cost 記録する
+    Then プロセス内ロックで全エントリが保持される。
+    """
+    monkeypatch.setattr(cost_tracker, "_fcntl", None)
+    monkeypatch.setattr(cost_tracker, "_msvcrt", None)
+
+    N = 20
+    _write_audio_entries_concurrently(N)
 
     entries = _read_log(tmp_channel, "audio_costs.json")
     assert len(entries) == N
