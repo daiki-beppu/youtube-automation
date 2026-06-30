@@ -71,6 +71,22 @@ def test_build_launch_curve_frame_has_required_columns():
     assert isinstance(df, pd.DataFrame)
 
 
+def test_build_launch_curve_frame_handles_missing_impressions_and_ctr_columns():
+    daily = {
+        "rows": [
+            {"video_id": "v1", "date": "2026-04-01", "views": 10},
+            {"video_id": "v1", "date": "2026-04-02", "views": 20},
+        ]
+    }
+    meta = {"v1": {"title": "v1", "published_at": "2026-04-01T00:00:00Z"}}
+
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+
+    assert list(df["daily_impressions"]) == [0, 0]
+    assert df["ctr"].isna().all()
+    assert list(df["cumulative_views"]) == [10, 30]
+
+
 def test_build_launch_curve_frame_merges_reporting_snapshot():
     """Reporting API snapshot があれば per_video CTR / impressions が broadcast される (#84)。"""
     daily, meta = _load()

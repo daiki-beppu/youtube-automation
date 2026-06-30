@@ -75,6 +75,15 @@ def build_launch_curve_frame(
             "impression_ctr": "ctr",
         }
     )
+    if "daily_impressions" not in df.columns:
+        df["daily_impressions"] = 0
+    if "ctr" not in df.columns:
+        df["ctr"] = pd.NA
+
+    df["daily_views"] = pd.to_numeric(df["daily_views"], errors="coerce").fillna(0).astype(int)
+    df["daily_impressions"] = pd.to_numeric(df["daily_impressions"], errors="coerce").fillna(0).astype(int)
+    df["ctr"] = pd.to_numeric(df["ctr"], errors="coerce")
+
     df = df.sort_values(["video_id", "days_since_publish"])
     df["cumulative_views"] = df.groupby("video_id")["daily_views"].cumsum()
 
