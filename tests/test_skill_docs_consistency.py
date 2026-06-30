@@ -222,8 +222,17 @@ def test_distrokid_skill_uses_helper_name() -> None:
     assert frontmatter["name"] == "distrokid-helper"
     assert "yt-collection-serve 起動" in frontmatter["description"]
     assert "### ステップ 9: distrokid-helper サーバー起動" in skill
-    assert 'uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --port 7874' in skill
-    assert "`--playlist-capture-root` / `--playlist-capture-prefix` は Suno playlist capture 用" in skill
+    assert (
+        'uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" '
+        '--playlist-capture-root "$CHANNEL_DIR" --port 7874'
+    ) in skill
+    assert (
+        "CHANNEL_DIR=/path/to/channel uv run yt-collection-serve "
+        "/path/to/channel/collections/planning --playlist-capture-root /path/to/channel --port 7874"
+    ) in skill
+    assert "`--playlist-capture-root` は distrokid-helper の配信済み記録" in skill
+    assert "`--playlist-capture-prefix` は Suno playlist capture 用" in skill
+    assert "DistroKid サーバー起動では指定しない" in skill
 
     features = _read("docs/features.md")
     assert "/distrokid-helper" in features

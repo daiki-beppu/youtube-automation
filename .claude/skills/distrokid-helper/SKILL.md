@@ -30,7 +30,7 @@ CLI 仕様の詳細は `references/distrokid_prepare.py`（実体: `src/youtube_
 | `uv run yt-distrokid-prepare build --spec <spec.json> <collection> [--force] [--release-date YYYY-MM-DD]` | spec 検証 → mp3 分割コピー → ffprobe 尺計測 → metadata.md + README.md 生成 |
 | `uv run yt-distrokid-prepare cover --input <image> <collection> [--force] [--crop]` | 新規 AI 生成した 1:1 画像を 3000×3000 JPEG（`30-distrokid/cover_art_3000.jpg`）に最終化 |
 | `uv run yt-distrokid-prepare verify <collection>` | cover サイズ / release_date / タイトルユニーク / ≤35 曲 を最終検証 |
-| `uv run yt-collection-serve <collections-root> --port 7874` | distrokid-helper 拡張向けに DistroKid dir mode サーバーを起動 |
+| `uv run yt-collection-serve <collections-root> --playlist-capture-root <channel-root> --port 7874` | distrokid-helper 拡張向けに DistroKid dir mode サーバーを起動し、配信済み記録の POST も有効化 |
 
 ## Instructions
 
@@ -229,10 +229,10 @@ verify が green になったら、DistroKid Web 操作へ進む前に `yt-colle
 
 ```bash
 # CHANNEL_DIR がチャンネルルートを指している場合
-uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --port 7874
+uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --playlist-capture-root "$CHANNEL_DIR" --port 7874
 
-# CHANNEL_DIR が未設定の場合
-uv run yt-collection-serve /path/to/channel/collections/planning --port 7874
+# CHANNEL_DIR が未設定、またはチャンネル外の CWD から起動する場合
+CHANNEL_DIR=/path/to/channel uv run yt-collection-serve /path/to/channel/collections/planning --playlist-capture-root /path/to/channel --port 7874
 ```
 
 起動後、以下を確認する:
@@ -246,8 +246,9 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 1. JSON array が返ること
 2. 対象 collection と `30-distrokid/<disc>` が一覧に含まれること
 3. サーバー出力に `distrokid dir mode enabled` が表示されること
+4. サーバー出力の `distrokid releases` が `enabled` になっていること
 
-`--playlist-capture-root` / `--playlist-capture-prefix` は Suno playlist capture 用なので、DistroKid サーバー起動では指定しない。
+`--playlist-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` にも必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--playlist-capture-prefix` は Suno playlist capture 用なので、DistroKid サーバー起動では指定しない。
 
 ユーザーには `http://localhost:7874` を distrokid-helper popup のサーバー URL として案内する。Chrome 拡張 **distrokid-helper** を使った DistroKid Web フォームへの転記・アップロード操作そのものは本スキルの範囲外。
 
@@ -264,7 +265,8 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 | `distrokid.enabled` が false | ConfigError または plan 実行時エラー | `config/channel/distrokid.json` の `distrokid.enabled` を `true` に設定してからリトライ |
 | タイトル重複エラー | build 時に「duplicate title across discs」エラー | spec.json を開き `needs_unique: true` のトラックに em-dash サフィックスを付与して再度 build |
 | `/distrokid/collections` が 404 | single file mode で起動している、または collections root が違う | `<collection>` ではなく `<channel>/collections/planning` を渡して `yt-collection-serve` を起動し直す |
-| `distrokid dir mode enabled` が出ない | `config/channel/distrokid.json` が読めない、または `enabled=false` | `CHANNEL_DIR` と `distrokid.enabled` を確認してからサーバーを再起動 |
+| `distrokid dir mode enabled` が出ない | `config/channel/distrokid.json` が読めない、または `enabled=false` | `CHANNEL_DIR` がチャンネルルートを指していることと `distrokid.enabled` を確認してからサーバーを再起動 |
+| `distrokid releases` が disabled または POST が 404 | `--playlist-capture-root` が未指定、またはチャンネルルート以外を指している | `--playlist-capture-root "$CHANNEL_DIR"` または `--playlist-capture-root /path/to/channel` を付けて再起動 |
 
 ---
 
