@@ -120,6 +120,9 @@ def test_ttp_preflight_checklist_covers_required_operational_checks() -> None:
     assert 'generation_mode: "single_step"' in checklist_block
     assert "diff_prompt_template" in checklist_block
     assert "image_generation.gemini.reference_images.stock.enabled" in checklist_block
+    assert "--max-attempts" in checklist_block
+    assert "参照不足" in checklist_block
+    assert "--no-rotate" in checklist_block
     assert "/thumbnail-compare" in checklist_block
     assert "承認**前**" in checklist_block
 
@@ -306,10 +309,35 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "watermark" in config
     assert "logo" in config
     assert "brand mark" in config
-    assert "enabled: true" in config
+    assert "候補ごとにユニークな参照画像" in config
+    assert "参照画像が候補数より少ない場合は再利用せずエラー" in config
+    assert "enabled: false" in config
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config
     assert 'diff_prompt_template: ""' in config
+
+
+def test_thumbnail_skill_requires_reference_per_ttp_attempt_and_drops_prompt_only_fallback() -> None:
+    skill = _read_thumbnail_skill()
+
+    assert "参照画像モード（必須）" in skill
+    assert "同じベンチマークチャンネル内の別サムネイル画像" in skill
+    assert "各 attempt は別参照画像" in skill
+    assert "thumbnail-prompts.md" in skill
+    assert "benchmark_channel" in skill
+    assert "プロンプトベースモード" not in skill
+    assert "参照画像なしでプロンプトのみで生成" not in skill
+
+
+def test_thumbnail_sample_prompts_are_short_ttp_diff_not_prompt_only_style() -> None:
+    sample = (_repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "sample-prompts.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Single-Step / TTP の短い差分プロンプト" in sample
+    assert "No logos, signatures, watermarks" in sample
+    assert "プロンプトベースモード" not in sample
+    assert "reference_images` がない場合" not in sample
 
 
 def test_thumbnail_default_config_provides_codex_ttp_upgrade_prompt() -> None:
