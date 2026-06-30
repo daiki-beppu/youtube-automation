@@ -39,11 +39,9 @@ preview:
   # false にすると従来通り単純削除 (rm -rf _plan-previews/<session>/)。
   # 退避自体の opt-out は config/skills/thumbnail.yaml の image_generation.stock.enabled が優先
   stock_archive: true
-  # PR-B (#364): ideate プレビュー生成時、参照画像プールに stock を混ぜるかの opt-out
-  # 実体設定 (max_count / shuffle / theme_match 等) は
-  # config/skills/thumbnail.yaml の image_generation.gemini.reference_images.stock を共有する。
-  # ただし source_role は内部的に "ideate_preview" へ強制上書きされる。
-  stock_refs: true
+  # Deprecated: TTP strict preview では stock 参照を混ぜない。
+  # 互換目的でキーは残すが、Phase 4-4 の生成手順では参照しない。
+  stock_refs: false
 
 # 差し替え可能オブジェクトの定義 (省略可、未定義時はサムネイル差別化は色・テーマのみ)
 # 詳しい例は references/object-design-examples.md を参照

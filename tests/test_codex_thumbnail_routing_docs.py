@@ -106,9 +106,8 @@ def test_collection_ideate_codex_parallel_uses_reference_paths_as_positionals() 
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
 
     assert "REF_PATHS" in block, f"codex 用の素の参照パス配列がありません:\n{block}"
-    assert "${REF_PATHS[0]}" in block
-    assert "${REF_PATHS[1]}" in block
-    assert "${REF_PATHS[2]}" in block
+    assert "for idx in $(seq 0 $((CANDIDATE_COUNT - 1)))" in block
+    assert '"${REF_PATHS[$idx]}"' in block
     assert re.search(r"codex-image\.sh[^\n]*\"\$\{REF_PATHS\[@\]\}\"", block) is None, (
         f"全候補へ同じ参照配列を渡してはいけません:\n{block}"
     )
@@ -125,6 +124,8 @@ def test_collection_ideate_parallel_validates_unique_single_channel_references()
     assert "plan_ttp_reference_assignments" in block
     assert "benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark'" in block
     assert "VALIDATED_REFS" in block
+    assert "CANDIDATE_COUNT" in block
+    assert "candidate_count = int(sys.argv[1])" in block
 
 
 def test_collection_ideate_api_parallel_uses_one_reference_per_candidate() -> None:
@@ -134,10 +135,28 @@ def test_collection_ideate_api_parallel_uses_one_reference_per_candidate() -> No
     """
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
 
-    assert '--ttp-strict-references --reference "${REF_PATHS[0]}" --max-attempts 1' in block
-    assert '--ttp-strict-references --reference "${REF_PATHS[1]}" --max-attempts 1' in block
-    assert '--ttp-strict-references --reference "${REF_PATHS[2]}" --max-attempts 1' in block
+    assert "for idx in $(seq 0 $((CANDIDATE_COUNT - 1)))" in block
+    assert "yt-generate-image --ttp-strict-references" in block
+    assert '--reference "${REF_PATHS[$idx]}"' in block
+    assert "--max-attempts 1" in block
     assert 'yt-generate-image "${REF_ARGS[@]}"' not in block
+
+
+def test_collection_ideate_sequential_uses_strict_single_reference_contract() -> None:
+    """Given collection-ideate Phase 4-4 sequential
+    When 選択済み 1 案を生成する
+    Then codex/API とも選択 index の参照 1 枚だけを strict に使う。
+    """
+    block = _phase_4_4_sequential_block(_read(_IDEATE_SKILL_MD))
+
+    assert "REF_INDEX" in block
+    assert 'if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then' in block
+    assert "selected preview reference is missing" in block
+    assert "codex-image.sh --require-reference" in block
+    assert '"${REF_PATHS[$REF_INDEX]}"' in block
+    assert "yt-generate-image --ttp-strict-references" in block
+    assert '--reference "${REF_PATHS[$REF_INDEX]}"' in block
+    assert "--max-attempts 1" in block
 
 
 def test_collection_ideate_codex_parallel_requires_short_prompt() -> None:

@@ -217,6 +217,12 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 # THEME はコレクションテーマ slug。ideate 段階の暫定値で OK
 THEME="<slug>"
 
+CANDIDATE_COUNT=$(uv run python3 -c "
+from youtube_automation.utils.skill_config import load_skill_config
+preview = load_skill_config('collection-ideate').get('preview', {})
+print(int(preview.get('candidate_count', 3) or 3))
+")
+
 REFS=$(uv run python3 -c "
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.skill_config import load_skill_config
@@ -239,46 +245,58 @@ done <<< "$REFS"
 VALIDATED_REFS=$(printf '%s\n' "${REF_PATHS[@]}" | uv run python3 -c "
 import sys
 from pathlib import Path
-from youtube_automation.scripts.generate_image import plan_ttp_reference_assignments
 from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.thumbnail_references import plan_ttp_reference_assignments
 
 refs = [Path(line.strip()) for line in sys.stdin if line.strip()]
+candidate_count = int(sys.argv[1])
 validated = plan_ttp_reference_assignments(
     refs,
-    3,
+    candidate_count,
     True,
     benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark',
 )
 for ref in validated:
     print(ref)
-")
+" "$CANDIDATE_COUNT")
 mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
 
-# 順次実行。以下は candidate_count=3 のサンプル。
-# 違う値の場合は連打数と plan-{a,b,c,...} の採番をその値に合わせて調整する。
+# 順次実行。candidate_count の数だけ plan-{a,b,c,...} を生成する。
+LABELS=(a b c d e f g h)
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
   # 候補ごとに別参照画像 1 枚だけを渡す。参照不足なら生成せず設定を直す。
-  if [ "${#REF_PATHS[@]}" -lt 3 ]; then
-    echo "ERROR: codex single_step preview requires at least 3 unique reference images" >&2
+  if [ "${#REF_PATHS[@]}" -lt "$CANDIDATE_COUNT" ]; then
+    echo "ERROR: codex single_step preview requires at least ${CANDIDATE_COUNT} unique reference images" >&2
     exit 1
   fi
   build_codex_prompt() {
     uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "$1"
   }
-  bash .claude/skills/thumbnail/references/codex-image.sh --require-reference "$(build_codex_prompt "<企画Aタイトル>")" collections/planning/_plan-previews/<dir>/plan-a-<slug>.png "${REF_PATHS[0]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh --require-reference "$(build_codex_prompt "<企画Bタイトル>")" collections/planning/_plan-previews/<dir>/plan-b-<slug>.png "${REF_PATHS[1]}"
-  bash .claude/skills/thumbnail/references/codex-image.sh --require-reference "$(build_codex_prompt "<企画Cタイトル>")" collections/planning/_plan-previews/<dir>/plan-c-<slug>.png "${REF_PATHS[2]}"
+  for idx in $(seq 0 $((CANDIDATE_COUNT - 1))); do
+    label="${LABELS[$idx]}"
+    title="<企画${label}タイトル>"
+    bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
+      "$(build_codex_prompt "$title")" \
+      "collections/planning/_plan-previews/<dir>/plan-${label}-<slug>.png" \
+      "${REF_PATHS[$idx]}"
+  done
 else
-  uv run yt-generate-image --ttp-strict-references --reference "${REF_PATHS[0]}" --max-attempts 1 --prompt "<企画Aプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-a-<slug>.png -y
-  uv run yt-generate-image --ttp-strict-references --reference "${REF_PATHS[1]}" --max-attempts 1 --prompt "<企画Bプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-b-<slug>.png -y
-  uv run yt-generate-image --ttp-strict-references --reference "${REF_PATHS[2]}" --max-attempts 1 --prompt "<企画Cプロンプト>" --output collections/planning/_plan-previews/<dir>/plan-c-<slug>.png -y
+  for idx in $(seq 0 $((CANDIDATE_COUNT - 1))); do
+    label="${LABELS[$idx]}"
+    prompt="<企画${label}プロンプト>"
+    uv run yt-generate-image --ttp-strict-references \
+      --reference "${REF_PATHS[$idx]}" \
+      --max-attempts 1 \
+      --prompt "$prompt" \
+      --output "collections/planning/_plan-previews/<dir>/plan-${label}-<slug>.png" -y
+  done
 fi
 ```
 
-- 全企画とも `REF_PATHS[0..2]` の別々の benchmark 参照を 1 枚ずつ使う。TTP strict preview では stock を混ぜない
+- 全企画とも `REF_PATHS[$idx]` の別々の benchmark 参照を 1 枚ずつ使う。TTP strict preview では stock を混ぜない
 - 出力先: `collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png`（`<x>` は a/b/c/... のラベル、`candidate_count` 枚ぶん）
 - `-y` 指定時、同名ファイルが既存なら自動で `-v2`, `-v3` ... と採番（追加の安全策）
 - stock は TTP strict preview には混ぜない。stock 参照を使う場合は `/thumbnail` の汎用参照生成で別途扱う

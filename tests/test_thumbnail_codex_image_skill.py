@@ -477,6 +477,37 @@ def test_codex_image_script_allows_zero_reference_images_for_generic_generation(
     assert output_path.exists()
 
 
+def test_codex_image_script_require_reference_rejects_multiple_reference_images(tmp_path: Path) -> None:
+    """Given --require-reference 付きで複数参照を渡す
+    When wrapper を起動する
+    Then TTP 候補 1 件につき参照 1 枚の契約で生成前に停止する。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    output_path = tmp_path / "output.png"
+    ref_a = tmp_path / "a.png"
+    ref_b = tmp_path / "b.png"
+    ref_a.write_text("a", encoding="utf-8")
+    ref_b.write_text("b", encoding="utf-8")
+
+    result = _run_script(
+        _CODEX_IMAGE_SH,
+        "--require-reference",
+        "prompt",
+        str(output_path),
+        str(ref_a),
+        str(ref_b),
+        env=env,
+    )
+
+    assert result.returncode != 0
+    assert "exactly one reference image" in result.stderr
+    assert not log_file.exists()
+    assert not output_path.exists()
+
+
 def test_codex_image_script_checks_login_output_and_png_validity() -> None:
     """Given codex-image.sh
     When 本文を読む

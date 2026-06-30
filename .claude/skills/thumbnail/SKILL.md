@@ -65,7 +65,7 @@ image_generation:
 bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
   "<thumbnail prompt>" \
   <collection-path>/10-assets/thumbnail-codex-v1.png \
-  <reference-image-1> <reference-image-2>
+  <reference-image-1>
 ```
 
 OpenAI API に切り替える場合:
@@ -185,6 +185,7 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 ```bash
 uv run yt-generate-image \
+  --ttp-strict-references \
   --prompt "<prompt_prefix を含むプロンプト>" \
   --reference <channel_dir>/<reference_images.default> \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y

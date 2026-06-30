@@ -15,7 +15,11 @@ shift 2
 
 if [ "$require_reference" = true ] && [ "$#" -lt 1 ]; then
   echo "ERROR: codex-image.sh requires at least one reference image for thumbnail TTP generation" >&2
-  echo "usage: codex-image.sh --require-reference <prompt> <output.png> reference.png [reference2.png ...]" >&2
+  echo "usage: codex-image.sh --require-reference <prompt> <output.png> reference.png" >&2
+  exit 1
+fi
+if [ "$require_reference" = true ] && [ "$#" -ne 1 ]; then
+  echo "ERROR: codex-image.sh --require-reference accepts exactly one reference image per TTP candidate" >&2
   exit 1
 fi
 

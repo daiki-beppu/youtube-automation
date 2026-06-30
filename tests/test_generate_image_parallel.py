@@ -25,7 +25,6 @@ from youtube_automation.scripts.generate_image import (
     build_requests,
     plan_output_paths,
     plan_reference_assignments,
-    plan_ttp_reference_assignments,
     run_requests_parallel,
 )
 from youtube_automation.scripts.generate_image import (
@@ -33,6 +32,7 @@ from youtube_automation.scripts.generate_image import (
 )
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import resolve_unique_path
+from youtube_automation.utils.thumbnail_references import plan_ttp_reference_assignments
 
 # ---- フェイク provider ------------------------------------------------------
 
