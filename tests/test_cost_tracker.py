@@ -314,7 +314,6 @@ def test_log_generation_uses_msvcrt_when_fcntl_is_unavailable(tmp_channel: Path,
     import threading
 
     class FakeMsvcrt:
-        LK_LOCK = 1
         LK_NBLCK = 3
         LK_UNLCK = 2
 
@@ -364,7 +363,6 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
     """
 
     class FakeMsvcrt:
-        LK_LOCK = 1
         LK_NBLCK = 3
         LK_UNLCK = 2
 
@@ -413,7 +411,6 @@ def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel:
     """
 
     class FakeMsvcrt:
-        LK_LOCK = 1
         LK_NBLCK = 3
         LK_UNLCK = 2
 
@@ -450,7 +447,6 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
     """
 
     class FakeMsvcrt:
-        LK_LOCK = 1
         LK_NBLCK = 3
         LK_UNLCK = 2
 
@@ -495,7 +491,6 @@ def test_log_generation_releases_msvcrt_lock_when_write_fails(tmp_channel: Path,
     """
 
     class FakeMsvcrt:
-        LK_LOCK = 1
         LK_NBLCK = 3
         LK_UNLCK = 2
 
