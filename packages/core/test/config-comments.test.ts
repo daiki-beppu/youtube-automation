@@ -42,7 +42,7 @@ const load = (sections: Sections) => {
 // Builds a comments.json wrapping a single catch-all gemini rule + the given
 // generator block (mirrors the Python `_comments_with_generator` helper).
 const commentsWithGenerator = (
-  generator: Record<string, unknown>
+  generator: Record<string, unknown>,
 ): Sections => {
   const sections = minimalSections();
   sections["comments.json"] = {
@@ -83,6 +83,13 @@ describe("comments — defaults", () => {
     const { generator } = load(sections).engagement.comments;
     expect(generator.provider).toBe("codex");
     expect(generator.fallbackOnError).toBe("skip");
+  });
+
+  test("rejects null comments section", () => {
+    const sections = minimalSections();
+    sections["comments.json"] = { comments: null };
+
+    expect(() => load(sections)).toThrow(/comments セクション/u);
   });
 });
 
@@ -158,7 +165,7 @@ describe("comments.generator — validation", () => {
     // Given an unsupported provider
     // When/Then load fails naming the provider key
     expect(() => load(commentsWithGenerator({ provider: "openai" }))).toThrow(
-      /comments\.generator\.provider/u
+      /comments\.generator\.provider/u,
     );
   });
 
@@ -166,7 +173,7 @@ describe("comments.generator — validation", () => {
     // Given gemini with no model
     // When/Then the model-required rule fires
     expect(() => load(commentsWithGenerator({ provider: "gemini" }))).toThrow(
-      /model/u
+      /model/u,
     );
   });
 

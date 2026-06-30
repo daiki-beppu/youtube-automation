@@ -2376,7 +2376,7 @@ def test_post_downloaded_default_rejects_missing_origin_without_exact_lock(serve
 
 
 def test_post_downloaded_oversized_body_returns_413(serve_dir, tmp_path):
-    """Given Content-Length > 1 MiB
+    """Given Content-Length > 10 KiB
     When POST /collections/<id>/downloaded を送る
     Then 413 を返す。
     """
@@ -2386,7 +2386,7 @@ def test_post_downloaded_oversized_body_returns_413(serve_dir, tmp_path):
     token = _fetch_token(base)
     conn, resp = _post_declared_length(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-        declared_length=1024 * 1024 + 1,
+        declared_length=10 * 1024 + 1,
         headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     )
     try:

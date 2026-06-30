@@ -1283,7 +1283,7 @@ def test_comments_generator_not_object_raises(tmp_path, monkeypatch):
         load_config()
 
 
-@pytest.mark.parametrize("comments_raw", [[], "", False, "legacy"])
+@pytest.mark.parametrize("comments_raw", [None, [], "", False, "legacy"])
 def test_comments_section_non_object_raises(tmp_path, monkeypatch, comments_raw):
     """comments セクション自体は falsy 値でも object 以外を未設定扱いしない."""
     sections = _minimal_sections()

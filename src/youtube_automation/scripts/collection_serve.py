@@ -97,6 +97,7 @@ _DISTROKID_RELEASES_ROUTE = "/distrokid/releases"
 # POST body upper bound for helper write endpoints. The expected payloads are
 # small JSON objects/lists; larger bodies are rejected before reading from rfile.
 _MAX_POST_BODY_BYTES = 1024 * 1024
+_MAX_DOWNLOADED_POST_BODY_BYTES = 10 * 1024
 
 
 def playlists_output_path(root: Path) -> Path:
@@ -692,7 +693,7 @@ def create_server(
                 self.send_error(404, "Not Found")
                 return
 
-            raw = self._read_limited_post_body()
+            raw = self._read_limited_post_body(max_bytes=_MAX_DOWNLOADED_POST_BODY_BYTES)
             if raw is None:
                 return
             try:
@@ -724,7 +725,7 @@ def create_server(
             ).encode("utf-8")
             self._send_bytes(resp_body, "application/json; charset=utf-8")
 
-        def _read_limited_post_body(self) -> bytes | None:
+        def _read_limited_post_body(self, *, max_bytes: int = _MAX_POST_BODY_BYTES) -> bytes | None:
             try:
                 length = int(self.headers.get("Content-Length", 0) or 0)
             except ValueError:
@@ -733,7 +734,7 @@ def create_server(
             if length < 0:
                 self.send_error(400, "Bad Request")
                 return None
-            if length > _MAX_POST_BODY_BYTES:
+            if length > max_bytes:
                 self.send_error(413, "Payload Too Large")
                 return None
             return self.rfile.read(length) if length else b""

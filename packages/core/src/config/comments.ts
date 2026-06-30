@@ -1,8 +1,7 @@
 // コメント自動返信設定（merged の `comments`・optional）。
 //
-// 形状・enum・廃止キー・条件付き必須の検証は superRefine で行い、既存テストが期待する
-// `config:` prefix のメッセージ（`comments.rules[0].name` 等、bracket 付き path を含む）を
-// そのまま保持する。検証通過後に transform が camelCase 出力を組み立てる。
+// section/generator/language と rules array shape を superRefine で検証する。
+// rules entry は legacy 互換入力として受けるが処理では使わず、transform 後は常に [] にする。
 
 import { z } from "zod";
 
@@ -25,14 +24,14 @@ type Issue = (message: string) => void;
 const validateGenerator = (raw: Record<string, unknown>, add: Issue): void => {
   if ("type" in raw) {
     add(
-      "comments.generator.type は廃止されました。comments.generator.provider を使用してください"
+      "comments.generator.type は廃止されました。comments.generator.provider を使用してください",
     );
     return;
   }
   const provider = (raw.provider as string | undefined) ?? PROVIDER_CODEX;
   if (!VALID_PROVIDERS.includes(provider)) {
     add(
-      `comments.generator.provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${provider}`
+      `comments.generator.provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${provider}`,
     );
     return;
   }
@@ -45,7 +44,7 @@ const validateGenerator = (raw: Record<string, unknown>, add: Issue): void => {
     (raw.fallback_on_error as string | undefined) ?? FALLBACK_SKIP;
   if (!VALID_FALLBACK_VALUES.includes(fallback)) {
     add(
-      `comments.generator.fallback_on_error は ${VALID_FALLBACK_VALUES.join(" / ")} のいずれかでなければなりません: ${fallback}`
+      `comments.generator.fallback_on_error は ${VALID_FALLBACK_VALUES.join(" / ")} のいずれかでなければなりません: ${fallback}`,
     );
   }
 };
@@ -57,7 +56,7 @@ const validateComments = (cm: unknown, add: Issue): void => {
   }
   if ("templates" in cm) {
     add(
-      "comments.templates は廃止されました。LLM provider で返信を生成してください"
+      "comments.templates は廃止されました。LLM provider で返信を生成してください",
     );
     return;
   }
@@ -124,7 +123,7 @@ export const Comments = z
   })
   .superRefine((o, ctx) => {
     validateComments(o.comments, (message) =>
-      ctx.addIssue({ code: "custom", message })
+      ctx.addIssue({ code: "custom", message }),
     );
   })
   .transform((o) => buildComments(o.comments as Record<string, unknown>));

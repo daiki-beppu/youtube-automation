@@ -486,8 +486,6 @@ def _build_generator_config(raw: dict) -> GeneratorConfig:
 
 def _build_comments(merged: dict) -> Comments:
     cm = merged.get("comments", {})
-    if cm is None:
-        cm = {}
     if not isinstance(cm, dict):
         raise ConfigError("comments セクションは object でなければなりません")
     if "templates" in cm:
