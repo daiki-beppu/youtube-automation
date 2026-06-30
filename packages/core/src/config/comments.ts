@@ -1,8 +1,7 @@
 // コメント自動返信設定（merged の `comments`・optional）。
 //
-// 形状・enum・廃止キー・条件付き必須の検証は superRefine で行い、既存テストが期待する
-// `config:` prefix のメッセージ（`comments.rules[0].name` 等、bracket 付き path を含む）を
-// そのまま保持する。検証通過後に transform が camelCase 出力を組み立てる。
+// section/generator/language と rules array shape を superRefine で検証する。
+// rules entry は legacy 互換入力として受けるが処理では使わず、transform 後は常に [] にする。
 
 import { z } from "zod";
 
@@ -15,10 +14,6 @@ const VALID_PROVIDERS = [PROVIDER_GEMINI, PROVIDER_CODEX];
 const FALLBACK_SKIP = "skip";
 const FALLBACK_RETRY = "retry";
 const VALID_FALLBACK_VALUES = [FALLBACK_SKIP, FALLBACK_RETRY];
-
-// CommentRule.scope: コメント階層（top-level / reply）でマッチ対象を絞る (#524)。
-const SCOPE_ANY = "any";
-const VALID_SCOPES = ["top_level", "reply", SCOPE_ANY];
 
 const MAX_LENGTH_DEFAULT = 280;
 const CHANNEL_PERSONA_DEFAULT = "";
@@ -54,40 +49,6 @@ const validateGenerator = (raw: Record<string, unknown>, add: Issue): void => {
   }
 };
 
-const validateRule = (raw: unknown, index: number, add: Issue): void => {
-  if (!isPlainObject(raw)) {
-    add(`comments.rules[${index}] は object でなければなりません`);
-    return;
-  }
-  if (!raw.name) {
-    add(`comments.rules[${index}].name が必須です`);
-    return;
-  }
-  if ("template_key" in raw) {
-    add(`comments.rules[${index}].template_key は廃止されました`);
-    return;
-  }
-  if ("generator" in raw) {
-    add(
-      `comments.rules[${index}].generator は廃止されました。provider を使用してください`
-    );
-    return;
-  }
-  const ruleProvider = (raw.provider as string | undefined) ?? null;
-  if (ruleProvider !== null && !VALID_PROVIDERS.includes(ruleProvider)) {
-    add(
-      `comments.rules[${index}].provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${ruleProvider}`
-    );
-    return;
-  }
-  const ruleScope = (raw.scope as string | undefined) ?? SCOPE_ANY;
-  if (!VALID_SCOPES.includes(ruleScope)) {
-    add(
-      `comments.rules[${index}].scope は ${VALID_SCOPES.join(" / ")} のいずれかでなければなりません: ${ruleScope}`
-    );
-  }
-};
-
 const validateComments = (cm: unknown, add: Issue): void => {
   if (!isPlainObject(cm)) {
     add("comments セクションは object でなければなりません");
@@ -100,9 +61,19 @@ const validateComments = (cm: unknown, add: Issue): void => {
     return;
   }
   const rulesRaw = cm.rules;
-  if (Array.isArray(rulesRaw)) {
-    for (const [i, raw] of rulesRaw.entries()) {
-      validateRule(raw, i, add);
+  if (rulesRaw !== undefined && rulesRaw !== null && !Array.isArray(rulesRaw)) {
+    add("comments.rules は list でなければなりません");
+    return;
+  }
+  const { language } = cm;
+  if (language !== undefined && language !== null) {
+    if (typeof language !== "string") {
+      add("comments.language は文字列でなければなりません");
+      return;
+    }
+    if (!language.trim()) {
+      add("comments.language は空文字にできません");
+      return;
     }
   }
   const genRaw = cm.generator;
@@ -128,18 +99,7 @@ const buildGenerator = (raw: Record<string, unknown> | undefined) => ({
     REQUESTS_PER_MINUTE_DEFAULT,
 });
 
-const buildRule = (raw: Record<string, unknown>) => ({
-  keywords: [...((raw.keywords as string[] | undefined) ?? [])],
-  language: (raw.language as string | undefined) ?? null,
-  name: raw.name as string,
-  pattern: (raw.pattern as string | undefined) ?? null,
-  priority: (raw.priority as number | undefined) ?? 0,
-  provider: (raw.provider as string | undefined) ?? null,
-  scope: (raw.scope as string | undefined) ?? SCOPE_ANY,
-});
-
 const buildComments = (cm: Record<string, unknown>) => {
-  const rulesRaw = (cm.rules as Record<string, unknown>[] | undefined) ?? [];
   const genRaw = cm.generator as Record<string, unknown> | undefined;
   return {
     delayBetweenRepliesSec:
@@ -148,9 +108,10 @@ const buildComments = (cm: Record<string, unknown>) => {
     generator: buildGenerator(genRaw),
     historyFile:
       (cm.history_file as string | undefined) ?? "comment_reply_history.json",
+    language: (cm.language as string | undefined) ?? null,
     maxRepliesPerRun: (cm.max_replies_per_run as number | undefined) ?? 20,
     ngWords: [...((cm.ng_words as string[] | undefined) ?? [])],
-    rules: rulesRaw.map(buildRule),
+    rules: [],
     skipHeldForReview: (cm.skip_held_for_review as boolean | undefined) ?? true,
   };
 };

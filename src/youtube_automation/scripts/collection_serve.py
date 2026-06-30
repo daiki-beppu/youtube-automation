@@ -94,6 +94,11 @@ _DISTROKID_METADATA_FILENAME = "metadata.md"
 _DISTROKID_COLLECTIONS_ROUTE = "/distrokid/collections"
 _DISTROKID_RELEASES_ROUTE = "/distrokid/releases"
 
+# POST body upper bound for helper write endpoints. The expected payloads are
+# small JSON objects/lists; larger bodies are rejected before reading from rfile.
+_MAX_POST_BODY_BYTES = 1024 * 1024
+_MAX_DOWNLOADED_POST_BODY_BYTES = 10 * 1024
+
 
 def playlists_output_path(root: Path) -> Path:
     """capture 出力先 JSON の実体パス `<root>/config/suno-playlists.json` を返す（#893）。"""
@@ -688,11 +693,9 @@ def create_server(
                 self.send_error(404, "Not Found")
                 return
 
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            if length > 10240:
-                self.send_error(413, "Payload Too Large")
+            raw = self._read_limited_post_body(max_bytes=_MAX_DOWNLOADED_POST_BODY_BYTES)
+            if raw is None:
                 return
-            raw = self.rfile.read(length) if length else b""
             try:
                 payload = json.loads(raw.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
@@ -722,6 +725,20 @@ def create_server(
             ).encode("utf-8")
             self._send_bytes(resp_body, "application/json; charset=utf-8")
 
+        def _read_limited_post_body(self, *, max_bytes: int = _MAX_POST_BODY_BYTES) -> bytes | None:
+            try:
+                length = int(self.headers.get("Content-Length", 0) or 0)
+            except ValueError:
+                self.send_error(400, "Bad Request")
+                return None
+            if length < 0:
+                self.send_error(400, "Bad Request")
+                return None
+            if length > max_bytes:
+                self.send_error(413, "Payload Too Large")
+                return None
+            return self.rfile.read(length) if length else b""
+
         def do_POST(self) -> None:  # noqa: N802
             # GET と異なり POST は Origin 必須。未設定・不許可は 403。
             # （チェック順: まず capture root の有無に関わらず Origin を確認する）
@@ -739,8 +756,9 @@ def create_server(
                 if origin is None:
                     self.send_error(403, "Forbidden")
                     return
-                length = int(self.headers.get("Content-Length", 0) or 0)
-                raw = self.rfile.read(length) if length else b""
+                raw = self._read_limited_post_body()
+                if raw is None:
+                    return
                 try:
                     payload = json.loads(raw.decode("utf-8"))
                 except (json.JSONDecodeError, UnicodeDecodeError):
@@ -767,8 +785,9 @@ def create_server(
                 if origin is None:
                     self.send_error(403, "Forbidden")
                     return
-                length = int(self.headers.get("Content-Length", 0) or 0)
-                raw = self.rfile.read(length) if length else b""
+                raw = self._read_limited_post_body()
+                if raw is None:
+                    return
                 try:
                     payload = json.loads(raw.decode("utf-8"))
                 except (json.JSONDecodeError, UnicodeDecodeError):
@@ -780,10 +799,26 @@ def create_server(
                 coll_id = payload.get("collection_id")
                 disc = payload.get("disc")
                 album_title = payload.get("album_title")
-                if not coll_id or not disc or not album_title:
-                    # 必須フィールド欠落は 400（#934）。
+                if (
+                    not isinstance(coll_id, str)
+                    or not coll_id
+                    or not isinstance(disc, str)
+                    or not disc
+                    or not isinstance(album_title, str)
+                    or not album_title
+                ):
+                    # 必須フィールド欠落・非 string は 400（#934）。
                     self.send_error(400, "Bad Request")
                     return
+                if collections_root is not None:
+                    known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
+                    coll_dir = known_collections.get(coll_id)
+                    if coll_dir is None:
+                        self.send_error(400, "Bad Request")
+                        return
+                    if disc not in find_distrokid_discs(coll_dir):
+                        self.send_error(400, "Bad Request")
+                        return
                 write_distrokid_release(capture_root, coll_id, disc, album_title)
                 resp_body = json.dumps(
                     {"recorded": True, "path": str(distrokid_releases_output_path(capture_root))}

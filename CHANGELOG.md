@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(comments)`: コメント返信の `RuleEngine` / `no_rule_matched` 経路を撤去し、基本フィルタ通過後の全コメントを Agent 生成返信の候補に変更。旧 `comments.rules` は後方互換で読み込むが処理では無視し、返信文の `@投稿者名` 補完と NG ワード監査を追加（#1011）
+- `fix(serve)`: `yt-collection-serve` の POST body を 1 MiB に制限し、dir mode の `/distrokid/releases` で実在する collection/disc のみ記録できるようにした（#953）
+- `docs(thumbnail)`: 下流チャンネルの `config/skills/thumbnail.yaml` と stock 運用状況を横断監査し、TTP 設定・stock 再利用・live collection 棚卸し結果を `docs/audits/thumbnail-ttp-2026-06-30.md` に追加（#520, #521, #522）
+- `docs(skills)`: `masterup` の `yt-suno-fetch` 記述を将来案として明記し、Claude Code 固有表現を Codex 共用時に読み替える注記を AGENTS / CLAUDE に追加（#1181, #1182）
 - `fix(thumbnail)`: `main.png/jpg` を textless 動画背景 / 参照画像として扱う契約に統一し、upload thumbnail / DistroKid cover は `thumbnail.jpg/png` のみを候補にするよう skill docs と回帰テストを更新（#1310）
 - `docs(channel-new)`: `/channel-new` の初期フローを TTP 対象確認中心に整理し、追加競合発掘・本格 benchmark/comments 収集は後続スキルへ委譲する方針に変更（#1309）
 - `docs(skills)`: 初投稿前に `/playlist` で未作成プレイリストを初期化し、`/video-upload` の自動 assign に引き継ぐ導線を追加（#1314）

@@ -1,14 +1,14 @@
 """yt-comments-reply — YouTube コメント自動返信 CLI.
 
 Examples:
-    # 対象コメントと生成返信のプレビューのみ
-    yt-comments-reply --dry-run --limit 5
+    # 対象コメントを JSON で export（CLI 内部では返信文を生成しない）
+    yt-comments-reply --dry-run --export-candidates --json --limit 5 > /tmp/comment-candidates.json
 
-    # 実際に返信（--apply は必須）
-    yt-comments-reply --apply --video-id abc123
+    # Agent が生成した返信 JSON を使って dry-run 監査
+    yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.json --limit 5
 
-    # 直近 7 日間のコメントのみ対象
-    yt-comments-reply --dry-run --since 2026-04-16
+    # 監査済み返信を実際に投稿（--apply は必須）
+    yt-comments-reply --apply --agent-replies-file /tmp/comment-replies.json --video-id abc123
 
 設計方針:
     dry-run がデフォルトではなく、--dry-run / --apply のどちらか明示を要求する。
@@ -98,7 +98,7 @@ def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
     for row in plan.planned:
         print(
             f"  [planned] video={row['video_id']} comment_id={row['comment_id']} "
-            f"rule={row.get('rule')} lang={row.get('language')}"
+            f"policy={row.get('reply_policy')} provider={row.get('provider')} lang={row.get('language')}"
         )
         print(f"    author: {row.get('comment_author')}")
         print(f"    text  : {row.get('comment_text', '')[:80]}")
@@ -106,7 +106,7 @@ def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
     for row in plan.replied:
         print(
             f"  [replied] video={row['video_id']} comment_id={row['comment_id']} "
-            f"rule={row.get('rule')} lang={row.get('language')}"
+            f"policy={row.get('reply_policy')} provider={row.get('provider')} lang={row.get('language')}"
         )
         print(f"    reply : {row.get('reply_text', '')[:120]}")
     for row in plan.skipped:
@@ -118,7 +118,7 @@ def _print_summary(plan, *, dry_run: bool, as_json: bool) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-comments-reply",
-        description="YouTube コメントに対して config/channel/comments.json のルールで自動返信する",
+        description="基本フィルタ通過後の YouTube コメントを返信候補化し、LLM または agent 返信で処理する",
     )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="API 送信せず計画のみ出力")
