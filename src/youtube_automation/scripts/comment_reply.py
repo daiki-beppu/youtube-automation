@@ -1,14 +1,14 @@
 """yt-comments-reply — YouTube コメント自動返信 CLI.
 
 Examples:
-    # 対象コメントと生成返信のプレビューのみ
-    yt-comments-reply --dry-run --limit 5
+    # 対象コメントを JSON で export（CLI 内部では返信文を生成しない）
+    yt-comments-reply --dry-run --export-candidates --json --limit 5 > /tmp/comment-candidates.json
 
-    # 実際に返信（--apply は必須）
-    yt-comments-reply --apply --video-id abc123
+    # Agent が生成した返信 JSON を使って dry-run 監査
+    yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.json --limit 5
 
-    # 直近 7 日間のコメントのみ対象
-    yt-comments-reply --dry-run --since 2026-04-16
+    # 監査済み返信を実際に投稿（--apply は必須）
+    yt-comments-reply --apply --agent-replies-file /tmp/comment-replies.json --video-id abc123
 
 設計方針:
     dry-run がデフォルトではなく、--dry-run / --apply のどちらか明示を要求する。
