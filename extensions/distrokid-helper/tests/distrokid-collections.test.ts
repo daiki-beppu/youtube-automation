@@ -71,6 +71,12 @@ describe("distrokidReleaseRoute", () => {
       "/collections/20261001-rjn-dawn-collection/distrokid/disc1/release.json",
     );
   });
+
+  it("スペース入り collection_id は path segment encode する", () => {
+    expect(distrokidReleaseRoute("20260526-rainy jazz-collection", "disc1")).toBe(
+      "/collections/20260526-rainy%20jazz-collection/distrokid/disc1/release.json",
+    );
+  });
 });
 
 // --- fetchDistrokidCollections ---

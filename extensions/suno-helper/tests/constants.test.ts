@@ -82,6 +82,12 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
       "/collections/20260601-clm-aaa-collection/suno/prompts.json",
     );
   });
+
+  it("Given スペース入り collection id When collectionPromptsRoute(id) Then id を path segment encode する", () => {
+    expect(collectionPromptsRoute("20260526-rainy jazz-collection")).toBe(
+      "/collections/20260526-rainy%20jazz-collection/suno/prompts.json",
+    );
+  });
 });
 
 describe("shared/constants: Suno queue 上限 (#816)", () => {

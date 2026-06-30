@@ -183,6 +183,9 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
         assert command in wf_next
         assert command in checklist
 
+    assert "/playlist" in channel_new
+    assert "`yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init`" in channel_new
+
     for text in (playlist, video_upload, wf_next, channel_new, checklist):
         assert "playlist_id" in text
         assert "自動 assign" in text
@@ -194,6 +197,8 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     assert "確認を省略しない" in wf_next
     assert "ユーザーが playlist 初期化を却下した場合" in wf_next
     assert "`/video-upload` を実行せず停止" in wf_next
+    assert "`config/channel/playlists.json` が無い" in wf_next
+    assert "全 playlist に `playlist_id` がある場合はスキップ" in wf_next
     assert "初投稿プレイリスト初期化ゲート" in wf_next
     assert "`upload.video_id = null`" in wf_next
     assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist

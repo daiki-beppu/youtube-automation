@@ -1229,7 +1229,6 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
     """ベンチマークデータの鮮度を確認し、全チャンネルが1つの JSON に揃った状態を保証する。
 
     1つでも古い or 欠けているチャンネルがあれば --force で全チャンネル一括更新。
-
     Raises:
         ConfigError: benchmark.channels が未設定のとき
         YouTubeAPIError: 最新化を試みたが 1 チャンネルも収集できなかったとき。

@@ -4,7 +4,7 @@ YouTube メタデータ自動生成ユーティリティ
 collections/ ディレクトリの構造を解析し、YouTube用メタデータを自動生成
 
 Features:
-- WAVファイル自動解析（afinfo使用）
+- 音声ファイル自動解析（afinfo / ffprobe 使用）
 - タイムスタンプ自動計算
 - config/channel/*.json ベースのテンプレート適用
 """
@@ -21,14 +21,14 @@ from typing import Dict, List
 
 import yaml
 
+from youtube_automation.utils.audio_formats import AUDIO_EXTS
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
-
-from .audio_formats import AUDIO_EXTS
-from .skill_config import load_skill_config
-from .time_utils import format_duration_display, format_duration_short, format_timestamp
-from .youtube_tag import normalize_youtube_tags
+from youtube_automation.utils.probe import probe_duration
+from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.time_utils import format_duration_display, format_duration_short, format_timestamp
+from youtube_automation.utils.youtube_tag import normalize_youtube_tags
 
 logger = logging.getLogger(__name__)
 
@@ -381,10 +381,10 @@ class BAHMetadataGenerator:
 
     def _get_audio_duration(self, wav_file: Path) -> int:
         """
-        afinfo コマンドで音声ファイルの長さを取得
+        afinfo / ffprobe で音声ファイルの長さを取得
 
         Args:
-            wav_file (Path): WAVファイルパス
+            wav_file (Path): 音声ファイルパス
 
         Returns:
             int: 長さ（秒）
@@ -395,21 +395,35 @@ class BAHMetadataGenerator:
             ValueError: duration 文字列の数値変換に失敗した場合
             IndexError: afinfo 出力のパースに失敗した場合
         """
-        result = subprocess.run(
-            ["afinfo", str(wav_file)],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30,
-        )
+        afinfo_error: Exception | None = None
+        try:
+            result = subprocess.run(
+                ["afinfo", str(wav_file)],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
+            )
 
-        # "estimated duration: XXX.XXX seconds" を抽出
-        for line in result.stdout.split("\n"):
-            if "estimated duration" in line:
-                duration_str = line.split(":")[1].strip().split()[0]
-                return int(float(duration_str))
+            # "estimated duration: XXX.XXX seconds" を抽出
+            for line in result.stdout.split("\n"):
+                if "estimated duration" in line:
+                    duration_str = line.split(":")[1].strip().split()[0]
+                    afinfo_duration = float(duration_str)
+                    if afinfo_duration > 0:
+                        return max(1, int(afinfo_duration))
+                    break
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError, OSError) as e:
+            afinfo_error = e
 
-        logger.warning(f"afinfo 出力に 'estimated duration' が見つかりません: {wav_file.name}")
+        duration = probe_duration(wav_file)
+        if duration is not None and duration > 0:
+            return max(1, int(duration))
+
+        if afinfo_error is not None:
+            raise afinfo_error
+
+        logger.warning(f"音声 duration を取得できませんでした: {wav_file.name}")
         return 0
 
     def _clean_track_title(self, filename: str) -> str:
