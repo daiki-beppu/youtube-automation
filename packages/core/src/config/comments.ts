@@ -24,14 +24,14 @@ type Issue = (message: string) => void;
 const validateGenerator = (raw: Record<string, unknown>, add: Issue): void => {
   if ("type" in raw) {
     add(
-      "comments.generator.type は廃止されました。comments.generator.provider を使用してください",
+      "comments.generator.type は廃止されました。comments.generator.provider を使用してください"
     );
     return;
   }
   const provider = (raw.provider as string | undefined) ?? PROVIDER_CODEX;
   if (!VALID_PROVIDERS.includes(provider)) {
     add(
-      `comments.generator.provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${provider}`,
+      `comments.generator.provider は ${VALID_PROVIDERS.join(" / ")} のいずれかでなければなりません: ${provider}`
     );
     return;
   }
@@ -44,7 +44,7 @@ const validateGenerator = (raw: Record<string, unknown>, add: Issue): void => {
     (raw.fallback_on_error as string | undefined) ?? FALLBACK_SKIP;
   if (!VALID_FALLBACK_VALUES.includes(fallback)) {
     add(
-      `comments.generator.fallback_on_error は ${VALID_FALLBACK_VALUES.join(" / ")} のいずれかでなければなりません: ${fallback}`,
+      `comments.generator.fallback_on_error は ${VALID_FALLBACK_VALUES.join(" / ")} のいずれかでなければなりません: ${fallback}`
     );
   }
 };
@@ -56,7 +56,7 @@ const validateComments = (cm: unknown, add: Issue): void => {
   }
   if ("templates" in cm) {
     add(
-      "comments.templates は廃止されました。LLM provider で返信を生成してください",
+      "comments.templates は廃止されました。LLM provider で返信を生成してください"
     );
     return;
   }
@@ -123,7 +123,7 @@ export const Comments = z
   })
   .superRefine((o, ctx) => {
     validateComments(o.comments, (message) =>
-      ctx.addIssue({ code: "custom", message }),
+      ctx.addIssue({ code: "custom", message })
     );
   })
   .transform((o) => buildComments(o.comments as Record<string, unknown>));
