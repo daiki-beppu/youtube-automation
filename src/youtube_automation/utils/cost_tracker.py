@@ -156,16 +156,11 @@ def _acquire_msvcrt_lock(lock_f: BinaryIO) -> None:
             if attempt == _MSVCRT_LOCK_MAX_ATTEMPTS - 1:
                 break
             time.sleep(_MSVCRT_LOCK_RETRY_DELAY_SECONDS)
-    raise TimeoutError(
-        f"msvcrt lock acquisition timed out after {_MSVCRT_LOCK_MAX_ATTEMPTS} attempts"
-    ) from last_error
+    raise TimeoutError(f"msvcrt lock acquisition timed out after {_MSVCRT_LOCK_MAX_ATTEMPTS} attempts") from last_error
 
 
 def _is_msvcrt_lock_contention(error: OSError) -> bool:
-    return (
-        error.errno in _MSVCRT_LOCK_RETRY_ERRNOS
-        or getattr(error, "winerror", None) in _MSVCRT_LOCK_RETRY_WINERRORS
-    )
+    return error.errno in _MSVCRT_LOCK_RETRY_ERRNOS or getattr(error, "winerror", None) in _MSVCRT_LOCK_RETRY_WINERRORS
 
 
 def _release_lock(lock_f: BinaryIO) -> None:
