@@ -858,7 +858,22 @@ def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> N
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
     assert "codex login status" in section
     assert ".claude/skills/thumbnail/references/codex-image.sh" in section
-    assert "main-codex.png" in section
+    assert "thumbnail-codex-v1.png" in section
+
+
+def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_contract() -> None:
+    """#1310: codex 経路も文字入り thumbnail と textless main を別成果物にする。"""
+    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
+
+    for required in (
+        "codex 経路でも標準ファイル契約は同じ",
+        "10-assets/thumbnail-codex-v1.png",
+        "10-assets/thumbnail.jpg",
+        "10-assets/main-v1.png",
+        "10-assets/main.png",
+        "動画背景には使わない",
+    ):
+        assert required in section
 
 
 def test_thumbnail_skill_codex_section_documents_api_route_boundary() -> None:

@@ -587,7 +587,7 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 `/masterup` は**音源（mp3 / wav）を作る工程**で、映像オーバーレイ（ビジュアライザー・波形・購読ボタンポップアップ等）は扱わない。
 ユーザーから「ビジュアライザー付きで」「波形を出して」等の指示があっても、`/masterup` 段階では何も合成できない。
 
-ビジュアライザー周りの現状と制約は `videoup` SKILL.md の「オーディオビジュアライザー / オーバーレイについて」節を参照（#511 で feature 化中・現状未実装）。
+ビジュアライザー周りの現行仕様は `videoup` SKILL.md の「オーディオビジュアライザー / オーバーレイについて」節を参照。必要な場合は `/videoup` 実行前に `config/channel/youtube.json::overlays.enabled: true` と overlay 詳細設定を用意する。
 誤指示の事故防止のため、masterup 着手前に動画にオーバーレイが必要かをユーザーへ確認すること（#646 feedback）。
 
 ## Next Step
