@@ -257,8 +257,6 @@ describe("recordDistrokidRelease", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/auth/token`);
     const retryInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
-    expect((retryInit.headers as Record<string, string>)["X-Serve-Token"]).toBe(
-      "fresh-token",
-    );
+    expect((retryInit.headers as Record<string, string>)["X-Serve-Token"]).toBe("fresh-token");
   });
 });
