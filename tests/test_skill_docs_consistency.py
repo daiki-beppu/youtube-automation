@@ -213,6 +213,24 @@ def test_common_docs_list_optional_channel_config_files() -> None:
             assert name in text, f"{path} missing {name}"
 
 
+def test_distrokid_skill_uses_helper_name() -> None:
+    skill_path = ROOT / ".claude" / "skills" / "distrokid-helper" / "SKILL.md"
+    assert skill_path.exists()
+    skill = skill_path.read_text(encoding="utf-8")
+
+    frontmatter = _frontmatter(".claude/skills/distrokid-helper/SKILL.md")
+    assert frontmatter["name"] == "distrokid-helper"
+    assert "yt-collection-serve 起動" in frontmatter["description"]
+    assert "### ステップ 9: distrokid-helper サーバー起動" in skill
+    assert 'uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --port 7874' in skill
+    assert "`--playlist-capture-root` / `--playlist-capture-prefix` は Suno playlist capture 用" in skill
+
+    features = _read("docs/features.md")
+    assert "/distrokid-helper" in features
+    assert "サーバー起動まで実行" in features
+    assert "distrokid-prep" not in features
+
+
 def test_community_post_declares_raw_json_loader_exception() -> None:
     text = _read(".claude/skills/community-post/SKILL.md")
 
