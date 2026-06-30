@@ -737,6 +737,82 @@ class TestUploadCompleteCollectionDedup:
         assert result["video_id"] == "VID_NEW"
         assert result["upload_source"] == "new_upload"
 
+    def test_prebuilt_upload_keeps_localization_timestamps_when_m4a_needs_probe_fallback(self, tmp_path, monkeypatch):
+        """#1323: prebuilt upload 経路でも `.m4a` fallback 後の timestamp を localizations に渡す."""
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+        from youtube_automation.utils import metadata_generator as metadata_generator_module
+        from youtube_automation.utils.config import load_config
+        from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
+
+        col_dir = tmp_path / "20990101-live-circuit-collection"
+        (col_dir / "01-master").mkdir(parents=True)
+        (col_dir / "01-master" / "video-master.mp4").write_bytes(b"\x00")
+        (col_dir / "02-Individual-music").mkdir()
+        (col_dir / "02-Individual-music" / "01-circuit-door.m4a").write_bytes(b"\x00")
+        (col_dir / "10-assets").mkdir()
+        (col_dir / "10-assets" / "thumbnail.jpg").write_bytes(b"\x00")
+        (col_dir / "20-documentation").mkdir()
+        (col_dir / "20-documentation" / "descriptions.md").write_text(
+            "\n".join(
+                [
+                    "## タイトル案",
+                    "```",
+                    "Circuit Collection",
+                    "```",
+                    "",
+                    "## Complete Collection 概要欄",
+                    "```",
+                    "00:00 Curated Circuit Door",
+                    "```",
+                    "",
+                    "## タグ（YouTube タグ欄）",
+                    "```",
+                    "circuit music, focus music",
+                    "```",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        config = load_config()
+        scene_phrases = {lang: f"quiet circuit room {lang}" for lang in config.localizations.supported_languages}
+        (col_dir / "workflow-state.json").write_text(
+            json.dumps({"scene_phrases": scene_phrases}),
+            encoding="utf-8",
+        )
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                raise _subprocess.CalledProcessError(1, "afinfo", "unsupported file")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        probe_calls: list[Path] = []
+
+        def fake_probe_duration(path: Path) -> float:
+            probe_calls.append(path)
+            return 121.9
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", fake_probe_duration)
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        metadata_gen = BAHMetadataGenerator(str(col_dir))
+        with (
+            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
+        ):
+            result = uploader._upload_complete_collection(col_dir, metadata_gen, publish_at=None)
+
+        assert result["video_id"] == "VID_NEW"
+        assert probe_calls == [col_dir / "02-Individual-music" / "01-circuit-door.m4a"]
+        metadata = mock_upload_video.call_args.args[1]
+        assert metadata["description"] == "00:00 Curated Circuit Door"
+        assert "localizations" in metadata
+        assert metadata["localizations"]
+        for loc in metadata["localizations"].values():
+            assert "00:00 Curated Circuit Door" in loc["description"]
+
     def test_should_fail_loud_when_upload_thumbnail_missing(self, tmp_path):
         """#1310: main.* は動画背景なので upload thumbnail 欠落を隠さない。"""
         from youtube_automation.utils.exceptions import ValidationError

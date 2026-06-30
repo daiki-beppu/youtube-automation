@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 import yaml
 
+from youtube_automation.utils import metadata_generator as metadata_generator_module
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import (
@@ -1300,6 +1301,7 @@ class TestAnalyzeAudioFilesSkipDetection:
             return _original_run(cmd, **kwargs)
 
         monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: None)
 
         import logging
 
@@ -1310,6 +1312,133 @@ class TestAnalyzeAudioFilesSkipDetection:
         assert "トラックをスキップ" in caplog.text
         assert "02-broken.wav" in caplog.text
         assert "ファイル解析エラー" in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_fails(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                raise _subprocess.CalledProcessError(1, "afinfo", "unsupported file")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_probe_duration_subsecond_is_kept_as_one_second(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                raise _subprocess.CalledProcessError(1, "afinfo", "unsupported file")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 0.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 1
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_has_no_estimated_duration(
+        self, gen_with_audio_dir, caplog, monkeypatch
+    ):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                return _subprocess.CompletedProcess(cmd, 0, stdout="no estimated duration\n", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_duration_is_malformed(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                return _subprocess.CompletedProcess(cmd, 0, stdout="estimated duration: unknown seconds\n", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_reports_zero(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                return _subprocess.CompletedProcess(cmd, 0, stdout="estimated duration: 0.0 seconds\n", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
 
     def test_count_mismatch_warning(self, gen_with_audio_dir, caplog, monkeypatch):
         gen, audio_dir = gen_with_audio_dir
