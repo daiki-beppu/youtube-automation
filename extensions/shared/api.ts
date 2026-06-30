@@ -477,24 +477,11 @@ export async function recordDistrokidRelease(
   record: DistrokidReleaseRecord,
 ): Promise<void> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-  const url = `${normalizedBaseUrl}${DISTROKID_RELEASES_ROUTE}`;
-  const token = await fetchServeToken(normalizedBaseUrl);
-  let resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Serve-Token": token },
-    body: JSON.stringify(record),
-  });
-  if (resp.status === 403) {
-    const freshToken = await fetchServeToken(normalizedBaseUrl);
-    resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Serve-Token": freshToken,
-      },
-      body: JSON.stringify(record),
-    });
-  }
+  const resp = await postJsonWithServeToken(
+    normalizedBaseUrl,
+    `${normalizedBaseUrl}${DISTROKID_RELEASES_ROUTE}`,
+    record,
+  );
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
@@ -530,6 +517,26 @@ async function fetchServeToken(baseUrl: string): Promise<string> {
   return token;
 }
 
+async function postJsonWithServeToken(
+  normalizedBaseUrl: string,
+  url: string,
+  payload: unknown,
+): Promise<Response> {
+  const post = async (token: string) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Serve-Token": token },
+      body: JSON.stringify(payload),
+    });
+
+  let res = await post(await fetchServeToken(normalizedBaseUrl));
+  if (res.status === 403) {
+    // 403 retry: token may be stale after server restart
+    res = await post(await fetchServeToken(normalizedBaseUrl));
+  }
+  return res;
+}
+
 export async function postDownloaded(
   baseUrl: string,
   collectionId: string,
@@ -542,25 +549,8 @@ export async function postDownloaded(
     throw new Error("file_count が正数の場合は download_path が必要です");
   }
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-  const token = await fetchServeToken(normalizedBaseUrl);
   const url = `${normalizedBaseUrl}${collectionDownloadedRoute(collectionId)}`;
-  let res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Serve-Token": token },
-    body: JSON.stringify(payload),
-  });
-  // 403 retry: token may be stale after server restart
-  if (res.status === 403) {
-    const freshToken = await fetchServeToken(normalizedBaseUrl);
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Serve-Token": freshToken,
-      },
-      body: JSON.stringify(payload),
-    });
-  }
+  const res = await postJsonWithServeToken(normalizedBaseUrl, url, payload);
   if (!res.ok) {
     throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
   }

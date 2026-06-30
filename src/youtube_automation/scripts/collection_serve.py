@@ -778,8 +778,8 @@ def create_server(
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。
             if self.path == _DISTROKID_RELEASES_ROUTE:
-                if capture_root is None:
-                    # capture root 未指定時は #893 の POST 無効と同じ gating（#934）。
+                if capture_root is None or collections_root is None:
+                    # release 記録は dir mode の collection/disc 実在検証と一体の契約（#934）。
                     self.send_error(404, "Not Found")
                     return
                 if not self._authorize_mutating_post():
@@ -799,22 +799,25 @@ def create_server(
                 coll_id = payload.get("collection_id")
                 disc = payload.get("disc")
                 album_title = payload.get("album_title")
-                if not coll_id or not disc or not album_title:
-                    # 必須フィールド欠落は 400（#934）。
+                if (
+                    not isinstance(coll_id, str)
+                    or not coll_id
+                    or not isinstance(disc, str)
+                    or not disc
+                    or not isinstance(album_title, str)
+                    or not album_title
+                ):
+                    # 必須フィールド欠落・非 string は 400（#934）。
                     self.send_error(400, "Bad Request")
                     return
-                coll_id = str(coll_id)
-                disc = str(disc)
-                album_title = str(album_title)
-                if collections_root is not None:
-                    known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
-                    coll_dir = known_collections.get(coll_id)
-                    if coll_dir is None:
-                        self.send_error(400, "Bad Request")
-                        return
-                    if disc not in find_distrokid_discs(coll_dir):
-                        self.send_error(400, "Bad Request")
-                        return
+                known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
+                coll_dir = known_collections.get(coll_id)
+                if coll_dir is None:
+                    self.send_error(400, "Bad Request")
+                    return
+                if disc not in find_distrokid_discs(coll_dir):
+                    self.send_error(400, "Bad Request")
+                    return
                 write_distrokid_release(capture_root, coll_id, disc, album_title)
                 resp_body = json.dumps(
                     {"recorded": True, "path": str(distrokid_releases_output_path(capture_root))}

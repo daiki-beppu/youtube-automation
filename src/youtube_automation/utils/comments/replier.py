@@ -419,7 +419,7 @@ class CommentReplier:
             return None
 
         mention = _author_mention(comment.author)
-        if mention and not reply_text.startswith(mention):
+        if mention and not _starts_with_mention_boundary(reply_text, mention):
             reply_text = f"{mention} {reply_text}"
         if len(reply_text) > ctx.max_length:
             logger.warning(
@@ -564,8 +564,12 @@ def _author_mention(author: str | None) -> str | None:
     return f"@{normalized}"
 
 
+def _starts_with_mention_boundary(reply_text: str, mention: str) -> bool:
+    return reply_text == mention or reply_text.startswith(f"{mention} ")
+
+
 def _truncate_preserving_mention(reply_text: str, mention: str | None, max_length: int) -> str | None:
-    if not mention or not reply_text.startswith(mention):
+    if not mention or not _starts_with_mention_boundary(reply_text, mention):
         return reply_text[:max_length].rstrip()
     if len(mention) > max_length:
         return None

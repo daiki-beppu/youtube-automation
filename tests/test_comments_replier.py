@@ -482,6 +482,26 @@ def test_agent_replies_file_path_uses_provided_reply_without_generator(tmp_path,
     _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
+def test_agent_replies_prefixes_mention_when_reply_starts_with_longer_handle(tmp_path, _mock_default_genai_client):
+    """@Alice2 は @Alice 済みとみなさず、投稿者 mention を補完する."""
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={"v1": [{"comment_id": "c1", "text": "こんにちは！", "author": "Alice"}]},
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        agent_replies={"c1": "@Alice2 見つけてくださってありがとうございます。"},
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned[0]["reply_text"] == "@Alice @Alice2 見つけてくださってありがとうございます。"
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
 def test_agent_replies_apply_posts_reply_and_saves_history_without_generator(tmp_path, _mock_default_genai_client):
     yt = _mock_youtube(
         video_ids=["v1"],
