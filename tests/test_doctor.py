@@ -83,23 +83,43 @@ def _write_minimal_config(base: Path) -> None:
     )
 
 
-def _write_benchmark_channels(base: Path) -> None:
+def _write_benchmark_channels_value(base: Path, channels: object) -> None:
     config_dir = base / "config" / "channel"
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "analytics.json").write_text(
         json.dumps(
             {
                 "benchmark": {
-                    "channels": [
-                        {
-                            "id": "UC_rival",
-                            "name": "Rival Channel",
-                            "slug": "rival",
-                        }
-                    ]
+                    "channels": channels,
                 }
             }
         ),
+        encoding="utf-8",
+    )
+
+
+def _write_benchmark_channels(base: Path) -> None:
+    _write_benchmark_channels_value(
+        base,
+        [
+            {
+                "id": "UC_rival",
+                "name": "Rival Channel",
+                "slug": "rival",
+            }
+        ],
+    )
+
+
+def _write_thumbnail_skill_default_yaml(base: Path, default_yaml: str) -> None:
+    skills_dir = base / "config" / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    (skills_dir / "thumbnail.yaml").write_text(
+        "image_generation:\n"
+        "  gemini:\n"
+        "    reference_images:\n"
+        f"      default: {default_yaml}\n"
+        "      path_base: channel_dir\n",
         encoding="utf-8",
     )
 
@@ -1135,6 +1155,16 @@ class TestCheckTtpWfNewReadiness:
         assert "benchmark.channels 未設定" in r.message
         assert r.next_action is None
 
+    @pytest.mark.parametrize("channels", [None, {"id": "UC_rival"}, ["not-a-channel", 123]])
+    def test_invalid_benchmark_channels_shapes_are_treated_as_unset(self, tmp_path, channels):
+        """benchmark.channels が契約外 shape なら承認済み TTP 未設定として扱う."""
+        _write_benchmark_channels_value(tmp_path, channels)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "benchmark.channels 未設定" in r.message
+
     def test_benchmark_channels_without_artifacts_warns_channel_setup_incomplete(self, tmp_path):
         """承認済み TTP 対象があるのに成果物が無ければ /channel-setup 未完了へ誘導する."""
         _write_benchmark_channels(tmp_path)
@@ -1166,6 +1196,17 @@ class TestCheckTtpWfNewReadiness:
         thumb_dir.mkdir(parents=True)
         (thumb_dir / "rival-abc.jpg").write_bytes(b"fake")
         _write_thumbnail_skill_config(tmp_path, ["{{REFERENCE_IMAGE_1}}"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default が空または未転記" in r.message
+
+    @pytest.mark.parametrize("default_yaml", ["null", "{ path: data/thumbnail_compare/benchmark/rival-abc.jpg }"])
+    def test_invalid_reference_default_shapes_are_treated_as_missing(self, tmp_path, default_yaml):
+        """reference_images.default が契約外 shape なら未転記として warn する."""
+        _write_complete_ttp_artifacts(tmp_path)
+        _write_thumbnail_skill_default_yaml(tmp_path, default_yaml)
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
