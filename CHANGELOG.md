@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(channel-new)`: `/channel-new` にチャンネル画像初期化導線を追加。TTP 対象の `snippet.thumbnails` / `brandingSettings.image` を reference-only として snapshot に保存し、`yt-channel-init` が `branding/` と `thumbnail.yaml` の channel branding 参照枠を生成するようにした（#1367）
+
 ### Changed
 
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
