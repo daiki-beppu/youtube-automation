@@ -3,8 +3,7 @@ name: CI
 on:
   push:
     branches: [main, feat/ts-rewrite, feat/1143-suno-bulk-download]
-  pull_request:
-    branches: [main, feat/ts-rewrite, feat/1143-suno-bulk-download]
+  pull_request: {}
 
 jobs:
   lint:
@@ -13,8 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
       - run: nix develop --command uv sync --extra dev
-      - run: nix develop --command uv run ruff check .
-      - run: nix develop --command uv run ruff format --check .
+      - parallel:
+          - name: Ruff check
+            run: nix develop --command uv run ruff check .
+          - name: Ruff format check
+            run: nix develop --command uv run ruff format --check .
 
   test:
     runs-on: ubuntu-latest
