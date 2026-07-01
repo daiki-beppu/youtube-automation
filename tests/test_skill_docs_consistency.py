@@ -219,6 +219,20 @@ def test_community_post_declares_raw_json_loader_exception() -> None:
     assert "skill-local raw JSON 例外" in text
     assert "utils.config.load_config()" in text
     assert "`community` section を持たない" in text
+    assert "投稿本文・Studio URL の実データには使わない" in text
+    assert "fallback や merge 元にしない" in text
+
+
+def test_community_draft_documents_skill_config_merge_before_channel_json() -> None:
+    text = _read(".claude/skills/community-draft/SKILL.md")
+
+    assert 'load_skill_config("community-draft")' in text
+    assert ".claude/skills/community-draft/config.default.yaml" in text
+    assert "config/skills/community-draft.yaml" in text
+    assert "config/channel/community-draft.json" in text
+    assert (
+        "config.default.yaml` < `config/skills/community-draft.yaml` < `config/channel/community-draft.json"
+    ) in text
 
 
 def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
@@ -244,6 +258,12 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
             for marker in (
                 "## Instructions",
                 "## 実行フロー",
+                "## Workflow",
+                "## Scripts",
+                "## Quick Reference",
+                "## Inputs",
+                "## 前提",
+                "## 制約・前提",
                 "### Step 1",
                 "### 前提条件チェック",
                 "### 対象コレクション",
