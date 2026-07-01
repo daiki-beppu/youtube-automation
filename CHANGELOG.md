@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(masterup)`: suno-helper ZIP 展開後の `NNa-` / `NNb-` take 付き音源では Step 2-3 をスキップし、`yt-suno-select-tracks` を必須ゲートとしてから master 生成へ進む契約を明確化（#1257）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 
 ### Fixed
