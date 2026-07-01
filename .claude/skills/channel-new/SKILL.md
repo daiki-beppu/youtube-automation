@@ -39,11 +39,11 @@ TTP メモは最低限、以下の観点を含める:
 - `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あり、各 entry に relationship（何を転写するか）が入っている
 - `docs/channel/ttp-seed-confirmation.md` に、候補ごとの source、seed fetch 要約、承認 / 不採用判断、転写したい要素、relationship、未反映項目が保存されている
 - `docs/channel/competitor-branding-snapshot.json` に、承認済み TTP 対象の `snippet` / `brandingSettings` / `localizations` snapshot が保存されている
-- thumbnail TTP の参照元として `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` が設定済み、またはスキップ理由がユーザー承認済み例外として `ttp-seed-confirmation.md` に残っている
-- `music_engine: suno` の場合、`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json::suno_preset.genre_line` が準備済み、または曲構造 TTP 未反映をユーザー承認済み例外として `ttp-seed-confirmation.md` に残している
+- thumbnail TTP の参照元として `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` が設定済み、またはスキップ理由が `ユーザー承認済み例外: thumbnail ...` として `ttp-seed-confirmation.md` に残っている
+- `music_engine: suno` の場合、`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json::suno_preset.genre_line` が準備済み、または曲構造 TTP 未反映が `ユーザー承認済み例外: music ...` / `ユーザー承認済み例外: 曲構造 ...` として `ttp-seed-confirmation.md` に残っている
 - `uv run yt-doctor --json` の `ttp_wf_new_readiness` が `ok` である。`warn` の場合は不足項目を解消するか、ユーザー承認済み例外を明記してから再確認する
 
-意図的に thumbnail reference / music structure / branding の一部をスキップする場合は、「何が TTP 未反映か」「なぜ進めるか」「後続でどの skill を使って解消するか」を `docs/channel/ttp-seed-confirmation.md` と最終 handoff に明記する。
+意図的に thumbnail reference / music structure の一部をスキップする場合は、「何が TTP 未反映か」「なぜ進めるか」「後続でどの skill を使って解消するか」を `ユーザー承認済み例外: thumbnail ...` または `ユーザー承認済み例外: music ...` の marker 付きで `docs/channel/ttp-seed-confirmation.md` と最終 handoff に明記する。branding snapshot は承認済み TTP 対象の `snippet` / `brandingSettings` / `localizations` を保存し、snapshot 不足を例外扱いにしない。
 
 ## 外部データの扱い
 

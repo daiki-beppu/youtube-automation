@@ -927,6 +927,14 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
 
 def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
     analytics_path = channel_dir / "config" / "channel" / "analytics.json"
+    if not analytics_path.is_file():
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="ok",
+            category=DATA_CATEGORY,
+            message="config/channel/analytics.json 未生成のため TTP readiness は未適用 (/channel-new 初回 preflight)",
+        )
+
     analytics = _read_json_mapping(analytics_path)
     channels = _benchmark_channels(analytics)
     if not channels:
@@ -997,6 +1005,7 @@ def _benchmark_channels(analytics: dict[str, object]) -> list[dict[str, object]]
 
 def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
     missing: list[str] = []
+    approved_exceptions: set[str] = set()
 
     channels_without_relationship = [
         str(channel.get("name") or channel.get("id") or index + 1)
@@ -1011,11 +1020,85 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         missing.append("docs/channel/ttp-seed-confirmation.md 未作成")
     else:
         seed_text = seed_confirmation.read_text(encoding="utf-8", errors="replace")
-        if "承認" not in seed_text and "approved" not in seed_text.lower():
-            missing.append("ttp-seed-confirmation.md に承認判断が未記録")
-        if "未反映" in seed_text or "スキップ" in seed_text or "skip" in seed_text.lower():
-            missing.append("ttp-seed-confirmation.md に TTP 未反映 / スキップ項目あり")
+        seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text)
+        missing.extend(seed_missing)
 
+    missing.extend(_missing_branding_snapshot_items(channel_dir, channels))
+
+    thumbnail = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
+    if not _has_thumbnail_ttp_reference(thumbnail) and "thumbnail" not in approved_exceptions:
+        missing.append("thumbnail reference_images.default 未設定")
+
+    youtube = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
+    if (
+        youtube.get("music_engine") == "suno"
+        and not _has_suno_music_readiness(channel_dir)
+        and "music" not in approved_exceptions
+    ):
+        missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
+
+    return missing
+
+
+_SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("source", ("source", "ソース", "url", "handle", "channel id", "チャンネルid")),
+    ("seed fetch 要約", ("seed fetch", "fetch", "取得要約", "収集要約")),
+    ("承認 / 不採用判断", ("承認", "不採用", "approved", "rejected")),
+    ("転写したい要素", ("転写", "ttp", "要素")),
+    ("relationship", ("relationship", "関係性")),
+    ("未反映項目", ("未反映", "未適用", "none", "なし")),
+)
+
+
+def _validate_ttp_seed_confirmation(seed_text: str) -> tuple[list[str], set[str]]:
+    missing = [
+        f"ttp-seed-confirmation.md に {label} が未記録"
+        for label, markers in _SEED_CONFIRMATION_MARKERS
+        if not _contains_any_marker(seed_text, markers)
+    ]
+
+    unapproved_skip_lines = [
+        line.strip()
+        for line in seed_text.splitlines()
+        if _line_mentions_ttp_skip(line) and not _line_mentions_approved_exception(line)
+    ]
+    if unapproved_skip_lines:
+        missing.append("ttp-seed-confirmation.md に未承認の TTP 未反映 / スキップ項目あり")
+
+    return missing, _approved_ttp_exceptions(seed_text)
+
+
+def _contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
+    lower_text = text.lower()
+    return any(marker.lower() in lower_text for marker in markers)
+
+
+def _line_mentions_ttp_skip(line: str) -> bool:
+    lower_line = line.lower()
+    if "なし" in line or "none" in lower_line:
+        return False
+    return "未反映" in line or "スキップ" in line or "skip" in lower_line
+
+
+def _line_mentions_approved_exception(line: str) -> bool:
+    lower_line = line.lower()
+    return "ユーザー承認済み例外" in line or "approved exception" in lower_line
+
+
+def _approved_ttp_exceptions(seed_text: str) -> set[str]:
+    exceptions: set[str] = set()
+    for line in seed_text.splitlines():
+        if not _line_mentions_approved_exception(line):
+            continue
+        lower_line = line.lower()
+        if "thumbnail" in lower_line or "サムネ" in line:
+            exceptions.add("thumbnail")
+        if "music" in lower_line or "suno" in lower_line or "曲構造" in line or "音楽" in line:
+            exceptions.add("music")
+    return exceptions
+
+
+def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
     branding_snapshot = _read_json_mapping(channel_dir / "docs" / "channel" / "competitor-branding-snapshot.json")
     snapshot_items = branding_snapshot.get("items")
     if (
@@ -1023,17 +1106,47 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         or not isinstance(snapshot_items, list)
         or not snapshot_items
     ):
-        missing.append("docs/channel/competitor-branding-snapshot.json 未作成または空")
+        return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
 
-    thumbnail = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
-    if not _has_thumbnail_ttp_reference(thumbnail):
-        missing.append("thumbnail reference_images.default 未設定")
+    missing: list[str] = []
+    approved_ids = _approved_ttp_channel_ids(channels)
+    snapshot_by_id = {
+        str(item.get("id")): item
+        for item in snapshot_items
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
 
-    youtube = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
-    if youtube.get("music_engine") == "suno" and not _has_suno_music_readiness(channel_dir):
-        missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
+    channels_without_id = [
+        str(channel.get("name") or index + 1)
+        for index, channel in enumerate(channels)
+        if not str(channel.get("id") or "").strip()
+    ]
+    if channels_without_id:
+        missing.append(f"benchmark.channels の id 未設定 ({', '.join(channels_without_id)})")
+
+    missing_ids = [channel_id for channel_id in approved_ids if channel_id not in snapshot_by_id]
+    if missing_ids:
+        missing.append(
+            "competitor-branding-snapshot.json に承認済み TTP 対象の snapshot 不足 (" + ", ".join(missing_ids) + ")"
+        )
+
+    for channel_id in approved_ids:
+        item = snapshot_by_id.get(channel_id)
+        if item is None:
+            continue
+        missing_fields = [
+            field for field in ("snippet", "brandingSettings", "localizations") if not isinstance(item.get(field), dict)
+        ]
+        if missing_fields:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に必須 field 不足 ({', '.join(missing_fields)})"
+            )
 
     return missing
+
+
+def _approved_ttp_channel_ids(channels: list[dict[str, object]]) -> list[str]:
+    return [channel_id for channel in channels if (channel_id := str(channel.get("id") or "").strip())]
 
 
 def _has_thumbnail_ttp_reference(thumbnail: dict[str, object]) -> bool:
