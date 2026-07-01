@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from youtube_automation.scripts import launch_curve
 from youtube_automation.utils.launch_curve_data import build_launch_curve_frame
@@ -133,6 +134,24 @@ def test_launch_curve_latest_png_handles_mixed_missing_impressions_and_ctr(tmp_p
     older = next(video for video in payload["all_videos"] if video["video_id"] == "v1")
     assert older["latest_ctr"] == 2.5
     assert Path(payload["png_path"]).exists()
+
+
+def test_build_launch_curve_frame_rejects_non_numeric_ctr():
+    daily = {
+        "rows": [
+            {
+                "video_id": "v1",
+                "date": "2026-04-01",
+                "views": 10,
+                "impressions": 100,
+                "impression_ctr": "not-a-number",
+            },
+        ]
+    }
+    meta = {"v1": {"title": "v1", "published_at": "2026-04-01T00:00:00Z"}}
+
+    with pytest.raises(ValueError):
+        build_launch_curve_frame(daily_data=daily, video_meta=meta)
 
 
 def test_build_launch_curve_frame_merges_reporting_snapshot():
