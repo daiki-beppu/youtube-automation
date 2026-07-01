@@ -48,6 +48,23 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.getInFlightCount()).toBe(0);
   });
 
+  it("Given feed 観測に duration がある When 読む Then clip ID ごとに記録して取得できる", () => {
+    const tracker = createClipTracker();
+    tracker.registerSubmitted([
+      { id: "c1", status: "submitted" },
+      { id: "c2", status: "submitted" },
+    ]);
+
+    tracker.applyFeedStatuses([
+      { id: "c1", status: "complete", duration: 182.4 },
+      { id: "c2", status: "streaming", duration: 0 },
+    ]);
+
+    expect(tracker.getDuration("c1")).toBe(182.4);
+    expect(tracker.getDuration("c2")).toBe(0);
+    expect(tracker.getDuration("missing")).toBeUndefined();
+  });
+
   it("Given feed 観測に未知の未終端 clip When 読む Then passive 合流で数える（前 run の残留分）", () => {
     const tracker = createClipTracker();
     tracker.applyFeedStatuses([

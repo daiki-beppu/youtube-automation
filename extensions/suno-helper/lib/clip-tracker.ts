@@ -25,6 +25,8 @@ export interface ClipTracker {
   getPendingSubmittedIds(): string[];
   /** この run の generate レスポンスで観測した clip id 一覧。playlist 対象の SSOT。 */
   getSubmittedIds(): string[];
+  /** 観測済み clip の duration (sec)。未観測または feed に duration が無い場合は undefined。 */
+  getDuration(clipId: string): number | undefined;
   /** run 開始時に playlist 対象 ID だけを初期化する。status 集計は残す。 */
   clearSubmittedIds(): void;
   /** generate / feed のいずれかを 1 度でも観測したか。false の間は DOM プロキシへ縮退する。 */
@@ -39,6 +41,7 @@ export interface ClipTracker {
 
 export function createClipTracker(now: () => number = Date.now): ClipTracker {
   const statusById = new Map<string, string>();
+  const durationById = new Map<string, number>();
   const submittedById = new Map<string, true>();
   let submissions = 0;
   let observedGenerate = false;
@@ -47,6 +50,9 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
   let changeAt = 0;
 
   function upsert(clip: ObservedClip): void {
+    if (typeof clip.duration === "number") {
+      durationById.set(clip.id, clip.duration);
+    }
     const prev = statusById.get(clip.id);
     if (prev !== clip.status) {
       statusById.set(clip.id, clip.status);
@@ -104,6 +110,9 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
     },
     getSubmittedIds() {
       return Array.from(submittedById.keys());
+    },
+    getDuration(clipId) {
+      return durationById.get(clipId);
     },
     clearSubmittedIds() {
       submittedById.clear();

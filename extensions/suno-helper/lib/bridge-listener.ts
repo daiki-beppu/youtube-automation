@@ -33,7 +33,9 @@ function isObservedClipArray(value: unknown): value is ObservedClip[] {
         typeof item === "object" &&
         item !== null &&
         typeof (item as { id?: unknown }).id === "string" &&
-        typeof (item as { status?: unknown }).status === "string",
+        typeof (item as { status?: unknown }).status === "string" &&
+        ((item as { duration?: unknown }).duration === undefined ||
+          typeof (item as { duration?: unknown }).duration === "number"),
     )
   );
 }
