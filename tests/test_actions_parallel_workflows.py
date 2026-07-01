@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,7 @@ _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip suno-helper": ("extensions/suno-helper", "pnpm zip"),
     "Build and zip distrokid-helper": ("extensions/distrokid-helper", "pnpm zip"),
 }
+_SHELL_BACKGROUND_OPERATOR = re.compile(r"(?<!&)&(?!&)")
 
 
 def _read_text(path: Path) -> str:
@@ -130,7 +132,7 @@ def _parallel_group_index_containing(steps: list[dict[str, object]], name: str) 
 def _assert_run_has_no_shell_backgrounding(run_script: str) -> None:
     for line in run_script.splitlines():
         command = line.strip()
-        assert not command.endswith("&"), f"shell backgrounding is not allowed: {command}"
+        assert _SHELL_BACKGROUND_OPERATOR.search(command) is None, f"shell backgrounding is not allowed: {command}"
         assert command != "wait" and not command.startswith("wait "), f"shell wait is not allowed: {command}"
 
 
@@ -169,6 +171,25 @@ def test_ci_lint_runs_ruff_checks_in_a_single_parallel_group() -> None:
         steps, "nix develop --command uv sync --extra dev"
     ) < _parallel_group_index_containing(steps, "Ruff check")
     _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
+
+
+@pytest.mark.parametrize(
+    "run_script",
+    [
+        "pnpm zip & echo ok",
+        "pnpm zip & # background",
+        "pnpm zip &\nwait",
+    ],
+)
+def test_parallel_run_contract_rejects_shell_backgrounding(run_script: str) -> None:
+    """Given parallel child run, When shell backgrounding is used, Then contract test rejects it."""
+    with pytest.raises(AssertionError):
+        _assert_run_has_no_shell_backgrounding(run_script)
+
+
+def test_parallel_run_contract_allows_shell_and_operator() -> None:
+    """Given parallel child run, When commands use shell AND, Then it is not treated as backgrounding."""
+    _assert_run_has_no_shell_backgrounding("pnpm install && pnpm zip")
 
 
 def test_suno_helper_checks_use_dependency_safe_parallel_groups() -> None:
