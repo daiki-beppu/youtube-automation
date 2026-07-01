@@ -1,10 +1,13 @@
 import logging
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,10 +29,18 @@ def _frontmatter(path: str) -> dict:
     return parsed
 
 
+def _isolated_git_env() -> dict[str, str]:
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_CONFIG_")}
+    env["GIT_CONFIG_GLOBAL"] = os.devnull
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    return env
+
+
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["git", *args],
+        ["git", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", *args],
         cwd=repo,
+        env=_isolated_git_env(),
         check=True,
         text=True,
         stdout=subprocess.PIPE,
@@ -122,9 +133,8 @@ def test_channel_new_requires_initial_save_before_followup_update() -> None:
     assert "初回保存と automation-update 前の整理" in channel_new
     assert "git status --porcelain" in channel_new
     assert "後続の `/automation-update` は dirty worktree で停止する" in channel_new
-    assert (
-        "git add -A -- . ':(exclude).env' ':(exclude)auth/client_secrets.json' ':(exclude)auth/token.json'"
-    ) in channel_new
+    assert "git add -A" in channel_new
+    assert "`git add -A` 後の guard を唯一の安全境界にする" in channel_new
     assert "bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1" in channel_new
     assert 'git commit -m "chore: 初回チャンネル設定を保存"' in channel_new
     assert "secret-like file staged; unstage before commit" in channel_new
@@ -136,7 +146,11 @@ def test_channel_new_requires_initial_save_before_followup_update() -> None:
     assert "/channel-new 直後の初回保存が未完了なら" in automation_update
 
 
-def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "secret_path",
+    [".env", "auth/client_secrets.json", "auth/token.json", "auth/token_streaming.json"],
+)
+def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path, secret_path: str) -> None:
     repo = tmp_path / "channel"
     repo.mkdir()
     _git(repo, "init")
@@ -146,20 +160,23 @@ def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path) ->
     _git(repo, "add", "README.md")
     _git(repo, "commit", "-m", "initial")
 
-    (repo / ".env").write_text("SECRET=value\n", encoding="utf-8")
+    secret_file = repo / secret_path
+    secret_file.parent.mkdir(parents=True, exist_ok=True)
+    secret_file.write_text("SECRET=value\n", encoding="utf-8")
     (repo / "config").mkdir()
     (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
     _git(repo, "add", "-A")
-    _git(repo, "add", "-f", ".env")
+    _git(repo, "add", "-f", secret_path)
 
     guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
     result = subprocess.run(
         [
             "bash",
             "-lc",
-            f'bash {guard} || exit 1\ngit commit -m "chore: 初回チャンネル設定を保存"',
+            f'bash {shlex.quote(str(guard))} || exit 1\ngit commit -m "chore: 初回チャンネル設定を保存"',
         ],
         cwd=repo,
+        env=_isolated_git_env(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -168,8 +185,38 @@ def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path) ->
 
     assert result.returncode != 0
     assert "secret-like file staged; unstage before commit" in result.stderr
-    assert ".env" in result.stderr
+    assert secret_path in result.stderr
     assert _git(repo, "rev-list", "--count", "HEAD").stdout.strip() == "1"
+
+
+def test_channel_new_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_path: Path) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    auth_dir = repo / "auth"
+    auth_dir.mkdir()
+    (auth_dir / "token_streaming.json").write_text("{}\n", encoding="utf-8")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+
+    _git(repo, "add", "-A")
+    staged = set(_git(repo, "diff", "--cached", "--name-only").stdout.splitlines())
+    assert "config/channel.json" in staged
+    assert "auth/token_streaming.json" in staged
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    result = subprocess.run(
+        ["bash", str(guard)],
+        cwd=repo,
+        env=_isolated_git_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "auth/token_streaming.json" in result.stderr
 
 
 def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path: Path) -> None:
@@ -184,6 +231,7 @@ def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path:
     result = subprocess.run(
         ["bash", str(guard)],
         cwd=repo,
+        env=_isolated_git_env(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

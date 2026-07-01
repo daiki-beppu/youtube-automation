@@ -4,9 +4,11 @@ set -euo pipefail
 staged_secret_paths=()
 
 while IFS= read -r path; do
-  if [[ "$path" =~ (^|/)(client_secrets|token)\.json$ || "$path" =~ (^|/)\.env$ ]]; then
-    staged_secret_paths+=("$path")
-  fi
+  case "$path" in
+    .env | */.env | auth/client_secrets.json | */auth/client_secrets.json | auth/token*.json | */auth/token*.json)
+      staged_secret_paths+=("$path")
+      ;;
+  esac
 done < <(git diff --cached --name-only)
 
 if ((${#staged_secret_paths[@]} > 0)); then

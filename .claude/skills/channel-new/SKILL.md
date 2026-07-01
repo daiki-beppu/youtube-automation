@@ -284,12 +284,12 @@ git status --porcelain
 
 出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。
 
-出力が非空の場合は、差分をユーザーに見せたうえで初回 commit を作成する。シークレットを混入させないため、staging は除外 pathspec 付きで行い、staged files を確認してから commit する。
-既に staged 済みの secret-like file も混入し得るため、commit 前 guard が失敗した場合はその場で停止し、`git commit` へ進まない。
+出力が非空の場合は、差分をユーザーに見せたうえで初回 commit を作成する。シークレットを混入させないため、staged files 全体を commit 前 guard で確認してから commit する。
+ignore 済み `.env` は exclude pathspec 付き `git add` でも Git が exit 1 になり得るため、`git add -A` 後の guard を唯一の安全境界にする。guard が失敗した場合はその場で停止し、`git commit` へ進まない。
 
 ```bash
 git status --short
-git add -A -- . ':(exclude).env' ':(exclude)auth/client_secrets.json' ':(exclude)auth/token.json'
+git add -A
 git diff --cached --name-only
 bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1
 git commit -m "chore: 初回チャンネル設定を保存"
@@ -303,7 +303,7 @@ guard が `secret-like file staged; unstage before commit` を出した場合は
 ```text
 未コミット変更が残っています。/automation-update の前に以下を完了してください:
   1. git status --short で差分を確認
-  2. .env / auth/client_secrets.json / auth/token.json が staged されていないことを確認
+  2. .env / auth/client_secrets.json / auth/token*.json が staged されていないことを確認
   3. git commit -m "chore: 初回チャンネル設定を保存"
 ```
 
