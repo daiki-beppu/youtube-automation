@@ -67,9 +67,17 @@ def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
     assert "next_action.cmd" in text
     assert "next_action.instructions" in text
     assert "uv run yt-skills sync --asset auth-template" in text
+    assert "uv run yt-setup-dirs" in text
     assert "uv run yt-skills sync --asset skills --force --prune --yes" in text
     assert "通常の `--force` sync では削除されない" in text
     assert "`.agents/skills` が `.claude/skills` を指す symlink" in text
+
+
+def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    assert "`/setup` は `uv run yt-setup-dirs`" in text
+    assert "`/setup` では `config/channel/*.json` を生成しない" in text
+    assert "OAuth クライアント JSON の配置先 `auth/`" in text
 
 
 def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
@@ -127,7 +135,10 @@ def test_current_setup_docs_do_not_route_to_legacy_onboard() -> None:
 def test_channel_new_setup_gate_does_not_require_doctor_all_green() -> None:
     text = _CHANNEL_NEW_SKILL.read_text(encoding="utf-8")
     assert "summary.next_check_id" not in text
-    assert "`channel_config`: `config/channel/ ディレクトリが存在しない (新規チャンネル)`" in text
+    assert (
+        "`channel_config`: `config/channel/ ディレクトリが存在しない "
+        "(新規チャンネル、setup 用ディレクトリのみでは未生成)`"
+    ) in text
     assert "`upload_ready`: `config/channel/meta.json が存在しない`" in text
     assert "`upload_ready`: `channel.channel_id が未設定`" in text
     assert "`upload_ready` が `auth/token.json が存在しない`" in text

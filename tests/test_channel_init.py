@@ -654,6 +654,23 @@ def test_main_adds_gitkeep_when_directory_exists_without_it(tmp_path):
     assert (tmp_path / "auth" / ".gitkeep").is_file()
 
 
+def test_main_is_safe_after_setup_dirs_precreated_directories(tmp_path):
+    # Given: /setup が先に最小ディレクトリだけを作成済み
+    from youtube_automation.cli.setup_dirs import main as setup_dirs_main
+
+    assert setup_dirs_main(["--target", str(tmp_path)]) == 0
+    assert not (tmp_path / "config" / "channel").exists()
+
+    # When: /channel-new が後続で yt-channel-init を実行
+    rc = main(_required_args(tmp_path))
+
+    # Then: config 生成と既存ディレクトリの .gitkeep 維持が両立する
+    assert rc == 0
+    assert (_channel_dir(tmp_path) / "meta.json").is_file()
+    for rel in GITKEEP_DIRS:
+        assert (tmp_path / rel / ".gitkeep").is_file()
+
+
 # ===================== Case 17: 一部 config 既存・残りのみ新規 =====================
 
 

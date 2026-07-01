@@ -15,7 +15,7 @@ PLACEHOLDER_DEFAULT = "TBD"
 BENCHMARK_CHANNEL_SEPARATOR = "|"
 DEFAULT_LOCALIZATION_LANGUAGES: tuple[str, ...] = ("ja", "en", "de")
 
-DIRECTORIES: tuple[str, ...] = (
+SETUP_DIRECTORIES: tuple[str, ...] = (
     "auth",
     "collections",
     "data",
@@ -23,6 +23,8 @@ DIRECTORIES: tuple[str, ...] = (
     "docs/benchmarks",
     "research",
 )
+
+DIRECTORIES: tuple[str, ...] = SETUP_DIRECTORIES
 
 
 @dataclass(frozen=True)
