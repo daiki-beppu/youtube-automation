@@ -9,7 +9,7 @@
 //
 // 契約 (draft が実装すべき public API):
 //   - PHASE.ADDING_TO_PLAYLIST: "adding-to-playlist" (shared/constants.ts)
-//   - SnapshotPayload.playlistName?: string (shared/constants.ts、後方互換 optional)
+//   - SnapshotPayload.playlistName?: string (shared/constants.ts)
 //   - initSnapshot(entries, playlistName?): SnapshotPayload (lib/snapshot.ts、playlistName を格納)
 //   - RestoreState.playlistName?: string + buildRestoreState が surface する (components/runner-errors.ts)
 import { describe, expect, it } from "vitest";
@@ -59,15 +59,14 @@ describe("applyProgress: ADDING_TO_PLAYLIST は実行中を維持する", () => 
   });
 });
 
-describe("initSnapshot: playlistName の格納（後方互換 optional）", () => {
+describe("initSnapshot: playlistName の格納", () => {
   it("Given playlistName 付き When initSnapshot Then snapshot に playlistName を保持する", () => {
     const snap = initSnapshot(makePromptEntries(2), "rjn-dawn-cloud-fold");
 
     expect(snap.playlistName).toBe("rjn-dawn-cloud-fold");
   });
 
-  it("Given playlistName 無し（単一ファイル mode）When initSnapshot Then playlistName は undefined", () => {
-    // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため playlistName を持たない。
+  it("Given playlistName 無し When initSnapshot Then playlistName は undefined", () => {
     const snap = initSnapshot(makePromptEntries(2));
 
     expect(snap.playlistName).toBeUndefined();

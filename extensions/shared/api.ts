@@ -1,15 +1,11 @@
-// yt-collection-serve の `/suno/prompts.json` クライアント。
-// 旧 `popup.js` の fetch ロジックを保持する:
-//   - fetch 先は `${baseUrl}${PROMPTS_ROUTE}`
-//   - HTTP 非 2xx で throw
-//   - 配列でない / 空配列の JSON で throw (fail-loud、silent 続行しない)
+// yt-collection-serve の collection prompts クライアント。
+// HTTP 非 2xx / 配列でない JSON / 空配列は fail-loud で throw する。
 import {
   collectionDownloadedRoute,
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
-  PROMPTS_ROUTE,
   VERSION_ROUTE,
 } from "./constants";
 
@@ -209,11 +205,6 @@ async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
   return data as PromptEntry[];
 }
 
-/** prompts.json を取得して PromptEntry[] を返す。不正な応答は fail-loud で throw。 */
-export async function fetchPrompts(baseUrl: string): Promise<PromptEntry[]> {
-  return fetchPromptArray(`${baseUrl}${PROMPTS_ROUTE}`);
-}
-
 /** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
 export async function fetchServerVersion(
   baseUrl: string,
@@ -336,7 +327,7 @@ function normalizeCollectionSummary(
 
 /**
  * 指定 collection の prompts.json を取得する (#816)。
- * fetchPrompts と同じ fail-loud 契約（非 2xx / 空配列 / 非配列で throw）。
+ * 非 2xx / 空配列 / 非配列は fail-loud で throw する。
  */
 export async function fetchCollectionPrompts(
   baseUrl: string,

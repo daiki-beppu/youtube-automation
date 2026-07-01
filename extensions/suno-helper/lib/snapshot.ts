@@ -6,8 +6,7 @@ import { PHASE, type ItemState, type Phase, type ProgressPayload, type SnapshotP
 
 /**
  * 連続実行の開始時スナップショット。全 idle・isRunning=true・entries を保持して初期化する。
- * playlistName は collection mode のみ渡され、再 open 復元時の display 用に保持する (#854)。
- * 単一ファイル mode では省略され undefined（playlist phase を実行しない）。
+ * playlistName は再 open 復元時の display 用に保持する (#854)。
  */
 export function initSnapshot(entries: PromptEntry[], playlistName?: string): SnapshotPayload {
   return {
