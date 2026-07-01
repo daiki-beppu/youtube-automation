@@ -9,6 +9,8 @@ import {
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
   DEFAULT_URL,
+  FEED_V3_METHOD,
+  FEED_V3_PATH,
   INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
@@ -87,6 +89,13 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
     expect(collectionPromptsRoute("20260526-rainy jazz-collection")).toBe(
       "/collections/20260526-rainy%20jazz-collection/suno/prompts.json",
     );
+  });
+});
+
+describe("shared/constants: Suno feed v3 endpoint (#1265)", () => {
+  it("Given FEED_V3_PATH / FEED_V3_METHOD When 読む Then passive 観測対象の endpoint 契約である", () => {
+    expect(FEED_V3_PATH).toBe("/api/feed/v3");
+    expect(FEED_V3_METHOD).toBe("POST");
   });
 });
 
