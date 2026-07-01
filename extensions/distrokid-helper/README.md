@@ -12,20 +12,20 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 
 ## ディレクトリ構成
 
-| パス                        | 役割                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `wxt.config.ts`             | Manifest V3 定義（最小権限 `storage` / `activeTab`、`host_permissions` は distrokid.com 限定） |
-| `entrypoints/background.ts` | service worker（ライフサイクルログのみ）                                                       |
-| `entrypoints/content.ts`    | `distrokid.com/new` での DOM 注入（テキスト + popup から受け取った File）                      |
-| `entrypoints/popup/`        | popup UI（React）。URL 入力 / データ取得 / レビュー / 一括入力 / 停止 / 進捗                   |
-| `components/`               | popup プレゼンテーション部品                                                                   |
-| `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）                |
-| `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）                   |
-| `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                  |
-| `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                                         |
-| `lib/storage.ts`            | サーバー URL 永続化（既定 `http://localhost:7873`）                                            |
-| `lib/types.ts`              | `/distrokid/release.json` の JSON 契約型                                                       |
-| `tests/`                    | Vitest unit + Playwright e2e                                                                   |
+| パス                        | 役割                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `wxt.config.ts`             | Manifest V3 定義（最小権限 `storage` / `activeTab`、`host_permissions` は distrokid.com + ローカル配信元） |
+| `entrypoints/background.ts` | service worker（ライフサイクルログのみ）                                                                   |
+| `entrypoints/content.ts`    | `distrokid.com/new` での DOM 注入（テキスト + popup から受け取った File）                                  |
+| `entrypoints/popup/`        | popup UI（React）。ローカル配信元選択 / データ取得 / レビュー / 一括入力 / 停止 / 進捗                     |
+| `components/`               | popup プレゼンテーション部品                                                                               |
+| `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）                            |
+| `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）                               |
+| `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                              |
+| `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                                                     |
+| `lib/storage.ts`            | ローカル配信元候補の永続化（既定 `http://youtube-automation.localhost:7873`）                              |
+| `lib/types.ts`              | `/distrokid/release.json` の JSON 契約型                                                                   |
+| `tests/`                    | Vitest unit + Playwright e2e                                                                               |
 
 ## 開発フロー
 
@@ -71,10 +71,10 @@ pnpm compile
    ```bash
    uv run yt-collection-serve <collections_root> --playlist-capture-root <channel_root> --allow-origin chrome-extension://<EXTENSION_ID>
    # 例: uv run yt-collection-serve collections/ --playlist-capture-root . --allow-origin chrome-extension://abcdefghijklmnopabcdefghijklmnop
-   # → GET /distrokid/collections でコレクション一覧を配信
+   # → http://<channel>.localhost:7873/distrokid/collections でコレクション一覧を配信
    ```
 2. Chrome で `distrokid.com/new` を開く。
-3. 拡張ポップアップで **サーバー URL** を確認し **データ取得**（または URL blur 後に自動取得）。
+3. 拡張ポップアップで **ローカル配信元** を選び **データ取得**。
 4. popup に **コレクション選択** のドロップダウンが表示される。未配信の disc のみ列挙される。
 5. disc を選んで **データ取得** → レビューを確認して **フォーム一括入力**。
 6. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。
@@ -91,12 +91,12 @@ pnpm compile
 1. コレクションのディレクトリを指定してサーバーを起動:
    ```bash
    uv run yt-collection-serve collections/planning/<theme>
-   # → http://localhost:7873/distrokid/release.json で配信
+   # → http://<channel>.localhost:7873/distrokid/release.json で配信
    ```
    対象チャンネルは `config/channel/distrokid.json` を `enabled: true` + profile 付きにしておく
    （`enabled: false` / 未配置だと `/distrokid/*` が 404 になり、popup がガイダンスを表示する）。
 2. Chrome で `distrokid.com/new` を開く。
-3. 拡張ポップアップで **サーバー URL**（既定 `http://localhost:7873`）を入力し **データ取得**。
+3. 拡張ポップアップで **ローカル配信元**（既定 `http://youtube-automation.localhost:7873`）を選び **データ取得**。
    コレクション選択 UI は表示されない（単一 mode のため）。
 4. レビュー表示を確認して **フォーム一括入力**。プロファイル + 動的データがフォームに注入される。
 5. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。

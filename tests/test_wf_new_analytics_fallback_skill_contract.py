@@ -195,7 +195,7 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
 
     assert "Suno-helper server" in phase_2g
     assert "collection 単体パスや `suno-prompts.json` 直指定は playlist phase がスキップ" in phase_2f
-    assert "`/wf-new` が自動で行うのは Suno 用 localhost server の起動と疎通確認まで" in text
+    assert "`/wf-new` が自動で行うのは Suno 用ローカル server の起動と疎通確認まで" in text
 
 
 def test_wf_new_cross_references_document_fallback_differences() -> None:

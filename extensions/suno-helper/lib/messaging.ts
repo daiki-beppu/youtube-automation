@@ -3,7 +3,7 @@
 // （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
-import type { CapturedPlaylist, CollectionSummary, DownloadedPayload, PromptEntry } from "../../shared/api";
+import type { CapturedPlaylist, CollectionSummary, DownloadedPayload, PromptEntry, ServerInfo } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
@@ -101,6 +101,8 @@ interface ProtocolMap {
   sendTrustedCmdP(payload: { isMac: boolean }): void;
   /** overlay → background: localhost read API を extension origin から取得する。 */
   fetchCompatibilityWarning(payload: { baseUrl: string; extensionVersion: string }): string;
+  /** overlay → background: `/server-info` を extension origin から取得する。 */
+  fetchServerInfo(payload: { baseUrl: string }): ServerInfo;
   /** overlay → background: `/collections` を extension origin から取得する。 */
   fetchCollections(payload: { baseUrl: string }): CollectionSummary[];
   /** overlay → background: `/suno/prompts.json` を extension origin から取得する。 */
