@@ -104,19 +104,32 @@ def _write_benchmark_channels(base: Path) -> None:
     )
 
 
-def _write_thumbnail_skill_config(base: Path, references: list[str]) -> None:
+def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> None:
     skills_dir = base / "config" / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
-    refs_yaml = "\n".join(f"        - {json.dumps(ref)}" for ref in references)
+    if isinstance(references, str):
+        default_yaml = f"      default: {json.dumps(references)}\n"
+    else:
+        refs_yaml = "\n".join(f"        - {json.dumps(ref)}" for ref in references)
+        default_yaml = f"      default:\n{refs_yaml}\n"
     (skills_dir / "thumbnail.yaml").write_text(
-        "image_generation:\n"
-        "  gemini:\n"
-        "    reference_images:\n"
-        "      default:\n"
-        f"{refs_yaml}\n"
-        "      path_base: channel_dir\n",
+        f"image_generation:\n  gemini:\n    reference_images:\n{default_yaml}      path_base: channel_dir\n",
         encoding="utf-8",
     )
+
+
+def _write_complete_ttp_artifacts(base: Path) -> Path:
+    _write_benchmark_channels(base)
+    data_dir = base / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+    docs_dir = base / "docs" / "benchmarks"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "rival.md").write_text("# Rival", encoding="utf-8")
+    thumb_path = base / "data" / "thumbnail_compare" / "benchmark" / "rival-abc.jpg"
+    thumb_path.parent.mkdir(parents=True)
+    thumb_path.write_bytes(b"fake")
+    return thumb_path
 
 
 @pytest.fixture
@@ -1178,6 +1191,64 @@ class TestCheckTtpWfNewReadiness:
         assert r.status == "ok"
         assert "/channel-setup 完了相当" in r.message
         assert r.next_action is None
+
+    def test_scalar_thumbnail_ref_is_ok(self, tmp_path):
+        """reference_images.default は文字列 1 件指定でも valid として扱う."""
+        _write_complete_ttp_artifacts(tmp_path)
+        _write_thumbnail_skill_config(tmp_path, "data/thumbnail_compare/benchmark/rival-abc.jpg")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "/channel-setup 完了相当" in r.message
+
+    def test_missing_configured_thumbnail_ref_warns(self, tmp_path):
+        """configured ref が存在しなければ参照先欠落として warn する."""
+        _write_complete_ttp_artifacts(tmp_path)
+        _write_thumbnail_skill_config(tmp_path, ["data/thumbnail_compare/benchmark/missing.jpg"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default の参照先が見つからない" in r.message
+        assert "missing.jpg" in r.message
+
+    def test_absolute_thumbnail_ref_is_rejected(self, tmp_path):
+        """絶対パスは channel_dir 外の存在確認に使わせない."""
+        thumb_path = _write_complete_ttp_artifacts(tmp_path)
+        _write_thumbnail_skill_config(tmp_path, str(thumb_path))
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default の参照パスが不正" in r.message
+        assert "絶対パスは指定できない" in r.message
+
+    def test_parent_directory_thumbnail_ref_is_rejected(self, tmp_path):
+        """../ で channel_dir 外へ抜ける参照は拒否する."""
+        _write_complete_ttp_artifacts(tmp_path)
+        outside_path = tmp_path.parent / f"{tmp_path.name}-outside.jpg"
+        outside_path.write_bytes(b"fake")
+        _write_thumbnail_skill_config(tmp_path, f"../{outside_path.name}")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default の参照パスが不正" in r.message
+        assert "channel_dir 外は指定できない" in r.message
+
+    def test_non_benchmark_thumbnail_ref_is_rejected(self, tmp_path):
+        """TTP 参照画像は benchmark 配下のファイルだけを完了扱いにする."""
+        _write_complete_ttp_artifacts(tmp_path)
+        other_path = tmp_path / "data" / "thumbnail_compare" / "other.jpg"
+        other_path.write_bytes(b"fake")
+        _write_thumbnail_skill_config(tmp_path, "data/thumbnail_compare/other.jpg")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default の参照パスが不正" in r.message
+        assert "data/thumbnail_compare/benchmark/ 配下ではない" in r.message
 
     def test_missing_benchmark_docs_are_checked(self, tmp_path):
         """docs/benchmarks/*.md も /channel-setup benchmark 反映の完了条件に含める."""

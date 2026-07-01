@@ -18,6 +18,7 @@ import yaml
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
+from youtube_automation.utils.image_provider.composition import normalize_reference_default
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -972,30 +973,43 @@ def _is_unresolved_placeholder(value: str) -> bool:
     return stripped.startswith("{{") and stripped.endswith("}}")
 
 
-def _thumbnail_reference_images(channel_dir: Path) -> list[Path]:
+def _thumbnail_reference_images(channel_dir: Path) -> tuple[list[Path], list[str]]:
     thumbnail_config = _read_yaml_dict(channel_dir / "config" / "skills" / "thumbnail.yaml")
     image_generation = thumbnail_config.get("image_generation")
     if not isinstance(image_generation, dict):
-        return []
+        return [], []
     gemini = image_generation.get("gemini")
     if not isinstance(gemini, dict):
-        return []
+        return [], []
     reference_images = gemini.get("reference_images")
     if not isinstance(reference_images, dict):
-        return []
-    default_refs = reference_images.get("default")
-    if not isinstance(default_refs, list):
-        return []
+        return [], []
 
     refs: list[Path] = []
-    for value in default_refs:
-        if not isinstance(value, str):
-            continue
+    invalid_refs: list[str] = []
+    benchmark_root = (channel_dir / "data" / "thumbnail_compare" / "benchmark").resolve(strict=False)
+    channel_root = channel_dir.resolve(strict=False)
+    for value in normalize_reference_default(reference_images.get("default")):
         stripped = value.strip()
         if not stripped or _is_unresolved_placeholder(stripped):
             continue
-        refs.append(channel_dir / stripped)
-    return refs
+        ref_path = Path(stripped)
+        if ref_path.is_absolute():
+            invalid_refs.append(f"絶対パスは指定できない: {stripped}")
+            continue
+        resolved = (channel_dir / ref_path).resolve(strict=False)
+        try:
+            resolved.relative_to(channel_root)
+        except ValueError:
+            invalid_refs.append(f"channel_dir 外は指定できない: {stripped}")
+            continue
+        try:
+            resolved.relative_to(benchmark_root)
+        except ValueError:
+            invalid_refs.append(f"data/thumbnail_compare/benchmark/ 配下ではない: {stripped}")
+            continue
+        refs.append(resolved)
+    return refs, invalid_refs
 
 
 def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
@@ -1016,10 +1030,13 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
     if not _benchmark_thumbnail_files(channel_dir):
         issues.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
 
-    refs = _thumbnail_reference_images(channel_dir)
-    if not refs:
+    refs, invalid_refs = _thumbnail_reference_images(channel_dir)
+    if not refs and not invalid_refs:
         issues.append("config/skills/thumbnail.yaml の reference_images.default が空または未転記")
-    else:
+    if invalid_refs:
+        sample = ", ".join(invalid_refs[:3])
+        issues.append(f"reference_images.default の参照パスが不正: {sample}")
+    if refs:
         missing_refs = [str(path) for path in refs if not path.is_file()]
         if missing_refs:
             sample = ", ".join(missing_refs[:3])
