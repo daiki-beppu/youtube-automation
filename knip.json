@@ -21,6 +21,7 @@
     "docs/**",
     "poc/**"
   ],
+  "ignoreWorkspaces": ["extensions/**"],
   "ignoreBinaries": [
     "lefthook",
     "uv",
