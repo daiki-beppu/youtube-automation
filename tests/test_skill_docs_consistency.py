@@ -213,6 +213,21 @@ def test_common_docs_list_optional_channel_config_files() -> None:
             assert name in text, f"{path} missing {name}"
 
 
+def test_distrokid_skill_uses_helper_name() -> None:
+    skill_path = ROOT / ".claude" / "skills" / "distrokid-helper" / "SKILL.md"
+    assert skill_path.exists()
+
+    frontmatter = _frontmatter(".claude/skills/distrokid-helper/SKILL.md")
+    assert frontmatter["name"] == "distrokid-helper"
+    assert (skill_path.parent / "references" / "distrokid_prepare.py").is_file()
+    assert (skill_path.parent / "references" / "spec-example.json").is_file()
+
+    features = _read("docs/features.md")
+    assert "/distrokid-helper" in features
+    assert "サーバー起動まで実行" in features
+    assert "distrokid-prep" not in features
+
+
 def test_community_post_declares_raw_json_loader_exception() -> None:
     text = _read(".claude/skills/community-post/SKILL.md")
 

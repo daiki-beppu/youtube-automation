@@ -235,8 +235,8 @@ def test_yt_skills_console_script_resolves_after_package_split() -> None:
     yt_skills = next(ep for ep in eps if ep.name == "yt-skills")
     fn = yt_skills.load()
 
-    # Then: callable が package の `main` シンボルそのもの
+    # Then: callable が package の CLI wrapper シンボルそのもの
     assert callable(fn)
-    from youtube_automation.cli.skills_sync import main
+    from youtube_automation.cli_entrypoints import yt_skills
 
-    assert fn is main
+    assert fn is yt_skills

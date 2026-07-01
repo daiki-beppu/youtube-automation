@@ -1612,12 +1612,12 @@ class TestPyprojectEntryPoint:
         text = read_file(_PYPROJECT)
         # `yt-stream-archive-check = "..."` 行が [project.scripts] にあること
         assert re.search(
-            r'^yt-stream-archive-check\s*=\s*"youtube_automation\.scripts\.streaming_archive_check:main"',
+            r'^yt-stream-archive-check\s*=\s*"youtube_automation\.cli_entrypoints:yt_stream_archive_check"',
             text,
             flags=re.MULTILINE,
         ), (
             "yt-stream-archive-check entry point が pyproject.toml に登録されていない "
-            '（"youtube_automation.scripts.streaming_archive_check:main" を指すこと）'
+            '（"youtube_automation.cli_entrypoints:yt_stream_archive_check" を指すこと）'
         )
 
 
