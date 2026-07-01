@@ -751,6 +751,27 @@ def test_get_collection_distrokid_asset_decodes_space_in_collection_id(serve_dir
         assert resp.read() == _MP3_BYTES
 
 
+def test_get_collection_distrokid_asset_decodes_percent_encoded_relpath(serve_dir_dk, tmp_path):
+    """Given 日本語ファイル名を percent-encode した collection-scoped asset URL
+    When `GET /collections/<id>/distrokid/assets/<rel>` を呼ぶ
+    Then decode 後の実ファイルを返す。
+    """
+    planning = tmp_path / "planning"
+    coll = planning / "20260526-abc-collection"
+    coll.mkdir(parents=True)
+    disc_dir = _make_disc(coll, "disc1-alpha", mp3_count=1)
+    filename = "01-不屈のビート.mp3"
+    (disc_dir / filename).write_bytes(_MP3_BYTES)
+    base = serve_dir_dk(planning)
+    relpath = urllib.parse.quote(f"30-distrokid/disc1-alpha/{filename}", safe="/")
+
+    url = f"{base}{_COLLECTIONS_ROUTE}/20260526-abc-collection/distrokid/assets/{relpath}"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        assert resp.headers.get("Content-Type") == "audio/mpeg"
+        assert resp.read() == _MP3_BYTES
+
+
 def test_get_collection_distrokid_asset_traversal_returns_404(serve_dir_dk, tmp_path):
     """Given `../` を含む asset rel
     When `GET /collections/<id>/distrokid/assets/<rel>`

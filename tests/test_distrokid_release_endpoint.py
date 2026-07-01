@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -323,6 +324,25 @@ def test_get_distrokid_asset_serves_binary_with_mime(serve, tmp_path):
     base = serve(collection_dir=collection, distrokid=distrokid)
 
     url = f"{base}{DISTROKID_ASSETS_PREFIX}02-Individual-music/01-foo.mp3"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        assert resp.headers.get("Content-Type") == "audio/mpeg"
+        assert resp.read() == _MP3_BYTES
+
+
+def test_get_distrokid_asset_decodes_percent_encoded_relpath(serve, tmp_path):
+    """Given 日本語ファイル名を percent-encode した asset URL
+    When `GET /distrokid/assets/<rel>` を呼ぶ
+    Then decode 後の実ファイルを返す。
+    """
+    collection = _make_collection(tmp_path)
+    filename = "01-不屈のビート.mp3"
+    (collection / "02-Individual-music" / filename).write_bytes(_MP3_BYTES)
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    base = serve(collection_dir=collection, distrokid=distrokid)
+    relpath = urllib.parse.quote(f"02-Individual-music/{filename}", safe="/")
+
+    url = f"{base}{DISTROKID_ASSETS_PREFIX}{relpath}"
     with urllib.request.urlopen(url) as resp:
         assert resp.status == 200
         assert resp.headers.get("Content-Type") == "audio/mpeg"
