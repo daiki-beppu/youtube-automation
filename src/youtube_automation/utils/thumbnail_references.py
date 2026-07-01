@@ -3,9 +3,63 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider.composition import normalize_reference_default
+
+PLACEHOLDER_REFERENCE_VALUES = frozenset({"", "tbd", "todo", "fixme", "未定", "要確認", "n/a", "na", "..."})
+
+
+@dataclass(frozen=True)
+class BenchmarkReferenceResolution:
+    references: list[Path]
+    placeholders: list[str]
+    invalid_reasons: list[str]
+
+
+def is_placeholder_reference_value(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip()
+    return stripped.casefold() in PLACEHOLDER_REFERENCE_VALUES or (
+        stripped.startswith("{{") and stripped.endswith("}}")
+    )
+
+
+def resolve_configured_benchmark_references(channel_dir: Path, default_value: object) -> BenchmarkReferenceResolution:
+    """Resolve ``reference_images.default`` with the strict TTP benchmark contract."""
+    refs: list[Path] = []
+    placeholders: list[str] = []
+    invalid_reasons: list[str] = []
+    benchmark_root = (channel_dir / "data" / "thumbnail_compare" / "benchmark").resolve(strict=False)
+    channel_root = channel_dir.resolve(strict=False)
+
+    for value in normalize_reference_default(default_value):  # type: ignore[arg-type]
+        stripped = value.strip()
+        if is_placeholder_reference_value(stripped):
+            placeholders.append(stripped)
+            continue
+        ref_path = Path(stripped)
+        if ref_path.is_absolute():
+            invalid_reasons.append(f"絶対パスは指定できない: {stripped}")
+            continue
+        resolved = (channel_dir / ref_path).resolve(strict=False)
+        try:
+            resolved.relative_to(channel_root)
+        except ValueError:
+            invalid_reasons.append(f"channel_dir 外は指定できない: {stripped}")
+            continue
+        try:
+            resolved.relative_to(benchmark_root)
+        except ValueError:
+            invalid_reasons.append(f"data/thumbnail_compare/benchmark/ 配下ではない: {stripped}")
+            continue
+        refs.append(resolved)
+    return BenchmarkReferenceResolution(references=refs, placeholders=placeholders, invalid_reasons=invalid_reasons)
 
 
 def canonicalize_benchmark_reference(reference_path: Path, benchmark_root: Path) -> Path:

@@ -18,12 +18,12 @@ import yaml
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.utils.image_provider.composition import normalize_reference_default
 from youtube_automation.utils.preflight_checks import (
     check_descriptions_md_parseability,
     check_suno_genre_line_char_limit,
     check_thumbnail_skill_config,
 )
+from youtube_automation.utils.thumbnail_references import resolve_configured_benchmark_references
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -976,11 +976,6 @@ def _benchmark_thumbnail_files(channel_dir: Path) -> list[Path]:
     return sorted(files)
 
 
-def _is_unresolved_placeholder(value: str) -> bool:
-    stripped = value.strip()
-    return stripped.startswith("{{") and stripped.endswith("}}")
-
-
 def _thumbnail_reference_images(channel_dir: Path) -> tuple[list[Path], list[str]]:
     thumbnail_config = _read_yaml_dict(channel_dir / "config" / "skills" / "thumbnail.yaml")
     image_generation = thumbnail_config.get("image_generation")
@@ -993,34 +988,10 @@ def _thumbnail_reference_images(channel_dir: Path) -> tuple[list[Path], list[str
     if not isinstance(reference_images, dict):
         return [], []
 
-    refs: list[Path] = []
-    invalid_refs: list[str] = []
-    benchmark_root = (channel_dir / "data" / "thumbnail_compare" / "benchmark").resolve(strict=False)
-    channel_root = channel_dir.resolve(strict=False)
-    for value in normalize_reference_default(reference_images.get("default")):
-        stripped = value.strip()
-        if not stripped:
-            continue
-        if _is_unresolved_placeholder(stripped):
-            invalid_refs.append(f"未解決 placeholder が残っている: {stripped}")
-            continue
-        ref_path = Path(stripped)
-        if ref_path.is_absolute():
-            invalid_refs.append(f"絶対パスは指定できない: {stripped}")
-            continue
-        resolved = (channel_dir / ref_path).resolve(strict=False)
-        try:
-            resolved.relative_to(channel_root)
-        except ValueError:
-            invalid_refs.append(f"channel_dir 外は指定できない: {stripped}")
-            continue
-        try:
-            resolved.relative_to(benchmark_root)
-        except ValueError:
-            invalid_refs.append(f"data/thumbnail_compare/benchmark/ 配下ではない: {stripped}")
-            continue
-        refs.append(resolved)
-    return refs, invalid_refs
+    resolved = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
+    invalid_refs = list(resolved.invalid_reasons)
+    invalid_refs.extend(f"未解決 placeholder が残っている: {value}" for value in resolved.placeholders)
+    return resolved.references, invalid_refs
 
 
 def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
@@ -1081,13 +1052,17 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
 def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
     issues: list[str] = []
 
-    thumbnail_path = channel_dir / "config" / "skills" / "thumbnail.yaml"
-    if thumbnail_path.is_file():
-        issues.extend(check_thumbnail_skill_config(channel_dir, _read_yaml_dict(thumbnail_path)))
+    thumbnail_cfg, thumbnail_error = _load_skill_config_for_channel("thumbnail", channel_dir)
+    if thumbnail_error:
+        issues.append(thumbnail_error)
+    else:
+        issues.extend(check_thumbnail_skill_config(channel_dir, thumbnail_cfg))
 
-    suno_path = channel_dir / "config" / "skills" / "suno.yaml"
-    if suno_path.is_file():
-        msg = check_suno_genre_line_char_limit(_read_yaml_dict(suno_path))
+    suno_cfg, suno_error = _load_skill_config_for_channel("suno", channel_dir)
+    if suno_error:
+        issues.append(suno_error)
+    else:
+        msg = check_suno_genre_line_char_limit(suno_cfg)
         if msg:
             issues.append(msg)
 
@@ -1117,6 +1092,26 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
             ),
         },
     )
+
+
+def _load_skill_config_for_channel(skill: str, target_channel_dir: Path) -> tuple[dict, str | None]:
+    from youtube_automation.utils.config import reset as reset_config
+    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.utils.skill_config import load_skill_config
+
+    old_env = os.environ.get("CHANNEL_DIR")
+    os.environ["CHANNEL_DIR"] = str(target_channel_dir)
+    try:
+        reset_config()
+        return load_skill_config(skill, use_cache=False), None
+    except (ConfigError, OSError, yaml.YAMLError) as exc:
+        return {}, f"config/skills/{skill}.yaml 読み込み失敗: {exc}"
+    finally:
+        reset_config()
+        if old_env is None:
+            os.environ.pop("CHANNEL_DIR", None)
+        else:
+            os.environ["CHANNEL_DIR"] = old_env
 
 
 def _planning_descriptions_md_paths(channel_dir: Path) -> list[Path]:

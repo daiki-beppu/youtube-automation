@@ -702,12 +702,24 @@ class TestCheckChannelConfig:
 
 
 class TestCheckInitialSetupReadiness:
-    def test_ok_when_no_initial_setup_files_exist(self, tmp_path):
+    def test_warns_when_no_initial_setup_files_exist(self, tmp_path):
         r = doctor.check_initial_setup_readiness(tmp_path)
 
         assert r.id == "initial_setup_readiness"
-        assert r.status == "ok"
+        assert r.status == "warn"
         assert r.category == "data"
+        assert "reference_images.default" in r.message
+        assert "composition_rules" in r.message
+
+    def test_warns_for_broken_skill_yaml(self, tmp_path):
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text("image_generation: [broken\n", encoding="utf-8")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "config/skills/thumbnail.yaml 読み込み失敗" in r.message
 
     def test_warns_for_thumbnail_suno_and_descriptions_md_issues(self, tmp_path):
         skills_dir = tmp_path / "config" / "skills"

@@ -15,6 +15,10 @@ from youtube_automation.utils.descriptions_md import (
     extract_descriptions_md_section,
     missing_descriptions_md_headings,
 )
+from youtube_automation.utils.thumbnail_references import (
+    is_placeholder_reference_value,
+    resolve_configured_benchmark_references,
+)
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
@@ -100,24 +104,20 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
     single_step = _as_mapping(gemini.get("single_step"))
     max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
     reference_images = _as_mapping(gemini.get("reference_images"))
-    refs, placeholder_refs = _normalize_reference_items(reference_images.get("default"))
-    if placeholder_refs or not refs:
+    resolved_refs = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
+    if resolved_refs.placeholders or not resolved_refs.references:
         issues.append(
             "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
             "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
         )
     else:
-        unique_refs = list(dict.fromkeys(refs))
+        unique_refs = list(dict.fromkeys(resolved_refs.references))
         if len(unique_refs) < max_attempts:
             issues.append(
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
                 f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
             )
-        missing_refs = [
-            str(_resolve_reference_path(channel_dir, reference_images, ref))
-            for ref in unique_refs
-            if not _resolve_reference_path(channel_dir, reference_images, ref).exists()
-        ]
+        missing_refs = [str(ref) for ref in unique_refs if not ref.exists()]
         if missing_refs:
             sample = ", ".join(missing_refs[:3])
             suffix = f" ほか {len(missing_refs) - 3} 件" if len(missing_refs) > 3 else ""
@@ -125,6 +125,13 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
                 f"に存在しない参照画像があります: {sample}{suffix}"
             )
+    if resolved_refs.invalid_reasons:
+        sample = ", ".join(resolved_refs.invalid_reasons[:3])
+        suffix = f" ほか {len(resolved_refs.invalid_reasons) - 3} 件" if len(resolved_refs.invalid_reasons) > 3 else ""
+        issues.append(
+            "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+            f"の参照パスが不正です: {sample}{suffix}"
+        )
 
     composition_rules = _as_mapping(gemini.get("composition_rules"))
     missing_composition = [
@@ -339,43 +346,8 @@ def _is_placeholder(value: object) -> bool:
         return True
     if not isinstance(value, str):
         return False
-    return value.strip().casefold() in _PLACEHOLDER_VALUES
-
-
-def _normalize_reference_items(value: object) -> tuple[list[str], bool]:
-    raw_items: list[object]
-    if isinstance(value, list):
-        raw_items = value
-    else:
-        raw_items = [value]
-
-    refs: list[str] = []
-    placeholder = False
-    for item in raw_items:
-        if item is None:
-            placeholder = True
-            continue
-        if not isinstance(item, str):
-            continue
-        stripped = item.strip()
-        if stripped.casefold() in _PLACEHOLDER_VALUES:
-            placeholder = True
-            continue
-        refs.append(stripped)
-    return refs, placeholder
-
-
-def _resolve_reference_path(channel_dir: Path, reference_images: Mapping[str, object], ref: str) -> Path:
-    base = reference_images.get("path_base") or "channel_dir"
-    ref_path = Path(ref)
-    if ref_path.is_absolute():
-        return ref_path
-    if isinstance(base, str) and base.strip() and base.strip() != "channel_dir":
-        base_path = Path(base.strip())
-        if not base_path.is_absolute():
-            base_path = channel_dir / base_path
-        return base_path / ref_path
-    return channel_dir / ref_path
+    stripped = value.strip()
+    return stripped.casefold() in _PLACEHOLDER_VALUES or is_placeholder_reference_value(stripped)
 
 
 def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:

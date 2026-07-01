@@ -157,6 +157,53 @@ class TestInitialSetupChecks:
         assert any("reference_images.default" in issue for issue in issues)
         assert any("composition_rules" in issue and "environment" in issue for issue in issues)
 
+    def test_thumbnail_config_detects_tbd_reference(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": "TBD"},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("reference_images.default" in issue and "TBD" in issue for issue in issues)
+
+    def test_thumbnail_config_detects_unexpanded_template_composition(self, tmp_path: Path) -> None:
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha.jpg"]},
+                    "composition_rules": {
+                        "environment": "{{ENVIRONMENT}}",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("composition_rules" in issue and "environment" in issue for issue in issues)
+
     def test_thumbnail_config_detects_missing_reference_path(self, tmp_path: Path) -> None:
         cfg = {
             "image_generation": {
@@ -179,6 +226,35 @@ class TestInitialSetupChecks:
 
         assert len(issues) == 1
         assert "存在しない参照画像" in issues[0]
+
+    def test_thumbnail_config_detects_refs_below_max_attempts(self, tmp_path: Path) -> None:
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "single_step": {"max_attempts": 2},
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha.jpg"]},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "必要枚数未満" in issues[0]
+        assert "max_attempts=2" in issues[0]
+        assert "unique_references=1" in issues[0]
 
     def test_thumbnail_config_valid_setup_passes(self, tmp_path: Path) -> None:
         ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
