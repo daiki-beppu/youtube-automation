@@ -44,6 +44,7 @@ class ChannelInitContext:
     country: str
     default_language: str
     supported_languages: tuple[str, ...]
+    distrokid_profile: dict | None
 
 
 def serialize_json(data: dict) -> str:
@@ -135,6 +136,12 @@ def _render_audio(ctx: ChannelInitContext) -> dict:
     }
 
 
+def _render_distrokid(ctx: ChannelInitContext) -> dict:
+    if ctx.distrokid_profile is None:
+        raise ValueError("distrokid_profile is required to render distrokid.json")
+    return {"distrokid": {"enabled": True, "profile": ctx.distrokid_profile}}
+
+
 CHANNEL_CONFIG_TEMPLATES: dict[str, Callable[[ChannelInitContext], dict]] = {
     "meta.json": _render_meta,
     "content.json": _render_content,
@@ -143,6 +150,10 @@ CHANNEL_CONFIG_TEMPLATES: dict[str, Callable[[ChannelInitContext], dict]] = {
     "playlists.json": _render_empty,
     "workflow.json": _render_empty,
     "audio.json": _render_audio,
+}
+
+OPTIONAL_CHANNEL_CONFIG_TEMPLATES: dict[str, Callable[[ChannelInitContext], dict]] = {
+    "distrokid.json": _render_distrokid,
 }
 
 
