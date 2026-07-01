@@ -277,8 +277,7 @@ export interface SnapshotPayload {
   itemStates: ItemState[];
   isRunning: boolean;
   progress: ProgressPayload;
-  // collection mode のときの playlist 名 (#854)。再 open 復元時の display 用。
-  // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため undefined。
+  // playlist 名 (#854)。再 open 復元時の display 用。download-only snapshot では undefined。
   playlistName?: string;
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。

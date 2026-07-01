@@ -5,7 +5,6 @@
 import {
   fetchCollectionPrompts,
   fetchCollections,
-  fetchPrompts,
   postDownloaded,
   resolveCompatibilityWarning,
 } from "../../shared/api";
@@ -94,11 +93,6 @@ export default defineBackground(() => {
   onMessage("fetchCollections", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCollections");
     return fetchCollections(data.baseUrl);
-  });
-
-  onMessage("fetchPrompts", ({ data, sender }) => {
-    requireRelayTab(sender, "fetchPrompts");
-    return fetchPrompts(data.baseUrl);
   });
 
   onMessage("fetchCollectionPrompts", ({ data, sender }) => {

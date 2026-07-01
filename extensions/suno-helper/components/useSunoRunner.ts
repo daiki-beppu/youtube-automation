@@ -51,7 +51,7 @@ interface RunnerState {
   compatibilityWarning: string;
   canRun: boolean;
   isRunning: boolean;
-  // collection 選択時の playlist 名 (#854)。display only（単一ファイル mode は undefined）。
+  // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
   // 実行範囲 UI の状態 (#872)。range モード時のみ start/end を使う。
   rangeMode: RangeMode;
@@ -82,12 +82,7 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
-type PromptSource = { kind: "collection"; collectionId: string | null } | { kind: "single-file" };
-
-async function fetchCollectionEntries(baseUrl: string, collectionId: string | null): Promise<PromptEntry[]> {
-  if (collectionId === null) {
-    throw new Error("prompts を取得できる collection がありません。");
-  }
+async function fetchCollectionEntries(baseUrl: string, collectionId: string): Promise<PromptEntry[]> {
   return sendMessage("fetchCollectionPrompts", { baseUrl, collectionId });
 }
 
@@ -163,7 +158,7 @@ export function useSunoRunner(): RunnerState {
   );
   const selectedCollectionId = nextSelectedId ?? "";
 
-  // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
+  // collection 選択から導出する playlist 名 (#854)。
   const selectedCollection = useMemo(
     () => collections.find((c) => c.id === selectedCollectionId),
     [collections, selectedCollectionId],
@@ -318,31 +313,18 @@ export function useSunoRunner(): RunnerState {
     [clearLoadedRunState],
   );
 
-  const applySingleFileMode = useCallback(() => {
-    setAllCollections([]);
-    setSelectedCollectionId("");
-  }, []);
-
   const syncCollections = useCallback(
-    async (baseUrl: string, currentSelectedId: string): Promise<PromptSource> => {
-      try {
-        const fetched = await sendMessage("fetchCollections", { baseUrl });
-        setAllCollections(fetched);
-        const { nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
-        setSelectedCollectionId(nextSelectedId ?? "");
-        return { kind: "collection", collectionId: nextSelectedId };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (message === "HTTP 404" || err instanceof TypeError) {
-          // 単一ファイル mode サーバーは `/collections` が 404。CORS ヘッダーなしの 404 は
-          // ブラウザが TypeError (Failed to fetch) として reject するため両方を捕捉する。
-          applySingleFileMode();
-          return { kind: "single-file" };
-        }
-        throw err;
+    async (baseUrl: string, currentSelectedId: string): Promise<string> => {
+      const fetched = await sendMessage("fetchCollections", { baseUrl });
+      setAllCollections(fetched);
+      const { nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
+      setSelectedCollectionId(nextSelectedId ?? "");
+      if (nextSelectedId === null) {
+        throw new Error("prompts を取得できる collection がありません。");
       }
+      return nextSelectedId;
     },
-    [applySingleFileMode, resolveVisibleCollections],
+    [resolveVisibleCollections],
   );
 
   const loadCollections = useCallback(
@@ -422,11 +404,8 @@ export function useSunoRunner(): RunnerState {
     const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl: trimmed, extensionVersion });
     setCompatibilityWarning(typeof warning === "string" ? warning : "");
     try {
-      const promptSource = await syncCollections(trimmed, selectedCollectionId);
-      const data =
-        promptSource.kind === "single-file"
-          ? await sendMessage("fetchPrompts", { baseUrl: trimmed })
-          : await fetchCollectionEntries(trimmed, promptSource.collectionId);
+      const collectionId = await syncCollections(trimmed, selectedCollectionId);
+      const data = await fetchCollectionEntries(trimmed, collectionId);
       setEntries(data);
       setItemStates(data.map(() => "idle"));
       report(`${data.length} パターンを取得しました。`);
@@ -447,6 +426,14 @@ export function useSunoRunner(): RunnerState {
       if (entries.length === 0) {
         return;
       }
+      if (!selectedCollectionId) {
+        report("コレクションを選択してください。", true);
+        return;
+      }
+      if (!derivedPlaylistName) {
+        report("playlist 名を解決できません。コレクションを選択し直してください。", true);
+        return;
+      }
       // overrides.range（1-click 自動再開）があればそれを優先する (#892 要件6)。
       // 無ければ range UI の状態から解決する（従来挙動）。range モードの 1-based 入力は
       // 0-based inclusive へ変換し、不正入力は resolveRunRange が throw → fail-loud で UI に出す。
@@ -465,8 +452,7 @@ export function useSunoRunner(): RunnerState {
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setIsRunning(true);
       try {
-        // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
-        // collectionId は ERROR 停止時の resume 紐付けに使う。単一ファイル mode（空文字）は undefined で送る (#872)。
+        // collection mode の payload だけを送る。collectionId は resume 紐付けと download 記録に必須。
         // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
         await sendMessage(
           "run",
@@ -492,6 +478,10 @@ export function useSunoRunner(): RunnerState {
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
   const retryPlaylist = useCallback(async () => {
     if (isRunning) {
+      return;
+    }
+    if (!selectedCollectionId) {
+      report("コレクションを選択してから、playlist 追加を再開してください。", true);
       return;
     }
     if (!playlistName) {
@@ -522,7 +512,7 @@ export function useSunoRunner(): RunnerState {
         playlistName,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount,
-        collectionId: selectedCollectionId || undefined,
+        collectionId: selectedCollectionId,
         shouldDownload,
       });
       setResumeDismissed(true);

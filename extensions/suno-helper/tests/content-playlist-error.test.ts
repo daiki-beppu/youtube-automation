@@ -6,9 +6,9 @@ import type { ResumeState, RunRange } from "../lib/resume-state";
 
 interface RunPayload {
   entries: PromptEntry[];
-  playlistName?: string;
+  playlistName: string;
   range?: RunRange;
-  collectionId?: string;
+  collectionId: string;
   indices?: number[];
   submittedClipIds?: string[];
   playlistExpectedClipCount?: number;

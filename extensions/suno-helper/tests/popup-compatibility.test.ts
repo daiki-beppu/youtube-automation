@@ -74,9 +74,6 @@ function defaultSendMessage(message: string, payload?: Record<string, string>): 
   if (message === "fetchCollections") {
     return readJson(`${payload?.baseUrl}/collections`);
   }
-  if (message === "fetchPrompts") {
-    return readJson(`${payload?.baseUrl}/suno/prompts.json`);
-  }
   if (message === "fetchCollectionPrompts") {
     return readJson(
       `${payload?.baseUrl}/collections/${encodeURIComponent(payload?.collectionId ?? "")}/suno/prompts.json`,
@@ -205,7 +202,17 @@ describe("Suno popup compatibility check", () => {
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: "0.2.0" }))
-      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
@@ -221,13 +228,26 @@ describe("Suno popup compatibility check", () => {
     });
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/suno/prompts.json`);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `${BASE_URL}/collections/20260601-clm-theme-a-collection/suno/prompts.json`,
+    );
   });
 
   it("旧サーバーの /version 404 は警告なしで prompts 取得を継続する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(404, {}))
-      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
@@ -243,7 +263,10 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).not.toContain("拡張を更新してください");
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/suno/prompts.json`);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `${BASE_URL}/collections/20260601-clm-theme-a-collection/suno/prompts.json`,
+    );
   });
 
   it("dir mode で URL 入力後にデータ取得すると collection endpoint の entries を run payload に渡す", async () => {
@@ -944,7 +967,7 @@ describe("Suno popup compatibility check", () => {
     expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
   });
 
-  it("dir mode の collection 一覧に実行可能候補が無い場合は single-file endpoint へフォールバックしない", async () => {
+  it("dir mode の collection 一覧に実行可能候補が無い場合は legacy endpoint へフォールバックしない", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(jsonResponse(200, []));
@@ -1033,11 +1056,10 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).not.toContain("done-collection");
   });
 
-  it("CORS なし 404 (TypeError) で /collections が reject されても single-file mode へ fallback する", async () => {
+  it("CORS なし 404 (TypeError) で /collections が reject されたら legacy endpoint へ fallback しない", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
     await act(async () => {
       setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
@@ -1047,10 +1069,10 @@ describe("Suno popup compatibility check", () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain("1 パターンを取得しました。");
+      expect(container.textContent).toContain("取得失敗: Failed to fetch");
     });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/suno/prompts.json`);
   });
 });
