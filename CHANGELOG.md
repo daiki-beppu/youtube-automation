@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(suno-helper)`: `suno-prompts.json` の `duration_filter` envelope を shared API で型付けし、省略時は 60〜300 秒の既定値へ正規化するようにした（#1259）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 
 ### Fixed

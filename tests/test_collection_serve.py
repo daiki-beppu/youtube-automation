@@ -240,6 +240,24 @@ def test_get_suno_prompts_json_returns_array_body(serve):
     assert body == entries
 
 
+def test_get_suno_prompts_json_preserves_duration_filter_envelope(serve):
+    """Given duration_filter 付き envelope prompts
+    When `GET /suno/prompts.json`
+    Then collection-serve は加工せず JSON を透過配信する（#1259）。
+    """
+    payload = {
+        "entries": [{"name": "A — A", "style": "slow, jazz", "lyrics": ""}],
+        "duration_filter": {"min_sec": 75, "max_sec": 240},
+    }
+    base = serve(payload)
+
+    with urllib.request.urlopen(f"{base}{_SUNO_PROMPTS_ROUTE}") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body == payload
+
+
 def test_get_version_returns_server_and_min_extension_semvers(serve):
     """Given 単一ファイル mode サーバー
     When `GET /version`
@@ -612,6 +630,30 @@ def test_build_collections_index_reports_status_and_pattern_count(tmp_path):
     assert no_prompts["downloaded_count"] == 0
 
 
+def test_build_collections_index_counts_prompt_response_entries(tmp_path):
+    """Given duration_filter 付き envelope prompts
+    When build_collections_index を呼ぶ
+    Then entries 数を pattern_count として扱う（#1259）。
+    """
+    _make_collection(
+        tmp_path,
+        "20260601-clm-with-filter-collection",
+        entries={
+            "entries": [
+                {"name": "A", "style": "s", "lyrics": ""},
+                {"name": "B", "style": "s", "lyrics": ""},
+            ],
+            "duration_filter": {"min_sec": 75, "max_sec": 240},
+        },
+    )
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["status"] == "ready"
+    assert row["pattern_count"] == 2
+    assert row["expected_file_count"] == 4
+
+
 def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
     """Given `<date>-<channel>-<theme>-collection` 形式の dir
     When build_collections_index を呼ぶ
@@ -979,6 +1021,27 @@ def test_get_collection_prompts_returns_entries(serve_dir, tmp_path):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
+
+
+def test_get_collection_prompts_preserves_duration_filter_envelope(serve_dir, tmp_path):
+    """Given 該当 collection に duration_filter 付き prompts json
+    When `GET /collections/<id>/suno/prompts.json`
+    Then envelope を加工せず透過配信する（#1259）。
+    """
+    planning = tmp_path / "planning"
+    payload = {
+        "entries": [{"name": "A — A", "style": "slow, jazz", "lyrics": ""}],
+        "duration_filter": {"min_sec": 75, "max_sec": 240},
+    }
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=payload)
+    base = serve_dir(planning)
+
+    url = f"{base}{_collection_prompts_route('20260601-clm-aaa-collection')}"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body == payload
 
 
 def test_get_collection_prompts_decodes_space_in_collection_id(serve_dir, tmp_path):

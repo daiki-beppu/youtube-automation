@@ -7,12 +7,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  DEFAULT_DURATION_FILTER,
   type CollectionSummary,
+  type DurationFilter,
   type PromptEntry,
   checkServerCompatibility,
   collectionHasPrompts,
+  durationFilterOrDefault,
+  fetchCollectionPromptResponse,
   fetchCollections,
   fetchCollectionPrompts,
+  fetchPromptResponse,
   fetchPrompts,
   fetchServerVersion,
   formatCompatibilityWarning,
@@ -163,6 +168,61 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
 
     expect(result[0].style_influence).toBe(0);
     expect(result[0].weirdness).toBe(0);
+  });
+});
+
+describe("shared/api PromptResponse.duration_filter: collection 単位 duration guard 契約 (#1259)", () => {
+  it("Given envelope JSON When fetchPromptResponse する Then entries と duration_filter を返す", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const durationFilter: DurationFilter = { min_sec: 75, max_sec: 240 };
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: durationFilter }),
+    }));
+
+    const result = await fetchPromptResponse(BASE_URL);
+
+    expect(result.entries).toEqual(entries);
+    expect(result.duration_filter).toEqual(durationFilter);
+  });
+
+  it("Given duration_filter 省略 When fetchPromptResponse する Then 既定値を補う", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ entries }) }));
+
+    const result = await fetchPromptResponse(BASE_URL);
+
+    expect(result.duration_filter).toEqual(DEFAULT_DURATION_FILTER);
+  });
+
+  it("Given legacy 配列 JSON When fetchPromptResponse する Then entries に正規化して既定値を補う", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchPromptResponse(BASE_URL);
+
+    expect(result).toEqual({ entries, duration_filter: DEFAULT_DURATION_FILTER });
+  });
+
+  it("Given invalid duration_filter When fetchPromptResponse する Then fail-loud で throw する", async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        entries: [{ name: "p1", style: "lofi", lyrics: "" }],
+        duration_filter: { min_sec: 300, max_sec: 60 },
+      }),
+    }));
+
+    await expect(fetchPromptResponse(BASE_URL)).rejects.toThrow(/min_sec/);
+  });
+
+  it("Given explicit/undefined filter When durationFilterOrDefault Then explicit または既定値を返す", () => {
+    const explicit: DurationFilter = { min_sec: 90, max_sec: 180 };
+
+    expect(durationFilterOrDefault(explicit)).toEqual(explicit);
+    expect(durationFilterOrDefault()).toEqual(DEFAULT_DURATION_FILTER);
   });
 });
 
@@ -363,6 +423,20 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
     const result = await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
 
     expect(result).toEqual(entries);
+  });
+
+  it("Given envelope JSON When fetchCollectionPromptResponse する Then duration_filter を保持する", async () => {
+    const entries: PromptEntry[] = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    const durationFilter: DurationFilter = { min_sec: 90, max_sec: 260 };
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: durationFilter }),
+    }));
+
+    const result = await fetchCollectionPromptResponse(BASE_URL, "20260601-clm-aaa-collection");
+
+    expect(result).toEqual({ entries, duration_filter: durationFilter });
   });
 });
 
