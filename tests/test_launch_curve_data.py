@@ -1,8 +1,10 @@
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
 
+from youtube_automation.scripts import launch_curve
 from youtube_automation.utils.launch_curve_data import build_launch_curve_frame
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sample_launch_curve"
@@ -85,6 +87,43 @@ def test_build_launch_curve_frame_handles_missing_impressions_and_ctr_columns():
     assert list(df["daily_impressions"]) == [0, 0]
     assert df["ctr"].isna().all()
     assert list(df["cumulative_views"]) == [10, 30]
+
+
+def test_launch_curve_latest_handles_missing_impressions_and_ctr_columns(tmp_path, monkeypatch, capsys):
+    daily_dir = tmp_path / "data" / "analytics" / "daily_per_video"
+    daily_dir.mkdir(parents=True)
+    with open(daily_dir / "2026-04-02.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "rows": [
+                    {"video_id": "v1", "date": "2026-04-01", "views": 10},
+                    {"video_id": "v2", "date": "2026-04-02", "views": 20},
+                ]
+            },
+            f,
+        )
+
+    with open(tmp_path / "data" / "analytics_data_2026-04-02.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "video_analytics": {
+                    "v1": {"title": "older", "published_at": "2026-04-01T00:00:00Z"},
+                    "v2": {"title": "latest", "published_at": "2026-04-02T00:00:00Z"},
+                }
+            },
+            f,
+        )
+
+    monkeypatch.setattr(launch_curve, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-launch-curve", "--latest"])
+
+    assert launch_curve.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["target"]["video_id"] == "v2"
+    assert payload["target"]["trace"][0]["daily_impressions"] == 0
+    assert payload["target"]["trace"][0]["ctr"] is None
+    assert payload["all_videos"][0]["latest_ctr"] is None
 
 
 def test_build_launch_curve_frame_merges_reporting_snapshot():
