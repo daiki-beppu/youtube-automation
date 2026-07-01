@@ -50,6 +50,7 @@ _PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-png-bytes"
 def _profile() -> DistrokidProfile:
     """#813 新 schema の profile（nested songwriter + ai_disclosure）."""
     return DistrokidProfile(
+        artist="ABYSS MI",
         language="ja",
         main_genre="Electronic",
         sub_genre="House",
@@ -99,6 +100,7 @@ def test_build_release_payload_merges_profile_and_dynamic_data(tmp_path):
 
     # build_release_payload は asdict(profile) で nested dataclass を再帰的に dict 化する。
     assert payload["profile"] == {
+        "artist": "ABYSS MI",
         "language": "ja",
         "main_genre": "Electronic",
         "sub_genre": "House",

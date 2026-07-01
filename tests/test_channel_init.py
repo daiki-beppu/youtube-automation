@@ -635,7 +635,7 @@ def test_pyproject_registers_yt_channel_init_entry_point():
 
     # Then: yt-channel-init エントリが登録されている
     assert "yt-channel-init" in scripts
-    assert scripts["yt-channel-init"] == "youtube_automation.cli.channel_init:main"
+    assert scripts["yt-channel-init"] == "youtube_automation.cli_entrypoints:yt_channel_init"
 
 
 # ===================== Case 16: ディレクトリ既存・.gitkeep 不在 =====================

@@ -15,6 +15,15 @@ description: "Use when 動画コンテンツ分析・映像解析が必要なと
 
 既存スキルが扱えていなかった「動画の中身」というドメインを埋め、`/benchmark`・`/analytics-analyze`・`/alignment-check`・`/thumbnail-compare`・`/viewer-voice` の精度を底上げする。
 
+## 設定読み込みゲート
+
+前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/video-analyze/config.default.yaml`
+2. `config/skills/video-analyze.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("video-analyze")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
+
 ## 前提
 
 - `config/channel/` がロード可能であること (`load_config()`)

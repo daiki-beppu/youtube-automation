@@ -213,12 +213,92 @@ def test_common_docs_list_optional_channel_config_files() -> None:
             assert name in text, f"{path} missing {name}"
 
 
+def test_distrokid_skill_uses_helper_name() -> None:
+    skill_path = ROOT / ".claude" / "skills" / "distrokid-helper" / "SKILL.md"
+    assert skill_path.exists()
+
+    frontmatter = _frontmatter(".claude/skills/distrokid-helper/SKILL.md")
+    assert frontmatter["name"] == "distrokid-helper"
+    assert (skill_path.parent / "references" / "distrokid_prepare.py").is_file()
+    assert (skill_path.parent / "references" / "spec-example.json").is_file()
+
+    features = _read("docs/features.md")
+    assert "/distrokid-helper" in features
+    assert "サーバー起動まで実行" in features
+    assert "distrokid-prep" not in features
+
+
 def test_community_post_declares_raw_json_loader_exception() -> None:
     text = _read(".claude/skills/community-post/SKILL.md")
 
     assert "skill-local raw JSON 例外" in text
     assert "utils.config.load_config()" in text
     assert "`community` section を持たない" in text
+    assert "投稿本文・Studio URL の実データには使わない" in text
+    assert "fallback や merge 元にしない" in text
+
+
+def test_community_draft_documents_skill_config_merge_before_channel_json() -> None:
+    text = _read(".claude/skills/community-draft/SKILL.md")
+
+    assert 'load_skill_config("community-draft")' in text
+    assert ".claude/skills/community-draft/config.default.yaml" in text
+    assert "config/skills/community-draft.yaml" in text
+    assert "config/channel/community-draft.json" in text
+    assert (
+        "config.default.yaml` < `config/skills/community-draft.yaml` < `config/channel/community-draft.json"
+    ) in text
+
+
+def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
+    skill_dirs = sorted(path.parent for path in (ROOT / ".claude" / "skills").glob("*/config.default.yaml"))
+    assert skill_dirs
+
+    for skill_dir in skill_dirs:
+        skill = skill_dir.name
+        rel_skill_md = f".claude/skills/{skill}/SKILL.md"
+        text = _read(rel_skill_md)
+
+        assert "## 設定読み込みゲート" in text, f"{skill} missing config read gate"
+        assert f".claude/skills/{skill}/config.default.yaml" in text
+        assert f"config/skills/{skill}.yaml" in text
+        assert f'load_skill_config("{skill}")' in text
+        assert "SKILL.md の説明や記憶から設定値を推測しない" in text
+        assert "必ず Read" in text
+        assert "存在する場合" in text
+        assert "勝手に作成しない" in text
+
+        if skill == "community-post":
+            assert "default と任意 override を確認する" in text
+            assert "gate で Read" in text
+        else:
+            assert "deep-merge 前提" in text
+            assert "チャンネル上書きを優先" in text
+
+        gate_pos = text.index("## 設定読み込みゲート")
+        operational_markers = [
+            marker
+            for marker in (
+                "## Instructions",
+                "## 実行フロー",
+                "## Workflow",
+                "## Scripts",
+                "## Quick Reference",
+                "## Inputs",
+                "## 前提",
+                "## 制約・前提",
+                "### モード判定",
+                "### スタイルバリアント",
+                "### Step 1",
+                "### 前提条件チェック",
+                "### 対象コレクション",
+            )
+            if marker in text
+        ]
+        if operational_markers:
+            assert gate_pos < min(text.index(marker) for marker in operational_markers), (
+                f"{skill} config read gate must appear before operational steps"
+            )
 
 
 def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
