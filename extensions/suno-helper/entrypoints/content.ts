@@ -75,6 +75,22 @@ function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submitte
   return map;
 }
 
+interface PlaylistClipPlan {
+  clipIds: string[];
+  expectedClipCount: number;
+  titleFallbackMap: Map<string, string>;
+}
+
+interface PlaylistClipPersistInfo {
+  submittedClipIds: string[];
+  playlistExpectedClipCount: number;
+}
+
+const DEFAULT_DURATION_FILTER = {
+  minSec: 60,
+  maxSec: 300,
+};
+
 async function resolveDownloadContext(): Promise<DownloadContext> {
   return {
     baseUrl: (await serverUrlItem.getValue()).trim(),
@@ -233,6 +249,7 @@ export default defineContentScript({
       expectedClipCount: number,
       entries: PromptEntry[],
       order: number[],
+      onResolvedPlaylistClipIds?: (info: PlaylistClipPersistInfo) => void,
     ): Promise<number> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
       const currentSubmittedIds = tracker.getSubmittedIds();
@@ -243,22 +260,34 @@ export default defineContentScript({
           `[suno-helper] bridge observation gap: expected ${expectedClipCount} clip IDs, observed ${observedCount}`,
         );
       }
-      const submittedIds = resolvePlaylistClipIds(previousSubmittedClipIds, currentSubmittedIds, expectedClipCount);
+      const rawSubmittedIds = resolvePlaylistClipIds(previousSubmittedClipIds, currentSubmittedIds, expectedClipCount);
       const currentTitleFallbackMap = buildTitleFallbackMap(entries, order, currentSubmittedIds);
       const currentOrder = new Set(order);
       const previousOrder = entries.map((_, index) => index).filter((index) => !currentOrder.has(index));
       const previousTitleFallbackMap = buildTitleFallbackMap(entries, previousOrder, previousSubmittedClipIds);
       const titleFallbackMap = new Map([...previousTitleFallbackMap, ...currentTitleFallbackMap]);
-      const selectedCount = await scrollAndMultiSelectByIds(submittedIds, {
-        isAborted: () => aborted,
+      const plan = buildPlaylistClipPlan(
+        rawSubmittedIds,
         titleFallbackMap,
+        previousSubmittedClipIds,
+        currentSubmittedIds,
+        entries,
+        order,
+      );
+      onResolvedPlaylistClipIds?.({
+        submittedClipIds: plan.clipIds,
+        playlistExpectedClipCount: plan.expectedClipCount,
+      });
+      const selectedCount = await scrollAndMultiSelectByIds(plan.clipIds, {
+        isAborted: () => aborted,
+        titleFallbackMap: plan.titleFallbackMap,
       });
       if (aborted) {
         return selectedCount;
       }
-      if (selectedCount !== expectedClipCount) {
+      if (selectedCount !== plan.expectedClipCount) {
         throw new Error(
-          `playlist 対象の DOM 選択数が一致しません: expected ${expectedClipCount}, selected ${selectedCount}`,
+          `playlist 対象の DOM 選択数が一致しません: expected ${plan.expectedClipCount}, selected ${selectedCount}`,
         );
       }
       await abortableSleep(SETTLE_MS, () => aborted);
@@ -281,6 +310,55 @@ export default defineContentScript({
         timeoutMs: GENERATE_TIMEOUT_MS,
       });
       return selectedCount;
+    }
+
+    function resolveDurationFilter(entry: PromptEntry | undefined): { minSec: number; maxSec: number } {
+      const minSec = entry?.duration_filter?.min_sec;
+      const maxSec = entry?.duration_filter?.max_sec;
+      return {
+        minSec: typeof minSec === "number" && Number.isFinite(minSec) ? minSec : DEFAULT_DURATION_FILTER.minSec,
+        maxSec: typeof maxSec === "number" && Number.isFinite(maxSec) ? maxSec : DEFAULT_DURATION_FILTER.maxSec,
+      };
+    }
+
+    function isDurationAccepted(clipId: string, entryIndex: number | undefined, entries: PromptEntry[]): boolean {
+      const duration = tracker.getDuration(clipId);
+      if (duration === undefined || entryIndex === undefined) {
+        return true;
+      }
+      const filter = resolveDurationFilter(entries[entryIndex]);
+      return duration >= filter.minSec && duration <= filter.maxSec;
+    }
+
+    function buildPlaylistClipPlan(
+      rawSubmittedIds: string[],
+      titleFallbackMap: Map<string, string>,
+      previousSubmittedClipIds: string[],
+      currentSubmittedIds: string[],
+      entries: PromptEntry[],
+      order: number[],
+    ): PlaylistClipPlan {
+      const currentOrder = new Set(order);
+      const previousOrder = entries.map((_, index) => index).filter((index) => !currentOrder.has(index));
+      const entryIndexByClipId = new Map<string, number | undefined>();
+      for (let i = 0; i < previousSubmittedClipIds.length; i++) {
+        entryIndexByClipId.set(previousSubmittedClipIds[i], previousOrder[Math.floor(i / CLIPS_PER_REQUEST)]);
+      }
+      for (let i = 0; i < currentSubmittedIds.length; i++) {
+        entryIndexByClipId.set(currentSubmittedIds[i], order[Math.floor(i / CLIPS_PER_REQUEST)]);
+      }
+
+      const clipIds = rawSubmittedIds.filter((clipId) =>
+        isDurationAccepted(clipId, entryIndexByClipId.get(clipId), entries),
+      );
+      if (clipIds.length === 0) {
+        throw new Error("playlist 対象の OK clip ID が 0 件です。全 clip が duration filter で除外されました。");
+      }
+      return {
+        clipIds,
+        expectedClipCount: clipIds.length,
+        titleFallbackMap,
+      };
     }
 
     async function waitForSubmittedClipsComplete(
@@ -359,6 +437,7 @@ export default defineContentScript({
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
       const failedIndices: number[] = [];
       let keepResumeStateForDownloadRetry = false;
+      let playlistPersistInfo: PlaylistClipPersistInfo | null = null;
       // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
       // そのまま流用し (要件3)、中断 index を載せる。collectionId が無い単一ファイル mode は
@@ -369,14 +448,16 @@ export default defineContentScript({
           const persistedSubmittedClipIds = Array.from(
             new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
           );
+          const playlistSubmittedClipIds = playlistPersistInfo?.submittedClipIds ?? persistedSubmittedClipIds;
+          const playlistExpectedCount = playlistPersistInfo?.playlistExpectedClipCount ?? expectedPlaylistClipCount;
           currentSnapshot =
             currentSnapshot === null
               ? currentSnapshot
               : {
                   ...currentSnapshot,
                   failedIndex: interruptedIndex,
-                  submittedClipIds: persistedSubmittedClipIds,
-                  playlistExpectedClipCount: expectedPlaylistClipCount,
+                  submittedClipIds: playlistSubmittedClipIds,
+                  playlistExpectedClipCount: playlistExpectedCount,
                 };
           void writeResumeState({
             collectionId,
@@ -384,8 +465,8 @@ export default defineContentScript({
             total,
             timestamp: Date.now(),
             failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
-            submittedClipIds: persistedSubmittedClipIds,
-            playlistExpectedClipCount: expectedPlaylistClipCount,
+            submittedClipIds: playlistSubmittedClipIds,
+            playlistExpectedClipCount: playlistExpectedCount,
           });
         }
       }
@@ -536,6 +617,9 @@ export default defineContentScript({
             expectedPlaylistClipCount,
             entries,
             order,
+            (info) => {
+              playlistPersistInfo = info;
+            },
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

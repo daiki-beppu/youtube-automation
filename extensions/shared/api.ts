@@ -29,6 +29,11 @@ export interface PromptEntry {
   weirdness?: number;
   /** Exclude styles free text。Suno の Exclude styles 欄へ注入。 */
   exclude_styles?: string;
+  /** Suno helper の歩留まり判定に使う duration 閾値。未指定時は content 側の既定値を使う。 */
+  duration_filter?: {
+    min_sec?: number;
+    max_sec?: number;
+  };
   /**
    * Voice section の Male / Female ボタン (Suno UI)。"male" / "female" のみ対応ボタンを click する。
    * "neutral" / "auto" / undefined は何もしない（既選択を解除しない、"Auto = Suno に任せる"解釈）。

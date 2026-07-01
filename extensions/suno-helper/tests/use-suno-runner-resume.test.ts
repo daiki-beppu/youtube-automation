@@ -272,19 +272,19 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist phase When content.ts を読む Then 保存済み ID と今回観測 ID を resolvePlaylistClipIds で合成してから scrollAndMultiSelectByIds で row 解決する", () => {
     expect(contentSource).toMatch(
-      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const submittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?scrollAndMultiSelectByIds\(submittedIds,/,
+      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/,
     );
   });
 
-  it("Given resume state persist When content.ts を読む Then playlist resume 情報を storage と snapshot の両方に保持する", () => {
+  it("Given resume state persist When content.ts を読む Then OK clip filter 後の playlist resume 情報で上書きできる", () => {
     expect(contentSource).toMatch(
-      /const persistedSubmittedClipIds = Array\.from\(\s*new Set\(\[\.\.\.previousSubmittedClipIds, \.\.\.tracker\.getSubmittedIds\(\)\]\),\s*\);[\s\S]*?submittedClipIds: persistedSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: expectedPlaylistClipCount,/,
+      /const playlistSubmittedClipIds = playlistPersistInfo\?\.submittedClipIds \?\? persistedSubmittedClipIds;[\s\S]*?const playlistExpectedCount = playlistPersistInfo\?\.playlistExpectedClipCount \?\? expectedPlaylistClipCount;[\s\S]*?submittedClipIds: playlistSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: playlistExpectedCount,/,
     );
   });
 
   it("Given playlist error persist When content.ts を読む Then snapshot に failedIndex も保持する", () => {
     expect(contentSource).toMatch(
-      /currentSnapshot =[\s\S]*?\{\s*\.\.\.currentSnapshot,\s*failedIndex: interruptedIndex,\s*submittedClipIds: persistedSubmittedClipIds,\s*playlistExpectedClipCount: expectedPlaylistClipCount,/,
+      /currentSnapshot =[\s\S]*?\{\s*\.\.\.currentSnapshot,\s*failedIndex: interruptedIndex,\s*submittedClipIds: playlistSubmittedClipIds,\s*playlistExpectedClipCount: playlistExpectedCount,/,
     );
   });
 

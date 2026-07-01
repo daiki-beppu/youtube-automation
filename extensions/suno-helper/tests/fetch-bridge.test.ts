@@ -95,13 +95,15 @@ describe("parseClipsFromGenerateResponse: 生成投入レスポンスの解析 (
 
 describe("parseClipsFromFeedResponse: feed レスポンスの解析 (両形対応・fail-soft)", () => {
   it("Given {clips: [...]} 形 When 解析する Then ObservedClip[] を返す", () => {
-    expect(parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming" }] })).toEqual([
-      { id: "c1", status: "streaming" },
-    ]);
+    expect(
+      parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming", metadata: { duration: 121.5 } }] }),
+    ).toEqual([{ id: "c1", status: "streaming", duration: 121.5 }]);
   });
 
   it("Given 素の配列形 When 解析する Then ObservedClip[] を返す", () => {
-    expect(parseClipsFromFeedResponse([{ id: "c1", status: "complete" }])).toEqual([{ id: "c1", status: "complete" }]);
+    expect(parseClipsFromFeedResponse([{ id: "c1", status: "complete", duration: "62" }])).toEqual([
+      { id: "c1", status: "complete", duration: 62 },
+    ]);
   });
 
   it("Given 形が崩れた JSON When 解析する Then null（throw しない）", () => {

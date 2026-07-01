@@ -135,6 +135,16 @@ describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
     expect(tracker.getPendingSubmittedIds()).toEqual([]);
   });
 
+  it("Given feed 観測に duration がある When 読む Then id ごとの duration を保持する", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([{ id: "fresh-a", status: "submitted" }]);
+    tracker.applyFeedStatuses([{ id: "fresh-a", status: "complete", duration: 119.8 }]);
+
+    expect(tracker.getDuration("fresh-a")).toBe(119.8);
+    expect(tracker.getDuration("missing")).toBeUndefined();
+  });
+
   it("Given clearSubmittedIds When 実行 Then playlist 対象だけを消し in-flight status は保持する", () => {
     const tracker = createClipTracker();
 

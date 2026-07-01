@@ -68,6 +68,17 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
+function parseDurationSeconds(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  }
+  return undefined;
+}
+
 /** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
@@ -81,9 +92,12 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
       typeof (item as { id?: unknown }).id === "string" &&
       typeof (item as { status?: unknown }).status === "string"
     ) {
+      const clip = item as { id: string; status: string; duration?: unknown; metadata?: { duration?: unknown } };
+      const duration = parseDurationSeconds(clip.metadata?.duration ?? clip.duration);
       clips.push({
-        id: (item as { id: string }).id,
-        status: (item as { status: string }).status,
+        id: clip.id,
+        status: clip.status,
+        ...(duration !== undefined ? { duration } : {}),
       });
     }
   }
