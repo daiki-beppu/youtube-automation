@@ -155,12 +155,17 @@ export const SUNO_API_ORIGIN = "https://studio-api-prod.suno.com";
 /** 生成投入 endpoint のパス（#948）。レスポンス JSON の `clips[].id` / `clips[].status` を観測する。 */
 export const GENERATE_ENDPOINT_PATH = "/api/generate/v2-web/";
 
-/** clip status 照会 endpoint のパス prefix（#948）。`/api/feed/v2?ids=...` 形式で Bearer 必須。
- * ページ自身の fetch を passive 観測しつつ、必要時は bridge が同 endpoint を active poll する。 */
+/** clip status 照会 endpoint のパス prefix（#948）。version 個別判定は FEED_V*_PATH を使う。 */
 export const FEED_ENDPOINT_PATH = "/api/feed/";
 
 /** active feed poll に使う具体 endpoint（#948）。 */
 export const FEED_V2_PATH = "/api/feed/v2";
+
+/** passive fetch 観測に使う feed v3 endpoint（#1265）。Suno ページ自身は POST で照会する。 */
+export const FEED_V3_PATH = "/api/feed/v3";
+
+/** feed v3 の request method（#1265）。v2 の GET poll と区別するため契約値として固定する。 */
+export const FEED_V3_METHOD = "POST";
 
 /** MAIN world bridge ⇄ ISOLATED content script の window.postMessage 識別マーカー（#948）。 */
 export const BRIDGE_SOURCE = "suno-helper-bridge";
