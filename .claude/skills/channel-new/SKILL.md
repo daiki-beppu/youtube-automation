@@ -115,6 +115,7 @@ uv run yt-doctor --json
 Step 4 の config 生成で解消するため、以下の config 未生成由来の fail は許容する:
 
 - `channel_config`: `config/channel/ ディレクトリが存在しない (新規チャンネル)`
+- `ttp_wf_new_readiness`: `config/channel/analytics.json 未生成`
 - `upload_ready`: `config/channel/meta.json が存在しない`
 - `upload_ready`: `channel.channel_id が未設定`
 

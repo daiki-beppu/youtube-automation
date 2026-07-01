@@ -930,9 +930,16 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
     if not analytics_path.is_file():
         return CheckResult(
             id="ttp_wf_new_readiness",
-            status="ok",
+            status="warn",
             category=DATA_CATEGORY,
-            message="config/channel/analytics.json 未生成のため TTP readiness は未適用 (/channel-new 初回 preflight)",
+            message="config/channel/analytics.json 未生成。/wf-new 接続前に承認済み TTP 対象の保存が必要",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 4 で config を生成し、Step 5 以降で承認済み TTP 対象を "
+                    "config/channel/analytics.json::benchmark.channels に保存してください"
+                ),
+            },
         )
 
     analytics = _read_json_mapping(analytics_path)
@@ -1008,19 +1015,23 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
     approved_exceptions: set[str] = set()
 
     channels_without_relationship = [
-        str(channel.get("name") or channel.get("id") or index + 1)
+        _channel_diagnostic_label(index, channel)
         for index, channel in enumerate(channels)
-        if not str(channel.get("relationship") or "").strip()
+        if _is_placeholder_relationship(str(channel.get("relationship") or ""))
     ]
     if channels_without_relationship:
-        missing.append(f"benchmark.channels の relationship 未設定 ({', '.join(channels_without_relationship)})")
+        missing.append(
+            "benchmark.channels の relationship 未設定または placeholder ("
+            + ", ".join(channels_without_relationship)
+            + ")"
+        )
 
     seed_confirmation = channel_dir / "docs" / "channel" / "ttp-seed-confirmation.md"
     if not seed_confirmation.is_file():
         missing.append("docs/channel/ttp-seed-confirmation.md 未作成")
     else:
         seed_text = seed_confirmation.read_text(encoding="utf-8", errors="replace")
-        seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text)
+        seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text, channels)
         missing.extend(seed_missing)
 
     missing.extend(_missing_branding_snapshot_items(channel_dir, channels))
@@ -1031,8 +1042,8 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
 
     youtube = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
     if (
-        youtube.get("music_engine") == "suno"
-        and not _has_suno_music_readiness(channel_dir)
+        youtube.get("music_engine", "suno") == "suno"
+        and not _has_suno_music_readiness(channel_dir, channels)
         and "music" not in approved_exceptions
     ):
         missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
@@ -1050,12 +1061,32 @@ _SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def _validate_ttp_seed_confirmation(seed_text: str) -> tuple[list[str], set[str]]:
+_PLACEHOLDER_RELATIONSHIPS = {"", "seed", "default", "unknown", "none", "n/a", "未設定", "なし"}
+
+
+def _validate_ttp_seed_confirmation(seed_text: str, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
     missing = [
         f"ttp-seed-confirmation.md に {label} が未記録"
         for label, markers in _SEED_CONFIRMATION_MARKERS
         if not _contains_any_marker(seed_text, markers)
     ]
+    lower_seed_text = seed_text.lower()
+
+    for index, channel in enumerate(channels):
+        label = _channel_diagnostic_label(index, channel)
+        identifiers = _channel_seed_identifiers(channel)
+        if not identifiers:
+            missing.append(f"ttp-seed-confirmation.md 照合用の id / slug が benchmark.channels に未設定 ({label})")
+        elif not any(identifier.lower() in lower_seed_text for identifier in identifiers):
+            missing.append(f"ttp-seed-confirmation.md に承認済み TTP 対象の識別子が未記録 ({label})")
+
+        relationship = str(channel.get("relationship") or "").strip()
+        if (
+            relationship
+            and not _is_placeholder_relationship(relationship)
+            and relationship.lower() not in lower_seed_text
+        ):
+            missing.append(f"ttp-seed-confirmation.md に承認済み TTP 対象の relationship が未記録 ({label})")
 
     unapproved_skip_lines = [
         line.strip()
@@ -1065,7 +1096,17 @@ def _validate_ttp_seed_confirmation(seed_text: str) -> tuple[list[str], set[str]
     if unapproved_skip_lines:
         missing.append("ttp-seed-confirmation.md に未承認の TTP 未反映 / スキップ項目あり")
 
-    return missing, _approved_ttp_exceptions(seed_text)
+    approved_exceptions, exception_missing = _approved_ttp_exceptions(seed_text)
+    missing.extend(exception_missing)
+    return missing, approved_exceptions
+
+
+def _is_placeholder_relationship(relationship: str) -> bool:
+    return relationship.strip().lower() in _PLACEHOLDER_RELATIONSHIPS
+
+
+def _channel_seed_identifiers(channel: dict[str, object]) -> list[str]:
+    return [value for value in (str(channel.get("id") or "").strip(), str(channel.get("slug") or "").strip()) if value]
 
 
 def _contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
@@ -1085,17 +1126,42 @@ def _line_mentions_approved_exception(line: str) -> bool:
     return "ユーザー承認済み例外" in line or "approved exception" in lower_line
 
 
-def _approved_ttp_exceptions(seed_text: str) -> set[str]:
+def _approved_ttp_exceptions(seed_text: str) -> tuple[set[str], list[str]]:
     exceptions: set[str] = set()
+    missing: list[str] = []
     for line in seed_text.splitlines():
         if not _line_mentions_approved_exception(line):
             continue
         lower_line = line.lower()
+        categories: set[str] = set()
         if "thumbnail" in lower_line or "サムネ" in line:
-            exceptions.add("thumbnail")
+            categories.add("thumbnail")
         if "music" in lower_line or "suno" in lower_line or "曲構造" in line or "音楽" in line:
-            exceptions.add("music")
-    return exceptions
+            categories.add("music")
+
+        if not categories:
+            missing.append("ユーザー承認済み例外に対象 category が未記録")
+            continue
+        if not _line_mentions_ttp_skip(line):
+            missing.append("ユーザー承認済み例外に具体的な未反映 / スキップ内容が未記録")
+            continue
+        if not _approved_exception_has_reason(line):
+            missing.append("ユーザー承認済み例外に進める理由が未記録")
+            continue
+        if "thumbnail" in categories and "/thumbnail" not in lower_line:
+            missing.append("thumbnail のユーザー承認済み例外に後続 /thumbnail が未記録")
+            continue
+        if "music" in categories and "/suno" not in lower_line:
+            missing.append("music のユーザー承認済み例外に後続 /suno が未記録")
+            continue
+
+        exceptions.update(categories)
+    return exceptions, missing
+
+
+def _approved_exception_has_reason(line: str) -> bool:
+    lower_line = line.lower()
+    return "ため" in line or "理由" in line or "because" in lower_line or "進める" in line
 
 
 def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
@@ -1117,7 +1183,7 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
     }
 
     channels_without_id = [
-        str(channel.get("name") or index + 1)
+        _channel_diagnostic_label(index, channel)
         for index, channel in enumerate(channels)
         if not str(channel.get("id") or "").strip()
     ]
@@ -1149,6 +1215,26 @@ def _approved_ttp_channel_ids(channels: list[dict[str, object]]) -> list[str]:
     return [channel_id for channel in channels if (channel_id := str(channel.get("id") or "").strip())]
 
 
+def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:
+    return [slug for channel in channels if (slug := str(channel.get("slug") or "").strip())]
+
+
+def _channel_diagnostic_label(index: int, channel: dict[str, object]) -> str:
+    parts = [f"entry #{index + 1}"]
+    if channel_id := _safe_diagnostic_value(channel.get("id")):
+        parts.append(f"id={channel_id}")
+    if slug := _safe_diagnostic_value(channel.get("slug")):
+        parts.append(f"slug={slug}")
+    return " ".join(parts)
+
+
+def _safe_diagnostic_value(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return re.sub(r"[^A-Za-z0-9_.:@/-]", "_", text)[:80]
+
+
 def _has_thumbnail_ttp_reference(thumbnail: dict[str, object]) -> bool:
     image_generation = thumbnail.get("image_generation")
     if not isinstance(image_generation, dict):
@@ -1167,7 +1253,7 @@ def _has_thumbnail_ttp_reference(thumbnail: dict[str, object]) -> bool:
     return False
 
 
-def _has_suno_music_readiness(channel_dir: Path) -> bool:
+def _has_suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) -> bool:
     suno = _read_yaml_mapping(channel_dir / "config" / "skills" / "suno.yaml")
     if str(suno.get("genre_line") or "").strip():
         return True
@@ -1175,11 +1261,12 @@ def _has_suno_music_readiness(channel_dir: Path) -> bool:
     video_analysis_dir = channel_dir / "data" / "video_analysis"
     if not video_analysis_dir.is_dir():
         return False
-    for path in video_analysis_dir.glob("*/*.json"):
-        payload = _read_json_mapping(path)
-        preset = payload.get("suno_preset")
-        if isinstance(preset, dict) and str(preset.get("genre_line") or "").strip():
-            return True
+    for slug in _approved_ttp_channel_slugs(channels):
+        for path in (video_analysis_dir / slug).glob("*.json"):
+            payload = _read_json_mapping(path)
+            preset = payload.get("suno_preset")
+            if isinstance(preset, dict) and str(preset.get("genre_line") or "").strip():
+                return True
     return False
 
 
