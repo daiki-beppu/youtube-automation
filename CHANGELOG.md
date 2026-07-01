@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
+- `docs(channel-new)`: `/channel-new` の `/wf-new` 接続前チェックに Analytics レポート取得設定と YouTube Live streaming 早期有効化の案内を追加（#1365）
+- `ci(knip)`: Knip が ignore 済みの extension package config を読み込まないよう、extension workspaces を明示除外（#1365）
 
 ## [5.5.14] - 2026-06-30
 
