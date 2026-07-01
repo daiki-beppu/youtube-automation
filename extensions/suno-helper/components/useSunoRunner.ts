@@ -371,8 +371,9 @@ export function useSunoRunner(): RunnerState {
     const unwatch = onMessage("progress", ({ data }) => {
       setItemStates((prev) => nextItemStates(prev, data.phase, data.index));
       // DONE は当該 item を done 化するだけで status 文字列は更新しない（旧 popup.js の live 挙動を維持）。
+      // ただし #1270 の duration check OK は DONE に log として載るため、その場合だけ表示更新する。
       // restore 経路は phaseToStatus(DONE) で「完了」を表示するため SSOT 側に DONE case は残す。
-      if (data.phase !== PHASE.DONE) {
+      if (data.phase !== PHASE.DONE || data.log) {
         const { text, error } = phaseToStatus(data, entries);
         report(text, Boolean(error));
       }
