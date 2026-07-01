@@ -7,6 +7,9 @@ import type { PromptEntry } from "./api";
 /** chrome.storage.local に保存するサーバー URL の key。 */
 export const STORAGE_KEY = "sunoServerUrl";
 
+/** chrome.storage.local に保存するローカル配信元候補の key。 */
+export const SERVER_SOURCES_STORAGE_KEY = "ytCollectionServeSources" as const;
+
 /** ERROR 停止時の途中再開 state を保存する chrome.storage.local の key (#872)。
  * overlay と content が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const RESUME_STATE_KEY = "sunoResumeState";
@@ -222,8 +225,64 @@ export function distrokidReleaseRoute(
   return `/collections/${encodeURIComponent(collectionId)}/distrokid/${disc}/release.json`;
 }
 
+/** yt-collection-serve の既定 port。 */
+export const DEFAULT_SERVER_PORT = 7873;
+
+/** ローカル配信元の既定 hostname。チャンネル別 hostname が未確定の fallback。 */
+export const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
+
+/** ローカル配信元の後方互換 URL。 */
+export const LEGACY_DEFAULT_URL =
+  `http://localhost:${DEFAULT_SERVER_PORT}` as const;
+
 /** ローカル配信元の既定 URL。 */
-export const DEFAULT_URL = "http://localhost:7873";
+export const DEFAULT_URL =
+  `http://${DEFAULT_SERVER_HOSTNAME}:${DEFAULT_SERVER_PORT}` as const;
+
+/** yt-collection-serve が配信元情報を返すサブパス。 */
+export const SERVER_INFO_ROUTE = "/server-info" as const;
+
+export interface LocalServerSource {
+  id: string;
+  label: string;
+  url: string;
+}
+
+/** 拡張初回起動時のローカル配信元候補。 */
+export const DEFAULT_SERVER_SOURCES: LocalServerSource[] = [
+  {
+    id: "youtube-automation-localhost-7873",
+    label: "YouTube Automation (default)",
+    url: DEFAULT_URL,
+  },
+  {
+    id: "localhost-7873",
+    label: "localhost fallback",
+    url: LEGACY_DEFAULT_URL,
+  },
+] as const satisfies LocalServerSource[];
+
+export function normalizeServerUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
+export function serverSourceIdFromUrl(url: string): string {
+  return normalizeServerUrl(url)
+    .replace(/^https?:\/\//u, "")
+    .replace(/[^a-zA-Z0-9]+/gu, "-")
+    .replace(/^-|-$/gu, "")
+    .toLowerCase();
+}
+
+export function labelFromServerUrl(url: string): string {
+  const normalized = normalizeServerUrl(url);
+  try {
+    const parsed = new URL(normalized);
+    return parsed.host;
+  } catch {
+    return normalized || DEFAULT_SERVER_SOURCES[0].label;
+  }
+}
 
 /** content script を注入する Suno のオリジン（manifest の matches / host_permissions と対）。 */
 export const SUNO_MATCHES = [
@@ -233,6 +292,7 @@ export const SUNO_MATCHES = [
 
 /** prompts 配信元（ローカルサーバー）への fetch を許可する host_permissions。 */
 export const SERVER_HOST_PERMISSIONS = [
+  "http://*.localhost/*",
   "http://localhost/*",
   "http://127.0.0.1/*",
 ] as const;

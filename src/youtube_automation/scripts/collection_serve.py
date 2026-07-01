@@ -62,6 +62,7 @@ from youtube_automation.utils.suno_downloaded_artifacts import (
 
 DEFAULT_PORT = 7873
 VERSION_ROUTE = "/version"
+SERVER_INFO_ROUTE = "/server-info"
 MIN_EXTENSION_VERSION = "0.2.0"
 _EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
 # overlay 化（#892/#895）で content script の fetch が page origin になったため、
@@ -112,6 +113,36 @@ def _slugify(text: str) -> str:
     既にハイフン区切りの文字列（collection dir 由来）は空白が無いため不変。
     """
     return re.sub(r"\s+", "-", text.strip().lower())
+
+
+def _hostname_slug(text: str) -> str:
+    """チャンネル名を `*.localhost` 用の ASCII hostname label にする（#1352）。"""
+    slug = re.sub(r"[^a-z0-9]+", "-", text.strip().lower())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or "youtube-automation"
+
+
+def channel_hostname(channel_name: str) -> str:
+    """チャンネル識別できるローカル hostname を返す。"""
+    return f"{_hostname_slug(channel_name)}.localhost"
+
+
+def build_server_info(channel_name: str, channel_short: str, port: int) -> dict[str, str | int]:
+    """helper 拡張の接続先 selector に出す配信元情報（#1352）。"""
+    hostname_source = (
+        channel_short if channel_short and not re.search(r"[a-z0-9]", channel_name.lower()) else channel_name
+    )
+    hostname = channel_hostname(hostname_source)
+    base_url = f"http://{hostname}:{port}"
+    short = channel_short or channel_name
+    return {
+        "channel_name": channel_name,
+        "channel_short": short,
+        "hostname": hostname,
+        "port": port,
+        "base_url": base_url,
+        "label": f"{channel_name} ({hostname}:{port})",
+    }
 
 
 def _prefix_pattern(prefix: str) -> str:
@@ -631,6 +662,7 @@ def create_server(
     port: int,
     allow_origin: str | None,
     *,
+    server_info: dict[str, str | int] | None = None,
     prompts_path: Path | None,
     collection_dir: Path | None,
     distrokid: Distrokid | None,
@@ -654,6 +686,9 @@ def create_server(
     distrokid_enabled = distrokid is not None and distrokid.enabled
     capture_root, capture_prefix = playlist_capture if playlist_capture is not None else (None, None)
     serve_token = str(uuid.uuid4())
+    resolved_server_info = (
+        server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
+    )
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
@@ -890,6 +925,10 @@ def create_server(
                 body = json.dumps(build_version_payload()).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
+            if self.path == SERVER_INFO_ROUTE:
+                body = json.dumps(resolved_server_info, ensure_ascii=False).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
             if self.path == "/auth/token":
                 raw_origin = self.headers.get("Origin")
                 if not _is_locked_extension_request(raw_origin, allow_origin):
@@ -1059,7 +1098,10 @@ def create_server(
         def log_message(self, *args) -> None:  # サーバーログを抑制
             pass
 
-    return ThreadingHTTPServer(("localhost", port), _Handler)
+    server = ThreadingHTTPServer(("localhost", port), _Handler)
+    if server_info is None:
+        resolved_server_info.update(build_server_info("YouTube Automation", "YA", server.server_address[1]))
+    return server
 
 
 def _resolve_playlist_capture(root_arg: str | None, prefix_arg: str | None) -> tuple[Path, str | None] | None:
@@ -1144,12 +1186,19 @@ def main() -> None:
         # dir mode でも distrokid エンドポイントを有効化するため load_config() を試みる（#934）。
         # distrokid 設定が無いチャンネルでは None のままにして 404 にフォールバックする。
         try:
-            distrokid_cfg = load_config().distrokid
+            config = load_config()
+            distrokid_cfg = config.distrokid
+            channel_name = config.meta.channel_name
+            channel_short = config.meta.channel_short
         except ConfigError:
             distrokid_cfg = None
+            channel_name = "YouTube Automation"
+            channel_short = "YA"
+        server_info = build_server_info(channel_name, channel_short, args.port)
         server = create_server(
             args.port,
             args.allow_origin,
+            server_info=server_info,
             prompts_path=None,
             collection_dir=None,
             distrokid=distrokid_cfg,
@@ -1157,9 +1206,11 @@ def main() -> None:
             playlist_capture=playlist_capture,
         )
         port = server.server_address[1]
-        print(
-            f"Serving {len(collection_dirs)} collections from {args.path} at http://localhost:{port}{COLLECTIONS_ROUTE}"
-        )
+        server_info.update(build_server_info(channel_name, channel_short, port))
+        canonical_url = str(server_info["base_url"])
+        print(f"Serving {len(collection_dirs)} collections from {args.path} at {canonical_url}{COLLECTIONS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{COLLECTIONS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
         if distrokid_cfg is not None and distrokid_cfg.enabled:
             print(
                 f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
@@ -1170,11 +1221,16 @@ def main() -> None:
         prompts_path = resolve_prompts_path(args.path)
         # collection dir: dir 引数はそのまま、json ファイル引数なら <collection>/20-documentation/x.json から 2 階層上。
         collection_dir = args.path if args.path.is_dir() else args.path.parent.parent
-        distrokid = load_config().distrokid
+        config = load_config()
+        distrokid = config.distrokid
+        channel_name = config.meta.channel_name
+        channel_short = config.meta.channel_short
+        server_info = build_server_info(channel_name, channel_short, args.port)
 
         server = create_server(
             args.port,
             args.allow_origin,
+            server_info=server_info,
             prompts_path=prompts_path,
             collection_dir=collection_dir,
             distrokid=distrokid,
@@ -1182,7 +1238,11 @@ def main() -> None:
             playlist_capture=playlist_capture,
         )
         port = server.server_address[1]
-        print(f"Serving {collection_dir} at http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        server_info.update(build_server_info(channel_name, channel_short, port))
+        canonical_url = str(server_info["base_url"])
+        print(f"Serving {collection_dir} at {canonical_url}{SUNO_PROMPTS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
         if distrokid.enabled:
             print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
         distrokid_capture_active = distrokid.enabled
@@ -1199,7 +1259,7 @@ def main() -> None:
             f"-> {playlists_output_path(capture_root)} (prefix='{capture_prefix}')"
         )
     if args.allow_origin is not None and args.allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
-        print(f"  serve token: GET http://localhost:{port}/auth/token")
+        print(f"  serve token: GET {canonical_url}/auth/token")
     else:
         print(
             "  serve token: disabled until --allow-origin "
