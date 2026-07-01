@@ -67,7 +67,7 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
       type: BRIDGE_MSG.FEED_CLIPS,
-      clips: [{ id: "c1", status: "streaming" }],
+      clips: [{ id: "c1", status: "streaming", duration: 187.25 }],
     });
     expect(tracker.getInFlightCount()).toBe(1);
 
@@ -95,12 +95,14 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     // clips の形崩れ
     dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS, clips: [{ id: 1 }] });
     dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS });
-    // duration は optional だが、存在する場合は number のみ受け入れる
-    dispatchBridgeMessage({
-      source: BRIDGE_SOURCE,
-      type: BRIDGE_MSG.GENERATE_CLIPS,
-      clips: [{ id: "x", status: "submitted", duration: "241.2" }],
-    });
+    // duration は optional だが、存在する場合は finite number のみ受け入れる
+    for (const duration of ["241.2", Number.NaN, Infinity]) {
+      dispatchBridgeMessage({
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.GENERATE_CLIPS,
+        clips: [{ id: "x", status: "submitted", duration }],
+      });
+    }
 
     expect(tracker.hasObservedAnyTraffic()).toBe(false);
     expect(tracker.getInFlightCount()).toBe(0);
@@ -155,7 +157,11 @@ describe("requestFeedPoll: active poll 応答の ObservedClip 境界検証", () 
     ]);
   });
 
-  it("Given duration が number ではない poll 応答 When 受信する Then null で resolve する", async () => {
+  it.each([
+    ["string", "241.2"],
+    ["NaN", Number.NaN],
+    ["Infinity", Infinity],
+  ])("Given duration が %s の poll 応答 When 受信する Then null で resolve する", async (_label, duration) => {
     const pending = requestFeedPoll(["c1"]);
     const requestId = await captureFeedPollRequestId();
 
@@ -163,7 +169,7 @@ describe("requestFeedPoll: active poll 応答の ObservedClip 境界検証", () 
       source: BRIDGE_SOURCE,
       type: BRIDGE_MSG.FEED_POLL_RESPONSE,
       requestId,
-      clips: [{ id: "c1", status: "streaming", duration: "241.2" }],
+      clips: [{ id: "c1", status: "streaming", duration }],
     });
 
     await expect(pending).resolves.toBeNull();

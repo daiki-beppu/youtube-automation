@@ -90,6 +90,30 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
   return clips.length > 0 ? clips : null;
 }
 
+/** feed レスポンス専用: metadata.duration が finite number の場合だけ ObservedClip に含める。 */
+function parseFeedClipArray(value: unknown): ObservedClip[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const clips: ObservedClip[] = [];
+  for (const item of value) {
+    if (
+      typeof item === "object" &&
+      item !== null &&
+      typeof (item as { id?: unknown }).id === "string" &&
+      typeof (item as { status?: unknown }).status === "string"
+    ) {
+      const duration = (item as { metadata?: { duration?: unknown } }).metadata?.duration;
+      clips.push({
+        id: (item as { id: string }).id,
+        status: (item as { status: string }).status,
+        ...(typeof duration === "number" && Number.isFinite(duration) ? { duration } : {}),
+      });
+    }
+  }
+  return clips.length > 0 ? clips : null;
+}
+
 /**
  * 生成投入レスポンス（POST /api/generate/v2-web/）から投入 clip を取り出す。
  * 形: `{ id: <batch>, clips: [{id, status: "submitted", ...}, ...] }`（chrome-devtools 実機観測）。
@@ -103,16 +127,16 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
 }
 
 /**
- * feed レスポンス（GET /api/feed/v2?ids=...）から clip status を取り出す。
+ * feed レスポンス（GET /api/feed/v2?ids=... / POST /api/feed/v3）から clip status を取り出す。
  * 形は `{ clips: [...] }` と素の配列の両方を観測しているため両対応する。
  * 形が崩れていたら null（fail-soft）。
  */
 export function parseClipsFromFeedResponse(json: unknown): ObservedClip[] | null {
   if (Array.isArray(json)) {
-    return parseClipArray(json);
+    return parseFeedClipArray(json);
   }
   if (typeof json !== "object" || json === null) {
     return null;
   }
-  return parseClipArray((json as { clips?: unknown }).clips);
+  return parseFeedClipArray((json as { clips?: unknown }).clips);
 }
