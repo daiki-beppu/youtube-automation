@@ -29,13 +29,25 @@ function normalizeBaseUrl(baseUrl: string): string {
 }
 
 function normalizeReleasePayload(raw: unknown): ReleasePayload {
-  const payload = raw as ReleasePayload;
-  const profile = payload.profile ?? {};
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("release.json payload must be an object");
+  }
+  const payload = raw as { profile?: unknown; release?: unknown };
+  if (payload.profile === null || typeof payload.profile !== "object" || Array.isArray(payload.profile)) {
+    throw new Error("release.json profile must be an object");
+  }
+  if (payload.release === null || typeof payload.release !== "object" || Array.isArray(payload.release)) {
+    throw new Error("release.json release must be an object");
+  }
+  const profile = payload.profile as Record<string, unknown>;
+  if ("artist" in profile && typeof profile.artist !== "string") {
+    throw new Error("release.json profile.artist must be a string");
+  }
   return {
     ...payload,
     profile: {
       ...profile,
-      artist: typeof profile.artist === "string" ? profile.artist : "",
+      artist: profile.artist ?? "",
     },
   } as ReleasePayload;
 }

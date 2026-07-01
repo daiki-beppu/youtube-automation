@@ -568,6 +568,54 @@ describe("distrokid", () => {
     expect(dk.profile.credits.performerRole).toBe("Synthesizer");
   });
 
+  test("rejects partial audio type unless recording scope is partial", () => {
+    // Given enabled distrokid with Python-incompatible AI disclosure settings
+    const sections = minimalSections();
+    const profile = fullDistrokidProfile();
+    const aiDisclosure = profile.ai_disclosure as Record<string, unknown>;
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: true,
+        profile: {
+          ...profile,
+          ai_disclosure: {
+            ...aiDisclosure,
+            partial_audio_type: "vocals",
+            recording_scope: "full",
+          },
+        },
+      },
+    };
+
+    // When/Then core rejects the same invalid cross-field combination as Python
+    expect(() => load(sections)).toThrow(/partial_audio_type/u);
+  });
+
+  test("accepts partial audio type when recording scope is partial", () => {
+    // Given enabled distrokid with a valid partial recording disclosure
+    const sections = minimalSections();
+    const profile = fullDistrokidProfile();
+    const aiDisclosure = profile.ai_disclosure as Record<string, unknown>;
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: true,
+        profile: {
+          ...profile,
+          ai_disclosure: {
+            ...aiDisclosure,
+            partial_audio_type: "vocals",
+            recording_scope: "partial",
+          },
+        },
+      },
+    };
+
+    // Then core maps the valid partial configuration to camelCase
+    const ai = load(sections).integrations.distrokid.profile.aiDisclosure;
+    expect(ai.recordingScope).toBe("partial");
+    expect(ai.partialAudioType).toBe("vocals");
+  });
+
   test.each([[null], [{ name: "City Nights" }], [["City Nights"]]])(
     "rejects enabled=true with non-string artist %p",
     (artist) => {

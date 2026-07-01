@@ -107,8 +107,9 @@ describe("fetchRelease", () => {
     // Given
     const legacyPayload = {
       ...SAMPLE_PAYLOAD,
-      profile: { ...SAMPLE_PAYLOAD.profile, artist: undefined },
+      profile: { ...SAMPLE_PAYLOAD.profile },
     };
+    Reflect.deleteProperty(legacyPayload.profile, "artist");
     fetchMock.mockResolvedValue(jsonResponse(200, legacyPayload));
 
     // When
@@ -119,22 +120,27 @@ describe("fetchRelease", () => {
   });
 
   it.each([[null], [{ name: "City Nights" }], [["City Nights"]]])(
-    "profile.artist=%j を空文字へ正規化する",
+    "profile.artist=%j は不正 payload として reject する",
     async (artist) => {
       // Given
-      const legacyPayload = {
+      const invalidPayload = {
         ...SAMPLE_PAYLOAD,
         profile: { ...SAMPLE_PAYLOAD.profile, artist },
       };
-      fetchMock.mockResolvedValue(jsonResponse(200, legacyPayload));
+      fetchMock.mockResolvedValue(jsonResponse(200, invalidPayload));
 
-      // When
-      const result = await fetchRelease("http://localhost:7873");
-
-      // Then
-      expect(result.profile.artist).toBe("");
+      // When / Then
+      await expect(fetchRelease("http://localhost:7873")).rejects.toThrow(/profile\.artist/u);
     },
   );
+
+  it.each([[null], [undefined], [["track-01"]]])("release=%j は不正 payload として reject する", async (release) => {
+    // Given
+    fetchMock.mockResolvedValue(jsonResponse(200, { ...SAMPLE_PAYLOAD, release }));
+
+    // When / Then
+    await expect(fetchRelease("http://localhost:7873")).rejects.toThrow(/release/u);
+  });
 
   it("404 のとき ReleaseUnavailableError を throw する（要件 #16: 無効チャンネルのガイダンス）", async () => {
     // Given: enabled=false / 未配置のチャンネルはサーバーが 404 を返す契約
@@ -190,8 +196,9 @@ describe("fetchCollectionRelease", () => {
     // Given
     const legacyPayload = {
       ...SAMPLE_PAYLOAD,
-      profile: { ...SAMPLE_PAYLOAD.profile, artist: undefined },
+      profile: { ...SAMPLE_PAYLOAD.profile },
     };
+    Reflect.deleteProperty(legacyPayload.profile, "artist");
     fetchMock.mockResolvedValue(jsonResponse(200, legacyPayload));
 
     // When
@@ -202,20 +209,19 @@ describe("fetchCollectionRelease", () => {
   });
 
   it.each([[null], [{ name: "City Nights" }], [["City Nights"]]])(
-    "dir mode でも profile.artist=%j を空文字へ正規化する",
+    "dir mode でも profile.artist=%j は不正 payload として reject する",
     async (artist) => {
       // Given
-      const legacyPayload = {
+      const invalidPayload = {
         ...SAMPLE_PAYLOAD,
         profile: { ...SAMPLE_PAYLOAD.profile, artist },
       };
-      fetchMock.mockResolvedValue(jsonResponse(200, legacyPayload));
+      fetchMock.mockResolvedValue(jsonResponse(200, invalidPayload));
 
-      // When
-      const result = await fetchCollectionRelease("http://localhost:7873", "20260526-sg-col", "disc1");
-
-      // Then
-      expect(result.profile.artist).toBe("");
+      // When / Then
+      await expect(fetchCollectionRelease("http://localhost:7873", "20260526-sg-col", "disc1")).rejects.toThrow(
+        /profile\.artist/u,
+      );
     },
   );
 

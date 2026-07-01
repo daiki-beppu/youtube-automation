@@ -21,18 +21,32 @@ const SongwriterName = z.object({
   middle: z.string().nullable().default(null),
 });
 
-const AiDisclosure = z.object({
-  apply_to_all: z.boolean().default(true),
-  artist_persona: z.boolean().default(true),
-  enabled: z.boolean().default(true),
-  lyrics: z.boolean().default(true),
-  music: z.boolean().default(true),
-  partial_audio_type: z
-    .enum(["vocals", "instruments"])
-    .nullable()
-    .default(null),
-  recording_scope: z.enum(["full", "partial"]).default("full"),
-});
+const AiDisclosure = z
+  .object({
+    apply_to_all: z.boolean().default(true),
+    artist_persona: z.boolean().default(true),
+    enabled: z.boolean().default(true),
+    lyrics: z.boolean().default(true),
+    music: z.boolean().default(true),
+    partial_audio_type: z
+      .enum(["vocals", "instruments"])
+      .nullable()
+      .default(null),
+    recording_scope: z.enum(["full", "partial"]).default("full"),
+  })
+  .superRefine((aiDisclosure, ctx) => {
+    if (
+      aiDisclosure.partial_audio_type !== null &&
+      aiDisclosure.recording_scope !== "partial"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "distrokid.profile.ai_disclosure.partial_audio_type は recording_scope='partial' のときのみ指定できます",
+        path: ["partial_audio_type"],
+      });
+    }
+  });
 
 const DistrokidProfileCredits = z.object({
   performer_role: z.string().default("Synthesizer"),

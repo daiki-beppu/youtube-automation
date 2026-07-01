@@ -8,80 +8,13 @@
 // 注入 primitive とメッセージ配線のみを持つ。
 // 「続ける」等の送信系操作は一切行わない（規約遵守・スコープ外）。
 
-import {
-  acceptImportantTerms,
-  assertNewRelease,
-  checkAllStores,
-  injectAiDisclosure,
-  injectAlbumTitle,
-  injectAppleMusicCredits,
-  injectCover,
-  injectProfile,
-  injectReleaseDate,
-  injectSongwriter,
-  injectTrackFile,
-  injectTrackTitle,
-  RELOAD_GUIDANCE,
-  resolveTrackUuids,
-  scrollToDoneButton,
-  setTrackCount,
-  uncheckUpsells,
-} from "@/lib/distrokid-injector";
-import { InjectSession, type Injector } from "@/lib/inject-session";
+import { createDocumentInjector } from "@/lib/content-injector";
+import { InjectSession } from "@/lib/inject-session";
 import { onMessage, sendMessage } from "@/lib/messaging";
-import type { ReleasePayload } from "@/lib/types";
 
 // document 束縛の注入 primitive。AI 開示モーダル（Suno 楽曲は通過必須）も含め
 // 実 DOM 操作はすべて lib/distrokid-injector.ts へ委譲する。
-const documentInjector: Injector = {
-  async injectStaticFields(payload: ReleasePayload): Promise<void> {
-    const { profile, release } = payload;
-    // (B) トラック数を payload に合わせて set し、track 行の生成完了を待つ（#888）。
-    // 以降の注入（assert / プロファイル / タイトル / credit）は行生成後に開始する（順序保証）。
-    await setTrackCount(document, release.tracks.length);
-
-    // 新規リリース前提を assert（過去公開対応はスコープ外）。
-    assertNewRelease(document);
-    injectProfile(document, profile);
-    injectAlbumTitle(document, release.album_title);
-    injectReleaseDate(document, release.release_date);
-
-    // track UUID を DOM order で解決し、全 track のタイトル / songwriter を注入する。
-    const uuids = resolveTrackUuids(document);
-    if (uuids.length !== release.tracks.length) {
-      throw new Error(
-        `track 数が DOM と一致しません: DOM=${uuids.length}, payload=${release.tracks.length}。${RELOAD_GUIDANCE}`,
-      );
-    }
-    release.tracks.forEach((track, i) => {
-      injectTrackTitle(document, uuids[i], track.title);
-      if (profile.songwriter !== null) {
-        injectSongwriter(document, i + 1, profile.songwriter);
-      }
-    });
-
-    // Apple Music check が credits 可視化の前提になるため、ストア check を先に行う（#923）。
-    checkAllStores(document);
-    // chk* 除外済みなので配信先は巻き込まない（#923）。
-    uncheckUpsells(document);
-    // ストア check 後に可視化されるため await（#923）。
-    await injectAppleMusicCredits(document, release.tracks.length, profile.artist, profile.credits);
-    // ストア check 後でないと条件付き areyousure が不可視のため、ストア check 後に実行（#923）。
-    acceptImportantTerms(document);
-  },
-  injectTrackFile(trackIndex: number, file: File): void {
-    // injector は 0-indexed、DOM の file input は 1-indexed。
-    injectTrackFile(document, trackIndex + 1, file);
-  },
-  injectCover(file: File): void {
-    injectCover(document, file);
-  },
-  async injectAiDisclosure(payload: ReleasePayload): Promise<void> {
-    await injectAiDisclosure(document, payload.profile.ai_disclosure);
-    // (E) フィル完了直後、続けるボタンを視界へスクロール（#919）。送信は人間が手動で押す。
-    scrollToDoneButton(document);
-  },
-};
+const documentInjector = createDocumentInjector(document);
 
 export default defineContentScript({
   matches: ["*://*.distrokid.com/new*"],
