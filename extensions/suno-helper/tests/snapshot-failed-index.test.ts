@@ -69,3 +69,24 @@ describe("applyProgress: ENTRY_FAILED で failedIndices を蓄積する (#948)",
     expect(snap.isRunning).toBe(false);
   });
 });
+
+describe("applyProgress: yield guard retry / accepted clip の snapshot 反映 (#1268)", () => {
+  it("Given yieldRetryCount 付き progress When 適用する Then entry index ごとの retry 回数を保持する", () => {
+    const snap = applyProgress(initSnapshot(makePromptEntries(2)), {
+      phase: PHASE.GENERATING,
+      index: 1,
+      total: 2,
+      yieldRetryCount: 2,
+    });
+
+    expect(snap.yieldRetryCounts).toEqual({ 1: 2 });
+  });
+
+  it("Given acceptedClipIds 付き DONE を複数回受信 When 適用する Then 重複排除して蓄積する", () => {
+    let snap = initSnapshot(makePromptEntries(2));
+    snap = applyProgress(snap, { phase: PHASE.DONE, index: 0, total: 2, acceptedClipIds: ["a", "b"] });
+    snap = applyProgress(snap, { phase: PHASE.DONE, index: 1, total: 2, acceptedClipIds: ["b", "c"] });
+
+    expect(snap.yieldAcceptedClipIds).toEqual(["a", "b", "c"]);
+  });
+});

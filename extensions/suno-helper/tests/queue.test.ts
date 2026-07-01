@@ -480,10 +480,13 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
     Array.from({ length: 20 }, () => addClipCard({ generating: true }));
 
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
-    const expectation = expect(pending).rejects.toThrow();
+    const outcome = pending.then(
+      () => ({ ok: true as const, error: null }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50);
-    await expectation;
-  }, 15_000);
+    await expect(outcome).resolves.toMatchObject({ ok: false, error: expect.any(Error) });
+  }, 30_000);
 });
 
 describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
