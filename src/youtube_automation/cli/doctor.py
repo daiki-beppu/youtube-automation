@@ -770,10 +770,13 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
             id="channel_config",
             status="fail",
             category=CHANNEL_CATEGORY,
-            message="config/channel/ ディレクトリが存在しない (新規チャンネル)",
+            message="config/channel/ ディレクトリが存在しない (新規チャンネル、setup 用ディレクトリのみでは未生成)",
             next_action={
                 "kind": "human",
-                "instructions": "/channel-new を実行して新規チャンネル設定を作成してください",
+                "instructions": (
+                    "setup 用ディレクトリ生成は完了していても config は未作成です。"
+                    "/channel-new を実行して新規チャンネル設定を作成してください"
+                ),
             },
         )
 

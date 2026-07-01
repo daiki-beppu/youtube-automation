@@ -578,9 +578,11 @@ class TestCheckChannelConfig:
         """config/channel/ ディレクトリが存在しない場合: fail + /channel-new 案内."""
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
+        assert "setup 用ディレクトリのみでは未生成" in r.message
         assert r.next_action is not None
-        action_str = json.dumps(r.next_action)
-        assert "/channel-new" in action_str
+        instructions = r.next_action["instructions"]
+        assert "/channel-new" in instructions
+        assert "setup 用ディレクトリ生成は完了していても config は未作成" in instructions
 
     def test_config_dir_exists_but_invalid_json_is_fail_with_channel_import(self, tmp_path):
         """config/channel/ 存在・JSON 破損: fail + /channel-import 案内 (既存チャンネル)."""
