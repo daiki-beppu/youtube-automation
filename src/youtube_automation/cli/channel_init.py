@@ -16,13 +16,16 @@ from youtube_automation.cli.channel_init_templates import (
     CHANNEL_CONFIG_TEMPLATES,
     CONFIG_SUBDIR,
     DEFAULT_LOCALIZATION_LANGUAGES,
-    DIRECTORIES,
-    GITKEEP_NAME,
     PLACEHOLDER_DEFAULT,
     ROOT_JSON_TEMPLATES,
     ROOT_TEXT_TEMPLATES,
     ChannelInitContext,
     serialize_json,
+)
+from youtube_automation.cli.setup_directory_contract import (
+    GITKEEP_NAME,
+    SETUP_DIRECTORIES,
+    validate_setup_directory_target,
 )
 from youtube_automation.utils.channel_settings import normalize_locale_to_short
 from youtube_automation.utils.exceptions import ConfigError
@@ -164,9 +167,9 @@ def _plan_actions(target: Path, ctx: ChannelInitContext, *, force: bool) -> Plan
         files.append(_plan_file(path, rel_path.as_posix(), render(ctx), force=force))
 
     directories: list[DirAction] = []
-    for rel in DIRECTORIES:
+    for rel in SETUP_DIRECTORIES:
         path = target / rel
-        directories.append(_plan_directory(path, rel))
+        directories.append(_plan_directory(target, path, rel))
 
     return Plan(files=files, directories=directories)
 
@@ -197,10 +200,8 @@ def _plan_file(path: Path, rel: str, new_text: str, *, force: bool) -> FileActio
     return FileAction(path=path, rel=rel, kind=ActionKind.SKIPPED, new_text=new_text, diff=diff)
 
 
-def _plan_directory(path: Path, rel: str) -> DirAction:
-    _validate_parent_directories(path, rel)
-    if path.exists() and not path.is_dir():
-        raise ConfigError(f"{rel} はディレクトリである必要があります: {path}")
+def _plan_directory(target: Path, path: Path, rel: str) -> DirAction:
+    validate_setup_directory_target(target, rel)
     gitkeep = path / GITKEEP_NAME
     if path.is_dir() and gitkeep.is_file():
         return DirAction(path=path, rel=rel, kind=ActionKind.SKIPPED)

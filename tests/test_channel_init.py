@@ -654,6 +654,38 @@ def test_main_adds_gitkeep_when_directory_exists_without_it(tmp_path):
     assert (tmp_path / "auth" / ".gitkeep").is_file()
 
 
+def test_main_rejects_directory_at_gitkeep_path_without_partial_generation(tmp_path, capsys):
+    # Given: .gitkeep として生成すべき path がディレクトリになっている
+    (tmp_path / "auth" / ".gitkeep").mkdir(parents=True)
+
+    # When: main 実行
+    rc = main(_required_args(tmp_path))
+    err = capsys.readouterr().err
+
+    # Then: plan 段階で停止し、config も他ディレクトリも部分生成しない
+    assert rc == 1
+    assert "auth/.gitkeep は通常ファイルである必要があります" in err
+    assert not (tmp_path / "config").exists()
+    assert not (tmp_path / "collections").exists()
+
+
+def test_main_rejects_setup_directory_symlink_without_partial_generation(tmp_path, capsys):
+    # Given: setup directory が target 外への symlink になっている
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "auth").symlink_to(outside, target_is_directory=True)
+
+    # When: main 実行
+    rc = main(_required_args(tmp_path))
+    err = capsys.readouterr().err
+
+    # Then: target 外への .gitkeep 作成も config 部分生成も行わない
+    assert rc == 1
+    assert "auth は symlink ではなくディレクトリである必要があります" in err
+    assert not (outside / ".gitkeep").exists()
+    assert not (tmp_path / "config").exists()
+
+
 def test_main_is_safe_after_setup_dirs_precreated_directories(tmp_path):
     # Given: /setup が先に最小ディレクトリだけを作成済み
     from youtube_automation.cli.setup_dirs import main as setup_dirs_main

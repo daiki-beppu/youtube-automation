@@ -99,14 +99,16 @@ def test_setup_directory_generation_contract_is_separate_from_channel_config() -
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     setup_dirs = _read("src/youtube_automation/cli/setup_dirs.py")
-    channel_init_templates = _read("src/youtube_automation/cli/channel_init_templates.py")
+    channel_init = _read("src/youtube_automation/cli/channel_init.py")
+    setup_directory_contract = _read("src/youtube_automation/cli/setup_directory_contract.py")
     pyproject = _read("pyproject.toml")
 
     assert "uv run yt-setup-dirs" in setup
     assert "`/setup` では `config/channel/*.json` を生成しない" in setup
     assert "`/setup` が作成済みのディレクトリはそのまま再利用する" in channel_new
-    assert "SETUP_DIRECTORIES" in setup_dirs
-    assert "DIRECTORIES: tuple[str, ...] = SETUP_DIRECTORIES" in channel_init_templates
+    assert "setup_directory_contract" in setup_dirs
+    assert "setup_directory_contract" in channel_init
+    assert "SETUP_DIRECTORIES" in setup_directory_contract
     assert 'yt-setup-dirs = "youtube_automation.cli_entrypoints:yt_setup_dirs"' in pyproject
 
 

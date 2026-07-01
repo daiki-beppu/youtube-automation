@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from youtube_automation.cli.channel_init_templates import GITKEEP_NAME, SETUP_DIRECTORIES
+from youtube_automation.cli.setup_directory_contract import (
+    GITKEEP_NAME,
+    SETUP_DIRECTORIES,
+    validate_setup_directory_target,
+)
 from youtube_automation.utils.exceptions import ConfigError
 
 
@@ -50,23 +54,12 @@ def _resolve_target_dir(target: str | None) -> Path:
     return Path.cwd().resolve()
 
 
-def _validate_parent_directories(path: Path, rel: str) -> None:
-    for index, parent_rel in enumerate(Path(rel).parents):
-        if parent_rel == Path("."):
-            break
-        parent = path.parents[index]
-        if parent.exists() and not parent.is_dir():
-            raise ConfigError(f"{rel} の親ディレクトリ {parent_rel} はディレクトリである必要があります: {parent}")
-
-
 def plan_setup_directories(target: Path) -> tuple[DirAction, ...]:
     """setup 用ディレクトリ作成 plan を副作用なしで組み立てる."""
     actions: list[DirAction] = []
     for rel in SETUP_DIRECTORIES:
         path = target / rel
-        _validate_parent_directories(path, rel)
-        if path.exists() and not path.is_dir():
-            raise ConfigError(f"{rel} はディレクトリである必要があります: {path}")
+        validate_setup_directory_target(target, rel)
         gitkeep = path / GITKEEP_NAME
         kind = ActionKind.SKIPPED if path.is_dir() and gitkeep.is_file() else ActionKind.CREATED
         actions.append(DirAction(path=path, rel=rel, kind=kind))
