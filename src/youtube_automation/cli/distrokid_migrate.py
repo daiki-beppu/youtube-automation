@@ -124,8 +124,18 @@ def _split_songwriter(value: object) -> dict | None:
 def _convert_profile(old_profile: dict) -> dict:
     """旧フラット profile を新 schema profile へ変換する（legacy フィールドは drop）."""
     new_profile: dict = {}
-    artist = old_profile.get("artist", old_profile.get("artist_name"))
-    if artist is not None:
+    if "artist" in old_profile:
+        artist = old_profile["artist"]
+        has_artist = True
+    elif "artist_name" in old_profile:
+        artist = old_profile["artist_name"]
+        has_artist = True
+    else:
+        artist = None
+        has_artist = False
+    if has_artist and not isinstance(artist, str):
+        raise ConfigError(f"artist は string でなければなりません（got {type(artist).__name__}）")
+    if has_artist:
         new_profile["artist"] = artist
     if old_profile.get("language") is not None:
         new_profile["language"] = old_profile["language"]

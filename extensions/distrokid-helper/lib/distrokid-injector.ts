@@ -226,10 +226,6 @@ export class VisibilityTimeoutError extends Error {
 
 type ValueElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
-function optionalString(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
 // 要素種別に応じた prototype から native value setter を取り出す。
 function nativeValueSetter(el: ValueElement): (value: string) => void {
   const prototype =
@@ -309,9 +305,8 @@ function requireVisibleField(root: ParentNode, selector: string): ValueElement {
 
 // 静的プロファイル（artist / sub_genre は任意、language / main_genre は必須）を注入する。
 export function injectProfile(root: ParentNode, profile: DistrokidProfile): void {
-  const artist = optionalString(profile.artist).trim();
-  if (artist !== "") {
-    setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.artist), artist);
+  if (profile.artist.trim() !== "") {
+    setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.artist), profile.artist.trim());
   }
   setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.language), profile.language);
   setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.main_genre), profile.main_genre);
@@ -667,8 +662,8 @@ function requireArtistName(root: ParentNode): string {
   return name;
 }
 
-function resolveCreditArtistName(root: ParentNode, profileArtist: unknown): string {
-  const configured = optionalString(profileArtist).trim();
+function resolveCreditArtistName(root: ParentNode, profileArtist: string): string {
+  const configured = profileArtist.trim();
   if (configured !== "") {
     return configured;
   }
@@ -703,7 +698,7 @@ function requireCreditTrigger(root: ParentNode): HTMLElement {
 export async function injectAppleMusicCredits(
   root: ParentNode,
   trackCount: number,
-  artist: string | null | undefined,
+  artist: string,
   credits: DistrokidProfileCredits,
 ): Promise<void> {
   const artistName = resolveCreditArtistName(root, artist);

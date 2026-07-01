@@ -568,19 +568,63 @@ describe("distrokid", () => {
     expect(dk.profile.credits.performerRole).toBe("Synthesizer");
   });
 
+  test.each([[null], [{ name: "City Nights" }], [["City Nights"]]])(
+    "rejects enabled=true with non-string artist %p",
+    (artist) => {
+      // Given enabled distrokid with invalid artist shape
+      const sections = minimalSections();
+      sections["distrokid.json"] = {
+        distrokid: {
+          enabled: true,
+          profile: { ...fullDistrokidProfile(), artist },
+        },
+      };
+
+      // When/Then the profile schema rejects it before it can flow into payloads
+      expect(() => load(sections)).toThrow(/artist/u);
+    }
+  );
+
   test("skips profile validation when disabled", () => {
     // Given disabled distrokid with an incomplete legacy profile
     const sections = minimalSections();
     sections["distrokid.json"] = {
-      distrokid: { enabled: false, profile: { artist_name: "x" } },
+      distrokid: {
+        enabled: false,
+        profile: {
+          apple_music_credit: "Jane Doe",
+          artist_name: "x",
+          language: "ja",
+          main_genre: "Electronic",
+          songwriter: "Jane Doe",
+          track_type: "Instrumental",
+        },
+      },
     };
 
     // Then it loads without validating the profile and ignores unknown legacy keys
     const dk = load(sections).integrations.distrokid;
     expect(dk.enabled).toBe(false);
     expect(dk.profile.artist).toBe("");
-    expect(dk.profile.language).toBe("");
+    expect(dk.profile.language).toBe("ja");
   });
+
+  test.each([[null], [{ name: "City Nights" }], [["City Nights"]]])(
+    "rejects enabled=false with non-string artist %p",
+    (artist) => {
+      // Given disabled distrokid still declares an invalid current-schema artist key
+      const sections = minimalSections();
+      sections["distrokid.json"] = {
+        distrokid: {
+          enabled: false,
+          profile: { artist },
+        },
+      };
+
+      // When/Then artist keeps the same string-only contract even when the integration is disabled
+      expect(() => load(sections)).toThrow(/artist/u);
+    }
+  );
 
   test("rejects a non-object distrokid section", () => {
     // Given distrokid declared as an array

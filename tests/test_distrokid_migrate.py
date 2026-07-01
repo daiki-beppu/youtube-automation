@@ -183,6 +183,18 @@ def test_migrate_apply_drops_legacy_fields(tmp_path):
     assert "track_type" not in profile
 
 
+@pytest.mark.parametrize("artist", [None, {"name": "City Nights"}, ["City Nights"]])
+def test_migrate_rejects_non_string_artist(tmp_path, artist):
+    """artist / artist_name は存在するなら string 必須。"""
+    data = _old_distrokid()
+    data["distrokid"]["profile"]["artist_name"] = artist
+    _write_distrokid(tmp_path, data)
+
+    rc = main(["--target", str(tmp_path), "--apply"])
+
+    assert rc == 1
+
+
 def test_migrate_apply_preserves_enabled_flag(tmp_path):
     """Given enabled=false の旧 schema
     When --apply

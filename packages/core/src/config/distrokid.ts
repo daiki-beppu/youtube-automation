@@ -77,6 +77,32 @@ const DistrokidInner = z
     }
   });
 
+const disabledProfileInput = (
+  profile: Record<string, unknown>
+): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  if ("artist" in profile) {
+    out.artist = profile.artist;
+  }
+  for (const key of ["language", "main_genre"] as const) {
+    const value = profile[key];
+    if (typeof value === "string") {
+      out[key] = value;
+    }
+  }
+  const subGenre = profile.sub_genre;
+  if (typeof subGenre === "string" || subGenre === null) {
+    out.sub_genre = subGenre;
+  }
+  for (const key of ["songwriter", "ai_disclosure", "credits"] as const) {
+    const value = profile[key];
+    if (value === null || isPlainObject(value)) {
+      out[key] = value;
+    }
+  }
+  return out;
+};
+
 /** `distrokid` セクション（optional・opt-in）。 */
 export const Distrokid = z
   .object({
@@ -84,7 +110,10 @@ export const Distrokid = z
   })
   .transform((o) => {
     // superRefine の isPlainObject 検証通過済みのため、transform 到達時は常に plain object。
-    const profile = DistrokidProfile.parse(o.distrokid.profile);
+    const profileRaw = o.distrokid.profile as Record<string, unknown>;
+    const profile = DistrokidProfile.parse(
+      o.distrokid.enabled ? profileRaw : disabledProfileInput(profileRaw)
+    );
     return {
       enabled: o.distrokid.enabled,
       profile: snakeToCamel(profile),
