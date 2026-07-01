@@ -194,4 +194,4 @@ def test_pyproject_registers_yt_channel_seed_entry_point():
     scripts = data["project"]["scripts"]
 
     # Then
-    assert scripts["yt-channel-seed"] == "youtube_automation.scripts.channel_seed:main"
+    assert scripts["yt-channel-seed"] == "youtube_automation.cli_entrypoints:yt_channel_seed"

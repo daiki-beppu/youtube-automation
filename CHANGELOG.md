@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
+
 ### Fixed
 
 - `fix(distrokid)`: `distrokid.profile.artist` を release payload に含め、distrokid-helper が `bandname` と Apple Music credits の performer / producer 名へ反映できるようにした（#1211）
@@ -35,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(cli)`: `yt-*` CLI 起動時に標準入出力を UTF-8 へ再設定し、Windows cp932 コンソールで日本語パスや Unicode ダッシュを含む出力が `UnicodeEncodeError` で落ちないようにした（#1331）
 - `fix(upload)`: `descriptions.md` の見出し不一致時に、期待する見出し一覧・不足/不一致の見出し・検出済み見出し・修正例を表示するよう改善（#1340）
 - `fix(suno-helper)`: `yt-collection-serve` の `/collections/<id>/suno/prompts.json` で URL エンコード済み collection ID をデコードし、スペースを含むフォルダ名でも prompts を取得できるようにした（#1338）
 - `fix(suno-helper)`: Suno Helper が `/collections` の `status` 形式と保存済み `suno_playlist_url` に追従し、Download 再開時は保存済み URL を優先するよう修正。Service Worker の `storage` 権限を生成 manifest で検証し、Suno 新 UI の Exclude styles / More メニュー検出とエラー案内も改善（#1321, #1336, #1337, #1339）

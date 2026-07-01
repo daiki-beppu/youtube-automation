@@ -48,6 +48,8 @@ _COLLECTIONS_ROUTE = "/collections"
 
 _MP3_BYTES = b"ID3\x03\x00\x00\x00fake-mp3-bytes"
 _JPG_BYTES = b"\xff\xd8\xff\xe0fake-jpg-bytes"
+_DEFAULT_DISTROKID = object()
+_DEFAULT_ALLOW_ORIGIN = object()
 
 
 def _profile() -> DistrokidProfile:
@@ -382,15 +384,19 @@ def serve_dir_dk(tmp_path):
     def _start(
         planning: Path,
         *,
-        distrokid: Distrokid | None = None,
+        distrokid: Distrokid | None | object = _DEFAULT_DISTROKID,
         capture_root: Path | None = None,
-        allow_origin: str | None = None,
+        allow_origin: str | None | object = _DEFAULT_ALLOW_ORIGIN,
     ):
-        dk = distrokid or Distrokid(enabled=True, profile=_profile())
-        playlist_capture = (capture_root, "dummy") if capture_root is not None else None
+        dk = Distrokid(enabled=True, profile=_profile()) if distrokid is _DEFAULT_DISTROKID else distrokid
+        if allow_origin is _DEFAULT_ALLOW_ORIGIN:
+            resolved_allow_origin = _EXTENSION_ORIGIN if capture_root is not None else None
+        else:
+            resolved_allow_origin = allow_origin
+        playlist_capture = (capture_root, None) if capture_root is not None else None
         server = create_server(
             0,
-            allow_origin,
+            resolved_allow_origin,
             prompts_path=None,
             collection_dir=None,
             distrokid=dk,
@@ -933,6 +939,91 @@ def test_post_distrokid_releases_without_capture_root_returns_404(tmp_path, serv
     _assert_json_error(exc_info.value, status=404, message="Not Found", expected_origin=_EXTENSION_ORIGIN)
 
 
+def test_post_distrokid_releases_requires_explicit_extension_lock(tmp_path, serve_dir_dk):
+    """Given --allow-origin 未指定のサーバー
+    When DistroKid page origin から POST /distrokid/releases する
+    Then local release state を書き換えず 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root, allow_origin=None)
+
+    payload = {
+        "collection_id": "20260526-abc-collection",
+        "disc": "disc1-alpha",
+        "album_title": "Alpha",
+    }
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", payload, headers={"Origin": "https://distrokid.com"})
+
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin="https://distrokid.com")
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_without_lock_rejects_extension_origin(tmp_path, serve_dir_dk):
+    """Given --allow-origin 未指定のサーバー
+    When Chrome extension origin から POST /distrokid/releases する
+    Then default extension scheme 許可に乗らず 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root, allow_origin=None)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {"collection_id": "20260526-abc-collection", "disc": "disc1-alpha", "album_title": "Alpha"},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_distrokid_disabled_returns_404(tmp_path, serve_dir_dk):
+    """Given distrokid.enabled=False
+    When capture_root 付きで POST /distrokid/releases する
+    Then endpoint は 404 で、release state を書き換えない。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, distrokid=Distrokid(enabled=False), capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {"collection_id": "20260526-abc-collection", "disc": "disc1-alpha", "album_title": "Alpha"},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=404, message="Not Found", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
+def test_post_distrokid_releases_distrokid_none_returns_404(tmp_path, serve_dir_dk):
+    """Given distrokid=None
+    When capture_root 付きで POST /distrokid/releases する
+    Then endpoint は 404 で、release state を書き換えない。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, distrokid=None, capture_root=capture_root)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {"collection_id": "20260526-abc-collection", "disc": "disc1-alpha", "album_title": "Alpha"},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=404, message="Not Found", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
 def test_post_distrokid_releases_single_mode_with_capture_root_preserves_legacy_write(tmp_path):
     """Given single collection mode + capture_root
     When POST /distrokid/releases する
@@ -948,7 +1039,7 @@ def test_post_distrokid_releases_single_mode_with_capture_root_preserves_legacy_
         collection_dir=collection_dir,
         distrokid=Distrokid(enabled=True, profile=_profile()),
         collections_root=None,
-        playlist_capture=(capture_root, "dummy"),
+        playlist_capture=(capture_root, None),
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -1012,6 +1103,28 @@ def test_post_distrokid_releases_with_disallowed_origin_returns_403(tmp_path, se
         _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", payload, headers={"Origin": "https://evil.com"})
 
     _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=None)
+
+
+def test_post_distrokid_releases_locked_origin_rejects_distrokid_page(tmp_path, serve_dir_dk):
+    """Given --allow-origin 相当で Chrome extension origin に lock したサーバー
+    When DistroKid page origin から POST する
+    Then ローカルの配信済み状態を書き換えず 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root, allow_origin=_EXTENSION_ORIGIN)
+
+    payload = {
+        "collection_id": "20260526-abc-collection",
+        "disc": "disc1-alpha",
+        "album_title": "Alpha",
+    }
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(f"{base}{_DISTROKID_RELEASES_ROUTE}", payload, headers={"Origin": "https://distrokid.com"})
+
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=None)
+    assert not distrokid_releases_output_path(capture_root).exists()
 
 
 def test_post_distrokid_releases_invalid_json_returns_400(tmp_path, serve_dir_dk):
