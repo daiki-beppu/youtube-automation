@@ -865,7 +865,7 @@ def serve_dir(tmp_path):
     """
     started = []
 
-    def _start(planning: Path, allow_origin=None, playlist_capture=None):
+    def _start(planning: Path, allow_origin=None, capture_root=None):
         server = create_server(
             0,
             allow_origin,
@@ -873,7 +873,7 @@ def serve_dir(tmp_path):
             collection_dir=None,
             distrokid=None,
             collections_root=planning,
-            playlist_capture=playlist_capture,
+            capture_root=capture_root,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -922,7 +922,7 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
 
 
 def test_get_collections_does_not_include_playlist_name_when_capture_enabled(serve_dir, tmp_path):
-    """Given capture prefix 付き dir mode サーバー
+    """Given capture root 付き dir mode サーバー
     When `GET /collections`
     Then playlist_name は返さない（拡張側で collection id/name から導出する）。
     """
@@ -935,7 +935,7 @@ def test_get_collections_does_not_include_playlist_name_when_capture_enabled(ser
         entries=[{"name": "A", "style": "s", "lyrics": ""}],
         theme="wah-groove",
     )
-    base = serve_dir(planning, playlist_capture=(channel_root, "soulful-grooves"))
+    base = serve_dir(planning, capture_root=channel_root)
 
     with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
         assert resp.status == 200
@@ -944,6 +944,34 @@ def test_get_collections_does_not_include_playlist_name_when_capture_enabled(ser
     assert "playlist_name" not in body[0]
     assert body[0]["channel"] == "soulful-grooves"
     assert body[0]["theme"] == "wah-groove"
+
+
+def test_post_suno_playlists_returns_404_after_capture_endpoint_removal(serve_dir, tmp_path):
+    """Given dir mode サーバー
+    When 旧 POST /suno/playlists に送信する
+    Then endpoint は存在せず 404 を返す（#1261）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(
+        planning,
+        allow_origin="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        capture_root=tmp_path,
+    )
+    req = urllib.request.Request(
+        f"{base}/suno/playlists",
+        data=b"[]",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Origin": "chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        },
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
 
 
 def test_dir_mode_get_version_is_available_before_collection_routing(serve_dir, tmp_path):

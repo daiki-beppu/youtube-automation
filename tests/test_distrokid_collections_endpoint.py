@@ -393,7 +393,6 @@ def serve_dir_dk(tmp_path):
             resolved_allow_origin = _EXTENSION_ORIGIN if capture_root is not None else None
         else:
             resolved_allow_origin = allow_origin
-        playlist_capture = (capture_root, None) if capture_root is not None else None
         server = create_server(
             0,
             resolved_allow_origin,
@@ -401,7 +400,7 @@ def serve_dir_dk(tmp_path):
             collection_dir=None,
             distrokid=dk,
             collections_root=planning,
-            playlist_capture=playlist_capture,
+            capture_root=capture_root,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -1039,7 +1038,7 @@ def test_post_distrokid_releases_single_mode_with_capture_root_preserves_legacy_
         collection_dir=collection_dir,
         distrokid=Distrokid(enabled=True, profile=_profile()),
         collections_root=None,
-        playlist_capture=(capture_root, None),
+        capture_root=capture_root,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
