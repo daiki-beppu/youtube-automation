@@ -37,6 +37,12 @@ export interface PromptEntry {
   vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
+/** Suno clip duration の歩留まり判定閾値（秒）。collection 単位で配信される。 */
+export interface DurationFilter {
+  min_sec?: number;
+  max_sec?: number;
+}
+
 /** collection の状態 (#1216)。サーバーがファイルシステムから動的に判定する。
  * - `needs_prompts`: suno-prompts.json が未作成
  * - `ready`: prompts 存在・ダウンロード未完了
