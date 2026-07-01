@@ -1004,10 +1004,7 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         if not str(channel.get("relationship") or "").strip()
     ]
     if channels_without_relationship:
-        missing.append(
-            "benchmark.channels の relationship 未設定 "
-            f"({', '.join(channels_without_relationship)})"
-        )
+        missing.append(f"benchmark.channels の relationship 未設定 ({', '.join(channels_without_relationship)})")
 
     seed_confirmation = channel_dir / "docs" / "channel" / "ttp-seed-confirmation.md"
     if not seed_confirmation.is_file():
