@@ -138,6 +138,25 @@ def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> No
     )
 
 
+def _write_valid_descriptions_md(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "## タイトル案\n"
+        "```\n"
+        "Title\n"
+        "```\n"
+        "## Complete Collection 概要欄\n"
+        "```\n"
+        "Body\n"
+        "```\n"
+        "## タグ（YouTube タグ欄）\n"
+        "```\n"
+        "tag\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+
 def _write_complete_ttp_artifacts(base: Path) -> Path:
     _write_benchmark_channels(base)
     data_dir = base / "data"
@@ -711,6 +730,21 @@ class TestCheckInitialSetupReadiness:
         assert "reference_images.default" in r.message
         assert "composition_rules" in r.message
 
+    def test_channel_dir_env_restored_after_success(self, tmp_path, monkeypatch):
+        original = str(tmp_path / "original")
+        monkeypatch.setenv("CHANNEL_DIR", original)
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert os.environ.get("CHANNEL_DIR") == original
+
+    def test_channel_dir_env_deleted_when_originally_absent(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CHANNEL_DIR", raising=False)
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert "CHANNEL_DIR" not in os.environ
+
     def test_warns_for_broken_skill_yaml(self, tmp_path):
         skills_dir = tmp_path / "config" / "skills"
         skills_dir.mkdir(parents=True)
@@ -720,6 +754,17 @@ class TestCheckInitialSetupReadiness:
 
         assert r.status == "warn"
         assert "config/skills/thumbnail.yaml 読み込み失敗" in r.message
+
+    def test_channel_dir_env_restored_after_broken_skill_yaml(self, tmp_path, monkeypatch):
+        original = str(tmp_path / "original")
+        monkeypatch.setenv("CHANNEL_DIR", original)
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text("image_generation: [broken\n", encoding="utf-8")
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert os.environ.get("CHANNEL_DIR") == original
 
     def test_warns_for_thumbnail_suno_and_descriptions_md_issues(self, tmp_path):
         skills_dir = tmp_path / "config" / "skills"
@@ -780,7 +825,7 @@ class TestCheckInitialSetupReadiness:
         assert "/video-description" in r.next_action["instructions"]
 
     def test_valid_initial_setup_is_ok(self, tmp_path):
-        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
         ref.parent.mkdir(parents=True)
         ref.write_bytes(b"jpg")
         skills_dir = tmp_path / "config" / "skills"
@@ -793,7 +838,7 @@ class TestCheckInitialSetupReadiness:
                     "    generation_mode: single_step",
                     "    reference_images:",
                     "      default:",
-                    "        - data/thumbnail_compare/benchmark/alpha.jpg",
+                    "        - data/thumbnail_compare/benchmark/alpha/alpha.jpg",
                     "      path_base: channel_dir",
                     "    composition_rules:",
                     '      environment: "desk"',
@@ -807,6 +852,8 @@ class TestCheckInitialSetupReadiness:
             encoding="utf-8",
         )
         (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz, soft piano"\n', encoding="utf-8")
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        _write_valid_descriptions_md(desc)
 
         r = doctor.check_initial_setup_readiness(tmp_path)
 

@@ -15,8 +15,10 @@ from youtube_automation.utils.descriptions_md import (
     extract_descriptions_md_section,
     missing_descriptions_md_headings,
 )
+from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.thumbnail_references import (
     is_placeholder_reference_value,
+    plan_ttp_reference_assignments,
     resolve_configured_benchmark_references,
 )
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
@@ -91,10 +93,6 @@ def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | No
 def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, object]) -> list[str]:
     """thumbnail skill-config の初期セットアップ漏れを検出する."""
     image_generation = _as_mapping(thumbnail_cfg.get("image_generation"))
-    provider = str(image_generation.get("provider") or "gemini").strip()
-    if provider and provider != "gemini":
-        return []
-
     gemini = _as_mapping(image_generation.get("gemini"))
     generation_mode = str(gemini.get("generation_mode") or "single_step").strip()
     if generation_mode != "single_step":
@@ -103,16 +101,20 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
     issues: list[str] = []
     single_step = _as_mapping(gemini.get("single_step"))
     max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
+    rotate = _bool(single_step.get("rotate"), default=True)
     reference_images = _as_mapping(gemini.get("reference_images"))
     resolved_refs = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
-    if resolved_refs.placeholders or not resolved_refs.references:
+    has_reference_count_issue = False
+    missing_refs: list[str] = []
+    if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
         issues.append(
             "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
             "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
         )
-    else:
+    elif resolved_refs.references:
         unique_refs = list(dict.fromkeys(resolved_refs.references))
         if len(unique_refs) < max_attempts:
+            has_reference_count_issue = True
             issues.append(
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
                 f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
@@ -132,6 +134,20 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
             "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
             f"の参照パスが不正です: {sample}{suffix}"
         )
+    if resolved_refs.references and not (missing_refs or resolved_refs.invalid_reasons or has_reference_count_issue):
+        benchmark_root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+        try:
+            plan_ttp_reference_assignments(
+                resolved_refs.references,
+                max_attempts,
+                rotate,
+                benchmark_root=benchmark_root,
+            )
+        except ConfigError as exc:
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                f"が single_step TTP 生成契約を満たしていません: {exc}"
+            )
 
     composition_rules = _as_mapping(gemini.get("composition_rules"))
     missing_composition = [
@@ -339,6 +355,10 @@ def _positive_int(value: object, *, default: int) -> int:
     if isinstance(value, int) and value > 0:
         return value
     return default
+
+
+def _bool(value: object, *, default: bool) -> bool:
+    return value if isinstance(value, bool) else default
 
 
 def _is_placeholder(value: object) -> bool:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -122,6 +124,55 @@ class TestCheckChapterVariationSuffix:
         ]
         assert check_chapter_variation_suffix(lines) is None
 
+    def test_v_suffix_detected(self) -> None:
+        lines = [
+            "00:00 Pattern A v1",
+            "10:00 Pattern A v2",
+            "20:00 Pattern A v3",
+        ]
+        msg = check_chapter_variation_suffix(lines)
+        assert msg is not None
+        assert "3 lines" in msg
+
+    def test_roman_suffix_detected(self) -> None:
+        lines = [
+            "00:00 Pattern I",
+            "10:00 Pattern II",
+            "20:00 Pattern III",
+            "30:00 Pattern VIII",
+        ]
+        msg = check_chapter_variation_suffix(lines)
+        assert msg is not None
+        assert "4 lines" in msg
+
+    def test_mixed_per_track_with_one_variation_detected(self) -> None:
+        # ほとんど per-track でも 1 件でも v 末尾が混じれば検出
+        lines = [
+            "00:00 After the Last Visitor",
+            "06:45 Rainy Studio Loop",
+            "13:20 Pattern v1",
+        ]
+        msg = check_chapter_variation_suffix(lines)
+        assert msg is not None
+        assert "1 lines" in msg
+
+    def test_word_ending_in_v_not_detected(self) -> None:
+        # 単語末尾の v は単独の v[1-9] パターンには合致しないため誤検知しない
+        lines = [
+            "00:00 Cinematic Move",
+            "10:00 Smooth Groove",
+        ]
+        assert check_chapter_variation_suffix(lines) is None
+
+    def test_track_titles_with_capital_letters_not_detected(self) -> None:
+        # 末尾が普通の単語末尾なら通過すること（誤検知防止のサンプル）
+        lines = [
+            "00:00 After Midnight",
+            "10:00 Empty Gallery",
+            "20:00 Last Train Home",
+        ]
+        assert check_chapter_variation_suffix(lines) is None
+
 
 class TestInitialSetupChecks:
     def test_suno_genre_line_over_style_limit_warns(self) -> None:
@@ -180,14 +231,14 @@ class TestInitialSetupChecks:
         assert any("reference_images.default" in issue and "TBD" in issue for issue in issues)
 
     def test_thumbnail_config_detects_unexpanded_template_composition(self, tmp_path: Path) -> None:
-        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
         ref.parent.mkdir(parents=True)
         ref.write_bytes(b"jpg")
         cfg = {
             "image_generation": {
                 "gemini": {
                     "generation_mode": "single_step",
-                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha.jpg"]},
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
                     "composition_rules": {
                         "environment": "{{ENVIRONMENT}}",
                         "character_size": "medium",
@@ -228,7 +279,7 @@ class TestInitialSetupChecks:
         assert "存在しない参照画像" in issues[0]
 
     def test_thumbnail_config_detects_refs_below_max_attempts(self, tmp_path: Path) -> None:
-        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
         ref.parent.mkdir(parents=True)
         ref.write_bytes(b"jpg")
         cfg = {
@@ -236,7 +287,7 @@ class TestInitialSetupChecks:
                 "gemini": {
                     "generation_mode": "single_step",
                     "single_step": {"max_attempts": 2},
-                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha.jpg"]},
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
                     "composition_rules": {
                         "environment": "desk",
                         "character_size": "medium",
@@ -256,29 +307,138 @@ class TestInitialSetupChecks:
         assert "max_attempts=2" in issues[0]
         assert "unique_references=1" in issues[0]
 
-    def test_thumbnail_config_valid_setup_passes(self, tmp_path: Path) -> None:
-        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
-        ref.parent.mkdir(parents=True)
-        ref.write_bytes(b"jpg")
+    def test_thumbnail_config_detects_provider_codex_setup_issues(self, tmp_path: Path) -> None:
         cfg = {
             "image_generation": {
+                "provider": "codex",
                 "gemini": {
                     "generation_mode": "single_step",
-                    "single_step": {"max_attempts": 1},
-                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha.jpg"]},
+                    "reference_images": {"default": []},
                     "composition_rules": {
-                        "environment": "desk",
-                        "character_size": "medium",
-                        "character_pose": "sitting",
-                        "allowed_actions": "reading",
-                        "ng_actions": "no text",
-                        "background": "warm room",
+                        "environment": "TBD",
+                        "character_size": "TBD",
+                        "character_pose": "TBD",
+                        "allowed_actions": "TBD",
+                        "ng_actions": "TBD",
+                        "background": "TBD",
                     },
-                }
+                },
             }
         }
 
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("reference_images.default" in issue for issue in issues)
+        assert any("composition_rules" in issue for issue in issues)
+
+    def test_thumbnail_config_detects_rotate_false_with_multiple_attempts(self, tmp_path: Path) -> None:
+        refs = [
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg",
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "b.jpg",
+        ]
+        for ref in refs:
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {
+                "single_step": {"max_attempts": 2, "rotate": False},
+                "reference_images": {
+                    "default": [
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/alpha/b.jpg",
+                    ]
+                },
+            }
+        )
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "single_step TTP 生成契約" in issues[0]
+        assert "--no-rotate" in issues[0]
+
+    def test_thumbnail_config_detects_duplicate_refs_in_selected_attempts(self, tmp_path: Path) -> None:
+        refs = [
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg",
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "b.jpg",
+        ]
+        for ref in refs:
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {
+                "single_step": {"max_attempts": 2, "rotate": True},
+                "reference_images": {
+                    "default": [
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/alpha/b.jpg",
+                    ]
+                },
+            }
+        )
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "同一参照画像" in issues[0]
+
+    def test_thumbnail_config_detects_mixed_benchmark_channels(self, tmp_path: Path) -> None:
+        refs = [
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg",
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "beta" / "b.jpg",
+        ]
+        for ref in refs:
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {
+                "single_step": {"max_attempts": 2, "rotate": True},
+                "reference_images": {
+                    "default": [
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/beta/b.jpg",
+                    ]
+                },
+            }
+        )
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "同じベンチマークチャンネル" in issues[0]
+
+    def test_thumbnail_config_detects_symlink_escape(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside.jpg"
+        outside.write_bytes(b"jpg")
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg"
+        ref.parent.mkdir(parents=True)
+        try:
+            ref.symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+        cfg = _valid_thumbnail_cfg({"reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/a.jpg"]}})
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "参照パスが不正" in issues[0]
+
+    def test_thumbnail_config_valid_setup_passes(self, tmp_path: Path) -> None:
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {"reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]}}
+        )
+
         assert check_thumbnail_skill_config(tmp_path, cfg) == []
+
+    def test_descriptions_md_parseability_accepts_valid_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        _write_valid_descriptions_md(p)
+
+        assert check_descriptions_md_parseability(p) is None
 
     def test_descriptions_md_parseability_detects_heading_body_annotation(self, tmp_path: Path) -> None:
         p = tmp_path / "descriptions.md"
@@ -305,54 +465,43 @@ class TestInitialSetupChecks:
         assert "descriptions.md parse failed" in msg
         assert "タイトル案" in msg
 
-    def test_v_suffix_detected(self) -> None:
-        lines = [
-            "00:00 Pattern A v1",
-            "10:00 Pattern A v2",
-            "20:00 Pattern A v3",
-        ]
-        msg = check_chapter_variation_suffix(lines)
-        assert msg is not None
-        assert "3 lines" in msg
 
-    def test_roman_suffix_detected(self) -> None:
-        lines = [
-            "00:00 Pattern I",
-            "10:00 Pattern II",
-            "20:00 Pattern III",
-            "30:00 Pattern VIII",
-        ]
-        msg = check_chapter_variation_suffix(lines)
-        assert msg is not None
-        assert "4 lines" in msg
+def _valid_thumbnail_cfg(overrides: dict[str, object] | None = None) -> dict[str, object]:
+    gemini: dict[str, object] = {
+        "generation_mode": "single_step",
+        "single_step": {"max_attempts": 1, "rotate": True},
+        "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
+        "composition_rules": {
+            "environment": "desk",
+            "character_size": "medium",
+            "character_pose": "sitting",
+            "allowed_actions": "reading",
+            "ng_actions": "no text",
+            "background": "warm room",
+        },
+    }
+    if overrides:
+        gemini.update(overrides)
+    return {"image_generation": {"gemini": gemini}}
 
-    def test_mixed_per_track_with_one_variation_detected(self) -> None:
-        # ほとんど per-track でも 1 件でも v 末尾が混じれば検出
-        lines = [
-            "00:00 After the Last Visitor",
-            "06:45 Rainy Studio Loop",
-            "13:20 Pattern v1",
-        ]
-        msg = check_chapter_variation_suffix(lines)
-        assert msg is not None
-        assert "1 lines" in msg
 
-    def test_word_ending_in_v_not_detected(self) -> None:
-        # 単語末尾の v は単独の v[1-9] パターンには合致しないため誤検知しない
-        lines = [
-            "00:00 Cinematic Move",
-            "10:00 Smooth Groove",
-        ]
-        assert check_chapter_variation_suffix(lines) is None
-
-    def test_track_titles_with_capital_letters_not_detected(self) -> None:
-        # 末尾が普通の単語末尾なら通過すること（誤検知防止のサンプル）
-        lines = [
-            "00:00 After Midnight",
-            "10:00 Empty Gallery",
-            "20:00 Last Train Home",
-        ]
-        assert check_chapter_variation_suffix(lines) is None
+def _write_valid_descriptions_md(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "## タイトル案\n"
+        "```\n"
+        "Title\n"
+        "```\n"
+        "## Complete Collection 概要欄\n"
+        "```\n"
+        "Body\n"
+        "```\n"
+        "## タグ（YouTube タグ欄）\n"
+        "```\n"
+        "tag\n"
+        "```\n",
+        encoding="utf-8",
+    )
 
 
 class TestCheckRequiredLocalizationLanguages:
