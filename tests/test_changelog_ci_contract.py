@@ -17,8 +17,8 @@ _PATH_FILTER_PATTERN = (
     "^(src/youtube_automation/|\\.claude/skills/|\\.claude/CLAUDE\\.template\\.md$"
     "|pyproject\\.toml$|packages/|package\\.json$)"
 )
-# CI トリガーで CI を回す対象 branch。#790 cutover で feat/ts-rewrite を外す。
-_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite", "feat/1143-suno-bulk-download"]
+# push で CI を回す対象 branch。PR は stacked PR base でも発火するよう branch 制限しない。
+_PUSH_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite", "feat/1143-suno-bulk-download"]
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
@@ -116,8 +116,8 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
     )
 
 
-def test_ci_workflow_triggers_run_on_feat_ts_rewrite_branch() -> None:
-    """#964: feat/ts-rewrite base の子 PR / push でも CI が走る必要がある。
+def test_ci_workflow_keeps_push_branch_allowlist() -> None:
+    """#964: feat/ts-rewrite branch への push でも CI が走る必要がある。
 
     #790 cutover で feat/ts-rewrite を branches から外したら本テストも更新する。
     """
@@ -126,9 +126,20 @@ def test_ci_workflow_triggers_run_on_feat_ts_rewrite_branch() -> None:
     triggers = workflow.get("on", workflow.get(True))
     assert isinstance(triggers, dict), "on トリガーが存在しない"
 
-    for event in ("push", "pull_request"):
-        branches = triggers.get(event, {}).get("branches")
-        assert branches == _TRIGGER_BRANCHES, f"{event} の branches が契約と不一致: {branches}"
+    push = triggers.get("push")
+    assert isinstance(push, dict), "push トリガーが存在しない"
+    assert push.get("branches") == _PUSH_TRIGGER_BRANCHES
+
+
+def test_ci_workflow_pull_requests_allow_stacked_pr_base_branches() -> None:
+    """stacked PR の base branch を allowlist で遮断しない。"""
+    workflow = _load_ci_workflow()
+    triggers = workflow.get("on", workflow.get(True))
+    assert isinstance(triggers, dict), "on トリガーが存在しない"
+
+    pull_request = triggers.get("pull_request")
+    assert isinstance(pull_request, dict), "pull_request トリガーが存在しない"
+    assert "branches" not in pull_request
 
 
 def test_ci_changelog_gate_covers_ts_packages() -> None:
