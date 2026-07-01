@@ -28,13 +28,17 @@ interface BridgeMessage {
 function isObservedClipArray(value: unknown): value is ObservedClip[] {
   return (
     Array.isArray(value) &&
-    value.every(
-      (item) =>
-        typeof item === "object" &&
-        item !== null &&
+    value.every((item) => {
+      if (typeof item !== "object" || item === null) {
+        return false;
+      }
+      const duration = (item as { duration?: unknown }).duration;
+      return (
         typeof (item as { id?: unknown }).id === "string" &&
-        typeof (item as { status?: unknown }).status === "string",
-    )
+        typeof (item as { status?: unknown }).status === "string" &&
+        (duration === undefined || (typeof duration === "number" && Number.isFinite(duration)))
+      );
+    })
   );
 }
 

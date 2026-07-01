@@ -81,10 +81,15 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
       typeof (item as { id?: unknown }).id === "string" &&
       typeof (item as { status?: unknown }).status === "string"
     ) {
-      clips.push({
+      const duration = (item as { metadata?: { duration?: unknown } }).metadata?.duration;
+      const clip: ObservedClip = {
         id: (item as { id: string }).id,
         status: (item as { status: string }).status,
-      });
+      };
+      if (typeof duration === "number" && Number.isFinite(duration)) {
+        clip.duration = duration;
+      }
+      clips.push(clip);
     }
   }
   return clips.length > 0 ? clips : null;
@@ -103,7 +108,7 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
 }
 
 /**
- * feed レスポンス（GET /api/feed/v2?ids=...）から clip status を取り出す。
+ * feed レスポンス（GET /api/feed/v2?ids=... / POST /api/feed/v3）から clip status を取り出す。
  * 形は `{ clips: [...] }` と素の配列の両方を観測しているため両対応する。
  * 形が崩れていたら null（fail-soft）。
  */
