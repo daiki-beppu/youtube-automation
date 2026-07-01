@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
+- `docs(channel-new)`: `/channel-new` 完了時に `git status --porcelain` で未コミット変更を確認し、初回 commit 作成または明確な保存手順を案内する完了ゲートを追加。`/automation-update` の dirty worktree 停止時にも `/channel-new` 直後の初回保存未完了を案内するよう更新（#1329）
 
 ### Fixed
 
@@ -17,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(launch-curve)`: `yt-launch-curve` で日次データに `impressions` / `impression_ctr` が無い場合も `daily_impressions=0` / `ctr` unavailable として扱い、初期チャンネルの欠損データで落ちないようにした（#1327）
 - `fix(skills)`: `config.default.yaml` を持つ skill の SKILL.md に設定読み込みゲートを追加し、チャンネル override の読み飛ばしを防ぐ契約テストを追加（#1243）
 - `fix(distrokid)`: `distrokid.profile.artist` を release payload に含め、distrokid-helper が `bandname` と Apple Music credits の performer / producer 名へ反映できるようにした（#1211）
+
+### Migration
+
+所要時間の目安: 0〜2 分
+
+local fix 衝突注意:
+- channel-new, automation-update: 下流で該当 skill を手書き調整している場合は `yt-skills diff` で差分確認が必要。
+
+サマリ:
+
+- 新規チャンネルセットアップ完了時に未コミット変更を残したまま後続の `/automation-update` へ進まないよう、初回保存手順を skill に明記した。
 
 ## [5.5.14] - 2026-06-30
 

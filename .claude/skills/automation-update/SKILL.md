@@ -91,7 +91,8 @@ git status --porcelain
 > 作業ツリーに未コミットの変更があります:
 >   <git status --porcelain の出力>
 >
-> stash / commit / 破棄 のいずれかで clean にしてから "done" と返してください。
+> /channel-new 直後の初回保存が未完了なら、まず初回 commit を作成してください。
+> それ以外の差分は stash / commit / 破棄 のいずれかで clean にしてから "done" と返してください。
 ```
 
 ### Step 1-2. 自リポの pin 形式を判定

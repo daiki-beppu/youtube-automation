@@ -274,10 +274,43 @@ uv run yt-channel-settings push --apply
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` で初期化する。初回動画の追加は `/video-upload` 内部の自動 assign に任せる |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
 
-最後に案内する:
+### Step 10: 初回保存と automation-update 前の整理
+
+`/channel-new` 完了直後は、`/setup` と本スキルで生成したファイルが未コミットのまま残りやすい。後続の `/automation-update` は dirty worktree で停止するため、最後に必ず git 状態を確認する。
+
+```bash
+git status --porcelain
+```
+
+出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。
+
+出力が非空の場合は、差分をユーザーに見せたうえで初回 commit を作成する。シークレットを混入させないため、staged files 全体を commit 前 guard で確認してから commit する。
+ignore 済み `.env` は exclude pathspec 付き `git add` でも Git が exit 1 になり得るため、`git add -A` 後の guard を唯一の安全境界にする。guard が失敗した場合は staged secret を自動で外して停止し、`git commit` へ進まない。
+
+```bash
+git status --short
+git add -A
+git diff --cached --name-only
+bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1
+git commit -m "chore: 初回チャンネル設定を保存"
+git status --porcelain
+```
+
+guard が `secret-like file staged; unstaged before commit` を出した場合は commit しない。該当ファイルは staged から外れているため、`.gitignore` を確認してからやり直す。
+
+`gh repo create` や remote 作成を保留している、git user identity 未設定で commit できない、またはユーザーが今 commit しない判断をした場合は、保存未完了として次の手順を明確に案内して終了する:
 
 ```text
-チャンネル初期化が完了しました。次は /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。
+未コミット変更が残っています。/automation-update の前に以下を完了してください:
+  1. git status --short で差分を確認
+  2. .env / auth/client_secrets.json / auth/token*.json が staged されていないことを確認
+  3. git commit -m "chore: 初回チャンネル設定を保存"
+```
+
+保存未完了として終了した場合は、以下の成功案内は出さない。作業ツリーが最初から clean、または初回 commit が成功した場合だけ最後に案内する:
+
+```text
+チャンネル初期化が完了しました。初回保存も完了しているため、次は /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。
 ```
 
 ## 障害時ガイダンス
