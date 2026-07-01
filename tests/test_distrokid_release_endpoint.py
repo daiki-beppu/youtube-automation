@@ -225,6 +225,16 @@ def test_resolve_asset_path_rejects_absolute_path(tmp_path):
     assert resolve_asset_path(collection, "/etc/passwd") is None
 
 
+def test_resolve_asset_path_rejects_nul_path(tmp_path):
+    """Given NUL 文字を含むパス
+    When resolve_asset_path を呼ぶ
+    Then 不正 path として None。
+    """
+    collection = _make_collection(tmp_path)
+
+    assert resolve_asset_path(collection, "02-Individual-music/bad\x00.mp3") is None
+
+
 def test_resolve_asset_path_missing_file_returns_none(tmp_path):
     """Given コレクション配下だが不在のパス
     When resolve_asset_path を呼ぶ
@@ -347,6 +357,40 @@ def test_get_distrokid_asset_decodes_percent_encoded_relpath(serve, tmp_path):
         assert resp.status == 200
         assert resp.headers.get("Content-Type") == "audio/mpeg"
         assert resp.read() == _MP3_BYTES
+
+
+@pytest.mark.parametrize(
+    ("encoded_relpath", "outside_filename"),
+    [
+        (urllib.parse.quote("../secret.mp3", safe=""), "secret.mp3"),
+        (None, "absolute-secret.mp3"),
+        (urllib.parse.quote("02-Individual-music/bad\x00.mp3", safe="/"), None),
+    ],
+)
+def test_get_distrokid_asset_rejects_decoded_invalid_relpath(
+    serve,
+    tmp_path,
+    encoded_relpath,
+    outside_filename,
+):
+    """Given decode 後に traversal / absolute / NUL になる asset URL
+    When `GET /distrokid/assets/<rel>` を呼ぶ
+    Then 外部ファイルや不正 path は 404。
+    """
+    collection = _make_collection(tmp_path)
+    if outside_filename is not None:
+        outside = tmp_path / outside_filename
+        outside.write_bytes(b"secret")
+        if encoded_relpath is None:
+            encoded_relpath = urllib.parse.quote(str(outside), safe="")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    base = serve(collection_dir=collection, distrokid=distrokid)
+
+    req = urllib.request.Request(f"{base}{DISTROKID_ASSETS_PREFIX}{encoded_relpath}")
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
 
 
 def test_get_distrokid_asset_missing_returns_404(serve, tmp_path):
