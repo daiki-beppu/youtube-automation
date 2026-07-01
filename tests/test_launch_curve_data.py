@@ -89,14 +89,20 @@ def test_build_launch_curve_frame_handles_missing_impressions_and_ctr_columns():
     assert list(df["cumulative_views"]) == [10, 30]
 
 
-def test_launch_curve_latest_handles_missing_impressions_and_ctr_columns(tmp_path, monkeypatch, capsys):
+def test_launch_curve_latest_png_handles_mixed_missing_impressions_and_ctr(tmp_path, monkeypatch, capsys):
     daily_dir = tmp_path / "data" / "analytics" / "daily_per_video"
     daily_dir.mkdir(parents=True)
     with open(daily_dir / "2026-04-02.json", "w", encoding="utf-8") as f:
         json.dump(
             {
                 "rows": [
-                    {"video_id": "v1", "date": "2026-04-01", "views": 10},
+                    {
+                        "video_id": "v1",
+                        "date": "2026-04-01",
+                        "views": 10,
+                        "impressions": 100,
+                        "impression_ctr": 2.5,
+                    },
                     {"video_id": "v2", "date": "2026-04-02", "views": 20},
                 ]
             },
@@ -115,7 +121,8 @@ def test_launch_curve_latest_handles_missing_impressions_and_ctr_columns(tmp_pat
         )
 
     monkeypatch.setattr(launch_curve, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-launch-curve", "--latest"])
+    monkeypatch.setattr(sys, "argv", ["yt-launch-curve", "--latest", "--png"])
+    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "matplotlib"))
 
     assert launch_curve.main() == 0
     payload = json.loads(capsys.readouterr().out)
@@ -123,7 +130,9 @@ def test_launch_curve_latest_handles_missing_impressions_and_ctr_columns(tmp_pat
     assert payload["target"]["video_id"] == "v2"
     assert payload["target"]["trace"][0]["daily_impressions"] == 0
     assert payload["target"]["trace"][0]["ctr"] is None
-    assert payload["all_videos"][0]["latest_ctr"] is None
+    older = next(video for video in payload["all_videos"] if video["video_id"] == "v1")
+    assert older["latest_ctr"] == 2.5
+    assert Path(payload["png_path"]).exists()
 
 
 def test_build_launch_curve_frame_merges_reporting_snapshot():
