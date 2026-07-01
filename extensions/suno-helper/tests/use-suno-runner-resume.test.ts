@@ -16,7 +16,12 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { buildFailedEntriesRunOverrides, buildResumeRunOverrides, buildRunPayload } from "../lib/run-overrides";
+import {
+  buildFailedEntriesRunOverrides,
+  buildResumeRunOverrides,
+  buildRunPayload,
+  buildSelectedEntriesRunOverrides,
+} from "../lib/run-overrides";
 import { resolveRunRange, resumeBannerRange, resumeRunRange } from "../lib/resume-state";
 import type { ResumeBanner } from "../lib/resume-state";
 
@@ -256,6 +261,36 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       submittedClipIds: ["clip-a", "clip-c"],
       playlistExpectedClipCount: 2,
     });
+  });
+
+  it("Given 全 entry が選択済み When selection overrides を構築する Then indices を省略して全実行扱いにする", () => {
+    expect(
+      buildSelectedEntriesRunOverrides({
+        selectedEntries: [true, true, true],
+        itemStates: ["idle", "idle", "idle"],
+        entryCount: 3,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("Given 一部 entry が未選択 When selection overrides を構築する Then 選択済み 0-based indices を返す", () => {
+    expect(
+      buildSelectedEntriesRunOverrides({
+        selectedEntries: [true, false, true, false],
+        itemStates: ["idle", "idle", "idle", "idle"],
+        entryCount: 4,
+      }),
+    ).toEqual({ indices: [0, 2] });
+  });
+
+  it("Given selection が未初期化で done entry がある When selection overrides を構築する Then done 以外を既定選択にする", () => {
+    expect(
+      buildSelectedEntriesRunOverrides({
+        selectedEntries: [],
+        itemStates: ["idle", "done", "failed"],
+        entryCount: 3,
+      }),
+    ).toEqual({ indices: [0, 2] });
   });
 
   it("Given 旧 ResumeState に期待件数が無い When useSunoRunner を読む Then total から期待件数を復元して渡す", () => {

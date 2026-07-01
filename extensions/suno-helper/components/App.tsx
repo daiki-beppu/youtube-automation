@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
-import { PatternList } from "./PatternList";
+import { PatternList, reconcilePatternSelection } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -11,6 +12,7 @@ const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
+  const [selectedEntries, setSelectedEntries] = useState<boolean[]>([]);
   const {
     url,
     setUrl,
@@ -25,12 +27,6 @@ export function App() {
     canRun,
     isRunning,
     playlistName,
-    rangeMode,
-    setRangeMode,
-    rangeStart,
-    setRangeStart,
-    rangeEnd,
-    setRangeEnd,
     speedPresetId,
     setSpeedPreset,
     resumeBanner,
@@ -45,6 +41,8 @@ export function App() {
     run,
     stop,
   } = useSunoRunner();
+  const previousEntriesRef = useRef(entries);
+  const previousItemStatesRef = useRef(itemStates);
 
   useEffect(() => {
     let mounted = true;
@@ -61,6 +59,45 @@ export function App() {
   const updateDownloadFormat = (value: DownloadFormat): void => {
     setDownloadFormat(value);
     void downloadFormatItem.setValue(value);
+  };
+
+  useEffect(() => {
+    setSelectedEntries((selection) =>
+      reconcilePatternSelection({
+        selection,
+        previousEntries: previousEntriesRef.current,
+        previousItemStates: previousItemStatesRef.current,
+        entries,
+        itemStates,
+      }),
+    );
+    previousEntriesRef.current = entries;
+    previousItemStatesRef.current = itemStates;
+  }, [entries, itemStates]);
+
+  const toggleEntrySelection = (index: number, checked: boolean): void => {
+    setSelectedEntries((selection) => selection.map((selected, i) => (i === index ? checked : selected)));
+  };
+
+  const selectedEntryCount = entries.reduce((count, _, index) => {
+    return count + ((selectedEntries[index] ?? (itemStates[index] ?? "idle") !== "done") ? 1 : 0);
+  }, 0);
+  const canRunSelectedEntries = canRun && selectedEntryCount > 0;
+  const runButtonLabel =
+    entries.length > 0 && selectedEntryCount === 0
+      ? "実行対象を選択"
+      : entries.length > 0 && selectedEntryCount < entries.length
+        ? `選択した${selectedEntryCount}件を連続実行`
+        : "全パターンを連続実行";
+
+  const runSelectedEntries = (): void => {
+    void run(
+      buildSelectedEntriesRunOverrides({
+        selectedEntries,
+        itemStates,
+        entryCount: entries.length,
+      }),
+    );
   };
 
   return (
@@ -156,46 +193,6 @@ export function App() {
       )}
 
       <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">実行範囲</legend>
-        <label className="flex items-center gap-2">
-          <input type="radio" name="range-mode" checked={rangeMode === "all"} onChange={() => setRangeMode("all")} />
-          全パターン
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
-            name="range-mode"
-            checked={rangeMode === "range"}
-            onChange={() => setRangeMode("range")}
-          />
-          範囲指定
-        </label>
-        {rangeMode === "range" && (
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={1}
-              value={rangeStart}
-              onChange={(e) => setRangeStart(e.target.value)}
-              placeholder="開始"
-              aria-label="開始 entry"
-              className="w-20 rounded border border-gray-300 px-2 py-1"
-            />
-            <span className="text-gray-500">〜</span>
-            <input
-              type="number"
-              min={1}
-              value={rangeEnd}
-              onChange={(e) => setRangeEnd(e.target.value)}
-              placeholder="終了 (省略可)"
-              aria-label="終了 entry"
-              className="w-28 rounded border border-gray-300 px-2 py-1"
-            />
-          </div>
-        )}
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
         <legend className="px-1 text-xs text-gray-600">実行モード</legend>
         {SPEED_PRESET_ORDER.map((id) => {
           const preset = SPEED_PRESETS[id];
@@ -242,11 +239,11 @@ export function App() {
         </button>
         <button
           type="button"
-          onClick={() => void run()}
-          disabled={!canRun}
+          onClick={runSelectedEntries}
+          disabled={!canRunSelectedEntries}
           className="flex-1 rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-500 disabled:opacity-40"
         >
-          {rangeMode === "range" ? "範囲を連続実行" : "全パターンを連続実行"}
+          {runButtonLabel}
         </button>
         <button
           type="button"
@@ -287,7 +284,12 @@ export function App() {
         </div>
       )}
 
-      <PatternList entries={entries} itemStates={itemStates} />
+      <PatternList
+        entries={entries}
+        itemStates={itemStates}
+        selectedEntries={selectedEntries}
+        onToggleEntry={toggleEntrySelection}
+      />
 
       {status && (
         <p className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}>{status}</p>

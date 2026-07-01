@@ -20,8 +20,6 @@ import {
   resolvePlaylistExpectedClipCountForResume,
   type ResumeBanner,
   type ResumeState,
-  resolveRunRange,
-  resumeBannerRange,
   shouldShowResumeBanner,
   writeResumeState,
 } from "../lib/resume-state";
@@ -34,9 +32,6 @@ import {
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
-
-/** 実行範囲モード (#872)。all=全パターン / range=範囲指定。 */
-export type RangeMode = "all" | "range";
 
 interface RunnerState {
   url: string;
@@ -53,13 +48,6 @@ interface RunnerState {
   isRunning: boolean;
   // collection 選択時の playlist 名 (#854)。display only（単一ファイル mode は undefined）。
   playlistName: string | undefined;
-  // 実行範囲 UI の状態 (#872)。range モード時のみ start/end を使う。
-  rangeMode: RangeMode;
-  setRangeMode: (mode: RangeMode) => void;
-  rangeStart: string;
-  setRangeStart: (value: string) => void;
-  rangeEnd: string;
-  setRangeEnd: (value: string) => void;
   // 速度プリセット (#875)。実行モード selector の選択値。永続化は setSpeedPreset 内で行う。
   speedPresetId: SpeedPresetId;
   setSpeedPreset: (id: SpeedPresetId) => void;
@@ -76,7 +64,7 @@ interface RunnerState {
   retryDownload: () => Promise<void>;
   adoptSelectedClips: () => Promise<void>;
   fetchData: () => Promise<void>;
-  // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
+  // overrides.range があればそれを使う (#892 要件6)。
   // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
   run: (overrides?: RunOverrides) => Promise<void>;
   stop: () => Promise<void>;
@@ -118,10 +106,6 @@ export function useSunoRunner(): RunnerState {
   const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
     undefined,
   );
-  // 実行範囲 UI の状態 (#872)。rangeStart/rangeEnd は入力欄の生文字列（1-based 表示）。
-  const [rangeMode, setRangeMode] = useState<RangeMode>("all");
-  const [rangeStart, setRangeStart] = useState("");
-  const [rangeEnd, setRangeEnd] = useState("");
   // 速度プリセット (#875)。マウント時に storage から復元し、選択時に永続化する。初期値は既定 (Balanced)。
   const [speedPresetId, setSpeedPresetId] = useState<SpeedPresetId>(DEFAULT_SPEED_PRESET_ID);
   // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
@@ -447,21 +431,6 @@ export function useSunoRunner(): RunnerState {
       if (entries.length === 0) {
         return;
       }
-      // overrides.range（1-click 自動再開）があればそれを優先する (#892 要件6)。
-      // 無ければ range UI の状態から解決する（従来挙動）。range モードの 1-based 入力は
-      // 0-based inclusive へ変換し、不正入力は resolveRunRange が throw → fail-loud で UI に出す。
-      let range = overrides?.range;
-      if (range === undefined && overrides?.indices === undefined && rangeMode === "range") {
-        try {
-          const start = Number(rangeStart);
-          const end = rangeEnd.trim() === "" ? undefined : Number(rangeEnd);
-          range = resolveRunRange(start, end, entries.length);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          report(message, true);
-          return;
-        }
-      }
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setIsRunning(true);
       try {
@@ -473,7 +442,7 @@ export function useSunoRunner(): RunnerState {
           buildRunPayload({
             entries,
             playlistName: derivedPlaylistName,
-            range,
+            range: overrides?.range,
             collectionId: selectedCollectionId,
             overrides,
           }),
@@ -486,7 +455,7 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, rangeMode, rangeStart, rangeEnd, derivedPlaylistName, selectedCollectionId, report],
+    [isRunning, entries, derivedPlaylistName, selectedCollectionId, report],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
@@ -555,10 +524,6 @@ export function useSunoRunner(): RunnerState {
       void retryPlaylist();
       return;
     }
-    const prefilled = resumeBannerRange(resumeBanner);
-    setRangeMode("range");
-    setRangeStart(String(prefilled.start));
-    setRangeEnd(String(prefilled.end));
     setResumeDismissed(true);
     void run(
       buildResumeRunOverrides(resumeBanner, {
@@ -709,12 +674,6 @@ export function useSunoRunner(): RunnerState {
     canRun: entries.length > 0 && !isRunning,
     isRunning,
     playlistName,
-    rangeMode,
-    setRangeMode,
-    rangeStart,
-    setRangeStart,
-    rangeEnd,
-    setRangeEnd,
     speedPresetId,
     setSpeedPreset,
     resumeBanner,
