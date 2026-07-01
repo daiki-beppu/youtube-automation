@@ -60,9 +60,6 @@ async function loadContentScript(overrides?: {
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
       }
-      if (type === "resolvePlaylistUrl") {
-        return Promise.resolve({ url: "https://suno.com/playlist/test" });
-      }
       if (type === "startDownload") {
         return Promise.resolve(overrides?.startDownloadResult ?? { ok: true });
       }
@@ -159,10 +156,6 @@ async function loadContentScript(overrides?: {
       : vi.fn(() => Promise.resolve(["clip-1", "clip-2"])),
     scrollAndMultiSelectByIds: vi.fn((ids: string[]) => Promise.resolve(ids.length)),
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
-  }));
-
-  vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => []),
   }));
 
   vi.doMock("../lib/page-reload", () => ({
@@ -306,18 +299,11 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
       scheduleRunCompleteReloadMock.mock.invocationCallOrder[0],
     );
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-    expect(downloadedPosts).toHaveLength(2);
+    expect(downloadedPosts).toHaveLength(1);
     expect(downloadedPosts[0].payload).toMatchObject({
-      body: {
-        file_count: 0,
-        suno_playlist_url: "https://suno.com/playlist/test",
-      },
-    });
-    expect(downloadedPosts[1].payload).toMatchObject({
       body: {
         file_count: clipIds.length,
         expected_file_count: clipIds.length,
-        suno_playlist_url: "https://suno.com/playlist/test",
         download_path: "/Users/test/Downloads/test-playlist.zip",
       },
     });
@@ -409,7 +395,7 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: clipIds, expectedClipCount: 4 },
+      data: { collectionId: "coll-1", submittedClipIds: clipIds, expectedClipCount: 4 },
     });
 
     // async フロー（scrollAndMultiSelectByIds → performDownload → waitForDownloadComplete）
@@ -435,36 +421,7 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
       body: {
         file_count: 4,
         expected_file_count: 4,
-        suno_playlist_url: "https://suno.com/playlist/test",
         download_path: "/Users/test/Downloads/test-playlist.zip",
-      },
-    });
-  });
-
-  it("Given 保存済み playlist URL 付き When retryDownload Then URL 再解決せず Download all へ進む", async () => {
-    const { handlers, sentMessages } = await loadContentScript();
-
-    const clipIds = ["clip-1", "clip-2"];
-    handlers.get("retryDownload")!({
-      data: {
-        collectionId: "coll-1",
-        playlistName: "test-playlist",
-        sunoPlaylistUrl: "https://suno.com/playlist/saved",
-        submittedClipIds: clipIds,
-        expectedClipCount: 4,
-      },
-    });
-
-    await new Promise((r) => setTimeout(r, 0));
-    handlers.get("downloadComplete")!({
-      data: { filename: "/Users/test/Downloads/test-playlist.zip" },
-    });
-
-    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
-    expect(sentMessages.some((m) => m.type === "resolvePlaylistUrl")).toBe(false);
-    expect(sentMessages.find((m) => m.type === "postDownloaded")?.payload).toMatchObject({
-      body: {
-        suno_playlist_url: "https://suno.com/playlist/saved",
       },
     });
   });
@@ -476,7 +433,7 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: clipIds, expectedClipCount: 4 },
+      data: { collectionId: "coll-1", submittedClipIds: clipIds, expectedClipCount: 4 },
     });
 
     await new Promise((r) => setTimeout(r, 0));
@@ -503,7 +460,7 @@ describe('content onMessage("retryDownload"): payload contract', () => {
 
   it.each([
     ["collectionId 欠落", { collectionId: undefined }, /retryDownload\.collectionId/],
-    ["playlistName 欠落", { playlistName: undefined }, /retryDownload\.playlistName/],
+    ["submittedClipIds 欠落", { submittedClipIds: undefined }, /retryDownload\.submittedClipIds/],
   ] as const)(
     "Given %s payload When retryDownload Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
@@ -514,7 +471,6 @@ describe('content onMessage("retryDownload"): payload contract', () => {
         retryHandler({
           data: {
             collectionId: "coll-1",
-            playlistName: "test-playlist",
             submittedClipIds: ["clip-1"],
             ...override,
           },
@@ -545,12 +501,12 @@ describe('content onMessage("retryDownload"): running ガード', () => {
     // 最初の retryDownload を投入
     const retryHandler = handlers.get("retryDownload")!;
     retryHandler({
-      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
+      data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
     });
 
     // running=true の間に再度呼ぶ → running ガードで即 ok
     const result = retryHandler({
-      data: { collectionId: "coll-2", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
+      data: { collectionId: "coll-2", submittedClipIds: ["clip-1"] },
     });
     expect(result).toEqual({ ok: true });
   });
@@ -571,7 +527,7 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
     });
 
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
+      data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
     });
 
     await vi.waitFor(() =>
@@ -591,7 +547,7 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
     });
 
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
+      data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
     });
 
     await vi.waitFor(() =>
@@ -610,7 +566,7 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
     const { handlers, sentMessages } = await loadContentScript();
 
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: ["clip-1"] },
+      data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
     });
 
     await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
@@ -674,7 +630,7 @@ describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#12
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", playlistName: "test-playlist", submittedClipIds: clipIds },
+      data: { collectionId: "coll-1", submittedClipIds: clipIds },
     });
 
     // async フロー（scrollAndMultiSelectByIds → performDownload → waitForDownloadComplete）

@@ -670,7 +670,7 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
-  it("collection に保存済み playlist URL がある場合は Download 再開 payload に含める", async () => {
+  it("collection に保存済み playlist URL がある場合も Download 再開 payload に含めない", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
@@ -723,7 +723,6 @@ describe("Suno popup compatibility check", () => {
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
       playlistName: "clm | theme-a",
-      sunoPlaylistUrl: "https://suno.com/playlist/saved",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
     });

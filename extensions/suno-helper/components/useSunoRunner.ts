@@ -612,7 +612,6 @@ export function useSunoRunner(): RunnerState {
         playlistName,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount: expectedClipCountForManualAdoption,
-        ...(selectedCollection?.suno_playlist_url ? { sunoPlaylistUrl: selectedCollection.suno_playlist_url } : {}),
       };
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
@@ -624,7 +623,6 @@ export function useSunoRunner(): RunnerState {
   }, [
     isRunning,
     selectedCollectionId,
-    selectedCollection,
     playlistName,
     submittedClipIdsForResume,
     expectedClipCountForManualAdoption,
