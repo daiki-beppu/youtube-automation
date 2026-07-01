@@ -544,6 +544,37 @@ class TestBootstrapChecks:
         assert "旧 onboard skill が残存" in r.message
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
 
+    def test_skills_synced_legacy_distrokid_prep_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["distrokid-helper"])
+        for skill_name in ["distrokid-helper", "distrokid-prep"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 distrokid-prep skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
+    def test_skills_synced_legacy_distrokid_prep_only_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["distrokid-helper"])
+        skill_dir = tmp_path / ".claude" / "skills" / "distrokid-prep"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# distrokid-prep", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 distrokid-prep skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
     def test_skills_synced_reports_missing_bundled_skill(self, tmp_path, monkeypatch):
         monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
         skill_dir = tmp_path / ".claude" / "skills" / "wf-new"

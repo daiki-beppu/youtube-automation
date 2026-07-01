@@ -636,7 +636,7 @@ def create_server(
     distrokid: Distrokid | None,
     collections_root: Path | None = None,
     distrokid_source: str | None = None,
-    playlist_capture: tuple[Path, str] | None = None,
+    playlist_capture: tuple[Path, str | None] | None = None,
 ) -> ThreadingHTTPServer:
     """サブパス分離した GET / POST / CORS preflight を返すサーバーを生成する.
 
@@ -645,7 +645,8 @@ def create_server(
     単一ファイル mode（`/suno/prompts.json` + `/distrokid/*`）。
 
     `playlist_capture=(root, prefix)` 指定時のみ POST `/suno/playlists` を有効化する（#893）。
-    None なら POST は 404。
+    `playlist_capture=(root, None)` は DistroKid release capture のみ有効化し、Suno POST は 404。
+    None なら capture 系 POST は 404。
 
     distrokid が None または `enabled == False` のとき `/distrokid/*` は 404。
     """
@@ -774,8 +775,7 @@ def create_server(
             return self.rfile.read(length) if length else b""
 
         def do_POST(self) -> None:  # noqa: N802
-            # GET と異なり POST は Origin 必須。未設定・不許可は 403。
-            # （チェック順: まず capture root の有無に関わらず Origin を確認する）
+            # GET と異なり POST は route ごとに書き込み可否を明示的に判定する。
             origin = self._allowed_origin()
 
             # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
@@ -784,7 +784,7 @@ def create_server(
             #     下流チャンネル repo の /wf-batch 系スキルが config/suno-playlists.json を読む
             #     旧運用との互換だけに残置。削除条件は #1301 で追跡する。
             if self.path == SUNO_PLAYLISTS_ROUTE:
-                if capture_root is None:
+                if capture_root is None or capture_prefix is None:
                     self.send_error(404, "Not Found")
                     return
                 if origin is None:
@@ -812,11 +812,16 @@ def create_server(
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。
             if self.path == _DISTROKID_RELEASES_ROUTE:
-                if capture_root is None:
-                    # capture root 未指定時は #893 の POST 無効と同じ gating（#934）。
+                if not distrokid_enabled or capture_root is None:
+                    # distrokid disabled / capture root 未指定時は endpoint 自体を出さない。
                     self.send_error(404, "Not Found")
                     return
-                if origin is None:
+                raw_origin = self.headers.get("Origin")
+                if (
+                    allow_origin is None
+                    or not allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
+                    or raw_origin != allow_origin
+                ):
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()
@@ -1057,19 +1062,20 @@ def create_server(
     return ThreadingHTTPServer(("localhost", port), _Handler)
 
 
-def _resolve_playlist_capture(root_arg: str | None, prefix_arg: str | None) -> tuple[Path, str] | None:
+def _resolve_playlist_capture(root_arg: str | None, prefix_arg: str | None) -> tuple[Path, str | None] | None:
     """CLI 引数 + env fallback から playlist capture 設定を解決する（#893 要件1/2）.
 
-    root / prefix のうち片方だけ指定は `ConfigError` で fail-loud（silent 無効化しない）。
-    両方未設定なら None（POST 無効）、両方設定なら `(Path(root).expanduser(), prefix)`。
+    root 未設定なら capture は無効。prefix だけ指定は `ConfigError` で fail-loud する。
+    root だけ指定した場合は DistroKid release capture のみ有効化し、Suno playlist capture は無効。
+    両方設定なら `(Path(root).expanduser(), prefix)`。
     """
     root = root_arg if root_arg is not None else os.environ.get(_PLAYLIST_CAPTURE_ROOT_ENV)
     prefix = prefix_arg if prefix_arg is not None else os.environ.get(_PLAYLIST_CAPTURE_PREFIX_ENV)
     if root is None and prefix is None:
         return None
-    if root is None or prefix is None:
+    if root is None:
         raise ConfigError(
-            "--playlist-capture-root と --playlist-capture-prefix は両方指定してください "
+            "--playlist-capture-prefix を指定する場合は --playlist-capture-root も指定してください "
             f"(env: {_PLAYLIST_CAPTURE_ROOT_ENV} / {_PLAYLIST_CAPTURE_PREFIX_ENV})。"
         )
     return Path(root).expanduser(), prefix
@@ -1115,14 +1121,18 @@ def main() -> None:
         "--playlist-capture-root",
         default=None,
         help=(
-            "downstream channel repo root to write config/suno-playlists.json into; "
-            f"enables POST {SUNO_PLAYLISTS_ROUTE} (env fallback: {_PLAYLIST_CAPTURE_ROOT_ENV})"
+            "downstream channel repo root for capture writes; enables POST "
+            f"{_DISTROKID_RELEASES_ROUTE}, and with --playlist-capture-prefix also enables "
+            f"POST {SUNO_PLAYLISTS_ROUTE} (env fallback: {_PLAYLIST_CAPTURE_ROOT_ENV})"
         ),
     )
     parser.add_argument(
         "--playlist-capture-prefix",
         default=None,
-        help=(f"Suno title / slug prefix to capture, e.g. 'df365' (env fallback: {_PLAYLIST_CAPTURE_PREFIX_ENV})"),
+        help=(
+            "Suno title / slug prefix to capture, e.g. 'df365'. "
+            f"Only required for POST {SUNO_PLAYLISTS_ROUTE} (env fallback: {_PLAYLIST_CAPTURE_PREFIX_ENV})"
+        ),
     )
     args = parser.parse_args()
 
@@ -1155,6 +1165,7 @@ def main() -> None:
                 f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
                 f"{COLLECTIONS_ROUTE}/<id>/distrokid/<disc>/release.json"
             )
+        distrokid_capture_active = distrokid_cfg is not None and distrokid_cfg.enabled
     else:
         prompts_path = resolve_prompts_path(args.path)
         # collection dir: dir 引数はそのまま、json ファイル引数なら <collection>/20-documentation/x.json から 2 階層上。
@@ -1174,7 +1185,14 @@ def main() -> None:
         print(f"Serving {collection_dir} at http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
         if distrokid.enabled:
             print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
-    if playlist_capture is not None:
+        distrokid_capture_active = distrokid.enabled
+    if playlist_capture is not None and distrokid_capture_active:
+        capture_root, _ = playlist_capture
+        print(
+            f"  distrokid releases enabled: POST {_DISTROKID_RELEASES_ROUTE} "
+            f"-> {distrokid_releases_output_path(capture_root)}"
+        )
+    if playlist_capture is not None and playlist_capture[1] is not None:
         capture_root, capture_prefix = playlist_capture
         print(
             f"  playlist capture enabled: POST {SUNO_PLAYLISTS_ROUTE} "

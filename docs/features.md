@@ -75,7 +75,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | /community-post | 動画公開と連動した固定テンプレ投稿（Studio 起動まで） |
 | /short | BGM テイスター（collection 型）チャンネル用 9:16 ショートを生成・投稿 |
 | /short-release | 楽曲リリース（release 型）チャンネル用 JP+EN クリップショート生成 |
-| /distrokid-prep | コレクション楽曲を DistroKid 配信用に整備（disc 分割 / metadata.md / 3000×3000 ジャケット生成） |
+| /distrokid-helper | コレクション楽曲を DistroKid 配信用に整備し、Chrome 拡張向けサーバー起動まで実行 |
 
 ## 分析・振り返り
 
