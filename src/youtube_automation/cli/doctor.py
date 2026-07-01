@@ -14,8 +14,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
+from youtube_automation.utils.image_provider.composition import normalize_reference_default
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -926,6 +929,150 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
     )
 
 
+def _read_json_dict(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_yaml_dict(path: Path) -> dict:
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _benchmark_channels(channel_dir: Path) -> list[dict]:
+    analytics = _read_json_dict(channel_dir / "config" / "channel" / "analytics.json")
+    benchmark = analytics.get("benchmark")
+    if not isinstance(benchmark, dict):
+        return []
+    channels = benchmark.get("channels")
+    if not isinstance(channels, list):
+        return []
+    return [channel for channel in channels if isinstance(channel, dict)]
+
+
+def _benchmark_report_files(channel_dir: Path) -> list[Path]:
+    return _matching_files(channel_dir / "docs" / "benchmarks", "*.md")
+
+
+def _benchmark_thumbnail_files(channel_dir: Path) -> list[Path]:
+    root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+    if not root.is_dir():
+        return []
+    patterns = ("*.jpg", "*.jpeg", "*.png", "*.webp")
+    files: list[Path] = []
+    for pattern in patterns:
+        files.extend(path for path in root.rglob(pattern) if path.is_file())
+    return sorted(files)
+
+
+def _is_unresolved_placeholder(value: str) -> bool:
+    stripped = value.strip()
+    return stripped.startswith("{{") and stripped.endswith("}}")
+
+
+def _thumbnail_reference_images(channel_dir: Path) -> tuple[list[Path], list[str]]:
+    thumbnail_config = _read_yaml_dict(channel_dir / "config" / "skills" / "thumbnail.yaml")
+    image_generation = thumbnail_config.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return [], []
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return [], []
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return [], []
+
+    refs: list[Path] = []
+    invalid_refs: list[str] = []
+    benchmark_root = (channel_dir / "data" / "thumbnail_compare" / "benchmark").resolve(strict=False)
+    channel_root = channel_dir.resolve(strict=False)
+    for value in normalize_reference_default(reference_images.get("default")):
+        stripped = value.strip()
+        if not stripped:
+            continue
+        if _is_unresolved_placeholder(stripped):
+            invalid_refs.append(f"未解決 placeholder が残っている: {stripped}")
+            continue
+        ref_path = Path(stripped)
+        if ref_path.is_absolute():
+            invalid_refs.append(f"絶対パスは指定できない: {stripped}")
+            continue
+        resolved = (channel_dir / ref_path).resolve(strict=False)
+        try:
+            resolved.relative_to(channel_root)
+        except ValueError:
+            invalid_refs.append(f"channel_dir 外は指定できない: {stripped}")
+            continue
+        try:
+            resolved.relative_to(benchmark_root)
+        except ValueError:
+            invalid_refs.append(f"data/thumbnail_compare/benchmark/ 配下ではない: {stripped}")
+            continue
+        refs.append(resolved)
+    return refs, invalid_refs
+
+
+def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
+    """承認済み TTP 対象から初回 /wf-new へ進む前の channel-setup 欠落を検出する。"""
+    if not _benchmark_channels(channel_dir):
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="ok",
+            category=DATA_CATEGORY,
+            message="承認済み TTP benchmark.channels 未設定。/wf-new は minimal mode の範囲で開始可能",
+        )
+
+    issues: list[str] = []
+    if not _matching_files(channel_dir / "data", "benchmark_*.json"):
+        issues.append("data/benchmark_*.json が無い")
+    if not _benchmark_report_files(channel_dir):
+        issues.append("docs/benchmarks/*.md が無い")
+    if not _benchmark_thumbnail_files(channel_dir):
+        issues.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
+
+    refs, invalid_refs = _thumbnail_reference_images(channel_dir)
+    if not refs and not invalid_refs:
+        issues.append("config/skills/thumbnail.yaml の reference_images.default が空または未転記")
+    if invalid_refs:
+        sample = ", ".join(invalid_refs[:3])
+        issues.append(f"reference_images.default の参照パスが不正: {sample}")
+    if refs:
+        missing_refs = [str(path) for path in refs if not path.is_file()]
+        if missing_refs:
+            sample = ", ".join(missing_refs[:3])
+            issues.append(f"reference_images.default の参照先が見つからない: {sample}")
+
+    if not issues:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="ok",
+            category=DATA_CATEGORY,
+            message="TTP benchmark docs / thumbnail refs は /channel-setup 完了相当",
+        )
+
+    return CheckResult(
+        id="ttp_wf_new_readiness",
+        status="warn",
+        category=DATA_CATEGORY,
+        message="/channel-setup benchmark 反映未完了の可能性: " + "; ".join(issues),
+        next_action={
+            "kind": "human",
+            "instructions": (
+                "`/channel-setup` の Step 3.5（TTP 参照画像の自動 download と "
+                "config/skills/thumbnail.yaml への転記）を完了してください。"
+                "必要に応じて `/channel-setup` を再実行し、最後に `uv run yt-doctor --json` で "
+                "`ttp_wf_new_readiness` が ok になることを確認してください。"
+            ),
+        },
+    )
+
+
 def check_upload_ready(channel_dir: Path) -> CheckResult:
     token_path = channel_dir / "auth" / "token.json"
 
@@ -1040,6 +1187,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_channel_config(channel_dir),
         check_analytics_report(channel_dir),
         check_benchmark_data(channel_dir),
+        check_ttp_wf_new_readiness(channel_dir),
         check_upload_ready(channel_dir),
     ]
 

@@ -525,6 +525,20 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     assert "`config/localizations.json`" in rules
 
 
+def test_channel_setup_documents_ttp_wf_new_readiness_gate() -> None:
+    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
+    rules = _read(".claude/skills/channel-setup/references/config-generation-rules.md")
+
+    for text in (channel_setup, rules):
+        assert "uv run yt-doctor --json" in text
+        assert "ttp_wf_new_readiness" in text
+        assert "/channel-setup benchmark 反映未完了" in text
+        assert "data/benchmark_*.json" in text
+        assert "docs/benchmarks/*.md" in text
+        assert "data/thumbnail_compare/benchmark/" in text
+        assert "config/skills/thumbnail.yaml::reference_images.default" in text
+
+
 def test_channel_setup_does_not_recopy_youtube_json_after_config_completion() -> None:
     channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
 
