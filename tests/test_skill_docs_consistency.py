@@ -360,6 +360,28 @@ def test_thumbnail_search_order_is_documented() -> None:
         assert "textless 動画背景" in text
 
 
+def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
+    video_upload = _read(".claude/skills/video-upload/SKILL.md")
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+
+    for text in (video_upload, wf_next):
+        assert "ユーザーに公開方法を" in text
+        assert "uv run yt-upload-collection --plan" in text
+        assert "plan 結果なしに「即時公開」と案内しない" in text or "場合だけ「即時公開」と表現する" in text
+        assert "`📅 公開設定: 即時公開 (public)`" in text
+        assert "`📅 公開予定: <日時>`" in text
+        assert "今アップロード → `<日時>` に自動で一般公開" in text
+
+    upload_flow_plan_idx = video_upload.index("0. **公開タイミング確定（必須）**")
+    upload_flow_run_idx = video_upload.index("1. **Complete Collection アップロード**")
+    assert upload_flow_plan_idx < upload_flow_run_idx
+
+    wf_next_gate = wf_next[wf_next.index("3. **アップロード承認ゲート 3-B") :]
+    plan_idx = wf_next_gate.index("uv run yt-upload-collection --plan")
+    question_idx = wf_next_gate.index("AskUserQuestion")
+    assert plan_idx < question_idx
+
+
 def test_first_post_playlist_initialization_contract_is_documented() -> None:
     playlist = _read(".claude/skills/playlist/SKILL.md")
     video_upload = _read(".claude/skills/video-upload/SKILL.md")
