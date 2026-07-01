@@ -304,6 +304,29 @@ def test_non_object_workflow_state_fails_before_best_effort_side_effects(tmp_pat
     assert not (collection / "01-master" / ".selection.log").exists()
 
 
+def test_workflow_state_directory_fails_before_best_effort_side_effects(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Red Pressure", "lyrics": "[Verse]\npressure rising"}],
+    )
+    first = _write_audio(collection, "01a-Red Pressure.mp3")
+    second = _write_audio(collection, "01b-Red Pressure.mp3")
+    (collection / "workflow-state.json").mkdir()
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 479.4)
+    cfg = _cfg(selection_log_path="new-log-dir/.selection.log")
+
+    with pytest.raises(ValidationError, match="workflow-state.json は file"):
+        suno_track_selection.select_suno_tracks(collection, cfg, allow_best_effort_over_max=True)
+
+    assert first.exists()
+    assert second.exists()
+    stock_root = tmp_path / "assets" / "stock"
+    assert not stock_root.exists() or not any(path.is_file() for path in stock_root.rglob("*"))
+    assert (collection / "workflow-state.json").is_dir()
+    assert not (collection / "new-log-dir").exists()
+    assert not (collection / "01-master" / ".selection.log").exists()
+
+
 def test_success_without_over_max_exception_does_not_read_or_modify_workflow_state(tmp_path, monkeypatch):
     collection = _make_collection(
         tmp_path,
