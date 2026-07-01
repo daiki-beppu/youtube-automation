@@ -14,6 +14,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 from youtube_automation.cli.skills_sync import bundled_skill_names
 
 PYPROJECT_FILENAME = "pyproject.toml"
@@ -47,6 +49,12 @@ UPLOAD_REQUIRED_SCOPES = [
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
+
+UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
+    "gemini-3.5-flash",
+}
+
+TTP_VIDEO_ANALYZE_TOP_N = 5
 
 
 @dataclass
@@ -876,6 +884,308 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
     )
 
 
+def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
+    channels, channel_error = _approved_benchmark_channels(channel_dir)
+    if channel_error:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message=channel_error,
+            next_action={"kind": "human", "instructions": "config/channel/analytics.json を確認してください"},
+        )
+    if not channels:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="ok",
+            category=DATA_CATEGORY,
+            message="承認済み TTP benchmark.channels 未設定。追加競合発掘は標準 readiness の対象外",
+        )
+
+    issues: list[str] = []
+    notes: list[str] = []
+    benchmark_by_slug = _latest_benchmark_videos_by_slug(channel_dir, issues)
+    _check_thumbnail_readiness(channel_dir, issues)
+    _check_video_analyze_readiness(channel_dir, channels, benchmark_by_slug, issues)
+    _check_suno_readiness(channel_dir, issues)
+    if _loop_video_disabled(channel_dir):
+        notes.append("loop-video.enabled=false: 初回 handoff に textless main.png 静止背景運用を明記")
+
+    if issues:
+        detail = "; ".join(issues[:6])
+        if len(issues) > 6:
+            detail += f"; ...ほか {len(issues) - 6} 件"
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message=detail,
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "承認済み TTP 対象だけを準備してください。"
+                    "`uv run yt-benchmark-collect --force -y --channel <slug>`、"
+                    "`uv run yt-video-analyze --source benchmark --channel <slug> --top 5`、"
+                    "config/skills/{thumbnail,suno,video-analyze}.yaml を確認します。"
+                ),
+            },
+        )
+
+    suffix = f" ({'; '.join(notes)})" if notes else ""
+    return CheckResult(
+        id="ttp_wf_new_readiness",
+        status="ok",
+        category=DATA_CATEGORY,
+        message=f"承認済み TTP {len(channels)} 件の初回 /wf-new readiness OK{suffix}",
+    )
+
+
+def _read_json_mapping(path: Path) -> tuple[dict, Optional[str]]:
+    if not path.is_file():
+        return {}, None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        return {}, f"{path} 読み込み失敗: {e}"
+    if not isinstance(data, dict):
+        return {}, f"{path} の root は object である必要があります"
+    return data, None
+
+
+def _read_yaml_mapping(path: Path) -> tuple[dict, Optional[str]]:
+    if not path.is_file():
+        return {}, None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError) as e:
+        return {}, f"{path} 読み込み失敗: {e}"
+    if not isinstance(data, dict):
+        return {}, f"{path} の root は mapping である必要があります"
+    return data, None
+
+
+def _deep_merge_dict(base: dict, override: dict) -> dict:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _skill_config_for_target(channel_dir: Path, skill: str, issues: list[str] | None = None) -> dict:
+    repo_default = Path(__file__).resolve().parents[3] / ".claude" / "skills" / skill / "config.default.yaml"
+    defaults, default_error = _read_yaml_mapping(repo_default)
+    if default_error and issues is not None:
+        issues.append(default_error)
+
+    override, override_error = _read_yaml_mapping(channel_dir / "config" / "skills" / f"{skill}.yaml")
+    if override_error and issues is not None:
+        issues.append(override_error)
+
+    return _deep_merge_dict(defaults, override)
+
+
+def _approved_benchmark_channels(channel_dir: Path) -> tuple[list[dict], Optional[str]]:
+    data, error = _read_json_mapping(channel_dir / "config" / "channel" / "analytics.json")
+    if error:
+        return [], error
+    benchmark = data.get("benchmark")
+    if not isinstance(benchmark, dict):
+        return [], None
+    channels = benchmark.get("channels")
+    if channels is None:
+        return [], None
+    if not isinstance(channels, list):
+        return [], "config/channel/analytics.json::benchmark.channels は list である必要があります"
+    valid = [ch for ch in channels if isinstance(ch, dict)]
+    invalid_count = len(channels) - len(valid)
+    if invalid_count:
+        return valid, f"benchmark.channels に object でない entry が {invalid_count} 件あります"
+    return valid, None
+
+
+def _channel_slug(channel: dict) -> str:
+    value = channel.get("slug") or channel.get("name") or channel.get("id")
+    return str(value) if value else ""
+
+
+def _latest_benchmark_videos_by_slug(channel_dir: Path, issues: list[str]) -> dict[str, list[dict]]:
+    benchmark_files = _matching_files(channel_dir / "data", "benchmark_*.json")
+    if not benchmark_files:
+        return {}
+    path = benchmark_files[-1]
+    data, error = _read_json_mapping(path)
+    if error:
+        issues.append(error)
+        return {}
+
+    result: dict[str, list[dict]] = {}
+    channels = data.get("channels")
+    if isinstance(channels, list):
+        for channel in channels:
+            if not isinstance(channel, dict):
+                continue
+            slug = str(channel.get("slug") or "")
+            videos = channel.get("videos")
+            if slug and isinstance(videos, list):
+                result[slug] = [v for v in videos if isinstance(v, dict)]
+        return result
+
+    videos = data.get("videos")
+    if isinstance(videos, list):
+        for video in videos:
+            if not isinstance(video, dict):
+                continue
+            slug = str(video.get("channel_slug") or video.get("slug") or "")
+            if slug:
+                result.setdefault(slug, []).append(video)
+    return result
+
+
+def _normalize_reference_images(value: object) -> list[str]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _check_thumbnail_readiness(channel_dir: Path, issues: list[str]) -> None:
+    cfg = _skill_config_for_target(channel_dir, "thumbnail", issues)
+    image_generation = cfg.get("image_generation")
+    if not isinstance(image_generation, dict):
+        issues.append("config/skills/thumbnail.yaml::image_generation が未設定")
+        return
+
+    provider = image_generation.get("provider", "gemini")
+    gemini = image_generation.get("gemini")
+    if isinstance(gemini, dict) and gemini.get("generation_mode", "single_step") == "single_step":
+        refs_cfg = gemini.get("reference_images")
+        refs_default = refs_cfg.get("default") if isinstance(refs_cfg, dict) else None
+        refs = _normalize_reference_images(refs_default)
+        candidate_count = _preview_candidate_count(channel_dir, issues)
+        unique_refs = sorted(set(refs))
+        if len(unique_refs) < candidate_count:
+            issues.append(
+                "thumbnail reference が不足 "
+                f"({len(unique_refs)}/{candidate_count}) "
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default"
+            )
+        missing = [ref for ref in unique_refs if not (channel_dir / ref).is_file()]
+        if missing:
+            sample = ", ".join(missing[:3])
+            issues.append(f"thumbnail reference file missing: {sample}")
+
+    if provider == "codex":
+        codex = image_generation.get("codex")
+        template = codex.get("default_prompt_template") if isinstance(codex, dict) else ""
+        template_text = template if isinstance(template, str) else ""
+        lowered = template_text.lower()
+        if "{title}" not in template_text or ("reference" not in lowered and "ttp" not in lowered):
+            issues.append(
+                "codex.default_prompt_template が TTP reference 前提ではない "
+                "(config/skills/thumbnail.yaml::image_generation.codex.default_prompt_template)"
+            )
+
+
+def _preview_candidate_count(channel_dir: Path, issues: list[str]) -> int:
+    cfg = _skill_config_for_target(channel_dir, "collection-ideate", issues)
+    preview = cfg.get("preview")
+    candidate_count = preview.get("candidate_count") if isinstance(preview, dict) else None
+    try:
+        return max(1, int(candidate_count or 3))
+    except (TypeError, ValueError):
+        issues.append("collection-ideate.preview.candidate_count が数値ではありません")
+        return 3
+
+
+def _check_video_analyze_readiness(
+    channel_dir: Path,
+    channels: list[dict],
+    benchmark_by_slug: dict[str, list[dict]],
+    issues: list[str],
+) -> None:
+    cfg = _skill_config_for_target(channel_dir, "video-analyze", issues)
+    model = cfg.get("model")
+    if isinstance(model, str) and model in UNSUPPORTED_VIDEO_ANALYZE_MODELS:
+        issues.append(f"video-analyze model が旧/非対応: {model}")
+
+    for channel in channels:
+        slug = _channel_slug(channel)
+        if not slug:
+            issues.append("benchmark.channels に slug/name/id が無い entry があります")
+            continue
+        videos = benchmark_by_slug.get(slug, [])
+        if not videos:
+            issues.append(f"{slug}: benchmark data 不足")
+            continue
+        top_videos = videos[:TTP_VIDEO_ANALYZE_TOP_N]
+        expected_ids = {str(v.get("video_id")) for v in top_videos if v.get("video_id")}
+        if not expected_ids:
+            issues.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
+            continue
+        analysis_dir = channel_dir / "data" / "video_analysis" / slug
+        existing_ids = {path.stem for path in _matching_files(analysis_dir, "*.json")}
+        done = len(expected_ids & existing_ids)
+        expected = len(expected_ids)
+        if done == 0:
+            issues.append(
+                f"{slug}: video_analysis 未実行 (0/{expected})。"
+                "実行前に対象本数・合計尺・概算コスト・動画長制限リスクを確認"
+            )
+        elif done < expected:
+            issues.append(f"{slug}: video_analysis が一部のみ ({done}/{expected})")
+
+
+def _check_suno_readiness(channel_dir: Path, issues: list[str]) -> None:
+    if _music_engine(channel_dir) != "suno":
+        return
+    cfg = _skill_config_for_target(channel_dir, "suno", issues)
+    genre_line = cfg.get("genre_line")
+    genre_text = genre_line if isinstance(genre_line, str) else ""
+    style_char_limit = cfg.get("style_char_limit", 120)
+    try:
+        limit = int(style_char_limit)
+    except (TypeError, ValueError):
+        limit = 120
+        issues.append("suno.style_char_limit が数値ではありません")
+
+    variants = cfg.get("style_variants")
+    valid_variant_count = 0
+    if isinstance(variants, dict):
+        for variant in variants.values():
+            if isinstance(variant, dict):
+                value = variant.get("genre_line")
+                if isinstance(value, str) and value.strip() and len(value) <= limit:
+                    valid_variant_count += 1
+
+    if not genre_text.strip() and not _has_any_video_analysis(channel_dir):
+        issues.append("Suno genre_line 空、かつ data/video_analysis が未生成")
+    if len(genre_text) > limit and valid_variant_count == 0:
+        issues.append(f"Suno genre_line が style_char_limit 超過 ({len(genre_text)}/{limit})")
+    if valid_variant_count == 0:
+        issues.append("Suno の短い style_variants が未設定")
+
+
+def _music_engine(channel_dir: Path) -> str:
+    data, _ = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
+    value = data.get("music_engine", "suno")
+    return value if isinstance(value, str) else "suno"
+
+
+def _has_any_video_analysis(channel_dir: Path) -> bool:
+    root = channel_dir / "data" / "video_analysis"
+    return root.is_dir() and any(path.is_file() for path in root.glob("*/*.json"))
+
+
+def _loop_video_disabled(channel_dir: Path) -> bool:
+    cfg = _skill_config_for_target(channel_dir, "loop-video")
+    return cfg.get("enabled") is False
+
+
 def check_upload_ready(channel_dir: Path) -> CheckResult:
     token_path = channel_dir / "auth" / "token.json"
 
@@ -990,6 +1300,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_channel_config(channel_dir),
         check_analytics_report(channel_dir),
         check_benchmark_data(channel_dir),
+        check_ttp_wf_new_readiness(channel_dir),
         check_upload_ready(channel_dir),
     ]
 

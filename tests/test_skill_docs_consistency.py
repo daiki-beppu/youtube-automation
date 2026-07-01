@@ -79,7 +79,6 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     forbidden = (
         "--benchmark-channel",
         "uv run yt-discover-competitors",
-        "uv run yt-benchmark-collect",
         "uv run yt-benchmark-comments",
         "data/benchmark_YYYYMMDD.json",
         "data/comments_YYYYMMDD.json",
@@ -91,13 +90,16 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
 
     assert "TTP seed fetch と承認済み対象反映" in channel_new
     assert "承認前に `benchmark.channels` へ書き込まない" in channel_new
+    assert "承認済み TTP readiness 収集" in channel_new
+    assert "承認済み TTP 対象だけ" in channel_new
+    assert "uv run yt-benchmark-collect --force -y --channel <approved-slug>" in channel_new
     assert "追加調査は後続スキルへ委譲" in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_new
     assert "docs/channel/competitor-branding-snapshot.json" in channel_new
     assert ".claude/skills/channel-new/references/fetch_branding_snapshot.py" in channel_new
     assert "`description` / `keywords` / `localizations` / `brandingSettings` は含まない" in channel_new
     assert "untrusted data" in channel_new
-    assert "承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない" in channel_new
+    assert "承認済み TTP 対象が 0 件の場合は Step 6 以降へ進まない" in channel_new
 
     assert 'CHANNELS_PART = "snippet,brandingSettings,localizations"' in branding_snapshot_script
     assert '"untrusted_data": True' in branding_snapshot_script

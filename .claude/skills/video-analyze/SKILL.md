@@ -55,7 +55,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
-| `model` | `gemini-3.5-flash` | 動画入力対応 Gemini モデル |
+| `model` | `gemini-2.5-flash` | 動画入力対応 Gemini モデル |
 | `delay_sec` | 10 | 動画間の API レート対策ウェイト (秒) |
 | `prompt` | 汎用プロンプト | ジャンル/世界観に合わせて `config/skills/video-analyze.yaml` で上書き推奨 |
 

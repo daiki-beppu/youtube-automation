@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from youtube_automation.cli import doctor
 
@@ -281,8 +282,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 21
-        assert len(payload["checks"]) == 21
+        # 6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 22
+        assert len(payload["checks"]) == 22
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -901,6 +902,100 @@ class TestDataReadinessSummary:
 
 
 # ---------------------------------------------------------------------------
+# check_ttp_wf_new_readiness
+# ---------------------------------------------------------------------------
+
+
+class TestCheckTtpWfNewReadiness:
+    def test_no_approved_ttp_is_ok_without_competitor_discovery(self, tmp_path):
+        """承認済み TTP 対象がないだけでは追加競合発掘へ誘導しない."""
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.id == "ttp_wf_new_readiness"
+        assert r.category == "data"
+        assert r.status == "ok"
+        assert "追加競合発掘" in r.message
+        assert r.next_action is None
+
+    def test_ready_when_refs_video_analysis_and_non_suno_engine_are_complete(self, tmp_path):
+        """TTP サムネ / benchmark top5 / video_analysis が揃えば ok."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_thumbnail_refs(tmp_path, count=3)
+        _write_video_analysis(tmp_path, slug, ids)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "ok"
+        assert "readiness OK" in r.message
+
+    def test_missing_benchmark_and_thumbnail_refs_warn(self, tmp_path):
+        """承認済み TTP がある場合、benchmark と参照画像不足を warn にする."""
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": "rival"}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "warn"
+        assert "rival: benchmark data 不足" in r.message
+        assert "thumbnail reference が不足" in r.message
+        assert r.next_action is not None
+        assert "yt-benchmark-collect" in r.next_action["instructions"]
+
+    def test_partial_video_analysis_warns_with_ratio(self, tmp_path):
+        """top5 の一部だけ video_analysis がある場合は partial として warn."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_thumbnail_refs(tmp_path, count=3)
+        _write_video_analysis(tmp_path, slug, ids[:3])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "warn"
+        assert "video_analysis が一部のみ (3/5)" in r.message
+
+    def test_old_video_analyze_model_warns(self, tmp_path):
+        """channel override が旧 video-analyze model を指定していれば warn."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_thumbnail_refs(tmp_path, count=3)
+        _write_video_analysis(tmp_path, slug, ids)
+        skill_dir = tmp_path / "config" / "skills"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "video-analyze.yaml").write_text("model: gemini-3.5-flash\n", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "warn"
+        assert "video-analyze model が旧/非対応: gemini-3.5-flash" in r.message
+
+    def test_suno_requires_short_style_variants(self, tmp_path):
+        """Suno channel では初回生成前に短い style_variants 不足を検出する."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_thumbnail_refs(tmp_path, count=3)
+        _write_video_analysis(tmp_path, slug, ids)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "warn"
+        assert "Suno の短い style_variants が未設定" in r.message
+
+    def test_suno_with_short_style_variants_is_ready(self, tmp_path):
+        """Suno channel でも短い style_variants があれば readiness OK."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_thumbnail_refs(tmp_path, count=3)
+        _write_video_analysis(tmp_path, slug, ids)
+        _write_suno_variants(tmp_path)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "ok"
+
+
+# ---------------------------------------------------------------------------
 # check_upload_ready
 # ---------------------------------------------------------------------------
 
@@ -924,6 +1019,73 @@ def _write_meta_channel_id(base: Path, channel_id: str | None) -> None:
     if channel_id is not None:
         ch["channel_id"] = channel_id
     (meta_dir / "meta.json").write_text(json.dumps({"channel": ch}), encoding="utf-8")
+
+
+def _write_analytics_channels(base: Path, channels: list[dict]) -> None:
+    config_dir = base / "config" / "channel"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "analytics.json").write_text(
+        json.dumps({"benchmark": {"channels": channels}}),
+        encoding="utf-8",
+    )
+
+
+def _write_youtube_music_engine(base: Path, music_engine: str) -> None:
+    config_dir = base / "config" / "channel"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "youtube.json").write_text(json.dumps({"music_engine": music_engine}), encoding="utf-8")
+
+
+def _write_ttp_benchmark(base: Path, slug: str, count: int = 5) -> list[str]:
+    data_dir = base / "data"
+    data_dir.mkdir(exist_ok=True)
+    ids = [f"VID{i}" for i in range(count)]
+    videos = [{"video_id": video_id, "views": 1000 - i} for i, video_id in enumerate(ids)]
+    (data_dir / "benchmark_20240101.json").write_text(
+        json.dumps({"channels": [{"slug": slug, "videos": videos}]}),
+        encoding="utf-8",
+    )
+    return ids
+
+
+def _write_thumbnail_refs(base: Path, count: int = 3) -> None:
+    ref_dir = base / "data" / "thumbnail_compare" / "benchmark"
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    refs = []
+    for i in range(count):
+        path = ref_dir / f"rival-{i}.jpg"
+        path.write_bytes(b"fake")
+        refs.append(str(path.relative_to(base)))
+    skill_dir = base / "config" / "skills"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"image_generation": {"gemini": {"reference_images": {"default": refs}}}}),
+        encoding="utf-8",
+    )
+
+
+def _write_video_analysis(base: Path, slug: str, video_ids: list[str]) -> None:
+    out_dir = base / "data" / "video_analysis" / slug
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for video_id in video_ids:
+        (out_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+
+
+def _write_suno_variants(base: Path) -> None:
+    skill_dir = base / "config" / "skills"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "suno.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "genre_line": "pinoy reggae, warm organ, guitar skank, male vocal",
+                "style_variants": {
+                    "a": {"genre_line": "pinoy reggae, warm organ, male vocal"},
+                    "b": {"genre_line": "dub reggae, guitar skank, mellow bass"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 class TestCheckUploadReady:
@@ -1103,11 +1265,11 @@ class TestUploadRequiredScopes:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_21_checks(self, monkeypatch, tmp_path):
-        """6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 計 21 件."""
+    def test_returns_22_checks(self, monkeypatch, tmp_path):
+        """6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 22 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 21
+        assert len(results) == 22
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -1128,6 +1290,7 @@ class TestRunAllChecksExtended:
         assert "channel_config" in ids
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
+        assert "ttp_wf_new_readiness" in ids
         assert "upload_ready" in ids
 
     def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
@@ -1163,12 +1326,12 @@ class TestRunAllChecksExtended:
         bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
         assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
 
-    def test_data_checks_are_analytics_report_and_benchmark_data(self, monkeypatch, tmp_path):
-        """data カテゴリは analytics_report と benchmark_data の 2 件."""
+    def test_data_checks_include_ttp_wf_new_readiness(self, monkeypatch, tmp_path):
+        """data カテゴリは /wf-new 入力と TTP readiness の 3 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         data_ids = {r.id for r in results if r.category == "data"}
-        assert data_ids == {"analytics_report", "benchmark_data"}
+        assert data_ids == {"analytics_report", "benchmark_data", "ttp_wf_new_readiness"}
 
     def test_upload_ready_is_only_upload_check(self, monkeypatch, tmp_path):
         """upload カテゴリは upload_ready の 1 件のみ."""
