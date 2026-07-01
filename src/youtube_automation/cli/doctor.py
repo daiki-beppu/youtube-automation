@@ -14,6 +14,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
 
@@ -923,6 +925,154 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
     )
 
 
+def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
+    analytics_path = channel_dir / "config" / "channel" / "analytics.json"
+    analytics = _read_json_mapping(analytics_path)
+    channels = _benchmark_channels(analytics)
+    if not channels:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 1/5 に戻り、TTP 対象を確認して "
+                    "config/channel/analytics.json::benchmark.channels に承認済み対象を保存してください"
+                ),
+            },
+        )
+
+    missing = _missing_ttp_readiness_items(channel_dir, channels)
+    if missing:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="TTP 完了条件が未充足: " + "; ".join(missing),
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 5-9 の不足項目を解消してください。"
+                    "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
+                    "ユーザー承認済み例外として未反映項目を明記してください"
+                ),
+            },
+        )
+
+    return CheckResult(
+        id="ttp_wf_new_readiness",
+        status="ok",
+        category=DATA_CATEGORY,
+        message="TTP 対象承認・branding snapshot・thumbnail / music readiness が /wf-new 接続可能",
+    )
+
+
+def _read_json_mapping(path: Path) -> dict[str, object]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_yaml_mapping(path: Path) -> dict[str, object]:
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _benchmark_channels(analytics: dict[str, object]) -> list[dict[str, object]]:
+    benchmark = analytics.get("benchmark")
+    if not isinstance(benchmark, dict):
+        return []
+    channels = benchmark.get("channels")
+    if not isinstance(channels, list):
+        return []
+    return [channel for channel in channels if isinstance(channel, dict)]
+
+
+def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
+    missing: list[str] = []
+
+    channels_without_relationship = [
+        str(channel.get("name") or channel.get("id") or index + 1)
+        for index, channel in enumerate(channels)
+        if not str(channel.get("relationship") or "").strip()
+    ]
+    if channels_without_relationship:
+        missing.append(
+            "benchmark.channels の relationship 未設定 "
+            f"({', '.join(channels_without_relationship)})"
+        )
+
+    seed_confirmation = channel_dir / "docs" / "channel" / "ttp-seed-confirmation.md"
+    if not seed_confirmation.is_file():
+        missing.append("docs/channel/ttp-seed-confirmation.md 未作成")
+    else:
+        seed_text = seed_confirmation.read_text(encoding="utf-8", errors="replace")
+        if "承認" not in seed_text and "approved" not in seed_text.lower():
+            missing.append("ttp-seed-confirmation.md に承認判断が未記録")
+        if "未反映" in seed_text or "スキップ" in seed_text or "skip" in seed_text.lower():
+            missing.append("ttp-seed-confirmation.md に TTP 未反映 / スキップ項目あり")
+
+    branding_snapshot = _read_json_mapping(channel_dir / "docs" / "channel" / "competitor-branding-snapshot.json")
+    snapshot_items = branding_snapshot.get("items")
+    if (
+        branding_snapshot.get("untrusted_data") is not True
+        or not isinstance(snapshot_items, list)
+        or not snapshot_items
+    ):
+        missing.append("docs/channel/competitor-branding-snapshot.json 未作成または空")
+
+    thumbnail = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
+    if not _has_thumbnail_ttp_reference(thumbnail):
+        missing.append("thumbnail reference_images.default 未設定")
+
+    youtube = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
+    if youtube.get("music_engine") == "suno" and not _has_suno_music_readiness(channel_dir):
+        missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
+
+    return missing
+
+
+def _has_thumbnail_ttp_reference(thumbnail: dict[str, object]) -> bool:
+    image_generation = thumbnail.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return False
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return False
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return False
+    default = reference_images.get("default")
+    if isinstance(default, str):
+        return bool(default.strip())
+    if isinstance(default, list):
+        return any(isinstance(item, str) and item.strip() for item in default)
+    return False
+
+
+def _has_suno_music_readiness(channel_dir: Path) -> bool:
+    suno = _read_yaml_mapping(channel_dir / "config" / "skills" / "suno.yaml")
+    if str(suno.get("genre_line") or "").strip():
+        return True
+
+    video_analysis_dir = channel_dir / "data" / "video_analysis"
+    if not video_analysis_dir.is_dir():
+        return False
+    for path in video_analysis_dir.glob("*/*.json"):
+        payload = _read_json_mapping(path)
+        preset = payload.get("suno_preset")
+        if isinstance(preset, dict) and str(preset.get("genre_line") or "").strip():
+            return True
+    return False
+
+
 def check_upload_ready(channel_dir: Path) -> CheckResult:
     token_path = channel_dir / "auth" / "token.json"
 
@@ -1037,6 +1187,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_channel_config(channel_dir),
         check_analytics_report(channel_dir),
         check_benchmark_data(channel_dir),
+        check_ttp_wf_new_readiness(channel_dir),
         check_upload_ready(channel_dir),
     ]
 

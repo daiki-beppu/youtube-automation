@@ -513,8 +513,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 21
-        assert len(payload["checks"]) == 21
+        # 6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 22
+        assert len(payload["checks"]) == 22
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -1133,7 +1133,7 @@ class TestDataReadinessSummary:
 
 
 # ---------------------------------------------------------------------------
-# check_upload_ready
+# check_ttp_wf_new_readiness
 # ---------------------------------------------------------------------------
 
 _SCOPE_YOUTUBE = "https://www.googleapis.com/auth/youtube"
@@ -1156,6 +1156,126 @@ def _write_meta_channel_id(base: Path, channel_id: str | None) -> None:
     if channel_id is not None:
         ch["channel_id"] = channel_id
     (meta_dir / "meta.json").write_text(json.dumps({"channel": ch}), encoding="utf-8")
+
+
+def _write_ttp_analytics(base: Path, channels: list[dict] | None = None) -> None:
+    config_dir = base / "config" / "channel"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "analytics.json").write_text(
+        json.dumps({"benchmark": {"channels": channels or []}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _write_ttp_readiness_files(base: Path) -> None:
+    docs_channel = base / "docs" / "channel"
+    docs_channel.mkdir(parents=True, exist_ok=True)
+    (docs_channel / "ttp-seed-confirmation.md").write_text(
+        "- 承認済み: Rival\n- relationship: title-structure / thumbnail-composition\n",
+        encoding="utf-8",
+    )
+    (docs_channel / "competitor-branding-snapshot.json").write_text(
+        json.dumps({"untrusted_data": True, "items": [{"id": "UC123"}]}),
+        encoding="utf-8",
+    )
+
+    skills_dir = base / "config" / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    (skills_dir / "thumbnail.yaml").write_text(
+        "\n".join(
+            [
+                "image_generation:",
+                "  gemini:",
+                "    reference_images:",
+                "      default:",
+                "        - docs/benchmarks/thumbnails/rival_1.jpg",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz, soft piano"\n', encoding="utf-8")
+
+
+class TestCheckTtpWfNewReadiness:
+    def test_id_and_category(self, tmp_path):
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.id == "ttp_wf_new_readiness"
+        assert r.category == "data"
+
+    def test_no_approved_ttp_channels_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [])
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "warn"
+        assert "承認済み TTP 対象が 0 件" in r.message
+        assert r.next_action is not None
+        assert "benchmark.channels" in r.next_action["instructions"]
+
+    def test_approved_ttp_missing_completion_artifacts_warns(self, tmp_path):
+        _write_ttp_analytics(
+            tmp_path,
+            [{"name": "Rival", "id": "UC123"}],
+        )
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+        assert r.status == "warn"
+        assert "relationship 未設定" in r.message
+        assert "ttp-seed-confirmation.md 未作成" in r.message
+        assert "competitor-branding-snapshot.json 未作成または空" in r.message
+        assert "thumbnail reference_images.default 未設定" in r.message
+        assert r.next_action is not None
+        assert "ユーザー承認済み例外" in r.next_action["instructions"]
+
+    def test_suno_video_analysis_preset_satisfies_music_readiness(self, tmp_path):
+        _write_ttp_analytics(
+            tmp_path,
+            [{"name": "Rival", "id": "UC123", "relationship": "title-structure"}],
+        )
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text("genre_line: ''\n", encoding="utf-8")
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        analysis_dir.mkdir(parents=True)
+        (analysis_dir / "VID123.json").write_text(
+            json.dumps({"suno_preset": {"genre_line": "soft piano, warm pads"}}),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "music readiness" in r.message
+
+    def test_skip_note_keeps_readiness_warn(self, tmp_path):
+        _write_ttp_analytics(
+            tmp_path,
+            [{"name": "Rival", "id": "UC123", "relationship": "title-structure"}],
+        )
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "- 承認済み: Rival\n- 曲構造 TTP はユーザー承認済みでスキップ、未反映\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "未反映 / スキップ項目あり" in r.message
+
+    def test_complete_ttp_readiness_is_ok(self, tmp_path):
+        _write_ttp_analytics(
+            tmp_path,
+            [{"name": "Rival", "id": "UC123", "relationship": "title-structure"}],
+        )
+        _write_ttp_readiness_files(tmp_path)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert r.next_action is None
+
+
+# ---------------------------------------------------------------------------
+# check_upload_ready
+# ---------------------------------------------------------------------------
 
 
 class TestCheckUploadReady:
@@ -1335,11 +1455,11 @@ class TestUploadRequiredScopes:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_21_checks(self, monkeypatch, tmp_path):
-        """6 bootstrap + 11 api + 1 channel + 2 data + 1 upload = 計 21 件."""
+    def test_returns_22_checks(self, monkeypatch, tmp_path):
+        """6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 22 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 21
+        assert len(results) == 22
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -1360,6 +1480,7 @@ class TestRunAllChecksExtended:
         assert "channel_config" in ids
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
+        assert "ttp_wf_new_readiness" in ids
         assert "upload_ready" in ids
 
     def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
@@ -1395,12 +1516,12 @@ class TestRunAllChecksExtended:
         bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
         assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
 
-    def test_data_checks_are_analytics_report_and_benchmark_data(self, monkeypatch, tmp_path):
-        """data カテゴリは analytics_report と benchmark_data の 2 件."""
+    def test_data_checks_include_ttp_wf_new_readiness(self, monkeypatch, tmp_path):
+        """data カテゴリは analytics_report / benchmark_data / ttp_wf_new_readiness の 3 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         data_ids = {r.id for r in results if r.category == "data"}
-        assert data_ids == {"analytics_report", "benchmark_data"}
+        assert data_ids == {"analytics_report", "benchmark_data", "ttp_wf_new_readiness"}
 
     def test_upload_ready_is_only_upload_check(self, monkeypatch, tmp_path):
         """upload カテゴリは upload_ready の 1 件のみ."""
@@ -1443,6 +1564,7 @@ class TestRenderTableCategories:
         assert "channel_config" in output
         assert "analytics_report" in output
         assert "benchmark_data" in output
+        assert "ttp_wf_new_readiness" in output
         assert "upload_ready" in output
 
     def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):
