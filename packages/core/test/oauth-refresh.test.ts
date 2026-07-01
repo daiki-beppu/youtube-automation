@@ -160,6 +160,38 @@ describe("refreshTokenService failure", () => {
     expect(r.error.domain).toBe("config");
     expect(r.error.message).toContain("installed");
   });
+
+  test("rejects installed client_secrets without redirect_uris", async () => {
+    // Given a Desktop app shaped file missing the redirect_uris key required by
+    // the Python runtime / doctor contract
+    const missingRedirectUrisJson = JSON.stringify({
+      installed: {
+        client_id: "cid.apps.googleusercontent.com",
+        client_secret: "the-client-secret",
+      },
+    });
+    const { client } = makeOAuthClient(() => {
+      throw new Error("should not refresh without redirect_uris");
+    });
+    const { deps } = makeDeps(client);
+
+    // When refreshing
+    const r = await refreshTokenService(
+      {
+        clientSecretsJson: missingRedirectUrisJson,
+        tokenJson: expiredTokenJson,
+      },
+      deps
+    );
+
+    // Then parsing fails before the OAuth client is constructed
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(r.error.domain).toBe("validation");
+    expect(r.error.message).toContain("redirect_uris");
+  });
 });
 
 describe("refreshTokenService input validation", () => {

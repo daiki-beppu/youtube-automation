@@ -353,6 +353,26 @@ describe("resolveClientSecretsJson", () => {
     spawnSpy.mockRestore();
   });
 
+  test("does not fall back when CLIENT_SECRETS_DIR/client_secrets.json is a directory", async () => {
+    // Given an explicit override whose client_secrets.json path exists but is
+    // not a regular file
+    const dir = makeChannelDir();
+    mkdirSync(join(dir, "client_secrets.json"));
+    process.env.CLIENT_SECRETS_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = '{"installed":{"client_id":"from-env"}}';
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // Then the invalid override is authoritative and env/op are not consulted
+    await expect(resolveClientSecretsJson()).rejects.toThrow(/^config:/u);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
   test("reads <channel>/auth/client_secrets.json when env is unset", async () => {
     // Given a channel dir holding the auth file (step 2)
     const dir = makeChannelDir();
@@ -371,6 +391,26 @@ describe("resolveClientSecretsJson", () => {
 
     // Then the file content is returned and op is not consulted
     expect(result).toBe(json);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("does not fall back when <channel>/auth/client_secrets.json is a directory", async () => {
+    // Given the primary channel auth candidate exists but is not a regular file
+    const dir = makeChannelDir();
+    mkdirSync(join(dir, "auth", "client_secrets.json"), { recursive: true });
+    process.env.CHANNEL_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = '{"installed":{"client_id":"from-env"}}';
+    reset();
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // Then the invalid file candidate fails as config error without fallback
+    await expect(resolveClientSecretsJson()).rejects.toThrow(/^config:/u);
     expect(spawnSpy).not.toHaveBeenCalled();
 
     whichSpy.mockRestore();

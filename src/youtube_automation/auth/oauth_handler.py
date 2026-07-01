@@ -325,6 +325,7 @@ def main():
     print("🎵 YouTube OAuth 2.0 認証テスト")
     print("=" * 60)
 
+    auth_handler = None
     try:
         # OAuth ハンドラー初期化
         auth_handler = YouTubeOAuthHandler()
@@ -343,7 +344,10 @@ def main():
         print("\n🛑 処理が中断されました")
         sys.exit(130)
     except (AuthError, ConfigError, ValidationError, YouTubeAPIError, OSError) as e:
-        logger.exception("CLI 実行失敗: %s", _redact(str(e)))
+        paths = []
+        if auth_handler is not None:
+            paths.extend([auth_handler.client_secrets_file, auth_handler.token_file])
+        logger.error("CLI 実行失敗: %s", _redact(str(e), *paths))
         sys.exit(1)
     except Exception as e:  # noqa: BLE001 - CLI top-level panic-handler: exit code 1 で必ず終了させる契約
         # 想定外例外の最終 fallback。traceback は logger.exception が付与し、
