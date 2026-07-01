@@ -12,10 +12,15 @@ while IFS= read -r path; do
 done < <(git diff --cached --name-only)
 
 if ((${#staged_secret_paths[@]} > 0)); then
+  if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    git restore --staged -- "${staged_secret_paths[@]}"
+  else
+    git rm --cached -r --ignore-unmatch -- "${staged_secret_paths[@]}" >/dev/null
+  fi
   {
-    echo "secret-like file staged; unstage before commit:"
+    echo "secret-like file staged; unstaged before commit:"
     printf '  %s\n' "${staged_secret_paths[@]}"
-    echo "Run: git restore --staged -- <path>"
+    echo "Review .gitignore before retrying."
   } >&2
   exit 1
 fi

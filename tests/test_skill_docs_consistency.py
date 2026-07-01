@@ -137,7 +137,8 @@ def test_channel_new_requires_initial_save_before_followup_update() -> None:
     assert "`git add -A` 後の guard を唯一の安全境界にする" in channel_new
     assert "bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1" in channel_new
     assert 'git commit -m "chore: 初回チャンネル設定を保存"' in channel_new
-    assert "secret-like file staged; unstage before commit" in channel_new
+    assert "secret-like file staged; unstaged before commit" in channel_new
+    assert "staged secret を自動で外して停止" in channel_new
     assert "未コミット変更が残っています。/automation-update の前に以下を完了してください" in channel_new
     assert "保存未完了として終了した場合は、以下の成功案内は出さない" in channel_new
     assert "初回保存も完了しているため" in channel_new
@@ -184,9 +185,10 @@ def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path, se
     )
 
     assert result.returncode != 0
-    assert "secret-like file staged; unstage before commit" in result.stderr
+    assert "secret-like file staged; unstaged before commit" in result.stderr
     assert secret_path in result.stderr
     assert _git(repo, "rev-list", "--count", "HEAD").stdout.strip() == "1"
+    assert secret_path not in _git(repo, "diff", "--cached", "--name-only").stdout.splitlines()
 
 
 def test_channel_new_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_path: Path) -> None:
@@ -217,6 +219,9 @@ def test_channel_new_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_p
 
     assert result.returncode != 0
     assert "auth/token_streaming.json" in result.stderr
+    staged_after_guard = set(_git(repo, "diff", "--cached", "--name-only").stdout.splitlines())
+    assert "config/channel.json" in staged_after_guard
+    assert "auth/token_streaming.json" not in staged_after_guard
 
 
 def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path: Path) -> None:
@@ -240,6 +245,42 @@ def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path:
 
     assert result.returncode == 0
     assert result.stderr == ""
+
+
+def test_channel_new_initial_save_success_path_commits_and_cleans_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / ".gitignore").write_text(
+        ".env\nauth/client_secrets.json\nauth/token*.json\n",
+        encoding="utf-8",
+    )
+    (repo / ".env").write_text("SECRET=value\n", encoding="utf-8")
+    auth_dir = repo / "auth"
+    auth_dir.mkdir()
+    (auth_dir / "client_secrets.json").write_text("{}\n", encoding="utf-8")
+    (auth_dir / "token_streaming.json").write_text("{}\n", encoding="utf-8")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    _git(repo, "add", "-A")
+    guard_result = subprocess.run(
+        ["bash", str(guard)],
+        cwd=repo,
+        env=_isolated_git_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    assert guard_result.returncode == 0
+
+    _git(repo, "commit", "-m", "chore: 初回チャンネル設定を保存")
+    assert _git(repo, "status", "--porcelain").stdout == ""
+    assert _git(repo, "rev-list", "--count", "HEAD").stdout.strip() == "1"
 
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:

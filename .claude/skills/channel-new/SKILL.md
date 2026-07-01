@@ -285,7 +285,7 @@ git status --porcelain
 出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。
 
 出力が非空の場合は、差分をユーザーに見せたうえで初回 commit を作成する。シークレットを混入させないため、staged files 全体を commit 前 guard で確認してから commit する。
-ignore 済み `.env` は exclude pathspec 付き `git add` でも Git が exit 1 になり得るため、`git add -A` 後の guard を唯一の安全境界にする。guard が失敗した場合はその場で停止し、`git commit` へ進まない。
+ignore 済み `.env` は exclude pathspec 付き `git add` でも Git が exit 1 になり得るため、`git add -A` 後の guard を唯一の安全境界にする。guard が失敗した場合は staged secret を自動で外して停止し、`git commit` へ進まない。
 
 ```bash
 git status --short
@@ -296,7 +296,7 @@ git commit -m "chore: 初回チャンネル設定を保存"
 git status --porcelain
 ```
 
-guard が `secret-like file staged; unstage before commit` を出した場合は commit しない。該当ファイルを `git restore --staged -- <path>` で外し、`.gitignore` を確認してからやり直す。
+guard が `secret-like file staged; unstaged before commit` を出した場合は commit しない。該当ファイルは staged から外れているため、`.gitignore` を確認してからやり直す。
 
 `gh repo create` や remote 作成を保留している、git user identity 未設定で commit できない、またはユーザーが今 commit しない判断をした場合は、保存未完了として次の手順を明確に案内して終了する:
 
