@@ -13,15 +13,12 @@ export interface DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ) => Promise<void>;
-  recordPlaylistUrl: (context: DownloadContext, collectionId: string, sunoPlaylistUrl: string) => Promise<void>;
   downloadBestEffort: (
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ) => Promise<string | null>;
   retryDownload: (options: RetryDownloadOptions) => Promise<void>;
 }
@@ -34,11 +31,8 @@ export interface DownloadFlowDeps {
 export interface RetryDownloadOptions {
   context: DownloadContext;
   collectionId: string;
-  playlistName: string;
-  savedSunoPlaylistUrl?: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
-  resolvePlaylistUrl: (playlistName: string) => Promise<string>;
   selectClipIds: (submittedClipIds: string[]) => Promise<void>;
   clearResumeState: (collectionId: string) => Promise<void>;
 }
@@ -99,7 +93,6 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ): Promise<void> {
     if (deps.isAborted()) return;
 
@@ -136,7 +129,6 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
           file_count: expectedFileCount,
           expected_file_count: expectedFileCount,
           format: context.format,
-          suno_playlist_url: sunoPlaylistUrl,
           download_path: downloadResult.filename,
         },
       });
@@ -150,31 +142,14 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     }
   }
 
-  async function recordPlaylistUrl(
-    context: DownloadContext,
-    collectionId: string,
-    sunoPlaylistUrl: string,
-  ): Promise<void> {
-    await sendMessage("postDownloaded", {
-      baseUrl: context.baseUrl,
-      collectionId,
-      body: {
-        file_count: 0,
-        format: context.format,
-        suno_playlist_url: sunoPlaylistUrl,
-      },
-    });
-  }
-
   async function downloadBestEffort(
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ): Promise<string | null> {
     try {
-      await performDownload(context, collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl);
+      await performDownload(context, collectionId, progressTotal, expectedFileCount);
       return null;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -199,27 +174,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
       return;
     }
-    const savedSunoPlaylistUrl = options.savedSunoPlaylistUrl?.trim();
-    let sunoPlaylistUrl: string;
-    if (savedSunoPlaylistUrl) {
-      sunoPlaylistUrl = savedSunoPlaylistUrl;
-    } else {
-      try {
-        sunoPlaylistUrl = await options.resolvePlaylistUrl(options.playlistName);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `保存済み playlist URL が無く、playlist 名からの再解決にも失敗しました: ${options.playlistName} (${message})`,
-        );
-      }
-    }
-    await performDownload(
-      options.context,
-      options.collectionId,
-      total,
-      options.expectedClipCount ?? total,
-      sunoPlaylistUrl,
-    );
+    await performDownload(options.context, options.collectionId, total, options.expectedClipCount ?? total);
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
       return;
@@ -231,7 +186,6 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
   return {
     installMessageHandlers,
     performDownload,
-    recordPlaylistUrl,
     downloadBestEffort,
     retryDownload,
   };

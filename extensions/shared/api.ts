@@ -57,12 +57,6 @@ export interface CollectionSummary {
   suno_playlist_url?: string;
 }
 
-/** Suno `/me` から捕捉した 1 playlist。legacy scrape 互換の内部型。 */
-export interface CapturedPlaylist {
-  title: string;
-  url: string;
-}
-
 /** GET /version の wire スキーマ（#1023）。 */
 export interface ServerVersionInfo {
   version: string;
@@ -537,9 +531,6 @@ export async function postDownloaded(
   collectionId: string,
   payload: DownloadedPayload,
 ): Promise<void> {
-  if (payload.download_path && !payload.suno_playlist_url) {
-    throw new Error("download_path を送る場合は suno_playlist_url が必要です");
-  }
   if (payload.file_count > 0 && !payload.download_path) {
     throw new Error("file_count が正数の場合は download_path が必要です");
   }
