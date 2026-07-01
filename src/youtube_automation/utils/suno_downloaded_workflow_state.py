@@ -25,6 +25,8 @@ def read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | N
     except (json.JSONDecodeError, OSError):
         return default
     if not isinstance(prompts, list):
+        if isinstance(prompts, dict) and isinstance(prompts.get("entries"), list):
+            return len(prompts["entries"])
         return default
     return len(prompts)
 

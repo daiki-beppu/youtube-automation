@@ -32,7 +32,16 @@ const HEAVY_DEPS_BANNED_IN_THIN_CLIENTS = {
 // #822: packages/core は pure domain logic。op (1Password CLI) を含む subprocess
 // 起動は cli/service 層 (packages/cli/lib/secrets.ts) に隔離する。core/src 配下で
 // `Bun.spawn` / `Bun.spawnSync` / `bun:ffi` を直接呼ぶ regression を error 化する。
-const OP_SPAWN_BANNED_IN_CORE = [
+interface RestrictedPropertyDetails {
+  message: string;
+  object: string;
+  property: string;
+}
+
+const OP_SPAWN_BANNED_IN_CORE: [
+  RestrictedPropertyDetails,
+  ...RestrictedPropertyDetails[],
+] = [
   {
     message:
       "#822: subprocess 起動 (op CLI 含む) は packages/cli/lib/secrets.ts に隔離。packages/core/src からの Bun.spawn 直呼びは禁止。",
