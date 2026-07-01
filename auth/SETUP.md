@@ -38,7 +38,7 @@ Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導
 /setup
 ```
 
-`gcloud auth login` / `gcloud auth application-default login` / Console での OAuth クライアント ID 作成の 3 ステップだけ PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外は AI が gcloud を直接 Bash で実行する。内部では本書のルート A (bootstrap.sh) を呼ぶ。
+`gcloud auth login` / `gcloud auth application-default login` / Google Auth Platform の Branding・Audience Test users・Clients 設定と `client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外は AI が gcloud を直接 Bash で実行する。内部では本書のルート A (bootstrap.sh) を呼ぶ。
 
 ### ルート A: `.claude/skills/channel-setup/references/gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
@@ -89,9 +89,9 @@ cd ../../..
 
 ---
 
-## <a id="step-oauth"></a>🔑 OAuth クライアント ID の作成（手動）
+## <a id="step-oauth"></a>🔑 Google Auth Platform 手動設定
 
-`gcloud` / Terraform いずれも OAuth クライアント ID 作成には対応していないため、ここだけ Console での作業が必要:
+`gcloud` / Terraform いずれも Google Auth Platform の Branding / Audience / Clients 設定には対応していないため、ここは Console での手動作業が必要:
 
 1. スクリプト / terraform 出力に表示された URL を開く
    - 形式: `https://console.cloud.google.com/apis/credentials?project=<PROJECT_ID>`

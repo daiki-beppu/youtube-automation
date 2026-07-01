@@ -35,6 +35,17 @@ def test_asset_specs_resolves_via_package_import() -> None:
     assert isinstance(_ASSET_SPECS, dict)
     assert "skills" in _ASSET_SPECS
     assert "claude-md" in _ASSET_SPECS
+    assert "auth-template" in _ASSET_SPECS
+
+
+def test_auth_template_asset_spec_points_to_client_secrets_template() -> None:
+    from youtube_automation.cli.skills_sync import _ASSET_SPECS, _asset_root
+
+    spec = _ASSET_SPECS["auth-template"]
+    assert spec["kind"] == "file"
+    assert spec["source_filename"] == "client_secrets.template.json"
+    assert spec["default_target"] == "auth/client_secrets.template.json"
+    assert (_asset_root("auth-template") / "client_secrets.template.json").exists()
 
 
 def test_asset_root_resolves_via_package_import() -> None:

@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+from youtube_automation.auth.oauth_handler import resolve_client_secrets_path
 from youtube_automation.cli.skills_sync import bundled_skill_names
 
 PYPROJECT_FILENAME = "pyproject.toml"
@@ -645,7 +646,7 @@ def check_env_file(channel_dir: Path) -> CheckResult:
 
 
 def check_client_secrets(channel_dir: Path) -> CheckResult:
-    path = channel_dir / "auth" / "client_secrets.json"
+    path = resolve_client_secrets_path(channel_dir)
     if not path.exists():
         project_id = _project_id_for(channel_dir) or ""
         return CheckResult(

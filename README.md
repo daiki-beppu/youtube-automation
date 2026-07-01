@@ -124,7 +124,7 @@ v1.x から v2.0.0 へ移行するチャンネルは [`docs/migration/v2-config-
 
 ### 4. OAuth 認証をセットアップ
 
-[auth/SETUP.md](auth/SETUP.md) の手順に従って Google Cloud Console で OAuth 2.0 認証情報を作成し、チャンネルディレクトリの `auth/client_secrets.json` に配置してください。
+[auth/SETUP.md](auth/SETUP.md) の手順に従って Google Auth Platform の Branding / Audience / Clients を設定し、チャンネルディレクトリの `auth/client_secrets.json` に配置してください。
 
 ```bash
 # どのスクリプトでも初回実行時に OAuth フローが立ち上がります

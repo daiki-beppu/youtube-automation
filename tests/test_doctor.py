@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.cli import doctor
+from youtube_automation.utils.exceptions import ConfigError
 
 
 def _assert_no_bare_yt_channel_status(value: object) -> None:
@@ -181,20 +182,64 @@ class TestProjectIdResolution:
 
 
 class TestClientSecrets:
+    def _write_valid_client_secrets(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "installed": {
+                        "client_id": "x",
+                        "client_secret": "y",
+                        "redirect_uris": ["http://localhost"],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
     def test_missing_without_project(self, tmp_path, monkeypatch):
         monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            lambda: (_ for _ in ()).throw(ConfigError("op read failed")),
+        )
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "fail"
         assert r.next_action["kind"] == "human"
         assert "credentials" in r.next_action["url"]
 
-    def test_missing_with_project(self, tmp_path):
+    def test_missing_with_project(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            lambda: (_ for _ in ()).throw(ConfigError("op read failed")),
+        )
         (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=foo-proj\n", encoding="utf-8")
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "fail"
         assert "foo-proj" in r.next_action["url"]
 
-    def test_missing_instructions_follow_google_auth_platform_contract(self, tmp_path):
+    def test_uses_client_secrets_dir_env(self, tmp_path, monkeypatch):
+        secrets_dir = tmp_path / "secrets"
+        self._write_valid_client_secrets(secrets_dir / "client_secrets.json")
+        monkeypatch.setenv("CLIENT_SECRETS_DIR", str(secrets_dir))
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_uses_submodule_fallback_path(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        self._write_valid_client_secrets(tmp_path / "automation" / "auth" / "client_secrets.json")
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_missing_instructions_follow_google_auth_platform_contract(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            lambda: (_ for _ in ()).throw(ConfigError("op read failed")),
+        )
         r = doctor.check_client_secrets(tmp_path)
 
         assert r.next_action is not None
@@ -212,20 +257,7 @@ class TestClientSecrets:
         assert "認証情報を作成 → OAuth クライアント ID" not in instructions
 
     def test_valid(self, tmp_path):
-        auth = tmp_path / "auth"
-        auth.mkdir()
-        (auth / "client_secrets.json").write_text(
-            json.dumps(
-                {
-                    "installed": {
-                        "client_id": "x",
-                        "client_secret": "y",
-                        "redirect_uris": ["http://localhost"],
-                    }
-                }
-            ),
-            encoding="utf-8",
-        )
+        self._write_valid_client_secrets(tmp_path / "auth" / "client_secrets.json")
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "ok"
 

@@ -113,6 +113,7 @@ packages = ["src/youtube_automation"]
 # 配布された SKILL.md / CLAUDE.md の相対 link が install 版と同 version の docs/ を指せる
 "docs/workflow-cheatsheet.md" = "youtube_automation/_docs/workflow-cheatsheet.md"
 "docs/features.md" = "youtube_automation/_docs/features.md"
+"auth/client_secrets.template.json" = "youtube_automation/_auth/client_secrets.template.json"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 

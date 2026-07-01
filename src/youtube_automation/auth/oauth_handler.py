@@ -60,6 +60,33 @@ def _redact(message: str, *paths: object) -> str:
     return redacted
 
 
+def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
+    """実行時 OAuth と doctor が共有する client_secrets.json の検索順を解決する。"""
+    if channel_dir is None:
+        from youtube_automation.utils.config import channel_dir as _channel_dir
+
+        channel_dir = _channel_dir()
+
+    client_secrets_dir = os.environ.get("CLIENT_SECRETS_DIR")
+    if client_secrets_dir:
+        return Path(client_secrets_dir) / "client_secrets.json"
+
+    candidates = [
+        channel_dir / "auth" / "client_secrets.json",
+        channel_dir / "automation" / "auth" / "client_secrets.json",
+    ]
+    found = next((c for c in candidates if c.exists()), None)
+    if found:
+        return found
+
+    try:
+        from youtube_automation.utils.secrets import get_client_secrets_path
+
+        return get_client_secrets_path()
+    except ConfigError:
+        return candidates[0]
+
+
 class YouTubeOAuthHandler:
     """YouTube Data API v3 OAuth 2.0 認証管理クラス"""
 
@@ -87,32 +114,7 @@ class YouTubeOAuthHandler:
 
         channel_dir = _channel_dir()
 
-        # client_secrets.json の検索順:
-        #   1. CLIENT_SECRETS_DIR 環境変数 (明示的オーバーライド)
-        #   2. <channel_dir>/auth/client_secrets.json (pip install 時の既定配置)
-        #   3. <channel_dir>/automation/auth/client_secrets.json (submodule 互換)
-        #   4. 1Password (op read) から動的取得
-        client_secrets_dir = os.environ.get("CLIENT_SECRETS_DIR")
-        if client_secrets_dir:
-            self.client_secrets_file = Path(client_secrets_dir) / "client_secrets.json"
-        else:
-            candidates = [
-                channel_dir / "auth" / "client_secrets.json",
-                channel_dir / "automation" / "auth" / "client_secrets.json",
-            ]
-            found = next((c for c in candidates if c.exists()), None)
-            if found:
-                self.client_secrets_file = found
-            else:
-                # ファイルが見つからない場合、1Password から取得を試みる
-                try:
-                    from youtube_automation.utils.secrets import get_client_secrets_path
-
-                    self.client_secrets_file = get_client_secrets_path()
-                except ConfigError:
-                    # op read も失敗した場合はデフォルトパスを設定
-                    # (_validate_client_secrets で適切なエラーメッセージを表示)
-                    self.client_secrets_file = candidates[0]
+        self.client_secrets_file = resolve_client_secrets_path(channel_dir)
 
         # scopes: 未指定時は SCOPES クラス属性（既存 callsite との後方互換）
         self._scopes = list(scopes) if scopes is not None else self.SCOPES
