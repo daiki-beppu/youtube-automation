@@ -695,5 +695,6 @@ def test_main_returns_1_and_stderr_on_validation_error(tmp_path, monkeypatch, ca
 def test_project_scripts_registers_suno_select_tracks_entrypoint():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     assert (
-        pyproject["project"]["scripts"]["yt-suno-select-tracks"] == "youtube_automation.scripts.suno_select_tracks:main"
+        pyproject["project"]["scripts"]["yt-suno-select-tracks"]
+        == "youtube_automation.cli_entrypoints:yt_suno_select_tracks"
     )
