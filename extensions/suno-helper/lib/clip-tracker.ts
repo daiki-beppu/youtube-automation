@@ -25,6 +25,16 @@ export interface ClipTracker {
   getPendingSubmittedIds(): string[];
   /** この run の generate レスポンスで観測した clip id 一覧。playlist 対象の SSOT。 */
   getSubmittedIds(): string[];
+  /** 指定 clip id のうち、まだ終端 status に達していないもの。duration guard の attempt 完了待ちに使う。 */
+  getPendingIdsByIds(ids: string[]): string[];
+  /** feed で観測した clip duration（秒）。未観測なら undefined。 */
+  getDuration(id: string): number | undefined;
+  /** duration check を通過した clip ID を記録する。 */
+  markAccepted(ids: string[]): void;
+  /** duration check を通過した clip ID 一覧。 */
+  getAcceptedSubmittedIds(): string[];
+  /** retry 全滅などで playlist 対象から外す。status 集計は queue 管理のため保持する。 */
+  dropSubmittedIds(ids: string[]): void;
   /** run 開始時に playlist 対象 ID だけを初期化する。status 集計は残す。 */
   clearSubmittedIds(): void;
   /** generate / feed のいずれかを 1 度でも観測したか。false の間は DOM プロキシへ縮退する。 */
@@ -39,7 +49,9 @@ export interface ClipTracker {
 
 export function createClipTracker(now: () => number = Date.now): ClipTracker {
   const statusById = new Map<string, string>();
+  const durationById = new Map<string, number>();
   const submittedById = new Map<string, true>();
+  const acceptedById = new Map<string, true>();
   let submissions = 0;
   let observedGenerate = false;
   let observedFeed = false;
@@ -51,6 +63,13 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
     if (prev !== clip.status) {
       statusById.set(clip.id, clip.status);
       changeAt = now();
+    }
+    if (clip.durationSec !== undefined) {
+      const prevDuration = durationById.get(clip.id);
+      if (prevDuration !== clip.durationSec) {
+        durationById.set(clip.id, clip.durationSec);
+        changeAt = now();
+      }
     }
   }
 
@@ -105,8 +124,38 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
     getSubmittedIds() {
       return Array.from(submittedById.keys());
     },
+    getPendingIdsByIds(ids) {
+      const pending: string[] = [];
+      for (const id of ids) {
+        const status = statusById.get(id);
+        if (!status || !TERMINAL.has(status)) {
+          pending.push(id);
+        }
+      }
+      return pending;
+    },
+    getDuration(id) {
+      return durationById.get(id);
+    },
+    markAccepted(ids) {
+      for (const id of ids) {
+        if (submittedById.has(id)) {
+          acceptedById.set(id, true);
+        }
+      }
+    },
+    getAcceptedSubmittedIds() {
+      return Array.from(acceptedById.keys());
+    },
+    dropSubmittedIds(ids) {
+      for (const id of ids) {
+        submittedById.delete(id);
+        acceptedById.delete(id);
+      }
+    },
     clearSubmittedIds() {
       submittedById.clear();
+      acceptedById.clear();
     },
     hasObservedAnyTraffic() {
       return observedGenerate || observedFeed;

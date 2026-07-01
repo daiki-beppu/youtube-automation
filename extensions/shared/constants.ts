@@ -78,6 +78,15 @@ export const INJECT_ACK_TIMEOUT_MS = 30000;
  * これを超えても in-flight が増えなければ fail-loud で ERROR phase に落とす。 */
 export const MAX_INJECT_RETRY = 2;
 
+/** duration guard で全 clip が NG だったときに同じ prompt を再 Generate する最大 retry 回数 (#1268)。 */
+export const MAX_YIELD_RETRY = 2;
+
+/** suno-prompts.json に duration_filter が無い場合の既定値 (#1268)。 */
+export const DEFAULT_YIELD_DURATION_FILTER = {
+  minSec: 60,
+  maxSec: 300,
+} as const;
+
 /** 速度プリセットの選択値を保存する chrome.storage.local の key (#875)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const SPEED_PRESET_STORAGE_KEY = "sunoSpeedPreset";
@@ -201,6 +210,8 @@ export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
 export interface ObservedClip {
   id: string;
   status: string;
+  /** Suno feed から観測した曲尺（秒）。duration guard (#1268) が使う。未観測なら undefined。 */
+  durationSec?: number;
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
@@ -265,6 +276,10 @@ export interface ProgressPayload {
   total: number;
   index?: number;
   message?: string;
+  /** yield guard の同一 prompt 再生成回数 (#1268)。snapshot 復元用の付加情報。 */
+  yieldRetryCount?: number;
+  /** duration check を通過した clip ID (#1268)。後続の playlist filter で消費する冗長ソース。 */
+  acceptedClipIds?: string[];
 }
 
 /** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
@@ -290,4 +305,8 @@ export interface SnapshotPayload {
   submittedClipIds?: string[];
   // playlist 追加時に揃っているべき clip ID 件数。
   playlistExpectedClipCount?: number;
+  // duration check を通過した clip ID 一覧 (#1268)。現時点では記録のみで playlist filter は後続 issue。
+  yieldAcceptedClipIds?: string[];
+  // entry index -> duration guard retry 回数 (#1268)。popup 再 open 時の snapshot に保持する。
+  yieldRetryCounts?: Record<number, number>;
 }

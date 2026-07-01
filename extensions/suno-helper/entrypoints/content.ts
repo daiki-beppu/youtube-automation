@@ -4,6 +4,7 @@ import type { PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
+  MAX_YIELD_RETRY,
   PHASE,
   type ProgressPayload,
   QUEUE_ERROR_WAIT_MS,
@@ -22,6 +23,7 @@ import {
 } from "../lib/resume-state";
 import { InjectNotAcknowledgedError, injectWithVerification } from "../lib/inject-retry";
 import { runEntryWithRetry } from "../lib/entry-retry";
+import { evaluateClips, formatYieldFailure, shouldRetry } from "../lib/yield-guard";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
 import { attachBridgeListener, createFeedPoller, requestFeedPoll, requestSliderSet } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
@@ -321,6 +323,36 @@ export default defineContentScript({
       return tracker.getSubmittedIds();
     }
 
+    async function waitForAttemptClipsComplete(clipIds: string[], isAborted: () => boolean): Promise<void> {
+      if (clipIds.length === 0) {
+        throw new Error(
+          "duration guard 用の clip ID を観測できませんでした。bridge の generate 観測を確認してください。",
+        );
+      }
+      const deadline = Date.now() + INFLIGHT_STALL_TIMEOUT_MS;
+      let lastPendingCount = Number.POSITIVE_INFINITY;
+      while (!isAborted()) {
+        const pendingIds = tracker.getPendingIdsByIds(clipIds);
+        if (pendingIds.length === 0) {
+          return;
+        }
+        if (pendingIds.length !== lastPendingCount) {
+          lastPendingCount = pendingIds.length;
+          console.info(`[suno-helper] yield guard wait: pending=${pendingIds.length}/${clipIds.length}`);
+        }
+        if (Date.now() >= deadline) {
+          throw new Error(`duration guard の clip 完了待ちがタイムアウトしました: pending=${pendingIds.length}`);
+        }
+        await requestFeedPoll(pendingIds);
+        await abortableSleep(POLL_INTERVAL_MS, isAborted);
+      }
+    }
+
+    async function evaluateAttemptYield(clipIds: string[], isAborted: () => boolean) {
+      await waitForAttemptClipsComplete(clipIds, isAborted);
+      return evaluateClips(clipIds.map((id) => ({ id, durationSec: tracker.getDuration(id) })));
+    }
+
     interface RunOptions {
       // 0-based inclusive な実行範囲 (#872)。未指定は全 entry。判断A: range 指定でも entries 全体と
       // 絶対 index を保ち、range 内の entry だけを処理する（slice 再採番による index ズレを起こさない）。
@@ -396,100 +428,166 @@ export default defineContentScript({
           emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
         }
-        // 1 entry の実行を失敗分類つきで包む (#948)。一時的な失敗は preset.maxEntryRetry 回まで
-        // 同一 entry を再試行し、それでも失敗ならスキップして次へ（run 全体は止めない）。
-        const result = await runEntryWithRetry({
-          attempt: async () => {
-            // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
-            // bridge 無観測の縮退中は message で明示する (#948 PR4: DOM プロキシは過大カウントしうるため
-            // 「待ちが長い」原因をユーザーが切り分けられるようにする)。
+        let yieldRetryCount = 0;
+        for (;;) {
+          const submittedStart = tracker.getSubmittedIds().length;
+          // 1 entry の実行を失敗分類つきで包む (#948)。一時的な失敗は preset.maxEntryRetry 回まで
+          // 同一 entry を再試行し、それでも失敗ならスキップして次へ（run 全体は止めない）。
+          const result = await runEntryWithRetry({
+            attempt: async () => {
+              // Suno のキュー上限（20 clip）を超えると後続が silent fail するため、投入前に空きを待つ。
+              // bridge 無観測の縮退中は message で明示する (#948 PR4: DOM プロキシは過大カウントしうるため
+              // 「待ちが長い」原因をユーザーが切り分けられるようにする)。
+              emitProgress({
+                phase: PHASE.WAITING_SLOT,
+                index: i,
+                total,
+                message: tracker.hasObservedAnyTraffic() ? undefined : "bridge 未観測: DOM 計数で待機中",
+              });
+              await waitForQueueSlot(maxGeneratingClips, {
+                isAborted: () => aborted,
+                pollIntervalMs: POLL_INTERVAL_MS,
+                // getLastChangeAt 注入により stall 経路で動くため timeoutMs は実質未使用（後方互換用に残す）。
+                timeoutMs: QUEUE_SLOT_WAIT_TIMEOUT_MS,
+                queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
+                // bridge の status ベースカウント (#948)。Remix disabled プロキシは完了後も disabled が
+                // 残り過大カウントするため、観測があれば一次情報（API status）で数える。
+                getCount: currentInFlightCount,
+                // stall ベース判定 (#948): 正確なカウントの下では上限での長い待ちは正常状態
+                //（clip 完了に数分かかる）。固定 5 分 deadline は誤停止になるため、
+                // 「in-flight 集合が 10 分間まったく変化しない」ときのみ fail-loud に倒す。
+                getLastChangeAt: () => tracker.lastChangeAt(),
+                stallTimeoutMs: INFLIGHT_STALL_TIMEOUT_MS,
+              });
+              if (aborted) {
+                return; // 中断は直後の outcome 判定で STOPPED 経路へ
+              }
+              emitProgress({ phase: PHASE.INJECTING, index: i, total, yieldRetryCount });
+              // inject 後に受理（ACK）を検証し、silent drop なら同じ entry を retry する (#864 root cause 3)。
+              // ACK は bridge の generate レスポンス観測 OR DOM 増分のハイブリッド (#948)。
+              await injectWithVerification({
+                inject: () => injectAndGenerate(entries[i], i, total),
+                markBeforeInject: () =>
+                  markAck({
+                    getSubmissionCount: () => tracker.submissionCount(),
+                    getDomInFlightCount: getInFlightClipCount,
+                    sleep,
+                  }),
+                waitForAck,
+                isAborted: () => aborted,
+                maxRetry: preset.maxInjectRetry,
+                ackTimeoutMs: preset.injectAckTimeoutMs,
+                pollIntervalMs: POLL_INTERVAL_MS,
+                describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
+              });
+            },
+            isAborted: () => aborted,
+            // Generate click 済みで受理失敗確定でないエラー（典型: 生成完了待ち timeout）は再実行すると
+            // 重複生成になるため presumed-done（resolveInterruptIndex の i+1 判断と同じ）。
+            wasSubmitted: (err) => lastSubmittedEntryIndex === i && !(err instanceof InjectNotAcknowledgedError),
+            isFatal: (err) => err instanceof FatalRunError,
+            maxRetry: preset.maxEntryRetry,
+            retryDelayMs: () => applyJitter(preset.interCreateDelayMs, preset.jitterMs),
+            sleep: abortableSleep,
+            describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
+          });
+          if (result.outcome === "fatal") {
+            const message = result.error instanceof Error ? result.error.message : String(result.error);
+            // interruptIndex: submitted（Generate click 済み）かつ silent drop 確定でない → i+1（重複しない）。
+            // emitProgress の index も interruptIndex にする: snapshot.applyProgress が ERROR payload の
+            // index を failedIndex として記録し、popup が chrome.storage 喪失時の冗長ソースに使うため (#924)。
+            const interruptIndex = resolveInterruptIndex(
+              i,
+              lastSubmittedEntryIndex === i,
+              result.error instanceof InjectNotAcknowledgedError,
+            );
+            emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total, message });
+            persistInterruptState(interruptIndex);
+            return;
+          }
+          if (result.outcome === "aborted" || aborted) {
+            // attempt 中の中断（waitForQueueSlot / injectAndGenerate 内の silent return 含む）。
+            // Generate click 済みなら i+1 を persist し再開時の重複生成を防ぐ (#924)。
+            const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
+            persistInterruptState(interruptIndex);
+            emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
+            return;
+          }
+          if (result.outcome === "failed") {
+            const message = result.error instanceof Error ? result.error.message : String(result.error);
+            failedIndices.push(i);
+            console.warn(`[suno-helper] entry ${i} をスキップして続行します: ${message}`);
+            emitProgress({ phase: PHASE.ENTRY_FAILED, index: i, total, message });
+            break; // run 全体は止めない。次 entry へ。
+          }
+          if (result.outcome === "presumed-done") {
+            const message = result.error instanceof Error ? result.error.message : String(result.error);
+            console.warn(`[suno-helper] entry ${i} は投入済みのため生成済み扱いで続行します: ${message}`);
+            emitProgress({ phase: PHASE.DONE, index: i, total, yieldRetryCount });
+            break;
+          }
+
+          const attemptClipIds = tracker.getSubmittedIds().slice(submittedStart);
+          if (attemptClipIds.length === 0) {
+            console.warn(
+              `[suno-helper] entry ${i} の clip ID を bridge で観測できなかったため duration guard を skip します。`,
+            );
+            emitProgress({ phase: PHASE.DONE, index: i, total, yieldRetryCount });
+            break;
+          }
+          let message = "";
+          try {
+            const evaluation = await evaluateAttemptYield(attemptClipIds, () => aborted);
+            if (aborted) {
+              const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
+              persistInterruptState(interruptIndex);
+              emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
+              return;
+            }
+            if (evaluation.acceptedClipIds.length > 0) {
+              tracker.markAccepted(evaluation.acceptedClipIds);
+              emitProgress({
+                phase: PHASE.DONE,
+                index: i,
+                total,
+                yieldRetryCount,
+                acceptedClipIds: evaluation.acceptedClipIds,
+              });
+              break;
+            }
+            tracker.dropSubmittedIds(attemptClipIds);
+            message = formatYieldFailure(evaluation);
+          } catch (err) {
+            tracker.dropSubmittedIds(attemptClipIds);
+            message = err instanceof Error ? err.message : String(err);
+          }
+
+          if (aborted) {
+            const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
+            persistInterruptState(interruptIndex);
+            emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
+            return;
+          }
+          if (shouldRetry(yieldRetryCount, MAX_YIELD_RETRY)) {
+            yieldRetryCount += 1;
+            console.warn(
+              `[suno-helper] entry ${i} duration guard NG、同一 prompt で再生成します (${yieldRetryCount}/${MAX_YIELD_RETRY}): ${message}`,
+            );
             emitProgress({
-              phase: PHASE.WAITING_SLOT,
+              phase: PHASE.GENERATING,
               index: i,
               total,
-              message: tracker.hasObservedAnyTraffic() ? undefined : "bridge 未観測: DOM 計数で待機中",
+              message: `${message}; retry ${yieldRetryCount}/${MAX_YIELD_RETRY}`,
+              yieldRetryCount,
             });
-            await waitForQueueSlot(maxGeneratingClips, {
-              isAborted: () => aborted,
-              pollIntervalMs: POLL_INTERVAL_MS,
-              // getLastChangeAt 注入により stall 経路で動くため timeoutMs は実質未使用（後方互換用に残す）。
-              timeoutMs: QUEUE_SLOT_WAIT_TIMEOUT_MS,
-              queueErrorWaitMs: QUEUE_ERROR_WAIT_MS,
-              // bridge の status ベースカウント (#948)。Remix disabled プロキシは完了後も disabled が
-              // 残り過大カウントするため、観測があれば一次情報（API status）で数える。
-              getCount: currentInFlightCount,
-              // stall ベース判定 (#948): 正確なカウントの下では上限での長い待ちは正常状態
-              //（clip 完了に数分かかる）。固定 5 分 deadline は誤停止になるため、
-              // 「in-flight 集合が 10 分間まったく変化しない」ときのみ fail-loud に倒す。
-              getLastChangeAt: () => tracker.lastChangeAt(),
-              stallTimeoutMs: INFLIGHT_STALL_TIMEOUT_MS,
-            });
-            if (aborted) {
-              return; // 中断は直後の outcome 判定で STOPPED 経路へ
-            }
-            emitProgress({ phase: PHASE.INJECTING, index: i, total });
-            // inject 後に受理（ACK）を検証し、silent drop なら同じ entry を retry する (#864 root cause 3)。
-            // ACK は bridge の generate レスポンス観測 OR DOM 増分のハイブリッド (#948)。
-            await injectWithVerification({
-              inject: () => injectAndGenerate(entries[i], i, total),
-              markBeforeInject: () =>
-                markAck({
-                  getSubmissionCount: () => tracker.submissionCount(),
-                  getDomInFlightCount: getInFlightClipCount,
-                  sleep,
-                }),
-              waitForAck,
-              isAborted: () => aborted,
-              maxRetry: preset.maxInjectRetry,
-              ackTimeoutMs: preset.injectAckTimeoutMs,
-              pollIntervalMs: POLL_INTERVAL_MS,
-              describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
-            });
-          },
-          isAborted: () => aborted,
-          // Generate click 済みで受理失敗確定でないエラー（典型: 生成完了待ち timeout）は再実行すると
-          // 重複生成になるため presumed-done（resolveInterruptIndex の i+1 判断と同じ）。
-          wasSubmitted: (err) => lastSubmittedEntryIndex === i && !(err instanceof InjectNotAcknowledgedError),
-          isFatal: (err) => err instanceof FatalRunError,
-          maxRetry: preset.maxEntryRetry,
-          retryDelayMs: () => applyJitter(preset.interCreateDelayMs, preset.jitterMs),
-          sleep: abortableSleep,
-          describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
-        });
-        if (result.outcome === "fatal") {
-          const message = result.error instanceof Error ? result.error.message : String(result.error);
-          // interruptIndex: submitted（Generate click 済み）かつ silent drop 確定でない → i+1（重複しない）。
-          // emitProgress の index も interruptIndex にする: snapshot.applyProgress が ERROR payload の
-          // index を failedIndex として記録し、popup が chrome.storage 喪失時の冗長ソースに使うため (#924)。
-          const interruptIndex = resolveInterruptIndex(
-            i,
-            lastSubmittedEntryIndex === i,
-            result.error instanceof InjectNotAcknowledgedError,
-          );
-          emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total, message });
-          persistInterruptState(interruptIndex);
-          return;
-        }
-        if (result.outcome === "aborted" || aborted) {
-          // attempt 中の中断（waitForQueueSlot / injectAndGenerate 内の silent return 含む）。
-          // Generate click 済みなら i+1 を persist し再開時の重複生成を防ぐ (#924)。
-          const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
-          persistInterruptState(interruptIndex);
-          emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
-          return;
-        }
-        if (result.outcome === "failed") {
-          const message = result.error instanceof Error ? result.error.message : String(result.error);
+            await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);
+            continue;
+          }
           failedIndices.push(i);
-          console.warn(`[suno-helper] entry ${i} をスキップして続行します: ${message}`);
-          emitProgress({ phase: PHASE.ENTRY_FAILED, index: i, total, message });
-          continue; // run 全体は止めない。retry 間で既に間隔を空けているため即次 entry へ。
+          console.warn(`[suno-helper] entry ${i} は duration guard 全滅のためスキップします: ${message}`);
+          emitProgress({ phase: PHASE.ENTRY_FAILED, index: i, total, message, yieldRetryCount });
+          break;
         }
-        if (result.outcome === "presumed-done") {
-          const message = result.error instanceof Error ? result.error.message : String(result.error);
-          console.warn(`[suno-helper] entry ${i} は投入済みのため生成済み扱いで続行します: ${message}`);
-        }
-        emitProgress({ phase: PHASE.DONE, index: i, total });
         // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
         // preset の基準間隔に ±jitter を加えて bot 判定の固定間隔シグナルを消す (#875)。毎回 fresh 算出する。
         await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);

@@ -73,12 +73,12 @@ describe("parseClipsFromGenerateResponse: 生成投入レスポンスの解析 (
     const json = {
       id: "batch-1",
       clips: [
-        { id: "c1", status: "submitted", title: "t1", extra: 1 },
+        { id: "c1", status: "submitted", title: "t1", extra: 1, metadata: { duration: 121.5 } },
         { id: "c2", status: "submitted" },
       ],
     };
     expect(parseClipsFromGenerateResponse(json)).toEqual([
-      { id: "c1", status: "submitted" },
+      { id: "c1", status: "submitted", durationSec: 121.5 },
       { id: "c2", status: "submitted" },
     ]);
   });
@@ -95,8 +95,8 @@ describe("parseClipsFromGenerateResponse: 生成投入レスポンスの解析 (
 
 describe("parseClipsFromFeedResponse: feed レスポンスの解析 (両形対応・fail-soft)", () => {
   it("Given {clips: [...]} 形 When 解析する Then ObservedClip[] を返す", () => {
-    expect(parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming" }] })).toEqual([
-      { id: "c1", status: "streaming" },
+    expect(parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming", duration_sec: "90" }] })).toEqual([
+      { id: "c1", status: "streaming", durationSec: 90 },
     ]);
   });
 

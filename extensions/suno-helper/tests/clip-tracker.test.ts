@@ -147,4 +147,29 @@ describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
     expect(tracker.submissionCount()).toBe(1);
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
   });
+
+  it("Given feed で duration 観測 When getDuration Then 秒数を返す", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([{ id: "fresh-a", status: "submitted" }]);
+    tracker.applyFeedStatuses([{ id: "fresh-a", status: "complete", durationSec: 123.4 }]);
+
+    expect(tracker.getDuration("fresh-a")).toBe(123.4);
+    expect(tracker.getPendingIdsByIds(["fresh-a"])).toEqual([]);
+  });
+
+  it("Given accepted と dropSubmittedIds When 読む Then accepted は保持され drop は playlist 候補だけ外す", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([
+      { id: "ok", status: "submitted" },
+      { id: "ng", status: "submitted" },
+    ]);
+    tracker.markAccepted(["ok"]);
+    tracker.dropSubmittedIds(["ng"]);
+
+    expect(tracker.getSubmittedIds()).toEqual(["ok"]);
+    expect(tracker.getAcceptedSubmittedIds()).toEqual(["ok"]);
+    expect(tracker.getPendingIds()).toEqual(["ok", "ng"]); // queue status 集計は保持する
+  });
 });

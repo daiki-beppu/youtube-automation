@@ -68,6 +68,41 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
+function parseDurationSec(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function extractDurationSec(item: Record<string, unknown>): number | undefined {
+  const direct =
+    parseDurationSec(item.duration) ??
+    parseDurationSec(item.duration_sec) ??
+    parseDurationSec(item.duration_s) ??
+    parseDurationSec(item.duration_seconds);
+  if (direct !== undefined) {
+    return direct;
+  }
+  const metadata = item.metadata;
+  if (typeof metadata === "object" && metadata !== null) {
+    const record = metadata as Record<string, unknown>;
+    return (
+      parseDurationSec(record.duration) ??
+      parseDurationSec(record.duration_sec) ??
+      parseDurationSec(record.duration_s) ??
+      parseDurationSec(record.duration_seconds)
+    );
+  }
+  return undefined;
+}
+
 /** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
@@ -81,9 +116,12 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
       typeof (item as { id?: unknown }).id === "string" &&
       typeof (item as { status?: unknown }).status === "string"
     ) {
+      const record = item as Record<string, unknown>;
+      const durationSec = extractDurationSec(record);
       clips.push({
         id: (item as { id: string }).id,
         status: (item as { status: string }).status,
+        ...(durationSec !== undefined ? { durationSec } : {}),
       });
     }
   }

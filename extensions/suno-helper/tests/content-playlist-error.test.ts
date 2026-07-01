@@ -116,7 +116,12 @@ async function loadContentScriptWithPlaylistRows(
     createClipTracker: vi.fn(() => ({
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
+      getPendingIdsByIds: vi.fn(() => []),
       getPendingSubmittedIds: vi.fn(() => []),
+      getDuration: vi.fn(() => 120),
+      markAccepted: vi.fn(),
+      getAcceptedSubmittedIds: vi.fn(() => []),
+      dropSubmittedIds: vi.fn(),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
