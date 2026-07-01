@@ -1,4 +1,5 @@
 import type { PromptEntry } from "../../shared/api";
+import type { ItemState } from "../../shared/constants";
 import type { RunPayload } from "./messaging";
 import { resumeRunRange, type ResumeBanner, type RunRange } from "./resume-state";
 
@@ -22,6 +23,12 @@ export interface RunPayloadInput {
   range: RunRange | undefined;
   collectionId: string;
   overrides: RunOverrides | undefined;
+}
+
+export interface SelectedEntriesRunOverridesInput {
+  selectedEntries: boolean[];
+  itemStates: ItemState[];
+  entryCount: number;
 }
 
 export function buildRunPayload(input: RunPayloadInput): RunPayloadObject {
@@ -56,4 +63,19 @@ export function buildFailedEntriesRunOverrides(
     submittedClipIds: [...playlistResume.submittedClipIds],
     playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
   };
+}
+
+export function buildSelectedEntriesRunOverrides({
+  selectedEntries,
+  itemStates,
+  entryCount,
+}: SelectedEntriesRunOverridesInput): RunOverrides | undefined {
+  const indices = Array.from({ length: entryCount }, (_, index) => index).filter((index) => {
+    return selectedEntries[index] ?? (itemStates[index] ?? "idle") !== "done";
+  });
+
+  if (indices.length === entryCount) {
+    return undefined;
+  }
+  return { indices };
 }

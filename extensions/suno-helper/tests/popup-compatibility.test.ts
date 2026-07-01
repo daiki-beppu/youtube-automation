@@ -300,6 +300,69 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("dir mode でチェックを外した entry を除外して 0-based indices を run payload に渡す", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "" },
+      { name: "p2", style: "lofi", lyrics: "" },
+      { name: "p3", style: "lofi", lyrics: "" },
+    ];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 3,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("3 パターンを取得しました。");
+    });
+
+    const checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, true, true]);
+
+    await act(async () => {
+      checkboxes[1].click();
+    });
+
+    await waitFor(() => {
+      expect(buttonByText(container, "選択した2件を連続実行")).toBeTruthy();
+    });
+
+    await act(async () => {
+      buttonByText(container, "選択した2件を連続実行").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("連続実行を開始しました。");
+    });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
+      entries,
+      playlistName: "clm | theme-a",
+      range: undefined,
+      collectionId: "20260601-clm-theme-a-collection",
+      indices: [0, 2],
+      submittedClipIds: undefined,
+      playlistExpectedClipCount: undefined,
+    });
+  });
+
   it("dir mode の channel/theme から multi-word channel の playlist 名を導出する", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock
