@@ -749,8 +749,7 @@ def create_server(
             return self.rfile.read(length) if length else b""
 
         def do_POST(self) -> None:  # noqa: N802
-            # GET と異なり POST は Origin 必須。未設定・不許可は 403。
-            # （チェック順: まず capture root の有無に関わらず Origin を確認する）
+            # GET と異なり POST は route ごとに書き込み可否を明示的に判定する。
             origin = self._allowed_origin()
 
             # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
@@ -787,11 +786,16 @@ def create_server(
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。
             if self.path == _DISTROKID_RELEASES_ROUTE:
-                if capture_root is None:
-                    # capture root 未指定時は #893 の POST 無効と同じ gating（#934）。
+                if not distrokid_enabled or capture_root is None:
+                    # distrokid disabled / capture root 未指定時は endpoint 自体を出さない。
                     self.send_error(404, "Not Found")
                     return
-                if origin is None:
+                raw_origin = self.headers.get("Origin")
+                if (
+                    allow_origin is None
+                    or not allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
+                    or raw_origin != allow_origin
+                ):
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()

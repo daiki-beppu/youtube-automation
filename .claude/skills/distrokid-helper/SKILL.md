@@ -246,7 +246,7 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 1. JSON array が返ること
 2. 対象 collection と `30-distrokid/<disc>` が一覧に含まれること
 3. サーバー出力に `distrokid dir mode enabled` が表示されること
-4. サーバー出力の `distrokid releases` が `enabled` になっていること
+4. サーバー出力に `distrokid releases enabled` が表示されること
 
 `--playlist-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` にも必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--playlist-capture-prefix` は Suno playlist capture 用なので、DistroKid サーバー起動では指定しない。`--allow-origin` は実際の distrokid-helper 拡張 ID に置き換え、DistroKid page origin からの write POST を許可しない。
 

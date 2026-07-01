@@ -324,6 +324,11 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
 def check_skills_synced(channel_dir: Path) -> CheckResult:
     skills_dir = channel_dir / CLAUDE_SKILLS_DIR
     bundled_skills = bundled_skill_names()
+    for legacy_skill in LEGACY_BUNDLED_SKILLS:
+        if (skills_dir / legacy_skill / SKILL_FILENAME).exists():
+            return _skills_sync_prune_failure(
+                f"旧 {legacy_skill} skill が残存: {CLAUDE_SKILLS_DIR / legacy_skill / SKILL_FILENAME}"
+            )
     missing_skill_files = [
         Path(skill_name) / SKILL_FILENAME
         for skill_name in bundled_skills
@@ -332,11 +337,6 @@ def check_skills_synced(channel_dir: Path) -> CheckResult:
     if missing_skill_files:
         sample = ", ".join(str(CLAUDE_SKILLS_DIR / path) for path in missing_skill_files[:5])
         return _skills_sync_failure(f"同梱 skill が未展開: {sample}")
-    for legacy_skill in LEGACY_BUNDLED_SKILLS:
-        if (skills_dir / legacy_skill / SKILL_FILENAME).exists():
-            return _skills_sync_prune_failure(
-                f"旧 {legacy_skill} skill が残存: {CLAUDE_SKILLS_DIR / legacy_skill / SKILL_FILENAME}"
-            )
     if not _agents_skills_link_is_valid(channel_dir, skills_dir):
         return _skills_sync_warning(f"{AGENTS_SKILLS_LINK} が {CLAUDE_SKILLS_DIR} を指す symlink になっていない")
     return CheckResult(
