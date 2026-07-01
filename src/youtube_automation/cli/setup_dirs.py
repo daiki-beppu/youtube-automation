@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from youtube_automation.cli.setup_directory_contract import (
     SETUP_DIRECTORIES,
     validate_setup_directory_target,
 )
+from youtube_automation.cli.target_resolver import resolve_existing_target_dir
 from youtube_automation.utils.exceptions import ConfigError
 
 
@@ -33,25 +33,7 @@ class DirAction:
 
 
 def _resolve_target_dir(target: str | None) -> Path:
-    """対象ディレクトリを解決する.
-
-    優先順: `--target` -> `CHANNEL_DIR` 環境変数 -> CWD.
-    明示指定されたディレクトリが存在しない場合は ConfigError。
-    """
-    if target:
-        path = Path(target).resolve()
-        if not path.is_dir():
-            raise ConfigError(f"--target で指定されたディレクトリが存在しません: {path}")
-        return path
-
-    env = os.environ.get("CHANNEL_DIR")
-    if env:
-        path = Path(env).resolve()
-        if not path.is_dir():
-            raise ConfigError(f"CHANNEL_DIR で指定されたディレクトリが存在しません: {path}")
-        return path
-
-    return Path.cwd().resolve()
+    return resolve_existing_target_dir(target)
 
 
 def plan_setup_directories(target: Path) -> tuple[DirAction, ...]:

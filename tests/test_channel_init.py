@@ -108,20 +108,21 @@ def test_main_creates_all_config_files_when_target_is_empty(tmp_path):
         assert (channel_dir / name).is_file(), f"missing config file: {name}"
 
 
-# ===================== Case 2: 正準ディレクトリ + .gitkeep =====================
+# ===================== Case 2: setup-owned ディレクトリは生成しない =====================
 
 
-def test_main_creates_canonical_directories_with_gitkeep_when_target_is_empty(tmp_path):
+def test_main_does_not_create_setup_owned_directories_when_target_is_empty(tmp_path):
     # Given: 空のターゲットディレクトリ
     # When: main を実行
     rc = main(_required_args(tmp_path))
 
-    # Then: 正準ディレクトリと .gitkeep が配置される
+    # Then: /setup が所有する空ディレクトリは生成しない
     assert rc == 0
-    for rel in GITKEEP_DIRS:
-        d = tmp_path / rel
-        assert d.is_dir(), f"missing directory: {rel}"
-        assert (d / ".gitkeep").is_file(), f"missing .gitkeep in {rel}"
+    assert not (tmp_path / "collections").exists()
+    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "docs").exists()
+    assert not (tmp_path / "research").exists()
+    assert not (tmp_path / "auth" / ".gitkeep").exists()
 
 
 # ===================== Case 3: --short / --name が meta.json に反映 =====================
@@ -515,20 +516,20 @@ def test_invalid_benchmark_channel_arg_exits_before_writing_files(tmp_path):
 # ===================== Case 9: stdout サマリーに created ラベル =====================
 
 
-def test_stdout_summary_lists_created_files_and_directories(tmp_path, capsys):
+def test_stdout_summary_lists_created_files_only(tmp_path, capsys):
     # Given: 空のターゲット
     # When: main 実行
     rc = main(_required_args(tmp_path))
     out = capsys.readouterr().out
 
-    # Then: サマリーに各ファイル名 + ディレクトリ名 + created ラベル
+    # Then: サマリーに各ファイル名 + created ラベル
     assert rc == 0
     assert "created" in out
-    # 代表的なファイル名・ディレクトリ名が出力されている
+    # 代表的なファイル名が出力され、setup-owned directory は出力されない
     assert "meta.json" in out
     assert "analytics.json" in out
-    assert "auth" in out
-    assert "docs/benchmarks" in out
+    assert "auth/client_secrets.template.json" in out
+    assert "docs/benchmarks" not in out
 
 
 # ===================== Case 10: 冪等性（2 回実行で skip） =====================
@@ -638,20 +639,20 @@ def test_pyproject_registers_yt_channel_init_entry_point():
     assert scripts["yt-channel-init"] == "youtube_automation.cli_entrypoints:yt_channel_init"
 
 
-# ===================== Case 16: ディレクトリ既存・.gitkeep 不在 =====================
+# ===================== Case 16: setup 済みディレクトリの再利用 =====================
 
 
-def test_main_adds_gitkeep_when_directory_exists_without_it(tmp_path):
+def test_main_does_not_add_gitkeep_when_setup_directory_exists_without_it(tmp_path):
     # Given: auth/ ディレクトリのみ手動作成（.gitkeep なし）
     (tmp_path / "auth").mkdir()
 
     # When: main 実行
     rc = main(_required_args(tmp_path))
 
-    # Then: .gitkeep が作成される、ディレクトリ自体は保持
+    # Then: .gitkeep は /setup の責務なので追加せず、ディレクトリ自体は保持
     assert rc == 0
     assert (tmp_path / "auth").is_dir()
-    assert (tmp_path / "auth" / ".gitkeep").is_file()
+    assert not (tmp_path / "auth" / ".gitkeep").exists()
 
 
 def test_main_rejects_directory_at_gitkeep_path_without_partial_generation(tmp_path, capsys):
@@ -667,6 +668,29 @@ def test_main_rejects_directory_at_gitkeep_path_without_partial_generation(tmp_p
     assert "auth/.gitkeep は通常ファイルである必要があります" in err
     assert not (tmp_path / "config").exists()
     assert not (tmp_path / "collections").exists()
+
+
+@pytest.mark.parametrize("target_exists", [True, False])
+def test_main_rejects_gitkeep_symlink_without_partial_generation(tmp_path, capsys, target_exists):
+    # Given: .gitkeep が symlink / broken symlink になっている
+    outside = tmp_path / "outside-gitkeep"
+    if target_exists:
+        outside.write_text("external\n", encoding="utf-8")
+    (tmp_path / "auth").mkdir()
+    (tmp_path / "auth" / ".gitkeep").symlink_to(outside)
+
+    # When: main 実行
+    rc = main(_required_args(tmp_path))
+    err = capsys.readouterr().err
+
+    # Then: symlink 先への touch も config 部分生成も行わない
+    assert rc == 1
+    assert "auth/.gitkeep は通常ファイルである必要があります" in err
+    if target_exists:
+        assert outside.read_text(encoding="utf-8") == "external\n"
+    else:
+        assert not outside.exists()
+    assert not (tmp_path / "config").exists()
 
 
 def test_main_rejects_setup_directory_symlink_without_partial_generation(tmp_path, capsys):
@@ -837,20 +861,19 @@ def test_short_arg_accepts_hyphen_and_digit_opaque_string(tmp_path):
     assert meta["channel"]["short"] == "BGM-01"
 
 
-# ===================== Case 22: docs/benchmarks/.gitkeep が parent 不在から作成 =====================
+# ===================== Case 22: setup-owned nested directory は生成しない =====================
 
 
-def test_nested_directory_gitkeep_is_created_from_missing_parent(tmp_path):
+def test_nested_setup_owned_directory_is_not_created_from_missing_parent(tmp_path):
     # Given: docs/ も存在しない空ターゲット
     assert not (tmp_path / "docs").exists()
 
     # When: main 実行
     rc = main(_required_args(tmp_path))
 
-    # Then: docs/benchmarks/.gitkeep が 1 ステップで作成される
+    # Then: docs/benchmarks は /setup の責務なので生成しない
     assert rc == 0
-    assert (tmp_path / "docs" / "benchmarks").is_dir()
-    assert (tmp_path / "docs" / "benchmarks" / ".gitkeep").is_file()
+    assert not (tmp_path / "docs" / "benchmarks").exists()
 
 
 def test_scaffold_gitignore_contains_secret_and_python_patterns(tmp_path):

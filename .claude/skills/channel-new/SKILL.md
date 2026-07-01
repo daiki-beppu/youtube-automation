@@ -109,7 +109,7 @@ Step 4 の config 生成で解消するため、以下の config 未生成由来
 
 seed fetch は YouTube Data API 認証に依存するため、既存チャンネルの token コピーで代替しない。
 
-### Step 4: フルパッケージ config / ディレクトリ生成
+### Step 4: フルパッケージ config / 初期運用ファイル生成
 
 `yt-channel-init` で `config/channel/*.json` と channel-new で必要な初期運用ファイルを一括生成する。`/setup` が作成済みのディレクトリはそのまま再利用する:
 
@@ -141,9 +141,8 @@ TTP 対象がこの時点で channel ID まで分かっている場合も、Step
 - `.env`
 - `.gitignore`
 - `auth/client_secrets.template.json`
-- `auth/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/`
 
-冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。setup が作成済みのディレクトリは `.gitkeep` の存在を確認して skip し、config ファイル生成とは独立して扱う。
+冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。初期ディレクトリ生成は `/setup` の責務であり、`yt-channel-init` は setup が作成済みのディレクトリを削除・再生成しない。
 
 ### Step 5: TTP seed fetch と承認済み対象反映
 

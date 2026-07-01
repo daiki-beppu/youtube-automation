@@ -18,6 +18,13 @@ SETUP_DIRECTORIES: tuple[str, ...] = (
 )
 
 
+def validate_existing_setup_directories(target: Path) -> None:
+    """存在している setup-owned directory component だけを検証する."""
+    for rel in SETUP_DIRECTORIES:
+        if _has_existing_component(target, rel):
+            validate_setup_directory_target(target, rel)
+
+
 def validate_setup_directory_target(target: Path, rel: str) -> None:
     """setup directory の生成先が target 配下の通常ディレクトリ契約を満たすか検証する."""
     rel_path = Path(rel)
@@ -44,3 +51,12 @@ def validate_setup_directory_target(target: Path, rel: str) -> None:
     gitkeep = path / GITKEEP_NAME
     if gitkeep.is_symlink() or (gitkeep.exists() and not gitkeep.is_file()):
         raise ConfigError(f"{rel}/{GITKEEP_NAME} は通常ファイルである必要があります: {gitkeep}")
+
+
+def _has_existing_component(target: Path, rel: str) -> bool:
+    current = target
+    for part in Path(rel).parts:
+        current = current / part
+        if current.exists() or current.is_symlink():
+            return True
+    return False

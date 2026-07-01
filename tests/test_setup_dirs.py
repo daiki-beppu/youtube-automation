@@ -95,6 +95,26 @@ def test_existing_gitkeep_directory_returns_domain_error_without_partial_generat
     assert not (tmp_path / "collections").exists()
 
 
+@pytest.mark.parametrize("target_exists", [True, False])
+def test_existing_gitkeep_symlink_returns_domain_error_without_partial_generation(tmp_path, capsys, target_exists):
+    outside = tmp_path / "outside-gitkeep"
+    if target_exists:
+        outside.write_text("external\n", encoding="utf-8")
+    (tmp_path / "auth").mkdir()
+    (tmp_path / "auth" / ".gitkeep").symlink_to(outside)
+
+    rc = setup_dirs.main(["--target", str(tmp_path)])
+    err = capsys.readouterr().err
+
+    assert rc == 1
+    assert "auth/.gitkeep は通常ファイルである必要があります" in err
+    if target_exists:
+        assert outside.read_text(encoding="utf-8") == "external\n"
+    else:
+        assert not outside.exists()
+    assert not (tmp_path / "collections").exists()
+
+
 def test_existing_setup_directory_symlink_returns_domain_error_without_external_write(tmp_path, capsys):
     outside = tmp_path / "outside"
     outside.mkdir()
