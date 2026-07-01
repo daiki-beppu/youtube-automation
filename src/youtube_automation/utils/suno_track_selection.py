@@ -622,7 +622,11 @@ def _apply_plan(
     stock_cfg: StockConfig,
 ) -> SelectionResult:
     _prepare_log_destination(plan.log_path)
-    workflow_state = _read_workflow_state(CollectionPaths(collection_dir).workflow_state_path)
+    workflow_state = (
+        _read_workflow_state(CollectionPaths(collection_dir).workflow_state_path)
+        if plan.exceptions_over_limit
+        else None
+    )
     log_snapshot = _snapshot_file(plan.log_path)
     transaction_dir = collection_dir / ".tmp" / f"suno-select-{uuid.uuid4().hex}"
     transaction_dir.mkdir(parents=True, exist_ok=False)
@@ -690,7 +694,8 @@ def _apply_plan(
             mode_counts=result.mode_counts,
             dry_run=False,
         )
-        _sync_workflow_state_music_pair_selection(workflow_state, result)
+        if workflow_state is not None:
+            _sync_workflow_state_music_pair_selection(workflow_state, result)
     except Exception:
         _rollback(
             stocked_new=stocked_new,
@@ -781,6 +786,8 @@ def _exception_payload(exception: OverLimitException) -> dict[str, object]:
 
 
 def _atomic_json_write(target: Path, data: dict) -> None:
+    if target.is_symlink():
+        raise ValidationError(f"workflow-state.json must not be a symlink: {target}")
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=".workflow-state-", suffix=".json")
     try:
@@ -794,6 +801,8 @@ def _atomic_json_write(target: Path, data: dict) -> None:
 
 
 def _read_workflow_state(workflow_state_path: Path) -> WorkflowStateSnapshot:
+    if workflow_state_path.is_symlink():
+        raise ValidationError(f"workflow-state.json must not be a symlink: {workflow_state_path}")
     if workflow_state_path.is_file():
         try:
             data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
@@ -808,18 +817,14 @@ def _read_workflow_state(workflow_state_path: Path) -> WorkflowStateSnapshot:
 
 
 def _sync_workflow_state_music_pair_selection(snapshot: WorkflowStateSnapshot, result: SelectionResult) -> None:
+    if not result.exceptions_over_limit:
+        return
     data = dict(snapshot.data)
-    if result.exceptions_over_limit:
-        data["music_pair_selection"] = {
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "exceptions_over_limit_count": len(result.exceptions_over_limit),
-            "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
-        }
-    else:
-        if "music_pair_selection" not in data:
-            return
-        data.pop("music_pair_selection", None)
-
+    data["music_pair_selection"] = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "exceptions_over_limit_count": len(result.exceptions_over_limit),
+        "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
+    }
     _atomic_json_write(snapshot.path, data)
 
 
