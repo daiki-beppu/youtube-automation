@@ -302,6 +302,24 @@ class TestClientSecrets:
         assert r.status == "fail"
         assert "CLIENT_SECRETS_JSON 読み込み失敗" in r.message
 
+    def test_rejects_non_object_client_secrets_file(self, tmp_path):
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        (auth / "client_secrets.json").write_text("[]", encoding="utf-8")
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "fail"
+        assert "JSON object" in r.message
+
+    def test_rejects_non_object_client_secrets_json_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLIENT_SECRETS_JSON", "[]")
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "fail"
+        assert "JSON object" in r.message
+
     def test_missing_instructions_follow_google_auth_platform_contract(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "youtube_automation.utils.secrets.get_secret",
@@ -412,6 +430,21 @@ class TestAccounts:
     def test_accounts_skips_client_secrets_directory(self, tmp_path, capsys, monkeypatch):
         monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
         (tmp_path / "channel-a" / "auth" / "client_secrets.json").mkdir(parents=True)
+
+        code = doctor.run_accounts(tmp_path, as_json=True)
+
+        assert code == 1
+        assert "チャンネルが見つかりません" in capsys.readouterr().out
+
+    def test_accounts_discovery_ignores_client_secrets_dir_override(self, tmp_path, capsys, monkeypatch):
+        secrets_dir = tmp_path / "global-secrets"
+        self._write_valid_client_secrets(
+            secrets_dir / "client_secrets.json",
+            project_id="global-proj",
+            client_id="global-client.apps.googleusercontent.com",
+        )
+        (tmp_path / "not-a-channel").mkdir()
+        monkeypatch.setenv("CLIENT_SECRETS_DIR", str(secrets_dir))
 
         code = doctor.run_accounts(tmp_path, as_json=True)
 

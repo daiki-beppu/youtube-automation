@@ -342,6 +342,43 @@ class TestClientSecretsFallback:
 
         assert "通常ファイル" in str(exc_info.value)
 
+    def test_validate_client_secrets_rejects_web_only_file(self, tmp_path: Path, monkeypatch):
+        """Given Web application の client_secrets.json
+        When OAuth handler が検証
+        Then Desktop app の installed 必須契約で fail する。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        client_secrets = tmp_path / "auth" / "client_secrets.json"
+        client_secrets.parent.mkdir(parents=True)
+        client_secrets.write_text(
+            '{"web":{"client_id":"x","client_secret":"y","redirect_uris":["http://localhost"]}}',
+            encoding="utf-8",
+        )
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(ValidationError) as exc_info:
+            handler._validate_client_secrets()
+
+        assert "Desktop app" in str(exc_info.value)
+        assert "installed" in str(exc_info.value)
+
+    def test_validate_client_secrets_rejects_missing_installed_keys(self, tmp_path: Path, monkeypatch):
+        """Given installed block の必須キーが不足
+        When OAuth handler が検証
+        Then OAuth flow 実行前に validation error で止まる。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        client_secrets = tmp_path / "auth" / "client_secrets.json"
+        client_secrets.parent.mkdir(parents=True)
+        client_secrets.write_text('{"installed":{"client_id":"x"}}', encoding="utf-8")
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(ValidationError) as exc_info:
+            handler._validate_client_secrets()
+
+        assert "必須キー不足" in str(exc_info.value)
+        assert "client_secret" in str(exc_info.value)
+
     def test_missing_client_secrets_error_follows_google_auth_platform_contract(self, tmp_path: Path, monkeypatch):
         """Missing secrets must point every direct OAuth entrypoint at the new Console UI."""
         self._force_fallback_path(monkeypatch, tmp_path)

@@ -26,7 +26,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.auth import oauth_handler
-from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
 
 # leak sentinel は `test_oauth_handler_exceptions.py` と同値を使う
 # （モジュール跨ぎでヘルパ共有を増やすとテスト間の依存が広がるため、定数だけ重複させる）。
@@ -132,22 +132,23 @@ class TestMainKeyboardInterrupt:
 
 
 # ===========================================================================
-# 3. ドメイン例外経路: 4 例外それぞれで exit 1 + logger.exception + _redact
+# 3. ドメイン例外経路: ドメイン例外それぞれで exit 1 + logger.exception + _redact
 # ===========================================================================
 
 
 class TestMainDomainExceptions:
-    """``(AuthError, ConfigError, YouTubeAPIError, OSError)`` narrow catch（推奨対応 #1, #2）。"""
+    """ドメイン例外の narrow catch（推奨対応 #1, #2）。"""
 
     @pytest.mark.parametrize(
         "exc",
         [
             AuthError("OAuth 認証に失敗しました"),
             ConfigError("client_secrets.json が見つかりません"),
+            ValidationError("client_secrets.json は通常ファイルである必要があります"),
             YouTubeAPIError("YouTube Data API 接続失敗"),
             OSError(13, "Permission denied", "/tmp/dummy"),
         ],
-        ids=["AuthError", "ConfigError", "YouTubeAPIError", "OSError"],
+        ids=["AuthError", "ConfigError", "ValidationError", "YouTubeAPIError", "OSError"],
     )
     def test_should_exit_with_code_1_on_each_domain_exception(self, monkeypatch, exc):
         """Given 4 ドメイン例外のいずれかが ``authenticate()`` から raise
@@ -210,6 +211,21 @@ class TestMainDomainExceptions:
             oauth_handler.main()
 
         assert exc_info.value.code == 1
+
+    def test_should_log_cli_failure_for_validation_error(self, monkeypatch, caplog):
+        """Given ``ValidationError`` が authenticate から raise
+        When ``main()``
+        Then 最終 fallback ではなく通常ドメイン例外として ``CLI 実行失敗`` に記録される。
+        """
+        _install_fake_handler(monkeypatch, authenticate_side_effect=ValidationError("invalid client_secrets"))
+        caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
+
+        with pytest.raises(SystemExit) as exc_info:
+            oauth_handler.main()
+
+        assert exc_info.value.code == 1
+        assert any("CLI 実行失敗" in r.getMessage() for r in caplog.records)
+        assert not any("想定外" in r.getMessage() for r in caplog.records)
 
 
 # ===========================================================================

@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
-from youtube_automation.auth.oauth_handler import client_secrets_file_candidates, resolve_client_secrets_location
+from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
 
 PYPROJECT_FILENAME = "pyproject.toml"
@@ -1105,7 +1105,10 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
 
 def _client_secrets_file_for_accounts(channel_dir: Path) -> Path | None:
     """accounts 表示で使う client_secrets.json を通常ファイル候補から選ぶ。"""
-    for candidate in client_secrets_file_candidates(channel_dir):
+    for candidate in (
+        channel_dir / "auth" / "client_secrets.json",
+        channel_dir / "automation" / "auth" / "client_secrets.json",
+    ):
         if candidate.is_file():
             return candidate
     return None

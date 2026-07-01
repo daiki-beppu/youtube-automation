@@ -112,10 +112,10 @@ cd ../../..
 `yt-channel-status` などの初回認証で `403 access_denied` が出る場合は、**Audience > Test users** にログイン中の Google アカウントが登録されているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
 
 検索順:
-1. `CLIENT_SECRETS_DIR` 環境変数で指定されたディレクトリ
-2. `<channel_dir>/auth/client_secrets.json`（推奨）
-3. `<channel_dir>/automation/auth/client_secrets.json`（submodule 互換フォールバック）
-4. 1Password / `CLIENT_SECRETS_JSON` fallback
+1. `CLIENT_SECRETS_DIR` 環境変数で指定されたディレクトリ（明示 override。設定時はその中の `client_secrets.json` のみ検査し、未配置でも fallback しない）
+2. `CLIENT_SECRETS_DIR` 未設定時: `<channel_dir>/auth/client_secrets.json`（推奨）
+3. `CLIENT_SECRETS_DIR` 未設定時: `<channel_dir>/automation/auth/client_secrets.json`（submodule 互換フォールバック）
+4. `CLIENT_SECRETS_DIR` 未設定かつ 2 / 3 が無い場合: 1Password / `CLIENT_SECRETS_JSON` fallback
 
 実行時 OAuth は 4 を一時ファイル化して Google OAuth ライブラリへ渡す。`yt-doctor` は read-only 診断のため、4 はメモリ上で JSON 構造だけ検査し、secret ファイルを書き出さない。
 

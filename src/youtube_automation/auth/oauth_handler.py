@@ -10,6 +10,7 @@ Required setup:
 4. Client secrets > Add secret で secret を発行して auth/client_secrets.json に配置
 """
 
+import json
 import logging
 import os
 import re
@@ -177,6 +178,19 @@ class YouTubeOAuthHandler:
                 "<channel_dir>/auth/client_secrets.json に配置\n"
                 "   または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
             )
+        try:
+            data = json.loads(self.client_secrets_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            raise ValidationError(f"client_secrets.json 読み込み失敗: {e}") from e
+        if not isinstance(data, dict):
+            raise ValidationError("client_secrets.json は JSON object である必要があります")
+        installed = data.get("installed")
+        if not isinstance(installed, dict):
+            raise ValidationError("Desktop app の client_secrets.json が必要です: installed セクションがありません")
+        required_keys = ("client_id", "client_secret", "redirect_uris")
+        missing = [key for key in required_keys if key not in installed]
+        if missing:
+            raise ValidationError(f"client_secrets.json に必須キー不足: {','.join(missing)}")
 
     def authenticate(self, force_reauth=False):
         """
@@ -328,7 +342,7 @@ def main():
         # Ctrl-C: UNIX 慣例 (128 + SIGINT=2 → 130)
         print("\n🛑 処理が中断されました")
         sys.exit(130)
-    except (AuthError, ConfigError, YouTubeAPIError, OSError) as e:
+    except (AuthError, ConfigError, ValidationError, YouTubeAPIError, OSError) as e:
         logger.exception("CLI 実行失敗: %s", _redact(str(e)))
         sys.exit(1)
     except Exception as e:  # noqa: BLE001 - CLI top-level panic-handler: exit code 1 で必ず終了させる契約

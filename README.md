@@ -200,7 +200,7 @@ nix develop
 | `GOOGLE_CLOUD_LOCATION` | 任意 | Vertex AI リージョン（既定: `us-central1`） |
 | `GOOGLE_GENAI_USE_VERTEXAI` | 任意 | google-genai SDK の自動検出用フラグ（アプリ側は参照しない） |
 | `CHANNEL_DIR` | 自動検出可 | チャンネルリポジトリのルートパス |
-| `CLIENT_SECRETS_DIR` | 任意 | `client_secrets.json` を置いたディレクトリ。未設定時は `<channel_dir>/auth/`、`<channel_dir>/automation/auth/`、1Password / `CLIENT_SECRETS_JSON` fallback の順で探索 |
+| `CLIENT_SECRETS_DIR` | 任意 | `client_secrets.json` を置いたディレクトリ。設定時はそのディレクトリのみ検査。未設定時は `<channel_dir>/auth/`、`<channel_dir>/automation/auth/`、1Password / `CLIENT_SECRETS_JSON` fallback の順で探索 |
 
 ## Development
 
