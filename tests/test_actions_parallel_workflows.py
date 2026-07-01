@@ -99,6 +99,10 @@ def _top_level_step_index(steps: list[dict[str, object]], name: str) -> int:
     pytest.fail(f"{name} step が top-level に存在しない")
 
 
+def _top_level_step(steps: list[dict[str, object]], name: str) -> dict[str, object]:
+    return steps[_top_level_step_index(steps, name)]
+
+
 def _top_level_step_index_with_run(steps: list[dict[str, object]], run: str) -> int:
     for index, step in enumerate(steps):
         if step.get("run") == run:
@@ -121,6 +125,21 @@ def _parallel_group_index_containing(steps: list[dict[str, object]], name: str) 
         if any(parallel_step.get("name") == name for parallel_step in parallel_steps):
             return index
     pytest.fail(f"{name} step を含む parallel group が存在しない")
+
+
+def _assert_run_has_no_shell_backgrounding(run_script: str) -> None:
+    for line in run_script.splitlines():
+        command = line.strip()
+        assert not command.endswith("&"), f"shell backgrounding is not allowed: {command}"
+        assert command != "wait" and not command.startswith("wait "), f"shell wait is not allowed: {command}"
+
+
+def _assert_parallel_runs_do_not_use_shell_backgrounding(steps: list[dict[str, object]]) -> None:
+    for group in _parallel_groups(steps):
+        for parallel_step in group:
+            run_script = parallel_step.get("run")
+            assert isinstance(run_script, str), f"{parallel_step.get('name')} parallel step に run が存在しない"
+            _assert_run_has_no_shell_backgrounding(run_script)
 
 
 def test_extensions_pull_request_trigger_allows_stacked_pr_base_branches() -> None:
@@ -149,6 +168,7 @@ def test_ci_lint_runs_ruff_checks_in_a_single_parallel_group() -> None:
     assert _top_level_step_index_with_run(
         steps, "nix develop --command uv sync --extra dev"
     ) < _parallel_group_index_containing(steps, "Ruff check")
+    _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
 
 
 def test_suno_helper_checks_use_dependency_safe_parallel_groups() -> None:
@@ -168,6 +188,20 @@ def test_suno_helper_checks_use_dependency_safe_parallel_groups() -> None:
     assert _parallel_group_index_containing(steps, "Install Playwright browser") < _top_level_step_index(
         steps, "E2E tests (Playwright)"
     )
+    _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
+
+
+def test_suno_helper_manifest_permission_check_preserves_least_privilege_contract() -> None:
+    """Given suno-helper CI, When manifest is built, Then permission verification remains meaningful."""
+    steps = _job_steps(_load_workflow(_EXTENSIONS_WORKFLOW_PATH), "check")
+    manifest_step = _top_level_step(steps, "Verify generated manifest permissions (least-privilege)")
+    run_script = str(manifest_step.get("run", ""))
+
+    assert ".output/chrome-mv3/manifest.json" in run_script
+    assert 'const expected = ["storage", "activeTab", "tabs", "downloads", "debugger"];' in run_script
+    assert "const actual = manifest.permissions ?? [];" in run_script
+    assert "expected.every((p) => actual.includes(p))" in run_script
+    assert "process.exit(1);" in run_script
 
 
 def test_distrokid_helper_checks_use_dependency_safe_parallel_groups() -> None:
@@ -184,6 +218,7 @@ def test_distrokid_helper_checks_use_dependency_safe_parallel_groups() -> None:
     assert _parallel_group_index_containing(steps, "Install Playwright browser") < _top_level_step_index(
         steps, "E2E (Playwright)"
     )
+    _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
 
 
 def test_release_extensions_builds_both_zips_before_release_attachment() -> None:
@@ -201,3 +236,4 @@ def test_release_extensions_builds_both_zips_before_release_attachment() -> None
     assert _top_level_step_index_with_uses(steps, "pnpm/action-setup@v4") < build_parallel_index
     assert _top_level_step_index_with_uses(steps, "actions/setup-node@v4") < build_parallel_index
     assert build_parallel_index < _top_level_step_index(steps, "Attach zips to Release")
+    _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
