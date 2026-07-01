@@ -1218,6 +1218,9 @@ def _write_ttp_readiness_files(base: Path) -> None:
         ),
         encoding="utf-8",
     )
+    thumbnail_dir = base / "docs" / "benchmarks" / "thumbnails"
+    thumbnail_dir.mkdir(parents=True, exist_ok=True)
+    (thumbnail_dir / "rival_1.jpg").write_bytes(b"fake image bytes")
 
     skills_dir = base / "config" / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
@@ -1330,6 +1333,29 @@ class TestCheckTtpWfNewReadiness:
         assert r.status == "warn"
         assert "未承認の TTP 未反映 / スキップ項目あり" in r.message
 
+    def test_none_and_skip_on_same_line_requires_approved_exception(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival を承認済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition / music-style",
+                    "- relationship: title-structure / thumbnail-composition",
+                    "- 未反映項目: なし。ただし曲構造 TTP はスキップ",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "未承認の TTP 未反映 / スキップ項目あり" in r.message
+
     def test_approved_thumbnail_exception_satisfies_missing_reference(self, tmp_path):
         _write_ttp_analytics(
             tmp_path,
@@ -1415,7 +1441,7 @@ class TestCheckTtpWfNewReadiness:
         )
         _write_ttp_readiness_files(tmp_path)
         (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
-            "- 承認済み: Rival\n- relationship: title-structure\n",
+            "- channel: UC123\n- 承認済み: Rival\n- relationship: title-structure\n",
             encoding="utf-8",
         )
 
@@ -1424,6 +1450,68 @@ class TestCheckTtpWfNewReadiness:
         assert r.status == "warn"
         assert "source が未記録" in r.message
         assert "seed fetch 要約 が未記録" in r.message
+
+    def test_seed_confirmation_https_only_does_not_satisfy_transfer_elements(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival を承認済み",
+                    "- relationship: title-structure",
+                    "- 未反映項目: なし",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "転写したい要素 が未記録" in r.message
+
+    def test_seed_confirmation_must_record_required_markers_per_channel(self, tmp_path):
+        _write_ttp_analytics(
+            tmp_path,
+            [
+                _ttp_channel(),
+                _ttp_channel(name="Second", channel_id="UC999", slug="second", relationship="thumbnail-composition"),
+            ],
+        )
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n\n".join(
+                [
+                    "\n".join(
+                        [
+                            "- channel: UC123 / rival",
+                            "- source: https://www.youtube.com/channel/UC123",
+                            "- seed fetch 要約: channel snippet / branding を取得済み",
+                            "- 承認 / 不採用判断: Rival を承認済み",
+                            "- 転写したい要素: title-structure / thumbnail-composition",
+                            "- relationship: title-structure",
+                            "- 未反映項目: なし",
+                        ]
+                    ),
+                    "\n".join(
+                        [
+                            "- channel: UC999 / second",
+                            "- relationship: thumbnail-composition",
+                        ]
+                    ),
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "source が未記録 (entry #2 id=UC999 slug=second)" in r.message
+        assert "seed fetch 要約 が未記録 (entry #2 id=UC999 slug=second)" in r.message
 
     def test_seed_confirmation_must_cover_each_approved_channel(self, tmp_path):
         _write_ttp_analytics(
@@ -1497,6 +1585,55 @@ class TestCheckTtpWfNewReadiness:
 
         assert r.status == "warn"
         assert "承認済み TTP 対象の snapshot 不足" in r.message
+
+    def test_missing_thumbnail_reference_file_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "benchmarks" / "thumbnails" / "rival_1.jpg").unlink()
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "参照画像が存在しない" in r.message
+
+    def test_malformed_ttp_contract_files_warn(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json").write_text(
+            "{broken json",
+            encoding="utf-8",
+        )
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "image_generation: [",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "JSON として不正" in r.message
+        assert "YAML として不正" in r.message
+
+    def test_shape_mismatch_ttp_contract_files_warn_without_crashing(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json").write_text(
+            json.dumps({"untrusted_data": True, "items": {"id": "UC123"}}),
+            encoding="utf-8",
+        )
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text("[]\n", encoding="utf-8")
+        _write_music_engine(tmp_path, "suno")
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text("genre_line: ''\n", encoding="utf-8")
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        analysis_dir.mkdir(parents=True)
+        (analysis_dir / "bad.json").write_text("null", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "items が list ではありません" in r.message
+        assert "thumbnail.yaml のトップレベルが object ではありません" in r.message
+        assert "bad.json のトップレベルが object ではありません" in r.message
 
     def test_default_suno_engine_requires_music_readiness(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
