@@ -31,7 +31,7 @@
 
 **Google Auth Platform の Branding / Audience / Clients 設定は google provider で未サポート** のため、別途 Console から設定し、`client_secrets.json` を配置する。
 
-Terraform apply 後に表示される Console URL を開き、**Branding** を保存し、**Audience > Test users** に OAuth 認証でログインする Google アカウントを追加してから、**Clients > Create client** で Application type **Desktop app** を作成する。作成直後の client secret を控えるか JSON をダウンロードし、secret を見失った場合は **Clients > 対象 client > Client secrets > Add secret** で新しい secret を発行する。JSON ダウンロードが表示されない場合は、チャンネル repo の `auth/client_secrets.template.json` をコピーして `client_id` / `project_id` / `client_secret` を手入力する。
+Terraform apply 後に表示される Console URL を開き、**Branding** を保存し、**Audience > Test users** に OAuth 認証でログインする Google アカウントを追加してから、**Clients > Create client** で Application type **Desktop app** を作成する。作成した client の **Client secrets > Add secret** で新しい secret を発行し、チャンネル repo の `auth/client_secrets.template.json` をコピーして `client_id` / `project_id` / `client_secret` を転記する。
 
 ## 前提
 

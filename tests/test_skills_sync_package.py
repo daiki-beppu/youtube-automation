@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import tomllib
 from importlib.metadata import entry_points
 from pathlib import Path
 
@@ -53,6 +54,19 @@ def test_default_all_assets_include_auth_template_target() -> None:
 
     all_targets = {spec["default_target"] for spec in _ASSET_SPECS.values()}
     assert "auth/client_secrets.template.json" in all_targets
+
+
+def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
+    pyproject = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+
+    hatch = pyproject["tool"]["hatch"]["build"]["targets"]
+    force_include = hatch["wheel"]["force-include"]
+    sdist_include = hatch["sdist"]["include"]
+
+    assert force_include["auth/client_secrets.template.json"] == (
+        "youtube_automation/_auth/client_secrets.template.json"
+    )
+    assert "auth/client_secrets.template.json" in sdist_include
 
 
 def test_asset_root_resolves_via_package_import() -> None:

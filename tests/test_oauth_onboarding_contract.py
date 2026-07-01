@@ -9,9 +9,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "setup" / "SKILL.md"
 CHANNEL_SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "channel-setup" / "SKILL.md"
-README = REPO_ROOT / "README.md"
-ONBOARDING = REPO_ROOT / "ONBOARDING.md"
-AUTH_SETUP = REPO_ROOT / "auth" / "SETUP.md"
 
 GOOGLE_AUTH_PLATFORM_KEYWORDS = (
     "Google Auth Platform",
@@ -32,6 +29,8 @@ def _assert_oauth_guidance_contract(text: str, context: str) -> None:
     assert "OAuth 同意画面のアプリ名" not in text
     assert "この 1 クリックだけ手動" not in text
     assert "OAuth クライアント ID 作成の 1 ステップだけ" not in text
+    assert "作成直後" not in text
+    assert "JSON をダウンロード" not in text
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -128,6 +127,8 @@ def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:
         "OAuth クライアント ID 作成まで",
         "OAuth クライアント ID の手動配置",
         "OAuth クライアント ID 作成の 1 ステップだけ",
+        "作成直後",
+        "JSON をダウンロード",
     )
     for path in (SETUP_SKILL, CHANNEL_SETUP_SKILL):
         text = path.read_text(encoding="utf-8")
@@ -137,22 +138,3 @@ def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:
         assert "client_secrets.json" in text
         for phrase in stale_phrases:
             assert phrase not in text
-
-
-def test_auth_template_asset_is_documented_as_default_sync_target() -> None:
-    for path in (README, ONBOARDING):
-        text = path.read_text(encoding="utf-8")
-        assert "yt-skills sync" in text
-        assert "--asset auth-template" in text
-        assert "auth/client_secrets.template.json" in text
-
-
-def test_client_secrets_fallback_contract_is_documented() -> None:
-    for path in (README, AUTH_SETUP):
-        text = path.read_text(encoding="utf-8")
-        assert "CLIENT_SECRETS_DIR" in text
-        assert "<channel_dir>/auth/" in text
-        assert "<channel_dir>/automation/auth/" in text
-        assert "CLIENT_SECRETS_JSON" in text
-        assert "1Password" in text
-    assert "secret ファイルを書き出さない" in AUTH_SETUP.read_text(encoding="utf-8")

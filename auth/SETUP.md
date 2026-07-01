@@ -102,11 +102,12 @@ cd ../../..
    - ここを忘れると、初回認証で `403 access_denied` になる
 5. **Clients** → **Create client** を開き、Application type **Desktop app** を選ぶ
 6. 名前を入力（推奨: `<channel-name> Desktop Client`）→ 作成
-7. 作成直後に表示される client secret を控えるか JSON をダウンロード
-8. `client_secrets.json` にリネームし、**チャンネルリポジトリの `auth/` 配下**に配置
+7. 作成した client を開き、**Client secrets** → **Add secret** で新しい secret を発行
+8. `auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を転記して `client_secrets.json` として保存
+9. `client_secrets.json` を **チャンネルリポジトリの `auth/` 配下**に配置
    - 推奨パス: `<channel_dir>/auth/client_secrets.json`
 
-作成直後の画面を閉じて client secret を見失った場合は、**Clients** → 対象 client → **Client secrets** → **Add secret** で新しい secret を発行し、JSON を再ダウンロードする。JSON ダウンロードが表示されない場合は `auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を手入力して `client_secrets.json` として保存する。
+新 UI では client 作成後の secret 再表示に依存しない。secret が必要なときは、**Clients** → 対象 client → **Client secrets** → **Add secret** で新しい secret を発行し、テンプレートへ転記する。
 
 `yt-channel-status` などの初回認証で `403 access_denied` が出る場合は、**Audience > Test users** にログイン中の Google アカウントが登録されているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
 

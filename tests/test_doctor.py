@@ -280,12 +280,37 @@ class TestClientSecrets:
             "auth/client_secrets.template.json",
         ):
             assert expected in instructions
+        assert "fallback 状態: 1Password / CLIENT_SECRETS_JSON fallback 取得失敗: op read failed" in instructions
         assert "認証情報を作成 → OAuth クライアント ID" not in instructions
+        assert "作成直後" not in instructions
+        assert "JSON をダウンロード" not in instructions
 
     def test_valid(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "auth" / "client_secrets.json")
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "ok"
+
+    def test_rejects_web_only_client_secrets(self, tmp_path):
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        (auth / "client_secrets.json").write_text(
+            json.dumps(
+                {
+                    "web": {
+                        "client_id": "x",
+                        "client_secret": "y",
+                        "redirect_uris": ["http://localhost"],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "fail"
+        assert "Desktop app" in r.message
+        assert "installed" in r.message
 
     def test_missing_keys(self, tmp_path):
         auth = tmp_path / "auth"

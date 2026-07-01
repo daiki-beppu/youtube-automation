@@ -295,6 +295,26 @@ class TestClientSecretsFallback:
 
         assert handler.client_secrets_file == tmp_path / "auth" / "client_secrets.json"
 
+    def test_should_use_submodule_candidate_before_one_password_fallback(self, tmp_path: Path, monkeypatch):
+        """Given submodule 互換 path に client_secrets.json がある
+        When ``YouTubeOAuthHandler()``
+        Then 1Password fallback を呼ばずにその path を使う。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        submodule_path = tmp_path / "automation" / "auth" / "client_secrets.json"
+        submodule_path.parent.mkdir(parents=True)
+        submodule_path.write_text('{"installed": {}}\n', encoding="utf-8")
+        get_client_secrets_path = MagicMock(side_effect=ConfigError("should not be called"))
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            get_client_secrets_path,
+        )
+
+        handler = YouTubeOAuthHandler()
+
+        assert handler.client_secrets_file == submodule_path
+        get_client_secrets_path.assert_not_called()
+
     def test_missing_client_secrets_error_follows_google_auth_platform_contract(self, tmp_path: Path, monkeypatch):
         """Missing secrets must point every direct OAuth entrypoint at the new Console UI."""
         self._force_fallback_path(monkeypatch, tmp_path)
@@ -319,6 +339,8 @@ class TestClientSecretsFallback:
         ):
             assert expected in message
         assert "OAuth 2.0 認証情報を作成" not in message
+        assert "作成直後" not in message
+        assert "JSON をダウンロード" not in message
 
     def test_should_not_swallow_non_config_error(self, tmp_path: Path, monkeypatch):
         """Given 1Password 取得が ``RuntimeError`` を raise（想定外）

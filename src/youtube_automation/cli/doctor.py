@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
 
 PYPROJECT_FILENAME = "pyproject.toml"
@@ -644,48 +645,36 @@ def check_env_file(channel_dir: Path) -> CheckResult:
     )
 
 
-def _client_secrets_file_candidates(channel_dir: Path) -> list[Path]:
-    """read-only doctor が検査する client_secrets.json のファイル候補を返す。"""
-    client_secrets_dir = os.environ.get("CLIENT_SECRETS_DIR")
-    if client_secrets_dir:
-        return [Path(client_secrets_dir) / "client_secrets.json"]
-    return [
-        channel_dir / "auth" / "client_secrets.json",
-        channel_dir / "automation" / "auth" / "client_secrets.json",
-    ]
-
-
-def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | None, str | None]:
+def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | None, str | None, str | None]:
     """client_secrets を副作用なしで読み込む。
 
     実行時 OAuth は 1Password fallback を一時ファイル化して
     InstalledAppFlow に渡すが、yt-doctor は read-only 診断なので
     `CLIENT_SECRETS_JSON` をメモリ上で構造検査する。
     """
-    candidates = _client_secrets_file_candidates(channel_dir)
-    found = next((candidate for candidate in candidates if candidate.exists()), None)
-    if found:
+    kind, path = resolve_client_secrets_location(channel_dir)
+    if kind == "file":
         try:
-            return found, json.loads(found.read_text(encoding="utf-8")), None
+            return path, json.loads(path.read_text(encoding="utf-8")), None, None
         except (json.JSONDecodeError, OSError) as e:
-            return found, None, f"client_secrets.json 読み込み失敗: {e}"
+            return path, None, f"client_secrets.json 読み込み失敗: {e}", None
 
-    if not os.environ.get("CLIENT_SECRETS_DIR"):
+    if kind == "secret-fallback":
         try:
             from youtube_automation.utils.exceptions import ConfigError
             from youtube_automation.utils.secrets import get_secret
 
-            return "CLIENT_SECRETS_JSON", json.loads(get_secret("CLIENT_SECRETS_JSON")), None
-        except ConfigError:
-            pass
+            return "CLIENT_SECRETS_JSON", json.loads(get_secret("CLIENT_SECRETS_JSON")), None, None
+        except ConfigError as e:
+            return path, None, None, f"1Password / CLIENT_SECRETS_JSON fallback 取得失敗: {e}"
         except json.JSONDecodeError as e:
-            return "CLIENT_SECRETS_JSON", None, f"CLIENT_SECRETS_JSON 読み込み失敗: {e}"
+            return "CLIENT_SECRETS_JSON", None, f"CLIENT_SECRETS_JSON 読み込み失敗: {e}", None
 
-    return candidates[0], None, None
+    return path, None, None, None
 
 
 def check_client_secrets(channel_dir: Path) -> CheckResult:
-    path, data, error = _load_client_secrets_data(channel_dir)
+    path, data, error, fallback_error = _load_client_secrets_data(channel_dir)
     if error:
         return CheckResult(
             id="client_secrets",
@@ -710,12 +699,10 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     "Audience > Test users に OAuth 認証でログインする Google アカウントを追加してください "
                     "(未追加だと初回認証が 403 access_denied で止まります)。"
                     "その後 Clients > Create client で Application type Desktop app を選び、"
-                    "作成直後の client secret を控えるか JSON をダウンロードして "
-                    f"`{path}` に配置してください。secret を見失った場合は "
-                    "Clients > 対象 client > Client secrets > Add secret で新しい secret を発行し、"
-                    "JSON を再ダウンロードします。JSON ダウンロードが表示されない場合は "
-                    "`auth/client_secrets.template.json` をコピーし、"
-                    "`client_id` / `project_id` / `client_secret` を手入力してください。"
+                    "Clients > 対象 client > Client secrets > Add secret で secret を発行してください。"
+                    "発行した `client_id` / `project_id` / `client_secret` を "
+                    "`auth/client_secrets.template.json` へ転記し、"
+                    f"`{path}` に配置してください。" + (f" fallback 状態: {fallback_error}" if fallback_error else "")
                 ),
             },
         )
@@ -726,7 +713,13 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
             status="fail",
             message="client_secrets.json は JSON object である必要があります",
         )
-    installed = data.get("installed") or data.get("web") or {}
+    installed = data.get("installed")
+    if not isinstance(installed, dict):
+        return CheckResult(
+            id="client_secrets",
+            status="fail",
+            message="Desktop app の client_secrets.json が必要です: installed セクションがありません",
+        )
     required_keys = ("client_id", "client_secret", "redirect_uris")
     missing = [k for k in required_keys if k not in installed]
     if missing:
@@ -1125,7 +1118,7 @@ def _extract_oauth_info(channel_dir: Path) -> dict:
     info: dict = {"channel": channel_dir.name, "path": str(channel_dir)}
     try:
         data = json.loads(cs_path.read_text(encoding="utf-8"))
-        installed = data.get("installed") or data.get("web") or {}
+        installed = data.get("installed") or {}
         info["project_id"] = installed.get("project_id", "?")
         info["client_id"] = installed.get("client_id", "?")
     except (json.JSONDecodeError, OSError):
