@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.suno_artifact_contracts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
@@ -118,7 +119,6 @@ class SelectionResult:
 @dataclass(frozen=True)
 class WorkflowStateSnapshot:
     path: Path
-    existed: bool
     data: dict[str, object]
 
 
@@ -466,7 +466,7 @@ def _plan_suno_selection(
                 )
                 for candidate in prompt_dropped
             )
-            if not all_dropped_are_over_max_only or cfg.pair.max_song_sec is None:
+            if not all_dropped_are_over_max_only:
                 still_missing.append(prompt_index)
                 continue
             selected = sorted(prompt_dropped, key=lambda c: (c.duration, c.path.name))[0]
@@ -622,7 +622,7 @@ def _apply_plan(
     stock_cfg: StockConfig,
 ) -> SelectionResult:
     _prepare_log_destination(plan.log_path)
-    workflow_state = _read_workflow_state(collection_dir)
+    workflow_state = _read_workflow_state(CollectionPaths(collection_dir).workflow_state_path)
     log_snapshot = _snapshot_file(plan.log_path)
     transaction_dir = collection_dir / ".tmp" / f"suno-select-{uuid.uuid4().hex}"
     transaction_dir.mkdir(parents=True, exist_ok=False)
@@ -793,8 +793,7 @@ def _atomic_json_write(target: Path, data: dict) -> None:
         raise
 
 
-def _read_workflow_state(collection_dir: Path) -> WorkflowStateSnapshot:
-    workflow_state_path = collection_dir / "workflow-state.json"
+def _read_workflow_state(workflow_state_path: Path) -> WorkflowStateSnapshot:
     if workflow_state_path.is_file():
         try:
             data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
@@ -802,10 +801,10 @@ def _read_workflow_state(collection_dir: Path) -> WorkflowStateSnapshot:
             raise ValidationError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
         if not isinstance(data, dict):
             raise ValidationError(f"workflow-state.json の root は object である必要があります: {workflow_state_path}")
-        return WorkflowStateSnapshot(path=workflow_state_path, existed=True, data=data)
+        return WorkflowStateSnapshot(path=workflow_state_path, data=data)
     if workflow_state_path.exists():
         raise ValidationError(f"workflow-state.json は file である必要があります: {workflow_state_path}")
-    return WorkflowStateSnapshot(path=workflow_state_path, existed=False, data={})
+    return WorkflowStateSnapshot(path=workflow_state_path, data={})
 
 
 def _sync_workflow_state_music_pair_selection(snapshot: WorkflowStateSnapshot, result: SelectionResult) -> None:
