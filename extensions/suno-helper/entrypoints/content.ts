@@ -135,6 +135,10 @@ export default defineContentScript({
       void sendMessage("progress", payload);
     }
 
+    function entryDisplayName(entry: PromptEntry): string {
+      return entry.title ?? entry.name;
+    }
+
     const downloadFlow = createDownloadFlow({
       emitProgress,
       isAborted: () => aborted,
@@ -453,6 +457,13 @@ export default defineContentScript({
           isFatal: (err) => err instanceof FatalRunError,
           maxRetry: preset.maxEntryRetry,
           retryDelayMs: () => applyJitter(preset.interCreateDelayMs, preset.jitterMs),
+          onRetry: (attempt, max) =>
+            emitProgress({
+              phase: PHASE.WAITING_SLOT,
+              index: i,
+              total,
+              log: { kind: "retry", entryName: entryDisplayName(entries[i]), attempt, max },
+            }),
           sleep: abortableSleep,
           describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
         });
@@ -482,7 +493,13 @@ export default defineContentScript({
           const message = result.error instanceof Error ? result.error.message : String(result.error);
           failedIndices.push(i);
           console.warn(`[suno-helper] entry ${i} をスキップして続行します: ${message}`);
-          emitProgress({ phase: PHASE.ENTRY_FAILED, index: i, total, message });
+          emitProgress({
+            phase: PHASE.ENTRY_FAILED,
+            index: i,
+            total,
+            message,
+            log: { kind: "skip", entryName: entryDisplayName(entries[i]) },
+          });
           continue; // run 全体は止めない。retry 間で既に間隔を空けているため即次 entry へ。
         }
         if (result.outcome === "presumed-done") {

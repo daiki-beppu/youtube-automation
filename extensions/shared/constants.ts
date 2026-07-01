@@ -259,12 +259,34 @@ export const PHASE = {
 
 export type Phase = (typeof PHASE)[keyof typeof PHASE];
 
+/** runner content が overlay / popup に表示させる構造化ログ (#1270)。 */
+export type ProgressLog =
+  | {
+      kind: "duration-check";
+      entryName: string;
+      durationSec: number;
+      ok: boolean;
+      minSec?: number;
+      maxSec?: number;
+    }
+  | {
+      kind: "retry";
+      entryName: string;
+      attempt: number;
+      max: number;
+    }
+  | {
+      kind: "skip";
+      entryName: string;
+    };
+
 /** runner content → overlay の進捗ペイロード。 */
 export interface ProgressPayload {
   phase: Phase;
   total: number;
   index?: number;
   message?: string;
+  log?: ProgressLog;
 }
 
 /** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
