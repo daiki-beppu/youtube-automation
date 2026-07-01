@@ -19,6 +19,11 @@ import yaml
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.utils.image_provider.composition import normalize_reference_default
+from youtube_automation.utils.preflight_checks import (
+    check_descriptions_md_parseability,
+    check_suno_genre_line_char_limit,
+    check_thumbnail_skill_config,
+)
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -1073,6 +1078,54 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
     )
 
 
+def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
+    issues: list[str] = []
+
+    thumbnail_path = channel_dir / "config" / "skills" / "thumbnail.yaml"
+    if thumbnail_path.is_file():
+        issues.extend(check_thumbnail_skill_config(channel_dir, _read_yaml_dict(thumbnail_path)))
+
+    suno_path = channel_dir / "config" / "skills" / "suno.yaml"
+    if suno_path.is_file():
+        msg = check_suno_genre_line_char_limit(_read_yaml_dict(suno_path))
+        if msg:
+            issues.append(msg)
+
+    for desc_md in _planning_descriptions_md_paths(channel_dir):
+        msg = check_descriptions_md_parseability(desc_md)
+        if msg:
+            issues.append(msg)
+
+    if not issues:
+        return CheckResult(
+            id="initial_setup_readiness",
+            status="ok",
+            category=DATA_CATEGORY,
+            message="初期セットアップの thumbnail / suno / descriptions.md 事前検査 OK",
+        )
+
+    return CheckResult(
+        id="initial_setup_readiness",
+        status="warn",
+        category=DATA_CATEGORY,
+        message="; ".join(issues),
+        next_action={
+            "kind": "human",
+            "instructions": (
+                "/channel-setup で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
+                "descriptions.md の parse 失敗は /video-description で再生成してください"
+            ),
+        },
+    )
+
+
+def _planning_descriptions_md_paths(channel_dir: Path) -> list[Path]:
+    planning_root = channel_dir / "collections" / "planning"
+    if not planning_root.is_dir():
+        return []
+    return sorted(planning_root.glob("*/20-documentation/descriptions.md"))
+
+
 def check_upload_ready(channel_dir: Path) -> CheckResult:
     token_path = channel_dir / "auth" / "token.json"
 
@@ -1188,6 +1241,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_analytics_report(channel_dir),
         check_benchmark_data(channel_dir),
         check_ttp_wf_new_readiness(channel_dir),
+        check_initial_setup_readiness(channel_dir),
         check_upload_ready(channel_dir),
     ]
 

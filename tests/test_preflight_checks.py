@@ -7,11 +7,14 @@ from pathlib import Path
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
+    check_descriptions_md_parseability,
     check_duration,
     check_low_cpm_localization_languages,
     check_required_localization_languages,
+    check_suno_genre_line_char_limit,
     check_tags_count,
     check_tags_yt_chars,
+    check_thumbnail_skill_config,
     check_title_duplicate_warnings,
     check_title_template_compliance,
     extract_descriptions_md_tags,
@@ -118,6 +121,113 @@ class TestCheckChapterVariationSuffix:
             "26:35 Rain Nest Reverie",
         ]
         assert check_chapter_variation_suffix(lines) is None
+
+
+class TestInitialSetupChecks:
+    def test_suno_genre_line_over_style_limit_warns(self) -> None:
+        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 121, "style_char_limit": 120})
+
+        assert msg is not None
+        assert "121 / 120" in msg
+        assert "config/skills/suno.yaml::genre_line" in msg
+
+    def test_suno_genre_line_at_style_limit_passes(self) -> None:
+        assert check_suno_genre_line_char_limit({"genre_line": "x" * 120, "style_char_limit": 120}) is None
+
+    def test_thumbnail_config_detects_empty_refs_and_tbd_composition(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": [], "path_base": "channel_dir"},
+                    "composition_rules": {
+                        "environment": "TBD",
+                        "character_size": "TBD",
+                        "character_pose": "TBD",
+                        "allowed_actions": "TBD",
+                        "ng_actions": "TBD",
+                        "background": "TBD",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("reference_images.default" in issue for issue in issues)
+        assert any("composition_rules" in issue and "environment" in issue for issue in issues)
+
+    def test_thumbnail_config_detects_missing_reference_path(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/missing.jpg"]},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "存在しない参照画像" in issues[0]
+
+    def test_thumbnail_config_valid_setup_passes(self, tmp_path: Path) -> None:
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "single_step": {"max_attempts": 1},
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha.jpg"]},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        assert check_thumbnail_skill_config(tmp_path, cfg) == []
+
+    def test_descriptions_md_parseability_detects_heading_body_annotation(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        p.write_text(
+            "## タイトル案\n"
+            "<!-- code comment -->\n"
+            "```\n"
+            "Title\n"
+            "```\n"
+            "## Complete Collection 概要欄\n"
+            "```\n"
+            "Body\n"
+            "```\n"
+            "## タグ（YouTube タグ欄）\n"
+            "```\n"
+            "tag\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        msg = check_descriptions_md_parseability(p)
+
+        assert msg is not None
+        assert "descriptions.md parse failed" in msg
+        assert "タイトル案" in msg
 
     def test_v_suffix_detected(self) -> None:
         lines = [

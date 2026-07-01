@@ -10,7 +10,11 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
-from youtube_automation.utils.descriptions_md import extract_descriptions_md_section
+from youtube_automation.utils.descriptions_md import (
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+    missing_descriptions_md_headings,
+)
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
@@ -35,6 +39,16 @@ DEFAULT_TITLE_VOLUME_PATTERNS = (
     r"\bVol\.?\s*[IVXLCDM]+\b",  # Vol. II
     r"\b(?:I{2,3}|IV|VI{0,3}|IX|X)\b\s*$",  # 末尾ローマ数字 (II〜X)
 )
+SUNO_DEFAULT_STYLE_CHAR_LIMIT = 120
+THUMBNAIL_COMPOSITION_REQUIRED_KEYS = (
+    "environment",
+    "character_size",
+    "character_pose",
+    "allowed_actions",
+    "ng_actions",
+    "background",
+)
+_PLACEHOLDER_VALUES = frozenset({"", "tbd", "todo", "fixme", "未定", "要確認", "n/a", "na", "..."})
 
 
 def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
@@ -42,6 +56,86 @@ def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
     if ts_count > chapter_max:
         return f"too many timestamps: {ts_count} (> chapter_max={chapter_max})"
     return None
+
+
+def check_descriptions_md_parseability(desc_md: Path) -> str | None:
+    """既存 ``descriptions.md`` が共通 parser で読めない場合に診断文字列を返す."""
+    if not desc_md.exists():
+        return None
+    text = desc_md.read_text(encoding="utf-8")
+    missing = missing_descriptions_md_headings(text)
+    if not missing:
+        return None
+    return f"{desc_md}: descriptions.md parse failed\n{build_descriptions_md_parse_diagnostics(text, missing)}"
+
+
+def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | None:
+    """``config/skills/suno.yaml::genre_line`` が Suno Style 欄制限内か検証する."""
+    genre_line = str(suno_cfg.get("genre_line") or "").strip()
+    if not genre_line:
+        return None
+    raw_limit = suno_cfg.get("style_char_limit", SUNO_DEFAULT_STYLE_CHAR_LIMIT)
+    limit = raw_limit if isinstance(raw_limit, int) and raw_limit > 0 else SUNO_DEFAULT_STYLE_CHAR_LIMIT
+    if len(genre_line) <= limit:
+        return None
+    return (
+        "config/skills/suno.yaml::genre_line が Suno Style 欄の文字数上限を超過: "
+        f"{len(genre_line)} / {limit}。5-Element Order に沿って要素を絞ってください"
+    )
+
+
+def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, object]) -> list[str]:
+    """thumbnail skill-config の初期セットアップ漏れを検出する."""
+    image_generation = _as_mapping(thumbnail_cfg.get("image_generation"))
+    provider = str(image_generation.get("provider") or "gemini").strip()
+    if provider and provider != "gemini":
+        return []
+
+    gemini = _as_mapping(image_generation.get("gemini"))
+    generation_mode = str(gemini.get("generation_mode") or "single_step").strip()
+    if generation_mode != "single_step":
+        return []
+
+    issues: list[str] = []
+    single_step = _as_mapping(gemini.get("single_step"))
+    max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
+    reference_images = _as_mapping(gemini.get("reference_images"))
+    refs, placeholder_refs = _normalize_reference_items(reference_images.get("default"))
+    if placeholder_refs or not refs:
+        issues.append(
+            "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+            "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
+        )
+    else:
+        unique_refs = list(dict.fromkeys(refs))
+        if len(unique_refs) < max_attempts:
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
+            )
+        missing_refs = [
+            str(_resolve_reference_path(channel_dir, reference_images, ref))
+            for ref in unique_refs
+            if not _resolve_reference_path(channel_dir, reference_images, ref).exists()
+        ]
+        if missing_refs:
+            sample = ", ".join(missing_refs[:3])
+            suffix = f" ほか {len(missing_refs) - 3} 件" if len(missing_refs) > 3 else ""
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                f"に存在しない参照画像があります: {sample}{suffix}"
+            )
+
+    composition_rules = _as_mapping(gemini.get("composition_rules"))
+    missing_composition = [
+        key for key in THUMBNAIL_COMPOSITION_REQUIRED_KEYS if _is_placeholder(composition_rules.get(key))
+    ]
+    if missing_composition:
+        issues.append(
+            "config/skills/thumbnail.yaml::image_generation.gemini.composition_rules "
+            "に未設定/TBD の主要項目があります: " + ", ".join(missing_composition)
+        )
+    return issues
 
 
 def check_chapter_variation_suffix(ts_lines: list[str]) -> str | None:
@@ -228,6 +322,60 @@ def check_low_cpm_localization_languages(
 
 def _ordered_intersection(order: Collection[str], values: set[str]) -> list[str]:
     return [lang for lang in order if lang in values]
+
+
+def _as_mapping(value: object) -> Mapping[str, object]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _positive_int(value: object, *, default: int) -> int:
+    if isinstance(value, int) and value > 0:
+        return value
+    return default
+
+
+def _is_placeholder(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    return value.strip().casefold() in _PLACEHOLDER_VALUES
+
+
+def _normalize_reference_items(value: object) -> tuple[list[str], bool]:
+    raw_items: list[object]
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = [value]
+
+    refs: list[str] = []
+    placeholder = False
+    for item in raw_items:
+        if item is None:
+            placeholder = True
+            continue
+        if not isinstance(item, str):
+            continue
+        stripped = item.strip()
+        if stripped.casefold() in _PLACEHOLDER_VALUES:
+            placeholder = True
+            continue
+        refs.append(stripped)
+    return refs, placeholder
+
+
+def _resolve_reference_path(channel_dir: Path, reference_images: Mapping[str, object], ref: str) -> Path:
+    base = reference_images.get("path_base") or "channel_dir"
+    ref_path = Path(ref)
+    if ref_path.is_absolute():
+        return ref_path
+    if isinstance(base, str) and base.strip() and base.strip() != "channel_dir":
+        base_path = Path(base.strip())
+        if not base_path.is_absolute():
+            base_path = channel_dir / base_path
+        return base_path / ref_path
+    return channel_dir / ref_path
 
 
 def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
