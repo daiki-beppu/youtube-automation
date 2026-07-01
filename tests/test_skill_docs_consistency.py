@@ -279,6 +279,8 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
                 "## Inputs",
                 "## 前提",
                 "## 制約・前提",
+                "### モード判定",
+                "### スタイルバリアント",
                 "### Step 1",
                 "### 前提条件チェック",
                 "### 対象コレクション",
