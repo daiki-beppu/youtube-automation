@@ -363,8 +363,9 @@ def test_thumbnail_search_order_is_documented() -> None:
 def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
     video_upload = _read(".claude/skills/video-upload/SKILL.md")
     wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    posting_checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
 
-    for text in (video_upload, wf_next):
+    for text in (video_upload, wf_next, posting_checklist):
         assert "ユーザーに公開方法を" in text
         assert "uv run yt-upload-collection --plan" in text
         assert "plan 結果なしに「即時公開」と案内しない" in text or "場合だけ「即時公開」と表現する" in text
@@ -372,9 +373,18 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
         assert "`📅 公開予定: <日時>`" in text
         assert "今アップロード → `<日時>` に自動で一般公開" in text
 
+    for text in (video_upload, posting_checklist):
+        assert "アップロード API は叩かない" in text
+        assert "YouTube read API を呼ぶ場合がある" in text
+        assert "実 API は叩かない" not in text
+
     upload_flow_plan_idx = video_upload.index("0. **公開タイミング確定（必須）**")
     upload_flow_run_idx = video_upload.index("1. **Complete Collection アップロード**")
     assert upload_flow_plan_idx < upload_flow_run_idx
+
+    checklist_plan_idx = posting_checklist.index("uv run yt-upload-collection --plan")
+    checklist_upload_idx = posting_checklist.index("uv run yt-upload-collection [-c NAME]")
+    assert checklist_plan_idx < checklist_upload_idx
 
     wf_next_gate = wf_next[wf_next.index("3. **アップロード承認ゲート 3-B") :]
     plan_idx = wf_next_gate.index("uv run yt-upload-collection --plan")

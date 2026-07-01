@@ -30,9 +30,17 @@ uv run yt-playlist-manager --init
 
 ## アップロード実行
 
+アップロード実行前に、ユーザーに公開方法を提示するための公開タイミングを必ず確定する。
+
 ```bash
-# ドライラン（スケジュール確認）
+# スケジュール計算（アップロード API は叩かない。予約日時計算で YouTube read API を呼ぶ場合がある）
 uv run yt-upload-collection --plan [-c NAME]
+```
+
+- [ ] plan 結果が `📅 公開設定: 即時公開 (public)` の場合だけ「即時公開」と表現する
+- [ ] plan 結果が `📅 公開予定: <日時>` の場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の公開予定時刻を明示した
+
+```bash
 
 # Complete Collection アップロード（デフォルト動作）
 uv run yt-upload-collection [-c NAME]
