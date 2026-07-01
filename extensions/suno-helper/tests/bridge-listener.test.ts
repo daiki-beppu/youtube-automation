@@ -81,6 +81,25 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     detach();
   });
 
+  it("Given FEED_CLIPS message に duration がある When 受信する Then tracker に透過される", () => {
+    const tracker = createClipTracker();
+    const detach = attachBridgeListener(tracker);
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+      clips: [{ id: "c1", status: "submitted" }],
+    });
+
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.FEED_CLIPS,
+      clips: [{ id: "c1", status: "complete", duration: 201.7 }],
+    });
+
+    expect(tracker.getDuration("c1")).toBe(201.7);
+    detach();
+  });
+
   it("Given source マーカー不一致 / event.source 非 window / 形崩れ clips When 受信する Then 無視する", () => {
     const tracker = createClipTracker();
     const detach = attachBridgeListener(tracker);
@@ -94,6 +113,11 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     );
     // clips の形崩れ
     dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS, clips: [{ id: 1 }] });
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+      clips: [{ id: "x", status: "s", duration: "bad" }],
+    });
     dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS });
 
     expect(tracker.hasObservedAnyTraffic()).toBe(false);
