@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from importlib import import_module
-from typing import Protocol, cast
+from typing import cast
 
 from youtube_automation.cli_stdio import configure_utf8_stdio
-
-
-class _MainCallable(Protocol):
-    def __call__(self) -> object: ...
 
 
 def _run(module_path: str, function_name: str = "main") -> object:
@@ -20,7 +16,7 @@ def _run(module_path: str, function_name: str = "main") -> object:
     target = getattr(import_module(module_path), function_name)
     if not callable(target):
         raise TypeError(f"{module_path}:{function_name} is not callable")
-    return cast(_MainCallable, target)()
+    return cast(Callable[[], object], target)()
 
 
 def _make_entrypoint(module_path: str, function_name: str = "main") -> Callable[[], object]:

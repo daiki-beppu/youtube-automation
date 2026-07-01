@@ -23,19 +23,16 @@ def configure_utf8_stdio() -> None:
         getattr(sys, "stdin", None),
         errors="surrogateescape",
         stream_name="stdin",
-        required=True,
     )
     _reconfigure_stream(
         getattr(sys, "stdout", None),
         errors="backslashreplace",
         stream_name="stdout",
-        required=True,
     )
     _reconfigure_stream(
         getattr(sys, "stderr", None),
         errors="backslashreplace",
         stream_name="stderr",
-        required=True,
     )
 
 
@@ -44,25 +41,20 @@ def _reconfigure_stream(
     *,
     errors: str,
     stream_name: str,
-    required: bool = False,
-) -> bool:
+) -> None:
     reconfigure = getattr(stream, "reconfigure", None)
     if not callable(reconfigure):
-        if required and _has_non_utf8_encoding(stream):
+        if _has_non_utf8_encoding(stream):
             raise RuntimeError(f"failed to configure {stream_name} for utf-8")
-        return False
+        return
 
     try:
         reconfigure(encoding="utf-8", errors=errors)
     except (AttributeError, TypeError, ValueError, OSError) as exc:
-        if required:
-            raise RuntimeError(f"failed to configure {stream_name} for utf-8") from exc
-        return False
+        raise RuntimeError(f"failed to configure {stream_name} for utf-8") from exc
 
-    if required and _has_non_utf8_encoding(stream):
+    if _has_non_utf8_encoding(stream):
         raise RuntimeError(f"failed to configure {stream_name} for utf-8")
-
-    return True
 
 
 def _has_non_utf8_encoding(stream: object | None) -> bool:
