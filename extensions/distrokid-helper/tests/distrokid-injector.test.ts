@@ -503,6 +503,19 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     expect(artist.value).toBe("Soulful Grooves");
   });
 
+  it("旧 payload で artist が欠落しても bandname を触らない", () => {
+    // Given
+    const artist = mountInput({ name: "bandname", value: "Soulful Grooves" });
+    mountSelect("language", ["ja"]);
+    mountSelect("genrePrimary", ["Electronic"]);
+
+    // When: 外部 JSON 境界では TypeScript 型どおりとは限らない
+    injectProfile(document, { ...SAMPLE_PROFILE, artist: undefined, sub_genre: null } as unknown as DistrokidProfile);
+
+    // Then
+    expect(artist.value).toBe("Soulful Grooves");
+  });
+
   it("artist が非空で bandname 欄が無ければ FieldNotFoundError", () => {
     // Given: bandname 以外は存在
     mountSelect("language", ["ja"]);
@@ -1019,6 +1032,18 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
 
     // When
     await injectAppleMusicCredits(document, 1, "", SAMPLE_CREDITS);
+
+    // Then
+    expect(document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!.value).toBe("Soulful Grooves");
+    expect(document.querySelector<HTMLInputElement>("#track-1-producer-1-name")!.value).toBe("Soulful Grooves");
+  });
+
+  it("旧 payload で profile.artist が欠落しても #artistName fallback を使う", async () => {
+    // Given
+    mountCreditDom(1, { artist: "Soulful Grooves" });
+
+    // When
+    await injectAppleMusicCredits(document, 1, undefined, SAMPLE_CREDITS);
 
     // Then
     expect(document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!.value).toBe("Soulful Grooves");

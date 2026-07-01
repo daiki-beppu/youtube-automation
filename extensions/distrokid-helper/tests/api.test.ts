@@ -103,6 +103,21 @@ describe("fetchRelease", () => {
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:7873/distrokid/release.json", expect.anything());
   });
 
+  it("旧 release.json で profile.artist が欠落していても空文字へ正規化する", async () => {
+    // Given
+    const legacyPayload = {
+      ...SAMPLE_PAYLOAD,
+      profile: { ...SAMPLE_PAYLOAD.profile, artist: undefined },
+    };
+    fetchMock.mockResolvedValue(jsonResponse(200, legacyPayload));
+
+    // When
+    const result = await fetchRelease("http://localhost:7873");
+
+    // Then
+    expect(result.profile.artist).toBe("");
+  });
+
   it("404 のとき ReleaseUnavailableError を throw する（要件 #16: 無効チャンネルのガイダンス）", async () => {
     // Given: enabled=false / 未配置のチャンネルはサーバーが 404 を返す契約
     fetchMock.mockResolvedValue(jsonResponse(404, {}));
@@ -151,6 +166,21 @@ describe("fetchCollectionRelease", () => {
       "http://localhost:7873/collections/20260526-rainy%20jazz-collection/distrokid/disc1/release.json",
       expect.anything(),
     );
+  });
+
+  it("dir mode でも profile.artist 欠落 payload を空文字へ正規化する", async () => {
+    // Given
+    const legacyPayload = {
+      ...SAMPLE_PAYLOAD,
+      profile: { ...SAMPLE_PAYLOAD.profile, artist: undefined },
+    };
+    fetchMock.mockResolvedValue(jsonResponse(200, legacyPayload));
+
+    // When
+    const result = await fetchCollectionRelease("http://localhost:7873", "20260526-sg-col", "disc1");
+
+    // Then
+    expect(result.profile.artist).toBe("");
   });
 
   it("404 のとき ReleaseUnavailableError を throw する", async () => {

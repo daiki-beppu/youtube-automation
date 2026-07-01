@@ -28,6 +28,18 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function normalizeReleasePayload(raw: unknown): ReleasePayload {
+  const payload = raw as ReleasePayload;
+  const profile = payload.profile ?? {};
+  return {
+    ...payload,
+    profile: {
+      ...profile,
+      artist: typeof profile.artist === "string" ? profile.artist : "",
+    },
+  } as ReleasePayload;
+}
+
 // release.json を取得する。404 は ReleaseUnavailableError、その他の非 OK は汎用 Error。
 export async function fetchRelease(baseUrl: string): Promise<ReleasePayload> {
   const url = `${normalizeBaseUrl(baseUrl)}${RELEASE_ROUTE}`;
@@ -40,7 +52,7 @@ export async function fetchRelease(baseUrl: string): Promise<ReleasePayload> {
     throw new Error(`release.json fetch failed: HTTP ${response.status}`);
   }
 
-  return (await response.json()) as ReleasePayload;
+  return normalizeReleasePayload(await response.json());
 }
 
 // dir mode の collection-scoped release.json を取得する (#934)。
@@ -62,7 +74,7 @@ export async function fetchCollectionRelease(
     throw new Error(`release.json fetch failed: HTTP ${response.status}`);
   }
 
-  return (await response.json()) as ReleasePayload;
+  return normalizeReleasePayload(await response.json());
 }
 
 // asset（曲 / ジャケット）を取得し、content へ転送するため直列化して返す。
