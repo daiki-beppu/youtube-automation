@@ -18,6 +18,7 @@ import yaml
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
+from youtube_automation.utils.image_provider.composition import normalize_reference_default
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -778,10 +779,13 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
             id="channel_config",
             status="fail",
             category=CHANNEL_CATEGORY,
-            message="config/channel/ ディレクトリが存在しない (新規チャンネル)",
+            message="config/channel/ ディレクトリが存在しない (新規チャンネル、setup 用ディレクトリのみでは未生成)",
             next_action={
                 "kind": "human",
-                "instructions": "/channel-new を実行して新規チャンネル設定を作成してください",
+                "instructions": (
+                    "setup 用ディレクトリ生成は完了していても config は未作成です。"
+                    "/channel-new を実行して新規チャンネル設定を作成してください"
+                ),
             },
         )
 
@@ -979,18 +983,20 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         )
 
     missing = _missing_ttp_readiness_items(channel_dir, channels)
+    missing.extend(_missing_channel_setup_benchmark_items(channel_dir))
     if missing:
         return CheckResult(
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="TTP 完了条件が未充足: " + "; ".join(missing),
+            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: " + "; ".join(missing),
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new Step 5-9 の不足項目を解消してください。"
+                    "/channel-new Step 5-9 と /channel-setup Step 3.5 の不足項目を解消してください。"
                     "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
-                    "ユーザー承認済み例外として未反映項目を明記してください"
+                    "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
+                    "`ttp_wf_new_readiness` が ok になることを確認してください"
                 ),
             },
         )
@@ -999,7 +1005,10 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         id="ttp_wf_new_readiness",
         status="ok",
         category=DATA_CATEGORY,
-        message="TTP 対象承認・branding snapshot・thumbnail / music readiness が /wf-new 接続可能",
+        message=(
+            "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
+            "/wf-new 接続可能（/channel-setup 完了相当）"
+        ),
     )
 
 
@@ -1091,6 +1100,17 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         missing.extend(music_readiness.errors)
         missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
 
+    return missing
+
+
+def _missing_channel_setup_benchmark_items(channel_dir: Path) -> list[str]:
+    missing: list[str] = []
+    if not _matching_files(channel_dir / "data", "benchmark_*.json"):
+        missing.append("data/benchmark_*.json が無い")
+    if not _benchmark_report_files(channel_dir):
+        missing.append("docs/benchmarks/*.md が無い")
+    if not _benchmark_thumbnail_files(channel_dir):
+        missing.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
     return missing
 
 
@@ -1323,38 +1343,88 @@ def _safe_diagnostic_value(value: object) -> str:
 
 
 def _thumbnail_ttp_reference_missing_reason(channel_dir: Path, thumbnail: dict[str, object]) -> str | None:
-    refs = _thumbnail_ttp_references(thumbnail)
+    refs, invalid_refs = _thumbnail_reference_images(channel_dir, thumbnail)
+    if invalid_refs:
+        sample = ", ".join(invalid_refs[:3])
+        return f"reference_images.default の参照パスが不正: {sample}"
     if not refs:
-        return "thumbnail reference_images.default 未設定"
+        return "thumbnail reference_images.default 未設定 / reference_images.default が空または未転記"
 
-    missing_refs = []
-    for ref in refs:
-        ref_path = Path(ref)
-        if not ref_path.is_absolute():
-            ref_path = channel_dir / ref_path
-        if not ref_path.is_file():
-            missing_refs.append(ref)
+    missing_refs = [str(path) for path in refs if not path.is_file()]
     if missing_refs:
-        return "thumbnail reference_images.default の参照画像が存在しない (" + ", ".join(missing_refs) + ")"
+        sample = ", ".join(missing_refs[:3])
+        return f"reference_images.default の参照先が見つからない / 参照画像が存在しない: {sample}"
     return None
 
 
-def _thumbnail_ttp_references(thumbnail: dict[str, object]) -> list[str]:
+def _benchmark_report_files(channel_dir: Path) -> list[Path]:
+    return _matching_files(channel_dir / "docs" / "benchmarks", "*.md")
+
+
+def _benchmark_thumbnail_files(channel_dir: Path) -> list[Path]:
+    root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+    if not root.is_dir():
+        return []
+    patterns = ("*.jpg", "*.jpeg", "*.png", "*.webp")
+    files: list[Path] = []
+    for pattern in patterns:
+        files.extend(path for path in root.rglob(pattern) if path.is_file())
+    return sorted(files)
+
+
+def _is_unresolved_placeholder(value: str) -> bool:
+    stripped = value.strip()
+    return stripped.startswith("{{") and stripped.endswith("}}")
+
+
+def _thumbnail_reference_images(
+    channel_dir: Path,
+    thumbnail: dict[str, object] | None = None,
+) -> tuple[list[Path], list[str]]:
+    if thumbnail is None:
+        thumbnail_read = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
+        if thumbnail_read.error:
+            return [], [thumbnail_read.error]
+        thumbnail = thumbnail_read.data
+
     image_generation = thumbnail.get("image_generation")
     if not isinstance(image_generation, dict):
-        return []
+        return [], []
     gemini = image_generation.get("gemini")
     if not isinstance(gemini, dict):
-        return []
+        return [], []
     reference_images = gemini.get("reference_images")
     if not isinstance(reference_images, dict):
-        return []
-    default = reference_images.get("default")
-    if isinstance(default, str):
-        return [default.strip()] if default.strip() else []
-    if isinstance(default, list):
-        return [item.strip() for item in default if isinstance(item, str) and item.strip()]
-    return []
+        return [], []
+
+    refs: list[Path] = []
+    invalid_refs: list[str] = []
+    benchmark_root = (channel_dir / "data" / "thumbnail_compare" / "benchmark").resolve(strict=False)
+    channel_root = channel_dir.resolve(strict=False)
+    for value in normalize_reference_default(reference_images.get("default")):
+        stripped = value.strip()
+        if not stripped:
+            continue
+        if _is_unresolved_placeholder(stripped):
+            invalid_refs.append(f"未解決 placeholder が残っている: {stripped}")
+            continue
+        ref_path = Path(stripped)
+        if ref_path.is_absolute():
+            invalid_refs.append(f"絶対パスは指定できない: {stripped}")
+            continue
+        resolved = (channel_dir / ref_path).resolve(strict=False)
+        try:
+            resolved.relative_to(channel_root)
+        except ValueError:
+            invalid_refs.append(f"channel_dir 外は指定できない: {stripped}")
+            continue
+        try:
+            resolved.relative_to(benchmark_root)
+        except ValueError:
+            invalid_refs.append(f"data/thumbnail_compare/benchmark/ 配下ではない: {stripped}")
+            continue
+        refs.append(resolved)
+    return refs, invalid_refs
 
 
 @dataclass(frozen=True)

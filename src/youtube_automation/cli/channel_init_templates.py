@@ -10,19 +10,9 @@ from pathlib import Path
 CONFIG_DIR = Path("config")
 CONFIG_SUBDIR = CONFIG_DIR / "channel"
 SKILLS_SUBDIR = CONFIG_DIR / "skills"
-GITKEEP_NAME = ".gitkeep"
 PLACEHOLDER_DEFAULT = "TBD"
 BENCHMARK_CHANNEL_SEPARATOR = "|"
 DEFAULT_LOCALIZATION_LANGUAGES: tuple[str, ...] = ("ja", "en", "de")
-
-DIRECTORIES: tuple[str, ...] = (
-    "auth",
-    "collections",
-    "data",
-    "docs/channel/personas",
-    "docs/benchmarks",
-    "research",
-)
 
 
 @dataclass(frozen=True)

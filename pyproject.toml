@@ -97,6 +97,7 @@ yt-shorts-bulk-update-loc = "youtube_automation.cli_entrypoints:yt_shorts_bulk_u
 
 # Skill management
 yt-skills = "youtube_automation.cli_entrypoints:yt_skills"
+yt-setup-dirs = "youtube_automation.cli_entrypoints:yt_setup_dirs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/youtube_automation"]

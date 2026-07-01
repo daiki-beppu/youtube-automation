@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(setup)`: `/setup` から `yt-setup-dirs` を実行して `auth/` などの最小ディレクトリを config 生成前に用意し、`/channel-new` は既存ディレクトリを再利用して `config/channel/*.json` 生成に集中する責務へ整理（#1396）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `docs(channel-new)`: `/channel-new` 完了時に `git status --porcelain` で未コミット変更を確認し、初回 commit 作成または明確な保存手順を案内する完了ゲートを追加。`/automation-update` の dirty worktree 停止時にも `/channel-new` 直後の初回保存未完了を案内するよう更新（#1329）
 
 ### Fixed
 
 - `fix(channel-new)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-new` が TTP 対象承認・relationship・branding snapshot・thumbnail reference・Suno readiness の不足を残したまま完了扱いにならないようにした（#1397）
+- `fix(doctor)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-setup` の benchmark 反映未完了による TTP 参照データ欠落を検知・案内できるようにした（#1400）
 - `fix(masterup)`: `yt-suno-select-tracks` で全候補が `max_song_sec` 超過だけで落ちた prompt を `--allow-best-effort-over-max` で最短候補として例外採用できるようにし、selection log と `workflow-state.json::music_pair_selection` を成功結果に同期するようにした（#1324）
 - `fix(launch-curve)`: `yt-launch-curve` で日次データに `impressions` / `impression_ctr` が無い場合も `daily_impressions=0` / `ctr` unavailable として扱い、初期チャンネルの欠損データで落ちないようにした（#1327）
 - `fix(skills)`: `config.default.yaml` を持つ skill の SKILL.md に設定読み込みゲートを追加し、チャンネル override の読み飛ばしを防ぐ契約テストを追加（#1243）
