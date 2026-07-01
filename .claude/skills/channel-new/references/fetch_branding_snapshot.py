@@ -19,6 +19,7 @@ from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
 
 CHANNELS_PART = "snippet,brandingSettings,localizations"
 SNAPSHOT_SOURCE = f"youtube.channels.list(part={CHANNELS_PART})"
+THUMBNAIL_PRIORITY = ("maxres", "standard", "high", "medium", "default")
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,6 +44,7 @@ def main() -> None:
     args = parse_args()
     youtube = YouTubeOAuthHandler().get_youtube_service()
     items = [_fetch_channel(youtube, channel_id) for channel_id in args.channel_id]
+    channel_image_references = [_extract_channel_image_references(item) for item in items]
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -50,8 +52,10 @@ def main() -> None:
         json.dumps(
             {
                 "untrusted_data": True,
+                "reference_only": True,
                 "source": SNAPSHOT_SOURCE,
                 "items": items,
+                "channel_image_references": channel_image_references,
             },
             indent=2,
             ensure_ascii=False,
@@ -83,6 +87,42 @@ def _fetch_channel(youtube, channel_id: str) -> dict:
         )
 
     return item
+
+
+def _extract_channel_image_references(item: dict) -> dict:
+    snippet = item.get("snippet") or {}
+    branding = item.get("brandingSettings") or {}
+    image = branding.get("image") or {}
+
+    return {
+        "channel_id": item.get("id", ""),
+        "title": snippet.get("title", ""),
+        "untrusted_data": True,
+        "reference_only": True,
+        "icon": _best_thumbnail(snippet.get("thumbnails") or {}),
+        "banner": _banner_references(image),
+    }
+
+
+def _best_thumbnail(thumbnails: dict) -> dict:
+    for key in THUMBNAIL_PRIORITY:
+        value = thumbnails.get(key)
+        if isinstance(value, dict) and value.get("url"):
+            return {
+                "source": f"snippet.thumbnails.{key}",
+                "url": value["url"],
+                "width": value.get("width"),
+                "height": value.get("height"),
+            }
+    return {}
+
+
+def _banner_references(image: dict) -> list[dict]:
+    references: list[dict] = []
+    for key, value in sorted(image.items()):
+        if key.endswith("Url") and isinstance(value, str) and value:
+            references.append({"source": f"brandingSettings.image.{key}", "url": value})
+    return references
 
 
 if __name__ == "__main__":

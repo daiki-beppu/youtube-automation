@@ -17,6 +17,7 @@ DEFAULT_LOCALIZATION_LANGUAGES: tuple[str, ...] = ("ja", "en", "de")
 
 DIRECTORIES: tuple[str, ...] = (
     "auth",
+    "branding",
     "collections",
     "data",
     "docs/channel/personas",
@@ -266,14 +267,24 @@ def _render_suno_skill(ctx: ChannelInitContext) -> str:
 
 
 def _render_thumbnail_skill(ctx: ChannelInitContext) -> str:
+    reference_notes = (
+        f"TTP benchmarks: {len(ctx.benchmark_channels)} channel(s); "
+        "channel branding references are reference-only, not reusable assets"
+    )
     return (
         "image_generation:\n"
         "  gemini:\n"
         '    brand_background: "TBD"\n'
         "    reference_images:\n"
         "      default: []\n"
+        "      channel_branding:\n"
+        "        snapshot: docs/channel/competitor-branding-snapshot.json\n"
+        "        icon_references: []\n"
+        "        banner_references: []\n"
+        "        output_icon: branding/icon.png\n"
+        "        output_banner: branding/banner.png\n"
         "      path_base: channel_dir\n"
-        f"      notes: {_yaml_scalar(f'TTP benchmarks: {len(ctx.benchmark_channels)} channel(s)')}\n"
+        f"      notes: {_yaml_scalar(reference_notes)}\n"
         '    diff_prompt_template: "Apply this channel visual direction to the collection theme."\n'
         "    composition_rules:\n"
         '      environment: "TBD"\n'
