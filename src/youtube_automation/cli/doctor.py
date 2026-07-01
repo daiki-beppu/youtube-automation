@@ -991,7 +991,10 @@ def _thumbnail_reference_images(channel_dir: Path) -> tuple[list[Path], list[str
     channel_root = channel_dir.resolve(strict=False)
     for value in normalize_reference_default(reference_images.get("default")):
         stripped = value.strip()
-        if not stripped or _is_unresolved_placeholder(stripped):
+        if not stripped:
+            continue
+        if _is_unresolved_placeholder(stripped):
+            invalid_refs.append(f"未解決 placeholder が残っている: {stripped}")
             continue
         ref_path = Path(stripped)
         if ref_path.is_absolute():

@@ -1200,7 +1200,8 @@ class TestCheckTtpWfNewReadiness:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "reference_images.default が空または未転記" in r.message
+        assert "reference_images.default の参照パスが不正" in r.message
+        assert "未解決 placeholder が残っている" in r.message
 
     @pytest.mark.parametrize("default_yaml", ["null", "{ path: data/thumbnail_compare/benchmark/rival-abc.jpg }"])
     def test_invalid_reference_default_shapes_are_treated_as_missing(self, tmp_path, default_yaml):
@@ -1242,6 +1243,23 @@ class TestCheckTtpWfNewReadiness:
 
         assert r.status == "ok"
         assert "/channel-setup 完了相当" in r.message
+
+    def test_mixed_real_thumbnail_ref_and_placeholder_warns(self, tmp_path):
+        """実パスと未解決 placeholder が混在していたら未転記として warn する."""
+        _write_complete_ttp_artifacts(tmp_path)
+        _write_thumbnail_skill_config(
+            tmp_path,
+            [
+                "data/thumbnail_compare/benchmark/rival-abc.jpg",
+                "{{REFERENCE_IMAGE_2}}",
+            ],
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default の参照パスが不正" in r.message
+        assert "未解決 placeholder が残っている" in r.message
 
     def test_missing_configured_thumbnail_ref_warns(self, tmp_path):
         """configured ref が存在しなければ参照先欠落として warn する."""
