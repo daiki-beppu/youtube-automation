@@ -960,6 +960,27 @@ def test_post_distrokid_releases_requires_explicit_extension_lock(tmp_path, serv
     assert not distrokid_releases_output_path(capture_root).exists()
 
 
+def test_post_distrokid_releases_without_lock_rejects_extension_origin(tmp_path, serve_dir_dk):
+    """Given --allow-origin 未指定のサーバー
+    When Chrome extension origin から POST /distrokid/releases する
+    Then default extension scheme 許可に乗らず 403 を返す。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
+    capture_root = tmp_path / "capture"
+    base = serve_dir_dk(planning, capture_root=capture_root, allow_origin=None)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _post(
+            f"{base}{_DISTROKID_RELEASES_ROUTE}",
+            {"collection_id": "20260526-abc-collection", "disc": "disc1-alpha", "album_title": "Alpha"},
+            headers={"Origin": _EXTENSION_ORIGIN},
+        )
+
+    _assert_json_error(exc_info.value, status=403, message="Forbidden", expected_origin=_EXTENSION_ORIGIN)
+    assert not distrokid_releases_output_path(capture_root).exists()
+
+
 def test_post_distrokid_releases_distrokid_disabled_returns_404(tmp_path, serve_dir_dk):
     """Given distrokid.enabled=False
     When capture_root 付きで POST /distrokid/releases する

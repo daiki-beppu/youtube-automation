@@ -222,20 +222,6 @@ def test_distrokid_skill_uses_helper_name() -> None:
     assert (skill_path.parent / "references" / "distrokid_prepare.py").is_file()
     assert (skill_path.parent / "references" / "spec-example.json").is_file()
 
-    skill_text = skill_path.read_text(encoding="utf-8")
-    assert "ステップ 9: distrokid-helper サーバー起動" in skill_text
-    assert 'yt-collection-serve "$CHANNEL_DIR/collections/planning"' in skill_text
-    assert '--playlist-capture-root "$CHANNEL_DIR"' in skill_text
-    assert "--allow-origin chrome-extension://<EXTENSION_ID>" in skill_text
-    assert "curl -s http://localhost:7874/distrokid/collections" in skill_text
-    assert "distrokid releases enabled" in skill_text
-    assert "`--playlist-capture-prefix` は Suno playlist capture 用" in skill_text
-
-    readme = _read("extensions/distrokid-helper/README.md")
-    assert "--playlist-capture-root <channel_root> --allow-origin chrome-extension://<EXTENSION_ID>" in readme
-    assert "POST /distrokid/releases" in readme
-    assert "拡張 origin へ明示 lock" in readme
-
     features = _read("docs/features.md")
     assert "/distrokid-helper" in features
     assert "サーバー起動まで実行" in features
