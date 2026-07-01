@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
-from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
+from youtube_automation.auth.oauth_handler import client_secrets_file_candidates, resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
 
 PYPROJECT_FILENAME = "pyproject.toml"
@@ -658,6 +658,8 @@ def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | N
             return path, json.loads(path.read_text(encoding="utf-8")), None, None
         except (json.JSONDecodeError, OSError) as e:
             return path, None, f"client_secrets.json 読み込み失敗: {e}", None
+    if kind == "invalid-file":
+        return path, None, f"client_secrets.json は通常ファイルである必要があります: {path}", None
 
     if kind == "secret-fallback":
         try:
@@ -1101,22 +1103,32 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
     return "\n".join(lines)
 
 
+def _client_secrets_file_for_accounts(channel_dir: Path) -> Path | None:
+    """accounts 表示で使う client_secrets.json を通常ファイル候補から選ぶ。"""
+    for candidate in client_secrets_file_candidates(channel_dir):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _find_channel_dirs(search_root: Path) -> list[Path]:
-    """search_root 直下のディレクトリで auth/client_secrets.json を持つものを返す。"""
+    """search_root 直下のディレクトリで client_secrets.json 候補を持つものを返す。"""
     dirs: list[Path] = []
     if not search_root.is_dir():
         return dirs
     for child in sorted(search_root.iterdir()):
-        if child.is_dir() and (child / "auth" / "client_secrets.json").exists():
+        if child.is_dir() and _client_secrets_file_for_accounts(child) is not None:
             dirs.append(child)
     return dirs
 
 
 def _extract_oauth_info(channel_dir: Path) -> dict:
     """client_secrets.json から GCP プロジェクト・クライアント ID を抽出する。"""
-    cs_path = channel_dir / "auth" / "client_secrets.json"
+    cs_path = _client_secrets_file_for_accounts(channel_dir)
     info: dict = {"channel": channel_dir.name, "path": str(channel_dir)}
     try:
+        if cs_path is None:
+            raise FileNotFoundError("client_secrets.json not found")
         data = json.loads(cs_path.read_text(encoding="utf-8"))
         installed = data.get("installed") or {}
         info["project_id"] = installed.get("project_id", "?")

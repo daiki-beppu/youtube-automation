@@ -10,7 +10,14 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.cli import doctor
+from youtube_automation.utils import secrets as secrets_module
 from youtube_automation.utils.exceptions import ConfigError
+
+
+def _clear_secret_cache() -> None:
+    cache_clear = getattr(secrets_module.get_secret, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
 
 
 def _assert_no_bare_yt_channel_status(value: object) -> None:
@@ -184,8 +191,11 @@ class TestProjectIdResolution:
 class TestClientSecrets:
     @pytest.fixture(autouse=True)
     def _isolate_client_secrets_env(self, monkeypatch):
+        _clear_secret_cache()
         monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
         monkeypatch.delenv("CLIENT_SECRETS_JSON", raising=False)
+        yield
+        _clear_secret_cache()
 
     def _write_valid_client_secrets(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -232,6 +242,29 @@ class TestClientSecrets:
 
         assert r.status == "ok"
 
+    def test_client_secrets_dir_missing_does_not_fall_back_to_secret(self, tmp_path, monkeypatch):
+        secrets_dir = tmp_path / "secrets"
+        monkeypatch.setenv("CLIENT_SECRETS_DIR", str(secrets_dir))
+        monkeypatch.setenv(
+            "CLIENT_SECRETS_JSON",
+            json.dumps(
+                {
+                    "installed": {
+                        "client_id": "x",
+                        "client_secret": "y",
+                        "redirect_uris": ["http://localhost"],
+                    }
+                }
+            ),
+        )
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "fail"
+        assert str(secrets_dir / "client_secrets.json") in r.message
+        assert r.next_action is not None
+        assert "fallback 状態" not in r.next_action["instructions"]
+
     def test_uses_submodule_fallback_path(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "automation" / "auth" / "client_secrets.json")
 
@@ -260,6 +293,14 @@ class TestClientSecrets:
         r = doctor.check_client_secrets(tmp_path)
 
         assert r.status == "ok"
+
+    def test_rejects_malformed_client_secrets_json_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLIENT_SECRETS_JSON", "{not-json")
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "fail"
+        assert "CLIENT_SECRETS_JSON 読み込み失敗" in r.message
 
     def test_missing_instructions_follow_google_auth_platform_contract(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
@@ -290,6 +331,14 @@ class TestClientSecrets:
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "ok"
 
+    def test_rejects_client_secrets_directory(self, tmp_path):
+        (tmp_path / "auth" / "client_secrets.json").mkdir(parents=True)
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "fail"
+        assert "通常ファイル" in r.message
+
     def test_rejects_web_only_client_secrets(self, tmp_path):
         auth = tmp_path / "auth"
         auth.mkdir()
@@ -318,6 +367,56 @@ class TestClientSecrets:
         (auth / "client_secrets.json").write_text(json.dumps({"installed": {"client_id": "x"}}), encoding="utf-8")
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "fail"
+
+
+class TestAccounts:
+    def _write_valid_client_secrets(self, path: Path, *, project_id: str, client_id: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "installed": {
+                        "client_id": client_id,
+                        "client_secret": "secret",
+                        "project_id": project_id,
+                        "redirect_uris": ["http://localhost"],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_accounts_includes_submodule_client_secrets_path(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        channel = tmp_path / "channel-a"
+        self._write_valid_client_secrets(
+            channel / "automation" / "auth" / "client_secrets.json",
+            project_id="submodule-proj",
+            client_id="submodule-client.apps.googleusercontent.com",
+        )
+
+        code = doctor.run_accounts(tmp_path, as_json=True)
+
+        assert code == 0
+        rows = json.loads(capsys.readouterr().out)
+        assert rows == [
+            {
+                "channel": "channel-a",
+                "path": str(channel),
+                "project_id": "submodule-proj",
+                "client_id": "submodule-client.apps.googleusercontent.com",
+                "has_token": False,
+            }
+        ]
+
+    def test_accounts_skips_client_secrets_directory(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        (tmp_path / "channel-a" / "auth" / "client_secrets.json").mkdir(parents=True)
+
+        code = doctor.run_accounts(tmp_path, as_json=True)
+
+        assert code == 1
+        assert "チャンネルが見つかりません" in capsys.readouterr().out
 
 
 class TestOAuthToken:

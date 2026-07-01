@@ -23,7 +23,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +77,17 @@ def resolve_client_secrets_location(channel_dir: Path) -> tuple[str, Path]:
     Returns:
         tuple[kind, path]:
         - ``file``: path に既存ファイルがある
+        - ``invalid-file``: path は存在するが通常ファイルではない
         - ``missing-file``: 明示 path を検査すべきだが未配置
         - ``secret-fallback``: 1Password / CLIENT_SECRETS_JSON fallback を試す
     """
     candidates = client_secrets_file_candidates(channel_dir)
-    found = next((c for c in candidates if c.exists()), None)
-    if found:
-        return "file", found
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        if candidate.is_file():
+            return "file", candidate
+        return "invalid-file", candidate
     if os.environ.get("CLIENT_SECRETS_DIR"):
         return "missing-file", candidates[0]
     return "secret-fallback", candidates[0]
@@ -97,7 +101,7 @@ def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
         channel_dir = _channel_dir()
 
     kind, path = resolve_client_secrets_location(channel_dir)
-    if kind in {"file", "missing-file"}:
+    if kind in {"file", "invalid-file", "missing-file"}:
         return path
 
     try:
@@ -157,7 +161,9 @@ class YouTubeOAuthHandler:
 
     def _validate_client_secrets(self):
         """client_secrets.json の存在確認"""
-        if not self.client_secrets_file.exists():
+        if self.client_secrets_file.exists() and not self.client_secrets_file.is_file():
+            raise ValidationError(f"client_secrets.json は通常ファイルである必要があります: {self.client_secrets_file}")
+        if not self.client_secrets_file.is_file():
             raise FileNotFoundError(
                 f"❌ client_secrets.json が見つかりません: {self.client_secrets_file}\n"
                 "設定手順:\n"

@@ -24,11 +24,12 @@ import google.auth.exceptions
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler, _redact
+from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler, _redact, resolve_client_secrets_location
 from youtube_automation.utils.exceptions import (
     AuthError,
     AutomationError,
     ConfigError,
+    ValidationError,
     YouTubeAPIError,
 )
 
@@ -314,6 +315,32 @@ class TestClientSecretsFallback:
 
         assert handler.client_secrets_file == submodule_path
         get_client_secrets_path.assert_not_called()
+
+    def test_should_report_invalid_location_for_client_secrets_directory(self, tmp_path: Path, monkeypatch):
+        """Given client_secrets.json がディレクトリ
+        When location を解決
+        Then secret fallback ではなく invalid-file として扱う。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        invalid_path = tmp_path / "auth" / "client_secrets.json"
+        invalid_path.mkdir(parents=True)
+
+        assert resolve_client_secrets_location(tmp_path) == ("invalid-file", invalid_path)
+
+    def test_validate_client_secrets_rejects_directory(self, tmp_path: Path, monkeypatch):
+        """Given client_secrets.json が通常ファイルではない
+        When OAuth handler が検証
+        Then missing ではなく validation error として fail する。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        invalid_path = tmp_path / "auth" / "client_secrets.json"
+        invalid_path.mkdir(parents=True)
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(ValidationError) as exc_info:
+            handler._validate_client_secrets()
+
+        assert "通常ファイル" in str(exc_info.value)
 
     def test_missing_client_secrets_error_follows_google_auth_platform_contract(self, tmp_path: Path, monkeypatch):
         """Missing secrets must point every direct OAuth entrypoint at the new Console UI."""
