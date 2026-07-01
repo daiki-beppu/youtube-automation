@@ -114,6 +114,9 @@ cd ../../..
 1. `CLIENT_SECRETS_DIR` 環境変数で指定されたディレクトリ
 2. `<channel_dir>/auth/client_secrets.json`（推奨）
 3. `<channel_dir>/automation/auth/client_secrets.json`（submodule 互換フォールバック）
+4. 1Password / `CLIENT_SECRETS_JSON` fallback
+
+実行時 OAuth は 4 を一時ファイル化して Google OAuth ライブラリへ渡す。`yt-doctor` は read-only 診断のため、4 はメモリ上で JSON 構造だけ検査し、secret ファイルを書き出さない。
 
 ---
 

@@ -182,6 +182,11 @@ class TestProjectIdResolution:
 
 
 class TestClientSecrets:
+    @pytest.fixture(autouse=True)
+    def _isolate_client_secrets_env(self, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        monkeypatch.delenv("CLIENT_SECRETS_JSON", raising=False)
+
     def _write_valid_client_secrets(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
@@ -200,8 +205,8 @@ class TestClientSecrets:
     def test_missing_without_project(self, tmp_path, monkeypatch):
         monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
-            lambda: (_ for _ in ()).throw(ConfigError("op read failed")),
+            "youtube_automation.utils.secrets.get_secret",
+            lambda _name: (_ for _ in ()).throw(ConfigError("op read failed")),
         )
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "fail"
@@ -210,8 +215,8 @@ class TestClientSecrets:
 
     def test_missing_with_project(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
-            lambda: (_ for _ in ()).throw(ConfigError("op read failed")),
+            "youtube_automation.utils.secrets.get_secret",
+            lambda _name: (_ for _ in ()).throw(ConfigError("op read failed")),
         )
         (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=foo-proj\n", encoding="utf-8")
         r = doctor.check_client_secrets(tmp_path)
@@ -227,9 +232,30 @@ class TestClientSecrets:
 
         assert r.status == "ok"
 
-    def test_uses_submodule_fallback_path(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+    def test_uses_submodule_fallback_path(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "automation" / "auth" / "client_secrets.json")
+
+        r = doctor.check_client_secrets(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_uses_client_secrets_json_fallback_without_materializing_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(
+            "CLIENT_SECRETS_JSON",
+            json.dumps(
+                {
+                    "installed": {
+                        "client_id": "x",
+                        "client_secret": "y",
+                        "redirect_uris": ["http://localhost"],
+                    }
+                }
+            ),
+        )
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            lambda: pytest.fail("yt-doctor must not materialize CLIENT_SECRETS_JSON"),
+        )
 
         r = doctor.check_client_secrets(tmp_path)
 
@@ -237,8 +263,8 @@ class TestClientSecrets:
 
     def test_missing_instructions_follow_google_auth_platform_contract(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
-            lambda: (_ for _ in ()).throw(ConfigError("op read failed")),
+            "youtube_automation.utils.secrets.get_secret",
+            lambda _name: (_ for _ in ()).throw(ConfigError("op read failed")),
         )
         r = doctor.check_client_secrets(tmp_path)
 

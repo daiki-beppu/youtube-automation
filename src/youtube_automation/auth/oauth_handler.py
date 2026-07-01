@@ -61,7 +61,7 @@ def _redact(message: str, *paths: object) -> str:
 
 
 def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
-    """実行時 OAuth と doctor が共有する client_secrets.json の検索順を解決する。"""
+    """実行時 OAuth が使う client_secrets.json の検索順を解決する。"""
     if channel_dir is None:
         from youtube_automation.utils.config import channel_dir as _channel_dir
 

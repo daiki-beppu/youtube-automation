@@ -14,7 +14,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
-from youtube_automation.auth.oauth_handler import resolve_client_secrets_path
 from youtube_automation.cli.skills_sync import bundled_skill_names
 
 PYPROJECT_FILENAME = "pyproject.toml"
@@ -645,9 +644,55 @@ def check_env_file(channel_dir: Path) -> CheckResult:
     )
 
 
+def _client_secrets_file_candidates(channel_dir: Path) -> list[Path]:
+    """read-only doctor が検査する client_secrets.json のファイル候補を返す。"""
+    client_secrets_dir = os.environ.get("CLIENT_SECRETS_DIR")
+    if client_secrets_dir:
+        return [Path(client_secrets_dir) / "client_secrets.json"]
+    return [
+        channel_dir / "auth" / "client_secrets.json",
+        channel_dir / "automation" / "auth" / "client_secrets.json",
+    ]
+
+
+def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | None, str | None]:
+    """client_secrets を副作用なしで読み込む。
+
+    実行時 OAuth は 1Password fallback を一時ファイル化して
+    InstalledAppFlow に渡すが、yt-doctor は read-only 診断なので
+    `CLIENT_SECRETS_JSON` をメモリ上で構造検査する。
+    """
+    candidates = _client_secrets_file_candidates(channel_dir)
+    found = next((candidate for candidate in candidates if candidate.exists()), None)
+    if found:
+        try:
+            return found, json.loads(found.read_text(encoding="utf-8")), None
+        except (json.JSONDecodeError, OSError) as e:
+            return found, None, f"client_secrets.json 読み込み失敗: {e}"
+
+    if not os.environ.get("CLIENT_SECRETS_DIR"):
+        try:
+            from youtube_automation.utils.exceptions import ConfigError
+            from youtube_automation.utils.secrets import get_secret
+
+            return "CLIENT_SECRETS_JSON", json.loads(get_secret("CLIENT_SECRETS_JSON")), None
+        except ConfigError:
+            pass
+        except json.JSONDecodeError as e:
+            return "CLIENT_SECRETS_JSON", None, f"CLIENT_SECRETS_JSON 読み込み失敗: {e}"
+
+    return candidates[0], None, None
+
+
 def check_client_secrets(channel_dir: Path) -> CheckResult:
-    path = resolve_client_secrets_path(channel_dir)
-    if not path.exists():
+    path, data, error = _load_client_secrets_data(channel_dir)
+    if error:
+        return CheckResult(
+            id="client_secrets",
+            status="fail",
+            message=error,
+        )
+    if data is None:
         project_id = _project_id_for(channel_dir) or ""
         return CheckResult(
             id="client_secrets",
@@ -674,13 +719,12 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                 ),
             },
         )
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as e:
+    assert data is not None
+    if not isinstance(data, dict):
         return CheckResult(
             id="client_secrets",
             status="fail",
-            message=f"client_secrets.json 読み込み失敗: {e}",
+            message="client_secrets.json は JSON object である必要があります",
         )
     installed = data.get("installed") or data.get("web") or {}
     required_keys = ("client_id", "client_secret", "redirect_uris")

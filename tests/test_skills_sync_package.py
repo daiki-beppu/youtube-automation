@@ -48,6 +48,13 @@ def test_auth_template_asset_spec_points_to_client_secrets_template() -> None:
     assert (_asset_root("auth-template") / "client_secrets.template.json").exists()
 
 
+def test_default_all_assets_include_auth_template_target() -> None:
+    from youtube_automation.cli.skills_sync import _ASSET_SPECS
+
+    all_targets = {spec["default_target"] for spec in _ASSET_SPECS.values()}
+    assert "auth/client_secrets.template.json" in all_targets
+
+
 def test_asset_root_resolves_via_package_import() -> None:
     # Given/When: package facade から import
     from youtube_automation.cli.skills_sync import _asset_root

@@ -120,8 +120,10 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 `/channel-new` Step 2 で自動実行されるが、後から手動で再実行する場合:
 
 ```bash
-yt-skills sync                       # .claude/skills/ をコピー
+yt-skills sync                       # 全 asset を一括展開 (--asset all がデフォルト)
+yt-skills sync --asset skills        # .claude/skills/ だけをコピー
 yt-skills sync --asset claude-md     # .claude/CLAUDE.md (BGM 運営方針テンプレ) を展開
+yt-skills sync --asset auth-template # auth/client_secrets.template.json を展開
 yt-skills diff                       # 同梱版とローカルの差分
 yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 ```
@@ -257,6 +259,7 @@ uv sync --extra dev --extra veo
 
 - `.claude/skills/` — Claude Code スキル群。wheel 内 `_skills/` に `force-include` され、`yt-skills sync --asset skills` で配布
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ。wheel 内 `_claude_md/CLAUDE.template.md` に `force-include` され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として配布
+- `auth/client_secrets.template.json` — Google Auth Platform の JSON ダウンロードが使えない場合の OAuth client secrets テンプレ。wheel 内 `_auth/client_secrets.template.json` に `force-include` され、`yt-skills sync --asset auth-template` で配布
 
 新しい配布アセットを追加するときは `src/youtube_automation/cli/skills_sync.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートする（`kind="dir"` / `"file"` を選ぶ）。
 

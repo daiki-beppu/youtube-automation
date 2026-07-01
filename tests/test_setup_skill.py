@@ -66,6 +66,7 @@ def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
     assert '`next_action.kind == "human"`' in text
     assert "next_action.cmd" in text
     assert "next_action.instructions" in text
+    assert "uv run yt-skills sync --asset auth-template" in text
     assert "uv run yt-skills sync --asset skills --force --prune --yes" in text
     assert "通常の `--force` sync では削除されない" in text
     assert "`.agents/skills` が `.claude/skills` を指す symlink" in text

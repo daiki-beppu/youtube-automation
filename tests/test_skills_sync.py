@@ -114,6 +114,33 @@ def test_cmd_sync_default_asset_is_all() -> None:
     assert args.asset == "all"
 
 
+def test_cmd_sync_default_all_includes_auth_template(
+    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (fake_repo / ".claude" / "CLAUDE.template.md").write_text("# policy\n", encoding="utf-8")
+    docs = fake_repo / "docs"
+    docs.mkdir()
+    (docs / "workflow-cheatsheet.md").write_text("# workflow\n", encoding="utf-8")
+    (docs / "features.md").write_text("# features\n", encoding="utf-8")
+    auth = fake_repo / "auth"
+    auth.mkdir()
+    (auth / "client_secrets.template.json").write_text('{"installed": {}}\n', encoding="utf-8")
+    downstream = tmp_path / "downstream"
+    downstream.mkdir()
+    monkeypatch.chdir(downstream)
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--force"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert (downstream / ".claude" / "skills" / "channel-research" / "SKILL.md").exists()
+    assert (downstream / ".claude" / "CLAUDE.md").read_text(encoding="utf-8") == "# policy\n"
+    assert (downstream / "docs" / "workflow-cheatsheet.md").exists()
+    assert (downstream / "docs" / "features.md").exists()
+    assert (downstream / "auth" / "client_secrets.template.json").exists()
+
+
 def test_cmd_sync_all_keeps_target_unset_after_resolve() -> None:
     """`--asset all` では target は asset ごとに resolve するため、parse 直後は None のまま。"""
     parser = build_parser()
