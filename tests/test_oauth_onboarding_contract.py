@@ -19,6 +19,7 @@ GOOGLE_AUTH_PLATFORM_KEYWORDS = (
     "auth/client_secrets.template.json",
 )
 
+
 def _assert_oauth_guidance_contract(text: str, context: str) -> None:
     for expected in GOOGLE_AUTH_PLATFORM_KEYWORDS:
         assert expected in text, f"{context} is missing {expected!r}"
