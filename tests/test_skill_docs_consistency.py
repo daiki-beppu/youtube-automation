@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,17 @@ def _frontmatter(path: str) -> dict:
     parsed = yaml.safe_load(text[4:end])
     assert isinstance(parsed, dict)
     return parsed
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
 
 def test_workflow_schema_references_existing_skill_schema() -> None:
@@ -113,13 +125,73 @@ def test_channel_new_requires_initial_save_before_followup_update() -> None:
     assert (
         "git add -A -- . ':(exclude).env' ':(exclude)auth/client_secrets.json' ':(exclude)auth/token.json'"
     ) in channel_new
+    assert "bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1" in channel_new
     assert 'git commit -m "chore: 初回チャンネル設定を保存"' in channel_new
     assert "secret-like file staged; unstage before commit" in channel_new
     assert "未コミット変更が残っています。/automation-update の前に以下を完了してください" in channel_new
+    assert "保存未完了として終了した場合は、以下の成功案内は出さない" in channel_new
     assert "初回保存も完了しているため" in channel_new
 
     assert "`git status --porcelain` が **非空** の場合" in automation_update
     assert "/channel-new 直後の初回保存が未完了なら" in automation_update
+
+
+def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+
+    (repo / ".env").write_text("SECRET=value\n", encoding="utf-8")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "add", "-f", ".env")
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    result = subprocess.run(
+        [
+            "bash",
+            "-lc",
+            f'bash {guard} || exit 1\ngit commit -m "chore: 初回チャンネル設定を保存"',
+        ],
+        cwd=repo,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "secret-like file staged; unstage before commit" in result.stderr
+    assert ".env" in result.stderr
+    assert _git(repo, "rev-list", "--count", "HEAD").stdout.strip() == "1"
+
+
+def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path: Path) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    result = subprocess.run(
+        ["bash", str(guard)],
+        cwd=repo,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
 
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:

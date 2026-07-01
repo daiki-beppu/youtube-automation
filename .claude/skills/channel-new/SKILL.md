@@ -285,17 +285,18 @@ git status --porcelain
 出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。
 
 出力が非空の場合は、差分をユーザーに見せたうえで初回 commit を作成する。シークレットを混入させないため、staging は除外 pathspec 付きで行い、staged files を確認してから commit する。
+既に staged 済みの secret-like file も混入し得るため、commit 前 guard が失敗した場合はその場で停止し、`git commit` へ進まない。
 
 ```bash
 git status --short
 git add -A -- . ':(exclude).env' ':(exclude)auth/client_secrets.json' ':(exclude)auth/token.json'
 git diff --cached --name-only
-git diff --cached --name-only | rg '(^|/)(client_secrets|token)\.json$|(^|/)\.env$' && echo "secret-like file staged; unstage before commit"
+bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1
 git commit -m "chore: 初回チャンネル設定を保存"
 git status --porcelain
 ```
 
-`git diff --cached --name-only` に `.env` / `auth/client_secrets.json` / `auth/token.json` が含まれる場合は commit しない。該当ファイルを `git restore --staged -- <path>` で外し、`.gitignore` を確認してからやり直す。
+guard が `secret-like file staged; unstage before commit` を出した場合は commit しない。該当ファイルを `git restore --staged -- <path>` で外し、`.gitignore` を確認してからやり直す。
 
 `gh repo create` や remote 作成を保留している、git user identity 未設定で commit できない、またはユーザーが今 commit しない判断をした場合は、保存未完了として次の手順を明確に案内して終了する:
 
@@ -306,7 +307,7 @@ git status --porcelain
   3. git commit -m "chore: 初回チャンネル設定を保存"
 ```
 
-最後に案内する:
+保存未完了として終了した場合は、以下の成功案内は出さない。作業ツリーが最初から clean、または初回 commit が成功した場合だけ最後に案内する:
 
 ```text
 チャンネル初期化が完了しました。初回保存も完了しているため、次は /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。
