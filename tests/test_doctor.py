@@ -1512,6 +1512,26 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "analytics.json 未生成" in r.message
 
+    @pytest.mark.parametrize(
+        ("raw_payload", "expected"),
+        [
+            ("{broken json", "JSON として不正"),
+            ("[]", "トップレベルが object ではありません"),
+            ("null", "トップレベルが object ではありません"),
+        ],
+    )
+    def test_malformed_analytics_root_warns_for_final_gate(self, tmp_path, raw_payload, expected):
+        analytics_dir = tmp_path / "config" / "channel"
+        analytics_dir.mkdir(parents=True)
+        (analytics_dir / "analytics.json").write_text(raw_payload, encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert expected in r.message
+        assert r.next_action is not None
+        assert "analytics.json" in r.next_action["instructions"]
+
     def test_no_approved_ttp_channels_warns(self, tmp_path):
         _write_ttp_analytics(tmp_path, [])
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
@@ -1568,6 +1588,16 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "Suno genre_line または data/video_analysis の suno_preset 未設定" in r.message
 
+    def test_non_suno_engine_does_not_require_suno_readiness(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        _write_music_engine(tmp_path, "lyria")
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text("genre_line: ''\n", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
     def test_unapproved_skip_note_keeps_readiness_warn(self, tmp_path):
         _write_ttp_analytics(
             tmp_path,
@@ -1623,6 +1653,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
             [_ttp_channel()],
         )
         _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "thumbnail_compare" / "benchmark" / "rival_1.jpg").unlink()
         (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text("image_generation: {}\n", encoding="utf-8")
         (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
             "\n".join(
@@ -1694,6 +1725,29 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "warn"
         assert "具体的な未反映 / スキップ内容が未記録" in r.message
+
+    def test_approved_exception_does_not_satisfy_approval_decision_marker(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text("image_generation: {}\n", encoding="utf-8")
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition / music-style",
+                    "- relationship: title-structure / thumbnail-composition",
+                    "- 未反映項目: ユーザー承認済み例外: thumbnail reference は後続 /thumbnail で補完するためスキップ",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "承認 / 不採用判断 が未記録" in r.message
 
     def test_seed_confirmation_missing_required_markers_warns(self, tmp_path):
         _write_ttp_analytics(
@@ -1773,6 +1827,48 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "source が未記録 (entry #2 id=UC999 slug=second)" in r.message
         assert "seed fetch 要約 が未記録 (entry #2 id=UC999 slug=second)" in r.message
+
+    def test_seed_identifier_prefix_collision_does_not_satisfy_missing_channel(self, tmp_path):
+        _write_ttp_analytics(
+            tmp_path,
+            [
+                _ttp_channel(),
+                _ttp_channel(name="Rival Plus", channel_id="UC999", slug="rival-plus", relationship="title-structure"),
+            ],
+        )
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- channel: UC999 / rival-plus",
+                    "- source: https://www.youtube.com/channel/UC999",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival Plus を承認済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition",
+                    "- relationship: title-structure",
+                    "- 未反映項目: なし",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json").write_text(
+            json.dumps(
+                {
+                    "untrusted_data": True,
+                    "items": [
+                        {"id": "UC123", "snippet": {}, "brandingSettings": {}, "localizations": {}},
+                        {"id": "UC999", "snippet": {}, "brandingSettings": {}, "localizations": {}},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "承認済み TTP 対象の識別子が未記録 (entry #1 id=UC123 slug=rival)" in r.message
 
     def test_seed_confirmation_must_cover_each_approved_channel(self, tmp_path):
         _write_ttp_analytics(
@@ -1896,6 +1992,15 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert "thumbnail.yaml のトップレベルが object ではありません" in r.message
         assert "bad.json のトップレベルが object ではありません" in r.message
 
+    def test_malformed_benchmark_channel_entry_warns_without_silent_drop(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel(), "bad-entry"])
+        _write_ttp_readiness_files(tmp_path)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "benchmark.channels entry #2 が object ではありません" in r.message
+
     def test_default_suno_engine_requires_music_readiness(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)
@@ -1905,6 +2010,23 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "warn"
         assert "Suno genre_line または data/video_analysis の suno_preset 未設定" in r.message
+
+    def test_video_analysis_slug_traversal_is_rejected(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel(slug="../../../outside")])
+        _write_ttp_readiness_files(tmp_path)
+        _write_music_engine(tmp_path, "suno")
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text("genre_line: ''\n", encoding="utf-8")
+        outside_dir = tmp_path.parent / "outside"
+        outside_dir.mkdir(exist_ok=True)
+        (outside_dir / "VID123.json").write_text(
+            json.dumps({"suno_preset": {"genre_line": "outside should not count"}}),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "benchmark.channels の slug が不正" in r.message
 
     def test_unapproved_video_analysis_slug_does_not_satisfy_suno_readiness(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel(slug="rival")])

@@ -76,6 +76,12 @@ class _MappingRead:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class _BenchmarkChannelsRead:
+    channels: list[dict[str, object]]
+    errors: list[str]
+
+
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
@@ -966,7 +972,8 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         )
 
     analytics = analytics_read.data
-    channels = _benchmark_channels(analytics)
+    channels_read = _benchmark_channels(analytics)
+    channels = channels_read.channels
     if not channels:
         return CheckResult(
             id="ttp_wf_new_readiness",
@@ -982,8 +989,9 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             },
         )
 
-    missing = _missing_ttp_readiness_items(channel_dir, channels)
-    missing.extend(_missing_channel_setup_benchmark_items(channel_dir))
+    missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
+    missing.extend(channels_read.errors)
+    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions))
     if missing:
         return CheckResult(
             id="ttp_wf_new_readiness",
@@ -1044,17 +1052,24 @@ def _diagnostic_path(path: Path) -> str:
     return path.as_posix()
 
 
-def _benchmark_channels(analytics: dict[str, object]) -> list[dict[str, object]]:
+def _benchmark_channels(analytics: dict[str, object]) -> _BenchmarkChannelsRead:
     benchmark = analytics.get("benchmark")
     if not isinstance(benchmark, dict):
-        return []
+        return _BenchmarkChannelsRead([], [])
     channels = benchmark.get("channels")
     if not isinstance(channels, list):
-        return []
-    return [channel for channel in channels if isinstance(channel, dict)]
+        return _BenchmarkChannelsRead([], [])
+    valid_channels: list[dict[str, object]] = []
+    errors: list[str] = []
+    for index, channel in enumerate(channels):
+        if isinstance(channel, dict):
+            valid_channels.append(channel)
+        else:
+            errors.append(f"benchmark.channels entry #{index + 1} が object ではありません")
+    return _BenchmarkChannelsRead(valid_channels, errors)
 
 
-def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
+def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
     missing: list[str] = []
     approved_exceptions: set[str] = set()
 
@@ -1100,16 +1115,16 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         missing.extend(music_readiness.errors)
         missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
 
-    return missing
+    return missing, approved_exceptions
 
 
-def _missing_channel_setup_benchmark_items(channel_dir: Path) -> list[str]:
+def _missing_channel_setup_benchmark_items(channel_dir: Path, approved_exceptions: set[str]) -> list[str]:
     missing: list[str] = []
     if not _matching_files(channel_dir / "data", "benchmark_*.json"):
         missing.append("data/benchmark_*.json が無い")
     if not _benchmark_report_files(channel_dir):
         missing.append("docs/benchmarks/*.md が無い")
-    if not _benchmark_thumbnail_files(channel_dir):
+    if "thumbnail" not in approved_exceptions and not _benchmark_thumbnail_files(channel_dir):
         missing.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
     return missing
 
@@ -1117,7 +1132,7 @@ def _missing_channel_setup_benchmark_items(channel_dir: Path) -> list[str]:
 _SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("source", ("source", "ソース", "url", "handle", "channel id", "チャンネルid")),
     ("seed fetch 要約", ("seed fetch", "fetch", "取得要約", "収集要約")),
-    ("承認 / 不採用判断", ("承認", "不採用", "approved", "rejected")),
+    ("承認 / 不採用判断", ("承認 / 不採用判断", "承認判断", "不採用判断", "判断:", "approved:", "rejected:")),
     ("転写したい要素", ("転写したい要素", "転写", "要素:")),
     ("relationship", ("relationship", "関係性")),
     ("未反映項目", ("未反映", "未適用", "none", "なし")),
@@ -1191,8 +1206,20 @@ def _seed_confirmation_sections(seed_text: str) -> list[str]:
 
 
 def _sections_for_identifiers(sections: list[str], identifiers: list[str]) -> list[str]:
-    lower_identifiers = [identifier.lower() for identifier in identifiers]
-    return [section for section in sections if any(identifier in section.lower() for identifier in lower_identifiers)]
+    return [
+        section
+        for section in sections
+        if any(_section_mentions_identifier(section, identifier) for identifier in identifiers)
+    ]
+
+
+def _section_mentions_identifier(section: str, identifier: str) -> bool:
+    pattern = re.compile(rf"(?<![A-Za-z0-9_-]){re.escape(identifier)}(?![A-Za-z0-9_-])", re.IGNORECASE)
+    identifier_line_markers = ("source", "ソース", "url", "handle", "channel", "チャンネル", "id", "slug")
+    return any(
+        any(marker in line.lower() for marker in identifier_line_markers) and pattern.search(line)
+        for line in section.splitlines()
+    )
 
 
 def _is_placeholder_relationship(relationship: str) -> bool:
@@ -1326,6 +1353,18 @@ def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:
     return [slug for channel in channels if (slug := str(channel.get("slug") or "").strip())]
 
 
+def _video_analysis_slug_dir(video_analysis_dir: Path, slug: str) -> tuple[Path | None, str | None]:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", slug):
+        return None, f"benchmark.channels の slug が不正 ({_safe_diagnostic_value(slug)})"
+    root = video_analysis_dir.resolve(strict=False)
+    candidate = (video_analysis_dir / slug).resolve(strict=False)
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None, f"data/video_analysis の channel_dir 外参照を拒否 ({_safe_diagnostic_value(slug)})"
+    return candidate, None
+
+
 def _channel_diagnostic_label(index: int, channel: dict[str, object]) -> str:
     parts = [f"entry #{index + 1}"]
     if channel_id := _safe_diagnostic_value(channel.get("id")):
@@ -1443,10 +1482,19 @@ def _suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) 
         return _MusicReadiness(True, errors)
 
     video_analysis_dir = channel_dir / "data" / "video_analysis"
+    slug_dirs: list[Path] = []
+    for slug in _approved_ttp_channel_slugs(channels):
+        slug_dir, slug_error = _video_analysis_slug_dir(video_analysis_dir, slug)
+        if slug_error:
+            errors.append(slug_error)
+            continue
+        if slug_dir is None:
+            continue
+        slug_dirs.append(slug_dir)
     if not video_analysis_dir.is_dir():
         return _MusicReadiness(False, errors)
-    for slug in _approved_ttp_channel_slugs(channels):
-        for path in (video_analysis_dir / slug).glob("*.json"):
+    for slug_dir in slug_dirs:
+        for path in slug_dir.glob("*.json"):
             payload_read = _read_json_mapping(path)
             if payload_read.error:
                 errors.append(payload_read.error)
