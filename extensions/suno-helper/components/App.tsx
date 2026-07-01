@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
-import { PatternList } from "./PatternList";
+import { PatternList, reconcilePatternSelection } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -11,6 +11,7 @@ const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
+  const [selectedEntries, setSelectedEntries] = useState<boolean[]>([]);
   const {
     url,
     setUrl,
@@ -45,6 +46,8 @@ export function App() {
     run,
     stop,
   } = useSunoRunner();
+  const previousEntriesRef = useRef(entries);
+  const previousItemStatesRef = useRef(itemStates);
 
   useEffect(() => {
     let mounted = true;
@@ -61,6 +64,24 @@ export function App() {
   const updateDownloadFormat = (value: DownloadFormat): void => {
     setDownloadFormat(value);
     void downloadFormatItem.setValue(value);
+  };
+
+  useEffect(() => {
+    setSelectedEntries((selection) =>
+      reconcilePatternSelection({
+        selection,
+        previousEntries: previousEntriesRef.current,
+        previousItemStates: previousItemStatesRef.current,
+        entries,
+        itemStates,
+      }),
+    );
+    previousEntriesRef.current = entries;
+    previousItemStatesRef.current = itemStates;
+  }, [entries, itemStates]);
+
+  const toggleEntrySelection = (index: number, checked: boolean): void => {
+    setSelectedEntries((selection) => selection.map((selected, i) => (i === index ? checked : selected)));
   };
 
   return (
@@ -287,7 +308,12 @@ export function App() {
         </div>
       )}
 
-      <PatternList entries={entries} itemStates={itemStates} />
+      <PatternList
+        entries={entries}
+        itemStates={itemStates}
+        selectedEntries={selectedEntries}
+        onToggleEntry={toggleEntrySelection}
+      />
 
       {status && (
         <p className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}>{status}</p>
