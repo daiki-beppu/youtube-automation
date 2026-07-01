@@ -33,6 +33,7 @@ async function loadContentScriptWithPlaylistRows(
     postDownloadedError?: Error;
     postDownloadedRejectOnCall?: number;
     downloadFormatValue?: unknown;
+    durationsById?: Record<string, number>;
   },
 ) {
   vi.resetModules();
@@ -117,6 +118,7 @@ async function loadContentScriptWithPlaylistRows(
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
+      getDuration: vi.fn((id: string) => overrides?.durationsById?.[id]),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -346,6 +348,59 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(options.titleFallbackMap.get("old-clip-2")).toBe("Track One");
     expect(options.titleFallbackMap.get("new-clip-1")).toBe("Track Two");
     expect(options.titleFallbackMap.get("new-clip-2")).toBe("Track Two");
+  });
+
+  it("Given duration NG clip が混在 When playlist 追加 Then OK clip IDs のみを multi-select し resume count も OK 件数で保存する", async () => {
+    const entries: PromptEntry[] = [
+      {
+        name: "track-1",
+        title: "Track One",
+        style: "style 1",
+        lyrics: "",
+        duration_filter: { min_sec: 60, max_sec: 300 },
+      },
+      {
+        name: "track-2",
+        title: "Track Two",
+        style: "style 2",
+        lyrics: "",
+        duration_filter: { min_sec: 60, max_sec: 300 },
+      },
+    ];
+    const currentSubmittedClipIds = ["clip-ok-1", "clip-short", "clip-long", "clip-ok-2"];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "clip-ok-1": 120,
+          "clip-short": 30,
+          "clip-long": 420,
+          "clip-ok-2": 180,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+      },
+    });
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-ok-1", "clip-ok-2"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["clip-ok-1", "clip-ok-2"],
+        playlistExpectedClipCount: 2,
+      }),
+    );
   });
 
   it("Given 旧 payload が期待件数なしで playlist-only resume When ID が不足 Then ERROR で止める", async () => {

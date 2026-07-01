@@ -201,6 +201,8 @@ export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
 export interface ObservedClip {
   id: string;
   status: string;
+  /** Suno feed metadata.duration 由来の秒数。generate response では未観測のため optional。 */
+  duration?: number;
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
