@@ -236,7 +236,7 @@ docs/channel/personas/channel-new-persona.md
 - 検索語彙 / コメント語彙仮説（コメント語彙は `/viewer-voice` 未実行なら仮説として明記）
 - タイトル、タグ、概要欄、サムネへの反映方針
 
-本格的な見直しは公開後に `/audience-persona` で実行する。
+本格的な見直しは公開後に `/audience-persona-design` で実行する。
 
 ### Step 8: branding 初回反映
 
@@ -296,7 +296,7 @@ uv run yt-channel-settings push --apply
 - `/discover-competitors` → TTP 対象外の追加競合発掘
 - `/benchmark` → 承認済み TTP 対象の本格ベンチマーク収集
 - `/viewer-voice` → コメント収集と視聴者インサイト分析
-- `/audience-persona` → 公開後の本格ペルソナ見直し
+- `/audience-persona-design` → 公開後の本格ペルソナ見直し
 - `/channel-research` → 収集済みデータの詳細分析
 - `/channel-direction` → 方向性の再検討
 - `/channel-setup` → 運用中の設定 push / pull と詳細セットアップ

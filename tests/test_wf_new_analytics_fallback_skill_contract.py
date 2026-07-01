@@ -111,22 +111,26 @@ def test_collection_ideate_allows_missing_persona_in_fallback_modes() -> None:
         f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} では停止せず",
         maxsplit=1,
     )[1].split("今回のターゲットペルソナ", maxsplit=1)[0]
-    assert "/audience-persona" not in fallback_guidance
+    assert "/audience-persona-design" not in fallback_guidance
     assert "チャンネル立ち上げ直後なら" not in fallback_guidance
 
 
-def test_collection_ideate_target_persona_rotation_uses_fallback_hypothesis() -> None:
+def test_collection_ideate_single_persona_variations_use_fallback_hypothesis() -> None:
     text = _read(_COLLECTION_IDEATE_SKILL_MD)
-    rotation = _section(text, "### ペルソナローテーション")
+    variations = _section(text, "### 第一ペルソナの企画バリエーション")
 
-    assert "`docs/channel/personas/persona-definition.md` が存在する場合" in rotation
-    assert "analytics mode で persona 文書が存在しない場合は停止" in rotation
-    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で persona 文書が存在しない場合" in rotation
-    assert "入力モードごとの材料から作る初回仮説の視聴者像" in rotation
-    assert f"{_BENCHMARK_FALLBACK_MODE}: ベンチマークデータ + config" in rotation
-    assert f"{_MINIMAL_MODE}: {_DIRECT_INPUT_LABEL}+ config" in rotation
-    assert "ユーザー直接入力 + config から作る初回仮説の視聴者像" not in rotation
-    assert "初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ" not in rotation
+    assert "`docs/channel/personas/persona-definition.md` が存在する場合" in variations
+    assert "第一ペルソナ 1 人" in variations
+    assert "複数ペルソナをローテーションせず" in variations
+    assert "別シーン・別感情・別利用文脈" in variations
+    assert "analytics mode で persona 文書が存在しない場合は停止" in variations
+    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で persona 文書が存在しない場合" in variations
+    assert "入力モードごとの材料から作る初回仮説の視聴者像" in variations
+    assert f"{_BENCHMARK_FALLBACK_MODE}: ベンチマークデータ + config" in variations
+    assert f"{_MINIMAL_MODE}: {_DIRECT_INPUT_LABEL}+ config" in variations
+    assert "ユーザー直接入力 + config から作る初回仮説の視聴者像" not in variations
+    assert "初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ" not in variations
+    assert "直近の選択ペルソナの次" not in variations
 
 
 def test_wf_new_overview_declares_minimal_mode_extra_pause() -> None:

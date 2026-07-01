@@ -1,6 +1,6 @@
 ---
 name: viewer-voice
-description: "Use when 承認済みベンチマーク競合のコメントを収集・分析して視聴者インサイトを抽出したいとき。「視聴者の声」「コメント分析」「視聴者が求めていること」「コメント調査」「ユーザーリサーチ」「TTP の語彙版」など。/audience-persona や /viewing-scene の前提データを作る任意後続スキルとして使用すること"
+description: "Use when 承認済みベンチマーク競合のコメントを収集・分析して視聴者インサイトを抽出したいとき。「視聴者の声」「コメント分析」「視聴者が求めていること」「コメント調査」「ユーザーリサーチ」「TTP の語彙版」など。/audience-persona-design や /viewing-scene の前提データを作る任意後続スキルとして使用すること"
 ---
 
 ## Overview

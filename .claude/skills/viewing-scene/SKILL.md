@@ -1,6 +1,6 @@
 ---
 name: viewing-scene
-description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義したいとき。「視聴シーン」「利用シーン」「どんな時に聴かれるか」「シーン分析」「視聴者はいつ聴く」「TTP の用途設計版」など。/audience-persona の結果を踏まえてシーン別パフォーマンスを分析。チャンネル立ち上げ・方向性見直し時に必ず使用すること"
+description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義したいとき。「視聴シーン」「利用シーン」「どんな時に聴かれるか」「シーン分析」「視聴者はいつ聴く」「TTP の用途設計版」など。/audience-persona-design の結果を踏まえてシーン別パフォーマンスを分析。チャンネル立ち上げ・方向性見直し時に必ず使用すること"
 ---
 
 ## Overview
@@ -19,7 +19,7 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。
   存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-import` を案内。
-- `docs/channel/personas/persona-definition.md` が存在すること（未実施なら `/audience-persona` を案内）
+- `docs/channel/personas/persona-definition.md` が存在すること（未実施なら `/audience-persona-design` を案内）
 - `reports/` に最新の分析レポートがあること（なければ `/analytics-collect` → `/analytics-analyze` を案内）
 
 ## 実行フロー
@@ -47,14 +47,15 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 - `config/channel/content.json` の `tags.base` と `genre.*` からキーワードを構築（例: `{genre.primary} music for study` / `{genre.style} music for work` / `作業用BGM {genre.primary}`）
 - YouTube 検索のオートコンプリート傾向を推定
 
-### Phase 2: シーン × ペルソナ クロス分析
+### Phase 2: 第一ペルソナ × シーン検証
 
 Phase 1 の結果 + `persona-definition.md` を統合し:
 
-1. 各シーンと各ペルソナの親和性マトリクスを作成
+1. 第一ペルソナが聴く時間帯・行動・感情状態をシーン別に検証
 2. 最も効果的なシーン3つを特定
 3. 動画尺の最適解を導出（シーン別 or 統一）
 4. 現行設定（`audio.target_duration_min`）の妥当性を検証
+5. `persona-definition.md` に反映すべき視聴シーン修正点を明示
 
 ### Phase 3: 意思決定 + レポート保存
 

@@ -11,7 +11,7 @@ rename マッピング:
 | `description` | `video-description` |
 | `upload` | `video-upload` |
 | `ideate` | `collection-ideate` |
-| `persona` | `audience-persona` |
+| `persona` | `audience-persona-design` |
 
 検証する不変条件:
 
@@ -55,6 +55,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SRC_DIR = _REPO_ROOT / "src" / "youtube_automation"
 _AUDIT_DOC = _REPO_ROOT / "docs" / "audits" / "2026-05-skill-md-audit.md"
+_AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
 
 # rename マッピング (order.md §5)
 RENAME_MAP: dict[str, str] = {
@@ -65,7 +66,7 @@ RENAME_MAP: dict[str, str] = {
     "description": "video-description",
     "upload": "video-upload",
     "ideate": "collection-ideate",
-    "persona": "audience-persona",
+    "persona": "audience-persona-design",
 }
 
 # 旧名 / 新名のフラットリスト (parametrize 用)
@@ -209,6 +210,49 @@ def test_all_skill_md_name_matches_parent_dir() -> None:
         if actual != dir_name:
             mismatches.append(f"{skill_md.relative_to(_REPO_ROOT)}: dir=`{dir_name}` vs name=`{actual}`")
     assert mismatches == [], "front-matter `name:` が親ディレクトリ名と不一致:\n  " + "\n  ".join(mismatches)
+
+
+def test_audience_persona_design_replaces_legacy_audience_persona_dir() -> None:
+    """Issue #1371: `/audience-persona` を単一ペルソナ設計スキルへ rename した契約。"""
+    legacy_path = _SKILLS_DIR / "audience-persona"
+    assert not os.path.lexists(legacy_path), "旧スキルディレクトリ .claude/skills/audience-persona が残存している"
+    assert _AUDIENCE_PERSONA_DESIGN.exists()
+    assert _front_matter_name(_AUDIENCE_PERSONA_DESIGN) == "audience-persona-design"
+
+
+def test_no_legacy_audience_persona_slash_command_in_skill_docs() -> None:
+    """Issue #1371: skill docs 内の旧 `/audience-persona` 導線を残さない。"""
+    pattern = _slash_pattern("audience-persona")
+    offenders: list[str] = []
+    for path in _iter_skill_md_files():
+        text = _read(path)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if pattern.search(line):
+                offenders.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}: {line.strip()}")
+    assert offenders == [], (
+        "旧スラッシュコマンド `/audience-persona` が `.claude/skills/**/*.md` に残存。"
+        " `/audience-persona-design` に書き換えること:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_audience_persona_design_orchestrates_single_persona_flow() -> None:
+    """Issue #1371: viewer-voice → persona design → viewing-scene → final persona の順序を固定する。"""
+    text = _read(_AUDIENCE_PERSONA_DESIGN)
+
+    assert "`/viewer-voice` の成果物を確認する。未実施なら案内して停止する。" in text
+    assert "候補を 1 人の第一ペルソナへ統合" in text
+    assert "`/viewing-scene` を実行" in text
+    assert "`/viewing-scene` の結果を反映し、最終 `persona-definition.md` を更新する。" in text
+    assert "最終版に残す人物は 1 人だけ" in text
+    for required in (
+        "コメント由来の語彙",
+        "感情トリガー",
+        "利用シーン",
+        "検索キーワード",
+        "避けるべき訴求",
+        "自チャンネルへの示唆",
+    ):
+        assert required in text
 
 
 # ---------- `.claude/skills/**/*.md` に旧スラッシュコマンド参照が残っていないか ----------

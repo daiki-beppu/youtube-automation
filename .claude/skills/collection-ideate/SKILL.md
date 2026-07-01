@@ -5,7 +5,7 @@ description: "Use when 新コレクションの企画が必要なとき、デー
 
 ## Overview
 
-最新の分析データ + 競合ベンチマークを基に、各ペルソナ向けの企画提案を自動生成する。
+最新の分析データ + 競合ベンチマークを基に、第一ペルソナ向けの企画提案を自動生成する。
 アナリティクス未収集の初回チャンネルでは、ベンチマークまたはユーザー直接入力で初回企画を生成する。
 設定は `config/skills/collection-ideate.yaml` を参照。
 
@@ -38,11 +38,11 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config | analytics / benchmark 依存をスキップ。persona / viewing-scene は初回仮説として扱う |
 
 analytics mode では `/analytics-analyze` と `/benchmark` を独立・並列で鮮度判定（stale 検出）し、
-`/audience-persona` と `/viewing-scene` は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
+`/audience-persona-design` と `/viewing-scene` は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
 
 - `reports/analysis_*.md` が存在するが stale → fallback せず中断。ユーザーに `/analytics-analyze` 再実行を案内（必要なら `/analytics-collect` 先行）。**自動呼び出し不可**（AI 推論コスト発生のため）
 - analytics mode で `/benchmark` が stale → Skill ツールで実行（内部で差分更新）
-- analytics mode で `/audience-persona` が未生成 → ユーザーに案内（更新タイミングは戦略判断のため人間が決める）
+- analytics mode で `/audience-persona-design` が未生成 → ユーザーに案内（更新タイミングは戦略判断のため人間が決める）
 - analytics mode で `/viewing-scene` が未生成 → ユーザーに案内（persona 下流のため連動して判断）
 
 判定ルール（鮮度・存在チェックの擬似コード・workflow-state との同期）は
@@ -118,7 +118,7 @@ analytics mode では CTR 改善に最適なテーマ戦略を優先し、benchm
 初回制作を開始できる具体性とチャンネル世界観への整合を優先する。
 
 ### Phase 3: ペルソナベース企画候補生成
-**rpg-collection-research-agent** と **rpg-storytelling-agent** サブエージェント（Task ツール）を連携して、各ペルソナ向けの企画候補を生成。
+**rpg-collection-research-agent** と **rpg-storytelling-agent** サブエージェント（Task ツール）を連携して、第一ペルソナ向けの企画候補を生成。
 benchmark fallback mode / minimal mode でペルソナ文書が無い場合は、入力モードごとの材料から初回仮説の視聴者像を明記して候補を生成する。
 
 ### Phase 4: プレビューサムネイル生成
@@ -339,7 +339,7 @@ uv run yt-thumbnail-check \
 ユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取る。NG だった場合の戻り経路:
 
 - 同じペルソナで再生成したい → Phase 3 から再実行
-- 別ペルソナに切り替えたい → ペルソナローテーション（後述）に従って次ペルソナで再実行
+- 別の利用文脈を試したい → 第一ペルソナの別シーン・別感情・別活動軸で Phase 3 から再実行
 - 個別画像だけ気に入らない → 該当企画を 4-4 のコマンドで単発再生成
 
 parallel モードでは Next Step で `yt-stock-archive` による不採用 (`candidate_count` - 1) 枚の stock 退避が走る（「Next Step」参照）。
@@ -404,7 +404,7 @@ analytics mode で存在しない場合は ideate を進めず、以下を案内
 
 ```
 ❌ docs/channel/personas/persona-definition.md が見つかりません。
-   先に `/audience-persona` を実行してターゲットペルソナを定義してください。
+   先に `/audience-persona-design` を実行してターゲットペルソナを定義してください。
 ```
 
 benchmark fallback mode / minimal mode では停止せず、入力モードごとの材料から初回仮説の視聴者像を明記する:
@@ -565,16 +565,15 @@ analytics mode / benchmark fallback mode ではベンチマークデータを分
 
 ## 意思決定支援
 
-### ペルソナローテーション
+### 第一ペルソナの企画バリエーション
 
-`/collection-ideate` は**1 つのペルソナに絞って `preview.candidate_count` 個の企画候補**を生成する。次回の `/collection-ideate` では次のペルソナに移る。
+`/collection-ideate` は `docs/channel/personas/persona-definition.md` の **第一ペルソナ 1 人** に絞って、`preview.candidate_count` 個の企画候補を生成する。複数ペルソナをローテーションせず、同じ人物の別シーン・別感情・別利用文脈から企画の幅を出す。
 
 **今回のターゲットペルソナ判定**:
 1. `docs/channel/personas/persona-definition.md` が存在する場合、そこに定義されたペルソナを対象にする
-2. `collections/` 配下の全 `workflow-state.json` から `planning.target_persona` を収集
-3. 直近の選択ペルソナの次を今回のターゲットにする。初回 or 不明なら persona 文書の先頭ペルソナを使う
-4. analytics mode で persona 文書が存在しない場合は停止し、`/audience-persona` 実行を案内する
-5. benchmark fallback mode / minimal mode で persona 文書が存在しない場合は、入力モードごとの材料から作る初回仮説の視聴者像を今回のターゲットペルソナとして扱う
+2. `collections/` 配下の全 `workflow-state.json` から `planning.target_persona` を収集する場合も、別人物への切り替えではなく、第一ペルソナ内で未使用のシーン・感情・活動軸を選ぶ材料として扱う
+3. analytics mode で persona 文書が存在しない場合は停止し、`/audience-persona-design` 実行を案内する
+4. benchmark fallback mode / minimal mode で persona 文書が存在しない場合は、入力モードごとの材料から作る初回仮説の視聴者像を今回のターゲットペルソナとして扱う
    - benchmark fallback mode: ベンチマークデータ + config
    - minimal mode: ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config
 
