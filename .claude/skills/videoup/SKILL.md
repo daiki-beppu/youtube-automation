@@ -8,6 +8,15 @@ description: "Use when コレクションの音声ファイルが揃い、動画
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
 
+## 設定読み込みゲート
+
+Quick Reference や対象コレクション確認に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/videoup/config.default.yaml`
+2. `config/skills/videoup.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("videoup")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+
 ## Scripts
 
 | スクリプト | 役割 | 場所 |

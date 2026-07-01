@@ -93,7 +93,7 @@ def _cmd_plan(args: argparse.Namespace) -> None:
     spec = build_draft_spec(
         paths.collection_name,
         chunks,
-        artist=config.meta.channel_name,
+        artist=config.distrokid.profile.artist or config.meta.channel_name,
         language=config.distrokid.profile.language,
         genre_primary=config.distrokid.profile.main_genre,
         genre_secondary=config.distrokid.profile.sub_genre,

@@ -62,7 +62,7 @@ def _filenames(n: int) -> list[str]:
     return [f"{i:02d}-track-{i:02d}.mp3" for i in range(1, n + 1)]
 
 
-def _fake_config(*, enabled: bool = True):
+def _fake_config(*, enabled: bool = True, artist: str = ""):
     """load_config() の戻り値を模倣する fake config オブジェクト."""
     from youtube_automation.utils.config.distrokid import (
         Distrokid,
@@ -70,6 +70,7 @@ def _fake_config(*, enabled: bool = True):
     )
 
     _profile = DistrokidProfile(
+        artist=artist,
         language="English",
         main_genre="Electronic",
         sub_genre="Ambient",
@@ -612,7 +613,50 @@ class TestWriteReleaseDate:
 
 
 # ---------------------------------------------------------------------------
-# 7. build 統合テスト（CLI main() を argv 指定で呼ぶ）
+# 7. plan 統合テスト（CLI main() を argv 指定で呼ぶ）
+# ---------------------------------------------------------------------------
+
+
+class TestPlanIntegration:
+    """main() を直接呼んで plan サブコマンドの config 反映を検証する。"""
+
+    def test_plan_uses_profile_artist_when_configured(self, tmp_path, monkeypatch):
+        """profile.artist が非空なら draft spec.artist に優先反映する."""
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        collection = _make_collection(tmp_path, n_tracks=4)
+        out = tmp_path / "spec.json"
+        monkeypatch.setattr(
+            "youtube_automation.scripts.distrokid_prepare.load_config",
+            lambda: _fake_config(artist="ABYSS MI"),
+        )
+
+        sys.argv = ["yt-distrokid-prepare", "plan", "--output", str(out), str(collection)]
+        dp_script.main()
+
+        spec = json.loads(out.read_text(encoding="utf-8"))
+        assert spec["artist"] == "ABYSS MI"
+
+    def test_plan_falls_back_to_channel_name_when_profile_artist_empty(self, tmp_path, monkeypatch):
+        """profile.artist が空なら draft spec.artist は channel.name に fallback する."""
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        collection = _make_collection(tmp_path, n_tracks=4)
+        out = tmp_path / "spec.json"
+        monkeypatch.setattr(
+            "youtube_automation.scripts.distrokid_prepare.load_config",
+            lambda: _fake_config(artist=""),
+        )
+
+        sys.argv = ["yt-distrokid-prepare", "plan", "--output", str(out), str(collection)]
+        dp_script.main()
+
+        spec = json.loads(out.read_text(encoding="utf-8"))
+        assert spec["artist"] == "Test Artist"
+
+
+# ---------------------------------------------------------------------------
+# 8. build 統合テスト（CLI main() を argv 指定で呼ぶ）
 # ---------------------------------------------------------------------------
 
 

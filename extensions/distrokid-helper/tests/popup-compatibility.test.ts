@@ -12,6 +12,7 @@ const MANIFEST_VERSION = "0.1.9";
 
 const RELEASE_PAYLOAD: ReleasePayload = {
   profile: {
+    artist: "Summer Artist",
     language: "en",
     main_genre: "Electronic",
     sub_genre: "House",
