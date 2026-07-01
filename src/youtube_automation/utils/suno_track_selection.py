@@ -621,12 +621,12 @@ def _apply_plan(
     plan: SelectionPlan,
     stock_cfg: StockConfig,
 ) -> SelectionResult:
-    _prepare_log_destination(plan.log_path)
     workflow_state = (
         _read_workflow_state(CollectionPaths(collection_dir).workflow_state_path)
         if plan.exceptions_over_limit
         else None
     )
+    _prepare_log_destination(plan.log_path)
     log_snapshot = _snapshot_file(plan.log_path)
     transaction_dir = collection_dir / ".tmp" / f"suno-select-{uuid.uuid4().hex}"
     transaction_dir.mkdir(parents=True, exist_ok=False)
@@ -820,8 +820,10 @@ def _sync_workflow_state_music_pair_selection(snapshot: WorkflowStateSnapshot, r
     if not result.exceptions_over_limit:
         return
     data = dict(snapshot.data)
+    updated_at = datetime.now(timezone.utc).isoformat()
+    data["updated_at"] = updated_at
     data["music_pair_selection"] = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": updated_at,
         "exceptions_over_limit_count": len(result.exceptions_over_limit),
         "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
     }

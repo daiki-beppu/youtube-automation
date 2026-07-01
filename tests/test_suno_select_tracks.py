@@ -155,6 +155,15 @@ def test_all_candidates_over_max_can_keep_shortest_with_explicit_recovery(tmp_pa
     )
     first = _write_audio(collection, "01a-Red Pressure.mp3")
     _write_audio(collection, "01b-Red Pressure.mp3")
+    (collection / "workflow-state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2000-01-01T00:00:00Z",
+                "assets": {"raw_master": "master.mp3"},
+            }
+        ),
+        encoding="utf-8",
+    )
 
     def fake_probe(path: Path) -> float:
         return 479.4 if path == first else 481.2
@@ -179,7 +188,10 @@ def test_all_candidates_over_max_can_keep_shortest_with_explicit_recovery(tmp_pa
     assert "01 a Red Pressure duration=479.40s max_song_sec=300.00s source=01a-Red Pressure.mp3" in log_text
 
     workflow_state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+    assert workflow_state["assets"] == {"raw_master": "master.mp3"}
     selection_state = workflow_state["music_pair_selection"]
+    assert workflow_state["updated_at"] != "2000-01-01T00:00:00Z"
+    assert workflow_state["updated_at"] == selection_state["updated_at"]
     assert selection_state["exceptions_over_limit_count"] == 1
     exception_state = selection_state["exceptions_over_limit"][0]
     assert exception_state["title"] == "Red Pressure"
@@ -257,9 +269,10 @@ def test_invalid_workflow_state_fails_before_best_effort_side_effects(tmp_path, 
     second = _write_audio(collection, "01b-Red Pressure.mp3")
     (collection / "workflow-state.json").write_text("{broken", encoding="utf-8")
     monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 479.4)
+    cfg = _cfg(selection_log_path="new-log-dir/.selection.log")
 
     with pytest.raises(ValidationError, match="workflow-state.json を読み取れませんでした"):
-        suno_track_selection.select_suno_tracks(collection, _cfg(), allow_best_effort_over_max=True)
+        suno_track_selection.select_suno_tracks(collection, cfg, allow_best_effort_over_max=True)
 
     assert first.exists()
     assert second.exists()
@@ -267,6 +280,7 @@ def test_invalid_workflow_state_fails_before_best_effort_side_effects(tmp_path, 
     assert not stock_root.exists() or not any(path.is_file() for path in stock_root.rglob("*"))
     assert (collection / "workflow-state.json").read_text(encoding="utf-8") == "{broken"
     assert not (collection / "01-master" / ".selection.log").exists()
+    assert not (collection / "new-log-dir").exists()
 
 
 def test_non_object_workflow_state_fails_before_best_effort_side_effects(tmp_path, monkeypatch):
