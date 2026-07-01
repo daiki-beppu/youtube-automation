@@ -99,6 +99,20 @@ def _top_level_step_index(steps: list[dict[str, object]], name: str) -> int:
     pytest.fail(f"{name} step が top-level に存在しない")
 
 
+def _top_level_step_index_with_run(steps: list[dict[str, object]], run: str) -> int:
+    for index, step in enumerate(steps):
+        if step.get("run") == run:
+            return index
+    pytest.fail(f"{run} run step が top-level に存在しない")
+
+
+def _top_level_step_index_with_uses(steps: list[dict[str, object]], uses: str) -> int:
+    for index, step in enumerate(steps):
+        if step.get("uses") == uses:
+            return index
+    pytest.fail(f"{uses} uses step が top-level に存在しない")
+
+
 def _parallel_group_index_containing(steps: list[dict[str, object]], name: str) -> int:
     for index, step in enumerate(steps):
         parallel_steps = step.get("parallel")
@@ -132,6 +146,9 @@ def test_ci_lint_runs_ruff_checks_in_a_single_parallel_group() -> None:
     steps = _job_steps(_load_workflow(_CI_WORKFLOW_PATH), "lint")
 
     _assert_named_parallel_commands(steps, _CI_LINT_PARALLEL_STEPS)
+    assert _top_level_step_index_with_run(
+        steps, "nix develop --command uv sync --extra dev"
+    ) < _parallel_group_index_containing(steps, "Ruff check")
 
 
 def test_suno_helper_checks_use_dependency_safe_parallel_groups() -> None:
@@ -140,6 +157,11 @@ def test_suno_helper_checks_use_dependency_safe_parallel_groups() -> None:
 
     _assert_named_parallel_commands(steps, _SUNO_FAST_PARALLEL_STEPS)
     _assert_named_parallel_commands(steps, _SUNO_BUILD_PARALLEL_STEPS)
+    install_index = _top_level_step_index(steps, "Install dependencies")
+    fast_parallel_index = _parallel_group_index_containing(steps, "Lint")
+    build_parallel_index = _parallel_group_index_containing(steps, "Build")
+
+    assert install_index < fast_parallel_index < build_parallel_index
     assert _parallel_group_index_containing(steps, "Build") < _top_level_step_index(
         steps, "Verify generated manifest permissions (least-privilege)"
     )
@@ -154,6 +176,11 @@ def test_distrokid_helper_checks_use_dependency_safe_parallel_groups() -> None:
 
     _assert_named_parallel_commands(steps, _DISTROKID_FAST_PARALLEL_STEPS)
     _assert_named_parallel_commands(steps, _DISTROKID_BUILD_PARALLEL_STEPS)
+    install_index = _top_level_step_index(steps, "Install dependencies")
+    fast_parallel_index = _parallel_group_index_containing(steps, "Lint")
+    build_parallel_index = _parallel_group_index_containing(steps, "Build")
+
+    assert install_index < fast_parallel_index < build_parallel_index
     assert _parallel_group_index_containing(steps, "Install Playwright browser") < _top_level_step_index(
         steps, "E2E (Playwright)"
     )
@@ -163,12 +190,14 @@ def test_release_extensions_builds_both_zips_before_release_attachment() -> None
     """Given extension release, When zips are built, Then both builds share one parallel group before attach."""
     steps = _job_steps(_load_workflow(_RELEASE_EXTENSIONS_WORKFLOW_PATH), "release")
     group = _parallel_group_with_names(steps, set(_RELEASE_BUILD_PARALLEL_STEPS))
+    build_parallel_index = _parallel_group_index_containing(steps, "Build and zip suno-helper")
 
     for step in group:
         working_directory, required_command = _RELEASE_BUILD_PARALLEL_STEPS[str(step["name"])]
         assert step.get("working-directory") == working_directory
         assert required_command in str(step.get("run", ""))
         assert "pnpm install --frozen-lockfile --ignore-workspace" in str(step.get("run", ""))
-    assert _parallel_group_index_containing(steps, "Build and zip suno-helper") < _top_level_step_index(
-        steps, "Attach zips to Release"
-    )
+    assert _top_level_step_index_with_uses(steps, "actions/checkout@v4") < build_parallel_index
+    assert _top_level_step_index_with_uses(steps, "pnpm/action-setup@v4") < build_parallel_index
+    assert _top_level_step_index_with_uses(steps, "actions/setup-node@v4") < build_parallel_index
+    assert build_parallel_index < _top_level_step_index(steps, "Attach zips to Release")
