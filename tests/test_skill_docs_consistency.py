@@ -264,8 +264,16 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
         assert f"config/skills/{skill}.yaml" in text
         assert f'load_skill_config("{skill}")' in text
         assert "SKILL.md の説明や記憶から設定値を推測しない" in text
+        assert "必ず Read" in text
         assert "存在する場合" in text
         assert "勝手に作成しない" in text
+
+        if skill == "community-post":
+            assert "default と任意 override を確認する" in text
+            assert "gate で Read" in text
+        else:
+            assert "deep-merge 前提" in text
+            assert "チャンネル上書きを優先" in text
 
         gate_pos = text.index("## 設定読み込みゲート")
         operational_markers = [
