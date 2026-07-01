@@ -3,7 +3,7 @@
 // （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
-import type { CapturedPlaylist, CollectionSummary, DownloadedPayload, PromptEntry } from "../../shared/api";
+import type { CollectionSummary, DownloadedPayload, PromptEntry } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
@@ -41,11 +41,6 @@ export interface AdoptSelectedClipsPayload {
   expectedClipCount: number;
 }
 
-/** runner → background: `/me/playlists` から playlist URL を解決する。 */
-export interface ResolvePlaylistUrlPayload {
-  playlistName: string;
-}
-
 /** runner → background: ダウンロード完了を通知するペイロード (#1146)。 */
 export interface DownloadCompletePayload {
   filename: string;
@@ -64,7 +59,6 @@ export interface RetryDownloadPayload {
   playlistName: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
-  sunoPlaylistUrl?: string;
 }
 
 interface ProtocolMap {
@@ -76,17 +70,12 @@ interface ProtocolMap {
   retryPlaylist(payload: RetryPlaylistPayload): { ok: true };
   /** overlay → background → runner: 手動選択中の clip ID を読む。 */
   adoptSelectedClips(payload: AdoptSelectedClipsPayload): { ok: true; clipIds: string[] };
-  /** runner → background: bg `/me/playlists` tab から playlist URL を解決する。 */
-  resolvePlaylistUrl(payload: ResolvePlaylistUrlPayload): { url: string };
   /** runner → background → overlay: 進捗を通知する。 */
   progress(payload: ProgressPayload): void;
   /** overlay → background → runner: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */
   queryProgress(): SnapshotPayload | null;
   /** background → overlay content: action クリックで overlay 表示を toggle する (#892)。 */
   toggleOverlay(): void;
-  /** runner content: 自身の document（Suno `/me`）から playlist を scrape して返す (#893)。
-   *  overlay → background → runner の手動 Capture と、background が開く bg `/me` tab への自動 capture が共用する。 */
-  capturePlaylists(): CapturedPlaylist[];
   /** runner → background: Download all 開始を通知し、background の chrome.downloads 監視を起動する (#1146)。
    *  content script は chrome.downloads API にアクセスできないため background に委譲する。 */
   startDownload(payload: { format: string }): StartDownloadResult;

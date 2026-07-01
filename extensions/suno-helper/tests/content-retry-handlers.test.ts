@@ -43,9 +43,6 @@ async function loadContentScript(overrides?: {
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
       }
-      if (type === "resolvePlaylistUrl") {
-        return Promise.resolve({ url: "https://suno.com/playlist/test" });
-      }
       if (type === "startDownload") {
         return Promise.resolve(overrides?.startDownloadResult ?? { ok: true });
       }
@@ -140,10 +137,6 @@ async function loadContentScript(overrides?: {
       : vi.fn(() => Promise.resolve(["clip-1", "clip-2"])),
     scrollAndMultiSelectByIds: vi.fn((ids: string[]) => Promise.resolve(ids.length)),
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
-  }));
-
-  vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => []),
   }));
 
   vi.doMock("../lib/ack-probe", () => ({
@@ -243,18 +236,11 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-    expect(downloadedPosts).toHaveLength(2);
+    expect(downloadedPosts).toHaveLength(1);
     expect(downloadedPosts[0].payload).toMatchObject({
-      body: {
-        file_count: 0,
-        suno_playlist_url: "https://suno.com/playlist/test",
-      },
-    });
-    expect(downloadedPosts[1].payload).toMatchObject({
       body: {
         file_count: clipIds.length,
         expected_file_count: clipIds.length,
-        suno_playlist_url: "https://suno.com/playlist/test",
         download_path: "/Users/test/Downloads/test-playlist.zip",
       },
     });
@@ -347,36 +333,7 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
       body: {
         file_count: 4,
         expected_file_count: 4,
-        suno_playlist_url: "https://suno.com/playlist/test",
         download_path: "/Users/test/Downloads/test-playlist.zip",
-      },
-    });
-  });
-
-  it("Given 保存済み playlist URL 付き When retryDownload Then URL 再解決せず Download all へ進む", async () => {
-    const { handlers, sentMessages } = await loadContentScript();
-
-    const clipIds = ["clip-1", "clip-2"];
-    handlers.get("retryDownload")!({
-      data: {
-        collectionId: "coll-1",
-        playlistName: "test-playlist",
-        sunoPlaylistUrl: "https://suno.com/playlist/saved",
-        submittedClipIds: clipIds,
-        expectedClipCount: 4,
-      },
-    });
-
-    await new Promise((r) => setTimeout(r, 0));
-    handlers.get("downloadComplete")!({
-      data: { filename: "/Users/test/Downloads/test-playlist.zip" },
-    });
-
-    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
-    expect(sentMessages.some((m) => m.type === "resolvePlaylistUrl")).toBe(false);
-    expect(sentMessages.find((m) => m.type === "postDownloaded")?.payload).toMatchObject({
-      body: {
-        suno_playlist_url: "https://suno.com/playlist/saved",
       },
     });
   });
