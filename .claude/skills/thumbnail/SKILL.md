@@ -11,6 +11,15 @@ description: "Use when コレクションのサムネイル画像が必要で、
 
 > imagegen taxonomy 対応: `Use case: product-mockup (YouTube thumbnail variant)`（imagegen の 19 スラグでは product-mockup に相当）。
 
+## 設定読み込みゲート
+
+前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/thumbnail/config.default.yaml`
+2. `config/skills/thumbnail.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("thumbnail")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+
 ## 前提
 
 `config/channel/` が存在すること（`load_config()` でロード可能）。
