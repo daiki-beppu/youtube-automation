@@ -66,6 +66,7 @@ def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
     assert '`next_action.kind == "human"`' in text
     assert "next_action.cmd" in text
     assert "next_action.instructions" in text
+    assert "uv run yt-skills sync --asset auth-template" in text
     assert "uv run yt-skills sync --asset skills --force --prune --yes" in text
     assert "通常の `--force` sync では削除されない" in text
     assert "`.agents/skills` が `.claude/skills` を指す symlink" in text
@@ -86,8 +87,9 @@ def test_setup_skill_suggests_oauth_app_and_client_names() -> None:
     assert "`gcp_project` と同じルールでチャンネル名を解決" in text
     assert "`{チャンネル名} YouTube Automation`" in text
     assert "`{チャンネル名} Desktop Client`" in text
-    assert "OAuth 同意画面のアプリ名: <channel-name> YouTube Automation" in text
+    assert "Google Auth Platform > Branding のアプリ名: <channel-name> YouTube Automation" in text
     assert "OAuth クライアント ID 名: <channel-name> Desktop Client" in text
+    assert "OAuth 同意画面のアプリ名: <channel-name> YouTube Automation" not in text
 
 
 def test_skills_use_uv_run_for_doctor_json() -> None:

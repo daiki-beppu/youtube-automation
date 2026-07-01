@@ -157,7 +157,7 @@ Fail Fast 原則）。`channel-setup` 側で空欄を残さないことで、こ
 
 ### Step 6: GCP / Vertex AI ブートストラップ
 
-**`/setup` を実行してください**。GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 作成までを AI 主導の wizard で進める。
+**`/setup` を実行してください**。GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出しを AI 主導で進め、Google Auth Platform の Branding / Audience Test users / Clients 設定と `client_secrets.json` 配置を `[HUMAN STEP]` として案内する。
 
 事前に `uv run yt-doctor --json` を叩き、`checks[]` のうち `category == "api"` の全 check が `ok` なら `/setup` は完了済みのため本 step を skip して **Step 7 へ進む**（`channel` / `upload` カテゴリは config 生成後フェーズで満たす）。
 

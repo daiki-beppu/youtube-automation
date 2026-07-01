@@ -14,7 +14,7 @@
 #   6. roles/aiplatform.user を ADC ユーザーに付与
 #   7. .env に GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI を書き出し
 #      (project_id は ADC quota project から自動解決されるため .env への書き出し不要)
-#   8. OAuth クライアント ID 作成のための Console URL を案内 (この 1 クリックだけ手動)
+#   8. Google Auth Platform 手動設定のための Console URL を案内
 #
 # 注意:
 #   Claude Code / CI / パイプ等の非対話セッション (TTY を持たない環境) からは実行しないこと。
@@ -251,16 +251,22 @@ ok "${ENV_FILE} に Vertex AI 用環境変数を書き出しました (project_i
 
 cat <<EOF
 
----- 最後に手動で 1 ステップ必要 ----
-gcloud からは OAuth 2.0 クライアント ID を作成できないため、Console で作成してください:
+---- 最後に Google Auth Platform の手動設定が必要 ----
+gcloud からは Google Auth Platform の Branding / Audience / Clients 設定を作成できないため、Console で設定してください:
 
   https://console.cloud.google.com/apis/credentials?project=${PROJECT_ID}
 
 手順:
-  1. 「認証情報を作成」→「OAuth クライアント ID」
-  2. アプリケーションの種類: 「デスクトップ」
-  3. ダウンロードした JSON を auth/client_secrets.json として配置
-     (チャンネルリポジトリ側の auth/ ディレクトリ)
+  1. 左メニューで「Google Auth Platform」を開く
+  2. 「Branding」でアプリ名・サポートメール・デベロッパー連絡先を保存
+  3. 「Audience」で User type は External、Publishing status は Testing のまま、
+     「Test users」に OAuth 認証でログインする Google アカウントを追加
+     (未追加だと初回認証が 403 access_denied で止まります)
+  4. 「Clients」→「Create client」で Application type「Desktop app」を選び、
+     名前を <channel-name> Desktop Client にする
+  5. 作成した client を開き、「Client secrets」→「Add secret」で新しい secret を発行
+  6. auth/client_secrets.template.json をコピーし、client_id / project_id / client_secret を転記して、
+     チャンネルリポジトリの auth/client_secrets.json として配置
 
 詳細は auth/SETUP.md を参照。
 -----------------------------------

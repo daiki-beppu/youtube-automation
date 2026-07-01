@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(thumbnail)`: `main.png/jpg` を textless 動画背景 / 参照画像として扱う契約に統一し、upload thumbnail / DistroKid cover は `thumbnail.jpg/png` のみを候補にするよう skill docs と回帰テストを更新（#1310）
 - `docs(channel-new)`: `/channel-new` の初期フローを TTP 対象確認中心に整理し、追加競合発掘・本格 benchmark/comments 収集は後続スキルへ委譲する方針に変更（#1309）
 - `docs(skills)`: 初投稿前に `/playlist` で未作成プレイリストを初期化し、`/video-upload` の自動 assign に引き継ぐ導線を追加（#1314）
+- `docs(setup)`: Google Auth Platform 新 UI に合わせて OAuth client 作成、client secret 再発行、Test users 追加手順を ONBOARDING / `/setup` / `auth/SETUP.md` に明記（#1330）
 - `feat(streaming)`: Terraform streaming module に配信元 MP4 の ffprobe プリフライトを追加。キーフレーム間隔と最低ビットレートを plan/apply 前に hard fail し、H.264 High profile は warning として通知する。README / `/streaming` skill に `-c:v copy` 前提の動画要件と推奨再エンコード例を追記（#1299）
 - `docs(skills)`: wf-next / wf-status / analytics-analyze / wf-new / channel-setup / video-upload / community-post / collection-ideate の記述を現行実装に同期し、optional config 一覧を README / AGENTS / CLAUDE に追記（#1173, #1174, #1175, #1176, #1177, #1178, #1179, #1180）
 - `feat(masterup)`: Suno 生成後の 2 clip を `20-documentation/suno-prompts.json` の歌詞有無で整理する `yt-suno-select-tracks` を追加。歌詞あり prompt は 1 clip 採用、instrumental は 2 clip 採用とし、極端に短い/長い失敗生成を stock 退避または削除できるようにした（#1308）
