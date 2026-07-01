@@ -14,7 +14,8 @@ PR #803 当時のフラット profile（`artist_name` / `apple_music_credit` / `
     - songwriter "First M Last"  → 中間語を middle に
     - songwriter が既に object   → そのまま（冪等）
     - ai_disclosure 省略         → 新 schema の default を付与
-    - artist_name / apple_music_credit / track_type → drop
+    - artist_name                   → artist
+    - apple_music_credit / track_type → drop
 """
 
 from __future__ import annotations
@@ -123,6 +124,19 @@ def _split_songwriter(value: object) -> dict | None:
 def _convert_profile(old_profile: dict) -> dict:
     """旧フラット profile を新 schema profile へ変換する（legacy フィールドは drop）."""
     new_profile: dict = {}
+    if "artist" in old_profile:
+        artist = old_profile["artist"]
+        has_artist = True
+    elif "artist_name" in old_profile:
+        artist = old_profile["artist_name"]
+        has_artist = True
+    else:
+        artist = None
+        has_artist = False
+    if has_artist and not isinstance(artist, str):
+        raise ConfigError(f"artist は string でなければなりません（got {type(artist).__name__}）")
+    if has_artist:
+        new_profile["artist"] = artist
     if old_profile.get("language") is not None:
         new_profile["language"] = old_profile["language"]
     if old_profile.get("main_genre") is not None:

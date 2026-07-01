@@ -46,6 +46,7 @@ export interface DistrokidProfileCredits {
 
 // `distrokid.profile` セクション（distrokid.com/new フォーム項目に対応する静的プロファイル）。
 export interface DistrokidProfile {
+  artist: string;
   language: string;
   main_genre: string;
   sub_genre: string | null;
