@@ -78,6 +78,9 @@ export const INJECT_ACK_TIMEOUT_MS = 30000;
  * これを超えても in-flight が増えなければ fail-loud で ERROR phase に落とす。 */
 export const MAX_INJECT_RETRY = 2;
 
+/** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
+export const MAX_YIELD_RETRY = 2;
+
 /** 速度プリセットの選択値を保存する chrome.storage.local の key (#875)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const SPEED_PRESET_STORAGE_KEY = "sunoSpeedPreset";
