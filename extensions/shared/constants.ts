@@ -162,6 +162,12 @@ export const FEED_ENDPOINT_PATH = "/api/feed/";
 /** active feed poll に使う具体 endpoint（#948）。 */
 export const FEED_V2_PATH = "/api/feed/v2";
 
+/** duration 取得に使う feed v3 endpoint（#1258）。後続の yield guard 実装で POST する。 */
+export const FEED_V3_PATH = "/api/feed/v3";
+
+/** feed v3 の request method（#1258）。v2 の GET poll と区別するため契約値として固定する。 */
+export const FEED_V3_METHOD = "POST";
+
 /** MAIN world bridge ⇄ ISOLATED content script の window.postMessage 識別マーカー（#948）。 */
 export const BRIDGE_SOURCE = "suno-helper-bridge";
 
@@ -175,6 +181,10 @@ export const BRIDGE_MSG = {
   FEED_POLL_REQUEST: "feed-poll-request",
   /** bridge → content: active poll の応答（requestId + clips | null）。 */
   FEED_POLL_RESPONSE: "feed-poll-response",
+  /** content → bridge: feed/v3 の active poll 要求（requestId + ids）。 */
+  FEED_V3_POLL_REQUEST: "feed-v3-poll-request",
+  /** bridge → content: feed/v3 active poll の応答（requestId + clips | null）。 */
+  FEED_V3_POLL_RESPONSE: "feed-v3-poll-response",
   /** content → bridge: slider 値注入要求（requestId + ariaLabel + target）（#973）。 */
   SLIDER_SET_REQUEST: "slider-set-request",
   /** bridge → content: slider 値注入の応答（requestId + ok + actual | null）（#973）。 */
@@ -201,6 +211,7 @@ export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
 export interface ObservedClip {
   id: string;
   status: string;
+  duration?: number;
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
