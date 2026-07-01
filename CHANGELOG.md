@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 
 ### Fixed

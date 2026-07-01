@@ -865,7 +865,7 @@ def serve_dir(tmp_path):
     """
     started = []
 
-    def _start(planning: Path, allow_origin=None, playlist_capture=None):
+    def _start(planning: Path, allow_origin=None, capture_root=None):
         server = create_server(
             0,
             allow_origin,
@@ -873,7 +873,7 @@ def serve_dir(tmp_path):
             collection_dir=None,
             distrokid=None,
             collections_root=planning,
-            playlist_capture=playlist_capture,
+            capture_root=capture_root,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -922,20 +922,18 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
 
 
 def test_get_collections_does_not_include_playlist_name_when_capture_enabled(serve_dir, tmp_path):
-    """Given capture prefix 付き dir mode サーバー
+    """Given dir mode サーバー
     When `GET /collections`
     Then playlist_name は返さない（拡張側で collection id/name から導出する）。
     """
     planning = tmp_path / "planning"
-    channel_root = tmp_path / "channel"
-    channel_root.mkdir()
     _make_collection(
         planning,
         "20260601-soulful-grooves-wah-groove-collection",
         entries=[{"name": "A", "style": "s", "lyrics": ""}],
         theme="wah-groove",
     )
-    base = serve_dir(planning, playlist_capture=(channel_root, "soulful-grooves"))
+    base = serve_dir(planning)
 
     with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
         assert resp.status == 200

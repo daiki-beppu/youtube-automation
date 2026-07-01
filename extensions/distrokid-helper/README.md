@@ -69,8 +69,8 @@ pnpm compile
 
 1. コレクションルートを指定してサーバーを起動:
    ```bash
-   uv run yt-collection-serve <collections_root> --playlist-capture-root <channel_root> --allow-origin chrome-extension://<EXTENSION_ID>
-   # 例: uv run yt-collection-serve collections/ --playlist-capture-root . --allow-origin chrome-extension://abcdefghijklmnopabcdefghijklmnop
+   uv run yt-collection-serve <collections_root> --distrokid-capture-root <channel_root> --allow-origin chrome-extension://<EXTENSION_ID>
+   # 例: uv run yt-collection-serve collections/ --distrokid-capture-root . --allow-origin chrome-extension://abcdefghijklmnopabcdefghijklmnop
    # → GET /distrokid/collections でコレクション一覧を配信
    ```
 2. Chrome で `distrokid.com/new` を開く。
