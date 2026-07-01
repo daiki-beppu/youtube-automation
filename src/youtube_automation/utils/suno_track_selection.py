@@ -115,6 +115,20 @@ class SelectionResult:
     log_path: Path
 
 
+@dataclass(frozen=True)
+class WorkflowStateSnapshot:
+    path: Path
+    existed: bool
+    data: dict[str, object]
+
+
+@dataclass(frozen=True)
+class FileSnapshot:
+    path: Path
+    existed: bool
+    content: bytes | None
+
+
 def _require_mapping(value: object, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise ValidationError(f"{label} must be a mapping")
@@ -443,19 +457,19 @@ def _plan_suno_selection(
 
         still_missing: list[int] = []
         for prompt_index in missing_after_filter:
-            over_max_candidates = [
-                candidate
-                for candidate in dropped_by_prompt.get(prompt_index, [])
-                if _is_over_max_only(
+            prompt_dropped = dropped_by_prompt.get(prompt_index, [])
+            all_dropped_are_over_max_only = bool(prompt_dropped) and all(
+                _is_over_max_only(
                     candidate,
                     min_song_sec=cfg.pair.min_song_sec,
                     max_song_sec=cfg.pair.max_song_sec,
                 )
-            ]
-            if not over_max_candidates:
+                for candidate in prompt_dropped
+            )
+            if not all_dropped_are_over_max_only or cfg.pair.max_song_sec is None:
                 still_missing.append(prompt_index)
                 continue
-            selected = sorted(over_max_candidates, key=lambda c: (c.duration, c.path.name))[0]
+            selected = sorted(prompt_dropped, key=lambda c: (c.duration, c.path.name))[0]
             grouped.setdefault(prompt_index, []).append(selected)
             dropped.remove(selected)
             stocked = [(candidate, dest) for candidate, dest in stocked if candidate != selected]
@@ -463,7 +477,7 @@ def _plan_suno_selection(
             exceptions_over_limit.append(
                 OverLimitException(
                     candidate=selected,
-                    max_song_sec=cfg.pair.max_song_sec or 0,
+                    max_song_sec=cfg.pair.max_song_sec,
                     reason="all_candidates_over_max_song_sec; selected_shortest_over_limit",
                 )
             )
@@ -582,6 +596,20 @@ def _rollback(
         _restore_missing(backup, source)
 
 
+def _snapshot_file(path: Path) -> FileSnapshot:
+    if path.is_file():
+        return FileSnapshot(path=path, existed=True, content=path.read_bytes())
+    return FileSnapshot(path=path, existed=False, content=None)
+
+
+def _restore_file_snapshot(snapshot: FileSnapshot) -> None:
+    if snapshot.existed:
+        snapshot.path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot.path.write_bytes(snapshot.content or b"")
+    elif snapshot.path.exists():
+        snapshot.path.unlink()
+
+
 def _cleanup_transaction_dir(transaction_dir: Path) -> None:
     if transaction_dir.exists():
         shutil.rmtree(transaction_dir)
@@ -594,6 +622,8 @@ def _apply_plan(
     stock_cfg: StockConfig,
 ) -> SelectionResult:
     _prepare_log_destination(plan.log_path)
+    workflow_state = _read_workflow_state(collection_dir)
+    log_snapshot = _snapshot_file(plan.log_path)
     transaction_dir = collection_dir / ".tmp" / f"suno-select-{uuid.uuid4().hex}"
     transaction_dir.mkdir(parents=True, exist_ok=False)
     stocked_paths: list[Path] = []
@@ -660,7 +690,7 @@ def _apply_plan(
             mode_counts=result.mode_counts,
             dry_run=False,
         )
-        _update_workflow_state_music_pair_selection(collection_dir, result)
+        _sync_workflow_state_music_pair_selection(workflow_state, result)
     except Exception:
         _rollback(
             stocked_new=stocked_new,
@@ -668,6 +698,7 @@ def _apply_plan(
             hidden_sources=hidden_sources,
             renames=renames_applied,
         )
+        _restore_file_snapshot(log_snapshot)
         raise
     finally:
         _cleanup_transaction_dir(transaction_dir)
@@ -762,10 +793,7 @@ def _atomic_json_write(target: Path, data: dict) -> None:
         raise
 
 
-def _update_workflow_state_music_pair_selection(collection_dir: Path, result: SelectionResult) -> None:
-    if not result.exceptions_over_limit:
-        return
-
+def _read_workflow_state(collection_dir: Path) -> WorkflowStateSnapshot:
     workflow_state_path = collection_dir / "workflow-state.json"
     if workflow_state_path.is_file():
         try:
@@ -774,15 +802,26 @@ def _update_workflow_state_music_pair_selection(collection_dir: Path, result: Se
             raise ValidationError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
         if not isinstance(data, dict):
             raise ValidationError(f"workflow-state.json の root は object である必要があります: {workflow_state_path}")
-    else:
-        data = {}
+        return WorkflowStateSnapshot(path=workflow_state_path, existed=True, data=data)
+    if workflow_state_path.exists():
+        raise ValidationError(f"workflow-state.json は file である必要があります: {workflow_state_path}")
+    return WorkflowStateSnapshot(path=workflow_state_path, existed=False, data={})
 
-    data["music_pair_selection"] = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "exceptions_over_limit_count": len(result.exceptions_over_limit),
-        "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
-    }
-    _atomic_json_write(workflow_state_path, data)
+
+def _sync_workflow_state_music_pair_selection(snapshot: WorkflowStateSnapshot, result: SelectionResult) -> None:
+    data = dict(snapshot.data)
+    if result.exceptions_over_limit:
+        data["music_pair_selection"] = {
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "exceptions_over_limit_count": len(result.exceptions_over_limit),
+            "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
+        }
+    else:
+        if "music_pair_selection" not in data:
+            return
+        data.pop("music_pair_selection", None)
+
+    _atomic_json_write(snapshot.path, data)
 
 
 def select_suno_tracks(
