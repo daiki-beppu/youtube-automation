@@ -36,7 +36,9 @@ ZERO_SHA="0000000000000000000000000000000000000000"
 if [ ! -t 0 ]; then
   ref_lines=0
   non_delete_refs=0
-  while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  # `|| [ -n ... ]` は末尾改行が無い最終行の取りこぼし防止（read が非ゼロを
+  # 返しても変数が埋まっていれば 1 回だけ本体を実行する）
+  while read -r _local_ref local_sha _remote_ref _remote_sha || [ -n "${local_sha:-}" ]; do
     [ -z "${local_sha:-}" ] && continue
     ref_lines=$((ref_lines + 1))
     if [ "${local_sha}" != "${ZERO_SHA}" ]; then

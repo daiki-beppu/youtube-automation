@@ -11,6 +11,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.sh"
+_LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
 
 _CHANGELOG_LABEL = "skip-changelog"
 _PATH_FILTER_PATTERN = (
@@ -154,3 +155,25 @@ def test_ci_changelog_gate_covers_ts_packages() -> None:
     # lefthook 側 GATED_PATHS は CI と同じ範囲を担保する。
     for token in ('"packages/"', '"package.json"'):
         assert token in gate_script, f"changelog-gate.sh に {token} が無い"
+
+
+def test_lefthook_changelog_gate_skips_branch_deletion_push() -> None:
+    """#1420: ブランチ削除 push（local sha 全ゼロ）は changelog ゲート対象外。
+
+    削除 push スキップは 2 ファイルで 1 つの不変条件:
+    changelog-gate.sh の stdin 判定と lefthook.yml の use_stdin: true。
+    use_stdin が落ちるとスクリプトの空 stdin フォールバックが回帰を隠して
+    削除 push が再びブロックされるため、両側をここで固定する。
+    """
+    gate_script = _read_text(_CHANGELOG_GATE_PATH)
+    for token in (
+        'ZERO_SHA="0000000000000000000000000000000000000000"',
+        "ブランチ削除 push のためスキップします",
+    ):
+        assert token in gate_script, f"changelog-gate.sh に {token} が無い"
+
+    lefthook_config = yaml.safe_load(_read_text(_LEFTHOOK_CONFIG_PATH))
+    gate_command = lefthook_config["pre-push"]["commands"]["changelog-gate"]
+    assert gate_command.get("use_stdin") is True, (
+        "lefthook.yml の changelog-gate に use_stdin: true が無いと削除 push スキップが黙って無効化される"
+    )
