@@ -38,6 +38,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
+    _resolve_capture_root,
     build_collections_index,
     create_server,
     find_collection_dirs,
@@ -144,6 +145,56 @@ def test_resolve_prompts_path_missing_path_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# _resolve_capture_root: DistroKid capture root の CLI/env 優先順位
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_capture_root_returns_none_without_arg_or_env(monkeypatch):
+    """Given CLI 引数も env もない
+    When capture root を解決する
+    Then DistroKid capture は無効のまま None を返す。
+    """
+    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.delenv("PLAYLIST_CAPTURE_PREFIX", raising=False)
+
+    assert _resolve_capture_root(None) is None
+
+
+def test_resolve_capture_root_prefers_cli_arg_over_env(tmp_path, monkeypatch):
+    """Given CLI 引数と env の両方がある
+    When capture root を解決する
+    Then CLI 引数を優先する。
+    """
+    env_root = tmp_path / "env"
+    arg_root = tmp_path / "arg"
+    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+
+    assert _resolve_capture_root(str(arg_root)) == arg_root
+
+
+def test_resolve_capture_root_uses_env_fallback(tmp_path, monkeypatch):
+    """Given CLI 引数がなく env がある
+    When capture root を解決する
+    Then env の root を返す。
+    """
+    env_root = tmp_path / "env"
+    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+
+    assert _resolve_capture_root(None) == env_root
+
+
+def test_resolve_capture_root_ignores_legacy_playlist_capture_prefix(tmp_path, monkeypatch):
+    """Given 旧 Suno playlist capture prefix だけがある
+    When capture root を解決する
+    Then DistroKid capture root は有効化しない。
+    """
+    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.setenv("PLAYLIST_CAPTURE_PREFIX", str(tmp_path / "legacy"))
+
+    assert _resolve_capture_root(None) is None
+
+
+# ---------------------------------------------------------------------------
 # is_origin_allowed: CORS 判定
 #   - allow_origin=None  : chrome-extension:// scheme + helper サイト origin を許可（#896）
 #   - allow_origin 指定時 : write/auth 用にその値との完全一致のみ許可（lock 維持・要件2）
@@ -238,6 +289,24 @@ def test_get_suno_prompts_json_returns_array_body(serve):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
+
+
+def test_get_suno_prompts_json_preserves_duration_filter_envelope(serve):
+    """Given duration_filter 付き envelope prompts
+    When `GET /suno/prompts.json`
+    Then collection-serve は加工せず JSON を透過配信する（#1259）。
+    """
+    payload = {
+        "entries": [{"name": "A — A", "style": "slow, jazz", "lyrics": ""}],
+        "duration_filter": {"min_sec": 75, "max_sec": 240},
+    }
+    base = serve(payload)
+
+    with urllib.request.urlopen(f"{base}{_SUNO_PROMPTS_ROUTE}") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body == payload
 
 
 def test_get_version_returns_server_and_min_extension_semvers(serve):
@@ -610,6 +679,30 @@ def test_build_collections_index_reports_status_and_pattern_count(tmp_path):
     assert no_prompts["status"] == "needs_prompts"
     assert no_prompts["pattern_count"] is None
     assert no_prompts["downloaded_count"] == 0
+
+
+def test_build_collections_index_counts_prompt_response_entries(tmp_path):
+    """Given duration_filter 付き envelope prompts
+    When build_collections_index を呼ぶ
+    Then entries 数を pattern_count として扱う（#1259）。
+    """
+    _make_collection(
+        tmp_path,
+        "20260601-clm-with-filter-collection",
+        entries={
+            "entries": [
+                {"name": "A", "style": "s", "lyrics": ""},
+                {"name": "B", "style": "s", "lyrics": ""},
+            ],
+            "duration_filter": {"min_sec": 75, "max_sec": 240},
+        },
+    )
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["status"] == "ready"
+    assert row["pattern_count"] == 2
+    assert row["expected_file_count"] == 4
 
 
 def test_build_collections_index_name_strips_date_and_channel_prefix(tmp_path):
@@ -1007,6 +1100,27 @@ def test_get_collection_prompts_returns_entries(serve_dir, tmp_path):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
+
+
+def test_get_collection_prompts_preserves_duration_filter_envelope(serve_dir, tmp_path):
+    """Given 該当 collection に duration_filter 付き prompts json
+    When `GET /collections/<id>/suno/prompts.json`
+    Then envelope を加工せず透過配信する（#1259）。
+    """
+    planning = tmp_path / "planning"
+    payload = {
+        "entries": [{"name": "A — A", "style": "slow, jazz", "lyrics": ""}],
+        "duration_filter": {"min_sec": 75, "max_sec": 240},
+    }
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=payload)
+    base = serve_dir(planning)
+
+    url = f"{base}{_collection_prompts_route('20260601-clm-aaa-collection')}"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body == payload
 
 
 def test_get_collection_prompts_decodes_space_in_collection_id(serve_dir, tmp_path):
@@ -1634,6 +1748,34 @@ def test_extract_and_rename_happy_path(tmp_path):
         "01b-Spiral Descent.mp3",
         "02a-First Revolution.mp3",
         "02b-First Revolution.mp3",
+    ]
+
+
+def test_extract_and_rename_accepts_prompt_response_envelope(tmp_path):
+    """duration_filter 付き envelope でも entries の曲順で ZIP をリネームする。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries={
+            "entries": [{"name": "螺旋の降下 — Spiral Descent", "style": "s", "lyrics": ""}],
+            "duration_filter": {"min_sec": 75, "max_sec": 240},
+        },
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {
+            "Spiral Descent.mp3": b"audio-a",
+            "Spiral Descent_1.mp3": b"audio-b",
+        },
+    )
+
+    extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == [
+        "01a-Spiral Descent.mp3",
+        "01b-Spiral Descent.mp3",
     ]
 
 

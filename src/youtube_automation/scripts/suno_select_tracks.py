@@ -17,12 +17,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Suno clips を歌詞-aware に選別し、尺外音源を除外する")
     parser.add_argument("collection", nargs="?", help="コレクションディレクトリ (省略時は CWD)")
     parser.add_argument("--dry-run", action="store_true", help="ファイル移動せず plan と log を stdout 表示")
+    parser.add_argument(
+        "--allow-best-effort-over-max",
+        action="store_true",
+        help="全候補が max_song_sec 超過した prompt は最短候補を警告付きで例外採用する",
+    )
     args = parser.parse_args()
 
     try:
         collection_dir = resolve_collection_dir(args.collection)
         cfg = load_skill_config("masterup")
-        result = select_suno_tracks(collection_dir, cfg, dry_run=args.dry_run)
+        result = select_suno_tracks(
+            collection_dir,
+            cfg,
+            dry_run=args.dry_run,
+            allow_best_effort_over_max=args.allow_best_effort_over_max,
+        )
     except (ValidationError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -31,6 +41,7 @@ def main() -> int:
         "[yt-suno-select-tracks] "
         f"kept={len(result.kept)} stocked={len(result.stocked)} "
         f"deleted={len(result.deleted)} dropped_duration={len(result.dropped)} "
+        f"exceptions_over_limit={len(result.exceptions_over_limit)} "
         f"log={result.log_path}"
     )
     return 0

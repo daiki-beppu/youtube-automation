@@ -15,6 +15,11 @@ export const RESUME_STATE_KEY = "sunoResumeState";
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
+/** run 一式完了時リロード (#1411) で失われる直近完了 run の snapshot を退避する chrome.storage.local の key。
+ * content が FINISHED 到達時（リロード予約の直前）に書き、リロード後の queryProgress が復元ソースとして読む。
+ * lib/finished-snapshot.ts が SSOT として参照する。 */
+export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
+
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
 export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
@@ -39,6 +44,9 @@ export const VERSION_ROUTE = "/version";
 
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
+  if (id.length === 0) {
+    throw new Error("collectionId must be non-empty string");
+  }
   return `${COLLECTIONS_ROUTE}/${encodeURIComponent(id)}${PROMPTS_ROUTE}`;
 }
 
@@ -162,6 +170,12 @@ export const FEED_ENDPOINT_PATH = "/api/feed/";
 /** active feed poll に使う具体 endpoint（#948）。 */
 export const FEED_V2_PATH = "/api/feed/v2";
 
+/** duration 取得に使う feed v3 endpoint（#1258）。後続の yield guard 実装で POST する。 */
+export const FEED_V3_PATH = "/api/feed/v3";
+
+/** feed v3 の request method（#1258）。v2 の GET poll と区別するため契約値として固定する。 */
+export const FEED_V3_METHOD = "POST";
+
 /** MAIN world bridge ⇄ ISOLATED content script の window.postMessage 識別マーカー（#948）。 */
 export const BRIDGE_SOURCE = "suno-helper-bridge";
 
@@ -175,6 +189,10 @@ export const BRIDGE_MSG = {
   FEED_POLL_REQUEST: "feed-poll-request",
   /** bridge → content: active poll の応答（requestId + clips | null）。 */
   FEED_POLL_RESPONSE: "feed-poll-response",
+  /** content → bridge: feed/v3 の active poll 要求（requestId + ids）。 */
+  FEED_V3_POLL_REQUEST: "feed-v3-poll-request",
+  /** bridge → content: feed/v3 active poll の応答（requestId + clips | null）。 */
+  FEED_V3_POLL_RESPONSE: "feed-v3-poll-response",
   /** content → bridge: slider 値注入要求（requestId + ariaLabel + target）（#973）。 */
   SLIDER_SET_REQUEST: "slider-set-request",
   /** bridge → content: slider 値注入の応答（requestId + ok + actual | null）（#973）。 */
@@ -201,6 +219,7 @@ export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
 export interface ObservedClip {
   id: string;
   status: string;
+  duration?: number;
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
@@ -273,12 +292,13 @@ export type ItemState = "idle" | "active" | "done" | "failed";
 /** content script が SSOT として保持する進捗スナップショット (#852)。
  * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
 export interface SnapshotPayload {
+  // 実行元 collection。popup 再 open 復元時に別 collection の entries を現在選択へ誤適用しないため保持する。
+  collectionId: string;
   entries: PromptEntry[];
   itemStates: ItemState[];
   isRunning: boolean;
   progress: ProgressPayload;
-  // collection mode のときの playlist 名 (#854)。再 open 復元時の display 用。
-  // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため undefined。
+  // playlist 名 (#854)。再 open 復元時の display 用。download-only snapshot では undefined。
   playlistName?: string;
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。

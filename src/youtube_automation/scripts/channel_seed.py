@@ -17,8 +17,8 @@ from youtube_automation.utils.channel_seed import (
 from youtube_automation.utils.exceptions import AutomationError, ConfigError
 
 ANALYTICS_PATH = Path("config") / "channel" / "analytics.json"
-DEFAULT_RELATIONSHIP = "seed"
 DEFAULT_RECENT_COUNT = 10
+PLACEHOLDER_RELATIONSHIPS = {"", "seed", "default", "unknown", "none", "n/a", "未設定", "なし"}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -28,7 +28,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("url", help="YouTube channel URL / handle / channel ID")
     parser.add_argument("--target", help="チャンネルリポジトリのルートディレクトリ")
-    parser.add_argument("--relationship", default=DEFAULT_RELATIONSHIP, help="benchmark.channels[].relationship")
+    parser.add_argument(
+        "--relationship",
+        help="benchmark.channels[].relationship。analytics.json へ書き込む場合は必須。",
+    )
     parser.add_argument("--recent", type=int, default=DEFAULT_RECENT_COUNT, help="取得する直近動画タイトル数")
     parser.add_argument(
         "--no-write-benchmark",
@@ -71,12 +74,16 @@ def _resolve_target(target: str | None) -> Path:
     return path
 
 
-def _write_benchmark_entry(target: Path, seed: SeedChannel, relationship: str) -> None:
+def _write_benchmark_entry(target: Path, seed: SeedChannel, relationship: str | None) -> None:
+    relationship_value = (relationship or "").strip()
+    if relationship_value.lower() in PLACEHOLDER_RELATIONSHIPS:
+        raise ConfigError("--relationship には TTP で転写する具体的な関係性メモを指定してください")
+
     path = target / ANALYTICS_PATH
     if not path.is_file():
         raise ConfigError(f"analytics.json が存在しません: {path}")
     analytics = json.loads(path.read_text(encoding="utf-8"))
-    entry = to_benchmark_entry(seed, relationship=relationship)
+    entry = to_benchmark_entry(seed, relationship=relationship_value)
     merged = merge_benchmark_channel(analytics, entry)
     path.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

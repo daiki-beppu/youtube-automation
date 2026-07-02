@@ -21,7 +21,7 @@ Suno UI が認識するセクションタグ:
 
 ## 標準テンプレ（4 種）
 
-以下は Funk/Soul ジャンル + 大人向けペルソナの例。チャンネル固有の `docs/audience-persona.md` がある場合は、そちらの語彙と視聴シーンを優先する。
+以下は Funk/Soul ジャンル + 大人向けペルソナの例。チャンネル固有の `docs/channel/personas/persona-definition.md` がある場合は、そちらの語彙と視聴シーンを優先する。旧 `docs/audience-persona.md` は legacy fallback としてのみ参照する。
 
 ### Template A: Smooth Soul（mid tempo 95-110 BPM）
 

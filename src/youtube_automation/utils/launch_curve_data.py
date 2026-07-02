@@ -20,7 +20,10 @@ def build_launch_curve_frame(
     永続化 JSON と動画メタから launch curve 用 DataFrame を構築する。
 
     Args:
-        daily_data: {"rows": [{video_id, date, views, impressions, impression_ctr}, ...]}
+        daily_data: {"rows": [{video_id, date, views, impressions?, impression_ctr?}, ...]}
+            `video_id` / `date` / `views` are required. Missing `impressions`
+            is normalized to `daily_impressions=0`; missing `impression_ctr`
+            keeps `ctr` unavailable.
         video_meta: {video_id: {"title": ..., "published_at": "ISO-8601"}}
         reporting_snapshot: Reporting API v1 由来の impressions_summary (#84)。
             指定された場合、per_video の CTR / impressions を `reporting_ctr_snapshot`
@@ -75,6 +78,13 @@ def build_launch_curve_frame(
             "impression_ctr": "ctr",
         }
     )
+    if "daily_impressions" not in df.columns:
+        df["daily_impressions"] = 0
+    if "ctr" not in df.columns:
+        df["ctr"] = pd.NA
+    df["daily_impressions"] = df["daily_impressions"].fillna(0)
+    df["ctr"] = df["ctr"].astype("Float64")
+
     df = df.sort_values(["video_id", "days_since_publish"])
     df["cumulative_views"] = df.groupby("video_id")["daily_views"].cumsum()
 

@@ -1,5 +1,9 @@
 # JSON-only config: packages/core から YAML 依存を排除
 
+## Status
+
+accepted (2026-06-15)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 Python 版では設定ファイルが 2 フォーマットに分裂していた:

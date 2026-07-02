@@ -13,8 +13,8 @@
 //   client.setCredentials(credentials)   // seeds the stored refresh_token
 //   await client.refreshAccessToken()    // -> { credentials }
 // The service extracts clientId / clientSecret from the client_secrets.json
-// `installed` (or `web`) block, seeds the stored token, refreshes, and serializes
-// the refreshed credentials back to a token.json string.
+// `installed` block, seeds the stored token, refreshes, and serializes the
+// refreshed credentials back to a token.json string.
 
 import { describe, expect, test } from "bun:test";
 
@@ -128,6 +128,69 @@ describe("refreshTokenService failure", () => {
       throw new Error("expected failure");
     }
     expect(r.error.domain).toBe("auth");
+  });
+
+  test("rejects web-only client_secrets as a config error", async () => {
+    // Given a Web application OAuth client instead of a Desktop app client
+    const webOnlyClientSecretsJson = JSON.stringify({
+      web: {
+        client_id: "web-client.apps.googleusercontent.com",
+        client_secret: "web-secret",
+      },
+    });
+    const { client } = makeOAuthClient(() => {
+      throw new Error("should not refresh without installed client");
+    });
+    const { deps } = makeDeps(client);
+
+    // When refreshing
+    const r = await refreshTokenService(
+      {
+        clientSecretsJson: webOnlyClientSecretsJson,
+        tokenJson: expiredTokenJson,
+      },
+      deps
+    );
+
+    // Then parsing fails before the OAuth client is constructed
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected config failure");
+    }
+    expect(r.error.domain).toBe("config");
+    expect(r.error.message).toContain("installed");
+  });
+
+  test("rejects installed client_secrets without redirect_uris", async () => {
+    // Given a Desktop app shaped file missing the redirect_uris key required by
+    // the Python runtime / doctor contract
+    const missingRedirectUrisJson = JSON.stringify({
+      installed: {
+        client_id: "cid.apps.googleusercontent.com",
+        client_secret: "the-client-secret",
+      },
+    });
+    const { client } = makeOAuthClient(() => {
+      throw new Error("should not refresh without redirect_uris");
+    });
+    const { deps } = makeDeps(client);
+
+    // When refreshing
+    const r = await refreshTokenService(
+      {
+        clientSecretsJson: missingRedirectUrisJson,
+        tokenJson: expiredTokenJson,
+      },
+      deps
+    );
+
+    // Then parsing fails before the OAuth client is constructed
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(r.error.domain).toBe("validation");
+    expect(r.error.message).toContain("redirect_uris");
   });
 });
 

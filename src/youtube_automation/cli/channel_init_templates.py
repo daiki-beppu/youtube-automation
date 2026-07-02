@@ -10,19 +10,9 @@ from pathlib import Path
 CONFIG_DIR = Path("config")
 CONFIG_SUBDIR = CONFIG_DIR / "channel"
 SKILLS_SUBDIR = CONFIG_DIR / "skills"
-GITKEEP_NAME = ".gitkeep"
 PLACEHOLDER_DEFAULT = "TBD"
 BENCHMARK_CHANNEL_SEPARATOR = "|"
 DEFAULT_LOCALIZATION_LANGUAGES: tuple[str, ...] = ("ja", "en", "de")
-
-DIRECTORIES: tuple[str, ...] = (
-    "auth",
-    "collections",
-    "data",
-    "docs/channel/personas",
-    "docs/benchmarks",
-    "research",
-)
 
 
 @dataclass(frozen=True)
@@ -44,6 +34,7 @@ class ChannelInitContext:
     country: str
     default_language: str
     supported_languages: tuple[str, ...]
+    distrokid_profile: dict | None
 
 
 def serialize_json(data: dict) -> str:
@@ -135,6 +126,12 @@ def _render_audio(ctx: ChannelInitContext) -> dict:
     }
 
 
+def _render_distrokid(ctx: ChannelInitContext) -> dict:
+    if ctx.distrokid_profile is None:
+        raise ValueError("distrokid_profile is required to render distrokid.json")
+    return {"distrokid": {"enabled": True, "profile": ctx.distrokid_profile}}
+
+
 CHANNEL_CONFIG_TEMPLATES: dict[str, Callable[[ChannelInitContext], dict]] = {
     "meta.json": _render_meta,
     "content.json": _render_content,
@@ -143,6 +140,10 @@ CHANNEL_CONFIG_TEMPLATES: dict[str, Callable[[ChannelInitContext], dict]] = {
     "playlists.json": _render_empty,
     "workflow.json": _render_empty,
     "audio.json": _render_audio,
+}
+
+OPTIONAL_CHANNEL_CONFIG_TEMPLATES: dict[str, Callable[[ChannelInitContext], dict]] = {
+    "distrokid.json": _render_distrokid,
 }
 
 
@@ -266,14 +267,24 @@ def _render_suno_skill(ctx: ChannelInitContext) -> str:
 
 
 def _render_thumbnail_skill(ctx: ChannelInitContext) -> str:
+    reference_notes = (
+        f"TTP benchmarks: {len(ctx.benchmark_channels)} channel(s); "
+        "channel branding references are reference-only, not reusable assets"
+    )
     return (
         "image_generation:\n"
         "  gemini:\n"
         '    brand_background: "TBD"\n'
         "    reference_images:\n"
         "      default: []\n"
+        "      channel_branding:\n"
+        "        snapshot: docs/channel/competitor-branding-snapshot.json\n"
+        "        icon_references: []\n"
+        "        banner_references: []\n"
+        "        output_icon: branding/icon.png\n"
+        "        output_banner: branding/banner.png\n"
         "      path_base: channel_dir\n"
-        f"      notes: {_yaml_scalar(f'TTP benchmarks: {len(ctx.benchmark_channels)} channel(s)')}\n"
+        f"      notes: {_yaml_scalar(reference_notes)}\n"
         '    diff_prompt_template: "Apply this channel visual direction to the collection theme."\n'
         "    composition_rules:\n"
         '      environment: "TBD"\n'

@@ -750,6 +750,62 @@ def test_get_collection_distrokid_asset_decodes_space_in_collection_id(serve_dir
         assert resp.read() == _MP3_BYTES
 
 
+def test_get_collection_distrokid_asset_decodes_percent_encoded_relpath(serve_dir_dk, tmp_path):
+    """Given 日本語ファイル名を percent-encode した collection-scoped asset URL
+    When `GET /collections/<id>/distrokid/assets/<rel>` を呼ぶ
+    Then decode 後の実ファイルを返す。
+    """
+    planning = tmp_path / "planning"
+    coll = planning / "20260526-abc-collection"
+    coll.mkdir(parents=True)
+    disc_dir = _make_disc(coll, "disc1-alpha", mp3_count=1)
+    filename = "01-不屈のビート.mp3"
+    (disc_dir / filename).write_bytes(_MP3_BYTES)
+    base = serve_dir_dk(planning)
+    relpath = urllib.parse.quote(f"30-distrokid/disc1-alpha/{filename}", safe="/")
+
+    url = f"{base}{_COLLECTIONS_ROUTE}/20260526-abc-collection/distrokid/assets/{relpath}"
+    with urllib.request.urlopen(url) as resp:
+        assert resp.status == 200
+        assert resp.headers.get("Content-Type") == "audio/mpeg"
+        assert resp.read() == _MP3_BYTES
+
+
+@pytest.mark.parametrize(
+    ("encoded_relpath", "outside_filename"),
+    [
+        (urllib.parse.quote("../secret.mp3", safe=""), "secret.mp3"),
+        (None, "absolute-secret.mp3"),
+        (urllib.parse.quote("30-distrokid/disc1-alpha/bad\x00.mp3", safe="/"), None),
+    ],
+)
+def test_get_collection_distrokid_asset_rejects_decoded_invalid_relpath(
+    serve_dir_dk,
+    tmp_path,
+    encoded_relpath,
+    outside_filename,
+):
+    """Given decode 後に traversal / absolute / NUL になる collection-scoped asset URL
+    When `GET /collections/<id>/distrokid/assets/<rel>` を呼ぶ
+    Then 外部ファイルや不正 path は 404。
+    """
+    planning = tmp_path / "planning"
+    collection_id = "20260526-abc-collection"
+    _make_collection(planning, collection_id, discs=["disc1-alpha"])
+    if outside_filename is not None:
+        outside = tmp_path / outside_filename
+        outside.write_bytes(b"secret")
+        if encoded_relpath is None:
+            encoded_relpath = urllib.parse.quote(str(outside), safe="")
+    base = serve_dir_dk(planning)
+
+    req = urllib.request.Request(f"{base}{_COLLECTIONS_ROUTE}/{collection_id}/distrokid/assets/{encoded_relpath}")
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
+
+
 def test_get_collection_distrokid_asset_traversal_returns_404(serve_dir_dk, tmp_path):
     """Given `../` を含む asset rel
     When `GET /collections/<id>/distrokid/assets/<rel>`

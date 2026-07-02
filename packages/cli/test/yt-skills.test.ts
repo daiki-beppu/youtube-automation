@@ -14,7 +14,6 @@ const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 // `bunx yt ...` 相当の e2e。citty dispatcher (bin/yt.ts) を実プロセスで起動する。
 const runYt = (...argv: string[]) =>
   Bun.spawnSync(["bun", "packages/cli/bin/yt.ts", ...argv], { cwd: repoRoot });
-const CLI_E2E_TIMEOUT_MS = 10_000;
 
 // ADR-0003: registry entry の run は Result を返す。ok arm を unwrap して e2e の
 // 期待値 (service が見るのと同じ payload) を得る。
@@ -53,58 +52,46 @@ describe("core registry — skills.list entry (ADR-0004 contract)", () => {
 });
 
 describe("yt skills list — text output (default)", () => {
-  test(
-    "exits 0 and prints the count header matching the Python `yt-skills list` format",
-    () => {
-      // Given `yt skills list` with no format flag
-      const proc = runYt("skills", "list");
+  test("exits 0 and prints the count header matching the Python `yt-skills list` format", () => {
+    // Given `yt skills list` with no format flag
+    const proc = runYt("skills", "list");
 
-      // Then it exits cleanly and the header matches `同梱スキル <N> 件 (source: <path>)`.
-      expect(proc.exitCode).toBe(0);
-      expect(proc.stdout.toString()).toMatch(
-        /^同梱スキル \d+ 件 \(source: .+\)$/mu
-      );
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then it exits cleanly and the header matches `同梱スキル <N> 件 (source: <path>)`.
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stdout.toString()).toMatch(
+      /^同梱スキル \d+ 件 \(source: .+\)$/mu
+    );
+  });
 
-  test(
-    "prints each skill as an indented bullet line",
-    async () => {
-      // Given `yt skills list`
-      const proc = runYt("skills", "list");
-      const output = proc.stdout.toString();
+  test("prints each skill as an indented bullet line", async () => {
+    // Given `yt skills list`
+    const proc = runYt("skills", "list");
+    const output = proc.stdout.toString();
 
-      // Then every skill from the registry entry appears as a `  - <name>` line.
-      const expected = await listOk({});
-      expect(output).toMatch(/^ {2}- .+$/mu);
-      for (const skill of expected.skills) {
-        expect(output).toContain(`  - ${skill}`);
-      }
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then every skill from the registry entry appears as a `  - <name>` line.
+    const expected = await listOk({});
+    expect(output).toMatch(/^ {2}- .+$/mu);
+    for (const skill of expected.skills) {
+      expect(output).toContain(`  - ${skill}`);
+    }
+  }, 10_000);
 });
 
 describe("yt skills list --json", () => {
-  test(
-    "prints valid JSON carrying source and skills, with no cli reshaping",
-    async () => {
-      // Given `yt skills list --json`
-      const proc = runYt("skills", "list", "--json");
+  test("prints valid JSON carrying source and skills, with no cli reshaping", async () => {
+    // Given `yt skills list --json`
+    const proc = runYt("skills", "list", "--json");
 
-      // Then stdout is parseable JSON matching the registry entry's output.
-      expect(proc.exitCode).toBe(0);
-      const parsed = JSON.parse(proc.stdout.toString()) as {
-        skills: string[];
-        source: string;
-      };
-      const expected = await listOk({});
-      expect(parsed.skills).toEqual(expected.skills);
-      expect(typeof parsed.source).toBe("string");
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then stdout is parseable JSON matching the registry entry's output.
+    expect(proc.exitCode).toBe(0);
+    const parsed = JSON.parse(proc.stdout.toString()) as {
+      skills: string[];
+      source: string;
+    };
+    const expected = await listOk({});
+    expect(parsed.skills).toEqual(expected.skills);
+    expect(typeof parsed.source).toBe("string");
+  });
 });
 
 describe("yt skills list --skills-dir — option propagates to the service", () => {
@@ -124,86 +111,60 @@ describe("yt skills list --skills-dir — option propagates to the service", () 
     rmSync(fixtureDir, { force: true, recursive: true });
   });
 
-  test(
-    "--json lists the directories under the supplied --skills-dir",
-    () => {
-      // Given `yt skills list --skills-dir <fixture> --json`
-      const proc = runYt(
-        "skills",
-        "list",
-        "--skills-dir",
-        fixtureDir,
-        "--json"
-      );
+  test("--json lists the directories under the supplied --skills-dir", () => {
+    // Given `yt skills list --skills-dir <fixture> --json`
+    const proc = runYt("skills", "list", "--skills-dir", fixtureDir, "--json");
 
-      // Then stdout reports the fixture's subdirectories (sorted) and echoes the
-      // fixture as the source — the option reached the service unchanged.
-      expect(proc.exitCode).toBe(0);
-      const parsed = JSON.parse(proc.stdout.toString()) as {
-        skills: string[];
-        source: string;
-      };
-      expect(parsed.skills).toEqual(["bravo", "charlie", "delta"]);
-      expect(parsed.source).toBe(fixtureDir);
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then stdout reports the fixture's subdirectories (sorted) and echoes the
+    // fixture as the source — the option reached the service unchanged.
+    expect(proc.exitCode).toBe(0);
+    const parsed = JSON.parse(proc.stdout.toString()) as {
+      skills: string[];
+      source: string;
+    };
+    expect(parsed.skills).toEqual(["bravo", "charlie", "delta"]);
+    expect(parsed.source).toBe(fixtureDir);
+  });
 
-  test(
-    "text output header reports the supplied --skills-dir as source",
-    () => {
-      // Given `yt skills list --skills-dir <fixture>` without --json
-      const proc = runYt("skills", "list", "--skills-dir", fixtureDir);
+  test("text output header reports the supplied --skills-dir as source", () => {
+    // Given `yt skills list --skills-dir <fixture>` without --json
+    const proc = runYt("skills", "list", "--skills-dir", fixtureDir);
 
-      // Then the header source is the fixture dir, not the bundled default.
-      expect(proc.exitCode).toBe(0);
-      expect(proc.stdout.toString()).toContain(`(source: ${fixtureDir})`);
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then the header source is the fixture dir, not the bundled default.
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stdout.toString()).toContain(`(source: ${fixtureDir})`);
+  });
 });
 
 describe("yt skills list — error path (run-command helper)", () => {
-  test(
-    "missing --skills-dir exits 1 with an io-domain stderr prefix and empty stdout",
-    () => {
-      // Given a `list` against a path that does not exist
-      const missingDir = join(tmpdir(), "skills-bin-missing-xyz-842");
-      const proc = runYt("skills", "list", "--skills-dir", missingDir);
+  test("missing --skills-dir exits 1 with an io-domain stderr prefix and empty stdout", () => {
+    // Given a `list` against a path that does not exist
+    const missingDir = join(tmpdir(), "skills-bin-missing-xyz-842");
+    const proc = runYt("skills", "list", "--skills-dir", missingDir);
 
-      // Then the ServiceError surfaces via lib/run-command.ts as exit 1
-      // (non-quota) with the `[domain] message` stderr line (ADR-0004 §4).
-      expect(proc.exitCode).toBe(1);
-      expect(proc.stderr.toString()).toContain("[io]");
-      expect(proc.stdout.toString()).toBe("");
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then the ServiceError surfaces via lib/run-command.ts as exit 1
+    // (non-quota) with the `[domain] message` stderr line (ADR-0004 §4).
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toContain("[io]");
+    expect(proc.stdout.toString()).toBe("");
+  });
 });
 
 describe("yt dispatcher — citty usage surface", () => {
-  test(
-    "`yt --help` exits 0 and lists the skills subcommand",
-    () => {
-      // Given the dispatcher invoked with --help
-      const proc = runYt("--help");
+  test("`yt --help` exits 0 and lists the skills subcommand", () => {
+    // Given the dispatcher invoked with --help
+    const proc = runYt("--help");
 
-      // Then the sub-command tree is shown (AC: `bunx yt --help`).
-      expect(proc.exitCode).toBe(0);
-      expect(proc.stdout.toString()).toContain("skills");
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then the sub-command tree is shown (AC: `bunx yt --help`).
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stdout.toString()).toContain("skills");
+  });
 
-  test(
-    "`yt skills <unknown>` exits non-zero",
-    () => {
-      // Given an unsupported subcommand under skills
-      const proc = runYt("skills", "bogus");
+  test("`yt skills <unknown>` exits non-zero", () => {
+    // Given an unsupported subcommand under skills
+    const proc = runYt("skills", "bogus");
 
-      // Then the process fails (usage error propagates to a non-zero exit).
-      expect(proc.exitCode).not.toBe(0);
-    },
-    CLI_E2E_TIMEOUT_MS
-  );
+    // Then the process fails (usage error propagates to a non-zero exit).
+    expect(proc.exitCode).not.toBe(0);
+  });
 });

@@ -43,7 +43,7 @@ Claude はこのリポジトリ上で **「BGM チャンネルを運営して収
 |------|--------|
 | 「次に何を作るか」を決める | `/collection-ideate` → `/wf-status`（在庫確認） |
 | タイトル / サムネ / 概要を決める | `/alignment-check`（音楽 × サムネ × タイトル整合性）→ `/thumbnail-compare`（モバイル視認性） |
-| シリーズ展開を判断する | `/analytics-analyze`（テーマ別パフォーマンス）→ `/audience-persona`（誰に効いたか） |
+| シリーズ展開を判断する | `/analytics-analyze`（テーマ別パフォーマンス）→ `/viewer-voice` → `/audience-persona-design` → `/viewing-scene`（誰にどう効いたか） |
 | コメント対応 | `/comments-reply`（ルール駆動の自動返信、二重返信防止つき） |
 | 競合動向を調べる | `/benchmark`（最新ベンチマーク取得）→ `/video-analyze`（動画本体の中身分析） |
 
@@ -176,7 +176,7 @@ ffmpeg / Veo / Lyria / 画像生成 API を呼ぶスキル（`/videoup` / `/mast
 | 「次に何やる？」 | `/wf-next`（既存コレクション継続） / `/collection-ideate`（新規企画） |
 | 「このコレクション、CTR 弱くない？」 | `/alignment-check` → `/thumbnail-compare` |
 | 「シリーズ広げるべき？」 | `/analytics-analyze`（テーマ別パフォーマンス） |
-| 「視聴者は誰？何を求めてる？」 | `/audience-persona` + `/viewer-voice` + `/viewing-scene` |
+| 「視聴者は誰？何を求めてる？」 | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` |
 | 「コメント溜まってる」 | `/comments-reply` |
 | 「容量パンパン」 | `/live-clean` |
 | 「競合は今どんな動画出してる？」 | `/benchmark` → `/video-analyze` |
