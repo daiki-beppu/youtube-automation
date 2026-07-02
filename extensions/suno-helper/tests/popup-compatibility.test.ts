@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PHASE, type ProgressPayload } from "../../shared/constants";
+import { PHASE, type ProgressPayload, type SnapshotPayload } from "../../shared/constants";
 import { App } from "../components/App";
 
 const BASE_URL = "http://localhost:7873";
@@ -660,20 +660,17 @@ describe("Suno popup compatibility check", () => {
       { name: "p2", style: "jazz", lyrics: "" },
       { name: "p3", style: "ambient", lyrics: "" },
     ];
+    const snapshot: SnapshotPayload = {
+      entries,
+      itemStates: entries.map(() => "idle"),
+      isRunning: true,
+      progress: { phase: PHASE.INJECTING, total: entries.length },
+    };
     let progressHandler: ((event: { data: ProgressPayload }) => void) | undefined;
 
     messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
       if (message === "queryProgress") {
-        throw new Error("runner unavailable");
-      }
-      if (message === "fetchCompatibilityWarning") {
-        return Promise.resolve("");
-      }
-      if (message === "fetchCollections") {
-        return Promise.reject(new Error("HTTP 404"));
-      }
-      if (message === "fetchPrompts") {
-        return Promise.resolve(entries);
+        return Promise.resolve(snapshot);
       }
       return defaultSendMessage(message, payload);
     });
@@ -693,22 +690,14 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
 
-    await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
-    await waitFor(() => {
-      expect(container.textContent).toContain("3 パターンを取得しました。");
-    });
-
     const checkboxStates = (): boolean[] =>
       Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).map(
         (checkbox) => checkbox.checked,
       );
 
-    expect(checkboxStates()).toEqual([true, true, true]);
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([true, true, true]);
+    });
 
     await act(async () => {
       progressHandler?.({ data: { phase: PHASE.DONE, index: 1, total: entries.length } });
