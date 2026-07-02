@@ -54,6 +54,7 @@ UPLOAD_CATEGORY = "upload"
 REQUIRED_APIS = [
     "youtube.googleapis.com",
     "youtubeanalytics.googleapis.com",
+    "youtubereporting.googleapis.com",
     "aiplatform.googleapis.com",
     "generativelanguage.googleapis.com",
 ]
