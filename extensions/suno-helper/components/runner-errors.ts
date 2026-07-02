@@ -7,6 +7,7 @@ import { PHASE, type ProgressLog, type SnapshotPayload } from "../../shared/cons
 
 /** popup の再 open 復元に使う state。useSunoRunner の restore effect がそのまま React state へ流す。 */
 export interface RestoreState {
+  collectionId: string;
   entries: SnapshotPayload["entries"];
   itemStates: SnapshotPayload["itemStates"];
   isRunning: boolean;
@@ -67,6 +68,22 @@ function formatProgressLog(log: ProgressLog): { text: string; error?: boolean } 
   }
 }
 
+function formatAllowedProgressLog(progress: SnapshotPayload["progress"]): { text: string; error?: boolean } | null {
+  if (!progress.log) {
+    return null;
+  }
+  switch (progress.phase) {
+    case PHASE.DONE:
+      return progress.log.kind === "duration-check" ? formatProgressLog(progress.log) : null;
+    case PHASE.WAITING_SLOT:
+      return progress.log.kind === "retry" ? formatProgressLog(progress.log) : null;
+    case PHASE.ENTRY_FAILED:
+      return progress.log.kind === "skip" ? formatProgressLog(progress.log) : null;
+    default:
+      return null;
+  }
+}
+
 /**
  * 直近 progress（と entry 名解決用の entries）を popup の status 文字列へ変換する。
  * content の snapshot 構築 (live) と popup の再 open 復元 (restore) の双方が同一文言を使うための SSOT。
@@ -76,8 +93,9 @@ export function phaseToStatus(
   progress: SnapshotPayload["progress"],
   entries: SnapshotPayload["entries"],
 ): { text: string; error?: boolean } {
-  if (progress.log) {
-    return formatProgressLog(progress.log);
+  const logStatus = formatAllowedProgressLog(progress);
+  if (logStatus) {
+    return logStatus;
   }
 
   const { phase, index, total, message } = progress;
@@ -129,6 +147,7 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
   }
   const { text, error } = phaseToStatus(snap.progress, snap.entries);
   return {
+    collectionId: snap.collectionId,
     entries: snap.entries,
     itemStates: snap.itemStates,
     isRunning: snap.isRunning,

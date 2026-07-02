@@ -5,10 +5,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BRIDGE_MSG,
   CLIPS_PER_REQUEST,
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
   DEFAULT_URL,
+  FEED_V2_PATH,
+  FEED_V3_METHOD,
+  FEED_V3_PATH,
   INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
@@ -21,6 +25,7 @@ import {
   SPEED_PRESET_STORAGE_KEY,
   SPEED_PRESETS,
   STORAGE_KEY,
+  type ObservedClip,
 } from "../../shared/constants";
 
 describe("shared/constants: サーバー互換の契約値", () => {
@@ -88,6 +93,10 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
       "/collections/20260526-rainy%20jazz-collection/suno/prompts.json",
     );
   });
+
+  it("Given 空 collection id When collectionPromptsRoute(id) Then throw する", () => {
+    expect(() => collectionPromptsRoute("")).toThrow(/collectionId/);
+  });
 });
 
 describe("shared/constants: Suno queue 上限 (#816)", () => {
@@ -99,6 +108,29 @@ describe("shared/constants: Suno queue 上限 (#816)", () => {
 
   it("Given 上限定数 When 積で最大 clip を求める Then 20 clip になる", () => {
     expect(MAX_INFLIGHT_REQUESTS * CLIPS_PER_REQUEST).toBe(20);
+  });
+});
+
+describe("shared/constants: Suno feed bridge 契約 (#1258)", () => {
+  it("Given feed endpoint constants When 読む Then v2 GET poll と v3 POST 用 path/method を固定する", () => {
+    expect(FEED_V2_PATH).toBe("/api/feed/v2");
+    expect(FEED_V3_PATH).toBe("/api/feed/v3");
+    expect(FEED_V3_METHOD).toBe("POST");
+  });
+
+  it("Given BRIDGE_MSG When feed v3 poll の message type を読む Then v2 と別名で固定されている", () => {
+    expect(BRIDGE_MSG.FEED_POLL_REQUEST).toBe("feed-poll-request");
+    expect(BRIDGE_MSG.FEED_POLL_RESPONSE).toBe("feed-poll-response");
+    expect(BRIDGE_MSG.FEED_V3_POLL_REQUEST).toBe("feed-v3-poll-request");
+    expect(BRIDGE_MSG.FEED_V3_POLL_RESPONSE).toBe("feed-v3-poll-response");
+  });
+
+  it("Given ObservedClip When duration を持つ clip / 持たない clip を扱う Then optional field として型付けできる", () => {
+    const withDuration = { id: "clip-1", status: "complete", duration: 241.2 } satisfies ObservedClip;
+    const withoutDuration = { id: "clip-2", status: "queued" } satisfies ObservedClip;
+
+    expect(withDuration.duration).toBe(241.2);
+    expect("duration" in withoutDuration).toBe(false);
   });
 });
 

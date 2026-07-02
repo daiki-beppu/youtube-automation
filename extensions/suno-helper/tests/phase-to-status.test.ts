@@ -10,11 +10,11 @@ import { PHASE } from "../../shared/constants";
 import type { ProgressPayload } from "../../shared/constants";
 import { phaseToStatus } from "../components/runner-errors";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import { makePromptEntries } from "./_helpers";
+import { makePromptEntries, snapshotOptions } from "./_helpers";
 
 /** 指定 progress を適用した snapshot を作る（phaseToStatus は progress / entries を読む）。 */
 function snapWith(payload: ProgressPayload) {
-  return applyProgress(initSnapshot(makePromptEntries(3)), payload);
+  return applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), payload);
 }
 
 /** snapshot を phaseToStatus の (progress, entries) 引数へ展開して呼ぶ。 */
@@ -141,6 +141,31 @@ describe("phaseToStatus: duration guard ログ (#1270)", () => {
 
     expect(text).toBe('"Night Groove": 312s ✗ (max 300s)');
     expect(error).toBeFalsy();
+  });
+
+  it("Given duration check NG log When min 未満 Then min 下限を表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.DONE,
+      index: 0,
+      total: 3,
+      log: { kind: "duration-check", entryName: "Night Groove", durationSec: 58, ok: false, minSec: 60 },
+    });
+
+    expect(text).toBe('"Night Groove": 58s ✗ (min 60s)');
+    expect(error).toBeFalsy();
+  });
+
+  it("Given ERROR phase に不正な log が混入 When 変換する Then error phase の文言と error flag を優先する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.ERROR,
+      index: 0,
+      total: 3,
+      message: "停止理由",
+      log: { kind: "retry", entryName: "Night Groove", attempt: 1, max: 2 },
+    } as unknown as ProgressPayload);
+
+    expect(text).toBe("中断: 停止理由");
+    expect(error).toBe(true);
   });
 
   it("Given retry log When 変換する Then リトライ回数を表示する", () => {

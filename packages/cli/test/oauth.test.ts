@@ -137,7 +137,11 @@ describe("getYouTubeClient happy path", () => {
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
     process.env.CLIENT_SECRETS_JSON = JSON.stringify({
-      installed: { client_id: "cid", client_secret: "cs" },
+      installed: {
+        client_id: "cid",
+        client_secret: "cs",
+        redirect_uris: ["http://localhost"],
+      },
     });
     mkdirSync(join(dir, "auth"), { recursive: true });
     writeFileSync(
@@ -182,7 +186,11 @@ describe("getYouTubeAnalyticsClient happy path", () => {
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
     process.env.CLIENT_SECRETS_JSON = JSON.stringify({
-      installed: { client_id: "cid", client_secret: "cs" },
+      installed: {
+        client_id: "cid",
+        client_secret: "cs",
+        redirect_uris: ["http://localhost"],
+      },
     });
     mkdirSync(join(dir, "auth"), { recursive: true });
     writeFileSync(
@@ -233,7 +241,11 @@ const failIfCalled = (name: string) => (): never => {
 const seedSecretsEnv = (dir: string): void => {
   process.env.CHANNEL_DIR = dir;
   process.env.CLIENT_SECRETS_JSON = JSON.stringify({
-    installed: { client_id: "cid", client_secret: "cs" },
+    installed: {
+      client_id: "cid",
+      client_secret: "cs",
+      redirect_uris: ["http://localhost"],
+    },
   });
   reset();
 };
@@ -264,7 +276,11 @@ describe("getYouTubeClient interactive branch", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.scopes).toEqual([...SCOPES]);
     expect(JSON.parse(calls[0]?.clientSecretsJson ?? "{}")).toEqual({
-      installed: { client_id: "cid", client_secret: "cs" },
+      installed: {
+        client_id: "cid",
+        client_secret: "cs",
+        redirect_uris: ["http://localhost"],
+      },
     });
     // ... the issued token was persisted at 0o600 ...
     const tokenPath = join(dir, "auth", "token.json");
@@ -309,7 +325,11 @@ describe("getYouTubeClient refresh branch", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.tokenJson).toBe(expired);
     expect(JSON.parse(calls[0]?.clientSecretsJson ?? "{}")).toEqual({
-      installed: { client_id: "cid", client_secret: "cs" },
+      installed: {
+        client_id: "cid",
+        client_secret: "cs",
+        redirect_uris: ["http://localhost"],
+      },
     });
     // ... the refreshed token was written back at 0o600 ...
     const tokenPath = join(dir, "auth", "token.json");

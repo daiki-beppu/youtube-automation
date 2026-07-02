@@ -203,7 +203,6 @@ async function loadBackground(opts?: {
     vi.doMock("../../shared/api", () => ({
       fetchCollectionPrompts: vi.fn(() => Promise.resolve([])),
       fetchCollections: vi.fn(() => Promise.resolve([])),
-      fetchPrompts: vi.fn(() => Promise.resolve([])),
       postDownloaded: postDownloadedMock,
       resolveCompatibilityWarning: vi.fn(() => Promise.resolve("")),
     }));
@@ -366,12 +365,11 @@ describe("background read API handlers: localhost read を extension origin 境�
     vi.unstubAllGlobals();
   });
 
-  it("collections/prompts/version を background fetch で取得する", async () => {
+  it("collections/collection prompts/version を background fetch で取得する", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: "p1", style: "lofi", lyrics: "" }] })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: "p2", style: "lofi", lyrics: "" }] })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -380,10 +378,6 @@ describe("background read API handlers: localhost read を extension origin 境�
     const { handlers } = await loadBackground({ useRealPostDownloaded: true, fetchImpl });
 
     await handlers.get("fetchCollections")!({
-      data: { baseUrl: "http://localhost:7873" },
-      sender: { tab: { id: 42 } },
-    });
-    await handlers.get("fetchPrompts")!({
       data: { baseUrl: "http://localhost:7873" },
       sender: { tab: { id: 42 } },
     });
@@ -399,10 +393,29 @@ describe("background read API handlers: localhost read を extension origin 境�
     ).resolves.toContain("拡張を更新してください");
 
     expect(fetchImpl).toHaveBeenNthCalledWith(1, "http://localhost:7873/collections");
-    expect(fetchImpl).toHaveBeenNthCalledWith(2, "http://localhost:7873/suno/prompts.json");
-    expect(fetchImpl).toHaveBeenNthCalledWith(3, "http://localhost:7873/collections/20260601-clm/suno/prompts.json");
-    expect(fetchImpl).toHaveBeenNthCalledWith(4, "http://localhost:7873/version");
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "http://localhost:7873/collections/20260601-clm/suno/prompts.json");
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "http://localhost:7873/version");
   });
+
+  it.each([
+    ["空文字", ""],
+    ["欠落", undefined],
+    ["非 string", 123],
+  ] as const)(
+    "fetchCollectionPrompts の collectionId が%sなら localhost fetch へ渡さず throw する",
+    async (_label, collectionId) => {
+      const fetchImpl = vi.fn();
+      const { handlers } = await loadBackground({ useRealPostDownloaded: true, fetchImpl });
+
+      expect(() =>
+        handlers.get("fetchCollectionPrompts")!({
+          data: { baseUrl: "http://localhost:7873", collectionId },
+          sender: { tab: { id: 42 } },
+        }),
+      ).toThrow(/collectionId/);
+      expect(fetchImpl).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('background onMessage("startDownload"): 非 .zip ダウンロードは無視する', () => {
