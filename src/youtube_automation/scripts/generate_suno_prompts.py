@@ -169,14 +169,55 @@ def _collect_video_analysis_presets() -> tuple[str, str]:
     return top_genre, ", ".join(exclude_seen)
 
 
-def _style_line(tempo: str | None, effective_style: str) -> str:
-    """Styles 欄の 1 行目（`<tempo>, <style>,`）を組み立てる共有部品.
+def _style_line(tempo: str | None, effective_style: str, variation_descriptor: str = "") -> str:
+    """Styles 欄の 1 行目（`<tempo>, <style>[, <variation>],`）を組み立てる共有部品.
 
     md 出力と JSON 出力で同一の文字列を使うことでドリフトを防ぐ。
+    variation_descriptor は #1456 の自動バリエーション句（空なら従来形式のまま）。
     """
     parts = [tempo] if tempo else []
     parts.append(effective_style)
+    if variation_descriptor:
+        parts.append(variation_descriptor)
     return ", ".join(parts) + ","
+
+
+# ---------------------------------------------------------------------------
+# Style 自動バリエーション (#1456): entry ごとに texture / rhythm feel の
+# descriptor を決定的に割り当て、Style 第 1 行の同質化を防ぐ。
+# コアジャンル (genre_line) は変えず、形容詞句の付与のみに限定する。
+# ---------------------------------------------------------------------------
+
+
+def _build_variation_sequence(pools: dict) -> list[str]:
+    """`style_variation.pools` から descriptor の割り当て列を構築する.
+
+    axis 名の辞書順で round-robin に interleave する（例: rhythm[0], texture[0],
+    rhythm[1], texture[1], ...）。YAML の記述順や deep-merge の結果順に依存させず、
+    同じ pools からは常に同じ列が得られる（決定性）。
+    """
+    axes = [pools[name] for name in sorted(pools) if isinstance(pools[name], list) and pools[name]]
+    if not axes:
+        return []
+    sequence: list[str] = []
+    for i in range(max(len(axis) for axis in axes)):
+        for axis in axes:
+            if i < len(axis):
+                sequence.append(str(axis[i]))
+    return sequence
+
+
+def _variation_descriptor(entry_index: int, sequence: list[str]) -> str:
+    """コレクション内の entry 通し番号 (0-based) に対する descriptor を返す.
+
+    先頭 entry (index 0) はコレクションの基準スタイルとして base style を維持する
+    （descriptor なし）。これにより単一 entry の既存コレクションは出力が変わらず、
+    複数 entry のときだけ 2 entry 目以降に微差が付く（後方互換）。
+    2 entry 目以降は sequence を循環割り当てする。
+    """
+    if entry_index == 0 or not sequence:
+        return ""
+    return sequence[(entry_index - 1) % len(sequence)]
 
 
 @dataclass
@@ -184,7 +225,7 @@ class _ResolvedPattern:
     name_jp: str
     name_en: str
     style_label: str
-    style_line: str
+    style_lines: list[str]  # scenes と同じ長さ。entry ごとの Styles 第 1 行 (#1456)
     scenes: list[str]
     lyrics_by_scene: list[str]  # scenes と同じ長さ。各値は rstrip 済み。歌詞が無ければ ""
 
@@ -369,6 +410,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
 
+    # Style 自動バリエーション (#1456): enabled のとき entry 通し番号で descriptor を循環割り当てる
+    style_variation = suno.get("style_variation") or {}
+    variation_enabled = bool(style_variation.get("enabled", False))
+    variation_sequence = _build_variation_sequence(style_variation.get("pools") or {}) if variation_enabled else []
+
     base_parts = [genre_line]
     if mood_descriptors:
         base_parts.append(mood_descriptors)
@@ -395,12 +441,14 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
     resolved: list[_ResolvedPattern] = []
     expected_external_lyrics_names: set[str] = set()
+    entry_index = 0  # コレクション内の entry (= scene) 通し番号。バリエーション割り当ての基準 (#1456)
     for pattern in patterns:
         tempo = pattern.get("tempo")
         style_key = pattern.get("style")
 
         # Per-pattern style variant override
-        if style_key and style_key in style_variants:
+        has_explicit_variant = bool(style_key and style_key in style_variants)
+        if has_explicit_variant:
             variant = style_variants[style_key]
             effective_style = variant["genre_line"]
             style_label = f" [{style_key}: {variant['name']}]"
@@ -414,6 +462,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         base_name = f"{pattern['name_jp']} — {pattern['name_en']}"
         multi = len(scenes) > 1
         lyrics_by_scene = []
+        style_lines = []
         for j in range(1, len(scenes) + 1):
             entry_name = f"{base_name} (Variation {j})" if multi else base_name
             if has_external_lyrics:
@@ -422,12 +471,21 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             else:
                 lyrics_by_scene.append(fallback_lyrics)
 
+            # 明示 variant がある entry は override を最優先し自動バリエーションを付けない (#1456)。
+            # entry_index は明示 variant の entry でも消費し、後続 entry の割り当てを YAML 上の
+            # 位置だけで決まる決定的なものに保つ。
+            descriptor = ""
+            if variation_enabled and not has_explicit_variant:
+                descriptor = _variation_descriptor(entry_index, variation_sequence)
+            style_lines.append(_style_line(tempo, effective_style, descriptor))
+            entry_index += 1
+
         resolved.append(
             _ResolvedPattern(
                 name_jp=pattern["name_jp"],
                 name_en=pattern["name_en"],
                 style_label=style_label,
-                style_line=_style_line(tempo, effective_style),
+                style_lines=style_lines,
                 scenes=scenes,
                 lyrics_by_scene=lyrics_by_scene,
             )
@@ -498,7 +556,7 @@ def generate(patterns_path: Path) -> str:
             lines.append(f"### Variation {j}")
             lines.append("**Styles:**")
             lines.append("```")
-            lines.append(pattern.style_line)
+            lines.append(pattern.style_lines[j - 1])
             lines.append(scene)
             lines.append("```")
 
@@ -535,6 +593,9 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
     - Style 文字数上限チェック (警告)
     - 禁止アーティスト名チェック (エラー)
     - auto_lyrics_structure による歌詞構造の自動補強
+
+    Style 重複検証 (#1456):
+    - 全 entry の Style 文 (第 1 行 + scene 行) が完全一致する組があれば警告する
     """
     resolved = _resolve_prompts(patterns_path)
     suno = load_skill_config("suno")
@@ -556,7 +617,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
         multi = len(pattern.scenes) > 1
         for j, scene in enumerate(pattern.scenes, 1):
             name = f"{base_name} (Variation {j})" if multi else base_name
-            full_style = f"{pattern.style_line}\n{scene}"
+            full_style = f"{pattern.style_lines[j - 1]}\n{scene}"
 
             # Quality rules: Style テキストの検証 (#904)
             # style_char_limit と banned_artists は完成形の full_style を検証する。
@@ -581,6 +642,17 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             # (gating は resolve 段で `key in override` 済み)。
             entry.update(resolved.advanced_json_fields)
             entries.append(entry)
+
+    # Style 重複検証 (#1456): 完全一致する Style 文は Suno 上で同質の曲を量産するため警告する。
+    # バリエーション無効の legacy 運用でも scene 差分があれば full_style はユニークになるので、
+    # ここで検知されるのは scene まで同一という設計ミスか pool 枯渇の異常ケースのみ。
+    style_counts = Counter(entry["style"] for entry in entries)
+    for style_text, count in style_counts.items():
+        if count > 1:
+            duplicated_names = ", ".join(e["name"] for e in entries if e["style"] == style_text)
+            report.warnings.append(
+                f"Duplicate Style text across {count} entries ({duplicated_names}): {style_text.splitlines()[0]}"
+            )
 
     # Quality report: エラーがあれば fail-loud、警告は stderr に出力
     if report.has_warnings:

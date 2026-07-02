@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(suno)`: `/suno` の Style プロンプト生成に entry ごとの自動バリエーション機構（`style_variation`、既定で有効）を追加。`genre_line` のコアジャンルを維持したまま texture / rhythm feel の descriptor を entry 通し番号ベースの決定的ローテーションで Style 第 1 行へ付与し、Suno V5.5 での楽曲同質化を防ぐ。先頭 entry は base style を維持（単一 entry の既存コレクションは出力不変）、`style` variant の明示 override がある entry は従来どおり優先、`style_variation.enabled: false` で従来動作へ戻せる。全 entry の Style 文が完全一致する組は生成時に警告する（#1456）
+
 ## [5.5.15] - 2026-07-02
 
 ### Added
