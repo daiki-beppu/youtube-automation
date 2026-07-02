@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -142,9 +143,6 @@ def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> No
 def _write_complete_ttp_artifacts(base: Path) -> Path:
     _write_benchmark_channels(base)
     _write_ttp_readiness_files(base)
-    data_dir = base / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
     docs_dir = base / "docs" / "benchmarks"
     docs_dir.mkdir(parents=True, exist_ok=True)
     (docs_dir / "rival.md").write_text("# Rival", encoding="utf-8")
@@ -1222,9 +1220,6 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         """benchmark JSON / docs / thumbnail / config refs が揃っていれば ok."""
         _write_benchmark_channels(tmp_path)
         _write_ttp_readiness_files(tmp_path)
-        data_dir = tmp_path / "data"
-        data_dir.mkdir(parents=True, exist_ok=True)
-        (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
         docs_dir = tmp_path / "docs" / "benchmarks"
         docs_dir.mkdir(parents=True, exist_ok=True)
         (docs_dir / "rival.md").write_text("# Rival", encoding="utf-8")
@@ -1484,7 +1479,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
                     {
                         "slug": "rival",
                         "videos": [
-                            {"video_id": video_id, "views": 1000 - index} for index, video_id in enumerate(video_ids)
+                            {"video_id": video_id, "views": 50000 - index} for index, video_id in enumerate(video_ids)
                         ],
                     }
                 ]
@@ -2066,7 +2061,10 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "channels": [
                         {
                             "slug": "rival",
-                            "videos": [{"video_id": video_id} for video_id in video_ids],
+                            "videos": [
+                                {"video_id": video_id, "views": 50000 - index}
+                                for index, video_id in enumerate(video_ids)
+                            ],
                         }
                     ]
                 }
@@ -2084,6 +2082,81 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "benchmark top 5 が不足 (3/5)" in r.message
         assert "video_analysis が一部のみ (3/5)" in r.message
+
+    def test_video_analysis_uses_views_sorted_min_views_top5(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        low_view_ids = [f"LOW{i}" for i in range(1, 6)]
+        high_view_ids = [f"HIGH{i}" for i in range(1, 6)]
+        videos = [{"video_id": video_id, "views": 100 + index} for index, video_id in enumerate(low_view_ids)]
+        videos.extend({"video_id": video_id, "views": 50000 - index} for index, video_id in enumerate(high_view_ids))
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "rival", "videos": videos}]}),
+            encoding="utf-8",
+        )
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        for path in analysis_dir.glob("*.json"):
+            path.unlink()
+        for video_id in high_view_ids:
+            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_unapproved_benchmark_slug_is_ignored_for_video_analysis(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        rival_videos = [{"video_id": f"VID{i}", "views": 50000 - i} for i in range(1, 6)]
+        extra_videos = [{"video_id": f"EXTRA{i}", "views": 60000 - i} for i in range(1, 6)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {"slug": "rival", "videos": rival_videos},
+                        {"slug": "unapproved", "videos": extra_videos},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_video_analysis_symlink_outside_channel_is_rejected(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        video_analysis = tmp_path / "data" / "video_analysis"
+        shutil.rmtree(video_analysis)
+        outside = tmp_path.parent / "outside-video-analysis"
+        outside_rival = outside / "rival"
+        outside_rival.mkdir(parents=True)
+        for i in range(1, 6):
+            (outside_rival / f"VID{i}.json").write_text(json.dumps({"video_id": f"VID{i}"}), encoding="utf-8")
+        try:
+            video_analysis.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink unavailable: {exc}")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "data/video_analysis の channel_dir 外参照を拒否" in r.message
+
+    def test_old_video_analyze_model_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "video-analyze.yaml").write_text(
+            "model: gemini-3.5-flash\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "video-analyze model が旧/非対応: gemini-3.5-flash" in r.message
 
     def test_suno_long_genre_line_warns_even_with_variants(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
@@ -2106,6 +2179,41 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "warn"
         assert "Suno genre_line が style_char_limit 超過 (121/120)" in r.message
+
+    def test_suno_variant_long_genre_line_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text(
+            "\n".join(
+                [
+                    "genre_line: short style",
+                    "style_char_limit: 120",
+                    "style_variants:",
+                    "  long:",
+                    f'    genre_line: "{"x" * 121}"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "Suno style_variants.long.genre_line が style_char_limit 超過 (121/120)" in r.message
+
+    def test_suno_style_char_limit_non_numeric_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text(
+            "\n".join(["genre_line: short style", "style_char_limit: nope", ""]),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "suno.style_char_limit が数値ではありません" in r.message
 
     def test_video_analysis_slug_traversal_is_rejected(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel(slug="../../../outside")])

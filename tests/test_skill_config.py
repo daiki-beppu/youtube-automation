@@ -84,9 +84,12 @@ def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("CHANNEL_DIR", str(env_channel))
 
-    cfg = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=explicit_channel)
+    env_cfg = skill_config.load_skill_config("thumbnail")
+    cfg = skill_config.load_skill_config("thumbnail", channel_dir=explicit_channel)
 
+    assert env_cfg.get("marker") == "env"
     assert cfg.get("marker") == "explicit"
+    assert skill_config.load_skill_config("thumbnail").get("marker") == "env"
 
 
 def test_channel_override_root_must_be_mapping(tmp_path, monkeypatch):
