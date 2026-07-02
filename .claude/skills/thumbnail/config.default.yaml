@@ -26,6 +26,21 @@ image_generation:
     # yt-stock-prune のテーマあたり最大保持件数 (未指定なら CLI 引数必須)
     max_per_theme: 50
 
+  # thumbnail 候補の自動選択 (#1370): TTP 参照画像プール
+  # (image_generation.gemini.reference_images.default) の特徴量 centroid に
+  # 最も近い候補を yt-thumbnail-auto-select で 10-assets/thumbnail.jpg として
+  # 自動確定する。TTP が確立したチャンネル向けの opt-in。
+  auto_selection:
+    # true にすると候補生成後、ユーザー承認の代わりに
+    # `yt-thumbnail-auto-select <collection-path> --apply` で自動確定できる。
+    # false / 未設定のチャンネルは従来どおり手動承認フロー (挙動は変わらない)。
+    enabled: false
+    # 候補が満たすべき最小解像度 (YouTube 推奨 1280x720)
+    min_width: 1280
+    min_height: 720
+    # 16:9 判定の許容誤差 (|width/height - 16/9| がこの値以下なら適格)
+    aspect_tolerance: 0.01
+
   gemini:
     # 使用する Gemini 画像生成モデル
     model: gemini-3.1-flash-image-preview

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(thumbnail)`: thumbnail 候補の自動選択を標準化する `yt-thumbnail-auto-select` CLI を追加。TTP 参照画像プール（`image_generation.gemini.reference_images.default`）の特徴量 centroid に最も近い候補を `10-assets/thumbnail.jpg` として自動確定する。`config/skills/thumbnail.yaml` の `image_generation.auto_selection.enabled: true` で opt-in（未設定チャンネルは従来の手動承認フローのまま）。dry-run / apply を分離し、apply 時は `workflow-state.json` に選択候補・distance・ランキング・実行時刻の監査ログを記録。候補なし・参照画像なし・16:9 逸脱・確定済みサムネ上書きは silent fallback せず明示エラーにする（#1370）
+
 ## [5.5.15] - 2026-07-02
 
 ### Added
