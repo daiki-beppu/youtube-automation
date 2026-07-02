@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(distrokid-helper)`: `POST /distrokid/releases` を suno-helper の downloaded POST と同じ background + serve token 必須の書き込み境界に統一（ADR-0016）。サーバー側で `X-Serve-Token` を検証し token なし / 不正 token / 不正 origin を 403 で拒否、popup は直接 POST せず background service worker へ typed message（`recordRelease`）で委譲、token stale の 403 は token 再取得で 1 回だけ retry する。token 取得 / 403 retry は shared API の共通ヘルパに集約し、書き込みには `--allow-origin chrome-extension://<EXTENSION_ID>` が必須になった（#1360）
 - `docs(skills)`: `/audience-persona` を `/audience-persona-design` に改名し、`/viewer-voice` と `/viewing-scene` を束ねて第一ペルソナ 1 人へ収束させる設計フローに更新（#1371）
 - `feat(channel-init)`: `yt-channel-init` に DistroKid opt-in 初期化を追加し、`--distrokid-enabled` 指定時のみ `config/channel/distrokid.json` を生成するようにした。`/channel-new` のヒアリング手順にも DistroKid 配信設定を追加（#1366）
 - `feat(setup)`: `/setup` から `yt-setup-dirs` を実行して `auth/` などの最小ディレクトリを config 生成前に用意し、`/channel-new` は既存ディレクトリを再利用して `config/channel/*.json` 生成に集中する責務へ整理（#1396）

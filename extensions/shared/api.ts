@@ -482,6 +482,7 @@ export function excludeReleasedDiscs(
 
 /**
  * フィル完了後に配信済みとして記録する (#934)。POST /distrokid/releases。
+ * serve token 必須の書き込み境界 (#1360): background の extension origin から呼ぶこと。
  * 失敗は caller が warn 表示するだけで、フィル成功を覆さない補助機能として扱う。
  * 非 2xx は fail-loud で throw する（caller が warn 処理する）。
  */
@@ -489,11 +490,11 @@ export async function recordDistrokidRelease(
   baseUrl: string,
   record: DistrokidReleaseRecord,
 ): Promise<void> {
-  const resp = await fetch(`${baseUrl}${DISTROKID_RELEASES_ROUTE}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(record),
-  });
+  const resp = await postJsonWithServeToken(
+    baseUrl,
+    DISTROKID_RELEASES_ROUTE,
+    record,
+  );
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
@@ -529,6 +530,32 @@ async function fetchServeToken(baseUrl: string): Promise<string> {
   return token;
 }
 
+/**
+ * serve token 必須の書き込み POST 共通ヘルパ (#1360)。
+ * GET /auth/token で token を取得し、`X-Serve-Token` 付きで JSON POST する。
+ * 403 はサーバー再起動による stale token とみなし、token を再取得して 1 回だけ retry する。
+ * 最終 Response をそのまま返し、成否判定とエラーメッセージは caller の契約に委ねる。
+ */
+async function postJsonWithServeToken(
+  baseUrl: string,
+  route: string,
+  body: unknown,
+): Promise<Response> {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const url = `${normalizedBaseUrl}${route}`;
+  const post = (token: string) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Serve-Token": token },
+      body: JSON.stringify(body),
+    });
+  let res = await post(await fetchServeToken(normalizedBaseUrl));
+  if (res.status === 403) {
+    res = await post(await fetchServeToken(normalizedBaseUrl));
+  }
+  return res;
+}
+
 export async function postDownloaded(
   baseUrl: string,
   collectionId: string,
@@ -540,26 +567,11 @@ export async function postDownloaded(
   if (payload.file_count > 0 && !payload.download_path) {
     throw new Error("file_count が正数の場合は download_path が必要です");
   }
-  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-  const token = await fetchServeToken(normalizedBaseUrl);
-  const url = `${normalizedBaseUrl}${collectionDownloadedRoute(collectionId)}`;
-  let res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Serve-Token": token },
-    body: JSON.stringify(payload),
-  });
-  // 403 retry: token may be stale after server restart
-  if (res.status === 403) {
-    const freshToken = await fetchServeToken(baseUrl);
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Serve-Token": freshToken,
-      },
-      body: JSON.stringify(payload),
-    });
-  }
+  const res = await postJsonWithServeToken(
+    baseUrl,
+    collectionDownloadedRoute(collectionId),
+    payload,
+  );
   if (!res.ok) {
     throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
   }
