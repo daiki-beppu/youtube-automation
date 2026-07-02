@@ -79,6 +79,14 @@ vi.mock("../lib/download", () => ({
   triggerDownloadAll: vi.fn(() => Promise.resolve()),
 }));
 
+// 完了時リロード前の snapshot 退避。実物は chrome.storage へアクセスするため node/jsdom 環境では mock 必須。
+// 退避契約そのものの検証は content-finished-snapshot.test.ts が担う。
+vi.mock("../lib/finished-snapshot", () => ({
+  writeFinishedSnapshot: vi.fn(() => Promise.resolve()),
+  readFreshFinishedSnapshot: vi.fn(() => Promise.resolve(null)),
+  clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("../../shared/api", () => ({
   postDownloaded: vi.fn(() => Promise.resolve()),
 }));

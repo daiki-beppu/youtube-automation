@@ -175,6 +175,14 @@ async function loadContentScriptWithPlaylistRows(
     cancelScheduledRunCompleteReload: cancelScheduledRunCompleteReloadMock,
   }));
 
+  // 完了時リロード前の snapshot 退避。実物は chrome.storage へアクセスするため node 環境では mock 必須。
+  // 退避契約そのものの検証は content-finished-snapshot.test.ts が担う。
+  vi.doMock("../lib/finished-snapshot", () => ({
+    writeFinishedSnapshot: vi.fn(() => Promise.resolve()),
+    readFreshFinishedSnapshot: vi.fn(() => Promise.resolve(null)),
+    clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
+  }));
+
   vi.doMock("../../shared/playlist-scrape", () => ({
     scrapePlaylistsFromMe: vi.fn(() => [
       { title: "vj | regression", url: "https://suno.com/playlist/regression" },

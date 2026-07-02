@@ -34,7 +34,9 @@ export function nextItemStates(prev: ItemState[], phase: Phase, index?: number):
   return prev;
 }
 
-/** 連続実行を終える phase（以降 isRunning=false）。snapshot 自体は破棄せず再 open 表示用に残す。 */
+/** 連続実行を終える phase（以降 isRunning=false）。snapshot 自体は破棄せず再 open 表示用に残す。
+ * ただし run 一式完了時リロード (#1411) は in-memory snapshot ごと content script を破棄するため、
+ * FINISHED の再 open 表示はリロード直前に chrome.storage へ退避した分 (lib/finished-snapshot.ts) が引き継ぐ。 */
 export function isTerminalPhase(phase: Phase): boolean {
   return phase === PHASE.FINISHED || phase === PHASE.STOPPED || phase === PHASE.ERROR;
 }
