@@ -1449,6 +1449,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
                 "- 承認 / 不採用判断: Rival を承認済み",
                 "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                 "- relationship: title-structure / thumbnail-composition",
+                "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
                 "- 未反映項目: なし",
                 "",
             ]
@@ -1663,6 +1664,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- 承認 / 不採用判断: Rival を承認済み",
                     "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                     "- relationship: title-structure / thumbnail-composition",
+                    "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
                     "- 未反映項目: ユーザー承認済み例外: thumbnail reference は後続 /thumbnail で補完するためスキップ",
                     "",
                 ]
@@ -1690,6 +1692,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- 承認 / 不採用判断: Rival を承認済み",
                     "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                     "- relationship: title-structure / thumbnail-composition",
+                    "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
                     "- 未反映項目: ユーザー承認済み例外: music / 曲構造 TTP は後続 /suno で補完するためスキップ",
                     "",
                 ]
@@ -1827,6 +1830,29 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "source が未記録 (entry #2 id=UC999 slug=second)" in r.message
         assert "seed fetch 要約 が未記録 (entry #2 id=UC999 slug=second)" in r.message
+
+    def test_seed_confirmation_must_record_branding_transfer_policy(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival を承認済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition",
+                    "- relationship: title-structure",
+                    "- 未反映項目: なし",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding snapshot 参照または転写方針が未記録" in r.message
 
     def test_seed_identifier_prefix_collision_does_not_satisfy_missing_channel(self, tmp_path):
         _write_ttp_analytics(

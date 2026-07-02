@@ -1162,6 +1162,8 @@ def _validate_ttp_seed_confirmation(seed_text: str, channels: list[dict[str, obj
         for marker_label, markers in _SEED_CONFIRMATION_MARKERS:
             if not _contains_any_marker(candidate_text, markers):
                 missing.append(f"ttp-seed-confirmation.md に {marker_label} が未記録 ({label})")
+        if not _has_branding_transfer_policy(candidate_text):
+            missing.append(f"ttp-seed-confirmation.md に branding snapshot 参照または転写方針が未記録 ({label})")
 
         relationship = str(channel.get("relationship") or "").strip()
         if (
@@ -1233,6 +1235,19 @@ def _channel_seed_identifiers(channel: dict[str, object]) -> list[str]:
 def _contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
     lower_text = text.lower()
     return any(marker.lower() in lower_text for marker in markers)
+
+
+def _has_branding_transfer_policy(text: str) -> bool:
+    lower_text = text.lower()
+    if "competitor-branding-snapshot.json" in lower_text or "branding snapshot" in lower_text:
+        return True
+    policy_markers = ("description", "keywords", "localizations")
+    transfer_markers = ("転写", "方針", "参照", "構造", "抽出")
+    return any(
+        any(policy_marker in line.lower() for policy_marker in policy_markers)
+        and any(transfer_marker in line for transfer_marker in transfer_markers)
+        for line in text.splitlines()
+    )
 
 
 def _line_mentions_ttp_skip(line: str) -> bool:
