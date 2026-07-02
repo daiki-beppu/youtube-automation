@@ -37,7 +37,7 @@
 | Skill | なにができるか |
 |---|---|
 | /viewer-voice | 競合コメント収集で視聴者インサイトを抽出 |
-| /audience-persona | ターゲット視聴者のペルソナを定義 |
+| /audience-persona-design | ターゲット視聴者のペルソナを定義 |
 | /viewing-scene | 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義 |
 | /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
 | /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |

@@ -162,22 +162,37 @@ def test_collection_ideate_allows_missing_persona_in_fallback_modes() -> None:
         f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} では停止せず",
         maxsplit=1,
     )[1].split("今回のターゲットペルソナ", maxsplit=1)[0]
-    assert "/audience-persona" not in fallback_guidance
+    assert "/audience-persona-design" not in fallback_guidance
     assert "チャンネル立ち上げ直後なら" not in fallback_guidance
 
 
-def test_collection_ideate_target_persona_rotation_uses_fallback_hypothesis() -> None:
+def test_collection_ideate_single_persona_variations_use_fallback_hypothesis() -> None:
     text = _read(_COLLECTION_IDEATE_SKILL_MD)
-    rotation = _section(text, "### ペルソナローテーション")
+    variations = _section(text, "### 第一ペルソナの企画バリエーション")
 
-    assert "`docs/channel/personas/persona-definition.md` が存在する場合" in rotation
-    assert "analytics mode で persona 文書が存在しない場合は停止" in rotation
-    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で persona 文書が存在しない場合" in rotation
-    assert "入力モードごとの材料から作る初回仮説の視聴者像" in rotation
-    assert f"{_BENCHMARK_FALLBACK_MODE}: ベンチマークデータ + config" in rotation
-    assert f"{_MINIMAL_MODE}: {_DIRECT_INPUT_LABEL}+ config" in rotation
-    assert "ユーザー直接入力 + config から作る初回仮説の視聴者像" not in rotation
-    assert "初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ" not in rotation
+    assert "`docs/channel/personas/persona-definition.md` が存在する場合" in variations
+    assert "第一ペルソナ 1 人" in variations
+    assert "複数ペルソナをローテーションせず" in variations
+    assert "別シーン・別感情・別利用文脈" in variations
+    assert "analytics mode で persona 文書が存在しない場合は停止" in variations
+    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で persona 文書が存在しない場合" in variations
+    assert "入力モードごとの材料から作る初回仮説の視聴者像" in variations
+    assert f"{_BENCHMARK_FALLBACK_MODE}: ベンチマークデータ + config" in variations
+    assert f"{_MINIMAL_MODE}: {_DIRECT_INPUT_LABEL}+ config" in variations
+    assert "ユーザー直接入力 + config から作る初回仮説の視聴者像" not in variations
+    assert "初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ" not in variations
+    assert "直近の選択ペルソナの次" not in variations
+
+
+def test_collection_ideate_persona_framework_uses_single_persona_candidate_count() -> None:
+    text = _read(_COLLECTION_IDEATE_SKILL_MD)
+    framework = _section(text, "## ペルソナベース企画フレームワーク")
+
+    assert "第一ペルソナ 1 人" in framework
+    assert "`preview.candidate_count` 個の企画候補を生成" in framework
+    assert "別シーン・別感情・別利用文脈" in framework
+    assert "ペルソナに対し、各 1 企画" not in framework
+    assert "ペルソナ × 差別化軸" not in framework
 
 
 def test_wf_new_overview_declares_minimal_mode_extra_pause() -> None:
@@ -328,6 +343,8 @@ def test_freshness_rules_follow_analytics_absent_fallback_contract() -> None:
     assert "analytics mode で `persona-definition.md` が存在しない" in triggers
     assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で `persona-definition.md` が存在しない" in triggers
     assert "analytics mode で `viewing-scene-matrix.md` が存在しない" in triggers
+    assert "`/audience-persona-design` で `/viewing-scene` 実行と最終 `persona-definition.md` 更新" in triggers
+    assert "`/viewing-scene` の先行実行を案内" not in triggers
     assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で `viewing-scene-matrix.md` が存在しない" in triggers
     assert f"| `{_ANALYTICS_REPORT_GLOB}` が存在しない | `/collection-ideate` を中断" not in triggers
     assert f"| `{_BENCHMARK_DATA_GLOB}` が `config/skills/benchmark.yaml`" not in triggers
@@ -348,6 +365,17 @@ def test_freshness_rules_follow_analytics_absent_fallback_contract() -> None:
     assert absolute_trigger.startswith("| analytics mode で最新 `data/analytics_data_*.json`")
     assert "実行日 (today)" in absolute_trigger
     assert "`/analytics-collect` → `/analytics-analyze`" in absolute_trigger
+
+
+def test_freshness_rules_route_viewing_scene_gap_through_persona_design_finalization() -> None:
+    text = _read(_FRESHNESS_RULES_MD)
+    table = _section(text, "## 鮮度判定表")
+    pseudo_code = _section(text, "## 判定擬似コード")
+
+    assert "| 3 | `/audience-persona-design` finalization | `docs/plans/viewing-scene-matrix.md` |" in table
+    assert "`/audience-persona-design` で `/viewing-scene` 実行と最終 `persona-definition.md` 更新" in table
+    assert "/viewing-scene 実行と最終 persona-definition.md 更新を案内" in pseudo_code
+    assert "viewing-scene 未定義 → /collection-ideate 中断、/viewing-scene を案内" not in pseudo_code
 
 
 def test_freshness_rules_select_latest_by_filename_date_not_mtime() -> None:

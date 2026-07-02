@@ -11,6 +11,9 @@
       "project": ["src/**/*.ts", "test/**/*.ts", "*/*.ts"]
     }
   },
+  "playwright": false,
+  "vitest": false,
+  "wxt": false,
   "ignoreWorkspaces": ["extensions/*"],
   "ignore": [
     ".worktrees/**",
