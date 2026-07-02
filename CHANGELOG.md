@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(thumbnail)`: サムネイル文字フォントを安定して指定できる決定的合成経路を追加（#1332）。`yt-thumbnail-text` CLI が textless 背景（`main.png` 系）に実フォントファイル（.ttf/.otf/.ttc）を Pillow で描画し、同一の背景・テキスト・設定なら常に同一の出力を生成する。フォント指定は skill-config `thumbnail_text.overlay`（`config/skills/thumbnail.yaml`）で行い、フォント未設定・ファイル不在時は理由と代替手順（AI 経路へのフォールバック含む）を明示して停止する。AI プロンプト経路向けにも `single_step.typography_clause` を追加し、SKILL.md に 2 経路の使い分けを示す「フォント安定化」章を新設
+
 ## [5.5.15] - 2026-07-02
 
 ### Added

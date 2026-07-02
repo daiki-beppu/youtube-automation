@@ -76,6 +76,15 @@ image_generation:
         Do not reproduce any signature, autograph, handwritten name, watermark,
         logo, brand mark, channel badge, copyright notice, or identifying mark
         from the reference image. Keep all corners clean and free of such marks.
+      # typography_clause (#1332): タイトル文字の書体をプロンプトで指示する clause。
+      # diff_prompt_template に ${typography_clause} として展開する。
+      # {font_description} は thumbnail_text.font.copy の値で置換して使う。
+      # 注意: AI 画像生成はフォント名の厳密な再現を保証しない。書体をピクセル単位で
+      # 固定したい場合は thumbnail_text.overlay (yt-thumbnail-text) を使うこと。
+      typography_clause: |
+        Render the title text in a consistent {font_description} typeface.
+        Keep the same letterforms, weight, and style across the whole title.
+        Do not mix multiple typefaces in the title.
 
     # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
     style: ""
@@ -157,6 +166,7 @@ image_generation:
       title_format: ""
       title_prefix: ""
       copy_position: "right of character"
+      # AI プロンプト用のフォント記述 (雰囲気の指示。厳密な書体再現は保証されない)
       font:
         copy: "classic serif"
         genre_tag: "sans-serif bold"
@@ -164,6 +174,41 @@ image_generation:
       decoration: "none"
       # Phase 2 のオーバーレイプロンプト (プレースホルダ: {title_line1}, {title_line2}, {channel_name})
       text_overlay_prompt: ""
+
+      # 決定的フォント合成 (#1332): textless 背景に実フォントファイルを
+      # Pillow で描画する yt-thumbnail-text の設定。AI 生成と違い、同一の
+      # 背景・テキスト・設定なら常に同一の出力になる (フォントが安定再現される)。
+      # フォント未設定・ファイル不在時は理由と代替手順つきの ConfigError になる。
+      overlay:
+        # true にするとチャンネルの標準フローとして overlay 経路を使う宣言になる
+        # (SKILL.md「フォント安定化」参照)。false でも CLI の明示実行は可能。
+        enabled: false
+        font:
+          # タイトル行のフォントファイル (.ttf / .otf / .ttc)。
+          # 絶対パス、または channel_dir からの相対パスで指定 (必須)。
+          # 例) title: "assets/fonts/NotoSansJP-Bold.ttf"
+          title: ""
+          # チャンネル名のフォント。未設定なら title を継承
+          channel_name: ""
+        title:
+          size: 96
+          color: "#FFFFFF"
+          stroke_width: 4
+          stroke_color: "#000000"
+        channel_name:
+          size: 36
+          color: "#FFFFFF"
+          stroke_width: 0
+          stroke_color: "#000000"
+        layout:
+          # top|center|bottom - left|center|right の 9 アンカー (中央は "center")
+          anchor: "bottom-center"
+          margin_x: 64
+          margin_y: 48
+          # タイトル行の行送り (フォント高さに対する倍率)
+          line_spacing: 1.15
+          # タイトルとチャンネル名の間隔 (px)
+          gap: 24
 
   openai:
     # 使用する OpenAI 画像生成モデル
