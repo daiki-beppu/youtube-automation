@@ -65,6 +65,8 @@ YouTube の第三者チャンネル由来データ（`snippet.description`、`br
 - **初期ジャンル情報**: `genre.primary` / `genre.style` / `genre.context`
 - **動画尺の初期値（分）**: `audio.target_duration_min` / `target_duration_max`
 - **音楽エンジン**: `music_engine` に入れる `suno` / `lyria` のどちらか
+- **DistroKid 配信有無**: 配信する場合は `distrokid.enabled=true` で初期化する
+- **DistroKid 初期 profile**: 配信する場合のみ `artist` / `language` / `main_genre` / `sub_genre` / songwriter first / last
 - **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか
 
 このヒアリング結果は `yt-channel-init` の CLI 引数と、後続の seed fetch / TTP 対象反映に使う。
@@ -143,12 +145,31 @@ uv run yt-channel-init \
   --channel-keyword "<keyword 2>"
 ```
 
+DistroKid 配信を行う場合だけ、以下も付けて `config/channel/distrokid.json` を生成する:
+
+```bash
+uv run yt-channel-init \
+  ... \
+  --distrokid-enabled \
+  --distrokid-artist "<artist name>" \
+  --distrokid-language "<en|ja|...>" \
+  --distrokid-main-genre "<main genre>" \
+  --distrokid-sub-genre "<sub genre>" \
+  --distrokid-songwriter-first "<first>" \
+  --distrokid-songwriter-last "<last>"
+```
+
+DistroKid 配信しない場合は `--distrokid-enabled` を付けず、`config/channel/distrokid.json` は生成しない。
+未配置時は config loader が `distrokid.enabled=false` として扱う。
+配信する場合は `artist`、`language`、`main_genre` を必ずヒアリングし、推測 default では埋めない。
+
 TTP 対象がこの時点で channel ID まで分かっている場合も、Step 4 では `benchmark.channels` へ書き込まない。
 候補 URL / handle / channel ID と関係性メモだけを残し、Step 5 の実データ確認とユーザー承認後に反映する。
 
 生成対象:
 
 - `config/channel/{meta,content,youtube,analytics,playlists,workflow,audio}.json`
+- `config/channel/distrokid.json`（`--distrokid-enabled` 指定時のみ）
 - `config/localizations.json`
 - `config/schedule_config.json`（`upload_settings` を含む）
 - `config/skills/{suno,thumbnail}.yaml`

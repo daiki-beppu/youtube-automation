@@ -254,6 +254,171 @@ def test_main_creates_full_package_files_when_target_is_empty(tmp_path):
     assert schedule["upload_settings"]["privacy_status"] == "private"
 
 
+def test_main_does_not_generate_distrokid_json_by_default(tmp_path, monkeypatch):
+    # Given: DistroKid 配信を opt-in しない新チャンネル
+    # When: main を実行
+    rc = main(_required_args(tmp_path))
+
+    # Then: distrokid.json は生成せず、loader の未配置 default で disabled として扱われる
+    assert rc == 0
+    assert not (_channel_dir(tmp_path) / "distrokid.json").exists()
+
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+    config = load_config()
+    assert config.distrokid.enabled is False
+
+
+def test_distrokid_enabled_args_generate_distrokid_json(tmp_path, monkeypatch):
+    # Given: channel-new ヒアリングで DistroKid 配信を行うと決めた
+    extra = [
+        "--distrokid-enabled",
+        "--distrokid-artist",
+        "Demo Artist",
+        "--distrokid-language",
+        "ja",
+        "--distrokid-main-genre",
+        "Electronic",
+        "--distrokid-sub-genre",
+        "House",
+        "--distrokid-songwriter-first",
+        "Jane",
+        "--distrokid-songwriter-last",
+        "Doe",
+    ]
+
+    # When: main を実行
+    rc = main(_required_args(tmp_path, extra=extra))
+
+    # Then: 既存 utils.config.distrokid と同じ nested schema で生成される
+    assert rc == 0
+    distrokid = _read_json(_channel_dir(tmp_path) / "distrokid.json")["distrokid"]
+    assert distrokid == {
+        "enabled": True,
+        "profile": {
+            "artist": "Demo Artist",
+            "language": "ja",
+            "main_genre": "Electronic",
+            "sub_genre": "House",
+            "songwriter": {"first": "Jane", "last": "Doe"},
+        },
+    }
+
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+    config = load_config()
+    assert config.distrokid.enabled is True
+    assert config.distrokid.profile.artist == "Demo Artist"
+    assert config.distrokid.profile.language == "ja"
+    assert config.distrokid.profile.main_genre == "Electronic"
+    assert config.distrokid.profile.sub_genre == "House"
+    assert config.distrokid.profile.songwriter is not None
+    assert config.distrokid.profile.songwriter.first == "Jane"
+    assert config.distrokid.profile.songwriter.last == "Doe"
+
+
+def test_distrokid_enabled_accepts_minimal_profile(tmp_path, monkeypatch):
+    # Given: DistroKid 配信に必要な最小 profile だけを指定
+    extra = [
+        "--distrokid-enabled",
+        "--distrokid-artist",
+        "Demo Artist",
+        "--distrokid-language",
+        "ja",
+        "--distrokid-main-genre",
+        "Electronic",
+    ]
+
+    # When: main を実行
+    rc = main(_required_args(tmp_path, extra=extra))
+
+    # Then: optional profile を推測で埋めず、指定値だけで生成される
+    assert rc == 0
+    distrokid = _read_json(_channel_dir(tmp_path) / "distrokid.json")["distrokid"]
+    assert distrokid == {
+        "enabled": True,
+        "profile": {"artist": "Demo Artist", "language": "ja", "main_genre": "Electronic"},
+    }
+
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+    config = load_config()
+    assert config.distrokid.enabled is True
+    assert config.distrokid.profile.artist == "Demo Artist"
+    assert config.distrokid.profile.language == "ja"
+    assert config.distrokid.profile.main_genre == "Electronic"
+    assert config.distrokid.profile.sub_genre is None
+    assert config.distrokid.profile.songwriter is None
+
+
+def test_distrokid_enabled_requires_artist_language_and_main_genre(tmp_path, capsys):
+    # Given: DistroKid 配信を opt-in するが必須 profile を省略
+    argv = _required_args(tmp_path, extra=["--distrokid-enabled"])
+
+    # When/Then: 推測 default で埋めず argparse がエラー終了し、scaffold は作成されない
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == 2
+    assert "--distrokid-artist, --distrokid-language, --distrokid-main-genre" in capsys.readouterr().err
+    assert not (tmp_path / "config").exists()
+
+
+def test_distrokid_profile_args_require_enabled_flag(tmp_path, capsys):
+    # Given: DistroKid を opt-in せずに profile 引数だけ指定
+    argv = _required_args(tmp_path, extra=["--distrokid-artist", "Demo Artist"])
+
+    # When/Then: argparse がエラー終了し、scaffold は作成されない
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == 2
+    assert "--distrokid-enabled が必要です" in capsys.readouterr().err
+    assert not (tmp_path / "config").exists()
+
+
+def test_distrokid_songwriter_first_and_last_must_be_set_together(tmp_path, capsys):
+    # Given: songwriter の片方だけを指定
+    argv = _required_args(
+        tmp_path,
+        extra=[
+            "--distrokid-enabled",
+            "--distrokid-artist",
+            "Demo Artist",
+            "--distrokid-language",
+            "ja",
+            "--distrokid-main-genre",
+            "Electronic",
+            "--distrokid-songwriter-first",
+            "Jane",
+        ],
+    )
+
+    # When/Then: argparse がエラー終了し、scaffold は作成されない
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == 2
+    assert "--distrokid-songwriter-first と --distrokid-songwriter-last" in capsys.readouterr().err
+    assert not (tmp_path / "config").exists()
+
+
+def test_distrokid_profile_args_reject_blank_values(tmp_path):
+    # Given: DistroKid 必須 profile に空白だけの値を指定
+    argv = _required_args(
+        tmp_path,
+        extra=[
+            "--distrokid-enabled",
+            "--distrokid-artist",
+            "Demo Artist",
+            "--distrokid-language",
+            "ja",
+            "--distrokid-main-genre",
+            "   ",
+        ],
+    )
+
+    # When/Then: parser type が拒否し、scaffold は作成されない
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == 2
+    assert not (tmp_path / "config").exists()
+
+
 def test_benchmark_channel_args_are_written_to_analytics_json(tmp_path):
     # Given: TTP ベンチマーク対象を 2 件指定
     extra = [
