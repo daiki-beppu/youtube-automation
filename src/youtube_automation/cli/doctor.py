@@ -18,7 +18,10 @@ import yaml
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
+from youtube_automation.scripts.benchmark_collector import load_benchmark_videos
+from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import normalize_reference_default
+from youtube_automation.utils.skill_config import load_skill_config
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -51,6 +54,12 @@ UPLOAD_REQUIRED_SCOPES = [
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
+
+UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
+    "gemini-3.5-flash",
+}
+
+TTP_VIDEO_ANALYZE_TOP_N = 5
 
 
 @dataclass
@@ -991,7 +1000,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
 
     missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
     missing.extend(channels_read.errors)
-    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions))
+    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions, channels))
     if missing:
         return CheckResult(
             id="ttp_wf_new_readiness",
@@ -1048,6 +1057,13 @@ def _read_yaml_mapping(path: Path) -> _MappingRead:
     return _MappingRead(data)
 
 
+def _skill_config_mapping(channel_dir: Path, skill: str) -> _MappingRead:
+    try:
+        return _MappingRead(load_skill_config(skill, use_cache=False, channel_dir=channel_dir))
+    except ConfigError as exc:
+        return _MappingRead({}, str(exc))
+
+
 def _diagnostic_path(path: Path) -> str:
     return path.as_posix()
 
@@ -1095,7 +1111,7 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
 
     missing.extend(_missing_branding_snapshot_items(channel_dir, channels))
 
-    thumbnail_read = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
+    thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
     if thumbnail_read.error:
         missing.append(thumbnail_read.error)
     if "thumbnail" not in approved_exceptions:
@@ -1103,30 +1119,88 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         if thumbnail_missing:
             missing.append(thumbnail_missing)
 
+    video_analyze_read = _skill_config_mapping(channel_dir, "video-analyze")
+    if video_analyze_read.error:
+        missing.append(video_analyze_read.error)
+    model = video_analyze_read.data.get("model")
+    if isinstance(model, str) and model in UNSUPPORTED_VIDEO_ANALYZE_MODELS:
+        missing.append(f"video-analyze model が旧/非対応: {model}")
+
     youtube_read = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
     if youtube_read.error:
         missing.append(youtube_read.error)
     youtube = youtube_read.data
-    if (
-        youtube.get("music_engine", "suno") == "suno"
-        and not (music_readiness := _suno_music_readiness(channel_dir, channels)).ready
-        and "music" not in approved_exceptions
-    ):
+    if youtube.get("music_engine", "suno") == "suno" and "music" not in approved_exceptions:
+        music_readiness = _suno_music_readiness(channel_dir, channels)
         missing.extend(music_readiness.errors)
-        missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
+        if not music_readiness.ready:
+            missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
 
     return missing, approved_exceptions
 
 
-def _missing_channel_setup_benchmark_items(channel_dir: Path, approved_exceptions: set[str]) -> list[str]:
+def _missing_channel_setup_benchmark_items(
+    channel_dir: Path,
+    approved_exceptions: set[str],
+    channels: list[dict[str, object]],
+) -> list[str]:
     missing: list[str] = []
     if not _matching_files(channel_dir / "data", "benchmark_*.json"):
         missing.append("data/benchmark_*.json が無い")
+    missing.extend(_missing_video_analysis_items(channel_dir, _approved_ttp_channel_slugs(channels)))
     if not _benchmark_report_files(channel_dir):
         missing.append("docs/benchmarks/*.md が無い")
     if "thumbnail" not in approved_exceptions and not _benchmark_thumbnail_files(channel_dir):
         missing.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
     return missing
+
+
+def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) -> list[str]:
+    approved_slug_set = set(approved_slugs)
+    if not approved_slug_set:
+        return []
+    benchmark_by_slug, errors = _latest_benchmark_videos_by_slug(channel_dir, approved_slug_set)
+    missing = list(errors)
+    video_analysis_dir = channel_dir / "data" / "video_analysis"
+    for slug, videos in benchmark_by_slug.items():
+        slug_dir, slug_error = _video_analysis_slug_dir(channel_dir, video_analysis_dir, slug)
+        if slug_error:
+            missing.append(slug_error)
+            continue
+        top_videos = videos[:TTP_VIDEO_ANALYZE_TOP_N]
+        if len(top_videos) < TTP_VIDEO_ANALYZE_TOP_N:
+            missing.append(
+                f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} が不足 ({len(top_videos)}/{TTP_VIDEO_ANALYZE_TOP_N})"
+            )
+        expected_ids = {str(video.get("video_id")) for video in top_videos if video.get("video_id")}
+        if len(expected_ids) < len(top_videos):
+            missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id 欠落があります")
+        if not expected_ids:
+            missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
+            continue
+        existing_ids = {path.stem for path in _matching_files(slug_dir or video_analysis_dir / slug, "*.json")}
+        done = len(expected_ids & existing_ids)
+        if done == 0:
+            missing.append(f"{slug}: video_analysis 未実行 (0/{TTP_VIDEO_ANALYZE_TOP_N})")
+        elif done < TTP_VIDEO_ANALYZE_TOP_N:
+            missing.append(f"{slug}: video_analysis が一部のみ ({done}/{TTP_VIDEO_ANALYZE_TOP_N})")
+    return missing
+
+
+def _latest_benchmark_videos_by_slug(
+    channel_dir: Path,
+    approved_slugs: set[str],
+) -> tuple[dict[str, list[dict[str, object]]], list[str]]:
+    try:
+        videos = load_benchmark_videos(channel_dir / "data")
+    except ConfigError as exc:
+        return {}, [str(exc)]
+    result: dict[str, list[dict[str, object]]] = {}
+    for video in videos:
+        slug = str(video.get("channel_slug") or "").strip()
+        if slug in approved_slugs:
+            result.setdefault(slug, []).append(video)
+    return result, []
 
 
 _SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -1368,13 +1442,19 @@ def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:
     return [slug for channel in channels if (slug := str(channel.get("slug") or "").strip())]
 
 
-def _video_analysis_slug_dir(video_analysis_dir: Path, slug: str) -> tuple[Path | None, str | None]:
+def _video_analysis_slug_dir(channel_dir: Path, video_analysis_dir: Path, slug: str) -> tuple[Path | None, str | None]:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", slug):
         return None, f"benchmark.channels の slug が不正 ({_safe_diagnostic_value(slug)})"
+    channel_root = channel_dir.resolve(strict=False)
     root = video_analysis_dir.resolve(strict=False)
     candidate = (video_analysis_dir / slug).resolve(strict=False)
     try:
+        root.relative_to(channel_root)
+    except ValueError:
+        return None, "data/video_analysis の channel_dir 外参照を拒否"
+    try:
         candidate.relative_to(root)
+        candidate.relative_to(channel_root)
     except ValueError:
         return None, f"data/video_analysis の channel_dir 外参照を拒否 ({_safe_diagnostic_value(slug)})"
     return candidate, None
@@ -1436,7 +1516,7 @@ def _thumbnail_reference_images(
     thumbnail: dict[str, object] | None = None,
 ) -> tuple[list[Path], list[str]]:
     if thumbnail is None:
-        thumbnail_read = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
+        thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
         if thumbnail_read.error:
             return [], [thumbnail_read.error]
         thumbnail = thumbnail_read.data
@@ -1489,17 +1569,42 @@ class _MusicReadiness:
 
 def _suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) -> _MusicReadiness:
     errors: list[str] = []
-    suno_read = _read_yaml_mapping(channel_dir / "config" / "skills" / "suno.yaml")
+    suno_read = _skill_config_mapping(channel_dir, "suno")
     if suno_read.error:
         errors.append(suno_read.error)
     suno = suno_read.data
-    if str(suno.get("genre_line") or "").strip():
+    genre_line = str(suno.get("genre_line") or "")
+    style_char_limit = suno.get("style_char_limit", 120)
+    try:
+        limit = int(style_char_limit)
+    except (TypeError, ValueError):
+        limit = 120
+        errors.append("suno.style_char_limit が数値ではありません")
+    genre_ready = False
+    if genre_line.strip():
+        if len(genre_line) <= limit:
+            genre_ready = True
+        else:
+            errors.append(f"Suno genre_line が style_char_limit 超過 ({len(genre_line)}/{limit})")
+    variants = suno.get("style_variants")
+    if isinstance(variants, dict):
+        for name, variant in variants.items():
+            if not isinstance(variant, dict):
+                continue
+            variant_genre_line = variant.get("genre_line")
+            if isinstance(variant_genre_line, str) and len(variant_genre_line) > limit:
+                errors.append(
+                    "Suno style_variants."
+                    f"{_safe_diagnostic_value(name)}.genre_line が style_char_limit 超過 "
+                    f"({len(variant_genre_line)}/{limit})"
+                )
+    if genre_ready:
         return _MusicReadiness(True, errors)
 
     video_analysis_dir = channel_dir / "data" / "video_analysis"
     slug_dirs: list[Path] = []
     for slug in _approved_ttp_channel_slugs(channels):
-        slug_dir, slug_error = _video_analysis_slug_dir(video_analysis_dir, slug)
+        slug_dir, slug_error = _video_analysis_slug_dir(channel_dir, video_analysis_dir, slug)
         if slug_error:
             errors.append(slug_error)
             continue
