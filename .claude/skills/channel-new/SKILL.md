@@ -468,18 +468,19 @@ AskUserQuestion で以下を対話的に確認:
 AskUserQuestion で以下を確認:
 
 1. **音楽エンジン**: Suno / Lyria（`music_engine` に入れる値は `suno` / `lyria` のどちらか。`both` は config 契約外のため選択肢にしない）
-2. **タイトルテンプレート**: 既存動画のタイトルパターンを確認し、`{style} {theme} Music - {activity} BGM [{duration_display}]` 形式で提案
-3. **タグ** (`tags.base`): ジャンルに適した YouTube 検索タグを 10 個程度提案
-4. **テーマ別タグ** (`tags.themes`): 6-10 テーマのタグ群を提案
-5. **説明文設定**:
+2. **動画尺** (`audio.target_duration_min` / `audio.target_duration_max`): 既存動画の標準尺を確認し、固定尺なら min/max を同値にする
+3. **タイトルテンプレート**: 既存動画のタイトルパターンを確認し、`{style} {theme} Music - {activity} BGM [{duration_display}]` 形式で提案
+4. **タグ** (`tags.base`): ジャンルに適した YouTube 検索タグを 10 個程度提案
+5. **テーマ別タグ** (`tags.themes`): 6-10 テーマのタグ群を提案
+6. **説明文設定**:
    - `descriptions.opening`: `{style} {primary} music inspired by ...` 形式
    - `descriptions.perfect_for`: 4 項目（例: Study & Focus, Relaxation, Creative Work, Sleep）
    - `descriptions.hashtags`: 5 個程度
-6. **Suno 設定**（音楽エンジンが Suno の場合）: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` を上書き（ない場合は skill default を使用）
+7. **Suno 設定**（音楽エンジンが Suno の場合）: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` を上書き（ない場合は skill default を使用）
 
 ### 取り込み Step 4: config 生成
 
-`channel-setup/references/config-template/*.json` をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成（meta / content / youtube / analytics）。
+`channel-setup/references/config-template/*.json` をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成（meta / content / youtube / analytics / audio）。動画尺は `channel-setup/references/config-template/audio.json` に反映する。
 
 含めるべきセクション（必須・skill-config 管理・オプション）は **`channel-setup/references/config-generation-rules.md`** を参照。
 
@@ -531,5 +532,5 @@ config 生成・認証完了後、以下を案内:
 - `/channel-research` → 収集済みデータの詳細分析
 - `/channel-direction` → 方向性の再検討
 - `/channel-setup` → 運用中の設定 push / pull と詳細セットアップ
-- `channel-setup/references/config-template/*.json` → 取り込みモードの config テンプレート（責務別 4 ファイル）
+- `channel-setup/references/config-template/*.json` → 取り込みモードの config テンプレート（責務別 5 ファイル: meta / content / youtube / analytics / audio）
 - `/wf-new` → 初回コレクション制作

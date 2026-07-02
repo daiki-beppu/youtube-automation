@@ -173,6 +173,12 @@ def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> N
     assert "取り込み Step 8: 次ステップ案内" in channel_new
     assert "`music_engine` に入れる値は `suno` / `lyria` のどちらか" in channel_new
     assert "both` は config 契約外" in channel_new
+    assert "audio.target_duration_min" in channel_new
+    assert "audio.target_duration_max" in channel_new
+    assert "meta / content / youtube / analytics / audio" in channel_new
+    assert "channel-setup/references/config-template/audio.json" in channel_new
+    assert "責務別 5 ファイル" in channel_new
+    assert (ROOT / ".claude/skills/channel-setup/references/config-template/audio.json").is_file()
     assert (
         "benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、"
         "`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない"
