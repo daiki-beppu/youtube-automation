@@ -33,4 +33,7 @@ pre-commit:
 pre-push:
   commands:
     changelog-gate:
+      # git が stdin に渡す "<local ref> <local sha> <remote ref> <remote sha>" を
+      # スクリプトへ転送する（ブランチ削除 push の判定に必要）
+      use_stdin: true
       run: bash .lefthook/pre-push/changelog-gate.sh

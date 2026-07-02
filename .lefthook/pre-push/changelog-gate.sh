@@ -26,6 +26,29 @@ if [ "${SKIP_CHANGELOG:-}" = "1" ]; then
   exit 0
 fi
 
+# pre-push は stdin から "<local ref> <local sha> <remote ref> <remote sha>" を
+# ref ごとに 1 行受け取る（lefthook.yml 側で use_stdin: true が必要）。
+# local sha が全ゼロの行はブランチ削除 push（git push origin :branch）で、
+# push されるコミットが存在しないためゲート対象外。
+# 削除以外の ref が 1 つでもあれば従来通り HEAD 基準で判定する。
+# stdin が空（手動実行など）の場合も従来通り判定にフォールバックする。
+ZERO_SHA="0000000000000000000000000000000000000000"
+if [ ! -t 0 ]; then
+  ref_lines=0
+  non_delete_refs=0
+  while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    [ -z "${local_sha:-}" ] && continue
+    ref_lines=$((ref_lines + 1))
+    if [ "${local_sha}" != "${ZERO_SHA}" ]; then
+      non_delete_refs=$((non_delete_refs + 1))
+    fi
+  done
+  if [ "${ref_lines}" -gt 0 ] && [ "${non_delete_refs}" -eq 0 ]; then
+    echo "changelog-gate: ブランチ削除 push のためスキップします。" >&2
+    exit 0
+  fi
+fi
+
 BASE_REF="origin/main"
 if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
   echo "changelog-gate: ${BASE_REF} が無いためスキップします（CI で判定されます）。" >&2
