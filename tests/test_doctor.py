@@ -121,6 +121,14 @@ def _write_thumbnail_skill_default_yaml(base: Path, default_yaml: str) -> None:
         "  gemini:\n"
         "    reference_images:\n"
         f"      default: {default_yaml}\n"
+        "      channel_branding:\n"
+        "        snapshot: docs/channel/competitor-branding-snapshot.json\n"
+        "        icon_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon\n"
+        "        banner_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]\n"
+        "        output_icon: branding/icon.png\n"
+        "        output_banner: branding/banner.png\n"
         "      path_base: channel_dir\n",
         encoding="utf-8",
     )
@@ -135,7 +143,19 @@ def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> No
         refs_yaml = "\n".join(f"        - {json.dumps(ref)}" for ref in references)
         default_yaml = f"      default:\n{refs_yaml}\n"
     (skills_dir / "thumbnail.yaml").write_text(
-        f"image_generation:\n  gemini:\n    reference_images:\n{default_yaml}      path_base: channel_dir\n",
+        "image_generation:\n"
+        "  gemini:\n"
+        "    reference_images:\n"
+        f"{default_yaml}"
+        "      channel_branding:\n"
+        "        snapshot: docs/channel/competitor-branding-snapshot.json\n"
+        "        icon_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon\n"
+        "        banner_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]\n"
+        "        output_icon: branding/icon.png\n"
+        "        output_banner: branding/banner.png\n"
+        "      path_base: channel_dir\n",
         encoding="utf-8",
     )
 
@@ -1664,7 +1684,12 @@ def _write_ttp_readiness_files(base: Path) -> None:
                             "width": 800,
                             "height": 800,
                         },
-                        "banner": [],
+                        "banner": [
+                            {
+                                "source": "brandingSettings.image.bannerExternalUrl",
+                                "url": "https://example.com/rival-banner.jpg",
+                            }
+                        ],
                     }
                 ],
             },
@@ -1712,6 +1737,14 @@ def _write_ttp_readiness_files(base: Path) -> None:
                 "    reference_images:",
                 "      default:",
                 "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                "      channel_branding:",
+                "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                "        icon_references:",
+                "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon",
+                "        banner_references:",
+                "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]",
+                "        output_icon: branding/icon.png",
+                "        output_banner: branding/banner.png",
                 "",
             ]
         ),
@@ -2223,6 +2256,12 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "    reference_images:",
                     "      default:",
                     "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references: []",
+                    "        banner_references: []",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
                     '      notes: "fallback: TTP seed memo provides channel branding direction"',
                     "",
                 ]
@@ -2246,7 +2285,115 @@ class TestCheckTtpWfNewReadinessChannelNew:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "画像参照または fallback 根拠 note がありません" in r.message
+        assert "icon 画像参照または fallback 根拠 note がありません" in r.message
+        assert "banner 画像参照または fallback 根拠 note がありません" in r.message
+
+    def test_branding_snapshot_icon_only_without_banner_fallback_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["banner"] = []
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "banner 画像参照または fallback 根拠 note がありません" in r.message
+
+    def test_branding_snapshot_banner_only_without_icon_fallback_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["icon"] = {}
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "icon 画像参照または fallback 根拠 note がありません" in r.message
+
+    def test_thumbnail_channel_branding_config_missing_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding 未設定" in r.message
+
+    def test_thumbnail_channel_branding_refs_required_when_snapshot_has_urls(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references: []",
+                    "        banner_references: []",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding.icon_references 未設定" in r.message
+        assert "reference_images.channel_branding.banner_references 未設定" in r.message
+
+    def test_thumbnail_channel_branding_output_paths_required(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon",
+                    "        banner_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]",
+                    "        output_icon: wrong/icon.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding.output_icon が未設定または不正" in r.message
+        assert "reference_images.channel_branding.output_banner が未設定または不正" in r.message
 
     def test_missing_thumbnail_reference_file_warns(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])

@@ -632,6 +632,7 @@ def test_channel_setup_documents_ttp_wf_new_readiness_gate() -> None:
         assert "docs/benchmarks/*.md" in text
         assert "data/thumbnail_compare/benchmark/" in text
         assert "config/skills/thumbnail.yaml::reference_images.default" in text
+        assert "config/skills/thumbnail.yaml::reference_images.channel_branding" in text
 
 
 def test_channel_setup_does_not_recopy_youtube_json_after_config_completion() -> None:

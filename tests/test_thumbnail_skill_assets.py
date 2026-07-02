@@ -378,6 +378,19 @@ def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() ->
         assert required in channel_setup_template
 
 
+def test_channel_setup_thumbnail_template_includes_channel_branding_contract() -> None:
+    template = _load_channel_setup_thumbnail_template()
+    reference_images = template["image_generation"]["gemini"]["reference_images"]
+
+    assert reference_images["channel_branding"] == {
+        "snapshot": "docs/channel/competitor-branding-snapshot.json",
+        "icon_references": ["{{CHANNEL_BRANDING_ICON_REFERENCE}}"],
+        "banner_references": ["{{CHANNEL_BRANDING_BANNER_REFERENCE}}"],
+        "output_icon": "branding/icon.png",
+        "output_banner": "branding/banner.png",
+    }
+
+
 def test_thumbnail_skill_includes_codex_prompt_helper_script() -> None:
     """#1300: collection-ideate から共有する Codex prompt helper を同梱する。"""
     script = _read_codex_prompt_script()
