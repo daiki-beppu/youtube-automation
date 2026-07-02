@@ -45,9 +45,10 @@ TTP メモは最低限、以下の観点を含める:
 - ジャンル / 音楽スタイル
 - branding description / keywords の段落構造と語彙
 
-### TTP 完了条件
+### TTP 完了条件（新規開設モード）
 
-`/channel-new` は以下が揃うまで完了扱いにしない。未完了のまま成功案内を出さない。
+新規開設モードの `/channel-new` は以下が揃うまで完了扱いにしない。未完了のまま成功案内を出さない。
+既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない。取り込みモードは「取り込み Step 8: 次ステップ案内」の完了条件で終了できる。
 
 - `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あり、各 entry に relationship（何を転写するか）が入っている
 - `docs/channel/ttp-seed-confirmation.md` に、候補ごとの source、seed fetch 要約、承認 / 不採用判断、転写したい要素、relationship、branding snapshot 参照または description / keywords / localizations の転写方針、未反映項目が保存されている
@@ -466,7 +467,7 @@ AskUserQuestion で以下を対話的に確認:
 
 AskUserQuestion で以下を確認:
 
-1. **音楽エンジン**: Suno / Lyria / both
+1. **音楽エンジン**: Suno / Lyria（`music_engine` に入れる値は `suno` / `lyria` のどちらか。`both` は config 契約外のため選択肢にしない）
 2. **タイトルテンプレート**: 既存動画のタイトルパターンを確認し、`{style} {theme} Music - {activity} BGM [{duration_display}]` 形式で提案
 3. **タグ** (`tags.base`): ジャンルに適した YouTube 検索タグを 10 個程度提案
 4. **テーマ別タグ** (`tags.themes`): 6-10 テーマのタグ群を提案
@@ -474,7 +475,7 @@ AskUserQuestion で以下を確認:
    - `descriptions.opening`: `{style} {primary} music inspired by ...` 形式
    - `descriptions.perfect_for`: 4 項目（例: Study & Focus, Relaxation, Creative Work, Sleep）
    - `descriptions.hashtags`: 5 個程度
-6. **Suno 設定**（音楽エンジンが Suno/both の場合）: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` を上書き（ない場合は skill default を使用）
+6. **Suno 設定**（音楽エンジンが Suno の場合）: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` を上書き（ない場合は skill default を使用）
 
 ### 取り込み Step 4: config 生成
 
@@ -505,6 +506,8 @@ config 生成・認証完了後、以下を案内:
 3. **ペルソナ定義**: `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` の順で実行
 4. **データ収集・分析**: `/analytics-collect` → `/analytics-analyze` で現状のパフォーマンスを把握
 5. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
+
+取り込みモードは、`config/channel/*.json` の生成、`uv run yt-config-migrate verify` の成功、OAuth 認証、`channel_id` 取得またはユーザー承認済みの未完了項目明記、次ステップ案内まで到達した時点で完了扱いにできる。新規開設モードの `benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない。
 
 ## 障害時ガイダンス
 

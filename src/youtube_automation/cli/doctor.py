@@ -46,7 +46,7 @@ SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
-LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep")
+LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep", "channel-import")
 
 BOOTSTRAP_CATEGORY = "bootstrap"
 API_CATEGORY = "api"

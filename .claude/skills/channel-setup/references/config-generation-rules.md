@@ -1,7 +1,7 @@
 # config/channel/*.json 生成ルール
 
 `/channel-setup` と `/channel-new`（既存チャンネル取り込みモード）から共通参照するルール集。
-テンプレートは同ディレクトリの `config-template.json`。
+テンプレートは同ディレクトリの `config-template/*.json`。
 
 ## TTP（徹底的にパクる）路線時の優先順位
 
@@ -147,6 +147,6 @@ Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致
 
 ## 参考
 
-- `config-template.json` — 全フィールドの雛形
+- `config-template/*.json` — 責務別 config の雛形
 - `/channel-setup` — 方向性ドキュメントから config 完成までの手順
 - `/channel-new`（既存チャンネル取り込みモード） — 既存チャンネル取り込みの手順
