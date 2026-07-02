@@ -2298,25 +2298,38 @@ def test_post_downloaded_relative_download_path_returns_400(serve_dir, tmp_path)
     assert exc_info.value.code == 400
 
 
-def test_post_downloaded_download_path_without_playlist_url_returns_400(serve_dir, tmp_path):
+def test_post_downloaded_download_path_without_playlist_url_succeeds(serve_dir, tmp_path):
     """Given download_path 付きだが suno_playlist_url が無い payload
     When POST /collections/<id>/downloaded を送る
-    Then workflow-state の lost update を避けるため 400 を返す。
+    Then ZIP を展開して既存 suno_playlist_url を保持し music_downloaded を更新する。
     """
     planning = tmp_path / "planning"
-    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
-    zip_path = _make_zip(tmp_path / "test.zip", {"Song A.mp3": b"a1"})
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    ws_path = coll / "workflow-state.json"
+    ws_path.write_text(
+        json.dumps({"planning": {"music": {"suno_playlist_url": "https://suno.com/playlist/existing"}}}),
+        encoding="utf-8",
+    )
+    zip_path = _make_zip(tmp_path / "test.zip", {"Song A.mp3": b"a1", "Song A_1.mp3": b"a2"})
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
 
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(
-            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-            {"file_count": 1, "format": "mp3", "download_path": str(zip_path)},
-            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
-        )
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        {"file_count": 2, "expected_file_count": 2, "format": "mp3", "download_path": str(zip_path)},
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
 
-    assert exc_info.value.code == 400
+    music_dir = coll / "02-Individual-music"
+    assert sorted(f.name for f in music_dir.iterdir()) == ["01a-Song A.mp3", "01b-Song A.mp3"]
+    ws = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert ws["planning"]["music"]["suno_playlist_url"] == "https://suno.com/playlist/existing"
+    assert ws["assets"]["music_downloaded"] is True
 
 
 def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):

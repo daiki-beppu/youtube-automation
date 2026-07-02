@@ -925,6 +925,5 @@ export default defineContentScript({
     // in-memory が破棄された後は、リロード直前に退避した直近完了 run の snapshot を fallback で返す
     // （stale 判定込み、次 run 開始で消去）。どちらも無ければ null（buildRestoreState が従来表示へ）。
     onMessage("queryProgress", async () => currentSnapshot ?? (await readFreshFinishedSnapshot(Date.now())));
-
   },
 });

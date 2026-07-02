@@ -6,19 +6,19 @@
 
 ## 構成
 
-| パス                                 | 役割                                                                                                                 |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `wxt.config.ts`                      | manifest を自動生成（権限 `storage` / `activeTab` / `tabs` / `downloads` / `debugger` は `lib/manifest.ts` が SSOT） |
-| `entrypoints/background.ts`          | service worker（Download all ZIP 監視、server token 取得、downloaded POST 中継）                                     |
-| `entrypoints/content.ts`             | Suno UI への注入と Generate 連続実行のフロー制御                                                                     |
-| `entrypoints/suno-bridge.content.ts` | MAIN world fetch bridge（#948）。Suno API の生成投入 / clip status を passive 観測                                   |
-| `entrypoints/popup/`                 | popup の HTML / エントリ（React + Tailwind）                                                                         |
-| `components/`                        | popup UI（`App.tsx` / `PatternList.tsx` / `useSunoRunner.ts`）                                                       |
-| `lib/messaging.ts`                   | popup ⇄ content の型付き message（@webext-core/messaging）                                                           |
-| `lib/clip-tracker.ts` ほか           | bridge 観測の集計（in-flight / ACK / stall。`bridge-listener` / `ack-probe` / `entry-retry`）                        |
-| `lib/storage.ts`                     | サーバー URL / resume state / overlay state の型付き storage（@wxt-dev/storage）                                     |
-| `lib/manifest.ts`                    | 最小権限定数 `MANIFEST_PERMISSIONS`                                                                                  |
-| `../shared/`                         | DOM 注入 / API client / origin allowlist / 契約定数（複数拡張で共有）                                                |
+| パス                                 | 役割                                                                                                        |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `wxt.config.ts`                      | manifest を自動生成（権限 `storage` / `activeTab` / `downloads` / `debugger` は `lib/manifest.ts` が SSOT） |
+| `entrypoints/background.ts`          | service worker（Download all ZIP 監視、server token 取得、downloaded POST 中継）                            |
+| `entrypoints/content.ts`             | Suno UI への注入と Generate 連続実行のフロー制御                                                            |
+| `entrypoints/suno-bridge.content.ts` | MAIN world fetch bridge（#948）。Suno API の生成投入 / clip status を passive 観測                          |
+| `entrypoints/popup/`                 | popup の HTML / エントリ（React + Tailwind）                                                                |
+| `components/`                        | popup UI（`App.tsx` / `PatternList.tsx` / `useSunoRunner.ts`）                                              |
+| `lib/messaging.ts`                   | popup ⇄ content の型付き message（@webext-core/messaging）                                                  |
+| `lib/clip-tracker.ts` ほか           | bridge 観測の集計（in-flight / ACK / stall。`bridge-listener` / `ack-probe` / `entry-retry`）               |
+| `lib/storage.ts`                     | サーバー URL / resume state / overlay state の型付き storage（@wxt-dev/storage）                            |
+| `lib/manifest.ts`                    | 最小権限定数 `MANIFEST_PERMISSIONS`                                                                         |
+| `../shared/`                         | DOM 注入 / API client / origin allowlist / 契約定数（複数拡張で共有）                                       |
 
 DOM 注入セレクタ（Style / Lyrics の placeholder、Generate ボタンのラベル、reCAPTCHA 検知）は `../shared/dom.ts` の `SELECTORS` に集約する。Suno の UI 変更で注入先が見つからなくなった場合はここを更新する。見つからない場合は **silent に続行せず停止** し、popup に理由を表示する。
 

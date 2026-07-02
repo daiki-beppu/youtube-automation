@@ -664,7 +664,6 @@ describe("Suno popup compatibility check", () => {
 
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
-      playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
     });
@@ -722,7 +721,6 @@ describe("Suno popup compatibility check", () => {
 
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
-      playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
     });
@@ -781,7 +779,6 @@ describe("Suno popup compatibility check", () => {
 
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
-      playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
       expectedClipCount: 4,
     });

@@ -13,7 +13,7 @@ import { MANIFEST_PERMISSIONS } from "../lib/manifest";
 import wxtConfig from "../wxt.config";
 
 const EXPECTED_PERMISSIONS = ["storage", "activeTab", "downloads", "debugger"];
-// `tabs` / `downloads` 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
+// Download all / trusted Cmd+P 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
 const FORBIDDEN_PERMISSIONS = ["history", "bookmarks", "cookies", "webNavigation"];
 
 describe("lib/manifest: 最小権限契約", () => {
@@ -21,7 +21,7 @@ describe("lib/manifest: 最小権限契約", () => {
     expect(new Set(MANIFEST_PERMISSIONS)).toEqual(new Set(EXPECTED_PERMISSIONS));
   });
 
-  it("Given MANIFEST_PERMISSIONS When 重複の有無を見る Then 5 件ちょうどである", () => {
+  it("Given MANIFEST_PERMISSIONS When 重複の有無を見る Then EXPECTED_PERMISSIONS と同数である", () => {
     expect(MANIFEST_PERMISSIONS).toHaveLength(EXPECTED_PERMISSIONS.length);
   });
 
