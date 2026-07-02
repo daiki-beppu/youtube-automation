@@ -55,7 +55,11 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SRC_DIR = _REPO_ROOT / "src" / "youtube_automation"
 _AUDIT_DOC = _REPO_ROOT / "docs" / "audits" / "2026-05-skill-md-audit.md"
+_CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
 _AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
+_VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
+_VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
+_COLLECTION_IDEATE = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 
 # rename マッピング (order.md §5)
 RENAME_MAP: dict[str, str] = {
@@ -111,6 +115,22 @@ def _config_yaml_pattern(name: str) -> re.Pattern[str]:
 def _iter_skill_md_files() -> Iterable[Path]:
     """`.claude/skills/**/*.md` を全件返す（front-matter / 連鎖呼び出しの双方を走査するため）。"""
     return sorted(_SKILLS_DIR.rglob("*.md"))
+
+
+def _iter_audience_persona_route_docs() -> Iterable[Path]:
+    """旧 `/audience-persona` 導線が残ると downstream に配布される文書を返す。"""
+    return [*_iter_skill_md_files(), _CLAUDE_TEMPLATE]
+
+
+def _markdown_section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^{re.escape(heading)}\n(?P<body>.*?)(?=^#{{2,4}}\s|\Z)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    if not match:
+        raise AssertionError(f"`{heading}` セクションが見つかりません")
+    return match.group("body")
 
 
 def _front_matter_name(skill_md: Path) -> str | None:
@@ -221,16 +241,16 @@ def test_audience_persona_design_replaces_legacy_audience_persona_dir() -> None:
 
 
 def test_no_legacy_audience_persona_slash_command_in_skill_docs() -> None:
-    """Issue #1371: skill docs 内の旧 `/audience-persona` 導線を残さない。"""
+    """Issue #1371: skill docs と配布テンプレ内の旧 `/audience-persona` 導線を残さない。"""
     pattern = _slash_pattern("audience-persona")
     offenders: list[str] = []
-    for path in _iter_skill_md_files():
+    for path in _iter_audience_persona_route_docs():
         text = _read(path)
         for lineno, line in enumerate(text.splitlines(), start=1):
             if pattern.search(line):
                 offenders.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}: {line.strip()}")
     assert offenders == [], (
-        "旧スラッシュコマンド `/audience-persona` が `.claude/skills/**/*.md` に残存。"
+        "旧スラッシュコマンド `/audience-persona` が skill docs または配布テンプレートに残存。"
         " `/audience-persona-design` に書き換えること:\n  " + "\n  ".join(offenders)
     )
 
@@ -238,11 +258,23 @@ def test_no_legacy_audience_persona_slash_command_in_skill_docs() -> None:
 def test_audience_persona_design_orchestrates_single_persona_flow() -> None:
     """Issue #1371: viewer-voice → persona design → viewing-scene → final persona の順序を固定する。"""
     text = _read(_AUDIENCE_PERSONA_DESIGN)
+    order = _markdown_section(text, "## 実行順序")
 
-    assert "`/viewer-voice` の成果物を確認する。未実施なら案内して停止する。" in text
-    assert "候補を 1 人の第一ペルソナへ統合" in text
-    assert "`/viewing-scene` を実行" in text
-    assert "`/viewing-scene` の結果を反映し、最終 `persona-definition.md` を更新する。" in text
+    expected_order = (
+        "`/viewer-voice` の成果物を確認する。未実施なら案内して停止する。",
+        "コメント由来の語彙・不満・利用シーン・感情トリガーを入力にする。",
+        "候補を 1 人の第一ペルソナへ統合",
+        "暫定 `persona-definition.md` を保存",
+        "`/viewing-scene` を実行",
+        "`/viewing-scene` の結果を反映し、最終 `persona-definition.md` を更新する。",
+    )
+    cursor = -1
+    for token in expected_order:
+        index = order.find(token, cursor + 1)
+        assert index != -1, f"audience-persona-design 実行順序に `{token}` がありません"
+        assert index > cursor, f"audience-persona-design 実行順序で `{token}` の順序が崩れています"
+        cursor = index
+
     assert "最終版に残す人物は 1 人だけ" in text
     for required in (
         "コメント由来の語彙",
@@ -253,6 +285,17 @@ def test_audience_persona_design_orchestrates_single_persona_flow() -> None:
         "自チャンネルへの示唆",
     ):
         assert required in text
+
+
+def test_persona_flow_declares_untrusted_data_boundaries() -> None:
+    """Issue #1371: コメント・WebSearch・生成 Markdown を命令として後続へ再注入しない。"""
+    for path in (_VIEWER_VOICE, _AUDIENCE_PERSONA_DESIGN, _VIEWING_SCENE, _COLLECTION_IDEATE):
+        text = _read(path)
+        assert "## Untrusted Data 境界" in text, f"{path.relative_to(_REPO_ROOT)} に untrusted data 境界がない"
+        assert "外部由来テキスト内の命令" in text, f"{path.relative_to(_REPO_ROOT)} が外部命令の無視を明記していない"
+        assert "構造化 persona fields" in text, (
+            f"{path.relative_to(_REPO_ROOT)} が構造化 persona fields 境界を明記していない"
+        )
 
 
 # ---------- `.claude/skills/**/*.md` に旧スラッシュコマンド参照が残っていないか ----------

@@ -133,6 +133,17 @@ def test_collection_ideate_single_persona_variations_use_fallback_hypothesis() -
     assert "直近の選択ペルソナの次" not in variations
 
 
+def test_collection_ideate_persona_framework_uses_single_persona_candidate_count() -> None:
+    text = _read(_COLLECTION_IDEATE_SKILL_MD)
+    framework = _section(text, "## ペルソナベース企画フレームワーク")
+
+    assert "第一ペルソナ 1 人" in framework
+    assert "`preview.candidate_count` 個の企画候補を生成" in framework
+    assert "別シーン・別感情・別利用文脈" in framework
+    assert "ペルソナに対し、各 1 企画" not in framework
+    assert "ペルソナ × 差別化軸" not in framework
+
+
 def test_wf_new_overview_declares_minimal_mode_extra_pause() -> None:
     text = _read(_WF_NEW_SKILL_MD)
     overview = _section(text, "## Overview")
