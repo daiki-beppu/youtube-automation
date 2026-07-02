@@ -1,0 +1,36 @@
+name: pr-size-guard
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-size-guard') }}
+    steps:
+      - name: Check diff size
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          n=${{ github.event.pull_request.number }}
+          total=$(gh api "repos/${{ github.repository }}/pulls/$n/files" --paginate \
+            --jq '[.[] | select(.filename | test("(^|/)(pnpm-lock\\.yaml|uv\\.lock|package-lock\\.json)$") | not)
+                   | .additions + .deletions] | add // 0')
+          echo "changed lines (excl. lockfiles): $total"
+          marker='<!-- pr-size-guard -->'
+          if [ "$total" -gt 800 ]; then
+            body="$marker
+          📏 **PR サイズ警告**（non-blocking）: lockfile を除く変更行数が **${total} 行** です（目安 800 行以下）。レビュー容易性のため、可能なら issue の vertical slice 分割（\`/to-issues\`）で PR を小さくすることを検討してください。"
+            cid=$(gh api "repos/${{ github.repository }}/issues/$n/comments" --paginate \
+              --jq "[.[] | select(.body | startswith(\"$marker\"))][0].id // empty")
+            if [ -n "$cid" ]; then
+              gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$cid" -f body="$body" > /dev/null
+            else
+              gh api "repos/${{ github.repository }}/issues/$n/comments" -f body="$body" > /dev/null
+            fi
+          fi
