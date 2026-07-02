@@ -55,6 +55,7 @@ import {
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { scheduleRunCompleteReload } from "../lib/page-reload";
 import { readDownloadFormat, serverUrlItem } from "../lib/storage";
 import type { DownloadContext } from "../lib/download-flow";
 
@@ -262,6 +263,37 @@ export default defineContentScript({
         );
       }
       await abortableSleep(SETTLE_MS, () => aborted);
+      if (aborted) {
+        return selectedCount;
+      }
+
+      // Cmd+P 直前の保険ガード (#1411 要件4)。完了時リロードが走らなかった経路（クラッシュ等）で
+      // 前回 run の stale selection が残っていると、Cmd+P は選択中 clip 全件を playlist 追加対象に
+      // するため累積汚染される。実際の選択中 clip を全走査で読み取り、target 件数を超えていたら
+      // fail-loud で中断する。判定は件数比較にする: scrollAndMultiSelectByIds の title fallback で
+      // 選択した row は DOM 上の ID が target 集合に含まれないため、ID 集合差だと誤検知する。
+      let actualSelectedIds: string[];
+      try {
+        actualSelectedIds = await readSelectedClipIds({ isAborted: () => aborted });
+      } catch (err) {
+        if (aborted) {
+          // 停止押下による走査打ち切り（0 件 throw 含む）は STOPPED 経路へ返す。
+          return selectedCount;
+        }
+        throw err;
+      }
+      if (aborted) {
+        return selectedCount;
+      }
+      if (actualSelectedIds.length > expectedClipCount) {
+        const targetIdSet = new Set(submittedIds);
+        const extraIds = actualSelectedIds.filter((id) => !targetIdSet.has(id));
+        throw new Error(
+          `選択中 clip が playlist 対象より多く、前回実行の選択が残っている可能性があります` +
+            `（expected ${expectedClipCount}, selected ${actualSelectedIds.length}, 対象外 ID: ${extraIds.join(", ")}）。` +
+            `ページをリロードして選択状態を解除してから再実行してください。`,
+        );
+      }
 
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const dialog = await openAddToPlaylistDialogViaCmdP(async () => {
@@ -585,10 +617,18 @@ export default defineContentScript({
         }
       }
       // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
+      // リロード前に消去完了を await する (#1411 要件3): 逆順だとリロード後の
+      // ResumeBanner が「中断からの再開」と誤判定する。
       if (collectionId && !keepResumeStateForDownloadRetry) {
-        void clearResumeStateForCollection(collectionId);
+        await clearResumeStateForCollection(collectionId);
       }
       emitProgress({ phase: PHASE.FINISHED, total });
+      // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
+      // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
+      // playlist phase を実行していない run（単一ファイル mode）は選択を作らないため対象外。
+      if (playlistName) {
+        scheduleRunCompleteReload();
+      }
     }
 
     onMessage("run", ({ data }) => {
@@ -683,10 +723,13 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
+          // 消去 → FINISHED → リロードの順序保証は runAll の完了経路と同じ (#1411 要件3)。
           if (collectionId) {
-            void clearResumeStateForCollection(collectionId);
+            await clearResumeStateForCollection(collectionId);
           }
           emitProgress({ phase: PHASE.FINISHED, total: 0 });
+          // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。
+          scheduleRunCompleteReload();
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, total: 0, message });

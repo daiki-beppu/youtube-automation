@@ -33,6 +33,9 @@ async function loadContentScriptWithPlaylistRows(
     postDownloadedError?: Error;
     postDownloadedRejectOnCall?: number;
     downloadFormatValue?: unknown;
+    // Cmd+P 前ガードが読む「実際の選択中 clip ID」(#1411)。未指定は multi-select した ID と同一
+    //（= 余剰なしでガード通過）。stale selection の混入はここへ余剰 ID を足して再現する。
+    guardSelectedClipIds?: string[];
   },
 ) {
   vi.resetModules();
@@ -42,13 +45,18 @@ async function loadContentScriptWithPlaylistRows(
   const progressMessages: ProgressMessage[] = [];
   const sentMessages: Array<{ type: string; payload: unknown }> = [];
   let postDownloadedCallCount = 0;
+  let lastMultiSelectIds: string[] = [];
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const scrollAndMultiSelectByIdsMock = vi.fn((_ids: string[], _options: unknown) => {
+  const scrollAndMultiSelectByIdsMock = vi.fn((ids: string[], _options: unknown) => {
+    lastMultiSelectIds = ids;
     if (playlistRowsResult instanceof Error) {
       return Promise.reject(playlistRowsResult);
     }
     return Promise.resolve(playlistRowsResult instanceof Array ? playlistRowsResult.length : 0);
   });
+  const readSelectedClipIdsMock = vi.fn(() => Promise.resolve(overrides?.guardSelectedClipIds ?? lastMultiSelectIds));
+  const openAddToPlaylistDialogViaCmdPMock = vi.fn(() => Promise.resolve({} as HTMLElement));
+  const scheduleRunCompleteReloadMock = vi.fn();
 
   vi.doMock("../lib/messaging", () => ({
     onMessage: vi.fn((type: string, handler: Handler) => {
@@ -147,9 +155,14 @@ async function loadContentScriptWithPlaylistRows(
   vi.doMock("../../shared/playlist-dom", () => ({
     clickPlaylistRowByName: vi.fn(() => Promise.resolve()),
     fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
-    openAddToPlaylistDialogViaCmdP: vi.fn(() => Promise.resolve({} as HTMLElement)),
+    openAddToPlaylistDialogViaCmdP: openAddToPlaylistDialogViaCmdPMock,
+    readSelectedClipIds: readSelectedClipIdsMock,
     scrollAndMultiSelectByIds: scrollAndMultiSelectByIdsMock,
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
+  }));
+
+  vi.doMock("../lib/page-reload", () => ({
+    scheduleRunCompleteReload: scheduleRunCompleteReloadMock,
   }));
 
   vi.doMock("../../shared/playlist-scrape", () => ({
@@ -196,7 +209,16 @@ async function loadContentScriptWithPlaylistRows(
   if (!runHandler) {
     throw new Error("run message handler was not registered");
   }
-  return { handlers, scrollAndMultiSelectByIdsMock, progressMessages, runHandler, sentMessages };
+  return {
+    handlers,
+    scrollAndMultiSelectByIdsMock,
+    readSelectedClipIdsMock,
+    openAddToPlaylistDialogViaCmdPMock,
+    scheduleRunCompleteReloadMock,
+    progressMessages,
+    runHandler,
+    sentMessages,
+  };
 }
 
 describe("content.ts playlist 追加失敗時の resume state", () => {
@@ -550,6 +572,25 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
   });
 
+  it("Given 通常 run で playlist row 解決が失敗 When ERROR 終了 Then 完了時リロードは走らない", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const { progressMessages, scheduleRunCompleteReloadMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      ["clip-1", "clip-2"],
+      new Error("playlist rows missing"),
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+      },
+    });
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.ERROR })));
+
+    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+  });
+
   it("Given full collection run の Download all が失敗 When run Then ERROR のまま終了する", async () => {
     const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
@@ -590,6 +631,150 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         total: entries.length,
         submittedClipIds: currentSubmittedClipIds,
         playlistExpectedClipCount: currentSubmittedClipIds.length,
+      }),
+    );
+    expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
+  });
+});
+
+// #1411: 連続実行時の stale selection 累積汚染対策（完了時リロード + Cmd+P 前ガード）
+describe("content.ts run 一式完了時のページリロード (#1411)", () => {
+  beforeEach(() => {
+    writeResumeStateMock.mockReset();
+    clearResumeStateForCollectionMock.mockReset();
+  });
+
+  it("Given full collection run が完走 When FINISHED Then resume state 消去の後にリロードが予約される", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const currentSubmittedClipIds = ["clip-1", "clip-2"];
+    const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
+    const {
+      handlers,
+      progressMessages,
+      runHandler,
+      sentMessages,
+      readSelectedClipIdsMock,
+      openAddToPlaylistDialogViaCmdPMock,
+      scheduleRunCompleteReloadMock,
+    } = await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+      },
+    });
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/regression.zip" },
+    });
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    // ガード通過（余剰なし）で Cmd+P まで進んでいる
+    expect(readSelectedClipIdsMock).toHaveBeenCalled();
+    expect(openAddToPlaylistDialogViaCmdPMock).toHaveBeenCalledTimes(1);
+    // リロードは resume state 消去の後（#1321 の再開フローと衝突しない順序保証）
+    expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
+    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("collection-a");
+    expect(clearResumeStateForCollectionMock.mock.invocationCallOrder[0]).toBeLessThan(
+      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("Given manual range run（download なし）が完走 When FINISHED Then リロードが予約される", async () => {
+    const entries = Array.from(
+      { length: 24 },
+      (_, index): PromptEntry => ({
+        name: `track-${index + 1}`,
+        style: `style ${index + 1}`,
+        lyrics: "",
+      }),
+    );
+    const range = { start: 4, end: 7 };
+    const currentSubmittedClipIds = Array.from(
+      { length: (range.end - range.start + 1) * CLIPS_PER_REQUEST },
+      (_, index) => `range-clip-${index + 1}`,
+    );
+    const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
+    const { progressMessages, runHandler, scheduleRunCompleteReloadMock } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | manual range",
+        collectionId: "collection-a",
+        range,
+      },
+    });
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+
+    expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given playlist 無しの run（単一ファイル mode）が完走 When FINISHED Then リロードは走らない", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const { progressMessages, runHandler, scheduleRunCompleteReloadMock, scrollAndMultiSelectByIdsMock } =
+      await loadContentScriptWithPlaylistRows([], []);
+
+    runHandler({ data: { entries } });
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+
+    // multi-select 自体が走らない = 選択状態を作らないためリロード不要
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
+    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("content.ts Cmd+P 前の stale selection ガード (#1411)", () => {
+  beforeEach(() => {
+    writeResumeStateMock.mockReset();
+    clearResumeStateForCollectionMock.mockReset();
+  });
+
+  it("Given 前回 run の選択が残っている When playlist 追加 Then Cmd+P 前に fail-loud で ERROR にする", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const currentSubmittedClipIds = ["clip-1", "clip-2"];
+    const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
+    const { progressMessages, runHandler, openAddToPlaylistDialogViaCmdPMock, scheduleRunCompleteReloadMock } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
+        // 完了時リロードが走らなかった経路の再現: target 2 件 + 前回 run の残り 2 件が選択中
+        guardSelectedClipIds: ["clip-1", "clip-2", "stale-1", "stale-2"],
+      });
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+      },
+    });
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          index: entries.length,
+          message: expect.stringContaining("ページをリロード"),
+        }),
+      ),
+    );
+
+    // 汚染された playlist を作らない: Cmd+P まで到達しない
+    expect(openAddToPlaylistDialogViaCmdPMock).not.toHaveBeenCalled();
+    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+    // ERROR メッセージに余剰 ID を含め、運用者が混入源を特定できるようにする
+    const errorMessage = progressMessages.find((m) => m.phase === PHASE.ERROR)?.message ?? "";
+    expect(errorMessage).toContain("stale-1");
+    expect(errorMessage).toContain("stale-2");
+    // resume state は保持され、リロード後に playlist-only 再開できる
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "collection-a",
+        failedIndex: entries.length,
+        submittedClipIds: currentSubmittedClipIds,
       }),
     );
     expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();

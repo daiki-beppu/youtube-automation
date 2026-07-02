@@ -15,6 +15,7 @@ interface ProgressMessage {
 type Handler = (message: { data: Record<string, unknown> }) => unknown;
 
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
+const scheduleRunCompleteReloadMock = vi.fn();
 
 async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
@@ -27,6 +28,7 @@ async function loadContentScript(overrides?: {
 }) {
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
+  scheduleRunCompleteReloadMock.mockReset();
 
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
@@ -146,6 +148,10 @@ async function loadContentScript(overrides?: {
     scrapePlaylistsFromMe: vi.fn(() => []),
   }));
 
+  vi.doMock("../lib/page-reload", () => ({
+    scheduleRunCompleteReload: scheduleRunCompleteReloadMock,
+  }));
+
   vi.doMock("../lib/ack-probe", () => ({
     createAckWaiter: vi.fn(() => vi.fn(() => Promise.resolve())),
     markAck: vi.fn(() => Promise.resolve({ submissions: 0, domInFlight: 0 })),
@@ -180,7 +186,7 @@ async function loadContentScript(overrides?: {
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
 
-  return { handlers, progressMessages, sentMessages, triggerDownloadAllMock };
+  return { handlers, progressMessages, sentMessages, triggerDownloadAllMock, scheduleRunCompleteReloadMock };
 }
 
 // retryPlaylist ----------------------------------------------------------------
@@ -221,7 +227,7 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
   });
 
   it("Given collectionId 付き When retryPlaylist Then playlist 追加後に download まで進めて resume state を消去する", async () => {
-    const { handlers, progressMessages, sentMessages } = await loadContentScript();
+    const { handlers, progressMessages, sentMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
 
     // submittedClipIds を指定し resolvePlaylistClipIds が正常に返るようにする
     const clipIds = ["clip-1", "clip-2"];
@@ -242,6 +248,11 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
+    // 完了時リロード (#1411): resume state 消去の後に予約される（再開誤判定の防止）
+    expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
+    expect(clearResumeStateMock.mock.invocationCallOrder[0]).toBeLessThan(
+      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0],
+    );
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts).toHaveLength(2);
     expect(downloadedPosts[0].payload).toMatchObject({
@@ -293,7 +304,7 @@ describe('content onMessage("retryPlaylist"): throw→ERROR', () => {
   it("Given addClipsToPlaylist 内部で throw When retryPlaylist Then ERROR phase を emit する", async () => {
     // submittedClipIds=[] + expectedClipCount=0 の場合、addClipsToPlaylist 内の
     // resolvePlaylistClipIds が「clip ID が 0 件」で throw する（自然なエラー経路）。
-    const { handlers, progressMessages } = await loadContentScript();
+    const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
 
     handlers.get("retryPlaylist")!({
       data: {
@@ -308,6 +319,8 @@ describe('content onMessage("retryPlaylist"): throw→ERROR', () => {
         expect.objectContaining({ phase: PHASE.ERROR, message: expect.stringContaining("clip ID") }),
       ),
     );
+    // ERROR 終了時は完了時リロードを走らせない (#1411)
+    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 });
 
