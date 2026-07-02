@@ -30,7 +30,6 @@ import {
   waitForElementCount,
   waitForRemoval,
   waitForElementVisible,
-  waitForSelectOption,
   checkAllStores,
   acceptImportantTerms,
   scrollToDoneButton,
@@ -562,18 +561,62 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     expect(sub.value).toBe("テクノ");
   });
 
+  it("sub_genre option 待機は部分一致では resolve せず完全一致の option を待つ（#1407）", async () => {
+    // Given
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    const genre = mountSelect("genrePrimary", ["エレクトロニック"]);
+    const sub = mountSelectWithOptions("genreSecondary", [
+      { value: "", text: "サブジャンルを選択" },
+      { value: "hardcore-techno", text: "ハードコア／ハードテクノ" },
+    ]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        const opt = document.createElement("option");
+        opt.value = "techno";
+        opt.textContent = "テクノ";
+        sub.appendChild(opt);
+      }, 0);
+    });
+
+    // When
+    await injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+
+    // Then: 部分一致の "ハードコア／ハードテクノ" ではなく、後から出た完全一致を選ぶ。
+    expect(sub.value).toBe("techno");
+  });
+
   it("sub_genre option 待機の no-match error には候補一覧を含める（#1407）", async () => {
     // Given
+    vi.useFakeTimers();
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    mountSelect("genrePrimary", ["エレクトロニック"]);
     const sub = mountSelectWithOptions("genreSecondary", [
       { value: "", text: "サブジャンルを選択" },
       { value: "house", text: "ハウス" },
     ]);
 
     // Then
-    await expect(waitForSelectOption(document, "#genreSecondary", "テクノ", 1)).rejects.toThrow(
-      /options=\[サブジャンルを選択 \/ ハウス\]/,
-    );
-    expect(sub.value).toBe("");
+    const promise = injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+    try {
+      const rejection = expect(promise).rejects.toThrow(/options=\[サブジャンルを選択 \/ ハウス\]/);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await rejection;
+      expect(sub.value).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -646,7 +689,14 @@ describe("setNativeValue（<select>）— option の value / text 一致 + norma
       { value: "25", text: "R&B／ソウル" },
     ]);
 
-    expect(() => setNativeValue(sel, "存在しないジャンル名")).toThrow(OptionNotFoundError);
+    let thrown: unknown;
+    try {
+      setNativeValue(sel, "存在しないジャンル名");
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(OptionNotFoundError);
+    expect((thrown as Error).message).toMatch(/options=\[Electronic \/ R&B／ソウル\]/);
     // 一致が無いので selectedIndex も初期のまま
     expect(sel.selectedIndex).toBe(0);
   });

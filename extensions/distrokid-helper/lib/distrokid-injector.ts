@@ -297,6 +297,19 @@ function findSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): num
   return idx;
 }
 
+// 依存 dropdown の readiness 判定は曖昧な部分一致を使わない。
+// "テクノ" を待っている途中に "ハードコア／ハードテクノ" が先に出ても、完全一致の
+// option が現れるまで待つ必要がある。
+function findExactSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): number {
+  const target = normalizeOptionText(payloadValue);
+  const opts = Array.from(el.options);
+  let idx = opts.findIndex((o) => o.value === payloadValue);
+  if (idx === -1) {
+    idx = opts.findIndex((o) => normalizeOptionText(o.text) === target);
+  }
+  return idx;
+}
+
 // <select> に対して payload 値で option を選ぶ。
 function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
   const idx = findSelectOptionIndex(el, payloadValue);
@@ -332,13 +345,13 @@ function findVisibleSelectWithOption(
   if (!(el instanceof HTMLSelectElement)) {
     return null;
   }
-  return findSelectOptionIndex(el, payloadValue) === -1 ? null : el;
+  return findExactSelectOptionIndex(el, payloadValue) === -1 ? null : el;
 }
 
 // 依存 dropdown の option 再生成を待つ（#1407）。
 // #genrePrimary の change 後、#genreSecondary は非同期に populate されるため、
 // payload と一致する option が現れてから setNativeValue する。
-export function waitForSelectOption(
+function waitForSelectOption(
   root: ParentNode,
   selector: string,
   payloadValue: string,
