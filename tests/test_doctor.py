@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -139,12 +140,28 @@ def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> No
     )
 
 
+def _write_valid_descriptions_md(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "## タイトル案\n"
+        "```\n"
+        "Title\n"
+        "```\n"
+        "## Complete Collection 概要欄\n"
+        "```\n"
+        "Body\n"
+        "```\n"
+        "## タグ（YouTube タグ欄）\n"
+        "```\n"
+        "tag\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+
 def _write_complete_ttp_artifacts(base: Path) -> Path:
     _write_benchmark_channels(base)
     _write_ttp_readiness_files(base)
-    data_dir = base / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
     docs_dir = base / "docs" / "benchmarks"
     docs_dir.mkdir(parents=True, exist_ok=True)
     (docs_dir / "rival.md").write_text("# Rival", encoding="utf-8")
@@ -585,8 +602,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 22
-        assert len(payload["checks"]) == 22
+        # 7 bootstrap + 11 api + 1 channel + 4 data + 1 upload = 24
+        assert len(payload["checks"]) == 24
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -702,6 +719,174 @@ class TestCheckChannelConfig:
         doctor.check_channel_config(tmp_path)
 
         assert "CHANNEL_DIR" not in os.environ
+
+
+class TestCheckInitialSetupReadiness:
+    def test_warns_when_no_initial_setup_files_exist(self, tmp_path):
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.id == "initial_setup_readiness"
+        assert r.status == "warn"
+        assert r.category == "data"
+        assert "reference_images.default" in r.message
+        assert "composition_rules" in r.message
+
+    def test_channel_dir_env_restored_after_success(self, tmp_path, monkeypatch):
+        original = str(tmp_path / "original")
+        monkeypatch.setenv("CHANNEL_DIR", original)
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert os.environ.get("CHANNEL_DIR") == original
+
+    def test_channel_dir_env_deleted_when_originally_absent(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CHANNEL_DIR", raising=False)
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert "CHANNEL_DIR" not in os.environ
+
+    def test_warns_for_broken_skill_yaml(self, tmp_path):
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text("image_generation: [broken\n", encoding="utf-8")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "config/skills/thumbnail.yaml 読み込み失敗" in r.message
+
+    def test_channel_dir_env_restored_after_broken_skill_yaml(self, tmp_path, monkeypatch):
+        original = str(tmp_path / "original")
+        monkeypatch.setenv("CHANNEL_DIR", original)
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text("image_generation: [broken\n", encoding="utf-8")
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert os.environ.get("CHANNEL_DIR") == original
+
+    def test_warns_for_thumbnail_suno_and_descriptions_md_issues(self, tmp_path):
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    generation_mode: single_step",
+                    "    reference_images:",
+                    "      default: []",
+                    "      path_base: channel_dir",
+                    "    composition_rules:",
+                    '      environment: "TBD"',
+                    '      character_size: "TBD"',
+                    '      character_pose: "TBD"',
+                    '      allowed_actions: "TBD"',
+                    '      ng_actions: "TBD"',
+                    '      background: "TBD"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (skills_dir / "suno.yaml").write_text(
+            'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, vinyl warmth, '
+            'ambient pads, brushed percussion, deep bass, tape saturation, late night study"\n',
+            encoding="utf-8",
+        )
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        desc.write_text(
+            "## タイトル案\n"
+            "<!-- annotation between heading and fence -->\n"
+            "```\n"
+            "Title\n"
+            "```\n"
+            "## Complete Collection 概要欄\n"
+            "```\n"
+            "Body\n"
+            "```\n"
+            "## タグ（YouTube タグ欄）\n"
+            "```\n"
+            "tag\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default" in r.message
+        assert "composition_rules" in r.message
+        assert "genre_line" in r.message
+        assert "descriptions.md parse failed" in r.message
+        assert r.next_action is not None
+        assert "/channel-setup" in r.next_action["instructions"]
+        assert "/video-description" in r.next_action["instructions"]
+
+    def test_valid_initial_setup_is_ok(self, tmp_path):
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    generation_mode: single_step",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/alpha/alpha.jpg",
+                    "      path_base: channel_dir",
+                    "    composition_rules:",
+                    '      environment: "desk"',
+                    '      character_size: "medium"',
+                    '      character_pose: "sitting"',
+                    '      allowed_actions: "reading"',
+                    '      ng_actions: "no text"',
+                    '      background: "warm room"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz, soft piano"\n', encoding="utf-8")
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        _write_valid_descriptions_md(desc)
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_descriptions_md_symlink_escape_warns_without_reading_external_heading(self, tmp_path):
+        outside = tmp_path.parent / f"{tmp_path.name}-outside"
+        outside_desc = outside / "descriptions.md"
+        outside.mkdir()
+        outside_desc.write_text("## SECRET_HEADING\noutside\n", encoding="utf-8")
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        try:
+            desc.symlink_to(outside_desc)
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "channel_dir 外" in r.message
+        assert "SECRET_HEADING" not in r.message
+
+    def test_descriptions_md_invalid_utf8_warns_without_exception(self, tmp_path):
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        desc.write_bytes(b"\xff\xfe\xfa")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "descriptions.md を読み取れません" in r.message
 
 
 # ---------------------------------------------------------------------------
@@ -1222,9 +1407,6 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         """benchmark JSON / docs / thumbnail / config refs が揃っていれば ok."""
         _write_benchmark_channels(tmp_path)
         _write_ttp_readiness_files(tmp_path)
-        data_dir = tmp_path / "data"
-        data_dir.mkdir(parents=True, exist_ok=True)
-        (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
         docs_dir = tmp_path / "docs" / "benchmarks"
         docs_dir.mkdir(parents=True, exist_ok=True)
         (docs_dir / "rival.md").write_text("# Rival", encoding="utf-8")
@@ -1476,7 +1658,27 @@ def _write_ttp_readiness_files(base: Path) -> None:
     )
     data_dir = base / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+    video_ids = [f"VID{i}" for i in range(1, 6)]
+    (data_dir / "benchmark_20240101.json").write_text(
+        json.dumps(
+            {
+                "channels": [
+                    {
+                        "slug": "rival",
+                        "videos": [
+                            {"video_id": video_id, "views": 50000 - index} for index, video_id in enumerate(video_ids)
+                        ],
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    analysis_dir = data_dir / "video_analysis" / "rival"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    for video_id in video_ids:
+        (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
     docs_benchmarks = base / "docs" / "benchmarks"
     docs_benchmarks.mkdir(parents=True, exist_ok=True)
     (docs_benchmarks / "rival.md").write_text("# Rival", encoding="utf-8")
@@ -1564,7 +1766,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
         _write_music_engine(tmp_path, "suno")
         (tmp_path / "config" / "skills" / "suno.yaml").write_text("genre_line: ''\n", encoding="utf-8")
         analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
-        analysis_dir.mkdir(parents=True)
+        analysis_dir.mkdir(parents=True, exist_ok=True)
         (analysis_dir / "VID123.json").write_text(
             json.dumps({"suno_preset": {"genre_line": "soft piano, warm pads"}}),
             encoding="utf-8",
@@ -1995,7 +2197,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "warn"
         assert "JSON として不正" in r.message
-        assert "YAML として不正" in r.message
+        assert "skill-config 読み込み失敗" in r.message
 
     def test_shape_mismatch_ttp_contract_files_warn_without_crashing(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
@@ -2008,14 +2210,13 @@ class TestCheckTtpWfNewReadinessChannelNew:
         _write_music_engine(tmp_path, "suno")
         (tmp_path / "config" / "skills" / "suno.yaml").write_text("genre_line: ''\n", encoding="utf-8")
         analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
-        analysis_dir.mkdir(parents=True)
+        analysis_dir.mkdir(parents=True, exist_ok=True)
         (analysis_dir / "bad.json").write_text("null", encoding="utf-8")
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
         assert "items が list ではありません" in r.message
-        assert "thumbnail.yaml のトップレベルが object ではありません" in r.message
         assert "bad.json のトップレベルが object ではありません" in r.message
 
     def test_malformed_benchmark_channel_entry_warns_without_silent_drop(self, tmp_path):
@@ -2036,6 +2237,243 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "warn"
         assert "Suno genre_line または data/video_analysis の suno_preset 未設定" in r.message
+
+    def test_three_of_three_video_analysis_is_still_top5_partial(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        video_ids = [f"VID{i}" for i in range(1, 4)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {
+                            "slug": "rival",
+                            "videos": [
+                                {"video_id": video_id, "views": 50000 - index}
+                                for index, video_id in enumerate(video_ids)
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        for path in analysis_dir.glob("*.json"):
+            path.unlink()
+        for video_id in video_ids:
+            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "benchmark top 5 が不足 (3/5)" in r.message
+        assert "video_analysis が一部のみ (3/5)" in r.message
+
+    def test_video_analysis_uses_views_sorted_min_views_top5(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        low_view_ids = [f"LOW{i}" for i in range(1, 6)]
+        high_view_ids = [f"HIGH{i}" for i in range(1, 6)]
+        videos = [{"video_id": video_id, "views": 100 + index} for index, video_id in enumerate(low_view_ids)]
+        videos.extend({"video_id": video_id, "views": 50000 - index} for index, video_id in enumerate(high_view_ids))
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "rival", "videos": videos}]}),
+            encoding="utf-8",
+        )
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        for path in analysis_dir.glob("*.json"):
+            path.unlink()
+        for video_id in high_view_ids:
+            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_unapproved_benchmark_slug_is_ignored_for_video_analysis(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        rival_videos = [{"video_id": f"VID{i}", "views": 50000 - i} for i in range(1, 6)]
+        extra_videos = [{"video_id": f"EXTRA{i}", "views": 60000 - i} for i in range(1, 6)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {"slug": "rival", "videos": rival_videos},
+                        {"slug": "unapproved", "videos": extra_videos},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_approved_slug_missing_from_benchmark_warns_even_if_unapproved_is_complete(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        extra_videos = [{"video_id": f"EXTRA{i}", "views": 60000 - i} for i in range(1, 6)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "unapproved", "videos": extra_videos}]}),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: benchmark top 5 が不足 (0/5)" in r.message
+
+    def test_approved_slug_with_no_min_view_videos_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        low_view_ids = [f"LOW{i}" for i in range(1, 6)]
+        extra_videos = [{"video_id": f"EXTRA{i}", "views": 60000 - i} for i in range(1, 6)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {
+                            "slug": "rival",
+                            "videos": [{"video_id": video_id, "views": 100} for video_id in low_view_ids],
+                        },
+                        {"slug": "unapproved", "videos": extra_videos},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: benchmark top 5 が不足 (0/5)" in r.message
+
+    def test_malformed_benchmark_json_warns_instead_of_raising(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "benchmark_20240101.json").write_text("{broken", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "Expecting property name enclosed in double quotes" in r.message
+
+    def test_non_numeric_benchmark_views_warns_instead_of_raising(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "rival", "videos": [{"video_id": "VID1", "views": "nope"}]}]}),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "invalid literal" in r.message
+
+    def test_video_analysis_raw_json_must_be_object(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "video_analysis" / "rival" / "VID1.json").write_text("null", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: VID1.json のトップレベルが object ではありません" in r.message
+        assert "rival: video_analysis が一部のみ (4/5)" in r.message
+
+    def test_video_analysis_symlink_outside_channel_is_rejected(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        video_analysis = tmp_path / "data" / "video_analysis"
+        shutil.rmtree(video_analysis)
+        outside = tmp_path.parent / "outside-video-analysis"
+        outside_rival = outside / "rival"
+        outside_rival.mkdir(parents=True)
+        for i in range(1, 6):
+            (outside_rival / f"VID{i}.json").write_text(json.dumps({"video_id": f"VID{i}"}), encoding="utf-8")
+        try:
+            video_analysis.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink unavailable: {exc}")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "data/video_analysis の channel_dir 外参照を拒否" in r.message
+
+    def test_old_video_analyze_model_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "video-analyze.yaml").write_text(
+            "model: gemini-3.5-flash\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "video-analyze model が旧/非対応: gemini-3.5-flash" in r.message
+
+    def test_suno_long_genre_line_warns_even_with_variants(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text(
+            "\n".join(
+                [
+                    f'genre_line: "{"x" * 121}"',
+                    "style_char_limit: 120",
+                    "style_variants:",
+                    "  short:",
+                    "    genre_line: short style",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "Suno genre_line が style_char_limit 超過 (121/120)" in r.message
+
+    def test_suno_variant_long_genre_line_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text(
+            "\n".join(
+                [
+                    "genre_line: short style",
+                    "style_char_limit: 120",
+                    "style_variants:",
+                    "  long:",
+                    f'    genre_line: "{"x" * 121}"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "Suno style_variants.long.genre_line が style_char_limit 超過 (121/120)" in r.message
+
+    def test_suno_style_char_limit_non_numeric_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "suno.yaml").write_text(
+            "\n".join(["genre_line: short style", "style_char_limit: nope", ""]),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "suno.style_char_limit が数値ではありません" in r.message
 
     def test_video_analysis_slug_traversal_is_rejected(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel(slug="../../../outside")])
@@ -2278,12 +2716,107 @@ class TestUploadRequiredScopes:
 # ---------------------------------------------------------------------------
 
 
+class TestCheckNumberedDuplicates:
+    def test_ok_when_clean(self, tmp_path):
+        (tmp_path / ".venv" / "bin").mkdir(parents=True)
+        (tmp_path / ".venv" / "bin" / "yt-analytics").write_text("#!/bin/sh\n", encoding="utf-8")
+        skills = tmp_path / ".claude" / "skills" / "channel-new"
+        skills.mkdir(parents=True)
+        (skills / "SKILL.md").write_text("# skill\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_ok_when_directories_missing(self, tmp_path):
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "ok"
+
+    def test_warns_on_venv_bin_duplicates(self, tmp_path):
+        bin_dir = tmp_path / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "yt-analytics").write_text("#!/bin/sh\n", encoding="utf-8")
+        (bin_dir / "yt-analytics 2").write_text("#!/bin/sh\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "warn"
+        assert ".venv/bin に 1 件" in r.message
+        assert "yt-analytics 2" in r.message
+        assert r.next_action is not None
+        assert "numbered-duplicate-files-cleanup" in r.next_action["instructions"]
+        assert "https://github.com/daiki-beppu/youtube-automation/blob/main/" in r.next_action["instructions"]
+
+    def test_warns_on_skills_duplicates_recursively(self, tmp_path):
+        skill = tmp_path / ".claude" / "skills" / "channel-new"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("# skill\n", encoding="utf-8")
+        (skill / "SKILL 2.md").write_text("# skill\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "warn"
+        assert "SKILL 2.md" in r.message
+
+    def test_warns_on_skills_symlink_root_without_scanning_outside(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret").write_text("do not expose\n", encoding="utf-8")
+        skills_parent = tmp_path / ".claude"
+        skills_parent.mkdir()
+        (skills_parent / "skills").symlink_to(outside, target_is_directory=True)
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "走査できません" in r.message
+        assert "secret" not in r.message
+
+    def test_warns_on_skills_file_symlink_root(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.write_text("outside\n", encoding="utf-8")
+        skills_parent = tmp_path / ".claude"
+        skills_parent.mkdir()
+        (skills_parent / "skills").symlink_to(outside)
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "走査できません" in r.message
+        assert "symlink" in r.message
+
+    def test_warns_on_skills_broken_symlink_root(self, tmp_path):
+        skills_parent = tmp_path / ".claude"
+        skills_parent.mkdir()
+        (skills_parent / "skills").symlink_to(tmp_path / "missing")
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "走査できません" in r.message
+        assert "symlink" in r.message
+
+    def test_escapes_control_characters_in_duplicate_names(self, tmp_path):
+        bin_dir = tmp_path / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "yt-\x1b[31m").write_text("#!/bin/sh\n", encoding="utf-8")
+        (bin_dir / "yt-\x1b[31m 2").write_text("#!/bin/sh\n", encoding="utf-8")
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "\x1b" not in r.message
+        assert "\\x1b" in r.message
+
+    def test_ignores_bounce_pattern_without_base(self, tmp_path):
+        bin_dir = tmp_path / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "orphan 2").write_text("#!/bin/sh\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "ok"
+
+
 class TestRunAllChecksExtended:
-    def test_returns_22_checks(self, monkeypatch, tmp_path):
-        """6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 22 件."""
+    def test_returns_24_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 11 api + 1 channel + 4 data + 1 upload = 計 24 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 22
+        assert len(results) == 24
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -2305,6 +2838,7 @@ class TestRunAllChecksExtended:
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
         assert "ttp_wf_new_readiness" in ids
+        assert "initial_setup_readiness" in ids
         assert "upload_ready" in ids
 
     def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
@@ -2338,14 +2872,27 @@ class TestRunAllChecksExtended:
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
-        assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
+        assert bootstrap_ids == {
+            "ffmpeg",
+            "ffprobe",
+            "uv",
+            "uv_project",
+            "automation_package",
+            "skills_synced",
+            "numbered_duplicates",
+        }
 
-    def test_data_checks_include_ttp_wf_new_readiness(self, monkeypatch, tmp_path):
-        """data カテゴリは analytics_report / benchmark_data / ttp_wf_new_readiness の 3 件."""
+    def test_data_checks_include_readiness_checks(self, monkeypatch, tmp_path):
+        """data カテゴリは analytics / benchmark と 2 種類の readiness check を含む."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         data_ids = {r.id for r in results if r.category == "data"}
-        assert data_ids == {"analytics_report", "benchmark_data", "ttp_wf_new_readiness"}
+        assert data_ids == {
+            "analytics_report",
+            "benchmark_data",
+            "ttp_wf_new_readiness",
+            "initial_setup_readiness",
+        }
 
     def test_upload_ready_is_only_upload_check(self, monkeypatch, tmp_path):
         """upload カテゴリは upload_ready の 1 件のみ."""
@@ -2389,6 +2936,7 @@ class TestRenderTableCategories:
         assert "analytics_report" in output
         assert "benchmark_data" in output
         assert "ttp_wf_new_readiness" in output
+        assert "initial_setup_readiness" in output
         assert "upload_ready" in output
 
     def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):

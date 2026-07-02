@@ -1,5 +1,11 @@
 # suno-helper に歩留まりガードレールを寄せ、masterup-pairs はキュレーションに専念する
 
+## Status
+
+accepted (2026-06-28)。実装は進行中 (#1266 / #1268)。
+
+2026-07-02 の ADR 監査で 0012 から番号振り直し（並行 PR による番号レースの解消、先着優先ルール）。旧文書中の「ADR-0012」は文脈により本 ADR を指す。
+
 Suno V5 は同一プロンプトでも尺が不安定で、1 分未満や 5 分超の壊れた曲を頻繁に出す。従来この歩留まり判定は masterup-pairs が ffprobe で事後的に行っていたが、NG 曲の補充は人間が手動で suno-helper を再実行する運用だった。suno-helper が Suno UI を操作している最中（feed v3 の `metadata.duration`）に duration を検知できることが判明したため、歩留まりガードレール（duration check + 自動再生成）を suno-helper 側に移す。masterup-pairs の duration filter は二重チェックとして残し、ペア選択 + stock 退避のキュレーション責務に専念させる。
 
 ## Considered Options
