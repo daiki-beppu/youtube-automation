@@ -191,4 +191,17 @@ describe("phaseToStatus: duration guard ログ (#1270)", () => {
     expect(text).toBe('"Night Groove": 全滅 — スキップ');
     expect(error).toBeFalsy();
   });
+
+  it("Given skip log with message When 変換する Then 全滅スキップと失敗理由を表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.ENTRY_FAILED,
+      index: 0,
+      total: 3,
+      message: "生成キューの空き待ちが失敗",
+      log: { kind: "skip", entryName: "Night Groove" },
+    });
+
+    expect(text).toBe('"Night Groove": 全滅 — スキップ: 生成キューの空き待ちが失敗');
+    expect(error).toBeFalsy();
+  });
 });

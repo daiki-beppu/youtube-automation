@@ -52,12 +52,16 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
   it("Given maxRetry=2 で全 attempt 失敗 When 実行 Then outcome=failed・attempt 3 回・error を保持", async () => {
     const error = new Error("毎回失敗");
     const attempt = vi.fn().mockRejectedValue(error);
+    const onRetry = vi.fn();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runEntryWithRetry(makeOptions({ attempt, maxRetry: 2 }));
+    const result = await runEntryWithRetry(makeOptions({ attempt, maxRetry: 2, onRetry }));
 
     expect(result).toEqual({ outcome: "failed", error });
     expect(attempt).toHaveBeenCalledTimes(3); // 初回 + retry 2
+    expect(onRetry).toHaveBeenNthCalledWith(1, 1, 2, error);
+    expect(onRetry).toHaveBeenNthCalledWith(2, 2, 2, error);
+    expect(onRetry).toHaveBeenCalledTimes(2); // 終端 attempt は予告しない
     expect(warn).toHaveBeenCalledTimes(2); // 終端 attempt は予告しない
     warn.mockRestore();
   });

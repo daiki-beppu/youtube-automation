@@ -2,17 +2,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
+import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
 import { makePromptEntries, markBbox } from "./_helpers";
 
 const harness = vi.hoisted(() => {
   const handlers = new Map<string, (message: { data: unknown }) => unknown>();
   const feedPollerStart = vi.fn();
   const feedPollerStop = vi.fn();
-  type RunEntryResult = { outcome: "success" } | { outcome: "failed"; error: Error };
-  const runEntryWithRetry = vi.fn(async (options: { attempt: () => Promise<void> }): Promise<RunEntryResult> => {
-    await options.attempt();
-    return { outcome: "success" as const };
-  });
+  const runEntryWithRetry = vi.fn(
+    async (options: Pick<RunEntryWithRetryOptions, "attempt">): Promise<EntryRunResult> => {
+      await options.attempt();
+      return { outcome: "ok" };
+    },
+  );
 
   return {
     handlers,
@@ -232,9 +234,9 @@ function makeRunPayload(entries = makePromptEntries(0)): {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
-  harness.runEntryWithRetry.mockImplementation(async (options: { attempt: () => Promise<void> }) => {
+  harness.runEntryWithRetry.mockImplementation(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
     await options.attempt();
-    return { outcome: "success" as const };
+    return { outcome: "ok" };
   });
   harness.handlers.clear();
   document.body.innerHTML = "";
@@ -458,13 +460,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const runHandler = getRunHandler();
     const entries = makePromptEntries(1);
     harness.runEntryWithRetry.mockImplementationOnce(
-      async (options: {
-        attempt: () => Promise<void>;
-        onRetry?: (attempt: number, max: number, error: unknown) => void;
-      }) => {
+      async (options: Pick<RunEntryWithRetryOptions, "attempt" | "onRetry">) => {
         await options.attempt();
         options.onRetry?.(1, 2, new Error("temporary"));
-        return { outcome: "success" as const };
+        return { outcome: "ok" };
       },
     );
 

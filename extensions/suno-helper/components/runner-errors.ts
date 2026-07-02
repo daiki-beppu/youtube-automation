@@ -77,8 +77,13 @@ function formatAllowedProgressLog(progress: SnapshotPayload["progress"]): { text
       return progress.log.kind === "duration-check" ? formatProgressLog(progress.log) : null;
     case PHASE.WAITING_SLOT:
       return progress.log.kind === "retry" ? formatProgressLog(progress.log) : null;
-    case PHASE.ENTRY_FAILED:
-      return progress.log.kind === "skip" ? formatProgressLog(progress.log) : null;
+    case PHASE.ENTRY_FAILED: {
+      if (progress.log.kind !== "skip") {
+        return null;
+      }
+      const status = formatProgressLog(progress.log);
+      return progress.message ? { ...status, text: `${status.text}: ${progress.message}` } : status;
+    }
     default:
       return null;
   }

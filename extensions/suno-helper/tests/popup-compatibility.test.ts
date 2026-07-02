@@ -11,10 +11,19 @@ import { App } from "../components/App";
 const BASE_URL = "http://localhost:7873";
 const MANIFEST_VERSION = "0.1.9";
 
-const messagingMocks = vi.hoisted(() => ({
-  onMessage: vi.fn(() => () => undefined),
-  sendMessage: vi.fn(),
-}));
+const messagingMocks = vi.hoisted(() => {
+  const mocks = {
+    progressHandler: undefined as ((message: { data: ProgressPayload }) => void) | undefined,
+    onMessage: vi.fn((type: string, handler: (message: { data: ProgressPayload }) => void) => {
+      if (type === "progress") {
+        mocks.progressHandler = handler;
+      }
+      return () => undefined;
+    }),
+    sendMessage: vi.fn(),
+  };
+  return mocks;
+});
 
 const storageMocks = vi.hoisted(() => ({
   getValue: vi.fn(async () => ""),
@@ -173,6 +182,15 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.getValue.mockResolvedValue("mp3");
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    messagingMocks.progressHandler = undefined;
+    messagingMocks.onMessage.mockImplementation(
+      (type: string, handler: (message: { data: ProgressPayload }) => void) => {
+        if (type === "progress") {
+          messagingMocks.progressHandler = handler;
+        }
+        return () => undefined;
+      },
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => {
@@ -203,6 +221,28 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     resumeStateMocks.readResumeState.mockResolvedValue(null);
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
+  });
+
+  it("progress handler が DONE + duration-check log を受けると live status を更新する", async () => {
+    expect(messagingMocks.progressHandler).toBeDefined();
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({ data: { phase: PHASE.DONE, index: 1, total: 3 } });
+    });
+    expect(container.textContent).not.toContain('"p2": 259s ✓');
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: {
+          phase: PHASE.DONE,
+          index: 1,
+          total: 3,
+          log: { kind: "duration-check", entryName: "p2", durationSec: 259, ok: true, maxSec: 300 },
+        },
+      });
+    });
+
+    expect(container.textContent).toContain('"p2": 259s ✓');
   });
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
