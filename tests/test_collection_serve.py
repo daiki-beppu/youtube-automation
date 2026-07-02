@@ -253,7 +253,7 @@ def serve(tmp_path):
     """
     started = []
 
-    def _start(entries, allow_origin=None):
+    def _start(entries, allow_origin=None, capture_root=None):
         json_path = tmp_path / "suno-prompts.json"
         json_path.write_text(json.dumps(entries), encoding="utf-8")
         server = create_server(
@@ -262,6 +262,7 @@ def serve(tmp_path):
             prompts_path=json_path,
             collection_dir=tmp_path,
             distrokid=None,
+            capture_root=capture_root,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -289,6 +290,34 @@ def test_get_suno_prompts_json_returns_array_body(serve):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
+
+
+def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):
+    """Given single mode サーバー
+    When 旧 POST /suno/playlists に送信する
+    Then endpoint は存在せず、旧 suno-playlists.json も作らない（#1261）。
+    """
+    capture_root = tmp_path / "channel"
+    base = serve(
+        [{"name": "A", "style": "s", "lyrics": ""}],
+        allow_origin="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        capture_root=capture_root,
+    )
+    req = urllib.request.Request(
+        f"{base}/suno/playlists",
+        data=b"[]",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Origin": "chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        },
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
+    assert not (capture_root / "config" / "suno-playlists.json").exists()
 
 
 def test_get_suno_prompts_json_preserves_duration_filter_envelope(serve):
@@ -598,6 +627,23 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
 
     assert exc_info.value.code == 0
     assert "usage" in capsys.readouterr().out.lower()
+
+
+def test_removed_playlist_capture_prefix_cli_option_exits_with_usage_error(monkeypatch, capsys, tmp_path):
+    """旧 --playlist-capture-prefix は argparse 入口で拒否する。"""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["yt-collection-serve", str(tmp_path), "--playlist-capture-prefix", "abc"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "unrecognized arguments" in stderr
+    assert "--playlist-capture-prefix" in stderr
 
 
 # ---------------------------------------------------------------------------
