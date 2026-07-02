@@ -97,6 +97,9 @@ export default defineBackground(() => {
 
   onMessage("fetchCollectionPrompts", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCollectionPrompts");
+    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
+      throw new Error("fetchCollectionPrompts.collectionId must be non-empty string");
+    }
     return fetchCollectionPrompts(data.baseUrl, data.collectionId);
   });
 

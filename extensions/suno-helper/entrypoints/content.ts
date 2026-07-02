@@ -55,10 +55,90 @@ import {
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
+import type { RetryDownloadPayload, RetryPlaylistPayload, RunPayload } from "../lib/messaging";
 import { clearFinishedSnapshot, readFreshFinishedSnapshot, writeFinishedSnapshot } from "../lib/finished-snapshot";
 import { cancelScheduledRunCompleteReload, scheduleRunCompleteReload } from "../lib/page-reload";
 import { readDownloadFormat, serverUrlItem } from "../lib/storage";
 import type { DownloadContext } from "../lib/download-flow";
+
+function assertNonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${field} must be non-empty string`);
+  }
+  return value;
+}
+
+function assertRecord(value: unknown, field: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${field} must be object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${field} must be string array`);
+  }
+  return value;
+}
+
+function assertOptionalFiniteNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${field} must be finite number`);
+  }
+  return value;
+}
+
+function assertOptionalBoolean(value: unknown, field: string): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${field} must be boolean`);
+  }
+  return value;
+}
+
+function assertRunPayload(value: unknown): RunPayload {
+  const record = assertRecord(value, "run payload");
+  if (!Array.isArray(record.entries)) {
+    throw new Error("run.entries must be array");
+  }
+  return {
+    ...(record as unknown as RunPayload),
+    entries: record.entries as PromptEntry[],
+    playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
+    collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
+  };
+}
+
+function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
+  const record = assertRecord(value, "retryPlaylist payload");
+  return {
+    playlistName: assertNonEmptyString(record.playlistName, "retryPlaylist.playlistName"),
+    submittedClipIds: assertStringArray(record.submittedClipIds, "retryPlaylist.submittedClipIds"),
+    expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryPlaylist.expectedClipCount") ?? 0,
+    collectionId: assertNonEmptyString(record.collectionId, "retryPlaylist.collectionId"),
+    shouldDownload: assertOptionalBoolean(record.shouldDownload, "retryPlaylist.shouldDownload"),
+  };
+}
+
+function assertRetryDownloadPayload(value: unknown): RetryDownloadPayload {
+  const record = assertRecord(value, "retryDownload payload");
+  return {
+    collectionId: assertNonEmptyString(record.collectionId, "retryDownload.collectionId"),
+    playlistName: assertNonEmptyString(record.playlistName, "retryDownload.playlistName"),
+    submittedClipIds: assertStringArray(record.submittedClipIds, "retryDownload.submittedClipIds"),
+    expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryDownload.expectedClipCount"),
+    sunoPlaylistUrl:
+      record.sunoPlaylistUrl === undefined
+        ? undefined
+        : assertNonEmptyString(record.sunoPlaylistUrl, "retryDownload.sunoPlaylistUrl"),
+  };
+}
 
 function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submittedIds: string[]): Map<string, string> {
   const map = new Map<string, string>();
@@ -145,13 +225,13 @@ export default defineContentScript({
      * 生き残るため復元性は保たれる。残る stale selection は次 run の Cmd+P 前ガードが検知する —
      * resume state 消去失敗時と同じ扱い）。
      */
-    async function persistFinishedSnapshotForReload(collectionId: string | undefined): Promise<boolean> {
+    async function persistFinishedSnapshotForReload(): Promise<boolean> {
       if (!currentSnapshot) {
         // FINISHED emit 済みの経路からのみ呼ばれるため到達しない（emitProgress と同じ不変条件）。
         return false;
       }
       try {
-        await writeFinishedSnapshot({ snapshot: currentSnapshot, collectionId, timestamp: Date.now() });
+        await writeFinishedSnapshot({ snapshot: currentSnapshot, timestamp: Date.now() });
         return true;
       } catch (err) {
         console.warn("[suno-helper] 完了 snapshot の退避に失敗しました。完了時リロードを見送ります:", err);
@@ -661,7 +741,7 @@ export default defineContentScript({
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
       // collection mode の run は playlist phase を実行するため対象。
       // リロード前に FINISHED snapshot を退避し、popup 再 open 時の完了結果表示を引き継ぐ。
-      if (playlistName && resumeStateCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+      if (playlistName && resumeStateCleared && (await persistFinishedSnapshotForReload())) {
         scheduleRunCompleteReload();
       }
     }
@@ -671,11 +751,12 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
+      const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } =
+        assertRunPayload(data);
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
       cancelScheduledRunCompleteReload();
-      const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } = data;
       currentSnapshot = initSnapshot(entries, { collectionId, playlistName });
       // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
@@ -719,7 +800,8 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } = data;
+      const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } =
+        assertRetryPlaylistPayload(data);
       currentSnapshot = initSnapshot([], { collectionId, playlistName });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -771,7 +853,7 @@ export default defineContentScript({
           emitProgress({ phase: PHASE.FINISHED, total: 0 });
           // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
-          if (resumeStateCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+          if (resumeStateCleared && (await persistFinishedSnapshotForReload())) {
             scheduleRunCompleteReload();
           }
         } catch (err) {
@@ -788,7 +870,8 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } = data;
+      const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } =
+        assertRetryDownloadPayload(data);
       currentSnapshot = initSnapshot([], { collectionId });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -816,7 +899,7 @@ export default defineContentScript({
           // ページごと破棄する (#1411)。この経路だけリロードが無いと、次 run が
           // 確実に Cmd+P 前ガードで止まり手動リロードを強いられる。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
-          if (result.completedAndCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+          if (result.completedAndCleared && (await persistFinishedSnapshotForReload())) {
             scheduleRunCompleteReload();
           }
         } catch (err) {

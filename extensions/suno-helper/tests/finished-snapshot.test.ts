@@ -20,7 +20,7 @@ function makeFinishedState(timestamp: number): FinishedSnapshotState {
     phase: PHASE.FINISHED,
     total: 2,
   });
-  return { snapshot, collectionId: "coll-1", timestamp };
+  return { snapshot, timestamp };
 }
 
 describe("isFinishedSnapshotFresh: 退避 snapshot の鮮度判定", () => {

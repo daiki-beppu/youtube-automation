@@ -396,6 +396,26 @@ describe("background read API handlers: localhost read を extension origin 境�
     expect(fetchImpl).toHaveBeenNthCalledWith(2, "http://localhost:7873/collections/20260601-clm/suno/prompts.json");
     expect(fetchImpl).toHaveBeenNthCalledWith(3, "http://localhost:7873/version");
   });
+
+  it.each([
+    ["空文字", ""],
+    ["欠落", undefined],
+    ["非 string", 123],
+  ] as const)(
+    "fetchCollectionPrompts の collectionId が%sなら localhost fetch へ渡さず throw する",
+    async (_label, collectionId) => {
+      const fetchImpl = vi.fn();
+      const { handlers } = await loadBackground({ useRealPostDownloaded: true, fetchImpl });
+
+      expect(() =>
+        handlers.get("fetchCollectionPrompts")!({
+          data: { baseUrl: "http://localhost:7873", collectionId },
+          sender: { tab: { id: 42 } },
+        }),
+      ).toThrow(/collectionId/);
+      expect(fetchImpl).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('background onMessage("startDownload"): 非 .zip ダウンロードは無視する', () => {

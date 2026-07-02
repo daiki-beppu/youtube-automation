@@ -149,6 +149,10 @@ function assertString(value: unknown, field: string): string {
   return value;
 }
 
+function assertCollectionId(value: unknown, field = "collectionId"): string {
+  return assertString(value, field);
+}
+
 function assertOptionalString(
   value: unknown,
   field: string,
@@ -333,7 +337,9 @@ export async function fetchCollectionPrompts(
   baseUrl: string,
   id: string,
 ): Promise<PromptEntry[]> {
-  return fetchPromptArray(`${baseUrl}${collectionPromptsRoute(id)}`);
+  return fetchPromptArray(
+    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
+  );
 }
 
 /** popup の実行対象一覧に出す collection。完了済みは次の作業対象ではないため非表示にする。 */

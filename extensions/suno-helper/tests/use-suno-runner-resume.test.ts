@@ -268,7 +268,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given content run start When data payload を読む Then playlist resume 情報を runAll に渡す", () => {
     expect(contentSource).toMatch(
-      /const \{ entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount \} =\s*data;[\s\S]*?void runAll\(entries, \{[\s\S]*?submittedClipIds,[\s\S]*?playlistExpectedClipCount,[\s\S]*?\}\)/,
+      /const \{ entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount \} =\s*assertRunPayload\(data\);[\s\S]*?void runAll\(entries, \{[\s\S]*?submittedClipIds,[\s\S]*?playlistExpectedClipCount,[\s\S]*?\}\)/,
     );
   });
 

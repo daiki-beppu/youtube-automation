@@ -215,13 +215,13 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
     expect(writeFinishedSnapshotMock).toHaveBeenCalledTimes(1);
     expect(writeFinishedSnapshotMock).toHaveBeenCalledWith({
       snapshot: expect.objectContaining({
+        collectionId: "coll-1",
         isRunning: false,
         progress: expect.objectContaining({ phase: PHASE.FINISHED }),
         // range {0,0} の部分実行: entry 0 のみ done、entry 1 は未実行のまま（per-entry 状態の引き継ぎ）
         itemStates: ["done", "idle"],
         playlistName: "pl",
       }),
-      collectionId: "coll-1",
       timestamp: expect.any(Number),
     });
     // 退避の完了を待ってからリロードを予約する（逆順だとリロードが write を巻き添えに殺しうる）
@@ -260,7 +260,10 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(writeFinishedSnapshotMock).toHaveBeenCalledWith(
-      expect.objectContaining({ collectionId: "coll-1", timestamp: expect.any(Number) }),
+      expect.objectContaining({
+        snapshot: expect.objectContaining({ collectionId: "coll-1" }),
+        timestamp: expect.any(Number),
+      }),
     );
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
     expect(writeFinishedSnapshotMock.mock.invocationCallOrder[0]).toBeLessThan(

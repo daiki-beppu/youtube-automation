@@ -231,6 +231,30 @@ afterEach(() => {
 });
 
 describe('content onMessage("run"): Run 開始前の Suno view preflight', () => {
+  it("Given 旧 array payload When run を受ける Then fail-loud し副作用を起こさない", async () => {
+    await loadContentScript();
+    const runHandler = getRunHandler();
+
+    expect(() => runHandler({ data: makePromptEntries(1) })).toThrow(/run payload/);
+    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(harness.feedPollerStart).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["collectionId 欠落", { collectionId: undefined }, /run\.collectionId/],
+    ["playlistName 欠落", { playlistName: undefined }, /run\.playlistName/],
+  ] as const)(
+    "Given %s payload When run を受ける Then fail-loud し副作用を起こさない",
+    async (_label, override, message) => {
+      await loadContentScript();
+      const runHandler = getRunHandler();
+
+      expect(() => runHandler({ data: { ...makeRunPayload(makePromptEntries(1)), ...override } })).toThrow(message);
+      expect(harness.sendMessage).not.toHaveBeenCalled();
+      expect(harness.feedPollerStart).not.toHaveBeenCalled();
+    },
+  );
+
   it("Given view dropdown が検出不能 When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
     await loadContentScript();
     const runHandler = getRunHandler();

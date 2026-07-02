@@ -88,6 +88,10 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
       "/collections/20260526-rainy%20jazz-collection/suno/prompts.json",
     );
   });
+
+  it("Given 空 collection id When collectionPromptsRoute(id) Then throw する", () => {
+    expect(() => collectionPromptsRoute("")).toThrow(/collectionId/);
+  });
 });
 
 describe("shared/constants: Suno queue 上限 (#816)", () => {

@@ -79,7 +79,7 @@ export function phaseToStatus(
  * snapshot 無し (null) は復元せず従来表示へフォールバックするため null を返す（silent fallback の根拠）。
  */
 export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | null {
-  if (!snap || !snap.collectionId) {
+  if (!snap) {
     return null;
   }
   const { text, error } = phaseToStatus(snap.progress, snap.entries);

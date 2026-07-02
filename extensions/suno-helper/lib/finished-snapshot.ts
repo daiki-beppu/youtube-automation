@@ -6,7 +6,7 @@
 // chrome.storage.local へ退避し、リロード後の queryProgress が in-memory 不在時の
 // fallback として読むことで、直近完了 run の結果表示を引き継ぐ。
 //
-// stale 化の防止: timestamp + collectionId を付与し、読み出し時に閾値超過なら破棄する。
+// stale 化の防止: timestamp を付与し、読み出し時に閾値超過なら破棄する。
 // 次 run 開始（initSnapshot）でも消去する（新しい実行が始まったら前 run の完了表示は不要）。
 //
 // I/O は resume-state.ts と同じく storage item を遅延生成する（storage.defineItem は呼ぶと
@@ -20,8 +20,6 @@ import { FINISHED_SNAPSHOT_KEY, type SnapshotPayload } from "../../shared/consta
 export interface FinishedSnapshotState {
   /** FINISHED 適用済みの snapshot（isRunning=false、itemStates は done/failed 確定済み）。 */
   snapshot: SnapshotPayload;
-  /** 完了した run の collection 識別子。retryDownload の退避では undefined。 */
-  collectionId?: string;
   /** 退避時刻 (epoch ms)。stale 判定に使う。 */
   timestamp: number;
 }

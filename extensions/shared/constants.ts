@@ -44,6 +44,9 @@ export const VERSION_ROUTE = "/version";
 
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
+  if (id.length === 0) {
+    throw new Error("collectionId must be non-empty string");
+  }
   return `${COLLECTIONS_ROUTE}/${encodeURIComponent(id)}${PROMPTS_ROUTE}`;
 }
 

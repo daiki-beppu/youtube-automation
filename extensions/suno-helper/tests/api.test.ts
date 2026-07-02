@@ -366,6 +366,18 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
 });
 
 describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
+  it.each([
+    ["空文字", ""],
+    ["欠落", undefined],
+    ["非 string", 123],
+  ] as const)("Given collectionId が%s When fetch する Then path を組み立てず throw する", async (_label, id) => {
+    const fetchFn = vi.fn();
+    vi.stubGlobal("fetch", fetchFn);
+
+    await expect(fetchCollectionPrompts(BASE_URL, id as never)).rejects.toThrow(/collectionId/);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("Given HTTP 404 (未知 id) When fetch する Then throw する", async () => {
     mockFetch(() => ({ ok: false, status: 404, json: async () => ({}) }));
 

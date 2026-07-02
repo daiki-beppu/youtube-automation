@@ -239,6 +239,36 @@ describe('content onMessage("retryPlaylist"): running ガード', () => {
   });
 });
 
+describe('content onMessage("retryPlaylist"): payload contract', () => {
+  beforeEach(() => {
+    clearResumeStateMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["collectionId 欠落", { collectionId: undefined }, /retryPlaylist\.collectionId/],
+    ["playlistName 欠落", { playlistName: undefined }, /retryPlaylist\.playlistName/],
+  ] as const)(
+    "Given %s payload When retryPlaylist Then fail-loud し副作用を起こさない",
+    async (_label, override, message) => {
+      const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+      const retryHandler = handlers.get("retryPlaylist")!;
+
+      expect(() =>
+        retryHandler({
+          data: { ...retryPlaylistMessage({ submittedClipIds: ["clip-1"], expectedClipCount: 1 }).data, ...override },
+        }),
+      ).toThrow(message);
+      expect(progressMessages).toHaveLength(0);
+      expect(clearResumeStateMock).not.toHaveBeenCalled();
+      expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('content onMessage("retryPlaylist"): 正常完了', () => {
   beforeEach(() => {
     clearResumeStateMock.mockReset();
@@ -460,6 +490,41 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts[0].payload).toMatchObject({ body: { format: "mp3" } });
   });
+});
+
+describe('content onMessage("retryDownload"): payload contract', () => {
+  beforeEach(() => {
+    clearResumeStateMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["collectionId 欠落", { collectionId: undefined }, /retryDownload\.collectionId/],
+    ["playlistName 欠落", { playlistName: undefined }, /retryDownload\.playlistName/],
+  ] as const)(
+    "Given %s payload When retryDownload Then fail-loud し副作用を起こさない",
+    async (_label, override, message) => {
+      const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+      const retryHandler = handlers.get("retryDownload")!;
+
+      expect(() =>
+        retryHandler({
+          data: {
+            collectionId: "coll-1",
+            playlistName: "test-playlist",
+            submittedClipIds: ["clip-1"],
+            ...override,
+          },
+        }),
+      ).toThrow(message);
+      expect(progressMessages).toHaveLength(0);
+      expect(clearResumeStateMock).not.toHaveBeenCalled();
+      expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('content onMessage("retryDownload"): running ガード', () => {

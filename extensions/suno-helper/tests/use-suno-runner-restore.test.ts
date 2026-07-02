@@ -130,15 +130,4 @@ describe("buildRestoreState: failedIndex の surface (#872 要件3 二重化)", 
 
     expect(buildRestoreState(snap)?.collectionId).toBe("20260601-clm-theme-a-collection");
   });
-
-  it("Given 旧 content 由来で collectionId が無い snapshot When buildRestoreState Then 復元しない", () => {
-    const snap = {
-      entries: makePromptEntries(1),
-      itemStates: ["idle"],
-      isRunning: true,
-      progress: { phase: PHASE.INJECTING, total: 1 },
-    };
-
-    expect(buildRestoreState(snap as never)).toBeNull();
-  });
 });
