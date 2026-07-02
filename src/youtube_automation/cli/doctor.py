@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
@@ -18,7 +20,12 @@ import yaml
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.utils.image_provider.composition import normalize_reference_default
+from youtube_automation.utils.preflight_checks import (
+    check_descriptions_md_parseability,
+    check_suno_genre_line_char_limit,
+    check_thumbnail_skill_config,
+)
+from youtube_automation.utils.thumbnail_references import resolve_configured_benchmark_references
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -795,34 +802,41 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
             },
         )
 
-    # config/channel/ 存在 → load_config() でロード可能か検証。
-    # CHANNEL_DIR を一時的に上書きしてシングルトンを差し替え、終了後に必ず復元する。
     from youtube_automation.utils.config import load_config
-    from youtube_automation.utils.config import reset as reset_config
     from youtube_automation.utils.exceptions import ConfigError
+
+    with _temporary_channel_dir(channel_dir):
+        try:
+            load_config()
+            return CheckResult(
+                id="channel_config",
+                status="ok",
+                category=CHANNEL_CATEGORY,
+                message="config/channel/ ロード成功",
+            )
+        except ConfigError as e:
+            return CheckResult(
+                id="channel_config",
+                status="fail",
+                category=CHANNEL_CATEGORY,
+                message=f"config/channel/ ロード失敗: {e}",
+                next_action={
+                    "kind": "human",
+                    "instructions": "/channel-import を実行して設定を修復してください",
+                },
+            )
+
+
+@contextmanager
+def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
+    """Temporarily point config singleton consumers at ``channel_dir``."""
+    from youtube_automation.utils.config import reset as reset_config
 
     old_env = os.environ.get("CHANNEL_DIR")
     os.environ["CHANNEL_DIR"] = str(channel_dir)
     try:
         reset_config()
-        load_config()
-        return CheckResult(
-            id="channel_config",
-            status="ok",
-            category=CHANNEL_CATEGORY,
-            message="config/channel/ ロード成功",
-        )
-    except ConfigError as e:
-        return CheckResult(
-            id="channel_config",
-            status="fail",
-            category=CHANNEL_CATEGORY,
-            message=f"config/channel/ ロード失敗: {e}",
-            next_action={
-                "kind": "human",
-                "instructions": "/channel-import を実行して設定を修復してください",
-            },
-        )
+        yield
     finally:
         reset_config()
         if old_env is None:
@@ -1426,11 +1440,6 @@ def _benchmark_thumbnail_files(channel_dir: Path) -> list[Path]:
     return sorted(files)
 
 
-def _is_unresolved_placeholder(value: str) -> bool:
-    stripped = value.strip()
-    return stripped.startswith("{{") and stripped.endswith("}}")
-
-
 def _thumbnail_reference_images(
     channel_dir: Path,
     thumbnail: dict[str, object] | None = None,
@@ -1451,34 +1460,10 @@ def _thumbnail_reference_images(
     if not isinstance(reference_images, dict):
         return [], []
 
-    refs: list[Path] = []
-    invalid_refs: list[str] = []
-    benchmark_root = (channel_dir / "data" / "thumbnail_compare" / "benchmark").resolve(strict=False)
-    channel_root = channel_dir.resolve(strict=False)
-    for value in normalize_reference_default(reference_images.get("default")):
-        stripped = value.strip()
-        if not stripped:
-            continue
-        if _is_unresolved_placeholder(stripped):
-            invalid_refs.append(f"未解決 placeholder が残っている: {stripped}")
-            continue
-        ref_path = Path(stripped)
-        if ref_path.is_absolute():
-            invalid_refs.append(f"絶対パスは指定できない: {stripped}")
-            continue
-        resolved = (channel_dir / ref_path).resolve(strict=False)
-        try:
-            resolved.relative_to(channel_root)
-        except ValueError:
-            invalid_refs.append(f"channel_dir 外は指定できない: {stripped}")
-            continue
-        try:
-            resolved.relative_to(benchmark_root)
-        except ValueError:
-            invalid_refs.append(f"data/thumbnail_compare/benchmark/ 配下ではない: {stripped}")
-            continue
-        refs.append(resolved)
-    return refs, invalid_refs
+    resolved = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
+    invalid_refs = list(resolved.invalid_reasons)
+    invalid_refs.extend(f"未解決 placeholder が残っている: {value}" for value in resolved.placeholders)
+    return resolved.references, invalid_refs
 
 
 @dataclass(frozen=True)
@@ -1519,6 +1504,69 @@ def _suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) 
             if isinstance(preset, dict) and str(preset.get("genre_line") or "").strip():
                 return _MusicReadiness(True, errors)
     return _MusicReadiness(False, errors)
+
+
+def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
+    issues: list[str] = []
+
+    thumbnail_cfg, thumbnail_error = _load_skill_config_for_channel("thumbnail", channel_dir)
+    if thumbnail_error:
+        issues.append(thumbnail_error)
+    else:
+        issues.extend(check_thumbnail_skill_config(channel_dir, thumbnail_cfg))
+
+    suno_cfg, suno_error = _load_skill_config_for_channel("suno", channel_dir)
+    if suno_error:
+        issues.append(suno_error)
+    else:
+        msg = check_suno_genre_line_char_limit(suno_cfg)
+        if msg:
+            issues.append(msg)
+
+    for desc_md in _planning_descriptions_md_paths(channel_dir):
+        msg = check_descriptions_md_parseability(desc_md, allowed_root=channel_dir)
+        if msg:
+            issues.append(msg)
+
+    if not issues:
+        return CheckResult(
+            id="initial_setup_readiness",
+            status="ok",
+            category=DATA_CATEGORY,
+            message="初期セットアップの thumbnail / suno / descriptions.md 事前検査 OK",
+        )
+
+    return CheckResult(
+        id="initial_setup_readiness",
+        status="warn",
+        category=DATA_CATEGORY,
+        message="; ".join(issues),
+        next_action={
+            "kind": "human",
+            "instructions": (
+                "/channel-setup で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
+                "descriptions.md の parse 失敗は /video-description で再生成してください"
+            ),
+        },
+    )
+
+
+def _load_skill_config_for_channel(skill: str, target_channel_dir: Path) -> tuple[dict, str | None]:
+    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.utils.skill_config import load_skill_config
+
+    try:
+        with _temporary_channel_dir(target_channel_dir):
+            return load_skill_config(skill, use_cache=False), None
+    except (ConfigError, OSError, yaml.YAMLError) as exc:
+        return {}, f"config/skills/{skill}.yaml 読み込み失敗: {exc}"
+
+
+def _planning_descriptions_md_paths(channel_dir: Path) -> list[Path]:
+    planning_root = channel_dir / "collections" / "planning"
+    if not planning_root.is_dir():
+        return []
+    return sorted(planning_root.glob("*/20-documentation/descriptions.md"))
 
 
 def check_upload_ready(channel_dir: Path) -> CheckResult:
@@ -1636,6 +1684,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_analytics_report(channel_dir),
         check_benchmark_data(channel_dir),
         check_ttp_wf_new_readiness(channel_dir),
+        check_initial_setup_readiness(channel_dir),
         check_upload_ready(channel_dir),
     ]
 

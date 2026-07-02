@@ -139,6 +139,25 @@ def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> No
     )
 
 
+def _write_valid_descriptions_md(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "## タイトル案\n"
+        "```\n"
+        "Title\n"
+        "```\n"
+        "## Complete Collection 概要欄\n"
+        "```\n"
+        "Body\n"
+        "```\n"
+        "## タグ（YouTube タグ欄）\n"
+        "```\n"
+        "tag\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+
 def _write_complete_ttp_artifacts(base: Path) -> Path:
     _write_benchmark_channels(base)
     _write_ttp_readiness_files(base)
@@ -585,8 +604,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 22
-        assert len(payload["checks"]) == 22
+        # 6 bootstrap + 11 api + 1 channel + 4 data + 1 upload = 23
+        assert len(payload["checks"]) == 23
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -702,6 +721,174 @@ class TestCheckChannelConfig:
         doctor.check_channel_config(tmp_path)
 
         assert "CHANNEL_DIR" not in os.environ
+
+
+class TestCheckInitialSetupReadiness:
+    def test_warns_when_no_initial_setup_files_exist(self, tmp_path):
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.id == "initial_setup_readiness"
+        assert r.status == "warn"
+        assert r.category == "data"
+        assert "reference_images.default" in r.message
+        assert "composition_rules" in r.message
+
+    def test_channel_dir_env_restored_after_success(self, tmp_path, monkeypatch):
+        original = str(tmp_path / "original")
+        monkeypatch.setenv("CHANNEL_DIR", original)
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert os.environ.get("CHANNEL_DIR") == original
+
+    def test_channel_dir_env_deleted_when_originally_absent(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CHANNEL_DIR", raising=False)
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert "CHANNEL_DIR" not in os.environ
+
+    def test_warns_for_broken_skill_yaml(self, tmp_path):
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text("image_generation: [broken\n", encoding="utf-8")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "config/skills/thumbnail.yaml 読み込み失敗" in r.message
+
+    def test_channel_dir_env_restored_after_broken_skill_yaml(self, tmp_path, monkeypatch):
+        original = str(tmp_path / "original")
+        monkeypatch.setenv("CHANNEL_DIR", original)
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text("image_generation: [broken\n", encoding="utf-8")
+
+        doctor.check_initial_setup_readiness(tmp_path)
+
+        assert os.environ.get("CHANNEL_DIR") == original
+
+    def test_warns_for_thumbnail_suno_and_descriptions_md_issues(self, tmp_path):
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    generation_mode: single_step",
+                    "    reference_images:",
+                    "      default: []",
+                    "      path_base: channel_dir",
+                    "    composition_rules:",
+                    '      environment: "TBD"',
+                    '      character_size: "TBD"',
+                    '      character_pose: "TBD"',
+                    '      allowed_actions: "TBD"',
+                    '      ng_actions: "TBD"',
+                    '      background: "TBD"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (skills_dir / "suno.yaml").write_text(
+            'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, vinyl warmth, '
+            'ambient pads, brushed percussion, deep bass, tape saturation, late night study"\n',
+            encoding="utf-8",
+        )
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        desc.write_text(
+            "## タイトル案\n"
+            "<!-- annotation between heading and fence -->\n"
+            "```\n"
+            "Title\n"
+            "```\n"
+            "## Complete Collection 概要欄\n"
+            "```\n"
+            "Body\n"
+            "```\n"
+            "## タグ（YouTube タグ欄）\n"
+            "```\n"
+            "tag\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.default" in r.message
+        assert "composition_rules" in r.message
+        assert "genre_line" in r.message
+        assert "descriptions.md parse failed" in r.message
+        assert r.next_action is not None
+        assert "/channel-setup" in r.next_action["instructions"]
+        assert "/video-description" in r.next_action["instructions"]
+
+    def test_valid_initial_setup_is_ok(self, tmp_path):
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    generation_mode: single_step",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/alpha/alpha.jpg",
+                    "      path_base: channel_dir",
+                    "    composition_rules:",
+                    '      environment: "desk"',
+                    '      character_size: "medium"',
+                    '      character_pose: "sitting"',
+                    '      allowed_actions: "reading"',
+                    '      ng_actions: "no text"',
+                    '      background: "warm room"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz, soft piano"\n', encoding="utf-8")
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        _write_valid_descriptions_md(desc)
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_descriptions_md_symlink_escape_warns_without_reading_external_heading(self, tmp_path):
+        outside = tmp_path.parent / f"{tmp_path.name}-outside"
+        outside_desc = outside / "descriptions.md"
+        outside.mkdir()
+        outside_desc.write_text("## SECRET_HEADING\noutside\n", encoding="utf-8")
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        try:
+            desc.symlink_to(outside_desc)
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "channel_dir 外" in r.message
+        assert "SECRET_HEADING" not in r.message
+
+    def test_descriptions_md_invalid_utf8_warns_without_exception(self, tmp_path):
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        desc.write_bytes(b"\xff\xfe\xfa")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "descriptions.md を読み取れません" in r.message
 
 
 # ---------------------------------------------------------------------------
@@ -2279,11 +2466,11 @@ class TestUploadRequiredScopes:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_22_checks(self, monkeypatch, tmp_path):
-        """6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 22 件."""
+    def test_returns_23_checks(self, monkeypatch, tmp_path):
+        """6 bootstrap + 11 api + 1 channel + 4 data + 1 upload = 計 23 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 22
+        assert len(results) == 23
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -2305,6 +2492,7 @@ class TestRunAllChecksExtended:
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
         assert "ttp_wf_new_readiness" in ids
+        assert "initial_setup_readiness" in ids
         assert "upload_ready" in ids
 
     def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
@@ -2340,12 +2528,17 @@ class TestRunAllChecksExtended:
         bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
         assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
 
-    def test_data_checks_include_ttp_wf_new_readiness(self, monkeypatch, tmp_path):
-        """data カテゴリは analytics_report / benchmark_data / ttp_wf_new_readiness の 3 件."""
+    def test_data_checks_include_readiness_checks(self, monkeypatch, tmp_path):
+        """data カテゴリは analytics / benchmark と 2 種類の readiness check を含む."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         data_ids = {r.id for r in results if r.category == "data"}
-        assert data_ids == {"analytics_report", "benchmark_data", "ttp_wf_new_readiness"}
+        assert data_ids == {
+            "analytics_report",
+            "benchmark_data",
+            "ttp_wf_new_readiness",
+            "initial_setup_readiness",
+        }
 
     def test_upload_ready_is_only_upload_check(self, monkeypatch, tmp_path):
         """upload カテゴリは upload_ready の 1 件のみ."""
@@ -2389,6 +2582,7 @@ class TestRenderTableCategories:
         assert "analytics_report" in output
         assert "benchmark_data" in output
         assert "ttp_wf_new_readiness" in output
+        assert "initial_setup_readiness" in output
         assert "upload_ready" in output
 
     def test_category_sections_ordered_in_output(self, monkeypatch, tmp_path):
