@@ -73,8 +73,11 @@ _STALE_REFERENCE_EXCLUDED_DIRS = {
     "__pycache__",
     "node_modules",
 }
-_STALE_REFERENCE_EXCLUDED_TOP_LEVEL_DIRS = {"docs"}
 _STALE_REFERENCE_EXCLUDED_FILES = {"CHANGELOG.md"}
+_STALE_REFERENCE_EXCLUDED_PATH_PREFIXES = {
+    ("docs", "audits"),
+    ("docs", "superpowers"),
+}
 
 
 # ---------- 共通ヘルパー ----------
@@ -92,7 +95,7 @@ def _is_stale_reference_scan_target(path: Path) -> bool:
     relative = path.relative_to(_REPO_ROOT)
     if relative.name in _STALE_REFERENCE_EXCLUDED_FILES:
         return False
-    if relative.parts[0] in _STALE_REFERENCE_EXCLUDED_TOP_LEVEL_DIRS:
+    if any(relative.parts[: len(prefix)] == prefix for prefix in _STALE_REFERENCE_EXCLUDED_PATH_PREFIXES):
         return False
     return not any(part in _STALE_REFERENCE_EXCLUDED_DIRS for part in relative.parts)
 

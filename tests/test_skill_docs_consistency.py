@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -632,6 +633,88 @@ def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
         assert "data/thumbnail_compare/benchmark/" in text
         assert "config/skills/thumbnail.yaml::reference_images.default" in text
         assert "config/skills/thumbnail.yaml::reference_images.channel_branding" in text
+
+
+def test_channel_new_setting_push_mode_contract_is_documented() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    description = _frontmatter(".claude/skills/channel-new/SKILL.md")["description"]
+
+    for trigger in (
+        "設定反映",
+        "チャンネル設定更新",
+        "branding push",
+        "ローカライゼーション同期",
+        "meta.json を YouTube に反映",
+    ):
+        assert trigger in description
+
+    overview = channel_new.split("## Overview", 1)[1].split("## TTP 原則", 1)[0]
+    assert "設定 push モード" in overview
+    assert "本モードへ直行し、他モードの Step はスキップする" in overview
+
+    mode = channel_new.split("## 設定 push モード", 1)[1].split("## 障害時ガイダンス", 1)[0]
+    for command in (
+        "uv run yt-channel-settings diff",
+        "uv run yt-channel-settings push",
+        "uv run yt-channel-settings push --apply",
+        "uv run yt-channel-settings pull",
+        "uv run yt-channel-settings pull --apply",
+    ):
+        assert command in mode
+
+    for contract in (
+        "brandingSettings",
+        "別々の `channels().update()`",
+        "branding_settings cannot be used with other parts",
+        "localizations",
+        "`Required` 400",
+        "--no-localizations",
+        "youtube.force-ssl",
+    ):
+        assert contract in mode
+
+
+def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    step = channel_new.split("#### Step R2.1:", 1)[1].split("#### Step R2.2:", 1)[0]
+
+    assert "benchmark.channels[0]" + "` が指定" not in step
+    assert "承認済み TTP 対象" in step
+    assert "全件取得" in step
+    assert "1 回のコマンド" in step
+    assert '--channel-id "<benchmark.channels[0].id>"' in step
+    assert '--channel-id "<benchmark.channels[1].id>"' in step
+    assert "先頭 1 件だけで済ませない" in step
+
+
+def test_config_generation_rules_reference_existing_templates_and_step_ids() -> None:
+    rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
+
+    assert "config-template" + ".json" not in rules
+    assert "config-template/" in rules
+    assert "config-template/*.json" in rules
+    assert "config-template/skills/*.yaml" in rules
+    assert "Step R2.3" in rules
+    assert "Step " + "2.3" not in rules
+
+    for path in (
+        ".claude/skills/channel-new/references/config-template/meta.json",
+        ".claude/skills/channel-new/references/config-template/content.json",
+        ".claude/skills/channel-new/references/config-template/youtube.json",
+        ".claude/skills/channel-new/references/config-template/analytics.json",
+        ".claude/skills/channel-new/references/config-template/skills/suno.yaml",
+        ".claude/skills/channel-new/references/config-template/skills/thumbnail.yaml",
+    ):
+        assert (ROOT / path).is_file(), f"{path} が存在しない"
+
+
+def test_readme_skill_catalog_count_matches_features_doc() -> None:
+    readme = _read("README.md")
+    features = _read("docs/features.md")
+    match = re.search(r"全 \*\*(\d+) 個\*\*", features)
+    assert match is not None
+
+    assert f"全 {match.group(1)} skill" in readme
 
 
 def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_completion() -> None:

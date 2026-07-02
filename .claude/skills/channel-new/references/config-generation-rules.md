@@ -1,7 +1,7 @@
 # config/channel/*.json 生成ルール
 
 `/channel-new`（再生成モード）と `/channel-import` から共通参照するルール集。
-テンプレートは同ディレクトリの `config-template.json`。
+テンプレートは同ディレクトリの `config-template/` 配下（`config-template/*.json` と `config-template/skills/*.yaml`）。
 
 ## TTP（徹底的にパクる）路線時の優先順位
 
@@ -11,7 +11,7 @@
 2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
 3. `brandingSettings.channel.keywords` は数・順序・スペース入りクォート形式（`"chill beats"` 等）まで踏襲する
 4. `localizations` で多言語化されている言語セットを `config/localizations.json::supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
-5. TTP self-check（SKILL.md Step 2.3）に通してから提案する
+5. TTP self-check（SKILL.md Step R2.3）に通してから提案する
 
 「独自路線」「ハイブリッド路線」を選んでいる場合は競合スナップショットを必ず参照しつつも、転写率と差別化の比率を方向性ドキュメントに合わせる。
 
@@ -53,7 +53,7 @@
 | `perfect_for` | **4 項目**（例: Study & Focus, Relaxation, Creative Work, Sleep） |
 | `hashtags` | **5 個** 程度 |
 
-**TTP 路線**: チャンネル概要欄（`snippet.description` / `brandingSettings.channel.description`）の章立て・段落構造を `descriptions.opening` + `descriptions.sub_opening` + `descriptions.perfect_for` に転写する。welcome 行・絵文字・箇条書きセクションの並び順を変えないこと。「TTP できているか」は SKILL.md Step 2.3 の self-check で必ず検証する。
+**TTP 路線**: チャンネル概要欄（`snippet.description` / `brandingSettings.channel.description`）の章立て・段落構造を `descriptions.opening` + `descriptions.sub_opening` + `descriptions.perfect_for` に転写する。welcome 行・絵文字・箇条書きセクションの並び順を変えないこと。「TTP できているか」は SKILL.md Step R2.3 の self-check で必ず検証する。
 
 ### `title`
 
@@ -147,6 +147,7 @@ Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致
 
 ## 参考
 
-- `config-template.json` — 全フィールドの雛形
+- `config-template/*.json` — `config/channel/*.json` の責務別雛形
+- `config-template/skills/*.yaml` — `config/skills/*.yaml` のチャンネル固有上書き雛形
 - `/channel-new`（再生成モード） — 方向性ドキュメントから config 完成までの手順
 - `/channel-import` — 既存チャンネル取り込みの手順
