@@ -60,7 +60,7 @@ export function PatternList({ entries, itemStates, selectedEntries, onToggleEntr
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={selectedEntries[index] ?? itemState !== "done"}
+                checked={selectedEntries[index]!}
                 onChange={(event) => onToggleEntry(index, event.currentTarget.checked)}
                 aria-label={`entry ${index + 1}: ${entry.name}`}
                 className="h-4 w-4 shrink-0"

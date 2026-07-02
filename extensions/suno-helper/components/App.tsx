@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
-import { PatternList, reconcilePatternSelection } from "./PatternList";
+import { buildInitialPatternSelection, PatternList, reconcilePatternSelection } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -81,8 +81,19 @@ export function App() {
   }, [entries, itemStates]);
 
   const toggleEntrySelection = (index: number, checked: boolean): void => {
-    setSelectedEntries((selection) => selection.map((selected, i) => (i === index ? checked : selected)));
+    setSelectedEntries((selection) =>
+      reconcilePatternSelection({
+        selection,
+        previousEntries: previousEntriesRef.current,
+        previousItemStates: previousItemStatesRef.current,
+        entries,
+        itemStates,
+      }).map((selected, i) => (i === index ? checked : selected)),
+    );
   };
+
+  const resolvedSelectedEntries =
+    selectedEntries.length === entries.length ? selectedEntries : buildInitialPatternSelection(entries, itemStates);
 
   return (
     <div className="flex flex-col gap-3 p-3 text-gray-900">
@@ -311,7 +322,7 @@ export function App() {
       <PatternList
         entries={entries}
         itemStates={itemStates}
-        selectedEntries={selectedEntries}
+        selectedEntries={resolvedSelectedEntries}
         onToggleEntry={toggleEntrySelection}
       />
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -87,5 +87,37 @@ describe("PatternList checkbox UI", () => {
     });
 
     expect(onToggleEntry).toHaveBeenCalledWith(1, true);
+  });
+
+  it("controlled state 更新後に done entry の手動再チェックを DOM に反映する", () => {
+    const entries = makePromptEntries(3);
+    const itemStates: ItemState[] = ["idle", "done", "failed"];
+
+    function StatefulPatternList() {
+      const [selectedEntries, setSelectedEntries] = useState(() => buildInitialPatternSelection(entries, itemStates));
+      return createElement(PatternList, {
+        entries,
+        itemStates,
+        selectedEntries,
+        onToggleEntry: (index: number, checked: boolean) => {
+          setSelectedEntries((selection) => selection.map((selected, i) => (i === index ? checked : selected)));
+        },
+      });
+    }
+
+    act(() => {
+      root.render(createElement(StatefulPatternList));
+    });
+
+    let checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, false, true]);
+
+    act(() => {
+      checkboxes[1]!.click();
+    });
+
+    checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, true, true]);
+    expect(checkboxes[1]!.closest("li")?.className).toContain("line-through");
   });
 });
