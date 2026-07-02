@@ -17,8 +17,8 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 | `wxt.config.ts`             | Manifest V3 定義（最小権限 `storage` / `activeTab`、`host_permissions` は distrokid.com 限定） |
 | `entrypoints/background.ts` | service worker（ライフサイクルログのみ）                                                       |
 | `entrypoints/content.ts`    | `distrokid.com/new` での DOM 注入（テキスト + popup から受け取った File）                      |
-| `entrypoints/popup/`        | popup UI（React）。URL 入力 / データ取得 / レビュー / 一括入力 / 停止 / 進捗                   |
-| `components/`               | popup プレゼンテーション部品                                                                   |
+| `entrypoints/popup/`        | popup UI（React）。表示とイベント接続のみ（実行制御は `useDistrokidRunner`）                   |
+| `components/`               | popup プレゼンテーション部品 + `useDistrokidRunner`（fetch / 注入 / 停止 / 配信済み記録）      |
 | `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）                |
 | `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）                   |
 | `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                  |
