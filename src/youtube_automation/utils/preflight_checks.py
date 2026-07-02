@@ -16,8 +16,8 @@ from youtube_automation.utils.descriptions_md import (
     missing_descriptions_md_headings,
 )
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.placeholders import is_placeholder_value
 from youtube_automation.utils.thumbnail_references import (
-    is_placeholder_reference_value,
     plan_ttp_reference_assignments,
     resolve_configured_benchmark_references,
 )
@@ -54,7 +54,6 @@ THUMBNAIL_COMPOSITION_REQUIRED_KEYS = (
     "ng_actions",
     "background",
 )
-_PLACEHOLDER_VALUES = frozenset({"", "tbd", "todo", "fixme", "未定", "要確認", "n/a", "na", "..."})
 
 
 def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
@@ -80,8 +79,7 @@ def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | No
     genre_line = str(suno_cfg.get("genre_line") or "").strip()
     if not genre_line:
         return None
-    raw_limit = suno_cfg.get("style_char_limit", SUNO_DEFAULT_STYLE_CHAR_LIMIT)
-    limit = raw_limit if isinstance(raw_limit, int) and raw_limit > 0 else SUNO_DEFAULT_STYLE_CHAR_LIMIT
+    limit = SUNO_DEFAULT_STYLE_CHAR_LIMIT
     if len(genre_line) <= limit:
         return None
     return (
@@ -362,12 +360,7 @@ def _bool(value: object, *, default: bool) -> bool:
 
 
 def _is_placeholder(value: object) -> bool:
-    if value is None:
-        return True
-    if not isinstance(value, str):
-        return False
-    stripped = value.strip()
-    return stripped.casefold() in _PLACEHOLDER_VALUES or is_placeholder_reference_value(stripped)
+    return is_placeholder_value(value)
 
 
 def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:

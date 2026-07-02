@@ -242,14 +242,14 @@ def kebab_to_title(dirname: str) -> str:
 def resolve_asset_path(collection_dir: Path, relpath: str) -> Path | None:
     """assets 相対パスをコレクション配下の実体パスへ解決する.
 
-    トラバーサル（`..` でコレクション外へ脱出）・絶対パス・不在ファイルは None。
+    トラバーサル（`..` でコレクション外へ脱出）・絶対パス・不正 path・不在ファイルは None。
     """
-    root = Path(collection_dir).resolve()
-    candidate = (root / relpath).resolve()
     try:
+        root = Path(collection_dir).resolve()
+        candidate = (root / relpath).resolve()
         candidate.relative_to(root)
-    except ValueError:
-        return None
-    if not candidate.is_file():
+        if not candidate.is_file():
+            return None
+    except (OSError, ValueError):
         return None
     return candidate

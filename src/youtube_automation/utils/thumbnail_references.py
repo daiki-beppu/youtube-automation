@@ -8,8 +8,7 @@ from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import normalize_reference_default
-
-PLACEHOLDER_REFERENCE_VALUES = frozenset({"", "tbd", "todo", "fixme", "未定", "要確認", "n/a", "na", "..."})
+from youtube_automation.utils.placeholders import is_placeholder_value
 
 
 @dataclass(frozen=True)
@@ -20,14 +19,7 @@ class BenchmarkReferenceResolution:
 
 
 def is_placeholder_reference_value(value: object) -> bool:
-    if value is None:
-        return True
-    if not isinstance(value, str):
-        return False
-    stripped = value.strip()
-    return stripped.casefold() in PLACEHOLDER_REFERENCE_VALUES or (
-        stripped.startswith("{{") and stripped.endswith("}}")
-    )
+    return is_placeholder_value(value)
 
 
 def resolve_configured_benchmark_references(channel_dir: Path, default_value: object) -> BenchmarkReferenceResolution:
@@ -40,7 +32,7 @@ def resolve_configured_benchmark_references(channel_dir: Path, default_value: ob
 
     for value in normalize_reference_default(default_value):  # type: ignore[arg-type]
         stripped = value.strip()
-        if is_placeholder_reference_value(stripped):
+        if is_placeholder_value(stripped):
             placeholders.append(stripped)
             continue
         ref_path = Path(stripped)

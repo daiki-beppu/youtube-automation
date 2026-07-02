@@ -75,6 +75,18 @@ class _WfNewInputMode:
     stale_report: bool
 
 
+@dataclass(frozen=True)
+class _MappingRead:
+    data: dict[str, object]
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class _BenchmarkChannelsRead:
+    channels: list[dict[str, object]]
+    errors: list[str]
+
+
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
@@ -934,31 +946,474 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
     )
 
 
-def _read_json_dict(path: Path) -> dict:
+def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
+    analytics_path = channel_dir / "config" / "channel" / "analytics.json"
+    if not analytics_path.is_file():
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="config/channel/analytics.json 未生成。/wf-new 接続前に承認済み TTP 対象の保存が必要",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 4 で config を生成し、Step 5 以降で承認済み TTP 対象を "
+                    "config/channel/analytics.json::benchmark.channels に保存してください"
+                ),
+            },
+        )
+
+    analytics_read = _read_json_mapping(analytics_path)
+    if analytics_read.error:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="TTP 完了条件が未充足: " + analytics_read.error,
+            next_action={
+                "kind": "human",
+                "instructions": "config/channel/analytics.json を修正してから yt-doctor を再実行してください",
+            },
+        )
+
+    analytics = analytics_read.data
+    channels_read = _benchmark_channels(analytics)
+    channels = channels_read.channels
+    if not channels:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 1/5 に戻り、TTP 対象を確認して "
+                    "config/channel/analytics.json::benchmark.channels に承認済み対象を保存してください"
+                ),
+            },
+        )
+
+    missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
+    missing.extend(channels_read.errors)
+    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions))
+    if missing:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: " + "; ".join(missing),
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 5-9 と /channel-setup Step 3.5 の不足項目を解消してください。"
+                    "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
+                    "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
+                    "`ttp_wf_new_readiness` が ok になることを確認してください"
+                ),
+            },
+        )
+
+    return CheckResult(
+        id="ttp_wf_new_readiness",
+        status="ok",
+        category=DATA_CATEGORY,
+        message=(
+            "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
+            "/wf-new 接続可能（/channel-setup 完了相当）"
+        ),
+    )
+
+
+def _read_json_mapping(path: Path) -> _MappingRead:
+    if not path.exists():
+        return _MappingRead({})
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
-    return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} が JSON として不正 ({e.msg})")
+    except OSError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} を読み込めません ({e})")
+    if not isinstance(data, dict):
+        return _MappingRead({}, f"{_diagnostic_path(path)} のトップレベルが object ではありません")
+    return _MappingRead(data)
 
 
-def _read_yaml_dict(path: Path) -> dict:
+def _read_yaml_mapping(path: Path) -> _MappingRead:
+    if not path.exists():
+        return _MappingRead({})
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (yaml.YAMLError, OSError):
-        return {}
-    return data if isinstance(data, dict) else {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} が YAML として不正 ({e})")
+    except OSError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} を読み込めません ({e})")
+    if not isinstance(data, dict):
+        return _MappingRead({}, f"{_diagnostic_path(path)} のトップレベルが object ではありません")
+    return _MappingRead(data)
 
 
-def _benchmark_channels(channel_dir: Path) -> list[dict]:
-    analytics = _read_json_dict(channel_dir / "config" / "channel" / "analytics.json")
+def _diagnostic_path(path: Path) -> str:
+    return path.as_posix()
+
+
+def _benchmark_channels(analytics: dict[str, object]) -> _BenchmarkChannelsRead:
     benchmark = analytics.get("benchmark")
     if not isinstance(benchmark, dict):
-        return []
+        return _BenchmarkChannelsRead([], [])
     channels = benchmark.get("channels")
     if not isinstance(channels, list):
-        return []
-    return [channel for channel in channels if isinstance(channel, dict)]
+        return _BenchmarkChannelsRead([], [])
+    valid_channels: list[dict[str, object]] = []
+    errors: list[str] = []
+    for index, channel in enumerate(channels):
+        if isinstance(channel, dict):
+            valid_channels.append(channel)
+        else:
+            errors.append(f"benchmark.channels entry #{index + 1} が object ではありません")
+    return _BenchmarkChannelsRead(valid_channels, errors)
+
+
+def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
+    missing: list[str] = []
+    approved_exceptions: set[str] = set()
+
+    channels_without_relationship = [
+        _channel_diagnostic_label(index, channel)
+        for index, channel in enumerate(channels)
+        if _is_placeholder_relationship(str(channel.get("relationship") or ""))
+    ]
+    if channels_without_relationship:
+        missing.append(
+            "benchmark.channels の relationship 未設定または placeholder ("
+            + ", ".join(channels_without_relationship)
+            + ")"
+        )
+
+    seed_confirmation = channel_dir / "docs" / "channel" / "ttp-seed-confirmation.md"
+    if not seed_confirmation.is_file():
+        missing.append("docs/channel/ttp-seed-confirmation.md 未作成")
+    else:
+        seed_text = seed_confirmation.read_text(encoding="utf-8", errors="replace")
+        seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text, channels)
+        missing.extend(seed_missing)
+
+    missing.extend(_missing_branding_snapshot_items(channel_dir, channels))
+
+    thumbnail_read = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
+    if thumbnail_read.error:
+        missing.append(thumbnail_read.error)
+    if "thumbnail" not in approved_exceptions:
+        thumbnail_missing = _thumbnail_ttp_reference_missing_reason(channel_dir, thumbnail_read.data)
+        if thumbnail_missing:
+            missing.append(thumbnail_missing)
+
+    youtube_read = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
+    if youtube_read.error:
+        missing.append(youtube_read.error)
+    youtube = youtube_read.data
+    if (
+        youtube.get("music_engine", "suno") == "suno"
+        and not (music_readiness := _suno_music_readiness(channel_dir, channels)).ready
+        and "music" not in approved_exceptions
+    ):
+        missing.extend(music_readiness.errors)
+        missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
+
+    return missing, approved_exceptions
+
+
+def _missing_channel_setup_benchmark_items(channel_dir: Path, approved_exceptions: set[str]) -> list[str]:
+    missing: list[str] = []
+    if not _matching_files(channel_dir / "data", "benchmark_*.json"):
+        missing.append("data/benchmark_*.json が無い")
+    if not _benchmark_report_files(channel_dir):
+        missing.append("docs/benchmarks/*.md が無い")
+    if "thumbnail" not in approved_exceptions and not _benchmark_thumbnail_files(channel_dir):
+        missing.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
+    return missing
+
+
+_SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("source", ("source", "ソース", "url", "handle", "channel id", "チャンネルid")),
+    ("seed fetch 要約", ("seed fetch", "fetch", "取得要約", "収集要約")),
+    ("承認 / 不採用判断", ("承認 / 不採用判断", "承認判断", "不採用判断", "判断:", "approved:", "rejected:")),
+    ("転写したい要素", ("転写したい要素", "転写", "要素:")),
+    ("relationship", ("relationship", "関係性")),
+    ("未反映項目", ("未反映", "未適用", "none", "なし")),
+)
+
+
+_PLACEHOLDER_RELATIONSHIPS = {"", "seed", "default", "unknown", "none", "n/a", "未設定", "なし"}
+
+
+def _validate_ttp_seed_confirmation(seed_text: str, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
+    missing: list[str] = []
+    sections = _seed_confirmation_sections(seed_text)
+
+    for index, channel in enumerate(channels):
+        label = _channel_diagnostic_label(index, channel)
+        identifiers = _channel_seed_identifiers(channel)
+        if not identifiers:
+            missing.append(f"ttp-seed-confirmation.md 照合用の id / slug が benchmark.channels に未設定 ({label})")
+            continue
+
+        candidate_sections = _sections_for_identifiers(sections, identifiers)
+        if not candidate_sections:
+            missing.append(f"ttp-seed-confirmation.md に承認済み TTP 対象の識別子が未記録 ({label})")
+            continue
+
+        candidate_text = "\n".join(candidate_sections)
+        for marker_label, markers in _SEED_CONFIRMATION_MARKERS:
+            if not _contains_any_marker(candidate_text, markers):
+                missing.append(f"ttp-seed-confirmation.md に {marker_label} が未記録 ({label})")
+        if not _has_branding_transfer_policy(candidate_text):
+            missing.append(f"ttp-seed-confirmation.md に branding snapshot 参照または転写方針が未記録 ({label})")
+
+        relationship = str(channel.get("relationship") or "").strip()
+        if (
+            relationship
+            and not _is_placeholder_relationship(relationship)
+            and relationship.lower() not in candidate_text.lower()
+        ):
+            missing.append(f"ttp-seed-confirmation.md に承認済み TTP 対象の relationship が未記録 ({label})")
+
+    unapproved_skip_lines = [
+        line.strip()
+        for line in seed_text.splitlines()
+        if _line_mentions_ttp_skip(line) and not _line_mentions_approved_exception(line)
+    ]
+    if unapproved_skip_lines:
+        missing.append("ttp-seed-confirmation.md に未承認の TTP 未反映 / スキップ項目あり")
+
+    approved_exceptions, exception_missing = _approved_ttp_exceptions(seed_text)
+    missing.extend(exception_missing)
+    return missing, approved_exceptions
+
+
+def _seed_confirmation_sections(seed_text: str) -> list[str]:
+    sections: list[str] = []
+    current: list[str] = []
+    for line in seed_text.splitlines():
+        stripped = line.strip()
+        starts_new_heading = stripped.startswith("#") and current
+        starts_new_list_channel = bool(
+            current and re.match(r"^[-*]\s+(?:channel|チャンネル|候補)\b", stripped, re.IGNORECASE)
+        )
+        if not stripped or starts_new_heading or starts_new_list_channel:
+            if current:
+                sections.append("\n".join(current))
+                current = []
+            if not stripped:
+                continue
+        current.append(line)
+    if current:
+        sections.append("\n".join(current))
+    return sections or [seed_text]
+
+
+def _sections_for_identifiers(sections: list[str], identifiers: list[str]) -> list[str]:
+    return [
+        section
+        for section in sections
+        if any(_section_mentions_identifier(section, identifier) for identifier in identifiers)
+    ]
+
+
+def _section_mentions_identifier(section: str, identifier: str) -> bool:
+    pattern = re.compile(rf"(?<![A-Za-z0-9_-]){re.escape(identifier)}(?![A-Za-z0-9_-])", re.IGNORECASE)
+    identifier_line_markers = ("source", "ソース", "url", "handle", "channel", "チャンネル", "id", "slug")
+    return any(
+        any(marker in line.lower() for marker in identifier_line_markers) and pattern.search(line)
+        for line in section.splitlines()
+    )
+
+
+def _is_placeholder_relationship(relationship: str) -> bool:
+    return relationship.strip().lower() in _PLACEHOLDER_RELATIONSHIPS
+
+
+def _channel_seed_identifiers(channel: dict[str, object]) -> list[str]:
+    return [value for value in (str(channel.get("id") or "").strip(), str(channel.get("slug") or "").strip()) if value]
+
+
+def _contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
+    lower_text = text.lower()
+    return any(marker.lower() in lower_text for marker in markers)
+
+
+def _has_branding_transfer_policy(text: str) -> bool:
+    lower_text = text.lower()
+    if "competitor-branding-snapshot.json" in lower_text or "branding snapshot" in lower_text:
+        return True
+    policy_markers = ("description", "keywords", "localizations")
+    transfer_markers = ("転写", "方針", "参照", "構造", "抽出")
+    return any(
+        any(policy_marker in line.lower() for policy_marker in policy_markers)
+        and any(transfer_marker in line for transfer_marker in transfer_markers)
+        for line in text.splitlines()
+    )
+
+
+def _line_mentions_ttp_skip(line: str) -> bool:
+    lower_line = line.lower()
+    if "スキップ" in line or "skip" in lower_line:
+        return True
+    if "未反映" not in line and "未適用" not in line:
+        return False
+    return not _line_declares_no_unapplied_items(line)
+
+
+def _line_declares_no_unapplied_items(line: str) -> bool:
+    lower_line = line.lower()
+    return ("なし" in line or "none" in lower_line) and "ただし" not in line and "but" not in lower_line
+
+
+def _line_mentions_approved_exception(line: str) -> bool:
+    lower_line = line.lower()
+    return "ユーザー承認済み例外" in line or "approved exception" in lower_line
+
+
+def _approved_ttp_exceptions(seed_text: str) -> tuple[set[str], list[str]]:
+    exceptions: set[str] = set()
+    missing: list[str] = []
+    for line in seed_text.splitlines():
+        if not _line_mentions_approved_exception(line):
+            continue
+        lower_line = line.lower()
+        categories: set[str] = set()
+        if "thumbnail" in lower_line or "サムネ" in line:
+            categories.add("thumbnail")
+        if "music" in lower_line or "suno" in lower_line or "曲構造" in line or "音楽" in line:
+            categories.add("music")
+
+        if not categories:
+            missing.append("ユーザー承認済み例外に対象 category が未記録")
+            continue
+        if not _line_mentions_ttp_skip(line):
+            missing.append("ユーザー承認済み例外に具体的な未反映 / スキップ内容が未記録")
+            continue
+        if not _approved_exception_has_reason(line):
+            missing.append("ユーザー承認済み例外に進める理由が未記録")
+            continue
+        if "thumbnail" in categories and "/thumbnail" not in lower_line:
+            missing.append("thumbnail のユーザー承認済み例外に後続 /thumbnail が未記録")
+            continue
+        if "music" in categories and "/suno" not in lower_line:
+            missing.append("music のユーザー承認済み例外に後続 /suno が未記録")
+            continue
+
+        exceptions.update(categories)
+    return exceptions, missing
+
+
+def _approved_exception_has_reason(line: str) -> bool:
+    lower_line = line.lower()
+    return "ため" in line or "理由" in line or "because" in lower_line or "進める" in line
+
+
+def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
+    branding_read = _read_json_mapping(channel_dir / "docs" / "channel" / "competitor-branding-snapshot.json")
+    if branding_read.error:
+        return [branding_read.error]
+
+    branding_snapshot = branding_read.data
+    snapshot_items = branding_snapshot.get("items")
+    if branding_snapshot.get("untrusted_data") is not True:
+        return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
+    if not isinstance(snapshot_items, list):
+        return ["docs/channel/competitor-branding-snapshot.json の items が list ではありません"]
+    if not snapshot_items:
+        return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
+
+    missing: list[str] = []
+    if any(not isinstance(item, dict) for item in snapshot_items):
+        missing.append("competitor-branding-snapshot.json の items に object ではない要素があります")
+    approved_ids = _approved_ttp_channel_ids(channels)
+    snapshot_by_id = {
+        str(item.get("id")): item
+        for item in snapshot_items
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+
+    channels_without_id = [
+        _channel_diagnostic_label(index, channel)
+        for index, channel in enumerate(channels)
+        if not str(channel.get("id") or "").strip()
+    ]
+    if channels_without_id:
+        missing.append(f"benchmark.channels の id 未設定 ({', '.join(channels_without_id)})")
+
+    missing_ids = [channel_id for channel_id in approved_ids if channel_id not in snapshot_by_id]
+    if missing_ids:
+        missing.append(
+            "competitor-branding-snapshot.json に承認済み TTP 対象の snapshot 不足 (" + ", ".join(missing_ids) + ")"
+        )
+
+    for channel_id in approved_ids:
+        item = snapshot_by_id.get(channel_id)
+        if item is None:
+            continue
+        missing_fields = [
+            field for field in ("snippet", "brandingSettings", "localizations") if not isinstance(item.get(field), dict)
+        ]
+        if missing_fields:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に必須 field 不足 ({', '.join(missing_fields)})"
+            )
+
+    return missing
+
+
+def _approved_ttp_channel_ids(channels: list[dict[str, object]]) -> list[str]:
+    return [channel_id for channel in channels if (channel_id := str(channel.get("id") or "").strip())]
+
+
+def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:
+    return [slug for channel in channels if (slug := str(channel.get("slug") or "").strip())]
+
+
+def _video_analysis_slug_dir(video_analysis_dir: Path, slug: str) -> tuple[Path | None, str | None]:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", slug):
+        return None, f"benchmark.channels の slug が不正 ({_safe_diagnostic_value(slug)})"
+    root = video_analysis_dir.resolve(strict=False)
+    candidate = (video_analysis_dir / slug).resolve(strict=False)
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None, f"data/video_analysis の channel_dir 外参照を拒否 ({_safe_diagnostic_value(slug)})"
+    return candidate, None
+
+
+def _channel_diagnostic_label(index: int, channel: dict[str, object]) -> str:
+    parts = [f"entry #{index + 1}"]
+    if channel_id := _safe_diagnostic_value(channel.get("id")):
+        parts.append(f"id={channel_id}")
+    if slug := _safe_diagnostic_value(channel.get("slug")):
+        parts.append(f"slug={slug}")
+    return " ".join(parts)
+
+
+def _safe_diagnostic_value(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return re.sub(r"[^A-Za-z0-9_.:@/-]", "_", text)[:80]
+
+
+def _thumbnail_ttp_reference_missing_reason(channel_dir: Path, thumbnail: dict[str, object]) -> str | None:
+    refs, invalid_refs = _thumbnail_reference_images(channel_dir, thumbnail)
+    if invalid_refs:
+        sample = ", ".join(invalid_refs[:3])
+        return f"reference_images.default の参照パスが不正: {sample}"
+    if not refs:
+        return "thumbnail reference_images.default 未設定 / reference_images.default が空または未転記"
+
+    missing_refs = [str(path) for path in refs if not path.is_file()]
+    if missing_refs:
+        sample = ", ".join(missing_refs[:3])
+        return f"reference_images.default の参照先が見つからない / 参照画像が存在しない: {sample}"
+    return None
 
 
 def _benchmark_report_files(channel_dir: Path) -> list[Path]:
@@ -976,9 +1431,17 @@ def _benchmark_thumbnail_files(channel_dir: Path) -> list[Path]:
     return sorted(files)
 
 
-def _thumbnail_reference_images(channel_dir: Path) -> tuple[list[Path], list[str]]:
-    thumbnail_config = _read_yaml_dict(channel_dir / "config" / "skills" / "thumbnail.yaml")
-    image_generation = thumbnail_config.get("image_generation")
+def _thumbnail_reference_images(
+    channel_dir: Path,
+    thumbnail: dict[str, object] | None = None,
+) -> tuple[list[Path], list[str]]:
+    if thumbnail is None:
+        thumbnail_read = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml")
+        if thumbnail_read.error:
+            return [], [thumbnail_read.error]
+        thumbnail = thumbnail_read.data
+
+    image_generation = thumbnail.get("image_generation")
     if not isinstance(image_generation, dict):
         return [], []
     gemini = image_generation.get("gemini")
@@ -994,59 +1457,44 @@ def _thumbnail_reference_images(channel_dir: Path) -> tuple[list[Path], list[str
     return resolved.references, invalid_refs
 
 
-def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
-    """承認済み TTP 対象から初回 /wf-new へ進む前の channel-setup 欠落を検出する。"""
-    if not _benchmark_channels(channel_dir):
-        return CheckResult(
-            id="ttp_wf_new_readiness",
-            status="ok",
-            category=DATA_CATEGORY,
-            message="承認済み TTP benchmark.channels 未設定。/wf-new は minimal mode の範囲で開始可能",
-        )
+@dataclass(frozen=True)
+class _MusicReadiness:
+    ready: bool
+    errors: list[str]
 
-    issues: list[str] = []
-    if not _matching_files(channel_dir / "data", "benchmark_*.json"):
-        issues.append("data/benchmark_*.json が無い")
-    if not _benchmark_report_files(channel_dir):
-        issues.append("docs/benchmarks/*.md が無い")
-    if not _benchmark_thumbnail_files(channel_dir):
-        issues.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
 
-    refs, invalid_refs = _thumbnail_reference_images(channel_dir)
-    if not refs and not invalid_refs:
-        issues.append("config/skills/thumbnail.yaml の reference_images.default が空または未転記")
-    if invalid_refs:
-        sample = ", ".join(invalid_refs[:3])
-        issues.append(f"reference_images.default の参照パスが不正: {sample}")
-    if refs:
-        missing_refs = [str(path) for path in refs if not path.is_file()]
-        if missing_refs:
-            sample = ", ".join(missing_refs[:3])
-            issues.append(f"reference_images.default の参照先が見つからない: {sample}")
+def _suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) -> _MusicReadiness:
+    errors: list[str] = []
+    suno_read = _read_yaml_mapping(channel_dir / "config" / "skills" / "suno.yaml")
+    if suno_read.error:
+        errors.append(suno_read.error)
+    suno = suno_read.data
+    if str(suno.get("genre_line") or "").strip():
+        return _MusicReadiness(True, errors)
 
-    if not issues:
-        return CheckResult(
-            id="ttp_wf_new_readiness",
-            status="ok",
-            category=DATA_CATEGORY,
-            message="TTP benchmark docs / thumbnail refs は /channel-setup 完了相当",
-        )
-
-    return CheckResult(
-        id="ttp_wf_new_readiness",
-        status="warn",
-        category=DATA_CATEGORY,
-        message="/channel-setup benchmark 反映未完了の可能性: " + "; ".join(issues),
-        next_action={
-            "kind": "human",
-            "instructions": (
-                "`/channel-setup` の Step 3.5（TTP 参照画像の自動 download と "
-                "config/skills/thumbnail.yaml への転記）を完了してください。"
-                "必要に応じて `/channel-setup` を再実行し、最後に `uv run yt-doctor --json` で "
-                "`ttp_wf_new_readiness` が ok になることを確認してください。"
-            ),
-        },
-    )
+    video_analysis_dir = channel_dir / "data" / "video_analysis"
+    slug_dirs: list[Path] = []
+    for slug in _approved_ttp_channel_slugs(channels):
+        slug_dir, slug_error = _video_analysis_slug_dir(video_analysis_dir, slug)
+        if slug_error:
+            errors.append(slug_error)
+            continue
+        if slug_dir is None:
+            continue
+        slug_dirs.append(slug_dir)
+    if not video_analysis_dir.is_dir():
+        return _MusicReadiness(False, errors)
+    for slug_dir in slug_dirs:
+        for path in slug_dir.glob("*.json"):
+            payload_read = _read_json_mapping(path)
+            if payload_read.error:
+                errors.append(payload_read.error)
+                continue
+            payload = payload_read.data
+            preset = payload.get("suno_preset")
+            if isinstance(preset, dict) and str(preset.get("genre_line") or "").strip():
+                return _MusicReadiness(True, errors)
+    return _MusicReadiness(False, errors)
 
 
 def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
