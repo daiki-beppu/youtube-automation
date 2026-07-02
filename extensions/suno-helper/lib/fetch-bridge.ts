@@ -68,6 +68,21 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
+function parseObservedClip(item: unknown): Pick<ObservedClip, "id" | "status"> | null {
+  if (
+    typeof item === "object" &&
+    item !== null &&
+    typeof (item as { id?: unknown }).id === "string" &&
+    typeof (item as { status?: unknown }).status === "string"
+  ) {
+    return {
+      id: (item as { id: string }).id,
+      status: (item as { status: string }).status,
+    };
+  }
+  return null;
+}
+
 /** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
@@ -75,16 +90,9 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
   }
   const clips: ObservedClip[] = [];
   for (const item of value) {
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as { id?: unknown }).id === "string" &&
-      typeof (item as { status?: unknown }).status === "string"
-    ) {
-      clips.push({
-        id: (item as { id: string }).id,
-        status: (item as { status: string }).status,
-      });
+    const clip = parseObservedClip(item);
+    if (clip) {
+      clips.push(clip);
     }
   }
   return clips.length > 0 ? clips : null;
@@ -97,16 +105,11 @@ function parseFeedClipArray(value: unknown): ObservedClip[] | null {
   }
   const clips: ObservedClip[] = [];
   for (const item of value) {
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as { id?: unknown }).id === "string" &&
-      typeof (item as { status?: unknown }).status === "string"
-    ) {
+    const clip = parseObservedClip(item);
+    if (clip) {
       const duration = (item as { metadata?: { duration?: unknown } }).metadata?.duration;
       clips.push({
-        id: (item as { id: string }).id,
-        status: (item as { status: string }).status,
+        ...clip,
         ...(typeof duration === "number" && Number.isFinite(duration) ? { duration } : {}),
       });
     }
