@@ -38,6 +38,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
+    _resolve_capture_root,
     build_collections_index,
     create_server,
     find_collection_dirs,
@@ -144,6 +145,56 @@ def test_resolve_prompts_path_missing_path_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# _resolve_capture_root: DistroKid capture root の CLI/env 優先順位
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_capture_root_returns_none_without_arg_or_env(monkeypatch):
+    """Given CLI 引数も env もない
+    When capture root を解決する
+    Then DistroKid capture は無効のまま None を返す。
+    """
+    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.delenv("PLAYLIST_CAPTURE_PREFIX", raising=False)
+
+    assert _resolve_capture_root(None) is None
+
+
+def test_resolve_capture_root_prefers_cli_arg_over_env(tmp_path, monkeypatch):
+    """Given CLI 引数と env の両方がある
+    When capture root を解決する
+    Then CLI 引数を優先する。
+    """
+    env_root = tmp_path / "env"
+    arg_root = tmp_path / "arg"
+    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+
+    assert _resolve_capture_root(str(arg_root)) == arg_root
+
+
+def test_resolve_capture_root_uses_env_fallback(tmp_path, monkeypatch):
+    """Given CLI 引数がなく env がある
+    When capture root を解決する
+    Then env の root を返す。
+    """
+    env_root = tmp_path / "env"
+    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+
+    assert _resolve_capture_root(None) == env_root
+
+
+def test_resolve_capture_root_ignores_legacy_playlist_capture_prefix(tmp_path, monkeypatch):
+    """Given 旧 Suno playlist capture prefix だけがある
+    When capture root を解決する
+    Then DistroKid capture root は有効化しない。
+    """
+    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.setenv("PLAYLIST_CAPTURE_PREFIX", str(tmp_path / "legacy"))
+
+    assert _resolve_capture_root(None) is None
+
+
+# ---------------------------------------------------------------------------
 # is_origin_allowed: CORS 判定
 #   - allow_origin=None  : chrome-extension:// scheme + helper サイト origin を許可（#896）
 #   - allow_origin 指定時 : write/auth 用にその値との完全一致のみ許可（lock 維持・要件2）
@@ -202,7 +253,7 @@ def serve(tmp_path):
     """
     started = []
 
-    def _start(entries, allow_origin=None):
+    def _start(entries, allow_origin=None, capture_root=None):
         json_path = tmp_path / "suno-prompts.json"
         json_path.write_text(json.dumps(entries), encoding="utf-8")
         server = create_server(
@@ -211,6 +262,7 @@ def serve(tmp_path):
             prompts_path=json_path,
             collection_dir=tmp_path,
             distrokid=None,
+            capture_root=capture_root,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -238,6 +290,34 @@ def test_get_suno_prompts_json_returns_array_body(serve):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
+
+
+def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):
+    """Given single mode サーバー
+    When 旧 POST /suno/playlists に送信する
+    Then endpoint は存在せず、旧 suno-playlists.json も作らない（#1261）。
+    """
+    capture_root = tmp_path / "channel"
+    base = serve(
+        [{"name": "A", "style": "s", "lyrics": ""}],
+        allow_origin="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        capture_root=capture_root,
+    )
+    req = urllib.request.Request(
+        f"{base}/suno/playlists",
+        data=b"[]",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Origin": "chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        },
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
+    assert not (capture_root / "config" / "suno-playlists.json").exists()
 
 
 def test_get_suno_prompts_json_preserves_duration_filter_envelope(serve):
@@ -547,6 +627,23 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
 
     assert exc_info.value.code == 0
     assert "usage" in capsys.readouterr().out.lower()
+
+
+def test_removed_playlist_capture_prefix_cli_option_exits_with_usage_error(monkeypatch, capsys, tmp_path):
+    """旧 --playlist-capture-prefix は argparse 入口で拒否する。"""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["yt-collection-serve", str(tmp_path), "--playlist-capture-prefix", "abc"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "unrecognized arguments" in stderr
+    assert "--playlist-capture-prefix" in stderr
 
 
 # ---------------------------------------------------------------------------
@@ -907,7 +1004,7 @@ def serve_dir(tmp_path):
     """
     started = []
 
-    def _start(planning: Path, allow_origin=None, playlist_capture=None):
+    def _start(planning: Path, allow_origin=None, capture_root=None):
         server = create_server(
             0,
             allow_origin,
@@ -915,7 +1012,7 @@ def serve_dir(tmp_path):
             collection_dir=None,
             distrokid=None,
             collections_root=planning,
-            playlist_capture=playlist_capture,
+            capture_root=capture_root,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -964,7 +1061,7 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
 
 
 def test_get_collections_does_not_include_playlist_name_when_capture_enabled(serve_dir, tmp_path):
-    """Given capture prefix 付き dir mode サーバー
+    """Given capture root 付き dir mode サーバー
     When `GET /collections`
     Then playlist_name は返さない（拡張側で collection id/name から導出する）。
     """
@@ -977,7 +1074,7 @@ def test_get_collections_does_not_include_playlist_name_when_capture_enabled(ser
         entries=[{"name": "A", "style": "s", "lyrics": ""}],
         theme="wah-groove",
     )
-    base = serve_dir(planning, playlist_capture=(channel_root, "soulful-grooves"))
+    base = serve_dir(planning, capture_root=channel_root)
 
     with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
         assert resp.status == 200
@@ -986,6 +1083,34 @@ def test_get_collections_does_not_include_playlist_name_when_capture_enabled(ser
     assert "playlist_name" not in body[0]
     assert body[0]["channel"] == "soulful-grooves"
     assert body[0]["theme"] == "wah-groove"
+
+
+def test_post_suno_playlists_returns_404_after_capture_endpoint_removal(serve_dir, tmp_path):
+    """Given dir mode サーバー
+    When 旧 POST /suno/playlists に送信する
+    Then endpoint は存在せず 404 を返す（#1261）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    base = serve_dir(
+        planning,
+        allow_origin="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        capture_root=tmp_path,
+    )
+    req = urllib.request.Request(
+        f"{base}/suno/playlists",
+        data=b"[]",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Origin": "chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        },
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 404
 
 
 def test_dir_mode_get_version_is_available_before_collection_routing(serve_dir, tmp_path):
