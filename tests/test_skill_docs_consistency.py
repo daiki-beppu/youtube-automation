@@ -17,6 +17,14 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _assert_appears_before(text: str, earlier: str, later: str) -> None:
+    earlier_idx = text.find(earlier)
+    later_idx = text.find(later)
+    assert earlier_idx >= 0, f"{earlier!r} not found"
+    assert later_idx >= 0, f"{later!r} not found"
+    assert earlier_idx < later_idx
+
+
 def _frontmatter(path: str) -> dict:
     text = _read(path)
     if not text.startswith("---\n"):
@@ -358,6 +366,49 @@ def test_thumbnail_search_order_is_documented() -> None:
         assert expected_order in text
         assert "→ `10-assets/main.jpg` → `10-assets/main.png`" not in text
         assert "textless 動画背景" in text
+
+
+def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
+    video_upload = _read(".claude/skills/video-upload/SKILL.md")
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    posting_checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
+    scheduled_publish = _read(".claude/skills/video-upload/references/scheduled-publish.md")
+
+    for text in (video_upload, wf_next, posting_checklist, scheduled_publish):
+        assert "uv run yt-upload-collection --plan" in text
+        assert "📅 公開設定: 即時公開 (public)" in text
+        assert "📅 公開予定" in text
+
+    for text in (video_upload, posting_checklist, scheduled_publish):
+        assert "アップロード API は叩かない" in text
+        assert "YouTube read API を呼ぶ場合がある" in text
+        assert "実 API は叩かない" not in text
+        assert "API 非消費" not in text
+
+    collection_flow = video_upload[
+        video_upload.index("### collection アップロードフロー") : video_upload.index(
+            "### single_release アップロードフロー"
+        )
+    ]
+    _assert_appears_before(collection_flow, "uv run yt-upload-collection --plan", "Complete Collection アップロード")
+
+    single_release_flow = video_upload[
+        video_upload.index("### single_release アップロードフロー") : video_upload.index("### コマンドリファレンス")
+    ]
+    assert "yt-upload-auto" in single_release_flow
+    assert "yt-upload-collection --plan" in single_release_flow
+    assert "この分岐では実行しない" in single_release_flow
+    assert "collection 用 plan 結果を流用しない" in single_release_flow
+
+    _assert_appears_before(
+        posting_checklist,
+        "uv run yt-upload-collection --plan",
+        "uv run yt-upload-collection [-c NAME]",
+    )
+
+    wf_next_gate = wf_next[wf_next.index("approval_gates.upload = true") :]
+    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "AskUserQuestion")
+    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "/video-upload")
 
 
 def test_first_post_playlist_initialization_contract_is_documented() -> None:
