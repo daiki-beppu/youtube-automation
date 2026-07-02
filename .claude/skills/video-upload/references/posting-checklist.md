@@ -30,7 +30,7 @@ uv run yt-playlist-manager --init
 
 ## アップロード実行
 
-アップロード実行前に、ユーザーに公開方法を提示するための公開タイミングを必ず確定する。
+collection 型では、アップロード実行前にユーザーに公開方法を提示するための公開タイミングを必ず確定する。single_release 型では `yt-upload-collection --plan` を使わず、`yt-upload-auto` の公開時刻決定に従う。
 
 ```bash
 # スケジュール計算（アップロード API は叩かない。予約日時計算で YouTube read API を呼ぶ場合がある）

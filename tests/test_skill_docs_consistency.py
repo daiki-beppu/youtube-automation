@@ -385,10 +385,20 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
         assert "実 API は叩かない" not in text
         assert "API 非消費" not in text
 
-    upload_flow = video_upload[
-        video_upload.index("### アップロードフロー") : video_upload.index("### コマンドリファレンス")
+    collection_flow = video_upload[
+        video_upload.index("### collection アップロードフロー") : video_upload.index(
+            "### single_release アップロードフロー"
+        )
     ]
-    _assert_appears_before(upload_flow, "uv run yt-upload-collection --plan", "Complete Collection アップロード")
+    _assert_appears_before(collection_flow, "uv run yt-upload-collection --plan", "Complete Collection アップロード")
+
+    single_release_flow = video_upload[
+        video_upload.index("### single_release アップロードフロー") : video_upload.index("### コマンドリファレンス")
+    ]
+    assert "yt-upload-auto" in single_release_flow
+    assert "yt-upload-collection --plan" in single_release_flow
+    assert "この分岐では実行しない" in single_release_flow
+    assert "collection 用 plan 結果を流用しない" in single_release_flow
 
     _assert_appears_before(
         posting_checklist,
