@@ -48,16 +48,6 @@ def numbered_duplicate_base_name(name: str) -> str | None:
     return m.group("stem") + (m.group("suffix") or "")
 
 
-def find_numbered_duplicates(root: Path, *, recursive: bool = False) -> list[Path]:
-    """root 配下の番号付き重複エントリ (ファイル / ディレクトリ) を列挙する。
-
-    bounce 元 (連番を除いた名前) が同じディレクトリに実在するものだけを
-    重複と判定し、命名がたまたま似ている正当なファイルの誤検知を防ぐ。
-    bounce されたディレクトリは 1 エントリとして数え、その配下には降りない。
-    """
-    return list(scan_numbered_duplicates(root, recursive=recursive).duplicates)
-
-
 def scan_numbered_duplicates(
     root: Path,
     *,

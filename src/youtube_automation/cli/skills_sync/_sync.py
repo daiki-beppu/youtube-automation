@@ -64,11 +64,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         return _sync_all(args)
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
-    target = Path(args.target)
-    if spec["kind"] == "dir" and target.is_symlink():
-        target = target.absolute()
-    else:
-        target = target.resolve()
+    target = Path(args.target).resolve()
 
     if spec["kind"] == "file":
         return _sync_file_asset(spec, root, target, args)
@@ -149,14 +145,6 @@ def _sync_dir_asset(
     args: argparse.Namespace,
 ) -> int:
     """ディレクトリ asset の sync。target は **ディレクトリパス** として扱う。"""
-    if target_dir.is_symlink():
-        _warn_numbered_duplicates(target_dir)
-        print(
-            f"  [error] sync target が symlink のため中止します: {target_dir}",
-            file=sys.stderr,
-        )
-        return 1
-
     target_dir.mkdir(parents=True, exist_ok=True)
     warned_numbered_duplicates = _warn_numbered_duplicates(target_dir)
 

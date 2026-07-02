@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from youtube_automation.utils.numbered_duplicates import (
-    find_numbered_duplicates,
     format_duplicate_name,
     format_scan_error_reason,
     numbered_duplicate_base_name,
@@ -41,26 +40,29 @@ class TestNumberedDuplicateBaseName:
         assert numbered_duplicate_base_name("v2") is None
 
 
-class TestFindNumberedDuplicates:
+def _duplicate_names(root: Path, *, recursive: bool = False) -> list[str]:
+    return [path.name for path in scan_numbered_duplicates(root, recursive=recursive).duplicates]
+
+
+class TestScanNumberedDuplicates:
     def test_detects_bounce_next_to_base(self, tmp_path: Path):
         (tmp_path / "yt-analytics").write_text("#!/bin/sh\n", encoding="utf-8")
         (tmp_path / "yt-analytics 2").write_text("#!/bin/sh\n", encoding="utf-8")
         (tmp_path / "yt-analytics 3").write_text("#!/bin/sh\n", encoding="utf-8")
-        found = find_numbered_duplicates(tmp_path)
-        assert [p.name for p in found] == ["yt-analytics 2", "yt-analytics 3"]
+        assert _duplicate_names(tmp_path) == ["yt-analytics 2", "yt-analytics 3"]
 
     def test_ignores_pattern_without_base(self, tmp_path: Path):
         # bounce 元が存在しない場合は正当なファイル名の可能性があるため検知しない
         (tmp_path / "notes 2.md").write_text("memo\n", encoding="utf-8")
-        assert find_numbered_duplicates(tmp_path) == []
+        assert _duplicate_names(tmp_path) == []
 
     def test_non_recursive_ignores_subdirectories(self, tmp_path: Path):
         sub = tmp_path / "skill"
         sub.mkdir()
         (sub / "SKILL.md").write_text("# skill\n", encoding="utf-8")
         (sub / "SKILL 2.md").write_text("# skill\n", encoding="utf-8")
-        assert find_numbered_duplicates(tmp_path) == []
-        assert [p.name for p in find_numbered_duplicates(tmp_path, recursive=True)] == ["SKILL 2.md"]
+        assert _duplicate_names(tmp_path) == []
+        assert _duplicate_names(tmp_path, recursive=True) == ["SKILL 2.md"]
 
     def test_bounced_directory_counts_once(self, tmp_path: Path):
         base = tmp_path / "channel-new"
@@ -70,12 +72,13 @@ class TestFindNumberedDuplicates:
         bounced.mkdir()
         (bounced / "SKILL.md").write_text("# skill\n", encoding="utf-8")
         (bounced / "SKILL 2.md").write_text("# skill\n", encoding="utf-8")
-        found = find_numbered_duplicates(tmp_path, recursive=True)
         # bounce されたディレクトリは 1 エントリとして数え、配下には降りない
-        assert [p.name for p in found] == ["channel-new 2"]
+        assert _duplicate_names(tmp_path, recursive=True) == ["channel-new 2"]
 
     def test_missing_directory_returns_empty(self, tmp_path: Path):
-        assert find_numbered_duplicates(tmp_path / "no-such-dir") == []
+        result = scan_numbered_duplicates(tmp_path / "no-such-dir")
+        assert result.duplicates == ()
+        assert result.errors == ()
 
     def test_regular_file_root_returns_empty_without_error(self, tmp_path: Path):
         root = tmp_path / "SKILL.md"

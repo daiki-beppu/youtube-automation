@@ -296,7 +296,7 @@ def test_cmd_sync_force_warns_before_overwriting_bounced_file_inside_skill(
     assert not bounced_file.exists()
 
 
-def test_cmd_sync_rejects_symlink_target(fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cmd_sync_resolves_symlink_target(fake_repo: Path, tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
     target = tmp_path / "out" / ".claude" / "skills"
@@ -307,10 +307,9 @@ def test_cmd_sync_rejects_symlink_target(fake_repo: Path, tmp_path: Path, capsys
     args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
     rc = args.func(args)
 
-    assert rc == 1
-    err = capsys.readouterr().err
-    assert "symlink" in err
-    assert "中止" in err
+    assert rc == 0
+    assert target.is_symlink()
+    assert (outside / "channel-research" / "SKILL.md").read_text(encoding="utf-8") == "# research\n"
 
 
 def test_cmd_sync_no_duplicate_warning_when_clean(
