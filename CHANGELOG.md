@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(channel-new)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-new` が TTP 対象承認・relationship・branding snapshot・thumbnail reference・Suno readiness の不足を残したまま完了扱いにならないようにした（#1397）
 - `fix(skills)`: `/video-upload` と `/wf-next` の公開承認前に `yt-upload-collection --plan` で即時公開/予約公開を確定し、予約時は実際の公開予定時刻を案内するよう明記（#1395）
 - `fix(doctor)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-setup` の benchmark 反映未完了による TTP 参照データ欠落を検知・案内できるようにした（#1400）
 - `fix(distrokid)`: `yt-collection-serve` の DistroKid asset 配信で URL encode された日本語ファイル名を decode し、single-file / dir mode の両方で 404 にならないようにした（#1401）
@@ -30,10 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 local fix 衝突注意:
 - channel-new, automation-update: 下流で該当 skill を手書き調整している場合は `yt-skills diff` で差分確認が必要。
+- channel-new: TTP 完了条件と `yt-doctor::ttp_wf_new_readiness` の完了ゲートを追加。下流で `/channel-new` を手書き調整している場合は TTP 対象承認 / branding snapshot / thumbnail reference / Suno readiness の扱いを確認する。
 
 サマリ:
 
 - 新規チャンネルセットアップ完了時に未コミット変更を残したまま後続の `/automation-update` へ進まないよう、初回保存手順を skill に明記した。
+- `/channel-new` が TTP 準拠前に成功案内を出さないよう、`yt-doctor` の readiness check と skill contract を追加した。
 
 ## [5.5.14] - 2026-06-30
 

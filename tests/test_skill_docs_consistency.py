@@ -146,6 +146,11 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert "`description` / `keywords` / `localizations` / `brandingSettings` は含まない" in channel_new
     assert "untrusted data" in channel_new
     assert "承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない" in channel_new
+    assert "TTP 完了条件" in channel_new
+    assert "relationship（何を転写するか）" in channel_new
+    assert "ttp_wf_new_readiness" in channel_new
+    assert "`warn` の場合は成功案内を出さない" in channel_new
+    assert "ユーザー承認済み例外" in channel_new
 
     assert 'CHANNELS_PART = "snippet,brandingSettings,localizations"' in branding_snapshot_script
     assert '"untrusted_data": True' in branding_snapshot_script

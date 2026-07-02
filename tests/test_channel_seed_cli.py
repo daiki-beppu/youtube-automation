@@ -68,7 +68,7 @@ def test_build_parser_has_expected_defaults():
 
     # Then
     assert args.url == "https://www.youtube.com/@seed"
-    assert args.relationship == "seed"
+    assert args.relationship is None
     assert args.recent == 10
     assert args.write_benchmark is True
     assert args.json is False
@@ -101,7 +101,7 @@ def test_build_parser_accepts_explicit_options():
     assert args.json is True
 
 
-def test_main_fetches_seed_and_writes_benchmark_entry(tmp_path, capsys):
+def test_main_rejects_benchmark_write_without_relationship(tmp_path, capsys):
     # Given
     analytics_path = _write_analytics(tmp_path)
     youtube = MagicMock()
@@ -112,6 +112,62 @@ def test_main_fetches_seed_and_writes_benchmark_entry(tmp_path, capsys):
         patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()) as fetch_seed,
     ):
         rc = main(["https://www.youtube.com/@seed", "--target", str(tmp_path)])
+
+    # Then
+    err = capsys.readouterr().err
+    assert rc == 1
+    get_youtube.assert_called_once_with()
+    fetch_seed.assert_called_once_with(youtube, "https://www.youtube.com/@seed", recent=10)
+    assert "--relationship" in err
+    assert json.loads(analytics_path.read_text(encoding="utf-8"))["benchmark"]["channels"] == []
+
+
+def test_main_rejects_placeholder_relationship(tmp_path, capsys):
+    # Given
+    analytics_path = _write_analytics(tmp_path)
+    youtube = MagicMock()
+
+    # When
+    with (
+        patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=youtube),
+        patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
+    ):
+        rc = main(
+            [
+                "https://www.youtube.com/@seed",
+                "--target",
+                str(tmp_path),
+                "--relationship",
+                "seed",
+            ]
+        )
+
+    # Then
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "具体的な関係性メモ" in err
+    assert json.loads(analytics_path.read_text(encoding="utf-8"))["benchmark"]["channels"] == []
+
+
+def test_main_fetches_seed_and_writes_benchmark_entry_with_relationship(tmp_path, capsys):
+    # Given
+    analytics_path = _write_analytics(tmp_path)
+    youtube = MagicMock()
+
+    # When
+    with (
+        patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=youtube) as get_youtube,
+        patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()) as fetch_seed,
+    ):
+        rc = main(
+            [
+                "https://www.youtube.com/@seed",
+                "--target",
+                str(tmp_path),
+                "--relationship",
+                "title-structure / thumbnail-composition",
+            ]
+        )
 
     # Then
     out = capsys.readouterr().out
@@ -130,7 +186,7 @@ def test_main_fetches_seed_and_writes_benchmark_entry(tmp_path, capsys):
             "id": "UC_seed",
             "slug": "seed",
             "name": "Seed Channel",
-            "relationship": "seed",
+            "relationship": "title-structure / thumbnail-composition",
         }
     ]
 
@@ -171,7 +227,15 @@ def test_main_deduplicates_existing_benchmark_channel(tmp_path):
         patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=MagicMock()),
         patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
     ):
-        rc = main(["https://www.youtube.com/@seed", "--target", str(tmp_path)])
+        rc = main(
+            [
+                "https://www.youtube.com/@seed",
+                "--target",
+                str(tmp_path),
+                "--relationship",
+                "title-structure",
+            ]
+        )
 
     # Then
     assert rc == 0

@@ -96,8 +96,18 @@ def test_fetch_branding_snapshot_writes_untrusted_json_for_multiple_ids(
         "untrusted_data": True,
         "source": "youtube.channels.list(part=snippet,brandingSettings,localizations)",
         "items": [
-            {"id": "UC_A", "snippet": {"description": "A"}},
-            {"id": "UC_B", "brandingSettings": {"channel": {"keywords": "b"}}},
+            {
+                "id": "UC_A",
+                "snippet": {"description": "A"},
+                "brandingSettings": {},
+                "localizations": {},
+            },
+            {
+                "id": "UC_B",
+                "snippet": {},
+                "brandingSettings": {"channel": {"keywords": "b"}},
+                "localizations": {},
+            },
         ],
     }
 
