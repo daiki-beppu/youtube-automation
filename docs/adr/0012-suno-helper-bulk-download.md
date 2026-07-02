@@ -1,5 +1,9 @@
 # suno-helper に一括ダウンロード責務を追加: DOM + chrome.downloads 方式
 
+## Status
+
+accepted (2026-06-23、#1143 レビューで改訂 2026-06-29)。
+
 Suno AI が一括ダウンロード機能（multi-select → "..." → Download all → フォーマット選択モーダル → ZIP ダウンロード）を追加したため、suno-helper Chrome 拡張の責務を「UI 自動生成 + playlist 捕捉」から「UI 自動生成 + 一括ダウンロード + playlist 捕捉」に拡張する。ダウンロード方式は Bridge fetch 傍受ではなく、DOM 操作 + `chrome.downloads` API + collection-serve への ZIP パス通知を採用する。
 
 併せて、楽曲生成の完了判定を `suno-playlists.json` から `workflow-state.json` + ファイルシステムに移行し、状態管理を collection 単位に一元化する。
