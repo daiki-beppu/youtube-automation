@@ -585,8 +585,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 22
-        assert len(payload["checks"]) == 22
+        # 7 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 23
+        assert len(payload["checks"]) == 23
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -2278,12 +2278,56 @@ class TestUploadRequiredScopes:
 # ---------------------------------------------------------------------------
 
 
+class TestCheckNumberedDuplicates:
+    def test_ok_when_clean(self, tmp_path):
+        (tmp_path / ".venv" / "bin").mkdir(parents=True)
+        (tmp_path / ".venv" / "bin" / "yt-analytics").write_text("#!/bin/sh\n", encoding="utf-8")
+        skills = tmp_path / ".claude" / "skills" / "channel-new"
+        skills.mkdir(parents=True)
+        (skills / "SKILL.md").write_text("# skill\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_ok_when_directories_missing(self, tmp_path):
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "ok"
+
+    def test_warns_on_venv_bin_duplicates(self, tmp_path):
+        bin_dir = tmp_path / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "yt-analytics").write_text("#!/bin/sh\n", encoding="utf-8")
+        (bin_dir / "yt-analytics 2").write_text("#!/bin/sh\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "warn"
+        assert ".venv/bin に 1 件" in r.message
+        assert "yt-analytics 2" in r.message
+        assert r.next_action is not None
+        assert "numbered-duplicate-files-cleanup" in r.next_action["instructions"]
+
+    def test_warns_on_skills_duplicates_recursively(self, tmp_path):
+        skill = tmp_path / ".claude" / "skills" / "channel-new"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("# skill\n", encoding="utf-8")
+        (skill / "SKILL 2.md").write_text("# skill\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "warn"
+        assert "SKILL 2.md" in r.message
+
+    def test_ignores_bounce_pattern_without_base(self, tmp_path):
+        bin_dir = tmp_path / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "orphan 2").write_text("#!/bin/sh\n", encoding="utf-8")
+        r = doctor.check_numbered_duplicates(tmp_path)
+        assert r.status == "ok"
+
+
 class TestRunAllChecksExtended:
-    def test_returns_22_checks(self, monkeypatch, tmp_path):
-        """6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 22 件."""
+    def test_returns_23_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 23 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 22
+        assert len(results) == 23
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -2338,7 +2382,15 @@ class TestRunAllChecksExtended:
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         bootstrap_ids = {r.id for r in results if r.category == "bootstrap"}
-        assert bootstrap_ids == {"ffmpeg", "ffprobe", "uv", "uv_project", "automation_package", "skills_synced"}
+        assert bootstrap_ids == {
+            "ffmpeg",
+            "ffprobe",
+            "uv",
+            "uv_project",
+            "automation_package",
+            "skills_synced",
+            "numbered_duplicates",
+        }
 
     def test_data_checks_include_ttp_wf_new_readiness(self, monkeypatch, tmp_path):
         """data カテゴリは analytics_report / benchmark_data / ttp_wf_new_readiness の 3 件."""

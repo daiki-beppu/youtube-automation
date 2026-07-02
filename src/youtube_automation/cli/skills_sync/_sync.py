@@ -19,6 +19,25 @@ from youtube_automation.cli.skills_sync._ops import (
     _prune_orphans,
     _symlink_entry,
 )
+from youtube_automation.utils.numbered_duplicates import find_numbered_duplicates
+
+
+def _warn_numbered_duplicates(target_dir: Path) -> None:
+    """sync 先に混入した番号付き重複 (iCloud bounce) を警告する。削除はしない。
+
+    sync は既存 entry を skip / --force で上書きするだけで重複を生成も除去も
+    しないため、混入に気づく機会をここで提供する (#1409 / #1410)。
+    """
+    duplicates = find_numbered_duplicates(target_dir, recursive=True)
+    if not duplicates:
+        return
+    sample = ", ".join(path.name for path in duplicates[:5])
+    print(
+        f"  [warn] sync 先に番号付き重複ファイルを検出: {len(duplicates)} 件 (例: {sample})\n"
+        "         iCloud Drive 等のクラウド同期コンフリクトで生成された可能性があります。\n"
+        "         対処手順: docs/migration/numbered-duplicate-files-cleanup.md (yt-doctor でも検知できます)",
+        file=sys.stderr,
+    )
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
@@ -174,6 +193,8 @@ def _sync_dir_asset(
         elif mirror is not None:
             print(f"  {prefix}{mirror:>8}: .agents/skills -> ../.claude/skills")
             counts[mirror] = counts.get(mirror, 0) + 1
+
+    _warn_numbered_duplicates(target_dir)
 
     print()
     print(f"完了: {sum(counts.values())} 件処理 — {counts}")

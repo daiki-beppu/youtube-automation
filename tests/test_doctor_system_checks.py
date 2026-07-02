@@ -121,17 +121,17 @@ class TestRunAllChecksWithBootstrap:
         assert "ffprobe" in ids
 
     def test_bootstrap_checks_count(self, monkeypatch, tmp_path):
-        """bootstrap カテゴリは ffmpeg + ffprobe + uv + uv project + automation + skills の 6 件."""
+        """bootstrap は ffmpeg + ffprobe + uv + uv project + automation + skills + numbered duplicates の 7 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         bootstrap_results = [r for r in results if r.category == "bootstrap"]
-        assert len(bootstrap_results) == 6
+        assert len(bootstrap_results) == 7
 
-    def test_total_checks_is_22(self, monkeypatch, tmp_path):
-        """6 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 22 件."""
+    def test_total_checks_is_23(self, monkeypatch, tmp_path):
+        """7 bootstrap + 11 api + 1 channel + 3 data + 1 upload = 計 23 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 22
+        assert len(results) == 23
 
     def test_bootstrap_before_api(self, monkeypatch, tmp_path):
         """bootstrap カテゴリは api カテゴリより前に配置される."""
