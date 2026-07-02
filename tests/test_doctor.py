@@ -1642,6 +1642,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
         json.dumps(
             {
                 "untrusted_data": True,
+                "reference_only": True,
                 "source": "youtube.channels.list(part=snippet,brandingSettings,localizations)",
                 "items": [
                     {
@@ -1649,6 +1650,21 @@ def _write_ttp_readiness_files(base: Path) -> None:
                         "snippet": {"title": "Rival"},
                         "brandingSettings": {"channel": {"description": "Rival description"}},
                         "localizations": {},
+                    }
+                ],
+                "channel_image_references": [
+                    {
+                        "channel_id": "UC123",
+                        "title": "Rival",
+                        "untrusted_data": True,
+                        "reference_only": True,
+                        "icon": {
+                            "source": "snippet.thumbnails.high",
+                            "url": "https://example.com/rival-icon.jpg",
+                            "width": 800,
+                            "height": 800,
+                        },
+                        "banner": [],
                     }
                 ],
             },
@@ -2170,6 +2186,67 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "warn"
         assert "承認済み TTP 対象の snapshot 不足" in r.message
+
+    def test_branding_snapshot_requires_reference_only_and_image_references(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json").write_text(
+            json.dumps(
+                {
+                    "untrusted_data": True,
+                    "items": [{"id": "UC123", "snippet": {}, "brandingSettings": {}, "localizations": {}}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_only が true ではありません" in r.message
+        assert "channel_image_references が list ではありません" in r.message
+        assert "画像参照メタ不足" in r.message
+
+    def test_branding_snapshot_allows_missing_image_urls_with_fallback_note(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["icon"] = {}
+        payload["channel_image_references"][0]["banner"] = []
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    '      notes: "fallback: TTP seed memo provides channel branding direction"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_branding_snapshot_missing_image_urls_without_fallback_note_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["icon"] = {}
+        payload["channel_image_references"][0]["banner"] = []
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "画像参照または fallback 根拠 note がありません" in r.message
 
     def test_missing_thumbnail_reference_file_warns(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])

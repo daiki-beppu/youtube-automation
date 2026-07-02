@@ -182,6 +182,53 @@ def test_fetch_branding_snapshot_writes_untrusted_json_for_multiple_ids(
     }
 
 
+def test_fetch_branding_snapshot_normalizes_invalid_nested_image_shapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    youtube = FakeYouTube(
+        {
+            "UC_A": {
+                "items": [
+                    {
+                        "id": "UC_A",
+                        "snippet": {"title": "Alpha", "thumbnails": ["not", "a", "mapping"]},
+                        "brandingSettings": {"image": "not-a-mapping"},
+                    }
+                ]
+            }
+        }
+    )
+    _patch_youtube_handler(monkeypatch, module, youtube)
+    output = tmp_path / "competitor-branding-snapshot.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "fetch_branding_snapshot.py",
+            "--channel-id",
+            "UC_A",
+            "--output",
+            str(output),
+        ],
+    )
+
+    module.main()
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["channel_image_references"] == [
+        {
+            "channel_id": "UC_A",
+            "title": "Alpha",
+            "untrusted_data": True,
+            "reference_only": True,
+            "icon": {},
+            "banner": [],
+        }
+    ]
+
+
 def test_fetch_branding_snapshot_empty_items_fails_without_writing_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

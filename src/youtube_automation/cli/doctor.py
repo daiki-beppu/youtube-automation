@@ -1493,13 +1493,26 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
         return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
 
     missing: list[str] = []
+    if branding_snapshot.get("reference_only") is not True:
+        missing.append("competitor-branding-snapshot.json の reference_only が true ではありません")
     if any(not isinstance(item, dict) for item in snapshot_items):
         missing.append("competitor-branding-snapshot.json の items に object ではない要素があります")
+    image_references = branding_snapshot.get("channel_image_references")
+    if not isinstance(image_references, list):
+        missing.append("competitor-branding-snapshot.json の channel_image_references が list ではありません")
+        image_references = []
+    elif any(not isinstance(item, dict) for item in image_references):
+        missing.append("competitor-branding-snapshot.json の channel_image_references に object ではない要素があります")
     approved_ids = _approved_ttp_channel_ids(channels)
     snapshot_by_id = {
         str(item.get("id")): item
         for item in snapshot_items
         if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    image_reference_by_id = {
+        str(item.get("channel_id")): item
+        for item in image_references
+        if isinstance(item, dict) and str(item.get("channel_id") or "").strip()
     }
 
     channels_without_id = [
@@ -1515,6 +1528,13 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
         missing.append(
             "competitor-branding-snapshot.json に承認済み TTP 対象の snapshot 不足 (" + ", ".join(missing_ids) + ")"
         )
+    missing_image_reference_ids = [channel_id for channel_id in approved_ids if channel_id not in image_reference_by_id]
+    if missing_image_reference_ids:
+        missing.append(
+            "competitor-branding-snapshot.json に承認済み TTP 対象の画像参照メタ不足 ("
+            + ", ".join(missing_image_reference_ids)
+            + ")"
+        )
 
     for channel_id in approved_ids:
         item = snapshot_by_id.get(channel_id)
@@ -1527,12 +1547,55 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
             missing.append(
                 f"competitor-branding-snapshot.json の {channel_id} に必須 field 不足 ({', '.join(missing_fields)})"
             )
+        image_reference = image_reference_by_id.get(channel_id)
+        if image_reference is None:
+            continue
+        if image_reference.get("reference_only") is not True:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} 画像参照メタ reference_only が true ではありません"
+            )
+        if not _channel_image_reference_has_source(image_reference) and not _channel_branding_fallback_note_recorded(
+            channel_dir
+        ):
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に画像参照または fallback 根拠 note がありません"
+            )
 
     return missing
 
 
 def _approved_ttp_channel_ids(channels: list[dict[str, object]]) -> list[str]:
     return [channel_id for channel in channels if (channel_id := str(channel.get("id") or "").strip())]
+
+
+def _channel_image_reference_has_source(image_reference: dict[str, object]) -> bool:
+    icon = image_reference.get("icon")
+    if isinstance(icon, dict) and isinstance(icon.get("url"), str) and icon["url"].strip():
+        return True
+    banner = image_reference.get("banner")
+    return isinstance(banner, list) and any(
+        isinstance(item, dict) and isinstance(item.get("url"), str) and item["url"].strip() for item in banner
+    )
+
+
+def _channel_branding_fallback_note_recorded(channel_dir: Path) -> bool:
+    thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
+    if thumbnail_read.error:
+        return False
+    image_generation = thumbnail_read.data.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return False
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return False
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return False
+    notes = reference_images.get("notes")
+    if not isinstance(notes, str):
+        return False
+    lower_notes = notes.lower()
+    return "fallback" in lower_notes or "取得できない" in notes or "参照画像なし" in notes
 
 
 def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:

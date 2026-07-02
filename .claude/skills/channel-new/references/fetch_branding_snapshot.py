@@ -95,18 +95,23 @@ def _fetch_channel(youtube, channel_id: str) -> dict:
 
 
 def _extract_channel_image_references(item: dict) -> dict:
-    snippet = item.get("snippet") or {}
-    branding = item.get("brandingSettings") or {}
-    image = branding.get("image") or {}
+    snippet = _mapping_or_empty(item.get("snippet"))
+    branding = _mapping_or_empty(item.get("brandingSettings"))
+    image = _mapping_or_empty(branding.get("image"))
+    title = snippet.get("title")
 
     return {
         "channel_id": item.get("id", ""),
-        "title": snippet.get("title", ""),
+        "title": title if isinstance(title, str) else "",
         "untrusted_data": True,
         "reference_only": True,
-        "icon": _best_thumbnail(snippet.get("thumbnails") or {}),
+        "icon": _best_thumbnail(_mapping_or_empty(snippet.get("thumbnails"))),
         "banner": _banner_references(image),
     }
+
+
+def _mapping_or_empty(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
 
 
 def _best_thumbnail(thumbnails: dict) -> dict:

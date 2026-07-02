@@ -369,7 +369,7 @@ uv run yt-channel-settings push --apply
 |---|---|
 | Analytics データがまだ無い | #1272 で wf-new 側対応予定。初回は TTP メモと seed fetch 結果を企画根拠として使う |
 | `config/skills/thumbnail.yaml` の reference_images が空 | `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` に存在する参照画像を設定する。意図的に後続へ回す場合は `docs/channel/ttp-seed-confirmation.md` に `ユーザー承認済み例外: thumbnail ... /thumbnail ...` として未反映内容・理由・後続 skill を残す。本格収集が必要なら `/benchmark` で `yt-benchmark-collect --keep-thumbnails` を実行する |
-| `reference_images.channel_branding` が空 | `docs/channel/competitor-branding-snapshot.json::channel_image_references` の URL 参照、または TTP メモ由来の fallback 根拠を `notes` に残してから `branding/icon.png` / `branding/banner.png` を生成する |
+| `reference_images.channel_branding.icon_references` / `banner_references` が空 | `docs/channel/competitor-branding-snapshot.json::channel_image_references` の URL 参照を転記する。参照画像が取得できない場合は TTP メモ由来の fallback 根拠を `reference_images.notes` に残してから `branding/icon.png` / `branding/banner.png` を生成する |
 | `config/skills/suno.yaml` が placeholder のまま | Step 1 のジャンル情報を `genre_line` に反映してから進む |
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` で初期化する。初回動画の追加は `/video-upload` 内部の自動 assign に任せる |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
