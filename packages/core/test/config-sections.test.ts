@@ -423,6 +423,30 @@ describe("workflow.wfNext.approvalGates", () => {
   });
 });
 
+describe("workflow.wfNext.skipManualMastering (#1449)", () => {
+  test("default to false (wait for a manually mastered file)", () => {
+    // Given no workflow.json
+    const config = load(minimalSections());
+
+    // Then raw=final adoption stays off
+    expect(config.publishing.workflow.wfNext.skipManualMastering).toBe(false);
+  });
+
+  test("read the explicit raw=final declaration", () => {
+    // Given a channel that ships the raw master as the final master
+    const sections = minimalSections();
+    sections["workflow.json"] = {
+      workflow: { wf_next: { skip_manual_mastering: true } },
+    };
+
+    // Then the flag is on and the approval gates keep their own defaults
+    const { wfNext } = load(sections).publishing.workflow;
+    expect(wfNext.skipManualMastering).toBe(true);
+    expect(wfNext.approvalGates.audio).toBe(false);
+    expect(wfNext.approvalGates.upload).toBe(false);
+  });
+});
+
 // --- pinned comment --------------------------------------------------------
 
 describe("pinnedComment", () => {
