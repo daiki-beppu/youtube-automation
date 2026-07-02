@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PHASE, type ProgressPayload, type SnapshotPayload } from "../../shared/constants";
+import { PHASE, type ProgressPayload } from "../../shared/constants";
 import { App } from "../components/App";
 
 const BASE_URL = "http://localhost:7873";
@@ -660,11 +660,12 @@ describe("Suno popup compatibility check", () => {
       { name: "p2", style: "jazz", lyrics: "" },
       { name: "p3", style: "ambient", lyrics: "" },
     ];
-    const snapshot: SnapshotPayload = {
+    const snapshot = {
       entries,
       itemStates: entries.map(() => "idle"),
       isRunning: true,
       progress: { phase: PHASE.INJECTING, total: entries.length },
+      collectionId: null,
     };
     let progressHandler: ((event: { data: ProgressPayload }) => void) | undefined;
 
