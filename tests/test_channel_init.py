@@ -311,6 +311,36 @@ def test_distrokid_enabled_args_generate_distrokid_json(tmp_path, monkeypatch):
     assert config.distrokid.profile.songwriter.last == "Doe"
 
 
+def test_distrokid_enabled_accepts_minimal_profile(tmp_path, monkeypatch):
+    # Given: DistroKid 配信に必要な最小 profile だけを指定
+    extra = [
+        "--distrokid-enabled",
+        "--distrokid-language",
+        "ja",
+        "--distrokid-main-genre",
+        "Electronic",
+    ]
+
+    # When: main を実行
+    rc = main(_required_args(tmp_path, extra=extra))
+
+    # Then: optional profile を推測で埋めず、指定値だけで生成される
+    assert rc == 0
+    distrokid = _read_json(_channel_dir(tmp_path) / "distrokid.json")["distrokid"]
+    assert distrokid == {
+        "enabled": True,
+        "profile": {"language": "ja", "main_genre": "Electronic"},
+    }
+
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+    config = load_config()
+    assert config.distrokid.enabled is True
+    assert config.distrokid.profile.language == "ja"
+    assert config.distrokid.profile.main_genre == "Electronic"
+    assert config.distrokid.profile.sub_genre is None
+    assert config.distrokid.profile.songwriter is None
+
+
 def test_distrokid_enabled_requires_language_and_main_genre(tmp_path, capsys):
     # Given: DistroKid 配信を opt-in するが必須 profile を省略
     argv = _required_args(tmp_path, extra=["--distrokid-enabled"])
