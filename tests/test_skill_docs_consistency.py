@@ -177,6 +177,45 @@ def test_channel_new_requires_initial_save_before_followup_update() -> None:
     assert "/channel-new 直後の初回保存が未完了なら" in automation_update
 
 
+def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_streaming() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    step9 = channel_new.split("### Step 9: wf-new 接続前チェック", 1)[1].split(
+        "### Step 10: 初回保存と automation-update 前の整理",
+        1,
+    )[0]
+    success_message = channel_new.split("保存未完了として終了した場合は、以下の成功案内は出さない", 1)[1].split(
+        "## 障害時ガイダンス",
+        1,
+    )[0]
+
+    assert "Analytics / Reporting レポート取得設定が未確認" in step9
+    assert "YouTube Analytics / Reporting API" in step9
+    assert "Reporting API job 作成状態" in step9
+    assert "`/analytics-collect`" in step9
+    assert "`/setup`" in step9
+    assert "初回制作は止めず" in step9
+
+    assert "ライブ配信を使う可能性がある" in step9
+    assert "YouTube Studio で Live streaming を早めに有効化" in step9
+    assert "初回配信可能になるまで最大 24 時間" in step9
+    assert "`/streaming`" in step9
+
+    assert "公開後の分析は /analytics-collect" in success_message
+    assert "Live streaming 有効化" in success_message
+    assert "/streaming の準備確認" in success_message
+
+
+def test_analytics_collect_documents_reporting_api_preflight() -> None:
+    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+
+    assert "`/analytics-collect reporting`" in analytics_collect
+    assert "uv run yt-analytics --reporting-dry-run" in analytics_collect
+    assert "uv run yt-analytics --reporting-create-job" in analytics_collect
+    assert "uv run yt-analytics --include-reporting" in analytics_collect
+    assert "最大 48 時間" in analytics_collect
+    assert "youtubereporting.googleapis.com" in analytics_collect
+
+
 @pytest.mark.parametrize(
     "secret_path",
     [".env", "auth/client_secrets.json", "auth/token.json", "auth/token_streaming.json"],

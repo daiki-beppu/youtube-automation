@@ -22,6 +22,12 @@ from youtube_automation.auth.oauth_handler import resolve_client_secrets_locatio
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.numbered_duplicates import (
+    CLEANUP_GUIDE_URL,
+    format_duplicate_name,
+    format_scan_error_reason,
+    scan_numbered_duplicates,
+)
 from youtube_automation.utils.preflight_checks import (
     check_descriptions_md_parseability,
     check_suno_genre_line_char_limit,
@@ -48,6 +54,7 @@ UPLOAD_CATEGORY = "upload"
 REQUIRED_APIS = [
     "youtube.googleapis.com",
     "youtubeanalytics.googleapis.com",
+    "youtubereporting.googleapis.com",
     "aiplatform.googleapis.com",
     "generativelanguage.googleapis.com",
 ]
@@ -376,6 +383,53 @@ def check_skills_synced(channel_dir: Path) -> CheckResult:
         status="ok",
         category=BOOTSTRAP_CATEGORY,
         message=f"skills synced ({len(bundled_skills)} bundled skills)",
+    )
+
+
+def check_numbered_duplicates(channel_dir: Path) -> CheckResult:
+    """iCloud Drive 等の同期コンフリクトで生成される番号付き重複ファイルの検知。
+
+    `.venv/bin/` (entry point) と `.claude/skills/` (配布 skill) は uv /
+    yt-skills sync が同名上書きで管理する領域のため、`<名前> <数字>` 形式が
+    現れたら外部要因 (同期サービス) による汚染とみなす (#1409 / #1410)。
+    """
+    findings: list[str] = []
+    scan_targets = (
+        (".venv/bin", channel_dir / ".venv" / "bin", False),
+        (str(CLAUDE_SKILLS_DIR), channel_dir / CLAUDE_SKILLS_DIR, True),
+    )
+    for label, directory, recursive in scan_targets:
+        result = scan_numbered_duplicates(directory, recursive=recursive, root_boundary=channel_dir)
+        if result.duplicates:
+            sample = ", ".join(format_duplicate_name(path) for path in result.duplicates[:3])
+            findings.append(f"{label} に {len(result.duplicates)} 件 (例: {sample})")
+        for error in result.errors:
+            findings.append(
+                f"{label} を走査できません "
+                f"({format_duplicate_name(error.path)}: {format_scan_error_reason(error.reason)})"
+            )
+    if not findings:
+        return CheckResult(
+            id="numbered_duplicates",
+            status="ok",
+            category=BOOTSTRAP_CATEGORY,
+            message="番号付き重複ファイルなし",
+        )
+    return CheckResult(
+        id="numbered_duplicates",
+        status="warn",
+        category=BOOTSTRAP_CATEGORY,
+        message="番号付き重複ファイルを検出: " + " / ".join(findings),
+        next_action={
+            "kind": "human",
+            "instructions": (
+                "iCloud Drive 等のクラウド同期コンフリクトで生成された可能性が高い。"
+                "リポジトリが同期対象パス (~/Desktop, ~/Documents, iCloud Drive) に"
+                "ないか確認する。`.venv` は `rm -rf .venv && uv sync` で再作成、"
+                f"{CLAUDE_SKILLS_DIR} は重複を削除して `{SKILLS_SYNC_CMD}` で再展開する。"
+                f"詳細手順: {CLEANUP_GUIDE_URL}"
+            ),
+        },
     )
 
 
@@ -1803,6 +1857,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_uv_project(channel_dir),
         check_automation_package(channel_dir),
         check_skills_synced(channel_dir),
+        check_numbered_duplicates(channel_dir),
         check_gcloud(),
         check_gcloud_account(),
         check_gcp_project(channel_dir),

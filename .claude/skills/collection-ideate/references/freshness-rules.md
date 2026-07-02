@@ -85,12 +85,16 @@ if [ "$INPUT_MODE" = "analytics mode" ] && [ -n "$LATEST_DATA" ]; then
 
   # (2) 絶対鮮度チェック (#1427): 収集データ自体が実行日から freshness_days を超えて古い。
   #     相対比較と OR 結合 — DATA_DATE == REPORT_DATE でもこちらで stale になり得る
-  FRESHNESS_DAYS=7  # config/skills/collection-ideate.yaml の freshness_days（未設定なら config.default.yaml の既定 7）
+  # 設定読み込みゲートで load_skill_config("collection-ideate") 相当の
+  # default + config/skills/collection-ideate.yaml deep-merge を先に行い、
+  # 解決済み freshness_days をこの擬似コードへ渡す。
+  COLLECTION_IDEATE_FRESHNESS_DAYS=${COLLECTION_IDEATE_FRESHNESS_DAYS:-7}
+  FRESHNESS_DAYS="$COLLECTION_IDEATE_FRESHNESS_DAYS"
   to_epoch() {
     # YYYYMMDD → epoch 秒（BSD date / GNU date 両対応）
     date -j -f '%Y%m%d' "$1" +%s 2>/dev/null || date -d "$1" +%s
   }
-  TODAY=$(date +%Y%m%d)
+  TODAY=${TODAY:-$(date +%Y%m%d)}
   ELAPSED_DAYS=$(( ($(to_epoch "$TODAY") - $(to_epoch "$DATA_DATE")) / 86400 ))
   if [ "$ELAPSED_DAYS" -gt "$FRESHNESS_DAYS" ]; then
     echo "analyze stale（収集データが ${ELAPSED_DAYS} 日前 > freshness_days=${FRESHNESS_DAYS}）→ /collection-ideate 中断、/analytics-collect → /analytics-analyze の順の再実行を案内"

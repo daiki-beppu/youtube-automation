@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from youtube_automation.cli import doctor
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SETUP_SKILL = _SKILLS_DIR / "setup" / "SKILL.md"
@@ -78,6 +80,13 @@ def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
     assert "`/setup` は `uv run yt-setup-dirs`" in text
     assert "`/setup` では `config/channel/*.json` を生成しない" in text
     assert "OAuth クライアント JSON の配置先 `auth/`" in text
+
+
+def test_setup_skill_enables_doctor_required_apis() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+
+    for api_name in doctor.REQUIRED_APIS:
+        assert api_name in text
 
 
 def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
