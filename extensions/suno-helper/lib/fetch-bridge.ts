@@ -76,12 +76,7 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
   const clips: ObservedClip[] = [];
   for (const item of value) {
     const clip = item as { duration?: unknown; id?: unknown; status?: unknown };
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof clip.id === "string" &&
-      typeof clip.status === "string"
-    ) {
+    if (typeof item === "object" && item !== null && typeof clip.id === "string" && typeof clip.status === "string") {
       const observed: ObservedClip = { id: clip.id, status: clip.status };
       if (typeof clip.duration === "number") {
         observed.duration = clip.duration;
