@@ -11,6 +11,10 @@
 # 個別スキップ: `LEFTHOOK=0 git push` で全 hook を無効化。
 # CHANGELOG ゲートのみ省く: `SKIP_CHANGELOG=1 git push`
 
+# use_stdin は lefthook 1.4.11 で追加。古い lefthook は未知 key を黙って無視し
+# ブランチ削除 push 判定が no-op になるため、最低バージョンを明示する
+min_version: 1.4.11
+
 pre-commit:
   parallel: true
   commands:
@@ -33,4 +37,10 @@ pre-commit:
 pre-push:
   commands:
     changelog-gate:
+      # git が stdin に渡す "<local ref> <local sha> <remote ref> <remote sha>" を
+      # スクリプトへ転送する（ブランチ削除 push の判定に必要）。
+      # 注意: lefthook の仕様で use_stdin を持つコマンドが同一 hook に複数あると
+      # stdin を受け取れるのは 1 つだけ。pre-push に stdin を使うコマンドを
+      # 追加するときはこのゲートの削除 push スキップが壊れないか確認すること
+      use_stdin: true
       run: bash .lefthook/pre-push/changelog-gate.sh
