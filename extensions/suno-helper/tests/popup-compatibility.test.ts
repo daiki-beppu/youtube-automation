@@ -323,6 +323,71 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("content snapshot 復元だけで再実行すると snapshot の collectionId を run payload に使う", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    storageMocks.getValue.mockResolvedValue(BASE_URL);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, [
+        {
+          id: "20260601-clm-other-collection",
+          name: "other-collection",
+          status: "ready",
+          pattern_count: 1,
+          downloaded_count: 0,
+        },
+        {
+          id: "20260602-clm-snapshot-collection",
+          name: "snapshot-collection",
+          channel: "clm",
+          theme: "snapshot",
+          status: "ready",
+          pattern_count: 1,
+          downloaded_count: 0,
+        },
+      ]),
+    );
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        return Promise.resolve({
+          collectionId: "20260602-clm-snapshot-collection",
+          entries,
+          itemStates: ["idle"],
+          isRunning: false,
+          progress: { phase: "stopped", total: 1 },
+          playlistName: "clm | snapshot",
+        });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("停止しました。手動で続行できます。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
+      entries,
+      playlistName: "clm | snapshot",
+      range: undefined,
+      collectionId: "20260602-clm-snapshot-collection",
+      indices: undefined,
+      submittedClipIds: undefined,
+      playlistExpectedClipCount: undefined,
+    });
+  });
+
   it("dir mode の channel/theme から multi-word channel の playlist 名を導出する", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock
@@ -981,6 +1046,26 @@ describe("Suno popup compatibility check", () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain("取得失敗: prompts を取得できる collection がありません。");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+  });
+
+  it("/collections が HTTP 404 の場合は legacy endpoint へフォールバックせずエラー表示する", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(404, {}));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("取得失敗: HTTP 404");
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);

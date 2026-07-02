@@ -4,17 +4,32 @@
 import type { PromptEntry } from "../../shared/api";
 import { PHASE, type ItemState, type Phase, type ProgressPayload, type SnapshotPayload } from "../../shared/constants";
 
+const LEGACY_SNAPSHOT_COLLECTION_ID = "__legacy_snapshot_collection__";
+
+interface InitSnapshotOptions {
+  collectionId: string;
+  playlistName?: string;
+}
+
 /**
  * 連続実行の開始時スナップショット。全 idle・isRunning=true・entries を保持して初期化する。
  * playlistName は再 open 復元時の display 用に保持する (#854)。
  */
-export function initSnapshot(entries: PromptEntry[], playlistName?: string): SnapshotPayload {
+export function initSnapshot(
+  entries: PromptEntry[],
+  optionsOrPlaylistName?: InitSnapshotOptions | string,
+): SnapshotPayload {
+  const options =
+    typeof optionsOrPlaylistName === "string" || optionsOrPlaylistName === undefined
+      ? { collectionId: LEGACY_SNAPSHOT_COLLECTION_ID, playlistName: optionsOrPlaylistName }
+      : optionsOrPlaylistName;
   return {
+    collectionId: options.collectionId,
     entries,
     itemStates: entries.map(() => "idle"),
     isRunning: true,
     progress: { phase: PHASE.INJECTING, total: entries.length },
-    playlistName,
+    playlistName: options.playlistName,
   };
 }
 

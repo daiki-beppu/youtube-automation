@@ -104,6 +104,7 @@ export function useSunoRunner(): RunnerState {
   // popup 再 open 時に content snapshot から復元する playlist 名 (#854)。
   // 選択由来 (derivedPlaylistName) が無い実行中復元ケースで display only に使う。
   const [restoredPlaylistName, setRestoredPlaylistName] = useState<string | undefined>(undefined);
+  const [restoredCollectionId, setRestoredCollectionId] = useState<string | undefined>(undefined);
   // content snapshot 由来の失敗 index (#872 要件3)。chrome.storage の resume state が失われても、
   // 現在タブの live snapshot が ERROR phase で保持する failedIndex を再開バナーの冗長ソースにする。
   const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
@@ -156,7 +157,7 @@ export function useSunoRunner(): RunnerState {
     () => resolveVisibleCollections(allCollections, selectedCollectionIdState),
     [allCollections, resolveVisibleCollections, selectedCollectionIdState],
   );
-  const selectedCollectionId = nextSelectedId ?? "";
+  const selectedCollectionId = restoredCollectionId ?? nextSelectedId ?? "";
 
   // collection 選択から導出する playlist 名 (#854)。
   const selectedCollection = useMemo(
@@ -193,13 +194,21 @@ export function useSunoRunner(): RunnerState {
       return { failedIndex: persistedResume.failedIndex, total: persistedResume.total };
     }
     // 2) content snapshot 由来 (要件3 二重化)。chrome.storage 書込が失われても、現在タブの
-    //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。snapshot は
-    //    当該タブのセッションそのものなので collection 一致 / stale 判定は不要。
-    if (restoredFailedIndex !== undefined && entries.length > 0) {
+    //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。
+    //    snapshot の collectionId が現在選択と一致するときだけ消費する。
+    if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
       return { failedIndex: restoredFailedIndex, total: entries.length };
     }
     return null;
-  }, [persistedResume, selectedCollectionId, resumeDismissed, resumeCheckedAt, restoredFailedIndex, entries.length]);
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeDismissed,
+    resumeCheckedAt,
+    restoredCollectionId,
+    restoredFailedIndex,
+    entries.length,
+  ]);
 
   // 失敗スキップされた entry の一覧 (#948)。resumeBanner と同じ二重ソース
   // （chrome.storage 優先、無ければ content snapshot）から解決する。
@@ -211,8 +220,8 @@ export function useSunoRunner(): RunnerState {
     ) {
       return persistedResume.failedIndices;
     }
-    return restoredFailedIndices ?? [];
-  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredFailedIndices]);
+    return restoredCollectionId === selectedCollectionId ? (restoredFailedIndices ?? []) : [];
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredFailedIndices]);
 
   const submittedClipIdsForResume = useMemo<string[]>(() => {
     if (
@@ -222,8 +231,8 @@ export function useSunoRunner(): RunnerState {
     ) {
       return persistedResume.submittedClipIds ?? [];
     }
-    return restoredSubmittedClipIds ?? [];
-  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredSubmittedClipIds]);
+    return restoredCollectionId === selectedCollectionId ? (restoredSubmittedClipIds ?? []) : [];
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredSubmittedClipIds]);
 
   const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
     if (
@@ -236,7 +245,7 @@ export function useSunoRunner(): RunnerState {
         persistedResume.total,
       );
     }
-    if (restoredFailedIndex !== undefined && entries.length > 0) {
+    if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
       return resolvePlaylistExpectedClipCountForResume(restoredPlaylistExpectedClipCount, entries.length);
     }
     return undefined;
@@ -244,6 +253,7 @@ export function useSunoRunner(): RunnerState {
     persistedResume,
     selectedCollectionId,
     resumeCheckedAt,
+    restoredCollectionId,
     restoredFailedIndex,
     restoredPlaylistExpectedClipCount,
     entries.length,
@@ -290,6 +300,7 @@ export function useSunoRunner(): RunnerState {
   const clearLoadedRunState = useCallback(() => {
     setEntries([]);
     setItemStates([]);
+    setRestoredCollectionId(undefined);
     setRestoredPlaylistName(undefined);
     setRestoredFailedIndex(undefined);
     setRestoredFailedIndices(undefined);
@@ -379,6 +390,8 @@ export function useSunoRunner(): RunnerState {
         setEntries(restored.entries);
         setItemStates(restored.itemStates);
         setIsRunning(restored.isRunning);
+        setRestoredCollectionId(restored.collectionId);
+        setSelectedCollectionId(restored.collectionId);
         setRestoredPlaylistName(restored.playlistName);
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
@@ -430,7 +443,7 @@ export function useSunoRunner(): RunnerState {
         report("コレクションを選択してください。", true);
         return;
       }
-      if (!derivedPlaylistName) {
+      if (!playlistName) {
         report("playlist 名を解決できません。コレクションを選択し直してください。", true);
         return;
       }
@@ -458,7 +471,7 @@ export function useSunoRunner(): RunnerState {
           "run",
           buildRunPayload({
             entries,
-            playlistName: derivedPlaylistName,
+            playlistName,
             range,
             collectionId: selectedCollectionId,
             overrides,
@@ -472,7 +485,7 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, rangeMode, rangeStart, rangeEnd, derivedPlaylistName, selectedCollectionId, report],
+    [isRunning, entries, rangeMode, rangeStart, rangeEnd, playlistName, selectedCollectionId, report],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。

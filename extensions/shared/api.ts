@@ -255,8 +255,8 @@ export async function checkServerCompatibility(
 
 /**
  * dir mode サーバーの collection 一覧を取得する (#816)。
- * 非 2xx は fail-loud で throw（単一 mode サーバーの 404 は popup の fallback トリガー）。
- * 空配列は throw せず返す（fallback 判断は呼び出し側）。
+ * 非 2xx は fail-loud で throw し、popup は取得失敗として表示する。
+ * 空配列は throw せず返し、caller が「選択可能な collection なし」として扱う。
  */
 export async function fetchCollections(
   baseUrl: string,

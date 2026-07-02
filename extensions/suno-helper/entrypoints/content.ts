@@ -593,7 +593,7 @@ export default defineContentScript({
         return { ok: true } as const;
       }
       const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } = data;
-      currentSnapshot = initSnapshot(entries, playlistName);
+      currentSnapshot = initSnapshot(entries, { collectionId, playlistName });
       if (detectSunoViewMode() === "unknown") {
         emitProgress({
           phase: PHASE.ERROR,
@@ -634,7 +634,7 @@ export default defineContentScript({
         return { ok: true } as const;
       }
       const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } = data;
-      currentSnapshot = initSnapshot([], playlistName);
+      currentSnapshot = initSnapshot([], { collectionId, playlistName });
       running = true;
       aborted = false;
       void (async () => {
@@ -684,7 +684,7 @@ export default defineContentScript({
         return { ok: true } as const;
       }
       const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } = data;
-      currentSnapshot = initSnapshot([], undefined);
+      currentSnapshot = initSnapshot([], { collectionId });
       running = true;
       aborted = false;
       void (async () => {

@@ -188,8 +188,8 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
 // ---------------------------------------------------------------------------
 // fetchCollections (#816 dir mode): `/collections` 列挙クライアント
 //   - fetch 先は `${baseUrl}/collections`
-//   - HTTP 非 2xx で throw
-//   - 配列を返す（空配列も許容 = 単一 mode / collection 0 件の fallback 判断は呼び出し側）
+//   - HTTP 非 2xx で throw し、popup は fail-loud にエラー表示する
+//   - 配列を返す（空配列も許容 = caller が「選択可能な collection なし」として扱う）
 // ---------------------------------------------------------------------------
 
 const SAMPLE_COLLECTIONS: CollectionSummary[] = [
@@ -233,7 +233,7 @@ describe("shared/api fetchCollections: 正常系", () => {
     });
   });
 
-  it("Given 空配列 When fetch する Then throw せず [] を返す (fallback 判断は呼び出し側)", async () => {
+  it("Given 空配列 When fetch する Then throw せず [] を返す（選択可能な collection なし）", async () => {
     mockFetch(() => ({ ok: true, status: 200, json: async () => [] }));
 
     await expect(fetchCollections(BASE_URL)).resolves.toEqual([]);
@@ -258,7 +258,7 @@ describe("shared/api fetchCollections: 正常系", () => {
 });
 
 describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
-  it("Given HTTP 404 (単一 mode サーバー) When fetch する Then throw する (popup の fallback トリガー)", async () => {
+  it("Given HTTP 404 When fetch する Then throw する（popup が取得失敗として表示する）", async () => {
     mockFetch(() => ({ ok: false, status: 404, json: async () => ({}) }));
 
     await expect(fetchCollections(BASE_URL)).rejects.toThrow(/404/);

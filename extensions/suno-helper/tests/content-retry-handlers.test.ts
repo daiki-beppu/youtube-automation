@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
+import type { RetryPlaylistPayload } from "../lib/messaging";
 
 interface ProgressMessage {
   phase: string;
@@ -12,9 +13,21 @@ interface ProgressMessage {
   message?: string;
 }
 
-type Handler = (message: { data: Record<string, unknown> }) => unknown;
+type Handler = (message: { data: unknown }) => unknown;
 
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
+
+function retryPlaylistMessage(overrides: Partial<RetryPlaylistPayload> = {}): { data: RetryPlaylistPayload } {
+  return {
+    data: {
+      playlistName: "test-playlist",
+      submittedClipIds: [],
+      expectedClipCount: 0,
+      collectionId: "coll-1",
+      ...overrides,
+    },
+  };
+}
 
 async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
@@ -199,14 +212,10 @@ describe('content onMessage("retryPlaylist"): running ガード', () => {
 
     // 最初の retryPlaylist を投入（async で走り始める → running=true）
     const retryHandler = handlers.get("retryPlaylist")!;
-    retryHandler({
-      data: { playlistName: "test", submittedClipIds: [], expectedClipCount: 0 },
-    });
+    retryHandler(retryPlaylistMessage({ playlistName: "test" }));
 
     // running=true の間に再度呼ぶ → running ガードで即 ok
-    const result = retryHandler({
-      data: { playlistName: "test2", submittedClipIds: [], expectedClipCount: 0 },
-    });
+    const result = retryHandler(retryPlaylistMessage({ playlistName: "test2" }));
     expect(result).toEqual({ ok: true });
   });
 });
@@ -295,13 +304,7 @@ describe('content onMessage("retryPlaylist"): throw→ERROR', () => {
     // resolvePlaylistClipIds が「clip ID が 0 件」で throw する（自然なエラー経路）。
     const { handlers, progressMessages } = await loadContentScript();
 
-    handlers.get("retryPlaylist")!({
-      data: {
-        playlistName: "test-playlist",
-        submittedClipIds: [],
-        expectedClipCount: 0,
-      },
-    });
+    handlers.get("retryPlaylist")!(retryPlaylistMessage());
 
     await vi.waitFor(() =>
       expect(progressMessages).toContainEqual(

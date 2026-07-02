@@ -7,6 +7,7 @@ import { PHASE, type SnapshotPayload } from "../../shared/constants";
 
 /** popup の再 open 復元に使う state。useSunoRunner の restore effect がそのまま React state へ流す。 */
 export interface RestoreState {
+  collectionId: string;
   entries: SnapshotPayload["entries"];
   itemStates: SnapshotPayload["itemStates"];
   isRunning: boolean;
@@ -78,11 +79,12 @@ export function phaseToStatus(
  * snapshot 無し (null) は復元せず従来表示へフォールバックするため null を返す（silent fallback の根拠）。
  */
 export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | null {
-  if (!snap) {
+  if (!snap || !snap.collectionId) {
     return null;
   }
   const { text, error } = phaseToStatus(snap.progress, snap.entries);
   return {
+    collectionId: snap.collectionId,
     entries: snap.entries,
     itemStates: snap.itemStates,
     isRunning: snap.isRunning,

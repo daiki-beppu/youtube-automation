@@ -273,6 +273,8 @@ export type ItemState = "idle" | "active" | "done" | "failed";
 /** content script が SSOT として保持する進捗スナップショット (#852)。
  * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
 export interface SnapshotPayload {
+  // 実行元 collection。popup 再 open 復元時に別 collection の entries を現在選択へ誤適用しないため保持する。
+  collectionId: string;
   entries: PromptEntry[];
   itemStates: ItemState[];
   isRunning: boolean;
