@@ -1162,11 +1162,12 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
     benchmark_by_slug, errors = _latest_benchmark_videos_by_slug(channel_dir, approved_slug_set)
     missing = list(errors)
     video_analysis_dir = channel_dir / "data" / "video_analysis"
-    for slug, videos in benchmark_by_slug.items():
+    for slug in approved_slugs:
         slug_dir, slug_error = _video_analysis_slug_dir(channel_dir, video_analysis_dir, slug)
         if slug_error:
             missing.append(slug_error)
             continue
+        videos = benchmark_by_slug.get(slug, [])
         top_videos = videos[:TTP_VIDEO_ANALYZE_TOP_N]
         if len(top_videos) < TTP_VIDEO_ANALYZE_TOP_N:
             missing.append(
@@ -1178,8 +1179,13 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
         if not expected_ids:
             missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
             continue
-        existing_ids = {path.stem for path in _matching_files(slug_dir or video_analysis_dir / slug, "*.json")}
-        done = len(expected_ids & existing_ids)
+        done_ids, analysis_errors = _verified_video_analysis_ids(
+            slug,
+            slug_dir or video_analysis_dir / slug,
+            expected_ids,
+        )
+        missing.extend(analysis_errors)
+        done = len(done_ids)
         if done == 0:
             missing.append(f"{slug}: video_analysis 未実行 (0/{TTP_VIDEO_ANALYZE_TOP_N})")
         elif done < TTP_VIDEO_ANALYZE_TOP_N:
@@ -1193,7 +1199,7 @@ def _latest_benchmark_videos_by_slug(
 ) -> tuple[dict[str, list[dict[str, object]]], list[str]]:
     try:
         videos = load_benchmark_videos(channel_dir / "data")
-    except ConfigError as exc:
+    except (ConfigError, json.JSONDecodeError, OSError, ValueError) as exc:
         return {}, [str(exc)]
     result: dict[str, list[dict[str, object]]] = {}
     for video in videos:
@@ -1201,6 +1207,29 @@ def _latest_benchmark_videos_by_slug(
         if slug in approved_slugs:
             result.setdefault(slug, []).append(video)
     return result, []
+
+
+def _verified_video_analysis_ids(slug: str, slug_dir: Path, expected_ids: set[str]) -> tuple[set[str], list[str]]:
+    done: set[str] = set()
+    errors: list[str] = []
+    for video_id in sorted(expected_ids):
+        path = slug_dir / f"{video_id}.json"
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            errors.append(f"{slug}: {path.name} 読み込み失敗: {exc}")
+            continue
+        if not isinstance(data, dict):
+            errors.append(f"{slug}: {path.name} のトップレベルが object ではありません")
+            continue
+        payload_video_id = data.get("video_id")
+        if payload_video_id is not None and str(payload_video_id) != video_id:
+            errors.append(f"{slug}: {path.name} の video_id が期待値と一致しません")
+            continue
+        done.add(video_id)
+    return done, errors
 
 
 _SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (

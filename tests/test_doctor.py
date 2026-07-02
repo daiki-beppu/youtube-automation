@@ -2125,6 +2125,79 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "ok"
 
+    def test_approved_slug_missing_from_benchmark_warns_even_if_unapproved_is_complete(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        extra_videos = [{"video_id": f"EXTRA{i}", "views": 60000 - i} for i in range(1, 6)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "unapproved", "videos": extra_videos}]}),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: benchmark top 5 が不足 (0/5)" in r.message
+
+    def test_approved_slug_with_no_min_view_videos_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        low_view_ids = [f"LOW{i}" for i in range(1, 6)]
+        extra_videos = [{"video_id": f"EXTRA{i}", "views": 60000 - i} for i in range(1, 6)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {
+                            "slug": "rival",
+                            "videos": [{"video_id": video_id, "views": 100} for video_id in low_view_ids],
+                        },
+                        {"slug": "unapproved", "videos": extra_videos},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: benchmark top 5 が不足 (0/5)" in r.message
+
+    def test_malformed_benchmark_json_warns_instead_of_raising(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "benchmark_20240101.json").write_text("{broken", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "Expecting property name enclosed in double quotes" in r.message
+
+    def test_non_numeric_benchmark_views_warns_instead_of_raising(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "rival", "videos": [{"video_id": "VID1", "views": "nope"}]}]}),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "invalid literal" in r.message
+
+    def test_video_analysis_raw_json_must_be_object(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "video_analysis" / "rival" / "VID1.json").write_text("null", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: VID1.json のトップレベルが object ではありません" in r.message
+        assert "rival: video_analysis が一部のみ (4/5)" in r.message
+
     def test_video_analysis_symlink_outside_channel_is_rejected(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)
