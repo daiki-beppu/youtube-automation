@@ -6,7 +6,7 @@ import { err, ok } from "../result.ts";
 import type { Result } from "../result.ts";
 import { buildEntries } from "./builder.ts";
 import { readSunoConfig } from "./config.ts";
-import { parsePatternsYaml } from "./parser.ts";
+import { parsePatternsJson } from "./parser.ts";
 import { resolveSunoPaths } from "./paths.ts";
 import { renderMarkdown } from "./renderer.ts";
 import { GenerateSunoInputSchema, GenerateSunoOutputSchema } from "./schema.ts";
@@ -25,7 +25,7 @@ export const generateSunoPromptsService = async (
       readFile(paths.patternsPath, "utf-8"),
       readSunoConfig(channelDir),
     ]);
-    const patternsFile = parsePatternsYaml(patternsText);
+    const patternsFile = parsePatternsJson(patternsText);
     const result = buildEntries(patternsFile, config);
     const markdown = renderMarkdown(patternsFile.title, result, config.config);
     const files = await writeSunoPromptFiles(

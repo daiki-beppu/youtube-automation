@@ -3,8 +3,8 @@ import { z } from "zod";
 import { snakeToCamel } from "../../internal/case.ts";
 
 export const SUNO_DOCS_DIR = "20-documentation";
-export const SUNO_PATTERNS_FILENAME = "suno-patterns.yaml";
-export const SUNO_CONFIG_FILENAME = "suno.yaml";
+export const SUNO_PATTERNS_FILENAME = "suno-patterns.json";
+export const SUNO_CONFIG_FILENAME = "suno.json";
 export const SUNO_PROMPTS_MD_FILENAME = "suno-prompts.md";
 export const SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json";
 

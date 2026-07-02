@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { parseTopLevelYaml } from "./parser.ts";
+import { parseTopLevelJson } from "./parser.ts";
 import { SUNO_CONFIG_FILENAME } from "./schema.ts";
 import type { SunoPromptEntry } from "./schema.ts";
 import type {
@@ -153,13 +153,13 @@ const deepMergeRecords = (
     )
   );
 
-const readOptionalYamlRecord = async (
+const readOptionalJsonRecord = async (
   path: string
 ): Promise<Record<string, unknown>> => {
   if (!existsSync(path)) {
     return {};
   }
-  return parseTopLevelYaml(await readFile(path, "utf-8"));
+  return parseTopLevelJson(await readFile(path, "utf-8"));
 };
 
 const parseStyleVariants = (
@@ -252,7 +252,7 @@ export const readSunoConfig = async (
 ): Promise<ResolvedSunoConfig> => {
   const path = join(channelDir, CONFIG_DIR, SKILLS_DIR, SUNO_CONFIG_FILENAME);
   const [override, fallback] = await Promise.all([
-    readOptionalYamlRecord(path),
+    readOptionalJsonRecord(path),
     collectVideoAnalysisPresets(channelDir),
   ]);
   const merged = deepMergeRecords(DEFAULT_SUNO_CONFIG, override);
