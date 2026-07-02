@@ -56,10 +56,12 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SRC_DIR = _REPO_ROOT / "src" / "youtube_automation"
 _AUDIT_DOC = _REPO_ROOT / "docs" / "audits" / "2026-05-skill-md-audit.md"
 _CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
+_ONBOARDING = _REPO_ROOT / "ONBOARDING.md"
 _AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
 _VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
 _VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
 _COLLECTION_IDEATE = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
+_POSTMORTEM = _SKILLS_DIR / "postmortem" / "SKILL.md"
 
 # rename マッピング (order.md §5)
 RENAME_MAP: dict[str, str] = {
@@ -131,6 +133,15 @@ def _markdown_section(text: str, heading: str) -> str:
     if not match:
         raise AssertionError(f"`{heading}` セクションが見つかりません")
     return match.group("body")
+
+
+def _assert_tokens_in_order(text: str, tokens: tuple[str, ...], context: str) -> None:
+    cursor = -1
+    for token in tokens:
+        index = text.find(token, cursor + 1)
+        assert index != -1, f"{context} に `{token}` がありません"
+        assert index > cursor, f"{context} で `{token}` の順序が崩れています"
+        cursor = index
 
 
 def _front_matter_name(skill_md: Path) -> str | None:
@@ -268,12 +279,7 @@ def test_audience_persona_design_orchestrates_single_persona_flow() -> None:
         "`/viewing-scene` を実行",
         "`/viewing-scene` の結果を反映し、最終 `persona-definition.md` を更新する。",
     )
-    cursor = -1
-    for token in expected_order:
-        index = order.find(token, cursor + 1)
-        assert index != -1, f"audience-persona-design 実行順序に `{token}` がありません"
-        assert index > cursor, f"audience-persona-design 実行順序で `{token}` の順序が崩れています"
-        cursor = index
+    _assert_tokens_in_order(order, expected_order, "audience-persona-design 実行順序")
 
     assert "最終版に残す人物は 1 人だけ" in text
     for required in (
@@ -296,6 +302,45 @@ def test_persona_flow_declares_untrusted_data_boundaries() -> None:
         assert "構造化 persona fields" in text, (
             f"{path.relative_to(_REPO_ROOT)} が構造化 persona fields 境界を明記していない"
         )
+
+
+def test_audience_persona_route_docs_follow_required_order() -> None:
+    """Issue #1371: 利用者導線も viewer-voice → persona design → viewing-scene の順にする。"""
+    onboarding = _read(_ONBOARDING)
+    frequency = _markdown_section(onboarding, "### 5.1 定常タスクの推奨頻度")
+    troubleshooting = _markdown_section(onboarding, "### 5.2 困ったときに参照するスキル")
+    postmortem = _read(_POSTMORTEM)
+    verification = _markdown_section(postmortem, "### Phase 4: 検証ステップの案内")
+    next_step = _markdown_section(postmortem, "## Next Step")
+
+    expected = "`/viewer-voice` → `/audience-persona-design` → `/viewing-scene`"
+    expected_tokens = ("`/viewer-voice`", "`/audience-persona-design`", "`/viewing-scene`")
+    assert expected in frequency
+    assert expected in troubleshooting
+    _assert_tokens_in_order(verification, expected_tokens, "postmortem Phase 4")
+    assert expected in next_step
+    assert "`/audience-persona-design` → `/viewer-voice`" not in postmortem
+
+
+def test_audience_persona_design_failure_guidance_covers_prerequisite_paths() -> None:
+    """Issue #1371: 未実施 viewer-voice と未反映 viewing-scene の停止/再実行契約を固定する。"""
+    text = _read(_AUDIENCE_PERSONA_DESIGN)
+    guidance = _markdown_section(text, "## 障害時ガイダンス")
+
+    assert "viewer-voice 未実施" in guidance
+    assert "`docs/plans/viewer-voice-analysis.md` が無い" in guidance
+    assert "`/viewer-voice` を先に実行するよう案内して停止する" in guidance
+    assert "viewing-scene 未反映" in guidance
+    assert "`docs/plans/viewing-scene-matrix.md` が無い" in guidance
+    assert "暫定 `persona-definition.md` 保存後に `/viewing-scene` を実行し、結果を反映して最終化する" in guidance
+
+
+def test_persona_skill_docs_do_not_reference_content_json_suno_genre_line() -> None:
+    """Issue #1371: `genre_line` は `config/skills/suno.yaml` 側であり content.json には存在しない。"""
+    for path in (_AUDIENCE_PERSONA_DESIGN, _VIEWING_SCENE):
+        text = _read(path)
+        assert "content.json` の `tags.base` と `suno.genre_line`" not in text
+        assert "content.json` の `tags.base` と `genre.*`" in text
 
 
 # ---------- `.claude/skills/**/*.md` に旧スラッシュコマンド参照が残っていないか ----------

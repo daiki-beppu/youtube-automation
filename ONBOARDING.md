@@ -209,7 +209,7 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 | 月次 | `/benchmark` | 競合チャンネル最新データ取得 |
 | 月次 | `/channel-status` | チャンネル全体統計（登録者数・総再生回数）取得 |
 | 月次 | `/alignment-check` | 過去動画のタイトル × サムネ × 音楽整合性監査 |
-| 四半期 | `/audience-persona-design` + `/viewing-scene` 見直し | ターゲット層・利用シーンの再検証 |
+| 四半期 | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` 見直し | ターゲット層・利用シーンの再検証 |
 | 容量逼迫時 | `/live-clean` | 公開済みコレクションの大容量メディア削除 |
 
 ### 5.2 困ったときに参照するスキル
@@ -220,7 +220,7 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 | 次に何やる？ | `/wf-next`（既存コレクション継続） / `/collection-ideate`（新規企画） |
 | このコレクション CTR 弱くない？ | `/alignment-check` → `/thumbnail-compare` |
 | シリーズ広げるべき？ | `/analytics-analyze`（テーマ別パフォーマンス） |
-| 視聴者は誰？何を求めてる？ | `/audience-persona-design` + `/viewer-voice` + `/viewing-scene` |
+| 視聴者は誰？何を求めてる？ | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` |
 | 競合は今どんな動画出してる？ | `/benchmark` → `/video-analyze` |
 
 ### 5.3 共通運営方針の更新

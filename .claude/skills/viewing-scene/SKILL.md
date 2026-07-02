@@ -49,7 +49,6 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 - TTP 対象として転写する活動タグ・尺パターンの **型** を明示
 
 **Agent 3: 検索需要調査**
-- `config/channel/content.json` の `tags.base` と `suno.genre_line`（またはチャンネルのジャンルキーワード）から動的にキーワードを構築して WebSearch で需要を調査する
 - `config/channel/content.json` の `tags.base` と `genre.*` からキーワードを構築（例: `{genre.primary} music for study` / `{genre.style} music for work` / `作業用BGM {genre.primary}`）
 - YouTube 検索のオートコンプリート傾向を推定
 

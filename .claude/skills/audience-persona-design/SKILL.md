@@ -56,7 +56,6 @@ description: "Use when ターゲット視聴者を 1 人の第一ペルソナと
 - TTP 対象として転写するコメント語彙・タグ・検索キーワードの **型** を明示
 
 **Agent 2: コミュニティ調査**
-- `config/channel/content.json` の `tags.base` と `suno.genre_line`（またはチャンネルのジャンルキーワード）から動的に検索クエリを構築して WebSearch で調査する
 - `config/channel/content.json` の `tags.base` と `genre.*` からキーワードを構築（例: `{genre.primary} music listener demographics` / `{genre.style} music youtube audience` / `{genre.context} background music community`）
 - 関連コミュニティ（Reddit, Discord 等）の住人像を推定
 - ジャンル横断での視聴者傾向
