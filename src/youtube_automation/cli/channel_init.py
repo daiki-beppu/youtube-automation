@@ -15,6 +15,7 @@ from youtube_automation.cli.channel_init_templates import (
     CHANNEL_CONFIG_TEMPLATES,
     CONFIG_SUBDIR,
     DEFAULT_LOCALIZATION_LANGUAGES,
+    OPTIONAL_CHANNEL_CONFIG_TEMPLATES,
     PLACEHOLDER_DEFAULT,
     ROOT_JSON_TEMPLATES,
     ROOT_TEXT_TEMPLATES,
@@ -75,6 +76,13 @@ def _normalize_repeated_option(values: list | None) -> tuple:
     return tuple(values)
 
 
+def _parse_non_empty(value: str) -> str:
+    text = value.strip()
+    if not text:
+        raise argparse.ArgumentTypeError("空文字は指定できません")
+    return text
+
+
 def _parse_language(value: str) -> str:
     language = value.strip()
     if not language:
@@ -114,6 +122,47 @@ def _resolve_target_duration_bounds(
     return target_min, target_max
 
 
+def _resolve_distrokid_profile(args: argparse.Namespace) -> dict | None:
+    profile_values = (
+        args.distrokid_artist,
+        args.distrokid_language,
+        args.distrokid_main_genre,
+        args.distrokid_sub_genre,
+        args.distrokid_songwriter_first,
+        args.distrokid_songwriter_last,
+    )
+    if not args.distrokid_enabled:
+        if any(value is not None for value in profile_values):
+            raise argparse.ArgumentTypeError("DistroKid profile 引数を使う場合は --distrokid-enabled が必要です")
+        return None
+
+    if args.distrokid_artist is None or args.distrokid_language is None or args.distrokid_main_genre is None:
+        raise argparse.ArgumentTypeError(
+            "--distrokid-enabled を使う場合は --distrokid-artist, --distrokid-language, "
+            "--distrokid-main-genre が必要です"
+        )
+
+    if bool(args.distrokid_songwriter_first) != bool(args.distrokid_songwriter_last):
+        raise argparse.ArgumentTypeError(
+            "--distrokid-songwriter-first と --distrokid-songwriter-last はセットで指定してください"
+        )
+
+    profile: dict[str, object] = {
+        "artist": args.distrokid_artist,
+        "language": args.distrokid_language,
+        "main_genre": args.distrokid_main_genre,
+    }
+    if args.distrokid_sub_genre is not None:
+        profile["sub_genre"] = args.distrokid_sub_genre
+    if args.distrokid_songwriter_first and args.distrokid_songwriter_last:
+        songwriter = {
+            "first": args.distrokid_songwriter_first,
+            "last": args.distrokid_songwriter_last,
+        }
+        profile["songwriter"] = songwriter
+    return profile
+
+
 def _resolve_target_dir(target: str | None) -> Path:
     return resolve_existing_target_dir(target)
 
@@ -124,6 +173,13 @@ def _plan_actions(target: Path, ctx: ChannelInitContext, *, force: bool) -> Plan
     files: list[FileAction] = []
     config_dir = target / CONFIG_SUBDIR
     for name, render in CHANNEL_CONFIG_TEMPLATES.items():
+        path = config_dir / name
+        rel = (CONFIG_SUBDIR / name).as_posix()
+        new_text = serialize_json(render(ctx))
+        files.append(_plan_file(path, rel, new_text, force=force))
+    for name, render in OPTIONAL_CHANNEL_CONFIG_TEMPLATES.items():
+        if name == "distrokid.json" and ctx.distrokid_profile is None:
+            continue
         path = config_dir / name
         rel = (CONFIG_SUBDIR / name).as_posix()
         new_text = serialize_json(render(ctx))
@@ -270,6 +326,47 @@ def build_parser() -> argparse.ArgumentParser:
         help='localizations の supported_languages。複数回指定可 (default: "ja", "en", "de")',
     )
     parser.add_argument(
+        "--distrokid-enabled",
+        action="store_true",
+        help="DistroKid 配信設定 config/channel/distrokid.json を生成し、distrokid.enabled=true にする",
+    )
+    parser.add_argument(
+        "--distrokid-artist",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid リリースアーティスト名 (--distrokid-enabled 指定時は必須)",
+    )
+    parser.add_argument(
+        "--distrokid-language",
+        type=_parse_language,
+        default=None,
+        help="DistroKid メタデータ言語 (--distrokid-enabled 指定時は必須)",
+    )
+    parser.add_argument(
+        "--distrokid-main-genre",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid main_genre (--distrokid-enabled 指定時は必須)",
+    )
+    parser.add_argument(
+        "--distrokid-sub-genre",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid sub_genre",
+    )
+    parser.add_argument(
+        "--distrokid-songwriter-first",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid songwriter.first",
+    )
+    parser.add_argument(
+        "--distrokid-songwriter-last",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid songwriter.last",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="既存ファイルを上書きする（.env は機密保護のため常に保持）",
@@ -289,6 +386,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             args.target_duration_min,
             args.target_duration_max,
         )
+        distrokid_profile = _resolve_distrokid_profile(args)
     except argparse.ArgumentTypeError as e:
         parser.error(str(e))
 
@@ -314,6 +412,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         country=args.country,
         default_language=default_language,
         supported_languages=supported_languages,
+        distrokid_profile=distrokid_profile,
     )
 
     try:

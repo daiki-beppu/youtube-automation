@@ -9,20 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(doctor)`: `yt-doctor` に `numbered_duplicates` チェックを追加し、`.venv/bin/` と `.claude/skills/` の番号付き重複ファイル（iCloud Drive 同期コンフリクトの bounced file name、原因調査 #1409）を検知・警告できるようにした。`yt-skills sync` も sync 先の重複を warning で報告する。クリーンアップ手順は `docs/migration/numbered-duplicate-files-cleanup.md` を新設し、`/automation-update` に検知確認と再発防止ガイダンス（同期対象外への移設が根本対策、`--frozen` は効果なし）を追記（#1410）
 - `docs(migration)`: TS 移行告知 + 移行ガイド `docs/migration/python-to-tayk.md` を公開し、README / ONBOARDING 冒頭に告知バナーを追加。Python 版は 2026-08 中に提供終了し `tayk`（npm）へ切り替わる（ADR-0015 の 2026-07 頭告知義務、#1416）
 - `feat(channel-new)`: 承認済み TTP 対象だけを使う初回 `/wf-new` readiness を追加し、`yt-doctor` で thumbnail reference / video-analysis partial / Suno style variants / 旧 video-analyze model を検出できるようにした（#1357）
 
 ### Changed
 
+- `feat(channel-init)`: `yt-channel-init` に DistroKid opt-in 初期化を追加し、`--distrokid-enabled` 指定時のみ `config/channel/distrokid.json` を生成するようにした。`/channel-new` のヒアリング手順にも DistroKid 配信設定を追加（#1366）
 - `feat(setup)`: `/setup` から `yt-setup-dirs` を実行して `auth/` などの最小ディレクトリを config 生成前に用意し、`/channel-new` は既存ディレクトリを再利用して `config/channel/*.json` 生成に集中する責務へ整理（#1396）
 - `feat(doctor)`: `yt-doctor` に `initial_setup_readiness` を追加し、thumbnail 参照画像・composition rules・Suno `genre_line` 文字数・planning 中 `descriptions.md` の parser 不一致を事前検知できるようにした（#1403）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
+- `docs(channel-new)`: `/channel-new` の `/wf-new` 接続前チェックに Analytics / Reporting レポート取得設定と YouTube Live streaming 早期有効化の案内を追加し、Reporting API job 初期化導線を `/analytics-collect` / `/setup` / `yt-doctor` に接続（#1365）
 - `docs(channel-new)`: `/channel-new` 完了時に `git status --porcelain` で未コミット変更を確認し、初回 commit 作成または明確な保存手順を案内する完了ゲートを追加。`/automation-update` の dirty worktree 停止時にも `/channel-new` 直後の初回保存未完了を案内するよう更新（#1329）
 
 ### Fixed
 
 - `fix(suno-helper)`: run 一式完了時リロード（#1411）が content script の in-memory snapshot（popup 進捗復元の SSOT）を破棄し、run 中に popup を閉じていた運用者が完了後に再 open しても完走結果や per-entry の done/failed を確認できない問題を修正。FINISHED 到達時（リロード予約の直前）に snapshot を timestamp + collectionId 付きで `chrome.storage.local` へ退避し、リロード後の `queryProgress` が in-memory 不在時の fallback として返すようにした（24h stale 判定付き、次の実行開始で消去、退避失敗時はリロードを見送り in-memory 復元を維持）
 - `fix(suno-helper)`: dir mode の同一タブ連続実行で前回 run の stale selection が次 run の playlist 追加（Cmd+P）に混入し曲数が累積汚染される問題を修正。run 一式完了時（resume state 消去後）にタブをリロードして Suno 内部の multi-select 状態を破棄し（runAll / retryPlaylist / retryDownload の全選択作成経路が対象）、保険として Cmd+P 直前に選択中 clip 数が対象件数を超えていたら fail-loud で中断してリロード後の再実行を促すようにした。ガード走査は 1 pass + 超過即打ち切りの軽量モードで行い、走査自体の失敗は fail-open（警告して続行）。リロード猶予中に次 run が受理された場合はリロードを取り消して新 run を保護し、resume state 消去失敗時は FINISHED を維持してリロードのみ見送る（#1411）
+- `fix(hooks)`: extensions/ 配下のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を exit 1 で返し必ず失敗する問題を修正。extensions は自前の ESLint / Prettier / tsc 管理（CI: extensions.yml）のため、`lefthook.yml` の oxlint / oxfmt / typecheck に `exclude: extensions/**` を追加して root ツールチェーンの対象のみに絞った（exclude の glob 配列サポートのため `min_version` を 1.5.0 へ引き上げ、#1428）
 - `fix(channel-new)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-new` が TTP 対象承認・relationship・branding snapshot・thumbnail reference・Suno readiness の不足を残したまま完了扱いにならないようにした（#1397）
 - `fix(skills)`: `/video-upload` と `/wf-next` の公開承認前に `yt-upload-collection --plan` で即時公開/予約公開を確定し、予約時は実際の公開予定時刻を案内するよう明記（#1395）
 - `fix(doctor)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-setup` の benchmark 反映未完了による TTP 参照データ欠落を検知・案内できるようにした（#1400）
