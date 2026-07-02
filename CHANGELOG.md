@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `chore(distrokid-helper)`: manifest / package の shell を suno-helper 基準に揃えた（ADR-0016、#1359）。manifest 権限を `lib/manifest.ts` の `MANIFEST_PERMISSIONS` / `MANIFEST_HOST_PERMISSIONS` に SSOT 化して `wxt.config.ts` から参照し、`tests/manifest.test.ts` と CI（extensions.yml）の生成 manifest 検査で drift（広域権限や suno-helper 専用権限の混入、distrokid.com 以外の host 追加）を機械検知するようにした。あわせて dependencies の caret 指定を既存解決値へ exact pin（`@webext-core/messaging` 2.3.0 / `@wxt-dev/storage` 1.2.8 / `react` `react-dom` 19.2.7）し、`pnpm.onlyBuiltDependencies: ["esbuild"]` を追加
 - `docs(skills)`: `/audience-persona` を `/audience-persona-design` に改名し、`/viewer-voice` と `/viewing-scene` を束ねて第一ペルソナ 1 人へ収束させる設計フローに更新（#1371）
 - `feat(channel-init)`: `yt-channel-init` に DistroKid opt-in 初期化を追加し、`--distrokid-enabled` 指定時のみ `config/channel/distrokid.json` を生成するようにした。`/channel-new` のヒアリング手順にも DistroKid 配信設定を追加（#1366）
 - `feat(setup)`: `/setup` から `yt-setup-dirs` を実行して `auth/` などの最小ディレクトリを config 生成前に用意し、`/channel-new` は既存ディレクトリを再利用して `config/channel/*.json` 生成に集中する責務へ整理（#1396）
