@@ -662,11 +662,21 @@ describe("Suno popup compatibility check", () => {
     ];
     let progressHandler: ((event: { data: ProgressPayload }) => void) | undefined;
 
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
-      .mockResolvedValueOnce(jsonResponse(404, {}))
-      .mockResolvedValueOnce(jsonResponse(200, entries));
-    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        throw new Error("runner unavailable");
+      }
+      if (message === "fetchCompatibilityWarning") {
+        return Promise.resolve("");
+      }
+      if (message === "fetchCollections") {
+        return Promise.reject(new Error("HTTP 404"));
+      }
+      if (message === "fetchPrompts") {
+        return Promise.resolve(entries);
+      }
+      return defaultSendMessage(message, payload);
+    });
     messagingMocks.onMessage.mockImplementation((message?: unknown, handler?: unknown) => {
       if (message === "progress" && typeof handler === "function") {
         progressHandler = handler as (event: { data: ProgressPayload }) => void;
