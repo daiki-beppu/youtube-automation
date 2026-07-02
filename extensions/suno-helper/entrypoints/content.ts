@@ -1,6 +1,6 @@
 // Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
-import type { PromptEntry } from "../../shared/api";
+import type { DurationFilter, PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
@@ -102,6 +102,25 @@ function assertOptionalBoolean(value: unknown, field: string): boolean | undefin
   return value;
 }
 
+function assertOptionalDurationFilter(value: unknown, field: string): DurationFilter | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const record = assertRecord(value, field);
+  const minSec = assertOptionalFiniteNumber(record.min_sec, `${field}.min_sec`);
+  const maxSec = assertOptionalFiniteNumber(record.max_sec, `${field}.max_sec`);
+  if (minSec === undefined || maxSec === undefined) {
+    throw new Error(`${field}.min_sec and ${field}.max_sec are required`);
+  }
+  if (minSec < 0 || maxSec < 0) {
+    throw new Error(`${field}.min_sec and ${field}.max_sec must be non-negative`);
+  }
+  if (minSec > maxSec) {
+    throw new Error(`${field}.min_sec must be less than or equal to max_sec`);
+  }
+  return { min_sec: minSec, max_sec: maxSec };
+}
+
 function assertRunPayload(value: unknown): RunPayload {
   const record = assertRecord(value, "run payload");
   if (!Array.isArray(record.entries)) {
@@ -112,6 +131,7 @@ function assertRunPayload(value: unknown): RunPayload {
     entries: record.entries as PromptEntry[],
     playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
     collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
+    durationFilter: assertOptionalDurationFilter(record.durationFilter, "run.durationFilter"),
   };
 }
 
@@ -464,6 +484,8 @@ export default defineContentScript({
     }
 
     interface RunOptions {
+      // collection 単位 duration guard 閾値 (#1259)。実フィルタは yield guard 側で消費する。
+      durationFilter?: DurationFilter;
       // 0-based inclusive な実行範囲 (#872)。未指定は全 entry。判断A: range 指定でも entries 全体と
       // 絶対 index を保ち、range 内の entry だけを処理する（slice 再採番による index ズレを起こさない）。
       range?: RunRange;
@@ -751,8 +773,16 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } =
-        assertRunPayload(data);
+      const {
+        entries,
+        playlistName,
+        durationFilter,
+        range,
+        collectionId,
+        indices,
+        submittedClipIds,
+        playlistExpectedClipCount,
+      } = assertRunPayload(data);
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
@@ -778,6 +808,7 @@ export default defineContentScript({
       // poller は stale 判定で自発的に黙る（intervalMs ごとの no-op tick のみ）。
       feedPoller.start();
       void runAll(entries, {
+        durationFilter,
         range,
         collectionId,
         playlistName,

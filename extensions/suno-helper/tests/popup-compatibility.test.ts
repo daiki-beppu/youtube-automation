@@ -79,6 +79,11 @@ function defaultSendMessage(message: string, payload?: Record<string, string>): 
       `${payload?.baseUrl}/collections/${encodeURIComponent(payload?.collectionId ?? "")}/suno/prompts.json`,
     );
   }
+  if (message === "fetchCollectionPromptResponse") {
+    return readJson(
+      `${payload?.baseUrl}/collections/${encodeURIComponent(payload?.collectionId ?? "")}/suno/prompts.json`,
+    );
+  }
   return Promise.resolve({ ok: true });
 }
 

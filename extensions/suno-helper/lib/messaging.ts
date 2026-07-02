@@ -3,7 +3,14 @@
 // （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
-import type { CapturedPlaylist, CollectionSummary, DownloadedPayload, PromptEntry } from "../../shared/api";
+import type {
+  CapturedPlaylist,
+  CollectionSummary,
+  DownloadedPayload,
+  DurationFilter,
+  PromptEntry,
+  PromptResponse,
+} from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
@@ -15,6 +22,8 @@ import type { RunRange } from "./resume-state";
 export interface RunPayload {
   entries: PromptEntry[];
   playlistName: string;
+  /** collection 単位 duration guard 閾値 (#1259)。実フィルタは yield guard 側で消費する。 */
+  durationFilter?: DurationFilter;
   range?: RunRange;
   collectionId: string;
   /** 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。 */
@@ -102,6 +111,8 @@ interface ProtocolMap {
   fetchCollections(payload: { baseUrl: string }): CollectionSummary[];
   /** overlay → background: collection prompts を extension origin から取得する。 */
   fetchCollectionPrompts(payload: { baseUrl: string; collectionId: string }): PromptEntry[];
+  /** overlay → background: collection prompts と metadata を extension origin から取得する。 */
+  fetchCollectionPromptResponse(payload: { baseUrl: string; collectionId: string }): PromptResponse;
   /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。 */
   postDownloaded(payload: { baseUrl: string; collectionId: string; body: DownloadedPayload }): void;
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */

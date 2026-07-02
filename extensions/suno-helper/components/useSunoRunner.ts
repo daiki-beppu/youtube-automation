@@ -7,8 +7,10 @@ import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
+  type DurationFilter,
   extractPlaylistName,
   type PromptEntry,
+  type PromptResponse,
   resolvePromptCollectionId,
   visiblePromptCollections,
 } from "../../shared/api";
@@ -82,8 +84,19 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
-async function fetchCollectionEntries(baseUrl: string, collectionId: string): Promise<PromptEntry[]> {
-  return sendMessage("fetchCollectionPrompts", { baseUrl, collectionId });
+function normalizePromptResponseMessage(response: PromptResponse | PromptEntry[]): PromptResponse {
+  if (Array.isArray(response)) {
+    return { entries: response };
+  }
+  return response;
+}
+
+async function fetchCollectionPromptResponse(baseUrl: string, collectionId: string): Promise<PromptResponse> {
+  const response = (await sendMessage("fetchCollectionPromptResponse", {
+    baseUrl,
+    collectionId,
+  })) as PromptResponse | PromptEntry[];
+  return normalizePromptResponseMessage(response);
 }
 
 function maxDefined(...values: Array<number | null | undefined>): number | undefined {
@@ -96,6 +109,7 @@ export function useSunoRunner(): RunnerState {
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
+  const [durationFilter, setDurationFilter] = useState<DurationFilter | undefined>(undefined);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
@@ -299,6 +313,7 @@ export function useSunoRunner(): RunnerState {
 
   const clearLoadedRunState = useCallback(() => {
     setEntries([]);
+    setDurationFilter(undefined);
     setItemStates([]);
     setRestoredCollectionId(undefined);
     setRestoredPlaylistName(undefined);
@@ -419,10 +434,11 @@ export function useSunoRunner(): RunnerState {
     setCompatibilityWarning(typeof warning === "string" ? warning : "");
     try {
       const collectionId = await syncCollections(trimmed, selectedCollectionId);
-      const data = await fetchCollectionEntries(trimmed, collectionId);
-      setEntries(data);
-      setItemStates(data.map(() => "idle"));
-      report(`${data.length} パターンを取得しました。`);
+      const data = await fetchCollectionPromptResponse(trimmed, collectionId);
+      setEntries(data.entries);
+      setDurationFilter(data.duration_filter);
+      setItemStates(data.entries.map(() => "idle"));
+      report(`${data.entries.length} パターンを取得しました。`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setEntries([]);
@@ -473,6 +489,7 @@ export function useSunoRunner(): RunnerState {
           buildRunPayload({
             entries,
             playlistName,
+            durationFilter,
             range,
             collectionId: selectedCollectionId,
             overrides,
@@ -486,7 +503,7 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, rangeMode, rangeStart, rangeEnd, playlistName, selectedCollectionId, report],
+    [isRunning, entries, durationFilter, rangeMode, rangeStart, rangeEnd, playlistName, selectedCollectionId, report],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
