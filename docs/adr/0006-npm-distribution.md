@@ -1,5 +1,9 @@
 # 配布形態: npm 公開 + 単一 bundle CLI (ccusage 型)
 
+## Status
+
+accepted (2026-06-12)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 ADR 0001 は TS 再実装の戦略を決めたが、**下流チャンネルリポが TS 版をどう消費するか** (配布形態) は未決だった。PR #791 のグリルセッション (2026-06-12) で以下の制約が確定した:

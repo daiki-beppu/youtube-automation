@@ -26,13 +26,15 @@
 //   (B) トラック数 select（#howManySongsOnThisAlbum）に曲数を set し、track 行（title_<uuid>）の
 //       生成完了を MutationObserver で待ってから後続注入へ進む（順序保証）。
 //   (C) Apple Music クレジット: 「クレジットを追加」を 1 回 click して全 track の入力欄を visible 化し、
-//       各 track の performer/producer へ #artistName（アカウント登録のアーティスト名）を注入する。
+//       各 track の performer/producer へ profile.artist を優先注入する。
+//       profile.artist 未設定・旧 payload で欠落時は #artistName（アカウント登録名）に fallback する。
 
 import { isVisible } from "../../shared/visibility";
 import type { AiDisclosure, DistrokidProfile, DistrokidProfileCredits, SongwriterName } from "./types";
 
-// 静的プロファイルの SELECT 注入先（id ベース）。
+// 静的プロファイルの注入先。
 export const PROFILE_SELECTORS = {
+  artist: 'input[name="bandname"]',
   language: "#language",
   main_genre: "#genrePrimary",
   sub_genre: "#genreSecondary",
@@ -112,8 +114,8 @@ export const TRACK_COUNT_SELECTOR = "#howManySongsOnThisAlbum";
 // track 行（title_<uuid> input）の生成完了を待つ上限（ms）。超過したら fail-loud。
 export const TRACK_ROW_WAIT_TIMEOUT_MS = 10_000;
 
-// Apple Music クレジット用のアーティスト名（アカウント登録の hidden 値）。
-// BGM チャンネルは演奏者 = プロデューサー = アーティスト名の前提（#888）。
+// Apple Music クレジット用 fallback アーティスト名（アカウント登録の hidden 値）。
+// profile.artist 未設定の後方互換用。BGM チャンネルは演奏者 = プロデューサー = アーティスト名の前提（#888）。
 export const ARTIST_NAME_SELECTOR = "#artistName";
 
 // Apple Music クレジット（演奏者 / プロデューサー）入力欄（#888 / #919）。track は 1-indexed。
@@ -301,8 +303,11 @@ function requireVisibleField(root: ParentNode, selector: string): ValueElement {
   return el;
 }
 
-// 静的プロファイル（language / main_genre 必須、sub_genre は任意）を注入する。
+// 静的プロファイル（artist / sub_genre は任意、language / main_genre は必須）を注入する。
 export function injectProfile(root: ParentNode, profile: DistrokidProfile): void {
+  if (profile.artist.trim() !== "") {
+    setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.artist), profile.artist.trim());
+  }
   setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.language), profile.language);
   setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.main_genre), profile.main_genre);
   if (profile.sub_genre !== null) {
@@ -657,6 +662,14 @@ function requireArtistName(root: ParentNode): string {
   return name;
 }
 
+function resolveCreditArtistName(root: ParentNode, profileArtist: string): string {
+  const configured = profileArtist.trim();
+  if (configured !== "") {
+    return configured;
+  }
+  return requireArtistName(root);
+}
+
 // Apple Music クレジット展開トリガー（「クレジットを追加」）を解決する。
 // .requirements-item-title は複数あり得るため textContent で絞り込む（fail-loud）。
 function requireCreditTrigger(root: ParentNode): HTMLElement {
@@ -675,7 +688,7 @@ function requireCreditTrigger(root: ParentNode): HTMLElement {
 //
 // トップレベルの「クレジットを追加」を 1 回 click して全 track の入力欄を visible 化し、
 // 各 track の performer / producer に以下を注入する:
-//   - name 欄: `#artistName`（アカウント登録のアーティスト名）
+//   - name 欄: `profile.artist`（未設定時は後方互換で `#artistName`）
 //   - role 欄: `credits.performer_role` / `credits.producer_role`（profile 由来、既定 Synthesizer + Producer）
 // role 欄は `dk-searchable-select__native` クラスで display:none に隠れたネイティブ select だが、
 // `setSelectValue` でネイティブ側に setSelectedIndex + change dispatch すれば DistroKid 独自 UI
@@ -685,9 +698,10 @@ function requireCreditTrigger(root: ParentNode): HTMLElement {
 export async function injectAppleMusicCredits(
   root: ParentNode,
   trackCount: number,
+  artist: string,
   credits: DistrokidProfileCredits,
 ): Promise<void> {
-  const artistName = requireArtistName(root);
+  const artistName = resolveCreditArtistName(root, artist);
   const trigger = requireCreditTrigger(root);
   // Apple Music ストア check 後に credit trigger が可視化されるまで待つ（#923）。
   await waitForElementVisible(trigger, CREDIT_TRIGGER_WAIT_TIMEOUT_MS);

@@ -563,13 +563,35 @@ def _build_distrokid(merged: dict) -> Distrokid:
                 f"distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: {', '.join(missing)}"
             )
 
+    if not enabled:
+        profile_raw = _disabled_distrokid_profile_raw(profile_raw)
+
     profile = _build_distrokid_profile(profile_raw)
     return Distrokid(enabled=enabled, profile=profile)
+
+
+def _disabled_distrokid_profile_raw(profile_raw: dict) -> dict:
+    sanitized: dict = {}
+    if "artist" in profile_raw:
+        sanitized["artist"] = _optional_string(profile_raw, "artist", "distrokid.profile.artist")
+    for key in ("language", "main_genre"):
+        value = profile_raw.get(key)
+        if isinstance(value, str):
+            sanitized[key] = value
+    sub_genre = profile_raw.get("sub_genre")
+    if isinstance(sub_genre, str) or sub_genre is None:
+        sanitized["sub_genre"] = sub_genre
+    for key in ("songwriter", "ai_disclosure", "credits"):
+        value = profile_raw.get(key)
+        if isinstance(value, dict) or value is None:
+            sanitized[key] = value
+    return sanitized
 
 
 def _build_distrokid_profile(profile_raw: dict) -> DistrokidProfile:
     sub_genre = profile_raw.get("sub_genre")
     return DistrokidProfile(
+        artist=_optional_string(profile_raw, "artist", "distrokid.profile.artist"),
         language=str(profile_raw.get("language", "")),
         main_genre=str(profile_raw.get("main_genre", "")),
         sub_genre=str(sub_genre) if sub_genre is not None else None,
@@ -577,6 +599,13 @@ def _build_distrokid_profile(profile_raw: dict) -> DistrokidProfile:
         ai_disclosure=_build_ai_disclosure(profile_raw.get("ai_disclosure")),
         credits=_build_credits(profile_raw.get("credits")),
     )
+
+
+def _optional_string(raw: dict, key: str, label: str) -> str:
+    value = raw.get(key, "")
+    if value is None or not isinstance(value, str):
+        raise ConfigError(f"{label} は string でなければなりません（got {type(value).__name__}）")
+    return value
 
 
 def _build_credits(raw: object) -> DistrokidProfileCredits:

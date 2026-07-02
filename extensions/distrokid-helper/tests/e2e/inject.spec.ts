@@ -51,8 +51,9 @@ test("トラック数 select でアルバム構造になり、SELECT/file 注入
     );
   });
 
-  // Then: artistName は type=hidden（可視入力欄なし → 注入対象外）
+  // Then: artistName は type=hidden（fallback 用）、bandname は可視 artist 注入対象
   await expect(page.locator("#artistName")).toHaveAttribute("type", "hidden");
+  await expect(page.locator('input[name="bandname"]')).toHaveCount(1);
 
   // When: トラック数 select に 2 を set + change（アルバムモードへ）
   await setNativeValue(page, "#howManySongsOnThisAlbum", "2");
@@ -82,6 +83,7 @@ test("トラック数 select でアルバム構造になり、SELECT/file 注入
   expect(noChecked).toBe(true);
 
   // When: SELECT とテキストを native setter、ファイルを DataTransfer で注入する
+  await setNativeValue(page, 'input[name="bandname"]', "ABYSS MI");
   await setNativeValue(page, "#language", "ja");
   await setNativeValue(page, '[name="songwriter_real_name_first1"]', "Jane");
   await page.evaluate(() => {
@@ -322,8 +324,8 @@ test("Apple Music「クレジットを追加」click で全 track の credit 入
     await expect(page.locator(`#track-${n}-producer-1-name`)).toBeVisible();
   }
 
-  // When: 全 track の performer / producer に artist 名（#artistName）を注入する
-  const artist = await page.locator("#artistName").inputValue();
+  // When: 全 track の performer / producer に profile artist 名を注入する
+  const artist = await page.locator('input[name="bandname"]').inputValue();
   for (const n of [1, 2]) {
     await setNativeValue(page, `#track-${n}-performer-1-name`, artist);
     await setNativeValue(page, `#track-${n}-producer-1-name`, artist);

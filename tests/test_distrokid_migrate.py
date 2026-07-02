@@ -151,6 +151,7 @@ def test_migrate_apply_converts_to_new_schema(tmp_path):
 
     assert rc == 0
     profile = _read_json(path)["distrokid"]["profile"]
+    assert profile["artist"] == "City Nights"
     assert profile["language"] == "ja"
     assert profile["main_genre"] == "Electronic"
     assert profile["songwriter"] == {"first": "Jane", "last": "Doe"}
@@ -168,7 +169,7 @@ def test_migrate_apply_converts_to_new_schema(tmp_path):
 def test_migrate_apply_drops_legacy_fields(tmp_path):
     """Given 旧フラット profile
     When --apply
-    Then artist_name / apple_music_credit / track_type は drop される。
+    Then artist_name は artist に変換され、apple_music_credit / track_type は drop される。
     """
     path = _write_distrokid(tmp_path, _old_distrokid())
 
@@ -176,9 +177,22 @@ def test_migrate_apply_drops_legacy_fields(tmp_path):
 
     assert rc == 0
     profile = _read_json(path)["distrokid"]["profile"]
+    assert profile["artist"] == "City Nights"
     assert "artist_name" not in profile
     assert "apple_music_credit" not in profile
     assert "track_type" not in profile
+
+
+@pytest.mark.parametrize("artist", [None, {"name": "City Nights"}, ["City Nights"]])
+def test_migrate_rejects_non_string_artist(tmp_path, artist):
+    """artist / artist_name は存在するなら string 必須。"""
+    data = _old_distrokid()
+    data["distrokid"]["profile"]["artist_name"] = artist
+    _write_distrokid(tmp_path, data)
+
+    rc = main(["--target", str(tmp_path), "--apply"])
+
+    assert rc == 1
 
 
 def test_migrate_apply_preserves_enabled_flag(tmp_path):
@@ -285,6 +299,7 @@ def test_migrate_already_new_schema_is_noop(tmp_path):
         "distrokid": {
             "enabled": True,
             "profile": {
+                "artist": "ABYSS MI",
                 "language": "ja",
                 "main_genre": "Electronic",
                 "songwriter": {"first": "Jane", "last": "Doe"},
@@ -306,6 +321,7 @@ def test_migrate_already_new_schema_is_noop(tmp_path):
 
     assert rc == 0
     profile = _read_json(path)["distrokid"]["profile"]
+    assert profile["artist"] == "ABYSS MI"
     assert profile["songwriter"] == {"first": "Jane", "last": "Doe"}
     assert profile["ai_disclosure"]["music"] is True
     assert "composition" not in profile["ai_disclosure"]
