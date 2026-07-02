@@ -728,6 +728,37 @@ def test_workflow_wf_next_approval_gates_partial(tmp_path, monkeypatch):
     assert config.workflow.wf_next.approval_gates.upload is False
 
 
+def test_workflow_wf_next_skip_manual_mastering_default(tmp_path, monkeypatch):
+    """#1449: `skip_manual_mastering` 未設定なら `False`（従来通り最終マスター配置待ち）."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_manual_mastering is False
+
+
+def test_workflow_wf_next_skip_manual_mastering_explicit(tmp_path, monkeypatch):
+    """#1449: `skip_manual_mastering: true` で raw=final 運用を宣言できる."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "skip_manual_mastering": True,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_manual_mastering is True
+    # approval_gates は独立した設定であり default を維持する
+    assert config.workflow.wf_next.approval_gates.audio is False
+    assert config.workflow.wf_next.approval_gates.upload is False
+
+
 def test_workflow_section_must_be_object(tmp_path, monkeypatch):
     """#508: `workflow` セクションが object でないと ConfigError."""
     sections = _minimal_sections()

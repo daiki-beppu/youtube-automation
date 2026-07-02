@@ -417,6 +417,7 @@ def _build_workflow(merged: dict) -> Workflow:
                 audio=bool(gates_raw.get("audio", False)),
                 upload=bool(gates_raw.get("upload", False)),
             ),
+            skip_manual_mastering=bool(wf_next_raw.get("skip_manual_mastering", False)),
         ),
     )
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(wf-next)`: `config/channel/workflow.json::workflow.wf_next.skip_manual_mastering`（default `false`）を新設。`true` のとき `/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが無くても `assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ進む（raw=final 運用）。`approval_gates.audio` とは独立で、後方互換（未設定は従来通り停止）。docs/workflow-cheatsheet.md のよくある質問に設定手順を追記（#1449）
+
 ## [5.5.15] - 2026-07-02
 
 ### Added
