@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from PIL import Image as PILImage
 
 from youtube_automation.cli import doctor
 from youtube_automation.utils import secrets as secrets_module
@@ -1652,6 +1653,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
                 "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                 "- relationship: title-structure / thumbnail-composition",
                 "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
                 "- 未反映項目: なし",
                 "",
             ]
@@ -1697,6 +1699,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
         ),
         encoding="utf-8",
     )
+    _write_channel_branding_output_images(base)
     data_dir = base / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     video_ids = [f"VID{i}" for i in range(1, 6)]
@@ -1751,6 +1754,13 @@ def _write_ttp_readiness_files(base: Path) -> None:
         encoding="utf-8",
     )
     (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz, soft piano"\n', encoding="utf-8")
+
+
+def _write_channel_branding_output_images(base: Path) -> None:
+    branding_dir = base / "branding"
+    branding_dir.mkdir(parents=True, exist_ok=True)
+    PILImage.new("RGB", (800, 800), color=(40, 80, 120)).save(branding_dir / "icon.png", format="PNG")
+    PILImage.new("RGB", (2048, 1152), color=(120, 80, 40)).save(branding_dir / "banner.png", format="PNG")
 
 
 class TestCheckTtpWfNewReadinessChannelNew:
@@ -1906,7 +1916,25 @@ class TestCheckTtpWfNewReadinessChannelNew:
         )
         _write_ttp_readiness_files(tmp_path)
         (tmp_path / "data" / "thumbnail_compare" / "benchmark" / "rival_1.jpg").unlink()
-        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text("image_generation: {}\n", encoding="utf-8")
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon",
+                    "        banner_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
         (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
             "\n".join(
                 [
@@ -1916,6 +1944,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                     "- relationship: title-structure / thumbnail-composition",
                     "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
                     "- 未反映項目: ユーザー承認済み例外: thumbnail reference は後続 /thumbnail で補完するためスキップ",
                     "",
                 ]
@@ -1926,6 +1955,33 @@ class TestCheckTtpWfNewReadinessChannelNew:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
+
+    def test_approved_thumbnail_exception_does_not_skip_channel_branding_config(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "thumbnail_compare" / "benchmark" / "rival_1.jpg").unlink()
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text("image_generation: {}\n", encoding="utf-8")
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival を承認済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition / music-style",
+                    "- relationship: title-structure / thumbnail-composition",
+                    "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
+                    "- 未反映項目: ユーザー承認済み例外: thumbnail reference は後続 /thumbnail で補完するためスキップ",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding 未設定" in r.message
 
     def test_approved_music_exception_satisfies_missing_suno_readiness(self, tmp_path):
         _write_ttp_analytics(
@@ -1944,6 +2000,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                     "- relationship: title-structure / thumbnail-composition",
                     "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
                     "- 未反映項目: ユーザー承認済み例外: music / 曲構造 TTP は後続 /suno で補完するためスキップ",
                     "",
                 ]
@@ -2394,6 +2451,83 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "reference_images.channel_branding.output_icon が未設定または不正" in r.message
         assert "reference_images.channel_branding.output_banner が未設定または不正" in r.message
+
+    def test_thumbnail_channel_branding_refs_must_resolve_to_snapshot_urls(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references:",
+                    "          - not-a-snapshot-icon-ref",
+                    "        banner_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[9]",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "icon_references に snapshot fragment として解決できない参照があります" in r.message
+        assert "banner_references に snapshot fragment として解決できない参照があります" in r.message
+
+    def test_channel_branding_generated_images_are_required(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "icon.png").unlink()
+        (tmp_path / "branding" / "banner.png").write_text("not an image", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/icon.png が未生成" in r.message
+        assert "branding/banner.png を画像として読み込めません" in r.message
+
+    def test_channel_branding_generated_image_aspect_ratio_is_checked(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        PILImage.new("RGB", (800, 600), color=(10, 20, 30)).save(tmp_path / "branding" / "icon.png", format="PNG")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/icon.png のアスペクト比が不正です" in r.message
+
+    def test_channel_branding_generated_images_require_approval_record(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival を承認済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition / music-style",
+                    "- relationship: title-structure / thumbnail-composition",
+                    "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 未反映項目: なし",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "channel branding 画像のユーザー承認記録がありません" in r.message
 
     def test_missing_thumbnail_reference_file_warns(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
