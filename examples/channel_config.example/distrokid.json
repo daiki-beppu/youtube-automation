@@ -2,6 +2,7 @@
   "distrokid": {
     "enabled": false,
     "profile": {
+      "artist": "Example Artist",
       "language": "en",
       "main_genre": "Electronic",
       "sub_genre": "House",

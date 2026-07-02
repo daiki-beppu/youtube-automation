@@ -982,7 +982,7 @@ def create_server(
             # `/distrokid/assets/<rel>` → collection-scoped アセット配信
             distrokid_assets_infix = "distrokid/assets/"
             if sub.startswith(distrokid_assets_infix):
-                relpath = sub[len(distrokid_assets_infix) :]
+                relpath = urllib.parse.unquote(sub[len(distrokid_assets_infix) :])
                 # コレクションルートからの相対パスで resolve（30-distrokid 配下も含む）
                 resolved = resolve_asset_path(coll_dir, relpath)
                 if resolved is None:
@@ -1048,7 +1048,7 @@ def create_server(
             if not distrokid_enabled:
                 self.send_error(404, "Not Found")
                 return
-            relpath = self.path[len(DISTROKID_ASSETS_PREFIX) :]
+            relpath = urllib.parse.unquote(self.path[len(DISTROKID_ASSETS_PREFIX) :])
             resolved = resolve_asset_path(collection_dir, relpath)
             if resolved is None:
                 self.send_error(404, "Not Found")

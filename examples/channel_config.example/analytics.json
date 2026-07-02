@@ -4,7 +4,12 @@
   },
   "benchmark": {
     "channels": [
-      {"name": "Rival Channel", "id": "UC123"}
+      {
+        "name": "Rival Channel",
+        "id": "UC123",
+        "slug": "rival-channel",
+        "relationship": "title-structure / thumbnail-composition"
+      }
     ]
   }
 }

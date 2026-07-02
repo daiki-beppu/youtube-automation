@@ -1,9 +1,13 @@
 import logging
+import os
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +15,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def _assert_appears_before(text: str, earlier: str, later: str) -> None:
+    earlier_idx = text.find(earlier)
+    later_idx = text.find(later)
+    assert earlier_idx >= 0, f"{earlier!r} not found"
+    assert later_idx >= 0, f"{later!r} not found"
+    assert earlier_idx < later_idx
 
 
 def _frontmatter(path: str) -> dict:
@@ -23,6 +35,25 @@ def _frontmatter(path: str) -> dict:
     parsed = yaml.safe_load(text[4:end])
     assert isinstance(parsed, dict)
     return parsed
+
+
+def _isolated_git_env() -> dict[str, str]:
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_CONFIG_")}
+    env["GIT_CONFIG_GLOBAL"] = os.devnull
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    return env
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", *args],
+        cwd=repo,
+        env=_isolated_git_env(),
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
 
 def test_workflow_schema_references_existing_skill_schema() -> None:
@@ -72,6 +103,23 @@ def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
     assert '"upload_settings": {' in schedule_template
 
 
+def test_setup_directory_generation_contract_is_separate_from_channel_config() -> None:
+    setup = _read(".claude/skills/setup/SKILL.md")
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    setup_dirs = _read("src/youtube_automation/cli/setup_dirs.py")
+    channel_init = _read("src/youtube_automation/cli/channel_init.py")
+    setup_directory_contract = _read("src/youtube_automation/cli/setup_directory_contract.py")
+    pyproject = _read("pyproject.toml")
+
+    assert "uv run yt-setup-dirs" in setup
+    assert "`/setup` では `config/channel/*.json` を生成しない" in setup
+    assert "`/setup` が作成済みのディレクトリはそのまま再利用する" in channel_new
+    assert "setup_directory_contract" in setup_dirs
+    assert "setup_directory_contract" in channel_init
+    assert "SETUP_DIRECTORIES" in setup_directory_contract
+    assert 'yt-setup-dirs = "youtube_automation.cli_entrypoints:yt_setup_dirs"' in pyproject
+
+
 def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     branding_snapshot_script = _read(".claude/skills/channel-new/references/fetch_branding_snapshot.py")
@@ -98,9 +146,171 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert "`description` / `keywords` / `localizations` / `brandingSettings` は含まない" in channel_new
     assert "untrusted data" in channel_new
     assert "承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない" in channel_new
+    assert "TTP 完了条件" in channel_new
+    assert "relationship（何を転写するか）" in channel_new
+    assert "ttp_wf_new_readiness" in channel_new
+    assert "`warn` の場合は成功案内を出さない" in channel_new
+    assert "ユーザー承認済み例外" in channel_new
 
     assert 'CHANNELS_PART = "snippet,brandingSettings,localizations"' in branding_snapshot_script
     assert '"untrusted_data": True' in branding_snapshot_script
+
+
+def test_channel_new_requires_initial_save_before_followup_update() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    automation_update = _read(".claude/skills/automation-update/SKILL.md")
+
+    assert "初回保存と automation-update 前の整理" in channel_new
+    assert "git status --porcelain" in channel_new
+    assert "後続の `/automation-update` は dirty worktree で停止する" in channel_new
+    assert "git add -A" in channel_new
+    assert "`git add -A` 後の guard を唯一の安全境界にする" in channel_new
+    assert "bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1" in channel_new
+    assert 'git commit -m "chore: 初回チャンネル設定を保存"' in channel_new
+    assert "secret-like file staged; unstaged before commit" in channel_new
+    assert "staged secret を自動で外して停止" in channel_new
+    assert "未コミット変更が残っています。/automation-update の前に以下を完了してください" in channel_new
+    assert "保存未完了として終了した場合は、以下の成功案内は出さない" in channel_new
+    assert "初回保存も完了しているため" in channel_new
+
+    assert "`git status --porcelain` が **非空** の場合" in automation_update
+    assert "/channel-new 直後の初回保存が未完了なら" in automation_update
+
+
+@pytest.mark.parametrize(
+    "secret_path",
+    [".env", "auth/client_secrets.json", "auth/token.json", "auth/token_streaming.json"],
+)
+def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path, secret_path: str) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+
+    secret_file = repo / secret_path
+    secret_file.parent.mkdir(parents=True, exist_ok=True)
+    secret_file.write_text("SECRET=value\n", encoding="utf-8")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "add", "-f", secret_path)
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    result = subprocess.run(
+        [
+            "bash",
+            "-lc",
+            f'bash {shlex.quote(str(guard))} || exit 1\ngit commit -m "chore: 初回チャンネル設定を保存"',
+        ],
+        cwd=repo,
+        env=_isolated_git_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "secret-like file staged; unstaged before commit" in result.stderr
+    assert secret_path in result.stderr
+    assert _git(repo, "rev-list", "--count", "HEAD").stdout.strip() == "1"
+    assert secret_path not in _git(repo, "diff", "--cached", "--name-only").stdout.splitlines()
+
+
+def test_channel_new_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_path: Path) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    auth_dir = repo / "auth"
+    auth_dir.mkdir()
+    (auth_dir / "token_streaming.json").write_text("{}\n", encoding="utf-8")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+
+    _git(repo, "add", "-A")
+    staged = set(_git(repo, "diff", "--cached", "--name-only").stdout.splitlines())
+    assert "config/channel.json" in staged
+    assert "auth/token_streaming.json" in staged
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    result = subprocess.run(
+        ["bash", str(guard)],
+        cwd=repo,
+        env=_isolated_git_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "auth/token_streaming.json" in result.stderr
+    staged_after_guard = set(_git(repo, "diff", "--cached", "--name-only").stdout.splitlines())
+    assert "config/channel.json" in staged_after_guard
+    assert "auth/token_streaming.json" not in staged_after_guard
+
+
+def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path: Path) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    result = subprocess.run(
+        ["bash", str(guard)],
+        cwd=repo,
+        env=_isolated_git_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+
+
+def test_channel_new_initial_save_success_path_commits_and_cleans_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / ".gitignore").write_text(
+        ".env\nauth/client_secrets.json\nauth/token*.json\n",
+        encoding="utf-8",
+    )
+    (repo / ".env").write_text("SECRET=value\n", encoding="utf-8")
+    auth_dir = repo / "auth"
+    auth_dir.mkdir()
+    (auth_dir / "client_secrets.json").write_text("{}\n", encoding="utf-8")
+    (auth_dir / "token_streaming.json").write_text("{}\n", encoding="utf-8")
+    (repo / "config").mkdir()
+    (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
+
+    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    _git(repo, "add", "-A")
+    guard_result = subprocess.run(
+        ["bash", str(guard)],
+        cwd=repo,
+        env=_isolated_git_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    assert guard_result.returncode == 0
+
+    _git(repo, "commit", "-m", "chore: 初回チャンネル設定を保存")
+    assert _git(repo, "status", "--porcelain").stdout == ""
+    assert _git(repo, "rev-list", "--count", "HEAD").stdout.strip() == "1"
 
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
@@ -161,6 +371,49 @@ def test_thumbnail_search_order_is_documented() -> None:
         assert expected_order in text
         assert "→ `10-assets/main.jpg` → `10-assets/main.png`" not in text
         assert "textless 動画背景" in text
+
+
+def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
+    video_upload = _read(".claude/skills/video-upload/SKILL.md")
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    posting_checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
+    scheduled_publish = _read(".claude/skills/video-upload/references/scheduled-publish.md")
+
+    for text in (video_upload, wf_next, posting_checklist, scheduled_publish):
+        assert "uv run yt-upload-collection --plan" in text
+        assert "📅 公開設定: 即時公開 (public)" in text
+        assert "📅 公開予定" in text
+
+    for text in (video_upload, posting_checklist, scheduled_publish):
+        assert "アップロード API は叩かない" in text
+        assert "YouTube read API を呼ぶ場合がある" in text
+        assert "実 API は叩かない" not in text
+        assert "API 非消費" not in text
+
+    collection_flow = video_upload[
+        video_upload.index("### collection アップロードフロー") : video_upload.index(
+            "### single_release アップロードフロー"
+        )
+    ]
+    _assert_appears_before(collection_flow, "uv run yt-upload-collection --plan", "Complete Collection アップロード")
+
+    single_release_flow = video_upload[
+        video_upload.index("### single_release アップロードフロー") : video_upload.index("### コマンドリファレンス")
+    ]
+    assert "yt-upload-auto" in single_release_flow
+    assert "yt-upload-collection --plan" in single_release_flow
+    assert "この分岐では実行しない" in single_release_flow
+    assert "collection 用 plan 結果を流用しない" in single_release_flow
+
+    _assert_appears_before(
+        posting_checklist,
+        "uv run yt-upload-collection --plan",
+        "uv run yt-upload-collection [-c NAME]",
+    )
+
+    wf_next_gate = wf_next[wf_next.index("approval_gates.upload = true") :]
+    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "AskUserQuestion")
+    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "/video-upload")
 
 
 def test_first_post_playlist_initialization_contract_is_documented() -> None:
@@ -234,6 +487,71 @@ def test_community_post_declares_raw_json_loader_exception() -> None:
     assert "skill-local raw JSON 例外" in text
     assert "utils.config.load_config()" in text
     assert "`community` section を持たない" in text
+    assert "投稿本文・Studio URL の実データには使わない" in text
+    assert "fallback や merge 元にしない" in text
+
+
+def test_community_draft_documents_skill_config_merge_before_channel_json() -> None:
+    text = _read(".claude/skills/community-draft/SKILL.md")
+
+    assert 'load_skill_config("community-draft")' in text
+    assert ".claude/skills/community-draft/config.default.yaml" in text
+    assert "config/skills/community-draft.yaml" in text
+    assert "config/channel/community-draft.json" in text
+    assert (
+        "config.default.yaml` < `config/skills/community-draft.yaml` < `config/channel/community-draft.json"
+    ) in text
+
+
+def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
+    skill_dirs = sorted(path.parent for path in (ROOT / ".claude" / "skills").glob("*/config.default.yaml"))
+    assert skill_dirs
+
+    for skill_dir in skill_dirs:
+        skill = skill_dir.name
+        rel_skill_md = f".claude/skills/{skill}/SKILL.md"
+        text = _read(rel_skill_md)
+
+        assert "## 設定読み込みゲート" in text, f"{skill} missing config read gate"
+        assert f".claude/skills/{skill}/config.default.yaml" in text
+        assert f"config/skills/{skill}.yaml" in text
+        assert f'load_skill_config("{skill}")' in text
+        assert "SKILL.md の説明や記憶から設定値を推測しない" in text
+        assert "必ず Read" in text
+        assert "存在する場合" in text
+        assert "勝手に作成しない" in text
+
+        if skill == "community-post":
+            assert "default と任意 override を確認する" in text
+            assert "gate で Read" in text
+        else:
+            assert "deep-merge 前提" in text
+            assert "チャンネル上書きを優先" in text
+
+        gate_pos = text.index("## 設定読み込みゲート")
+        operational_markers = [
+            marker
+            for marker in (
+                "## Instructions",
+                "## 実行フロー",
+                "## Workflow",
+                "## Scripts",
+                "## Quick Reference",
+                "## Inputs",
+                "## 前提",
+                "## 制約・前提",
+                "### モード判定",
+                "### スタイルバリアント",
+                "### Step 1",
+                "### 前提条件チェック",
+                "### 対象コレクション",
+            )
+            if marker in text
+        ]
+        if operational_markers:
+            assert gate_pos < min(text.index(marker) for marker in operational_markers), (
+                f"{skill} config read gate must appear before operational steps"
+            )
 
 
 def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
@@ -261,6 +579,20 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     )[0]
     assert "`localizations`" not in required_sections
     assert "`config/localizations.json`" in rules
+
+
+def test_channel_setup_documents_ttp_wf_new_readiness_gate() -> None:
+    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
+    rules = _read(".claude/skills/channel-setup/references/config-generation-rules.md")
+
+    for text in (channel_setup, rules):
+        assert "uv run yt-doctor --json" in text
+        assert "ttp_wf_new_readiness" in text
+        assert "/channel-setup benchmark 反映未完了" in text
+        assert "data/benchmark_*.json" in text
+        assert "docs/benchmarks/*.md" in text
+        assert "data/thumbnail_compare/benchmark/" in text
+        assert "config/skills/thumbnail.yaml::reference_images.default" in text
 
 
 def test_channel_setup_does_not_recopy_youtube_json_after_config_completion() -> None:

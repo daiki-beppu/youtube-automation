@@ -80,6 +80,7 @@ _DISC1_TRACKS = [
 def _profile() -> DistrokidProfile:
     """profile.language は `ja`（metadata.md override 前の元値）。"""
     return DistrokidProfile(
+        artist="ABYSS MI",
         language="ja",
         main_genre="Electronic",
         sub_genre="House",
