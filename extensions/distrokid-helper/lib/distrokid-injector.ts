@@ -345,6 +345,25 @@ function findVisibleSelectWithOption(
   return findExactSelectOptionIndex(el, payloadValue) === -1 ? null : el;
 }
 
+function mutationTouchesSelector(mutation: MutationRecord, selector: string, current: Element | null): boolean {
+  const target = mutation.target;
+  if (current !== null && (target === current || current.contains(target) || target.contains(current))) {
+    return true;
+  }
+  for (const node of [...mutation.addedNodes, ...mutation.removedNodes]) {
+    if (!(node instanceof Element)) {
+      continue;
+    }
+    if (node.matches(selector) || node.querySelector(selector) !== null) {
+      return true;
+    }
+    if (current !== null && (node === current || node.contains(current) || current.contains(node))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // 依存 dropdown の option 再生成を待つ（#1407）。
 // #genrePrimary の change 後、#genreSecondary は非同期に populate されるため、
 // payload と一致する option が現れてから setNativeValue する。
@@ -353,14 +372,17 @@ function waitForSelectOption(
   selector: string,
   payloadValue: string,
   timeoutMs: number,
+  options: { requireSelectorMutation?: boolean } = {},
 ): Promise<HTMLSelectElement> {
   const initial = requireVisibleField(root, selector);
   if (!(initial instanceof HTMLSelectElement)) {
     throw new FieldNotFoundError(selector);
   }
-  const existing = findVisibleSelectWithOption(root, selector, payloadValue);
-  if (existing !== null) {
-    return Promise.resolve(existing);
+  if (options.requireSelectorMutation !== true) {
+    const existing = findVisibleSelectWithOption(root, selector, payloadValue);
+    if (existing !== null) {
+      return Promise.resolve(existing);
+    }
   }
   const observeRoot = ownerDocumentOf(root).body ?? ownerDocumentOf(root);
   return new Promise((resolve, reject) => {
@@ -370,7 +392,13 @@ function waitForSelectOption(
       const options = current instanceof HTMLSelectElement ? selectOptionLabels(current) : [];
       reject(new OptionNotFoundError(selector, payloadValue, options));
     }, timeoutMs);
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((mutations) => {
+      if (
+        options.requireSelectorMutation === true &&
+        !mutations.some((mutation) => mutationTouchesSelector(mutation, selector, findVisibleField(root, selector)))
+      ) {
+        return;
+      }
       const found = findVisibleSelectWithOption(root, selector, payloadValue);
       if (found !== null) {
         clearTimeout(timer);
@@ -378,7 +406,7 @@ function waitForSelectOption(
         resolve(found);
       }
     });
-    observer.observe(observeRoot, { childList: true, subtree: true, characterData: true });
+    observer.observe(observeRoot, { childList: true, subtree: true, characterData: true, attributes: true });
   });
 }
 
@@ -395,6 +423,7 @@ export async function injectProfile(root: ParentNode, profile: DistrokidProfile)
       PROFILE_SELECTORS.sub_genre,
       profile.sub_genre,
       GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS,
+      { requireSelectorMutation: true },
     );
     setNativeValue(subGenre, profile.sub_genre);
   }

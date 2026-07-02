@@ -114,6 +114,22 @@ function mountStaticForm(trackCount: number, fallbackArtist: string): void {
   }
 }
 
+function wireGenreSecondaryPopulate(options: ReadonlyArray<{ value: string; text: string }>): void {
+  const genre = document.querySelector<HTMLSelectElement>("#genrePrimary")!;
+  const subGenre = document.querySelector<HTMLSelectElement>("#genreSecondary")!;
+  genre.addEventListener("change", () => {
+    setTimeout(() => {
+      subGenre.innerHTML = "";
+      for (const option of options) {
+        const opt = document.createElement("option");
+        opt.value = option.value;
+        opt.textContent = option.text;
+        subGenre.appendChild(opt);
+      }
+    }, 0);
+  });
+}
+
 function payload(profile: DistrokidProfile): ReleasePayload {
   return {
     profile,
@@ -140,6 +156,7 @@ describe("createDocumentInjector", () => {
   it("injectStaticFields が profile.artist を Apple Music credits へ渡す", async () => {
     // Given
     mountStaticForm(1, "Soulful Grooves");
+    wireGenreSecondaryPopulate([{ value: "Ambient", text: "Ambient" }]);
 
     // When
     await createDocumentInjector(document).injectStaticFields(payload(BASE_PROFILE));
@@ -153,21 +170,13 @@ describe("createDocumentInjector", () => {
   it("injectStaticFields が main_genre change 後の非同期 sub_genre populate を待ってから後続注入する", async () => {
     // Given
     mountStaticForm(1, "Soulful Grooves");
-    const genre = document.querySelector<HTMLSelectElement>("#genrePrimary")!;
     const subGenre = document.querySelector<HTMLSelectElement>("#genreSecondary")!;
     subGenre.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "サブジャンルを選択";
-    subGenre.appendChild(placeholder);
-    genre.addEventListener("change", () => {
-      setTimeout(() => {
-        const option = document.createElement("option");
-        option.value = "Ambient";
-        option.textContent = "Ambient";
-        subGenre.appendChild(option);
-      }, 0);
-    });
+    const staleOption = document.createElement("option");
+    staleOption.value = "old-ambient";
+    staleOption.textContent = "Ambient";
+    subGenre.appendChild(staleOption);
+    wireGenreSecondaryPopulate([{ value: "Ambient", text: "Ambient" }]);
     let subGenreAtAlbumTitleInjection: string | null = null;
     document.querySelector<HTMLInputElement>("#albumTitleInput")!.addEventListener("input", () => {
       subGenreAtAlbumTitleInjection = subGenre.value;
@@ -176,7 +185,7 @@ describe("createDocumentInjector", () => {
     // When
     await createDocumentInjector(document).injectStaticFields(payload(BASE_PROFILE));
 
-    // Then: await が外れると album title 注入時点ではまだ placeholder のままになる。
+    // Then: await が外れると album title 注入時点では stale option のままになる。
     expect(subGenre.value).toBe("Ambient");
     expect(subGenreAtAlbumTitleInjection).toBe("Ambient");
   });
@@ -184,6 +193,7 @@ describe("createDocumentInjector", () => {
   it("profile.artist が空なら content 実配線でも #artistName fallback を使う", async () => {
     // Given
     mountStaticForm(1, "Soulful Grooves");
+    wireGenreSecondaryPopulate([{ value: "Ambient", text: "Ambient" }]);
 
     // When
     await createDocumentInjector(document).injectStaticFields(

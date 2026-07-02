@@ -461,6 +461,17 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     const language = mountSelect("language", ["ja", "en"]);
     const genre = mountSelect("genrePrimary", ["Electronic", "Pop"]);
     const sub = mountSelect("genreSecondary", ["House", "Techno"]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        sub.innerHTML = "";
+        for (const value of ["House", "Techno"]) {
+          const opt = document.createElement("option");
+          opt.value = value;
+          opt.textContent = value;
+          sub.appendChild(opt);
+        }
+      }, 0);
+    });
 
     // When
     await injectProfile(document, SAMPLE_PROFILE);
@@ -589,6 +600,42 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
 
     // Then: 部分一致の "ハードコア／ハードテクノ" ではなく、後から出た完全一致を選ぶ。
     expect(sub.value).toBe("techno");
+  });
+
+  it("sub_genre option 待機は既存の完全一致 stale option では resolve しない（#1407）", async () => {
+    // Given
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    const genre = mountSelect("genrePrimary", ["エレクトロニック"]);
+    const sub = mountSelectWithOptions("genreSecondary", [
+      { value: "", text: "サブジャンルを選択" },
+      { value: "old-techno", text: "テクノ" },
+    ]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        sub.innerHTML = "";
+        for (const option of [
+          { value: "", text: "サブジャンルを選択" },
+          { value: "new-techno", text: "テクノ" },
+        ]) {
+          const opt = document.createElement("option");
+          opt.value = option.value;
+          opt.textContent = option.text;
+          sub.appendChild(opt);
+        }
+      }, 0);
+    });
+
+    // When
+    await injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+
+    // Then: primary change 前から存在した stale option ではなく、再生成後の option を選ぶ。
+    expect(sub.value).toBe("new-techno");
   });
 
   it("sub_genre option 待機の no-match error には候補一覧を含める（#1407）", async () => {
