@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.15] - 2026-07-02
+
 ### Added
 
 - `feat(channel-new)`: `/channel-new` にチャンネル画像初期化導線を追加。TTP 対象の `snippet.thumbnails` / `brandingSettings.image` を reference-only として snapshot に保存し、`yt-channel-init` が `thumbnail.yaml` の channel branding 参照枠を生成、`yt-setup-dirs` が `branding/` を作成するようにした（#1367）
@@ -1305,6 +1307,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.15]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.15
 [5.5.14]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.14
 [5.5.13]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.13
 [5.5.12]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.12
