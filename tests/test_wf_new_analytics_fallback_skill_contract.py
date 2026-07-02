@@ -354,6 +354,7 @@ def test_freshness_rules_select_latest_by_filename_date_not_mtime() -> None:
     pseudo_code = _section(text, "## 判定擬似コード")
 
     assert "ls -t" not in pseudo_code
+    assert "compgen" not in pseudo_code
     assert "latest_by_filename_date" in pseudo_code
     assert "grep -oE '[0-9]{8}'" in pseudo_code
     assert '[ ! -f "$file" ]' in pseudo_code
