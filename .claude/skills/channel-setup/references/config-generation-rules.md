@@ -131,6 +131,10 @@
 `data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::reference_images.default`
 の欠落を読むだけで検出する。
 
+設定生成後は `uv run yt-doctor` を実行し、`initial_setup_readiness` が OK であることを確認する。
+ここで `reference_images.default` / `composition_rules` の空欄・TBD、Suno `genre_line` の
+Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致を公開前に検出できる。
+
 ## オプションセクション
 
 方向性 or ヒアリング結果に応じて `config/channel/*.json` に追加:

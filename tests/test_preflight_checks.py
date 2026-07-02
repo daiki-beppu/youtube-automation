@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
+    check_descriptions_md_parseability,
     check_duration,
     check_low_cpm_localization_languages,
     check_required_localization_languages,
+    check_suno_genre_line_char_limit,
     check_tags_count,
     check_tags_yt_chars,
+    check_thumbnail_skill_config,
     check_title_duplicate_warnings,
     check_title_template_compliance,
     extract_descriptions_md_tags,
@@ -167,6 +172,398 @@ class TestCheckChapterVariationSuffix:
             "20:00 Last Train Home",
         ]
         assert check_chapter_variation_suffix(lines) is None
+
+
+class TestInitialSetupChecks:
+    def test_suno_genre_line_over_fixed_style_limit_warns_even_if_config_raises_limit(self) -> None:
+        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 121, "style_char_limit": 999})
+
+        assert msg is not None
+        assert "121 / 120" in msg
+        assert "config/skills/suno.yaml::genre_line" in msg
+
+    def test_suno_genre_line_at_style_limit_passes(self) -> None:
+        assert check_suno_genre_line_char_limit({"genre_line": "x" * 120, "style_char_limit": 1}) is None
+
+    def test_thumbnail_config_detects_empty_refs_and_tbd_composition(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": [], "path_base": "channel_dir"},
+                    "composition_rules": {
+                        "environment": "TBD",
+                        "character_size": "TBD",
+                        "character_pose": "TBD",
+                        "allowed_actions": "TBD",
+                        "ng_actions": "TBD",
+                        "background": "TBD",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("reference_images.default" in issue for issue in issues)
+        assert any("composition_rules" in issue and "environment" in issue for issue in issues)
+
+    def test_thumbnail_config_detects_tbd_reference(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": "TBD"},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("reference_images.default" in issue and "TBD" in issue for issue in issues)
+
+    def test_thumbnail_config_detects_unexpanded_template_composition(self, tmp_path: Path) -> None:
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
+                    "composition_rules": {
+                        "environment": "{{ENVIRONMENT}}",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("composition_rules" in issue and "environment" in issue for issue in issues)
+
+    def test_thumbnail_config_detects_composition_rules_outside_single_step(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "two_phase",
+                    "composition_rules": {
+                        "environment": "TBD",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert issues == [
+            "config/skills/thumbnail.yaml::image_generation.gemini.composition_rules "
+            "に未設定/TBD の主要項目があります: environment"
+        ]
+
+    def test_thumbnail_config_detects_missing_reference_path(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/missing.jpg"]},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "存在しない参照画像" in issues[0]
+
+    def test_thumbnail_config_detects_refs_below_max_attempts(self, tmp_path: Path) -> None:
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "single_step": {"max_attempts": 2},
+                    "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "必要枚数未満" in issues[0]
+        assert "max_attempts=2" in issues[0]
+        assert "unique_references=1" in issues[0]
+
+    def test_thumbnail_config_detects_provider_codex_setup_issues(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "provider": "codex",
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "reference_images": {"default": []},
+                    "composition_rules": {
+                        "environment": "TBD",
+                        "character_size": "TBD",
+                        "character_pose": "TBD",
+                        "allowed_actions": "TBD",
+                        "ng_actions": "TBD",
+                        "background": "TBD",
+                    },
+                },
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert any("reference_images.default" in issue for issue in issues)
+        assert any("composition_rules" in issue for issue in issues)
+
+    def test_thumbnail_config_detects_rotate_false_with_multiple_attempts(self, tmp_path: Path) -> None:
+        refs = [
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg",
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "b.jpg",
+        ]
+        for ref in refs:
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {
+                "single_step": {"max_attempts": 2, "rotate": False},
+                "reference_images": {
+                    "default": [
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/alpha/b.jpg",
+                    ]
+                },
+            }
+        )
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "single_step TTP 生成契約" in issues[0]
+        assert "--no-rotate" in issues[0]
+
+    def test_thumbnail_config_detects_duplicate_refs_in_selected_attempts(self, tmp_path: Path) -> None:
+        refs = [
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg",
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "b.jpg",
+        ]
+        for ref in refs:
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {
+                "single_step": {"max_attempts": 2, "rotate": True},
+                "reference_images": {
+                    "default": [
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/alpha/b.jpg",
+                    ]
+                },
+            }
+        )
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "同一参照画像" in issues[0]
+
+    def test_thumbnail_config_detects_mixed_benchmark_channels(self, tmp_path: Path) -> None:
+        refs = [
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg",
+            tmp_path / "data" / "thumbnail_compare" / "benchmark" / "beta" / "b.jpg",
+        ]
+        for ref in refs:
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {
+                "single_step": {"max_attempts": 2, "rotate": True},
+                "reference_images": {
+                    "default": [
+                        "data/thumbnail_compare/benchmark/alpha/a.jpg",
+                        "data/thumbnail_compare/benchmark/beta/b.jpg",
+                    ]
+                },
+            }
+        )
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "同じベンチマークチャンネル" in issues[0]
+
+    def test_thumbnail_config_detects_symlink_escape(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside.jpg"
+        outside.write_bytes(b"jpg")
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "a.jpg"
+        ref.parent.mkdir(parents=True)
+        try:
+            ref.symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+        cfg = _valid_thumbnail_cfg({"reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/a.jpg"]}})
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert len(issues) == 1
+        assert "参照パスが不正" in issues[0]
+
+    def test_thumbnail_config_valid_setup_passes(self, tmp_path: Path) -> None:
+        ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        cfg = _valid_thumbnail_cfg(
+            {"reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]}}
+        )
+
+        assert check_thumbnail_skill_config(tmp_path, cfg) == []
+
+    def test_descriptions_md_parseability_accepts_valid_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        _write_valid_descriptions_md(p)
+
+        assert check_descriptions_md_parseability(p) is None
+
+    def test_descriptions_md_parseability_detects_heading_body_annotation(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        p.write_text(
+            "## タイトル案\n"
+            "<!-- code comment -->\n"
+            "```\n"
+            "Title\n"
+            "```\n"
+            "## Complete Collection 概要欄\n"
+            "```\n"
+            "Body\n"
+            "```\n"
+            "## タグ（YouTube タグ欄）\n"
+            "```\n"
+            "tag\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        msg = check_descriptions_md_parseability(p)
+
+        assert msg is not None
+        assert "descriptions.md parse failed" in msg
+        assert "タイトル案" in msg
+
+    def test_descriptions_md_parseability_warns_for_directory(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        p.mkdir()
+
+        msg = check_descriptions_md_parseability(p)
+
+        assert msg is not None
+        assert "通常ファイルではありません" in msg
+
+    def test_descriptions_md_parseability_warns_for_broken_symlink(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        try:
+            p.symlink_to(tmp_path / "missing.md")
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+
+        msg = check_descriptions_md_parseability(p)
+
+        assert msg is not None
+        assert "symlink が壊れています" in msg
+
+    def test_descriptions_md_parseability_rejects_path_outside_allowed_root(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside.md"
+        outside.write_text("## SECRET_HEADING\n", encoding="utf-8")
+        root = tmp_path / "channel"
+        root.mkdir()
+        p = root / "descriptions.md"
+        try:
+            p.symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+
+        msg = check_descriptions_md_parseability(p, allowed_root=root)
+
+        assert msg is not None
+        assert "channel_dir 外" in msg
+        assert "SECRET_HEADING" not in msg
+
+
+def _valid_thumbnail_cfg(overrides: dict[str, object] | None = None) -> dict[str, object]:
+    gemini: dict[str, object] = {
+        "generation_mode": "single_step",
+        "single_step": {"max_attempts": 1, "rotate": True},
+        "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
+        "composition_rules": {
+            "environment": "desk",
+            "character_size": "medium",
+            "character_pose": "sitting",
+            "allowed_actions": "reading",
+            "ng_actions": "no text",
+            "background": "warm room",
+        },
+    }
+    if overrides:
+        gemini.update(overrides)
+    return {"image_generation": {"gemini": gemini}}
+
+
+def _write_valid_descriptions_md(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "## タイトル案\n"
+        "```\n"
+        "Title\n"
+        "```\n"
+        "## Complete Collection 概要欄\n"
+        "```\n"
+        "Body\n"
+        "```\n"
+        "## タグ（YouTube タグ欄）\n"
+        "```\n"
+        "tag\n"
+        "```\n",
+        encoding="utf-8",
+    )
 
 
 class TestCheckRequiredLocalizationLanguages:
