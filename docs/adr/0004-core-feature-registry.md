@@ -1,5 +1,9 @@
 # Core feature registry: name → {schema, service, deps} を core が所有し、CLI/MCP は adapter
 
+## Status
+
+accepted (2026-06-12)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 ADR 0002 は「依存方向は core ← cli / core ← mcp の 1 方向のみ。cli と mcp は互いに独立」と決定したが、Phase 3 の計画 (#842 / #843) はこれと矛盾する形になっていた:
