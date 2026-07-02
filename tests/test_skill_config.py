@@ -68,6 +68,27 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
+def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
+    """明示 channel_dir 指定時は CHANNEL_DIR ではなく指定先の override を読む."""
+    env_channel = tmp_path / "env-ch"
+    explicit_channel = tmp_path / "explicit-ch"
+    (env_channel / "config" / "skills").mkdir(parents=True)
+    (explicit_channel / "config" / "skills").mkdir(parents=True)
+    (env_channel / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "env"}),
+        encoding="utf-8",
+    )
+    (explicit_channel / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "explicit"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(env_channel))
+
+    cfg = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=explicit_channel)
+
+    assert cfg.get("marker") == "explicit"
+
+
 def test_cache_reset(tmp_path, monkeypatch):
     """reset でキャッシュがクリアされ、再度ロードされること"""
     channel_dir = tmp_path / "ch"

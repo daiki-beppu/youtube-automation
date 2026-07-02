@@ -994,6 +994,121 @@ class TestCheckTtpWfNewReadiness:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
         assert r.status == "ok"
 
+    def test_slug_is_required_without_name_or_id_fallback(self, tmp_path):
+        """承認済み TTP は CLI slug 契約を満たす slug 明示を必須にする."""
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival"}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "安全な slug が無い" in r.message
+
+    def test_slug_must_be_single_safe_segment(self, tmp_path):
+        """slug を video_analysis path に使う前に traversal を拒否する."""
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": "../outside"}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "安全な slug が無い" in r.message
+
+    def test_thumbnail_reference_must_stay_in_benchmark_scope(self, tmp_path):
+        """reference_images.default は channel_dir 配下の benchmark refs だけを有効にする."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_video_analysis(tmp_path, slug, ids)
+        outside = tmp_path / "data" / "not_benchmark" / "ref.jpg"
+        outside.parent.mkdir(parents=True)
+        outside.write_bytes(b"fake")
+        skill_dir = tmp_path / "config" / "skills"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "thumbnail.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "image_generation": {
+                        "gemini": {
+                            "reference_images": {"default": [str(outside.relative_to(tmp_path))]},
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "data/thumbnail_compare/benchmark 配下のみ" in r.message
+
+    def test_three_of_three_video_analysis_is_still_top5_partial(self, tmp_path):
+        """benchmark が 3 件だけなら 3/3 分析済みでも top5 readiness は未完了."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+        ids = _write_ttp_benchmark(tmp_path, slug, count=3)
+        _write_thumbnail_refs(tmp_path, count=3)
+        _write_video_analysis(tmp_path, slug, ids)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "benchmark top 5 が不足 (3/5)" in r.message
+        assert "video_analysis が一部のみ (3/5)" in r.message
+
+    def test_suno_long_genre_line_warns_even_with_variants(self, tmp_path):
+        """未使用 variant だけで長すぎる base style を解消済みにしない."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_thumbnail_refs(tmp_path, count=3)
+        _write_video_analysis(tmp_path, slug, ids)
+        _write_suno_variants(tmp_path)
+        skill_dir = tmp_path / "config" / "skills"
+        (skill_dir / "suno.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "genre_line": "x" * 121,
+                    "style_char_limit": 120,
+                    "style_variants": {"short": {"genre_line": "short style"}},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "Suno genre_line が style_char_limit 超過 (121/120)" in r.message
+
+    def test_malformed_skill_yaml_warns(self, tmp_path):
+        """skill-config の YAML 異常は doctor の warn として surfaced する."""
+        slug = "rival"
+        _write_analytics_channels(tmp_path, [{"id": "UC_RIVAL", "name": "Rival", "slug": slug}])
+        _write_youtube_music_engine(tmp_path, "lyria")
+        ids = _write_ttp_benchmark(tmp_path, slug, count=5)
+        _write_video_analysis(tmp_path, slug, ids)
+        skill_dir = tmp_path / "config" / "skills"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "thumbnail.yaml").write_text("image_generation: [", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "skill-config 読み込み失敗" in r.message
+
+    def test_benchmark_channels_shape_warns(self, tmp_path):
+        """benchmark.channels に object 以外が混じる設定異常を warn にする."""
+        _write_analytics_channels(tmp_path, [{"slug": "rival"}, "invalid"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "benchmark.channels に object でない entry" in r.message
+
 
 # ---------------------------------------------------------------------------
 # check_upload_ready
