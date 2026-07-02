@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(hooks)`: extensions/ 配下のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を exit 1 で返し必ず失敗する問題を修正。extensions は自前の ESLint / Prettier / tsc 管理（CI: extensions.yml）のため、`lefthook.yml` の oxlint / oxfmt / typecheck に `exclude: extensions/**` を追加して root ツールチェーンの対象のみに絞った（exclude の glob 配列サポートのため `min_version` を 1.5.0 へ引き上げ、#1428）
 - `fix(channel-new)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-new` が TTP 対象承認・relationship・branding snapshot・thumbnail reference・Suno readiness の不足を残したまま完了扱いにならないようにした（#1397）
 - `fix(skills)`: `/video-upload` と `/wf-next` の公開承認前に `yt-upload-collection --plan` で即時公開/予約公開を確定し、予約時は実際の公開予定時刻を案内するよう明記（#1395）
 - `fix(doctor)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-setup` の benchmark 反映未完了による TTP 参照データ欠落を検知・案内できるようにした（#1400）

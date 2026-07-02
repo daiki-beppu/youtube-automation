@@ -11,9 +11,9 @@
 # 個別スキップ: `LEFTHOOK=0 git push` で全 hook を無効化。
 # CHANGELOG ゲートのみ省く: `SKIP_CHANGELOG=1 git push`
 
-# use_stdin は lefthook 1.4.11 で追加。古い lefthook は未知 key を黙って無視し
-# ブランチ削除 push 判定が no-op になるため、最低バージョンを明示する
-min_version: 1.4.11
+# use_stdin は lefthook 1.4.11、exclude の glob 配列は 1.5.0 で追加。古い lefthook は
+# 未知 key / 未対応の値形式を黙って無視し判定が no-op になるため、最低バージョンを明示する
+min_version: 1.5.0
 
 pre-commit:
   parallel: true
@@ -24,14 +24,27 @@ pre-commit:
     ruff-format:
       glob: "*.py"
       run: uv run ruff format --check {staged_files}
+    # oxlint / oxfmt / typecheck は root ツールチェーン（ADR 0001）の対象のみに絞る。
+    # extensions/ は自前の ESLint / Prettier / tsc 管理（CI: extensions.yml）であり、
+    # oxlint.config.ts の ignorePatterns も extensions/** を除外しているため、staged files が
+    # extensions のみだと oxlint / oxfmt が「対象ファイルなし」を exit 1 で返し commit が
+    # 必ず落ちる (#1428)。exclude で staged files から外せば、対象 0 件のとき lefthook が
+    # コマンドごと skip する。
     oxlint:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
+      exclude:
+        - "extensions/**"
       run: bunx oxlint {staged_files}
     oxfmt:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
+      exclude:
+        - "extensions/**"
       run: bunx oxfmt --check {staged_files}
     typecheck:
+      # root の tsc -b は extensions を含まないため、extensions のみの変更では起動しない
       glob: "*.{ts,tsx}"
+      exclude:
+        - "extensions/**"
       run: bun run typecheck
 
 pre-push:
