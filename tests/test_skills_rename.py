@@ -62,6 +62,13 @@ _VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
 _VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
 _COLLECTION_IDEATE = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _POSTMORTEM = _SKILLS_DIR / "postmortem" / "SKILL.md"
+_SUNO_LYRIC = _SKILLS_DIR / "suno-lyric" / "SKILL.md"
+_SUNO_LYRIC_PERSONA_DOCS = (
+    _SUNO_LYRIC,
+    _SKILLS_DIR / "suno-lyric" / "config.default.yaml",
+    _SKILLS_DIR / "suno-lyric" / "references" / "persona-quote-affinity.md",
+    _SKILLS_DIR / "suno-lyric" / "references" / "lyric-templates.md",
+)
 
 # rename マッピング (order.md §5)
 RENAME_MAP: dict[str, str] = {
@@ -341,6 +348,19 @@ def test_persona_skill_docs_do_not_reference_content_json_suno_genre_line() -> N
         text = _read(path)
         assert "content.json` の `tags.base` と `suno.genre_line`" not in text
         assert "content.json` の `tags.base` と `genre.*`" in text
+
+
+def test_suno_lyric_prefers_new_persona_definition_artifact() -> None:
+    """Issue #1371: `/suno-lyric` は新 persona artifact を主入力にし、旧 artifact は fallback 明記に限る。"""
+    for path in _SUNO_LYRIC_PERSONA_DOCS:
+        text = _read(path)
+        assert "docs/channel/personas/persona-definition.md" in text, (
+            f"{path.relative_to(_REPO_ROOT)} が新 persona artifact を参照していない"
+        )
+        if "docs/audience-persona.md" in text:
+            assert "legacy fallback" in text, (
+                f"{path.relative_to(_REPO_ROOT)} の旧 docs/audience-persona.md 参照は legacy fallback と明記すること"
+            )
 
 
 # ---------- `.claude/skills/**/*.md` に旧スラッシュコマンド参照が残っていないか ----------

@@ -291,6 +291,8 @@ def test_freshness_rules_follow_analytics_absent_fallback_contract() -> None:
     assert "analytics mode で `persona-definition.md` が存在しない" in triggers
     assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で `persona-definition.md` が存在しない" in triggers
     assert "analytics mode で `viewing-scene-matrix.md` が存在しない" in triggers
+    assert "`/audience-persona-design` で `/viewing-scene` 実行と最終 `persona-definition.md` 更新" in triggers
+    assert "`/viewing-scene` の先行実行を案内" not in triggers
     assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で `viewing-scene-matrix.md` が存在しない" in triggers
     assert f"| `{_ANALYTICS_REPORT_GLOB}` が存在しない | `/collection-ideate` を中断" not in triggers
     assert f"| `{_BENCHMARK_DATA_GLOB}` が `config/skills/benchmark.yaml`" not in triggers
@@ -299,6 +301,17 @@ def test_freshness_rules_follow_analytics_absent_fallback_contract() -> None:
     assert benchmark_trigger.startswith(f"| {_ANALYTICS_MODE} で `{_BENCHMARK_DATA_GLOB}`")
     assert _BENCHMARK_FALLBACK_MODE not in benchmark_trigger
     assert _MINIMAL_MODE not in benchmark_trigger
+
+
+def test_freshness_rules_route_viewing_scene_gap_through_persona_design_finalization() -> None:
+    text = _read(_FRESHNESS_RULES_MD)
+    table = _section(text, "## 鮮度判定表")
+    pseudo_code = _section(text, "## 判定擬似コード")
+
+    assert "| 3 | `/audience-persona-design` finalization | `docs/plans/viewing-scene-matrix.md` |" in table
+    assert "`/audience-persona-design` で `/viewing-scene` 実行と最終 `persona-definition.md` 更新" in table
+    assert "/viewing-scene 実行と最終 persona-definition.md 更新を案内" in pseudo_code
+    assert "viewing-scene 未定義 → /collection-ideate 中断、/viewing-scene を案内" not in pseudo_code
 
 
 def test_freshness_rules_select_latest_by_filename_date_not_mtime() -> None:

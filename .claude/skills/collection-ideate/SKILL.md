@@ -52,12 +52,12 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config | analytics / benchmark 依存をスキップ。persona / viewing-scene は初回仮説として扱う |
 
 analytics mode では `/analytics-analyze` と `/benchmark` を独立・並列で鮮度判定（stale 検出）し、
-`/audience-persona-design` と `/viewing-scene` は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
+`/audience-persona-design` の最終 persona chain（`persona-definition.md` と `viewing-scene-matrix.md`）は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
 
 - `reports/analysis_*.md` が存在するが stale → fallback せず中断。ユーザーに `/analytics-analyze` 再実行を案内（必要なら `/analytics-collect` 先行）。**自動呼び出し不可**（AI 推論コスト発生のため）
 - analytics mode で `/benchmark` が stale → Skill ツールで実行（内部で差分更新）
 - analytics mode で `/audience-persona-design` が未生成 → ユーザーに案内（更新タイミングは戦略判断のため人間が決める）
-- analytics mode で `/viewing-scene` が未生成 → ユーザーに案内（persona 下流のため連動して判断）
+- analytics mode で `viewing-scene-matrix.md` が未生成、または viewing-scene 結果が最終 `persona-definition.md` に未反映 → `/audience-persona-design` で `/viewing-scene` 実行と最終 persona 更新を行うよう案内
 
 判定ルール（鮮度・存在チェックの擬似コード・workflow-state との同期）は
 `references/freshness-rules.md` を参照。analytics mode の必須入力で stale または未生成を検出したら
