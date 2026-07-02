@@ -67,11 +67,13 @@ export function App() {
   };
 
   useEffect(() => {
+    const previousEntries = previousEntriesRef.current;
+    const previousItemStates = previousItemStatesRef.current;
     setSelectedEntries((selection) =>
       reconcilePatternSelection({
         selection,
-        previousEntries: previousEntriesRef.current,
-        previousItemStates: previousItemStatesRef.current,
+        previousEntries,
+        previousItemStates,
         entries,
         itemStates,
       }),

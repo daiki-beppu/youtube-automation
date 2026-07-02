@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PHASE, type ProgressPayload } from "../../shared/constants";
 import { App } from "../components/App";
 
 const BASE_URL = "http://localhost:7873";
@@ -650,6 +651,77 @@ describe("Suno popup compatibility check", () => {
     if (!select) throw new Error("download format select not found");
     await waitFor(() => {
       expect(select.value).toBe("mp3");
+    });
+  });
+
+  it("App 配線で done entry の自動 OFF と手動再チェック保持を反映する", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "" },
+      { name: "p2", style: "jazz", lyrics: "" },
+      { name: "p3", style: "ambient", lyrics: "" },
+    ];
+    let progressHandler: ((event: { data: ProgressPayload }) => void) | undefined;
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    messagingMocks.onMessage.mockImplementation((message?: unknown, handler?: unknown) => {
+      if (message === "progress" && typeof handler === "function") {
+        progressHandler = handler as (event: { data: ProgressPayload }) => void;
+      }
+      return () => undefined;
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("3 パターンを取得しました。");
+    });
+
+    const checkboxStates = (): boolean[] =>
+      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).map(
+        (checkbox) => checkbox.checked,
+      );
+
+    expect(checkboxStates()).toEqual([true, true, true]);
+
+    await act(async () => {
+      progressHandler?.({ data: { phase: PHASE.DONE, index: 1, total: entries.length } });
+    });
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([true, false, true]);
+    });
+    expect(
+      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]?.closest("li")?.className,
+    ).toContain("line-through");
+
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]?.click();
+    });
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([true, true, true]);
+    });
+
+    await act(async () => {
+      progressHandler?.({ data: { phase: PHASE.DONE, index: 0, total: entries.length } });
+    });
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([false, true, true]);
     });
   });
 
