@@ -1164,6 +1164,21 @@ def find_latest_benchmark_json(data_dir: Path) -> Path | None:
     return files[0] if files else None
 
 
+# YouTube Data API は配信中・配信予定のライブ配信に contentDetails.duration = "P0D" を返す
+# （配信終了後のアーカイブは実尺になるため対象外）
+LIVE_DURATION_ISO = "P0D"
+
+
+def is_live_benchmark_video(video: dict) -> bool:
+    """benchmark 動画エントリがライブ配信（duration_iso == "P0D"）かどうかを判定する。
+
+    Gemini はライブ配信 URL を取り込めず yt-video-analyze が 403 で恒久的に失敗するため、
+    video_analysis 系の消費側（yt-doctor / yt-video-analyze）は本判定で除外する (#1462)。
+    duration_iso を持たない旧形式エントリは VOD 扱い。
+    """
+    return str(video.get("duration_iso") or "") == LIVE_DURATION_ISO
+
+
 def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbnail: bool = False) -> list[dict]:
     """最新ベンチマーク JSON から min_views 以上の動画を抽出する。
 
@@ -1209,6 +1224,7 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
                     "channel_name": channel_name,
                     "channel_slug": channel_slug,
                     "published_at": v.get("published_at", ""),
+                    "duration_iso": v.get("duration_iso", ""),
                     "thumbnail_url": thumb_url,
                 }
             )

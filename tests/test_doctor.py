@@ -2784,6 +2784,93 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert "rival: VID1.json のトップレベルが object ではありません" in r.message
         assert "rival: video_analysis が一部のみ (4/5)" in r.message
 
+    def _write_rival_benchmark(self, tmp_path, videos: list[dict]) -> None:
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "rival", "videos": videos}]}),
+            encoding="utf-8",
+        )
+
+    def _write_rival_analyses(self, tmp_path, video_ids: list[str]) -> None:
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        for path in analysis_dir.glob("*.json"):
+            path.unlink()
+        for video_id in video_ids:
+            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+
+    def test_live_video_is_excluded_and_next_vod_promoted(self, tmp_path):
+        # Given: top 5 の 2 位が live 配信 (duration_iso == "P0D")、次点 VOD 込みで 5 本の解析済み
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+            {"video_id": "VID5", "views": 45000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4", "VID5"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+
+    def test_live_exclusion_shrinks_denominator_when_vods_run_short(self, tmp_path):
+        # Given: benchmark が 5 本ちょうどで 1 本が live → VOD 4 本の解析で充足する
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+
+    def test_promoted_vod_without_analysis_still_warns_with_live_note(self, tmp_path):
+        # Given: live 除外で 6 位 VOD が繰り上がるが、その解析がまだ無い
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+            {"video_id": "VID5", "views": 45000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: video_analysis が一部のみ (4/5)" in r.message
+        assert "live 配信 1 本" in r.message
+
+    def test_all_live_benchmark_warns_no_analyzable_vod(self, tmp_path):
+        # Given: 該当 slug の benchmark が live 配信のみ
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [{"video_id": f"LIVE{i}", "views": 50000 - i, "duration_iso": "P0D"} for i in range(1, 6)]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, [])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: benchmark 上位が live 配信のみで解析可能な VOD がありません" in r.message
+        assert "live 配信 5 本" in r.message
+
     def test_video_analysis_symlink_outside_channel_is_rejected(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)

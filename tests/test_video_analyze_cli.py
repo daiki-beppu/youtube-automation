@@ -307,6 +307,60 @@ class TestResolveBenchmarkTargets:
                     top=5,
                 )
 
+    def test_live_video_is_skipped_and_next_vod_promoted(self, tmp_path):
+        # Given: 1 位が live 配信 (duration_iso == "P0D") → スキップして次点 VOD を繰り上げる
+        videos = self._videos()
+        videos.insert(
+            0,
+            {
+                "video_id": "LIVE1",
+                "title": "24/7 Celtic Radio",
+                "views": 900000,
+                "channel_name": "CelticCh",
+                "channel_slug": "celtic-music",
+                "published_at": "2026-03-10",
+                "duration_iso": "P0D",
+                "thumbnail_url": "https://i.ytimg.com/l1.jpg",
+            },
+        )
+        with patch(
+            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            return_value=videos,
+        ):
+            targets = _resolve_benchmark_targets(
+                data_dir=tmp_path,
+                channel_slug="celtic-music",
+                top=2,
+            )
+
+        # Then: live は含まれず VOD 上位 2 件が選ばれる
+        assert [t.video_id for t in targets] == ["C1", "C2"]
+
+    def test_all_live_slug_raises(self, tmp_path):
+        # Given: 該当 slug の動画がすべて live 配信
+        videos = [
+            {
+                "video_id": "LIVE1",
+                "title": "24/7 Radio",
+                "views": 900000,
+                "channel_name": "LiveCh",
+                "channel_slug": "live-only",
+                "published_at": "2026-03-10",
+                "duration_iso": "P0D",
+                "thumbnail_url": "https://i.ytimg.com/l1.jpg",
+            },
+        ]
+        with patch(
+            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            return_value=videos,
+        ):
+            with pytest.raises(ValidationError, match="live 配信のみ"):
+                _resolve_benchmark_targets(
+                    data_dir=tmp_path,
+                    channel_slug="live-only",
+                    top=5,
+                )
+
     def test_top_zero_raises(self, tmp_path):
         # Given: top=0 は意味がない (不整合な値のサイレントスキップ禁止)
         with patch(
