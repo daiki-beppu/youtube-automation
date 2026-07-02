@@ -57,16 +57,12 @@ export const RESUME_STALE_MS = 24 * 60 * 60 * 1000;
 /**
  * 起動時に再開バナーを表示すべきか判定する (要件4)。
  *   - state 無し → 表示しない
- *   - 選択中 collection が空（単一ファイル mode）→ 表示しない
  *   - collectionId が選択中と不一致 → 表示しない（別 collection 選択中）
  *   - timestamp が RESUME_STALE_MS より古い → 表示しない（stale）。境界はちょうど閾値まで inclusive
  * now を注入可能にし、純関数として時刻依存を排してテストする。
  */
 export function shouldShowResumeBanner(state: ResumeState | null, selectedCollectionId: string, now: number): boolean {
   if (!state) {
-    return false;
-  }
-  if (!selectedCollectionId) {
     return false;
   }
   if (state.collectionId !== selectedCollectionId) {

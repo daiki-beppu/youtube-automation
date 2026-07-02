@@ -1,10 +1,9 @@
-"""yt-channel-init — 正準ディレクトリ構造 + config 一式を一括生成する CLI."""
+"""yt-channel-init — config 一式と channel-new 初期運用ファイルを生成する CLI."""
 
 from __future__ import annotations
 
 import argparse
 import difflib
-import os
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -16,14 +15,15 @@ from youtube_automation.cli.channel_init_templates import (
     CHANNEL_CONFIG_TEMPLATES,
     CONFIG_SUBDIR,
     DEFAULT_LOCALIZATION_LANGUAGES,
-    DIRECTORIES,
-    GITKEEP_NAME,
+    OPTIONAL_CHANNEL_CONFIG_TEMPLATES,
     PLACEHOLDER_DEFAULT,
     ROOT_JSON_TEMPLATES,
     ROOT_TEXT_TEMPLATES,
     ChannelInitContext,
     serialize_json,
 )
+from youtube_automation.cli.setup_directory_contract import validate_existing_setup_directories
+from youtube_automation.cli.target_resolver import resolve_existing_target_dir
 from youtube_automation.utils.channel_settings import normalize_locale_to_short
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -48,16 +48,8 @@ class FileAction:
 
 
 @dataclass(frozen=True)
-class DirAction:
-    path: Path
-    rel: str
-    kind: ActionKind
-
-
-@dataclass(frozen=True)
 class Plan:
     files: list[FileAction] = field(default_factory=list)
-    directories: list[DirAction] = field(default_factory=list)
 
 
 def _parse_benchmark_channel(value: str) -> dict[str, str]:
@@ -82,6 +74,13 @@ def _normalize_repeated_option(values: list | None) -> tuple:
     if values is None:
         return ()
     return tuple(values)
+
+
+def _parse_non_empty(value: str) -> str:
+    text = value.strip()
+    if not text:
+        raise argparse.ArgumentTypeError("空文字は指定できません")
+    return text
 
 
 def _parse_language(value: str) -> str:
@@ -123,34 +122,64 @@ def _resolve_target_duration_bounds(
     return target_min, target_max
 
 
+def _resolve_distrokid_profile(args: argparse.Namespace) -> dict | None:
+    profile_values = (
+        args.distrokid_artist,
+        args.distrokid_language,
+        args.distrokid_main_genre,
+        args.distrokid_sub_genre,
+        args.distrokid_songwriter_first,
+        args.distrokid_songwriter_last,
+    )
+    if not args.distrokid_enabled:
+        if any(value is not None for value in profile_values):
+            raise argparse.ArgumentTypeError("DistroKid profile 引数を使う場合は --distrokid-enabled が必要です")
+        return None
+
+    if args.distrokid_artist is None or args.distrokid_language is None or args.distrokid_main_genre is None:
+        raise argparse.ArgumentTypeError(
+            "--distrokid-enabled を使う場合は --distrokid-artist, --distrokid-language, "
+            "--distrokid-main-genre が必要です"
+        )
+
+    if bool(args.distrokid_songwriter_first) != bool(args.distrokid_songwriter_last):
+        raise argparse.ArgumentTypeError(
+            "--distrokid-songwriter-first と --distrokid-songwriter-last はセットで指定してください"
+        )
+
+    profile: dict[str, object] = {
+        "artist": args.distrokid_artist,
+        "language": args.distrokid_language,
+        "main_genre": args.distrokid_main_genre,
+    }
+    if args.distrokid_sub_genre is not None:
+        profile["sub_genre"] = args.distrokid_sub_genre
+    if args.distrokid_songwriter_first and args.distrokid_songwriter_last:
+        songwriter = {
+            "first": args.distrokid_songwriter_first,
+            "last": args.distrokid_songwriter_last,
+        }
+        profile["songwriter"] = songwriter
+    return profile
+
+
 def _resolve_target_dir(target: str | None) -> Path:
-    """対象ディレクトリを解決する.
-
-    優先順: `--target` → `CHANNEL_DIR` 環境変数 → CWD.
-    `--target` / `CHANNEL_DIR` で指定された場合、存在しないなら `ConfigError`.
-    CWD フォールバックは常に存在するため検証不要.
-    """
-    if target:
-        path = Path(target).resolve()
-        if not path.is_dir():
-            raise ConfigError(f"--target で指定されたディレクトリが存在しません: {path}")
-        return path
-
-    env = os.environ.get("CHANNEL_DIR")
-    if env:
-        path = Path(env).resolve()
-        if not path.is_dir():
-            raise ConfigError(f"CHANNEL_DIR で指定されたディレクトリが存在しません: {path}")
-        return path
-
-    return Path.cwd().resolve()
+    return resolve_existing_target_dir(target)
 
 
 def _plan_actions(target: Path, ctx: ChannelInitContext, *, force: bool) -> Plan:
     """副作用なしで `Plan` を組み立てる（既存ファイルの read のみ実施）."""
+    validate_existing_setup_directories(target)
     files: list[FileAction] = []
     config_dir = target / CONFIG_SUBDIR
     for name, render in CHANNEL_CONFIG_TEMPLATES.items():
+        path = config_dir / name
+        rel = (CONFIG_SUBDIR / name).as_posix()
+        new_text = serialize_json(render(ctx))
+        files.append(_plan_file(path, rel, new_text, force=force))
+    for name, render in OPTIONAL_CHANNEL_CONFIG_TEMPLATES.items():
+        if name == "distrokid.json" and ctx.distrokid_profile is None:
+            continue
         path = config_dir / name
         rel = (CONFIG_SUBDIR / name).as_posix()
         new_text = serialize_json(render(ctx))
@@ -163,12 +192,7 @@ def _plan_actions(target: Path, ctx: ChannelInitContext, *, force: bool) -> Plan
         path = target / rel_path
         files.append(_plan_file(path, rel_path.as_posix(), render(ctx), force=force))
 
-    directories: list[DirAction] = []
-    for rel in DIRECTORIES:
-        path = target / rel
-        directories.append(_plan_directory(path, rel))
-
-    return Plan(files=files, directories=directories)
+    return Plan(files=files)
 
 
 def _plan_file(path: Path, rel: str, new_text: str, *, force: bool) -> FileAction:
@@ -197,16 +221,6 @@ def _plan_file(path: Path, rel: str, new_text: str, *, force: bool) -> FileActio
     return FileAction(path=path, rel=rel, kind=ActionKind.SKIPPED, new_text=new_text, diff=diff)
 
 
-def _plan_directory(path: Path, rel: str) -> DirAction:
-    _validate_parent_directories(path, rel)
-    if path.exists() and not path.is_dir():
-        raise ConfigError(f"{rel} はディレクトリである必要があります: {path}")
-    gitkeep = path / GITKEEP_NAME
-    if path.is_dir() and gitkeep.is_file():
-        return DirAction(path=path, rel=rel, kind=ActionKind.SKIPPED)
-    return DirAction(path=path, rel=rel, kind=ActionKind.CREATED)
-
-
 def _validate_parent_directories(path: Path, rel: str) -> None:
     for index, parent_rel in enumerate(Path(rel).parents):
         if parent_rel == Path("."):
@@ -221,18 +235,12 @@ def _apply(plan: Plan) -> None:
         if action.kind in (ActionKind.CREATED, ActionKind.OVERWRITTEN):
             action.path.parent.mkdir(parents=True, exist_ok=True)
             action.path.write_text(action.new_text, encoding="utf-8")
-    for action in plan.directories:
-        if action.kind == ActionKind.CREATED:
-            action.path.mkdir(parents=True, exist_ok=True)
-            (action.path / GITKEEP_NAME).touch()
 
 
 def _format_summary(plan: Plan) -> str:
     lines: list[str] = []
     for action in plan.files:
         lines.append(f"  {action.kind.value:<11} {action.rel}")
-    for action in plan.directories:
-        lines.append(f"  {action.kind.value:<11} {action.rel}/")
     return "\n".join(lines)
 
 
@@ -244,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-channel-init",
         description=(
-            "正準ディレクトリ構造 + config 一式を一括生成する。既存ファイルは --force がない限り上書きしない。"
+            "config 一式と channel-new 初期運用ファイルを生成する。既存ファイルは --force がない限り上書きしない。"
         ),
     )
     parser.add_argument(
@@ -318,6 +326,47 @@ def build_parser() -> argparse.ArgumentParser:
         help='localizations の supported_languages。複数回指定可 (default: "ja", "en", "de")',
     )
     parser.add_argument(
+        "--distrokid-enabled",
+        action="store_true",
+        help="DistroKid 配信設定 config/channel/distrokid.json を生成し、distrokid.enabled=true にする",
+    )
+    parser.add_argument(
+        "--distrokid-artist",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid リリースアーティスト名 (--distrokid-enabled 指定時は必須)",
+    )
+    parser.add_argument(
+        "--distrokid-language",
+        type=_parse_language,
+        default=None,
+        help="DistroKid メタデータ言語 (--distrokid-enabled 指定時は必須)",
+    )
+    parser.add_argument(
+        "--distrokid-main-genre",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid main_genre (--distrokid-enabled 指定時は必須)",
+    )
+    parser.add_argument(
+        "--distrokid-sub-genre",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid sub_genre",
+    )
+    parser.add_argument(
+        "--distrokid-songwriter-first",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid songwriter.first",
+    )
+    parser.add_argument(
+        "--distrokid-songwriter-last",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid songwriter.last",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="既存ファイルを上書きする（.env は機密保護のため常に保持）",
@@ -337,6 +386,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             args.target_duration_min,
             args.target_duration_max,
         )
+        distrokid_profile = _resolve_distrokid_profile(args)
     except argparse.ArgumentTypeError as e:
         parser.error(str(e))
 
@@ -362,6 +412,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         country=args.country,
         default_language=default_language,
         supported_languages=supported_languages,
+        distrokid_profile=distrokid_profile,
     )
 
     try:

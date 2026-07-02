@@ -1,8 +1,6 @@
-import type { PromptEntry } from "../../shared/api";
+import type { DurationFilter, PromptEntry } from "../../shared/api";
 import type { RunPayload } from "./messaging";
 import { resumeRunRange, type ResumeBanner, type RunRange } from "./resume-state";
-
-export type RunPayloadObject = Exclude<RunPayload, PromptEntry[]>;
 
 export interface RunOverrides {
   range?: RunRange;
@@ -18,18 +16,20 @@ export interface PlaylistResumePayload {
 
 export interface RunPayloadInput {
   entries: PromptEntry[];
-  playlistName: string | undefined;
+  playlistName: string;
+  durationFilter?: DurationFilter;
   range: RunRange | undefined;
   collectionId: string;
   overrides: RunOverrides | undefined;
 }
 
-export function buildRunPayload(input: RunPayloadInput): RunPayloadObject {
+export function buildRunPayload(input: RunPayloadInput): RunPayload {
   return {
     entries: input.entries,
     playlistName: input.playlistName,
+    ...(input.durationFilter ? { durationFilter: input.durationFilter } : {}),
     range: input.range,
-    collectionId: input.collectionId === "" ? undefined : input.collectionId,
+    collectionId: input.collectionId,
     indices: input.overrides?.indices,
     submittedClipIds: input.overrides?.submittedClipIds,
     playlistExpectedClipCount: input.overrides?.playlistExpectedClipCount,

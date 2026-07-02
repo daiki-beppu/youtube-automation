@@ -78,22 +78,25 @@ export function App() {
         />
       </label>
 
-      {collections.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm">
-          コレクション
-          <select
-            value={selectedCollectionId}
-            onChange={(e) => selectCollection(e.target.value)}
-            className="rounded border border-gray-300 px-2 py-1"
-          >
-            {collections.map((c) => (
-              <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
-                {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <label className="flex flex-col gap-1 text-sm">
+        コレクション
+        <select
+          value={selectedCollectionId}
+          onChange={(e) => selectCollection(e.target.value)}
+          className="rounded border border-gray-300 px-2 py-1"
+        >
+          {collections.length === 0 && (
+            <option value="" disabled>
+              コレクションなし
+            </option>
+          )}
+          {collections.map((c) => (
+            <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
+              {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {playlistName && (
         <p className="text-xs text-gray-600">

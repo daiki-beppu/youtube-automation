@@ -1,5 +1,9 @@
 # ライブ配信のデフォルトを 24/7 連続配信に変更
 
+## Status
+
+accepted (2026-06-24)。
+
 ## Context
 
 ライブ配信は Vultr VPS 上の systemd + ffmpeg で運用している。従来は `RuntimeMaxSec=11h` + `RestartSec=1h`（11 時間配信 → 1 時間休憩）のサイクルで、YouTube が 12 時間超のライブをアーカイブしない制約への対策として設計されていた。日次稼働 22h（91.7%）、月 2 アーカイブ/日。

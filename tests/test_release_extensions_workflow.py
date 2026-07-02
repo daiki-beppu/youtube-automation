@@ -44,7 +44,7 @@ def _on_section(workflow: dict[str, object]) -> dict[str, object]:
     return section
 
 
-def _release_steps() -> list[dict[str, object]]:
+def _release_top_level_steps() -> list[dict[str, object]]:
     workflow = _load_workflow()
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict), "jobs セクションが存在しない"
@@ -53,6 +53,18 @@ def _release_steps() -> list[dict[str, object]]:
     assert release_job.get("runs-on") == "ubuntu-latest"
     steps = release_job.get("steps")
     assert isinstance(steps, list) and steps, "release job に steps が存在しない"
+    return steps
+
+
+def _release_steps_including_parallel() -> list[dict[str, object]]:
+    steps: list[dict[str, object]] = []
+    for step in _release_top_level_steps():
+        if "parallel" not in step:
+            steps.append(step)
+            continue
+        parallel_steps = step.get("parallel")
+        assert isinstance(parallel_steps, list) and parallel_steps, "parallel step が空"
+        steps.extend(parallel_steps)
     return steps
 
 
@@ -73,7 +85,7 @@ def test_grants_contents_write_permission() -> None:
 @pytest.mark.parametrize("name", _EXTENSIONS)
 def test_builds_and_zips_each_extension(name: str) -> None:
     """両拡張がそれぞれの作業ディレクトリで install → zip される。"""
-    steps = _release_steps()
+    steps = _release_steps_including_parallel()
     matched = [
         step
         for step in steps
@@ -86,7 +98,7 @@ def test_builds_and_zips_each_extension(name: str) -> None:
 
 def test_attaches_both_zips_to_single_release() -> None:
     """単一の gh-release ステップで両拡張の zip を添付する。"""
-    steps = _release_steps()
+    steps = _release_top_level_steps()
     release_steps = [step for step in steps if str(step.get("uses", "")).startswith(_GH_RELEASE_ACTION)]
     assert len(release_steps) == 1, "gh-release ステップは 1 個に集約する"
 
@@ -97,7 +109,7 @@ def test_attaches_both_zips_to_single_release() -> None:
 
 def test_release_body_embeds_install_and_update_template() -> None:
     """Release 本文に初回インストール/更新手順テンプレが埋め込まれている。"""
-    steps = _release_steps()
+    steps = _release_top_level_steps()
     release_step = next(step for step in steps if str(step.get("uses", "")).startswith(_GH_RELEASE_ACTION))
     body = str(release_step.get("with", {}).get("body", ""))
     assert body, "Release 本文テンプレ (body) が未設定"

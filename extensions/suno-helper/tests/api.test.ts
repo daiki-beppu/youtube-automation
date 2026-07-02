@@ -1,6 +1,5 @@
-// yt-collection-serve の `/suno/prompts.json` クライアントの契約テスト。
-// 旧 `popup.js:54-60` の fetch ロジックを保持する:
-//   - fetch 先は `${baseUrl}${PROMPTS_ROUTE}` (= `${baseUrl}/suno/prompts.json`)
+// yt-collection-serve の collection prompts クライアントの契約テスト。
+//   - fetch 先は `${baseUrl}/collections/<id>/suno/prompts.json`
 //   - HTTP 非 2xx で throw
 //   - 配列でない / 空配列の JSON で throw (fail-loud、silent 続行しない)
 //   - 成功時は PromptEntry[] を返す
@@ -13,12 +12,9 @@ import {
   type PromptEntry,
   checkServerCompatibility,
   collectionHasPrompts,
-  durationFilterOrDefault,
   fetchCollectionPromptResponse,
   fetchCollections,
   fetchCollectionPrompts,
-  fetchPromptResponse,
-  fetchPrompts,
   fetchServerVersion,
   formatCompatibilityWarning,
   pickInitialCollectionId,
@@ -29,7 +25,8 @@ import {
 } from "../../shared/api";
 
 const BASE_URL = "http://localhost:7873";
-const PROMPTS_URL = `${BASE_URL}/suno/prompts.json`;
+const COLLECTION_ID = "20260601-clm-theme-a-collection";
+const PROMPTS_URL = `${BASE_URL}/collections/${COLLECTION_ID}/suno/prompts.json`;
 const COLLECTIONS_URL = `${BASE_URL}/collections`;
 const VERSION_URL = `${BASE_URL}/version`;
 
@@ -43,7 +40,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("shared/api fetchPrompts: 配信元 URL の組み立て", () => {
+describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () => {
   it("Given baseUrl When fetch する Then `/suno/prompts.json` サブパスへ要求する", async () => {
     const fetchFn = mockFetch(() => ({
       ok: true,
@@ -51,13 +48,13 @@ describe("shared/api fetchPrompts: 配信元 URL の組み立て", () => {
       json: async () => [{ name: "p1", style: "lofi", lyrics: "" }],
     }));
 
-    await fetchPrompts(BASE_URL);
+    await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(fetchFn).toHaveBeenCalledWith(PROMPTS_URL);
   });
 });
 
-describe("shared/api fetchPrompts: 正常系", () => {
+describe("shared/api fetchCollectionPrompts: 正常系", () => {
   it("Given 配列 JSON When fetch する Then PromptEntry[] を返す", async () => {
     const entries = [
       { name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" },
@@ -65,7 +62,7 @@ describe("shared/api fetchPrompts: 正常系", () => {
     ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result).toEqual(entries);
     expect(result[0]).toMatchObject({
@@ -74,6 +71,19 @@ describe("shared/api fetchPrompts: 正常系", () => {
       lyrics: expect.any(String),
     });
   });
+
+  it("Given envelope JSON When fetch する Then entries だけを返す（既存 API 互換）", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: { min_sec: 75, max_sec: 240 } }),
+    }));
+
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
+
+    expect(result).toEqual(entries);
+  });
 });
 
 describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", () => {
@@ -81,7 +91,7 @@ describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", (
     const entries = [{ name: "夜更けのカフェ", title: "Midnight Cafe", style: "lofi, jazzy", lyrics: "la la la" }];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result[0].title).toBe("Midnight Cafe");
   });
@@ -90,7 +100,7 @@ describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", (
     const entries = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result[0].title).toBeUndefined();
   });
@@ -101,7 +111,7 @@ describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", (
     const withoutTitle: PromptEntry = { name: "p2", style: "cinematic", lyrics: "" };
     mockFetch(() => ({ ok: true, status: 200, json: async () => [withTitle, withoutTitle] }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result).toEqual([withTitle, withoutTitle]);
     expect(result[0].title).toBe("Custom One");
@@ -122,7 +132,7 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
     ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result[0].style_influence).toBe(85);
     expect(result[0].weirdness).toBe(30);
@@ -133,7 +143,7 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result[0].style_influence).toBeUndefined();
     expect(result[0].weirdness).toBeUndefined();
@@ -153,7 +163,7 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
     const without: PromptEntry = { name: "p2", style: "ambient", lyrics: "" };
     mockFetch(() => ({ ok: true, status: 200, json: async () => [withAdvanced, without] }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result).toEqual([withAdvanced, without]);
     expect(result[0].style_influence).toBe(85);
@@ -164,7 +174,7 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
     const entries = [{ name: "p1", style: "lofi", lyrics: "", style_influence: 0, weirdness: 0 }];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchPrompts(BASE_URL);
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
     expect(result[0].style_influence).toBe(0);
     expect(result[0].weirdness).toBe(0);
@@ -172,7 +182,7 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
 });
 
 describe("shared/api PromptResponse.duration_filter: collection 単位 duration guard 契約 (#1259)", () => {
-  it("Given envelope JSON When fetchPromptResponse する Then entries と duration_filter を返す", async () => {
+  it("Given envelope JSON When fetchCollectionPromptResponse する Then entries と duration_filter を返す", async () => {
     const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
     const durationFilter: DurationFilter = { min_sec: 75, max_sec: 240 };
     mockFetch(() => ({
@@ -181,76 +191,81 @@ describe("shared/api PromptResponse.duration_filter: collection 単位 duration 
       json: async () => ({ entries, duration_filter: durationFilter }),
     }));
 
-    const result = await fetchPromptResponse(BASE_URL);
+    const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
 
     expect(result.entries).toEqual(entries);
     expect(result.duration_filter).toEqual(durationFilter);
   });
 
-  it("Given duration_filter 省略 When fetchPromptResponse する Then 既定値を補う", async () => {
+  it("Given duration_filter 省略 When fetchCollectionPromptResponse する Then 既定値を補う", async () => {
     const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
     mockFetch(() => ({ ok: true, status: 200, json: async () => ({ entries }) }));
 
-    const result = await fetchPromptResponse(BASE_URL);
+    const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
 
     expect(result.duration_filter).toEqual(DEFAULT_DURATION_FILTER);
   });
 
-  it("Given legacy 配列 JSON When fetchPromptResponse する Then entries に正規化して既定値を補う", async () => {
+  it("Given legacy 配列 JSON When fetchCollectionPromptResponse する Then entries に正規化して既定値を補う", async () => {
     const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchPromptResponse(BASE_URL);
+    const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
 
     expect(result).toEqual({ entries, duration_filter: DEFAULT_DURATION_FILTER });
   });
 
-  it("Given invalid duration_filter When fetchPromptResponse する Then fail-loud で throw する", async () => {
-    mockFetch(() => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        entries: [{ name: "p1", style: "lofi", lyrics: "" }],
-        duration_filter: { min_sec: 300, max_sec: 60 },
-      }),
-    }));
+  it.each([
+    ["null", null],
+    ["空 object", {}],
+    ["min_sec 欠落", { max_sec: 300 }],
+    ["max_sec 欠落", { min_sec: 60 }],
+    ["min_sec 非数値", { min_sec: "60", max_sec: 300 }],
+    ["max_sec 非数値", { min_sec: 60, max_sec: "300" }],
+    ["min_sec 負数", { min_sec: -1, max_sec: 300 }],
+    ["min_sec > max_sec", { min_sec: 300, max_sec: 60 }],
+  ])(
+    "Given invalid duration_filter (%s) When fetchCollectionPromptResponse する Then fail-loud で throw する",
+    async (_label, durationFilter) => {
+      mockFetch(() => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          entries: [{ name: "p1", style: "lofi", lyrics: "" }],
+          duration_filter: durationFilter,
+        }),
+      }));
 
-    await expect(fetchPromptResponse(BASE_URL)).rejects.toThrow(/min_sec/);
-  });
-
-  it("Given explicit/undefined filter When durationFilterOrDefault Then explicit または既定値を返す", () => {
-    const explicit: DurationFilter = { min_sec: 90, max_sec: 180 };
-
-    expect(durationFilterOrDefault(explicit)).toEqual(explicit);
-    expect(durationFilterOrDefault()).toEqual(DEFAULT_DURATION_FILTER);
-  });
+      await expect(fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID)).rejects.toThrow();
+    },
+  );
 });
 
-describe("shared/api fetchPrompts: 異常系 (fail-loud)", () => {
+describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
   it("Given HTTP 500 When fetch する Then ステータスを含めて throw する", async () => {
     mockFetch(() => ({ ok: false, status: 500, json: async () => ({}) }));
 
-    await expect(fetchPrompts(BASE_URL)).rejects.toThrow(/500/);
+    await expect(fetchCollectionPrompts(BASE_URL, COLLECTION_ID)).rejects.toThrow(/500/);
   });
 
   it("Given 配列でない JSON (オブジェクト) When fetch する Then throw する", async () => {
     mockFetch(() => ({ ok: true, status: 200, json: async () => ({ name: "x" }) }));
 
-    await expect(fetchPrompts(BASE_URL)).rejects.toThrow();
+    await expect(fetchCollectionPrompts(BASE_URL, COLLECTION_ID)).rejects.toThrow();
   });
 
   it("Given 空配列 When fetch する Then throw する", async () => {
     mockFetch(() => ({ ok: true, status: 200, json: async () => [] }));
 
-    await expect(fetchPrompts(BASE_URL)).rejects.toThrow();
+    await expect(fetchCollectionPrompts(BASE_URL, COLLECTION_ID)).rejects.toThrow();
   });
 });
 
 // ---------------------------------------------------------------------------
 // fetchCollections (#816 dir mode): `/collections` 列挙クライアント
 //   - fetch 先は `${baseUrl}/collections`
-//   - HTTP 非 2xx で throw
-//   - 配列を返す（空配列も許容 = 単一 mode / collection 0 件の fallback 判断は呼び出し側）
+//   - HTTP 非 2xx で throw し、popup は fail-loud にエラー表示する
+//   - 配列を返す（空配列も許容 = caller が「選択可能な collection なし」として扱う）
 // ---------------------------------------------------------------------------
 
 const SAMPLE_COLLECTIONS: CollectionSummary[] = [
@@ -294,7 +309,7 @@ describe("shared/api fetchCollections: 正常系", () => {
     });
   });
 
-  it("Given 空配列 When fetch する Then throw せず [] を返す (fallback 判断は呼び出し側)", async () => {
+  it("Given 空配列 When fetch する Then throw せず [] を返す（選択可能な collection なし）", async () => {
     mockFetch(() => ({ ok: true, status: 200, json: async () => [] }));
 
     await expect(fetchCollections(BASE_URL)).resolves.toEqual([]);
@@ -319,7 +334,7 @@ describe("shared/api fetchCollections: 正常系", () => {
 });
 
 describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
-  it("Given HTTP 404 (単一 mode サーバー) When fetch する Then throw する (popup の fallback トリガー)", async () => {
+  it("Given HTTP 404 When fetch する Then throw する（popup が取得失敗として表示する）", async () => {
     mockFetch(() => ({ ok: false, status: 404, json: async () => ({}) }));
 
     await expect(fetchCollections(BASE_URL)).rejects.toThrow(/404/);
@@ -386,7 +401,7 @@ describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
 // ---------------------------------------------------------------------------
 // fetchCollectionPrompts (#816): `/collections/<id>/suno/prompts.json`
 //   - fetch 先は collectionPromptsRoute(id)
-//   - HTTP 非 2xx / 空配列 / 非配列で throw（fetchPrompts と同じ fail-loud 契約）
+//   - HTTP 非 2xx / 空配列 / 非配列で throw（fetchCollectionPrompts と同じ fail-loud 契約）
 // ---------------------------------------------------------------------------
 
 describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () => {
@@ -413,12 +428,37 @@ describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () 
 
     expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`);
   });
+
+  it("Given スペース入り id When fetchCollectionPromptResponse する Then id を path segment encode して要求する", async () => {
+    const fetchFn = mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ name: "p1", style: "lofi", lyrics: "" }],
+    }));
+
+    await fetchCollectionPromptResponse(BASE_URL, "20260526-rainy jazz-collection");
+
+    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`);
+  });
 });
 
 describe("shared/api fetchCollectionPrompts: 正常系", () => {
   it("Given 配列 JSON When fetch する Then PromptEntry[] を返す", async () => {
     const entries = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
+
+    expect(result).toEqual(entries);
+  });
+
+  it("Given envelope JSON When fetchCollectionPrompts する Then entries だけを返す（既存 API 互換）", async () => {
+    const entries: PromptEntry[] = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: { min_sec: 90, max_sec: 260 } }),
+    }));
 
     const result = await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
 
@@ -441,6 +481,18 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
 });
 
 describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
+  it.each([
+    ["空文字", ""],
+    ["欠落", undefined],
+    ["非 string", 123],
+  ] as const)("Given collectionId が%s When fetch する Then path を組み立てず throw する", async (_label, id) => {
+    const fetchFn = vi.fn();
+    vi.stubGlobal("fetch", fetchFn);
+
+    await expect(fetchCollectionPrompts(BASE_URL, id as never)).rejects.toThrow(/collectionId/);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("Given HTTP 404 (未知 id) When fetch する Then throw する", async () => {
     mockFetch(() => ({ ok: false, status: 404, json: async () => ({}) }));
 

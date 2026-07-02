@@ -67,7 +67,7 @@ describe("shouldShowResumeBanner: 起動時バナーの表示条件 (要件4)", 
     expect(shouldShowResumeBanner(state, "20260601-clm-other-collection", NOW)).toBe(false);
   });
 
-  it("Given 選択中 collectionId が空文字 When 判定 Then 表示しない（単一ファイル mode）", () => {
+  it("Given 選択中 collectionId が空文字 When 判定 Then 表示しない（collection 不一致）", () => {
     const state = makeResumeState({ timestamp: NOW - HOUR_MS });
     expect(shouldShowResumeBanner(state, "", NOW)).toBe(false);
   });

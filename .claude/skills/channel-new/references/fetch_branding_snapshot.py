@@ -19,6 +19,7 @@ from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
 
 CHANNELS_PART = "snippet,brandingSettings,localizations"
 SNAPSHOT_SOURCE = f"youtube.channels.list(part={CHANNELS_PART})"
+THUMBNAIL_PRIORITY = ("maxres", "standard", "high", "medium", "default")
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,6 +44,7 @@ def main() -> None:
     args = parse_args()
     youtube = YouTubeOAuthHandler().get_youtube_service()
     items = [_fetch_channel(youtube, channel_id) for channel_id in args.channel_id]
+    channel_image_references = [_extract_channel_image_references(item) for item in items]
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -50,8 +52,10 @@ def main() -> None:
         json.dumps(
             {
                 "untrusted_data": True,
+                "reference_only": True,
                 "source": SNAPSHOT_SOURCE,
                 "items": items,
+                "channel_image_references": channel_image_references,
             },
             indent=2,
             ensure_ascii=False,
@@ -82,7 +86,53 @@ def _fetch_channel(youtube, channel_id: str) -> dict:
             f"YouTube channel id mismatch for approved TTP channel id {channel_id}: response id={returned_id!r}"
         )
 
-    return item
+    return {
+        **item,
+        "snippet": item.get("snippet") if isinstance(item.get("snippet"), dict) else {},
+        "brandingSettings": item.get("brandingSettings") if isinstance(item.get("brandingSettings"), dict) else {},
+        "localizations": item.get("localizations") if isinstance(item.get("localizations"), dict) else {},
+    }
+
+
+def _extract_channel_image_references(item: dict) -> dict:
+    snippet = _mapping_or_empty(item.get("snippet"))
+    branding = _mapping_or_empty(item.get("brandingSettings"))
+    image = _mapping_or_empty(branding.get("image"))
+    title = snippet.get("title")
+
+    return {
+        "channel_id": item.get("id", ""),
+        "title": title if isinstance(title, str) else "",
+        "untrusted_data": True,
+        "reference_only": True,
+        "icon": _best_thumbnail(_mapping_or_empty(snippet.get("thumbnails"))),
+        "banner": _banner_references(image),
+    }
+
+
+def _mapping_or_empty(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _best_thumbnail(thumbnails: dict) -> dict:
+    for key in THUMBNAIL_PRIORITY:
+        value = thumbnails.get(key)
+        if isinstance(value, dict) and value.get("url"):
+            return {
+                "source": f"snippet.thumbnails.{key}",
+                "url": value["url"],
+                "width": value.get("width"),
+                "height": value.get("height"),
+            }
+    return {}
+
+
+def _banner_references(image: dict) -> list[dict]:
+    references: list[dict] = []
+    for key, value in sorted(image.items()):
+        if key.endswith("Url") and isinstance(value, str) and value:
+            references.append({"source": f"brandingSettings.image.{key}", "url": value})
+    return references
 
 
 if __name__ == "__main__":

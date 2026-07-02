@@ -118,12 +118,24 @@
 |---|---|
 | `image_generation.gemini.brand_background` | 「ビジュアルアイデンティティ」の背景色 |
 | `image_generation.gemini.reference_images.default` | TTP 対象の代表サムネ（`data/thumbnail_compare/benchmark/<channel>-<vid>.jpg`、`/benchmark` で download される） |
+| `image_generation.gemini.reference_images.channel_branding` | `docs/channel/competitor-branding-snapshot.json` 由来の icon / banner reference と `branding/icon.png` / `branding/banner.png` の出力先 |
 | `image_generation.gemini.composition_rules.*` | 「ビジュアルアイデンティティ」「サムネイル方針」 |
 | `image_generation.gemini.diff_prompt_template` | コレクション側 `prompts/<theme>.md` への差分指示テンプレ |
 
 `reference_images.default` の TTP サムネは `/benchmark` skill（CLI は `yt-benchmark-collect`）が
 `docs/benchmarks/*.md` 取得時に `data/thumbnail_compare/benchmark/` に自動 download する。
 **手動 download はしない**（issue #567）。
+
+`benchmark.channels` が設定済みのチャンネルでは、`uv run yt-doctor --json` の
+`ttp_wf_new_readiness` で `/channel-setup benchmark 反映未完了` が出ないことを完了条件にする。
+この check は `data/benchmark_*.json`、`docs/benchmarks/*.md`、
+`data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::reference_images.default`、
+`config/skills/thumbnail.yaml::reference_images.channel_branding`
+の欠落を読むだけで検出する。
+
+設定生成後は `uv run yt-doctor` を実行し、`initial_setup_readiness` が OK であることを確認する。
+ここで `reference_images.default` / `composition_rules` の空欄・TBD、Suno `genre_line` の
+Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致を公開前に検出できる。
 
 ## オプションセクション
 

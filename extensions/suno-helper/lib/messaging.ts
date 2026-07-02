@@ -3,36 +3,42 @@
 // （詳細は lib/overlay-relay.ts）。payload 定義をここに集約する (要件3)。
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
-import type { CapturedPlaylist, CollectionSummary, DownloadedPayload, PromptEntry } from "../../shared/api";
+import type {
+  CapturedPlaylist,
+  CollectionSummary,
+  DownloadedPayload,
+  DurationFilter,
+  PromptEntry,
+  PromptResponse,
+} from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
 /**
- * run メッセージの payload (#854, #872)。collection mode は playlistName を伴う `{entries, playlistName}`、
- * 単一ファイル mode（旧形式）は `PromptEntry[]` をそのまま渡し content 側で wrap する（後方互換拡張）。
+ * run メッセージの payload (#854, #872)。
  *   - range: 0-based inclusive な実行範囲 (#872)。未指定は全 entry 実行（従来通り）。
- *   - collectionId: ERROR 停止時に resume state を紐付ける collection 識別子 (#872)。単一ファイル mode は省略。
+ *   - collectionId: ERROR 停止時に resume state を紐付ける collection 識別子 (#872)。
  */
-export type RunPayload =
-  | PromptEntry[]
-  | {
-      entries: PromptEntry[];
-      playlistName?: string;
-      range?: RunRange;
-      collectionId?: string;
-      /** 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。 */
-      indices?: number[];
-      /** 再開前の run で観測済みの playlist 対象 clip ID。 */
-      submittedClipIds?: string[];
-      /** playlist 追加時に揃っているべき clip ID 件数。 */
-      playlistExpectedClipCount?: number;
-    };
+export interface RunPayload {
+  entries: PromptEntry[];
+  playlistName: string;
+  /** collection 単位 duration guard 閾値 (#1259)。実フィルタは yield guard 側で消費する。 */
+  durationFilter?: DurationFilter;
+  range?: RunRange;
+  collectionId: string;
+  /** 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。 */
+  indices?: number[];
+  /** 再開前の run で観測済みの playlist 対象 clip ID。 */
+  submittedClipIds?: string[];
+  /** playlist 追加時に揃っているべき clip ID 件数。 */
+  playlistExpectedClipCount?: number;
+}
 
 export interface RetryPlaylistPayload {
   playlistName: string;
   submittedClipIds: string[];
   expectedClipCount: number;
-  collectionId?: string;
+  collectionId: string;
   shouldDownload?: boolean;
 }
 
@@ -103,10 +109,10 @@ interface ProtocolMap {
   fetchCompatibilityWarning(payload: { baseUrl: string; extensionVersion: string }): string;
   /** overlay → background: `/collections` を extension origin から取得する。 */
   fetchCollections(payload: { baseUrl: string }): CollectionSummary[];
-  /** overlay → background: `/suno/prompts.json` を extension origin から取得する。 */
-  fetchPrompts(payload: { baseUrl: string }): PromptEntry[];
   /** overlay → background: collection prompts を extension origin から取得する。 */
   fetchCollectionPrompts(payload: { baseUrl: string; collectionId: string }): PromptEntry[];
+  /** overlay → background: collection prompts と metadata を extension origin から取得する。 */
+  fetchCollectionPromptResponse(payload: { baseUrl: string; collectionId: string }): PromptResponse;
   /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。 */
   postDownloaded(payload: { baseUrl: string; collectionId: string; body: DownloadedPayload }): void;
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */

@@ -1672,6 +1672,34 @@ def test_extract_and_rename_happy_path(tmp_path):
     ]
 
 
+def test_extract_and_rename_accepts_prompt_response_envelope(tmp_path):
+    """duration_filter 付き envelope でも entries の曲順で ZIP をリネームする。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries={
+            "entries": [{"name": "螺旋の降下 — Spiral Descent", "style": "s", "lyrics": ""}],
+            "duration_filter": {"min_sec": 75, "max_sec": 240},
+        },
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {
+            "Spiral Descent.mp3": b"audio-a",
+            "Spiral Descent_1.mp3": b"audio-b",
+        },
+    )
+
+    extract_and_rename_music(coll, str(zip_path))
+
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == [
+        "01a-Spiral Descent.mp3",
+        "01b-Spiral Descent.mp3",
+    ]
+
+
 def test_extract_without_prompts(tmp_path):
     """suno-prompts.json が無い場合、対応件数を確定できないため配置しない。"""
     coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=None)

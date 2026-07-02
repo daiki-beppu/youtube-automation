@@ -5,7 +5,7 @@
 
 ## フォールバックペルソナ例
 
-チャンネル固有の `docs/audience-persona.md` がある場合はそちらを優先する。この節は persona 未定義チャンネル向けの例。
+チャンネル固有の `docs/channel/personas/persona-definition.md` がある場合はそちらを優先する。旧 `docs/audience-persona.md` は legacy fallback としてのみ参照し、この節は persona 未定義チャンネル向けの例とする。
 
 ### Primary: Carla (45-65歳)
 

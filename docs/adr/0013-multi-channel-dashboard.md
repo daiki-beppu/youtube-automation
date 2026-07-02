@@ -1,5 +1,9 @@
 # マルチチャンネル dashboard: 2 フェーズ戦略
 
+## Status
+
+accepted (2026-06-23)。実装は未着手（Phase 1 の Python PoC から着手予定 — 本文参照）。
+
 全 first-party チャンネルの analytics を一覧表示する dashboard を、PoC (Python) → 本実装 (TS) の 2 フェーズで構築する。
 
 ## Context
