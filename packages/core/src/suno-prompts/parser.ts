@@ -1,4 +1,3 @@
-import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
 import { snakeToCamel } from "../../internal/case.ts";
@@ -19,7 +18,7 @@ export interface SunoPatternsFile {
   readonly tracks?: number;
 }
 
-const YamlMappingSchema = z.record(z.string(), z.unknown());
+const JsonMappingSchema = z.record(z.string(), z.unknown());
 
 const RawSunoPatternSchema = z
   .object({
@@ -55,10 +54,10 @@ const RawSunoPatternsFileSchema = z
     })
   );
 
-export const parseTopLevelYaml = (text: string): Record<string, unknown> => {
-  const parsed = parseYaml(text) as unknown;
-  return YamlMappingSchema.parse(parsed);
+export const parseTopLevelJson = (text: string): Record<string, unknown> => {
+  const parsed = JSON.parse(text) as unknown;
+  return JsonMappingSchema.parse(parsed);
 };
 
-export const parsePatternsYaml = (text: string): SunoPatternsFile =>
-  RawSunoPatternsFileSchema.parse(parseYaml(text) as unknown);
+export const parsePatternsJson = (text: string): SunoPatternsFile =>
+  RawSunoPatternsFileSchema.parse(JSON.parse(text) as unknown);

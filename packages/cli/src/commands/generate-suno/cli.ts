@@ -57,7 +57,7 @@ export const createGenerateSunoCommand = ({
       },
       path: {
         description:
-          "collection directory または suno-patterns.yaml。省略時は CLI adapter が CWD に解決する",
+          "collection directory または suno-patterns.json。省略時は CLI adapter が CWD に解決する",
         required: false,
         type: "positional",
       },

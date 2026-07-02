@@ -40,10 +40,17 @@ afterEach(() => {
   }
 });
 
-const writeSunoOverride = (channelDir: string, yaml: string): void => {
+const writeSunoOverride = (
+  channelDir: string,
+  config: Record<string, unknown>
+): void => {
   const configDir = join(channelDir, "config", "skills");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "suno.yaml"), yaml, "utf-8");
+  writeFileSync(
+    join(configDir, "suno.json"),
+    JSON.stringify(config, null, 2),
+    "utf-8"
+  );
 };
 
 const writeVideoAnalysisPreset = (
@@ -65,11 +72,18 @@ const writeMalformedVideoAnalysis = (channelDir: string): void => {
   writeFileSync(join(dir, "broken.json"), "{not-json", "utf-8");
 };
 
-const makeCollection = (channelDir: string, patternsYaml: string): string => {
+const makeCollection = (
+  channelDir: string,
+  patternsFile: Record<string, unknown>
+): string => {
   const collectionDir = join(channelDir, "collections", "planning", "test");
   const docsDir = join(collectionDir, "20-documentation");
   mkdirSync(docsDir, { recursive: true });
-  writeFileSync(join(docsDir, "suno-patterns.yaml"), patternsYaml, "utf-8");
+  writeFileSync(
+    join(docsDir, "suno-patterns.json"),
+    JSON.stringify(patternsFile, null, 2),
+    "utf-8"
+  );
   return collectionDir;
 };
 
@@ -142,7 +156,7 @@ describe("GenerateSunoInputSchema — contract", () => {
   });
 
   test("should reject unknown keys", () => {
-    const raw = { path: "/tmp/patterns.yaml", unexpected: true };
+    const raw = { path: "/tmp/patterns.json", unexpected: true };
 
     expect(() => GenerateSunoInputSchema.parse(raw)).toThrow();
   });
@@ -151,27 +165,23 @@ describe("GenerateSunoInputSchema — contract", () => {
 describe("generateSunoPromptsService — file generation", () => {
   test("should generate markdown and json from a collection directory", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"',
-        "auto_lyrics_structure: false",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Morning Collection"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "朝霧"',
-        '    name_en: "Morning Haze"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "mist over a quiet river"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: false,
+      genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Morning Haze",
+          name_jp: "朝霧",
+          scenes: ["mist over a quiet river"],
+          tempo: "slow",
+        },
+      ],
+      title: "Morning Collection",
+      tracks: 2,
+    });
 
     const output = await generateOk({ path: collectionDir }, channelDir);
 
@@ -212,63 +222,27 @@ describe("generateSunoPromptsService — file generation", () => {
     ]);
   });
 
-  test("should parse single-quoted YAML scalars without preserving quote marks", async () => {
-    const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        "genre_line: 'lo-fi jazz, soft piano, warm rhodes, mellow drums, slow'",
-        "auto_lyrics_structure: false",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        "title: 'Single Quote Collection'",
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        "  - name_jp: '朝霧'",
-        "    name_en: 'Morning Haze'",
-        "    tempo: 'slow'",
-        "    scenes:",
-        "      - 'mist over a quiet river'",
-      ].join("\n")
-    );
-
-    await generateOk({ path: collectionDir }, channelDir);
-
-    expect(readGeneratedEntries(collectionDir)).toEqual([
-      {
-        lyrics: "",
-        name: "朝霧 — Morning Haze",
-        style:
-          "slow, lo-fi jazz, soft piano, warm rhodes, mellow drums, slow,\nmist over a quiet river",
-      },
-    ]);
-  });
-
   test("should suffix variation names when one pattern has multiple scenes", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      'genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow"\n'
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Two Variations"',
-        "mode: instrumental",
-        "tracks: 4",
-        "patterns:",
-        '  - name_jp: "灯り"',
-        '    name_en: "Lantern"',
-        '    tempo: "gentle"',
-        "    scenes:",
-        '      - "paper lanterns in the rain"',
-        '      - "last train lights through glass"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Lantern",
+          name_jp: "灯り",
+          scenes: [
+            "paper lanterns in the rain",
+            "last train lights through glass",
+          ],
+          tempo: "gentle",
+        },
+      ],
+      title: "Two Variations",
+      tracks: 4,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -281,60 +255,52 @@ describe("generateSunoPromptsService — file generation", () => {
     ]);
   });
 
-  test("should use tracks_per_collection when instrumental YAML omits tracks", async () => {
+  test("should use tracks_per_collection when instrumental patterns file omits tracks", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow"',
-        "tracks_per_collection: 4",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Config Tracks"',
-        "mode: instrumental",
-        "patterns:",
-        '  - name_jp: "灯り"',
-        '    name_en: "Lantern"',
-        '    tempo: "gentle"',
-        "    scenes:",
-        '      - "paper lanterns in the rain"',
-        '      - "last train lights through glass"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow",
+      tracks_per_collection: 4,
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Lantern",
+          name_jp: "灯り",
+          scenes: [
+            "paper lanterns in the rain",
+            "last train lights through glass",
+          ],
+          tempo: "gentle",
+        },
+      ],
+      title: "Config Tracks",
+    });
 
     const output = await generateOk({ path: collectionDir }, channelDir);
 
     expect(output.entryCount).toBe(2);
   });
 
-  test("should preserve vocal lyrics from pattern YAML", async () => {
+  test("should preserve vocal lyrics from the patterns file", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "jazzhop vocal, warm piano, brushed drums, slow"',
-        "auto_lyrics_structure: false",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Vocal Lyrics"',
-        "mode: vocal",
-        "patterns:",
-        '  - name_jp: "雨音"',
-        '    name_en: "Rain Notes"',
-        '    tempo: "slow"',
-        "    lyrics: |",
-        "      ame no oto dake",
-        "      mada koko ni aru",
-        "    scenes:",
-        '      - "rain at a window"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: false,
+      genre_line: "jazzhop vocal, warm piano, brushed drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "vocal",
+      patterns: [
+        {
+          lyrics: "ame no oto dake\nmada koko ni aru\n",
+          name_en: "Rain Notes",
+          name_jp: "雨音",
+          scenes: ["rain at a window"],
+          tempo: "slow",
+        },
+      ],
+      title: "Vocal Lyrics",
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -350,30 +316,26 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should include only channel override advanced fields in generated json", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"',
-        "style_influence: 0",
-        "weirdness: 0",
-        'exclude_styles: ""',
-        'vocal_gender: ""',
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Advanced Fields"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "静寂"',
-        '    name_en: "Stillness"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "a desk lamp after midnight"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      exclude_styles: "",
+      genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow",
+      style_influence: 0,
+      vocal_gender: "",
+      weirdness: 0,
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Stillness",
+          name_jp: "静寂",
+          scenes: ["a desk lamp after midnight"],
+          tempo: "slow",
+        },
+      ],
+      title: "Advanced Fields",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -397,20 +359,19 @@ describe("generateSunoPromptsService — file generation", () => {
       exclude_styles: "noise, harsh synth",
       genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow",
     });
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Default Merge"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "余白"',
-        '    name_en: "Open Space"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "blank pages beside coffee"',
-      ].join("\n")
-    );
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Open Space",
+          name_jp: "余白",
+          scenes: ["blank pages beside coffee"],
+          tempo: "slow",
+        },
+      ],
+      title: "Default Merge",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -432,32 +393,30 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should use style variant genre_line when pattern declares style", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow"',
-        "auto_lyrics_structure: false",
-        "style_variants:",
-        "  piano:",
-        '    name: "solo piano"',
-        '    genre_line: "solo piano, felt keys, intimate room, soft pedal, slow"',
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Variant"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "鍵盤"',
-        '    name_en: "Felt Keys"',
-        '    tempo: "slow"',
-        '    style: "piano"',
-        "    scenes:",
-        '      - "a quiet piano beside the window"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: false,
+      genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow",
+      style_variants: {
+        piano: {
+          genre_line: "solo piano, felt keys, intimate room, soft pedal, slow",
+          name: "solo piano",
+        },
+      },
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Felt Keys",
+          name_jp: "鍵盤",
+          scenes: ["a quiet piano beside the window"],
+          style: "piano",
+          tempo: "slow",
+        },
+      ],
+      title: "Variant",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -475,31 +434,21 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should use core-owned default tracks_per_collection when patterns omit tracks", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow"',
-        "auto_lyrics_structure: false",
-      ].join("\n")
-    );
-    const patterns = Array.from({ length: 10 }, (_, index) =>
-      [
-        `  - name_jp: "情景${index + 1}"`,
-        `    name_en: "Scene ${index + 1}"`,
-        '    tempo: "slow"',
-        "    scenes:",
-        `      - "quiet scene ${index + 1}"`,
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Core Defaults"',
-        "mode: instrumental",
-        "patterns:",
-        ...patterns,
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: false,
+      genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow",
+    });
+    const patterns = Array.from({ length: 10 }, (_, index) => ({
+      name_en: `Scene ${index + 1}`,
+      name_jp: `情景${index + 1}`,
+      scenes: [`quiet scene ${index + 1}`],
+      tempo: "slow",
+    }));
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns,
+      title: "Core Defaults",
+    });
 
     const result = await generateSunoPromptsService(
       { path: collectionDir },
@@ -513,23 +462,21 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should infer instrumental mode from genre_line when mode is omitted", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      'genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow"\n'
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Implicit Instrumental"',
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "静けさ"',
-        '    name_en: "Still Air"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "a quiet room at dawn"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      patterns: [
+        {
+          name_en: "Still Air",
+          name_jp: "静けさ",
+          scenes: ["a quiet room at dawn"],
+          tempo: "slow",
+        },
+      ],
+      title: "Implicit Instrumental",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -545,25 +492,21 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should infer vocal mode from genre_line when mode is omitted", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      'genre_line: "jazzhop vocal, warm piano, brushed drums, slow"\n'
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Implicit Vocal"',
-        "patterns:",
-        '  - name_jp: "雨音"',
-        '    name_en: "Rain Notes"',
-        '    tempo: "slow"',
-        "    lyrics: |",
-        "      [Verse]",
-        "      ame no oto dake",
-        "    scenes:",
-        '      - "rain at a window"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      genre_line: "jazzhop vocal, warm piano, brushed drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      patterns: [
+        {
+          lyrics: "[Verse]\name no oto dake\n",
+          name_en: "Rain Notes",
+          name_jp: "雨音",
+          scenes: ["rain at a window"],
+          tempo: "slow",
+        },
+      ],
+      title: "Implicit Vocal",
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -579,27 +522,23 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should auto-fill instrumental lyrics when auto_lyrics_structure is enabled", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"',
-        "auto_lyrics_structure: true",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Auto Lyrics"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "余白"',
-        '    name_en: "Open Space"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "blank pages beside coffee"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: true,
+      genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Open Space",
+          name_jp: "余白",
+          scenes: ["blank pages beside coffee"],
+          tempo: "slow",
+        },
+      ],
+      title: "Auto Lyrics",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -616,30 +555,25 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should ignore instrumental pattern lyrics before adding structure tags", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"',
-        "auto_lyrics_structure: true",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Instrument Notes"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "余白"',
-        '    name_en: "Open Space"',
-        '    tempo: "slow"',
-        "    lyrics: |",
-        "      Mixing Notes: warm tape saturation",
-        "      Instrument Notes: felt piano lead",
-        "    scenes:",
-        '      - "blank pages beside coffee"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: true,
+      genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          lyrics:
+            "Mixing Notes: warm tape saturation\nInstrument Notes: felt piano lead\n",
+          name_en: "Open Space",
+          name_jp: "余白",
+          scenes: ["blank pages beside coffee"],
+          tempo: "slow",
+        },
+      ],
+      title: "Instrument Notes",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -655,30 +589,25 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should ignore instrumental pattern lyrics when auto lyrics are disabled", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"',
-        "auto_lyrics_structure: false",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Instrument Notes Disabled"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "余白"',
-        '    name_en: "Open Space"',
-        '    tempo: "slow"',
-        "    lyrics: |",
-        "      Mixing Notes: warm tape saturation",
-        "      Instrument Notes: felt piano lead",
-        "    scenes:",
-        '      - "blank pages beside coffee"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: false,
+      genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          lyrics:
+            "Mixing Notes: warm tape saturation\nInstrument Notes: felt piano lead\n",
+          name_en: "Open Space",
+          name_jp: "余白",
+          scenes: ["blank pages beside coffee"],
+          tempo: "slow",
+        },
+      ],
+      title: "Instrument Notes Disabled",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -694,29 +623,23 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should append extended outro to vocal lyrics when auto_lyrics_structure is enabled", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "jazzhop vocal, warm piano, brushed drums, slow"',
-        "auto_lyrics_structure: true",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Vocal Auto Lyrics"',
-        "mode: vocal",
-        "patterns:",
-        '  - name_jp: "雨音"',
-        '    name_en: "Rain Notes"',
-        '    tempo: "slow"',
-        "    lyrics: |",
-        "      [Verse]",
-        "      ame no oto dake",
-        "    scenes:",
-        '      - "rain at a window"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: true,
+      genre_line: "jazzhop vocal, warm piano, brushed drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "vocal",
+      patterns: [
+        {
+          lyrics: "[Verse]\name no oto dake\n",
+          name_en: "Rain Notes",
+          name_jp: "雨音",
+          scenes: ["rain at a window"],
+          tempo: "slow",
+        },
+      ],
+      title: "Vocal Auto Lyrics",
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -732,28 +655,26 @@ describe("generateSunoPromptsService — file generation", () => {
 
   test("should return quality warnings for long styles and early tempo words", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "slow, ambient pad, soft synth, airy textures, subtle bass"',
-        "style_char_limit: 40",
-        "auto_lyrics_structure: false",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Quality Warning"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "警告"',
-        '    name_en: "Warning"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "a very long descriptive scene with rain on glass and a quiet late night desk lamp"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: false,
+      genre_line: "slow, ambient pad, soft synth, airy textures, subtle bass",
+      style_char_limit: 40,
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Warning",
+          name_jp: "警告",
+          scenes: [
+            "a very long descriptive scene with rain on glass and a quiet late night desk lamp",
+          ],
+          tempo: "slow",
+        },
+      ],
+      title: "Quality Warning",
+      tracks: 2,
+    });
 
     const output = await generateOk({ path: collectionDir }, channelDir);
 
@@ -769,20 +690,19 @@ describe("generateSunoPromptsService — file generation", () => {
       genre_line: "ambient pad, soft synth, airy textures, subtle bass, slow",
     });
     writeMalformedVideoAnalysis(channelDir);
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Malformed Analysis"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "解析"',
-        '    name_en: "Analysis"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "a desk with notes from benchmark analysis"',
-      ].join("\n")
-    );
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Analysis",
+          name_jp: "解析",
+          scenes: ["a desk with notes from benchmark analysis"],
+          tempo: "slow",
+        },
+      ],
+      title: "Malformed Analysis",
+      tracks: 2,
+    });
 
     await generateOk({ path: collectionDir }, channelDir);
 
@@ -802,24 +722,22 @@ describe("generateSunoPromptsService — file generation", () => {
 describe("generateSunoPromptsService — error contract", () => {
   test("should return a config error when tracks_per_collection mismatches entries", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"\n'
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Mismatch"',
-        "mode: instrumental",
-        "tracks: 4",
-        "patterns:",
-        '  - name_jp: "朝"',
-        '    name_en: "Morning"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "one scene only"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Morning",
+          name_jp: "朝",
+          scenes: ["one scene only"],
+          tempo: "slow",
+        },
+      ],
+      title: "Mismatch",
+      tracks: 4,
+    });
 
     const result = await generateSunoPromptsService(
       { path: collectionDir },
@@ -835,28 +753,23 @@ describe("generateSunoPromptsService — error contract", () => {
 
   test("should return a config error when style text contains a banned artist", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "lo-fi jazz like Drake"',
-        "banned_artists:",
-        "  - Drake",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Banned Artist"',
-        "mode: instrumental",
-        "tracks: 2",
-        "patterns:",
-        '  - name_jp: "夜"',
-        '    name_en: "Night"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "quiet neon street"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      banned_artists: ["Drake"],
+      genre_line: "lo-fi jazz like Drake",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Night",
+          name_jp: "夜",
+          scenes: ["quiet neon street"],
+          tempo: "slow",
+        },
+      ],
+      title: "Banned Artist",
+      tracks: 2,
+    });
 
     const result = await generateSunoPromptsService(
       { path: collectionDir },
@@ -872,32 +785,29 @@ describe("generateSunoPromptsService — error contract", () => {
 
   test("should return a config error when final entry names are duplicated", async () => {
     const channelDir = makeTempDir("suno-channel-");
-    writeSunoOverride(
-      channelDir,
-      [
-        'genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow"',
-        "auto_lyrics_structure: false",
-      ].join("\n")
-    );
-    const collectionDir = makeCollection(
-      channelDir,
-      [
-        'title: "Duplicate Names"',
-        "mode: instrumental",
-        "tracks: 4",
-        "patterns:",
-        '  - name_jp: "雨"',
-        '    name_en: "Rain"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "first rain scene"',
-        '  - name_jp: "雨"',
-        '    name_en: "Rain"',
-        '    tempo: "slow"',
-        "    scenes:",
-        '      - "second rain scene"',
-      ].join("\n")
-    );
+    writeSunoOverride(channelDir, {
+      auto_lyrics_structure: false,
+      genre_line: "lo-fi jazz, soft piano, warm rhodes, mellow drums, slow",
+    });
+    const collectionDir = makeCollection(channelDir, {
+      mode: "instrumental",
+      patterns: [
+        {
+          name_en: "Rain",
+          name_jp: "雨",
+          scenes: ["first rain scene"],
+          tempo: "slow",
+        },
+        {
+          name_en: "Rain",
+          name_jp: "雨",
+          scenes: ["second rain scene"],
+          tempo: "slow",
+        },
+      ],
+      title: "Duplicate Names",
+      tracks: 4,
+    });
 
     const result = await generateSunoPromptsService(
       { path: collectionDir },

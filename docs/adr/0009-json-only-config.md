@@ -1,5 +1,9 @@
 # JSON-only config: packages/core から YAML 依存を排除
 
+## Status
+
+accepted。実装乖離（`packages/core` の `yaml` 依存と suno-prompts の YAML 読み込みが残存、#1413 監査で検出）は 2026-07-02 に解消済み (#1415)
+
 ## Context
 
 Python 版では設定ファイルが 2 フォーマットに分裂していた:

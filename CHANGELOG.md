@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(ts-rewrite/core)`: ADR-0009（JSON-only config）との実装乖離を解消し、`packages/core` から `yaml` 依存を排除した（#1415）。suno-prompts の定義ファイルを JSON 化（`suno-patterns.yaml` → `suno-patterns.json`、`config/skills/suno.yaml` → `suno.json`）し、parser を `JSON.parse` ベース（`parseTopLevelJson` / `parsePatternsJson`）に変更。`packages/core/package.json` から `yaml` を削除し、ADR-0009 に Status（乖離解消日）を追記した。
 - `fix(ts-rewrite/core)`: `uploadVideoService` の予約公開時刻正規化で、不正な timezone offset（例: `+25:99`）を UTC 変換対象にしないよう修正した（#1120）。
 - `refactor(ts-rewrite/core)`: `collectVideoDailyAnalyticsService` の列マッピングをハードコード位置参照から `columnHeaders` ベースの動的解決（`requireHeaders` / `resolveColumnIndex`）へ移行した（#1114）。API レスポンスの列順変更に対する堅牢性を向上
 - `fix(ts-rewrite/core)`: `readReferenceFiles` の参照画像読み込み失敗時エラーに対象パスを含め、元の filesystem error を `cause` に保持するよう修正した（#1121）。
