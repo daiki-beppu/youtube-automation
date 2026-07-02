@@ -16,6 +16,7 @@ type Handler = (message: { data: Record<string, unknown> }) => unknown;
 
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
 const scheduleRunCompleteReloadMock = vi.fn();
+const cancelScheduledRunCompleteReloadMock = vi.fn();
 
 async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
@@ -29,6 +30,7 @@ async function loadContentScript(overrides?: {
   vi.resetModules();
   vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
   scheduleRunCompleteReloadMock.mockReset();
+  cancelScheduledRunCompleteReloadMock.mockReset();
 
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
@@ -150,6 +152,7 @@ async function loadContentScript(overrides?: {
 
   vi.doMock("../lib/page-reload", () => ({
     scheduleRunCompleteReload: scheduleRunCompleteReloadMock,
+    cancelScheduledRunCompleteReload: cancelScheduledRunCompleteReloadMock,
   }));
 
   vi.doMock("../lib/ack-probe", () => ({
@@ -290,6 +293,29 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(0);
     expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(0);
   });
+
+  it("Given resume state 消去が失敗 When retryPlaylist 成功 Then FINISHED を維持しリロードのみ見送る（ERROR にしない）", async () => {
+    // 消去失敗を catch へ流すと ERROR → 再試行誘導 → 同名 playlist の重複作成につながる。
+    // playlist 追加自体は成功しているため FINISHED を維持し、再開バナー誤判定を避けるため
+    // リロードだけ見送る (#1411)。
+    clearResumeStateMock.mockRejectedValueOnce(new Error("storage down"));
+    const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+    const clipIds = ["clip-1", "clip-2"];
+
+    handlers.get("retryPlaylist")!({
+      data: {
+        playlistName: "test-playlist",
+        submittedClipIds: clipIds,
+        expectedClipCount: clipIds.length,
+        collectionId: "coll-1",
+        shouldDownload: false,
+      },
+    });
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    expect(progressMessages).not.toContainEqual(expect.objectContaining({ phase: PHASE.ERROR }));
+    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('content onMessage("retryPlaylist"): throw→ERROR', () => {
@@ -336,7 +362,7 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
   });
 
   it("Given collectionId 付き When retryDownload Then FINISHED phase を emit し resume state を消去する", async () => {
-    const { handlers, progressMessages, sentMessages } = await loadContentScript();
+    const { handlers, progressMessages, sentMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
@@ -354,6 +380,12 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
+    // retryDownload も selectClipIds で multi-select 状態を作るため、完了時リロードを予約する (#1411)。
+    // 順序は resume state 消去 → FINISHED → リロード（再開バナー誤判定の防止）。
+    expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
+    expect(clearResumeStateMock.mock.invocationCallOrder[0]).toBeLessThan(
+      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0],
+    );
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts).toHaveLength(1);
     expect(downloadedPosts[0].payload).toMatchObject({

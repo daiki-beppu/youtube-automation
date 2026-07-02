@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `fix(suno-helper)`: dir mode の同一タブ連続実行で前回 run の stale selection が次 run の playlist 追加（Cmd+P）に混入し曲数が累積汚染される問題を修正。run 一式完了時（resume state 消去後）にタブをリロードして Suno 内部の multi-select 状態を破棄し、保険として Cmd+P 直前に選択中 clip 数が対象件数を超えていたら fail-loud で中断してリロード後の再実行を促すようにした（#1411）
+- `fix(suno-helper)`: dir mode の同一タブ連続実行で前回 run の stale selection が次 run の playlist 追加（Cmd+P）に混入し曲数が累積汚染される問題を修正。run 一式完了時（resume state 消去後）にタブをリロードして Suno 内部の multi-select 状態を破棄し（runAll / retryPlaylist / retryDownload の全選択作成経路が対象）、保険として Cmd+P 直前に選択中 clip 数が対象件数を超えていたら fail-loud で中断してリロード後の再実行を促すようにした。ガード走査は 1 pass + 超過即打ち切りの軽量モードで行い、走査自体の失敗は fail-open（警告して続行）。リロード猶予中に次 run が受理された場合はリロードを取り消して新 run を保護し、resume state 消去失敗時は FINISHED を維持してリロードのみ見送る（#1411）
 - `fix(channel-new)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-new` が TTP 対象承認・relationship・branding snapshot・thumbnail reference・Suno readiness の不足を残したまま完了扱いにならないようにした（#1397）
 - `fix(skills)`: `/video-upload` と `/wf-next` の公開承認前に `yt-upload-collection --plan` で即時公開/予約公開を確定し、予約時は実際の公開予定時刻を案内するよう明記（#1395）
 - `fix(doctor)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-setup` の benchmark 反映未完了による TTP 参照データ欠落を検知・案内できるようにした（#1400）
