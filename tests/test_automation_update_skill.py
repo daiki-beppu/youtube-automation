@@ -62,6 +62,13 @@ def _fake_tool_path(tmp_path: Path) -> str:
     return f"{fake_bin}{os.pathsep}{os.environ['PATH']}"
 
 
+def _path_with_broken_python(tmp_path: Path) -> str:
+    fake_bin = tmp_path / "broken-python-bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "python3", "#!/usr/bin/env bash\nexit 1\n")
+    return f"{fake_bin}{os.pathsep}{os.environ['PATH']}"
+
+
 def test_automation_update_step_guides_with_escaped_channel_candidate(tmp_path: Path) -> None:
     home = tmp_path / "home"
     outside = tmp_path / "outside"
@@ -86,7 +93,7 @@ def test_automation_update_step_guides_with_escaped_channel_candidate(tmp_path: 
 def test_automation_update_step_guides_from_upstream_repo(tmp_path: Path) -> None:
     home = tmp_path / "home"
     upstream_repo = tmp_path / "upstream"
-    _write_pyproject(upstream_repo, '[project]\nname = "youtube-channels-automation"\n')
+    _write_pyproject(upstream_repo, '[project]\nname = "youtube_channels.automation"\n')
 
     result = _run_step_1_1(upstream_repo, home)
 
@@ -96,6 +103,7 @@ def test_automation_update_step_guides_from_upstream_repo(tmp_path: Path) -> Non
     assert "理由:" in result.stdout
     assert "移動先候補:" in result.stdout
     assert "[project].dependencies" in result.stdout
+    assert "-, _, . は同一扱い" in result.stdout
     assert "[project].name が youtube-channels-automation の upstream 本体は除外" in result.stdout
 
 
@@ -113,6 +121,7 @@ def test_automation_update_step_fallback_excludes_upstream_projects(tmp_path: Pa
     assert "find " in result.stdout
     assert "-type f" in result.stdout
     assert "[project].dependencies" in result.stdout
+    assert "-, _, . は同一扱い" in result.stdout
     assert "[project].name が youtube-channels-automation の upstream 本体は除外" in result.stdout
 
 
@@ -181,6 +190,52 @@ def test_automation_update_step_allows_exact_channel_dependency(tmp_path: Path) 
     assert "/automation-update は下流チャンネルリポジトリで実行してください" not in result.stdout
     assert "uv 0.0.0-test" in result.stdout
     assert "github.com OK" in result.stdout
+
+
+def test_automation_update_step_allows_normalized_channel_dependency(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    channel_repo = tmp_path / "channel"
+    _write_pyproject(
+        channel_repo,
+        ('[project]\nname = "deepfocus365"\ndependencies = ["YouTube_Channels.Automation>=5"]\n'),
+    )
+
+    result = _run_step_1_1(channel_repo, home, path=_fake_tool_path(tmp_path))
+
+    assert result.returncode == 0
+    assert "/automation-update は下流チャンネルリポジトリで実行してください" not in result.stdout
+    assert "uv 0.0.0-test" in result.stdout
+    assert "github.com OK" in result.stdout
+
+
+def test_automation_update_step_rejects_non_list_dependencies_table(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    table_repo = tmp_path / "table-deps"
+    _write_pyproject(
+        table_repo,
+        ('[project]\nname = "not-a-channel"\n[project.dependencies]\nyoutube-channels-automation = ">=5"\n'),
+    )
+
+    result = _run_step_1_1(table_repo, home, path=_fake_tool_path(tmp_path))
+
+    assert result.returncode == 1
+    assert "uv 0.0.0-test" not in result.stdout
+    assert "自動検出できませんでした" in result.stdout
+
+
+def test_automation_update_step_reports_python_parser_preflight_failure(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    channel_repo = tmp_path / "channel"
+    _write_pyproject(
+        channel_repo,
+        '[project]\nname = "deepfocus365"\ndependencies = ["youtube-channels-automation>=5"]\n',
+    )
+
+    result = _run_step_1_1(channel_repo, home, path=_path_with_broken_python(tmp_path))
+
+    assert result.returncode == 1
+    assert "python3 は tomllib" in result.stdout
+    assert "/automation-update は下流チャンネルリポジトリで実行してください" not in result.stdout
 
 
 def test_automation_update_step_ignores_non_regular_pyproject_candidates(tmp_path: Path) -> None:
