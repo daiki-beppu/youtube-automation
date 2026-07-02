@@ -11,6 +11,7 @@
       "project": ["src/**/*.ts", "test/**/*.ts", "*/*.ts"]
     }
   },
+  "ignoreWorkspaces": ["extensions/*"],
   "ignore": [
     ".worktrees/**",
     ".claude/worktrees/**",
@@ -21,7 +22,6 @@
     "docs/**",
     "poc/**"
   ],
-  "ignoreWorkspaces": ["extensions/**"],
   "ignoreBinaries": [
     "lefthook",
     "uv",

@@ -4,6 +4,8 @@
 
 accepted (2026-06-14)。**ADR-0001 §Identity（package 同名維持）を supersede** する。
 
+2026-07-02 監査注記: 起案時前提「下流は全て first-party（第三者 consumer なし）」は ADR-0015 (2026-06-25) で外部ユーザー（数十人規模）の実在に更新された。移行コストは ADR-0015 §移行戦略（告知 + 移行ガイド + skills エントリポイント安定）で吸収するため、rebrand 決定自体は維持する。なお workspace scope 名（`@youtube-automation/*` → `@tayk/*`）の改名は未実施 — lock point は最初の alpha publish 前。
+
 ## Context
 
 ADR-0001 は TS 移行にあたり package 名を `youtube-channels-automation` のまま維持し（下流に "同じツールの大幅 update" と見せる）、新名採用を「別ツールへの乗り換え体験 = オーバーキル」として却下していた。PR #791 のグリル (2026-06-14) でこの前提を再評価した:

@@ -1,10 +1,9 @@
-"""yt-channel-init — 正準ディレクトリ構造 + config 一式を一括生成する CLI."""
+"""yt-channel-init — config 一式と channel-new 初期運用ファイルを生成する CLI."""
 
 from __future__ import annotations
 
 import argparse
 import difflib
-import os
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -16,14 +15,14 @@ from youtube_automation.cli.channel_init_templates import (
     CHANNEL_CONFIG_TEMPLATES,
     CONFIG_SUBDIR,
     DEFAULT_LOCALIZATION_LANGUAGES,
-    DIRECTORIES,
-    GITKEEP_NAME,
     PLACEHOLDER_DEFAULT,
     ROOT_JSON_TEMPLATES,
     ROOT_TEXT_TEMPLATES,
     ChannelInitContext,
     serialize_json,
 )
+from youtube_automation.cli.setup_directory_contract import validate_existing_setup_directories
+from youtube_automation.cli.target_resolver import resolve_existing_target_dir
 from youtube_automation.utils.channel_settings import normalize_locale_to_short
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -48,16 +47,8 @@ class FileAction:
 
 
 @dataclass(frozen=True)
-class DirAction:
-    path: Path
-    rel: str
-    kind: ActionKind
-
-
-@dataclass(frozen=True)
 class Plan:
     files: list[FileAction] = field(default_factory=list)
-    directories: list[DirAction] = field(default_factory=list)
 
 
 def _parse_benchmark_channel(value: str) -> dict[str, str]:
@@ -124,30 +115,12 @@ def _resolve_target_duration_bounds(
 
 
 def _resolve_target_dir(target: str | None) -> Path:
-    """対象ディレクトリを解決する.
-
-    優先順: `--target` → `CHANNEL_DIR` 環境変数 → CWD.
-    `--target` / `CHANNEL_DIR` で指定された場合、存在しないなら `ConfigError`.
-    CWD フォールバックは常に存在するため検証不要.
-    """
-    if target:
-        path = Path(target).resolve()
-        if not path.is_dir():
-            raise ConfigError(f"--target で指定されたディレクトリが存在しません: {path}")
-        return path
-
-    env = os.environ.get("CHANNEL_DIR")
-    if env:
-        path = Path(env).resolve()
-        if not path.is_dir():
-            raise ConfigError(f"CHANNEL_DIR で指定されたディレクトリが存在しません: {path}")
-        return path
-
-    return Path.cwd().resolve()
+    return resolve_existing_target_dir(target)
 
 
 def _plan_actions(target: Path, ctx: ChannelInitContext, *, force: bool) -> Plan:
     """副作用なしで `Plan` を組み立てる（既存ファイルの read のみ実施）."""
+    validate_existing_setup_directories(target)
     files: list[FileAction] = []
     config_dir = target / CONFIG_SUBDIR
     for name, render in CHANNEL_CONFIG_TEMPLATES.items():
@@ -163,12 +136,7 @@ def _plan_actions(target: Path, ctx: ChannelInitContext, *, force: bool) -> Plan
         path = target / rel_path
         files.append(_plan_file(path, rel_path.as_posix(), render(ctx), force=force))
 
-    directories: list[DirAction] = []
-    for rel in DIRECTORIES:
-        path = target / rel
-        directories.append(_plan_directory(path, rel))
-
-    return Plan(files=files, directories=directories)
+    return Plan(files=files)
 
 
 def _plan_file(path: Path, rel: str, new_text: str, *, force: bool) -> FileAction:
@@ -197,16 +165,6 @@ def _plan_file(path: Path, rel: str, new_text: str, *, force: bool) -> FileActio
     return FileAction(path=path, rel=rel, kind=ActionKind.SKIPPED, new_text=new_text, diff=diff)
 
 
-def _plan_directory(path: Path, rel: str) -> DirAction:
-    _validate_parent_directories(path, rel)
-    if path.exists() and not path.is_dir():
-        raise ConfigError(f"{rel} はディレクトリである必要があります: {path}")
-    gitkeep = path / GITKEEP_NAME
-    if path.is_dir() and gitkeep.is_file():
-        return DirAction(path=path, rel=rel, kind=ActionKind.SKIPPED)
-    return DirAction(path=path, rel=rel, kind=ActionKind.CREATED)
-
-
 def _validate_parent_directories(path: Path, rel: str) -> None:
     for index, parent_rel in enumerate(Path(rel).parents):
         if parent_rel == Path("."):
@@ -221,18 +179,12 @@ def _apply(plan: Plan) -> None:
         if action.kind in (ActionKind.CREATED, ActionKind.OVERWRITTEN):
             action.path.parent.mkdir(parents=True, exist_ok=True)
             action.path.write_text(action.new_text, encoding="utf-8")
-    for action in plan.directories:
-        if action.kind == ActionKind.CREATED:
-            action.path.mkdir(parents=True, exist_ok=True)
-            (action.path / GITKEEP_NAME).touch()
 
 
 def _format_summary(plan: Plan) -> str:
     lines: list[str] = []
     for action in plan.files:
         lines.append(f"  {action.kind.value:<11} {action.rel}")
-    for action in plan.directories:
-        lines.append(f"  {action.kind.value:<11} {action.rel}/")
     return "\n".join(lines)
 
 
@@ -244,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-channel-init",
         description=(
-            "正準ディレクトリ構造 + config 一式を一括生成する。既存ファイルは --force がない限り上書きしない。"
+            "config 一式と channel-new 初期運用ファイルを生成する。既存ファイルは --force がない限り上書きしない。"
         ),
     )
     parser.add_argument(

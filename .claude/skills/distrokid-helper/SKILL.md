@@ -39,7 +39,7 @@ CLI 仕様の詳細は `references/distrokid_prepare.py`（実体: `src/youtube_
 作業開始前に以下を確認する。
 
 1. `02-Individual-music/*.mp3` が 1 件以上存在すること
-2. `config/channel/distrokid.json` の `distrokid.enabled` が `true` であること（`false` のチャンネルでは本スキルを使わない。設定方法はユーザーに確認する）
+2. `config/channel/distrokid.json` の `distrokid.enabled` が `true` で、`distrokid.profile.artist` が配信アーティスト名になっていること（`false` のチャンネルでは本スキルを使わない。設定方法はユーザーに確認する）
 3. ジャケット生成に使用する `config/skills/thumbnail.yaml` が存在すること（`provider` / `brand_background` / `style_lock_clause` を参照する）
 
 ---

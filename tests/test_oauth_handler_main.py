@@ -5,7 +5,8 @@
 - 包括 ``except Exception as e: print(...)`` が消え、catch 句が
   ``KeyboardInterrupt`` / ``(AuthError, ConfigError, YouTubeAPIError, OSError)`` /
   最終 fallback ``Exception`` の 3 段構成になっていること。
-- すべての error 経路で ``logger.exception`` 経由のログ + ``_redact`` 適用が行われること。
+- ドメイン例外経路は raw traceback を出さず、ログメッセージに ``_redact`` 適用が行われること。
+- 想定外例外経路は ``logger.exception`` 経由の traceback + ``_redact`` 適用が行われること。
 - ``KeyboardInterrupt`` で exit code 130、それ以外の例外で exit code 1 を返すこと。
 - 正常系では ``sys.exit`` が呼ばれず終了すること（既存挙動の回帰保護）。
 
@@ -26,12 +27,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.auth import oauth_handler
-from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
 
 # leak sentinel は `test_oauth_handler_exceptions.py` と同値を使う
 # （モジュール跨ぎでヘルパ共有を増やすとテスト間の依存が広がるため、定数だけ重複させる）。
 _LEAKY_ACCESS_TOKEN = "ya29.A0AbCdEfGhIjKlMnOpQrStUvWxYz123456"
 _LEAKY_TOKEN_PATH = "/Users/leak-canary/auth/token.json"
+_LEAKY_CLIENT_SECRETS = "/Users/leak-canary/auth/client_secrets.json"
 
 _LOGGER_NAME = "youtube_automation.auth.oauth_handler"
 
@@ -132,22 +134,23 @@ class TestMainKeyboardInterrupt:
 
 
 # ===========================================================================
-# 3. ドメイン例外経路: 4 例外それぞれで exit 1 + logger.exception + _redact
+# 3. ドメイン例外経路: ドメイン例外それぞれで exit 1 + logger.error + _redact
 # ===========================================================================
 
 
 class TestMainDomainExceptions:
-    """``(AuthError, ConfigError, YouTubeAPIError, OSError)`` narrow catch（推奨対応 #1, #2）。"""
+    """ドメイン例外の narrow catch（推奨対応 #1, #2）。"""
 
     @pytest.mark.parametrize(
         "exc",
         [
             AuthError("OAuth 認証に失敗しました"),
             ConfigError("client_secrets.json が見つかりません"),
+            ValidationError("client_secrets.json は通常ファイルである必要があります"),
             YouTubeAPIError("YouTube Data API 接続失敗"),
             OSError(13, "Permission denied", "/tmp/dummy"),
         ],
-        ids=["AuthError", "ConfigError", "YouTubeAPIError", "OSError"],
+        ids=["AuthError", "ConfigError", "ValidationError", "YouTubeAPIError", "OSError"],
     )
     def test_should_exit_with_code_1_on_each_domain_exception(self, monkeypatch, exc):
         """Given 4 ドメイン例外のいずれかが ``authenticate()`` から raise
@@ -176,8 +179,7 @@ class TestMainDomainExceptions:
 
         errors = [r for r in caplog.records if r.levelno == logging.ERROR]
         assert any("CLI 実行失敗" in r.getMessage() for r in errors), "narrow catch の error ログが出ていない"
-        # logger.exception は exc_info を必ず付与する
-        assert any(r.exc_info is not None for r in errors), "traceback (exc_info) が記録されていない"
+        assert all(r.exc_info is None for r in errors), "ドメイン例外経路で raw traceback が記録されている"
         # token leak 防止
         for record in caplog.records:
             assert _LEAKY_ACCESS_TOKEN not in record.getMessage()
@@ -199,6 +201,33 @@ class TestMainDomainExceptions:
                 f"OSError 経路で絶対パスが leak: {record.getMessage()!r}"
             )
 
+    def test_should_log_validation_error_without_leaking_client_secrets_path(self, monkeypatch, caplog):
+        """Given ``ValidationError`` の message に client_secrets 絶対パスが混入
+        When ``main()``
+        Then handler 属性を使った redaction が効き、raw traceback も出さない。
+        """
+        instance = _install_fake_handler(
+            monkeypatch,
+            authenticate_side_effect=ValidationError(
+                f"client_secrets.json は通常ファイルである必要があります: {_LEAKY_CLIENT_SECRETS}"
+            ),
+        )
+        instance.client_secrets_file = _LEAKY_CLIENT_SECRETS
+        instance.token_file = _LEAKY_TOKEN_PATH
+        caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
+
+        with pytest.raises(SystemExit) as exc_info:
+            oauth_handler.main()
+
+        assert exc_info.value.code == 1
+        errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert errors
+        assert all(r.exc_info is None for r in errors)
+        for record in caplog.records:
+            assert _LEAKY_CLIENT_SECRETS not in record.getMessage()
+            assert _LEAKY_TOKEN_PATH not in record.getMessage()
+        assert any("<redacted-path>" in r.getMessage() for r in errors)
+
     def test_should_catch_config_error_raised_during_handler_init(self, monkeypatch):
         """Given ``YouTubeOAuthHandler()`` の構築段階で ``ConfigError``
         When ``main()``
@@ -210,6 +239,21 @@ class TestMainDomainExceptions:
             oauth_handler.main()
 
         assert exc_info.value.code == 1
+
+    def test_should_log_cli_failure_for_validation_error(self, monkeypatch, caplog):
+        """Given ``ValidationError`` が authenticate から raise
+        When ``main()``
+        Then 最終 fallback ではなく通常ドメイン例外として ``CLI 実行失敗`` に記録される。
+        """
+        _install_fake_handler(monkeypatch, authenticate_side_effect=ValidationError("invalid client_secrets"))
+        caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
+
+        with pytest.raises(SystemExit) as exc_info:
+            oauth_handler.main()
+
+        assert exc_info.value.code == 1
+        assert any("CLI 実行失敗" in r.getMessage() for r in caplog.records)
+        assert not any("想定外" in r.getMessage() for r in caplog.records)
 
 
 # ===========================================================================

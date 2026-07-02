@@ -95,6 +95,8 @@ pair_selection:
 
   # 極端に短い曲 / 長い曲は master から除外する。
   # Suno の失敗生成（数秒で終わる、5 分超で崩れる等）を master に混ぜないための guard。
+  # 既定 300 秒は YouTube 用 BGM collection に 5 分超の崩れた生成を混ぜないための guard。
+  # チャンネル側で `config/skills/masterup.yaml` に同じキーを書けば明示的に上書きできる。
   # null で片側だけ無効化できる。
   min_song_sec: 45
   max_song_sec: 300
