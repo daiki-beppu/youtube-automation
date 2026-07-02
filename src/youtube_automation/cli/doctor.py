@@ -1515,7 +1515,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
             issues.append(msg)
 
     for desc_md in _planning_descriptions_md_paths(channel_dir):
-        msg = check_descriptions_md_parseability(desc_md)
+        msg = check_descriptions_md_parseability(desc_md, allowed_root=channel_dir)
         if msg:
             issues.append(msg)
 

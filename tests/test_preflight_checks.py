@@ -255,6 +255,30 @@ class TestInitialSetupChecks:
 
         assert any("composition_rules" in issue and "environment" in issue for issue in issues)
 
+    def test_thumbnail_config_detects_composition_rules_outside_single_step(self, tmp_path: Path) -> None:
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "two_phase",
+                    "composition_rules": {
+                        "environment": "TBD",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert issues == [
+            "config/skills/thumbnail.yaml::image_generation.gemini.composition_rules "
+            "に未設定/TBD の主要項目があります: environment"
+        ]
+
     def test_thumbnail_config_detects_missing_reference_path(self, tmp_path: Path) -> None:
         cfg = {
             "image_generation": {
@@ -464,6 +488,44 @@ class TestInitialSetupChecks:
         assert msg is not None
         assert "descriptions.md parse failed" in msg
         assert "タイトル案" in msg
+
+    def test_descriptions_md_parseability_warns_for_directory(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        p.mkdir()
+
+        msg = check_descriptions_md_parseability(p)
+
+        assert msg is not None
+        assert "通常ファイルではありません" in msg
+
+    def test_descriptions_md_parseability_warns_for_broken_symlink(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        try:
+            p.symlink_to(tmp_path / "missing.md")
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+
+        msg = check_descriptions_md_parseability(p)
+
+        assert msg is not None
+        assert "symlink が壊れています" in msg
+
+    def test_descriptions_md_parseability_rejects_path_outside_allowed_root(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside.md"
+        outside.write_text("## SECRET_HEADING\n", encoding="utf-8")
+        root = tmp_path / "channel"
+        root.mkdir()
+        p = root / "descriptions.md"
+        try:
+            p.symlink_to(outside)
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+
+        msg = check_descriptions_md_parseability(p, allowed_root=root)
+
+        assert msg is not None
+        assert "channel_dir 外" in msg
+        assert "SECRET_HEADING" not in msg
 
 
 def _valid_thumbnail_cfg(overrides: dict[str, object] | None = None) -> dict[str, object]:

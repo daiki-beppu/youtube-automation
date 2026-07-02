@@ -862,6 +862,24 @@ class TestCheckInitialSetupReadiness:
 
         assert r.status == "ok"
 
+    def test_descriptions_md_symlink_escape_warns_without_reading_external_heading(self, tmp_path):
+        outside = tmp_path.parent / f"{tmp_path.name}-outside"
+        outside_desc = outside / "descriptions.md"
+        outside.mkdir()
+        outside_desc.write_text("## SECRET_HEADING\noutside\n", encoding="utf-8")
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        try:
+            desc.symlink_to(outside_desc)
+        except OSError:
+            pytest.skip("symlink is unavailable on this filesystem")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "channel_dir 外" in r.message
+        assert "SECRET_HEADING" not in r.message
+
 
 # ---------------------------------------------------------------------------
 # bootstrap checks

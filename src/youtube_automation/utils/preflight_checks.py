@@ -63,11 +63,28 @@ def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
     return None
 
 
-def check_descriptions_md_parseability(desc_md: Path) -> str | None:
+def check_descriptions_md_parseability(desc_md: Path, *, allowed_root: Path | None = None) -> str | None:
     """既存 ``descriptions.md`` が共通 parser で読めない場合に診断文字列を返す."""
+    if allowed_root is not None:
+        root = allowed_root.resolve(strict=False)
+        resolved = desc_md.resolve(strict=False)
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            return (
+                f"{desc_md}: descriptions.md が channel_dir 外を指しています。"
+                "リンク先を channel_dir 配下に直してください"
+            )
+    if desc_md.is_symlink() and not desc_md.exists():
+        return f"{desc_md}: descriptions.md の symlink が壊れています。リンク先を修正してください"
     if not desc_md.exists():
         return None
-    text = desc_md.read_text(encoding="utf-8")
+    if not desc_md.is_file():
+        return f"{desc_md}: descriptions.md が通常ファイルではありません。/video-description で再生成してください"
+    try:
+        text = desc_md.read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"{desc_md}: descriptions.md を読み取れません: {exc}"
     missing = missing_descriptions_md_headings(text)
     if not missing:
         return None
@@ -93,59 +110,62 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
     image_generation = _as_mapping(thumbnail_cfg.get("image_generation"))
     gemini = _as_mapping(image_generation.get("gemini"))
     generation_mode = str(gemini.get("generation_mode") or "single_step").strip()
-    if generation_mode != "single_step":
-        return []
 
     issues: list[str] = []
-    single_step = _as_mapping(gemini.get("single_step"))
-    max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
-    rotate = _bool(single_step.get("rotate"), default=True)
-    reference_images = _as_mapping(gemini.get("reference_images"))
-    resolved_refs = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
-    has_reference_count_issue = False
-    missing_refs: list[str] = []
-    if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
-        issues.append(
-            "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-            "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
-        )
-    elif resolved_refs.references:
-        unique_refs = list(dict.fromkeys(resolved_refs.references))
-        if len(unique_refs) < max_attempts:
-            has_reference_count_issue = True
+    if generation_mode == "single_step":
+        single_step = _as_mapping(gemini.get("single_step"))
+        max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
+        rotate = _bool(single_step.get("rotate"), default=True)
+        reference_images = _as_mapping(gemini.get("reference_images"))
+        resolved_refs = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
+        has_reference_count_issue = False
+        missing_refs: list[str] = []
+        if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
             issues.append(
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
+                "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
             )
-        missing_refs = [str(ref) for ref in unique_refs if not ref.exists()]
-        if missing_refs:
-            sample = ", ".join(missing_refs[:3])
-            suffix = f" ほか {len(missing_refs) - 3} 件" if len(missing_refs) > 3 else ""
+        elif resolved_refs.references:
+            unique_refs = list(dict.fromkeys(resolved_refs.references))
+            if len(unique_refs) < max_attempts:
+                has_reference_count_issue = True
+                issues.append(
+                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                    f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
+                )
+            missing_refs = [str(ref) for ref in unique_refs if not ref.exists()]
+            if missing_refs:
+                sample = ", ".join(missing_refs[:3])
+                suffix = f" ほか {len(missing_refs) - 3} 件" if len(missing_refs) > 3 else ""
+                issues.append(
+                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                    f"に存在しない参照画像があります: {sample}{suffix}"
+                )
+        if resolved_refs.invalid_reasons:
+            sample = ", ".join(resolved_refs.invalid_reasons[:3])
+            suffix = (
+                f" ほか {len(resolved_refs.invalid_reasons) - 3} 件" if len(resolved_refs.invalid_reasons) > 3 else ""
+            )
             issues.append(
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                f"に存在しない参照画像があります: {sample}{suffix}"
+                f"の参照パスが不正です: {sample}{suffix}"
             )
-    if resolved_refs.invalid_reasons:
-        sample = ", ".join(resolved_refs.invalid_reasons[:3])
-        suffix = f" ほか {len(resolved_refs.invalid_reasons) - 3} 件" if len(resolved_refs.invalid_reasons) > 3 else ""
-        issues.append(
-            "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-            f"の参照パスが不正です: {sample}{suffix}"
-        )
-    if resolved_refs.references and not (missing_refs or resolved_refs.invalid_reasons or has_reference_count_issue):
-        benchmark_root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
-        try:
-            plan_ttp_reference_assignments(
-                resolved_refs.references,
-                max_attempts,
-                rotate,
-                benchmark_root=benchmark_root,
-            )
-        except ConfigError as exc:
-            issues.append(
-                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                f"が single_step TTP 生成契約を満たしていません: {exc}"
-            )
+        if resolved_refs.references and not (
+            missing_refs or resolved_refs.invalid_reasons or has_reference_count_issue
+        ):
+            benchmark_root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+            try:
+                plan_ttp_reference_assignments(
+                    resolved_refs.references,
+                    max_attempts,
+                    rotate,
+                    benchmark_root=benchmark_root,
+                )
+            except ConfigError as exc:
+                issues.append(
+                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                    f"が single_step TTP 生成契約を満たしていません: {exc}"
+                )
 
     composition_rules = _as_mapping(gemini.get("composition_rules"))
     missing_composition = [

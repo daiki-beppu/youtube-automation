@@ -18,10 +18,6 @@ class BenchmarkReferenceResolution:
     invalid_reasons: list[str]
 
 
-def is_placeholder_reference_value(value: object) -> bool:
-    return is_placeholder_value(value)
-
-
 def resolve_configured_benchmark_references(channel_dir: Path, default_value: object) -> BenchmarkReferenceResolution:
     """Resolve ``reference_images.default`` with the strict TTP benchmark contract."""
     refs: list[Path] = []
