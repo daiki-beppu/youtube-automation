@@ -39,6 +39,7 @@ CHANNEL_DIR_FILES: tuple[str, ...] = (
 
 GITKEEP_DIRS: tuple[str, ...] = (
     "auth",
+    "branding",
     "collections",
     "data",
     "docs/channel/personas",
@@ -598,7 +599,18 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     assert suno["genre_line"] == "warm lo-fi ambient music for late-night study"
 
     thumbnail = yaml.safe_load((tmp_path / "config" / "skills" / "thumbnail.yaml").read_text(encoding="utf-8"))
-    assert thumbnail["image_generation"]["gemini"]["reference_images"]["notes"] == "TTP benchmarks: 1 channel(s)"
+    reference_images = thumbnail["image_generation"]["gemini"]["reference_images"]
+    assert (
+        reference_images["notes"]
+        == "TTP benchmarks: 1 channel(s); channel branding references are reference-only, not reusable assets"
+    )
+    assert reference_images["channel_branding"] == {
+        "snapshot": "docs/channel/competitor-branding-snapshot.json",
+        "icon_references": [],
+        "banner_references": [],
+        "output_icon": "branding/icon.png",
+        "output_banner": "branding/banner.png",
+    }
     assert thumbnail["image_generation"]["gemini"]["composition_rules"]["channel_branding"] == "Focus Atlas"
 
 

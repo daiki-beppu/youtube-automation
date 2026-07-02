@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
@@ -1156,6 +1158,7 @@ def _benchmark_channels(analytics: dict[str, object]) -> _BenchmarkChannelsRead:
 def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
     missing: list[str] = []
     approved_exceptions: set[str] = set()
+    seed_text = ""
 
     channels_without_relationship = [
         _channel_diagnostic_label(index, channel)
@@ -1177,7 +1180,7 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text, channels)
         missing.extend(seed_missing)
 
-    missing.extend(_missing_branding_snapshot_items(channel_dir, channels))
+    missing.extend(_missing_branding_snapshot_items(channel_dir, channels, seed_text))
 
     thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
     if thumbnail_read.error:
@@ -1478,7 +1481,11 @@ def _approved_exception_has_reason(line: str) -> bool:
     return "ため" in line or "理由" in line or "because" in lower_line or "進める" in line
 
 
-def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
+def _missing_branding_snapshot_items(
+    channel_dir: Path,
+    channels: list[dict[str, object]],
+    seed_text: str,
+) -> list[str]:
     branding_read = _read_json_mapping(channel_dir / "docs" / "channel" / "competitor-branding-snapshot.json")
     if branding_read.error:
         return [branding_read.error]
@@ -1493,13 +1500,26 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
         return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
 
     missing: list[str] = []
+    if branding_snapshot.get("reference_only") is not True:
+        missing.append("competitor-branding-snapshot.json の reference_only が true ではありません")
     if any(not isinstance(item, dict) for item in snapshot_items):
         missing.append("competitor-branding-snapshot.json の items に object ではない要素があります")
+    image_references = branding_snapshot.get("channel_image_references")
+    if not isinstance(image_references, list):
+        missing.append("competitor-branding-snapshot.json の channel_image_references が list ではありません")
+        image_references = []
+    elif any(not isinstance(item, dict) for item in image_references):
+        missing.append("competitor-branding-snapshot.json の channel_image_references に object ではない要素があります")
     approved_ids = _approved_ttp_channel_ids(channels)
     snapshot_by_id = {
         str(item.get("id")): item
         for item in snapshot_items
         if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    image_reference_by_id = {
+        str(item.get("channel_id")): item
+        for item in image_references
+        if isinstance(item, dict) and str(item.get("channel_id") or "").strip()
     }
 
     channels_without_id = [
@@ -1515,6 +1535,13 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
         missing.append(
             "competitor-branding-snapshot.json に承認済み TTP 対象の snapshot 不足 (" + ", ".join(missing_ids) + ")"
         )
+    missing_image_reference_ids = [channel_id for channel_id in approved_ids if channel_id not in image_reference_by_id]
+    if missing_image_reference_ids:
+        missing.append(
+            "competitor-branding-snapshot.json に承認済み TTP 対象の画像参照メタ不足 ("
+            + ", ".join(missing_image_reference_ids)
+            + ")"
+        )
 
     for channel_id in approved_ids:
         item = snapshot_by_id.get(channel_id)
@@ -1527,12 +1554,260 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
             missing.append(
                 f"competitor-branding-snapshot.json の {channel_id} に必須 field 不足 ({', '.join(missing_fields)})"
             )
+        image_reference = image_reference_by_id.get(channel_id)
+        if image_reference is None:
+            continue
+        if image_reference.get("reference_only") is not True:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} 画像参照メタ reference_only が true ではありません"
+            )
+        fallback_note_recorded = _channel_branding_fallback_note_recorded(channel_dir)
+        if not _channel_image_reference_has_icon_source(image_reference) and not fallback_note_recorded:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に "
+                "icon 画像参照または fallback 根拠 note がありません"
+            )
+        if not _channel_image_reference_has_banner_source(image_reference) and not fallback_note_recorded:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に "
+                "banner 画像参照または fallback 根拠 note がありません"
+            )
 
+    missing.extend(
+        _missing_channel_branding_thumbnail_config(channel_dir, approved_ids, image_references, image_reference_by_id)
+    )
+    missing.extend(_missing_channel_branding_outputs(channel_dir, seed_text))
     return missing
 
 
 def _approved_ttp_channel_ids(channels: list[dict[str, object]]) -> list[str]:
     return [channel_id for channel in channels if (channel_id := str(channel.get("id") or "").strip())]
+
+
+def _channel_image_reference_has_icon_source(image_reference: dict[str, object]) -> bool:
+    icon = image_reference.get("icon")
+    return isinstance(icon, dict) and isinstance(icon.get("url"), str) and bool(icon["url"].strip())
+
+
+def _channel_image_reference_has_banner_source(image_reference: dict[str, object]) -> bool:
+    banner = image_reference.get("banner")
+    return isinstance(banner, list) and any(
+        isinstance(item, dict) and isinstance(item.get("url"), str) and item["url"].strip() for item in banner
+    )
+
+
+def _missing_channel_branding_thumbnail_config(
+    channel_dir: Path,
+    approved_ids: list[str],
+    image_references: list[object],
+    image_reference_by_id: dict[str, dict[str, object]],
+) -> list[str]:
+    thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
+    if thumbnail_read.error:
+        return []
+    image_generation = thumbnail_read.data.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return ["thumbnail.yaml の image_generation.gemini.reference_images.channel_branding 未設定"]
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return ["thumbnail.yaml の image_generation.gemini.reference_images.channel_branding 未設定"]
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return ["thumbnail.yaml の image_generation.gemini.reference_images.channel_branding 未設定"]
+    channel_branding = reference_images.get("channel_branding")
+    if not isinstance(channel_branding, dict):
+        return ["thumbnail.yaml の reference_images.channel_branding 未設定"]
+
+    missing: list[str] = []
+    if channel_branding.get("snapshot") != "docs/channel/competitor-branding-snapshot.json":
+        missing.append("thumbnail.yaml の reference_images.channel_branding.snapshot が未設定または不正")
+    if channel_branding.get("output_icon") != "branding/icon.png":
+        missing.append("thumbnail.yaml の reference_images.channel_branding.output_icon が未設定または不正")
+    if channel_branding.get("output_banner") != "branding/banner.png":
+        missing.append("thumbnail.yaml の reference_images.channel_branding.output_banner が未設定または不正")
+
+    icon_required = any(
+        _channel_image_reference_has_icon_source(image_reference_by_id[channel_id])
+        for channel_id in approved_ids
+        if channel_id in image_reference_by_id
+    )
+    banner_required = any(
+        _channel_image_reference_has_banner_source(image_reference_by_id[channel_id])
+        for channel_id in approved_ids
+        if channel_id in image_reference_by_id
+    )
+    if icon_required:
+        missing.extend(
+            _missing_channel_branding_reference_list(
+                "icon_references",
+                channel_branding.get("icon_references"),
+                image_references,
+                "icon",
+            )
+        )
+    if banner_required:
+        missing.extend(
+            _missing_channel_branding_reference_list(
+                "banner_references",
+                channel_branding.get("banner_references"),
+                image_references,
+                "banner",
+            )
+        )
+    return missing
+
+
+def _missing_channel_branding_reference_list(
+    field_name: str,
+    value: object,
+    image_references: list[object],
+    kind: str,
+) -> list[str]:
+    label = f"thumbnail.yaml の reference_images.channel_branding.{field_name}"
+    if not isinstance(value, list) or not value:
+        return [f"{label} 未設定"]
+
+    invalid_refs = [
+        str(item) for item in value if not _channel_branding_reference_resolves(item, image_references, kind)
+    ]
+    if invalid_refs:
+        return [f"{label} に snapshot fragment として解決できない参照があります ({', '.join(invalid_refs)})"]
+    return []
+
+
+def _channel_branding_reference_resolves(value: object, image_references: list[object], kind: str) -> bool:
+    if not isinstance(value, str) or not value.strip() or "{{" in value:
+        return False
+
+    if kind == "icon":
+        match = re.fullmatch(
+            r"docs/channel/competitor-branding-snapshot\.json#channel_image_references\[(\d+)\]\.icon",
+            value.strip(),
+        )
+        if match is None:
+            return False
+        index = int(match.group(1))
+        if index >= len(image_references):
+            return False
+        image_reference = image_references[index]
+        return isinstance(image_reference, dict) and _channel_image_reference_has_icon_source(image_reference)
+
+    if kind == "banner":
+        match = re.fullmatch(
+            r"docs/channel/competitor-branding-snapshot\.json#channel_image_references\[(\d+)\]\.banner\[(\d+)\]",
+            value.strip(),
+        )
+        if match is None:
+            return False
+        image_index = int(match.group(1))
+        banner_index = int(match.group(2))
+        if image_index >= len(image_references):
+            return False
+        image_reference = image_references[image_index]
+        if not isinstance(image_reference, dict):
+            return False
+        banner = image_reference.get("banner")
+        if not isinstance(banner, list) or banner_index >= len(banner):
+            return False
+        banner_reference = banner[banner_index]
+        return (
+            isinstance(banner_reference, dict)
+            and isinstance(banner_reference.get("url"), str)
+            and bool(banner_reference["url"].strip())
+        )
+
+    return False
+
+
+def _missing_channel_branding_outputs(channel_dir: Path, seed_text: str) -> list[str]:
+    missing: list[str] = []
+    missing.extend(
+        _missing_channel_branding_output_image(
+            channel_dir,
+            "branding/icon.png",
+            expected_ratio=1.0,
+            max_size_bytes=4 * 1024 * 1024,
+            label="branding/icon.png",
+        )
+    )
+    missing.extend(
+        _missing_channel_branding_output_image(
+            channel_dir,
+            "branding/banner.png",
+            expected_ratio=16 / 9,
+            max_size_bytes=6 * 1024 * 1024,
+            label="branding/banner.png",
+        )
+    )
+    if not _channel_branding_output_approved(seed_text):
+        missing.append("docs/channel/ttp-seed-confirmation.md に channel branding 画像のユーザー承認記録がありません")
+    return missing
+
+
+def _missing_channel_branding_output_image(
+    channel_dir: Path,
+    relative_path: str,
+    *,
+    expected_ratio: float,
+    max_size_bytes: int,
+    label: str,
+) -> list[str]:
+    path = channel_dir / relative_path
+    if not path.is_file():
+        return [f"{label} が未生成"]
+    try:
+        if path.stat().st_size > max_size_bytes:
+            return [f"{label} のファイルサイズが上限を超えています"]
+    except OSError as exc:
+        return [f"{label} のファイルサイズを確認できません ({exc})"]
+
+    try:
+        with PILImage.open(path) as image:
+            width, height = image.size
+            image.verify()
+    except (OSError, UnidentifiedImageError) as exc:
+        return [f"{label} を画像として読み込めません ({exc})"]
+
+    if width <= 0 or height <= 0:
+        return [f"{label} の画像サイズが不正です"]
+    actual_ratio = width / height
+    if abs(actual_ratio - expected_ratio) > 0.03:
+        return [f"{label} のアスペクト比が不正です"]
+    return []
+
+
+def _channel_branding_output_approved(seed_text: str) -> bool:
+    for line in seed_text.splitlines():
+        lower_line = line.lower()
+        mentions_branding_output = (
+            "branding/icon.png" in lower_line
+            or "branding/banner.png" in lower_line
+            or "channel branding" in lower_line
+            or "チャンネル画像" in line
+        )
+        if mentions_branding_output and ("承認済み" in line or "approved" in lower_line):
+            return True
+    return False
+
+
+def _channel_branding_fallback_note_recorded(channel_dir: Path) -> bool:
+    thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
+    if thumbnail_read.error:
+        return False
+    image_generation = thumbnail_read.data.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return False
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return False
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return False
+    notes = reference_images.get("notes")
+    if not isinstance(notes, str):
+        return False
+    lower_notes = notes.lower()
+    return "fallback" in lower_notes or "取得できない" in notes or "参照画像なし" in notes
 
 
 def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:
