@@ -287,7 +287,7 @@ uv run yt-channel-settings push --apply
 | `config/skills/suno.yaml` が placeholder のまま | Step 1 のジャンル情報を `genre_line` に反映してから進む |
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` で初期化する。初回動画の追加は `/video-upload` 内部の自動 assign に任せる |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
-| Analytics レポート取得設定が未確認 | 初回制作は止めず、公開後の分析に備えて `/analytics-collect` で YouTube Analytics API の収集前提を確認する。不足する GCP / OAuth / API 設定が出たら `/setup` に戻す |
+| Analytics / Reporting レポート取得設定が未確認 | 初回制作は止めず、公開後の分析に備えて `/analytics-collect` で YouTube Analytics / Reporting API の収集前提と Reporting API job 作成状態を確認する。不足する GCP / OAuth / API 設定が出たら `/setup` に戻す |
 | ライブ配信を使う可能性がある | 初回制作は止めず、YouTube Studio で Live streaming を早めに有効化するよう案内する。有効化後、初回配信可能になるまで最大 24 時間かかるため、24/7 live や初回配信へ進む前に `/streaming` で配信側の準備を確認する |
 
 最後に `yt-doctor` で TTP 完了条件を確認する:

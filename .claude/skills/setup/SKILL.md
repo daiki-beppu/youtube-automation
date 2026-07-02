@@ -188,7 +188,7 @@ billing account が 1 つも無い利用者には、Console URL (`https://consol
 AI が以下を直接実行:
 
 ```bash
-gcloud services enable youtube.googleapis.com youtubeanalytics.googleapis.com aiplatform.googleapis.com generativelanguage.googleapis.com --project=<project-id>
+gcloud services enable youtube.googleapis.com youtubeanalytics.googleapis.com youtubereporting.googleapis.com aiplatform.googleapis.com generativelanguage.googleapis.com --project=<project-id>
 ```
 
 billing 未紐付けで失敗する場合は `billing_linked` に戻る。
