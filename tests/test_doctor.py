@@ -694,27 +694,29 @@ class TestCheckChannelConfig:
         assert "/channel-new" in instructions
         assert "setup 用ディレクトリ生成は完了していても config は未作成" in instructions
 
-    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・JSON 破損: fail + /channel-import 案内 (既存チャンネル)."""
+    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・JSON 破損: fail + /channel-new 取り込みモード案内 (既存チャンネル)."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         (config_dir / "meta.json").write_text("{broken json", encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
         assert r.next_action is not None
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
-    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・必須キー不足: fail + /channel-import 案内."""
+    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・必須キー不足: fail + /channel-new 取り込みモード案内."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         # meta.json のみ（必須キーも不足）
         (config_dir / "meta.json").write_text(json.dumps({"channel": {}}), encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
     def test_valid_config_is_ok(self, tmp_path):
         """load_config() が成功する設定: ok."""

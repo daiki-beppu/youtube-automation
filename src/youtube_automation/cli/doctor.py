@@ -889,7 +889,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                 message=f"config/channel/ ロード失敗: {e}",
                 next_action={
                     "kind": "human",
-                    "instructions": "/channel-import を実行して設定を修復してください",
+                    "instructions": ("/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"),
                 },
             )
 
